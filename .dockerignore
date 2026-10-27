@@ -1,0 +1,16 @@
+# never into the image: data, dependencies, builds, git
+data
+data-*
+*.db
+*.db-*
+seed
+node_modules
+dist
+dev-dist
+.git
+.github
+.env
+.env.*
+*.log
+tests
+scripts

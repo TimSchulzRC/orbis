@@ -14,6 +14,7 @@ import { addLaterDefaultProps, migrateCollections, renameShippedLabels, upgradeA
 import type { Lang } from "../shared/i18n";
 import { storeWriter } from "./importers";
 import { UndoError, redoStep, undoStep } from "./undo";
+import { DEFAULT_TRUSTED, trustedProxies } from "./trust";
 import { type ClientMsg, type ServerMsg, type WireUpdate, fromB64, toB64 } from "../shared/protocol";
 
 const PORT = Number(process.env.PORT ?? 8480);
@@ -21,6 +22,8 @@ const HOST = process.env.HOST ?? "127.0.0.1";
 const DATA = resolve(process.env.OBTION_DATA ?? "data");
 const DIST = resolve(import.meta.dir, "../../dist");
 const PUBLIC_URL = process.env.OBTION_PUBLIC_URL ?? "";
+/** Every hub brings the web app; OBTION_WEB_APP=off makes it a hub for sync, API and MCP only. */
+const WEB_APP = !/^(off|0|false|no)$/i.test(process.env.OBTION_WEB_APP ?? "on");
 
 mkdirSync(DATA, { recursive: true });
 const configPath = join(DATA, "config.json");
@@ -145,9 +148,10 @@ async function sniffImage(path: string): Promise<string> {
 
 /**
  * tailscale serve adds who is calling (tailscale-user-login/-name). Only trusted when the
- * connection comes from 127.0.0.1 – that is tailscale serve itself; with HOST=0.0.0.0 anyone
- * else could send the header.
+ * connection comes from a trusted proxy (trust.ts: loopback, or OBTION_TRUSTED_PROXIES) – with
+ * HOST=0.0.0.0 anyone else could send the header.
  */
+const trusted = trustedProxies(process.env.OBTION_TRUSTED_PROXIES || DEFAULT_TRUSTED);
 let viaLocal = (_req: Request) => false; // set once the server runs (it knows the peer address)
 function userOf(req: Request) {
   return (viaLocal(req) && req.headers.get("tailscale-user-login")) || "local";
@@ -302,6 +306,7 @@ const server = Bun.serve<Conn>({
     }
 
     if (path.startsWith("/api/")) return new Response("Not found", { status: 404 });
+    if (!WEB_APP) return new Response("This Obtion hub serves sync, API and MCP only (OBTION_WEB_APP=off).", { status: 404 });
     return serveStatic(path);
   },
   websocket: {
@@ -345,9 +350,9 @@ const server = Bun.serve<Conn>({
   },
 });
 
-viaLocal = (r) => ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(server.requestIP(r)?.address ?? "");
+viaLocal = (r) => trusted(server.requestIP(r)?.address);
 
-console.log(`[obtion] listening on http://${server.hostname}:${server.port}`);
+console.log(`[obtion] listening on http://${server.hostname}:${server.port}${WEB_APP ? "" : " (no web app: OBTION_WEB_APP=off)"}`);
 
 process.on("SIGTERM", () => {
   store.flush();

@@ -1,0 +1,28 @@
+# Obtion on a NAS or server. Reached over Tailscale: `tailscale serve` on the host forwards
+# https://<host>.<tailnet>.ts.net to 127.0.0.1:8480 and tells the hub who is calling.
+#   docker compose up -d
+services:
+  obtion:
+    build: .
+    image: obtion-hub
+    restart: unless-stopped
+    ports:
+      # only on the host itself: the hub trusts the caller headers from tailscale serve, so
+      # nobody else in the network may reach the port directly
+      - "127.0.0.1:8480:8480"
+    volumes:
+      - ./data:/data # the data directory; must be writable by uid 1000 (or set `user:`)
+    environment:
+      OBTION_PUBLIC_URL: https://nas.example.ts.net # the address in the browser
+      # tailscale serve on the host reaches the container through this network's gateway
+      OBTION_TRUSTED_PROXIES: 172.30.0.1
+      # OBTION_WEB_APP: "off" # only sync, API and MCP, no web app
+    networks:
+      - obtion
+
+networks:
+  obtion:
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+          gateway: 172.30.0.1

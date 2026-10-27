@@ -20,7 +20,9 @@ Rules that are easy to miss (details in the plan, Technik › Regeln):
 - **Trash with cascade:** `meta.deleted` is `true` or `"via:<root>"`. What hangs only below a deleted item goes along and comes back with it; another living parent always keeps an item (`src/shared/trash.ts`).
 - **Done date:** entering the status group done sets `meta.done`, reopening clears it; an update with a status change uses its own date. Query `erledigt>-7d`.
 - **One step, one undo:** every user action and every tool call is a step (its id is on every log row it wrote). Activity › Rückgängig takes back all of it; fields changed again later keep the newer value, items it created go to the trash; undo is itself a step and can be redone (`src/server/undo.ts`).
-- **Hub reset:** devices send `hello { since, sinceId }`; a hub restored from an older backup is noticed even after another device synced first.
+- **Areas:** every information, type, file and log row belongs to exactly one area (`meta.area`, column `area`); sync runs per area. For now there is one, the personal area, without any interface.
+- **Hub reset:** devices send `hello { area, since, sinceId }`; a hub restored from an older backup is noticed even after another device synced first.
+- **Data format:** the data carry a format version (`settings.format`, `FORMAT` in `src/shared/model.ts`). A newer hub upgrades older data once at start (`src/shared/setup.ts`); an app older than the data still reads them but asks to be reloaded before it writes. `tests/fixtures/format-1.json` keeps data of format 1 that every later version must read.
 - **Tolerant input:** statuses as group or option name in German or English (also synonyms), dates like 30.10.2026, 10/30/2026, morgen, type names in plural (`src/shared/input.ts`). Search folds ä/ö/ü/ß and hyphens.
 
 ## Architecture
@@ -58,6 +60,22 @@ bun run stats                        # counts per type, hub id, sequence number
 ```
 
 All data lives in `data/` (`OBTION_DATA`): `obtion.db` (SQLite), `blobs/`, `vault/` (Markdown mirror) and `config.json` with the MCP token. None of it is in git.
+
+### Running on a NAS or server (Docker)
+
+The image holds the hub with the web app; all data live in one volume (`/data`).
+
+```bash
+docker compose up -d                 # builds the image from this repository, see docker-compose.yml
+tailscale serve --bg --https=443 http://127.0.0.1:8480
+```
+
+- **Settings** (environment): `OBTION_PUBLIC_URL` – the address in the browser, e.g. `https://nas.example.ts.net` (the hub only answers to its known host names; more with `OBTION_ALLOWED_HOSTS`). `OBTION_WEB_APP=off` – only sync, API and MCP, no web app. `PORT`, `OBTION_DATA` are set in the image (8480, `/data`).
+- **Volume:** `./data` next to the compose file (on Synology, QNAP or Unraid a folder of the docker share). The container runs as uid 1000: make the folder writable for it (`chown -R 1000:1000 data`) or set `user:` in the compose file.
+- **Access and identity:** reach it through Tailscale. `tailscale serve` on the host tells the hub who is calling (`tailscale-user-login`); the hub believes that only from a trusted proxy – by default only 127.0.0.1, in the container the compose network's gateway (`OBTION_TRUSTED_PROXIES`, addresses or ranges). That is why the port is published on 127.0.0.1 only: nobody else may reach the hub directly and send the header.
+- **Backup:** stop the container and copy the data folder (`docker compose stop`, `tar czf obtion-$(date +%F).tgz data`, `docker compose start`). `vault/` is rebuilt at every start and can be left out.
+- **Moving an existing hub here:** stop the old hub, copy its whole data folder (`obtion.db`, `blobs/`, `config.json`, …) into the volume folder, start the container. The hub keeps its id, so connected devices just continue (point the address they use to the new host); the MCP token stays the same. Starting with an empty volume instead gives a new hub id: each device then asks once whether to replace its copy with the hub's data or upload it.
+- The built-in agent needs the Claude Code CLI next to the hub and is not in the image; MCP works for any client.
 
 ### Development
 
