@@ -19,6 +19,9 @@ COPY packages/core ./packages/core
 COPY apps/server ./apps/server
 COPY --from=build /app/apps/web/dist ./apps/web/dist
 COPY docker/entrypoint.sh /usr/local/bin/obtion-entrypoint
+# COPY keeps the modes of the checkout; cloned with a strict umask (common on a NAS) the
+# server's user could not read its own code ("Module not found")
+RUN chmod -R a+rX /app/package.json /app/packages /app/apps && chmod a+rx /usr/local/bin/obtion-entrypoint
 ENV HOST=0.0.0.0 PORT=8480 OBTION_DATA=/data
 VOLUME /data
 EXPOSE 8480
