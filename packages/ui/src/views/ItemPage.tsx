@@ -3,7 +3,7 @@
 // sections appear (via their capabilities), never the layout.
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { EditorView } from "@codemirror/view";
-import { Sparkles, Trash2, RotateCcw, MoreHorizontal, Plus, AlertTriangle, ImagePlus, Scissors, ListFilter, Languages, Pin, PinOff, FilePlus, FolderInput, Link2 } from "lucide-react";
+import { Sparkles, Trash2, RotateCcw, MoreHorizontal, Plus, AlertTriangle, ImagePlus, Scissors, ListFilter, Languages, Pin, PinOff, FilePlus, FolderInput, Link2, ArrowRightLeft } from "lucide-react";
 import { type Item, META_TYPE } from "@obtion/core/model";
 import { isInInbox, isOverview } from "@obtion/core/placement";
 import { wouldBeInInbox } from "@obtion/core/typeops";
@@ -27,6 +27,9 @@ import { TypePage } from "./TypePage";
 import { askAgent, createAndOpen } from "../actions";
 import { INBOX_ICON, NOTE_ICON, OVERVIEW_ICON } from "../ui/icons";
 import { extractAsCard, extractType } from "../ui/extract";
+import { movedItems } from "@obtion/core/transfer";
+import { accountOf, hostOf, useAccounts } from "../accounts";
+import { moveTo } from "../ui/Spaces";
 
 export function ItemPage({ id, isNew }: { id: string; isNew: boolean }) {
   const r = useRepo();
@@ -61,6 +64,8 @@ function InfoView({ item, isNew }: { item: Item; isNew: boolean }) {
   const [view, setView] = useState<EditorView | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [placing, setPlacing] = useState(false);
+  const [moving, setMoving] = useState(false);
+  const others = useAccounts().spaces.length > 1;
   const [refPicking, setRefPicking] = useState(false);
   const [placesOpen, setPlacesOpen] = useState(0);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -132,6 +137,11 @@ function InfoView({ item, isNew }: { item: Item; isNew: boolean }) {
             <MenuItem icon={<Languages size={14} />} onClick={() => (close(), askAgent(t("item.translatePrompt", { title: item.title, id: item.id }), t("item.translateShown", { title: item.title })))}>
               {t("item.translate")}
             </MenuItem>
+            {others && !item.deleted && item.type !== META_TYPE && (
+              <MenuItem icon={<ArrowRightLeft size={14} />} onClick={() => (close(), setMoving(true))}>
+                {t("move.menu")}
+              </MenuItem>
+            )}
             {!item.deleted && (
               <MenuItem danger icon={<Trash2 size={14} />} onClick={() => (close(), setDeleting(true))}>
                 {t("item.delete")}
@@ -209,6 +219,7 @@ function InfoView({ item, isNew }: { item: Item; isNew: boolean }) {
         />
       )}
       {deleting && <DeleteDialog item={item} onClose={() => setDeleting(false)} />}
+      {moving && <MoveDialog item={item} onClose={() => setMoving(false)} />}
     </div>
   );
 }
@@ -405,6 +416,35 @@ function DeleteDialog({ item, onClose }: { item: Item; onClose: () => void }) {
           {t("delete.all", { count: only.length + 1 })}
         </Button>
       </div>
+    </Dialog>
+  );
+}
+
+/** "In anderen Workspace verschieben": with what hangs only below it; here it goes to the trash. */
+function MoveDialog({ item, onClose }: { item: Item; onClose: () => void }) {
+  const { t } = useT();
+  const { spaces, active } = useAccounts();
+  const count = movedItems(repo.index(), item.id).length - 1;
+  const [busy, setBusy] = useState(false);
+  return (
+    <Dialog title={t("move.title", { title: item.title || t("untitled") })} onClose={onClose}>
+      <p className="text-sm text-muted">{count > 0 ? t("move.introBelow", { count }) : t("move.intro")}</p>
+      <ul className="mt-3 space-y-1">
+        {spaces
+          .filter((s) => s.key !== active?.key)
+          .map((s) => (
+            <li key={s.key}>
+              <button
+                disabled={busy}
+                onClick={() => (setBusy(true), void moveTo(item.id, s).finally(onClose))}
+                className="tap-row flex w-full items-center gap-2 rounded-lg border border-line px-3 py-2 text-left text-sm hover:bg-hover disabled:opacity-60"
+              >
+                <span className="min-w-0 flex-1 truncate font-medium">{s.name}</span>
+                <span className="shrink-0 truncate text-xs text-muted">{hostOf(accountOf(s).server)}</span>
+              </button>
+            </li>
+          ))}
+      </ul>
     </Dialog>
   );
 }

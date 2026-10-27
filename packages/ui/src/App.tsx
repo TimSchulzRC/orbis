@@ -28,15 +28,38 @@ import { Activity } from "./views/Activity";
 import { TrashView } from "./views/Trash";
 import { Settings } from "./views/Settings";
 import { ICON } from "./ui/icons";
+import { OtherSpaces, SpaceSwitcher } from "./ui/Spaces";
+import { Gate } from "./views/Account";
+import { accountOf, connectServer, here, hostOf, signOut, useAccounts } from "./accounts";
 
 export function App() {
+  const { active } = useAccounts();
   // the confirm dialog lives above everything: the sync may ask before the app has loaded
   return (
     <>
-      <Main />
+      {/* another workspace: the app anew on its replica (repo and files point at it) */}
+      <Gate>
+        <Main key={active?.key} />
+      </Gate>
       <ConfirmHost />
       <AppToaster />
     </>
+  );
+}
+
+/** The open workspace's server no longer takes the account's token: sign in again there. */
+function SignedOut() {
+  const { t } = useT();
+  const { active } = useAccounts();
+  if (!active || !accountOf(active).lost) return null;
+  const acc = accountOf(active);
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line bg-surface-2 px-4 py-2 text-sm" role="status">
+      <span className="flex-1">{t("account.lost", { server: hostOf(acc.server) })}</span>
+      <button onClick={() => (acc.server === here ? signOut(acc) : connectServer(acc.server))} className="font-medium text-[var(--link)] hover:underline">
+        {t("account.signInAgain")}
+      </button>
+    </div>
   );
 }
 
@@ -155,6 +178,7 @@ function Main() {
             </button>
           </header>
         )}
+        <SignedOut />
         {r.readOnly && (
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line bg-surface-2 px-4 py-2 text-sm" role="status">
             <span className="flex-1">{t("format.tooNew")}</span>
@@ -217,6 +241,9 @@ function MobileMenu() {
   const inbox = runQuery({ where: inboxWhere(ix) }, { ix }).total;
   return (
     <>
+      <div className="mb-2 flex px-3">
+        <SpaceSwitcher />
+      </div>
       <a href="#/" className={row}>
         <LayoutDashboard size={18} className="text-muted" /> {t("nav.start")}
       </a>
@@ -226,6 +253,7 @@ function MobileMenu() {
       </a>
       <PinnedTree touch />
       <TypeNav touch />
+      <OtherSpaces touch />
       <div className="my-2 border-t border-line" />
       <a href="#/settings" className={row}>
         <SlidersHorizontal size={18} className="text-muted" /> {t("nav.settings")}

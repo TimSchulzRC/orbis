@@ -3,7 +3,9 @@
 // with zero types) on free ports, opens every route and one page per kind of item in a real
 // browser – light, dark and phone – and fails on console errors, page errors, an error
 // boundary or a blank page. A fourth server is set up on the page with its examples, which are
-// removed again in the settings and brought back with "Rückgängig".
+// removed again in the settings and brought back with "Rückgängig". Every server gets its first
+// account through the API; the browser holds it as if it had signed in (the sign-in page itself
+// is checked once).
 //   bun run test:e2e        (builds first; Chrome from ~/.cache/ms-playwright)
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
@@ -43,7 +45,10 @@ async function startServer(seeded: boolean, noTypes = false) {
     if (await fetch(url + "/api/info").then((r) => r.ok, () => false)) break;
     await Bun.sleep(100);
   }
-  const server = { dir, url, proc, file: "", trashed: "" };
+  // the first account (the admin): with the seeded data it gets them, otherwise a personal workspace
+  const signup = (await fetch(url + "/api/account/signup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "E2E", email: "e2e@example.org", password: "geheim12345", lang: "de" }) }).then((r) => r.json())) as { token: string };
+  const me = (await fetch(url + "/api/account", { headers: { authorization: `Bearer ${signup.token}` } }).then((r) => r.json())) as { user: unknown; workspaces: { id: string }[] };
+  const server = { dir, url, proc, file: "", trashed: "", token: signup.token, me };
   if (seeded && !noTypes) {
     const token = JSON.parse(readFileSync(join(dir, "config.json"), "utf8")).token as string;
     const mcp = async (name: string, args: unknown) => {
@@ -62,6 +67,23 @@ async function startServer(seeded: boolean, noTypes = false) {
     await mcp("delete", { ref: server.trashed });
   }
   return server;
+}
+
+/** A browser context that holds the server's first account, as after signing in on the page. */
+async function signedIn(browser: import("playwright-core").Browser, server: Awaited<ReturnType<typeof startServer>>, opts: import("playwright-core").BrowserContextOptions) {
+  const context = await browser.newContext({ baseURL: server.url, ...opts });
+  const accounts = [{ id: "e2e", server: server.url, token: server.token, user: server.me.user }];
+  const spaces = server.me.workspaces.map((w) => ({ ...w, key: `e2e/${w.id}`, account: "e2e" }));
+  await context.addInitScript(
+    ({ accounts, spaces }) => {
+      if (localStorage.getItem("obtion.accounts")) return;
+      localStorage.setItem("obtion.accounts", JSON.stringify(accounts));
+      localStorage.setItem("obtion.spaces", JSON.stringify(spaces));
+      localStorage.setItem("obtion.active", spaces[0]!.key);
+    },
+    { accounts, spaces },
+  );
+  return context;
 }
 
 async function settle(page: Page) {
@@ -122,10 +144,11 @@ async function run() {
     { name: "phone", viewport: { width: 390, height: 844 }, scheme: "light" as const, mobile: true },
   ];
   try {
+    await signInPage(browser, empty);
     await examplesOnSetup(browser, fresh);
     for (const [serverName, server] of [["empty", empty], ["seeded", seeded], ["no types", typeless]] as const) {
       for (const v of variants) {
-        const context = await browser.newContext({ baseURL: server.url, viewport: v.viewport, colorScheme: v.scheme, isMobile: !!v.mobile, hasTouch: !!v.mobile, locale: "de-DE" });
+        const context = await signedIn(browser, server, { viewport: v.viewport, colorScheme: v.scheme, isMobile: !!v.mobile, hasTouch: !!v.mobile, locale: "de-DE" });
         const page = await context.newPage();
         const errors: string[] = [];
         page.on("pageerror", (e) => errors.push(`page error: ${e.message}`));
@@ -308,9 +331,25 @@ async function run() {
   console.log(`E2E smoke: ${checks} checks passed (empty, seeded, typeless and fresh server; light, dark, phone).`);
 }
 
-/** Set up on the page with the examples (the default), then remove them in the settings and undo that. */
-async function examplesOnSetup(browser: import("playwright-core").Browser, server: { url: string }) {
+/** Without an account the app asks to sign in; signing in on the page opens the workspace. */
+async function signInPage(browser: import("playwright-core").Browser, server: { url: string }) {
   const context = await browser.newContext({ baseURL: server.url, viewport: { width: 1440, height: 900 }, locale: "de-DE" });
+  const page = await context.newPage();
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(`page error: ${e.message}`));
+  await check(page, "sign-in", "/", errors, async (p) => {
+    await p.getByLabel("E-Mail").fill("e2e@example.org");
+    await p.getByLabel("Passwort").fill("geheim12345");
+    await p.getByRole("button", { name: "Anmelden" }).click();
+    // the account's workspace is not set up yet: its setup page
+    if (!(await p.getByRole("button", { name: /Einrichten/ }).waitFor({ timeout: 8000 }).then(() => true, () => false))) failures.push("sign-in: the workspace did not open after signing in");
+  });
+  await context.close();
+}
+
+/** Set up on the page with the examples (the default), then remove them in the settings and undo that. */
+async function examplesOnSetup(browser: import("playwright-core").Browser, server: Awaited<ReturnType<typeof startServer>>) {
+  const context = await signedIn(browser, server, { viewport: { width: 1440, height: 900 }, locale: "de-DE" });
   const page = await context.newPage();
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(`page error: ${e.message}`));

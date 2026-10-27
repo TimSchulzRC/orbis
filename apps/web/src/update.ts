@@ -3,7 +3,7 @@
 // local changes first go to the server, then SKIP_WAITING, then exactly one reload when the new
 // worker has taken over. Without a waiting worker the page reloads at once.
 import { toast } from "sonner";
-import { repo, tr } from "@obtion/ui";
+import { tr, unsynced } from "@obtion/ui";
 
 const ID = "update";
 let reg: ServiceWorkerRegistration | undefined;
@@ -27,7 +27,7 @@ function ready() {
 /** Unsent local changes: wait until the server has them (they are kept on the device anyway). */
 async function settled(ms = 5000) {
   const end = Date.now() + ms;
-  while (repo.status.pending > 0 && repo.status.online && Date.now() < end) await new Promise((r) => setTimeout(r, 150));
+  while (unsynced() && Date.now() < end) await new Promise((r) => setTimeout(r, 150));
 }
 
 function reloadOnce() {

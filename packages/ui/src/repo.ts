@@ -1,5 +1,8 @@
-// The replica every component reads and writes, on the browser's platform (browser.ts).
-import { Repo } from "@obtion/sync";
-import { browserHost } from "./browser";
+// The replica every component reads and writes: the workspace open in the app. Switching the
+// workspace (accounts.ts) points `repo` at another replica and renders the app anew.
+import type { Repo } from "@obtion/sync";
 
-export const repo = new Repo(browserHost());
+export let repo: Repo;
+export function setRepo(r: Repo) {
+  repo = r;
+}

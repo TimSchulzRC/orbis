@@ -257,6 +257,8 @@ function makeAuth(db: Database, secret: string, baseURL: string) {
     // the app's own page calls /api/auth/*; the server checks the origin itself (index.ts)
     trustedOrigins: (req) => [req?.headers.get("origin") ?? undefined].filter((o): o is string => !!o),
     plugins: [bearer()],
+    // also outside NODE_ENV=production: a hosted server must not let anyone guess passwords
+    rateLimit: { enabled: true },
     telemetry: { enabled: false },
   });
 }

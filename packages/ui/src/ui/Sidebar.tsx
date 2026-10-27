@@ -18,8 +18,16 @@ import { ItemPicker } from "./Picker";
 import { SyncDot } from "./SyncDot";
 import { createAndOpen } from "../actions";
 import { NewTypeDialog } from "../views/Types";
+import { OtherSpaces, SpaceSwitcher } from "./Spaces";
 
 let dragging: { id: string; from: string | null } | null = null;
+/** What is being dragged in the tree (another workspace in the sidebar takes it: a move). */
+export function takeDragged() {
+  const d = dragging;
+  dragging = null;
+  return d;
+}
+export const isDragging = () => !!dragging && dragging.from !== "types";
 
 export function Sidebar({ onSearch, onAgent }: { onSearch: () => void; onAgent: () => void }) {
   const { t, lang } = useT();
@@ -31,8 +39,7 @@ export function Sidebar({ onSearch, onAgent }: { onSearch: () => void; onAgent: 
   return (
     <aside className="flex w-[256px] shrink-0 flex-col border-r border-line bg-surface-2/50 pt-safe">
       <div className="flex items-center gap-2 px-4 pb-2 pt-4">
-        <img src="/icon.svg" alt="" className="size-6" />
-        <span className="font-semibold tracking-tight">Obtion</span>
+        <SpaceSwitcher />
         <SyncDot />
       </div>
       <button onClick={onSearch} className="mx-3 mb-2 flex items-center gap-2 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm text-muted hover:text-fg">
@@ -52,6 +59,7 @@ export function Sidebar({ onSearch, onAgent }: { onSearch: () => void; onAgent: 
         </nav>
         <PinnedTree />
         <TypeNav />
+        <OtherSpaces />
       </div>
       {/* below: the agent and the settings (activity, graph, trash and the language live there) */}
       <div className="flex flex-col gap-0.5 border-t border-line p-2">
@@ -67,7 +75,7 @@ export function Sidebar({ onSearch, onAgent }: { onSearch: () => void; onAgent: 
 }
 
 /** A block of the sidebar with a heading that folds it (remembered on this device; open at first). */
-function Section({ id, title, add, touch, children }: { id: string; title: string; add: { label: string; run: () => void }; touch?: boolean; children: React.ReactNode }) {
+export function Section({ id, title, add, touch, children }: { id: string; title: string; add?: { label: string; run: () => void }; touch?: boolean; children: React.ReactNode }) {
   const [open, setOpen] = useLocalStorage<boolean>(`obtion.sidebar.${id}`, true);
   return (
     <section className="mt-3.5" aria-label={title}>
@@ -76,9 +84,11 @@ function Section({ id, title, add, touch, children }: { id: string; title: strin
           <ChevronRight size={13} className={cx("text-faint transition-transform", open && "rotate-90")} />
           {title}
         </button>
-        <button title={add.label} aria-label={add.label} onClick={add.run} className={cx("tap rounded text-muted hover:bg-hover hover:text-fg", touch ? "p-1.5" : "p-0.5")}>
-          <Plus size={14} />
-        </button>
+        {add && (
+          <button title={add.label} aria-label={add.label} onClick={add.run} className={cx("tap rounded text-muted hover:bg-hover hover:text-fg", touch ? "p-1.5" : "p-0.5")}>
+            <Plus size={14} />
+          </button>
+        )}
       </div>
       {open && children}
     </section>

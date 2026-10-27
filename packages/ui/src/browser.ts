@@ -1,17 +1,24 @@
 // The replica's platform in a browser (web app, later the desktop app's window): IndexedDB as
-// storage, the server that served the page, other tabs over BroadcastChannel, dialogs of the UI.
+// storage, a workspace on a server (the one that served the page or another), other tabs over
+// BroadcastChannel, dialogs of the UI.
 import { openDB, type IDBPDatabase } from "idb";
 import type { OutItem, RepoHost, ReplicaStorage, SyncSocket, TabMsg } from "@obtion/sync";
 import { tr } from "./i18n";
 
-const DB = "obtion";
+/** Where a workspace is: its address on the server (…/w/<id>), the account's token, the name of its storage here. */
+export interface SpaceLink {
+  base: string;
+  token: string;
+  /** IndexedDB and BroadcastChannel name; "obtion" for the data from before accounts (devices keep their copy) */
+  name: string;
+}
 
 /** The replica in IndexedDB: stores "updates" (per document), "outbox", "meta" (cursor, server id). */
-export function idbStorage(): ReplicaStorage {
+export function idbStorage(name: string): ReplicaStorage {
   let db!: IDBPDatabase;
   return {
     async open() {
-      db = await openDB(DB, 1, {
+      db = await openDB(name, 1, {
         // Another tab wants to delete/upgrade the database (e.g. "re-download everything"): step aside.
         blocking: () => {
           db.close();
@@ -67,25 +74,24 @@ export function idbStorage(): ReplicaStorage {
     async destroy() {
       db.close();
       await new Promise((res) => {
-        const r = indexedDB.deleteDatabase(DB);
+        const r = indexedDB.deleteDatabase(name);
         r.onsuccess = r.onerror = r.onblocked = res;
       });
     },
   };
 }
 
-/** The browser as the replica's platform; the server is the one that served this page. */
-export function browserHost(): RepoHost {
-  const bc = typeof BroadcastChannel !== "undefined" ? new BroadcastChannel("obtion") : null;
+/** The browser as the replica's platform for one workspace. The token goes as subprotocol: browsers send no headers on WebSockets. */
+export function browserHost(link: SpaceLink): RepoHost {
+  const bc = typeof BroadcastChannel !== "undefined" ? new BroadcastChannel(link.name) : null;
   return {
-    storage: idbStorage(),
+    storage: idbStorage(link.name),
     device: deviceName(),
     connect() {
-      const proto = location.protocol === "https:" ? "wss:" : "ws:";
-      return new WebSocket(`${proto}//${location.host}/sync`) as unknown as SyncSocket;
+      return new WebSocket(`${link.base.replace(/^http/, "ws")}/sync`, ["obtion", `auth.${link.token}`]) as unknown as SyncSocket;
     },
     async post(path, body) {
-      const res = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).catch(() => null);
+      const res = await fetch(link.base + path, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${link.token}` }, body: JSON.stringify(body) }).catch(() => null);
       if (!res) return null;
       return { ok: res.ok, statusText: res.statusText, body: await res.json().catch(() => ({})) };
     },
@@ -125,7 +131,7 @@ export function browserHost(): RepoHost {
   };
 }
 
-function deviceName(): string {
+export function deviceName(): string {
   const saved = localStorage.getItem("obtion.device");
   if (saved) return saved;
   const ua = navigator.userAgent;

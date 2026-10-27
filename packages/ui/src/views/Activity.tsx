@@ -1,6 +1,7 @@
 // Activity: every change with its origin (which device, which agent, import). Bulk
 // operations like deleting a type are listed here and can be undone.
 import { useEffect, useState } from "react";
+import { activeFetch } from "../accounts";
 import { Sparkles, User, Download, Bot, Cog, Undo2, Redo2 } from "lucide-react";
 import type { ActivityEvent, FieldChange } from "@obtion/core/protocol";
 import { type Item, META_TYPE } from "@obtion/core/model";
@@ -209,7 +210,7 @@ export function Activity() {
   const [more, setMore] = useState(true);
   const [error, setError] = useState(false);
   const load = (before?: number) =>
-    fetch(`/api/activity?limit=60${before ? `&before=${before}` : ""}`)
+    activeFetch(`/api/activity?limit=60${before ? `&before=${before}` : ""}`)
       .then((res) => res.json())
       .then((list: ActivityEvent[]) => {
         setEvents((ev) => (before ? [...ev, ...list] : list));

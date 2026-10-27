@@ -5,6 +5,7 @@ import { Markdown } from "./Markdown";
 import { Button, Empty, cx, IconButton, ItemIcon, shortcut, useModal } from "./bits";
 import { go, useRepo } from "../hooks";
 import { repo } from "../repo";
+import { activeFetch, agentHere } from "../accounts";
 import { tr, useT } from "../i18n";
 
 interface ToolCall {
@@ -66,12 +67,7 @@ export function AgentPanel({ context, onClose, overlay }: { context?: Item; onCl
   const scroller = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  useEffect(() => {
-    fetch("/api/info")
-      .then((res) => res.json())
-      .then((i) => setAvailable(!!i.agent))
-      .catch(() => setAvailable(false));
-  }, [r.status.online]);
+  useEffect(() => setAvailable(agentHere()), [r.status.online]);
 
   useEffect(() => {
     localStorage.setItem("obtion.chat", JSON.stringify(msgs.slice(-60)));
@@ -113,7 +109,7 @@ export function AgentPanel({ context, onClose, overlay }: { context?: Item; onCl
     abort.current = ac;
     const ctx = useContext && context ? `${context.kind === "datei" ? "file" : (r.index().typeName(context.type) ?? "information")} "${context.title}" (id ${context.id})` : undefined;
     try {
-      const res = await fetch("/api/agent", {
+      const res = await activeFetch("/api/agent", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ message, sessionId: session, context: ctx, model }),

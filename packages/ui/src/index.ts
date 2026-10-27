@@ -2,6 +2,5 @@
 import "./theme";
 
 export { App } from "./App";
-export { repo } from "./repo";
-export { files } from "./files";
+export { refreshAll, unsynced } from "./accounts";
 export { tr } from "./i18n";

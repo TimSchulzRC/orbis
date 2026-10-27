@@ -12,6 +12,8 @@ import { Button, Dialog, ItemIcon, Seg, SectionTitle, TypeGlyph, cx } from "../u
 import { notify } from "../ui/feedback";
 import { History, Shapes, Trash2, Waypoints } from "lucide-react";
 import { setTheme, useTheme } from "../theme";
+import { type Space, accountOf, agentHere, here, hostOf, inviteLink, leaveSpace, mcpToken, members, renameSpace, signOut, useAccounts } from "../accounts";
+import { AddServerDialog, NewSpaceDialog } from "../ui/Spaces";
 
 interface Connect {
   mcpUrl: string;
@@ -63,6 +65,101 @@ function CopyBox({ text, secret, label }: { text: string; secret?: string; label
         </button>
       </div>
     </div>
+  );
+}
+
+/** The open workspace: its name, who is in it, an invite link, leaving it. */
+function SpaceSettings() {
+  const { t } = useT();
+  const { active } = useAccounts();
+  const [name, setName] = useState(active?.name ?? "");
+  const [list, setList] = useState<{ id: string; name: string; email: string; role: string }[]>([]);
+  const [link, setLink] = useState("");
+  const [error, setError] = useState("");
+  useEffect(() => {
+    if (active) members(active).then(setList, () => {});
+  }, [active?.key]);
+  if (!active) return null;
+  const owner = active.role === "owner";
+  const fail = (e: unknown) => setError((e as Error).message === "last owner" ? t("space.lastOwner") : (e as Error).message);
+  return (
+    <section>
+      <SectionTitle>{t("space.title")}</SectionTitle>
+      <p className="mb-3 text-sm text-muted">{t("space.intro", { server: hostOf(accountOf(active).server) })}</p>
+      {owner ? (
+        <form className="flex flex-wrap items-center gap-2" onSubmit={(e) => (e.preventDefault(), renameSpace(active, name).catch(fail))}>
+          <input value={name} onChange={(e) => setName(e.target.value)} aria-label={t("space.name")} className="field rounded-lg border border-line bg-surface px-3 py-1.5 text-sm" />
+          <Button type="submit" variant="outline" disabled={!name.trim() || name === active.name}>
+            {t("space.rename")}
+          </Button>
+        </form>
+      ) : (
+        <p className="text-sm font-medium">{active.name}</p>
+      )}
+      <ul className="mt-3 space-y-1 text-sm">
+        {list.map((m) => (
+          <li key={m.id} className="flex items-center gap-2">
+            <span className="min-w-0 truncate">{m.name || m.email}</span>
+            <span className="truncate text-muted">{m.email}</span>
+            <span className="ml-auto shrink-0 text-xs text-muted">{t(`space.role.${m.role}`)}</span>
+          </li>
+        ))}
+      </ul>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Button variant="outline" onClick={() => inviteLink(active).then(setLink, fail)}>
+          {t("space.invite")}
+        </Button>
+        <Button variant="outline" onClick={() => leaveSpace(active).catch(fail)}>
+          {t("space.leave")}
+        </Button>
+      </div>
+      {link && (
+        <div className="mt-3">
+          <p className="mb-1 text-sm text-muted">{t("space.inviteHint")}</p>
+          <CopyBox label={t("space.invite")} text={link} />
+        </div>
+      )}
+      {error && <p className="mt-3 text-sm text-[var(--danger-text)]">{error}</p>}
+    </section>
+  );
+}
+
+/** The accounts of this app: on this server and others; a new workspace, another server, signing out. */
+function Accounts() {
+  const { t } = useT();
+  const { accounts, spaces } = useAccounts();
+  const [dialog, setDialog] = useState<"new" | "server" | null>(null);
+  const spacesOf = (id: string) => spaces.filter((s: Space) => s.account === id);
+  return (
+    <section>
+      <SectionTitle>{t("account.title")}</SectionTitle>
+      <ul className="space-y-2">
+        {accounts.map((a) => (
+          <li key={a.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-line p-3 text-sm">
+            <span className="min-w-0 flex-1">
+              <span className="block truncate font-medium">{a.user.email}</span>
+              <span className="block truncate text-xs text-muted">
+                {a.server === here ? t("account.thisServer", { server: hostOf(a.server) }) : hostOf(a.server)} · {spacesOf(a.id).map((s) => s.name).join(", ") || t("account.noSpaces")}
+                {a.lost && ` · ${t("account.signedOut")}`}
+              </span>
+            </span>
+            <Button variant="outline" onClick={() => void signOut(a)}>
+              {t("account.signOut")}
+            </Button>
+          </li>
+        ))}
+      </ul>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button variant="outline" onClick={() => setDialog("new")}>
+          {t("space.new")}
+        </Button>
+        <Button variant="outline" onClick={() => setDialog("server")}>
+          {t("space.addServer")}
+        </Button>
+      </div>
+      {dialog === "new" && <NewSpaceDialog onClose={() => setDialog(null)} />}
+      {dialog === "server" && <AddServerDialog onClose={() => setDialog(null)} />}
+    </section>
   );
 }
 
@@ -131,23 +228,14 @@ export function Settings() {
   const { t, lang } = useT();
   const theme = useTheme();
   const fs = useFileStatus();
+  // an MCP token is made on request (each is a new one, shown once)
   const [c, setC] = useState<Connect | null>(null);
   const [err, setErr] = useState(false);
   const [device, setDevice] = useState(r.device);
-  useEffect(() => {
-    fetch("/api/connect")
-      .then((res) => res.json())
-      .then(setC)
-      .catch(() => setErr(true));
-  }, [r.status.online]);
-  // the built-in agent needs the Claude Code CLI on the server: say how, here where it is set up
-  const [agentMissing, setAgentMissing] = useState(false);
-  useEffect(() => {
-    fetch("/api/info")
-      .then((res) => res.json())
-      .then((i) => setAgentMissing(!i.agent))
-      .catch(() => {});
-  }, [r.status.online]);
+  const { active } = useAccounts();
+  const newToken = () => mcpToken(active!).then(setC, () => setErr(true));
+  // the built-in agent needs the Claude Code CLI on the server and the server's consent: say so here
+  const agentMissing = !agentHere();
   const s = r.status;
   const ix = r.index();
   const capture = r.get(SETTINGS_ID)?.settings?.captureTypes ?? [];
@@ -177,6 +265,10 @@ export function Settings() {
           ))}
         </nav>
       </div>
+
+      <SpaceSettings />
+
+      <Accounts />
 
       <Examples />
 
@@ -243,6 +335,11 @@ export function Settings() {
         <p className="mb-3 text-sm text-muted">{t("settings.agentIntro")}</p>
         {agentMissing && <p className="mb-3 rounded-lg border border-line bg-surface-2 p-3 text-sm text-muted">{t("agent.noCli")}</p>}
         {err && !c && <p className="text-sm text-muted">{t("settings.connectOffline")}</p>}
+        {!c && (
+          <Button variant="outline" onClick={() => void newToken()}>
+            {t("settings.newToken")}
+          </Button>
+        )}
         {c && (
           <div className="space-y-4">
             <div>

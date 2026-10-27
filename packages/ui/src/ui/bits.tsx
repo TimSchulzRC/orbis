@@ -4,6 +4,7 @@ import { X, Check, ChevronDown, ChevronRight, CircleCheck, CirclePause, CircleX,
 import { type Item, type OptionDef, type StatusGroup, type TypeSchema, META_TYPE, todayISO } from "@obtion/core/model";
 import { fmtRelative, fmtShortDate } from "@obtion/core/i18n";
 import { isInInbox, isOverview } from "@obtion/core/placement";
+import type { Index } from "@obtion/core/graph";
 import { parseDate, statusShape } from "@obtion/core/input";
 import { repo } from "../repo";
 import { itemHref } from "../hooks";
@@ -19,8 +20,7 @@ export const pal = (color?: string) => `var(--pal-${color ?? "slate"}, var(--pal
 export const GROUP_COLOR: Record<StatusGroup, string> = { todo: "var(--faint)", active: "var(--t-inbox)", done: "var(--ok)" };
 
 /** Visual identity of an item: its type, or note / inbox / file / type. */
-export function itemLook(item: Item): { icon: typeof INBOX_ICON; color: string; label: string } {
-  const ix = repo.index();
+export function itemLook(item: Item, ix: Index = repo.index()): { icon: typeof INBOX_ICON; color: string; label: string } {
   if (item.kind === "datei") return { icon: FILE_ICONS[item.file?.filetype ?? "sonstiges"] ?? FILE_ICONS.sonstiges!, color: "var(--t-file)", label: "file" };
   if (item.schema && item.type === META_TYPE) return { icon: ICON[item.schema.icon] ?? TYPE_ICON, color: pal(item.schema.color), label: "type" };
   const schema = ix.schemaOf(item);
@@ -30,9 +30,10 @@ export function itemLook(item: Item): { icon: typeof INBOX_ICON; color: string; 
   return { icon: NOTE_ICON, color: "var(--t-note)", label: "note" };
 }
 
-export function ItemIcon({ item, size = 16, className }: { item: Item; size?: number; className?: string }) {
+/** `ix`: the index of the item's workspace, if it is not the open one (the sidebar shows others). */
+export function ItemIcon({ item, size = 16, className, ix }: { item: Item; size?: number; className?: string; ix?: Index }) {
   const { t } = useT();
-  const look = itemLook(item);
+  const look = itemLook(item, ix);
   const label = ["file", "inbox", "note", "type", "overview"].includes(look.label) ? t("kind." + look.label) : look.label;
   return <look.icon size={size} style={{ color: look.color }} className={cx("shrink-0", className)} aria-label={label} />;
 }
@@ -551,6 +552,7 @@ export function Popover({
   onOpenChange,
   align = "left",
   className,
+  triggerClass,
 }: {
   trigger: (p: { onClick: () => void; "aria-expanded": boolean }) => ReactNode;
   children: ReactNode | ((close: () => void) => ReactNode);
@@ -558,6 +560,8 @@ export function Popover({
   onOpenChange?: (o: boolean) => void;
   align?: "left" | "right";
   className?: string;
+  /** around the trigger (e.g. to let it take the free width) */
+  triggerClass?: string;
 }) {
   const [inner, setInner] = useState(false);
   const isOpen = open ?? inner;
@@ -587,7 +591,7 @@ export function Popover({
     };
   }, [isOpen]);
   return (
-    <span ref={ref} className="relative inline-flex">
+    <span ref={ref} className={cx("relative inline-flex", triggerClass)}>
       {trigger({ onClick: () => set(!isOpen), "aria-expanded": isOpen })}
       {isOpen &&
         createPortal(

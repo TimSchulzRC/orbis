@@ -9,7 +9,8 @@
 import { openDB, type IDBPDatabase } from "idb";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { type FileMeta, type Item, fileTypeOf, initItem, mimeOf, newId, setFileMeta } from "@obtion/core/model";
-import { repo } from "./repo";
+import type { Repo } from "@obtion/sync";
+import type { SpaceLink } from "./browser";
 
 export type FileMode = "online" | "local";
 const MODE_KEY = "obtion.fileMode";
@@ -30,11 +31,11 @@ interface BlobStore {
   list(): Promise<{ hash: string; size: number }[]>;
 }
 
-async function opfsStore(): Promise<BlobStore | null> {
+async function opfsStore(name: string): Promise<BlobStore | null> {
   try {
     const root = await navigator.storage?.getDirectory?.();
     if (!root) return null;
-    const dir = await root.getDirectoryHandle("blobs", { create: true });
+    const dir = await root.getDirectoryHandle(name, { create: true });
     const probe = await dir.getFileHandle(".probe", { create: true });
     if (typeof (probe as any).createWritable !== "function") return null;
     return {
@@ -163,7 +164,8 @@ export interface FileStatus {
   downloading: number;
 }
 
-class DeviceFiles {
+/** The file contents of one workspace on this device. */
+export class DeviceFiles {
   mode: FileMode = (localStorage.getItem(MODE_KEY) as FileMode) || "online";
   status: FileStatus = { mode: this.mode, originals: 0, total: 0, bytes: 0, uploading: 0, downloading: 0 };
   private db!: IDBPDatabase;
@@ -177,7 +179,7 @@ class DeviceFiles {
   /** Ask the server whether it has a content, without downloading it. */
   async check(hash: string): Promise<void> {
     if (this.local.has(hash) || this.missing.has(hash)) return;
-    const res = await fetch(`/api/blobs/${hash}?check=1`, { headers: { "x-obtion-probe": "1" } }).catch(() => null);
+    const res = await fetch(`${this.link.base}/api/blobs/${hash}?check=1`, { headers: { "x-obtion-probe": "1", ...this.auth } }).catch(() => null);
     if (res?.headers.get("x-obtion-missing")) {
       this.missing.add(hash);
       this.emit();
@@ -195,21 +197,30 @@ class DeviceFiles {
   private syncTimer: ReturnType<typeof setTimeout> | null = null;
   private uploading = false;
 
-  constructor() {
+  constructor(
+    private repo: Repo,
+    private link: SpaceLink,
+  ) {
     this.ready = this.open();
   }
 
+  private get auth() {
+    return { authorization: `Bearer ${this.link.token}` };
+  }
+
   private async open() {
-    this.db = await openDB("obtion-files", 1, {
+    // the data from before accounts keep the names they had ("obtion" → "obtion-files", "blobs")
+    const legacy = this.link.name === "obtion";
+    this.db = await openDB(legacy ? "obtion-files" : `${this.link.name}-files`, 1, {
       upgrade(db) {
         db.createObjectStore("blobs");
         db.createObjectStore("uploads", { keyPath: "hash" });
       },
     });
-    this.store = (await opfsStore()) ?? idbStore(this.db);
+    this.store = (await opfsStore(legacy ? "blobs" : `blobs-${this.link.name}`)) ?? idbStore(this.db);
     for (const b of await this.store.list()) this.local.add(b.hash);
-    repo.subscribe(() => this.scheduleSync());
-    repo.onBlob((hash) => {
+    this.repo.subscribe(() => this.scheduleSync());
+    this.repo.onBlob((hash) => {
       // arrived on the server: "wird hochgeladen" gives way to the file
       if (this.missing.delete(hash)) this.emit();
       this.scheduleSync(50);
@@ -259,12 +270,13 @@ class DeviceFiles {
     return p;
   }
 
-  /** Direct server URL (for downloads and the PDF viewer while online). */
+  /** Direct server URL (for downloads and the PDF viewer while online); a link carries no header, so the token goes along. */
   serverUrl(hash: string, name?: string, download = false) {
     const q = new URLSearchParams();
     if (name) q.set("name", name);
     if (download) q.set("download", "1");
-    return `/api/blobs/${hash}${q.size ? "?" + q : ""}`;
+    q.set("t", this.link.token);
+    return `${this.link.base}/api/blobs/${hash}?${q}`;
   }
 
   /** Object URL of the original on this device, with its type (the PDF viewer needs it); undefined if not here. */
@@ -289,7 +301,7 @@ class DeviceFiles {
 
   private async fetchVerified(hash: string): Promise<Blob | undefined> {
     try {
-      const res = await fetch(`/api/blobs/${hash}`, { headers: { "x-obtion-probe": "1" } });
+      const res = await fetch(`${this.link.base}/api/blobs/${hash}`, { headers: { "x-obtion-probe": "1", ...this.auth } });
       if (res.status === 404 || res.headers.get("x-obtion-missing")) {
         this.missing.add(hash);
         this.emit();
@@ -309,13 +321,27 @@ class DeviceFiles {
     this.local.add(hash);
   }
 
+  /** A content from this device or the server (checked against its hash); undefined if neither has it. */
+  async content(hash: string): Promise<Blob | undefined> {
+    await this.ready;
+    return (this.local.has(hash) ? await this.store.get(hash) : undefined) ?? (await this.fetchVerified(hash));
+  }
+
+  /** A content brought from another workspace (a move): kept here and uploaded like a new file. */
+  async adopt(hash: string, blob: Blob, name: string, derived: boolean) {
+    await this.ready;
+    await this.save(hash, blob);
+    await this.enqueueUpload({ hash, name, derived: derived || undefined });
+    this.scheduleSync(10);
+  }
+
   // ---------- adding files ----------
 
   /** Add a file: stored here at once, uploaded when the server is reachable. Returns the file item id. */
   async add(file: File | Blob, name: string, opts: { parent?: string } = {}): Promise<{ id: string; name: string }> {
     await this.ready;
     const hash = await sha256(file);
-    const ix = repo.index();
+    const ix = this.repo.index();
     const same = ix.live.find((r) => r.file?.hash === hash);
     if (same) return { id: same.id, name: same.file!.name };
     // Pasted images are all called "image.png": keep names unique so [[links]] stay unambiguous.
@@ -323,8 +349,8 @@ class DeviceFiles {
     for (let n = 2; ix.live.some((r) => r.file?.name.toLowerCase() === unique.toLowerCase()); n++) unique = name.replace(/(\.[^.]+)?$/, ` (${n})$1`);
     const meta = await this.prepare(file, unique, hash);
     const id = newId();
-    repo.change(id, (doc) => {
-      initItem(doc, { kind: "datei", title: unique, parents: opts.parent ? [opts.parent] : [], createdBy: `web:${repo.device}` });
+    this.repo.change(id, (doc) => {
+      initItem(doc, { kind: "datei", title: unique, parents: opts.parent ? [opts.parent] : [], createdBy: `web:${this.repo.device}` });
       setFileMeta(doc, meta);
     });
     this.scheduleSync(10);
@@ -376,17 +402,17 @@ class DeviceFiles {
 
   private async sync() {
     await this.ready;
-    const files = repo.live().filter((r) => r.kind === "datei" && r.file?.hash);
-    if (repo.status.online) await this.uploadAll();
+    const files = this.repo.live().filter((r) => r.kind === "datei" && r.file?.hash);
+    if (this.repo.status.online) await this.uploadAll();
     const want: string[] = [];
     for (const f of files) {
       const m = f.file!;
       for (const h of [m.thumb, m.display]) if (h && !this.local.has(h)) want.push(h);
       if (this.mode === "local" && !this.local.has(m.hash)) want.push(m.hash);
     }
-    if (repo.status.online) for (const h of want) if (!this.queue.includes(h) && !this.missing.has(h)) this.queue.push(h);
+    if (this.repo.status.online) for (const h of want) if (!this.queue.includes(h) && !this.missing.has(h)) this.queue.push(h);
     this.pump();
-    if (repo.status.online) this.makePdfPreviews(files).catch(() => {});
+    if (this.repo.status.online) this.makePdfPreviews(files).catch(() => {});
     this.updateStatus(files);
   }
 
@@ -409,7 +435,7 @@ class DeviceFiles {
         })
         .finally(() => {
           this.active--;
-          if (!this.queue.length && !this.active) this.updateStatus(repo.live().filter((r) => r.kind === "datei" && r.file?.hash));
+          if (!this.queue.length && !this.active) this.updateStatus(this.repo.live().filter((r) => r.kind === "datei" && r.file?.hash));
           this.pump();
         });
     }
@@ -429,14 +455,14 @@ class DeviceFiles {
         }
         const q = new URLSearchParams({ name: u.name });
         if (u.derived) q.set("derived", "1");
-        const res = await fetch(`/api/blobs/${u.hash}?${q}`, { method: "PUT", body: blob }).catch(() => null);
+        const res = await fetch(`${this.link.base}/api/blobs/${u.hash}?${q}`, { method: "PUT", body: blob, headers: this.auth }).catch(() => null);
         if (!res) break; // offline again
         if (res.ok || res.status === 415 || res.status === 422 || res.status === 413) {
           await this.db.delete("uploads", u.hash);
           this.status.uploading--;
           // "Online only": the original does not need to stay here once the server has it –
           // unless it is what an image shows (an SVG has no display version of its own)
-          if (res.ok && !u.derived && this.mode === "online" && !shownItself().has(u.hash)) await this.drop(u.hash);
+          if (res.ok && !u.derived && this.mode === "online" && !shownItself(this.repo).has(u.hash)) await this.drop(u.hash);
         }
       }
     } finally {
@@ -459,19 +485,19 @@ class DeviceFiles {
       // leave other devices pointing at a preview that never arrives.
       const thumb = await sha256(prev.blob);
       await this.save(thumb, prev.blob);
-      const res = await fetch(`/api/blobs/${thumb}?name=preview.webp&derived=1`, { method: "PUT", body: prev.blob }).catch(() => null);
+      const res = await fetch(`${this.link.base}/api/blobs/${thumb}?name=preview.webp&derived=1`, { method: "PUT", body: prev.blob, headers: this.auth }).catch(() => null);
       if (!res?.ok) {
         this.pdfDone.delete(f.id); // try again next time
         continue;
       }
-      repo.change(f.id, (doc) => setFileMeta(doc, { thumb, pages: m.pages ?? prev.pages }));
+      this.repo.change(f.id, (doc) => setFileMeta(doc, { thumb, pages: m.pages ?? prev.pages }));
     }
   }
 
   /** Remove local originals (switching to online only). Previews and what images show stay. */
   async dropOriginals() {
-    const keep = shownItself();
-    for (const r of repo.live()) if (r.file) for (const h of [r.file.thumb, r.file.display]) if (h) keep.add(h);
+    const keep = shownItself(this.repo);
+    for (const r of this.repo.live()) if (r.file) for (const h of [r.file.thumb, r.file.display]) if (h) keep.add(h);
     const pending = new Set(((await this.db.getAll("uploads")) as Upload[]).map((u) => u.hash));
     for (const h of [...this.local]) {
       if (keep.has(h) || pending.has(h)) continue;
@@ -489,11 +515,15 @@ class DeviceFiles {
 }
 
 /** Originals that are shown as they are: images without a display version (SVGs). */
-function shownItself(): Set<string> {
+function shownItself(repo: Repo): Set<string> {
   return new Set(repo.live().flatMap((r) => (r.file?.filetype === "bild" && !r.file.display ? [r.file.hash] : [])));
 }
 
-export const files = new DeviceFiles();
+/** The files of the workspace open in the app (see accounts.ts, like `repo`). */
+export let files: DeviceFiles;
+export function setFiles(f: DeviceFiles) {
+  files = f;
+}
 
 export function useFileStatus() {
   useSyncExternalStore(files.subscribe, files.getVersion);
