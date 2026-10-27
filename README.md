@@ -11,45 +11,37 @@ This README summarises the model and what the code implements.
 - **Pinned:** any information can be pinned (`meta.pinned`). Pinned items form "Angeheftet" in the sidebar and count as a place; below each, all children one level deeper (done items left out). Below "Angeheftet", "Typen" lists the page of every type and the files.
 - **File:** its own primitive with the same connections, no type but a file type (bild, pdf, audio, video, dokument, sonstiges). Content by SHA-256 on the hub, metadata synced; previews and display versions of images on every device; per device "online only" or "everything local".
 - **Inbox:** whatever its rule matches – stored in the settings, adjustable ("Was landet im Eingang?"), default `ohne:typ ohne:eltern -angeheftet | datei ohne:eltern ohne:verwendung`.
-- **Type:** data, not code – properties per type (text, number, date, checkbox, URL, select, multi-select, status with groups, relation with inverse, computed) and capabilities (status, progress, updates, due date "Termin", main action, template). Capabilities are read only through `src/shared/traits.ts`. Every type has its page: the list of its entries with views as tabs (table, board, list, calendar, timeline, gallery), stored on the type. Karte, Projekt and Task are created at setup and are ordinary, deletable types afterwards. No code asks for a type id; the app works with zero types.
+- **Type:** data, not code – properties per type (text, number, date, checkbox, URL, select, multi-select, status with groups, relation with inverse, computed) and capabilities (status, progress, updates, due date "Termin", main action, template). Capabilities are read only through `packages/core/src/traits.ts`. Every type has its page: the list of its entries with views as tabs (table, board, list, calendar, timeline, gallery), stored on the type. Karte, Projekt and Task are created at setup and are ordinary, deletable types afterwards. No code asks for a type id; the app works with zero types.
 - **Queries:** stored as JSON with ids, typed in either language: `typ:Task status:offen unter:[[Relaunch]] fällig<=+7d gruppe:pfad`. Query blocks live in texts (```` ```abfrage … ``` ````). Mixed lists are pages with query blocks (with tabs too), e.g. "Eingang Arbeit" = `eingang verknüpft:unter:[[Arbeit]]`.
 - **No required type:** new informations have no type by default; there is no setting for another default. In the inbox the agent only suggests a type and a place.
 
 Rules that are easy to miss (details in the plan, Technik › Regeln):
 
-- **Trash with cascade:** `meta.deleted` is `true` or `"via:<root>"`. What hangs only below a deleted item goes along and comes back with it; another living parent always keeps an item (`src/shared/trash.ts`).
+- **Trash with cascade:** `meta.deleted` is `true` or `"via:<root>"`. What hangs only below a deleted item goes along and comes back with it; another living parent always keeps an item (`packages/core/src/trash.ts`).
 - **Done date:** entering the status group done sets `meta.done`, reopening clears it; an update with a status change uses its own date. Query `erledigt>-7d`.
-- **One step, one undo:** every user action and every tool call is a step (its id is on every log row it wrote). Activity › Rückgängig takes back all of it; fields changed again later keep the newer value, items it created go to the trash; undo is itself a step and can be redone (`src/server/undo.ts`).
+- **One step, one undo:** every user action and every tool call is a step (its id is on every log row it wrote). Activity › Rückgängig takes back all of it; fields changed again later keep the newer value, items it created go to the trash; undo is itself a step and can be redone (`apps/hub/src/undo.ts`).
 - **Areas:** every information, type, file and log row belongs to exactly one area (`meta.area`, column `area`); sync runs per area. For now there is one, the personal area, without any interface.
 - **Hub reset:** devices send `hello { area, since, sinceId }`; a hub restored from an older backup is noticed even after another device synced first.
-- **Data format:** the data carry a format version (`settings.format`, `FORMAT` in `src/shared/model.ts`). A newer hub upgrades older data once at start (`src/shared/setup.ts`); an app older than the data still reads them but asks to be reloaded before it writes. `tests/fixtures/format-1.json` keeps data of format 1 that every later version must read.
-- **Tolerant input:** statuses as group or option name in German or English (also synonyms), dates like 30.10.2026, 10/30/2026, morgen, type names in plural (`src/shared/input.ts`). Search folds ä/ö/ü/ß and hyphens.
+- **Data format:** the data carry a format version (`settings.format`, `FORMAT` in `packages/core/src/model.ts`). A newer hub upgrades older data once at start (`packages/core/src/setup.ts`); an app older than the data still reads them but asks to be reloaded before it writes. `tests/fixtures/format-1.json` keeps data of format 1 that every later version must read.
+- **Tolerant input:** statuses as group or option name in German or English (also synonyms), dates like 30.10.2026, 10/30/2026, morgen, type names in plural (`packages/core/src/input.ts`). Search folds ä/ö/ü/ß and hyphens.
 
 ## Architecture
 
-```
- Browser / PWA                                   Any MCP client (Claude Code, Desktop …)
- full replica (IndexedDB, files in OPFS)                 │  MCP over HTTPS + bearer token
-        │  WebSocket /sync (Yjs updates + outbox)        │
-        ▼                                                ▼
- ┌────────────────────────────── Hub (NAS / home server, Bun) ──────────────────────────────┐
- │ SQLite: update log · snapshots · activity      data/blobs/<sha256> (+ previews via ffmpeg)│
- │ records → index (structure, links, aggregation) → search · queries · MCP · agent runner   │
- │ data/vault/: read-only Markdown mirror below each item's home                             │
- └───────────────────────────────────────────────────────────────────────────────────────────┘
-```
+- **Hub** (Bun, one process): SQLite with the update log, snapshots and activity; files by SHA-256 in `blobs/` (previews via ffmpeg); a read-only Markdown mirror in `vault/` below each item's home; the index (structure, links, aggregation), search, queries, MCP and the agent runner. It serves the web app too, unless `OBTION_WEB_APP=off`.
+- **Web app** (PWA): always a client of a hub, which serves it. It keeps a full replica on the device (IndexedDB, files in OPFS) and syncs over the WebSocket `/sync` (Yjs updates plus an outbox for offline changes).
+- **Agents**: any MCP client over HTTPS with a bearer token; the built-in chat runs a headless Claude with only these tools.
 
-Each item is a Yjs document; scalar fields merge last-writer-wins, sets (tags, refs, parents, relations) merge as sets, the text merges character by character. Structure, links, inbox, queries and progress are computed by the same code on devices and the hub (`src/shared/`). The hub has an id: a device that knew a different hub asks whether to replace its copy (recommended: the hub was set up anew) or upload it (the hub was restored from a backup).
+Each item is a Yjs document; scalar fields merge last-writer-wins, sets (tags, refs, parents, relations) merge as sets, the text merges character by character. Structure, links, inbox, queries and progress are computed by the same code on devices and the hub (`@obtion/core`). The hub has an id: a device that knew a different hub asks whether to replace its copy (recommended: the hub was set up anew) or upload it (the hub was restored from a backup).
 
 ## Running
 
 ```bash
 bun install
-bun run build                        # web app → dist/
-bun run start                        # hub on 127.0.0.1:8480 (PORT, HOST, OBTION_DATA, OBTION_PUBLIC_URL)
+bun run build                        # web app → apps/web/dist/
+bun run start                        # hub on 127.0.0.1:8480 (PORT, HOST, OBTION_DATA, OBTION_PUBLIC_URL, OBTION_WEB_DIST)
 ```
 
-On first start the browser asks for the language and sets up the default types and the start page – by default with a small made-up world of examples (`src/shared/examples.ts`), which Settings › Remove examples moves to the trash again. On the hub: `bun run setup de [--examples]`.
+On first start the browser asks for the language and sets up the default types and the start page – by default with a small made-up world of examples (`packages/core/src/examples.ts`), which Settings › Remove examples moves to the trash again. On the hub: `bun run setup de [--examples]`.
 
 Admin commands run while the hub is stopped (they refuse otherwise) and are repeatable – same source, same item. Sources are only read.
 
@@ -81,11 +73,11 @@ tailscale serve --bg --https=443 http://127.0.0.1:8480
 
 ```bash
 bun run seed:demo                    # the setup's examples → data-demo/ (never data/)
-OBTION_DATA=data-demo PORT=8481 bun --watch src/server/index.ts
-PORT=8481 bunx vite --port 5181          # proxies /api, /mcp and /sync (WebSocket) to the hub on PORT
-bun test && bun run typecheck && bun run build
+OBTION_DATA=data-demo PORT=8481 bun --watch apps/hub/src/index.ts
+cd apps/web && PORT=8481 bunx vite --port 5181   # proxies /api, /mcp and /sync (WebSocket) to the hub on PORT
+bun test && bun run typecheck && bun run build   # typecheck: every package on its own
 bun run test:e2e                     # browser smoke test: empty, examples and fresh hub, every route, light/dark/phone
-bun run icons                        # regenerate the app icons in public/
+bun run icons                        # regenerate the app icons in apps/web/public/
 ```
 
 The vite dev server listens on 127.0.0.1 and talks to the hub under the hub's own address (Host and Origin), so it works on any port and behind `tailscale serve`. Reached through the tailnet over HTTPS, set `OBTION_DEV_PUBLIC_URL=https://<host>.ts.net:<port>` so hot reload connects over wss on that port.
@@ -108,15 +100,19 @@ Tools: `schema`, `query` (text or a type name), `get`, `search`, `focus`, `creat
 
 ## Layout
 
-```
-src/shared/  model.ts (documents), graph.ts (index), placement.ts (overview, sidebar), inbox.ts,
-             traits.ts (capabilities), query.ts, typeops.ts (delete type, tag ↔ type), setup.ts, i18n.ts
-src/server/  index.ts (HTTP/WS), store.ts, blobs.ts, ops.ts + mcp.ts (agents), agent.ts, mirror.ts,
-             importers.ts + cli.ts
-src/client/  repo.ts (replica + sync), files.ts (file contents per device), App.tsx, views/*, ui/*
-src/locales/ de.json, en.json (ICU; a test checks every key is in every catalog)
-scripts/     demo-seed.ts, e2e.ts (browser smoke test, playwright-core + Chrome in ~/.cache/ms-playwright), icons.ts
-```
+A Bun workspace. Logic without UI lives in shared packages, so further clients (a desktop app around the same React interface, a mobile app) reuse it; each app is a thin shell.
+
+| Package | Contains | May use |
+| --- | --- | --- |
+| `packages/core` (`@obtion/core`) | data model and Yjs documents (`model.ts`), index (`graph.ts`), overview and sidebar (`placement.ts`), inbox, capabilities (`traits.ts`), queries, search, type operations, trash, setup and examples, sync protocol (`protocol.ts`), translations (`i18n.ts`, `locales/`) | only what every JavaScript runtime has (`runtime.d.ts`): no DOM, Node or Bun |
+| `packages/sync` (`@obtion/sync`) | `Repo`: a device's replica of a hub – documents, outbox, steps, sync over WebSocket. Storage, the hub connection and questions to the user come from the platform (`RepoHost`, `ReplicaStorage`) | like core |
+| `packages/ui` (`@obtion/ui`) | the React interface: `App.tsx`, `views/*`, `ui/*`, styles; `browser.ts` is the browser's `RepoHost` (IndexedDB, the hub that served the page, tabs), `files.ts` the file contents per device | browser APIs, React |
+| `apps/hub` (`@obtion/hub`) | `index.ts` (HTTP/WS), `store.ts`, `blobs.ts`, `ops.ts` + `mcp.ts` (agents), `agent.ts`, `undo.ts`, `mirror.ts`, `trust.ts`, `importers.ts` + `cli.ts` | Bun, SQLite |
+| `apps/web` (`@obtion/web`) | the PWA shell: `index.html`, `src/main.tsx`, service worker updates (`src/update.ts`), icons, Vite config | browser APIs |
+
+`tests/` holds the unit and hub tests (`bun test`), `scripts/` the browser smoke test (playwright-core + Chrome in ~/.cache/ms-playwright), the demo seed and the icon generator. A locale test checks every key is in every catalog.
+
+The typecheck runs per package with its own environment, so core and sync cannot pick up a platform API by accident. Bun installs isolated: a package only sees the dependencies it declares.
 
 ## License
 
