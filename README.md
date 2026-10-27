@@ -51,22 +51,27 @@ bun run import:obsidian ~/second_brain
 bun run stats                        # counts per type, server id, sequence number
 ```
 
-All data lives in `data/` (`OBTION_DATA`): `obtion.db` (SQLite), `blobs/`, `vault/` (Markdown mirror) and `config.json` with the MCP token. None of it is in git.
+All data lives in `data/` (`OBTION_DATA`): `obtion.db` (SQLite), `backups/` (a copy of it per day), `blobs/`, `vault/` (Markdown mirror) and `config.json` with the MCP token. None of it is in git.
 
 ### Running on a NAS or server (Docker)
 
-The image holds the server with the web app; all data live in one volume (`/data`).
+The image holds the server with the web app. All data live in one ordinary folder on the host.
 
 ```bash
-docker compose up -d                 # builds the image from this repository, see docker-compose.yml
-tailscale serve --bg --https=443 http://127.0.0.1:8480
+git clone <repository> obtion && cd obtion
+cp .env.example .env                 # set OBTION_PUBLIC_URL (and OBTION_DATA_DIR if wanted)
+docker compose up -d                 # builds the image from this repository
 ```
 
-- **Settings** (environment): `OBTION_PUBLIC_URL` – the address in the browser, e.g. `https://nas.example.ts.net` (the server only answers to its known host names; more with `OBTION_ALLOWED_HOSTS`). `OBTION_WEB_APP=off` – only sync, API and MCP, no web app. `PORT`, `OBTION_DATA` are set in the image (8480, `/data`).
-- **Volume:** `./data` next to the compose file (on Synology, QNAP or Unraid a folder of the docker share). The container runs as uid 1000: make the folder writable for it (`chown -R 1000:1000 data`) or set `user:` in the compose file.
-- **Access and identity:** reach it through Tailscale. `tailscale serve` on the host tells the server who is calling (`tailscale-user-login`); the server believes that only from a trusted proxy – by default only 127.0.0.1, in the container the compose network's gateway (`OBTION_TRUSTED_PROXIES`, addresses or ranges). That is why the port is published on 127.0.0.1 only: nobody else may reach the server directly and send the header.
-- **Backup:** stop the container and copy the data folder (`docker compose stop`, `tar czf obtion-$(date +%F).tgz data`, `docker compose start`). `vault/` is rebuilt at every start and can be left out.
-- **Moving an existing server here:** stop the old server, copy its whole data folder (`obtion.db`, `blobs/`, `config.json`, …) into the volume folder, start the container. The server keeps its id, so connected devices just continue (point the address they use to the new host); the MCP token stays the same. Starting with an empty volume instead gives a new server id: each device then asks once whether to replace its copy with the server's data or upload it.
+Then make the port reachable over HTTPS through whatever runs on the host – the server does not care which: `tailscale serve --bg --https=443 http://127.0.0.1:8480`, the NAS's own reverse proxy, Caddy and the like. The app needs HTTPS to be installed and to work offline.
+
+- **Settings** live in `.env` (not in git, so `git pull` never collides with them); `.env.example` explains each. `OBTION_PUBLIC_URL` (required) is the address in the browser: the server only answers to its known host names (more with `OBTION_ALLOWED_HOSTS`).
+- **Data:** `OBTION_DATA_DIR`, default `./data` next to the compose file – a plain folder, e.g. on the NAS's SSD. A new folder is set up by the container; an existing one keeps its owner (the server runs as that user, never as root).
+- **Backup:** the server writes a consistent copy of the database to `backups/obtion-<date>.db` once a day and keeps the last seven. A backup job may therefore copy the whole data folder at any time, without stopping anything: `backups/` and `blobs/` (file contents, only ever added) are what counts; `obtion.db` itself may be caught mid-write and `vault/` is rebuilt at every start.
+- **Restore:** `docker compose stop`, replace `obtion.db` with a file from `backups/` and delete `obtion.db-wal` and `obtion.db-shm`, `docker compose start`. Devices notice the older state and send what they have beyond it.
+- **Update:** `git pull && docker compose up -d --build`.
+- **Access and identity:** by default the port is published on 127.0.0.1 only, for a proxy on the same host. There is no login yet: whoever reaches the port can read and change everything, so keep it that way (`OBTION_BIND=0.0.0.0` opens it to the whole network). `tailscale serve` on the host also tells the server who is calling (`tailscale-user-login`); the server believes that only from a trusted proxy – the compose network's gateway (`OBTION_TRUSTED_PROXIES`).
+- **Moving an existing server here:** stop the old server, copy its whole data folder (`obtion.db`, `blobs/`, `config.json`, …) into the data folder, start the container. The server keeps its id, so connected devices just continue (point the address they use to the new host); the MCP token stays the same. Starting with an empty folder instead gives a new server id: each device then asks once whether to replace its copy with the server's data or upload it.
 - The built-in agent needs the Claude Code CLI next to the server and is not in the image; MCP works for any client.
 
 ### Development
@@ -107,7 +112,7 @@ A Bun workspace. Logic without UI lives in shared packages, so further clients (
 | `packages/core` (`@obtion/core`) | data model and Yjs documents (`model.ts`), index (`graph.ts`), overview and sidebar (`placement.ts`), inbox, capabilities (`traits.ts`), queries, search, type operations, trash, setup and examples, sync protocol (`protocol.ts`), translations (`i18n.ts`, `locales/`) | only what every JavaScript runtime has (`runtime.d.ts`): no DOM, Node or Bun |
 | `packages/sync` (`@obtion/sync`) | `Repo`: a device's replica of a server – documents, outbox, steps, sync over WebSocket. Storage, the server connection and questions to the user come from the platform (`RepoHost`, `ReplicaStorage`) | like core |
 | `packages/ui` (`@obtion/ui`) | the React interface: `App.tsx`, `views/*`, `ui/*`, styles; `browser.ts` is the browser's `RepoHost` (IndexedDB, the server that served the page, tabs), `files.ts` the file contents per device | browser APIs, React |
-| `apps/server` (`@obtion/server`) | `index.ts` (HTTP/WS), `store.ts`, `blobs.ts`, `ops.ts` + `mcp.ts` (agents), `agent.ts`, `undo.ts`, `mirror.ts`, `trust.ts`, `importers.ts` + `cli.ts` | Bun, SQLite |
+| `apps/server` (`@obtion/server`) | `index.ts` (HTTP/WS), `store.ts`, `blobs.ts`, `ops.ts` + `mcp.ts` (agents), `agent.ts`, `undo.ts`, `mirror.ts`, `backup.ts`, `trust.ts`, `importers.ts` + `cli.ts` | Bun, SQLite |
 | `apps/web` (`@obtion/web`) | the PWA shell: `index.html`, `src/main.tsx`, service worker updates (`src/update.ts`), icons, Vite config | browser APIs |
 
 `tests/` holds the unit and server tests (`bun test`), `scripts/` the browser smoke test (playwright-core + Chrome in ~/.cache/ms-playwright), the demo seed and the icon generator. A locale test checks every key is in every catalog.

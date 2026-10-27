@@ -1,22 +1,25 @@
-# Obtion on a NAS or any Docker host. Reached over Tailscale: `tailscale serve` on the host forwards
-# https://<host>.<tailnet>.ts.net to 127.0.0.1:8480 and tells the server who is calling.
-#   docker compose up -d
+# Obtion on a NAS or any Docker host: clone the repository, `cp .env.example .env`,
+# set the address there, `docker compose up -d`. Your settings live in .env (not in git),
+# so `git pull` never collides with them.
 services:
   obtion:
     build: .
     image: obtion-server
     restart: unless-stopped
     ports:
-      # only on the host itself: the server trusts the caller headers from tailscale serve, so
-      # nobody else in the network may reach the port directly
-      - "127.0.0.1:8480:8480"
+      # by default only on the host itself: a reverse proxy or `tailscale serve` there
+      # forwards to it. The server has no login yet – whoever reaches the port sees everything.
+      - "${OBTION_BIND:-127.0.0.1}:${OBTION_PORT:-8480}:8480"
     volumes:
-      - ./data:/data # the data directory; must be writable by uid 1000 (or set `user:`)
+      # an ordinary folder on the host: database, daily backups, files, Markdown mirror
+      - ${OBTION_DATA_DIR:-./data}:/data
     environment:
-      OBTION_PUBLIC_URL: https://nas.example.ts.net # the address in the browser
-      # tailscale serve on the host reaches the container through this network's gateway
+      OBTION_PUBLIC_URL: ${OBTION_PUBLIC_URL:?set OBTION_PUBLIC_URL in .env (see .env.example)}
+      OBTION_ALLOWED_HOSTS: ${OBTION_ALLOWED_HOSTS:-}
+      OBTION_WEB_APP: ${OBTION_WEB_APP:-on}
+      # a proxy on the host reaches the container through this network's gateway; only from
+      # there the server believes the caller's name (tailscale serve sends it)
       OBTION_TRUSTED_PROXIES: 172.30.0.1
-      # OBTION_WEB_APP: "off" # only sync, API and MCP, no web app
     networks:
       - obtion
 

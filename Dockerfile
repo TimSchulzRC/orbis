@@ -1,5 +1,5 @@
 # Obtion server with its web app: sync, API, MCP and the app in one container.
-# Data live in the volume /data (database, files, Markdown mirror, MCP token).
+# Data live in /data (database, daily backups, files, Markdown mirror, MCP token).
 FROM oven/bun:1.3 AS build
 WORKDIR /app
 COPY . .
@@ -18,9 +18,10 @@ RUN bun install --frozen-lockfile --production --omit optional --filter @obtion/
 COPY packages/core ./packages/core
 COPY apps/server ./apps/server
 COPY --from=build /app/apps/web/dist ./apps/web/dist
-RUN mkdir -p /data && chown bun:bun /data
-USER bun
+COPY docker/entrypoint.sh /usr/local/bin/obtion-entrypoint
 ENV HOST=0.0.0.0 PORT=8480 OBTION_DATA=/data
 VOLUME /data
 EXPOSE 8480
+# runs the server as the owner of /data, never as root (docker/entrypoint.sh)
+ENTRYPOINT ["obtion-entrypoint"]
 CMD ["bun", "apps/server/src/index.ts"]

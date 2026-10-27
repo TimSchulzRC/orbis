@@ -9,6 +9,7 @@ import { Mirror } from "./mirror";
 import { handleMcp, INSTRUCTIONS } from "./mcp";
 import { agentAvailable, runAgent } from "./agent";
 import { Blobs, MAX_BLOB } from "./blobs";
+import { Backups } from "./backup";
 import { FORMAT, PERSONAL, SETTINGS_ID, fileTypeOf } from "@obtion/core/model";
 import { addLaterDefaultProps, migrateCollections, renameShippedLabels, upgradeAreas, upgradeHideEmptyTaskFields, upgradeStartPage } from "@obtion/core/setup";
 import type { Lang } from "@obtion/core/i18n";
@@ -87,6 +88,7 @@ blobs.onStored = (hash) => {
 };
 blobs.scan();
 mirror.start();
+new Backups(store, join(DATA, "backups")).start();
 
 function handleHello(ws: ServerWebSocket<Conn>, msg: Extract<ClientMsg, { t: "hello" }>) {
   const area = typeof msg.area === "string" ? msg.area : PERSONAL; // apps from before areas: personal

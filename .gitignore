@@ -9,6 +9,7 @@ data-*
 # local configuration and secrets
 .env
 .env.*
+!.env.example
 *.local
 *.log
 .DS_Store
