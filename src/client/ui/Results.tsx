@@ -222,48 +222,6 @@ export function CellValue({ item, name, ctx }: { item: Item; name: string; ctx: 
   return <span className="line-clamp-2">{String(v)}</span>;
 }
 
-/**
- * One table for every place that shows entries as a table (a type's page, "Darunter"): the title
- * column stays in view when scrolling sideways, long text is cut to two lines, rows stay low.
- */
-export function DataTable({ items, cols, label, ctx }: { items: Item[]; cols: string[]; label: (c: string) => string; ctx: EvalCtx }) {
-  const { t } = useT();
-  const sticky = "sticky left-0 z-[1] bg-bg";
-  return (
-    <div className="-mx-2 overflow-x-auto">
-      <table className="w-full border-collapse text-sm">
-        <thead>
-          <tr className="border-b border-line text-left text-xs text-muted">
-            <th className={cx(sticky, "px-2 py-1.5 font-medium")}>{t("field.title")}</th>
-            {cols.map((c) => (
-              <th key={c} className="whitespace-nowrap px-2 py-1.5 font-medium">
-                {label(c)}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((i) => (
-            <tr key={i.id} data-id={i.id} className="group border-b border-line hover:bg-hover">
-              <td className={cx(sticky, "min-w-40 max-w-72 px-2 py-1.5 align-top group-hover:bg-hover")}>
-                <a href={itemHref(i.id)} className="flex items-start gap-2 hover:underline">
-                  <ItemIcon item={i} size={14} className="mt-0.5 shrink-0" />
-                  <span className="line-clamp-2">{i.title || t("untitled")}</span>
-                </a>
-              </td>
-              {cols.map((c) => (
-                <td key={c} className="min-w-24 max-w-72 px-2 py-1.5 align-top text-muted">
-                  <CellValue item={i} name={c} ctx={ctx} />
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
 // ---------- board ----------
 
 function BoardView({ items, def, ctx, look }: { items: Item[]; def: QueryDef; ctx: EvalCtx; look?: Look }) {

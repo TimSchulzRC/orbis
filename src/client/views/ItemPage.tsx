@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { EditorView } from "@codemirror/view";
 import { Sparkles, Trash2, RotateCcw, MoreHorizontal, Plus, AlertTriangle, ImagePlus, Scissors, ListFilter, Languages, Pin, PinOff, FilePlus, FolderInput, Link2 } from "lucide-react";
 import { type Item, META_TYPE } from "../../shared/model";
-import { hasPlace, isInInbox, isOverview } from "../../shared/placement";
+import { isInInbox, isOverview } from "../../shared/placement";
 import { wouldBeInInbox } from "../../shared/typeops";
 import { onlyBelow } from "../../shared/trash";
 import { primaryChild, hasUpdates, progressSpec, statusOf, languageCode, translations, translationInit, translationPlan } from "../../shared/traits";

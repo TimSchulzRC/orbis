@@ -308,10 +308,6 @@ export function resetInbox(w: Writer) {
   w.change(SETTINGS_ID, (doc) => setSettings(doc, { inbox: null }));
 }
 
-export function isSetUp(w: Writer): boolean {
-  return !!w.get(SETTINGS_ID);
-}
-
 /** First setup in the chosen language. Safe to run twice (fixed ids merge). */
 export function runSetup(w: Writer, lang: Lang, origin?: string) {
   const fresh = !w.get(SYS.project);

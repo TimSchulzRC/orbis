@@ -2,7 +2,7 @@ import { test, expect } from "bun:test";
 import { MemRepo } from "./helpers";
 import { runSetup, SYS, upgradeHideEmptyTaskFields } from "../src/shared/setup";
 import { META_TYPE, initItem, initSchema, setProp, upsertProp } from "../src/shared/model";
-import { deleteType, previewTagToType, tagToType, typeUsage, undoOp, wouldBeInInbox } from "../src/shared/typeops";
+import { deleteType, previewTagToType, tagToType, typeUsage, wouldBeInInbox } from "../src/shared/typeops";
 import { isInInbox } from "../src/shared/placement";
 import { languageCode, translations, translationInit, translationPlan, visibleProps } from "../src/shared/traits";
 
@@ -35,13 +35,13 @@ function books() {
   return { m, hamming, b1, b2 };
 }
 
-test("delete a type into a tag: values become free properties, relations refs; undo restores", () => {
+test("delete a type into a tag: values become free properties, relations refs", () => {
   const { m, hamming, b1, b2 } = books();
   let ix = m.index();
   const u = typeUsage(ix, "t_buch");
   expect(u.items.length).toBe(2);
   expect(u.inboxAfterRemove).toBe(2);
-  const op = deleteType(m.writer, ix, "t_buch", { mode: "tag", tag: "buch" }, "Buch → #buch");
+  deleteType(m.writer, ix, "t_buch", { mode: "tag", tag: "buch" }, "Buch → #buch");
   ix = m.index();
   const book = ix.get(b1)!;
   expect(book.type).toBeNull();
@@ -50,17 +50,6 @@ test("delete a type into a tag: values become free properties, relations refs; u
   expect(book.refs).toEqual([hamming]);
   expect(isInInbox(ix.get(b2)!, ix)).toBe(true);
   expect(ix.types.has("t_buch")).toBe(false);
-  // undo
-  undoOp(m.writer, m.get(op)!);
-  ix = m.index();
-  const back = ix.get(b1)!;
-  expect(back.type).toBe("t_buch");
-  expect(back.tags).toEqual([]);
-  expect(back.extra).toEqual({});
-  expect(back.refs).toEqual([]);
-  expect(back.rels.p_autor).toEqual([hamming]);
-  expect(ix.types.has("t_buch")).toBe(true);
-  expect(m.get(op)!.op!.undone).toBe(true);
 });
 
 test("convert a type into another type maps same-named properties", () => {

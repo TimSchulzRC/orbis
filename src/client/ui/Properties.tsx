@@ -5,7 +5,7 @@ import { X, Plus, ExternalLink, AlertTriangle, Trash2, ArrowRightLeft } from "lu
 import { type FreeKind, type FreeValue, type Item, type PropDef, type TypeSchema, type Value, FREE_KINDS, todayISO } from "../../shared/model";
 import { fmtDate, fmtNumber } from "../../shared/i18n";
 import { parseQuery, matches } from "../../shared/query";
-import { doneAt, progressSpec, statusProp } from "../../shared/traits";
+import { doneAt, statusProp } from "../../shared/traits";
 import { toFree } from "../../shared/typeops";
 import { repo } from "../repo";
 import { useIndex } from "../hooks";
@@ -307,64 +307,6 @@ function RelationField({ item, prop, autoOpen }: { item: Item; prop: PropDef; au
   );
 }
 
-/** Other items' relations pointing here, under the relation's inverse name (e.g. "Bücher" on a person). */
-export function InverseRelations({ item }: { item: Item }) {
-  const ix = useIndex();
-  const { t } = useT();
-  const groups = new Map<string, { label: string; ids: string[] }>();
-  for (const b of ix.backlinks(item.id)) {
-    if (b.kind !== "rel") continue;
-    const from = ix.get(b.from)!;
-    const p = ix.schemaOf(from)?.properties.find((x) => x.id === b.prop);
-    if (!p || p.symmetric) continue;
-    const key = `${from.type}:${p.id}`;
-    const label = p.inverseName || t("props.inverse", { prop: p.name, type: ix.typeName(from.type) ?? "" });
-    const g = groups.get(key) ?? { label, ids: [] };
-    g.ids.push(from.id);
-    groups.set(key, g);
-  }
-  if (!groups.size) return null;
-  return (
-    <>
-      {[...groups.values()].map((g) => (
-        <section key={g.label}>
-          <h2 className="mb-2 text-sm font-semibold text-muted">{g.label}</h2>
-          <ul className="space-y-0.5">
-            {g.ids.map((id) => (
-              <li key={id} className="text-sm">
-                <ItemLink item={ix.get(id)!} />
-              </li>
-            ))}
-          </ul>
-        </section>
-      ))}
-    </>
-  );
-}
-
-export function ProgressRow({ item }: { item: Item }) {
-  const ix = useIndex();
-  const { t } = useT();
-  const schema = ix.schemaOf(item);
-  if (!progressSpec(schema)) return null;
-  // shown as a computed property already? then not twice
-  if (schema?.properties.some((p) => p.kind === "computed" && p.computed?.fn === "progress")) return null;
-  const p = ix.progressOf(item)!;
-  if (!p.total) return null;
-  return (
-    <div className={cx("mt-1", grid)}>
-      <Row label={t("props.progress")}>
-        <span className="flex w-full max-w-64 items-center gap-2">
-          <Progress done={p.done} total={p.total} className="flex-1" />
-          <span className="text-xs tabular-nums text-muted">
-            {p.done}/{p.total}
-          </span>
-        </span>
-      </Row>
-    </div>
-  );
-}
-
 // ---------- free properties ----------
 
 export function FreeField({ value, onChange, name, options }: { value: FreeValue; onChange: (v: FreeValue | null) => void; name: string; options?: string[] }) {
@@ -391,80 +333,6 @@ export function freeOptions(name: string): string[] {
     if (v?.k === "select") set.add(String(v.v));
   }
   return [...set].sort();
-}
-
-/**
- * Free properties, and the one quiet entry point for more fields: "+ Eigenschaft" lists the
- * type's empty properties (one click shows and opens it) and offers a new free property.
- */
-export function FreePropertyRows({ item, schema, opened, onOpen }: { item: Item; schema?: TypeSchema; opened?: Set<string>; onOpen?: (propId: string) => void }) {
-  const { t } = useT();
-  const ix = useIndex();
-  const [adding, setAdding] = useState(false);
-  const shown = schema ? new Set(visibleProps(item, schema, ix, opened ?? new Set()).map((p) => p.id)) : new Set<string>();
-  const empty = schema ? schema.properties.filter((p) => !shown.has(p.id) && p.kind !== "computed") : [];
-  const [name, setName] = useState("");
-  const [kind, setKind] = useState<FreeKind>("text");
-  const entries = Object.entries(item.extra);
-  const add = () => {
-    const n = name.trim();
-    if (!n) return;
-    repo.setExtra(item.id, n, { k: kind, v: kind === "checkbox" ? true : kind === "number" ? 0 : kind === "date" ? todayISO() : "…" });
-    setName("");
-    setAdding(false);
-  };
-  return (
-    <div className={cx("mt-1", grid)}>
-      {entries.map(([n, v]) => (
-        <Row key={n} label={n}>
-          <FreeField value={v} name={n} options={v.k === "select" ? freeOptions(n) : undefined} onChange={(x) => repo.setExtra(item.id, n, x)} />
-          <button onClick={() => repo.setExtra(item.id, n, null)} className="tap ml-auto rounded p-0.5 text-muted opacity-0 pointer-coarse:opacity-100 hover:bg-hover hover:text-fg group-hover:opacity-100 focus:opacity-100" aria-label={t("props.removeFree", { name: n })}>
-            <X size={12} />
-          </button>
-        </Row>
-      ))}
-      <div className="col-span-2">
-        {adding ? (
-          <div className="flex flex-wrap items-center gap-2 py-1">
-            <input autoFocus value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} placeholder={t("props.name")} className="w-36 rounded-md border border-line bg-bg px-2 py-1 text-sm outline-none" />
-            <select value={kind} onChange={(e) => setKind(e.target.value as FreeKind)} className="rounded-md border border-line bg-bg px-1.5 py-1 text-sm" aria-label={t("props.kind")}>
-              {FREE_KINDS.map((k) => (
-                <option key={k} value={k}>
-                  {t("kind.prop." + k)}
-                </option>
-              ))}
-            </select>
-            <button onClick={add} className="rounded-md bg-ink px-2 py-1 text-xs text-ink-text">
-              {t("props.add")}
-            </button>
-            <button onClick={() => setAdding(false)} className="text-xs text-muted">
-              {t("cancel")}
-            </button>
-          </div>
-        ) : empty.length && onOpen ? (
-          <Popover
-            trigger={(pp) => (
-              <AddButton {...pp}>{t("props.addFree")}</AddButton>
-            )}
-          >
-            {(close) => (
-              <>
-                {empty.map((p) => (
-                  <MenuItem key={p.id} onClick={() => (close(), onOpen(p.id))}>
-                    {p.name}
-                  </MenuItem>
-                ))}
-                <div className="my-1 border-t border-line" />
-                <MenuItem onClick={() => (close(), setAdding(true))}>{t("props.newFree")}</MenuItem>
-              </>
-            )}
-          </Popover>
-        ) : (
-          <AddButton onClick={() => setAdding(true)}>{t("props.addFree")}</AddButton>
-        )}
-      </div>
-    </div>
-  );
 }
 
 // ---------- the property block of a page ----------

@@ -313,7 +313,6 @@
  "date.calendar": "Calendar",
  "props.notTarget": "Doesn't match the target {target}",
  "props.inverse": "{prop} (from {type})",
- "props.progress": "Progress",
  "props.name": "Name",
  "props.kind": "Kind",
  "props.add": "Add",

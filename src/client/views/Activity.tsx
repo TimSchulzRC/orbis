@@ -5,9 +5,7 @@ import { Sparkles, User, Download, Bot, Cog, Undo2, Redo2 } from "lucide-react";
 import type { ActivityEvent, FieldChange } from "../../shared/protocol";
 import { type Item, META_TYPE } from "../../shared/model";
 import type { Index } from "../../shared/graph";
-import { undoOp } from "../../shared/typeops";
 import { useRepo, itemHref } from "../hooks";
-import { repo } from "../repo";
 import { useT } from "../i18n";
 import type { T } from "../../shared/i18n";
 import { Button, Empty, ItemIcon, RelTime, cx, Seg } from "../ui/bits";
@@ -126,7 +124,6 @@ function Avatar({ origin }: { origin: string }) {
   );
 }
 
-/** One event on its own (the history on an item page). */
 /** Hub messages are stored in English (data); shown in the app's language when we know them. */
 const SYSTEM_TEXTS: [RegExp, string][] = [
   [/^Imported (\d+) notes from Obsidian$/, "activity.sys.obsidian"],
@@ -139,32 +136,6 @@ function systemText(text: string, t: (k: string, v?: Record<string, unknown>) =>
     if (m) return t(key, { count: Number(m[1]) });
   }
   return text;
-}
-
-export function ActivityItem({ e, compact }: { e: ActivityEvent; compact?: boolean }) {
-  const r = useRepo();
-  const { t } = useT();
-  const w = who(e.origin, t);
-  const item = r.get(e.doc);
-  const op = item?.kind === "op" ? item : undefined;
-  return (
-    <li className={cx("flex gap-2.5", compact ? "text-sm" : "text-[15px]")}>
-      <Avatar origin={e.origin} />
-      <div className="min-w-0 flex-1">
-        <span className="font-medium">{w.label}</span>
-        <Entry e={e} compact={compact} />
-        <div className="flex items-center gap-2 text-xs text-muted">
-          <RelTime ts={e.ts} />
-          {!e.step && op && !op.op?.undone && e.kind === "created" && (
-            <Button className="!px-1.5 !py-0.5 text-xs" onClick={() => undoOp(repo.writer, op)}>
-              <Undo2 size={12} /> {t("activity.undo")}
-            </Button>
-          )}
-          {!e.step && op?.op?.undone && e.kind === "created" && <span>· {t("activity.undone")}</span>}
-        </div>
-      </div>
-    </li>
-  );
 }
 
 /** Everything one step did (one user action or tool call), with one "Rückgängig" for all of it. */

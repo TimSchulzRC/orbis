@@ -263,21 +263,3 @@ export function tagToType(w: Writer, ix: Index, tag: string, typeId: string, opt
   return recordOp(w, label, "tagToType", { items }, origin);
 }
 
-/** Reverse an op. */
-export function undoOp(w: Writer, op: Item): void {
-  if (!op.op || op.op.undone) return;
-  const payload = op.op.payload as OpPayload;
-  if (payload.typeDeleted) w.change(payload.typeDeleted, (doc) => setMeta(doc, { deleted: null }));
-  for (const u of payload.items ?? []) {
-    w.change(u.id, (doc) => {
-      setMeta(doc, { type: u.type });
-      for (const [pid, v] of Object.entries(u.props)) setProp(doc, pid, v);
-      for (const [name, v] of Object.entries(u.extra)) setExtra(doc, name, v);
-      if (u.tagAdded) setMember(doc, "tags", u.tagAdded, false);
-      if (u.tagRemoved) setMember(doc, "tags", u.tagRemoved, true);
-      for (const r of u.refsAdded) setMember(doc, "refs", r, false);
-      for (const r of u.rels) setRel(doc, r.prop, r.target, false);
-    });
-  }
-  w.change(op.id, (doc) => setOp(doc, { undone: true }));
-}

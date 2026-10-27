@@ -715,9 +715,6 @@ export function stripQueryBlocks(body: string) {
 }
 
 export const IMAGE_EXT = /\.(png|jpe?g|gif|webp|avif|bmp|svg|heic)$/i;
-export function isImageName(name: string) {
-  return IMAGE_EXT.test(name);
-}
 
 /** Looks like a file name ("x.pdf", "y.png") rather than an information title. */
 export function looksLikeFileName(name: string) {

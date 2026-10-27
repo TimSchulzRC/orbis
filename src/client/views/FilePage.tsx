@@ -25,8 +25,6 @@ export function FilePage({ item }: { item: Item }) {
   const [orig, setOrig] = useState<string | undefined>();
   const used = ix.usedIn(item.id);
   const parents = ix.parentsOf(item.id);
-  const home = ix.home(item.id);
-  const path = ix.homePath(item.id);
   const local = files.hasLocal(f.hash);
   useEffect(() => {
     if (f.filetype === "audio" || f.filetype === "video") files.url(f.hash).then(setOrig);
