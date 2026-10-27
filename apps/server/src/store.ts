@@ -1,6 +1,8 @@
-// The server's replica: an append-only update log in SQLite, every doc held in
-// memory, and plain-object records materialised from the docs for queries,
-// search, activity events and the markdown mirror.
+// The server's replica: an append-only update log in SQLite, and plain-object records
+// materialised from the docs for queries, search, activity events and the markdown mirror.
+// A document itself (Y.Doc with its history) is loaded when it is used – from its snapshot
+// plus the log rows after it – and let go again when it has not been used for a while
+// (see trim()); only the records stay in memory for all documents.
 import { Database } from "bun:sqlite";
 import * as Y from "yjs";
 import { mkdirSync } from "node:fs";
@@ -32,9 +34,15 @@ type Listener = {
   record?: (r: Item) => void;
 };
 
+/** How many documents stay in memory when not in use (least recently used go first). */
+const CACHE_SIZE = 200;
+
 export class Store {
   db: Database;
-  docs = new Map<string, Y.Doc>();
+  /** The documents in memory, least recently used first. Not all documents: see getDoc(). */
+  loaded = new Map<string, Y.Doc>();
+  /** The area of every document, also of the ones not in memory (sync and the area check need it). */
+  private areas = new Map<string, string>();
   records = new Map<string, Item>();
   searchIndex: SearchIndex = createIndex();
   seq = 0;
@@ -44,12 +52,16 @@ export class Store {
   /** The step changes made on the server belong to (a tool call, an undo); see step(). */
   private stepCtx: { id: string; actor: string; undoes?: string } | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
+  private trimTimer: ReturnType<typeof setTimeout> | null = null;
   private _ix: Index | null = null;
   /** While an atomic call runs: its updates, written only if the whole call succeeds. */
   private held: { docId: string; data: Uint8Array; origin: string; quiet: boolean; step?: string }[] | null = null;
   private heldPrev = new Map<string, Item | undefined>();
 
-  constructor(public dir: string) {
+  constructor(
+    public dir: string,
+    private cacheSize = CACHE_SIZE,
+  ) {
     mkdirSync(dir, { recursive: true });
     this.db = new Database(join(dir, "obtion.db"));
     this.db.exec(`
@@ -96,26 +108,13 @@ export class Store {
 
   // ---------- loading ----------
 
+  /** Records, areas and search index for every document, reading one document at a time. */
   private load() {
-    const snapshots = this.db.query("SELECT id, state, seq FROM docstate").all() as { id: string; state: Uint8Array; seq: number }[];
-    const snapSeq = new Map<string, number>();
-    for (const s of snapshots) {
-      const doc = this.getDoc(s.id);
-      Y.applyUpdate(doc, s.state, REMOTE);
-      snapSeq.set(s.id, s.seq);
-    }
-    // Replay log rows newer than the snapshots (crash between log append and snapshot).
-    // Every flush snapshots all pending docs at the current seq, so rows at or below the
-    // oldest snapshot are already contained in snapshots.
-    const minSnap = snapshots.length ? Math.min(...snapshots.map((s) => s.seq)) : 0;
-    const rows = this.db.query("SELECT seq, doc, data FROM updates WHERE seq > ? ORDER BY seq").iterate(minSnap) as Iterable<{ seq: number; doc: string; data: Uint8Array }>;
-    for (const r of rows) {
-      if (r.seq > (snapSeq.get(r.doc) ?? 0)) Y.applyUpdate(this.getDoc(r.doc), r.data, REMOTE);
-    }
     const last = this.db.query("SELECT seq, uid FROM updates ORDER BY seq DESC LIMIT 1").get() as { seq: number; uid: string } | null;
     this.seq = last?.seq ?? 0;
     this.lastUid = last?.uid ?? "";
-    for (const [id, doc] of this.docs) {
+    for (const [id, doc] of this.eachDoc()) {
+      this.noteArea(id, doc);
       const rec = readItem(id, doc);
       if (rec) this.records.set(id, rec);
     }
@@ -123,13 +122,85 @@ export class Store {
     for (const rec of this.records.values()) indexRecord(this.searchIndex, rec);
   }
 
-  getDoc(id: string): Y.Doc {
-    let doc = this.docs.get(id);
-    if (!doc) {
-      doc = new Y.Doc({ guid: id, gc: true });
-      this.docs.set(id, doc);
+  /**
+   * Every stored document, one at a time: the ones in memory as they are, the others read for
+   * the caller and not kept. For a pass over all documents (startup, one-time upgrades).
+   */
+  *eachDoc(): Generator<[string, Y.Doc]> {
+    // a doc without snapshot has only log rows (a crash before its first flush)
+    const ids = this.db.query("SELECT id FROM docstate UNION SELECT doc FROM updates").all() as { id: string }[];
+    for (const { id } of ids) {
+      const doc = this.loaded.get(id) ?? this.read(id);
+      if (doc) yield [id, doc];
     }
+  }
+
+  /** What the database holds of a document: its snapshot (if any) and the log rows after it. */
+  private stored(id: string): Uint8Array[] {
+    const snap = this.db.query("SELECT state, seq FROM docstate WHERE id = ?").get(id) as { state: Uint8Array; seq: number } | null;
+    const rows = this.db.query("SELECT data FROM updates WHERE doc = ? AND seq > ? ORDER BY seq").all(id, snap?.seq ?? 0) as { data: Uint8Array }[];
+    return [...(snap ? [snap.state] : []), ...rows.map((r) => r.data)];
+  }
+
+  /** A document from the database (null if unknown). */
+  private read(id: string): Y.Doc | null {
+    const parts = this.stored(id);
+    if (!parts.length) return null;
+    const doc = new Y.Doc({ guid: id, gc: true });
+    for (const u of parts) Y.applyUpdate(doc, u, REMOTE);
     return doc;
+  }
+
+  /** A document to read or change, loaded if it is not in memory (a new, empty one if unknown). */
+  getDoc(id: string): Y.Doc {
+    let doc = this.loaded.get(id);
+    if (doc) {
+      this.loaded.delete(id); // most recently used: to the end
+      this.loaded.set(id, doc);
+      return doc;
+    }
+    doc = this.read(id) ?? new Y.Doc({ guid: id, gc: true });
+    this.loaded.set(id, doc);
+    this.scheduleTrim();
+    return doc;
+  }
+
+  /** Not right away: whoever is running may still hold documents it got in the same call. */
+  private scheduleTrim() {
+    if (this.loaded.size > this.cacheSize && !this.trimTimer) this.trimTimer = setTimeout(() => this.trim(), 0);
+  }
+
+  /**
+   * Let go of the least recently used documents beyond the cache size. Never one with changes
+   * not yet in its snapshot (pending) or inside an atomic call: loading it again from the
+   * database gives exactly the state it had.
+   */
+  trim() {
+    if (this.trimTimer) clearTimeout(this.trimTimer);
+    this.trimTimer = null;
+    if (this.held) return;
+    let over = this.loaded.size - this.cacheSize;
+    for (const id of this.loaded.keys()) {
+      if (over <= 0) break;
+      if (this.pending.has(id)) continue;
+      this.loaded.delete(id);
+      over--;
+    }
+  }
+
+  /** A document's full state as one update, without loading it if it is not in memory. */
+  stateOf(id: string): Uint8Array {
+    const doc = this.loaded.get(id);
+    if (doc) return Y.encodeStateAsUpdate(doc);
+    const parts = this.stored(id); // usually just the snapshot (rows after it only after a crash before a flush)
+    return parts.length === 1 ? parts[0]! : parts.length ? Y.mergeUpdates(parts) : Y.encodeStateAsUpdate(new Y.Doc());
+  }
+
+  private noteArea(id: string, doc: Y.Doc) {
+    const meta = doc.getMap<any>("meta");
+    const area = (meta.get("area") as string | undefined) ?? (meta.has("kind") ? PERSONAL : undefined);
+    if (area) this.areas.set(id, area);
+    else this.areas.delete(id);
   }
 
   on(l: Listener) {
@@ -141,10 +212,7 @@ export class Store {
 
   /** The area of a document (personal for documents from before areas); undefined if unknown. */
   areaOf(docId: string): string | undefined {
-    const doc = this.docs.get(docId);
-    if (!doc) return undefined;
-    const meta = doc.getMap<any>("meta");
-    return (meta.get("area") as string | undefined) ?? (meta.has("kind") ? PERSONAL : undefined);
+    return this.areas.get(docId);
   }
 
   /**
@@ -157,6 +225,7 @@ export class Store {
     const doc = this.getDoc(docId);
     const before = Y.encodeStateVector(doc);
     Y.applyUpdate(doc, data, REMOTE);
+    this.noteArea(docId, doc);
     // Skip log rows only for true duplicates (re-sent outbox items). An update whose
     // dependencies are missing is parked by Yjs without changing the state vector –
     // it must still be logged and relayed, or it would be acked and then lost.
@@ -216,6 +285,7 @@ export class Store {
     const doc = this.getDoc(docId);
     const sv = Y.encodeStateVector(doc);
     doc.transact(() => fn(doc), this.stepCtx ? { actor: origin, step: this.stepCtx.id } : origin);
+    this.noteArea(docId, doc);
     const update = Y.encodeStateAsUpdate(doc, sv);
     if (update.length <= 2) return; // nothing changed
     this.append(docId, update, origin, undefined, opts.quiet, this.stepCtx?.id);
@@ -258,21 +328,16 @@ export class Store {
   private reload(ids: string[]) {
     for (const id of ids) {
       this.pending.delete(id);
-      const snap = this.db.query("SELECT state, seq FROM docstate WHERE id = ?").get(id) as { state: Uint8Array; seq: number } | null;
-      const rows = this.db.query("SELECT data FROM updates WHERE doc = ? AND seq > ? ORDER BY seq").all(id, snap?.seq ?? 0) as { data: Uint8Array }[];
-      if (!snap && !rows.length) {
-        this.docs.delete(id);
+      this.loaded.delete(id);
+      const doc = this.read(id);
+      const rec = doc && readItem(id, doc);
+      if (doc) this.noteArea(id, doc);
+      else this.areas.delete(id);
+      if (rec) this.records.set(id, rec);
+      else {
         this.records.delete(id);
         if (this.searchIndex.has(id)) this.searchIndex.discard(id);
-        continue;
       }
-      const doc = new Y.Doc({ guid: id, gc: true });
-      if (snap) Y.applyUpdate(doc, snap.state, REMOTE);
-      for (const r of rows) Y.applyUpdate(doc, r.data, REMOTE);
-      this.docs.set(id, doc);
-      const rec = readItem(id, doc);
-      if (rec) this.records.set(id, rec);
-      else this.records.delete(id);
     }
     resolveCascade(this.records);
     for (const id of ids) {
@@ -378,6 +443,7 @@ export class Store {
       }
     })();
     this._ix = null;
+    this.scheduleTrim();
     for (const r of changed) for (const l of this.listeners) l.record?.(r);
     for (const e of events) for (const l of this.listeners) l.event?.(e);
   }
@@ -405,7 +471,7 @@ export class Store {
 
   /** Docs of an area changed after `since`, as full state updates (what a reconnecting replica needs). */
   docsSince(area: string, since: number): string[] {
-    if (since <= 0) return [...this.docs.keys()].filter((id) => this.areaOf(id) === area);
+    if (since <= 0) return [...this.areas].filter(([, a]) => a === area).map(([id]) => id);
     const rows = this.db.query("SELECT DISTINCT doc FROM updates WHERE area = ? AND seq > ?").all(area, since) as { doc: string }[];
     return rows.map((r) => r.doc);
   }

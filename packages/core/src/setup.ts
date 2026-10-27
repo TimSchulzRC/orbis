@@ -330,7 +330,8 @@ export function upgradeAreas(w: Writer, docs: Iterable<[string, Y.Doc]>): number
   const KEY = "areas-1";
   const settings = w.get(SETTINGS_ID)?.settings;
   if (!settings || settings.upgrades?.includes(KEY)) return 0;
-  const ids = [...docs].filter(([, d]) => d.getMap<any>("meta").has("kind") && !d.getMap<any>("meta").has("area")).map(([id]) => id);
+  const ids: string[] = []; // one document at a time: the server reads them from its database
+  for (const [id, d] of docs) if (d.getMap<any>("meta").has("kind") && !d.getMap<any>("meta").has("area")) ids.push(id);
   for (const id of ids) w.change(id, (d) => d.getMap<any>("meta").set("area", PERSONAL));
   w.change(SETTINGS_ID, (d) => setSettings(d, { format: Math.max(settings.format ?? 0, FORMAT), upgrades: [...(settings.upgrades ?? []), KEY] }));
   return ids.length;

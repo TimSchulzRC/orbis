@@ -1,6 +1,5 @@
 // Obtion server: serves the web app, the sync WebSocket, the MCP endpoint and the
 // in-app agent. Intended to run on the NAS / home server behind Tailscale.
-import * as Y from "yjs";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve, extname } from "node:path";
 import type { ServerWebSocket } from "bun";
@@ -43,10 +42,10 @@ const store = new Store(DATA);
   if (lang && renameShippedLabels(storeWriter(store, "system:setup"), lang)) store.flush();
   if (upgradeHideEmptyTaskFields(storeWriter(store, "system:setup"))) store.flush();
   // collections are gone (26.10.): their views go to the types, the inbox rule to the settings
-  const moved = lang ? migrateCollections(storeWriter(store, "system:setup"), store.index(), store.docs, lang) : [];
+  const moved = lang ? migrateCollections(storeWriter(store, "system:setup"), store.index(), store.eachDoc(), lang) : [];
   if (moved.length) (store.flush(), console.log(`[obtion] collections migrated:\n  ${moved.join("\n  ")}`));
   // areas (27.10.): every document from before belongs to the personal area
-  const marked = upgradeAreas(storeWriter(store, "system:setup"), store.docs);
+  const marked = upgradeAreas(storeWriter(store, "system:setup"), store.eachDoc());
   if (marked) (store.flush(), console.log(`[obtion] areas: ${marked} documents marked as personal`));
 }
 /** The areas a device may sync. One for now; with accounts (later) the server decides per user. */
@@ -101,7 +100,7 @@ function handleHello(ws: ServerWebSocket<Conn>, msg: Extract<ClientMsg, { t: "he
   const BATCH = 150;
   if (ids.length === 0) send(ws, { t: "updates", area, items: [], last: last.seq, lastId: last.uid || undefined, initial: true, done: true, reset });
   for (let i = 0; i < ids.length; i += BATCH) {
-    const items = ids.slice(i, i + BATCH).map((d) => ({ d, u: toB64(Y.encodeStateAsUpdate(store.getDoc(d))) }));
+    const items = ids.slice(i, i + BATCH).map((d) => ({ d, u: toB64(store.stateOf(d)) }));
     const done = i + BATCH >= ids.length;
     // Only the final batch carries the real position, so an interrupted first sync is retried.
     send(ws, { t: "updates", area, items, last: done ? last.seq : 0, lastId: done ? last.uid || undefined : undefined, initial: true, done, reset: reset && i === 0 });
