@@ -1,6 +1,6 @@
 // A new version of the app: one notice at the bottom (sonner, id "update", never twice). While
 // the new service worker still loads it says so; once it waits, "Neu laden" activates it fully –
-// local changes first go to the hub, then SKIP_WAITING, then exactly one reload when the new
+// local changes first go to the server, then SKIP_WAITING, then exactly one reload when the new
 // worker has taken over. Without a waiting worker the page reloads at once.
 import { toast } from "sonner";
 import { repo, tr } from "@obtion/ui";
@@ -24,7 +24,7 @@ function ready() {
   });
 }
 
-/** Unsent local changes: wait until the hub has them (they are kept on the device anyway). */
+/** Unsent local changes: wait until the server has them (they are kept on the device anyway). */
 async function settled(ms = 5000) {
   const end = Date.now() + ms;
   while (repo.status.pending > 0 && repo.status.online && Date.now() < end) await new Promise((r) => setTimeout(r, 150));

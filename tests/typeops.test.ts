@@ -163,7 +163,7 @@ test("pages show every property of a type, empty ones too – except those marke
 test("the one-time upgrade marks only the two task fields, once – a later choice of the user stays", () => {
   const m = new MemRepo();
   runSetup(m.writer, "de");
-  // a hub set up before: no marks yet
+  // a server set up before: no marks yet
   m.change(SYS.task, (d) => {
     upsertProp(d, "p_blocked", { hideEmpty: null as any });
     upsertProp(d, "p_waiting", { hideEmpty: null as any });

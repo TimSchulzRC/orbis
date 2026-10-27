@@ -1,8 +1,8 @@
-// Who may tell the hub who is calling. `tailscale serve` adds the caller's identity as headers
-// (tailscale-user-login/-name). Anyone who can reach the hub directly could send those headers
+// Who may tell the server who is calling. `tailscale serve` adds the caller's identity as headers
+// (tailscale-user-login/-name). Anyone who can reach the server directly could send those headers
 // too, so they count only if the connection comes from a trusted proxy:
 //   - by default only loopback (127.0.0.1, ::1): tailscale serve on the same machine, or a
-//     Tailscale sidecar container that shares the hub container's network;
+//     Tailscale sidecar container that shares the server container's network;
 //   - in a container behind tailscale serve on the host, the connection comes from the
 //     container network's gateway: name it, exactly or as a range, in OBTION_TRUSTED_PROXIES
 //     (comma-separated, e.g. "172.17.0.1" or "172.16.0.0/12").

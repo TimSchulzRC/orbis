@@ -127,7 +127,7 @@ export function Settings() {
       .then(setC)
       .catch(() => setErr(true));
   }, [r.status.online]);
-  // the built-in agent needs the Claude Code CLI on the hub: say how, here where it is set up
+  // the built-in agent needs the Claude Code CLI on the server: say how, here where it is set up
   const [agentMissing, setAgentMissing] = useState(false);
   useEffect(() => {
     fetch("/api/info")
@@ -250,7 +250,7 @@ export function Settings() {
       <section>
         <SectionTitle>{t("settings.sync")}</SectionTitle>
         <dl className="grid grid-cols-[10rem_1fr] gap-y-1.5 text-sm">
-          <dt className="text-muted">{t("settings.hub")}</dt>
+          <dt className="text-muted">{t("settings.server")}</dt>
           <dd>{s.online ? t("settings.connected") : t("settings.offline")}</dd>
           {s.pending > 0 && (
             <>

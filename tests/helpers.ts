@@ -8,7 +8,7 @@ import { resolveCascade } from "@obtion/core/trash";
 import type { Writer } from "@obtion/core/setup";
 
 const temps: string[] = [];
-/** A fresh data directory for a hub store; removed again by `removeTempDirs` (call it in afterAll). */
+/** A fresh data directory for a server store; removed again by `removeTempDirs` (call it in afterAll). */
 export function tempDir(prefix: string): string {
   const dir = mkdtempSync(join(tmpdir(), prefix));
   temps.push(dir);

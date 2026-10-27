@@ -512,7 +512,7 @@ time,
   display: none;
 }
 
-/* An embedded file whose content the hub does not have. */
+/* An embedded file whose content the server does not have. */
 .embed-missing {
   display: inline-block;
   border: 1px dashed var(--border);

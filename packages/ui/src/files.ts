@@ -167,9 +167,9 @@ class DeviceFiles {
   private urls = new Map<string, string>();
   private loading = new Map<string, Promise<string | undefined>>();
   private local = new Set<string>();
-  private missing = new Set<string>(); // not on the hub (yet): shown as "Datei fehlt"
+  private missing = new Set<string>(); // not on the server (yet): shown as "Datei fehlt"
 
-  /** Ask the hub whether it has a content, without downloading it. */
+  /** Ask the server whether it has a content, without downloading it. */
   async check(hash: string): Promise<void> {
     if (this.local.has(hash) || this.missing.has(hash)) return;
     const res = await fetch(`/api/blobs/${hash}?check=1`, { headers: { "x-obtion-probe": "1" } }).catch(() => null);
@@ -179,7 +179,7 @@ class DeviceFiles {
     }
   }
 
-  /** The hub does not have this content (and this device neither). */
+  /** The server does not have this content (and this device neither). */
   isMissing(hash?: string): boolean {
     return !!hash && this.missing.has(hash) && !this.local.has(hash);
   }
@@ -205,7 +205,7 @@ class DeviceFiles {
     for (const b of await this.store.list()) this.local.add(b.hash);
     repo.subscribe(() => this.scheduleSync());
     repo.onBlob((hash) => {
-      // arrived on the hub: "wird hochgeladen" gives way to the file
+      // arrived on the server: "wird hochgeladen" gives way to the file
       if (this.missing.delete(hash)) this.emit();
       this.scheduleSync(50);
     });
@@ -229,7 +229,7 @@ class DeviceFiles {
     this.emit();
   }
 
-  /** Object URL for a content hash: from this device, else from the hub. */
+  /** Object URL for a content hash: from this device, else from the server. */
   async url(hash: string, opts: { keep?: boolean } = {}): Promise<string | undefined> {
     const cached = this.urls.get(hash);
     if (cached) return cached;
@@ -254,8 +254,8 @@ class DeviceFiles {
     return p;
   }
 
-  /** Direct hub URL (for downloads and the PDF viewer while online). */
-  hubUrl(hash: string, name?: string, download = false) {
+  /** Direct server URL (for downloads and the PDF viewer while online). */
+  serverUrl(hash: string, name?: string, download = false) {
     const q = new URLSearchParams();
     if (name) q.set("name", name);
     if (download) q.set("download", "1");
@@ -271,7 +271,7 @@ class DeviceFiles {
   }
 
   /**
-   * What to say when the hub lacks a file's content: a young file is most likely still being
+   * What to say when the server lacks a file's content: a young file is most likely still being
    * uploaded by the device that added it ("wird hochgeladen"), an older one is missing.
    */
   missingKey(created: number): "file.uploading" | "file.missing" {
@@ -306,7 +306,7 @@ class DeviceFiles {
 
   // ---------- adding files ----------
 
-  /** Add a file: stored here at once, uploaded when the hub is reachable. Returns the file item id. */
+  /** Add a file: stored here at once, uploaded when the server is reachable. Returns the file item id. */
   async add(file: File | Blob, name: string, opts: { parent?: string } = {}): Promise<{ id: string; name: string }> {
     await this.ready;
     const hash = await sha256(file);
@@ -429,7 +429,7 @@ class DeviceFiles {
         if (res.ok || res.status === 415 || res.status === 422 || res.status === 413) {
           await this.db.delete("uploads", u.hash);
           this.status.uploading--;
-          // "Online only": the original does not need to stay here once the hub has it –
+          // "Online only": the original does not need to stay here once the server has it –
           // unless it is what an image shows (an SVG has no display version of its own)
           if (res.ok && !u.derived && this.mode === "online" && !shownItself().has(u.hash)) await this.drop(u.hash);
         }
@@ -450,7 +450,7 @@ class DeviceFiles {
       if (!url) continue;
       const prev = await pdfPreview(await (await fetch(url)).blob());
       if (!prev) continue;
-      // Shared only once the hub has it: a device that goes away before uploading must not
+      // Shared only once the server has it: a device that goes away before uploading must not
       // leave other devices pointing at a preview that never arrives.
       const thumb = await sha256(prev.blob);
       await this.save(thumb, prev.blob);

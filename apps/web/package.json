@@ -1,6 +1,6 @@
 {
   "name": "@obtion/web",
-  "description": "The web app (PWA): a thin shell around @obtion/ui, served by the hub",
+  "description": "The web app (PWA): a thin shell around @obtion/ui, served by the server",
   "type": "module",
   "private": true,
   "license": "AGPL-3.0-or-later",

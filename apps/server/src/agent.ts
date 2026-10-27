@@ -1,6 +1,6 @@
 // In-app agent: runs headless Claude Code (`claude -p`) with *only* the Obtion
 // MCP tools (no shell, no file access) and streams its events to the browser.
-// Uses the Claude Code login already present on the hub machine.
+// Uses the Claude Code login already present on the server machine.
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { todayISO } from "@obtion/core/model";

@@ -1,7 +1,7 @@
-// File contents on the hub: data/blobs/<sha256>. The same content is stored once.
-// For images the hub makes a preview (320 px) and a display version (1600 px WebP),
+// File contents on the server: data/blobs/<sha256>. The same content is stored once.
+// For images the server makes a preview (320 px) and a display version (1600 px WebP),
 // for audio/video it reads the duration, for PDFs the page count and the text (search).
-// Devices that add images offline make previews themselves; the hub only fills gaps.
+// Devices that add images offline make previews themselves; the server only fills gaps.
 import { existsSync, mkdirSync, renameSync, statSync, readdirSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { type FileMeta, type Item, setFileMeta } from "@obtion/core/model";

@@ -4,7 +4,7 @@ import * as Y from "yjs";
 import { MemRepo } from "../helpers";
 import { runSetup } from "@obtion/core/setup";
 import { exampleFiles, fileFacts, writeExamples } from "@obtion/core/examples";
-import { sha256 } from "@obtion/hub/blobs";
+import { sha256 } from "@obtion/server/blobs";
 import { toB64 } from "@obtion/core/protocol";
 
 const m = new MemRepo();

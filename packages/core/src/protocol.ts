@@ -1,9 +1,9 @@
-// Sync protocol between replicas (browser, later desktop/mobile) and the hub.
+// Sync protocol between replicas (browser, later desktop/mobile) and the server.
 //
-// The hub keeps an append-only log of Yjs updates, each with a sequence number.
+// The server keeps an append-only log of Yjs updates, each with a sequence number.
 // A replica remembers the last sequence it has seen. On connect it says `hello`
 // with that number and the id of the log row there (`sinceId`) and receives everything
-// newer. If the hub no longer has that row – it was restored from an older backup, even if
+// newer. If the server no longer has that row – it was restored from an older backup, even if
 // other devices have pushed it past the old number since – it answers with `reset`, and
 // the replica uploads its full state. Its own offline changes sit
 // in a local outbox and are pushed until acknowledged. Yjs updates are
@@ -14,7 +14,7 @@
 // the personal area.
 
 export interface WireUpdate {
-  s?: number; // hub sequence (server -> client)
+  s?: number; // server sequence (server -> client)
   d: string; // doc id
   u: string; // base64 Yjs update
   o?: string; // origin (who made the change)
@@ -26,12 +26,12 @@ export type ClientMsg =
   | { t: "ping" };
 
 export type ServerMsg =
-  | { t: "welcome"; hub: string; area: string; seq: number; format: number }
+  | { t: "welcome"; hub: string; area: string; seq: number; format: number } // hub: the server id (old name, kept on the wire)
   | { t: "denied"; area: string } // an area this device may not sync
   | { t: "updates"; area: string; items: WireUpdate[]; last: number; lastId?: string; initial?: boolean; done?: boolean; reset?: boolean }
   | { t: "ack"; area: string; keys: string[]; last: number; lastId?: string }
   | { t: "event"; event: ActivityEvent }
-  | { t: "blob"; hash: string } // a file content arrived on the hub
+  | { t: "blob"; hash: string } // a file content arrived on the server
   | { t: "pong" };
 
 export interface FieldChange {

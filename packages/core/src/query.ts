@@ -5,7 +5,7 @@
 //   typ:Projekt in:diese -status:erledigt ansicht:board gruppe:status
 //
 // Space = AND, | = OR, - = NOT, parentheses group. Properties are found by name across all
-// types and free properties. The same code runs on devices, the hub and for agents.
+// types and free properties. The same code runs on devices, the server and for agents.
 import { type ViewTab, type FileType, type Item, type OptionDef, type PropDef, type ViewKind, FILE_TYPES, META_TYPE, titleKey, todayISO } from "./model";
 import type { Index } from "./graph";
 import { inboxWhere } from "./inbox";

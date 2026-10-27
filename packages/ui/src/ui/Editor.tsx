@@ -269,7 +269,7 @@ function localStamp(d = new Date()) {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}-${p(d.getHours())}-${p(d.getMinutes())}-${p(d.getSeconds())}`;
 }
 
-/** Insert files at a position: stored on this device at once, uploaded when the hub is reachable. */
+/** Insert files at a position: stored on this device at once, uploaded when the server is reachable. */
 async function insertFiles(view: EditorView, list: File[], pos: number, parent?: string) {
   let at = pos;
   for (const f of list) {

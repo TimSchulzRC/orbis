@@ -1,4 +1,4 @@
-// Obtion hub: serves the web app, the sync WebSocket, the MCP endpoint and the
+// Obtion server: serves the web app, the sync WebSocket, the MCP endpoint and the
 // in-app agent. Intended to run on the NAS / home server behind Tailscale.
 import * as Y from "yjs";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -23,7 +23,7 @@ const DATA = resolve(process.env.OBTION_DATA ?? "data");
 /** The built web app (apps/web/dist); OBTION_WEB_DIST points elsewhere. */
 const DIST = resolve(process.env.OBTION_WEB_DIST ?? join(import.meta.dir, "../../web/dist"));
 const PUBLIC_URL = process.env.OBTION_PUBLIC_URL ?? "";
-/** Every hub brings the web app; OBTION_WEB_APP=off makes it a hub for sync, API and MCP only. */
+/** Every server brings the web app; OBTION_WEB_APP=off makes it a server for sync, API and MCP only. */
 const WEB_APP = !/^(off|0|false|no)$/i.test(process.env.OBTION_WEB_APP ?? "on");
 
 mkdirSync(DATA, { recursive: true });
@@ -48,14 +48,14 @@ const store = new Store(DATA);
   const marked = upgradeAreas(storeWriter(store, "system:setup"), store.docs);
   if (marked) (store.flush(), console.log(`[obtion] areas: ${marked} documents marked as personal`));
 }
-/** The areas a device may sync. One for now; with accounts (later) the hub decides per user. */
+/** The areas a device may sync. One for now; with accounts (later) the server decides per user. */
 const AREAS = new Set([PERSONAL]);
 const blobs = new Blobs(join(DATA, "blobs"), store);
 const mirror = new Mirror(store, join(DATA, "vault"), blobs);
 
 console.log(`[obtion] ${store.records.size} nodes, seq ${store.seq}, data in ${DATA}`);
 
-// ---------- sync hub ----------
+// ---------- sync server ----------
 
 interface Conn {
   areas: Set<string>; // said hello for these: only then it gets (and may push) their updates
@@ -93,8 +93,8 @@ function handleHello(ws: ServerWebSocket<Conn>, msg: Extract<ClientMsg, { t: "he
   if (!AREAS.has(area)) return send(ws, { t: "denied", area });
   if (msg.device) ws.data.origin = `web:${ws.data.user}@${String(msg.device).slice(0, 40)}`;
   const last = store.last(area);
-  send(ws, { t: "welcome", hub: store.hubId, area, seq: last.seq, format: FORMAT });
-  const reset = !store.knowsCursor(area, msg.since, msg.sinceId); // hub restored from an older backup; replica must merge everything
+  send(ws, { t: "welcome", hub: store.serverId, area, seq: last.seq, format: FORMAT });
+  const reset = !store.knowsCursor(area, msg.since, msg.sinceId); // server restored from an older backup; replica must merge everything
   const ids = store.docsSince(area, reset ? 0 : msg.since);
   const BATCH = 150;
   if (ids.length === 0) send(ws, { t: "updates", area, items: [], last: last.seq, lastId: last.uid || undefined, initial: true, done: true, reset });
@@ -307,7 +307,7 @@ const server = Bun.serve<Conn>({
     }
 
     if (path.startsWith("/api/")) return new Response("Not found", { status: 404 });
-    if (!WEB_APP) return new Response("This Obtion hub serves sync, API and MCP only (OBTION_WEB_APP=off).", { status: 404 });
+    if (!WEB_APP) return new Response("This Obtion server serves sync, API and MCP only (OBTION_WEB_APP=off).", { status: 404 });
     return serveStatic(path);
   },
   websocket: {
@@ -328,7 +328,7 @@ const server = Bun.serve<Conn>({
       if (msg.t === "hello") handleHello(ws, msg);
       else if (msg.t === "ping") send(ws, { t: "pong" });
       else if (msg.t === "push") {
-        // only after the welcome: the client has to know which hub it writes to (hub-id check);
+        // only after the welcome: the client has to know which server it writes to (server-id check);
         // no ack, so its outbox keeps the changes and sends them again after the next hello
         const area = typeof msg.area === "string" ? msg.area : PERSONAL;
         if (!ws.data.areas.has(area)) return;

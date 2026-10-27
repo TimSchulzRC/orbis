@@ -1,9 +1,9 @@
-// The data model shared by hub, devices and agents.
+// The data model shared by server, devices and agents.
 //
 // Everything is an *item*, stored as one Yjs document (guid = item id):
 //   kind "info"      an information (a type, being an information with the system type
 //                    META_TYPE, adds a `schema` map)
-//   kind "datei"     a file: metadata here, content on the hub by SHA-256
+//   kind "datei"     a file: metadata here, content on the server by SHA-256
 //   kind "op"        a reversible bulk operation (e.g. deleting a type), shown in Activity
 //   kind "settings"  the one shared settings doc (start page, capture types, the inbox rule)
 //   (documents of the former kind "sammlung" are ignored since 26.10.: see migrateCollections)

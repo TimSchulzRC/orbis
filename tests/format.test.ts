@@ -1,4 +1,4 @@
-// Data on the hub and in every browser must stay readable by every later version. These are
+// Data on the server and in every browser must stay readable by every later version. These are
 // data of format 1 as they were written then (the setup with its examples, frozen on 27.10.2026):
 // never regenerate the fixture – add one per new format instead.
 import { test, expect } from "bun:test";

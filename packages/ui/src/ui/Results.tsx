@@ -31,7 +31,7 @@ export function useQuery(def: QueryDef, thisId?: string) {
 const isInboxQuery = (def: QueryDef) => !!def.where && "inbox" in def.where;
 
 let agentInfo: Promise<boolean> | null = null;
-/** Is the built-in agent available on the hub? (asked once) */
+/** Is the built-in agent available on the server? (asked once) */
 function useAgentAvailable(): boolean {
   const [ok, setOk] = useState(false);
   useEffect(() => {

@@ -1,13 +1,13 @@
-// The examples of the setup page ("Mit Beispielen starten", packages/core/src/examples.ts), for a test hub.
-// Writes only to a separate data dir (default data-demo/, never data/). Run while no hub uses that dir:
+// The examples of the setup page ("Mit Beispielen starten", packages/core/src/examples.ts), for a test server.
+// Writes only to a separate data dir (default data-demo/, never data/). Run while no server uses that dir:
 //   bun run seed:demo [de|en]             → data-demo/
 //   OBTION_DATA=/tmp/obtion-demo bun run seed:demo
-// Then: OBTION_DATA=data-demo PORT=8481 bun apps/hub/src/index.ts
+// Then: OBTION_DATA=data-demo PORT=8481 bun apps/server/src/index.ts
 // Fixed ids (ex-*): running it again only adds what is missing.
 import { join, resolve } from "node:path";
-import { Store } from "@obtion/hub/store";
-import { Blobs } from "@obtion/hub/blobs";
-import { setUp } from "@obtion/hub/importers";
+import { Store } from "@obtion/server/store";
+import { Blobs } from "@obtion/server/blobs";
+import { setUp } from "@obtion/server/importers";
 import { EXAMPLE } from "@obtion/core/examples";
 import type { Lang } from "@obtion/core/i18n";
 
@@ -22,7 +22,7 @@ const running = await fetch(`http://127.0.0.1:${port}/api/info`, { signal: Abort
   () => false,
 );
 if (running) {
-  console.error(`A hub is running on :${port}. Stop it first, then run this again.`);
+  console.error(`A server is running on :${port}. Stop it first, then run this again.`);
   process.exit(1);
 }
 

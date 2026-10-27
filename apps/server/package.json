@@ -1,6 +1,6 @@
 {
-  "name": "@obtion/hub",
-  "description": "The hub: SQLite, sync, API, MCP, agent, Markdown mirror; serves the web app (optional)",
+  "name": "@obtion/server",
+  "description": "The server: SQLite, sync, API, MCP, agent, Markdown mirror; serves the web app (optional)",
   "type": "module",
   "private": true,
   "license": "AGPL-3.0-or-later",

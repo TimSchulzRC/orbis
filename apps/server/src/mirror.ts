@@ -93,7 +93,7 @@ export class Mirror {
         } catch {
           copyFileSync(this.blobs.path(w.blob!), abs);
         }
-      } else continue; // content not on the hub yet
+      } else continue; // content not on the server yet
       this.files.set(rel, sig);
     }
     for (const rel of [...this.files.keys()]) {

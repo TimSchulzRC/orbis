@@ -3,11 +3,11 @@ import { tempDir, removeTempDirs } from "./helpers";
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import * as Y from "yjs";
-import { Store } from "@obtion/hub/store";
-import { Ops, OpError } from "@obtion/hub/ops";
-import { Mirror } from "@obtion/hub/mirror";
+import { Store } from "@obtion/server/store";
+import { Ops, OpError } from "@obtion/server/ops";
+import { Mirror } from "@obtion/server/mirror";
 import { runSetup, SYS } from "@obtion/core/setup";
-import { storeWriter } from "@obtion/hub/importers";
+import { storeWriter } from "@obtion/server/importers";
 import { initItem, replaceBody, addDaysISO, todayISO, addParent } from "@obtion/core/model";
 import { deleteItem } from "@obtion/core/trash";
 
@@ -25,7 +25,7 @@ beforeEach(() => {
   ops = new Ops(s);
 });
 
-test("hub persists remote updates and reloads them; duplicates are idempotent", () => {
+test("server persists remote updates and reloads them; duplicates are idempotent", () => {
   const client = new Y.Doc({ guid: "a" });
   client.transact(() => initItem(client, { title: "Hello", body: "world" }));
   const u = Y.encodeStateAsUpdate(client);

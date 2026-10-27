@@ -39,7 +39,7 @@ function DayHead() {
   if (b.inbox) sub.push(<a key="i" href="#/inbox" className={link}>{t("day.inbox", { count: b.inbox })}</a>);
   if (b.activeProjects) sub.push(<a key="p" href={itemHref("sys:project")} className={link}>{t("day.activeProjects", { count: b.activeProjects })}</a>);
   if (b.upcoming) sub.push(<span key="n">{t("day.nextDate", { date: fmtDate(lang, b.upcoming.due, { weekday: "short", day: "numeric", month: "short" }) })}</span>);
-  // a fresh hub: nothing pinned yet – the one sensible first step
+  // a fresh server: nothing pinned yet – the one sensible first step
   if (!sidebarRoots(ix).length)
     sub.push(
       <button key="a" onClick={() => createAndOpen({ pinned: keyBetween(null, null) })} className={link}>

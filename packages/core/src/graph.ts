@@ -1,6 +1,6 @@
 // Derived indexes over all items: titles, "Teil von" (with cycle resolution), descendants,
 // paths, links, backlinks, relation inverses, file usage, progress. The same code runs on
-// devices, the hub and for agents, so everyone sees the same structure.
+// devices, the server and for agents, so everyone sees the same structure.
 import {
   type Item,
   type TypeSchema,

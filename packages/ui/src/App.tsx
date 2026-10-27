@@ -93,7 +93,7 @@ function Main() {
   }, [route.path]);
 
   if (!r.status.loaded) return <div className="flex h-full items-center justify-center text-muted">{t("app.opening")}</div>;
-  // First setup: only once the hub was asked (or nothing is there at all and we are offline).
+  // First setup: only once the server was asked (or nothing is there at all and we are offline).
   const settings = r.get(SETTINGS_ID);
   if (!settings && (r.status.synced || (!r.status.online && r.docs.size === 0))) return <Setup />;
   if (!settings) return <div className="flex h-full items-center justify-center text-muted">{t("app.syncing")}</div>;

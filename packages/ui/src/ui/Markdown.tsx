@@ -76,7 +76,7 @@ export function renderMarkdown(src: string): string {
   return md.parse(src, { async: false }) as string;
 }
 
-/** Fill in file contents (from this device or the hub) after rendering. */
+/** Fill in file contents (from this device or the server) after rendering. */
 export function hydrateFiles(root: HTMLElement | null) {
   if (!root) return;
   root.querySelectorAll<HTMLElement>("[data-hash]").forEach((el) => {
@@ -87,7 +87,7 @@ export function hydrateFiles(root: HTMLElement | null) {
     files.url(hash, { keep }).then((u) => {
       if (u) (el as HTMLImageElement).src = u;
       else if (files.isMissing(hash) && el.tagName === "IMG") {
-        // not on the hub: a quiet note instead of a broken image
+        // not on the server: a quiet note instead of a broken image
         const note = document.createElement("span");
         note.className = "embed-missing";
         note.textContent = tr(files.missingKey(Number(el.dataset.created) || 0));

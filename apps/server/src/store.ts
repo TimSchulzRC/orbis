@@ -1,4 +1,4 @@
-// The hub's replica: an append-only update log in SQLite, every doc held in
+// The server's replica: an append-only update log in SQLite, every doc held in
 // memory, and plain-object records materialised from the docs for queries,
 // search, activity events and the markdown mirror.
 import { Database } from "bun:sqlite";
@@ -41,7 +41,7 @@ export class Store {
   lastUid = "";
   private listeners = new Set<Listener>();
   private pending = new Map<string, { origins: Set<string>; quiet: boolean; step?: string }>();
-  /** The step changes made on the hub belong to (a tool call, an undo); see step(). */
+  /** The step changes made on the server belong to (a tool call, an undo); see step(). */
   private stepCtx: { id: string; actor: string; undoes?: string } | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private _ix: Index | null = null;
@@ -64,7 +64,7 @@ export class Store {
       CREATE TABLE IF NOT EXISTS steps (id TEXT PRIMARY KEY, actor TEXT, ts INTEGER, undoes TEXT);
       CREATE INDEX IF NOT EXISTS steps_undoes ON steps(undoes);
     `);
-    // Each log row has a unique id, so a replica's cursor (seq + uid) tells whether the hub
+    // Each log row has a unique id, so a replica's cursor (seq + uid) tells whether the server
     // still has the row it saw. Older databases get ids for their existing rows once.
     const cols = this.db.query("PRAGMA table_info(updates)").all() as { name: string }[];
     if (!cols.some((c) => c.name === "uid")) {
@@ -85,11 +85,12 @@ export class Store {
     }
     if (!ecols.some((c) => c.name === "area")) this.db.exec(`ALTER TABLE events ADD COLUMN area TEXT NOT NULL DEFAULT '${PERSONAL}'`);
     this.load();
+    // stored as "hubId" (the server was called hub before); renaming it would look like a new server
     if (!this.kvGet("hubId")) this.kvSet("hubId", newId());
   }
 
-  /** Identity of this hub database. A device seeing a different id knows it met a new hub. */
-  get hubId(): string {
+  /** Identity of this server database. A device seeing a different id knows it met a new server. */
+  get serverId(): string {
     return this.kvGet("hubId")!;
   }
 
@@ -197,7 +198,7 @@ export class Store {
   }
 
   /**
-   * Run `fn` as one step: every change it makes on the hub carries the same step id, so
+   * Run `fn` as one step: every change it makes on the server carries the same step id, so
    * "Rückgängig" can take back all of it, across documents. Nested calls join the outer step.
    */
   step<T>(actor: string, fn: (step: string) => T, opts: { undoes?: string } = {}): T {
@@ -210,7 +211,7 @@ export class Store {
     }
   }
 
-  /** Make a change on the hub itself (MCP tools, imports). */
+  /** Make a change on the server itself (MCP tools, imports). */
   change(docId: string, origin: string, fn: (doc: Y.Doc) => void, opts: { quiet?: boolean } = {}): void {
     const doc = this.getDoc(docId);
     const sv = Y.encodeStateVector(doc);
@@ -384,8 +385,8 @@ export class Store {
   // ---------- reading ----------
 
   /**
-   * Does this hub still hold the log row a replica last saw? Not if the position lies beyond
-   * the log, or if the row there has another id: the hub came from an older backup, and maybe
+   * Does this server still hold the log row a replica last saw? Not if the position lies beyond
+   * the log, or if the row there has another id: the server came from an older backup, and maybe
    * another device has synced since, so seq alone has grown past the cursor again.
    */
   knowsCursor(area: string, since: number, sinceId?: string): boolean {

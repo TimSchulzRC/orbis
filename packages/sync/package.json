@@ -1,6 +1,6 @@
 {
   "name": "@obtion/sync",
-  "description": "The device's replica of a hub: Yjs documents, outbox, sync over WebSocket – storage and platform are passed in",
+  "description": "The device's replica of a server: Yjs documents, outbox, sync over WebSocket – storage and platform are passed in",
   "type": "module",
   "private": true,
   "license": "AGPL-3.0-or-later",

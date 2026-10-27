@@ -1,7 +1,7 @@
 node_modules
 dist
 dev-dist
-# hub data (database, files, Markdown mirror, MCP token) – never in the repo
+# server data (database, files, Markdown mirror, MCP token) – never in the repo
 data
 data-*
 *.db

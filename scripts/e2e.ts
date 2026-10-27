@@ -1,8 +1,8 @@
-// Browser smoke test: starts an empty hub, one filled with the examples of the setup (seed:demo,
+// Browser smoke test: starts an empty server, one filled with the examples of the setup (seed:demo,
 // plus a file and an item in the trash) and the same data with every type deleted (the app runs
 // with zero types) on free ports, opens every route and one page per kind of item in a real
 // browser – light, dark and phone – and fails on console errors, page errors, an error
-// boundary or a blank page. A fourth hub is set up on the page with its examples, which are
+// boundary or a blank page. A fourth server is set up on the page with its examples, which are
 // removed again in the settings and brought back with "Rückgängig".
 //   bun run test:e2e        (builds first; Chrome from ~/.cache/ms-playwright)
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -25,7 +25,7 @@ function freePort(): Promise<number> {
   });
 }
 
-async function startHub(seeded: boolean, noTypes = false) {
+async function startServer(seeded: boolean, noTypes = false) {
   const dir = mkdtempSync(join(tmpdir(), "obtion-e2e-"));
   const port = await freePort();
   const env = { ...process.env, OBTION_DATA: dir, PORT: String(port), HOST: "127.0.0.1" };
@@ -37,13 +37,13 @@ async function startHub(seeded: boolean, noTypes = false) {
       if (!del.stdout.toString().includes("types left: 0")) throw new Error("deleting types failed: " + del.stderr.toString());
     }
   }
-  const proc = Bun.spawn(["bun", "apps/hub/src/index.ts"], { cwd: ROOT, env, stdout: "ignore", stderr: "pipe" });
+  const proc = Bun.spawn(["bun", "apps/server/src/index.ts"], { cwd: ROOT, env, stdout: "ignore", stderr: "pipe" });
   const url = `http://127.0.0.1:${port}`;
   for (let i = 0; i < 100; i++) {
     if (await fetch(url + "/api/info").then((r) => r.ok, () => false)) break;
     await Bun.sleep(100);
   }
-  const hub = { dir, url, proc, file: "", trashed: "" };
+  const server = { dir, url, proc, file: "", trashed: "" };
   if (seeded && !noTypes) {
     const token = JSON.parse(readFileSync(join(dir, "config.json"), "utf8")).token as string;
     const mcp = async (name: string, args: unknown) => {
@@ -57,11 +57,11 @@ async function startHub(seeded: boolean, noTypes = false) {
     };
     // a 1×1 PNG below the course
     const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
-    hub.file = await mcp("attach", { name: "skizze.png", base64: png, parent: "Kurs Datenbanken", description: "Eine Skizze" });
-    hub.trashed = "ex-i-bike";
-    await mcp("delete", { ref: hub.trashed });
+    server.file = await mcp("attach", { name: "skizze.png", base64: png, parent: "Kurs Datenbanken", description: "Eine Skizze" });
+    server.trashed = "ex-i-bike";
+    await mcp("delete", { ref: server.trashed });
   }
-  return hub;
+  return server;
 }
 
 async function settle(page: Page) {
@@ -112,10 +112,10 @@ const ITEMS = ["ex-work", "ex-art-de", "ex-relaunch", "ex-design", "ex-t-pages",
 
 async function run() {
   const browser = await chromium.launch({ headless: true });
-  const empty = await startHub(false);
-  const seeded = await startHub(true);
-  const typeless = await startHub(true, true);
-  const fresh = await startHub(false);
+  const empty = await startServer(false);
+  const seeded = await startServer(true);
+  const typeless = await startServer(true, true);
+  const fresh = await startServer(false);
   const variants = [
     { name: "light", viewport: { width: 1440, height: 900 }, scheme: "light" as const },
     { name: "dark", viewport: { width: 1440, height: 900 }, scheme: "dark" as const },
@@ -123,18 +123,18 @@ async function run() {
   ];
   try {
     await examplesOnSetup(browser, fresh);
-    for (const [hubName, hub] of [["empty", empty], ["seeded", seeded], ["no types", typeless]] as const) {
+    for (const [serverName, server] of [["empty", empty], ["seeded", seeded], ["no types", typeless]] as const) {
       for (const v of variants) {
-        const context = await browser.newContext({ baseURL: hub.url, viewport: v.viewport, colorScheme: v.scheme, isMobile: !!v.mobile, hasTouch: !!v.mobile, locale: "de-DE" });
+        const context = await browser.newContext({ baseURL: server.url, viewport: v.viewport, colorScheme: v.scheme, isMobile: !!v.mobile, hasTouch: !!v.mobile, locale: "de-DE" });
         const page = await context.newPage();
         const errors: string[] = [];
         page.on("pageerror", (e) => errors.push(`page error: ${e.message}`));
         page.on("console", (m) => {
           if (m.type() === "error") errors.push(`console error: ${m.text()}`);
         });
-        const label = `${hubName} ${v.name}`;
-        if (hubName === "empty" && v.name === "light") {
-          // the first visit sets the hub up, here without the examples
+        const label = `${serverName} ${v.name}`;
+        if (serverName === "empty" && v.name === "light") {
+          // the first visit sets the server up, here without the examples
           await check(page, label, "/", errors, async (p) => {
             await p.getByRole("checkbox", { name: /Mit Beispielen starten/ }).uncheck();
             await p.getByRole("button", { name: /Einrichten|Set up/ }).click();
@@ -143,9 +143,9 @@ async function run() {
         }
         const phone = !!v.mobile;
         for (const r of ROUTES) await check(page, label, r, errors, undefined, { phone });
-        if (hubName === "no types") for (const id of ITEMS) await check(page, label, `/#/i/${encodeURIComponent(id)}`, errors, undefined, { phone, page: true });
-        if (hubName === "seeded") {
-          for (const id of [...ITEMS, hub.file, hub.trashed]) await check(page, label, `/#/i/${encodeURIComponent(id)}`, errors, undefined, { phone, page: true });
+        if (serverName === "no types") for (const id of ITEMS) await check(page, label, `/#/i/${encodeURIComponent(id)}`, errors, undefined, { phone, page: true });
+        if (serverName === "seeded") {
+          for (const id of [...ITEMS, server.file, server.trashed]) await check(page, label, `/#/i/${encodeURIComponent(id)}`, errors, undefined, { phone, page: true });
           // the inbox: hovering does not change a row's height, j/k moves the detail (desktop);
           // on a phone an entry opens on a page of its own (design rules § 8)
           await check(page, label, "/#/inbox", errors, async (p) => {
@@ -305,12 +305,12 @@ async function run() {
     console.error(`E2E smoke: ${failures.length} failure(s) in ${checks} checks:\n- ${failures.join("\n- ")}`);
     process.exit(1);
   }
-  console.log(`E2E smoke: ${checks} checks passed (empty, seeded, typeless and fresh hub; light, dark, phone).`);
+  console.log(`E2E smoke: ${checks} checks passed (empty, seeded, typeless and fresh server; light, dark, phone).`);
 }
 
 /** Set up on the page with the examples (the default), then remove them in the settings and undo that. */
-async function examplesOnSetup(browser: import("playwright-core").Browser, hub: { url: string }) {
-  const context = await browser.newContext({ baseURL: hub.url, viewport: { width: 1440, height: 900 }, locale: "de-DE" });
+async function examplesOnSetup(browser: import("playwright-core").Browser, server: { url: string }) {
+  const context = await browser.newContext({ baseURL: server.url, viewport: { width: 1440, height: 900 }, locale: "de-DE" });
   const page = await context.newPage();
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(`page error: ${e.message}`));

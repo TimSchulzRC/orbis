@@ -18,7 +18,7 @@ const pdfWasm = {
 };
 
 /**
- * `bun run dev:build` (vite build --watch, for the dev hub): a page loaded during a rebuild never
+ * `bun run dev:build` (vite build --watch, for a server in development): a page loaded during a rebuild never
  * gets an index.html whose assets are not written yet or already gone. The old hashed assets stay;
  * the new index.html is written under another name and takes over in one rename once everything
  * is on disk. Assets of the build before the previous one go then.
@@ -43,22 +43,22 @@ const atomicWatch: Plugin = {
   },
 };
 
-const hub = `http://127.0.0.1:${process.env.PORT ?? 8480}`;
+const server = `http://127.0.0.1:${process.env.PORT ?? 8480}`;
 /** The dev server's own public address, if it is reached through `tailscale serve` (e.g. https://<host>.<tailnet>.ts.net:8472). */
 const devPublic = process.env.OBTION_DEV_PUBLIC_URL ? new URL(process.env.OBTION_DEV_PUBLIC_URL) : undefined;
 
 /**
- * Requests to the hub go out as the hub's own: Host and Origin are the hub's address. The hub
+ * Requests to the server go out as the server's own: Host and Origin are the server's address. The server
  * only answers to the hosts it serves under (DNS rebinding guard) and checks Origin against Host
  * (CSRF, cross-site WebSocket); the dev server may run on any port or tailnet name.
  */
-function toHub(ws = false) {
+function toServer(ws = false) {
   return {
-    target: hub,
+    target: server,
     ws,
     changeOrigin: true,
     configure: (proxy: any) => {
-      const own = (req: any) => req.getHeader?.("origin") !== undefined && req.setHeader("origin", hub);
+      const own = (req: any) => req.getHeader?.("origin") !== undefined && req.setHeader("origin", server);
       proxy.on("proxyReq", own);
       proxy.on("proxyReqWs", own);
     },
@@ -108,9 +108,9 @@ export default defineConfig({
     // behind `tailscale serve` (HTTPS): the browser reaches HMR over wss on the public port
     hmr: devPublic ? { protocol: "wss", host: devPublic.hostname, clientPort: Number(devPublic.port || 443) } : undefined,
     proxy: {
-      "/api": toHub(),
-      "/mcp": toHub(),
-      "/sync": toHub(true),
+      "/api": toServer(),
+      "/mcp": toServer(),
+      "/sync": toServer(true),
     },
   },
 });

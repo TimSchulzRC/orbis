@@ -1,12 +1,12 @@
 // The replica's platform in a browser (web app, later the desktop app's window): IndexedDB as
-// storage, the hub that served the page, other tabs over BroadcastChannel, dialogs of the UI.
+// storage, the server that served the page, other tabs over BroadcastChannel, dialogs of the UI.
 import { openDB, type IDBPDatabase } from "idb";
 import type { OutItem, RepoHost, ReplicaStorage, SyncSocket, TabMsg } from "@obtion/sync";
 import { tr } from "./i18n";
 
 const DB = "obtion";
 
-/** The replica in IndexedDB: stores "updates" (per document), "outbox", "meta" (cursor, hub id). */
+/** The replica in IndexedDB: stores "updates" (per document), "outbox", "meta" (cursor, server id). */
 export function idbStorage(): ReplicaStorage {
   let db!: IDBPDatabase;
   return {
@@ -54,13 +54,14 @@ export function idbStorage(): ReplicaStorage {
         if (w.cursor.lastId) tx.objectStore("meta").put(w.cursor.lastId, "lastId");
         else tx.objectStore("meta").delete("lastId");
       }
-      if (w.hubId) tx.objectStore("meta").put(w.hubId, "hubId");
+      // key "hubId" from when the server was called hub; kept so devices still recognise it
+      if (w.serverId) tx.objectStore("meta").put(w.serverId, "hubId");
       await tx.done;
     },
     async outbox() {
       return (await db.getAll("outbox")) as OutItem[];
     },
-    async hubId() {
+    async serverId() {
       return (await db.get("meta", "hubId")) as string | undefined;
     },
     async destroy() {
@@ -73,7 +74,7 @@ export function idbStorage(): ReplicaStorage {
   };
 }
 
-/** The browser as the replica's platform; the hub is the one that served this page. */
+/** The browser as the replica's platform; the server is the one that served this page. */
 export function browserHost(): RepoHost {
   const bc = typeof BroadcastChannel !== "undefined" ? new BroadcastChannel("obtion") : null;
   return {
@@ -101,14 +102,14 @@ export function browserHost(): RepoHost {
     persist() {
       if (navigator.storage?.persist) navigator.storage.persist().catch(() => {});
     },
-    async askOtherHub() {
+    async askOtherServer() {
       const { chooseAction } = await import("./ui/feedback");
       const answer = await chooseAction({
-        title: tr("sync.otherHub.title"),
-        body: tr("sync.otherHub.body"),
+        title: tr("sync.otherServer.title"),
+        body: tr("sync.otherServer.body"),
         choices: [
-          { key: "upload", label: tr("sync.otherHub.upload") },
-          { key: "replace", label: tr("sync.otherHub.replace"), primary: true },
+          { key: "upload", label: tr("sync.otherServer.upload") },
+          { key: "replace", label: tr("sync.otherServer.replace"), primary: true },
         ],
       });
       return answer === "upload" || answer === "replace" ? answer : null;

@@ -1,7 +1,7 @@
 import MiniSearch from "minisearch";
 import { type Item, isContent, stripQueryBlocks } from "./model";
 
-// Same search on hub (agents) and devices (offline), so both agree.
+// Same search on server (agents) and devices (offline), so both agree.
 //
 // Spellings: terms are folded (lower case, ä→ae, ö→oe, ü→ue, ß→ss) when indexing and when
 // searching, and indexed once more with plain vowels (ö→o), so "Juergen" finds "Jürgen" and

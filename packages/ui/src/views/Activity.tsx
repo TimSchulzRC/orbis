@@ -124,7 +124,7 @@ function Avatar({ origin }: { origin: string }) {
   );
 }
 
-/** Hub messages are stored in English (data); shown in the app's language when we know them. */
+/** Server messages are stored in English (data); shown in the app's language when we know them. */
 const SYSTEM_TEXTS: [RegExp, string][] = [
   [/^Imported (\d+) notes from Obsidian$/, "activity.sys.obsidian"],
   [/^Imported (\d+) projects and tasks from Notion$/, "activity.sys.notion"],

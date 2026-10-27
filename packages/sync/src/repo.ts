@@ -1,6 +1,6 @@
-// A device's full replica of the hub's data. Everything lives in memory and in the device's
-// storage, so the app works offline; changes go to an outbox and sync when the hub is
-// reachable. No UI and no platform APIs: storage, the connection to the hub and the questions
+// A device's full replica of the server's data. Everything lives in memory and in the device's
+// storage, so the app works offline; changes go to an outbox and sync when the server is
+// reachable. No UI and no platform APIs: storage, the connection to the server and the questions
 // to the user come from the platform (RepoHost) – the browser's in @obtion/ui, later the
 // desktop and mobile apps' own.
 import * as Y from "yjs";
@@ -63,14 +63,14 @@ export interface ReplicaStorage {
   load(): Promise<{ rows: StoredRow[]; outbox: OutItem[]; lastSeq?: number; lastId?: string }>;
   /** Replace a document's stored updates by one merged update. */
   compact(docs: { keys: unknown[]; row: StoredRow }[]): Promise<void>;
-  write(w: { rows?: StoredRow[]; outbox?: OutItem[]; acked?: string[]; cursor?: { lastSeq: number; lastId?: string }; hubId?: string }): Promise<void>;
+  write(w: { rows?: StoredRow[]; outbox?: OutItem[]; acked?: string[]; cursor?: { lastSeq: number; lastId?: string }; serverId?: string }): Promise<void>;
   outbox(): Promise<OutItem[]>;
-  hubId(): Promise<string | undefined>;
+  serverId(): Promise<string | undefined>;
   /** Delete everything stored. */
   destroy(): Promise<void>;
 }
 
-/** The connection to the hub's /sync endpoint (a WebSocket). */
+/** The connection to the server's /sync endpoint (a WebSocket). */
 export interface SyncSocket {
   readonly readyState: number;
   send(data: string): void;
@@ -91,19 +91,19 @@ export interface RepoHost {
   storage: ReplicaStorage;
   /** This device's name, e.g. "Mac-x3f9" (activity, origin of changes). */
   device: string;
-  /** Opens a connection to the hub's sync endpoint. */
+  /** Opens a connection to the server's sync endpoint. */
   connect(): SyncSocket;
-  /** Sends JSON to the hub's API (e.g. "/api/undo"); null when the hub cannot be reached. */
+  /** Sends JSON to the server's API (e.g. "/api/undo"); null when the server cannot be reached. */
   post(path: string, body: unknown): Promise<{ ok: boolean; statusText: string; body: any } | null>;
   /** Other windows on this device, if the platform has several. */
   tabs?: { post(msg: TabMsg): void; listen(fn: (msg: TabMsg) => void): void };
-  /** Calls fn whenever it is worth trying the hub again (back online, app in front). */
+  /** Calls fn whenever it is worth trying the server again (back online, app in front). */
   onWake?(fn: () => void): void;
   /** Asks the platform to keep the stored data (browsers may delete it otherwise). */
   persist?(): void;
-  /** This device knew another hub: upload its copy, replace it with the hub's, or no answer. */
-  askOtherHub(): Promise<"upload" | "replace" | null>;
-  /** Drop changes the hub does not have yet? */
+  /** This device knew another server: upload its copy, replace it with the server's, or no answer. */
+  askOtherServer(): Promise<"upload" | "replace" | null>;
+  /** Drop changes the server does not have yet? */
   confirmDiscard(count: number): Promise<boolean>;
   /** The data are newer than this app: tell the user (once). */
   tooNew(): void;
@@ -115,7 +115,7 @@ export interface SyncStatus {
   loaded: boolean;
   online: boolean;
   synced: boolean; // initial catch-up done in this session
-  pending: number; // local changes not yet acknowledged by the hub
+  pending: number; // local changes not yet acknowledged by the server
   lastSeq: number;
 }
 
@@ -139,7 +139,7 @@ export class Repo {
   private flushScheduled = false;
   private searchTimer: ReturnType<typeof setTimeout> | null = null;
   private outbox = new Map<string, OutItem>();
-  private hubFormat = 0;
+  private serverFormat = 0;
   private tooNewShown = false;
   private retry = 0;
   private persistFailed = false;
@@ -315,7 +315,7 @@ export class Repo {
     try {
       await this.db.write({ rows: batch.map((b) => b.row), outbox: batch.map((b) => b.out) });
     } catch (e) {
-      // Not stored locally: stop advancing lastSeq so the hub resends this doc later.
+      // Not stored locally: stop advancing lastSeq so the server resends this doc later.
       this.persistFailed = true;
       console.error("persist failed", e);
     } finally {
@@ -345,11 +345,11 @@ export class Repo {
       this.status.online = true;
       this.status.synced = false;
       this.emit();
-      // The outbox is pushed after the hub's "welcome" was checked (see onMessage).
+      // The outbox is pushed after the server's "welcome" was checked (see onMessage).
       for (const area of AREAS) this.send({ t: "hello", area, since: this.status.lastSeq, sinceId: this.lastId, client: this.device, device: this.device });
       ping = setInterval(() => this.send({ t: "ping" }), 25000);
     };
-    // Handle messages strictly in order (the hub-identity check must finish before updates apply).
+    // Handle messages strictly in order (the server-identity check must finish before updates apply).
     ws.onmessage = (ev) => {
       const msg = JSON.parse(ev.data) as ServerMsg;
       this.inbox = this.inbox.then(() => (this.ws === ws ? this.onMessage(msg) : undefined)).catch((e) => console.error("sync message failed", e));
@@ -387,21 +387,21 @@ export class Repo {
     if (this.ws?.readyState === OPEN) this.ws.send(JSON.stringify(msg));
   }
 
-  private hubId: string | undefined;
-  /** Id of the hub's log row at lastSeq: lets the hub notice it was restored from an older backup. */
+  private serverId: string | undefined;
+  /** Id of the server's log row at lastSeq: lets the server notice it was restored from an older backup. */
   private lastId: string | undefined;
   private inbox: Promise<void> = Promise.resolve();
 
   private async onMessage(msg: ServerMsg) {
     if (msg.t === "denied") return;
     if (msg.t === "welcome") {
-      this.hubFormat = msg.format ?? 0;
-      const known = this.hubId ?? (await this.db.hubId());
+      this.serverFormat = msg.format ?? 0;
+      const known = this.serverId ?? (await this.db.serverId());
       if (known && known !== msg.hub && this.docs.size > 0) {
-        // A different hub: mostly it was set up anew and this device's copy is stale (replace it,
+        // A different server: mostly it was set up anew and this device's copy is stale (replace it,
         // the recommended answer); rarely it was restored from a backup and misses what only this
-        // device has (upload, which adds this copy to the hub). Only the user knows.
-        const answer = await this.host.askOtherHub();
+        // device has (upload, which adds this copy to the server). Only the user knows.
+        const answer = await this.host.askOtherServer();
         // no answer (closed): the safe way, nothing is lost – ask again on the next connection
         if (answer === null) {
           const old = this.ws;
@@ -411,25 +411,25 @@ export class Repo {
         }
         const upload = answer === "upload";
         if (!upload) {
-          await this.db.write({ hubId: msg.hub });
+          await this.db.write({ serverId: msg.hub });
           await this.resetLocal(true);
           return;
         }
         await this.enqueueFullUpload();
-        // Our sequence position belongs to the old hub: start over against the new one.
+        // Our sequence position belongs to the old server: start over against the new one.
         this.status.lastSeq = 0;
         this.lastId = undefined;
         await this.db.write({ cursor: { lastSeq: 0 } });
         this.send({ t: "hello", area: msg.area, since: 0, client: this.device, device: this.device });
       }
-      this.hubId = msg.hub;
-      if (known !== msg.hub) await this.db.write({ hubId: msg.hub });
+      this.serverId = msg.hub;
+      if (known !== msg.hub) await this.db.write({ serverId: msg.hub });
       await this.flushOutbox();
       return;
     }
     if (msg.t === "updates") {
       if (msg.reset) {
-        // The hub lost data (restored from backup?). Give it everything we have.
+        // The server lost data (restored from backup?). Give it everything we have.
         await this.enqueueFullUpload();
         await this.flushOutbox();
       }
@@ -466,7 +466,7 @@ export class Repo {
     } else if (msg.t === "blob") {
       for (const l of this.blobListeners) l(msg.hash);
     } else if (msg.t === "event") {
-      // Edits by the same author are folded into one event on the hub, so replace by id.
+      // Edits by the same author are folded into one event on the server, so replace by id.
       this.events = [msg.event, ...this.events.filter((e) => e.id !== msg.event.id)].slice(0, 100);
       for (const l of this.eventListeners) l(msg.event);
       this.emit();
@@ -474,7 +474,7 @@ export class Repo {
   }
 
   /**
-   * Take back a step (one user action or tool call) on the hub, or redo it. Needs the hub:
+   * Take back a step (one user action or tool call) on the server, or redo it. Needs the server:
    * it holds the history. This device's own changes are pushed first, so they are included.
    */
   async undo(step: string, redo = false): Promise<{ ok: true; changed: number; kept: number } | { ok: false; error: string }> {
@@ -487,12 +487,12 @@ export class Repo {
   }
 
   /**
-   * The data (or the hub) are newer than this app: it still reads them but does not write – a
+   * The data (or the server) are newer than this app: it still reads them but does not write – a
    * newer format might be damaged by changes it does not understand (see FORMAT). Reloading
    * brings the new app.
    */
   get readOnly(): boolean {
-    return (this.records.get(SETTINGS_ID)?.settings?.format ?? 0) > FORMAT || this.hubFormat > FORMAT;
+    return (this.records.get(SETTINGS_ID)?.settings?.format ?? 0) > FORMAT || this.serverFormat > FORMAT;
   }
 
   /** Drop the local replica and download everything again. */

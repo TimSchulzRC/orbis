@@ -7,9 +7,9 @@ import { defaultStartBody } from "@obtion/core/setup";
 import { findBlocks, readBlock, runQuery } from "@obtion/core/query";
 import { inbox } from "@obtion/core/placement";
 import { setMeta, touch } from "@obtion/core/model";
-import { Store } from "@obtion/hub/store";
-import { Blobs, sha256 } from "@obtion/hub/blobs";
-import { setUp } from "@obtion/hub/importers";
+import { Store } from "@obtion/server/store";
+import { Blobs, sha256 } from "@obtion/server/blobs";
+import { setUp } from "@obtion/server/importers";
 import type { Lang } from "@obtion/core/i18n";
 
 afterAll(removeTempDirs);
@@ -104,7 +104,7 @@ test("removeExamples ignores ids that are not examples", () => {
   expect(m.index().get(own)).toBeDefined();
 });
 
-test("on the hub: set up with the examples, the files' contents stored", async () => {
+test("on the server: set up with the examples, the files' contents stored", async () => {
   const dir = tempDir("obtion-ex-");
   const store = new Store(dir);
   const blobs = new Blobs(join(dir, "blobs"), store);

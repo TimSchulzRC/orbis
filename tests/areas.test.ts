@@ -3,7 +3,7 @@ import * as Y from "yjs";
 import { MemRepo, tempDir, removeTempDirs } from "./helpers";
 import { FORMAT, PERSONAL, SETTINGS_ID, initItem, readItem } from "@obtion/core/model";
 import { runSetup, upgradeAreas } from "@obtion/core/setup";
-import { AreaError, Store } from "@obtion/hub/store";
+import { AreaError, Store } from "@obtion/server/store";
 
 afterAll(removeTempDirs);
 
@@ -44,7 +44,7 @@ function update(id: string, area?: string) {
   return Y.encodeStateAsUpdate(d);
 }
 
-test("hub log: every row has its area; cursors and catch-up per area; areas never mix", () => {
+test("server log: every row has its area; cursors and catch-up per area; areas never mix", () => {
   const s = new Store(tempDir("obtion-area-"));
   s.applyRemote("p1", update("p1"), "web:x");
   s.applyRemote("t1", update("t1", "team-a"), "web:x", undefined, undefined, "team-a");

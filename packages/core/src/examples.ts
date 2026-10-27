@@ -17,7 +17,7 @@ export const EXAMPLE_ORIGIN = "system:examples";
 
 export const EX_TYPES = { book: "ex-type-book", person: "ex-type-person", article: "ex-type-article" } as const;
 
-/** A file of the examples: made here, stored by the caller (hub: blobs, device: its file store). */
+/** A file of the examples: made here, stored by the caller (server: blobs, device: its file store). */
 export interface ExampleFile {
   key: "diagram" | "sheet";
   name: string;

@@ -34,7 +34,7 @@ export function storeWriter(store: Store, origin: string, quiet = true): Writer 
   };
 }
 
-/** First setup on the hub, optionally with the examples: the same code the setup page runs. */
+/** First setup on the server, optionally with the examples: the same code the setup page runs. */
 export async function setUp(store: Store, blobs: Blobs, lang: Lang, opts: { examples?: boolean; quiet?: boolean } = {}) {
   runSetup(storeWriter(store, "system:setup", opts.quiet), lang, "system:setup");
   if (opts.examples)

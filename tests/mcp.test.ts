@@ -1,9 +1,9 @@
 import { test, expect, beforeEach, afterAll } from "bun:test";
 import { tempDir, removeTempDirs } from "./helpers";
-import { Store } from "@obtion/hub/store";
-import { handleMcp } from "@obtion/hub/mcp";
+import { Store } from "@obtion/server/store";
+import { handleMcp } from "@obtion/server/mcp";
 import { runSetup } from "@obtion/core/setup";
-import { storeWriter } from "@obtion/hub/importers";
+import { storeWriter } from "@obtion/server/importers";
 import { deleteType } from "@obtion/core/typeops";
 
 afterAll(removeTempDirs);

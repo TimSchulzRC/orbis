@@ -30,7 +30,7 @@ export function FilePage({ item }: { item: Item }) {
     if (f.filetype === "audio" || f.filetype === "video") files.url(f.hash).then(setOrig);
     else void files.check(f.hash);
   }, [f.hash]);
-  // the original on this device ("alles lokal", offline): viewer and download use it instead of the hub
+  // the original on this device ("alles lokal", offline): viewer and download use it instead of the server
   const [localSrc, setLocalSrc] = useState<string | undefined>();
   useEffect(() => {
     let url: string | undefined;
@@ -93,7 +93,7 @@ export function FilePage({ item }: { item: Item }) {
         <div className="min-w-0 flex-1">
           <TitleField item={item} autoFocus={false} placeholder={f.name} />
         </div>
-        <a href={localSrc ?? files.hubUrl(f.hash, f.name, true)} download={localSrc ? f.name : undefined} className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-line bg-surface px-3 text-sm font-medium text-fg hover:bg-hover">
+        <a href={localSrc ?? files.serverUrl(f.hash, f.name, true)} download={localSrc ? f.name : undefined} className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-line bg-surface px-3 text-sm font-medium text-fg hover:bg-hover">
           <Download size={15} /> <span className="max-md:hidden">{t("file.download")}</span>
         </a>
       </div>
@@ -121,7 +121,7 @@ export function FilePage({ item }: { item: Item }) {
       {/* the file itself, as wide as the column, and its description */}
       <div className="mt-6 overflow-hidden rounded-xl border border-line bg-surface-2">
         {isImg && display && <img src={display} alt={item.body || item.title} className="mx-auto max-h-[70vh] w-auto" />}
-        {f.filetype === "pdf" && (!local || localSrc) && <iframe title={item.title} src={localSrc ?? files.hubUrl(f.hash)} className="h-[75vh] w-full bg-white" />}
+        {f.filetype === "pdf" && (!local || localSrc) && <iframe title={item.title} src={localSrc ?? files.serverUrl(f.hash)} className="h-[75vh] w-full bg-white" />}
         {f.filetype === "audio" && orig && <audio controls src={orig} className="w-full p-4" />}
         {f.filetype === "video" && orig && <video controls src={orig} className="w-full" />}
         {!isImg && f.filetype !== "pdf" && f.filetype !== "audio" && f.filetype !== "video" && <div className="flex h-40 items-center justify-center text-sm text-muted">{f.name}</div>}

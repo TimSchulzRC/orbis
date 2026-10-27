@@ -1,8 +1,8 @@
-// Admin CLI. Run while the hub is stopped (it keeps all documents in memory):
-//   bun apps/hub/src/cli.ts setup [de|en] [--examples]
-//   bun apps/hub/src/cli.ts import-obsidian <vault> [--no-moc-parents]
-//   bun apps/hub/src/cli.ts import-notion <json> [--project-type Projekt] [--task-type Task]
-//   bun apps/hub/src/cli.ts stats
+// Admin CLI. Run while the server is stopped (it keeps all documents in memory):
+//   bun apps/server/src/cli.ts setup [de|en] [--examples]
+//   bun apps/server/src/cli.ts import-obsidian <vault> [--no-moc-parents]
+//   bun apps/server/src/cli.ts import-notion <json> [--project-type Projekt] [--task-type Task]
+//   bun apps/server/src/cli.ts stats
 import { join, resolve } from "node:path";
 import { Store } from "./store";
 import { Blobs } from "./blobs";
@@ -27,7 +27,7 @@ const running = await fetch(`http://127.0.0.1:${port}/api/info`, { signal: Abort
   () => false,
 );
 if (running && cmd !== "stats" && !flag("force")) {
-  console.error(`A hub is running on :${port}. Stop it first, then run this again.`);
+  console.error(`A server is running on :${port}. Stop it first, then run this again.`);
   process.exit(1);
 }
 
@@ -43,9 +43,9 @@ if (cmd === "stats") {
     const k = r.kind !== "info" ? r.kind : r.type === META_TYPE ? "typ" : (store.index().typeName(r.type) ?? (r.type ? "?" : "ohne Typ"));
     by.set(k, (by.get(k) ?? 0) + 1);
   }
-  // files whose content (or preview) the hub does not have: shown as "Datei fehlt" in the app
+  // files whose content (or preview) the server does not have: shown as "Datei fehlt" in the app
   const missing = store.live().filter((r) => r.file && [r.file.hash, r.file.display, r.file.thumb].some((h) => h && !blobs.has(h)));
-  console.log(Object.fromEntries(by), { seq: store.seq, hub: store.hubId, filesMissingContent: missing.length });
+  console.log(Object.fromEntries(by), { seq: store.seq, server: store.serverId, filesMissingContent: missing.length });
   for (const r of missing.slice(0, 20)) console.log("  missing:", r.title, r.id);
 } else if (cmd === "setup") {
   await setUp(store, blobs, (positional[0] as Lang) ?? lang, { examples: flag("examples"), quiet: false });

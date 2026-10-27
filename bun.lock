@@ -6,15 +6,15 @@
       "name": "obtion",
       "devDependencies": {
         "@obtion/core": "workspace:*",
-        "@obtion/hub": "workspace:*",
+        "@obtion/server": "workspace:*",
         "@types/bun": "^1.4.4",
         "playwright-core": "^1.64.1",
         "typescript": "^7.0.2",
         "yjs": "^13.6.33",
       },
     },
-    "apps/hub": {
-      "name": "@obtion/hub",
+    "apps/server": {
+      "name": "@obtion/server",
       "dependencies": {
         "@modelcontextprotocol/sdk": "^1.32.2",
         "@obtion/core": "workspace:*",
@@ -370,7 +370,7 @@
 
     "@obtion/core": ["@obtion/core@workspace:packages/core"],
 
-    "@obtion/hub": ["@obtion/hub@workspace:apps/hub"],
+    "@obtion/server": ["@obtion/server@workspace:apps/server"],
 
     "@obtion/sync": ["@obtion/sync@workspace:packages/sync"],
 

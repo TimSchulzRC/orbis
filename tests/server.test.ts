@@ -1,12 +1,12 @@
-// The hub as a program: who it trusts with the caller's identity, with and without the web app,
-// and the sync per area. Starts real hubs.
+// The server as a program: who it trusts with the caller's identity, with and without the web app,
+// and the sync per area. Starts real servers.
 import { test, expect, beforeAll, afterAll } from "bun:test";
 import { createServer } from "node:net";
 import * as Y from "yjs";
 import { tempDir, removeTempDirs } from "./helpers";
 import { FORMAT, PERSONAL, initItem } from "@obtion/core/model";
 import { type ServerMsg, toB64 } from "@obtion/core/protocol";
-import { trustedProxies } from "@obtion/hub/trust";
+import { trustedProxies } from "@obtion/server/trust";
 
 function freePort(): Promise<number> {
   return new Promise((res) => {
@@ -21,7 +21,7 @@ function freePort(): Promise<number> {
 const procs: ReturnType<typeof Bun.spawn>[] = [];
 async function start(env: Record<string, string>): Promise<string> {
   const port = await freePort();
-  const p = Bun.spawn(["bun", "apps/hub/src/index.ts"], {
+  const p = Bun.spawn(["bun", "apps/server/src/index.ts"], {
     cwd: `${import.meta.dir}/..`,
     env: { ...process.env, PORT: String(port), HOST: "127.0.0.1", ...env },
     stdout: "ignore",
@@ -33,14 +33,14 @@ async function start(env: Record<string, string>): Promise<string> {
     if (await fetch(base + "/api/info").then((r) => r.ok, () => false)) return base;
     await Bun.sleep(50);
   }
-  throw new Error("hub did not start");
+  throw new Error("server did not start");
 }
 
 let plain = "";
 let bare = "";
 beforeAll(async () => {
-  plain = await start({ OBTION_DATA: tempDir("obtion-hub-") });
-  bare = await start({ OBTION_DATA: tempDir("obtion-hub-"), OBTION_TRUSTED_PROXIES: "10.0.0.0/8, 192.168.1.5", OBTION_WEB_APP: "off" });
+  plain = await start({ OBTION_DATA: tempDir("obtion-server-") });
+  bare = await start({ OBTION_DATA: tempDir("obtion-server-"), OBTION_TRUSTED_PROXIES: "10.0.0.0/8, 192.168.1.5", OBTION_WEB_APP: "off" });
 });
 afterAll(async () => {
   for (const p of procs) (p.kill(), await p.exited);
@@ -68,13 +68,13 @@ test("trusted proxies: loopback by default; addresses and ranges from the list; 
 
 test("the identity headers count from a trusted proxy only", async () => {
   expect(await who(plain)).toMatchObject({ user: "ada@example.org", name: "Ada" });
-  // the second hub trusts only 10.0.0.0/8 and 192.168.1.5: the same request from loopback is anonymous
+  // the second server trusts only 10.0.0.0/8 and 192.168.1.5: the same request from loopback is anonymous
   const anon = await who(bare);
   expect(anon.user).toBe("local");
   expect(anon.name).toBeUndefined();
 });
 
-test("every hub brings the web app; OBTION_WEB_APP=off leaves sync, API and MCP", async () => {
+test("every server brings the web app; OBTION_WEB_APP=off leaves sync, API and MCP", async () => {
   const app = await fetch(plain + "/");
   expect(app.status).not.toBe(404); // the app (or 503 while it is not built)
   const none = await fetch(bare + "/");
@@ -84,7 +84,7 @@ test("every hub brings the web app; OBTION_WEB_APP=off leaves sync, API and MCP"
   expect((await fetch(bare + "/mcp", { method: "POST" })).status).toBe(401); // there, asks for its token
 });
 
-/** A sync connection that collects what the hub sends. */
+/** A sync connection that collects what the server sends. */
 async function connect(base: string) {
   const ws = new WebSocket(base.replace("http", "ws") + "/sync");
   const msgs: ServerMsg[] = [];
@@ -119,7 +119,7 @@ for (const which of ["with", "without"] as const)
     const relayed = (await b.until((m) => m.t === "updates" && m.items.some((i) => i.d === "n1"))) as Extract<ServerMsg, { t: "updates" }>;
     expect(relayed.area).toBe(PERSONAL);
 
-    // an area this hub does not hold for the device: refused, the connection stays
+    // an area this server does not hold for the device: refused, the connection stays
     a.ws.send(JSON.stringify({ t: "hello", area: "team-x", since: 0, client: "a" }));
     expect(await a.until((m) => m.t === "denied")).toEqual({ t: "denied", area: "team-x" });
     for (const c of [a, b]) c.ws.close();

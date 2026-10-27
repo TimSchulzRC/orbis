@@ -4,9 +4,9 @@
 import { test, expect, beforeEach, afterAll } from "bun:test";
 import * as Y from "yjs";
 import { tempDir, removeTempDirs, MemRepo } from "./helpers";
-import { Store } from "@obtion/hub/store";
-import { Ops } from "@obtion/hub/ops";
-import { storeWriter } from "@obtion/hub/importers";
+import { Store } from "@obtion/server/store";
+import { Ops } from "@obtion/server/ops";
+import { storeWriter } from "@obtion/server/importers";
 import { SYS, migrateCollections, runSetup, typeTabs } from "@obtion/core/setup";
 import { SETTINGS_ID, readItem, setTab, setTabs } from "@obtion/core/model";
 import { DEFAULT_INBOX_WHERE } from "@obtion/core/inbox";

@@ -179,7 +179,7 @@ export function AgentPanel({ context, onClose, overlay }: { context?: Item; onCl
       <header className="flex items-center gap-2 border-b border-line px-3 py-2">
         <Sparkles size={16} className="text-muted" />
         <span className="font-medium">Agent</span>
-        {/* how things stand, in one word: ready, not set up, offline (the hub was asked, not guessed) */}
+        {/* how things stand, in one word: ready, not set up, offline (the server was asked, not guessed) */}
         {available !== null && (
           <span className="inline-flex items-center gap-1 text-xs text-muted" role="status">
             <span className="size-1.5 rounded-full" style={{ background: available && r.status.online ? "var(--ok)" : "var(--faint)" }} />

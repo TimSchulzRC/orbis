@@ -4,7 +4,7 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { Database } from "bun:sqlite";
 import * as Y from "yjs";
-import { Store } from "@obtion/hub/store";
+import { Store } from "@obtion/server/store";
 import { PERSONAL as P, initItem } from "@obtion/core/model";
 
 afterAll(removeTempDirs);
@@ -16,25 +16,25 @@ function update(id: string, title: string): Uint8Array {
 }
 const tmp = () => tempDir("obtion-sync-");
 
-test("a hub restored from an older backup is detected even after another device synced first", () => {
+test("a server restored from an older backup is detected even after another device synced first", () => {
   const dir = tmp();
-  const hub = new Store(dir);
-  hub.applyRemote("a", update("a", "A"), "web:laptop");
-  // Backup of the hub at seq 1.
+  const server = new Store(dir);
+  server.applyRemote("a", update("a", "A"), "web:laptop");
+  // Backup of the server at seq 1.
   const backup = tmp();
-  hub.db.exec(`VACUUM INTO '${join(backup, "obtion.db")}'`);
-  // The phone pushes and remembers the hub's cursor (seq 2 + id of that row).
-  hub.applyRemote("b", update("b", "B"), "web:phone");
-  const phone = { since: hub.seq, sinceId: hub.lastUid };
-  const hubId = hub.hubId;
+  server.db.exec(`VACUUM INTO '${join(backup, "obtion.db")}'`);
+  // The phone pushes and remembers the server's cursor (seq 2 + id of that row).
+  server.applyRemote("b", update("b", "B"), "web:phone");
+  const phone = { since: server.seq, sinceId: server.lastUid };
+  const serverId = server.serverId;
   expect(phone.since).toBe(2);
-  expect(hub.knowsCursor(P, phone.since, phone.sinceId)).toBe(true);
-  hub.flush();
-  hub.db.close();
+  expect(server.knowsCursor(P, phone.since, phone.sinceId)).toBe(true);
+  server.flush();
+  server.db.close();
 
-  // The hub is restored from the backup; the laptop syncs first and pushes seq back to 2.
+  // The server is restored from the backup; the laptop syncs first and pushes seq back to 2.
   const restored = new Store(backup);
-  expect(restored.hubId).toBe(hubId);
+  expect(restored.serverId).toBe(serverId);
   expect(restored.seq).toBe(1);
   restored.applyRemote("c", update("c", "C"), "web:laptop");
   expect(restored.seq).toBe(2);
@@ -81,7 +81,7 @@ test("a re-sent outbox item does not create a new log row", () => {
   expect([s.seq, s.lastUid]).toEqual([seq, lastUid]);
 });
 
-test("timestamps from a device clock far in the future are capped by the hub", () => {
+test("timestamps from a device clock far in the future are capped by the server", () => {
   const s = new Store(tmp());
   const d = new Y.Doc({ guid: "a" });
   const future = Date.now() + 3 * 864e5;
