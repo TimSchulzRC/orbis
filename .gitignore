@@ -1,0 +1,16 @@
+node_modules
+dist
+dev-dist
+# hub data (database, files, Markdown mirror, MCP token) – never in the repo
+data
+data-*
+*.db
+*.db-*
+# local configuration and secrets
+.env
+.env.*
+*.local
+*.log
+.DS_Store
+# exports from Notion and other sources (personal data, read by the importers)
+seed

@@ -1,0 +1,727 @@
+// The data model shared by hub, devices and agents.
+//
+// Everything is an *item*, stored as one Yjs document (guid = item id):
+//   kind "info"      an information (a type, being an information with the system type
+//                    META_TYPE, adds a `schema` map)
+//   kind "datei"     a file: metadata here, content on the hub by SHA-256
+//   kind "op"        a reversible bulk operation (e.g. deleting a type), shown in Activity
+//   kind "settings"  the one shared settings doc (start page, capture types, the inbox rule)
+//   (documents of the former kind "sammlung" are ignored since 26.10.: see migrateCollections)
+//
+// Top-level Yjs types of a document:
+//   meta     Y.Map   id-free scalars: kind, title, type, home, pinned (sort key | null), created,
+//                    updated, deleted …
+//                    (no inbox field: the inbox is computed, see placement.ts)
+//   parents  Y.Map   parentId -> { sort, at }  ("Teil von"; sort is per parent, at = when added)
+//   props    Y.Map   propId -> value           (values of the type's properties)
+//   extra    Y.Map   name -> { k, v }          (free properties, simple kinds only)
+//   rels     Y.Map   propId -> Y.Map<targetId, true>
+//   tags     Y.Map   tag -> true
+//   refs     Y.Map   targetId -> true          (explicit only; links in the text are derived)
+//   body     Y.Text  Markdown with [[links]] and ```abfrage blocks
+//   updates  Y.Array { id, at, text, by, status? }
+//   views    Y.Map   viewId -> view definition (query, display)
+//   schema   Y.Map   types only: name, plural, icon, color, description, pos (order in the
+//                    sidebar), capabilities (Y.Map), properties (Y.Map<propId, Y.Map>)
+//   tabs     Y.Map   types only: tabId -> Y.Map, the views of the type's page (see ViewTab);
+//                    empty: the default views
+//   file     Y.Map   files only: hash, name, mime, filetype, size, width, height, pages, duration,
+//                    display, thumb, history
+//   op       Y.Map   ops only
+//   settings Y.Map   settings only
+import * as Y from "yjs";
+import { keyBetween } from "./sortkey";
+import type { Cond, QueryDef } from "./query";
+
+/** The meta type "Typ": every type document has this as its type. Not a document, cannot be deleted. */
+export const META_TYPE = "sys:type";
+export const SETTINGS_ID = "sys:settings";
+
+export type Kind = "info" | "datei" | "op" | "settings";
+export type FileType = "bild" | "pdf" | "audio" | "video" | "dokument" | "sonstiges";
+export const FILE_TYPES: FileType[] = ["bild", "pdf", "audio", "video", "dokument", "sonstiges"];
+
+export type StatusGroup = "todo" | "active" | "done";
+export const STATUS_GROUPS: StatusGroup[] = ["todo", "active", "done"];
+
+export type PropKind = "text" | "number" | "date" | "checkbox" | "url" | "select" | "multiselect" | "status" | "relation" | "computed";
+export const PROP_KINDS: PropKind[] = ["text", "number", "date", "checkbox", "url", "select", "multiselect", "status", "relation", "computed"];
+/** Free properties (without a type) only come in simple kinds. */
+export type FreeKind = "text" | "number" | "date" | "checkbox" | "url" | "select";
+export const FREE_KINDS: FreeKind[] = ["text", "number", "date", "checkbox", "url", "select"];
+
+export interface OptionDef {
+  id: string;
+  name: string;
+  group?: StatusGroup; // status options only
+  color?: string;
+}
+
+export interface ComputedDef {
+  fn: "progress" | "count";
+  of?: string; // optional type filter
+}
+
+export interface PropDef {
+  id: string;
+  name: string;
+  kind: PropKind;
+  description?: string;
+  options?: OptionDef[];
+  multiple?: boolean; // relation: several targets
+  target?: string; // relation: query in text form (e.g. "typ:Person"), only a hint
+  inverseName?: string;
+  symmetric?: boolean;
+  range?: boolean; // date: start/end
+  computed?: ComputedDef;
+  hideEmpty?: boolean; // display: only on pages where it has a value (else behind "+ Eigenschaft")
+  removed?: boolean; // removed from the type; kept so its values still have a name
+  sort: string;
+}
+
+/**
+ * Capabilities as the plan describes them: status, progress, updates, due date ("Termin"),
+ * main action and template. Status and due name the property they use. Read them only
+ * through traits.ts.
+ */
+export interface Capabilities {
+  status?: string; // propId of the main status property
+  due?: string; // "Termin": propId of the date property that is the due date
+  progress?: { of?: string }; // share of done descendants with a status (optional type filter)
+  updates?: boolean;
+  template?: { body?: string; values?: Record<string, Value> };
+  primaryChild?: string; // main action: "+" on the page creates a child of this type
+}
+
+export interface TypeSchema {
+  name: string;
+  plural?: string; // the name of the list ("Bücher"); unset: a guess, see typePlural
+  pos?: string; // order among the types in the sidebar; unset: at the end
+  views?: ViewTab[]; // the views of the type's page; unset: the default views (setup.ts typeTabs)
+  icon: string;
+  color: string;
+  description: string;
+  capabilities: Capabilities;
+  properties: PropDef[]; // sorted, active ones
+  removedProperties: PropDef[]; // removed ones, values stay in `props` ("Weitere Eigenschaften")
+}
+
+export type Value = string | number | boolean | string[];
+export interface FreeValue {
+  k: FreeKind;
+  v: string | number | boolean;
+}
+
+export interface ParentLink {
+  sort: string;
+  at: number;
+}
+
+export interface UpdateEntry {
+  id: string;
+  at: number;
+  text: string;
+  by: string;
+  status?: string; // option id set together with this update
+}
+
+export type ViewKind = "list" | "table" | "board" | "tree" | "gallery" | "triage" | "calendar" | "timeline";
+
+export interface ViewDef {
+  query?: QueryDef; // stored as JSON with ids, see query.ts
+  display?: ViewKind;
+  scope?: "level" | "all"; // "Nur diese Ebene" / "Inkl. Unterprojekte"
+  group?: string;
+  showDone?: boolean;
+}
+
+export interface FileMeta {
+  hash: string;
+  name: string;
+  mime: string;
+  filetype: FileType;
+  size: number;
+  width?: number;
+  height?: number;
+  pages?: number;
+  duration?: number;
+  display?: string; // hash of the display version (images, 1600 px WebP)
+  thumb?: string; // hash of the preview (320 px)
+  text?: string; // extracted text (PDF)
+  history?: { hash: string; at: number }[];
+}
+
+export interface Suggestion {
+  type?: string;
+  parents?: string[];
+  props?: Record<string, Value>;
+  note?: string;
+  by: string;
+  at: number;
+}
+
+export interface OpRecord {
+  action: string; // e.g. "deleteType"
+  label: string;
+  payload: unknown;
+  undone?: boolean;
+}
+
+export interface SettingsRecord {
+  setupLang?: string;
+  captureTypes: string[]; // pinned types in the capture type picker
+  upgrades?: string[]; // one-time data upgrades already applied (each runs once, even if the user later undoes its effect)
+  inbox?: Cond; // what lands in the inbox; unset: the default (inbox.ts)
+  filesPos?: string; // where "Dateien" stands among the types in the sidebar
+}
+
+/**
+ * One view, shown as a tab (a type's page, a query block). Its filter is added to the base query
+ * (AND); grouping, sorting and properties are its own. An empty name shows the kind's name.
+ */
+export interface ViewTab {
+  id: string;
+  pos: string; // sort key: the order of the tabs
+  name?: string;
+  kind: ViewKind;
+  where?: Cond;
+  sort?: { key: string; desc?: boolean }[];
+  group?: string; // "status" | "statusGroup" | "type" | "path" | field or property name
+  subgroup?: string; // boards: rows ("swimlanes") within the columns
+  hideEmpty?: boolean; // hide empty groups
+  hiddenGroups?: string[]; // groups hidden by hand (see groupId), shown again from "N ausgeblendete Gruppen"
+  columns?: string[]; // shown properties in this order (table columns, card lines)
+  widths?: Record<string, number>; // table column widths in px
+  date?: string; // calendar and timeline: the date property
+}
+
+/** The tab a single view (a query block without tabs, an old collection) is read as. */
+export const MAIN_TAB = "main";
+export function legacyTab(view: { display?: ViewKind; sort?: { key: string; desc?: boolean }[]; group?: string; columns?: string[] }): ViewTab {
+  const t: ViewTab = { id: MAIN_TAB, pos: "V", kind: view.display ?? "list" };
+  if (view.sort?.length) t.sort = view.sort;
+  if (view.group) t.group = view.group;
+  if (view.columns?.length) t.columns = view.columns;
+  return t;
+}
+
+export interface Item {
+  id: string;
+  kind: Kind;
+  title: string;
+  type: string | null;
+  home: string | null; // stored; the effective home comes from the index
+  pinned?: string; // sort key when pinned to the top of the sidebar (counts as a place)
+  parents: Record<string, ParentLink>;
+  props: Record<string, Value>;
+  extra: Record<string, FreeValue>;
+  rels: Record<string, string[]>;
+  tags: string[];
+  refs: string[];
+  body: string;
+  updates: UpdateEntry[];
+  views: Record<string, ViewDef>;
+  schema?: TypeSchema;
+  file?: FileMeta;
+  op?: OpRecord;
+  settings?: SettingsRecord;
+  suggestion?: Suggestion;
+  created: number;
+  updated: number;
+  createdBy?: string;
+  /** In the trash: deleted itself, or deleted together with a root that is (see trash.ts). */
+  deleted: boolean;
+  /** meta.deleted = "via:<root>": deleted together with that root (raw mark). */
+  deletedVia?: string;
+  /** meta.done: when the status last entered the group done (read it via traits.doneAt). */
+  doneAt?: number;
+  source?: string;
+}
+
+// ---------- reading ----------
+
+/** meta.deleted is true or "via:<root>" (deleted together with that root, see trash.ts). */
+export const VIA = "via:";
+export function viaRoot(raw: unknown): string | undefined {
+  return typeof raw === "string" && raw.startsWith(VIA) ? raw.slice(VIA.length) : undefined;
+}
+
+function plain(v: unknown): any {
+  return v instanceof Y.AbstractType ? v.toJSON() : v;
+}
+
+export function readSchema(doc: Y.Doc): TypeSchema {
+  const s = doc.getMap<any>("schema");
+  const caps = s.get("capabilities");
+  const props = s.get("properties");
+  const properties: PropDef[] = [];
+  if (props instanceof Y.Map) {
+    for (const [id, p] of props as Y.Map<any>) {
+      const o = plain(p) ?? {};
+      if (!o.name && !o.kind) continue;
+      properties.push({ ...o, id, name: o.name ?? "", kind: o.kind ?? "text", sort: o.sort ?? "V" });
+    }
+  }
+  properties.sort((a, b) => (a.sort < b.sort ? -1 : a.sort > b.sort ? 1 : a.id.localeCompare(b.id)));
+  return {
+    removedProperties: properties.filter((p) => p.removed),
+    name: s.get("name") ?? "",
+    plural: s.get("plural") || undefined,
+    pos: s.get("pos") || undefined,
+    icon: s.get("icon") ?? "circle",
+    color: s.get("color") ?? "slate",
+    description: s.get("description") ?? "",
+    capabilities: (caps instanceof Y.Map ? caps.toJSON() : caps) ?? {},
+    properties: properties.filter((p) => !p.removed),
+  };
+}
+
+export function readItem(id: string, doc: Y.Doc): Item | null {
+  const meta = doc.getMap<any>("meta");
+  const kind = meta.get("kind") as Kind | undefined;
+  // not initialised yet (half-synced), or a legacy document (a former collection)
+  if (!kind || (kind as string) === "sammlung") return null;
+  const relsMap = doc.getMap<any>("rels");
+  const rels: Record<string, string[]> = {};
+  for (const [p, m] of relsMap) if (m instanceof Y.Map && m.size) rels[p] = [...m.keys()];
+  const str = (k: string) => {
+    const v = meta.get(k);
+    return v === undefined || v === null || v === "" ? undefined : String(v);
+  };
+  const item: Item = {
+    id,
+    kind,
+    title: (meta.get("title") as string) ?? "",
+    type: str("type") ?? null,
+    home: str("home") ?? null,
+    pinned: str("pinned"),
+    parents: doc.getMap<ParentLink>("parents").toJSON() as Record<string, ParentLink>,
+    props: doc.getMap<Value>("props").toJSON() as Record<string, Value>,
+    extra: doc.getMap<FreeValue>("extra").toJSON() as Record<string, FreeValue>,
+    rels,
+    tags: [...doc.getMap("tags").keys()].sort(),
+    refs: [...doc.getMap("refs").keys()],
+    body: doc.getText("body").toString(),
+    updates: doc.getArray<UpdateEntry>("updates").toArray().slice(),
+    views: doc.getMap<ViewDef>("views").toJSON() as Record<string, ViewDef>,
+    created: Number(meta.get("created") ?? 0),
+    updated: Number(meta.get("updated") ?? meta.get("created") ?? 0),
+    createdBy: str("createdBy"),
+    deleted: meta.get("deleted") === true || viaRoot(meta.get("deleted")) !== undefined,
+    deletedVia: viaRoot(meta.get("deleted")),
+    doneAt: typeof meta.get("done") === "number" ? meta.get("done") : undefined,
+    source: str("source"),
+  };
+  const sug = meta.get("suggestion");
+  if (sug && typeof sug === "object") item.suggestion = sug as Suggestion;
+  if (item.type === META_TYPE) {
+    item.schema = readSchema(doc);
+    if (doc.getMap("tabs").size) item.schema.views = readTabs(doc);
+  }
+  if (kind === "datei") item.file = doc.getMap<any>("file").toJSON() as FileMeta;
+  if (kind === "op") item.op = doc.getMap<any>("op").toJSON() as OpRecord;
+  if (kind === "settings") {
+    const s = doc.getMap<any>("settings").toJSON();
+    item.settings = { setupLang: s.setupLang, captureTypes: s.captureTypes ?? [], upgrades: s.upgrades ?? [], inbox: s.inbox ?? undefined, filesPos: s.filesPos ?? undefined };
+  }
+  return item;
+}
+
+/** The stored tabs of a document, in order; none stored: its old single view (former collections). */
+export function readTabs(doc: Y.Doc): ViewTab[] {
+  const tabs: ViewTab[] = [];
+  for (const [id, v] of doc.getMap<any>("tabs")) {
+    const o = plain(v);
+    if (o && typeof o === "object" && o.kind) tabs.push({ ...o, id, pos: o.pos ?? "V" });
+  }
+  tabs.sort((a, b) => (a.pos < b.pos ? -1 : a.pos > b.pos ? 1 : a.id.localeCompare(b.id)));
+  return tabs.length ? tabs : [legacyTab(doc.getMap<any>("view").toJSON())];
+}
+
+// ---------- writing (call inside doc.transact) ----------
+
+export interface ItemInit {
+  kind?: Kind;
+  title?: string;
+  type?: string | null;
+  body?: string;
+  tags?: string[];
+  refs?: string[];
+  parents?: string[]; // first one becomes the home
+  props?: Record<string, Value>;
+  extra?: Record<string, FreeValue>;
+  rels?: Record<string, string[]>;
+  pinned?: string;
+  created?: number;
+  updated?: number;
+  createdBy?: string;
+  source?: string;
+}
+
+export function initItem(doc: Y.Doc, init: ItemInit, now = Date.now()) {
+  const meta = doc.getMap<any>("meta");
+  meta.set("kind", init.kind ?? "info");
+  meta.set("title", init.title ?? "");
+  if (init.type) meta.set("type", init.type);
+  if (init.pinned) meta.set("pinned", init.pinned);
+  if (init.source) meta.set("source", init.source);
+  if (init.createdBy) meta.set("createdBy", init.createdBy);
+  meta.set("created", init.created ?? now);
+  meta.set("updated", init.updated ?? init.created ?? now);
+  if (init.body) doc.getText("body").insert(0, init.body);
+  for (const t of init.tags ?? []) setMember(doc, "tags", t, true);
+  for (const r of init.refs ?? []) setMember(doc, "refs", r, true);
+  (init.parents ?? []).forEach((p, i) => addParent(doc, p, undefined, (init.created ?? now) + i));
+  for (const [k, v] of Object.entries(init.props ?? {})) setProp(doc, k, v);
+  for (const [k, v] of Object.entries(init.extra ?? {})) setExtra(doc, k, v);
+  for (const [p, ids] of Object.entries(init.rels ?? {})) for (const t of ids) setRel(doc, p, t, true);
+}
+
+export type MetaField = "title" | "type" | "home" | "pinned" | "deleted" | "source" | "suggestion";
+
+/** Set meta fields; null or "" clears. */
+export function setMeta(doc: Y.Doc, fields: Partial<Record<MetaField, unknown>>, now = Date.now()) {
+  const meta = doc.getMap<any>("meta");
+  for (const [k, v] of Object.entries(fields)) {
+    if (v === undefined) continue;
+    if (v === null || v === "" || v === false) {
+      if (meta.has(k)) meta.delete(k);
+    } else if (meta.get(k) !== v) meta.set(k, v);
+  }
+  touch(doc, now);
+}
+
+export function touch(doc: Y.Doc, now = Date.now()) {
+  doc.getMap<any>("meta").set("updated", now);
+}
+
+/**
+ * Typing is a change: local edits of the text move meta.updated ("geändert", "Zuletzt bearbeitet"),
+ * right away and then at most every `every` ms (the last edit of a burst counts too). Edits that
+ * arrive from other devices or tabs don't – they bring their own time. Runs in its own
+ * transaction, outside the text's undo history. Returns a function that stops it.
+ */
+export function touchOnTextEdit(doc: Y.Doc, every = 3000, clock: () => number = Date.now): () => void {
+  const text = doc.getText("body");
+  let last = 0;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const stamp = () => {
+    timer = undefined;
+    last = clock();
+    doc.transact(() => touch(doc, last), TOUCH_ORIGIN);
+  };
+  const onEdit = (_e: Y.YTextEvent, tr: Y.Transaction) => {
+    if (!tr.local || timer) return;
+    const wait = Math.max(0, last + every - clock());
+    timer = setTimeout(stamp, wait);
+  };
+  text.observe(onEdit);
+  return () => {
+    text.unobserve(onEdit);
+    if (timer) (clearTimeout(timer), stamp());
+  };
+}
+export const TOUCH_ORIGIN = "touch";
+
+/** Add a parent. The first parent becomes the home. */
+export function addParent(doc: Y.Doc, parentId: string, sort?: string, at = Date.now()) {
+  const parents = doc.getMap<ParentLink>("parents");
+  if (parents.has(parentId)) return;
+  // a file has exactly one parent (where else it is used shows under "Verwendet in"): a new place replaces the old one
+  if (doc.getMap<any>("meta").get("kind") === "datei") for (const k of [...parents.keys()]) parents.delete(k);
+  parents.set(parentId, { sort: sort ?? keyBetween(null, null), at });
+  const meta = doc.getMap<any>("meta");
+  if (!meta.get("home") || !parents.has(meta.get("home"))) meta.set("home", parentId);
+}
+
+export function setParentSort(doc: Y.Doc, parentId: string, sort: string) {
+  const parents = doc.getMap<ParentLink>("parents");
+  const cur = parents.get(parentId);
+  if (cur) parents.set(parentId, { ...cur, sort });
+}
+
+/** Remove a parent; if it was the home, the oldest remaining parent becomes home. */
+export function removeParent(doc: Y.Doc, parentId: string) {
+  const parents = doc.getMap<ParentLink>("parents");
+  if (!parents.has(parentId)) return;
+  parents.delete(parentId);
+  const meta = doc.getMap<any>("meta");
+  if (meta.get("home") === parentId) {
+    const next = [...parents.entries()].sort((a, b) => a[1].at - b[1].at || a[0].localeCompare(b[0]))[0];
+    if (next) meta.set("home", next[0]);
+    else meta.delete("home");
+  }
+}
+
+export function setHome(doc: Y.Doc, parentId: string) {
+  if (doc.getMap("parents").has(parentId)) doc.getMap<any>("meta").set("home", parentId);
+}
+
+export function setProp(doc: Y.Doc, propId: string, value: Value | null | undefined) {
+  const props = doc.getMap<Value>("props");
+  if (value === null || value === undefined || value === "" || (Array.isArray(value) && !value.length)) props.delete(propId);
+  else if (JSON.stringify(props.get(propId)) !== JSON.stringify(value)) props.set(propId, value);
+}
+
+export function setExtra(doc: Y.Doc, name: string, value: FreeValue | null | undefined) {
+  const extra = doc.getMap<FreeValue>("extra");
+  const key = name.trim();
+  if (!key) return;
+  if (!value || value.v === "" || value.v === null) extra.delete(key);
+  else extra.set(key, value);
+}
+
+export function setRel(doc: Y.Doc, propId: string, target: string, on: boolean) {
+  const rels = doc.getMap<any>("rels");
+  let m = rels.get(propId);
+  if (!(m instanceof Y.Map)) {
+    if (!on) return;
+    m = new Y.Map();
+    rels.set(propId, m);
+  }
+  if (on) m.set(target, true);
+  else m.delete(target);
+}
+
+export function setMember(doc: Y.Doc, set: "tags" | "refs", key: string, on: boolean) {
+  const m = doc.getMap(set);
+  const k = set === "tags" ? normalizeTag(key) : key;
+  if (!k) return;
+  if (on) m.set(k, true);
+  else m.delete(k);
+}
+
+/** Replace body text with minimal edits (common prefix/suffix), so concurrent edits elsewhere merge. */
+export function replaceBody(doc: Y.Doc, next: string) {
+  const text = doc.getText("body");
+  const prev = text.toString();
+  if (prev === next) return;
+  let start = 0;
+  while (start < prev.length && start < next.length && prev[start] === next[start]) start++;
+  let endPrev = prev.length;
+  let endNext = next.length;
+  while (endPrev > start && endNext > start && prev[endPrev - 1] === next[endNext - 1]) {
+    endPrev--;
+    endNext--;
+  }
+  if (endPrev > start) text.delete(start, endPrev - start);
+  if (endNext > start) text.insert(start, next.slice(start, endNext));
+}
+
+export function appendUpdate(doc: Y.Doc, entry: Omit<UpdateEntry, "id"> & { id?: string }) {
+  doc.getArray<UpdateEntry>("updates").push([{ ...entry, id: entry.id ?? newId() } as UpdateEntry]);
+}
+
+export function setView(doc: Y.Doc, viewId: string, def: ViewDef | null) {
+  const views = doc.getMap<ViewDef>("views");
+  if (def) views.set(viewId, def);
+  else views.delete(viewId);
+}
+
+// ---------- types (schema) ----------
+
+export function initSchema(doc: Y.Doc, s: Partial<Omit<TypeSchema, "properties" | "removedProperties">> & { properties?: Omit<PropDef, "sort">[] }) {
+  const schema = doc.getMap<any>("schema");
+  for (const k of ["name", "icon", "color", "description"] as const) if (s[k] !== undefined) schema.set(k, s[k]);
+  if (!(schema.get("capabilities") instanceof Y.Map)) schema.set("capabilities", new Y.Map());
+  if (!(schema.get("properties") instanceof Y.Map)) schema.set("properties", new Y.Map());
+  for (const [k, v] of Object.entries(s.capabilities ?? {})) setCapability(doc, k as keyof Capabilities, v);
+  let prev: string | null = null;
+  for (const p of s.properties ?? []) {
+    prev = keyBetween(prev, null);
+    upsertProp(doc, p.id, { ...p, sort: prev });
+  }
+}
+
+export function setSchemaField(doc: Y.Doc, field: "name" | "plural" | "icon" | "color" | "description" | "pos", value: string) {
+  if (value) doc.getMap<any>("schema").set(field, value);
+  else doc.getMap<any>("schema").delete(field);
+}
+
+export function setCapability<K extends keyof Capabilities>(doc: Y.Doc, key: K, value: Capabilities[K] | null | undefined) {
+  const schema = doc.getMap<any>("schema");
+  let caps = schema.get("capabilities");
+  if (!(caps instanceof Y.Map)) schema.set("capabilities", (caps = new Y.Map()));
+  if (value === null || value === undefined || value === false) caps.delete(key);
+  else caps.set(key, value);
+}
+
+/** Each property is its own Y.Map, so two devices can change different properties at once. */
+export function upsertProp(doc: Y.Doc, propId: string, patch: Partial<Omit<PropDef, "id">>) {
+  const schema = doc.getMap<any>("schema");
+  let props = schema.get("properties");
+  if (!(props instanceof Y.Map)) schema.set("properties", (props = new Y.Map()));
+  let p = props.get(propId);
+  if (!(p instanceof Y.Map)) {
+    p = new Y.Map();
+    props.set(propId, p);
+    if (!patch.sort) {
+      const last = [...(props as Y.Map<any>).values()].map((x: any) => (x instanceof Y.Map ? x.get("sort") : undefined)).filter(Boolean).sort().at(-1);
+      p.set("sort", keyBetween(last ?? null, null));
+    }
+  }
+  for (const [k, v] of Object.entries(patch)) {
+    if (v === undefined) continue;
+    if (v === null || v === "") p.delete(k);
+    else p.set(k, v);
+  }
+}
+
+/** Removing a property keeps all values in `props` and the definition as a tombstone, so they still show up by name as "Weitere Eigenschaften". */
+export function removeProp(doc: Y.Doc, propId: string) {
+  upsertProp(doc, propId, { removed: true });
+}
+
+// ---------- files, ops, settings ----------
+
+export function setFileMeta(doc: Y.Doc, patch: { [K in keyof FileMeta]?: FileMeta[K] | null }) {
+  const f = doc.getMap<any>("file");
+  for (const [k, v] of Object.entries(patch)) {
+    if (v === undefined) continue;
+    if (v === null) f.delete(k);
+    else f.set(k, v);
+  }
+}
+
+export function setOp(doc: Y.Doc, patch: Partial<OpRecord>) {
+  const o = doc.getMap<any>("op");
+  for (const [k, v] of Object.entries(patch)) if (v !== undefined) o.set(k, v);
+}
+
+/** Change one tab: undefined leaves a field, null clears it; `null` as the patch removes the tab. */
+export function setTab(doc: Y.Doc, id: string, patch: { [K in keyof Omit<ViewTab, "id">]?: ViewTab[K] | null } | null) {
+  const tabs = doc.getMap<any>("tabs");
+  if (patch === null) tabs.delete(id);
+  else {
+    let m = tabs.get(id);
+    if (!(m instanceof Y.Map)) tabs.set(id, (m = toMap(plain(m) ?? {})));
+    for (const [k, v] of Object.entries(patch)) {
+      if (v === undefined) continue;
+      if (v === null || (Array.isArray(v) && !v.length)) m.delete(k);
+      else m.set(k, v);
+    }
+  }
+  doc.getMap<any>("meta").set("updated", Date.now());
+}
+
+/** Replace all tabs; an empty list goes back to the defaults ("Ansichten zurücksetzen"). */
+export function setTabs(doc: Y.Doc, list: Omit<ViewTab, "pos">[]) {
+  const tabs = doc.getMap<any>("tabs");
+  for (const k of [...tabs.keys()]) tabs.delete(k);
+  let pos: string | null = null;
+  for (const { id, ...t } of list) {
+    pos = keyBetween(pos, null);
+    tabs.set(id, toMap({ ...t, pos }));
+  }
+  doc.getMap<any>("meta").set("updated", Date.now());
+}
+
+function toMap(o: Record<string, unknown>): Y.Map<unknown> {
+  const m = new Y.Map<unknown>();
+  for (const [k, v] of Object.entries(o)) if (v !== undefined && v !== null) m.set(k, v);
+  return m;
+}
+
+export function setSettings(doc: Y.Doc, patch: { [K in keyof SettingsRecord]?: SettingsRecord[K] | null }) {
+  const s = doc.getMap<any>("settings");
+  for (const [k, v] of Object.entries(patch)) if (v === null) s.delete(k);
+  else if (v !== undefined) s.set(k, v);
+}
+
+// ---------- helpers ----------
+
+export function normalizeTag(t: string): string {
+  return t.trim().replace(/^#+/, "").replace(/\s+/g, "-").toLowerCase();
+}
+
+// Time-sortable ids: 9 chars of time + 8 random chars, base36.
+export function newId(): string {
+  const t = Date.now().toString(36).padStart(9, "0");
+  const r = Array.from(crypto.getRandomValues(new Uint8Array(8)))
+    .map((b) => (b % 36).toString(36))
+    .join("");
+  return t + r;
+}
+
+export function shortId(prefix: string): string {
+  return prefix + "_" + newId().slice(-8);
+}
+
+export function titleKey(title: string) {
+  return title.trim().toLowerCase();
+}
+
+export function todayISO(d = new Date()) {
+  const z = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+  return z.toISOString().slice(0, 10);
+}
+
+export function addDaysISO(days: number, from = new Date()) {
+  return todayISO(new Date(from.getTime() + days * 864e5));
+}
+
+/** Live means: not deleted and a real information or file (not an op or the settings). */
+export function isContent(i: Item) {
+  return !i.deleted && (i.kind === "info" || i.kind === "datei");
+}
+
+// ---------- links in the text ----------
+
+const WIKILINK = /(!?)\[\[([^\]|#\n]+)(#[^\]|\n]*)?(\|[^\]\n]*)?\]\]/g;
+
+export interface WikiLink {
+  target: string;
+  embed: boolean;
+  size?: number; // ![[x.png|320]]
+  alias?: string;
+}
+
+/** Wikilinks outside of ```abfrage blocks. */
+export function parseWikiLinks(body: string): WikiLink[] {
+  const out: WikiLink[] = [];
+  if (!body.includes("[[")) return out;
+  const text = stripQueryBlocks(body);
+  for (const m of text.matchAll(WIKILINK)) {
+    const target = m[2]!.trim();
+    const extra = m[4]?.slice(1).trim();
+    const size = extra && /^\d+(x\d+)?$/.test(extra) ? Number(extra.split("x")[0]) : undefined;
+    out.push({ target, embed: m[1] === "!", size, alias: size ? undefined : extra || undefined });
+  }
+  return out;
+}
+
+export const QUERY_FENCE = /^```(?:abfrage|query)[ \t]*(.*)\n([\s\S]*?)^```[ \t]*$/gm;
+
+export function stripQueryBlocks(body: string) {
+  return body.includes("```") ? body.replace(QUERY_FENCE, "") : body;
+}
+
+export const IMAGE_EXT = /\.(png|jpe?g|gif|webp|avif|bmp|svg|heic)$/i;
+export function isImageName(name: string) {
+  return IMAGE_EXT.test(name);
+}
+
+/** Looks like a file name ("x.pdf", "y.png") rather than an information title. */
+export function looksLikeFileName(name: string) {
+  return /\.[a-z0-9]{2,5}$/i.test(name) && !/\s\.[a-z]+$/i.test(name);
+}
+
+export function fileTypeOf(name: string, mime = ""): FileType {
+  const n = name.toLowerCase();
+  if (mime.startsWith("image/") || IMAGE_EXT.test(n)) return "bild";
+  if (mime === "application/pdf" || n.endsWith(".pdf")) return "pdf";
+  if (mime.startsWith("audio/") || /\.(mp3|m4a|wav|ogg|oga|flac|aac|opus)$/.test(n)) return "audio";
+  if (mime.startsWith("video/") || /\.(mp4|mov|webm|mkv|m4v)$/.test(n)) return "video";
+  if (/\.(docx?|xlsx?|pptx?|odt|ods|odp|txt|md|csv|rtf|pages|numbers|key|excalidraw)$/.test(n)) return "dokument";
+  return "sonstiges";
+}
+
+export function mimeOf(name: string): string {
+  const ext = name.toLowerCase().split(".").pop() ?? "";
+  const m: Record<string, string> = {
+    png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", avif: "image/avif", bmp: "image/bmp", svg: "image/svg+xml", heic: "image/heic",
+    pdf: "application/pdf", mp3: "audio/mpeg", m4a: "audio/mp4", wav: "audio/wav", ogg: "audio/ogg", flac: "audio/flac", opus: "audio/opus",
+    mp4: "video/mp4", mov: "video/quicktime", webm: "video/webm", txt: "text/plain", md: "text/markdown", csv: "text/csv",
+  };
+  return m[ext] ?? "application/octet-stream";
+}

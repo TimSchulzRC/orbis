@@ -1,0 +1,283 @@
+// Bulk changes on types: delete a type (into a tag, into another type, or remove it),
+// take over items from a tag. Every run is recorded as an "op" document, shown in
+// Activity and reversible. Values are never lost: what the new state cannot hold as
+// typed property ends up as a free property, relations become refs.
+import * as Y from "yjs";
+import {
+  type FreeValue,
+  type Item,
+  type PropDef,
+  type TypeSchema,
+  type Value,
+  META_TYPE,
+  initItem,
+  newId,
+  normalizeTag,
+  setExtra,
+  setMember,
+  setMeta,
+  setOp,
+  setProp,
+  setRel,
+  titleKey,
+} from "./model";
+import { Index } from "./graph";
+import { isInInbox } from "./placement";
+import { findBlocks, readBlock, typesIn } from "./query";
+import { initialProps, primaryChild, progressSpec } from "./traits";
+import type { Writer } from "./setup";
+
+export type DeleteMode = { mode: "tag"; tag: string } | { mode: "type"; target: string } | { mode: "remove" };
+
+export interface TypeUsage {
+  items: string[];
+  inboxAfterRemove: number; // items that would land in the inbox (checked against the inbox's stored query)
+  queries: { id: string; title: string }[]; // pages whose query blocks or views use the type
+  relations: { type: string; prop: string; name: string }[]; // relation targets naming the type
+  progress: { type: string; name: string }[]; // progress/computed filters on the type
+  childOf: { type: string; name: string }[]; // types whose main action creates this type
+}
+
+export function typeUsage(ix: Index, typeId: string): TypeUsage {
+  const items = ix.live.filter((i) => i.type === typeId).map((i) => i.id);
+  const name = ix.typeName(typeId) ?? "";
+  const queries: TypeUsage["queries"] = [];
+  for (const i of ix.all.values()) {
+    if (i.deleted) continue;
+    const viewTypes = Object.values(i.views).flatMap((v) => typesIn(v.query?.where));
+    const blockTypes = findBlocks(i.body).flatMap((b) => typesIn(readBlock(b.src, ix).def.where));
+    if ([...viewTypes, ...blockTypes].includes(typeId)) queries.push({ id: i.id, title: i.kind === "settings" ? "Start" : i.title });
+  }
+  const relations: TypeUsage["relations"] = [];
+  const progress: TypeUsage["progress"] = [];
+  const childOf: TypeUsage["childOf"] = [];
+  for (const t of ix.types.values()) {
+    const s = t.schema!;
+    for (const p of s.properties) {
+      if (p.kind === "relation" && p.target && name && new RegExp(`:\\s*"?${escapeRe(name)}"?(\\s|$|\\))`, "i").test(p.target)) relations.push({ type: t.id, prop: p.id, name: `${s.name} › ${p.name}` });
+      if (p.kind === "computed" && p.computed?.of === typeId) progress.push({ type: t.id, name: `${s.name} › ${p.name}` });
+    }
+    if (progressSpec(s)?.of === typeId && !progress.some((x) => x.type === t.id)) progress.push({ type: t.id, name: s.name });
+    if (primaryChild(s) === typeId && t.id !== typeId) childOf.push({ type: t.id, name: s.name });
+  }
+  const inboxAfterRemove = wouldBeInInbox(ix, items, (i) => ({ ...i, type: null }));
+  return { items, inboxAfterRemove, queries, relations, progress, childOf };
+}
+
+/**
+ * How many of these items would be in the inbox after a change – evaluated against the stored
+ * inbox query. `also` are further changed records, e.g. a parent that is about to be deleted.
+ */
+export function wouldBeInInbox(ix: Index, ids: string[], change: (i: Item) => Item, also: Item[] = []): number {
+  const next = new Map(ix.all);
+  for (const id of ids) next.set(id, change(ix.get(id)!));
+  for (const i of also) next.set(i.id, i);
+  const after = new Index(next);
+  return ids.filter((id) => isInInbox(after.get(id)!, after)).length;
+}
+
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** A typed value as a free property (simple kinds only). */
+export function toFree(p: PropDef, v: Value | undefined, ix: Index): FreeValue | undefined {
+  if (v === undefined || v === null || v === "") return undefined;
+  switch (p.kind) {
+    case "text":
+    case "number":
+    case "date":
+    case "checkbox":
+    case "url":
+      return { k: p.kind, v: v as string | number | boolean };
+    case "select":
+    case "status":
+      return { k: "select", v: p.options?.find((o) => o.id === v)?.name ?? String(v) };
+    case "multiselect":
+      return { k: "text", v: (Array.isArray(v) ? v : [v]).map((id) => p.options?.find((o) => o.id === id)?.name ?? String(id)).join(", ") };
+    default:
+      return undefined;
+  }
+}
+
+/** Map a value from one property definition to another (by option name, status group as fallback). */
+function mapValue(from: PropDef, to: PropDef, v: Value): Value | undefined {
+  if (from.kind === to.kind && !from.options) return v;
+  const optName = (id: string) => from.options?.find((o) => o.id === id)?.name;
+  if ((to.kind === "select" || to.kind === "status") && typeof v === "string") {
+    const name = optName(v) ?? v;
+    const hit = to.options?.find((o) => titleKey(o.name) === titleKey(name));
+    if (hit) return hit.id;
+    const group = from.options?.find((o) => o.id === v)?.group;
+    if (to.kind === "status" && group) return to.options?.find((o) => (o.group ?? "todo") === group)?.id;
+    return undefined;
+  }
+  if (to.kind === "multiselect") {
+    const ids = (Array.isArray(v) ? v : [v]).map((x) => optName(String(x)) ?? String(x));
+    const out = ids.map((n) => to.options?.find((o) => titleKey(o.name) === titleKey(n))?.id).filter(Boolean) as string[];
+    return out.length ? out : undefined;
+  }
+  if (["text", "url"].includes(to.kind)) return typeof v === "string" ? (optName(v) ?? v) : String(v);
+  if (to.kind === "number" && typeof v === "number") return v;
+  if (to.kind === "date" && typeof v === "string" && /^\d{4}-/.test(v)) return v;
+  if (to.kind === "checkbox" && typeof v === "boolean") return v;
+  return undefined;
+}
+
+interface Undo {
+  id: string;
+  type: string | null;
+  props: Record<string, Value | null>; // previous values of touched props
+  extra: Record<string, FreeValue | null>; // previous values of touched free properties
+  tagAdded?: string;
+  tagRemoved?: string;
+  refsAdded: string[];
+  rels: { prop: string; target: string }[]; // relations added
+}
+
+interface OpPayload {
+  typeDeleted?: string;
+  items: Undo[];
+}
+
+function convertItem(doc: Y.Doc, item: Item, from: TypeSchema | undefined, ix: Index, to: { type: string | null; schema?: TypeSchema; tag?: string; removeTag?: string }): Undo {
+  const u: Undo = { id: item.id, type: item.type, props: {}, extra: {}, refsAdded: [], rels: [] };
+  setMeta(doc, { type: to.type });
+  if (to.tag && !item.tags.includes(normalizeTag(to.tag))) {
+    setMember(doc, "tags", to.tag, true);
+    u.tagAdded = normalizeTag(to.tag);
+  }
+  if (to.removeTag && item.tags.includes(to.removeTag)) {
+    setMember(doc, "tags", to.removeTag, false);
+    u.tagRemoved = to.removeTag;
+  }
+  const setP = (pid: string, v: Value | undefined) => {
+    if (!(pid in u.props)) u.props[pid] = item.props[pid] ?? null;
+    setProp(doc, pid, v ?? null);
+  };
+  const setX = (name: string, v: FreeValue | null) => {
+    if (!(name in u.extra)) u.extra[name] = item.extra[name] ?? null;
+    setExtra(doc, name, v);
+  };
+  const target = to.schema;
+  for (const p of from?.properties ?? []) {
+    const match = target?.properties.find((q) => titleKey(q.name) === titleKey(p.name) && q.kind !== "computed");
+    if (p.kind === "relation") {
+      const ids = item.rels[p.id] ?? [];
+      for (const t of ids) {
+        if (match?.kind === "relation") {
+          if (!item.rels[match.id]?.includes(t)) (setRel(doc, match.id, t, true), u.rels.push({ prop: match.id, target: t }));
+        } else if (!item.refs.includes(t)) (setMember(doc, "refs", t, true), u.refsAdded.push(t));
+      }
+      continue;
+    }
+    const v = item.props[p.id];
+    if (v === undefined || p.kind === "computed") continue;
+    const mapped = match ? mapValue(p, match, v) : undefined;
+    if (match && mapped !== undefined) {
+      setP(match.id, mapped);
+      if (match.id !== p.id) {
+        /* old value stays under its old id as well, so undo is exact */
+      }
+    } else {
+      const fv = toFree(p, v, ix);
+      if (fv) setX(p.name, fv);
+    }
+  }
+  // Free properties that the target type defines become typed values.
+  if (target) {
+    for (const [name, fv] of Object.entries(item.extra)) {
+      const q = target.properties.find((x) => titleKey(x.name) === titleKey(name));
+      if (!q || q.kind === "computed" || q.kind === "relation") continue;
+      const v = mapValue({ id: "", name, kind: fv.k === "select" ? "text" : fv.k, sort: "" }, q, fv.v as Value);
+      if (v === undefined) continue;
+      setP(q.id, v);
+      setX(name, null);
+    }
+    for (const [pid, v] of Object.entries(initialProps(target))) if (item.props[pid] === undefined && !(pid in u.props)) setP(pid, v);
+  }
+  return u;
+}
+
+function recordOp(w: Writer, label: string, action: string, payload: OpPayload, origin?: string): string {
+  const id = "op_" + newId();
+  w.change(id, (doc) => {
+    initItem(doc, { kind: "op", title: label, createdBy: origin });
+    setOp(doc, { action, label, payload });
+  });
+  return id;
+}
+
+/** Delete a type: items become tagged, another type, or untyped. Returns the op id. */
+export function deleteType(w: Writer, ix: Index, typeId: string, m: DeleteMode, label: string, origin?: string): string {
+  const typeItem = ix.types.get(typeId);
+  if (!typeItem) throw new Error("Unknown type");
+  const from = typeItem.schema;
+  const target = m.mode === "type" ? ix.types.get(m.target)?.schema : undefined;
+  if (m.mode === "type" && (!target || m.target === typeId)) throw new Error("Unknown target type");
+  const items: Undo[] = [];
+  for (const item of ix.live.filter((i) => i.type === typeId)) {
+    w.change(item.id, (doc) => {
+      items.push(convertItem(doc, item, from, ix, { type: m.mode === "type" ? m.target : null, schema: target, tag: m.mode === "tag" ? m.tag : undefined }));
+    });
+  }
+  w.change(typeId, (doc) => setMeta(doc, { deleted: true }));
+  return recordOp(w, label, "deleteType", { typeDeleted: typeId, items }, origin);
+}
+
+export interface TagTakeoverPreview {
+  candidates: string[]; // items with the tag
+  untyped: string[];
+  typedOther: string[]; // already have another type (conflict)
+  already: string[]; // already this type
+}
+
+export function previewTagToType(ix: Index, tag: string, typeId: string): TagTakeoverPreview {
+  const t = normalizeTag(tag);
+  const candidates = ix.live.filter((i) => i.kind === "info" && i.tags.includes(t) && i.type !== META_TYPE);
+  return {
+    candidates: candidates.map((i) => i.id),
+    untyped: candidates.filter((i) => !ix.typeOf(i)).map((i) => i.id),
+    typedOther: candidates.filter((i) => ix.typeOf(i) && i.type !== typeId).map((i) => i.id),
+    already: candidates.filter((i) => i.type === typeId).map((i) => i.id),
+  };
+}
+
+/** "Einträge aus Tag übernehmen": items with the tag get the type. */
+export function tagToType(w: Writer, ix: Index, tag: string, typeId: string, opts: { replaceTypes: boolean; removeTag: boolean }, label: string, origin?: string): string {
+  const target = ix.types.get(typeId)?.schema;
+  if (!target) throw new Error("Unknown type");
+  const p = previewTagToType(ix, tag, typeId);
+  const ids = [...p.untyped, ...(opts.replaceTypes ? p.typedOther : []), ...(opts.removeTag ? p.already : [])];
+  const items: Undo[] = [];
+  for (const id of ids) {
+    const item = ix.get(id)!;
+    w.change(id, (doc) => {
+      items.push(
+        convertItem(doc, item, ix.schemaOf(item), ix, {
+          type: item.type === typeId ? typeId : typeId,
+          schema: item.type === typeId ? undefined : target,
+          removeTag: opts.removeTag ? normalizeTag(tag) : undefined,
+        }),
+      );
+    });
+  }
+  return recordOp(w, label, "tagToType", { items }, origin);
+}
+
+/** Reverse an op. */
+export function undoOp(w: Writer, op: Item): void {
+  if (!op.op || op.op.undone) return;
+  const payload = op.op.payload as OpPayload;
+  if (payload.typeDeleted) w.change(payload.typeDeleted, (doc) => setMeta(doc, { deleted: null }));
+  for (const u of payload.items ?? []) {
+    w.change(u.id, (doc) => {
+      setMeta(doc, { type: u.type });
+      for (const [pid, v] of Object.entries(u.props)) setProp(doc, pid, v);
+      for (const [name, v] of Object.entries(u.extra)) setExtra(doc, name, v);
+      if (u.tagAdded) setMember(doc, "tags", u.tagAdded, false);
+      if (u.tagRemoved) setMember(doc, "tags", u.tagRemoved, true);
+      for (const r of u.refsAdded) setMember(doc, "refs", r, false);
+      for (const r of u.rels) setRel(doc, r.prop, r.target, false);
+    });
+  }
+  w.change(op.id, (doc) => setOp(doc, { undone: true }));
+}

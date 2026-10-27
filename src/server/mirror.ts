@@ -1,0 +1,171 @@
+// Read-only Markdown mirror (data/vault): every information as Markdown with frontmatter,
+// below its home ("Teil von"); files next to it. For backup, grep, git and file-based
+// agents. Changes made there are overwritten; edit through the app or MCP.
+import { existsSync, linkSync, copyFileSync, mkdirSync, readdirSync, rmSync, unlinkSync, writeFileSync, rmdirSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { type Item, META_TYPE } from "../shared/model";
+import type { Index } from "../shared/graph";
+import { blocksAsText } from "../shared/query";
+import { isInInbox } from "../shared/placement";
+import type { Lang } from "../shared/i18n";
+import type { Store } from "./store";
+import type { Blobs } from "./blobs";
+
+export class Mirror {
+  private files = new Map<string, string>(); // relative path -> content signature
+  private timer: ReturnType<typeof setTimeout> | null = null;
+
+  constructor(
+    private store: Store,
+    private root: string,
+    private blobs?: Blobs,
+  ) {}
+
+  start() {
+    rmSync(this.root, { recursive: true, force: true });
+    mkdirSync(this.root, { recursive: true });
+    this.sync();
+    this.store.on({ record: () => this.schedule() });
+    if (this.blobs) {
+      const prev = this.blobs.onStored;
+      this.blobs.onStored = (h) => (prev?.(h), this.schedule());
+    }
+  }
+
+  private schedule() {
+    if (!this.timer) this.timer = setTimeout(() => ((this.timer = null), this.safeSync()), 1500);
+  }
+
+  private safeSync() {
+    try {
+      this.sync();
+    } catch (e) {
+      console.error("[mirror]", e);
+    }
+  }
+
+  private lang(): Lang {
+    return (this.store.records.get("sys:settings")?.settings?.setupLang as Lang) ?? "de";
+  }
+
+  /** Compute every file, write what changed, remove what is gone. */
+  sync() {
+    const ix = this.store.index();
+    const lang = this.lang();
+    const want = new Map<string, { content?: string; blob?: string }>();
+    const used = new Set<string>();
+    const unique = (path: string, id: string) => {
+      let p = path;
+      if (used.has(p.toLowerCase())) p = p.replace(/(\.[^./]+)$/, ` (${id.slice(-6)})$1`);
+      used.add(p.toLowerCase());
+      return p;
+    };
+    const folderOf = (i: Item): string => {
+      const path = ix.homePath(i.id).map((id) => safe(ix.get(id)!.title));
+      if (path.length) return path.join("/");
+      if (i.pinned) return "."; // pinned items without a parent sit at the top of the mirror
+      if (i.type === META_TYPE) return lang === "de" ? "_Typen" : "_Types";
+      if (isInInbox(i, ix)) return lang === "de" ? "Eingang" : "Inbox";
+      const tn = ix.typeName(i.type);
+      if (tn) return safe(tn);
+      return lang === "de" ? "Ohne Ort" : "No place";
+    };
+    for (const i of ix.live) {
+      if (i.kind === "datei" && i.file) {
+        want.set(unique(`${folderOf(i)}/${safe(i.file.name)}`.replace(/^\.\//, ""), i.id), { blob: i.file.hash });
+        continue;
+      }
+      // An item with children gets a folder of the same name for them (folder note style).
+      want.set(unique(`${folderOf(i)}/${safe(i.title || "Untitled")}.md`.replace(/^\.\//, ""), i.id), { content: this.render(i, ix, lang) });
+    }
+    want.set("README.md", { content: "# Obtion mirror\n\nGenerated from the Obtion database: every information as Markdown below its home. Read freely; changes made here are overwritten. To change data, use the app or the MCP tools.\n" });
+
+    for (const [rel, w] of want) {
+      const sig = w.content ?? "blob:" + w.blob;
+      if (this.files.get(rel) === sig) continue;
+      const abs = join(this.root, rel);
+      mkdirSync(dirname(abs), { recursive: true });
+      if (w.content !== undefined) writeFileSync(abs, w.content);
+      else if (this.blobs?.has(w.blob!)) {
+        if (existsSync(abs)) unlinkSync(abs);
+        try {
+          linkSync(this.blobs.path(w.blob!), abs);
+        } catch {
+          copyFileSync(this.blobs.path(w.blob!), abs);
+        }
+      } else continue; // content not on the hub yet
+      this.files.set(rel, sig);
+    }
+    for (const rel of [...this.files.keys()]) {
+      if (want.has(rel)) continue;
+      const abs = join(this.root, rel);
+      if (existsSync(abs)) unlinkSync(abs);
+      this.files.delete(rel);
+      pruneEmpty(dirname(abs), this.root);
+    }
+  }
+
+  render(i: Item, ix: Index, lang: Lang): string {
+    const schema = ix.schemaOf(i);
+    const fm: Record<string, unknown> = { id: i.id };
+    if (i.type === META_TYPE && i.schema) fm.kind = "type";
+    else fm.type = ix.typeName(i.type);
+    if (isInInbox(i, ix)) fm.inbox = true;
+    if (i.pinned) fm.pinned = true;
+    const parents = ix.parentsOf(i.id);
+    if (parents.length) fm.part_of = parents.map((p) => `[[${ix.get(p)!.title}]]`);
+    for (const p of schema?.properties ?? []) {
+      const v = i.props[p.id];
+      if (p.kind === "relation") {
+        const ids = ix.relValues(i, p.id, p.symmetric);
+        if (ids.length) fm[p.name] = ids.map((x) => `[[${ix.get(x)?.title}]]`);
+      } else if (p.kind === "computed") {
+        const pr = ix.progress(i.id, p.computed?.of);
+        if (p.computed?.fn === "count") fm[p.name] = ix.countDescendants(i.id, p.computed.of);
+        else if (pr.total) fm[p.name] = `${pr.done}/${pr.total}`;
+      } else if (v !== undefined) fm[p.name] = p.options ? (Array.isArray(v) ? v : [v]).map((id) => p.options!.find((o) => o.id === id)?.name ?? id) : v;
+    }
+    for (const [k, v] of Object.entries(i.extra)) fm[k] = v.v;
+    if (i.tags.length) fm.tags = i.tags;
+    if (i.refs.length) fm.refs = i.refs.map((r) => `[[${ix.get(r)?.title ?? r}]]`);
+    fm.created = new Date(i.created).toISOString();
+    fm.updated = new Date(i.updated).toISOString();
+    let out = "---\n";
+    for (const [k, v] of Object.entries(fm)) {
+      if (v === undefined) continue;
+      const key = /^[\w-]+$/.test(k) ? k : JSON.stringify(k);
+      if (Array.isArray(v)) out += `${key}:\n${v.map((x) => `  - ${yaml(String(x))}`).join("\n")}\n`;
+      else out += `${key}: ${yaml(String(v))}\n`;
+    }
+    out += "---\n\n";
+    if (i.schema && i.type === META_TYPE) {
+      out += `${i.schema.description}\n\n## Properties\n\n` + i.schema.properties.map((p) => `- ${p.name} (${p.kind})${p.options ? ": " + p.options.map((o) => o.name).join(", ") : ""}`).join("\n") + "\n";
+      return out;
+    }
+    out += blocksAsText(i.body, lang, ix).trimEnd() + "\n";
+    const kids = ix.childrenOf(i.id).map((c) => ix.get(c)!);
+    if (kids.length) out += `\n## ${lang === "de" ? "Darunter" : "Below"}\n\n` + kids.map((k) => `- [[${k.title}]]${ix.typeName(k.type) ? ` (${ix.typeName(k.type)})` : ""}`).join("\n") + "\n";
+    if (i.updates.length) out += "\n## Updates\n\n" + i.updates.map((e) => `- ${new Date(e.at).toISOString().slice(0, 16).replace("T", " ")} (${e.by}): ${e.text}`).join("\n") + "\n";
+    return out;
+  }
+}
+
+function safe(title: string) {
+  return (title || "Untitled").replace(/[\\/:*?"<>|#^[\]]/g, "-").replace(/\s+/g, " ").trim().slice(0, 120) || "Untitled";
+}
+
+function yaml(s: string) {
+  return /^[\w ./@()&+,–-]*$/.test(s) && !/^\s|\s$/.test(s) && s !== "" ? s : JSON.stringify(s);
+}
+
+function pruneEmpty(dir: string, root: string) {
+  while (dir.startsWith(root) && dir !== root) {
+    try {
+      if (readdirSync(dir).length) return;
+      rmdirSync(dir);
+    } catch {
+      return;
+    }
+    dir = dirname(dir);
+  }
+}

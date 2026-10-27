@@ -1,0 +1,59 @@
+{
+  "name": "obtion",
+  "type": "module",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/bun": "^1.4.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "playwright-core": "^1.64.1",
+    "tailwindcss": "^4.3.3",
+    "vite": "^8.3.5",
+    "vite-plugin-pwa": "^2.0.0"
+  },
+  "peerDependencies": {
+    "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "@codemirror/autocomplete": "^6.20.4",
+    "@codemirror/commands": "^6.11.1",
+    "@codemirror/lang-markdown": "^6.5.2",
+    "@codemirror/language": "^6.13.1",
+    "@codemirror/search": "^6.7.2",
+    "@codemirror/state": "^6.7.6",
+    "@codemirror/view": "^6.43.15",
+    "@lezer/highlight": "^1.2.5",
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "force-graph": "^1.52.0",
+    "idb": "^8.0.4",
+    "intl-messageformat": "^12.1.4",
+    "lucide-react": "^1.61.0",
+    "marked": "^18.1.1",
+    "minisearch": "^7.2.0",
+    "pdfjs-dist": "^6.4.299",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "sonner": "^2.0.8",
+    "y-codemirror.next": "^0.3.6",
+    "yjs": "^13.6.33",
+    "zod": "^4.6.7"
+  },
+  "scripts": {
+    "dev": "bun --watch src/server/index.ts & vite",
+    "build": "vite build",
+    "dev:build": "vite build --watch",
+    "start": "bun src/server/index.ts",
+    "typecheck": "tsc --noEmit -p .",
+    "import:obsidian": "bun src/server/cli.ts import-obsidian",
+    "import:notion": "bun src/server/cli.ts import-notion seed/notion.json",
+    "test": "bun test",
+    "setup": "bun src/server/cli.ts setup",
+    "stats": "bun src/server/cli.ts stats",
+    "seed:demo": "bun scripts/demo-seed.ts",
+    "icons": "bun scripts/icons.ts",
+    "test:e2e": "vite build && bun scripts/e2e.ts"
+  }
+}
