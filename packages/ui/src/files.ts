@@ -95,7 +95,12 @@ function idbStore(db: IDBPDatabase): BlobStore {
 }
 
 export async function sha256(blob: Blob): Promise<string> {
-  const buf = await crypto.subtle.digest("SHA-256", await blob.arrayBuffer());
+  const data = await blob.arrayBuffer();
+  // crypto.subtle exists only over HTTPS (and on localhost); opened as http://<address> a
+  // JavaScript implementation hashes instead, loaded only then
+  const buf = crypto.subtle
+    ? await crypto.subtle.digest("SHA-256", data)
+    : (await import("@noble/hashes/sha2.js")).sha256(new Uint8Array(data));
   return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 

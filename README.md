@@ -59,18 +59,17 @@ The image holds the server with the web app. All data live in one ordinary folde
 
 ```bash
 git clone <repository> obtion && cd obtion
-cp .env.example .env                 # set OBTION_PUBLIC_URL (and OBTION_DATA_DIR if wanted)
 docker compose up -d                 # builds the image from this repository
 ```
 
-Then make the port reachable over HTTPS through whatever runs on the host – the server does not care which: `tailscale serve --bg --https=443 http://127.0.0.1:8480`, the NAS's own reverse proxy, Caddy and the like. The app needs HTTPS to be installed and to work offline.
+Then open `http://<any address of the host>:8480` – its LAN address, its tailnet address or name, `http://nas:8480`. Nothing else has to be set up. Over plain HTTP the browser leaves out a few things: the app cannot be installed and does not open offline (the data stay on the device all the same). For that, put HTTPS in front – `tailscale serve`, the NAS's reverse proxy, Caddy – and open that address instead.
 
-- **Settings** live in `.env` (not in git, so `git pull` never collides with them); `.env.example` explains each. `OBTION_PUBLIC_URL` (required) is the address in the browser: the server only answers to its known host names (more with `OBTION_ALLOWED_HOSTS`).
+- **Settings** are optional and live in `.env` (`cp .env.example .env`; not in git, so `git pull` never collides with them); `.env.example` explains each. The server answers under IP addresses and private names (`nas`, `*.local`, `*.lan`, `*.ts.net`) by itself; a public name behind a reverse proxy goes into `OBTION_PUBLIC_URL` (more in `OBTION_ALLOWED_HOSTS`).
 - **Data:** `OBTION_DATA_DIR`, default `./data` next to the compose file – a plain folder, e.g. on the NAS's SSD. A new folder is set up by the container; an existing one keeps its owner (the server runs as that user, never as root).
 - **Backup:** the server writes a consistent copy of the database to `backups/obtion-<date>.db` once a day and keeps the last seven. A backup job may therefore copy the whole data folder at any time, without stopping anything: `backups/` and `blobs/` (file contents, only ever added) are what counts; `obtion.db` itself may be caught mid-write and `vault/` is rebuilt at every start.
 - **Restore:** `docker compose stop`, replace `obtion.db` with a file from `backups/` and delete `obtion.db-wal` and `obtion.db-shm`, `docker compose start`. Devices notice the older state and send what they have beyond it.
 - **Update:** `git pull && docker compose up -d --build`.
-- **Access and identity:** by default the port is published on 127.0.0.1 only, for a proxy on the same host. There is no login yet: whoever reaches the port can read and change everything, so keep it that way (`OBTION_BIND=0.0.0.0` opens it to the whole network). `tailscale serve` on the host also tells the server who is calling (`tailscale-user-login`); the server believes that only from a trusted proxy – the compose network's gateway (`OBTION_TRUSTED_PROXIES`).
+- **Access and identity:** the port is published on every address of the host. There is no login yet: whoever reaches the port can read and change everything – in a home network and tailnet that may be fine; `OBTION_BIND=127.0.0.1` limits it to a proxy on the same host. `tailscale serve` on the host also tells the server who is calling (`tailscale-user-login`); the server believes that only from a trusted proxy – the compose network's gateway (`OBTION_TRUSTED_PROXIES`).
 - **Moving an existing server here:** stop the old server, copy its whole data folder (`obtion.db`, `blobs/`, `config.json`, …) into the data folder, start the container. The server keeps its id, so connected devices just continue (point the address they use to the new host); the MCP token stays the same. Starting with an empty folder instead gives a new server id: each device then asks once whether to replace its copy with the server's data or upload it.
 - The built-in agent needs the Claude Code CLI next to the server and is not in the image; MCP works for any client.
 

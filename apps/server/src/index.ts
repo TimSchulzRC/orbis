@@ -15,7 +15,7 @@ import { addLaterDefaultProps, migrateCollections, renameShippedLabels, upgradeA
 import type { Lang } from "@obtion/core/i18n";
 import { storeWriter } from "./importers";
 import { UndoError, redoStep, undoStep } from "./undo";
-import { DEFAULT_TRUSTED, trustedProxies } from "./trust";
+import { DEFAULT_TRUSTED, allowedHosts, trustedProxies } from "./trust";
 import { type ClientMsg, type ServerMsg, type WireUpdate, fromB64, toB64 } from "@obtion/core/protocol";
 
 const PORT = Number(process.env.PORT ?? 8480);
@@ -126,16 +126,11 @@ function sameOrigin(req: Request): boolean {
   }
 }
 
-// DNS rebinding guard: only answer to host names we actually serve under.
-const ALLOWED_HOSTS = new Set(
-  [
-    `127.0.0.1:${PORT}`,
-    `localhost:${PORT}`,
-    "localhost:5180", // vite dev server proxy
-    PUBLIC_URL ? new URL(PUBLIC_URL).host : "",
-    ...(process.env.OBTION_ALLOWED_HOSTS ?? "").split(",").map((h) => h.trim()),
-  ].filter(Boolean),
-);
+// DNS rebinding guard (trust.ts): addresses and private names always, public names when configured.
+const allowedHost = allowedHosts([
+  PUBLIC_URL ? new URL(PUBLIC_URL).host : "",
+  ...(process.env.OBTION_ALLOWED_HOSTS ?? "").split(","),
+]);
 
 /** Uploads: only kinds the app knows how to show (no HTML, scripts, executables). */
 const UPLOAD_OK = (name: string) => fileTypeOf(name) !== "sonstiges" || /\.(zip|json|xml|ics|vcf)$/i.test(name);
@@ -203,7 +198,7 @@ const server = Bun.serve<Conn>({
   async fetch(req, srv) {
     const url = new URL(req.url);
     const path = url.pathname;
-    if (!ALLOWED_HOSTS.has(req.headers.get("host") ?? "")) return new Response("Unknown host", { status: 421 });
+    if (!allowedHost(req.headers.get("host"))) return new Response("Unknown host. Add it to OBTION_ALLOWED_HOSTS or set OBTION_PUBLIC_URL.", { status: 421 });
     const guarded = path === "/sync" || path === "/api/connect" || (path.startsWith("/api/") && req.method !== "GET");
     if (guarded && !sameOrigin(req)) return new Response("Forbidden", { status: 403 });
 

@@ -6,7 +6,7 @@ import * as Y from "yjs";
 import { tempDir, removeTempDirs } from "./helpers";
 import { FORMAT, PERSONAL, initItem } from "@obtion/core/model";
 import { type ServerMsg, toB64 } from "@obtion/core/protocol";
-import { trustedProxies } from "@obtion/server/trust";
+import { allowedHosts, trustedProxies } from "@obtion/server/trust";
 
 function freePort(): Promise<number> {
   return new Promise((res) => {
@@ -64,6 +64,14 @@ test("trusted proxies: loopback by default; addresses and ranges from the list; 
   expect(list("10.1.2.4")).toBe(false);
   expect(list("FD00::1")).toBe(true);
   expect(list("127.0.0.1")).toBe(false); // a list replaces the default
+});
+
+test("host names: addresses and private names on any port, public names only when configured", () => {
+  const ok = allowedHosts(["obtion.example.org", "notes.example.com:8443", ""]);
+  for (const h of ["192.168.1.10:8480", "100.101.102.103:9000", "127.0.0.1:8480", "[fd7a:115c::1]:8480", "[::1]:8480", "nas:8480", "localhost:5180", "nas.local:8480", "nas.fritz.lan", "nas.tail1234.ts.net", "nas.tail1234.ts.net:8480", "obtion.example.org", "Obtion.Example.org:443", "notes.example.com:8443"])
+    expect([h, ok(h)]).toEqual([h, true]);
+  for (const h of ["evil.example.net", "evil.example.net:8480", "notes.example.com:8480", "ts.net.evil.example", "", null])
+    expect([h, ok(h)]).toEqual([h, false]);
 });
 
 test("the identity headers count from a trusted proxy only", async () => {

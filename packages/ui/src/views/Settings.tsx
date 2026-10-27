@@ -21,6 +21,19 @@ interface Connect {
   vault: string;
 }
 
+/** navigator.clipboard exists only over HTTPS; opened as http://<address> the old way copies. */
+function copyText(text: string) {
+  if (navigator.clipboard) return void navigator.clipboard.writeText(text);
+  const area = document.createElement("textarea");
+  area.value = text;
+  area.style.position = "fixed";
+  area.style.opacity = "0";
+  document.body.append(area);
+  area.select();
+  document.execCommand("copy");
+  area.remove();
+}
+
 function CopyBox({ text, secret, label }: { text: string; secret?: string; label: string }) {
   const { t } = useT();
   const [copied, setCopied] = useState(false);
@@ -39,7 +52,7 @@ function CopyBox({ text, secret, label }: { text: string; secret?: string; label
         )}
         <button
           onClick={() => {
-            navigator.clipboard?.writeText(text);
+            copyText(text);
             setCopied(true);
             setTimeout(() => setCopied(false), 1500);
           }}
