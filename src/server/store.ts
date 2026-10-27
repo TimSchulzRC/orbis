@@ -5,7 +5,7 @@ import { Database } from "bun:sqlite";
 import * as Y from "yjs";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { type Item, type ItemInit, initItem, isContent, newId, readItem } from "../shared/model";
+import { type Item, type ItemInit, PERSONAL, initItem, isContent, newId, readItem } from "../shared/model";
 import { Index } from "../shared/graph";
 import { resolveCascade } from "../shared/trash";
 import type { ActivityEvent, FieldChange } from "../shared/protocol";
@@ -17,10 +17,14 @@ export interface StoredUpdate {
   seq: number;
   uid: string; // unique id of this log row: a restored backup reuses seq numbers, never uids
   doc: string;
+  area: string;
   data: Uint8Array;
   origin: string;
   step?: string;
 }
+
+/** A change for a document of another area than the one it was sent for. */
+export class AreaError extends Error {}
 
 type Listener = {
   update?: (u: StoredUpdate, conn?: unknown) => void;
@@ -74,6 +78,12 @@ export class Store {
     }
     const ecols = this.db.query("PRAGMA table_info(events)").all() as { name: string }[];
     if (!ecols.some((c) => c.name === "step")) this.db.exec("ALTER TABLE events ADD COLUMN step TEXT");
+    // Every log row and activity entry belongs to one area (27.10.); rows from before are personal.
+    if (!cols.some((c) => c.name === "area")) {
+      this.db.exec(`ALTER TABLE updates ADD COLUMN area TEXT NOT NULL DEFAULT '${PERSONAL}'`);
+      this.db.exec("CREATE INDEX IF NOT EXISTS updates_area ON updates(area, seq)");
+    }
+    if (!ecols.some((c) => c.name === "area")) this.db.exec(`ALTER TABLE events ADD COLUMN area TEXT NOT NULL DEFAULT '${PERSONAL}'`);
     this.load();
     if (!this.kvGet("hubId")) this.kvSet("hubId", newId());
   }
@@ -128,8 +138,21 @@ export class Store {
 
   // ---------- writing ----------
 
-  /** Apply an update that came from another replica. Returns its sequence number. */
-  applyRemote(docId: string, data: Uint8Array, origin: string, conn?: unknown, step?: string): number {
+  /** The area of a document (personal for documents from before areas); undefined if unknown. */
+  areaOf(docId: string): string | undefined {
+    const doc = this.docs.get(docId);
+    if (!doc) return undefined;
+    const meta = doc.getMap<any>("meta");
+    return (meta.get("area") as string | undefined) ?? (meta.has("kind") ? PERSONAL : undefined);
+  }
+
+  /**
+   * Apply an update that came from another replica for `area`. Returns its sequence number.
+   * A document of another area is refused (AreaError): areas never mix through sync.
+   */
+  applyRemote(docId: string, data: Uint8Array, origin: string, conn?: unknown, step?: string, area = PERSONAL): number {
+    const known = this.areaOf(docId);
+    if (known && known !== area) throw new AreaError(`${docId} belongs to the area ${known}, not ${area}`);
     const doc = this.getDoc(docId);
     const before = Y.encodeStateVector(doc);
     Y.applyUpdate(doc, data, REMOTE);
@@ -139,7 +162,7 @@ export class Store {
     const after = Y.encodeStateVector(doc);
     const pending = doc.store.pendingStructs !== null || doc.store.pendingDs !== null;
     if (!pending && equalBytes(before, after) && !hasDeleteSet(data)) return this.seq;
-    const seq = this.append(docId, data, origin, conn, false, step);
+    const seq = this.append(docId, data, origin, conn, false, step, area);
     this.capFuture(docId);
     return seq;
   }
@@ -258,7 +281,7 @@ export class Store {
     this._ix = null;
   }
 
-  private append(docId: string, data: Uint8Array, origin: string, conn?: unknown, quiet = false, step?: string): number {
+  private append(docId: string, data: Uint8Array, origin: string, conn?: unknown, quiet = false, step?: string, area = this.areaOf(docId) ?? PERSONAL): number {
     if (this.held) {
       this.held.push({ docId, data, origin, quiet, step });
       this.refresh(docId);
@@ -266,15 +289,15 @@ export class Store {
     }
     const uid = newId();
     const res = this.db
-      .query("INSERT INTO updates (doc, data, origin, ts, uid, step) VALUES (?, ?, ?, ?, ?, ?) RETURNING seq")
-      .get(docId, data, origin, Date.now(), uid, step ?? null) as { seq: number };
+      .query("INSERT INTO updates (doc, data, origin, ts, uid, step, area) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING seq")
+      .get(docId, data, origin, Date.now(), uid, step ?? null, area) as { seq: number };
     this.seq = res.seq;
     this.lastUid = uid;
     if (step) {
       const undoes = this.stepCtx?.id === step ? (this.stepCtx.undoes ?? null) : null;
       this.db.query("INSERT OR IGNORE INTO steps (id, actor, ts, undoes) VALUES (?, ?, ?, ?)").run(step, origin, Date.now(), undoes);
     }
-    const u: StoredUpdate = { seq: res.seq, uid, doc: docId, data, origin, step };
+    const u: StoredUpdate = { seq: res.seq, uid, doc: docId, area, data, origin, step };
     for (const l of this.listeners) l.update?.(u, conn);
     const p = this.pending.get(docId) ?? { origins: new Set<string>(), quiet };
     p.origins.add(origin);
@@ -304,7 +327,7 @@ export class Store {
     if (!pending.length) return;
     const saveSnap = this.db.prepare("INSERT OR REPLACE INTO docstate (id, state, seq) VALUES (?, ?, ?)");
     const saveEvent = this.db.prepare(
-      "INSERT INTO events (ts, doc, title, type, kind, origin, changes, step) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+      "INSERT INTO events (ts, doc, title, type, kind, origin, changes, step, area) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
     );
     const lastEvent = this.db.prepare("SELECT id, ts, kind, origin, changes, step FROM events WHERE doc = ? ORDER BY id DESC LIMIT 1");
     const updateEvent = this.db.prepare("UPDATE events SET ts = ?, title = ?, changes = ? WHERE id = ?");
@@ -349,7 +372,7 @@ export class Store {
           events.push({ id: last.id, ts, doc: id, title: next.title, type: typeTag(next), kind, origin, changes: merged, step });
           continue;
         }
-        const row = saveEvent.get(ts, id, next.title, typeTag(next), kind, origin, JSON.stringify(changes), step ?? null) as { id: number };
+        const row = saveEvent.get(ts, id, next.title, typeTag(next), kind, origin, JSON.stringify(changes), step ?? null, next.area) as { id: number };
         events.push({ id: row.id, ts, doc: id, title: next.title, type: typeTag(next), kind, origin, changes, step });
       }
     })();
@@ -365,18 +388,24 @@ export class Store {
    * the log, or if the row there has another id: the hub came from an older backup, and maybe
    * another device has synced since, so seq alone has grown past the cursor again.
    */
-  knowsCursor(since: number, sinceId?: string): boolean {
+  knowsCursor(area: string, since: number, sinceId?: string): boolean {
     if (since <= 0) return true;
-    if (since > this.seq) return false;
+    if (since > this.last(area).seq) return false;
     if (!sinceId) return true; // replica from before cursor ids: seq is all we can check
-    const row = this.db.query("SELECT uid FROM updates WHERE seq = ?").get(since) as { uid: string } | null;
-    return row?.uid === sinceId;
+    const row = this.db.query("SELECT uid, area FROM updates WHERE seq = ?").get(since) as { uid: string; area: string } | null;
+    return row?.uid === sinceId && row.area === area;
   }
 
-  /** Docs changed after `since`, as full state updates (what a reconnecting replica needs). */
-  docsSince(since: number): string[] {
-    if (since <= 0) return [...this.docs.keys()];
-    const rows = this.db.query("SELECT DISTINCT doc FROM updates WHERE seq > ?").all(since) as { doc: string }[];
+  /** The newest log row of an area: the position a replica of it has after catching up. */
+  last(area: string): { seq: number; uid: string } {
+    const row = this.db.query("SELECT seq, uid FROM updates WHERE area = ? ORDER BY seq DESC LIMIT 1").get(area) as { seq: number; uid: string } | null;
+    return row ?? { seq: 0, uid: "" };
+  }
+
+  /** Docs of an area changed after `since`, as full state updates (what a reconnecting replica needs). */
+  docsSince(area: string, since: number): string[] {
+    if (since <= 0) return [...this.docs.keys()].filter((id) => this.areaOf(id) === area);
+    const rows = this.db.query("SELECT DISTINCT doc FROM updates WHERE area = ? AND seq > ?").all(area, since) as { doc: string }[];
     return rows.map((r) => r.doc);
   }
 

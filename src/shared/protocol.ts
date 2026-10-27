@@ -8,6 +8,10 @@
 // the replica uploads its full state. Its own offline changes sit
 // in a local outbox and are pushed until acknowledged. Yjs updates are
 // idempotent and commutative, so re-sending or re-receiving is always safe.
+//
+// All of it runs per area (see PERSONAL in model.ts): a replica says hello for each area it
+// holds, and every message names its area. Messages without one (apps from before areas) mean
+// the personal area.
 
 export interface WireUpdate {
   s?: number; // hub sequence (server -> client)
@@ -17,14 +21,15 @@ export interface WireUpdate {
 }
 
 export type ClientMsg =
-  | { t: "hello"; since: number; sinceId?: string; client: string; device?: string }
-  | { t: "push"; items: { k: string; d: string; u: string; s?: string }[] } // s: the step (user action) it belongs to
+  | { t: "hello"; area?: string; since: number; sinceId?: string; client: string; device?: string }
+  | { t: "push"; area?: string; items: { k: string; d: string; u: string; s?: string }[] } // s: the step (user action) it belongs to
   | { t: "ping" };
 
 export type ServerMsg =
-  | { t: "welcome"; hub: string; seq: number }
-  | { t: "updates"; items: WireUpdate[]; last: number; lastId?: string; initial?: boolean; done?: boolean; reset?: boolean }
-  | { t: "ack"; keys: string[]; last: number; lastId?: string }
+  | { t: "welcome"; hub: string; area: string; seq: number; format: number }
+  | { t: "denied"; area: string } // an area this device may not sync
+  | { t: "updates"; area: string; items: WireUpdate[]; last: number; lastId?: string; initial?: boolean; done?: boolean; reset?: boolean }
+  | { t: "ack"; area: string; keys: string[]; last: number; lastId?: string }
   | { t: "event"; event: ActivityEvent }
   | { t: "blob"; hash: string } // a file content arrived on the hub
   | { t: "pong" };

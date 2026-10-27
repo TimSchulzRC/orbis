@@ -167,8 +167,22 @@ export interface OpRecord {
   undone?: boolean;
 }
 
+/**
+ * Areas ("Bereiche"): every information, type, file and change belongs to exactly one. The unit
+ * of sync and, later, of storage and rights. Until teams come there is one, the personal area,
+ * without any interface. Documents from before areas are read as personal.
+ */
+export const PERSONAL = "personal";
+
+/**
+ * Format of the data. A newer app upgrades older data once (setup.ts); an older app that meets
+ * newer data still reads it but asks for an update before it writes (see the client's repo).
+ */
+export const FORMAT = 1;
+
 export interface SettingsRecord {
   setupLang?: string;
+  format?: number; // see FORMAT; unset: data from before format versions (0)
   captureTypes: string[]; // pinned types in the capture type picker
   upgrades?: string[]; // one-time data upgrades already applied (each runs once, even if the user later undoes its effect)
   inbox?: Cond; // what lands in the inbox; unset: the default (inbox.ts)
@@ -208,6 +222,7 @@ export function legacyTab(view: { display?: ViewKind; sort?: { key: string; desc
 export interface Item {
   id: string;
   kind: Kind;
+  area: string; // see PERSONAL
   title: string;
   type: string | null;
   home: string | null; // stored; the effective home comes from the index
@@ -291,6 +306,7 @@ export function readItem(id: string, doc: Y.Doc): Item | null {
   const item: Item = {
     id,
     kind,
+    area: str("area") ?? PERSONAL,
     title: (meta.get("title") as string) ?? "",
     type: str("type") ?? null,
     home: str("home") ?? null,
@@ -322,7 +338,7 @@ export function readItem(id: string, doc: Y.Doc): Item | null {
   if (kind === "op") item.op = doc.getMap<any>("op").toJSON() as OpRecord;
   if (kind === "settings") {
     const s = doc.getMap<any>("settings").toJSON();
-    item.settings = { setupLang: s.setupLang, captureTypes: s.captureTypes ?? [], upgrades: s.upgrades ?? [], inbox: s.inbox ?? undefined, filesPos: s.filesPos ?? undefined };
+    item.settings = { setupLang: s.setupLang, format: typeof s.format === "number" ? s.format : undefined, captureTypes: s.captureTypes ?? [], upgrades: s.upgrades ?? [], inbox: s.inbox ?? undefined, filesPos: s.filesPos ?? undefined };
   }
   return item;
 }
@@ -342,6 +358,7 @@ export function readTabs(doc: Y.Doc): ViewTab[] {
 
 export interface ItemInit {
   kind?: Kind;
+  area?: string; // default: the personal area
   title?: string;
   type?: string | null;
   body?: string;
@@ -361,6 +378,7 @@ export interface ItemInit {
 export function initItem(doc: Y.Doc, init: ItemInit, now = Date.now()) {
   const meta = doc.getMap<any>("meta");
   meta.set("kind", init.kind ?? "info");
+  meta.set("area", init.area ?? PERSONAL);
   meta.set("title", init.title ?? "");
   if (init.type) meta.set("type", init.type);
   if (init.pinned) meta.set("pinned", init.pinned);

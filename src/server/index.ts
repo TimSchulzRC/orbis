@@ -4,13 +4,13 @@ import * as Y from "yjs";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve, extname } from "node:path";
 import type { ServerWebSocket } from "bun";
-import { Store } from "./store";
+import { AreaError, Store } from "./store";
 import { Mirror } from "./mirror";
 import { handleMcp, INSTRUCTIONS } from "./mcp";
 import { agentAvailable, runAgent } from "./agent";
 import { Blobs, MAX_BLOB } from "./blobs";
-import { SETTINGS_ID, fileTypeOf } from "../shared/model";
-import { addLaterDefaultProps, migrateCollections, renameShippedLabels, upgradeHideEmptyTaskFields, upgradeStartPage } from "../shared/setup";
+import { FORMAT, PERSONAL, SETTINGS_ID, fileTypeOf } from "../shared/model";
+import { addLaterDefaultProps, migrateCollections, renameShippedLabels, upgradeAreas, upgradeHideEmptyTaskFields, upgradeStartPage } from "../shared/setup";
 import type { Lang } from "../shared/i18n";
 import { storeWriter } from "./importers";
 import { UndoError, redoStep, undoStep } from "./undo";
@@ -40,7 +40,12 @@ const store = new Store(DATA);
   // collections are gone (26.10.): their views go to the types, the inbox rule to the settings
   const moved = lang ? migrateCollections(storeWriter(store, "system:setup"), store.index(), store.docs, lang) : [];
   if (moved.length) (store.flush(), console.log(`[obtion] collections migrated:\n  ${moved.join("\n  ")}`));
+  // areas (27.10.): every document from before belongs to the personal area
+  const marked = upgradeAreas(storeWriter(store, "system:setup"), store.docs);
+  if (marked) (store.flush(), console.log(`[obtion] areas: ${marked} documents marked as personal`));
 }
+/** The areas a device may sync. One for now; with accounts (later) the hub decides per user. */
+const AREAS = new Set([PERSONAL]);
 const blobs = new Blobs(join(DATA, "blobs"), store);
 const mirror = new Mirror(store, join(DATA, "vault"), blobs);
 
@@ -49,7 +54,7 @@ console.log(`[obtion] ${store.records.size} nodes, seq ${store.seq}, data in ${D
 // ---------- sync hub ----------
 
 interface Conn {
-  ready: boolean;
+  areas: Set<string>; // said hello for these: only then it gets (and may push) their updates
   origin: string;
   user: string;
 }
@@ -62,36 +67,40 @@ function send(ws: ServerWebSocket<Conn>, msg: ServerMsg) {
 store.on({
   update: (u, from) => {
     const item: WireUpdate = { s: u.seq, d: u.doc, u: toB64(u.data), o: u.origin };
-    for (const ws of conns) if (ws.data.ready && ws !== from) send(ws, { t: "updates", items: [item], last: u.seq, lastId: u.uid });
+    for (const ws of conns) if (ws.data.areas.has(u.area) && ws !== from) send(ws, { t: "updates", area: u.area, items: [item], last: u.seq, lastId: u.uid });
   },
   event: (event) => {
     if (event.step) Object.assign(event, store.stepState(event.step));
-    for (const ws of conns) if (ws.data.ready) send(ws, { t: "event", event });
+    const area = store.areaOf(event.doc) ?? PERSONAL;
+    for (const ws of conns) if (ws.data.areas.has(area)) send(ws, { t: "event", event });
   },
   record: (r) => {
     if (r.file && blobs.needsWork(r)) blobs.schedule(r.id);
   },
 });
 blobs.onStored = (hash) => {
-  for (const ws of conns) if (ws.data.ready) send(ws, { t: "blob", hash });
+  for (const ws of conns) if (ws.data.areas.size) send(ws, { t: "blob", hash });
 };
 blobs.scan();
 mirror.start();
 
-function handleHello(ws: ServerWebSocket<Conn>, since: number, sinceId?: string, device?: string) {
-  if (device) ws.data.origin = `web:${ws.data.user}@${device.slice(0, 40)}`;
-  send(ws, { t: "welcome", hub: store.hubId, seq: store.seq });
-  const reset = !store.knowsCursor(since, sinceId); // hub restored from an older backup; replica must merge everything
-  const ids = store.docsSince(reset ? 0 : since);
+function handleHello(ws: ServerWebSocket<Conn>, msg: Extract<ClientMsg, { t: "hello" }>) {
+  const area = typeof msg.area === "string" ? msg.area : PERSONAL; // apps from before areas: personal
+  if (!AREAS.has(area)) return send(ws, { t: "denied", area });
+  if (msg.device) ws.data.origin = `web:${ws.data.user}@${String(msg.device).slice(0, 40)}`;
+  const last = store.last(area);
+  send(ws, { t: "welcome", hub: store.hubId, area, seq: last.seq, format: FORMAT });
+  const reset = !store.knowsCursor(area, msg.since, msg.sinceId); // hub restored from an older backup; replica must merge everything
+  const ids = store.docsSince(area, reset ? 0 : msg.since);
   const BATCH = 150;
-  if (ids.length === 0) send(ws, { t: "updates", items: [], last: store.seq, lastId: store.lastUid, initial: true, done: true, reset });
+  if (ids.length === 0) send(ws, { t: "updates", area, items: [], last: last.seq, lastId: last.uid || undefined, initial: true, done: true, reset });
   for (let i = 0; i < ids.length; i += BATCH) {
     const items = ids.slice(i, i + BATCH).map((d) => ({ d, u: toB64(Y.encodeStateAsUpdate(store.getDoc(d))) }));
     const done = i + BATCH >= ids.length;
     // Only the final batch carries the real position, so an interrupted first sync is retried.
-    send(ws, { t: "updates", items, last: done ? store.seq : 0, lastId: done ? store.lastUid : undefined, initial: true, done, reset: reset && i === 0 });
+    send(ws, { t: "updates", area, items, last: done ? last.seq : 0, lastId: done ? last.uid || undefined : undefined, initial: true, done, reset: reset && i === 0 });
   }
-  ws.data.ready = true;
+  ws.data.areas.add(area);
 }
 
 // ---------- http ----------
@@ -193,7 +202,7 @@ const server = Bun.serve<Conn>({
 
     if (path === "/sync") {
       const user = userOf(req).split("@")[0]!;
-      if (srv.upgrade(req, { data: { ready: false, origin: `web:${user}`, user } })) return;
+      if (srv.upgrade(req, { data: { areas: new Set<string>(), origin: `web:${user}`, user } })) return;
       return new Response("Expected WebSocket", { status: 400 });
     }
 
@@ -310,24 +319,27 @@ const server = Bun.serve<Conn>({
       } catch {
         return;
       }
-      if (msg.t === "hello") handleHello(ws, msg.since, msg.sinceId, msg.device);
+      if (msg.t === "hello") handleHello(ws, msg);
       else if (msg.t === "ping") send(ws, { t: "pong" });
       else if (msg.t === "push") {
         // only after the welcome: the client has to know which hub it writes to (hub-id check);
         // no ack, so its outbox keeps the changes and sends them again after the next hello
-        if (!ws.data.ready) return;
+        const area = typeof msg.area === "string" ? msg.area : PERSONAL;
+        if (!ws.data.areas.has(area)) return;
         const keys: string[] = [];
         for (const it of msg.items) {
           try {
             const step = typeof it.s === "string" && /^[\w-]{1,40}$/.test(it.s) ? it.s : undefined;
-            store.applyRemote(it.d, fromB64(it.u), ws.data.origin, ws, step);
+            store.applyRemote(it.d, fromB64(it.u), ws.data.origin, ws, step, area);
             keys.push(it.k);
           } catch (e) {
-            console.error("[sync] bad update", it.d, e);
-            keys.push(it.k); // drop malformed updates instead of retrying forever
+            if (e instanceof AreaError) console.error(`[sync] refused: ${e.message}`);
+            else console.error("[sync] bad update", it.d, e);
+            keys.push(it.k); // drop malformed or misplaced updates instead of retrying forever
           }
         }
-        send(ws, { t: "ack", keys, last: store.seq, lastId: store.lastUid });
+        const last = store.last(area);
+        send(ws, { t: "ack", area, keys, last: last.seq, lastId: last.uid || undefined });
       }
     },
   },

@@ -4,6 +4,9 @@
 import * as Y from "yjs";
 import { openDB, type IDBPDatabase } from "idb";
 import {
+  FORMAT,
+  PERSONAL,
+  SETTINGS_ID,
   type Item,
   type ItemInit,
   type FreeValue,
@@ -37,6 +40,9 @@ import { createIndex, indexRecord, searchIds } from "../shared/search";
 import { tr } from "./i18n";
 
 const REMOTE = Symbol("remote");
+/** The areas this device holds. One until teams come (see PERSONAL); the cursor below is its. */
+const AREAS = [PERSONAL];
+type OutItem = { k: string; d: string; u: string; s?: string; a?: string };
 const LOAD = Symbol("load");
 const TAB = Symbol("tab");
 
@@ -67,7 +73,9 @@ export class Repo {
   private searchDirty = new Set<string>();
   private flushScheduled = false;
   private searchTimer: ReturnType<typeof setTimeout> | null = null;
-  private outbox = new Map<string, { k: string; d: string; u: string; s?: string }>();
+  private outbox = new Map<string, OutItem>();
+  private hubFormat = 0;
+  private tooNewShown = false;
   private bc = typeof BroadcastChannel !== "undefined" ? new BroadcastChannel("obtion") : null;
   private retry = 0;
   private persistFailed = false;
@@ -237,20 +245,48 @@ export class Repo {
   }
 
   private local(docId: string, update: Uint8Array, step?: string) {
+    const area = (this.docs.get(docId)?.getMap<any>("meta").get("area") as string | undefined) ?? PERSONAL;
     const k = newId();
-    const item = { k, d: docId, u: toB64(update), s: step };
+    const item: OutItem = { k, d: docId, u: toB64(update), s: step, a: area };
     this.outbox.set(k, item);
     this.status.pending = this.outbox.size;
+    this.store({ d: docId, u: update }, item);
+    this.bc?.postMessage({ d: docId, u: update });
+    this.send({ t: "push", area, items: [item] });
+  }
+
+  // Everything one tick changed goes to IndexedDB in one transaction: quick to commit, so a
+  // reload right after a big change (the setup writes dozens of documents) loses nothing.
+  private toStore: { row: { d: string; u: Uint8Array }; out: OutItem }[] = [];
+  private storing: Promise<void> | null = null;
+
+  private store(row: { d: string; u: Uint8Array }, out: OutItem) {
+    this.toStore.push({ row, out });
+    this.storing ??= Promise.resolve().then(() => this.storeNow());
+  }
+
+  private async storeNow(): Promise<void> {
+    const batch = this.toStore.splice(0);
     const tx = this.db.transaction(["updates", "outbox"], "readwrite");
-    tx.objectStore("updates").add({ d: docId, u: update });
-    tx.objectStore("outbox").put(item);
-    tx.done.catch((e) => {
+    for (const { row, out } of batch) {
+      tx.objectStore("updates").add(row);
+      tx.objectStore("outbox").put(out);
+    }
+    try {
+      await tx.done;
+    } catch (e) {
       // Not stored locally: stop advancing lastSeq so the hub resends this doc later.
       this.persistFailed = true;
       console.error("persist failed", e);
-    });
-    this.bc?.postMessage({ d: docId, u: update });
-    this.send({ t: "push", items: [item] });
+    } finally {
+      // what came in meanwhile goes in the next transaction
+      this.storing = this.toStore.length ? this.storeNow() : null;
+    }
+  }
+
+  /** Resolves once every change so far is stored on this device. */
+  async saved(): Promise<void> {
+    while (this.storing) await this.storing;
   }
 
   private applyFromTab(msg: { d: string; u: Uint8Array }) {
@@ -271,7 +307,7 @@ export class Repo {
       this.status.synced = false;
       this.emit();
       // The outbox is pushed after the hub's "welcome" was checked (see onMessage).
-      this.send({ t: "hello", since: this.status.lastSeq, sinceId: this.lastId, client: this.device, device: this.device });
+      for (const area of AREAS) this.send({ t: "hello", area, since: this.status.lastSeq, sinceId: this.lastId, client: this.device, device: this.device });
       ping = setInterval(() => this.send({ t: "ping" }), 25000);
     };
     // Handle messages strictly in order (the hub-identity check must finish before updates apply).
@@ -292,15 +328,17 @@ export class Repo {
 
   /** Push everything in the outbox, including items other (closed) tabs left in IndexedDB. */
   private async flushOutbox() {
-    for (const o of (await this.db.getAll("outbox")) as { k: string; d: string; u: string; s?: string }[]) this.outbox.set(o.k, o);
+    for (const o of (await this.db.getAll("outbox")) as OutItem[]) this.outbox.set(o.k, o);
     this.status.pending = this.outbox.size;
-    const items = [...this.outbox.values()];
-    for (let i = 0; i < items.length; i += 200) this.send({ t: "push", items: items.slice(i, i + 200) });
+    for (const area of AREAS) {
+      const items = [...this.outbox.values()].filter((o) => (o.a ?? PERSONAL) === area); // items from before areas: personal
+      for (let i = 0; i < items.length; i += 200) this.send({ t: "push", area, items: items.slice(i, i + 200) });
+    }
   }
 
   /** Queue this device's full state for upload. Goes through the durable outbox, so it survives disconnects. */
   private async enqueueFullUpload() {
-    const items = [...this.docs].map(([d, doc]) => ({ k: newId(), d, u: toB64(Y.encodeStateAsUpdate(doc)) }));
+    const items: OutItem[] = [...this.docs].map(([d, doc]) => ({ k: newId(), d, u: toB64(Y.encodeStateAsUpdate(doc)), a: (doc.getMap<any>("meta").get("area") as string | undefined) ?? PERSONAL }));
     const tx = this.db.transaction("outbox", "readwrite");
     for (const it of items) tx.store.put(it);
     await tx.done;
@@ -318,7 +356,9 @@ export class Repo {
   private inbox: Promise<void> = Promise.resolve();
 
   private async onMessage(msg: ServerMsg) {
+    if (msg.t === "denied") return;
     if (msg.t === "welcome") {
+      this.hubFormat = msg.format ?? 0;
       const known = this.hubId ?? ((await this.db.get("meta", "hubId")) as string | undefined);
       if (known && known !== msg.hub && this.docs.size > 0) {
         // A different hub: mostly it was set up anew and this device's copy is stale (replace it,
@@ -352,7 +392,7 @@ export class Repo {
         this.lastId = undefined;
         await this.db.put("meta", 0, "lastSeq");
         await this.db.delete("meta", "lastId");
-        this.send({ t: "hello", since: 0, client: this.device, device: this.device });
+        this.send({ t: "hello", area: msg.area, since: 0, client: this.device, device: this.device });
       }
       this.hubId = msg.hub;
       if (known !== msg.hub) await this.db.put("meta", msg.hub, "hubId");
@@ -430,6 +470,15 @@ export class Repo {
     return { ok: true, changed: body.changed.length + body.trashed.length, kept: body.kept.length };
   }
 
+  /**
+   * The data (or the hub) are newer than this app: it still reads them but does not write – a
+   * newer format might be damaged by changes it does not understand (see FORMAT). Reloading
+   * brings the new app.
+   */
+  get readOnly(): boolean {
+    return (this.records.get(SETTINGS_ID)?.settings?.format ?? 0) > FORMAT || this.hubFormat > FORMAT;
+  }
+
   /** Drop the local replica and download everything again. */
   async resetLocal(force = false) {
     if (!force && this.outbox.size) {
@@ -479,6 +528,11 @@ export class Repo {
 
   /** Run a change on one document (the generic way; everything else builds on it). */
   change(id: string, fn: (doc: Y.Doc) => void) {
+    if (this.readOnly) {
+      if (!this.tooNewShown) void import("./ui/feedback").then(({ notify }) => notify(tr("format.tooNew")));
+      this.tooNewShown = true;
+      return;
+    }
     const doc = this.getDoc(id);
     doc.transact(() => fn(doc));
   }

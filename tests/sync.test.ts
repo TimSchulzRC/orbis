@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { Database } from "bun:sqlite";
 import * as Y from "yjs";
 import { Store } from "../src/server/store";
-import { initItem } from "../src/shared/model";
+import { PERSONAL as P, initItem } from "../src/shared/model";
 
 afterAll(removeTempDirs);
 
@@ -28,7 +28,7 @@ test("a hub restored from an older backup is detected even after another device 
   const phone = { since: hub.seq, sinceId: hub.lastUid };
   const hubId = hub.hubId;
   expect(phone.since).toBe(2);
-  expect(hub.knowsCursor(phone.since, phone.sinceId)).toBe(true);
+  expect(hub.knowsCursor(P, phone.since, phone.sinceId)).toBe(true);
   hub.flush();
   hub.db.close();
 
@@ -40,14 +40,14 @@ test("a hub restored from an older backup is detected even after another device 
   expect(restored.seq).toBe(2);
   // seq alone looks fine (2 is not beyond the log), but the row there is another one.
   expect(phone.since > restored.seq).toBe(false);
-  expect(restored.knowsCursor(phone.since, phone.sinceId)).toBe(false);
+  expect(restored.knowsCursor(P, phone.since, phone.sinceId)).toBe(false);
   // The laptop's own cursor is valid, and so is any position the backup still holds.
-  expect(restored.knowsCursor(restored.seq, restored.lastUid)).toBe(true);
+  expect(restored.knowsCursor(P, restored.seq, restored.lastUid)).toBe(true);
   const row1 = restored.db.query("SELECT uid FROM updates WHERE seq = 1").get() as { uid: string };
-  expect(restored.knowsCursor(1, row1.uid)).toBe(true);
+  expect(restored.knowsCursor(P, 1, row1.uid)).toBe(true);
   // A cursor beyond the log is a reset as before; a fresh replica (0) never is.
-  expect(restored.knowsCursor(5, "x")).toBe(false);
-  expect(restored.knowsCursor(0)).toBe(true);
+  expect(restored.knowsCursor(P, 5, "x")).toBe(false);
+  expect(restored.knowsCursor(P, 0)).toBe(true);
 });
 
 test("log rows keep their ids across restarts; databases from before cursor ids get ids once", () => {
@@ -69,7 +69,7 @@ test("log rows keep their ids across restarts; databases from before cursor ids 
   s.db.close();
   const again = new Store(dir);
   expect(again.lastUid).toBe(ids[1]!);
-  expect(again.knowsCursor(1, ids[0])).toBe(true);
+  expect(again.knowsCursor(P, 1, ids[0])).toBe(true);
 });
 
 test("a re-sent outbox item does not create a new log row", () => {

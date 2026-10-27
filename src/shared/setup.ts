@@ -7,7 +7,9 @@ import {
   type Item,
   type PropDef,
   type ViewTab,
+  FORMAT,
   META_TYPE,
+  PERSONAL,
   SETTINGS_ID,
   initItem,
   initSchema,
@@ -319,9 +321,23 @@ export function runSetup(w: Writer, lang: Lang, origin?: string) {
   if (!w.get(SETTINGS_ID))
     w.change(SETTINGS_ID, (doc) => {
       initItem(doc, { kind: "settings", title: "Settings" });
-      setSettings(doc, { setupLang: lang, captureTypes: DEFAULT_CAPTURE_TYPES });
+      setSettings(doc, { setupLang: lang, format: FORMAT, captureTypes: DEFAULT_CAPTURE_TYPES });
       replaceBody(doc, defaultStartBody(lang));
     });
+}
+
+/**
+ * Once (27.10.): areas. Every document from before gets the personal area written into it, and
+ * the data the format version 1. Returns how many documents were marked.
+ */
+export function upgradeAreas(w: Writer, docs: Iterable<[string, Y.Doc]>): number {
+  const KEY = "areas-1";
+  const settings = w.get(SETTINGS_ID)?.settings;
+  if (!settings || settings.upgrades?.includes(KEY)) return 0;
+  const ids = [...docs].filter(([, d]) => d.getMap<any>("meta").has("kind") && !d.getMap<any>("meta").has("area")).map(([id]) => id);
+  for (const id of ids) w.change(id, (d) => d.getMap<any>("meta").set("area", PERSONAL));
+  w.change(SETTINGS_ID, (d) => setSettings(d, { format: Math.max(settings.format ?? 0, FORMAT), upgrades: [...(settings.upgrades ?? []), KEY] }));
+  return ids.length;
 }
 
 /** The collections shipped for the default types (until 26.10.). */

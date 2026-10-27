@@ -919,5 +919,7 @@
  "type.edit": "Edit type",
  "type.resetViews": "Reset views",
  "type.viewsReset": "Views reset.",
- "type.plural": "List name"
+ "type.plural": "List name",
+ "format.tooNew": "These data come from a newer version of Obtion. Reading works; to write, please reload the app.",
+ "format.reload": "Reload"
 }

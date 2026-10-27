@@ -919,5 +919,7 @@
  "type.edit": "Typ bearbeiten",
  "type.resetViews": "Ansichten zurücksetzen",
  "type.viewsReset": "Ansichten zurückgesetzt.",
- "type.plural": "Liste heißt"
+ "type.plural": "Liste heißt",
+ "format.tooNew": "Diese Daten stammen aus einer neueren Version von Obtion. Lesen geht, zum Schreiben bitte die App neu laden.",
+ "format.reload": "Neu laden"
 }

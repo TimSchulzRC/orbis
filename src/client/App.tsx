@@ -155,6 +155,14 @@ function Main() {
             </button>
           </header>
         )}
+        {r.readOnly && (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line bg-surface-2 px-4 py-2 text-sm" role="status">
+            <span className="flex-1">{t("format.tooNew")}</span>
+            <button onClick={() => location.reload()} className="font-medium text-[var(--link)] hover:underline">
+              {t("format.reload")}
+            </button>
+          </div>
+        )}
         <main tabIndex={-1} className={cx("@container min-h-0 flex-1 outline-none", isGraph ? "overflow-hidden" : "overflow-y-auto")}>
           <PageBoundary key={route.path}>{page}</PageBoundary>
         </main>
