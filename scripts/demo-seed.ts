@@ -1,15 +1,15 @@
-// The examples of the setup page ("Mit Beispielen starten", src/shared/examples.ts), for a test hub.
+// The examples of the setup page ("Mit Beispielen starten", packages/core/src/examples.ts), for a test hub.
 // Writes only to a separate data dir (default data-demo/, never data/). Run while no hub uses that dir:
 //   bun run seed:demo [de|en]             → data-demo/
 //   OBTION_DATA=/tmp/obtion-demo bun run seed:demo
-// Then: OBTION_DATA=data-demo PORT=8481 bun src/server/index.ts
+// Then: OBTION_DATA=data-demo PORT=8481 bun apps/hub/src/index.ts
 // Fixed ids (ex-*): running it again only adds what is missing.
 import { join, resolve } from "node:path";
-import { Store } from "../src/server/store";
-import { Blobs } from "../src/server/blobs";
-import { setUp } from "../src/server/importers";
-import { EXAMPLE } from "../src/shared/examples";
-import type { Lang } from "../src/shared/i18n";
+import { Store } from "@obtion/hub/store";
+import { Blobs } from "@obtion/hub/blobs";
+import { setUp } from "@obtion/hub/importers";
+import { EXAMPLE } from "@obtion/core/examples";
+import type { Lang } from "@obtion/core/i18n";
 
 const DATA = resolve(process.env.OBTION_DATA ?? "data-demo");
 if (DATA === resolve("data")) {

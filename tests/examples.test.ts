@@ -1,16 +1,16 @@
 import { test, expect, afterAll } from "bun:test";
 import { join } from "node:path";
 import { MemRepo, tempDir, removeTempDirs } from "./helpers";
-import { runSetup, SYS } from "../src/shared/setup";
-import { EXAMPLE, EX_TYPES, exampleFiles, fileFacts, listExamples, removeExamples, restoreExamples, writeExamples } from "../src/shared/examples";
-import { defaultStartBody } from "../src/shared/setup";
-import { findBlocks, readBlock, runQuery } from "../src/shared/query";
-import { inbox } from "../src/shared/placement";
-import { setMeta, touch } from "../src/shared/model";
-import { Store } from "../src/server/store";
-import { Blobs, sha256 } from "../src/server/blobs";
-import { setUp } from "../src/server/importers";
-import type { Lang } from "../src/shared/i18n";
+import { runSetup, SYS } from "@obtion/core/setup";
+import { EXAMPLE, EX_TYPES, exampleFiles, fileFacts, listExamples, removeExamples, restoreExamples, writeExamples } from "@obtion/core/examples";
+import { defaultStartBody } from "@obtion/core/setup";
+import { findBlocks, readBlock, runQuery } from "@obtion/core/query";
+import { inbox } from "@obtion/core/placement";
+import { setMeta, touch } from "@obtion/core/model";
+import { Store } from "@obtion/hub/store";
+import { Blobs, sha256 } from "@obtion/hub/blobs";
+import { setUp } from "@obtion/hub/importers";
+import type { Lang } from "@obtion/core/i18n";
 
 afterAll(removeTempDirs);
 

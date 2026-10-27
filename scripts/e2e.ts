@@ -37,7 +37,7 @@ async function startHub(seeded: boolean, noTypes = false) {
       if (!del.stdout.toString().includes("types left: 0")) throw new Error("deleting types failed: " + del.stderr.toString());
     }
   }
-  const proc = Bun.spawn(["bun", "src/server/index.ts"], { cwd: ROOT, env, stdout: "ignore", stderr: "pipe" });
+  const proc = Bun.spawn(["bun", "apps/hub/src/index.ts"], { cwd: ROOT, env, stdout: "ignore", stderr: "pipe" });
   const url = `http://127.0.0.1:${port}`;
   for (let i = 0; i < 100; i++) {
     if (await fetch(url + "/api/info").then((r) => r.ok, () => false)) break;

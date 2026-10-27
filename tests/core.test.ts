@@ -1,12 +1,12 @@
 import { test, expect, describe } from "bun:test";
 import * as Y from "yjs";
 import { MemRepo } from "./helpers";
-import { addParent, readItem, removeParent, setMeta, setProp, setSettings, initItem, META_TYPE, SETTINGS_ID, touchOnTextEdit } from "../src/shared/model";
-import { keyBetween, keysFor } from "../src/shared/sortkey";
-import { isInInbox, isOverview, inbox, sidebarRoots, sidebarChildren } from "../src/shared/placement";
-import { runSetup, restoreDefaultTypes, resetInbox, SYS } from "../src/shared/setup";
-import { parseQuery, printQuery, runQuery } from "../src/shared/query";
-import { CATALOGS } from "../src/shared/i18n";
+import { addParent, readItem, removeParent, setMeta, setProp, setSettings, initItem, META_TYPE, SETTINGS_ID, touchOnTextEdit } from "@obtion/core/model";
+import { keyBetween, keysFor } from "@obtion/core/sortkey";
+import { isInInbox, isOverview, inbox, sidebarRoots, sidebarChildren } from "@obtion/core/placement";
+import { runSetup, restoreDefaultTypes, resetInbox, SYS } from "@obtion/core/setup";
+import { parseQuery, printQuery, runQuery } from "@obtion/core/query";
+import { CATALOGS } from "@obtion/core/i18n";
 
 describe("sort keys", () => {
   test("between always sorts between", () => {

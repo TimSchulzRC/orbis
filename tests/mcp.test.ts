@@ -1,10 +1,10 @@
 import { test, expect, beforeEach, afterAll } from "bun:test";
 import { tempDir, removeTempDirs } from "./helpers";
-import { Store } from "../src/server/store";
-import { handleMcp } from "../src/server/mcp";
-import { runSetup } from "../src/shared/setup";
-import { storeWriter } from "../src/server/importers";
-import { deleteType } from "../src/shared/typeops";
+import { Store } from "@obtion/hub/store";
+import { handleMcp } from "@obtion/hub/mcp";
+import { runSetup } from "@obtion/core/setup";
+import { storeWriter } from "@obtion/hub/importers";
+import { deleteType } from "@obtion/core/typeops";
 
 afterAll(removeTempDirs);
 

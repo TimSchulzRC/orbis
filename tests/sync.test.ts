@@ -4,8 +4,8 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { Database } from "bun:sqlite";
 import * as Y from "yjs";
-import { Store } from "../src/server/store";
-import { PERSONAL as P, initItem } from "../src/shared/model";
+import { Store } from "@obtion/hub/store";
+import { PERSONAL as P, initItem } from "@obtion/core/model";
 
 afterAll(removeTempDirs);
 

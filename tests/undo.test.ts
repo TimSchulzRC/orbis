@@ -1,12 +1,12 @@
 import { test, expect, beforeEach, afterAll } from "bun:test";
 import { tempDir, removeTempDirs } from "./helpers";
 import * as Y from "yjs";
-import { Store } from "../src/server/store";
-import { Ops } from "../src/server/ops";
-import { undoStep, redoStep, UndoError } from "../src/server/undo";
-import { runSetup, typeTabs, SYS } from "../src/shared/setup";
-import { storeWriter } from "../src/server/importers";
-import { initItem, setMeta, setTab, setTabs } from "../src/shared/model";
+import { Store } from "@obtion/hub/store";
+import { Ops } from "@obtion/hub/ops";
+import { undoStep, redoStep, UndoError } from "@obtion/hub/undo";
+import { runSetup, typeTabs, SYS } from "@obtion/core/setup";
+import { storeWriter } from "@obtion/hub/importers";
+import { initItem, setMeta, setTab, setTabs } from "@obtion/core/model";
 
 afterAll(removeTempDirs);
 

@@ -4,13 +4,13 @@
 import { test, expect, beforeEach, afterAll } from "bun:test";
 import * as Y from "yjs";
 import { tempDir, removeTempDirs, MemRepo } from "./helpers";
-import { Store } from "../src/server/store";
-import { Ops } from "../src/server/ops";
-import { storeWriter } from "../src/server/importers";
-import { SYS, migrateCollections, runSetup, typeTabs } from "../src/shared/setup";
-import { SETTINGS_ID, readItem, setTab, setTabs } from "../src/shared/model";
-import { DEFAULT_INBOX_WHERE } from "../src/shared/inbox";
-import { type Cond, groupId, groupItems, runQuery, tabDef } from "../src/shared/query";
+import { Store } from "@obtion/hub/store";
+import { Ops } from "@obtion/hub/ops";
+import { storeWriter } from "@obtion/hub/importers";
+import { SYS, migrateCollections, runSetup, typeTabs } from "@obtion/core/setup";
+import { SETTINGS_ID, readItem, setTab, setTabs } from "@obtion/core/model";
+import { DEFAULT_INBOX_WHERE } from "@obtion/core/inbox";
+import { type Cond, groupId, groupItems, runQuery, tabDef } from "@obtion/core/query";
 
 afterAll(removeTempDirs);
 

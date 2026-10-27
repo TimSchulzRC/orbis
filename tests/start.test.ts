@@ -1,9 +1,9 @@
 import { test, expect } from "bun:test";
 import { MemRepo } from "./helpers";
-import { runSetup, SYS, defaultStartBody, upgradeStartPage, isDefaultStartBody } from "../src/shared/setup";
-import { findBlocks, readBlock, runQuery, parseQuery } from "../src/shared/query";
-import { addDaysISO, todayISO, SETTINGS_ID, replaceBody } from "../src/shared/model";
-import { dayBrief } from "../src/shared/today";
+import { runSetup, SYS, defaultStartBody, upgradeStartPage, isDefaultStartBody } from "@obtion/core/setup";
+import { findBlocks, readBlock, runQuery, parseQuery } from "@obtion/core/query";
+import { addDaysISO, todayISO, SETTINGS_ID, replaceBody } from "@obtion/core/model";
+import { dayBrief } from "@obtion/core/today";
 
 function world() {
   const m = new MemRepo();

@@ -1,0 +1,23 @@
+{
+  "name": "@obtion/hub",
+  "description": "The hub: SQLite, sync, API, MCP, agent, Markdown mirror; serves the web app (optional)",
+  "type": "module",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "start": "bun src/index.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "@obtion/core": "workspace:*",
+    "pdfjs-dist": "^6.4.299",
+    "yjs": "^13.6.33",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.4"
+  }
+}

@@ -1,8 +1,8 @@
 import { test, expect, describe } from "bun:test";
 import { MemRepo } from "./helpers";
-import { runSetup, SYS, addLaterDefaultProps, renameShippedLabels } from "../src/shared/setup";
-import { parseQuery, printQuery, runQuery, groupItems, normalizeBlocks, findBlocks, readBlock, blocksAsText, shownByBlocks } from "../src/shared/query";
-import { addDaysISO, todayISO, initItem, initSchema, META_TYPE, removeProp, setMember } from "../src/shared/model";
+import { runSetup, SYS, addLaterDefaultProps, renameShippedLabels } from "@obtion/core/setup";
+import { parseQuery, printQuery, runQuery, groupItems, normalizeBlocks, findBlocks, readBlock, blocksAsText, shownByBlocks } from "@obtion/core/query";
+import { addDaysISO, todayISO, initItem, initSchema, META_TYPE, removeProp, setMember } from "@obtion/core/model";
 
 function world() {
   const m = new MemRepo();

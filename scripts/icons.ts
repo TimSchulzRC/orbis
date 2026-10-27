@@ -1,5 +1,5 @@
 // Renders the app icon (a tiny graph: three linked nodes) to PNG and SVG without dependencies.
-//   bun run icons   → public/
+//   bun run icons   → apps/web/public/
 import { deflateSync } from "node:zlib";
 import { writeFileSync } from "node:fs";
 
@@ -58,7 +58,7 @@ function png(size: number, px: Float32Array) {
   return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk("IHDR", ihdr), chunk("IDAT", deflateSync(raw)), chunk("IEND", Buffer.alloc(0))]);
 }
 
-const out = process.argv[2] ?? "public";
+const out = process.argv[2] ?? "apps/web/public";
 writeFileSync(`${out}/icon-192.png`, render(192));
 writeFileSync(`${out}/icon-512.png`, render(512));
 writeFileSync(`${out}/apple-touch-icon.png`, render(180));

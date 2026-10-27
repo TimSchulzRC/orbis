@@ -1,9 +1,9 @@
 import { test, expect, afterAll } from "bun:test";
 import * as Y from "yjs";
 import { MemRepo, tempDir, removeTempDirs } from "./helpers";
-import { FORMAT, PERSONAL, SETTINGS_ID, initItem, readItem } from "../src/shared/model";
-import { runSetup, upgradeAreas } from "../src/shared/setup";
-import { AreaError, Store } from "../src/server/store";
+import { FORMAT, PERSONAL, SETTINGS_ID, initItem, readItem } from "@obtion/core/model";
+import { runSetup, upgradeAreas } from "@obtion/core/setup";
+import { AreaError, Store } from "@obtion/hub/store";
 
 afterAll(removeTempDirs);
 

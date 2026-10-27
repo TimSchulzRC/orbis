@@ -3,13 +3,13 @@ import { tempDir, removeTempDirs } from "./helpers";
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import * as Y from "yjs";
-import { Store } from "../src/server/store";
-import { Ops, OpError } from "../src/server/ops";
-import { Mirror } from "../src/server/mirror";
-import { runSetup, SYS } from "../src/shared/setup";
-import { storeWriter } from "../src/server/importers";
-import { initItem, replaceBody, addDaysISO, todayISO, addParent } from "../src/shared/model";
-import { deleteItem } from "../src/shared/trash";
+import { Store } from "@obtion/hub/store";
+import { Ops, OpError } from "@obtion/hub/ops";
+import { Mirror } from "@obtion/hub/mirror";
+import { runSetup, SYS } from "@obtion/core/setup";
+import { storeWriter } from "@obtion/hub/importers";
+import { initItem, replaceBody, addDaysISO, todayISO, addParent } from "@obtion/core/model";
+import { deleteItem } from "@obtion/core/trash";
 
 afterAll(removeTempDirs);
 

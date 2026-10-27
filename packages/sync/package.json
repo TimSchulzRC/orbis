@@ -1,0 +1,14 @@
+{
+  "name": "@obtion/sync",
+  "description": "The device's replica of a hub: Yjs documents, outbox, sync over WebSocket – storage and platform are passed in",
+  "type": "module",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "exports": {
+    ".": "./src/repo.ts"
+  },
+  "dependencies": {
+    "@obtion/core": "workspace:*",
+    "yjs": "^13.6.33"
+  }
+}

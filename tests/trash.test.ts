@@ -1,10 +1,10 @@
 import { test, expect } from "bun:test";
 import * as Y from "yjs";
 import { MemRepo } from "./helpers";
-import { runSetup, SYS } from "../src/shared/setup";
-import { addParent, removeParent, setMeta } from "../src/shared/model";
-import { deleteItem, restoreItem, cascadeCount } from "../src/shared/trash";
-import { isInInbox } from "../src/shared/placement";
+import { runSetup, SYS } from "@obtion/core/setup";
+import { addParent, removeParent, setMeta } from "@obtion/core/model";
+import { deleteItem, restoreItem, cascadeCount } from "@obtion/core/trash";
+import { isInInbox } from "@obtion/core/placement";
 
 function repo() {
   const m = new MemRepo();

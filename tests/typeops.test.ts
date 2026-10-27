@@ -1,10 +1,10 @@
 import { test, expect } from "bun:test";
 import { MemRepo } from "./helpers";
-import { runSetup, SYS, upgradeHideEmptyTaskFields } from "../src/shared/setup";
-import { META_TYPE, initItem, initSchema, setProp, upsertProp } from "../src/shared/model";
-import { deleteType, previewTagToType, tagToType, typeUsage, wouldBeInInbox } from "../src/shared/typeops";
-import { isInInbox } from "../src/shared/placement";
-import { languageCode, translations, translationInit, translationPlan, visibleProps } from "../src/shared/traits";
+import { runSetup, SYS, upgradeHideEmptyTaskFields } from "@obtion/core/setup";
+import { META_TYPE, initItem, initSchema, setProp, upsertProp } from "@obtion/core/model";
+import { deleteType, previewTagToType, tagToType, typeUsage, wouldBeInInbox } from "@obtion/core/typeops";
+import { isInInbox } from "@obtion/core/placement";
+import { languageCode, translations, translationInit, translationPlan, visibleProps } from "@obtion/core/traits";
 
 function books() {
   const m = new MemRepo();

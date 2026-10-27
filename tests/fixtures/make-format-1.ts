@@ -2,10 +2,10 @@
 // for this format; a new format gets its own fixture.
 import * as Y from "yjs";
 import { MemRepo } from "../helpers";
-import { runSetup } from "../../src/shared/setup";
-import { exampleFiles, fileFacts, writeExamples } from "../../src/shared/examples";
-import { sha256 } from "../../src/server/blobs";
-import { toB64 } from "../../src/shared/protocol";
+import { runSetup } from "@obtion/core/setup";
+import { exampleFiles, fileFacts, writeExamples } from "@obtion/core/examples";
+import { sha256 } from "@obtion/hub/blobs";
+import { toB64 } from "@obtion/core/protocol";
 
 const m = new MemRepo();
 runSetup(m.writer, "de");

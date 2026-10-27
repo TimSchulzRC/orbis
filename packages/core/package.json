@@ -1,0 +1,16 @@
+{
+  "name": "@obtion/core",
+  "description": "Data model, index, queries, search, setup, sync protocol and translations – no UI, no platform APIs",
+  "type": "module",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "exports": {
+    "./locales/*": "./locales/*",
+    "./*": "./src/*.ts"
+  },
+  "dependencies": {
+    "intl-messageformat": "^12.1.4",
+    "minisearch": "^7.2.0",
+    "yjs": "^13.6.33"
+  }
+}

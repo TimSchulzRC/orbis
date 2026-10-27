@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { createIndex, indexRecord, searchIds, snippet } from "../src/shared/search";
+import { createIndex, indexRecord, searchIds, snippet } from "@obtion/core/search";
 import { MemRepo } from "./helpers";
 
 function search(docs: { title: string; body?: string; tags?: string[] }[]) {

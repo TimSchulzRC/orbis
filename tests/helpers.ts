@@ -2,10 +2,10 @@ import * as Y from "yjs";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type Item, type ItemInit, initItem, readItem, newId } from "../src/shared/model";
-import { Index } from "../src/shared/graph";
-import { resolveCascade } from "../src/shared/trash";
-import type { Writer } from "../src/shared/setup";
+import { type Item, type ItemInit, initItem, readItem, newId } from "@obtion/core/model";
+import { Index } from "@obtion/core/graph";
+import { resolveCascade } from "@obtion/core/trash";
+import type { Writer } from "@obtion/core/setup";
 
 const temps: string[] = [];
 /** A fresh data directory for a hub store; removed again by `removeTempDirs` (call it in afterAll). */

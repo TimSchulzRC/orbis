@@ -1,9 +1,9 @@
 // Deletes every type in OBTION_DATA the way the app does (values stay as free properties).
 // For the browser smoke test: the app has to run with zero types. Never point it at data/.
 import { resolve } from "node:path";
-import { Store } from "../src/server/store";
-import { storeWriter } from "../src/server/importers";
-import { deleteType } from "../src/shared/typeops";
+import { Store } from "@obtion/hub/store";
+import { storeWriter } from "@obtion/hub/importers";
+import { deleteType } from "@obtion/core/typeops";
 
 const dir = process.env.OBTION_DATA;
 if (!dir || resolve(dir) === resolve(import.meta.dir, "../data")) throw new Error("set OBTION_DATA to a test directory");
