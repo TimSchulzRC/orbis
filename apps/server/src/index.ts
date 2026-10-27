@@ -1,21 +1,20 @@
-// Obtion server: serves the web app, the sync WebSocket, the MCP endpoint and the
-// in-app agent. Intended to run on the NAS / home server behind Tailscale.
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+// Obtion server: accounts and workspaces, the sync WebSocket, the API and MCP endpoint of every
+// workspace, the in-app agent; serves the web app too (unless OBTION_WEB_APP=off).
+//
+// Everything of a workspace lives under /w/<id>/… (sync, files, activity, undo, agent, MCP) and
+// needs a member's token (Authorization: Bearer, on the WebSocket as subprotocol). With a token
+// any site may call it (CORS): an app served by one server can hold workspaces of others.
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve, extname } from "node:path";
 import type { ServerWebSocket } from "bun";
-import { AreaError, Store } from "./store";
-import { Mirror } from "./mirror";
-import { handleMcp, INSTRUCTIONS } from "./mcp";
-import { agentAvailable, runAgent } from "./agent";
-import { Blobs, MAX_BLOB } from "./blobs";
-import { Backups } from "./backup";
-import { FORMAT, PERSONAL, SETTINGS_ID, fileTypeOf } from "@obtion/core/model";
-import { addLaterDefaultProps, migrateCollections, renameShippedLabels, upgradeAreas, upgradeHideEmptyTaskFields, upgradeStartPage } from "@obtion/core/setup";
-import type { Lang } from "@obtion/core/i18n";
-import { storeWriter } from "./importers";
-import { UndoError, redoStep, undoStep } from "./undo";
-import { DEFAULT_TRUSTED, allowedHosts, trustedProxies } from "./trust";
-import { type ClientMsg, type ServerMsg, type WireUpdate, fromB64, toB64 } from "@obtion/core/protocol";
+import { Store } from "./store";
+import { INSTRUCTIONS } from "./mcp";
+import { agentAvailable } from "./agent";
+import { Accounts, AccountError, type SignupPolicy } from "./accounts";
+import { type Conn, Workspace } from "./workspace";
+import { SETTINGS_ID } from "@obtion/core/model";
+import type { ClientMsg } from "@obtion/core/protocol";
+import { allowedHosts } from "./trust";
 
 const PORT = Number(process.env.PORT ?? 8480);
 const HOST = process.env.HOST ?? "127.0.0.1";
@@ -25,95 +24,45 @@ const DIST = resolve(process.env.OBTION_WEB_DIST ?? join(import.meta.dir, "../..
 const PUBLIC_URL = process.env.OBTION_PUBLIC_URL ?? "";
 /** Every server brings the web app; OBTION_WEB_APP=off makes it a server for sync, API and MCP only. */
 const WEB_APP = !/^(off|0|false|no)$/i.test(process.env.OBTION_WEB_APP ?? "on");
+/** Who may create an account (the first one always may, it becomes the admin): open | invite | off. */
+const SIGNUP = (["open", "invite", "off"].includes(process.env.OBTION_SIGNUP ?? "") ? process.env.OBTION_SIGNUP : "invite") as SignupPolicy;
+/** Who may use the in-app agent (it runs on the server's Claude login): admins | all | off. */
+const AGENT = (process.env.OBTION_AGENT ?? "admins").toLowerCase();
 
-mkdirSync(DATA, { recursive: true });
 const configPath = join(DATA, "config.json");
-const config: { token: string } = existsSync(configPath)
-  ? JSON.parse(readFileSync(configPath, "utf8"))
-  : { token: Buffer.from(crypto.getRandomValues(new Uint8Array(24))).toString("base64url") };
-if (!existsSync(configPath)) writeFileSync(configPath, JSON.stringify(config, null, 2), { mode: 0o600 });
+const random = () => Buffer.from(crypto.getRandomValues(new Uint8Array(24))).toString("base64url");
+// token: the MCP token from before accounts (still opens the data from then at /mcp);
+// agentToken: lets the in-app agent call the MCP endpoint of any workspace (never leaves the server)
+const config: { token: string; agentToken?: string; authSecret?: string } = existsSync(configPath) ? JSON.parse(readFileSync(configPath, "utf8")) : { token: random() };
+const freshConfig = !config.agentToken || !config.authSecret || !existsSync(configPath);
+config.agentToken ??= random();
+config.authSecret ??= random() + random();
+if (freshConfig) writeFileSync(configPath, JSON.stringify(config, null, 2), { mode: 0o600 });
 
-const store = new Store(DATA);
-// Properties shipped after a default type was set up ("Wartet auf"): added once, nothing migrated.
-{
-  const lang = store.records.get(SETTINGS_ID)?.settings?.setupLang as Lang | undefined;
-  if (lang && addLaterDefaultProps(storeWriter(store, "system:setup"), lang).length) store.flush();
-  if (lang && upgradeStartPage(storeWriter(store, "system:setup"), lang)) store.flush();
-  if (lang && renameShippedLabels(storeWriter(store, "system:setup"), lang)) store.flush();
-  if (upgradeHideEmptyTaskFields(storeWriter(store, "system:setup"))) store.flush();
-  // collections are gone (26.10.): their views go to the types, the inbox rule to the settings
-  const moved = lang ? migrateCollections(storeWriter(store, "system:setup"), store.index(), store.eachDoc(), lang) : [];
-  if (moved.length) (store.flush(), console.log(`[obtion] collections migrated:\n  ${moved.join("\n  ")}`));
-  // areas (27.10.): every document from before belongs to the personal area
-  const marked = upgradeAreas(storeWriter(store, "system:setup"), store.eachDoc());
-  if (marked) (store.flush(), console.log(`[obtion] areas: ${marked} documents marked as personal`));
-}
-/** The areas a device may sync. One for now; with accounts (later) the server decides per user. */
-const AREAS = new Set([PERSONAL]);
-const blobs = new Blobs(join(DATA, "blobs"), store);
-const mirror = new Mirror(store, join(DATA, "vault"), blobs);
-
-console.log(`[obtion] ${store.records.size} nodes, seq ${store.seq}, data in ${DATA}`);
-
-// ---------- sync server ----------
-
-interface Conn {
-  areas: Set<string>; // said hello for these: only then it gets (and may push) their updates
-  origin: string;
-  user: string;
-}
-const conns = new Set<ServerWebSocket<Conn>>();
-
-function send(ws: ServerWebSocket<Conn>, msg: ServerMsg) {
-  ws.send(JSON.stringify(msg));
-}
-
-store.on({
-  update: (u, from) => {
-    const item: WireUpdate = { s: u.seq, d: u.doc, u: toB64(u.data), o: u.origin };
-    for (const ws of conns) if (ws.data.areas.has(u.area) && ws !== from) send(ws, { t: "updates", area: u.area, items: [item], last: u.seq, lastId: u.uid });
-  },
-  event: (event) => {
-    if (event.step) Object.assign(event, store.stepState(event.step));
-    const area = store.areaOf(event.doc) ?? PERSONAL;
-    for (const ws of conns) if (ws.data.areas.has(area)) send(ws, { t: "event", event });
-  },
-  record: (r) => {
-    if (r.file && blobs.needsWork(r)) blobs.schedule(r.id);
-  },
+const accounts = new Accounts(DATA, { secret: config.authSecret, baseURL: PUBLIC_URL || `http://${HOST}:${PORT}`, policy: SIGNUP });
+await accounts.init((dir) => {
+  const s = new Store(dir);
+  const lang = s.records.get(SETTINGS_ID)?.settings?.setupLang;
+  s.db.close();
+  return lang === "en" ? "Personal" : "Persönlich";
 });
-blobs.onStored = (hash) => {
-  for (const ws of conns) if (ws.data.areas.size) send(ws, { t: "blob", hash });
-};
-blobs.scan();
-mirror.start();
-new Backups(store, join(DATA, "backups")).start();
+const legacyId = (accounts.db.query("SELECT id FROM workspaces WHERE legacy = 1").get() as { id: string } | null)?.id;
 
-function handleHello(ws: ServerWebSocket<Conn>, msg: Extract<ClientMsg, { t: "hello" }>) {
-  const area = typeof msg.area === "string" ? msg.area : PERSONAL; // apps from before areas: personal
-  if (!AREAS.has(area)) return send(ws, { t: "denied", area });
-  if (msg.device) ws.data.origin = `web:${ws.data.user}@${String(msg.device).slice(0, 40)}`;
-  const last = store.last(area);
-  send(ws, { t: "welcome", hub: store.serverId, area, seq: last.seq, format: FORMAT });
-  const reset = !store.knowsCursor(area, msg.since, msg.sinceId); // server restored from an older backup; replica must merge everything
-  const ids = store.docsSince(area, reset ? 0 : msg.since);
-  const BATCH = 150;
-  if (ids.length === 0) send(ws, { t: "updates", area, items: [], last: last.seq, lastId: last.uid || undefined, initial: true, done: true, reset });
-  for (let i = 0; i < ids.length; i += BATCH) {
-    const items = ids.slice(i, i + BATCH).map((d) => ({ d, u: toB64(store.stateOf(d)) }));
-    const done = i + BATCH >= ids.length;
-    // Only the final batch carries the real position, so an interrupted first sync is retried.
-    send(ws, { t: "updates", area, items, last: done ? last.seq : 0, lastId: done ? last.uid || undefined : undefined, initial: true, done, reset: reset && i === 0 });
-  }
-  ws.data.areas.add(area);
+/** Workspaces in use, opened on first use. */
+const open = new Map<string, Workspace>();
+function workspace(id: string): Workspace | undefined {
+  let w = open.get(id);
+  if (!w && accounts.exists(id)) open.set(id, (w = new Workspace(id, accounts.dir(id))));
+  return w;
 }
+
+console.log(`[obtion] ${accounts.userCount()} accounts, signup ${SIGNUP}, data in ${DATA}`);
 
 // ---------- http ----------
 
 /**
- * Browsers always send Origin on WebSocket upgrades and cross-site requests. Reject
- * other sites (cross-site WebSocket hijacking, CSRF against the agent and uploads).
- * Requests without Origin come from non-browser clients on the tailnet.
+ * Browsers always send Origin on WebSocket upgrades and cross-site requests. Requests that
+ * rely on nothing but being sent by a browser (the sign-in pages) must come from this site.
  */
 function sameOrigin(req: Request): boolean {
   const origin = req.headers.get("origin");
@@ -131,47 +80,38 @@ const allowedHost = allowedHosts([
   ...(process.env.OBTION_ALLOWED_HOSTS ?? "").split(","),
 ]);
 
-/** Uploads: only kinds the app knows how to show (no HTML, scripts, executables). */
-const UPLOAD_OK = (name: string) => fileTypeOf(name) !== "sonstiges" || /\.(zip|json|xml|ics|vcf)$/i.test(name);
-const INLINE = /^(image\/(png|jpeg|gif|webp|avif|bmp|svg\+xml)|application\/pdf|audio\/|video\/|text\/plain)/;
-
-async function sniffImage(path: string): Promise<string> {
-  const head = new Uint8Array(await Bun.file(path).slice(0, 12).arrayBuffer());
-  if (head[0] === 0x89 && head[1] === 0x50) return "image/png";
-  if (head[0] === 0xff && head[1] === 0xd8) return "image/jpeg";
-  if (String.fromCharCode(...head.slice(8, 12)) === "WEBP") return "image/webp";
-  return "application/octet-stream";
+/** The bearer token of a request; on a WebSocket (no headers in browsers) the subprotocol "auth.<token>". */
+function tokenOf(req: Request): string | undefined {
+  const auth = req.headers.get("authorization");
+  if (auth?.startsWith("Bearer ")) return auth.slice(7).trim();
+  const proto = req.headers.get("sec-websocket-protocol");
+  return proto
+    ?.split(",")
+    .map((p) => p.trim())
+    .find((p) => p.startsWith("auth."))
+    ?.slice(5);
 }
 
-/**
- * tailscale serve adds who is calling (tailscale-user-login/-name). Only trusted when the
- * connection comes from a trusted proxy (trust.ts: loopback, or OBTION_TRUSTED_PROXIES) – with
- * HOST=0.0.0.0 anyone else could send the header.
- */
-const trusted = trustedProxies(process.env.OBTION_TRUSTED_PROXIES || DEFAULT_TRUSTED);
-let viaLocal = (_req: Request) => false; // set once the server runs (it knows the peer address)
-function userOf(req: Request) {
-  return (viaLocal(req) && req.headers.get("tailscale-user-login")) || "local";
-}
-function userName(req: Request) {
-  return (viaLocal(req) && req.headers.get("tailscale-user-name")) || undefined;
+/** With a token, any site may call: its answer is readable there (no cookies are involved). */
+function withCors(req: Request, res: Response): Response {
+  const origin = req.headers.get("origin");
+  if (origin && !sameOrigin(req)) {
+    res.headers.set("access-control-allow-origin", origin);
+    res.headers.set("access-control-expose-headers", "x-obtion-missing");
+    res.headers.append("vary", "origin");
+  }
+  return res;
 }
 
-function sse(gen: AsyncGenerator<unknown>, onClose: () => void): Response {
-  const enc = new TextEncoder();
-  const stream = new ReadableStream({
-    async start(controller) {
-      try {
-        for await (const ev of gen) controller.enqueue(enc.encode(`data: ${JSON.stringify(ev)}\n\n`));
-      } catch (e) {
-        controller.enqueue(enc.encode(`data: ${JSON.stringify({ type: "error", message: String(e) })}\n\n`));
-      } finally {
-        controller.close();
-      }
-    },
-    cancel: onClose,
-  });
-  return new Response(stream, { headers: { "content-type": "text/event-stream", "cache-control": "no-cache", "x-accel-buffering": "no" } });
+const json = (x: unknown, status = 200) => Response.json(x, { status });
+const fail = (e: unknown) => {
+  if (e instanceof AccountError) return json({ error: e.message }, e.status);
+  throw e;
+};
+
+async function body<T>(req: Request): Promise<T | null> {
+  if (!(req.headers.get("content-type") ?? "").includes("application/json")) return null;
+  return (await req.json().catch(() => null)) as T | null;
 }
 
 async function serveStatic(path: string): Promise<Response> {
@@ -190,6 +130,77 @@ async function serveStatic(path: string): Promise<Response> {
   });
 }
 
+const agentAllowed = (user: string) => agentAvailable() && (AGENT === "all" || (AGENT === "admins" && accounts.isAdmin(user)));
+
+/** The account API: who am I, my workspaces, invites, tokens. `null`: not this path. */
+async function accountApi(req: Request, path: string, url: URL): Promise<Response | null> {
+  if (path === "/api/info") {
+    return json({ signup: SIGNUP, firstAccount: accounts.userCount() === 0, agent: agentAvailable() });
+  }
+
+  if (path === "/api/account/signup" && req.method === "POST") {
+    const b = await body<{ name?: string; email?: string; password?: string; invite?: string; lang?: string }>(req);
+    if (!b?.email || !b.password) return json({ error: "email and password required" }, 400);
+    return accounts
+      .signUp({ name: b.name ?? "", email: b.email, password: b.password, invite: b.invite || undefined, personal: b.lang === "en" ? "Personal" : "Persönlich" })
+      .then((r) => json(r), fail);
+  }
+
+  if (path.startsWith("/api/invites/")) {
+    const code = path.slice("/api/invites/".length);
+    const inv = accounts.invite(code);
+    if (!inv) return json({ error: "invite invalid" }, 404);
+    if (req.method === "GET") return json({ workspace: inv.name, by: inv.by, signup: accounts.canSignUp(code) });
+  }
+
+  const token = tokenOf(req);
+  const user = await accounts.userOf(token);
+  if (!user) return path.startsWith("/api/account") || path.startsWith("/api/workspaces") || path.startsWith("/api/invites/") ? json({ error: "unauthorized" }, 401) : null;
+  try {
+    if (path === "/api/account" && req.method === "GET") {
+      return json({ user, admin: accounts.isAdmin(user.id), agent: agentAllowed(user.id), workspaces: accounts.workspacesOf(user.id) });
+    }
+    // another app (on another server's page) asks for its own session; see the connect page
+    if (path === "/api/account/session" && req.method === "POST") return json({ token: await accounts.newSession(user.id), user });
+    if (path === "/api/account/signout" && req.method === "POST") return (await accounts.signOut(token!), json({ ok: true }));
+    if (path === "/api/workspaces" && req.method === "POST") {
+      const b = await body<{ name?: string }>(req);
+      if (!b?.name?.trim()) return json({ error: "name required" }, 400);
+      return json(accounts.createWorkspace(user.id, b.name));
+    }
+    if (path.startsWith("/api/invites/") && req.method === "POST") return json(accounts.join(path.slice("/api/invites/".length), user.id));
+    const m = path.match(/^\/api\/workspaces\/([\w-]+)(\/[\w/-]*)?$/);
+    if (m) {
+      const [, id, sub = ""] = m as unknown as [string, string, string?];
+      if (!accounts.role(id, user.id)) return json({ error: "not a member" }, 403);
+      if (sub === "" && req.method === "PATCH") {
+        accounts.rename(id, user.id, (await body<{ name?: string }>(req))?.name ?? "");
+        return json({ ok: true });
+      }
+      if (sub === "/members" && req.method === "GET") return json(accounts.members(id));
+      if (sub.startsWith("/members/") && req.method === "DELETE") return (accounts.removeMember(id, user.id, sub.slice("/members/".length)), json({ ok: true }));
+      if (sub === "/invites" && req.method === "POST") return json({ code: accounts.createInvite(id, user.id) });
+      // MCP: a token for agents on this workspace, shown once
+      if (sub === "/mcp-token" && req.method === "POST") {
+        const base = PUBLIC_URL || `${url.protocol}//${req.headers.get("host")}`;
+        const mcpUrl = `${base}/w/${id}/mcp`;
+        const t = accounts.mcpToken(id, user.id);
+        return json({
+          mcpUrl,
+          token: t,
+          claudeCode: `claude mcp add --transport http obtion ${mcpUrl} --header "Authorization: Bearer ${t}" -s user`,
+          json: { mcpServers: { obtion: { type: "http", url: mcpUrl, headers: { Authorization: `Bearer ${t}` } } } },
+          vault: join(accounts.dir(id), "vault"),
+          instructions: INSTRUCTIONS,
+        });
+      }
+    }
+  } catch (e) {
+    return fail(e);
+  }
+  return null;
+}
+
 const server = Bun.serve<Conn>({
   port: PORT,
   hostname: HOST,
@@ -198,164 +209,85 @@ const server = Bun.serve<Conn>({
     const url = new URL(req.url);
     const path = url.pathname;
     if (!allowedHost(req.headers.get("host"))) return new Response("Unknown host. Add it to OBTION_ALLOWED_HOSTS or set OBTION_PUBLIC_URL.", { status: 421 });
-    const guarded = path === "/sync" || path === "/api/connect" || (path.startsWith("/api/") && req.method !== "GET");
-    if (guarded && !sameOrigin(req)) return new Response("Forbidden", { status: 403 });
 
-    if (path === "/sync") {
-      const user = userOf(req).split("@")[0]!;
-      if (srv.upgrade(req, { data: { areas: new Set<string>(), origin: `web:${user}`, user } })) return;
-      return new Response("Expected WebSocket", { status: 400 });
+    // sign-in and sign-up of the app's own page (Better Auth; accounts are created through /api/account/signup)
+    if (path.startsWith("/api/auth/")) {
+      if (!sameOrigin(req)) return new Response("Forbidden", { status: 403 });
+      if (path.startsWith("/api/auth/sign-up")) return new Response("Not found", { status: 404 });
+      return accounts.auth.handler(req);
     }
+
+    const api = path.startsWith("/api/") || path.startsWith("/w/") || path === "/mcp";
+    if (api && req.method === "OPTIONS") {
+      return withCors(req, new Response(null, { status: 204, headers: { "access-control-allow-methods": "GET, POST, PUT, PATCH, DELETE", "access-control-allow-headers": "authorization, content-type, x-obtion-probe, x-obtion-agent", "access-control-max-age": "86400" } }));
+    }
+    // a change without a token must come from this site (CSRF): without one only the sign-up is open
+    if (api && req.method !== "GET" && !tokenOf(req) && !sameOrigin(req)) return new Response("Forbidden", { status: 403 });
 
     if (path === "/mcp") {
-      const auth = req.headers.get("authorization") ?? "";
-      if (auth !== `Bearer ${config.token}`) return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401, headers: { "content-type": "application/json" } });
-      return handleMcp(store, req, blobs);
+      // the MCP address from before accounts: its token opens the data from then
+      if (!legacyId || req.headers.get("authorization") !== `Bearer ${config.token}`) return json({ error: "unauthorized" }, 401);
+      return workspace(legacyId)!.mcp(req);
     }
 
-    if (path === "/api/info") {
-      return Response.json({
-        user: userOf(req),
-        name: userName(req),
-        agent: agentAvailable(),
-        nodes: store.live().length,
-        seq: store.seq,
-      });
-    }
+    if (path.startsWith("/api/")) return withCors(req, (await accountApi(req, path, url)) ?? new Response("Not found", { status: 404 }));
 
-    if (path === "/api/connect") {
-      const base = PUBLIC_URL || `${url.protocol}//${req.headers.get("host")}`;
-      const mcpUrl = `${base}/mcp`;
-      return Response.json({
-        mcpUrl,
-        token: config.token,
-        claudeCode: `claude mcp add --transport http obtion ${mcpUrl} --header "Authorization: Bearer ${config.token}" -s user`,
-        json: { mcpServers: { obtion: { type: "http", url: mcpUrl, headers: { Authorization: `Bearer ${config.token}` } } } },
-        vault: join(DATA, "vault"),
-        instructions: INSTRUCTIONS,
-      });
-    }
-
-    if (path === "/api/activity") {
-      const before = Number(url.searchParams.get("before") ?? 0) || undefined;
-      const doc = url.searchParams.get("doc") ?? undefined;
-      return Response.json(store.events({ before, doc, limit: Number(url.searchParams.get("limit") ?? 60) }));
-    }
-
-    if (path === "/api/undo" && req.method === "POST") {
-      if (!(req.headers.get("content-type") ?? "").includes("application/json")) return new Response("JSON required", { status: 415 });
-      const body = (await req.json()) as { step?: string; redo?: boolean; device?: string };
-      if (typeof body.step !== "string") return new Response("step required", { status: 400 });
-      const actor = `web:${userOf(req).split("@")[0]}${body.device ? "@" + String(body.device).slice(0, 40) : ""}`;
-      try {
-        return Response.json((body.redo ? redoStep : undoStep)(store, body.step, actor));
-      } catch (e) {
-        if (e instanceof UndoError) return Response.json({ error: e.message }, { status: 409 });
-        throw e;
+    const m = path.match(/^\/w\/([\w-]{1,40})(\/.*)$/);
+    if (m) {
+      const [, id, rest] = m as unknown as [string, string, string];
+      const token = tokenOf(req) ?? (req.method === "GET" && rest.startsWith("/api/blobs/") ? (url.searchParams.get("t") ?? undefined) : undefined);
+      if (rest === "/mcp") {
+        // the in-app agent (server-internal token) or an agent with a member's MCP token
+        const agent = token === config.agentToken;
+        const user = agent ? undefined : token && accounts.mcpUser(id, token);
+        if ((!agent && !user) || !workspace(id)) return json({ error: "unauthorized" }, 401);
+        return workspace(id)!.mcp(req);
       }
-    }
-
-    if (path === "/api/agent" && req.method === "POST") {
-      if (!(req.headers.get("content-type") ?? "").includes("application/json")) return new Response("JSON required", { status: 415 });
-      const body = (await req.json()) as { message: string; sessionId?: string; context?: string; model?: string };
-      if (!body.message?.trim()) return new Response("message required", { status: 400 });
-      const ac = new AbortController();
-      req.signal.addEventListener("abort", () => ac.abort());
-      const gen = runAgent({
-        message: body.message,
-        sessionId: body.sessionId,
-        context: body.context,
-        model: body.model || process.env.OBTION_AGENT_MODEL || "sonnet",
-        mcpUrl: `http://127.0.0.1:${PORT}/mcp`,
-        token: config.token,
-        dataDir: DATA,
-        signal: ac.signal,
-      });
-      return sse(gen, () => ac.abort());
-    }
-
-    if (path.startsWith("/api/blobs/")) {
-      const hash = path.slice("/api/blobs/".length);
-      if (!Blobs.valid(hash)) return new Response("bad hash", { status: 400 });
-      if (req.method === "PUT") {
-        const name = url.searchParams.get("name") ?? "";
-        if (!UPLOAD_OK(name) && !url.searchParams.has("derived")) return new Response("File type not allowed", { status: 415 });
-        if (Number(req.headers.get("content-length") ?? 0) > MAX_BLOB) return new Response("Too large", { status: 413 });
-        const data = new Uint8Array(await req.arrayBuffer());
-        if (data.length > MAX_BLOB) return new Response("Too large", { status: 413 });
-        return (await blobs.put(hash, data)) ? Response.json({ ok: true }) : new Response("Hash mismatch", { status: 422 });
+      const user = await accounts.userOf(token);
+      if (!user) return withCors(req, json({ error: "unauthorized" }, 401));
+      if (!accounts.role(id, user.id)) return withCors(req, json({ error: "not a member" }, 403));
+      const w = workspace(id);
+      if (!w) return withCors(req, json({ error: "no such workspace" }, 404));
+      if (rest === "/sync") {
+        const name = user.name.split(/\s+/)[0] || user.email.split("@")[0]!;
+        const ok = srv.upgrade(req, { data: { workspace: id, areas: new Set<string>(), origin: `web:${name}`, user: name }, headers: { "sec-websocket-protocol": "obtion" } });
+        return ok ? undefined : new Response("Expected WebSocket", { status: 400 });
       }
-      // the app asks politely (no error in the console) and shows "Datei fehlt"
-      if (!blobs.has(hash)) return req.headers.get("x-obtion-probe") ? new Response(null, { status: 204, headers: { "x-obtion-missing": "1" } }) : new Response("Not found", { status: 404 });
-      if (url.searchParams.has("check")) return new Response(null, { status: 204 });
-      const rec = store.live().find((r) => r.file?.hash === hash) ?? [...store.records.values()].find((r) => r.file?.hash === hash);
-      const mime = rec?.file?.mime ?? (await sniffImage(blobs.path(hash))); // derived versions: WebP (or PNG/JPEG from a device)
-      const headers: Record<string, string> = {
-        "cache-control": "private, max-age=31536000, immutable",
-        "x-content-type-options": "nosniff",
-        // Never let a file run as part of the app (SVG, HTML-like content).
-        "content-security-policy": mime === "application/pdf" ? "script-src 'none'" : "sandbox",
-        "content-type": INLINE.test(mime) ? mime : "application/octet-stream",
-      };
-      const fname = (url.searchParams.get("name") ?? rec?.file?.name ?? hash).replace(/["\\\r\n]/g, "");
-      if (url.searchParams.has("download") || !INLINE.test(mime)) headers["content-disposition"] = `attachment; filename*=UTF-8''${encodeURIComponent(fname)}`;
-      return new Response(Bun.file(blobs.path(hash)), { headers });
+      const res = await w.handle(req, rest, {
+        user: user.name.split(/\s+/)[0] || user.email.split("@")[0]!,
+        agent: { allowed: agentAllowed(user.id), mcpUrl: `http://127.0.0.1:${PORT}/w/${id}/mcp`, token: config.agentToken!, model: process.env.OBTION_AGENT_MODEL },
+      });
+      return withCors(req, res);
     }
 
-    if (path.startsWith("/api/")) return new Response("Not found", { status: 404 });
     if (!WEB_APP) return new Response("This Obtion server serves sync, API and MCP only (OBTION_WEB_APP=off).", { status: 404 });
     return serveStatic(path);
   },
   websocket: {
     maxPayloadLength: 64 * 1024 * 1024,
     open(ws) {
-      conns.add(ws);
+      open.get(ws.data.workspace)?.conns.add(ws);
     },
     close(ws) {
-      conns.delete(ws);
+      open.get(ws.data.workspace)?.conns.delete(ws);
     },
-    message(ws, raw) {
+    message(ws: ServerWebSocket<Conn>, raw) {
       let msg: ClientMsg;
       try {
         msg = JSON.parse(String(raw));
       } catch {
         return;
       }
-      if (msg.t === "hello") handleHello(ws, msg);
-      else if (msg.t === "ping") send(ws, { t: "pong" });
-      else if (msg.t === "push") {
-        // only after the welcome: the client has to know which server it writes to (server-id check);
-        // no ack, so its outbox keeps the changes and sends them again after the next hello
-        const area = typeof msg.area === "string" ? msg.area : PERSONAL;
-        if (!ws.data.areas.has(area)) return;
-        const keys: string[] = [];
-        for (const it of msg.items) {
-          try {
-            const step = typeof it.s === "string" && /^[\w-]{1,40}$/.test(it.s) ? it.s : undefined;
-            store.applyRemote(it.d, fromB64(it.u), ws.data.origin, ws, step, area);
-            keys.push(it.k);
-          } catch (e) {
-            if (e instanceof AreaError) console.error(`[sync] refused: ${e.message}`);
-            else console.error("[sync] bad update", it.d, e);
-            keys.push(it.k); // drop malformed or misplaced updates instead of retrying forever
-          }
-        }
-        const last = store.last(area);
-        send(ws, { t: "ack", area, keys, last: last.seq, lastId: last.uid || undefined });
-      }
+      open.get(ws.data.workspace)?.message(ws, msg);
     },
   },
 });
 
-viaLocal = (r) => trusted(server.requestIP(r)?.address);
-
 console.log(`[obtion] listening on http://${server.hostname}:${server.port}${WEB_APP ? "" : " (no web app: OBTION_WEB_APP=off)"}`);
 
-process.on("SIGTERM", () => {
-  store.flush();
+function stop() {
+  for (const w of open.values()) w.close();
   process.exit(0);
-});
-process.on("SIGINT", () => {
-  store.flush();
-  process.exit(0);
-});
+}
+process.on("SIGTERM", stop);
+process.on("SIGINT", stop);

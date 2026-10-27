@@ -1,10 +1,13 @@
-// Admin CLI. Run while the server is stopped (it keeps all documents in memory):
+// Admin CLI. Run while the server is stopped (it keeps all documents in memory). Works on one
+// workspace: --workspace <id>, or the only one there is (or the data from before accounts):
 //   bun apps/server/src/cli.ts setup [de|en] [--examples]
 //   bun apps/server/src/cli.ts import-obsidian <vault> [--no-moc-parents]
 //   bun apps/server/src/cli.ts import-notion <json> [--project-type Projekt] [--task-type Task]
 //   bun apps/server/src/cli.ts stats
-import { join, resolve } from "node:path";
+import { existsSync } from "node:fs";
+import { basename, join, resolve } from "node:path";
 import { Store } from "./store";
+import { workspaceDirs } from "./accounts";
 import { Blobs } from "./blobs";
 import { runSetup, SYS } from "@obtion/core/setup";
 import { META_TYPE } from "@obtion/core/model";
@@ -31,8 +34,24 @@ if (running && cmd !== "stats" && !flag("force")) {
   process.exit(1);
 }
 
-const store = new Store(DATA);
-const blobs = new Blobs(join(DATA, "blobs"), store);
+/** The folder of the workspace to work on (see the top). */
+function workspaceDir(): string {
+  const id = opt("workspace");
+  const dirs = workspaceDirs(DATA);
+  if (id) {
+    const dir = dirs.find((d) => basename(d) === id);
+    if (!dir) (console.error(`No workspace ${id} in ${DATA}.`), process.exit(1));
+    return dir;
+  }
+  if (existsSync(join(DATA, "obtion.db")) || dirs.length === 0) return DATA; // before accounts: the folder itself
+  if (dirs.length === 1) return dirs[0]!;
+  console.error(`Several workspaces – name one with --workspace:\n  ${dirs.map((d) => basename(d)).join("\n  ")}`);
+  process.exit(1);
+}
+
+const DIR = workspaceDir();
+const store = new Store(DIR);
+const blobs = new Blobs(join(DIR, "blobs"), store);
 const lang = (opt("lang", store.records.get("sys:settings")?.settings?.setupLang ?? "de") as Lang) ?? "de";
 const log = (m: string) => console.log(m);
 
@@ -57,7 +76,7 @@ if (cmd === "stats") {
   runSetup(storeWriter(store, "system:setup"), lang, "system:setup");
   importNotion(store, resolve(positional[0] ?? "seed/notion.json"), { lang, projectType: opt("project-type", SYS.project)!, taskType: opt("task-type", SYS.task)! }, log);
 } else {
-  console.log("usage: cli.ts setup [de|en] [--examples] | import-obsidian <vault> | import-notion <json> [--project-type X] [--task-type Y] | stats");
+  console.log("usage: cli.ts setup [de|en] [--examples] | import-obsidian <vault> | import-notion <json> [--project-type X] [--task-type Y] | stats   [--workspace <id>]");
   process.exit(1);
 }
 store.flush();

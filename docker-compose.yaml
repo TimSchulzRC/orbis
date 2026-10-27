@@ -7,8 +7,8 @@ services:
     image: obtion-server
     restart: unless-stopped
     ports:
-      # on every address of the host (LAN, tailnet, …). The server has no login yet:
-      # whoever reaches the port can read and change everything.
+      # on every address of the host (LAN, tailnet, …); the first account created on the page
+      # becomes the admin
       - "${OBTION_BIND:-0.0.0.0}:${OBTION_PORT:-8480}:8480"
     volumes:
       # an ordinary folder on the host: database, daily backups, files, Markdown mirror
@@ -17,15 +17,7 @@ services:
       OBTION_PUBLIC_URL: ${OBTION_PUBLIC_URL:-}
       OBTION_ALLOWED_HOSTS: ${OBTION_ALLOWED_HOSTS:-}
       OBTION_WEB_APP: ${OBTION_WEB_APP:-on}
-      # a proxy on the host (e.g. tailscale serve) reaches the container through this network's
-      # gateway; only from there the server believes the caller's name
-      OBTION_TRUSTED_PROXIES: 172.30.0.1
-    networks:
-      - obtion
-
-networks:
-  obtion:
-    ipam:
-      config:
-        - subnet: 172.30.0.0/24
-          gateway: 172.30.0.1
+      # who may create an account: invite (with an invite link), open (anyone), off
+      OBTION_SIGNUP: ${OBTION_SIGNUP:-invite}
+      # who may use the in-app agent (the server's Claude login): admins, all, off
+      OBTION_AGENT: ${OBTION_AGENT:-admins}

@@ -1,12 +1,15 @@
-// The server as a program: who it trusts with the caller's identity, with and without the web app,
-// and the sync per area. Starts real servers.
+// The server as a program: accounts and workspaces (who sees what), with and without the web app,
+// the data from before accounts, and the sync per workspace. Starts real servers.
 import { test, expect, beforeAll, afterAll } from "bun:test";
 import { createServer } from "node:net";
 import * as Y from "yjs";
 import { tempDir, removeTempDirs } from "./helpers";
 import { FORMAT, PERSONAL, initItem } from "@obtion/core/model";
 import { type ServerMsg, toB64 } from "@obtion/core/protocol";
-import { allowedHosts, trustedProxies } from "@obtion/server/trust";
+import { allowedHosts } from "@obtion/server/trust";
+import { Store } from "@obtion/server/store";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 
 function freePort(): Promise<number> {
   return new Promise((res) => {
@@ -38,33 +41,33 @@ async function start(env: Record<string, string>): Promise<string> {
 
 let plain = "";
 let bare = "";
+let legacy = "";
+let legacyDir = "";
 beforeAll(async () => {
   plain = await start({ OBTION_DATA: tempDir("obtion-server-") });
-  bare = await start({ OBTION_DATA: tempDir("obtion-server-"), OBTION_TRUSTED_PROXIES: "10.0.0.0/8, 192.168.1.5", OBTION_WEB_APP: "off" });
+  bare = await start({ OBTION_DATA: tempDir("obtion-server-"), OBTION_WEB_APP: "off", OBTION_SIGNUP: "open" });
+  // a data folder from before accounts, with one item
+  legacyDir = tempDir("obtion-server-");
+  const s = new Store(legacyDir);
+  s.create({ title: "Von früher" }, "test", { id: "old-1" });
+  s.flush();
+  s.db.close();
+  legacy = await start({ OBTION_DATA: legacyDir });
 });
 afterAll(async () => {
   for (const p of procs) (p.kill(), await p.exited);
   removeTempDirs();
 });
 
-const who = (base: string) => fetch(base + "/api/info", { headers: { "tailscale-user-login": "ada@example.org", "tailscale-user-name": "Ada" } }).then((r) => r.json());
-
-test("trusted proxies: loopback by default; addresses and ranges from the list; anything else is not", () => {
-  const def = trustedProxies();
-  expect(def("127.0.0.1")).toBe(true);
-  expect(def("::1")).toBe(true);
-  expect(def("::ffff:127.0.0.1")).toBe(true);
-  expect(def("172.17.0.1")).toBe(false);
-  expect(def(undefined)).toBe(false);
-  const list = trustedProxies("172.16.0.0/12, 10.1.2.3, fd00::1, nonsense, 1.2.3.4/99");
-  expect(list("172.17.0.1")).toBe(true);
-  expect(list("172.31.255.255")).toBe(true);
-  expect(list("172.32.0.1")).toBe(false);
-  expect(list("::ffff:10.1.2.3")).toBe(true);
-  expect(list("10.1.2.4")).toBe(false);
-  expect(list("FD00::1")).toBe(true);
-  expect(list("127.0.0.1")).toBe(false); // a list replaces the default
-});
+const post = (base: string, path: string, body: unknown, token?: string, headers: Record<string, string> = {}) =>
+  fetch(base + path, { method: "POST", headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}), ...headers }, body: JSON.stringify(body) });
+const get = (base: string, path: string, token?: string) => fetch(base + path, { headers: token ? { authorization: `Bearer ${token}` } : {} });
+async function signUp(base: string, email: string, invite?: string): Promise<{ token: string; user: { id: string } }> {
+  const res = await post(base, "/api/account/signup", { name: email.split("@")[0], email, password: "geheim12345", invite });
+  if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+  return res.json();
+}
+const account = (base: string, token: string) => get(base, "/api/account", token).then((r) => r.json());
 
 test("host names: addresses and private names on any port, public names only when configured", () => {
   const ok = allowedHosts(["obtion.example.org", "notes.example.com:8443", ""]);
@@ -74,12 +77,85 @@ test("host names: addresses and private names on any port, public names only whe
     expect([h, ok(h)]).toEqual([h, false]);
 });
 
-test("the identity headers count from a trusted proxy only", async () => {
-  expect(await who(plain)).toMatchObject({ user: "ada@example.org", name: "Ada" });
-  // the second server trusts only 10.0.0.0/8 and 192.168.1.5: the same request from loopback is anonymous
-  const anon = await who(bare);
-  expect(anon.user).toBe("local");
-  expect(anon.name).toBeUndefined();
+test("the first account is the admin with a personal workspace; then only with an invite (default)", async () => {
+  expect(await get(plain, "/api/info").then((r) => r.json())).toMatchObject({ signup: "invite", firstAccount: true });
+  const ada = await signUp(plain, "ada@example.org");
+  const me = await account(plain, ada.token);
+  expect(me).toMatchObject({ admin: true, user: { email: "ada@example.org" } });
+  expect(me.workspaces).toEqual([{ id: expect.any(String), name: "Persönlich", role: "owner" }]);
+  expect((await post(plain, "/api/account/signup", { email: "eve@example.org", password: "geheim12345" })).status).toBe(403);
+  expect((await get(plain, "/api/account")).status).toBe(401);
+
+  // an invite link: Bob joins Ada's workspace and gets none of his own
+  const ws = me.workspaces[0].id as string;
+  const { code } = await post(plain, `/api/workspaces/${ws}/invites`, {}, ada.token).then((r) => r.json());
+  expect(await get(plain, `/api/invites/${code}`).then((r) => r.json())).toEqual({ workspace: "Persönlich", by: "ada", signup: true });
+  const bob = await signUp(plain, "bob@example.org", code);
+  expect((await account(plain, bob.token)).workspaces).toEqual([{ id: ws, name: "Persönlich", role: "member" }]);
+  expect((await account(plain, bob.token)).admin).toBe(false);
+  expect((await get(plain, `/api/workspaces/${ws}/members`, bob.token).then((r) => r.json())).map((m: any) => m.role)).toEqual(["owner", "member"]);
+  // the last owner cannot leave; a member can
+  expect((await fetch(`${plain}/api/workspaces/${ws}/members/${ada.user.id}`, { method: "DELETE", headers: { authorization: `Bearer ${ada.token}` } })).status).toBe(409);
+});
+
+test("a workspace is only open to its members – sync, files, activity, MCP", async () => {
+  const carla = await signUp(bare, "carla@example.org"); // open signup on this server
+  const dan = await signUp(bare, "dan@example.org");
+  const [cw] = (await account(bare, carla.token)).workspaces;
+  const [dw] = (await account(bare, dan.token)).workspaces;
+  expect(cw.id).not.toBe(dw.id);
+  expect((await get(bare, `/w/${cw.id}/api/activity`, carla.token)).status).toBe(200);
+  expect((await get(bare, `/w/${cw.id}/api/activity`, dan.token)).status).toBe(403);
+  expect((await get(bare, `/w/${cw.id}/api/activity`)).status).toBe(401);
+  const hash = "0".repeat(64);
+  expect((await get(bare, `/w/${cw.id}/api/blobs/${hash}`, dan.token)).status).toBe(403);
+  expect((await get(bare, `/w/${cw.id}/api/blobs/${hash}?t=${dan.token}`)).status).toBe(403);
+  expect((await get(bare, `/w/${cw.id}/api/blobs/${hash}?t=${carla.token}`)).status).toBe(404);
+  await expect(connect(bare, cw.id, dan.token)).rejects.toThrow();
+  // MCP: a member's token for one workspace opens that one only
+  const { token, mcpUrl } = await post(bare, `/api/workspaces/${cw.id}/mcp-token`, {}, carla.token).then((r) => r.json());
+  expect(mcpUrl).toEndWith(`/w/${cw.id}/mcp`);
+  const call = (ws: string, t: string) => post(bare, `/w/${ws}/mcp`, { jsonrpc: "2.0", id: 1, method: "tools/list" }, t, { accept: "application/json, text/event-stream" });
+  expect((await call(cw.id, token)).status).toBe(200);
+  expect((await call(dw.id, token)).status).toBe(401);
+  expect((await call(cw.id, carla.token)).status).toBe(401); // a session is no MCP token
+});
+
+test("with a token any site may call (CORS); without one, changes must come from the server's own page", async () => {
+  const eve = await signUp(bare, "eve@example.org");
+  const [w] = (await account(bare, eve.token)).workspaces;
+  const pre = await fetch(`${bare}/w/${w.id}/api/undo`, { method: "OPTIONS", headers: { origin: "https://app.example.org", "access-control-request-headers": "authorization, content-type" } });
+  expect(pre.status).toBe(204);
+  expect(pre.headers.get("access-control-allow-origin")).toBe("https://app.example.org");
+  expect(pre.headers.get("access-control-allow-headers")).toContain("authorization");
+  const res = await fetch(`${bare}/w/${w.id}/api/activity`, { headers: { origin: "https://app.example.org", authorization: `Bearer ${eve.token}` } });
+  expect(res.status).toBe(200);
+  expect(res.headers.get("access-control-allow-origin")).toBe("https://app.example.org");
+  // the sign-in of the server's own page: never from another site
+  expect((await post(bare, "/api/auth/sign-in/email", { email: "eve@example.org", password: "geheim12345" }, undefined, { origin: "https://evil.example.org" })).status).toBe(403);
+  const own = await post(bare, "/api/auth/sign-in/email", { email: "eve@example.org", password: "geheim12345" }, undefined, { origin: bare });
+  expect(own.status).toBe(200);
+  expect(await account(bare, (await own.json()).token)).toMatchObject({ user: { email: "eve@example.org" } });
+  // a further session for an app on another server's page
+  const { token } = await post(bare, "/api/account/session", {}, eve.token, { origin: "https://app.example.org" }).then((r) => r.json());
+  expect(token).not.toBe(eve.token);
+  expect((await account(bare, token)).user.email).toBe("eve@example.org");
+});
+
+test("the data from before accounts become a workspace of the first account; the old MCP address still opens them", async () => {
+  expect(existsSync(join(legacyDir, "obtion.db"))).toBe(false);
+  const ada = await signUp(legacy, "ada@example.org");
+  const [w] = (await account(legacy, ada.token)).workspaces;
+  expect(w).toEqual({ id: expect.any(String), name: "Persönlich", role: "owner", legacy: true });
+  expect(existsSync(join(legacyDir, "workspaces", w.id, "obtion.db"))).toBe(true);
+  const c = await connect(legacy, w.id, ada.token);
+  c.ws.send(JSON.stringify({ t: "hello", area: PERSONAL, since: 0, client: "a" }));
+  const first = (await c.until((m) => m.t === "updates" && !!m.done)) as Extract<ServerMsg, { t: "updates" }>;
+  expect(first.items.map((i) => i.d)).toContain("old-1");
+  c.ws.close();
+  const old = JSON.parse(readFileSync(join(legacyDir, "config.json"), "utf8")).token;
+  expect((await post(legacy, "/mcp", { jsonrpc: "2.0", id: 1, method: "tools/list" }, old, { accept: "application/json, text/event-stream" })).status).toBe(200);
+  expect((await post(legacy, "/mcp", { jsonrpc: "2.0", id: 1, method: "tools/list" }, "wrong", { accept: "application/json, text/event-stream" })).status).toBe(401);
 });
 
 test("every server brings the web app; OBTION_WEB_APP=off leaves sync, API and MCP", async () => {
@@ -92,12 +168,12 @@ test("every server brings the web app; OBTION_WEB_APP=off leaves sync, API and M
   expect((await fetch(bare + "/mcp", { method: "POST" })).status).toBe(401); // there, asks for its token
 });
 
-/** A sync connection that collects what the server sends. */
-async function connect(base: string) {
-  const ws = new WebSocket(base.replace("http", "ws") + "/sync");
+/** A sync connection to a workspace that collects what the server sends; the token goes as subprotocol, as in browsers. */
+async function connect(base: string, workspace: string, token: string) {
+  const ws = new WebSocket(`${base.replace("http", "ws")}/w/${workspace}/sync`, ["obtion", `auth.${token}`]);
   const msgs: ServerMsg[] = [];
   ws.onmessage = (e) => msgs.push(JSON.parse(String(e.data)));
-  await new Promise((r, j) => ((ws.onopen = r), (ws.onerror = j)));
+  await new Promise((r, j) => ((ws.onopen = r), (ws.onerror = j), (ws.onclose = j)));
   const until = async (pred: (m: ServerMsg) => boolean) => {
     for (let i = 0; i < 100; i++) {
       const m = msgs.find(pred);
@@ -109,26 +185,28 @@ async function connect(base: string) {
   return { ws, msgs, until };
 }
 
-for (const which of ["with", "without"] as const)
-  test(`sync per area (${which} the web app); an app from before areas means the personal one`, async () => {
-    const base = which === "with" ? plain : bare;
-    const a = await connect(base);
-    const b = await connect(base);
-    a.ws.send(JSON.stringify({ t: "hello", area: PERSONAL, since: 0, client: "a", device: "a" }));
-    b.ws.send(JSON.stringify({ t: "hello", since: 0, client: "b" })); // no area: from before
-    expect(await a.until((m) => m.t === "welcome")).toMatchObject({ area: PERSONAL, format: FORMAT });
-    expect(await b.until((m) => m.t === "welcome")).toMatchObject({ area: PERSONAL });
-    await b.until((m) => m.t === "updates" && !!m.done);
+test("sync per workspace: members get each other's changes; an app from before areas means the personal area", async () => {
+  const fay = await signUp(bare, "fay@example.org");
+  const [w] = (await account(bare, fay.token)).workspaces;
+  const { code } = await post(bare, `/api/workspaces/${w.id}/invites`, {}, fay.token).then((r) => r.json());
+  const gus = await signUp(bare, "gus@example.org", code);
+  const a = await connect(bare, w.id, fay.token);
+  const b = await connect(bare, w.id, gus.token);
+  a.ws.send(JSON.stringify({ t: "hello", area: PERSONAL, since: 0, client: "a", device: "a" }));
+  b.ws.send(JSON.stringify({ t: "hello", since: 0, client: "b" })); // no area: from before
+  expect(await a.until((m) => m.t === "welcome")).toMatchObject({ area: PERSONAL, format: FORMAT });
+  expect(await b.until((m) => m.t === "welcome")).toMatchObject({ area: PERSONAL });
+  await b.until((m) => m.t === "updates" && !!m.done);
 
-    const d = new Y.Doc({ guid: "n1" });
-    d.transact(() => initItem(d, { title: "Aus dem Test" }));
-    a.ws.send(JSON.stringify({ t: "push", area: PERSONAL, items: [{ k: "k1", d: "n1", u: toB64(Y.encodeStateAsUpdate(d)) }] }));
-    expect(await a.until((m) => m.t === "ack")).toMatchObject({ area: PERSONAL, keys: ["k1"] });
-    const relayed = (await b.until((m) => m.t === "updates" && m.items.some((i) => i.d === "n1"))) as Extract<ServerMsg, { t: "updates" }>;
-    expect(relayed.area).toBe(PERSONAL);
+  const d = new Y.Doc({ guid: "n1" });
+  d.transact(() => initItem(d, { title: "Aus dem Test" }));
+  a.ws.send(JSON.stringify({ t: "push", area: PERSONAL, items: [{ k: "k1", d: "n1", u: toB64(Y.encodeStateAsUpdate(d)) }] }));
+  expect(await a.until((m) => m.t === "ack")).toMatchObject({ area: PERSONAL, keys: ["k1"] });
+  const relayed = (await b.until((m) => m.t === "updates" && m.items.some((i) => i.d === "n1"))) as Extract<ServerMsg, { t: "updates" }>;
+  expect(relayed.items.find((i) => i.d === "n1")!.o).toBe("web:fay@a");
 
-    // an area this server does not hold for the device: refused, the connection stays
-    a.ws.send(JSON.stringify({ t: "hello", area: "team-x", since: 0, client: "a" }));
-    expect(await a.until((m) => m.t === "denied")).toEqual({ t: "denied", area: "team-x" });
-    for (const c of [a, b]) c.ws.close();
-  });
+  // another area inside the workspace: refused, the connection stays
+  a.ws.send(JSON.stringify({ t: "hello", area: "team-x", since: 0, client: "a" }));
+  expect(await a.until((m) => m.t === "denied")).toEqual({ t: "denied", area: "team-x" });
+  for (const c of [a, b]) c.ws.close();
+});
