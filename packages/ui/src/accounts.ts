@@ -14,8 +14,6 @@ export interface Account {
   token: string;
   user: { id: string; name: string; email: string };
   admin?: boolean;
-  /** may use the in-app agent */
-  agent?: boolean;
   /** the server no longer accepts the token: sign in again */
   lost?: boolean;
 }
@@ -123,8 +121,6 @@ export function activate(id: string) {
   }
 }
 
-/** May the account use the in-app agent? (on the server and for this account) */
-export const agentHere = () => !!account?.agent;
 
 /** A workspace's API (/w/<id>/api/…). */
 export const spaceFetch = (id: string, path: string, init: RequestInit = {}) =>
@@ -149,7 +145,7 @@ export async function refresh() {
   let gone: Space[] = [];
   try {
     const me = await call("/api/account");
-    Object.assign(account, { user: me.user, admin: me.admin, agent: me.agent, lost: false });
+    Object.assign(account, { user: me.user, admin: me.admin, lost: false });
     const known = new Map(spaces.map((s) => [s.id, s]));
     // gone on the server (deleted, or this account removed): the copy here goes too
     gone = spaces.filter((s) => !me.workspaces.some((w: Space) => w.id === s.id));
@@ -262,7 +258,7 @@ export async function joinInvite(code: string) {
 }
 
 export const invite = (code: string): Promise<{ workspace: string; by: string; signup: boolean }> => call(`/api/invites/${code}`);
-export const serverInfo = (): Promise<{ signup: "open" | "invite" | "off"; firstAccount: boolean; agent: boolean }> => call("/api/info");
+export const serverInfo = (): Promise<{ signup: "open" | "invite" | "off"; firstAccount: boolean }> => call("/api/info");
 
 /** An MCP token for agents on a workspace, with the ready-made commands. */
 export const mcpToken = (s: Space) => call(`/api/workspaces/${s.id}/mcp-token`, {});

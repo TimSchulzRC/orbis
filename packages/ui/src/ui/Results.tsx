@@ -2,17 +2,15 @@ import { Button as ShadcnButton } from "../components/ui/button";
 // Showing query results: list, table, board, tree, gallery and triage ("sortieren").
 // Used by collections, query blocks in texts and the sections of a page.
 import { useState } from "react";
-import { AlertTriangle, ChevronDown, ChevronRight, EyeOff, Sparkles } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronRight, EyeOff } from "lucide-react";
 import { type Item, type StatusGroup, type ViewKind, todayISO } from "@obtion/core/model";
 import { type QueryDef, type EvalCtx, type Group as QGroup, FIELDS, fieldOf, groupItems, pathBase, runQuery, typesIn } from "@obtion/core/query";
 import { fmtDate, fmtNumber } from "@obtion/core/i18n";
 import { firstOfGroup, statusOf, statusProp } from "@obtion/core/traits";
 import { plainText } from "@obtion/core/search";
 import { repo } from "../repo";
-import { agentHere } from "../accounts";
 import { useIndex, useRepo, useSpaceId, itemHref, go } from "../hooks";
 import { useT } from "../i18n";
-import { askAgent } from "../actions";
 import { files, useBlobUrl } from "../files";
 import { ItemIcon, StatusPill, cx, Tag, ProgressCount } from "./bits";
 import { ItemRow, pathLabel, setStatus, treeOrder, Group } from "./Row";
@@ -32,27 +30,15 @@ export function useQuery(def: QueryDef, thisId?: string) {
 
 const isInboxQuery = (def: QueryDef) => !!def.where && "inbox" in def.where;
 
-/** Is the built-in agent available (on the server, for this account)? */
-function useAgentAvailable(): boolean {
-  return agentHere();
-}
-
 /** Under a shortened inbox list: how much is waiting, and a clear way to work through it. */
 function InboxNudge({ total }: { total: number }) {
   const { t } = useT();
-  const agent = useAgentAvailable();
-  const space = useSpaceId();
   return (
     <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 px-2 pt-1 text-sm">
       <span className="tabular-nums text-muted-foreground">{t("inbox.waiting", { count: total })}</span>
       <a href="#/inbox" className="font-medium text-fg underline-offset-2 hover:underline">
         {t("inbox.sortNow")}
       </a>
-      {agent && total >= 30 && (
-        <ShadcnButton variant="plain" size="none" onClick={() => askAgent(t("inbox.agentPrompt"), undefined, space)} className="inline-flex items-center gap-1 text-muted-foreground hover:text-fg">
-          <Sparkles size={13} /> {t("inbox.sortWithAgent")}
-        </ShadcnButton>
-      )}
     </div>
   );
 }

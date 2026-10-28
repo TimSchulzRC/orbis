@@ -17,7 +17,7 @@ import { useT, setLang } from "../i18n";
 import { Button, Dialog, ItemIcon, Seg, SectionTitle, TypeGlyph, cx } from "../ui/bits";
 import { chooseAction, notify } from "../ui/feedback";
 import { setTheme, useTheme } from "../theme";
-import { type Space, agentHere, deleteSpace, inviteLink, leaveSpace, mcpToken, members, renameSpace, replica, signOut, spaceById, useAccounts } from "../accounts";
+import { type Space, deleteSpace, inviteLink, leaveSpace, mcpToken, members, renameSpace, replica, signOut, spaceById, useAccounts } from "../accounts";
 import { NewSpaceDialog } from "../ui/Spaces";
 
 interface Connect {
@@ -296,8 +296,6 @@ export function SpaceSettingsPage() {
   useEffect(() => void (document.title = space?.name ?? t("space.settings")), [space?.name]);
   if (!space) return null;
   const newToken = () => mcpToken(space).then(setC, () => setErr(true));
-  // the built-in agent needs the Claude Code CLI on the server and the server's consent: say so here
-  const agentMissing = !agentHere();
   const s = r.status;
   const ix = r.index();
   const capture = r.get(SETTINGS_ID)?.settings?.captureTypes ?? [];
@@ -358,7 +356,6 @@ export function SpaceSettingsPage() {
       <section>
         <SectionTitle>{t("settings.agent")}</SectionTitle>
         <p className="mb-3 text-sm text-muted-foreground">{t("settings.agentIntro")}</p>
-        {agentMissing && <p className="mb-3 rounded-lg border border-line bg-surface-2 p-3 text-sm text-muted-foreground">{t("agent.noCli")}</p>}
         {err && !c && <p className="text-sm text-muted-foreground">{t("settings.connectOffline")}</p>}
         {!c && (
           <Button variant="outline" onClick={() => void newToken()}>

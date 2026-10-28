@@ -7,8 +7,8 @@ import { SETTINGS_ID } from "@obtion/core/model";
 import { useFiles, useRepo, useSpaceId, spaceHref } from "../hooks";
 import { shownSpaces, spaceById, useAccounts } from "../accounts";
 import { useT } from "../i18n";
-import { askAgent, capture, extractMentions, recentPlaces, rememberPlace } from "../actions";
-import { MenuItem, Popover, TypeGlyph, cx, Dialog, modName } from "./bits";
+import { capture, extractMentions, recentPlaces, rememberPlace } from "../actions";
+import { MenuItem, Popover, TypeGlyph, cx, Dialog } from "./bits";
 import { ItemPicker } from "./Picker";
 import { SpaceScope } from "./Spaces";
 import { notify } from "./feedback";
@@ -18,8 +18,7 @@ import { NOTE_ICON } from "./icons";
  * Capture field: Enter saves. Preset is a note (no type); where it goes follows from the model –
  * a note without a place is in the inbox, with a place below it; a type puts it into the list of
  * the type. Below the field: the type (the only chip) and "Einsortieren …" (a plain text button).
- * "/name text" picks a type by name, a page mentioned with @ is offered as the place. ⌘Enter sends
- * it to the agent.
+ * "/name text" picks a type by name, a page mentioned with @ is offered as the place.
  */
 export function Capture({ anywhere, ...p }: CaptureProps & { anywhere?: boolean }) {
   const [space, setSpace] = useState(() => (anywhere ? captureSpace() : undefined));
@@ -55,7 +54,7 @@ function CaptureField({ parent, autoFocus, onDone, compact, onSpace }: CapturePr
   const files = useFiles();
   const space = useSpaceId();
   const { spaces } = useAccounts();
-  const { t, lang } = useT();
+  const { t } = useT();
   const [text, setText] = useState("");
   const [type, setType] = useState<string | null>(null);
   const [place, setPlace] = useState<string | null>(null);
@@ -79,11 +78,6 @@ function CaptureField({ parent, autoFocus, onDone, compact, onSpace }: CapturePr
     const what = usedType ? ix.typeName(usedType) : t("capture.note");
     const msg = where ? t("capture.notifyUnder", { what, place: ix.get(where)?.title ?? "" }) : usedType ? t("capture.notifyAs", { what }) : t("capture.notifyInbox");
     notify(msg, undefined, { label: t("capture.open"), run: () => (location.hash = spaceHref(space, `/i/${encodeURIComponent(id)}`)) });
-    setText("");
-    onDone?.();
-  };
-  const ask = () => {
-    askAgent(text, undefined, space);
     setText("");
     onDone?.();
   };
@@ -112,8 +106,7 @@ function CaptureField({ parent, autoFocus, onDone, compact, onSpace }: CapturePr
           onBlur={() => setFocused(false)}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) (e.preventDefault(), ask());
-            else if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) (e.preventDefault(), save());
+            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) (e.preventDefault(), save());
           }}
           rows={1}
           placeholder={parent ? t("capture.placeholderHere") : t("capture.placeholder")}
@@ -125,7 +118,7 @@ function CaptureField({ parent, autoFocus, onDone, compact, onSpace }: CapturePr
           <Paperclip size={15} />
           <Input type="file" multiple className="hidden" onChange={(e) => void attach(e.target.files)} aria-label={t("capture.attach")} />
         </label>
-        <ShadcnButton variant="plain" size="none" onClick={save} disabled={!text.trim()} className="tap mt-0.5 rounded-md p-1 text-muted-foreground enabled:text-fg enabled:hover:bg-hover disabled:opacity-40" aria-label={t("capture.save")} title={`${t("capture.save")} (↵) · ${t("capture.toAgent", { mod: modName(lang) })}`}>
+        <ShadcnButton variant="plain" size="none" onClick={save} disabled={!text.trim()} className="tap mt-0.5 rounded-md p-1 text-muted-foreground enabled:text-fg enabled:hover:bg-hover disabled:opacity-40" aria-label={t("capture.save")} title={`${t("capture.save")} (↵)`}>
           <ArrowRight size={16} />
         </ShadcnButton>
       </div>

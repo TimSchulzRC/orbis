@@ -1,7 +1,7 @@
 // Obtion server: accounts and workspaces, the sync WebSocket, the API and MCP endpoint of every
-// workspace, the in-app agent; serves the web app too (unless OBTION_WEB_APP=off).
+// workspace; serves the web app too (unless OBTION_WEB_APP=off).
 //
-// Everything of a workspace lives under /w/<id>/… (sync, files, activity, undo, agent, MCP) and
+// Everything of a workspace lives under /w/<id>/… (sync, files, activity, undo, MCP) and
 // needs a member's token (Authorization: Bearer, on the WebSocket as subprotocol). With a token
 // any site may call it (CORS): an app served by one server can hold workspaces of others.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -9,7 +9,6 @@ import { join, resolve, extname } from "node:path";
 import type { ServerWebSocket } from "bun";
 import { Store } from "./store";
 import { INSTRUCTIONS } from "./mcp";
-import { agentAvailable } from "./agent";
 import { Accounts, AccountError, type SignupPolicy } from "./accounts";
 import { type Conn, Workspace } from "./workspace";
 import { SETTINGS_ID } from "@obtion/core/model";
@@ -26,17 +25,13 @@ const PUBLIC_URL = process.env.OBTION_PUBLIC_URL ?? "";
 const WEB_APP = !/^(off|0|false|no)$/i.test(process.env.OBTION_WEB_APP ?? "on");
 /** Who may create an account (the first one always may, it becomes the admin): open | invite | off. */
 const SIGNUP = (["open", "invite", "off"].includes(process.env.OBTION_SIGNUP ?? "") ? process.env.OBTION_SIGNUP : "invite") as SignupPolicy;
-/** Who may use the in-app agent (it runs on the server's Claude login): admins | all | off. */
-const AGENT = (process.env.OBTION_AGENT ?? "admins").toLowerCase();
 
 mkdirSync(DATA, { recursive: true });
 const configPath = join(DATA, "config.json");
 const random = () => Buffer.from(crypto.getRandomValues(new Uint8Array(24))).toString("base64url");
 // token: the MCP token from before accounts (still opens the data from then at /mcp);
-// agentToken: lets the in-app agent call the MCP endpoint of any workspace (never leaves the server)
-const config: { token: string; agentToken?: string; authSecret?: string } = existsSync(configPath) ? JSON.parse(readFileSync(configPath, "utf8")) : { token: random() };
-const freshConfig = !config.agentToken || !config.authSecret || !existsSync(configPath);
-config.agentToken ??= random();
+const config: { token: string; authSecret?: string } = existsSync(configPath) ? JSON.parse(readFileSync(configPath, "utf8")) : { token: random() };
+const freshConfig = !config.authSecret || !existsSync(configPath);
 config.authSecret ??= random() + random();
 if (freshConfig) writeFileSync(configPath, JSON.stringify(config, null, 2), { mode: 0o600 });
 
@@ -120,12 +115,11 @@ async function serveStatic(path: string): Promise<Response> {
   });
 }
 
-const agentAllowed = (user: string) => agentAvailable() && (AGENT === "all" || (AGENT === "admins" && accounts.isAdmin(user)));
 
 /** The account API: who am I, my workspaces, invites, tokens. `null`: not this path. */
 async function accountApi(req: Request, path: string, url: URL): Promise<Response | null> {
   if (path === "/api/info") {
-    return json({ signup: SIGNUP, firstAccount: accounts.userCount() === 0, agent: agentAvailable() });
+    return json({ signup: SIGNUP, firstAccount: accounts.userCount() === 0 });
   }
 
   if (path === "/api/account/signup" && req.method === "POST") {
@@ -148,7 +142,7 @@ async function accountApi(req: Request, path: string, url: URL): Promise<Respons
   if (!user) return path.startsWith("/api/account") || path.startsWith("/api/workspaces") || path.startsWith("/api/invites/") ? json({ error: "unauthorized" }, 401) : null;
   try {
     if (path === "/api/account" && req.method === "GET") {
-      return json({ user, admin: accounts.isAdmin(user.id), agent: agentAllowed(user.id), workspaces: accounts.workspacesOf(user.id) });
+      return json({ user, admin: accounts.isAdmin(user.id), workspaces: accounts.workspacesOf(user.id) });
     }
     if (path === "/api/account/signout" && req.method === "POST") return (await accounts.signOut(token!), json({ ok: true }));
     if (path === "/api/workspaces" && req.method === "POST") {
@@ -230,10 +224,8 @@ const server = Bun.serve<Conn>({
       const [, id, rest] = m as unknown as [string, string, string];
       const token = tokenOf(req) ?? (req.method === "GET" && rest.startsWith("/api/blobs/") ? (url.searchParams.get("t") ?? undefined) : undefined);
       if (rest === "/mcp") {
-        // the in-app agent (server-internal token) or an agent with a member's MCP token
-        const agent = token === config.agentToken;
-        const user = agent ? undefined : token && accounts.mcpUser(id, token);
-        if ((!agent && !user) || !workspace(id)) return json({ error: "unauthorized" }, 401);
+        const user = token && accounts.mcpUser(id, token);
+        if (!user || !workspace(id)) return json({ error: "unauthorized" }, 401);
         return workspace(id)!.mcp(req);
       }
       const user = await accounts.userOf(token);
@@ -248,7 +240,6 @@ const server = Bun.serve<Conn>({
       }
       return w.handle(req, rest, {
         user: user.name.split(/\s+/)[0] || user.email.split("@")[0]!,
-        agent: { allowed: agentAllowed(user.id), mcpUrl: `http://127.0.0.1:${PORT}/w/${id}/mcp`, token: config.agentToken!, model: process.env.OBTION_AGENT_MODEL },
       });
     }
 

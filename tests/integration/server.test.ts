@@ -98,6 +98,15 @@ test("the first account is the admin with a personal workspace; then only with a
   expect((await fetch(`${plain}/api/workspaces/${ws}/members/${ada.user.id}`, { method: "DELETE", headers: { authorization: `Bearer ${ada.token}` } })).status).toBe(409);
 });
 
+test("the web app exposes no built-in agent API", async () => {
+  const user = await signUp(bare, "mcp-only@test.de");
+  const me = await account(bare, user.token);
+  expect(me).not.toHaveProperty("agent");
+  expect(await get(bare, "/api/info").then((r) => r.json())).not.toHaveProperty("agent");
+  const [w] = me.workspaces;
+  expect((await post(bare, `/w/${w.id}/api/agent`, { message: "hello" }, user.token)).status).toBe(404);
+});
+
 test("a workspace is only open to its members – sync, files, activity, MCP", async () => {
   const carla = await signUp(bare, "carla@example.org"); // open signup on this server
   const dan = await signUp(bare, "dan@example.org");

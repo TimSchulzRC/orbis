@@ -3,7 +3,7 @@ import { Input } from "../components/ui/input";
 // The lists of the app: a type's page (its entries with views as tabs, like a database in
 // Notion), the files, and the inbox. A type keeps its views; the files and the inbox have one.
 import { useEffect, useRef, useState } from "react";
-import { ListFilter, X, MoreHorizontal, RotateCcw, SlidersHorizontal, Plus, Upload, Sparkles } from "lucide-react";
+import { ListFilter, X, MoreHorizontal, RotateCcw, SlidersHorizontal, Plus, Upload } from "lucide-react";
 import { type FileType, type Item, type ViewTab, SETTINGS_ID, setSettings, setTab, setTabs, shortId } from "@obtion/core/model";
 import { type QueryDef, andWhere, runQuery, tabDef } from "@obtion/core/query";
 import { inboxWhere } from "@obtion/core/inbox";
@@ -23,7 +23,7 @@ import { viewGroups } from "../ui/Table";
 import { type TabEdit, ViewSettings, ViewTabs, tabName, useTabChoice, useViewFields } from "../ui/Views";
 import { AddFilter, QueryEditor } from "../ui/QueryEditor";
 import { notify } from "../ui/feedback";
-import { askAgent, createAndOpen } from "../actions";
+import { createAndOpen } from "../actions";
 
 /**
  * The entries of a type with its views as tabs. How a view looks (kind, grouping, sorting,
@@ -219,10 +219,6 @@ export function InboxPage() {
     return items;
   });
   const items = per.flat().sort((a, b) => b.created - a.created);
-  // the agent sorts in one workspace: the one it worked in last if that has entries, else the first that has
-  const last = localStorage.getItem("obtion.agent.space");
-  const agentSpace = (shown.find((s, n) => s.id === last && per[n]!.length) ?? shown.find((_, n) => per[n]!.length))?.id;
-  const sortWithAgent = () => agentSpace && askAgent(t("triage.agentPrompt"), undefined, agentSpace);
   useEffect(() => void (document.title = t("nav.inbox")), []);
   return (
     <div className="page-wide">
@@ -232,11 +228,6 @@ export function InboxPage() {
           <h1 className="page-title truncate">{t("nav.inbox")}</h1>
           <span className="text-[15px] tabular-nums text-muted-foreground">{items.length}</span>
         </div>
-        {agentSpace && (
-          <Button variant="ghost" onClick={sortWithAgent} title={t("triage.withAgent")}>
-            <Sparkles size={14} /> <span className="hidden sm:inline">{shown.length > 1 ? t("triage.withAgentIn", { name: spaceById(agentSpace)?.name ?? "" }) : t("triage.withAgent")}</span>
-          </Button>
-        )}
         <Popover align="right" trigger={(p) => <IconButton {...p} label={t("more")} icon={MoreHorizontal} />}>
           {(close) =>
             shown.map((s) => (

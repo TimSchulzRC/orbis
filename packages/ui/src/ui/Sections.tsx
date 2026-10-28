@@ -6,7 +6,7 @@ import { NativeSelect } from "../components/ui/native-select";
 // the main child list (e.g. tasks of a project, over all levels), same-type children
 // (sub-projects), other children, notes (children without a type) and updates.
 import { useState } from "react";
-import { Plus, Send, Sparkles } from "lucide-react";
+import { Plus, Send } from "lucide-react";
 import { type Item, type ViewDef, titleKey } from "@obtion/core/model";
 import type { Index } from "@obtion/core/graph";
 import { LANGS, translate } from "@obtion/core/i18n";
@@ -19,7 +19,6 @@ import { useT, tr } from "../i18n";
 import { Button, DueLabel, ItemIcon, RelTime, Seg, SectionTitle, ViewMenu } from "./bits";
 import { type PageGroup, PageTable } from "./Table";
 import { shortPath } from "./Row";
-import { askAgent } from "../actions";
 import { agentLabel } from "./AgentNotice";
 
 /**
@@ -321,9 +320,6 @@ export function Updates({ item }: { item: Item }) {
                 ))}
               </NativeSelect>
             )}
-            <Button variant="outline" className="ml-auto" onClick={() => askAgent(t("updates.agentPrompt", { title: item.title, text: text.trim() }))}>
-              <Sparkles size={14} /> {t("updates.viaAgent")}
-            </Button>
             <Button variant="primary" onClick={submit}>
               <Send size={14} /> {t("updates.post")}
             </Button>

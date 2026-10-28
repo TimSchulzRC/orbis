@@ -1,5 +1,5 @@
 // MCP endpoint (Streamable HTTP, stateless). Every agent – Claude Code, Claude Desktop,
-// the in-app chat – works through these tools. They know no type by name: the agent reads
+// and other MCP clients – works through these tools. They know no type by name: the agent reads
 // `schema` first and follows the types' descriptions and capabilities.
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";

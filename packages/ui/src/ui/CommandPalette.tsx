@@ -2,7 +2,7 @@ import { ModalSurface } from "../components/ui/dialog";
 import { Button as ShadcnButton } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Plus, Sparkles, CornerDownLeft, ChevronRight } from "lucide-react";
+import { Plus, CornerDownLeft, ChevronRight } from "lucide-react";
 import { SETTINGS_ID } from "@obtion/core/model";
 import { snippet } from "@obtion/core/search";
 import { statusOf } from "@obtion/core/traits";
@@ -15,19 +15,18 @@ import { setTheme } from "../theme";
 import { useT, setLang, getLang } from "../i18n";
 import { ItemIcon, StatusPill, TypeGlyph, cx, modName } from "./bits";
 import { shortPath } from "./Row";
-import { askAgent, createAndOpen } from "../actions";
+import { createAndOpen } from "../actions";
 
 type Entry =
   | { kind: "item"; id: string; space: string }
   | { kind: "create"; type: string | null; title: string }
-  | { kind: "ask"; text: string }
   | { kind: "nav"; label: string; path: string }
   | { kind: "cmd"; label: string; run: () => void };
 
 /**
  * Search and go anywhere, over the workspaces seen: their entries, their pages (named with the
  * workspace when there are several), creating something new (in the workspace a capture goes to)
- * and asking the agent.
+ * for new entries.
  */
 export function CommandPalette({ onClose }: { onClose: () => void }) {
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -90,10 +89,9 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
       : per.flat().sort((a, b) => b.h.updated - a.h.updated).slice(0, 8);
     out.push(...hits.map(({ h, space }) => ({ kind: "item" as const, id: h.id, space })));
     if (query) {
-      // after the hits: all hits on the search page, then creating something new, then the agent
+      // after the hits: all hits on the search page, then creating something new
       if (hits.length >= 10) out.push({ kind: "nav", label: t("palette.allHits"), path: `#/search?q=${encodeURIComponent(query)}` });
       out.push(...[null, ...captureTypes].map((type) => ({ kind: "create" as const, type, title: query })));
-      out.push({ kind: "ask", text: query });
     }
     if (!query) for (const [label, path] of navs) out.push({ kind: "nav", label: label!, path: path! });
     return out;
@@ -110,7 +108,6 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
     else if (it.kind === "create") createAndOpen({ type: it.type, title: it.title }, repo, cs);
     else if (it.kind === "nav") location.hash = it.path;
     else if (it.kind === "cmd") it.run();
-    else askAgent(it.text);
   };
 
   return (
@@ -163,15 +160,6 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
                   </span>
                   {it.type && <TypeGlyph schema={ix.types.get(it.type)?.schema} size={14} />}
                   {several && <span className="max-w-28 shrink-0 truncate text-xs text-muted-foreground">{nameOf(cs)}</span>}
-                </ShadcnButton>
-              );
-            if (it.kind === "ask")
-              return (
-                <ShadcnButton variant="plain" size="none" {...common}>
-                  <Sparkles size={16} className="text-muted-foreground" />
-                  <span className="flex-1 truncate">
-                    {t("palette.ask")} <span className="font-medium">{it.text}</span>
-                  </span>
                 </ShadcnButton>
               );
             if (it.kind === "cmd")

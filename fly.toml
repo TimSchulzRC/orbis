@@ -12,8 +12,6 @@ primary_region = 'fra'
   # the server only answers under names it knows; obtion.fly.dev is a public one
   OBTION_PUBLIC_URL = 'https://obtion.fly.dev'
   OBTION_SIGNUP = 'invite'
-  # the image has no Claude login; agents connect from outside through MCP
-  OBTION_AGENT = 'off'
 
 # SQLite needs one machine with its own disk; never more than one
 [mounts]
