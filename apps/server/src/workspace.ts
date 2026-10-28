@@ -62,6 +62,7 @@ export class Workspace {
   blobs: Blobs;
   conns = new Set<ServerWebSocket<Conn>>();
   private backups: Backups;
+  private mirror: Mirror;
 
   constructor(
     public id: string,
@@ -70,7 +71,7 @@ export class Workspace {
     this.store = new Store(dir);
     upgrade(this.store);
     this.blobs = new Blobs(join(dir, "blobs"), this.store);
-    const mirror = new Mirror(this.store, join(dir, "vault"), this.blobs);
+    const mirror = (this.mirror = new Mirror(this.store, join(dir, "vault"), this.blobs));
     this.store.on({
       update: (u, from) => {
         const item: WireUpdate = { s: u.seq, d: u.doc, u: toB64(u.data), o: u.origin };
@@ -96,7 +97,16 @@ export class Workspace {
 
   close() {
     this.backups.stop();
+    this.mirror.stop();
     this.store.flush();
+  }
+
+  /** Closed for good (deleted): connections end, nothing writes into its folder any more. */
+  shut() {
+    for (const ws of this.conns) ws.close(4404, "workspace deleted");
+    this.close();
+    this.blobs.stop();
+    this.store.db.close();
   }
 
   // ---------- sync ----------

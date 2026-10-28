@@ -197,6 +197,7 @@ async function call(path: string, body?: unknown, method = body === undefined ? 
 /** Ask the server for the account's workspaces (and whether the token still counts). */
 export async function refresh() {
   if (!account) return;
+  let gone: Space[] = [];
   try {
     const me = await call("/api/account");
     Object.assign(account, { user: me.user, admin: me.admin, agent: me.agent, lost: false });
@@ -204,12 +205,17 @@ export async function refresh() {
     server = me.workspaces.map((w: Space) => ({ ...known.get(w.id), ...w }));
     // a folder copy is called as its workspace on the server
     for (const f of folders) f.name = server.find((w) => w.id === f.remote)?.name ?? f.name;
+    // gone on the server (deleted, or this account removed): the copy here goes too, a folder goes on alone
+    gone = spaces.filter((s) => s.remote && known.has(s.remote) && !server.some((w) => w.id === s.remote));
+    for (const s of gone) if (s.folder) await cutOff(s);
   } catch (e) {
     if ((e as { status?: number }).status === 401) account.lost = true;
     else return; // offline: keep what is known
   }
   save();
   if (!activeSpace() && spaces[0]) activate(spaces[0].id);
+  // deleting makes open replicas reload the page: last
+  for (const s of gone) await forget(s);
 }
 
 /** Keep the account signed in with `token` (another one signed in before leaves first). */
@@ -358,6 +364,27 @@ export async function detach(s: Space) {
   await cutOff(s);
   // deleting makes the open replica reload the page: last
   await forget(s);
+  location.reload();
+}
+
+/**
+ * Delete a workspace for good: on the server (owners only; for every member) and in its folder,
+ * where the app's files go (obtion.json, updates/, files/) and anything else stays.
+ */
+export async function deleteSpace(s: Space) {
+  if (s.remote) await call(`/api/workspaces/${s.remote}`, undefined, "DELETE");
+  if (s.folder) {
+    const handle = await folderOf(s.id);
+    for (const name of ["obtion.json", "updates", "files"]) await handle.removeEntry(name, { recursive: true }).catch(() => {});
+  }
+  server = server.filter((x) => x.id !== s.remote);
+  folders = folders.filter((f) => f.id !== s.id);
+  save();
+  if (!activeSpace()) active = spaces[0]?.id ?? null;
+  save();
+  if (s.folder) await forgetFolder(s.id);
+  await forget(s);
+  location.replace("#/");
   location.reload();
 }
 

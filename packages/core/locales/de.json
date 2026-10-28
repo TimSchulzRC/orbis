@@ -992,5 +992,11 @@
  "account.signInHint": "Ein Konto auf {server} brauchst du nur, um Workspaces zu synchronisieren und zu teilen.",
  "storage.where.server": "Auf dem Server {server}",
  "storage.where.folder": "In einem Ordner auf diesem Computer",
- "storage.where.both": "Auf dem Server {server} und in einem Ordner auf diesem Computer"
+ "storage.where.both": "Auf dem Server {server} und in einem Ordner auf diesem Computer",
+ "space.delete": "Workspace löschen",
+ "space.deleteHint.server": "Löscht ihn mit allem darin auf dem Server – für alle Mitglieder, auch die Dateien und Backups. Das lässt sich nicht rückgängig machen.",
+ "space.deleteHint.folder": "Löscht ihn mit allem darin, auch die Dateien im Ordner. Andere Dateien im Ordner bleiben. Das lässt sich nicht rückgängig machen.",
+ "space.deleteHint.both": "Löscht ihn mit allem darin auf dem Server – für alle Mitglieder – und im Ordner auf diesem Computer. Das lässt sich nicht rückgängig machen.",
+ "space.deleteConfirm": "„{name}“ endgültig löschen?",
+ "space.deleteOwner": "Löschen können nur Besitzer. Du kannst den Workspace verlassen."
 }

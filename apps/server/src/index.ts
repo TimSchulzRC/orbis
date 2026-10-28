@@ -161,6 +161,13 @@ async function accountApi(req: Request, path: string, url: URL): Promise<Respons
     if (m) {
       const [, id, sub = ""] = m as unknown as [string, string, string?];
       if (!accounts.role(id, user.id)) return json({ error: "not a member" }, 403);
+      if (sub === "" && req.method === "DELETE") {
+        if (accounts.role(id, user.id) !== "owner") return json({ error: "only owners delete" }, 403);
+        open.get(id)?.shut();
+        open.delete(id);
+        accounts.deleteWorkspace(id, user.id);
+        return json({ ok: true });
+      }
       if (sub === "" && req.method === "PATCH") {
         accounts.rename(id, user.id, (await body<{ name?: string }>(req))?.name ?? "");
         return json({ ok: true });
@@ -211,8 +218,9 @@ const server = Bun.serve<Conn>({
 
     if (path === "/mcp") {
       // the MCP address from before accounts: its token opens the data from then
-      if (!legacyId || req.headers.get("authorization") !== `Bearer ${config.token}`) return json({ error: "unauthorized" }, 401);
-      return workspace(legacyId)!.mcp(req);
+      const old = legacyId ? workspace(legacyId) : undefined;
+      if (!old || req.headers.get("authorization") !== `Bearer ${config.token}`) return json({ error: "unauthorized" }, 401);
+      return old.mcp(req);
     }
 
     if (path.startsWith("/api/")) return (await accountApi(req, path, url)) ?? new Response("Not found", { status: 404 });

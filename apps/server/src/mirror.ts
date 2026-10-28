@@ -32,8 +32,16 @@ export class Mirror {
     }
   }
 
+  private stopped = false;
+
   private schedule() {
-    if (!this.timer) this.timer = setTimeout(() => ((this.timer = null), this.safeSync()), 1500);
+    if (!this.timer && !this.stopped) this.timer = setTimeout(() => ((this.timer = null), this.safeSync()), 1500);
+  }
+
+  stop() {
+    this.stopped = true;
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = null;
   }
 
   private safeSync() {

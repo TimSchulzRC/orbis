@@ -1,6 +1,6 @@
 // Browser test of workspaces in a folder: without an account a workspace is made in a folder and
 // set up, survives a reload, is synced with the server after signing in (another device then sees
-// it), gets cut off again; a workspace of the server gets a full copy in a folder. The folder
+// it), gets cut off again; a workspace of the server gets a full copy in a folder; both are deleted. The folder
 // picker hands out folders of the browser's private file system (they are real directory handles).
 // A phone sees nothing of all this, another desktop browser a hint.
 //   bun run build && bun tests/e2e/local.ts
@@ -143,6 +143,22 @@ try {
     return (await (await root.getFileHandle("obtion.json")).getFile()).text();
   });
   expect(!info.includes("server"), "cut off, the folder still names the server");
+
+  // ---------- delete: the folder workspace, then the server's one with its copy ----------
+  const remove = async (p: Page, ws: string) => {
+    await p.goto(`/#/w/${ws}/workspace`);
+    await p.waitForTimeout(800);
+    await p.getByRole("button", { name: "Workspace löschen" }).click();
+    await p.getByRole("dialog").getByRole("button", { name: "Workspace löschen" }).click();
+    await p.waitForTimeout(2000);
+  };
+  await remove(page, id);
+  expect((await files(page, "one")).length === 0, "deleted, the folder still holds its files");
+  expect(!(await page.evaluate(() => localStorage.getItem("obtion.folders") ?? "")).includes(id), "deleted, the app still lists the folder workspace");
+  await remove(page2, remote);
+  expect((await files(page2, "copy")).length === 0, "deleted, the copy's folder still holds its files");
+  const after = (await fetch(url + "/api/account", { headers: { authorization: `Bearer ${signup.token}` } }).then((r) => r.json())) as { workspaces: unknown[] };
+  expect(after.workspaces.length === 0, "deleted, the workspace is still on the server");
 
   // ---------- a phone sees nothing, another browser a hint ----------
   const phone = await browser.newContext({ baseURL: url, locale: "de-DE", ...devices["iPhone 13"] });

@@ -6,7 +6,7 @@
 // (workspaces/<id>/, see workspace.ts). Nobody needs a workspace of their own – joining one by an
 // invite link is enough.
 import { Database } from "bun:sqlite";
-import { existsSync, mkdirSync, readdirSync, renameSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { betterAuth } from "better-auth";
 import { bearer } from "better-auth/plugins";
@@ -178,6 +178,14 @@ export class Accounts {
     if (this.role(workspace, user) !== "owner") throw new AccountError("only owners rename", 403);
     if (!name.trim()) throw new AccountError("name required");
     this.db.query("UPDATE workspaces SET name = ? WHERE id = ?").run(name.trim().slice(0, 80), workspace);
+  }
+
+  /** An owner deletes a workspace: for everyone, with its folder (data, files, backups). Close it first. */
+  deleteWorkspace(workspace: string, by: string) {
+    if (this.role(workspace, by) !== "owner") throw new AccountError("only owners delete", 403);
+    for (const table of ["members", "invites", "tokens"]) this.db.query(`DELETE FROM ${table} WHERE workspace = ?`).run(workspace);
+    this.db.query("DELETE FROM workspaces WHERE id = ?").run(workspace);
+    rmSync(this.dir(workspace), { recursive: true, force: true });
   }
 
   private addMember(workspace: string, user: string, role: WorkspaceInfo["role"]) {

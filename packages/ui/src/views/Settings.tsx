@@ -11,12 +11,11 @@ import { listExamples, removeExamples, restoreExamples } from "@obtion/core/exam
 import { useRepo, useSpaceId, spaceHref } from "../hooks";
 import { useT, setLang } from "../i18n";
 import { Button, Dialog, ItemIcon, Seg, SectionTitle, TypeGlyph, cx } from "../ui/bits";
-import { notify } from "../ui/feedback";
+import { chooseAction, confirmAction, notify } from "../ui/feedback";
 import { setTheme, useTheme } from "../theme";
-import { type Space, FolderError, agentHere, copyToFolder, detach, inviteLink, leaveSpace, mcpToken, members, onServer, putOnServer, removeFolderSpace, renameSpace, replica, signOut, spaceById, useAccounts } from "../accounts";
+import { type Space, FolderError, agentHere, copyToFolder, deleteSpace, detach, inviteLink, leaveSpace, mcpToken, members, onServer, putOnServer, removeFolderSpace, renameSpace, replica, signOut, spaceById, useAccounts } from "../accounts";
 import { folderNow, folderSupport, pickFolder } from "../local";
 import { FolderHint, NewSpaceDialog } from "../ui/Spaces";
-import { confirmAction } from "../ui/feedback";
 import { SignIn } from "./Account";
 
 interface Connect {
@@ -517,7 +516,39 @@ export function SpaceSettingsPage() {
           </div>
         </details>
       </section>}
+
+      <DeleteSpace space={space} />
     </div>
+  );
+}
+
+/** Deleting the workspace for good: on the server only by an owner (for everyone), in a folder by whoever has it. */
+function DeleteSpace({ space }: { space: Space }) {
+  const { t } = useT();
+  const [error, setError] = useState("");
+  const server = !!space.remote;
+  const allowed = !server || (onServer(space.id) && space.role === "owner");
+  if (!allowed && !onServer(space.id)) return null;
+  const hint = t(`space.deleteHint.${server && space.folder ? "both" : server ? "server" : "folder"}`);
+  const run = async () => {
+    const yes = await chooseAction({ title: t("space.deleteConfirm", { name: space.name }), body: hint, choices: [{ key: "yes", label: t("space.delete"), danger: true }] });
+    if (yes === "yes") await deleteSpace(space).catch((e) => setError(String((e as Error).message ?? e)));
+  };
+  return (
+    <section>
+      <SectionTitle>{t("space.delete")}</SectionTitle>
+      {allowed ? (
+        <>
+          <p className="mb-3 text-sm text-muted">{hint}</p>
+          <Button variant="outline" className="text-[var(--danger-text)]" onClick={() => void run()}>
+            {t("space.delete")}
+          </Button>
+        </>
+      ) : (
+        <p className="text-sm text-muted">{t("space.deleteOwner")}</p>
+      )}
+      {error && <p className="mt-3 text-sm text-[var(--danger-text)]">{error}</p>}
+    </section>
   );
 }
 

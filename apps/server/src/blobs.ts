@@ -105,6 +105,11 @@ export class Blobs {
     return false;
   }
 
+  /** No more processing (the workspace is deleted). */
+  stop() {
+    this.queue.length = 0;
+  }
+
   schedule(id: string) {
     if (this.busy.has(id)) return;
     this.busy.add(id);

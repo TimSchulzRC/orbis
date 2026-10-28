@@ -992,5 +992,11 @@
  "account.signInHint": "You only need an account on {server} to sync and share workspaces.",
  "storage.where.server": "On the server {server}",
  "storage.where.folder": "In a folder on this computer",
- "storage.where.both": "On the server {server} and in a folder on this computer"
+ "storage.where.both": "On the server {server} and in a folder on this computer",
+ "space.delete": "Delete workspace",
+ "space.deleteHint.server": "Deletes it with everything in it on the server – for all members, files and backups included. This cannot be undone.",
+ "space.deleteHint.folder": "Deletes it with everything in it, the files in the folder included. Other files in the folder stay. This cannot be undone.",
+ "space.deleteHint.both": "Deletes it with everything in it on the server – for all members – and in the folder on this computer. This cannot be undone.",
+ "space.deleteConfirm": "Delete “{name}” for good?",
+ "space.deleteOwner": "Only owners can delete it. You can leave the workspace."
 }

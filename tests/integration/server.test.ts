@@ -200,3 +200,26 @@ test("sync per workspace: members get each other's changes; an app from before a
   expect(await a.until((m) => m.t === "denied")).toEqual({ t: "denied", area: "team-x" });
   for (const c of [a, b]) c.ws.close();
 });
+
+test("an owner deletes a workspace for everyone, with its folder; a member cannot", async () => {
+  const data = tempDir("obtion-server-");
+  const base = await start({ OBTION_DATA: data, OBTION_SIGNUP: "open" });
+  const owner = await signUp(base, "olga@example.org");
+  const [w] = (await account(base, owner.token)).workspaces;
+  const { code } = await post(base, `/api/workspaces/${w.id}/invites`, {}, owner.token).then((r) => r.json());
+  const member = await signUp(base, "max@example.org", code);
+  const sync = await connect(base, w.id, owner.token); // open, with a connection
+  expect(existsSync(join(data, "workspaces", w.id))).toBe(true);
+
+  const del = (token: string) => fetch(`${base}/api/workspaces/${w.id}`, { method: "DELETE", headers: { authorization: `Bearer ${token}` } });
+  expect((await del(member.token)).status).toBe(403);
+  expect((await del(owner.token)).status).toBe(200);
+  expect(existsSync(join(data, "workspaces", w.id))).toBe(false);
+  expect((await account(base, owner.token)).workspaces).toEqual([]);
+  expect((await account(base, member.token)).workspaces).toEqual([]);
+  expect((await get(base, `/w/${w.id}/api/activity`, owner.token)).status).not.toBe(200);
+  sync.ws.close();
+  // nothing comes back into its folder afterwards
+  await Bun.sleep(2000);
+  expect(existsSync(join(data, "workspaces", w.id))).toBe(false);
+});
