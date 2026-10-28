@@ -17,6 +17,7 @@ import { UndoError, redoStep, undoStep } from "./undo";
 import { type ClientMsg, type ServerMsg, type WireUpdate, fromB64, toB64 } from "@obtion/core/protocol";
 
 export interface Conn {
+  userId: string;
   workspace: string;
   areas: Set<string>; // said hello for these: only then it gets (and may push) their updates
   origin: string;

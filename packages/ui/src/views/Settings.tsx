@@ -17,7 +17,7 @@ import { useT, setLang } from "../i18n";
 import { Button, Dialog, ItemIcon, Seg, SectionTitle, TypeGlyph, cx } from "../ui/bits";
 import { chooseAction, notify } from "../ui/feedback";
 import { setTheme, useTheme } from "../theme";
-import { type Space, deleteSpace, inviteLink, leaveSpace, mcpToken, members, renameSpace, replica, signOut, spaceById, useAccounts } from "../accounts";
+import { type Space, deleteAccount, deleteSpace, inviteLink, leaveSpace, mcpToken, members, renameSpace, replica, signOut, spaceById, useAccounts } from "../accounts";
 import { NewSpaceDialog } from "../ui/Spaces";
 
 interface Connect {
@@ -129,6 +129,7 @@ function Members({ space }: { space: Space }) {
 function AccountSection() {
   const { t } = useT();
   const { account } = useAccounts();
+  const [deleting, setDeleting] = useState(false);
   if (!account) return null;
   return (
     <section>
@@ -144,8 +145,44 @@ function AccountSection() {
         <Button variant="outline" onClick={() => void signOut()}>
           {t("account.signOut")}
         </Button>
+        <Button variant="outline" onClick={() => setDeleting(true)}>{t("account.delete")}</Button>
       </div>
+      {deleting && <DeleteAccountDialog onClose={() => setDeleting(false)} />}
     </section>
+  );
+}
+
+function DeleteAccountDialog({ onClose }: { onClose: () => void }) {
+  const { t } = useT();
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  return (
+    <Dialog title={t("account.delete")} onClose={() => { if (!busy) onClose(); }}>
+      <form onSubmit={async (e) => {
+        e.preventDefault();
+        if (busy) return;
+        setBusy(true);
+        setError("");
+        try { await deleteAccount(password); }
+        catch (e) {
+          const message = (e as Error).message;
+          setError(t(message === "last owner" ? "account.deleteOwner" : message === "invalid password" ? "account.deletePassword" : "account.offline"));
+          setBusy(false);
+        }
+      }}>
+        <p className="mb-4 text-sm text-muted-foreground">{t("account.deleteHint")}</p>
+        <label className="block text-sm">
+          {t("account.password")}
+          <Input type="password" autoComplete="current-password" required value={password} disabled={busy} onChange={(e) => setPassword(e.target.value)} />
+        </label>
+        {error && <p role="alert" className="mt-3 text-sm text-[var(--danger-text)]">{error}</p>}
+        <div className="mt-4 flex gap-2">
+          <Button type="button" variant="outline" disabled={busy} onClick={onClose}>{t("cancel")}</Button>
+          <ShadcnButton type="submit" variant="destructive" disabled={busy || !password}>{t("account.delete")}</ShadcnButton>
+        </div>
+      </form>
+    </Dialog>
   );
 }
 

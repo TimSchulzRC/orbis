@@ -144,6 +144,14 @@ async function accountApi(req: Request, path: string, url: URL): Promise<Respons
     if (path === "/api/account" && req.method === "GET") {
       return json({ user, admin: accounts.isAdmin(user.id), workspaces: accounts.workspacesOf(user.id) });
     }
+    if (path === "/api/account" && req.method === "DELETE") {
+      const b = await body<{ password?: unknown }>(req);
+      if (typeof b?.password !== "string") return json({ error: "password required" }, 400);
+      await accounts.deleteAccount(user.id, b.password);
+      for (const w of open.values())
+        for (const ws of w.conns) if (ws.data.userId === user.id) ws.close(4401, "account deleted");
+      return json({ ok: true });
+    }
     if (path === "/api/account/signout" && req.method === "POST") return (await accounts.signOut(token!), json({ ok: true }));
     if (path === "/api/workspaces" && req.method === "POST") {
       const b = await body<{ name?: string }>(req);
@@ -235,7 +243,7 @@ const server = Bun.serve<Conn>({
       if (!w) return json({ error: "no such workspace" }, 404);
       if (rest === "/sync") {
         const name = user.name.split(/\s+/)[0] || user.email.split("@")[0]!;
-        const ok = srv.upgrade(req, { data: { workspace: id, areas: new Set<string>(), origin: `web:${name}`, user: name }, headers: { "sec-websocket-protocol": "obtion" } });
+        const ok = srv.upgrade(req, { data: { workspace: id, areas: new Set<string>(), origin: `web:${name}`, user: name, userId: user.id }, headers: { "sec-websocket-protocol": "obtion" } });
         return ok ? undefined : new Response("Expected WebSocket", { status: 400 });
       }
       return w.handle(req, rest, {
@@ -255,6 +263,10 @@ const server = Bun.serve<Conn>({
       open.get(ws.data.workspace)?.conns.delete(ws);
     },
     message(ws: ServerWebSocket<Conn>, raw) {
+      if (!accounts.role(ws.data.workspace, ws.data.userId)) {
+        ws.close(4401, "membership ended");
+        return;
+      }
       let msg: ClientMsg;
       try {
         msg = JSON.parse(String(raw));

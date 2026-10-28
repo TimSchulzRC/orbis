@@ -188,20 +188,36 @@ export async function signOut() {
   location.reload();
 }
 
+/** Delete the account on this server, then remove this device's workspace copies. */
+export async function deleteAccount(password: string) {
+  await call("/api/account", { password }, "DELETE");
+  await forgetAll();
+  save();
+  location.replace("#/");
+  location.reload();
+}
+
 async function forgetAll() {
-  for (const s of spaces) await forget(s);
+  const previous = spaces;
   account = null;
   spaces = [];
   active = null;
   shown = null;
+  // Persist the signed-out state before IndexedDB deletion can reload another open replica.
+  save();
+  for (const s of previous) await forget(s);
 }
 
 /** Delete a workspace's local copy (after leaving it or signing out). */
 async function forget(s: Space) {
-  const name = link(s).name;
+  const name = s.legacy ? "obtion" : `obtion-ws-${s.id}`;
   open.delete(s.id);
   const legacy = name === "obtion";
-  for (const db of [name, legacy ? "obtion-files" : `${name}-files`]) indexedDB.deleteDatabase(db);
+  await Promise.all([name, legacy ? "obtion-files" : `${name}-files`].map((db) => new Promise<void>((resolve, reject) => {
+    const request = indexedDB.deleteDatabase(db);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  })));
   const root = await navigator.storage?.getDirectory?.().catch(() => undefined);
   await root?.removeEntry(legacy ? "blobs" : `blobs-${name}`, { recursive: true }).catch(() => {});
 }

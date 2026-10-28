@@ -247,7 +247,7 @@ export class Store {
     const meta = doc.getMap<any>("meta");
     const late = ["created", "updated", "done"].filter((k) => typeof meta.get(k) === "number" && meta.get(k) > max);
     const updates = doc.getArray<any>("updates");
-    const lateUpdates = updates.toArray().map((u, i) => [u, i] as const).filter(([u]) => typeof u?.at === "number" && u.at > max);
+    const lateUpdates = (updates.toArray() as any[]).map((u, i) => [u, i] as const).filter(([u]) => typeof u?.at === "number" && u.at > max);
     if (!late.length && !lateUpdates.length) return;
     const now = Date.now();
     this.change(

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-[[ $# == 1 && ( $1 == start || $1 == stop ) ]] || {
-  echo 'Usage: bun run dev:start | bun run dev:stop' >&2
+[[ $# == 1 && ( $1 == start || $1 == stop || $1 == stop-all || $1 == reset-all ) ]] || {
+  echo 'Usage: bun run dev:start | bun run dev:stop | bun run dev:stop:all | bun run dev:reset:all' >&2
   exit 1
 }
 root=$(git rev-parse --show-toplevel)
@@ -40,6 +40,61 @@ stop() {
     tailscale serve --yes --https="$public" off
   fi
 }
+
+# Stop every service managed by this script, including units whose state file is gone.
+stop_all() {
+  local units unit saved
+  units=$(systemctl --user list-units --all --plain --no-legend 'obtion-dev-*-backend.service' 'obtion-dev-*-web.service')
+  while read -r unit _; do
+    [[ -n $unit ]] || continue
+    [[ $unit =~ ^obtion-dev-[a-f0-9]{16}-(backend|web)\.service$ ]] || continue
+    systemctl --user stop "$unit"
+    if active "$unit"; then
+      echo "Could not stop $unit" >&2
+      return 1
+    fi
+  done <<< "$units"
+  for saved in "$state_dir"/*.ports; do
+    [[ -f $saved ]] || continue
+    read -r public web backend host < "$saved"
+    [[ $public =~ ^[0-9]+$ && $web =~ ^[0-9]+$ && $backend =~ ^[0-9]+$ && -n $host ]]
+    if proxy_matches; then
+      tailscale serve --yes --https="$public" off
+    fi
+  done
+}
+
+if [[ $1 == stop-all || $1 == reset-all ]]; then
+  # Collect and validate every target before stopping services or deleting data.
+  targets=()
+  if [[ $1 == reset-all ]]; then
+    listing=$(mktemp)
+    trap 'rm -f -- "$listing"' EXIT
+    git worktree list --porcelain -z > "$listing"
+    while IFS= read -r -d "" tree; do
+      [[ $tree == "worktree "* ]] || continue
+      tree=${tree#worktree }
+      [[ -d $tree ]] || continue
+      [[ -f "$tree/apps/server/src/index.ts" ]] || continue
+      if [[ -L "$tree/data" ]]; then
+        echo "Refusing to delete symlink: $tree/data" >&2
+        exit 1
+      fi
+      targets+=("$tree/data")
+    done < "$listing"
+    rm -f -- "$listing"
+    trap - EXIT
+  fi
+  stop_all
+  echo 'Stopped all managed Obtion development servers'
+  if [[ $1 == reset-all ]]; then
+    for target in "${targets[@]}"; do
+      rm -rf -- "$target"
+      echo "Deleted: $target"
+    done
+  fi
+  exit
+fi
 
 public= web= backend= host=
 if [[ -f $state_file ]]; then
