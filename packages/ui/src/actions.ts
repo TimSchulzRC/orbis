@@ -12,9 +12,13 @@ export function createAndOpen(init: ItemInit, repo: Repo = current, space?: stri
   return id;
 }
 
-/** Open the agent panel, optionally sending a message; `shown` is what the chat shows of it (no ids or instructions). */
-export function askAgent(text?: string, shown?: string) {
-  if (text?.trim()) sessionStorage.setItem("obtion.agentDraft", JSON.stringify({ text: text.trim(), shown }));
+/**
+ * Open the agent panel, optionally sending a message; `shown` is what the chat shows of it (no ids
+ * or instructions), `space` the workspace it works in (else the page's, or the one chosen last).
+ */
+export function askAgent(text?: string, shown?: string, space?: string) {
+  if (space) sessionStorage.setItem("obtion.agentSpace", space);
+  if (text?.trim()) sessionStorage.setItem("obtion.agentDraft", JSON.stringify({ text: text.trim(), shown, space }));
   window.dispatchEvent(new CustomEvent("obtion:ask"));
 }
 

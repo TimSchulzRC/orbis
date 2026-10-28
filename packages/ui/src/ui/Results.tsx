@@ -9,7 +9,7 @@ import { firstOfGroup, statusOf, statusProp } from "@obtion/core/traits";
 import { plainText } from "@obtion/core/search";
 import { repo } from "../repo";
 import { agentHere } from "../accounts";
-import { useIndex, itemHref, go } from "../hooks";
+import { useIndex, useRepo, useSpaceId, itemHref, go } from "../hooks";
 import { useT } from "../i18n";
 import { askAgent } from "../actions";
 import { files, useBlobUrl } from "../files";
@@ -40,6 +40,7 @@ function useAgentAvailable(): boolean {
 function InboxNudge({ total }: { total: number }) {
   const { t } = useT();
   const agent = useAgentAvailable();
+  const space = useSpaceId();
   return (
     <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 px-2 pt-1 text-sm">
       <span className="tabular-nums text-muted">{t("inbox.waiting", { count: total })}</span>
@@ -47,7 +48,7 @@ function InboxNudge({ total }: { total: number }) {
         {t("inbox.sortNow")}
       </a>
       {agent && total >= 30 && (
-        <button onClick={() => askAgent(t("inbox.agentPrompt"))} className="inline-flex items-center gap-1 text-muted hover:text-fg">
+        <button onClick={() => askAgent(t("inbox.agentPrompt"), undefined, space)} className="inline-flex items-center gap-1 text-muted hover:text-fg">
           <Sparkles size={13} /> {t("inbox.sortWithAgent")}
         </button>
       )}
@@ -230,18 +231,19 @@ function BoardView({ items, def, ctx, look }: { items: Item[]; def: QueryDef; ct
   const lanes = tab?.subgroup ? groupItems(items, tab.subgroup, ctx).filter((g) => g.items.length) : [{ key: "", items } as QGroup];
   const [over, setOver] = useState<string | null>(null);
   const [folded, setFolded] = useState<Set<string>>(new Set());
+  const repo = useRepo();
   const drop = (id: string, g: QGroup) => {
     const item = repo.get(id);
     if (!item) return;
     const schema = ix.schemaOf(item);
     if (by === "statusGroup") {
       const o = g.key ? firstOfGroup(schema, g.key as StatusGroup) : undefined;
-      if (o) void setStatus(item, o.id);
+      if (o) void setStatus(item, o.id, repo);
       return;
     }
     const prop = by === "status" ? statusProp(schema) : schema?.properties.find((p) => p.name.toLowerCase() === by.toLowerCase() && (p.kind === "select" || p.kind === "status"));
     const opt = prop?.options?.find((o) => o.name === g.label);
-    if (prop && opt && prop.id === statusProp(schema)?.id) void setStatus(item, opt.id);
+    if (prop && opt && prop.id === statusProp(schema)?.id) void setStatus(item, opt.id, repo);
     else if (prop && opt) repo.setProp(id, prop.id, opt.id);
     else if (prop && !g.key) repo.setProp(id, prop.id, null);
   };

@@ -3,9 +3,11 @@ import { X, Send, Square, Plus, Mic, Wrench, Check, AlertTriangle, Sparkles } fr
 import type { Item } from "@obtion/core/model";
 import { Markdown } from "./Markdown";
 import { Button, Empty, cx, IconButton, ItemIcon, shortcut, useModal } from "./bits";
-import { go, useRepo } from "../hooks";
-import { repo } from "../repo";
-import { activeFetch, agentHere } from "../accounts";
+import type { Repo } from "@obtion/sync";
+import { go, useRepo, useRoute } from "../hooks";
+import { agentHere, spaceById, spaceFetch, useAccounts } from "../accounts";
+import { globalPage } from "../scope";
+import { SpaceScope } from "./Spaces";
 import { tr, useT } from "../i18n";
 
 interface ToolCall {
@@ -36,7 +38,7 @@ function load<T>(k: string, d: T): T {
   }
 }
 
-function toolLabel(t: ToolCall): string {
+function toolLabel(t: ToolCall, repo: Repo): string {
   const i = t.input ?? {};
   // Agents often pass ids: show the item's title instead.
   const name = (ref?: string) => (ref ? (repo.get(ref)?.title ?? ref) : undefined);
@@ -53,11 +55,51 @@ function toolLabel(t: ToolCall): string {
 
 const WRITE_TOOLS = new Set(["create", "update", "place", "add_update", "define_type", "update_type", "attach", "suggest", "delete", "restore"]);
 
+const SPACE_KEY = "obtion.agent.space";
+
+/**
+ * The agent works in one workspace: on a page of a workspace in that one, elsewhere (Start, inbox,
+ * search, settings) in the one chosen last – asked from somewhere for a workspace, in that. Each
+ * workspace keeps its own chat on this device.
+ */
 export function AgentPanel({ context, onClose, overlay }: { context?: Item; onClose: () => void; overlay: boolean }) {
+  const route = useRoute();
+  const { spaces, active } = useAccounts();
+  const onPage = !globalPage(route.parts) ? active?.id : undefined;
+  const asked = () => sessionStorage.getItem("obtion.agentSpace") ?? undefined;
+  const [chosen, setChosen] = useState(() => asked() ?? onPage ?? localStorage.getItem(SPACE_KEY) ?? undefined);
+  const choose = (id: string) => {
+    setChosen(id);
+    localStorage.setItem(SPACE_KEY, id);
+  };
+  useEffect(() => void (onPage && choose(onPage)), [onPage]);
+  useEffect(() => {
+    const on = () => {
+      const id = asked();
+      sessionStorage.removeItem("obtion.agentSpace");
+      if (id) choose(id);
+    };
+    on();
+    window.addEventListener("obtion:ask", on);
+    return () => window.removeEventListener("obtion:ask", on);
+  }, []);
+  const space = spaceById(chosen ?? "") ? chosen! : (active?.id ?? spaces[0]?.id);
+  if (!space) return null;
+  return (
+    <SpaceScope id={space}>
+      <AgentChat key={space} space={space} onSpace={choose} context={space === active?.id ? context : undefined} onClose={onClose} overlay={overlay} />
+    </SpaceScope>
+  );
+}
+
+function AgentChat({ space, onSpace, context, onClose, overlay }: { space: string; onSpace: (id: string) => void; context?: Item; onClose: () => void; overlay: boolean }) {
   const r = useRepo();
   const { t, lang } = useT();
-  const [msgs, setMsgs] = useState<Msg[]>(() => load("obtion.chat", []));
-  const [session, setSession] = useState<string | undefined>(() => load("obtion.chatSession", undefined));
+  const { spaces } = useAccounts();
+  // each workspace its own chat; the one from before workspaces stays with the first
+  const legacy = space === spaces[0]?.id;
+  const [msgs, setMsgs] = useState<Msg[]>(() => load(`obtion.chat.${space}`, legacy ? load("obtion.chat", []) : []));
+  const [session, setSession] = useState<string | undefined>(() => load(`obtion.chatSession.${space}`, legacy ? load("obtion.chatSession", undefined) : undefined));
   const [model, setModel] = useState<string>(() => localStorage.getItem("obtion.model") ?? "sonnet");
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -70,25 +112,26 @@ export function AgentPanel({ context, onClose, overlay }: { context?: Item; onCl
   useEffect(() => setAvailable(agentHere()), [r.status.online]);
 
   useEffect(() => {
-    localStorage.setItem("obtion.chat", JSON.stringify(msgs.slice(-60)));
+    localStorage.setItem(`obtion.chat.${space}`, JSON.stringify(msgs.slice(-60)));
     scroller.current?.scrollTo({ top: scroller.current.scrollHeight });
   }, [msgs]);
   useEffect(() => {
-    localStorage.setItem("obtion.chatSession", JSON.stringify(session ?? null));
+    localStorage.setItem(`obtion.chatSession.${space}`, JSON.stringify(session ?? null));
   }, [session]);
 
   const sendRef = useRef<(t: string, shown?: string) => void>(() => {});
   useEffect(() => {
     const consume = () => {
       const draft = sessionStorage.getItem("obtion.agentDraft");
-      if (draft) {
+      let d: { text: string; shown?: string; space?: string } | undefined;
+      try {
+        d = draft ? JSON.parse(draft) : undefined;
+      } catch {
+        d = { text: draft! };
+      }
+      // meant for another workspace: the panel switches over, and the chat there sends it
+      if (d && (!d.space || d.space === space)) {
         sessionStorage.removeItem("obtion.agentDraft");
-        let d: { text: string; shown?: string };
-        try {
-          d = JSON.parse(draft);
-        } catch {
-          d = { text: draft };
-        }
         sendRef.current(d.text, d.shown);
       } else if (matchMedia("(min-width: 1024px)").matches) inputRef.current?.focus(); // no keyboard pop-up on phones
     };
@@ -109,7 +152,7 @@ export function AgentPanel({ context, onClose, overlay }: { context?: Item; onCl
     abort.current = ac;
     const ctx = useContext && context ? `${context.kind === "datei" ? "file" : (r.index().typeName(context.type) ?? "information")} "${context.title}" (id ${context.id})` : undefined;
     try {
-      const res = await activeFetch("/api/agent", {
+      const res = await spaceFetch(space, "/api/agent", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ message, sessionId: session, context: ctx, model }),
@@ -197,6 +240,15 @@ export function AgentPanel({ context, onClose, overlay }: { context?: Item; onCl
             </option>
           ))}
         </select>
+        {spaces.length > 1 && (
+          <select value={space} onChange={(e) => onSpace(e.target.value)} className="min-w-0 max-w-32 truncate rounded-md bg-transparent px-1 py-0.5 text-xs text-muted hover:bg-hover" aria-label={t("agent.space")}>
+            {spaces.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        )}
         <IconButton onClick={newChat} label={t("agent.newChat")} icon={Plus} className="ml-auto" />
         <IconButton onClick={onClose} label={t("agent.close", { key: shortcut("J", lang) })} icon={X} />
       </header>
@@ -248,7 +300,7 @@ export function AgentPanel({ context, onClose, overlay }: { context?: Item; onCl
                       )}
                     >
                       {tc.ok === undefined ? <Wrench size={11} className="animate-pulse" /> : tc.ok ? <Check size={11} /> : <AlertTriangle size={11} className="text-danger" />}
-                      <span className="truncate">{toolLabel(tc)}</span>
+                      <span className="truncate">{toolLabel(tc, r)}</span>
                     </span>
                   ))}
                 </div>

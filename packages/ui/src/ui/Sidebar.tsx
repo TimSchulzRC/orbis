@@ -77,12 +77,12 @@ export function Sidebar({ onSearch, onAgent }: { onSearch: () => void; onAgent: 
         ))}
         {creating && <NewSpaceDialog onClose={() => setCreating(false)} />}
       </div>
-      {/* below: the agent and the settings (activity, graph, trash and the language live there) */}
+      {/* below: the agent and the settings (the account, its workspaces, this device) */}
       <div className="flex flex-col gap-0.5 border-t border-line p-2">
         <button onClick={onAgent} className={navCls(false)}>
           <Sparkles size={16} /> <span className="flex-1 text-left">{t("nav.agent")}</span> <Kbd>{shortcut("J", lang)}</Kbd>
         </button>
-        <a href="#/settings" className={navCls(["/settings", "/types", "/activity", "/trash", "/graph"].some((x) => route.path.startsWith(x)))}>
+        <a href="#/settings" className={navCls(route.path.startsWith("/settings"))}>
           <SlidersHorizontal size={16} /> {t("nav.settings")}
         </a>
       </div>
@@ -150,7 +150,7 @@ export function SpaceTree({ space, touch }: { space: Space; touch?: boolean }) {
         >
           {(close) => (
             <>
-              <MenuItem onClick={() => (close(), go("/settings"))}>{t("space.settings")}</MenuItem>
+              <MenuItem onClick={() => (close(), go("/workspace"))}>{t("space.settings")}</MenuItem>
               <MenuItem onClick={() => (close(), go("/activity"))}>{t("nav.activity")}</MenuItem>
               <MenuItem onClick={() => (close(), go("/trash"))}>{t("nav.trash")}</MenuItem>
             </>
@@ -158,7 +158,7 @@ export function SpaceTree({ space, touch }: { space: Space; touch?: boolean }) {
         </Popover>
       </div>
       {open && !ready && (
-        <a href={spaceHref(space.id, "/")} className={cx(row, "pl-[30px] text-muted hover:bg-hover hover:text-fg", !touch && "mx-2")}>
+        <a href={spaceHref(space.id, "/setup")} className={cx(row, "pl-[30px] text-muted hover:bg-hover hover:text-fg", !touch && "mx-2")}>
           {repo.status.loaded && (repo.status.synced || !repo.status.online) ? t("space.setUp") : t("app.syncing")}
         </a>
       )}

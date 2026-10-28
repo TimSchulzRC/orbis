@@ -8,7 +8,7 @@ import { ChevronsUpDown, Plus, SlidersHorizontal } from "lucide-react";
 import type { Repo } from "@obtion/sync";
 import { createSpace, replica, setShown, spaceById, useAccounts } from "../accounts";
 import { ScopeContext } from "../scope";
-import { spaceHref } from "../hooks";
+import { spaceHref, useSpaceId } from "../hooks";
 import { MoveError, moveToSpace, planToSpace } from "../move";
 import { useT, tr } from "../i18n";
 import { Button, Dialog, MenuItem, Popover, cx } from "./bits";
@@ -32,6 +32,14 @@ export function SpaceScope({ id, children }: { id: string; children: React.React
       </div>
     </ScopeContext.Provider>
   );
+}
+
+/** Above the title of a page of one workspace: which one it is, once there are several. */
+export function SpaceEyebrow() {
+  const { spaces } = useAccounts();
+  const id = useSpaceId();
+  if (spaces.length < 2) return null;
+  return <p className="mb-0.5 text-[13px] text-muted">{spaceById(id ?? "")?.name}</p>;
 }
 
 /** Which workspaces are seen: the label says it ("Alle Workspaces", one name, or the names); the menu ticks them. */

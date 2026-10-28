@@ -4,6 +4,7 @@ import { cascadeCount } from "@obtion/core/trash";
 import { isInInbox } from "@obtion/core/placement";
 import { notify } from "../ui/feedback";
 import { useRepo } from "../hooks";
+import { SpaceEyebrow } from "../ui/Spaces";
 import { useT } from "../i18n";
 import { Button, Empty, ItemIcon, RelTime } from "../ui/bits";
 
@@ -38,6 +39,7 @@ export function TrashView() {
   };
   return (
     <div className="page-read">
+      <SpaceEyebrow />
       <h1 className="mb-1 page-title">{t("nav.trash")}</h1>
       <p className="mb-5 text-sm text-muted">{t("trash.intro")}</p>
       {items.length ? (

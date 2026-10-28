@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowRight, ChevronDown, CornerDownRight, Layers, Paperclip, X } from "lucide-react";
 import { SETTINGS_ID } from "@obtion/core/model";
 import { useFiles, useRepo, useSpaceId, spaceHref } from "../hooks";
-import { activeSpace, spaceById, useAccounts } from "../accounts";
+import { shownSpaces, spaceById, useAccounts } from "../accounts";
 import { useT } from "../i18n";
 import { askAgent, capture, extractMentions, recentPlaces, rememberPlace } from "../actions";
 import { MenuItem, Popover, TypeGlyph, cx, Dialog, modName } from "./bits";
@@ -30,14 +30,14 @@ export function Capture({ anywhere, ...p }: CaptureProps & { anywhere?: boolean 
 }
 
 const LAST_SPACE = "obtion.capture.space";
-/** Where a capture from anywhere goes: the workspace the inbox is filtered to, else the one used last, else the open one. */
-function captureSpace(): string | undefined {
+/** Where a capture from anywhere goes: the workspace the inbox is filtered to, else the one used last, else the first seen. */
+export function captureSpace(): string | undefined {
   const known = (id: unknown) => (typeof id === "string" && !!spaceById(id) ? id : undefined);
   let filter: unknown;
   try {
     filter = JSON.parse(localStorage.getItem("obtion.inbox.space") ?? "null");
   } catch {}
-  return known(filter) ?? known(localStorage.getItem(LAST_SPACE)) ?? activeSpace()?.id;
+  return known(filter) ?? known(localStorage.getItem(LAST_SPACE)) ?? shownSpaces()[0]?.id;
 }
 
 interface CaptureProps {
@@ -80,7 +80,7 @@ function CaptureField({ parent, autoFocus, onDone, compact, onSpace }: CapturePr
     onDone?.();
   };
   const ask = () => {
-    askAgent(text);
+    askAgent(text, undefined, space);
     setText("");
     onDone?.();
   };

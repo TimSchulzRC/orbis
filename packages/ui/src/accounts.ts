@@ -8,6 +8,7 @@ import { Repo } from "@obtion/sync";
 import { browserHost, type SpaceLink } from "./browser";
 import { DeviceFiles, setFiles } from "./files";
 import { setRepo } from "./repo";
+import { globalPage } from "./scope";
 
 export interface Account {
   token: string;
@@ -125,9 +126,19 @@ export function activate(id: string) {
 /** May the account use the in-app agent? (on the server and for this account) */
 export const agentHere = () => !!account?.agent;
 
-/** The open workspace's API (/w/<id>/api/…). */
-export const activeFetch = (path: string, init: RequestInit = {}) =>
-  fetch(`/w/${active}${path}`, { ...init, headers: { ...(init.headers as Record<string, string>), authorization: `Bearer ${account!.token}` } });
+/** A workspace's API (/w/<id>/api/…). */
+export const spaceFetch = (id: string, path: string, init: RequestInit = {}) =>
+  fetch(`/w/${id}${path}`, { ...init, headers: { ...(init.headers as Record<string, string>), authorization: `Bearer ${account!.token}` } });
+
+const START_KEY = "obtion.start.space";
+/** Which workspace Start takes its layout from, on this device: the account's first unless chosen. */
+export function startSpace(): Space | undefined {
+  return spaceById(localStorage.getItem(START_KEY) ?? "") ?? spaces[0];
+}
+export function setStartSpace(id: string) {
+  localStorage.setItem(START_KEY, id);
+  save();
+}
 
 // ---------- account ----------
 
@@ -210,7 +221,7 @@ export async function createSpace(name: string) {
   const w = await call("/api/workspaces", { name });
   if (shown) shown = [...shown, w.id];
   await refresh();
-  location.hash = `#/w/${w.id}/`;
+  location.hash = `#/w/${w.id}/setup`;
 }
 
 export async function renameSpace(s: Space, name: string) {
@@ -251,14 +262,16 @@ export const serverInfo = (): Promise<{ signup: "open" | "invite" | "off"; first
 export const mcpToken = (s: Space) => call(`/api/workspaces/${s.id}/mcp-token`, {});
 
 /**
- * The address names the workspace ("#/w/<id>/…") and opens it. One without (a link inside the
- * app) is the open workspace's and gets its name, so going back later returns to it.
+ * The address names the workspace ("#/w/<id>/…") and opens it. A page of a workspace without it
+ * (a link inside the app) is the open workspace's and gets its name, so going back later returns
+ * to it. Pages of no workspace (Start, inbox, search, settings) keep an address without one.
  */
 function followHash() {
   const named = /^#\/w\/([^/?]+)/.exec(location.hash)?.[1];
   if (named) {
     if (named !== active && spaces.some((s) => s.id === named)) activate(named);
-  } else if (active) history.replaceState(history.state, "", `#/w/${active}${location.hash.slice(1) || "/"}`);
+  } else if (active && !globalPage((location.hash.slice(1).split("?")[0] ?? "").split("/").filter(Boolean)))
+    history.replaceState(history.state, "", `#/w/${active}${location.hash.slice(1) || "/"}`);
 }
 addEventListener("hashchange", followHash);
 

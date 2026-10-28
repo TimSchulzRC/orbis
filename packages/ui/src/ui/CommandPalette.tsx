@@ -3,8 +3,11 @@ import { Plus, Sparkles, CornerDownLeft, ChevronRight } from "lucide-react";
 import { SETTINGS_ID } from "@obtion/core/model";
 import { snippet } from "@obtion/core/search";
 import { statusOf } from "@obtion/core/traits";
-import { repo } from "../repo";
-import { go } from "../hooks";
+import type { Item } from "@obtion/core/model";
+import { go, spaceHref } from "../hooks";
+import { useAccounts } from "../accounts";
+import { useReplicas } from "./Spaces";
+import { captureSpace } from "./Capture";
 import { setTheme } from "../theme";
 import { useT, setLang, getLang } from "../i18n";
 import { ItemIcon, StatusPill, TypeGlyph, cx, modName, useModal } from "./bits";
@@ -12,12 +15,17 @@ import { shortPath } from "./Row";
 import { askAgent, createAndOpen } from "../actions";
 
 type Entry =
-  | { kind: "item"; id: string }
+  | { kind: "item"; id: string; space: string }
   | { kind: "create"; type: string | null; title: string }
   | { kind: "ask"; text: string }
   | { kind: "nav"; label: string; path: string }
   | { kind: "cmd"; label: string; run: () => void };
 
+/**
+ * Search and go anywhere, over the workspaces seen: their entries, their pages (named with the
+ * workspace when there are several), creating something new (in the workspace a capture goes to)
+ * and asking the agent.
+ */
 export function CommandPalette({ onClose }: { onClose: () => void }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   useModal(dialogRef, onClose);
@@ -25,28 +33,43 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   const [q, setQ] = useState("");
   const [sel, setSel] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
-  const ix = repo.index();
+  const { shown } = useAccounts();
+  const repos = useReplicas(shown.map((s) => s.id));
+  const repoOf = (space: string) => repos[shown.findIndex((s) => s.id === space)] ?? repos[0]!;
+  const several = shown.length > 1;
+  const nameOf = (space: string) => shown.find((s) => s.id === space)?.name ?? "";
   const navs = useMemo(
     () => [
-      [t("nav.start"), "/"],
-      [t("nav.inbox"), "/inbox"],
-      ...ix.typesInOrder().map((x) => [ix.typePlural(x.id), `/i/${encodeURIComponent(x.id)}`]),
-      [t("nav.files"), "/files"],
-      [t("nav.types"), "/types"],
-      [t("nav.activity"), "/activity"],
-      [t("nav.graph"), "/graph"],
-      [t("nav.trash"), "/trash"],
-      [t("nav.settings"), "/settings"],
+      [t("nav.start"), "#/"],
+      [t("nav.inbox"), "#/inbox"],
+      ...shown.flatMap((s, n) => {
+        const ix = repos[n]!.index();
+        const of = (label: string) => (several ? `${label} · ${s.name}` : label);
+        return [
+          ...ix.typesInOrder().map((x) => [of(ix.typePlural(x.id)), spaceHref(s.id, `/i/${encodeURIComponent(x.id)}`)]),
+          [of(t("nav.files")), spaceHref(s.id, "/files")],
+          [of(t("nav.types")), spaceHref(s.id, "/types")],
+          [of(t("nav.activity")), spaceHref(s.id, "/activity")],
+          [of(t("nav.graph")), spaceHref(s.id, "/graph")],
+          [of(t("nav.trash")), spaceHref(s.id, "/trash")],
+          [several ? `${t("space.settings")} · ${s.name}` : t("space.settings"), spaceHref(s.id, "/workspace")],
+        ];
+      }),
+      [t("nav.settings"), "#/settings"],
     ],
     [],
   );
+  // something new goes where a capture from anywhere goes
+  const cs = captureSpace() ?? shown[0]!.id;
+  const repo = repoOf(cs);
+  const ix = repo.index();
   const pinnedTypes = (repo.get(SETTINGS_ID)?.settings?.captureTypes ?? []).filter((id) => ix.types.has(id));
   // "Neu: …" for every type – the pinned ones first, then the others by name (own types like "Buch" too)
   const captureTypes = [...pinnedTypes, ...[...ix.types.values()].filter((x) => !pinnedTypes.includes(x.id)).sort((a, b) => a.schema!.name.localeCompare(b.schema!.name)).map((x) => x.id)];
   // actions, found by typing their name
   const cmds: [string, () => void][] = [
     [t("palette.cmd.sortInbox"), () => go("/inbox")],
-    [t("palette.cmd.newType"), () => go("/types?new=1")],
+    [t("palette.cmd.newType"), () => (location.hash = spaceHref(cs, "/types?new=1"))],
     [t("palette.cmd.language"), () => setLang(getLang() === "de" ? "en" : "de")],
     ...(["system", "light", "dark"] as const).map((v): [string, () => void] => [t("palette.cmd.theme", { name: t("theme." + v) }), () => setTheme(v)]),
   ];
@@ -59,11 +82,15 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
     const nav = navs.filter(([label]) => query && words(label!));
     out.push(...nav.map(([label, path]) => ({ kind: "nav" as const, label: label!, path: path! })));
     if (query) out.push(...cmds.filter(([label]) => words(label)).map(([label, run]) => ({ kind: "cmd" as const, label, run })));
-    const hits = query ? repo.search(query, 10) : repo.live().sort((a, b) => b.updated - a.updated).slice(0, 8);
-    out.push(...hits.map((h) => ({ kind: "item" as const, id: h.id })));
+    // the hits of every workspace seen, taking turns (each ranked by its own search)
+    const per = repos.map((r, n) => (query ? r.search(query, 10) : r.live()).map((h) => ({ h, space: shown[n]!.id })));
+    const hits: { h: Item; space: string }[] = query
+      ? Array.from({ length: 10 }, (_, i) => per.map((list) => list[i])).flat().filter((x) => !!x).slice(0, 10)
+      : per.flat().sort((a, b) => b.h.updated - a.h.updated).slice(0, 8);
+    out.push(...hits.map(({ h, space }) => ({ kind: "item" as const, id: h.id, space })));
     if (query) {
       // after the hits: all hits on the search page, then creating something new, then the agent
-      if (hits.length >= 10) out.push({ kind: "nav", label: t("palette.allHits"), path: `/search?q=${encodeURIComponent(query)}` });
+      if (hits.length >= 10) out.push({ kind: "nav", label: t("palette.allHits"), path: `#/search?q=${encodeURIComponent(query)}` });
       out.push(...[null, ...captureTypes].map((type) => ({ kind: "create" as const, type, title: query })));
       out.push({ kind: "ask", text: query });
     }
@@ -78,9 +105,9 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
 
   const run = (it: Entry) => {
     onClose();
-    if (it.kind === "item") go(`/i/${encodeURIComponent(it.id)}`);
-    else if (it.kind === "create") createAndOpen({ type: it.type, title: it.title });
-    else if (it.kind === "nav") go(it.path);
+    if (it.kind === "item") location.hash = spaceHref(it.space, `/i/${encodeURIComponent(it.id)}`);
+    else if (it.kind === "create") createAndOpen({ type: it.type, title: it.title }, repo, cs);
+    else if (it.kind === "nav") location.hash = it.path;
     else if (it.kind === "cmd") it.run();
     else askAgent(it.text);
   };
@@ -106,7 +133,8 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
             const active = i === sel;
             const common = { "data-i": i, onMouseEnter: () => setSel(i), onClick: () => run(it), className: cx("flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm", active && "bg-selected"), key: i };
             if (it.kind === "item") {
-              const n = repo.get(it.id)!;
+              const ix = repoOf(it.space).index();
+              const n = ix.get(it.id)!;
               const st = statusOf(n, ix.schemaOf(n));
               return (
                 <button {...common}>
@@ -120,6 +148,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
                     )}
                   </span>
                   {st && <StatusPill option={st.option} group={st.group} small />}
+                  {several && <span className="max-w-28 shrink-0 truncate text-xs text-muted">{nameOf(it.space)}</span>}
                   {active && <CornerDownLeft size={14} className="text-muted" />}
                 </button>
               );
@@ -132,6 +161,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
                     {it.type ? t("palette.newTyped", { name: ix.typeName(it.type) }) : t("palette.new")} <span className="font-medium">{t("palette.quoted", { text: it.title })}</span>
                   </span>
                   {it.type && <TypeGlyph schema={ix.types.get(it.type)?.schema} size={14} />}
+                  {several && <span className="max-w-28 shrink-0 truncate text-xs text-muted">{nameOf(cs)}</span>}
                 </button>
               );
             if (it.kind === "ask")

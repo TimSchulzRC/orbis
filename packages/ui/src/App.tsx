@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Sparkles, Plus, Menu, Search, LayoutDashboard, Inbox, SlidersHorizontal, X } from "lucide-react";
 import { SETTINGS_ID } from "@obtion/core/model";
-import { useRepo, useRoute, useMediaQuery, itemHref } from "./hooks";
+import { useRepo, useRoute, useMediaQuery, itemHref, spaceHref } from "./hooks";
 import { useT } from "./i18n";
 import { cx, IconButton, useModal } from "./ui/bits";
 import { AgentNotice } from "./ui/AgentNotice";
@@ -24,9 +24,10 @@ import { TypesView } from "./views/Types";
 import { GraphView } from "./views/Graph";
 import { Activity } from "./views/Activity";
 import { TrashView } from "./views/Trash";
-import { Settings } from "./views/Settings";
+import { Settings, SpaceSettingsPage } from "./views/Settings";
 import { ICON } from "./ui/icons";
-import { NewSpaceDialog, SpaceScope, SpaceSelector } from "./ui/Spaces";
+import { NewSpaceDialog, SpaceScope, SpaceSelector, useReplicas } from "./ui/Spaces";
+import { globalPage } from "./scope";
 import { Gate } from "./views/Account";
 import { signOut, useAccounts } from "./accounts";
 
@@ -53,6 +54,21 @@ function SignedOut() {
       <span className="flex-1">{t("account.lost", { server: location.host })}</span>
       <button onClick={() => void signOut()} className="font-medium text-[var(--link)] hover:underline">
         {t("account.signInAgain")}
+      </button>
+    </div>
+  );
+}
+
+/** A newer app wrote data in one of the workspaces: this one only reads them until reloaded. */
+function TooNew() {
+  const { t } = useT();
+  const { spaces } = useAccounts();
+  if (!useReplicas(spaces.map((s) => s.id)).some((r) => r.readOnly)) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line bg-surface-2 px-4 py-2 text-sm" role="status">
+      <span className="flex-1">{t("format.tooNew")}</span>
+      <button onClick={() => location.reload()} className="font-medium text-[var(--link)] hover:underline">
+        {t("format.reload")}
       </button>
     </div>
   );
@@ -111,13 +127,16 @@ function Main() {
     }
   }, [route.path]);
 
-  if (!r.status.loaded) return <div className="flex h-full items-center justify-center text-muted">{t("app.opening")}</div>;
-  // First setup: only once the server was asked (or nothing is there at all and we are offline).
+  // a page of a workspace waits for it and is its setup until it is set up; Start, the inbox,
+  // search and the settings show what is there in every workspace
   const settings = r.get(SETTINGS_ID);
-  if (!settings && (r.status.synced || (!r.status.online && r.docs.size === 0))) return <Setup />;
-  if (!settings) return <div className="flex h-full items-center justify-center text-muted">{t("app.syncing")}</div>;
-
+  const setUp = !settings && (r.status.synced || (!r.status.online && r.docs.size === 0));
   const page = (() => {
+    if (!globalPage(route.parts) || route.parts[0] === "setup") {
+      if (!r.status.loaded) return <div className="flex h-full items-center justify-center text-muted">{t("app.opening")}</div>;
+      if (setUp) return <Setup />;
+      if (!settings) return <div className="flex h-full items-center justify-center text-muted">{t("app.syncing")}</div>;
+    }
     switch (route.parts[0]) {
       case undefined:
         return <Start />;
@@ -140,6 +159,10 @@ function Main() {
         return <TrashView />;
       case "settings":
         return <Settings />;
+      case "workspace":
+        return <SpaceSettingsPage />;
+      case "setup":
+        return <Redirect to="/" />;
       case "i":
         return <ItemPage id={route.parts[1]!} isNew={route.query.get("new") === "1"} />;
       default:
@@ -175,23 +198,16 @@ function Main() {
           </header>
         )}
         <SignedOut />
-        {r.readOnly && (
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line bg-surface-2 px-4 py-2 text-sm" role="status">
-            <span className="flex-1">{t("format.tooNew")}</span>
-            <button onClick={() => location.reload()} className="font-medium text-[var(--link)] hover:underline">
-              {t("format.reload")}
-            </button>
-          </div>
-        )}
+        <TooNew />
         <main tabIndex={-1} className={cx("@container min-h-0 flex-1 outline-none", isGraph ? "overflow-hidden" : "overflow-y-auto")}>
-          {/* another workspace: the page anew on its replica (repo and files point at it) */}
-          <PageBoundary key={`${active?.id}${route.path}`}>{page}</PageBoundary>
+          {/* a page of another workspace: anew on its replica (repo and files point at it) */}
+          <PageBoundary key={`${globalPage(route.parts) ? "" : active?.id}${route.path}`}>{page}</PageBoundary>
         </main>
         {/* an inbox entry on a phone has its actions at the bottom instead */}
         {!wide && !(route.parts[0] === "inbox" && route.parts[1]) && <MobileNav onAgent={() => toggleAgent(true)} />}
       </div>
 
-      {agentOpen && <AgentPanel key={active?.id} context={contextItem} onClose={() => toggleAgent(false)} overlay={!wide} />}
+      {agentOpen && <AgentPanel context={contextItem} onClose={() => toggleAgent(false)} overlay={!wide} />}
       {palette && <CommandPalette onClose={() => setPalette(false)} />}
       {menu && (
         <div className="fixed inset-0 z-50 bg-black/30" onClick={() => setMenu(false)}>
@@ -271,20 +287,27 @@ function Redirect({ to }: { to: string }) {
   return null;
 }
 
-/** Bottom bar on phones: Start, Eingang, the first two types of the sidebar (Projekte, Tasks), Agent. */
+/**
+ * Bottom bar on phones: Start, Eingang, Agent – with one workspace seen also its first two types
+ * of the sidebar (Projekte, Tasks); with several they are in the menu, each in its workspace.
+ */
 function MobileNav({ onAgent }: { onAgent: () => void }) {
   const { t } = useT();
-  const r = useRepo();
+  const { shown, active } = useAccounts();
+  const one = shown.length === 1 ? shown[0]! : undefined;
+  const [r] = useReplicas(one ? [one.id] : []);
   const route = useRoute();
-  const ix = r.index();
+  const ix = r?.index();
   const inbox = useInboxTotal();
   const entries = [
     { key: "start", label: t("nav.start"), icon: <LayoutDashboard size={20} />, href: "#/", active: route.path === "/" },
     { key: "inbox", label: t("nav.inbox"), icon: <Inbox size={20} />, href: "#/inbox", active: route.path.startsWith("/inbox"), dot: inbox > 0 },
-    ...ix.typesInOrder().slice(0, 2).map((x) => {
-      const I = ICON[x.schema!.icon] ?? ICON.circle!;
-      return { key: x.id, label: ix.typePlural(x.id), icon: <I size={20} />, href: itemHref(x.id), active: route.parts[0] === "i" && route.parts[1] === x.id };
-    }),
+    ...(ix
+      ? ix.typesInOrder().slice(0, 2).map((x) => {
+          const I = ICON[x.schema!.icon] ?? ICON.circle!;
+          return { key: x.id, label: ix.typePlural(x.id), icon: <I size={20} />, href: spaceHref(one!.id, `/i/${encodeURIComponent(x.id)}`), active: active?.id === one!.id && route.parts[0] === "i" && route.parts[1] === x.id };
+        })
+      : []),
     { key: "agent", label: t("nav.agent"), icon: <Sparkles size={20} />, onClick: onAgent },
   ] as { key: string; label: string; icon: React.ReactNode; href?: string; onClick?: () => void; active?: boolean; dot?: boolean }[];
   return (

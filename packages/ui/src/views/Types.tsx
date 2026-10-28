@@ -3,6 +3,7 @@ import { Plus, RotateCcw } from "lucide-react";
 import { restoreDefaultTypes } from "@obtion/core/setup";
 import { useIndex, useRepo, useRoute, useSpaceId, itemHref, spaceHref } from "../hooks";
 import { repo } from "../repo";
+import { SpaceEyebrow } from "../ui/Spaces";
 import { useT, getLang } from "../i18n";
 import { Button, Dialog, TypeGlyph } from "../ui/bits";
 import { createType } from "../actions";
@@ -18,6 +19,7 @@ export function TypesView() {
     <div className="page-read">
       <div className="mb-5 flex items-end gap-3">
         <div className="flex-1">
+          <SpaceEyebrow />
           <h1 className="page-title">{t("nav.types")}</h1>
           <p className="text-sm text-muted">{t("types.intro")}</p>
         </div>

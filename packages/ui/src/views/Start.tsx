@@ -2,7 +2,7 @@
 // a quiet line below, capture, then the start page as cards. The start page stays a text with
 // query blocks (editable via "Start bearbeiten"); read, each "## heading" with its blocks is a
 // card, and a line "---" splits it into a main and a side column.
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { MoreHorizontal, Pencil, Check, ChevronRight } from "lucide-react";
 import { type Item, SETTINGS_ID, todayISO } from "@obtion/core/model";
 import { defaultStartBody, isDefaultStartBody } from "@obtion/core/setup";
@@ -15,7 +15,7 @@ import type { Repo } from "@obtion/sync";
 import { type DayBrief, dayBrief } from "@obtion/core/today";
 import { createAndOpen } from "../actions";
 import { useRepo, useIndex, useMediaQuery, useRoute, itemHref, spaceHref } from "../hooks";
-import { spaceById, useAccounts } from "../accounts";
+import { spaceById, startSpace, useAccounts } from "../accounts";
 import { SpaceFilter, SpaceScope, useReplicas } from "../ui/Spaces";
 import { useT } from "../i18n";
 import { Capture } from "../ui/Capture";
@@ -291,19 +291,23 @@ function FocusRow({ item, space }: { item: Item; space?: string }) {
 // ---------- the page ----------
 
 /**
- * Start over the workspaces seen. Its layout is the start text of the account's first workspace
- * (editing opens that one); each card's blocks run in every workspace seen.
+ * Start over the workspaces seen. Its layout is the start text of one workspace, chosen on this
+ * device (Settings; the account's first unless chosen, the first set up while that one is not);
+ * each card's blocks run in every workspace seen. Before any workspace is set up, it sets one up.
  */
 export function Start() {
   const { t, lang } = useT();
-  const { spaces, shown, active } = useAccounts();
-  const home = spaces[0]!;
-  const repos = useReplicas([home.id, ...shown.map((s) => s.id)]);
-  const homeRepo = repos[0]!;
-  const parts: Part[] = shown.map((s, n) => ({ space: s.id, repo: repos[n + 1]! })).filter((p) => p.repo.get(SETTINGS_ID));
-  // editing writes the first workspace's start text: it is opened for that
-  const editing = useRoute().query.get("edit") === "1" && active?.id === home.id;
-  const edit = (on: boolean) => (location.hash = spaceHref(home.id, on ? "/?edit=1" : "/"));
+  const { spaces, shown } = useAccounts();
+  const all = useReplicas(spaces.map((s) => s.id));
+  const chosen = startSpace()!;
+  const home = all[spaces.indexOf(chosen)]?.get(SETTINGS_ID) ? chosen : (spaces.find((_, n) => all[n]!.get(SETTINGS_ID)) ?? chosen);
+  const homeRepo = all[spaces.indexOf(home)]!;
+  const parts: Part[] = shown.map((s) => ({ space: s.id, repo: all[spaces.indexOf(s)]! })).filter((p) => p.repo.get(SETTINGS_ID));
+  const editing = useRoute().query.get("edit") === "1";
+  const edit = (on: boolean) => (location.hash = on ? "#/?edit=1" : "#/");
+  const fresh = !homeRepo.get(SETTINGS_ID);
+  const asked = homeRepo.status.loaded && (homeRepo.status.synced || (!homeRepo.status.online && homeRepo.docs.size === 0));
+  useEffect(() => void (fresh && asked && location.replace(spaceHref(home.id, "/setup"))), [fresh && asked]);
   const doc = useMemo(() => homeRepo.getDoc(SETTINGS_ID), [homeRepo]);
   // the shipped start page, still unchanged, reads in the UI language (its text counts as a key
   // until it is edited); editing works on the stored text
@@ -347,7 +351,9 @@ export function Start() {
       {editing ? (
         <div className="mt-6">
           {spaces.length > 1 && <p className="mb-3 text-sm text-muted">{t("start.editHint", { name: home.name })}</p>}
-          <Editor doc={doc} extra={[queryBlocks(undefined)]} placeholder={t("start.placeholder")} />
+          <SpaceScope id={home.id}>
+            <Editor doc={doc} extra={[queryBlocks(undefined)]} placeholder={t("start.placeholder")} />
+          </SpaceScope>
         </div>
       ) : (
         <>

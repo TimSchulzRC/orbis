@@ -772,7 +772,7 @@
  "palette.allHits": "alle Treffer",
  "palette.quoted": "„{text}“",
  "palette.keys": "↑↓ wählen · ↵ öffnen · {mod}+↵ neue Notiz · Esc schließen",
- "settings.intro": "Sprache, Dateien auf diesem Gerät, Agents, Sync.",
+ "settings.intro": "Dein Konto, deine Workspaces und was für dieses Gerät gilt. Was zu einem Workspace gehört, steht in seinen eigenen Einstellungen.",
  "settings.more": "Weitere Bereiche der App",
  "settings.language": "Sprache",
  "settings.languageHint": "Gilt für dieses Gerät. Typen und Inhalte bleiben, wie sie heißen.",
@@ -989,5 +989,12 @@
  "triage.oneSpace": "Einträge aus verschiedenen Workspaces lassen sich nur löschen – Ort und Typ gehören zu einem Workspace.",
  "triage.withAgentIn": "Mit Agent sortieren ({name})",
  "inbox.whatLandsIn": "Was landet im Eingang von {name}?",
- "start.editHint": "Der Aufbau der Startseite gehört zum Workspace {name} und gilt für alle."
+ "start.editHint": "Der Aufbau der Startseite kommt aus dem Workspace {name} – welcher, legst du in den Einstellungen für dieses Gerät fest.",
+ "settings.workspaces": "Workspaces",
+ "settings.workspacesHint": "Jeder Workspace hat seine eigenen Inhalte, Typen, Mitglieder und Einstellungen.",
+ "settings.startLayout": "Startseite",
+ "settings.startLayoutFrom": "Aufbau aus",
+ "settings.startLayoutHint": "Gilt für dieses Gerät. Die Karten zeigen trotzdem alle Workspaces, die du siehst.",
+ "space.members": "Name und Mitglieder",
+ "agent.space": "Workspace des Agenten"
 }

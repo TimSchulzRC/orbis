@@ -2,15 +2,17 @@ import { useState } from "react";
 import { Search as SearchIcon } from "lucide-react";
 import { type Cond, parseQuery } from "@obtion/core/query";
 import { snippet } from "@obtion/core/search";
-import { useIndex, useRoute, itemHref } from "../hooks";
-import { repo } from "../repo";
+import type { Index } from "@obtion/core/graph";
+import { useRoute, spaceHref } from "../hooks";
+import { useAccounts } from "../accounts";
+import { SpaceScope, useReplicas } from "../ui/Spaces";
 import { useT, tr } from "../i18n";
 import { ItemIcon } from "../ui/bits";
 import { Results } from "../ui/Results";
 import { shortPath } from "../ui/Row";
 
 /** "type:Gibtsnicht" → "Typ „Gibtsnicht“ gibt es nicht – meintest du „Buch“?" */
-function explain(err: string, ix: ReturnType<typeof useIndex>): string {
+function explain(err: string, ix: Index): string {
   const [kind, ...rest] = err.split(":");
   const value = rest.join(":");
   if (kind === "type") {
@@ -36,16 +38,27 @@ function onlyText(c: Cond): boolean {
   return false;
 }
 
-/** Full-text search; input that reads as a query (typ:, #tag, unter: …) runs as one, and */
+/**
+ * Full-text search over the workspaces seen, each with its hits under its name when there are
+ * several; input that reads as a query (typ:, #tag, unter: …) runs as one in each workspace that
+ * understands it (types and places are a workspace's own).
+ */
 export function SearchView() {
   const { t } = useT();
-  const ix = useIndex();
+  const { shown } = useAccounts();
+  const repos = useReplicas(shown.map((s) => s.id));
   const route = useRoute();
   const [q, setQ] = useState(route.query.get("q") ?? "");
-  const parsed = parseQuery(q, ix);
+  const per = shown.map((s, n) => {
+    const ix = repos[n]!.index();
+    return { space: s, repo: repos[n]!, ix, parsed: parseQuery(q, ix) };
+  });
   // A query is anything the parser reads as more than plain words – in every language of the catalogs.
-  const isQuery = !!parsed.def.where && !parsed.errors.length && !onlyText(parsed.def.where);
-  const hits = !isQuery && q.trim() ? repo.search(q, 60) : [];
+  const understood = per.filter((p) => !!p.parsed.def.where && !p.parsed.errors.length && !onlyText(p.parsed.def.where));
+  const isQuery = understood.length > 0;
+  const errors = isQuery ? undefined : (per.find((p) => p.parsed.errors.length) ?? per[0]);
+  const hits = per.map((p) => ({ ...p, hits: !isQuery && q.trim() ? p.repo.search(q, 60) : [] }));
+  const several = shown.length > 1;
   return (
     <div className="page-read">
       <div className="flex items-center gap-2 rounded-xl border border-line bg-surface px-3 py-2 focus-within:border-[var(--focus)]">
@@ -61,19 +74,30 @@ export function SearchView() {
           className="flex-1 bg-transparent text-base outline-none"
         />
       </div>
-      {parsed.errors.length > 0 ? (
-        <p className="mt-1.5 text-xs text-warn">{t("search.notUnderstood", { list: parsed.errors.map((e) => explain(e, ix)).join(" · ") })}</p>
+      {errors && errors.parsed.errors.length > 0 ? (
+        <p className="mt-1.5 text-xs text-warn">{t("search.notUnderstood", { list: errors.parsed.errors.map((e) => explain(e, errors.ix)).join(" · ") })}</p>
       ) : (
         <p className="mt-1.5 text-xs text-muted">{t("search.hint")}</p>
       )}
       <div className="mt-5">
         {isQuery ? (
-          <Results def={parsed.def} />
+          understood.map((p) => (
+            <SpaceScope key={p.space.id} id={p.space.id}>
+              {several && <h2 className="mb-1 mt-6 text-xs font-semibold uppercase tracking-[0.05em] text-muted first:mt-0">{p.space.name}</h2>}
+              <Results def={p.parsed.def} />
+            </SpaceScope>
+          ))
         ) : (
           <ul className="space-y-1">
-            {hits.map((h) => (
-              <li key={h.id}>
-                <a href={itemHref(h.id)} className="-mx-2 block rounded-lg px-2 py-1.5 hover:bg-hover">
+            {hits.flatMap(({ space, ix, hits }) => [
+              several && hits.length > 0 && (
+                <li key={space.id} className="pt-4 text-xs font-semibold uppercase tracking-[0.05em] text-muted first:pt-0">
+                  {space.name}
+                </li>
+              ),
+              ...hits.map((h) => (
+              <li key={`${space.id}/${h.id}`}>
+                <a href={spaceHref(space.id, `/i/${encodeURIComponent(h.id)}`)} className="-mx-2 block rounded-lg px-2 py-1.5 hover:bg-hover">
                   <span className="flex items-center gap-2 font-medium">
                     <ItemIcon item={h} size={15} /> {h.title || t("untitled")}
                   </span>
@@ -81,8 +105,9 @@ export function SearchView() {
                   {(h.body || h.file?.text) && <span className="mt-0.5 line-clamp-2 block pl-6 text-sm text-muted">{snippet(h.body || h.file?.text || "", q, 180)}</span>}
                 </a>
               </li>
-            ))}
-            {q.trim() && !hits.length && <p className="text-sm text-muted">{t("search.none")}</p>}
+              )),
+            ])}
+            {q.trim() && hits.every((x) => !x.hits.length) && <p className="text-sm text-muted">{t("search.none")}</p>}
           </ul>
         )}
       </div>

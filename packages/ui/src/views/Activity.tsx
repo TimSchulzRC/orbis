@@ -1,12 +1,13 @@
 // Activity: every change with its origin (which device, which agent, import). Bulk
 // operations like deleting a type are listed here and can be undone.
 import { useEffect, useState } from "react";
-import { activeFetch } from "../accounts";
+import { spaceFetch } from "../accounts";
+import { SpaceEyebrow } from "../ui/Spaces";
 import { Sparkles, User, Download, Bot, Cog, Undo2, Redo2 } from "lucide-react";
 import type { ActivityEvent, FieldChange } from "@obtion/core/protocol";
 import { type Item, META_TYPE } from "@obtion/core/model";
 import type { Index } from "@obtion/core/graph";
-import { useRepo, itemHref } from "../hooks";
+import { useRepo, useSpaceId, itemHref } from "../hooks";
 import { useT } from "../i18n";
 import type { T } from "@obtion/core/i18n";
 import { Button, Empty, ItemIcon, RelTime, cx, Seg } from "../ui/bits";
@@ -204,13 +205,14 @@ function groupBySteps(events: ActivityEvent[]): ActivityEvent[][] {
 
 export function Activity() {
   const r = useRepo();
+  const space = useSpaceId()!;
   const { t } = useT();
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [filter, setFilter] = useState<"all" | "agent" | "you">("all");
   const [more, setMore] = useState(true);
   const [error, setError] = useState(false);
   const load = (before?: number) =>
-    activeFetch(`/api/activity?limit=60${before ? `&before=${before}` : ""}`)
+    spaceFetch(space, `/api/activity?limit=60${before ? `&before=${before}` : ""}`)
       .then((res) => res.json())
       .then((list: ActivityEvent[]) => {
         setEvents((ev) => (before ? [...ev, ...list] : list));
@@ -226,6 +228,7 @@ export function Activity() {
   const shown = merged.filter((e) => filter === "all" || (filter === "agent" ? e.origin.includes("agent:") : e.origin.includes("web:")));
   return (
     <div className="page-read">
+      <SpaceEyebrow />
       <h1 className="page-title">{t("nav.activity")}</h1>
       <p className="mb-5 text-sm text-muted">{t("activity.intro")}</p>
       <div className="mb-5">

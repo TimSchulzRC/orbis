@@ -7,9 +7,9 @@ import { type QueryDef, andWhere, runQuery, tabDef } from "@obtion/core/query";
 import { inboxWhere } from "@obtion/core/inbox";
 import { keyBetween } from "@obtion/core/sortkey";
 import { resetInbox, typeTabs } from "@obtion/core/setup";
-import { useRepo, useRoute, spaceHref } from "../hooks";
-import { activate, spaceById, useAccounts } from "../accounts";
-import { SpaceFilter, SpaceScope, useReplicas } from "../ui/Spaces";
+import { useRepo, useRoute } from "../hooks";
+import { spaceById, useAccounts } from "../accounts";
+import { SpaceEyebrow, SpaceFilter, SpaceScope, useReplicas } from "../ui/Spaces";
 import { Triage } from "../ui/Triage";
 import { repo } from "../repo";
 import { useT } from "../i18n";
@@ -165,6 +165,7 @@ export function FilesPage() {
   useEffect(() => void (document.title = t("nav.files")), []);
   return (
     <div className="page-wide">
+      <SpaceEyebrow />
       <div className="mb-4 flex items-center gap-3">
         <h1 className="page-title">{t("nav.files")}</h1>
         <span className="flex-1 text-[15px] tabular-nums text-muted">{all.length}</span>
@@ -201,7 +202,7 @@ export function FilesPage() {
  */
 export function InboxPage() {
   const { t } = useT();
-  const { shown, active } = useAccounts();
+  const { shown } = useAccounts();
   const [rule, setRule] = useState<string | null>(null);
   const repos = useReplicas(shown.map((s) => s.id));
   const spaceOf = new WeakMap<Item, string>();
@@ -214,14 +215,10 @@ export function InboxPage() {
     return items;
   });
   const items = per.flat().sort((a, b) => b.created - a.created);
-  // the agent sorts in the open workspace: that one if it has entries, else the first that has
-  const agentSpace = (shown.find((s, n) => s.id === active?.id && per[n]!.length) ?? shown.find((_, n) => per[n]!.length))?.id;
-  const sortWithAgent = () => {
-    if (!agentSpace) return;
-    activate(agentSpace);
-    location.hash = spaceHref(agentSpace, "/inbox");
-    askAgent(t("triage.agentPrompt"));
-  };
+  // the agent sorts in one workspace: the one it worked in last if that has entries, else the first that has
+  const last = localStorage.getItem("obtion.agent.space");
+  const agentSpace = (shown.find((s, n) => s.id === last && per[n]!.length) ?? shown.find((_, n) => per[n]!.length))?.id;
+  const sortWithAgent = () => agentSpace && askAgent(t("triage.agentPrompt"), undefined, agentSpace);
   useEffect(() => void (document.title = t("nav.inbox")), []);
   return (
     <div className="page-wide">

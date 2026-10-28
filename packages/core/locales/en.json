@@ -772,7 +772,7 @@
  "palette.allHits": "all hits",
  "palette.quoted": "“{text}”",
  "palette.keys": "↑↓ choose · ↵ open · {mod}+↵ new note · Esc close",
- "settings.intro": "Language, files on this device, agents, sync.",
+ "settings.intro": "Your account, your workspaces and what applies to this device. What belongs to a workspace is in its own settings.",
  "settings.more": "More of the app",
  "settings.language": "Language",
  "settings.languageHint": "For this device. Types and content keep their names.",
@@ -989,5 +989,12 @@
  "triage.oneSpace": "Entries from different workspaces can only be deleted together – a place and a type belong to one workspace.",
  "triage.withAgentIn": "Sort with agent ({name})",
  "inbox.whatLandsIn": "What lands in the inbox of {name}?",
- "start.editHint": "The layout of Start belongs to the workspace {name} and applies to all."
+ "start.editHint": "The layout of Start comes from the workspace {name} – which one is set in the settings for this device.",
+ "settings.workspaces": "Workspaces",
+ "settings.workspacesHint": "Each workspace has its own content, types, members and settings.",
+ "settings.startLayout": "Start",
+ "settings.startLayoutFrom": "Layout from",
+ "settings.startLayoutHint": "Applies to this device. The cards still show every workspace you see.",
+ "space.members": "Name and members",
+ "agent.space": "Agent's workspace"
 }
