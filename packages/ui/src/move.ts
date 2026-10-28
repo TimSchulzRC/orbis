@@ -1,7 +1,6 @@
-// Moving an item (with what hangs only below it) from the open workspace into another one – on
-// the same server or another. The file contents come first: once they are kept for the other
-// workspace (on this device, uploaded from there), the copy is written (copyToWorkspace) and the
-// originals go to the trash here. Each workspace keeps its own undo: here "Wiederherstellen".
+// Moving an item (with what hangs only below it) from the open workspace into another one. The
+// file contents come first: once they are kept for the other workspace (on this device, uploaded
+// from there), the copy is written (copyToWorkspace) and the originals go to the trash here. Each workspace keeps its own undo: here "Wiederherstellen".
 import type { Repo } from "@obtion/sync";
 import { SETTINGS_ID } from "@obtion/core/model";
 import { copyToWorkspace, movedItems } from "@obtion/core/transfer";
@@ -29,7 +28,7 @@ async function ready(r: Repo, ms = 10000): Promise<boolean> {
 export async function moveToSpace(id: string, to: Space, parent?: string): Promise<string> {
   const src = repo;
   const srcFiles = files;
-  const dst = replica(to.key);
+  const dst = replica(to.id);
   if (!(await ready(dst.repo))) throw new MoveError("unreachable");
   // never set up: its setup would add the shipped types a second time next to the moved ones
   if (!dst.repo.get(SETTINGS_ID)) throw new MoveError("setup");
@@ -52,6 +51,6 @@ export async function moveToSpace(id: string, to: Space, parent?: string): Promi
 
 /** Open the moved item in its new workspace. */
 export function openIn(to: Space, id: string) {
-  activate(to.key);
+  activate(to.id);
   location.hash = itemHref(id);
 }

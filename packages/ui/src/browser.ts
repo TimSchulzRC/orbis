@@ -1,5 +1,5 @@
 // The replica's platform in a browser (web app, later the desktop app's window): IndexedDB as
-// storage, a workspace on a server (the one that served the page or another), other tabs over
+// storage, a workspace on the server that served the page, other tabs over
 // BroadcastChannel, dialogs of the UI.
 import { openDB, type IDBPDatabase } from "idb";
 import type { OutItem, RepoHost, ReplicaStorage, SyncSocket, TabMsg } from "@obtion/sync";

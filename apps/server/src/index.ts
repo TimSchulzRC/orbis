@@ -93,17 +93,6 @@ function tokenOf(req: Request): string | undefined {
     ?.slice(5);
 }
 
-/** With a token, any site may call: its answer is readable there (no cookies are involved). */
-function withCors(req: Request, res: Response): Response {
-  const origin = req.headers.get("origin");
-  if (origin && !sameOrigin(req)) {
-    res.headers.set("access-control-allow-origin", origin);
-    res.headers.set("access-control-expose-headers", "x-obtion-missing");
-    res.headers.append("vary", "origin");
-  }
-  return res;
-}
-
 const json = (x: unknown, status = 200) => Response.json(x, { status });
 const fail = (e: unknown) => {
   if (e instanceof AccountError) return json({ error: e.message }, e.status);
@@ -161,8 +150,6 @@ async function accountApi(req: Request, path: string, url: URL): Promise<Respons
     if (path === "/api/account" && req.method === "GET") {
       return json({ user, admin: accounts.isAdmin(user.id), agent: agentAllowed(user.id), workspaces: accounts.workspacesOf(user.id) });
     }
-    // another app (on another server's page) asks for its own session; see the connect page
-    if (path === "/api/account/session" && req.method === "POST") return json({ token: await accounts.newSession(user.id), user });
     if (path === "/api/account/signout" && req.method === "POST") return (await accounts.signOut(token!), json({ ok: true }));
     if (path === "/api/workspaces" && req.method === "POST") {
       const b = await body<{ name?: string }>(req);
@@ -219,9 +206,6 @@ const server = Bun.serve<Conn>({
     }
 
     const api = path.startsWith("/api/") || path.startsWith("/w/") || path === "/mcp";
-    if (api && req.method === "OPTIONS") {
-      return withCors(req, new Response(null, { status: 204, headers: { "access-control-allow-methods": "GET, POST, PUT, PATCH, DELETE", "access-control-allow-headers": "authorization, content-type, x-obtion-probe, x-obtion-agent", "access-control-max-age": "86400" } }));
-    }
     // a change without a token must come from this site (CSRF): without one only the sign-up is open
     if (api && req.method !== "GET" && !tokenOf(req) && !sameOrigin(req)) return new Response("Forbidden", { status: 403 });
 
@@ -231,7 +215,7 @@ const server = Bun.serve<Conn>({
       return workspace(legacyId)!.mcp(req);
     }
 
-    if (path.startsWith("/api/")) return withCors(req, (await accountApi(req, path, url)) ?? new Response("Not found", { status: 404 }));
+    if (path.startsWith("/api/")) return (await accountApi(req, path, url)) ?? new Response("Not found", { status: 404 });
 
     const m = path.match(/^\/w\/([\w-]{1,40})(\/.*)$/);
     if (m) {
@@ -245,20 +229,19 @@ const server = Bun.serve<Conn>({
         return workspace(id)!.mcp(req);
       }
       const user = await accounts.userOf(token);
-      if (!user) return withCors(req, json({ error: "unauthorized" }, 401));
-      if (!accounts.role(id, user.id)) return withCors(req, json({ error: "not a member" }, 403));
+      if (!user) return json({ error: "unauthorized" }, 401);
+      if (!accounts.role(id, user.id)) return json({ error: "not a member" }, 403);
       const w = workspace(id);
-      if (!w) return withCors(req, json({ error: "no such workspace" }, 404));
+      if (!w) return json({ error: "no such workspace" }, 404);
       if (rest === "/sync") {
         const name = user.name.split(/\s+/)[0] || user.email.split("@")[0]!;
         const ok = srv.upgrade(req, { data: { workspace: id, areas: new Set<string>(), origin: `web:${name}`, user: name }, headers: { "sec-websocket-protocol": "obtion" } });
         return ok ? undefined : new Response("Expected WebSocket", { status: 400 });
       }
-      const res = await w.handle(req, rest, {
+      return w.handle(req, rest, {
         user: user.name.split(/\s+/)[0] || user.email.split("@")[0]!,
         agent: { allowed: agentAllowed(user.id), mcpUrl: `http://127.0.0.1:${PORT}/w/${id}/mcp`, token: config.agentToken!, model: process.env.OBTION_AGENT_MODEL },
       });
-      return withCors(req, res);
     }
 
     if (!WEB_APP) return new Response("This Obtion server serves sync, API and MCP only (OBTION_WEB_APP=off).", { status: 404 });

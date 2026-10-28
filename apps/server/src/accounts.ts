@@ -149,13 +149,6 @@ export class Accounts {
     return { token: res.token!, user };
   }
 
-  /** Another session for the same user: a further app (on another server's page) gets its own token. */
-  async newSession(user: string): Promise<string> {
-    const ctx = await this.auth.$context;
-    const s = await ctx.internalAdapter.createSession(user);
-    return s.token;
-  }
-
   async signOut(token: string) {
     const ctx = await this.auth.$context;
     await ctx.internalAdapter.deleteSession(token);

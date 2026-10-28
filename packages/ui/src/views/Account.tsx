@@ -1,8 +1,7 @@
 // Before the app: signing in or creating an account on this server, joining by an invite link
-// (#/join/<code>), the consent page another app sends its user to (#/connect?app=…) and the way
-// back from there (#/connected?server=…&token=…). Then a workspace has to be open.
+// (#/join/<code>). Then a workspace has to be open.
 import { useEffect, useState, type ReactNode } from "react";
-import { type Account, connected, createSpace, grant, here, homeAccount, hostOf, invite, joinInvite, serverInfo, signIn, signUp, useAccounts } from "../accounts";
+import { createSpace, invite, joinInvite, serverInfo, signIn, signUp, useAccounts } from "../accounts";
 import { useRoute } from "../hooks";
 import { getLang, useT } from "../i18n";
 import { Button } from "../ui/bits";
@@ -93,7 +92,7 @@ function Join({ code }: { code: string }) {
   const { t } = useT();
   const [inv, setInv] = useState<{ workspace: string; by: string } | null | undefined>();
   const [error, setError] = useState("");
-  const acc = homeAccount();
+  const { account: acc } = useAccounts();
   useEffect(() => {
     invite(code).then(setInv, () => setInv(null));
   }, [code]);
@@ -101,8 +100,8 @@ function Join({ code }: { code: string }) {
   if (inv === undefined) return null;
   if (inv === null) return <Card title={t("account.inviteInvalid")} intro={t("account.inviteInvalidHint")}><a href="#/" className="mt-4 block text-sm text-[var(--link)] hover:underline">{t("nav.start")}</a></Card>;
   return (
-    <Card title={t("account.joinTitle", { workspace: inv.workspace })} intro={t("account.joinIntro", { by: inv.by, server: hostOf(here) })}>
-      {acc ? (
+    <Card title={t("account.joinTitle", { workspace: inv.workspace })} intro={t("account.joinIntro", { by: inv.by, server: location.host })}>
+      {acc && !acc.lost ? (
         <>
           <p className="mt-4 text-sm">{t("account.joinAs", { email: acc.user.email })}</p>
           {error && <p className="mt-3 text-sm text-[var(--danger-text)]">{error}</p>}
@@ -117,56 +116,13 @@ function Join({ code }: { code: string }) {
   );
 }
 
-/** On this server's page: another app (on another server) asks for access to the account here. */
-function Connect({ app }: { app: string }) {
-  const { t } = useT();
-  const acc = homeAccount();
-  let origin = "";
-  try {
-    origin = new URL(app).origin;
-  } catch {}
-  if (!origin || !/^https?:/.test(origin)) return <Card title={t("account.connectBad")}>{null}</Card>;
-  return (
-    <Card title={t("account.connectTitle")} intro={t("account.connectIntro", { app: hostOf(origin), server: hostOf(here) })}>
-      {acc ? (
-        <>
-          <p className="mt-4 text-sm">{t("account.connectAs", { email: acc.user.email })}</p>
-          <div className="mt-6 flex gap-2">
-            <Button variant="outline" className="flex-1" onClick={() => (location.href = origin)}>
-              {t("cancel")}
-            </Button>
-            <Button variant="primary" className="flex-1" onClick={() => void grant(origin)}>
-              {t("account.allow")}
-            </Button>
-          </div>
-        </>
-      ) : (
-        <SignIn />
-      )}
-    </Card>
-  );
-}
-
-/** Back from another server's consent page with a token. */
-function Connected({ server, token }: { server: string; token: string }) {
-  const { t } = useT();
-  const [error, setError] = useState("");
-  useEffect(() => {
-    connected(server, token).then(
-      () => location.replace("#/"),
-      (e) => setError((e as Error).message),
-    );
-  }, []);
-  return <Card title={error ? t("account.connectFailed") : t("app.opening")} intro={error || undefined}>{error && <a href="#/" className="mt-4 block text-sm text-[var(--link)] hover:underline">{t("nav.start")}</a>}</Card>;
-}
-
 /** Signed in, but in no workspace (left them all, or joined none): make one. */
-function NoSpace({ acc }: { acc: Account }) {
+function NoSpace() {
   const { t } = useT();
   const [name, setName] = useState(t("account.personal"));
   return (
     <Card title={t("account.noSpace")} intro={t("account.noSpaceHint")}>
-      <form onSubmit={(e) => (e.preventDefault(), void createSpace(acc, name))}>
+      <form onSubmit={(e) => (e.preventDefault(), void createSpace(name))}>
         <Field label={t("space.name")} required value={name} onChange={(e) => setName(e.target.value)} />
         <Button type="submit" variant="primary" className="mt-6 w-full">
           {t("space.create")}
@@ -180,15 +136,9 @@ function NoSpace({ acc }: { acc: Account }) {
 export function Gate({ children }: { children: ReactNode }) {
   const { t } = useT();
   const route = useRoute();
-  const { accounts, active } = useAccounts();
+  const { account, active } = useAccounts();
   if (route.parts[0] === "join" && route.parts[1]) return <Join code={route.parts[1]} />;
-  if (route.parts[0] === "connect") return <Connect app={route.query.get("app") ?? ""} />;
-  if (route.parts[0] === "connected") return <Connected server={route.query.get("server") ?? ""} token={route.query.get("token") ?? ""} />;
-  if (!accounts.length) return <Card title={t("setup.welcome")} intro={t("account.intro", { server: hostOf(here) })}><SignIn /></Card>;
-  if (!active) {
-    const acc = accounts.find((a) => !a.lost);
-    if (!acc) return <Card title={t("account.lostTitle")} intro={t("account.lost", { server: hostOf(accounts[0]!.server) })}><SignIn /></Card>;
-    return <NoSpace acc={acc} />;
-  }
+  if (!account) return <Card title={t("setup.welcome")} intro={t("account.intro", { server: location.host })}><SignIn /></Card>;
+  if (!active) return account.lost ? <Card title={t("account.lostTitle")} intro={t("account.lost", { server: location.host })}><SignIn /></Card> : <NoSpace />;
   return <>{children}</>;
 }

@@ -28,7 +28,7 @@ import { askAgent, createAndOpen } from "../actions";
 import { INBOX_ICON, NOTE_ICON, OVERVIEW_ICON } from "../ui/icons";
 import { extractAsCard, extractType } from "../ui/extract";
 import { movedItems } from "@obtion/core/transfer";
-import { accountOf, hostOf, useAccounts } from "../accounts";
+import { useAccounts } from "../accounts";
 import { moveTo } from "../ui/Spaces";
 
 export function ItemPage({ id, isNew }: { id: string; isNew: boolean }) {
@@ -431,16 +431,15 @@ function MoveDialog({ item, onClose }: { item: Item; onClose: () => void }) {
       <p className="text-sm text-muted">{count > 0 ? t("move.introBelow", { count }) : t("move.intro")}</p>
       <ul className="mt-3 space-y-1">
         {spaces
-          .filter((s) => s.key !== active?.key)
+          .filter((s) => s.id !== active?.id)
           .map((s) => (
-            <li key={s.key}>
+            <li key={s.id}>
               <button
                 disabled={busy}
                 onClick={() => (setBusy(true), void moveTo(item.id, s).finally(onClose))}
                 className="tap-row flex w-full items-center gap-2 rounded-lg border border-line px-3 py-2 text-left text-sm hover:bg-hover disabled:opacity-60"
               >
                 <span className="min-w-0 flex-1 truncate font-medium">{s.name}</span>
-                <span className="shrink-0 truncate text-xs text-muted">{hostOf(accountOf(s).server)}</span>
               </button>
             </li>
           ))}

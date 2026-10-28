@@ -30,7 +30,7 @@ import { Settings } from "./views/Settings";
 import { ICON } from "./ui/icons";
 import { OtherSpaces, SpaceSwitcher } from "./ui/Spaces";
 import { Gate } from "./views/Account";
-import { accountOf, connectServer, here, hostOf, signOut, useAccounts } from "./accounts";
+import { signOut, useAccounts } from "./accounts";
 
 export function App() {
   const { active } = useAccounts();
@@ -39,7 +39,7 @@ export function App() {
     <>
       {/* another workspace: the app anew on its replica (repo and files point at it) */}
       <Gate>
-        <Main key={active?.key} />
+        <Main key={active?.id} />
       </Gate>
       <ConfirmHost />
       <AppToaster />
@@ -47,16 +47,15 @@ export function App() {
   );
 }
 
-/** The open workspace's server no longer takes the account's token: sign in again there. */
+/** The server no longer takes the account's token: sign in again. */
 function SignedOut() {
   const { t } = useT();
-  const { active } = useAccounts();
-  if (!active || !accountOf(active).lost) return null;
-  const acc = accountOf(active);
+  const { account } = useAccounts();
+  if (!account?.lost) return null;
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line bg-surface-2 px-4 py-2 text-sm" role="status">
-      <span className="flex-1">{t("account.lost", { server: hostOf(acc.server) })}</span>
-      <button onClick={() => (acc.server === here ? signOut(acc) : connectServer(acc.server))} className="font-medium text-[var(--link)] hover:underline">
+      <span className="flex-1">{t("account.lost", { server: location.host })}</span>
+      <button onClick={() => void signOut()} className="font-medium text-[var(--link)] hover:underline">
         {t("account.signInAgain")}
       </button>
     </div>

@@ -72,16 +72,16 @@ async function startServer(seeded: boolean, noTypes = false) {
 /** A browser context that holds the server's first account, as after signing in on the page. */
 async function signedIn(browser: import("playwright-core").Browser, server: Awaited<ReturnType<typeof startServer>>, opts: import("playwright-core").BrowserContextOptions) {
   const context = await browser.newContext({ baseURL: server.url, ...opts });
-  const accounts = [{ id: "e2e", server: server.url, token: server.token, user: server.me.user }];
-  const spaces = server.me.workspaces.map((w) => ({ ...w, key: `e2e/${w.id}`, account: "e2e" }));
+  const account = { token: server.token, user: server.me.user };
+  const spaces = server.me.workspaces;
   await context.addInitScript(
-    ({ accounts, spaces }) => {
-      if (localStorage.getItem("obtion.accounts")) return;
-      localStorage.setItem("obtion.accounts", JSON.stringify(accounts));
+    ({ account, spaces }) => {
+      if (localStorage.getItem("obtion.account")) return;
+      localStorage.setItem("obtion.account", JSON.stringify(account));
       localStorage.setItem("obtion.spaces", JSON.stringify(spaces));
-      localStorage.setItem("obtion.active", spaces[0]!.key);
+      localStorage.setItem("obtion.active", spaces[0]!.id);
     },
-    { accounts, spaces },
+    { account, spaces },
   );
   return context;
 }

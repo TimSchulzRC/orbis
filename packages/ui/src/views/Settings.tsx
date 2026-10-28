@@ -12,8 +12,8 @@ import { Button, Dialog, ItemIcon, Seg, SectionTitle, TypeGlyph, cx } from "../u
 import { notify } from "../ui/feedback";
 import { History, Shapes, Trash2, Waypoints } from "lucide-react";
 import { setTheme, useTheme } from "../theme";
-import { type Space, accountOf, agentHere, here, hostOf, inviteLink, leaveSpace, mcpToken, members, renameSpace, signOut, useAccounts } from "../accounts";
-import { AddServerDialog, NewSpaceDialog } from "../ui/Spaces";
+import { agentHere, inviteLink, leaveSpace, mcpToken, members, renameSpace, signOut, useAccounts } from "../accounts";
+import { NewSpaceDialog } from "../ui/Spaces";
 
 interface Connect {
   mcpUrl: string;
@@ -78,14 +78,14 @@ function SpaceSettings() {
   const [error, setError] = useState("");
   useEffect(() => {
     if (active) members(active).then(setList, () => {});
-  }, [active?.key]);
+  }, [active?.id]);
   if (!active) return null;
   const owner = active.role === "owner";
   const fail = (e: unknown) => setError((e as Error).message === "last owner" ? t("space.lastOwner") : (e as Error).message);
   return (
     <section>
       <SectionTitle>{t("space.title")}</SectionTitle>
-      <p className="mb-3 text-sm text-muted">{t("space.intro", { server: hostOf(accountOf(active).server) })}</p>
+      <p className="mb-3 text-sm text-muted">{t("space.intro", { server: location.host })}</p>
       {owner ? (
         <form className="flex flex-wrap items-center gap-2" onSubmit={(e) => (e.preventDefault(), renameSpace(active, name).catch(fail))}>
           <input value={name} onChange={(e) => setName(e.target.value)} aria-label={t("space.name")} className="field rounded-lg border border-line bg-surface px-3 py-1.5 text-sm" />
@@ -124,41 +124,33 @@ function SpaceSettings() {
   );
 }
 
-/** The accounts of this app: on this server and others; a new workspace, another server, signing out. */
+/** The account: its workspaces, a new one, signing out. */
 function Accounts() {
   const { t } = useT();
-  const { accounts, spaces } = useAccounts();
-  const [dialog, setDialog] = useState<"new" | "server" | null>(null);
-  const spacesOf = (id: string) => spaces.filter((s: Space) => s.account === id);
+  const { account, spaces } = useAccounts();
+  const [creating, setCreating] = useState(false);
+  if (!account) return null;
   return (
     <section>
       <SectionTitle>{t("account.title")}</SectionTitle>
-      <ul className="space-y-2">
-        {accounts.map((a) => (
-          <li key={a.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-line p-3 text-sm">
-            <span className="min-w-0 flex-1">
-              <span className="block truncate font-medium">{a.user.email}</span>
-              <span className="block truncate text-xs text-muted">
-                {a.server === here ? t("account.thisServer", { server: hostOf(a.server) }) : hostOf(a.server)} · {spacesOf(a.id).map((s) => s.name).join(", ") || t("account.noSpaces")}
-                {a.lost && ` · ${t("account.signedOut")}`}
-              </span>
-            </span>
-            <Button variant="outline" onClick={() => void signOut(a)}>
-              {t("account.signOut")}
-            </Button>
-          </li>
-        ))}
-      </ul>
-      <div className="mt-3 flex flex-wrap gap-2">
-        <Button variant="outline" onClick={() => setDialog("new")}>
-          {t("space.new")}
-        </Button>
-        <Button variant="outline" onClick={() => setDialog("server")}>
-          {t("space.addServer")}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-line p-3 text-sm">
+        <span className="min-w-0 flex-1">
+          <span className="block truncate font-medium">{account.user.email}</span>
+          <span className="block truncate text-xs text-muted">
+            {t("account.thisServer", { server: location.host })} · {spaces.map((s) => s.name).join(", ") || t("account.noSpaces")}
+            {account.lost && ` · ${t("account.signedOut")}`}
+          </span>
+        </span>
+        <Button variant="outline" onClick={() => void signOut()}>
+          {t("account.signOut")}
         </Button>
       </div>
-      {dialog === "new" && <NewSpaceDialog onClose={() => setDialog(null)} />}
-      {dialog === "server" && <AddServerDialog onClose={() => setDialog(null)} />}
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button variant="outline" onClick={() => setCreating(true)}>
+          {t("space.new")}
+        </Button>
+      </div>
+      {creating && <NewSpaceDialog onClose={() => setCreating(false)} />}
     </section>
   );
 }

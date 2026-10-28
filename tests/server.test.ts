@@ -121,25 +121,15 @@ test("a workspace is only open to its members – sync, files, activity, MCP", a
   expect((await call(cw.id, carla.token)).status).toBe(401); // a session is no MCP token
 });
 
-test("with a token any site may call (CORS); without one, changes must come from the server's own page", async () => {
+test("the sign-in only from the server's own page; other sites get no CORS answer", async () => {
   const eve = await signUp(bare, "eve@example.org");
   const [w] = (await account(bare, eve.token)).workspaces;
-  const pre = await fetch(`${bare}/w/${w.id}/api/undo`, { method: "OPTIONS", headers: { origin: "https://app.example.org", "access-control-request-headers": "authorization, content-type" } });
-  expect(pre.status).toBe(204);
-  expect(pre.headers.get("access-control-allow-origin")).toBe("https://app.example.org");
-  expect(pre.headers.get("access-control-allow-headers")).toContain("authorization");
   const res = await fetch(`${bare}/w/${w.id}/api/activity`, { headers: { origin: "https://app.example.org", authorization: `Bearer ${eve.token}` } });
-  expect(res.status).toBe(200);
-  expect(res.headers.get("access-control-allow-origin")).toBe("https://app.example.org");
-  // the sign-in of the server's own page: never from another site
+  expect(res.headers.get("access-control-allow-origin")).toBeNull();
   expect((await post(bare, "/api/auth/sign-in/email", { email: "eve@example.org", password: "geheim12345" }, undefined, { origin: "https://evil.example.org" })).status).toBe(403);
   const own = await post(bare, "/api/auth/sign-in/email", { email: "eve@example.org", password: "geheim12345" }, undefined, { origin: bare });
   expect(own.status).toBe(200);
   expect(await account(bare, (await own.json()).token)).toMatchObject({ user: { email: "eve@example.org" } });
-  // a further session for an app on another server's page
-  const { token } = await post(bare, "/api/account/session", {}, eve.token, { origin: "https://app.example.org" }).then((r) => r.json());
-  expect(token).not.toBe(eve.token);
-  expect((await account(bare, token)).user.email).toBe("eve@example.org");
 });
 
 test("the data from before accounts become a workspace of the first account; the old MCP address still opens them", async () => {

@@ -2,5 +2,5 @@
 import "./theme";
 
 export { App } from "./App";
-export { refreshAll, unsynced } from "./accounts";
+export { refresh, unsynced } from "./accounts";
 export { tr } from "./i18n";

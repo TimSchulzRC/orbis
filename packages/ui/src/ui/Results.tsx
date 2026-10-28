@@ -1,6 +1,6 @@
 // Showing query results: list, table, board, tree, gallery and triage ("sortieren").
 // Used by collections, query blocks in texts and the sections of a page.
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { AlertTriangle, ChevronDown, ChevronRight, EyeOff, Sparkles } from "lucide-react";
 import { type Item, type StatusGroup, type ViewKind, todayISO } from "@obtion/core/model";
 import { type QueryDef, type EvalCtx, type Group as QGroup, FIELDS, fieldOf, groupItems, pathBase, runQuery, typesIn } from "@obtion/core/query";
