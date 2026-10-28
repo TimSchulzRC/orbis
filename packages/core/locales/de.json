@@ -989,5 +989,8 @@
  "storage.removeHint": "Der Ordner bleibt mit allem darin; du kannst ihn später wieder öffnen.",
  "storage.removeConfirm": "„{name}“ aus der App entfernen?",
  "storage.local": "Ordner",
- "account.signInHint": "Ein Konto auf {server} brauchst du nur, um Workspaces zu synchronisieren und zu teilen."
+ "account.signInHint": "Ein Konto auf {server} brauchst du nur, um Workspaces zu synchronisieren und zu teilen.",
+ "storage.where.server": "Auf dem Server {server}",
+ "storage.where.folder": "In einem Ordner auf diesem Computer",
+ "storage.where.both": "Auf dem Server {server} und in einem Ordner auf diesem Computer"
 }
