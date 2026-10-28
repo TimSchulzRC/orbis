@@ -4,7 +4,7 @@
 // Everything of a workspace lives under /w/<id>/… (sync, files, activity, undo, agent, MCP) and
 // needs a member's token (Authorization: Bearer, on the WebSocket as subprotocol). With a token
 // any site may call it (CORS): an app served by one server can hold workspaces of others.
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve, extname } from "node:path";
 import type { ServerWebSocket } from "bun";
 import { Store } from "./store";
@@ -29,6 +29,7 @@ const SIGNUP = (["open", "invite", "off"].includes(process.env.OBTION_SIGNUP ?? 
 /** Who may use the in-app agent (it runs on the server's Claude login): admins | all | off. */
 const AGENT = (process.env.OBTION_AGENT ?? "admins").toLowerCase();
 
+mkdirSync(DATA, { recursive: true });
 const configPath = join(DATA, "config.json");
 const random = () => Buffer.from(crypto.getRandomValues(new Uint8Array(24))).toString("base64url");
 // token: the MCP token from before accounts (still opens the data from then at /mcp);
