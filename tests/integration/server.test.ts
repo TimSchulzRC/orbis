@@ -8,6 +8,7 @@ import { FORMAT, PERSONAL, initItem } from "@obtion/core/model";
 import { type ServerMsg, toB64 } from "@obtion/core/protocol";
 import { allowedHosts } from "@obtion/server/trust";
 import { Store } from "@obtion/server/store";
+import { Accounts } from "@obtion/server/accounts";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -222,4 +223,68 @@ test("an owner deletes a workspace for everyone, with its folder; a member canno
   // nothing comes back into its folder afterwards
   await Bun.sleep(2000);
   expect(existsSync(join(data, "workspaces", w.id))).toBe(false);
+});
+
+test("account deletion requires a password and leaves last-owner workspaces intact", async () => {
+  const user = await signUp(bare, "delete-owner@example.org");
+  const [workspace] = (await account(bare, user.token)).workspaces;
+  const remove = (body: unknown, token = user.token) => fetch(bare + "/api/account", {
+    method: "DELETE", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify(body),
+  });
+  expect((await remove({ password: "geheim12345" }, "invalid")).status).toBe(401);
+  expect((await remove({})).status).toBe(400);
+  expect((await remove({ password: "wrong" })).status).toBe(403);
+  expect((await remove({ password: "geheim12345" })).status).toBe(409);
+  expect((await account(bare, user.token)).workspaces).toHaveLength(1);
+  expect((await fetch(`${bare}/api/workspaces/${workspace.id}`, { method: "DELETE", headers: { authorization: `Bearer ${user.token}` } })).status).toBe(200);
+  expect((await remove({ password: "geheim12345" })).status).toBe(200);
+  expect((await get(bare, "/api/account", user.token)).status).toBe(401);
+  expect((await post(bare, "/api/auth/sign-in/email", { email: "delete-owner@example.org", password: "geheim12345" })).ok).toBe(false);
+  // Credentials are gone too: the same email can register again.
+  expect((await signUp(bare, "delete-owner@example.org")).user.id).not.toBe(user.user.id);
+});
+
+test("deleting a member revokes sessions, invites, MCP tokens and live sync without deleting shared data", async () => {
+  const owner = await signUp(bare, "delete-shared-owner@example.org");
+  const [workspace] = (await account(bare, owner.token)).workspaces;
+  const { code } = await post(bare, `/api/workspaces/${workspace.id}/invites`, {}, owner.token).then((r) => r.json());
+  const member = await signUp(bare, "delete-member@example.org", code);
+  const second = await post(bare, "/api/auth/sign-in/email", { email: "delete-member@example.org", password: "geheim12345" }).then((r) => r.json());
+  const invite = await post(bare, `/api/workspaces/${workspace.id}/invites`, {}, member.token).then((r) => r.json());
+  const agent = await post(bare, `/api/workspaces/${workspace.id}/mcp-token`, {}, member.token).then((r) => r.json());
+  const live = await connect(bare, workspace.id, member.token);
+  const closed = new Promise<number>((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error("deleted account's sync remained open")), 3000);
+    live.ws.onclose = (e) => { clearTimeout(timeout); resolve(e.code); };
+  });
+  expect((await fetch(bare + "/api/account", {
+    method: "DELETE", headers: { authorization: `Bearer ${member.token}`, "content-type": "application/json" }, body: JSON.stringify({ password: "geheim12345" }),
+  })).status).toBe(200);
+  expect(await closed).toBe(4401);
+  for (const token of [member.token, second.token]) expect((await get(bare, "/api/account", token)).status).toBe(401);
+  expect((await get(bare, `/api/invites/${invite.code}`)).status).toBe(404);
+  expect((await post(bare, `/w/${workspace.id}/mcp`, { jsonrpc: "2.0", id: 1, method: "tools/list" }, agent.token)).status).toBe(401);
+  expect((await get(bare, `/w/${workspace.id}/api/activity`, owner.token)).status).toBe(200);
+  expect(await get(bare, `/api/workspaces/${workspace.id}/members`, owner.token).then((r) => r.json())).toHaveLength(1);
+});
+
+
+test("a co-owner can delete their account, including admin and credential records", async () => {
+  const accounts = new Accounts(tempDir("obtion-account-delete-"), { secret: "a-test-secret-longer-than-thirty-two-characters", baseURL: "http://localhost:8480", policy: "open" });
+  try {
+    await accounts.init(() => "Personal");
+    const first = await accounts.signUp({ email: "first@example.org", name: "First", password: "geheim12345", personal: "Personal" });
+    const [workspace] = accounts.workspacesOf(first.user.id);
+    const invite = accounts.createInvite(workspace!.id, first.user.id);
+    const second = await accounts.signUp({ email: "second@example.org", name: "Second", password: "geheim12345", personal: "Personal", invite });
+    accounts.db.query("UPDATE members SET role = 'owner' WHERE user = ?").run(second.user.id);
+    expect(accounts.isAdmin(first.user.id)).toBe(true);
+    await accounts.deleteAccount(first.user.id, "geheim12345");
+    expect(accounts.isAdmin(first.user.id)).toBe(false);
+    expect(accounts.userCount()).toBe(1);
+    expect(accounts.members(workspace!.id).map((m) => m.id)).toEqual([second.user.id]);
+    expect(accounts.exists(workspace!.id)).toBe(true);
+    for (const table of ["session", "account"])
+      expect(accounts.db.query(`SELECT 1 FROM "${table}" WHERE userId = ?`).get(first.user.id)).toBeNull();
+  } finally { accounts.db.close(); }
 });

@@ -22,7 +22,8 @@ export function idbStorage(name: string): ReplicaStorage {
         // Another tab wants to delete/upgrade the database (e.g. "re-download everything"): step aside.
         blocking: () => {
           db.close();
-          location.reload();
+          // Signing out already clears the account and will reload after all copies are removed.
+          if (localStorage.getItem("obtion.account") !== "null") location.reload();
         },
         upgrade(db) {
           db.createObjectStore("updates", { autoIncrement: true });

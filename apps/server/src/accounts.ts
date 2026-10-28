@@ -154,6 +154,26 @@ export class Accounts {
     await ctx.internalAdapter.deleteSession(token);
   }
 
+  /** Delete only the caller's identity. Workspaces must retain an owner. */
+  async deleteAccount(user: string, password: string) {
+    if (!password || password.length > 1024) throw new AccountError("invalid password", 403);
+    const ctx = await this.auth.$context;
+    const credential = await ctx.internalAdapter.findCredentialAccount(user);
+    if (!credential?.password || !(await ctx.password.verify({ hash: credential.password, password })))
+      throw new AccountError("invalid password", 403);
+    this.db.transaction(() => {
+      for (const w of this.workspacesOf(user)) {
+        if (w.role === "owner" && this.members(w.id).filter((m) => m.role === "owner").length === 1)
+          throw new AccountError("last owner", 409);
+      }
+      for (const table of ["members", "tokens", "admins"]) this.db.query(`DELETE FROM ${table} WHERE user = ?`).run(user);
+      this.db.query('DELETE FROM invites WHERE "by" = ?').run(user);
+      // Better Auth's database-backed sessions and credentials have no secondary cache here.
+      for (const table of ["session", "account"]) this.db.query(`DELETE FROM "${table}" WHERE userId = ?`).run(user);
+      this.db.query('DELETE FROM "user" WHERE id = ?').run(user);
+    })();
+  }
+
   // ---------- workspaces ----------
 
   workspacesOf(user: string): WorkspaceInfo[] {
