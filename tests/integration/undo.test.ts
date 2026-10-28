@@ -1,5 +1,5 @@
 import { test, expect, beforeEach, afterAll } from "bun:test";
-import { tempDir, removeTempDirs } from "./helpers";
+import { tempDir, removeTempDirs } from "../support/helpers";
 import * as Y from "yjs";
 import { Store } from "@obtion/server/store";
 import { Ops } from "@obtion/server/ops";

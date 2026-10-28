@@ -1,6 +1,6 @@
 import { test, expect, afterAll } from "bun:test";
 import { join } from "node:path";
-import { MemRepo, tempDir, removeTempDirs } from "./helpers";
+import { MemRepo, tempDir, removeTempDirs } from "../support/helpers";
 import { runSetup, SYS } from "@obtion/core/setup";
 import { EXAMPLE, EX_TYPES, exampleFiles, fileFacts, listExamples, removeExamples, restoreExamples, writeExamples } from "@obtion/core/examples";
 import { findBlocks, readBlock, runQuery } from "@obtion/core/query";

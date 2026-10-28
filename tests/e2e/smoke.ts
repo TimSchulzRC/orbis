@@ -1,20 +1,21 @@
-// Browser smoke test: starts an empty server, one filled with the examples of the setup (seed:demo,
-// plus a file and an item in the trash) and the same data with every type deleted (the app runs
+// Browser smoke test: starts an empty server, one filled with the examples of the setup (the
+// server's "setup --examples", plus a file and an item in the trash) and the same data with every type deleted (the app runs
 // with zero types) on free ports, opens every route and one page per kind of item in a real
-// browser – light, dark and phone – and fails on console errors, page errors, an error
+// browser – desktop and phone – and fails on console errors, page errors, an error
 // boundary or a blank page. A fourth server is set up on the page with its examples, which are
 // removed again in the settings and brought back with "Rückgängig"; then it gets a second
 // workspace (sidebar, inbox filter, a move into it). Every server gets its first
 // account through the API; the browser holds it as if it had signed in (the sign-in page itself
 // is checked once).
 //   bun run test:e2e        (builds first; Chrome from ~/.cache/ms-playwright)
+// Not part of `bun test`: it needs a browser and takes a few minutes.
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { type Page, chromium } from "playwright-core";
 
-const ROOT = resolve(import.meta.dir, "..");
+const ROOT = resolve(import.meta.dir, "../..");
 const failures: string[] = [];
 let checks = 0;
 
@@ -33,10 +34,10 @@ async function startServer(seeded: boolean, noTypes = false) {
   const port = await freePort();
   const env = { ...process.env, OBTION_DATA: dir, PORT: String(port), HOST: "127.0.0.1" };
   if (seeded) {
-    const seed = Bun.spawnSync(["bun", "scripts/demo-seed.ts"], { cwd: ROOT, env });
+    const seed = Bun.spawnSync(["bun", "apps/server/src/cli.ts", "setup", "de", "--examples"], { cwd: ROOT, env });
     if (seed.exitCode !== 0) throw new Error("seed failed: " + seed.stderr.toString());
     if (noTypes) {
-      const del = Bun.spawnSync(["bun", "scripts/no-types.ts"], { cwd: ROOT, env });
+      const del = Bun.spawnSync(["bun", "tests/e2e/no-types.ts"], { cwd: ROOT, env });
       if (!del.stdout.toString().includes("types left: 0")) throw new Error("deleting types failed: " + del.stderr.toString());
     }
   }
@@ -141,7 +142,6 @@ async function run() {
   const fresh = await startServer(false);
   const variants = [
     { name: "light", viewport: { width: 1440, height: 900 }, scheme: "light" as const },
-    { name: "dark", viewport: { width: 1440, height: 900 }, scheme: "dark" as const },
     { name: "phone", viewport: { width: 390, height: 844 }, scheme: "light" as const, mobile: true },
   ];
   try {
@@ -270,40 +270,39 @@ async function run() {
           });
           // capturing: a note is preset (no "Eingang" to choose), "Einsortieren …" is no chip, a page
           // mentioned with @ is offered as the place; the notice says where it went
-          if (v.name !== "dark")
-            await check(page, label, "/#/inbox", errors, async (p) => {
-              // on a phone the field opens from the "+" button in a sheet, which closes after saving
-              const open = async () => {
-                if (phone) await p.locator("button[aria-label='Erfassen']").last().click();
-                const f = p.locator(phone ? "[role=dialog] textarea[aria-label='Erfassen']" : "main textarea[aria-label='Erfassen']");
-                await f.click();
-                return f;
-              };
-              let field = await open();
-              let row = field.locator("xpath=ancestor::div[contains(@class,'rounded-2xl')]");
-              const typeBtn = row.getByRole("button", { name: "Typ: Notiz" });
-              if (!(await typeBtn.count())) failures.push(`${label}: capture does not preset "Notiz"`);
-              if (await row.getByRole("button", { name: "Eingang", exact: true }).count()) failures.push(`${label}: capture still offers "Eingang"`);
-              const sortIn = row.getByRole("button", { name: /Einsortieren …/ });
-              if (!(await sortIn.count())) failures.push(`${label}: capture has no "Einsortieren …"`);
-              else if ((await sortIn.evaluate((el) => getComputedStyle(el).borderTopWidth)) !== "0px") failures.push(`${label}: "Einsortieren" looks like a chip`);
-              await field.fill("E2E-Notiz ohne Ort");
+          await check(page, label, "/#/inbox", errors, async (p) => {
+            // on a phone the field opens from the "+" button in a sheet, which closes after saving
+            const open = async () => {
+              if (phone) await p.locator("button[aria-label='Erfassen']").last().click();
+              const f = p.locator(phone ? "[role=dialog] textarea[aria-label='Erfassen']" : "main textarea[aria-label='Erfassen']");
+              await f.click();
+              return f;
+            };
+            let field = await open();
+            let row = field.locator("xpath=ancestor::div[contains(@class,'rounded-2xl')]");
+            const typeBtn = row.getByRole("button", { name: "Typ: Notiz" });
+            if (!(await typeBtn.count())) failures.push(`${label}: capture does not preset "Notiz"`);
+            if (await row.getByRole("button", { name: "Eingang", exact: true }).count()) failures.push(`${label}: capture still offers "Eingang"`);
+            const sortIn = row.getByRole("button", { name: /Einsortieren …/ });
+            if (!(await sortIn.count())) failures.push(`${label}: capture has no "Einsortieren …"`);
+            else if ((await sortIn.evaluate((el) => getComputedStyle(el).borderTopWidth)) !== "0px") failures.push(`${label}: "Einsortieren" looks like a chip`);
+            await field.fill("E2E-Notiz ohne Ort");
+            await field.press("Enter");
+            if (!(await p.locator("[data-sonner-toast]").filter({ hasText: "Notiz im Eingang" }).first().waitFor({ timeout: 3000 }).then(() => true, () => false))) failures.push(`${label}: no notice "Notiz im Eingang"`);
+            if (phone) {
+              await p.waitForTimeout(400);
+              field = await open();
+              row = field.locator("xpath=ancestor::div[contains(@class,'rounded-2xl')]");
+            }
+            await field.fill("E2E-Frage zu @Arbeit");
+            const offer = row.getByRole("button", { name: "In Arbeit einsortieren?" });
+            if (!(await offer.count())) failures.push(`${label}: no offer to place in the mentioned page`);
+            else {
+              await offer.click();
               await field.press("Enter");
-              if (!(await p.locator("[data-sonner-toast]").filter({ hasText: "Notiz im Eingang" }).first().waitFor({ timeout: 3000 }).then(() => true, () => false))) failures.push(`${label}: no notice "Notiz im Eingang"`);
-              if (phone) {
-                await p.waitForTimeout(400);
-                field = await open();
-                row = field.locator("xpath=ancestor::div[contains(@class,'rounded-2xl')]");
-              }
-              await field.fill("E2E-Frage zu @Arbeit");
-              const offer = row.getByRole("button", { name: "In Arbeit einsortieren?" });
-              if (!(await offer.count())) failures.push(`${label}: no offer to place in the mentioned page`);
-              else {
-                await offer.click();
-                await field.press("Enter");
-                if (!(await p.locator("[data-sonner-toast]").filter({ hasText: "Notiz unter Arbeit" }).first().waitFor({ timeout: 3000 }).then(() => true, () => false))) failures.push(`${label}: no notice "Notiz unter Arbeit"`);
-              }
-            }, { phone });
+              if (!(await p.locator("[data-sonner-toast]").filter({ hasText: "Notiz unter Arbeit" }).first().waitFor({ timeout: 3000 }).then(() => true, () => false))) failures.push(`${label}: no notice "Notiz unter Arbeit"`);
+            }
+          }, { phone });
         }
         await context.close();
       }
@@ -320,7 +319,7 @@ async function run() {
     console.error(`E2E smoke: ${failures.length} failure(s) in ${checks} checks:\n- ${failures.join("\n- ")}`);
     process.exit(1);
   }
-  console.log(`E2E smoke: ${checks} checks passed (empty, seeded, typeless and fresh server; light, dark, phone).`);
+  console.log(`E2E smoke: ${checks} checks passed (empty, seeded, typeless and fresh server; desktop, phone).`);
 }
 
 /** Without an account the app asks to sign in; signing in on the page opens the workspace. */

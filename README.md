@@ -22,7 +22,7 @@ Rules that are easy to miss (details in the plan, Technik › Regeln):
 - **One step, one undo:** every user action and every tool call is a step (its id is on every log row it wrote). Activity › Rückgängig takes back all of it; fields changed again later keep the newer value, items it created go to the trash; undo is itself a step and can be redone (`apps/server/src/undo.ts`).
 - **Areas:** every information, type, file and log row belongs to exactly one area (`meta.area`, column `area`); sync runs per area. Inside a workspace there is one, the personal area; rights come from the workspace (see below).
 - **Server reset:** devices send `hello { area, since, sinceId }`; a server restored from an older backup is noticed even after another device synced first.
-- **Data format:** the data carry a format version (`settings.format`, `FORMAT` in `packages/core/src/model.ts`). A newer server upgrades older data once at start (`packages/core/src/setup.ts`); an app older than the data still reads them but asks to be reloaded before it writes. `tests/fixtures/format-1.json` keeps data of format 1 that every later version must read.
+- **Data format:** the data carry a format version (`settings.format`, `FORMAT` in `packages/core/src/model.ts`). A newer server upgrades older data once at start (`packages/core/src/setup.ts`); an app older than the data still reads them but asks to be reloaded before it writes. `tests/support/format-1.json` keeps data of format 1 that every later version must read.
 - **Tolerant input:** statuses as group or option name in German or English (also synonyms), dates like 30.10.2026, 10/30/2026, morgen, type names in plural (`packages/core/src/input.ts`). Search folds ä/ö/ü/ß and hyphens.
 
 ## Accounts and workspaces
@@ -86,12 +86,11 @@ Then open `http://<any address of the host>:8480` – its LAN address, its tailn
 ### Development
 
 ```bash
-bun run seed:demo                    # the setup's examples → data-demo/ (never data/)
+OBTION_DATA=data-demo bun run setup de --examples   # the setup's examples → data-demo/
 OBTION_DATA=data-demo PORT=8481 bun --watch apps/server/src/index.ts
 cd apps/web && PORT=8481 bunx vite --port 5181   # proxies /api, /mcp and /sync (WebSocket) to the server on PORT
 bun test && bun run typecheck && bun run build   # typecheck: every package on its own
-bun run test:e2e                     # browser smoke test: empty, examples and fresh server, every route, light/dark/phone
-bun run icons                        # regenerate the app icons in apps/web/public/
+bun run test:e2e                     # browser smoke test: empty, examples and fresh server, every route, desktop/phone
 ```
 
 The vite dev server listens on 127.0.0.1 and talks to the server under the server's own address (Host and Origin), so it works on any port and behind `tailscale serve`. Reached through the tailnet over HTTPS, set `OBTION_DEV_PUBLIC_URL=https://<host>.ts.net:<port>` so hot reload connects over wss on that port.
@@ -124,7 +123,14 @@ A Bun workspace. Logic without UI lives in shared packages, so further clients (
 | `apps/server` (`@obtion/server`) | `index.ts` (HTTP/WS, routing), `accounts.ts` (accounts, workspaces, invites, tokens), `workspace.ts` (one workspace: sync and API), `store.ts`, `blobs.ts`, `ops.ts` + `mcp.ts` (agents), `agent.ts`, `undo.ts`, `mirror.ts`, `backup.ts`, `trust.ts`, `importers.ts` + `cli.ts` | Bun, SQLite |
 | `apps/web` (`@obtion/web`) | the PWA shell: `index.html`, `src/main.tsx`, service worker updates (`src/update.ts`), icons, Vite config | browser APIs |
 
-`tests/` holds the unit and server tests (`bun test`), `scripts/` the browser smoke test (playwright-core + Chrome in ~/.cache/ms-playwright), the demo seed and the icon generator. A locale test checks every key is in every catalog.
+`tests/` has three kinds, plus what they share:
+
+- `tests/unit/`: the logic of `@obtion/core` on its own, in memory (`bun run test:unit`). A locale test checks every key is in every catalog; `format.test.ts` reads data of an older format.
+- `tests/integration/`: the server with its SQLite store, MCP tools, undo, sync, accounts and HTTP (`bun run test:integration`).
+- `tests/e2e/`: the browser smoke test (`bun run test:e2e`; playwright-core + Chrome in ~/.cache/ms-playwright), not part of `bun test`.
+- `tests/support/`: the in-memory replica and temporary folders the tests share (`helpers.ts`), and the frozen data of format 1 (`format-1.json`).
+
+`bun test` runs unit and integration tests, as CI does.
 
 The typecheck runs per package with its own environment, so core and sync cannot pick up a platform API by accident. Bun installs isolated: a package only sees the dependencies it declares.
 

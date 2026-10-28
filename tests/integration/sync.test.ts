@@ -1,5 +1,5 @@
 import { test, expect, afterAll } from "bun:test";
-import { tempDir, removeTempDirs } from "./helpers";
+import { tempDir, removeTempDirs } from "../support/helpers";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { Database } from "bun:sqlite";

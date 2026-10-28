@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import * as Y from "yjs";
-import { MemRepo } from "./helpers";
+import { MemRepo } from "../support/helpers";
 import { runSetup, SYS } from "@obtion/core/setup";
 import { addParent, removeParent, setMeta } from "@obtion/core/model";
 import { deleteItem, restoreItem, cascadeCount } from "@obtion/core/trash";

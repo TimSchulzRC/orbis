@@ -3,7 +3,7 @@
 import { test, expect, beforeAll, afterAll } from "bun:test";
 import { createServer } from "node:net";
 import * as Y from "yjs";
-import { tempDir, removeTempDirs } from "./helpers";
+import { tempDir, removeTempDirs } from "../support/helpers";
 import { FORMAT, PERSONAL, initItem } from "@obtion/core/model";
 import { type ServerMsg, toB64 } from "@obtion/core/protocol";
 import { allowedHosts } from "@obtion/server/trust";
@@ -25,7 +25,7 @@ const procs: ReturnType<typeof Bun.spawn>[] = [];
 async function start(env: Record<string, string>): Promise<string> {
   const port = await freePort();
   const p = Bun.spawn(["bun", "apps/server/src/index.ts"], {
-    cwd: `${import.meta.dir}/..`,
+    cwd: `${import.meta.dir}/../..`,
     env: { ...process.env, PORT: String(port), HOST: "127.0.0.1", ...env },
     stdout: "ignore",
     stderr: "ignore",

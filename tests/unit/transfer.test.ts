@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { MemRepo } from "./helpers";
+import { MemRepo } from "../support/helpers";
 import { runSetup, SYS } from "@obtion/core/setup";
 import { META_TYPE, initSchema, newId, initItem } from "@obtion/core/model";
 import { copyToWorkspace, movedItems, planMove } from "@obtion/core/transfer";

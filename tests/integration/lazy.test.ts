@@ -1,7 +1,7 @@
 // The server keeps only the documents in use in memory (store.ts: getDoc, trim). A document
 // let go is loaded again from snapshot + log, and everything works on it as before.
 import { test, expect, afterAll } from "bun:test";
-import { tempDir, removeTempDirs } from "./helpers";
+import { tempDir, removeTempDirs } from "../support/helpers";
 import * as Y from "yjs";
 import { AreaError, Store } from "@obtion/server/store";
 import { Ops } from "@obtion/server/ops";

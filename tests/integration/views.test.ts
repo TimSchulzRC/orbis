@@ -3,7 +3,7 @@
 // migration from the former collections.
 import { test, expect, beforeEach, afterAll } from "bun:test";
 import * as Y from "yjs";
-import { tempDir, removeTempDirs, MemRepo } from "./helpers";
+import { tempDir, removeTempDirs, MemRepo } from "../support/helpers";
 import { Store } from "@obtion/server/store";
 import { Ops } from "@obtion/server/ops";
 import { storeWriter } from "@obtion/server/importers";

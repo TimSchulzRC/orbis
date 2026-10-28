@@ -6,7 +6,7 @@ import * as Y from "yjs";
 import { Store } from "@obtion/server/store";
 import { Backups } from "@obtion/server/backup";
 import { initItem } from "@obtion/core/model";
-import { tempDir, removeTempDirs } from "./helpers";
+import { tempDir, removeTempDirs } from "../support/helpers";
 
 afterAll(removeTempDirs);
 

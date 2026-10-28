@@ -13,4 +13,3 @@ seed
 **/.env.*
 **/*.log
 tests
-scripts

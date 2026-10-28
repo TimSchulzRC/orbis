@@ -1,5 +1,5 @@
 import { test, expect, describe } from "bun:test";
-import { MemRepo } from "./helpers";
+import { MemRepo } from "../support/helpers";
 import { runSetup, SYS, addLaterDefaultProps, renameShippedLabels } from "@obtion/core/setup";
 import { parseQuery, printQuery, runQuery, groupItems, normalizeBlocks, findBlocks, readBlock, blocksAsText, shownByBlocks } from "@obtion/core/query";
 import { addDaysISO, todayISO, initItem, initSchema, META_TYPE, removeProp, setMember } from "@obtion/core/model";

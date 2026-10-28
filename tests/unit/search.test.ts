@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import { createIndex, indexRecord, searchIds, snippet } from "@obtion/core/search";
-import { MemRepo } from "./helpers";
+import { MemRepo } from "../support/helpers";
 
 function search(docs: { title: string; body?: string; tags?: string[] }[]) {
   const m = new MemRepo();

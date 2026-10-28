@@ -19,12 +19,12 @@
     "start": "bun apps/server/src/index.ts",
     "typecheck": "tsc --noEmit -p packages/core && tsc --noEmit -p packages/sync && tsc --noEmit -p packages/ui && tsc --noEmit -p apps/server && tsc --noEmit -p apps/web && tsc --noEmit -p .",
     "test": "bun test",
-    "test:e2e": "bun run build && bun scripts/e2e.ts",
+    "test:unit": "bun test tests/unit",
+    "test:integration": "bun test tests/integration",
+    "test:e2e": "bun run build && bun tests/e2e/smoke.ts",
     "setup": "bun apps/server/src/cli.ts setup",
     "stats": "bun apps/server/src/cli.ts stats",
     "import:obsidian": "bun apps/server/src/cli.ts import-obsidian",
-    "import:notion": "bun apps/server/src/cli.ts import-notion seed/notion.json",
-    "seed:demo": "bun scripts/demo-seed.ts",
-    "icons": "bun scripts/icons.ts"
+    "import:notion": "bun apps/server/src/cli.ts import-notion seed/notion.json"
   }
 }

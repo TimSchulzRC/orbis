@@ -1,6 +1,6 @@
 import { test, expect, describe } from "bun:test";
 import * as Y from "yjs";
-import { MemRepo } from "./helpers";
+import { MemRepo } from "../support/helpers";
 import { addParent, readItem, removeParent, setMeta, setProp, setSettings, initItem, META_TYPE, SETTINGS_ID, touchOnTextEdit } from "@obtion/core/model";
 import { keyBetween, keysFor } from "@obtion/core/sortkey";
 import { isInInbox, isOverview, inbox, sidebarRoots, sidebarChildren } from "@obtion/core/placement";

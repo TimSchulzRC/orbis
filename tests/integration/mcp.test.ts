@@ -1,5 +1,5 @@
 import { test, expect, beforeEach, afterAll } from "bun:test";
-import { tempDir, removeTempDirs } from "./helpers";
+import { tempDir, removeTempDirs } from "../support/helpers";
 import { Store } from "@obtion/server/store";
 import { handleMcp } from "@obtion/server/mcp";
 import { runSetup } from "@obtion/core/setup";

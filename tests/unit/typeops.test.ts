@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { MemRepo } from "./helpers";
+import { MemRepo } from "../support/helpers";
 import { runSetup, SYS, upgradeHideEmptyTaskFields } from "@obtion/core/setup";
 import { META_TYPE, initItem, initSchema, setProp, upsertProp } from "@obtion/core/model";
 import { deleteType, previewTagToType, tagToType, typeUsage, wouldBeInInbox } from "@obtion/core/typeops";
