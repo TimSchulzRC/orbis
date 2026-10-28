@@ -1,5 +1,6 @@
 # Obtion on Fly.io: one machine with a volume for /data (database, backups, files).
-# Deploy with `fly deploy`; the volume is created on the first deploy.
+# Once: `fly scale count 1` and `fly volume create obtion_data -r fra -n 1 -s 1`; then
+# `fly deploy --ha=false` (never a second machine: it would have its own database).
 # See https://fly.io/docs/reference/configuration/
 
 app = 'obtion'
