@@ -7,7 +7,8 @@ import { type QueryDef, andWhere, runQuery, tabDef } from "@obtion/core/query";
 import { inboxWhere } from "@obtion/core/inbox";
 import { keyBetween } from "@obtion/core/sortkey";
 import { resetInbox, typeTabs } from "@obtion/core/setup";
-import { useRepo, useRoute } from "../hooks";
+import { useRepo, useRoute, useMediaQuery } from "../hooks";
+import { Capture } from "../ui/Capture";
 import { spaceById, useAccounts } from "../accounts";
 import { SpaceEyebrow, SpaceFilter, SpaceScope, useReplicas } from "../ui/Spaces";
 import { Triage } from "../ui/Triage";
@@ -205,6 +206,7 @@ export function InboxPage() {
   const { shown } = useAccounts();
   const [rule, setRule] = useState<string | null>(null);
   const repos = useReplicas(shown.map((s) => s.id));
+  const wide = useMediaQuery("(min-width: 768px)");
   const spaceOf = new WeakMap<Item, string>();
   const per = shown.map((s, n) => {
     const r = repos[n]!;
@@ -244,6 +246,12 @@ export function InboxPage() {
         </Popover>
       </div>
       <SpaceFilter />
+      {/* on the phone the "+" button captures */}
+      {wide && (
+        <div className="mb-5">
+          <Capture anywhere />
+        </div>
+      )}
       {rule && shown.some((s) => s.id === rule) && (
         <SpaceScope id={rule}>
           <InboxRule name={shown.length > 1 ? spaceById(rule)?.name : undefined} onClose={() => setRule(null)} />

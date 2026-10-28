@@ -283,7 +283,7 @@ async function run() {
           // capturing: a note is preset (no "Eingang" to choose), "Einsortieren …" is no chip, a page
           // mentioned with @ is offered as the place; the notice says where it went
           if (v.name !== "dark")
-            await check(page, label, "/", errors, async (p) => {
+            await check(page, label, "/#/inbox", errors, async (p) => {
               // on a phone the field opens from the "+" button in a sheet, which closes after saving
               const open = async () => {
                 if (phone) await p.locator("button[aria-label='Erfassen']").last().click();
