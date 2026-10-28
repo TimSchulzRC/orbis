@@ -1,3 +1,4 @@
+import { BrandLogo } from "../ui/BrandLogo";
 // Before the app: signing in or creating an account on this server, joining by an invite link
 // (#/join/<code>). Then a workspace has to be open.
 import { useEffect, useState, type ReactNode } from "react";
@@ -10,7 +11,7 @@ function Card({ title, intro, children }: { title: string; intro?: ReactNode; ch
   return (
     <div className="flex h-full items-center justify-center overflow-y-auto p-6">
       <div className="w-full max-w-md rounded-2xl border border-line bg-surface p-6 shadow-sm">
-        <img src="/icon.svg" alt="" className="mb-4 size-10" />
+        <BrandLogo alt="" className="mb-4 size-10" />
         <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
         {intro && <p className="mt-2 text-sm text-muted">{intro}</p>}
         {children}
