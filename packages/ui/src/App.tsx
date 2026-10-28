@@ -26,7 +26,7 @@ import { Activity } from "./views/Activity";
 import { TrashView } from "./views/Trash";
 import { Settings } from "./views/Settings";
 import { ICON } from "./ui/icons";
-import { SpaceScope } from "./ui/Spaces";
+import { NewSpaceDialog, SpaceScope, SpaceSelector } from "./ui/Spaces";
 import { Gate } from "./views/Account";
 import { signOut, useAccounts } from "./accounts";
 
@@ -230,20 +230,29 @@ function MenuSheet({ onClose, children }: { onClose: () => void; children: React
   );
 }
 
-/** The phone menu (a sheet from below): Eingang · every workspace (as in the sidebar) · Einstellungen. */
+/** The phone menu (a sheet from below): the selector, Start, Eingang · the workspaces seen (as in the sidebar) · Einstellungen. */
 function MobileMenu() {
   const { t } = useT();
-  const { spaces } = useAccounts();
+  const { shown } = useAccounts();
+  const [creating, setCreating] = useState(false);
   const row = "flex min-h-11 items-center gap-3 rounded-lg px-3 text-[15px] hover:bg-hover";
   const inbox = useInboxTotal();
   return (
     <>
+      <div className="mb-2 flex px-3">
+        <SpaceSelector className="flex-1" onNew={() => setCreating(true)} />
+      </div>
+      {creating && <NewSpaceDialog onClose={() => setCreating(false)} />}
+      <a href="#/" className={row}>
+        <LayoutDashboard size={18} className="text-muted" /> {t("nav.start")}
+      </a>
       <a href="#/inbox" className={row}>
         <Inbox size={18} className="text-muted" /> <span className="flex-1">{t("nav.inbox")}</span>
         {inbox > 0 && <span className="text-xs tabular-nums text-muted">{inbox}</span>}
       </a>
-      {spaces.map((s) => (
+      {shown.map((s) => (
         <SpaceScope key={s.id} id={s.id}>
+          <div className="mx-3 mt-3 border-t border-line" />
           <SpaceTree space={s} touch />
         </SpaceScope>
       ))}

@@ -975,7 +975,6 @@
  "account.tooMany": "Too many attempts – wait a moment, then try again.",
  "space.menu": "Menu of {name}",
  "space.setUp": "Set up",
- "inbox.filter": "Workspace",
  "inbox.all": "All",
  "capture.spaceLabel": "Workspace: {name}",
  "move.preview.title": "Move “{title}” to {workspace}?",
@@ -984,5 +983,11 @@
  "move.preview.types": "{count, plural, one {Type} other {Types}} {names} {count, plural, one {is} other {are}} created in {workspace}",
  "move.preview.free": "Become free properties, as nothing fits there: {names}",
  "move.preview.links": "{count, plural, one {1 link} other {# links}} to entries staying in {from} {count, plural, one {is dropped or becomes} other {are dropped or become}} text",
- "move.confirm": "Move"
+ "move.confirm": "Move",
+ "space.all": "All workspaces",
+ "space.choose": "Choose workspaces",
+ "triage.oneSpace": "Entries from different workspaces can only be deleted together – a place and a type belong to one workspace.",
+ "triage.withAgentIn": "Sort with agent ({name})",
+ "inbox.whatLandsIn": "What lands in the inbox of {name}?",
+ "start.editHint": "The layout of Start belongs to the workspace {name} and applies to all."
 }

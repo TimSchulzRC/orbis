@@ -4,8 +4,9 @@ import { tr } from "../i18n";
 import { confirmAction, notify } from "./feedback";
 import { dueOf, firstOfGroup, isDone, primaryChild, statusOf, statusProp } from "@obtion/core/traits";
 import { fmtBytes } from "@obtion/core/i18n";
-import { repo } from "../repo";
-import { itemHref } from "../hooks";
+import type { Repo } from "@obtion/sync";
+import { repo as current } from "../repo";
+import { itemHref, useRepo } from "../hooks";
 import { useT } from "../i18n";
 import { DueLabel, ItemIcon, MenuItem, Popover, StatusGlyph, StatusPill, cx, pal, ProgressCount } from "./bits";
 import { statusShape } from "@obtion/core/input";
@@ -13,6 +14,7 @@ import { statusShape } from "@obtion/core/input";
 /** Status choice as a small menu (rows of projects; the ring there does not tick off). */
 export function StatusMenu({ item, trigger }: { item: Item; trigger: (p: { onClick: () => void; "aria-expanded": boolean }) => React.ReactNode }) {
   const { t } = useT();
+  const repo = useRepo();
   const ix = repo.index();
   const schema = ix.schemaOf(item);
   const sp = statusProp(schema);
@@ -26,7 +28,7 @@ export function StatusMenu({ item, trigger }: { item: Item; trigger: (p: { onCli
             {(sp?.options ?? [])
               .filter((o) => (o.group ?? "todo") === g)
               .map((o) => (
-                <MenuItem key={o.id} active={o.id === cur} icon={<StatusGlyph option={o} size={14} />} onClick={() => (close(), void setStatus(item, o.id))}>
+                <MenuItem key={o.id} active={o.id === cur} icon={<StatusGlyph option={o} size={14} />} onClick={() => (close(), void setStatus(item, o.id, repo))}>
                   {o.name}
                 </MenuItem>
               ))}
@@ -38,7 +40,7 @@ export function StatusMenu({ item, trigger }: { item: Item; trigger: (p: { onCli
 }
 
 /** Open entries with a status somewhere below (they would stay open if this is closed). */
-export function openBelow(item: Item): Item[] {
+export function openBelow(item: Item, repo: Repo = current): Item[] {
   const ix = repo.index();
   return [...ix.descendants(item.id)].map((d) => ix.get(d)!).filter((x) => {
     const s = statusOf(x, ix.schemaOf(x));
@@ -50,7 +52,7 @@ export function openBelow(item: Item): Item[] {
  * Set a status the careful way: closing something with open entries below asks first, and
  * closing says "Erledigt · Rückgängig". Returns false if the user said no.
  */
-export async function setStatus(item: Item, optionId: string): Promise<boolean> {
+export async function setStatus(item: Item, optionId: string, repo: Repo = current): Promise<boolean> {
   const ix = repo.index();
   const schema = ix.schemaOf(item);
   const sp = statusProp(schema);
@@ -59,7 +61,7 @@ export async function setStatus(item: Item, optionId: string): Promise<boolean> 
   const before = item.props[sp.id];
   const closing = (opt.group ?? "todo") === "done" && !isDone(item, schema);
   if (closing) {
-    const open = openBelow(item);
+    const open = openBelow(item, repo);
     if (open.length) {
       const ok = await confirmAction({
         title: tr("tick.openTitle", { title: item.title || tr("untitled") }),
@@ -94,20 +96,20 @@ addEventListener("beforeunload", () => {
  * The ring in a list: ticks a task off (or reopens it). Entries with open entries below ask
  * first. The write waits a moment so the row can be seen struck through.
  */
-export function tick(item: Item) {
+export function tick(item: Item, repo: Repo = current) {
   const ix = repo.index();
   const schema = ix.schemaOf(item);
   const sp = statusProp(schema);
   if (!sp) return;
   const next = isDone(item, schema) ? firstOfGroup(schema, "todo") : firstOfGroup(schema, "done");
   if (!next) return;
-  if (isDone(item, schema) || openBelow(item).length) return void setStatus(item, next.id);
+  if (isDone(item, schema) || openBelow(item, repo).length) return void setStatus(item, next.id, repo);
   if (lingering.has(item.id)) return;
   lingering.set(
     item.id,
     setTimeout(() => {
       lingering.delete(item.id);
-      void setStatus(repo.get(item.id) ?? item, next.id);
+      void setStatus(repo.get(item.id) ?? item, next.id, repo);
       lingerEmit();
     }, 900),
   );
@@ -132,14 +134,14 @@ export function Group({ heading, count, first, children }: { heading?: React.Rea
   );
 }
 
-export function pathLabel(ids: string[]) {
+export function pathLabel(ids: string[], repo: Repo = current) {
   const ix = repo.index();
   return ids.map((id) => ix.get(id)?.title ?? "").join(" › ");
 }
 
 /** Where an entry lives, short: the last two places of its home path ("… › Frankreich › Nordlicht"). */
-export function shortPath(ids: string[], keep = 2): string {
-  const label = pathLabel(ids.slice(-keep));
+export function shortPath(ids: string[], keep = 2, repo: Repo = current): string {
+  const label = pathLabel(ids.slice(-keep), repo);
   return ids.length > keep ? "… › " + label : label;
 }
 
@@ -159,6 +161,7 @@ export function ItemRow({
   note?: React.ReactNode; // a second line, e.g. a project's next task
 }) {
   const { t, lang } = useT();
+  const repo = useRepo();
   const ix = repo.index();
   const schema = ix.schemaOf(item);
   const st = statusOf(item, schema);
@@ -204,6 +207,7 @@ export function ItemRow({
  */
 export function RowStatus({ item, size = 17 }: { item: Item; size?: number }) {
   const { t } = useT();
+  const repo = useRepo();
   const ix = repo.index();
   const schema = ix.schemaOf(item);
   const st = statusOf(item, schema);
@@ -222,14 +226,14 @@ export function RowStatus({ item, size = 17 }: { item: Item; size?: number }) {
       </button>
     )} />
   ) : (
-    <button onClick={() => tick(item)} className="tap-edge shrink-0 text-muted hover:text-ok" aria-label={done ? t("row.reopen") : t("row.done")} title={done ? t("row.reopen") : t("row.done")}>
+    <button onClick={() => tick(item, repo)} className="tap-edge shrink-0 text-muted hover:text-ok" aria-label={done ? t("row.reopen") : t("row.done")} title={done ? t("row.reopen") : t("row.done")}>
       {glyph}
     </button>
   );
 }
 
 /** Keep the given order, but put sub-items right after their listed parent (any depth). */
-export function treeOrder(items: Item[]): { item: Item; depth: number }[] {
+export function treeOrder(items: Item[], repo: Repo = current): { item: Item; depth: number }[] {
   const ix = repo.index();
   const ids = new Set(items.map((i) => i.id));
   const parentOf = (i: Item) => ix.parentsOf(i.id).find((p) => ids.has(p));

@@ -129,6 +129,9 @@ describe("inbox and overviews", () => {
     expect(sidebarChildren(arbeit, ix).map((i) => i.id).sort()).toEqual([kunden, open, card].sort());
     expect(sidebarChildren(arbeit, ix, [arbeit, done]).map((i) => i.id)).toContain(done);
     expect(sidebarChildren(kunden, ix).map((i) => i.id)).toEqual([steuer]);
+    // a type's page can be pinned too: it joins the top level, in its own order
+    m.change(SYS.project, (d) => setMeta(d, { pinned: "Y" }));
+    expect(sidebarRoots(m.index()).map((i) => i.title).at(-1)).toBe("Projekt");
   });
 
   test("a keyword with notes below, not pinned, stays in the inbox as a bundle; pinning places it", () => {

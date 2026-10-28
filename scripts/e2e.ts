@@ -232,8 +232,10 @@ async function run() {
             await check(page, label, "/#/inbox", errors, async (p) => {
               await p.locator("main").getByRole("button", { name: "Mehr" }).first().click();
               const menu = await p.locator("[data-popover]").last().innerText();
-              if (!/Was landet im Eingang\?/.test(menu) || !/Standard wiederherstellen/.test(menu) || /Sammlung/.test(menu)) failures.push(`${label}: inbox menu is "${menu.replace(/\n/g, " · ")}"`);
-              await p.keyboard.press("Escape");
+              if (!/Was landet im Eingang\?/.test(menu) || /Sammlung/.test(menu)) failures.push(`${label}: inbox menu is "${menu.replace(/\n/g, " · ")}"`);
+              // the rule opens with the way back to the default
+              await p.getByText("Was landet im Eingang?").click();
+              if (!(await p.locator("main").getByRole("button", { name: /Standard wiederherstellen/ }).count())) failures.push(`${label}: the inbox rule has no "Standard wiederherstellen"`);
             });
             await check(page, label, "/#/c/sys%3Ac-task", errors, async (p) => {
               if (!p.url().includes("/i/sys%3Atask")) failures.push(`${label}: an old collection link does not lead to the type's page (${p.url()})`);
@@ -387,8 +389,9 @@ async function examplesOnSetup(browser: import("playwright-core").Browser, serve
 }
 
 /**
- * A second workspace next to the first: it shows in the sidebar and is set up from there, the
- * inbox filters by workspace (remembered over a reload), and a pinned area moves into it.
+ * A second workspace next to the first: it shows in the sidebar and is set up from there; the
+ * inbox is one list of both and shows one when chosen (remembered over a reload, the sidebar
+ * follows); a type page can be pinned; a pinned area moves into the other workspace.
  */
 async function twoWorkspaces(browser: import("playwright-core").Browser, server: Awaited<ReturnType<typeof startServer>>) {
   const personal = server.me.workspaces[0]!.id;
@@ -406,7 +409,7 @@ async function twoWorkspaces(browser: import("playwright-core").Browser, server:
     await firma(p).getByText("Einrichten").click();
     await p.getByRole("checkbox", { name: /Mit Beispielen starten/ }).uncheck();
     await p.getByRole("button", { name: /^Einrichten$/ }).click();
-    if (!(await firma(p).getByText("Start").waitFor({ timeout: 8000 }).then(() => true, () => false))) failures.push(`${label}: "Firma" not set up from the sidebar`);
+    if (!(await firma(p).getByRole("button", { name: "Typen" }).waitFor({ timeout: 8000 }).then(() => true, () => false))) failures.push(`${label}: "Firma" not set up from the sidebar`);
     if (!(await p.locator("aside section[aria-label='Persönlich'] a[href='#/i/ex-work']").count())) failures.push(`${label}: the first workspace's block lost its pinned items`);
   });
   await check(page, label, "/#/inbox", errors, async (p) => {
@@ -416,7 +419,13 @@ async function twoWorkspaces(browser: import("playwright-core").Browser, server:
     await p.reload();
     await settle(p);
     if ((await p.locator("main [aria-pressed=true]").innerText()).replace(/\s*\d+$/, "") !== "Firma") failures.push(`${label}: the inbox filter is not remembered`);
+    if (await p.locator("aside section[aria-label='Persönlich']").count()) failures.push(`${label}: the sidebar still shows the workspace left out`);
     await p.locator("main").getByRole("button", { name: /^Alle/ }).click();
+  });
+  await check(page, label, `/#/w/${personal}/i/sys%3Aproject`, errors, async (p) => {
+    await p.locator("main").getByRole("button", { name: "Mehr" }).first().click();
+    await p.getByText("Anheften", { exact: true }).click();
+    if (!(await p.locator("aside section[aria-label='Persönlich']").getByText("Projekte", { exact: true }).first().waitFor({ timeout: 3000 }).then(() => true, () => false))) failures.push(`${label}: the pinned type page is not in the sidebar`);
   });
   await check(page, label, `/#/w/${personal}/i/ex-work`, errors, async (p) => {
     await p.locator("main").getByRole("button", { name: "Mehr" }).first().click();

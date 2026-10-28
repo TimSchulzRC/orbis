@@ -1,15 +1,17 @@
-// Workspaces side by side: the sidebar and the inbox show every workspace of the account, each
-// block in its own SpaceScope (useRepo and useFiles read that workspace's replica there, and
-// links inside open in it). Moving an item from one workspace into another asks first if
+// Workspaces side by side: the sidebar, the inbox and Start show the workspaces chosen in the
+// selector (several at once; on this device, the account stays as it is). Each part of a page
+// that belongs to one workspace sits in its SpaceScope (useRepo and useFiles read that
+// workspace's replica there, and links inside open in it). Moving an item from one workspace into another asks first if
 // something changes on the way (a type copied, values that become free properties, links left behind).
 import { useMemo, useState, useSyncExternalStore } from "react";
+import { ChevronsUpDown, Plus, SlidersHorizontal } from "lucide-react";
 import type { Repo } from "@obtion/sync";
-import { createSpace, replica, spaceById, useAccounts } from "../accounts";
+import { createSpace, replica, setShown, spaceById, useAccounts } from "../accounts";
 import { ScopeContext } from "../scope";
 import { spaceHref } from "../hooks";
 import { MoveError, moveToSpace, planToSpace } from "../move";
 import { useT, tr } from "../i18n";
-import { Button, Dialog } from "./bits";
+import { Button, Dialog, MenuItem, Popover, cx } from "./bits";
 import { confirmAction, notify } from "./feedback";
 
 /** A part of the page that belongs to workspace `id`. A link clicked inside opens there. */
@@ -29,6 +31,83 @@ export function SpaceScope({ id, children }: { id: string; children: React.React
         {children}
       </div>
     </ScopeContext.Provider>
+  );
+}
+
+/** Which workspaces are seen: the label says it ("Alle Workspaces", one name, or the names); the menu ticks them. */
+export function SpaceSelector({ className, onNew }: { className?: string; onNew: () => void }) {
+  const { t } = useT();
+  const { account, spaces, shown } = useAccounts();
+  const ids = shown.map((s) => s.id);
+  const label = shown.length === spaces.length && spaces.length > 1 ? t("space.all") : shown.map((s) => s.name).join(", ");
+  const toggle = (id: string) => {
+    const next = ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id];
+    if (next.length) setShown(next);
+  };
+  return (
+    <Popover
+      triggerClass={cx("min-w-0", className)}
+      trigger={(p) => (
+        <button {...p} className="-mx-1.5 flex w-full min-w-0 items-center gap-2 rounded-lg px-1.5 py-1 text-left hover:bg-hover" aria-label={t("space.choose")}>
+          <img src="/icon.svg" alt="" className="size-6 shrink-0" />
+          <span className="min-w-0 flex-1 truncate text-sm font-semibold">{label}</span>
+          <ChevronsUpDown size={14} className="shrink-0 text-faint" />
+        </button>
+      )}
+    >
+      {(close) => (
+        <div className="w-72 p-1">
+          <p className="truncate px-2.5 pb-0.5 pt-1.5 text-[11px] font-semibold uppercase tracking-[0.05em] text-muted">
+            {account?.user.email}
+            {account?.lost && ` · ${t("account.signedOut")}`}
+          </p>
+          {/* several at once: boxes, not a choice of one */}
+          {spaces.map((s) => (
+            <label key={s.id} className="tap-row flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm hover:bg-hover">
+              <input type="checkbox" checked={ids.includes(s.id)} disabled={ids.length === 1 && ids.includes(s.id)} onChange={() => toggle(s.id)} className="size-4 accent-[var(--focus)]" />
+              <span className="min-w-0 flex-1 truncate">{s.name}</span>
+            </label>
+          ))}
+          <div className="my-1 border-t border-line" />
+          <MenuItem icon={<Plus size={14} />} onClick={() => (close(), onNew())}>
+            {t("space.new")}
+          </MenuItem>
+          <MenuItem icon={<SlidersHorizontal size={14} />} onClick={() => (close(), (location.hash = "#/settings"))}>
+            {t("nav.settings")}
+          </MenuItem>
+        </div>
+      )}
+    </Popover>
+  );
+}
+
+/**
+ * The workspaces seen, as chips above the inbox and Start – the same choice as the selector in
+ * the sidebar. From "Alle", a chip shows that workspace only; else chips add and take away.
+ */
+export function SpaceFilter() {
+  const { t } = useT();
+  const { spaces, shown } = useAccounts();
+  if (spaces.length < 2) return null;
+  const ids = shown.map((s) => s.id);
+  const all = ids.length === spaces.length;
+  const pick = (id: string) => {
+    if (all) return setShown([id]);
+    const next = ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id];
+    if (next.length) setShown(next);
+  };
+  const chip = (on: boolean) => cx("shrink-0 whitespace-nowrap rounded-full border px-3 py-1", on ? "border-[var(--focus)] bg-surface text-fg" : "border-line text-muted hover:bg-hover hover:text-fg");
+  return (
+    <div className="-mx-4 mb-4 flex gap-1 overflow-x-auto px-4 text-sm [scrollbar-width:none] md:mx-0 md:px-0" role="group" aria-label={t("space.choose")}>
+      <button onClick={() => setShown(spaces.map((s) => s.id))} aria-pressed={all} className={chip(all)}>
+        {t("inbox.all")}
+      </button>
+      {spaces.map((s) => (
+        <button key={s.id} onClick={() => pick(s.id)} aria-pressed={!all && ids.includes(s.id)} className={chip(!all && ids.includes(s.id))}>
+          {s.name}
+        </button>
+      ))}
+    </div>
   );
 }
 

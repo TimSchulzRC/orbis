@@ -33,10 +33,10 @@ export function inbox(ix: Index): Item[] {
   return ix.live.filter((i) => isInInbox(i, ix));
 }
 
-/** Top level of the sidebar: everything pinned, in its own order. */
+/** Top level of the sidebar: everything pinned (informations and type pages), in its own order. */
 export function sidebarRoots(ix: Index): Item[] {
   return ix.live
-    .filter((i) => i.pinned && i.type !== META_TYPE)
+    .filter((i) => i.pinned)
     .sort((a, b) => (a.pinned! < b.pinned! ? -1 : a.pinned! > b.pinned! ? 1 : a.title.localeCompare(b.title)));
 }
 

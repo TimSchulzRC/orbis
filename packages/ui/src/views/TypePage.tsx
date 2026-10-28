@@ -2,7 +2,7 @@
 // "…" › "Typ bearbeiten": identity, description (the agent reads it), properties and capabilities –
 // a type is an information with a schema; changing it is editing, not programming.
 import { useEffect, useState } from "react";
-import { MoreHorizontal, Plus, Trash2, GripVertical, ArrowUp, ArrowDown, Layers, Tag as TagIcon, X, Pencil, RotateCcw } from "lucide-react";
+import { MoreHorizontal, Plus, Trash2, GripVertical, ArrowUp, ArrowDown, Layers, Tag as TagIcon, X, Pencil, Pin, RotateCcw } from "lucide-react";
 import {
   type Item,
   type OptionDef,
@@ -58,6 +58,9 @@ export function TypePage({ item }: { item: Item }) {
             <>
               <MenuItem icon={<Pencil size={14} />} onClick={() => (close(), setEditing(!editing))}>
                 {t("type.edit")}
+              </MenuItem>
+              <MenuItem icon={<Pin size={14} />} onClick={() => (close(), repo.pin(item.id, !item.pinned))}>
+                {item.pinned ? t("item.unpin") : t("item.pin")}
               </MenuItem>
               <MenuItem icon={<RotateCcw size={14} />} onClick={() => (close(), repo.change(item.id, (d) => setTabs(d, [])), notify(t("type.viewsReset")))}>
                 {t("type.resetViews")}

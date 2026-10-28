@@ -10,11 +10,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, ChevronLeft, FolderInput, Shapes, Sparkles, Trash2, Check, X, Plus } from "lucide-react";
 import { type Item, SETTINGS_ID, setMeta } from "@obtion/core/model";
+import type { Index } from "@obtion/core/graph";
 import { onlyBelow } from "@obtion/core/trash";
 import { inboxWhere } from "@obtion/core/inbox";
 import { runQuery } from "@obtion/core/query";
-import type { Repo } from "@obtion/sync";
 import { useIndex, useRepo, useSpaceId, itemHref, go, spaceHref, useMediaQuery } from "../hooks";
+import { replica, spaceById } from "../accounts";
+import { SpaceScope } from "./Spaces";
 import { useT } from "../i18n";
 import { createType, recentPlaces, rememberPlace } from "../actions";
 import { Button, Dialog, ItemIcon, Kbd, RelTime, Tag, TypeGlyph, cx } from "./bits";
@@ -28,11 +30,12 @@ import { plainText } from "@obtion/core/search";
 
 interface Undo {
   label: string;
-  steps: { id: string; type?: string | null; addedParents?: string[]; deleted?: boolean }[];
+  steps: { space: string; id: string; type?: string | null; addedParents?: string[]; deleted?: boolean }[];
 }
 
-function revert(u: Undo, repo: Repo) {
+function revert(u: Undo) {
   for (const s of u.steps) {
+    const repo = replica(s.space).repo;
     if (s.deleted) repo.restore(s.id);
     if (s.type !== undefined) repo.setType(s.id, s.type);
     for (const p of s.addedParents ?? []) repo.removeParent(s.id, p);
@@ -46,16 +49,23 @@ function ageGroup(created: number, now = Date.now()): "week" | "month" | "older"
   return days <= 7 ? "week" : days <= 30 ? "month" : "older";
 }
 
-/** What can be done with entries: place, give a type, delete – each with one undo (toast, 5 s). */
-function useTriageActions() {
+/**
+ * What can be done with entries: place, give a type, delete – each with one undo (toast, 5 s).
+ * Entries may come from several workspaces (`spaceOf`); a place and a type belong to one, so those
+ * act on entries of one workspace only (the pickers see to that).
+ */
+function useTriageActions(spaceOf: (i: Item) => string) {
   const { t } = useT();
-  const repo = useRepo();
-  const ix = repo.index();
   const last = useRef<Undo | null>(null);
-  const firstType = (repo.get(SETTINGS_ID)?.settings?.captureTypes ?? []).find((id) => ix.types.has(id));
+  const repoOf = (i: Item) => replica(spaceOf(i)).repo;
+  const firstType = (i?: Item) => {
+    if (!i) return undefined;
+    const repo = repoOf(i);
+    return (repo.get(SETTINGS_ID)?.settings?.captureTypes ?? []).find((id) => repo.index().types.has(id));
+  };
   const done = (u: Undo) => {
     last.current = u;
-    notify.undo(u.label, () => (revert(u, repo), (last.current = null)));
+    notify.undo(u.label, () => (revert(u), (last.current = null)));
   };
   const short = (i?: Item) => {
     const name = i?.title || i?.file?.name || t("untitled");
@@ -64,12 +74,15 @@ function useTriageActions() {
   const label = (list: Item[], key: string, values: Record<string, unknown> = {}) => (list.length > 1 ? t(key + "Many", { count: list.length, ...values }) : t(key, { ...values, title: short(list[0]), ...("title" in values ? { title: values.title } : {}) }));
   const giveType = (list: Item[], type: string) => {
     const infos = list.filter((i) => i.kind === "info");
-    done({ label: list.length > 1 ? label(infos, "triage.typed", { name: ix.typeName(type) }) : t("triage.typedOne", { title: short(infos[0]), name: ix.typeName(type) }), steps: infos.map((i) => ({ id: i.id, type: i.type })) });
+    if (!infos.length) return;
+    const repo = repoOf(infos[0]!);
+    const name = repo.index().typeName(type);
+    done({ label: list.length > 1 ? label(infos, "triage.typed", { name }) : t("triage.typedOne", { title: short(infos[0]), name }), steps: infos.map((i) => ({ space: spaceOf(i), id: i.id, type: i.type })) });
     for (const i of infos) repo.setType(i.id, type);
   };
   const trash = async (list: Item[]): Promise<boolean> => {
     // entries with notes below: delete those too, or let them back into the inbox?
-    const below = list.reduce((n, i) => n + onlyBelow(ix, i.id).length, 0);
+    const below = list.reduce((n, i) => n + onlyBelow(repoOf(i).index(), i.id).length, 0);
     let children: "trash" | "inbox" = "trash";
     if (below) {
       const c = await chooseAction({
@@ -83,55 +96,72 @@ function useTriageActions() {
       if (!c) return false;
       children = c as "trash" | "inbox";
     }
-    done({ label: label(list, children === "inbox" && below ? "triage.trashedKeep" : "triage.trashed", { count: below, title: short(list[0]) }), steps: list.map((i) => ({ id: i.id, deleted: true })) });
-    for (const i of list) repo.remove(i.id, children);
+    done({ label: label(list, children === "inbox" && below ? "triage.trashedKeep" : "triage.trashed", { count: below, title: short(list[0]) }), steps: list.map((i) => ({ space: spaceOf(i), id: i.id, deleted: true })) });
+    for (const i of list) repoOf(i).remove(i.id, children);
     return true;
   };
   const place = (list: Item[], parent: string) => {
+    if (!list.length) return;
+    const repo = repoOf(list[0]!);
     const ok = list.filter((i) => repo.addParent(i.id, parent));
     if (!ok.length) return;
     rememberPlace(parent, repo);
-    const where = ix.get(parent)?.title ?? "";
-    done({ label: ok.length > 1 ? t("triage.placedMany", { count: ok.length, title: where }) : t("triage.placedOne", { title: short(ok[0]), place: where }), steps: ok.map((i) => ({ id: i.id, addedParents: [parent] })) });
+    const where = repo.index().get(parent)?.title ?? "";
+    done({ label: ok.length > 1 ? t("triage.placedMany", { count: ok.length, title: where }) : t("triage.placedOne", { title: short(ok[0]), place: where }), steps: ok.map((i) => ({ space: spaceOf(i), id: i.id, addedParents: [parent] })) });
   };
   // "u": takes back the last one (the notice offers the same)
   const undo = () => {
     if (!last.current) return;
-    revert(last.current, repo);
+    revert(last.current);
     last.current = null;
   };
   return { firstType, giveType, trash, place, undo };
 }
 
-/** The pickers an action may need: where to (place) and which type. */
-function usePickers(place: (list: Item[], p: string) => void, giveType: (list: Item[], t: string) => void, after?: () => void) {
+/** The pickers an action may need: where to (place) and which type – in the workspace of the entries. */
+function usePickers(spaceOf: (i: Item) => string, place: (list: Item[], p: string) => void, giveType: (list: Item[], t: string) => void, after?: () => void) {
   const { t } = useT();
-  const repo = useRepo();
-  const ix = repo.index();
-  const [placing, setPlacing] = useState<Item[] | null>(null);
-  const [typing, setTyping] = useState<Item[] | null>(null);
+  const [placing, setPlacingRaw] = useState<Item[] | null>(null);
+  const [typing, setTypingRaw] = useState<Item[] | null>(null);
+  // a place or a type is one workspace's: entries of several are sorted one workspace at a time
+  const one = (list: Item[]) => new Set(list.map(spaceOf)).size <= 1 || (notify(t("triage.oneSpace")), false);
+  const setPlacing = (list: Item[] | null) => (!list || one(list)) && setPlacingRaw(list);
+  const setTyping = (list: Item[] | null) => (!list || one(list)) && setTypingRaw(list);
   const node = (
     <>
-      {placing && (
-        <ItemPicker
-          title={placing.length > 1 ? t("triage.whereToMany", { count: placing.length }) : t("triage.whereTo")}
-          suggestions={placing.length === 1 ? placeSuggestions(placing[0]!, repo) : []}
-          exclude={(x) => placing.some((p) => x.id === p.id || ix.wouldCycle(p.id, x.id) || !!p.parents[x.id]) || x.kind !== "info"}
-          onPick={(p) => (place(placing, p), setPlacing(null), after?.())}
-          onCreate={(title) => (place(placing, repo.create({ title })), setPlacing(null), after?.())}
-          onClose={() => setPlacing(null)}
-        />
+      {placing && placing.length > 0 && (
+        <SpaceScope id={spaceOf(placing[0]!)}>
+          <PlacePicker list={placing} onPick={(p) => (place(placing, p), setPlacingRaw(null), after?.())} onClose={() => setPlacingRaw(null)} />
+        </SpaceScope>
       )}
       {typing && typing.length > 0 && (
-        <TypePicker current={typing.length === 1 ? typing[0]!.type : null} onPick={(type) => (giveType(typing, type), setTyping(null), after?.())} onClose={() => setTyping(null)} />
+        <SpaceScope id={spaceOf(typing[0]!)}>
+          <TypePicker current={typing.length === 1 ? typing[0]!.type : null} onPick={(type) => (giveType(typing, type), setTypingRaw(null), after?.())} onClose={() => setTypingRaw(null)} />
+        </SpaceScope>
       )}
     </>
   );
   return { node, placing, typing, setPlacing, setTyping };
 }
 
+function PlacePicker({ list, onPick, onClose }: { list: Item[]; onPick: (p: string) => void; onClose: () => void }) {
+  const { t } = useT();
+  const repo = useRepo();
+  const ix = repo.index();
+  return (
+    <ItemPicker
+      title={list.length > 1 ? t("triage.whereToMany", { count: list.length }) : t("triage.whereTo")}
+      suggestions={list.length === 1 ? placeSuggestions(list[0]!, repo) : []}
+      exclude={(x) => list.some((p) => x.id === p.id || ix.wouldCycle(p.id, x.id) || !!p.parents[x.id]) || x.kind !== "info"}
+      onPick={onPick}
+      onCreate={(title) => onPick(repo.create({ title }))}
+      onClose={onClose}
+    />
+  );
+}
+
 /** The quiet hint of a row: the agent's suggestion, a mentioned place, or the notes bundled below. */
-function rowHint(item: Item, ix: ReturnType<typeof useIndex>, t: (k: string, v?: Record<string, unknown>) => string): { icon: React.ReactNode; text: string } | null {
+function rowHint(item: Item, ix: Index, t: (k: string, v?: Record<string, unknown>) => string): { icon: React.ReactNode; text: string } | null {
   const sug = item.suggestion;
   if (sug) {
     const what = [sug.type ? ix.typeName(sug.type) : null, ...(sug.parents ?? []).map((p) => ix.get(p)?.title)].filter(Boolean).join(" · ");
@@ -154,19 +184,27 @@ function MarkBox({ on, onToggle, title }: { on: boolean; onToggle: () => void; t
   );
 }
 
-/** The keys go to one list only (the inbox shows one per workspace): the one used last, else the first. */
+/** The keys go to one list only (a page may show several): the one used last, else the first. */
 let keyOwner: symbol | null = null;
 
-export function Triage({ items }: { items: Item[]; storageKey?: string }) {
+/**
+ * `spaceOf`: the workspace of each entry, when they come from several (the inbox); each row then
+ * says which, and the entry shows and acts in its own.
+ */
+export function Triage({ items, spaceOf: given }: { items: Item[]; storageKey?: string; spaceOf?: (i: Item) => string }) {
   const { t } = useT();
-  const ix = useIndex();
-  const space = useSpaceId();
+  const here = useSpaceId()!;
+  const spaceOf = (i: Item) => given?.(i) ?? here;
+  // ids are unique within a workspace only (the examples have the same ones everywhere)
+  const keyOf = (i: Item) => `${spaceOf(i)}/${i.id}`;
+  const ixOf = (i: Item) => replica(spaceOf(i)).repo.index();
+  const several = !!given && new Set(items.map(spaceOf)).size > 1;
   const phone = useMediaQuery("(max-width: 767px)");
   const [sel, setSel] = useState(0);
   const [marked, setMarked] = useState<Set<string>>(new Set());
   const [limit, setLimit] = useState(60);
-  const act = useTriageActions();
-  const pick = usePickers(act.place, act.giveType, () => setMarked(new Set()));
+  const act = useTriageActions(spaceOf);
+  const pick = usePickers(spaceOf, act.place, act.giveType, () => setMarked(new Set()));
   const list = useRef<HTMLDivElement>(null);
   const me = useRef(Symbol()).current;
   const claim = () => void (keyOwner = me);
@@ -177,7 +215,7 @@ export function Triage({ items }: { items: Item[]; storageKey?: string }) {
 
   // what an action applies to: the marked entries, else the selected one
   const targets = (): Item[] => {
-    const m = items.filter((i) => marked.has(i.id));
+    const m = items.filter((i) => marked.has(keyOf(i)));
     return m.length ? m : items[sel] ? [items[sel]!] : [];
   };
   const toggle = (id: string, on?: boolean) =>
@@ -196,25 +234,25 @@ export function Triage({ items }: { items: Item[]; storageKey?: string }) {
       const cur = items[sel];
       const k = e.key;
       if (k === "J" || (k === "ArrowDown" && e.shiftKey)) {
-        if (cur) toggle(cur.id, true);
+        if (cur) toggle(keyOf(cur), true);
         const n = Math.min(items.length - 1, sel + 1);
-        if (items[n]) toggle(items[n]!.id, true);
+        if (items[n]) toggle(keyOf(items[n]!), true);
         setSel(n);
       } else if (k === "K" || (k === "ArrowUp" && e.shiftKey)) {
-        if (cur) toggle(cur.id, true);
+        if (cur) toggle(keyOf(cur), true);
         const n = Math.max(0, sel - 1);
-        if (items[n]) toggle(items[n]!.id, true);
+        if (items[n]) toggle(keyOf(items[n]!), true);
         setSel(n);
       } else if (k === "j" || k === "ArrowDown") setSel((s) => Math.min(items.length - 1, s + 1));
       else if (k === "k" || k === "ArrowUp") setSel((s) => Math.max(0, s - 1));
-      else if (k === " " && cur) toggle(cur.id);
+      else if (k === " " && cur) toggle(keyOf(cur));
       else if (k === "Escape" && marked.size) setMarked(new Set());
       else if (k === "e" && cur) pick.setPlacing(targets());
-      else if (k === "c" && act.firstType && cur) (act.giveType(targets(), act.firstType), setMarked(new Set()));
+      else if (k === "c" && act.firstType(cur) && cur && new Set(targets().map(spaceOf)).size === 1) (act.giveType(targets(), act.firstType(cur)!), setMarked(new Set()));
       else if (k === "y" && cur) pick.setTyping(targets().filter((i) => i.kind === "info"));
       else if ((k === "x" || k === "Delete") && cur) trash(targets());
       else if (k === "u" || k === "z") act.undo();
-      else if ((k === "Enter" || k === "o") && cur) (location.hash = spaceHref(space, `/i/${encodeURIComponent(cur.id)}`));
+      else if ((k === "Enter" || k === "o") && cur) (location.hash = spaceHref(spaceOf(cur), `/i/${encodeURIComponent(cur.id)}`));
       else return;
       e.preventDefault();
     };
@@ -228,12 +266,12 @@ export function Triage({ items }: { items: Item[]; storageKey?: string }) {
   }, [sel, items.length]);
   // marks of entries that left the list go with them
   useEffect(() => {
-    if (marked.size && [...marked].some((id) => !items.some((i) => i.id === id))) setMarked(new Set([...marked].filter((id) => items.some((i) => i.id === id))));
+    if (marked.size && [...marked].some((id) => !items.some((i) => keyOf(i) === id))) setMarked(new Set([...marked].filter((id) => items.some((i) => keyOf(i) === id))));
   }, [items]);
 
   const shown = items.slice(0, limit);
   const sorted = [...items].every((x, n, a) => n === 0 || a[n - 1]!.created >= x.created);
-  const many = marked.size > 0 ? items.filter((i) => marked.has(i.id)) : null;
+  const many = marked.size > 0 ? items.filter((i) => marked.has(keyOf(i))) : null;
   const current = items[sel];
 
   const rows = (
@@ -242,10 +280,10 @@ export function Triage({ items }: { items: Item[]; storageKey?: string }) {
         const g = ageGroup(i.created);
         const head = sorted && (n === 0 || ageGroup(shown[n - 1]!.created) !== g);
         const count = head ? shown.filter((x) => ageGroup(x.created) === g).length : 0;
-        const hint = rowHint(i, ix, t);
+        const hint = rowHint(i, ixOf(i), t);
         const on = n === sel && !phone;
         return (
-          <div key={i.id}>
+          <div key={keyOf(i)}>
             {head && (
               <p className="px-3 pb-1 pt-3 text-xs font-semibold text-muted md:pl-11">
                 {t("triage.age." + g)} <span className="font-normal tabular-nums">{count}</span>
@@ -255,14 +293,14 @@ export function Triage({ items }: { items: Item[]; storageKey?: string }) {
               data-triage={n}
               role="option"
               aria-selected={on}
-              onClick={() => (phone ? (location.hash = spaceHref(space, `/inbox/${encodeURIComponent(i.id)}`)) : setSel(n))}
+              onClick={() => (phone ? (location.hash = spaceHref(spaceOf(i), `/inbox/${encodeURIComponent(i.id)}`)) : setSel(n))}
               className={cx(
                 "relative grid cursor-default items-center gap-x-2 px-3 hover:bg-hover",
                 phone ? "min-h-12 grid-cols-[44px_minmax(0,1fr)_auto] py-1.5" : "h-10 grid-cols-[24px_minmax(0,1fr)_auto_minmax(64px,auto)]",
                 on && "bg-selected before:absolute before:inset-y-1.5 before:left-0 before:w-[3px] before:rounded-r before:bg-[var(--focus)]",
               )}
             >
-              <MarkBox on={marked.has(i.id)} onToggle={() => toggle(i.id)} title={i.title || i.file?.name || t("untitled")} />
+              <MarkBox on={marked.has(keyOf(i))} onToggle={() => toggle(keyOf(i))} title={i.title || i.file?.name || t("untitled")} />
               {phone ? (
                 <span className="flex min-w-0 flex-col">
                   <span className="truncate text-[15px]">{i.title || i.file?.name || t("untitled")}</span>
@@ -287,6 +325,7 @@ export function Triage({ items }: { items: Item[]; storageKey?: string }) {
                 </>
               )}
               <span className="whitespace-nowrap text-right text-xs text-muted">
+                {several && <span className="font-medium">{spaceById(spaceOf(i))?.name} · </span>}
                 <RelTime ts={i.created} />
               </span>
             </div>
@@ -348,23 +387,27 @@ export function Triage({ items }: { items: Item[]; storageKey?: string }) {
             <h2 className="text-xl font-semibold">{t("triage.markedTitle", { count: many.length })}</h2>
             <ul className="mt-3 space-y-1 text-sm">
               {many.map((i) => (
-                <li key={i.id} className="flex items-center gap-2">
-                  <ItemIcon item={i} size={14} /> <span className="truncate">{i.title || i.file?.name || t("untitled")}</span>
+                <li key={keyOf(i)} className="flex items-center gap-2">
+                  <ItemIcon item={i} size={14} ix={ixOf(i)} /> <span className="truncate">{i.title || i.file?.name || t("untitled")}</span>
                 </li>
               ))}
             </ul>
           </div>
         ) : current ? (
-          <Detail item={current} onPlaced={(p) => act.place([current], p)} />
+          <SpaceScope id={spaceOf(current)}>
+            <Detail item={current} onPlaced={(p) => act.place([current], p)} />
+          </SpaceScope>
         ) : null}
-        <ActionBar
-          onPlace={() => pick.setPlacing(targets())}
-          onType={() => pick.setTyping(targets().filter((i) => i.kind === "info"))}
-          toType={!many && current?.kind === "info" && act.firstType && act.firstType !== current.type ? act.firstType : undefined}
-          onToType={(type) => act.giveType(targets(), type)}
-          onTrash={() => trash(targets())}
-          keys
-        />
+        <SpaceScope id={current ? spaceOf(current) : here}>
+          <ActionBar
+            onPlace={() => pick.setPlacing(targets())}
+            onType={() => pick.setTyping(targets().filter((i) => i.kind === "info"))}
+            toType={!many && current?.kind === "info" && act.firstType(current) && act.firstType(current) !== current.type ? act.firstType(current) : undefined}
+            onToType={(type) => act.giveType(targets(), type)}
+            onTrash={() => trash(targets())}
+            keys
+          />
+        </SpaceScope>
       </div>
       {pick.node}
     </div>
@@ -514,6 +557,7 @@ function ActionBar({ onPlace, onType, toType, onToType, onTrash, keys }: { onPla
  */
 export function InboxEntry({ id }: { id: string }) {
   const { t } = useT();
+  const here = useSpaceId()!;
   const ix = useIndex();
   const items = runQuery({ where: inboxWhere(ix), sort: [{ key: "created", desc: true }] }, { ix }).items;
   // the list as it was when this entry opened: "next" stays the one below it, also after it left
@@ -524,8 +568,8 @@ export function InboxEntry({ id }: { id: string }) {
   const next = order.current.slice(at + 1).find((x) => items.some((i) => i.id === x)) ?? order.current.slice(0, at).reverse().find((x) => items.some((i) => i.id === x && x !== id));
   const prev = order.current.slice(0, at).reverse().find((x) => items.some((i) => i.id === x));
   const open = (x?: string) => (x ? location.replace(`#/inbox/${encodeURIComponent(x)}`) : go("/inbox"));
-  const act = useTriageActions();
-  const pick = usePickers(act.place, act.giveType, () => open(next));
+  const act = useTriageActions(() => here);
+  const pick = usePickers(() => here, act.place, act.giveType, () => open(next));
   const touch = useRef<number | null>(null);
   if (!item || item.deleted)
     return (
@@ -558,9 +602,9 @@ export function InboxEntry({ id }: { id: string }) {
         <Button variant="outline" onClick={() => pick.setTyping([item])} className="h-11 px-1.5">
           {t("triage.typeShort")}
         </Button>
-        {act.firstType && act.firstType !== item.type ? (
-          <Button variant="outline" onClick={() => (act.giveType([item], act.firstType!), open(next))} className="h-11 px-1.5">
-            {ix.typeName(act.firstType)}
+        {act.firstType(item) && act.firstType(item) !== item.type ? (
+          <Button variant="outline" onClick={() => (act.giveType([item], act.firstType(item)!), open(next))} className="h-11 px-1.5">
+            {ix.typeName(act.firstType(item)!)}
           </Button>
         ) : (
           <span />

@@ -975,7 +975,6 @@
  "account.tooMany": "Zu viele Versuche – warte kurz und versuch es dann noch einmal.",
  "space.menu": "Menü von {name}",
  "space.setUp": "Einrichten",
- "inbox.filter": "Workspace",
  "inbox.all": "Alle",
  "capture.spaceLabel": "Workspace: {name}",
  "move.preview.title": "„{title}“ nach {workspace} verschieben?",
@@ -984,5 +983,11 @@
  "move.preview.types": "{count, plural, one {Typ} other {Typen}} {names} {count, plural, one {wird} other {werden}} in {workspace} neu angelegt",
  "move.preview.free": "Wird zu freien Eigenschaften, weil es dort nichts Passendes gibt: {names}",
  "move.preview.links": "{count, plural, one {1 Verweis} other {# Verweise}} auf Einträge, die in {from} bleiben, {count, plural, one {fällt weg oder wird} other {fallen weg oder werden}} zu Text",
- "move.confirm": "Verschieben"
+ "move.confirm": "Verschieben",
+ "space.all": "Alle Workspaces",
+ "space.choose": "Workspaces auswählen",
+ "triage.oneSpace": "Einträge aus verschiedenen Workspaces lassen sich nur löschen – Ort und Typ gehören zu einem Workspace.",
+ "triage.withAgentIn": "Mit Agent sortieren ({name})",
+ "inbox.whatLandsIn": "Was landet im Eingang von {name}?",
+ "start.editHint": "Der Aufbau der Startseite gehört zum Workspace {name} und gilt für alle."
 }

@@ -7,9 +7,10 @@ import { type QueryDef, andWhere, runQuery, tabDef } from "@obtion/core/query";
 import { inboxWhere } from "@obtion/core/inbox";
 import { keyBetween } from "@obtion/core/sortkey";
 import { resetInbox, typeTabs } from "@obtion/core/setup";
-import { useLocalStorage, useRepo, useRoute, useSpaceId, spaceHref } from "../hooks";
-import { activate, useAccounts } from "../accounts";
-import { SpaceScope, useReplicas } from "../ui/Spaces";
+import { useRepo, useRoute, spaceHref } from "../hooks";
+import { activate, spaceById, useAccounts } from "../accounts";
+import { SpaceFilter, SpaceScope, useReplicas } from "../ui/Spaces";
+import { Triage } from "../ui/Triage";
 import { repo } from "../repo";
 import { useT } from "../i18n";
 import { files } from "../files";
@@ -194,107 +195,93 @@ export function FilesPage() {
 }
 
 /**
- * The inbox of all workspaces, each in a block of its own (sorting stays inside a workspace). A
- * filter, remembered on this device, shows one workspace only.
+ * The inbox: one list of the entries of the workspaces seen (the selector in the sidebar, also
+ * here above the list), newest first; each entry is sorted in its own workspace. What lands there
+ * is each workspace's rule, behind "…".
  */
 export function InboxPage() {
   const { t } = useT();
-  const { spaces } = useAccounts();
-  const [only, setOnly] = useLocalStorage<string | null>("obtion.inbox.space", null);
-  const counts = useReplicas(spaces.map((s) => s.id)).map((r) => (r.get(SETTINGS_ID) ? runQuery({ where: inboxWhere(r.index()) }, { ix: r.index() }).total : 0));
-  const filter = spaces.some((s) => s.id === only) ? only : null;
-  const shown = spaces.map((s, i) => ({ s, n: counts[i]! })).filter(({ s }) => !filter || s.id === filter);
-  const total = shown.reduce((n, x) => n + x.n, 0);
+  const { shown, active } = useAccounts();
+  const [rule, setRule] = useState<string | null>(null);
+  const repos = useReplicas(shown.map((s) => s.id));
+  const spaceOf = new WeakMap<Item, string>();
+  const per = shown.map((s, n) => {
+    const r = repos[n]!;
+    if (!r.get(SETTINGS_ID)) return [];
+    const ix = r.index();
+    const items = runQuery({ where: inboxWhere(ix), sort: [{ key: "created", desc: true }] }, { ix }).items;
+    for (const i of items) spaceOf.set(i, s.id);
+    return items;
+  });
+  const items = per.flat().sort((a, b) => b.created - a.created);
+  // the agent sorts in the open workspace: that one if it has entries, else the first that has
+  const agentSpace = (shown.find((s, n) => s.id === active?.id && per[n]!.length) ?? shown.find((_, n) => per[n]!.length))?.id;
+  const sortWithAgent = () => {
+    if (!agentSpace) return;
+    activate(agentSpace);
+    location.hash = spaceHref(agentSpace, "/inbox");
+    askAgent(t("triage.agentPrompt"));
+  };
   useEffect(() => void (document.title = t("nav.inbox")), []);
-  const chip = (on: boolean) => cx("shrink-0 whitespace-nowrap rounded-full border px-3 py-1", on ? "border-[var(--focus)] bg-surface text-fg" : "border-line text-muted hover:bg-hover hover:text-fg");
   return (
     <div className="page-wide">
-      {/* its name and how many wait, in one line (design rules § 5.1) */}
-      <div className="mb-4 flex min-w-0 items-baseline gap-2.5">
-        <h1 className="page-title truncate">{t("nav.inbox")}</h1>
-        <span className="text-[15px] tabular-nums text-muted">{total}</span>
-      </div>
-      {spaces.length > 1 && (
-        <div className="-mx-4 mb-4 flex gap-1 overflow-x-auto px-4 text-sm [scrollbar-width:none] md:mx-0 md:px-0" role="group" aria-label={t("inbox.filter")}>
-          <button onClick={() => setOnly(null)} aria-pressed={!filter} className={chip(!filter)}>
-            {t("inbox.all")} <span className="tabular-nums text-muted">{counts.reduce((n, x) => n + x, 0)}</span>
-          </button>
-          {spaces.map((s, i) => (
-            <button key={s.id} onClick={() => setOnly(s.id)} aria-pressed={filter === s.id} className={chip(filter === s.id)}>
-              {s.name} <span className="tabular-nums text-muted">{counts[i]}</span>
-            </button>
-          ))}
+      <div className="mb-4 flex items-center gap-3">
+        {/* its name and how many wait, in one line (design rules § 5.1) */}
+        <div className="flex min-w-0 flex-1 items-baseline gap-2.5">
+          <h1 className="page-title truncate">{t("nav.inbox")}</h1>
+          <span className="text-[15px] tabular-nums text-muted">{items.length}</span>
         </div>
+        {agentSpace && (
+          <Button variant="ghost" onClick={sortWithAgent} title={t("triage.withAgent")}>
+            <Sparkles size={14} /> <span className="hidden sm:inline">{shown.length > 1 ? t("triage.withAgentIn", { name: spaceById(agentSpace)?.name ?? "" }) : t("triage.withAgent")}</span>
+          </Button>
+        )}
+        <Popover align="right" trigger={(p) => <IconButton {...p} label={t("more")} icon={MoreHorizontal} />}>
+          {(close) =>
+            shown.map((s) => (
+              <MenuItem key={s.id} icon={<SlidersHorizontal size={14} />} onClick={() => (close(), setRule(s.id))}>
+                {shown.length > 1 ? t("inbox.whatLandsIn", { name: s.name }) : t("inbox.whatLands")}
+              </MenuItem>
+            ))
+          }
+        </Popover>
+      </div>
+      <SpaceFilter />
+      {rule && shown.some((s) => s.id === rule) && (
+        <SpaceScope id={rule}>
+          <InboxRule name={shown.length > 1 ? spaceById(rule)?.name : undefined} onClose={() => setRule(null)} />
+        </SpaceScope>
       )}
-      {shown
-        .filter(({ n }) => n > 0 || shown.length === 1)
-        .map(({ s }) => (
-          <SpaceScope key={s.id} id={s.id}>
-            <InboxBlock heading={shown.length > 1 ? s.name : undefined} />
-          </SpaceScope>
-        ))}
-      {!total && shown.length > 1 && <Empty title={t("inbox.empty")} />}
+      {items.length ? <Triage items={items} spaceOf={(i) => spaceOf.get(i)!} /> : <Empty title={t("inbox.empty")} />}
     </div>
   );
 }
 
-/** The inbox of one workspace: its entries to sort, and what lands there (its rule, behind "…"). */
-function InboxBlock({ heading }: { heading?: string }) {
+/** What lands in a workspace's inbox: its rule (a draft until "Speichern") and the way back to the default. */
+function InboxRule({ name, onClose }: { name?: string; onClose: () => void }) {
   const { t } = useT();
   const repo = useRepo();
-  const space = useSpaceId()!;
-  const ix = repo.index();
-  const where = inboxWhere(ix);
-  const [editing, setEditing] = useState(false);
+  const where = inboxWhere(repo.index());
   const [draft, setDraft] = useState<QueryDef["where"] | null>(null);
-  const def: QueryDef = { where, sort: [{ key: "created", desc: true }] };
-  const { total } = useQuery(def);
   const restore = () => (setDraft(null), resetInbox(repo.writer), notify(t("inbox.restored")));
-  // the agent works in the open workspace: this one first
-  const sortWithAgent = () => {
-    activate(space);
-    location.hash = spaceHref(space, "/inbox");
-    askAgent(t("triage.agentPrompt"));
-  };
-  if (!repo.get(SETTINGS_ID)) return null;
   return (
-    <section className="mb-8" aria-label={heading}>
-      <div className="mb-2 flex min-h-8 items-center gap-3">
-        <h2 className="min-w-0 flex-1 truncate text-sm font-semibold text-muted">{heading}</h2>
-        {total > 0 && (
-          <Button variant="ghost" onClick={sortWithAgent} title={t("triage.withAgent")}>
-            <Sparkles size={14} /> <span className="hidden sm:inline">{t("triage.withAgent")}</span>
-          </Button>
-        )}
-        <Popover align="right" trigger={(p) => <IconButton {...p} label={t("more")} icon={MoreHorizontal} />}>
-          {(close) => (
-            <>
-              <MenuItem icon={<SlidersHorizontal size={14} />} onClick={() => (close(), setEditing(!editing))}>
-                {t("inbox.whatLands")}
-              </MenuItem>
-              <MenuItem icon={<RotateCcw size={14} />} onClick={() => (close(), restore())}>
-                {t("inbox.restoreDefault")}
-              </MenuItem>
-            </>
-          )}
-        </Popover>
-      </div>
-      {editing && (
-        <div className="mb-4 space-y-2 rounded-xl border border-line bg-surface p-3">
-          <div className="flex items-start gap-2">
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium">{t("inbox.whatLands")}</p>
-              <p className="text-xs text-muted">{t("inbox.ruleHint")}</p>
-            </div>
-            <IconButton icon={X} label={t("view.closeSettings")} onClick={() => setEditing(false)} />
+    <>
+      <div className="mb-4 space-y-2 rounded-xl border border-line bg-surface p-3">
+        <div className="flex items-start gap-2">
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium">{name ? t("inbox.whatLandsIn", { name }) : t("inbox.whatLands")}</p>
+            <p className="text-xs text-muted">{t("inbox.ruleHint")}</p>
           </div>
-          <QueryEditor autoFocus def={{ where: draft ?? where }} onChange={(d) => setDraft(d.where ?? null)} />
+          <Button variant="ghost" onClick={restore}>
+            <RotateCcw size={14} /> {t("inbox.restoreDefault")}
+          </Button>
+          <IconButton icon={X} label={t("view.closeSettings")} onClick={onClose} />
         </div>
-      )}
+        <QueryEditor autoFocus def={{ where: draft ?? where }} onChange={(d) => setDraft(d.where ?? null)} />
+      </div>
       {draft && JSON.stringify(draft) !== JSON.stringify(where) && (
         <DraftBar onDiscard={() => setDraft(null)} onSave={() => (repo.change(SETTINGS_ID, (d) => setSettings(d, { inbox: draft })), setDraft(null), notify(t("view.saved")))} />
       )}
-      <Results def={def} display="triage" keyPrefix={`inbox-${space}`} empty={<Empty title={t("inbox.empty")} />} />
-    </section>
+    </>
   );
 }

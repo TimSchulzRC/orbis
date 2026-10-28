@@ -1,12 +1,13 @@
-// Sidebar: search and the inbox (of all workspaces), then every workspace as a block of its own
-// (as teamspaces in Notion): its name, Start, the pinned informations with their children as a
-// tree, and its types with the files. Blocks and what is open in them fold; that is remembered on
+// Sidebar: the workspace selector (which workspaces are seen), search, Start and the inbox (of
+// the workspaces seen), then each of them as a block of its own (as teamspaces in Notion): its
+// name, the pinned items (informations with their children as a tree, also type pages), and its
+// types with the files. Blocks and what is open in them fold; that is remembered on
 // this device. In the tree, dragging replaces the parent you come from; with Alt held a place is
 // added. Dropping on the upper or lower edge of a row reorders. Dropped into another workspace's
 // block, an item moves there.
 import { useEffect, useState } from "react";
 import { ChevronRight, ChevronDown, LayoutDashboard, Inbox, Search, Sparkles, SlidersHorizontal, Link2, MoreHorizontal, Plus, Paperclip } from "lucide-react";
-import { type Item, SETTINGS_ID, setSchemaField, setSettings } from "@obtion/core/model";
+import { type Item, META_TYPE, SETTINGS_ID, setSchemaField, setSettings } from "@obtion/core/model";
 import { sidebarChildren, sidebarRoots } from "@obtion/core/placement";
 import { inboxWhere } from "@obtion/core/inbox";
 import { runQuery } from "@obtion/core/query";
@@ -19,15 +20,20 @@ import { ItemPicker } from "./Picker";
 import { SyncDot } from "./SyncDot";
 import { createAndOpen } from "../actions";
 import { NewTypeDialog } from "../views/Types";
-import { NewSpaceDialog, SpaceScope, moveTo, useReplicas } from "./Spaces";
+import { NewSpaceDialog, SpaceScope, SpaceSelector, moveTo, useReplicas } from "./Spaces";
 
-/** What is being dragged in the sidebar: an item (from below `from`, null: pinned) or a type row, and from which workspace. */
-let dragging: { id: string; from: string | null; space: string } | null = null;
+/**
+ * What is being dragged in the sidebar: an item (from below `from`, null: pinned; `type`: a pinned
+ * type page, which only changes its place among the pinned) or a row of "Typen", and from which workspace.
+ */
+let dragging: { id: string; from: string | null; space: string; type?: boolean } | null = null;
+/** Can it go into another workspace? Items can (a move), type pages and rows of "Typen" not. */
+const movable = (d: typeof dragging) => !!d && d.from !== "types" && !d.type;
 
-/** How many entries wait in the inboxes of all workspaces. */
+/** How many entries wait in the inboxes of the workspaces seen. */
 export function useInboxTotal() {
-  const { spaces } = useAccounts();
-  return useReplicas(spaces.map((s) => s.id)).reduce((n, r) => {
+  const { shown } = useAccounts();
+  return useReplicas(shown.map((s) => s.id)).reduce((n, r) => {
     const ix = r.index();
     return n + (r.get(SETTINGS_ID) ? runQuery({ where: inboxWhere(ix) }, { ix }).total : 0);
   }, 0);
@@ -36,7 +42,7 @@ export function useInboxTotal() {
 export function Sidebar({ onSearch, onAgent }: { onSearch: () => void; onAgent: () => void }) {
   const { t, lang } = useT();
   const route = useRoute();
-  const { spaces } = useAccounts();
+  const { shown } = useAccounts();
   const inbox = useInboxTotal();
   const [creating, setCreating] = useState(false);
   const navCls = (active: boolean) => cx("flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm", active ? "bg-hover font-medium text-fg" : "text-muted hover:bg-hover hover:text-fg");
@@ -44,8 +50,7 @@ export function Sidebar({ onSearch, onAgent }: { onSearch: () => void; onAgent: 
   return (
     <aside className="flex w-[256px] shrink-0 flex-col border-r border-line bg-surface-2/50 pt-safe">
       <div className="flex items-center gap-2 px-4 pb-2 pt-4">
-        <img src="/icon.svg" alt="" className="size-6 shrink-0" />
-        <span className="flex-1 font-semibold tracking-tight">Obtion</span>
+        <SpaceSelector className="flex-1" onNew={() => setCreating(true)} />
         <SyncDot />
       </div>
       <button onClick={onSearch} className="mx-3 mb-2 flex items-center gap-2 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm text-muted hover:text-fg">
@@ -55,19 +60,21 @@ export function Sidebar({ onSearch, onAgent }: { onSearch: () => void; onAgent: 
       </button>
       <div className="min-h-0 flex-1 overflow-y-auto pb-3">
         <nav className="flex flex-col gap-0.5 px-2" aria-label={t("nav.main")}>
+          <a href="#/" className={navCls(route.path === "/")}>
+            <LayoutDashboard size={16} /> <span className="flex-1">{t("nav.start")}</span>
+          </a>
           <a href="#/inbox" className={navCls(route.path.startsWith("/inbox"))}>
             <Inbox size={16} /> <span className="flex-1">{t("nav.inbox")}</span>
             {inbox > 0 && <span className="text-xs tabular-nums text-muted">{inbox}</span>}
           </a>
         </nav>
-        {spaces.map((s) => (
+        {/* a line above each workspace: where one ends and the next begins */}
+        {shown.map((s) => (
           <SpaceScope key={s.id} id={s.id}>
+            <div className="mx-4 mt-3 border-t border-line" />
             <SpaceTree space={s} />
           </SpaceScope>
         ))}
-        <button onClick={() => setCreating(true)} className="mx-2 mt-3 flex items-center gap-2 rounded-lg px-2.5 py-1 text-xs text-muted hover:bg-hover hover:text-fg">
-          <Plus size={13} /> {t("space.new")}
-        </button>
         {creating && <NewSpaceDialog onClose={() => setCreating(false)} />}
       </div>
       {/* below: the agent and the settings (activity, graph, trash and the language live there) */}
@@ -91,11 +98,10 @@ export function Sidebar({ onSearch, onAgent }: { onSearch: () => void; onAgent: 
 export function SpaceTree({ space, touch }: { space: Space; touch?: boolean }) {
   const { t } = useT();
   const repo = useRepo();
-  const route = useRoute();
-  const { active, spaces } = useAccounts();
+  const { active, shown } = useAccounts();
   const here = active?.id === space.id;
   const [open, setOpen] = useLocalStorage<boolean>(`obtion.sidebar.space.${space.id}`, true);
-  const [typesOpen, setTypesOpen] = useLocalStorage<boolean>(`obtion.sidebar.types.${space.id}`, spaces.length === 1);
+  const [typesOpen, setTypesOpen] = useLocalStorage<boolean>(`obtion.sidebar.types.${space.id}`, shown.length === 1);
   const [over, setOver] = useState(false);
   const ix = repo.index();
   const roots = sidebarRoots(ix);
@@ -103,11 +109,11 @@ export function SpaceTree({ space, touch }: { space: Space; touch?: boolean }) {
   const go = (path: string) => (location.hash = spaceHref(space.id, path));
   const row = cx("flex items-center gap-2 rounded-lg pr-2", touch ? "py-2 text-[15px]" : "py-1 text-sm");
   return (
-    <section className="mt-3.5" aria-label={space.name}>
+    <section className="mt-2" aria-label={space.name}>
       <div
         className={cx("group/space flex h-7 items-center gap-0.5 rounded-lg", touch ? "px-3" : "mx-2 px-2", over && "bg-hover ring-1 ring-[var(--focus)]")}
         onDragOver={(e) => {
-          if (!dragging || dragging.space === space.id || dragging.from === "types") return;
+          if (!movable(dragging) || dragging!.space === space.id) return;
           e.preventDefault();
           setOver(true);
         }}
@@ -117,7 +123,7 @@ export function SpaceTree({ space, touch }: { space: Space; touch?: boolean }) {
           setOver(false);
           const d = dragging;
           dragging = null;
-          if (d && d.space !== space.id && d.from !== "types") void moveTo(d.id, d.space, space.id);
+          if (movable(d) && d!.space !== space.id) void moveTo(d!.id, d!.space, space.id);
         }}
       >
         <button onClick={() => setOpen(!open)} aria-expanded={open} className="-ml-1 flex min-w-0 flex-1 items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.05em] text-muted hover:text-fg">
@@ -158,9 +164,6 @@ export function SpaceTree({ space, touch }: { space: Space; touch?: boolean }) {
       )}
       {open && ready && (
         <div className={cx(!touch && "px-2")}>
-          <a href={spaceHref(space.id, "/")} className={cx(row, "w-full pl-2.5", here && route.path === "/" ? "bg-hover font-medium text-fg" : "text-muted hover:bg-hover hover:text-fg")}>
-            <LayoutDashboard size={touch ? 17 : 15} className="shrink-0" /> {t("nav.start")}
-          </a>
           <PinnedTree touch={touch} here={here} />
           <button onClick={() => setTypesOpen(!typesOpen)} aria-expanded={typesOpen} className={cx(row, "w-full pl-2.5 text-muted hover:bg-hover hover:text-fg")}>
             <ChevronRight size={touch ? 17 : 15} className={cx("shrink-0 text-faint transition-transform", typesOpen && "rotate-90")} />
@@ -208,7 +211,7 @@ export function PinnedTree({ touch, here }: { touch?: boolean; here: boolean }) 
         const d = dragging;
         if (!d || d.from === "types" || e.defaultPrevented) return;
         dragging = null;
-        if (d.space !== space) return void moveTo(d.id, d.space, space);
+        if (d.space !== space) return void (movable(d) && moveTo(d.id, d.space, space));
         if (d.from && !e.altKey) repo.removeParent(d.id, d.from);
         repo.setSort(d.id, null, keyBetween(roots.at(-1)?.pinned ?? null, null));
       }}
@@ -326,6 +329,7 @@ function TreeNode({
   const repo = useRepo();
   const space = useSpaceId()!;
   const ix = repo.index();
+  const isType = item.type === META_TYPE;
   const key = `${parent ?? ""}>${item.id}`;
   const kids = sidebarChildren(item.id, ix, keep);
   const isOpen = opened(key, depth);
@@ -343,7 +347,8 @@ function TreeNode({
     dragging = null;
     setDrop(null);
     if (!d || d.id === item.id) return;
-    if (d.space !== space) return void moveTo(d.id, d.space, space, item.id);
+    if (d.space !== space) return void (movable(d) && !isType && moveTo(d.id, d.space, space, item.id));
+    if ((d.type || isType) && drop === "inside") return;
     if (drop === "inside") {
       if (e.altKey) repo.addParent(d.id, item.id);
       else if (d.from) repo.moveParent(d.id, d.from, item.id);
@@ -373,18 +378,23 @@ function TreeNode({
       <div
         draggable={!touch}
         onDragStart={(e) => {
-          dragging = { id: item.id, from: parent, space };
+          dragging = { id: item.id, from: parent, space, type: isType };
           e.dataTransfer.effectAllowed = "copyMove";
           e.dataTransfer.setData("text/plain", item.title);
         }}
         onDragOver={(e) => {
-          if (!dragging || dragging.id === item.id || dragging.from === "types") return;
+          const d = dragging;
+          if (!d || d.id === item.id || d.from === "types") return;
+          const other = d.space !== space;
+          // from another workspace only into this item (a move), never into a type page; a type
+          // page only changes its place among the pinned
+          if (other ? !movable(d) || isType : d.type && parent !== null) return;
           e.preventDefault();
           e.stopPropagation();
           const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
           const y = e.clientY - r.top;
-          // from another workspace only into this item: a move there
-          setDrop(dragging.space !== space ? "inside" : y < r.height * 0.25 ? "before" : y > r.height * 0.75 ? "after" : "inside");
+          const edge = y < r.height / 2 ? "before" : "after";
+          setDrop(other ? "inside" : d.type || isType ? edge : y < r.height * 0.25 ? "before" : y > r.height * 0.75 ? "after" : "inside");
         }}
         onDragLeave={() => setDrop(null)}
         onDrop={onDrop}
@@ -407,9 +417,9 @@ function TreeNode({
         >
           {isOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
         </button>
-        <ItemIcon item={item} size={touch ? 17 : 15} />
+        {isType ? <TypeGlyph schema={item.schema} size={touch ? 17 : 15} /> : <ItemIcon item={item} size={touch ? 17 : 15} />}
         <a href={itemHref(item.id)} className="min-w-0 flex-1 truncate" title={item.title} aria-current={activeId === item.id ? "page" : undefined}>
-          {distinctLabel(item.title, parent ? ix.get(parent)?.title : undefined) || t("untitled")}
+          {isType ? ix.typePlural(item.id) : distinctLabel(item.title, parent ? ix.get(parent)?.title : undefined) || t("untitled")}
         </a>
         {secondary && (
           <span title={t("tree.secondary", { home: ix.get(home)?.title ?? "" })} className="text-muted">
@@ -417,7 +427,7 @@ function TreeNode({
           </span>
         )}
         {/* on a phone there is no hover: no invisible buttons to hit by accident */}
-        {!touch && (
+        {!touch && !isType && (
           <button
             onClick={() => {
               if (!isOpen) toggle(key, depth);
@@ -444,7 +454,7 @@ function TreeNode({
           {(close) => (
             <>
               <MenuItem onClick={() => (close(), repo.pin(item.id, !item.pinned))}>{item.pinned ? t("item.unpin") : t("item.pin")}</MenuItem>
-              <MenuItem onClick={() => (close(), setPicking(true))}>{item.kind === "datei" ? t("place.change") : t("place.add")}</MenuItem>
+              {!isType && <MenuItem onClick={() => (close(), setPicking(true))}>{item.kind === "datei" ? t("place.change") : t("place.add")}</MenuItem>}
               {parent && <MenuItem onClick={() => (close(), repo.removeParent(item.id, parent))}>{t("place.removeHere")}</MenuItem>}
               {parent && secondary && <MenuItem onClick={() => (close(), repo.setHome(item.id, parent))}>{t("place.makeHome")}</MenuItem>}
             </>

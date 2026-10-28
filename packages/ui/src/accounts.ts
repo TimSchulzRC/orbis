@@ -26,7 +26,7 @@ export interface Space {
   legacy?: boolean;
 }
 
-const KEY = { account: "obtion.account", spaces: "obtion.spaces", active: "obtion.active" };
+const KEY = { account: "obtion.account", spaces: "obtion.spaces", active: "obtion.active", shown: "obtion.shown" };
 const read = <T>(k: string, def: T): T => {
   try {
     return (JSON.parse(localStorage.getItem(k) ?? "null") as T) ?? def;
@@ -45,6 +45,8 @@ if (localStorage.getItem("obtion.accounts")) {
 let account: Account | null = read(KEY.account, null);
 let spaces: Space[] = read(KEY.spaces, []);
 let active: string | null = localStorage.getItem(KEY.active);
+/** The workspaces chosen to be seen (sidebar, inbox, Start) on this device; null: all. */
+let shown: string[] | null = read(KEY.shown, null);
 let version = 0;
 const listeners = new Set<() => void>();
 
@@ -53,6 +55,7 @@ function save() {
   localStorage.setItem(KEY.spaces, JSON.stringify(spaces));
   if (active) localStorage.setItem(KEY.active, active);
   else localStorage.removeItem(KEY.active);
+  localStorage.setItem(KEY.shown, JSON.stringify(shown));
   version++;
   for (const l of listeners) l();
 }
@@ -62,7 +65,19 @@ export function useAccounts() {
     (l) => (listeners.add(l), () => listeners.delete(l)),
     () => version,
   );
-  return { account, spaces, active: spaces.find((s) => s.id === active) };
+  return { account, spaces, active: spaces.find((s) => s.id === active), shown: shownSpaces() };
+}
+
+/** The workspaces chosen to be seen; never none (a choice that left none shows all). */
+export function shownSpaces(): Space[] {
+  const list = spaces.filter((s) => !shown || shown.includes(s.id));
+  return list.length ? list : spaces;
+}
+
+/** Choose the workspaces to be seen. All of them is stored as "all", so a new one is seen too. */
+export function setShown(ids: string[]) {
+  shown = spaces.every((s) => ids.includes(s.id)) ? null : ids;
+  save();
 }
 
 export const activeSpace = () => spaces.find((s) => s.id === active);
@@ -176,6 +191,7 @@ async function forgetAll() {
   account = null;
   spaces = [];
   active = null;
+  shown = null;
 }
 
 /** Delete a workspace's local copy (after leaving it or signing out). */
@@ -192,6 +208,7 @@ async function forget(s: Space) {
 
 export async function createSpace(name: string) {
   const w = await call("/api/workspaces", { name });
+  if (shown) shown = [...shown, w.id];
   await refresh();
   location.hash = `#/w/${w.id}/`;
 }
