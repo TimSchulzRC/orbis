@@ -1,3 +1,5 @@
+import { Button as ShadcnButton } from "../components/ui/button";
+import { Input } from "../components/ui/input";
 // One query, two ways in: conditions as chips to click (each opens a short menu: switch off,
 // negate, "oder …", remove; "+ Bedingung" adds one), and the same query as text for those who
 // like typing (folded away by default).
@@ -31,9 +33,9 @@ function CondPicker({ pick, onUnder, context }: { pick: (c: Cond) => void; onUnd
   const [tag, setTag] = useState("");
   const types = [...ix.types.values()].sort((a, b) => a.schema!.name.localeCompare(b.schema!.name));
   const back = (
-    <button onClick={() => setStep("root")} className="mb-1 flex items-center gap-1 px-2 text-xs text-muted hover:text-fg">
+    <ShadcnButton variant="plain" size="none" onClick={() => setStep("root")} className="mb-1 flex items-center gap-1 px-2 text-xs text-muted-foreground hover:text-fg">
       <ChevronLeft size={12} /> {t("query.back")}
-    </button>
+    </ShadcnButton>
   );
   if (step === "type")
     return (
@@ -70,7 +72,7 @@ function CondPicker({ pick, onUnder, context }: { pick: (c: Cond) => void; onUnd
     return (
       <div className="p-1">
         {back}
-        <input
+        <Input
           autoFocus
           value={tag}
           onChange={(e) => setTag(e.target.value.replace(/^#/, ""))}
@@ -105,9 +107,9 @@ function Chip({ cond, ctx, off, onToggle, onNegate, onOr, onRemove, onUnder, con
     <Popover
       onOpenChange={(o) => o && setMode("menu")}
       trigger={(p) => (
-        <button {...p} className={cx("inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-line bg-bg px-1.5 py-0.5 hover:border-[var(--focus)]", off && "line-through opacity-50")} title={off ? t("query.offHint") : undefined}>
+        <ShadcnButton variant="plain" size="none" {...p} className={cx("inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-line bg-bg px-1.5 py-0.5 hover:border-[var(--focus)]", off && "line-through opacity-50")} title={off ? t("query.offHint") : undefined}>
           {label(cond, ctx)}
-        </button>
+        </ShadcnButton>
       )}
     >
       {(close) =>
@@ -131,9 +133,9 @@ function Chip({ cond, ctx, off, onToggle, onNegate, onOr, onRemove, onUnder, con
   return (
     <span className="inline-flex items-center">
       {chip}
-      <button onClick={onRemove} className="tap -ml-0.5 rounded p-0.5 text-muted hover:bg-hover hover:text-fg" aria-label={t("query.removeCondNamed", { cond: label(cond, ctx) })}>
+      <ShadcnButton variant="plain" size="none" onClick={onRemove} className="tap -ml-0.5 rounded p-0.5 text-muted-foreground hover:bg-hover hover:text-fg" aria-label={t("query.removeCondNamed", { cond: label(cond, ctx) })}>
         <X size={12} />
-      </button>
+      </ShadcnButton>
     </span>
   );
 }
@@ -203,7 +205,7 @@ export function QueryEditor({ def, onChange, autoFocus, context, bare }: { def: 
         <span key={n} className="inline-flex flex-wrap items-center gap-1 rounded-lg border border-dashed border-line px-1 py-0.5">
           {c.or.map((alt, k) => (
             <span key={k} className="inline-flex items-center gap-1">
-              {k > 0 && <span className="text-muted">{t("query.orWord")}</span>}
+              {k > 0 && <span className="text-muted-foreground">{t("query.orWord")}</span>}
               <Chip
                 cond={alt}
                 ctx={ctx}
@@ -240,7 +242,7 @@ export function QueryEditor({ def, onChange, autoFocus, context, bare }: { def: 
       <div className="flex flex-wrap items-center gap-1.5 text-xs">
         {parts.map((p, n) => (
           <span key={n} className="inline-flex items-center gap-1.5">
-            {n > 0 && !bare && <span className="text-muted">{t("query.and")}</span>}
+            {n > 0 && !bare && <span className="text-muted-foreground">{t("query.and")}</span>}
             {chip(p, n)}
           </span>
         ))}
@@ -249,22 +251,22 @@ export function QueryEditor({ def, onChange, autoFocus, context, bare }: { def: 
         ))}
         <Popover
           trigger={(p) => (
-            <button {...p} autoFocus={autoFocus && !parts.length} className="inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-muted hover:bg-hover hover:text-fg">
+            <ShadcnButton variant="plain" size="none" {...p} autoFocus={autoFocus && !parts.length} className="inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-muted-foreground hover:bg-hover hover:text-fg">
               <Plus size={12} /> {bare ? t("query.addFilter") : t("query.addCond")}
-            </button>
+            </ShadcnButton>
           )}
         >
           {(close) => <CondPicker context={context} pick={(c) => (add(c), close())} onUnder={() => (close(), under(add))} />}
         </Popover>
         {!bare && (
-          <button onClick={() => setAsText(!asText)} className="ml-auto text-muted hover:text-fg">
+          <ShadcnButton variant="plain" size="none" onClick={() => setAsText(!asText)} className="ml-auto text-muted-foreground hover:text-fg">
             {asText ? t("query.hideText") : t("query.asText")}
-          </button>
+          </ShadcnButton>
         )}
       </div>
       {asText && (
         <div className="mt-2 flex items-center gap-1.5">
-          <input
+          <Input
             value={text}
             autoFocus
             onFocus={() => setFocused(true)}
@@ -277,9 +279,9 @@ export function QueryEditor({ def, onChange, autoFocus, context, bare }: { def: 
             spellCheck={false}
             placeholder={t("query.placeholder")}
             aria-label={t("query.label")}
-            className={cx("min-w-0 flex-1 bg-transparent font-mono text-sm outline-none placeholder:text-muted", errors.length > 0 && "text-warn")}
+            className={cx("min-w-0 flex-1 bg-transparent font-mono text-sm outline-none placeholder:text-muted-foreground", errors.length > 0 && "text-warn")}
           />
-          <span title={t("query.help")} className="cursor-help text-muted" aria-label={t("query.help")}>
+          <span title={t("query.help")} className="cursor-help text-muted-foreground" aria-label={t("query.help")}>
             <HelpCircle size={14} />
           </span>
         </div>

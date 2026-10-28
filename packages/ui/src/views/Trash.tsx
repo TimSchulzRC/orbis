@@ -41,7 +41,7 @@ export function TrashView() {
     <div className="page-read">
       <SpaceEyebrow />
       <h1 className="mb-1 page-title">{t("nav.trash")}</h1>
-      <p className="mb-5 text-sm text-muted">{t("trash.intro")}</p>
+      <p className="mb-5 text-sm text-muted-foreground">{t("trash.intro")}</p>
       {items.length ? (
         <ul className="divide-y divide-line rounded-xl border border-line bg-surface">
           {items.map((i) => (
@@ -51,10 +51,10 @@ export function TrashView() {
                 <a href={`#/i/${encodeURIComponent(i.id)}`} className="truncate hover:underline">
                   {i.title || t("untitled")}
                 </a>
-                {pathOf(i).length > 0 && <span className="truncate text-xs text-muted">{pathOf(i).join(" › ")}</span>}
+                {pathOf(i).length > 0 && <span className="truncate text-xs text-muted-foreground">{pathOf(i).join(" › ")}</span>}
               </span>
-              {cascadeCount(r.records, i.id) > 0 && <span className="text-xs text-muted">{t("trash.withChildren", { count: cascadeCount(r.records, i.id) })}</span>}
-              <span className="text-xs text-muted">
+              {cascadeCount(r.records, i.id) > 0 && <span className="text-xs text-muted-foreground">{t("trash.withChildren", { count: cascadeCount(r.records, i.id) })}</span>}
+              <span className="text-xs text-muted-foreground">
                 <RelTime ts={i.updated} />
               </span>
               <Button onClick={() => restore(i)}>

@@ -1,3 +1,6 @@
+import { Checkbox } from "../components/ui/checkbox";
+import { Button as ShadcnButton } from "../components/ui/button";
+import { Input } from "../components/ui/input";
 // "Sortieren" (design rules § 5): go through entries and decide – place, give a type, delete.
 // Works for any list or query block; the inbox is just one. An entry leaves the list as
 // soon as it no longer matches the query.
@@ -179,7 +182,7 @@ function MarkBox({ on, onToggle, title }: { on: boolean; onToggle: () => void; t
   const { t } = useT();
   return (
     <label className="tap-edge relative flex size-6 shrink-0 cursor-pointer items-center justify-center" onClick={(e) => e.stopPropagation()}>
-      <input type="checkbox" checked={on} onChange={onToggle} aria-label={t("triage.markNamed", { title })} className="size-4 cursor-pointer accent-[var(--focus)] pointer-coarse:size-[18px]" />
+      <Checkbox  checked={on} onChange={onToggle} aria-label={t("triage.markNamed", { title })} className="size-4 cursor-pointer accent-[var(--focus)] pointer-coarse:size-[18px]" />
     </label>
   );
 }
@@ -285,7 +288,7 @@ export function Triage({ items, spaceOf: given }: { items: Item[]; storageKey?: 
         return (
           <div key={keyOf(i)}>
             {head && (
-              <p className="px-3 pb-1 pt-3 text-xs font-semibold text-muted md:pl-11">
+              <p className="px-3 pb-1 pt-3 text-xs font-semibold text-muted-foreground md:pl-11">
                 {t("triage.age." + g)} <span className="font-normal tabular-nums">{count}</span>
               </p>
             )}
@@ -305,7 +308,7 @@ export function Triage({ items, spaceOf: given }: { items: Item[]; storageKey?: 
                 <span className="flex min-w-0 flex-col">
                   <span className="truncate text-[15px]">{i.title || i.file?.name || t("untitled")}</span>
                   {hint && (
-                    <span className="flex min-w-0 items-center gap-1 text-xs text-muted">
+                    <span className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
                       <span className="shrink-0">{hint.icon}</span>
                       <span className="truncate">{hint.text}</span>
                     </span>
@@ -314,7 +317,7 @@ export function Triage({ items, spaceOf: given }: { items: Item[]; storageKey?: 
               ) : (
                 <>
                   <span className="truncate text-sm">{i.title || i.file?.name || t("untitled")}</span>
-                  <span className="flex max-w-[104px] items-center gap-1 overflow-hidden whitespace-nowrap text-xs text-muted">
+                  <span className="flex max-w-[104px] items-center gap-1 overflow-hidden whitespace-nowrap text-xs text-muted-foreground">
                     {hint && (
                       <>
                         <span className="shrink-0">{hint.icon}</span>
@@ -324,7 +327,7 @@ export function Triage({ items, spaceOf: given }: { items: Item[]; storageKey?: 
                   </span>
                 </>
               )}
-              <span className="whitespace-nowrap text-right text-xs text-muted">
+              <span className="whitespace-nowrap text-right text-xs text-muted-foreground">
                 {several && <span className="font-medium">{spaceById(spaceOf(i))?.name} · </span>}
                 <RelTime ts={i.created} />
               </span>
@@ -333,9 +336,9 @@ export function Triage({ items, spaceOf: given }: { items: Item[]; storageKey?: 
         );
       })}
       {items.length > limit && (
-        <button onClick={() => setLimit(limit + 60)} className="w-full py-3 text-sm text-muted hover:text-fg">
+        <ShadcnButton variant="plain" size="none" onClick={() => setLimit(limit + 60)} className="w-full py-3 text-sm text-muted-foreground hover:text-fg">
           {t("query.more", { count: items.length - limit })}
-        </button>
+        </ShadcnButton>
       )}
     </div>
   );
@@ -357,7 +360,7 @@ export function Triage({ items, spaceOf: given }: { items: Item[]; storageKey?: 
       </Button>
     </div>
   ) : (
-    <div className="flex h-11 shrink-0 items-center gap-2 border-b border-line px-3 text-[13px] text-muted">
+    <div className="flex h-11 shrink-0 items-center gap-2 border-b border-line px-3 text-[13px] text-muted-foreground">
       <span className="flex-1">{sorted ? t("triage.newestFirst") : ""}</span>
       {!phone && (
         <span className="flex items-center gap-1">
@@ -435,13 +438,13 @@ function Detail({ item, onPlaced }: { item: Item; onPlaced: (p: string) => void 
     repo.change(item.id, (doc) => setMeta(doc, { suggestion: null }));
   };
   const section = "mt-5";
-  const k = "mb-1.5 text-xs font-semibold text-muted";
+  const k = "mb-1.5 text-xs font-semibold text-muted-foreground";
   return (
     <div className="min-h-0 flex-1 overflow-y-auto px-7 py-6 max-md:px-4 max-md:py-4">
       <a href={itemHref(item.id)} className="block text-xl font-semibold leading-[26px] hover:underline max-md:text-[22px] max-md:leading-7">
         {item.title || item.file?.name || t("untitled")}
       </a>
-      <p className="mt-1 text-xs text-muted">
+      <p className="mt-1 text-xs text-muted-foreground">
         {t("triage.captured")} <RelTime ts={item.created} />
         {mentioned.length > 0 && <> · {t("triage.mentions", { list: mentioned.map((m) => m.title).join(", ") })}</>}
       </p>
@@ -450,7 +453,7 @@ function Detail({ item, onPlaced }: { item: Item; onPlaced: (p: string) => void 
           <Markdown src={item.body} />
         </div>
       ) : item.file?.text ? (
-        <p className="mt-4 max-w-[64ch] text-[15px] leading-[1.65] text-muted">{plainText(item.file.text).slice(0, 800)}</p>
+        <p className="mt-4 max-w-[64ch] text-[15px] leading-[1.65] text-muted-foreground">{plainText(item.file.text).slice(0, 800)}</p>
       ) : null}
       {kids.length > 0 && (
         <div className={section}>
@@ -479,17 +482,17 @@ function Detail({ item, onPlaced }: { item: Item; onPlaced: (p: string) => void 
         <div className={section}>
           <p className={k}>{t("triage.fromAgent")}</p>
           <div className="flex flex-wrap items-center gap-2.5 rounded-[10px] bg-surface-2 px-3 py-2 text-sm">
-            <Sparkles size={15} className="shrink-0 text-muted" />
+            <Sparkles size={15} className="shrink-0 text-muted-foreground" />
             <span className="min-w-0 flex-1 basis-48">
               {[sug.type ? ix.typeName(sug.type) : null, ...(sug.parents ?? []).map((p) => ix.get(p)?.title)].filter(Boolean).join(" · ")}
-              {sug.note && <span className="text-muted"> – {sug.note}</span>}
+              {sug.note && <span className="text-muted-foreground"> – {sug.note}</span>}
             </span>
             <Button variant="outline" onClick={applySuggestion} className="h-7 shrink-0 px-2 text-[13px]">
               <Check size={13} /> {t("triage.accept")}
             </Button>
-            <button onClick={() => repo.change(item.id, (doc) => setMeta(doc, { suggestion: null }))} className="tap shrink-0 rounded p-1 text-faint hover:bg-hover hover:text-fg" aria-label={t("triage.dismiss")}>
+            <ShadcnButton variant="plain" size="none" onClick={() => repo.change(item.id, (doc) => setMeta(doc, { suggestion: null }))} className="tap shrink-0 rounded p-1 text-faint hover:bg-hover hover:text-fg" aria-label={t("triage.dismiss")}>
               <X size={14} />
-            </button>
+            </ShadcnButton>
           </div>
         </div>
       )}
@@ -498,10 +501,10 @@ function Detail({ item, onPlaced }: { item: Item; onPlaced: (p: string) => void 
           <p className={k}>{t("triage.placeIn")}</p>
           <div className="flex flex-wrap gap-1.5">
             {places.map((p) => (
-              <button key={p.id} onClick={() => onPlaced(p.id)} className="tap-y inline-flex h-[30px] items-center gap-1.5 whitespace-nowrap rounded-lg border border-line bg-surface px-2.5 text-[13px] hover:bg-hover">
-                <FolderInput size={13} className="text-muted" /> {ix.get(p.id)?.title}
-                <span className="text-xs text-muted">{p.why}</span>
-              </button>
+              <ShadcnButton variant="plain" size="none" key={p.id} onClick={() => onPlaced(p.id)} className="tap-y inline-flex h-[30px] items-center gap-1.5 whitespace-nowrap rounded-lg border border-line bg-surface px-2.5 text-[13px] hover:bg-hover">
+                <FolderInput size={13} className="text-muted-foreground" /> {ix.get(p.id)?.title}
+                <span className="text-xs text-muted-foreground">{p.why}</span>
+              </ShadcnButton>
             ))}
           </div>
         </div>
@@ -534,7 +537,7 @@ function ActionBar({ onPlace, onType, toType, onToType, onTrash, keys }: { onPla
         </Button>
       </div>
       {keys && (
-        <p className="flex flex-wrap gap-x-3 px-7 pb-3 text-xs text-muted">
+        <p className="flex flex-wrap gap-x-3 px-7 pb-3 text-xs text-muted-foreground">
           <span>
             <Kbd>j</Kbd> <Kbd>k</Kbd> {t("triage.keys.next")}
           </span>
@@ -573,7 +576,7 @@ export function InboxEntry({ id }: { id: string }) {
   const touch = useRef<number | null>(null);
   if (!item || item.deleted)
     return (
-      <div className="page-read text-center text-muted">
+      <div className="page-read text-center text-muted-foreground">
         <a href="#/inbox" className="underline">{t("kind.inbox")}</a>
       </div>
     );
@@ -592,7 +595,7 @@ export function InboxEntry({ id }: { id: string }) {
         <a href="#/inbox" className="tap flex items-center gap-1 rounded-lg px-2 text-[15px] font-semibold">
           <ChevronLeft size={20} /> {t("nav.inbox")}
         </a>
-        <span className="ml-auto pr-3 text-xs tabular-nums text-muted">{pos >= 0 ? t("triage.position", { at: pos + 1, count: items.length }) : ""}</span>
+        <span className="ml-auto pr-3 text-xs tabular-nums text-muted-foreground">{pos >= 0 ? t("triage.position", { at: pos + 1, count: items.length }) : ""}</span>
       </div>
       <Detail item={item} onPlaced={(p) => (act.place([item], p), open(next))} />
       <div className="grid shrink-0 grid-cols-[1.6fr_1fr_1fr_52px] gap-2 border-t border-line bg-surface px-3 py-2.5 pb-safe">
@@ -636,7 +639,7 @@ export function TypePicker({ current, onPick, onClose }: { current: string | nul
   };
   return (
     <Dialog title={t("triage.chooseType")} onClose={onClose}>
-      <input
+      <Input
         autoFocus
         value={q}
         onChange={(e) => (setQ(e.target.value), setSel(0))}
@@ -653,7 +656,7 @@ export function TypePicker({ current, onPick, onClose }: { current: string | nul
         {rows.map((r, n) => {
           const x = r.id ? ix.types.get(r.id) : undefined;
           return (
-            <button
+            <ShadcnButton variant="plain" size="none"
               key={r.id ?? "new"}
               role="option"
               aria-selected={n === sel}
@@ -661,11 +664,11 @@ export function TypePicker({ current, onPick, onClose }: { current: string | nul
               onClick={() => pick(r)}
               className={cx("flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm", n === sel && "bg-selected", !r.id && "mt-1 border-t border-line pt-2")}
             >
-              {x ? <TypeGlyph schema={x.schema} size={15} /> : <Plus size={15} className="text-muted" />}
+              {x ? <TypeGlyph schema={x.schema} size={15} /> : <Plus size={15} className="text-muted-foreground" />}
               <span className="min-w-0 flex-1 truncate">{x ? x.schema!.name : r.create ? t("triage.newTypeNamed", { name: r.create }) : t("triage.newType")}</span>
               {x && r.id === current && <Check size={14} className="text-ok" />}
               {x && n < 9 && !q && <Kbd>{n + 1}</Kbd>}
-            </button>
+            </ShadcnButton>
           );
         })}
       </div>

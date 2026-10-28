@@ -1,102 +1,44 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "./theme.css";
 /* the classes live in this package, wherever the app that bundles it is built */
 @source "./";
 
 /* light or dark: set on <html data-theme> before the first paint (index.html), per device */
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
-:root {
-  --bg: #f7f6f3;
-  --surface: #ffffff;
-  --surface-2: #f0eee9;
-  --hover: #ebe8e1;
-  --selected: #f0eee9; /* a selected row: muted text keeps 4.5:1 here (on hover it would not) */
-  --border: #e3e0d8;
-  --text: #1f1f1f;
-  /* grey text tones are neutral; faint (3.2:1) only for symbols and lines – small text uses muted */
-  --muted: #6b6b6b;
-  --faint: #8a8a8a;
-  --ink: #1f1f1f;
-  --ink-text: #ffffff;
-  --focus: #3a6ff0;
-  --t-inbox: #be780a;
-  --t-note: #8a8a8a;
-  --t-file: #706258;
-  --ok: #23905f;
-  --ok-text: #1a744b;
-  --pal-blue: #2f6ae0;
-  --pal-violet: #8b4fd8;
-  --pal-green: #23905f;
-  --pal-slate: #5c6b80;
-  --pal-teal: #0d828c;
-  --pal-pink: #c84078;
-  --pal-brown: #9a6b45;
-  --pal-amber: #be780a;
-  --pal-red: #d1453b;
-  --pal-indigo: #4f55d8;
-  --pal-olive: #6b7a1f;
-  --pal-gray: #706258;
-  --danger: #d1453b;
-  /* text tones: ≥ 4.5:1 on every surface incl. hover (the decorative tones above are for icons and fills) */
-  --warn-text: #945b08;
-  --danger-text: #bc362d;
-  --link: #2c5fd4;
-  --c-gray: #8a8a8a;
-  --c-blue: #2f6ae0;
-  --c-amber: #c98412;
-  --c-purple: #8b4fd8;
-  --c-green: #23905f;
-  --c-red: #d1453b;
-  --c-brown: #9a6b45;
-  color-scheme: light;
-}
-
-/* dark: neutral greys, no violet or blue tint */
-:root[data-theme="dark"] {
-    --bg: #191919;
-    --surface: #202020;
-    --surface-2: #252525;
-    --hover: #2c2c2c;
-    --selected: #2c2c2c;
-    --border: #303030;
-    --text: #ececec;
-    --muted: #a3a3a3;
-    --faint: #8a8a8a;
-    --ink: #ececec;
-    --ink-text: #191919;
-    --focus: #6f97ff;
-    --t-inbox: #f0b040;
-    --t-note: #8a8a8a;
-    --t-file: #c4b6aa;
-    --ok: #50c88c;
-    --ok-text: #50c88c;
-    --pal-blue: #6e96ff;
-    --pal-violet: #b58cf0;
-    --pal-green: #50c88c;
-    --pal-slate: #94a3b8;
-    --pal-teal: #46c8d2;
-    --pal-pink: #f082af;
-    --pal-brown: #c79a73;
-    --pal-amber: #f0b040;
-    --pal-red: #f06b60;
-    --pal-indigo: #9399ff;
-    --pal-olive: #b4c35a;
-    --pal-gray: #c4b6aa;
-    --danger: #f06b60;
-    --warn-text: #f0b040;
-    --danger-text: #f06b60;
-    --link: #6f97ff;
-    --c-gray: #9a9a9a;
-    --c-blue: #6e96ff;
-    --c-amber: #f0b040;
-    --c-purple: #b58cf0;
-    --c-green: #50c88c;
-    --c-red: #f06b60;
-    --c-brown: #c79a73;
-    color-scheme: dark;
-}
-
 @theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
   --color-bg: var(--bg);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
@@ -261,7 +203,7 @@ button {
 .md blockquote {
   border-left: 3px solid var(--border);
   padding-left: 0.8em;
-  color: var(--muted);
+  color: var(--muted-foreground);
 }
 .md a {
   color: var(--link);
@@ -274,7 +216,7 @@ button {
   font-weight: 500;
 }
 .md a.wikilink.missing {
-  color: var(--muted);
+  color: var(--muted-foreground);
   text-decoration: underline dotted;
 }
 .md img {
@@ -341,7 +283,7 @@ button {
   font-weight: 500;
 }
 .cm-wikilink.missing {
-  color: var(--muted);
+  color: var(--muted-foreground);
   text-decoration: underline dotted;
 }
 .cm-bracket-dim {
@@ -365,7 +307,7 @@ button {
 :is(.md, .cm-embed) .embed-av figcaption {
   margin-top: 0.3em;
   font-size: 0.8em;
-  color: var(--muted);
+  color: var(--muted-foreground);
 }
 :is(.md, .cm-embed) .embed-av figcaption a {
   color: inherit;
@@ -388,7 +330,7 @@ button {
   font-family: var(--font-sans);
 }
 .cm-completionDetail {
-  color: var(--muted);
+  color: var(--muted-foreground);
   font-style: normal !important;
   margin-left: 0.6em;
 }
@@ -432,7 +374,7 @@ button {
 :is(.md, .cm-embed) .embed-img figcaption {
   margin-top: 0.3em;
   font-size: 0.8em;
-  color: var(--muted);
+  color: var(--muted-foreground);
 }
 :is(.md, .cm-embed) .embed-file {
   display: inline-flex;
@@ -459,7 +401,7 @@ button {
 }
 :is(.md, .cm-embed) .embed-file small,
 .md .file-chip small {
-  color: var(--muted);
+  color: var(--muted-foreground);
 }
 .md .file-chip {
   text-decoration: none;
@@ -519,7 +461,7 @@ time,
   border-radius: 8px;
   padding: 6px 10px;
   font-size: 13px;
-  color: var(--muted);
+  color: var(--muted-foreground);
 }
 
 /* Table cells edited in place: the small tools (remove ×, add +, calendar) show on the row
@@ -571,4 +513,11 @@ tr:hover .cell-tools button:not(.tap-y),
     font-size: 24px;
     line-height: 30px;
   }
+}
+
+@layer base {
+  * { border-color: var(--border); }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-slot] { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }

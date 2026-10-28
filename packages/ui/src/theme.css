@@ -1,0 +1,121 @@
+/* Obtion theme: edit semantic tokens here for light and dark mode. */
+:root {
+  --background: #f7f6f3;
+  --card: #ffffff;
+  --secondary: #f0eee9;
+  --accent: #ebe8e1;
+  --selected: #f0eee9; /* a selected row: muted text keeps 4.5:1 here (on hover it would not) */
+  --border: #e3e0d8;
+  --foreground: #1f1f1f;
+  /* grey text tones are neutral; faint (3.2:1) only for symbols and lines – small text uses muted */
+  --muted-foreground: #6b6b6b;
+  --faint: #8a8a8a;
+  --primary: #1f1f1f;
+  --primary-foreground: #ffffff;
+  --ring: #3a6ff0;
+  --t-inbox: #be780a;
+  --t-note: #8a8a8a;
+  --t-file: #706258;
+  --ok: #23905f;
+  --ok-text: #1a744b;
+  --pal-blue: #2f6ae0;
+  --pal-violet: #8b4fd8;
+  --pal-green: #23905f;
+  --pal-slate: #5c6b80;
+  --pal-teal: #0d828c;
+  --pal-pink: #c84078;
+  --pal-brown: #9a6b45;
+  --pal-amber: #be780a;
+  --pal-red: #d1453b;
+  --pal-indigo: #4f55d8;
+  --pal-olive: #6b7a1f;
+  --pal-gray: #706258;
+  --danger: #d1453b;
+  /* text tones: ≥ 4.5:1 on every surface incl. hover (the decorative tones above are for icons and fills) */
+  --warn-text: #945b08;
+  --danger-text: #bc362d;
+  --link: #2c5fd4;
+  --c-gray: #8a8a8a;
+  --c-blue: #2f6ae0;
+  --c-amber: #c98412;
+  --c-purple: #8b4fd8;
+  --c-green: #23905f;
+  --c-red: #d1453b;
+  --c-brown: #9a6b45;
+  color-scheme: light;
+}
+
+/* dark: neutral greys, no violet or blue tint */
+:root[data-theme="dark"] {
+    --background: #191919;
+    --card: #202020;
+    --secondary: #252525;
+    --accent: #2c2c2c;
+    --selected: #2c2c2c;
+    --border: #303030;
+    --foreground: #ececec;
+    --muted-foreground: #a3a3a3;
+    --faint: #8a8a8a;
+    --primary: #ececec;
+    --primary-foreground: #191919;
+    --ring: #6f97ff;
+    --t-inbox: #f0b040;
+    --t-note: #8a8a8a;
+    --t-file: #c4b6aa;
+    --ok: #50c88c;
+    --ok-text: #50c88c;
+    --pal-blue: #6e96ff;
+    --pal-violet: #b58cf0;
+    --pal-green: #50c88c;
+    --pal-slate: #94a3b8;
+    --pal-teal: #46c8d2;
+    --pal-pink: #f082af;
+    --pal-brown: #c79a73;
+    --pal-amber: #f0b040;
+    --pal-red: #f06b60;
+    --pal-indigo: #9399ff;
+    --pal-olive: #b4c35a;
+    --pal-gray: #c4b6aa;
+    --danger: #f06b60;
+    --warn-text: #f0b040;
+    --danger-text: #f06b60;
+    --link: #6f97ff;
+    --c-gray: #9a9a9a;
+    --c-blue: #6e96ff;
+    --c-amber: #f0b040;
+    --c-purple: #b58cf0;
+    --c-green: #50c88c;
+    --c-red: #f06b60;
+    --c-brown: #c79a73;
+    color-scheme: dark;
+}
+
+
+:root {
+  --radius: 0.625rem;
+  --bg: var(--background);
+  --surface: var(--card);
+  --surface-2: var(--secondary);
+  --hover: var(--accent);
+  --text: var(--foreground);
+  --ink: var(--primary);
+  --ink-text: var(--primary-foreground);
+  --focus: var(--ring);
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --secondary-foreground: var(--foreground);
+  --muted: var(--secondary);
+  --accent-foreground: var(--foreground);
+  --destructive: var(--danger-text);
+  --destructive-foreground: #fff;
+  --input: var(--border);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+}

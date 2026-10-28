@@ -1,3 +1,4 @@
+import { Button as ShadcnButton } from "../components/ui/button";
 // Activity: every change with its origin (which device, which agent, import). Bulk
 // operations like deleting a type are listed here and can be undone.
 import { useEffect, useState } from "react";
@@ -97,21 +98,21 @@ function Entry({ e, compact, noVerb }: { e: ActivityEvent; compact?: boolean; no
     <>
       <div className="leading-snug">
         {/* in an undo the head says what happened ("hat rückgängig gemacht"): one verb, not two */}
-        {!op && !noVerb && <span className="text-muted">{e.doc ? verb : ""}</span>}{" "}
+        {!op && !noVerb && <span className="text-muted-foreground">{e.doc ? verb : ""}</span>}{" "}
         {op ? (
           <span className="font-medium">{op.title}</span>
         ) : e.doc && item && (item.kind === "info" || item.kind === "datei") ? (
           <a href={itemHref(item.id)} className="inline-flex items-center gap-1 font-medium hover:underline">
             <ItemIcon item={item} size={13} />
             {/* a type is named as one: its title alone reads like an entry */}
-            {item.type === META_TYPE && <span className="font-normal text-muted">{t("activity.aType")}</span>}
+            {item.type === META_TYPE && <span className="font-normal text-muted-foreground">{t("activity.aType")}</span>}
             {item.title || t("untitled")}
           </a>
         ) : (
           <span className="font-medium">{systemText(e.title, t)}</span>
         )}
       </div>
-      {changes.length > 0 && <div className={cx("text-muted", compact ? "line-clamp-2 text-xs" : "text-sm")}>{changes.join(" · ")}</div>}
+      {changes.length > 0 && <div className={cx("text-muted-foreground", compact ? "line-clamp-2 text-xs" : "text-sm")}>{changes.join(" · ")}</div>}
     </>
   );
 }
@@ -120,7 +121,7 @@ function Avatar({ origin }: { origin: string }) {
   const { t } = useT();
   const w = who(origin, t);
   return (
-    <span className={cx("mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full", w.agent ? "text-ok" : "text-muted")} style={{ background: w.agent ? "color-mix(in srgb, var(--ok) 14%, transparent)" : "var(--surface-2)" }}>
+    <span className={cx("mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full", w.agent ? "text-ok" : "text-muted-foreground")} style={{ background: w.agent ? "color-mix(in srgb, var(--ok) 14%, transparent)" : "var(--surface-2)" }}>
       <w.icon size={13} />
     </span>
   );
@@ -166,7 +167,7 @@ function StepGroup({ events, onChanged }: { events: ActivityEvent[]; onChanged: 
       <Avatar origin={head.origin} />
       <div className="min-w-0 flex-1">
         <span className="font-medium">{w.label}</span>
-        {head.undoes && <span className="text-muted"> {t(head.redo ? "activity.redoStep" : "activity.undoStep")}</span>}
+        {head.undoes && <span className="text-muted-foreground"> {t(head.redo ? "activity.redoStep" : "activity.undoStep")}</span>}
         <ul className={cx("space-y-1", events.length > 1 && "mt-0.5")}>
           {events.map((e) => (
             <li key={e.id}>
@@ -174,7 +175,7 @@ function StepGroup({ events, onChanged }: { events: ActivityEvent[]; onChanged: 
             </li>
           ))}
         </ul>
-        <div className="mt-0.5 flex items-center gap-2 text-xs text-muted">
+        <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
           <RelTime ts={head.ts} />
           {head.step && !head.undoes && restored && <span>· {t("activity.restoredSince")}</span>}
           {head.step && !head.undoes && !restored && (
@@ -185,7 +186,7 @@ function StepGroup({ events, onChanged }: { events: ActivityEvent[]; onChanged: 
               </Button>
             </>
           )}
-          {note && <span className="text-muted">{note}</span>}
+          {note && <span className="text-muted-foreground">{note}</span>}
         </div>
       </div>
     </li>
@@ -230,7 +231,7 @@ export function Activity() {
     <div className="page-read">
       <SpaceEyebrow />
       <h1 className="page-title">{t("nav.activity")}</h1>
-      <p className="mb-5 text-sm text-muted">{t("activity.intro")}</p>
+      <p className="mb-5 text-sm text-muted-foreground">{t("activity.intro")}</p>
       <div className="mb-5">
         <Seg label={t("activity.filterLabel")} value={filter} onChange={setFilter} options={(["all", "agent", "you"] as const).map((f) => ({ value: f, label: t("activity.filter." + f) }))} />
       </div>
@@ -244,9 +245,9 @@ export function Activity() {
         </ul>
       )}
       {more && events.length > 0 && (
-        <button onClick={() => load(events.at(-1)!.id)} className="mt-6 text-sm text-muted hover:text-fg">
+        <ShadcnButton variant="plain" size="none" onClick={() => load(events.at(-1)!.id)} className="mt-6 text-sm text-muted-foreground hover:text-fg">
           {t("activity.more")}
-        </button>
+        </ShadcnButton>
       )}
     </div>
   );

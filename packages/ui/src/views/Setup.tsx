@@ -1,3 +1,5 @@
+import { Checkbox } from "../components/ui/checkbox";
+import { Input } from "../components/ui/input";
 import { useState } from "react";
 import { type Lang, detectLang, translate } from "@obtion/core/i18n";
 import type { FileMeta } from "@obtion/core/model";
@@ -32,7 +34,7 @@ export function Setup() {
       <div className="w-full max-w-md rounded-2xl border border-line bg-surface p-6 shadow-sm">
         <img src="/icon.svg" alt="" className="mb-4 size-10" />
         <h1 className="text-2xl font-semibold tracking-tight">{t("setup.welcome")}</h1>
-        <p className="mt-2 text-sm text-muted">{t("setup.intro")}</p>
+        <p className="mt-2 text-sm text-muted-foreground">{t("setup.intro")}</p>
         <div className="mt-6 flex items-center justify-between">
           <span className="text-sm font-medium">{t("settings.language")}</span>
           <Seg
@@ -45,12 +47,12 @@ export function Setup() {
             ]}
           />
         </div>
-        <p className="mt-4 text-xs text-muted">{t("setup.types")}</p>
+        <p className="mt-4 text-xs text-muted-foreground">{t("setup.types")}</p>
         <label className="mt-5 flex cursor-pointer gap-3 rounded-xl border border-line p-3 hover:bg-hover">
-          <input type="checkbox" checked={examples} onChange={(e) => setExamples(e.target.checked)} className="mt-0.5 size-4 shrink-0 accent-[var(--focus)]" />
+          <Checkbox  checked={examples} onCheckedChange={(checked) => setExamples((checked === true))} className="mt-0.5 size-4 shrink-0 accent-[var(--focus)]" />
           <span>
             <span className="block text-sm font-medium">{t("setup.examples")}</span>
-            <span className="block text-xs text-muted">{t("setup.examplesHint")}</span>
+            <span className="block text-xs text-muted-foreground">{t("setup.examplesHint")}</span>
           </span>
         </label>
         <Button variant="primary" className="mt-6 w-full" disabled={busy} onClick={() => void start()}>

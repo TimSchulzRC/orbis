@@ -1,5 +1,12 @@
-import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { ToggleGroup, ToggleGroupItem } from "../components/ui/toggle-group";
+import { Badge } from "../components/ui/badge";
+import { Progress as ShadcnProgress } from "../components/ui/progress";
+import { Input } from "../components/ui/input";
+import { Textarea } from "../components/ui/textarea";
+import { Button as ShadcnButton } from "../components/ui/button";
+import { Dialog as DialogRoot, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
+import { Popover as PopoverRoot, PopoverAnchor, PopoverContent } from "../components/ui/popover";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { X, Check, ChevronDown, ChevronRight, CircleCheck, CirclePause, CircleX, CalendarDays, Plus } from "lucide-react";
 import { type Item, type OptionDef, type StatusGroup, type TypeSchema, META_TYPE, todayISO } from "@obtion/core/model";
 import { fmtRelative, fmtShortDate } from "@obtion/core/i18n";
@@ -79,13 +86,13 @@ export function StatusPill({ option, small, group }: { option?: OptionDef; small
   // status options have a group and show their shape; plain select options a dot
   const isStatus = !!(group ?? option.group);
   return (
-    <span
+    <Badge variant="outline"
       className={cx("inline-flex items-center gap-1.5 whitespace-nowrap rounded-full font-medium", small ? "px-1.5 py-0 text-xs" : "px-2 py-0.5 text-xs")}
       style={{ color: `color-mix(in srgb, ${c} 62%, var(--text))`, background: `color-mix(in srgb, ${c} 13%, transparent)` }}
     >
       {isStatus ? <StatusGlyph option={{ ...option, group: group ?? option.group }} size={12} /> : <span className="size-1.5 rounded-full" style={{ background: c }} />}
       {option.name}
-    </span>
+    </Badge>
   );
 }
 
@@ -93,11 +100,11 @@ export function Tag({ tag, onRemove, href }: { tag: string; onRemove?: () => voi
   const { t } = useT();
   const inner = (
     <>
-      <span className="text-muted">#</span>
+      <span className="text-muted-foreground">#</span>
       {tag}
       {onRemove && (
-        <button
-          className="-mr-1 ml-0.5 rounded px-1 text-muted hover:bg-hover hover:text-fg"
+        <ShadcnButton variant="plain" size="none"
+          className="-mr-1 ml-0.5 rounded px-1 text-muted-foreground hover:bg-hover hover:text-fg"
           onClick={(e) => {
             e.preventDefault();
             onRemove();
@@ -105,11 +112,11 @@ export function Tag({ tag, onRemove, href }: { tag: string; onRemove?: () => voi
           aria-label={t("tag.remove", { tag })}
         >
           ×
-        </button>
+        </ShadcnButton>
       )}
     </>
   );
-  const cls = "inline-flex items-center rounded-md bg-surface-2 px-1.5 py-0.5 text-xs text-muted";
+  const cls = "inline-flex items-center rounded-md bg-surface-2 px-1.5 py-0.5 text-xs text-muted-foreground";
   return href ? (
     <a href={href} className={cx(cls, "hover:text-fg")}>
       {inner}
@@ -122,9 +129,7 @@ export function Tag({ tag, onRemove, href }: { tag: string; onRemove?: () => voi
 export function Progress({ done, total, className }: { done: number; total: number; className?: string }) {
   const pct = total ? Math.round((done / total) * 100) : 0;
   return (
-    <div className={cx("h-1.5 overflow-hidden rounded-full bg-surface-2", className)} role="progressbar" title={tr("progress.title", { done, total })} aria-label={tr("progress.label")} aria-valuetext={`${done}/${total}`} aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
-      <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: "var(--ok)" }} />
-    </div>
+    <ShadcnProgress value={pct} className={cx("h-1.5 bg-secondary [&_[data-slot=progress-indicator]]:bg-[var(--ok)]", className)} title={tr("progress.title", { done, total })} aria-label={tr("progress.label")} aria-valuetext={`${done}/${total}`} />
   );
 }
 
@@ -168,26 +173,10 @@ export function Button({
   disabled?: boolean;
   autoFocus?: boolean;
 } & Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "onClick" | "type" | "className" | "title" | "disabled" | "autoFocus" | "children">) {
-  const v = {
-    ghost: "text-muted hover:bg-hover hover:text-fg",
-    primary: "bg-ink text-ink-text hover:opacity-90",
-    outline: "border border-line bg-surface text-fg hover:bg-hover",
-    danger: "text-danger hover:bg-hover",
-  }[variant];
-  return (
-    <button
-      {...rest}
-      type={type}
-      title={title}
-      aria-label={rest["aria-label"] ?? title}
-      disabled={disabled}
-      autoFocus={autoFocus}
-      onClick={onClick}
-      className={cx("tap inline-flex items-center justify-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors disabled:opacity-40", v, className)}
-    >
-      {children}
-    </button>
-  );
+  const variants = { ghost: "ghost", primary: "default", outline: "outline", danger: "destructive" } as const;
+  return <ShadcnButton {...rest} type={type} title={title} aria-label={rest["aria-label"] ?? title}
+    disabled={disabled} autoFocus={autoFocus} onClick={onClick} variant={variants[variant]} size="sm"
+    className={cx("tap h-auto rounded-lg px-2.5 py-1.5", className)}>{children}</ShadcnButton>;
 }
 
 /**
@@ -196,18 +185,18 @@ export function Button({
  */
 export function IconButton({ label, icon: Icon, className, ...rest }: { label: string; icon: React.ComponentType<{ size?: number }> } & Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "children">) {
   return (
-    <button type="button" title={label} aria-label={label} {...rest} className={cx("tap inline-flex items-center justify-center rounded-lg p-1.5 text-muted transition-colors hover:bg-hover hover:text-fg disabled:opacity-40", className)}>
+    <ShadcnButton variant="plain" size="none" type="button" title={label} aria-label={label} {...rest} className={cx("tap inline-flex items-center justify-center rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-hover hover:text-fg disabled:opacity-40", className)}>
       <Icon size={16} />
-    </button>
+    </ShadcnButton>
   );
 }
 
 /** The quiet "+ …" entry point (a place, a ref, a property, a tag): one look everywhere. Passes all button props on, so it works as a popover trigger too. */
 export function AddButton({ children, className, icon: Icon = Plus, ...rest }: React.ButtonHTMLAttributes<HTMLButtonElement> & { icon?: React.ComponentType<{ size?: number }> }) {
   return (
-    <button type="button" {...rest} className={cx("tap-y inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-xs text-muted hover:bg-hover hover:text-fg", className)}>
+    <ShadcnButton variant="plain" size="none" type="button" {...rest} className={cx("tap-y inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-hover hover:text-fg", className)}>
       <Icon size={12} /> {children}
-    </button>
+    </ShadcnButton>
   );
 }
 
@@ -218,9 +207,9 @@ export function AddButton({ children, className, icon: Icon = Plus, ...rest }: R
 export function Empty({ icon, title, children }: { icon?: ReactNode; title: string; children?: ReactNode }) {
   return (
     <div className="flex flex-col items-center justify-center gap-3 px-6 py-12 text-center">
-      {icon && <div className="text-muted">{icon}</div>}
-      <div className="text-[15px] text-muted">{title}</div>
-      {children && <div className="max-w-sm text-sm text-muted">{children}</div>}
+      {icon && <div className="text-muted-foreground">{icon}</div>}
+      <div className="text-[15px] text-muted-foreground">{title}</div>
+      {children && <div className="max-w-sm text-sm text-muted-foreground">{children}</div>}
     </div>
   );
 }
@@ -235,15 +224,15 @@ export function SectionTitle({ children, count, right, open, onToggle, className
     <>
       {onToggle && <ChevronRight size={14} className={cx("shrink-0 text-faint transition-transform", open && "rotate-90")} aria-hidden />}
       <h2 className="truncate text-[15px] font-semibold leading-[22px] text-fg">{children}</h2>
-      {count !== undefined && count !== null && count !== "" && <span className="shrink-0 text-[13px] tabular-nums text-muted">{count}</span>}
+      {count !== undefined && count !== null && count !== "" && <span className="shrink-0 text-[13px] tabular-nums text-muted-foreground">{count}</span>}
     </>
   );
   return (
     <div className={cx("mb-2.5 flex min-h-8 items-center gap-2", className)}>
       {onToggle ? (
-        <button type="button" onClick={onToggle} aria-expanded={!!open} className="tap-y -ml-1 flex min-w-0 items-center gap-2 rounded-md px-1 text-left hover:bg-hover">
+        <ShadcnButton variant="plain" size="none" type="button" onClick={onToggle} aria-expanded={!!open} className="tap-y -ml-1 flex min-w-0 items-center gap-2 rounded-md px-1 text-left hover:bg-hover">
           {head}
-        </button>
+        </ShadcnButton>
       ) : (
         head
       )}
@@ -278,7 +267,7 @@ export function ProgressBand({ done, total, desc }: { done: number; total: numbe
         <div className="h-full rounded-full" style={{ width: `${share * 100}%`, background: "var(--ok)" }} />
       </div>
       <span className="text-[15px] font-semibold tabular-nums">{new Intl.NumberFormat(lang, { style: "percent", maximumFractionDigits: 0 }).format(share)}</span>
-      <span className="text-[13px] text-muted">{desc}</span>
+      <span className="text-[13px] text-muted-foreground">{desc}</span>
     </div>
   );
 }
@@ -295,7 +284,7 @@ export function modName(lang: string): string {
 }
 
 export function Kbd({ children }: { children: ReactNode }) {
-  return <kbd className="rounded border border-line bg-surface-2 px-1 font-mono text-[10px] text-muted">{children}</kbd>;
+  return <kbd className="rounded border border-line bg-surface-2 px-1 font-mono text-[10px] text-muted-foreground">{children}</kbd>;
 }
 
 export function RelTime({ ts }: { ts: number }) {
@@ -310,7 +299,7 @@ export function DueLabel({ due, done }: { due?: string; done?: boolean }) {
   const overdue = !done && due < today;
   const isToday = due === today;
   return (
-    <span className={cx("whitespace-nowrap text-xs tabular-nums", overdue ? "font-medium text-danger" : isToday ? "font-medium text-warn" : "text-muted")}>
+    <span className={cx("whitespace-nowrap text-xs tabular-nums", overdue ? "font-medium text-danger" : isToday ? "font-medium text-warn" : "text-muted-foreground")}>
       {isToday ? t("time.today") : fmtShortDate(lang, due)}
     </span>
   );
@@ -355,11 +344,11 @@ export function InlineText({
     onFocus: () => (focused.current = true),
     onBlur: commit,
     onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setV(e.target.value),
-    className: cx("field w-full bg-transparent outline-none placeholder:text-muted", className),
+    className: cx("field w-full bg-transparent outline-none placeholder:text-muted-foreground", className),
   };
-  if (multiline) return <textarea {...props} rows={Math.max(2, v.split("\n").length)} className={cx(props.className, "resize-none [field-sizing:content]")} />;
+  if (multiline) return <Textarea {...props} rows={Math.max(2, v.split("\n").length)} className={cx(props.className, "resize-none [field-sizing:content]")} />;
   return (
-    <input
+    <Input
       {...props}
       onKeyDown={(e) => {
         if (e.key === "Enter") (e.target as HTMLInputElement).blur();
@@ -415,7 +404,7 @@ export function DateField({ value, onChange, label, className, autoFocus }: { va
   };
   return (
     <span className={cx("field-within group/date -ml-1 inline-flex items-center rounded-md hover:bg-hover", className)}>
-      <input
+      <Input
         value={text}
         autoFocus={autoFocus}
         aria-label={label}
@@ -433,11 +422,11 @@ export function DateField({ value, onChange, label, className, autoFocus }: { va
             setTimeout(() => (e.target as HTMLInputElement).blur());
           }
         }}
-        className={cx("w-[6.6rem] bg-transparent px-1 py-0.5 tabular-nums outline-none placeholder:text-muted", bad && "text-danger")}
+        className={cx("w-[6.6rem] bg-transparent px-1 py-0.5 tabular-nums outline-none placeholder:text-muted-foreground", bad && "text-danger")}
       />
-      <button type="button" onClick={() => picker.current?.showPicker?.()} className="tap relative rounded p-0.5 text-muted opacity-60 hover:text-fg focus-visible:opacity-100 group-hover/date:opacity-100" aria-label={t("date.calendar")}>
+      <ShadcnButton variant="plain" size="none" type="button" onClick={() => picker.current?.showPicker?.()} className="tap relative rounded p-0.5 text-muted-foreground opacity-60 hover:text-fg focus-visible:opacity-100 group-hover/date:opacity-100" aria-label={t("date.calendar")}>
         <CalendarDays size={13} />
-        <input
+        <Input
           ref={picker}
           type="date"
           tabIndex={-1}
@@ -446,69 +435,9 @@ export function DateField({ value, onChange, label, className, autoFocus }: { va
           onChange={(e) => e.target.value && onChange(e.target.value)}
           className="pointer-events-none absolute inset-0 opacity-0"
         />
-      </button>
+      </ShadcnButton>
     </span>
   );
-}
-
-const modals: HTMLElement[] = [];
-const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select, textarea, [tabindex]:not([tabindex="-1"]), [contenteditable="true"]';
-
-/**
- * What every modal surface does (dialogs, palette, phone menu, agent sheet, full view): focus
- * moves in and stays in (Tab wraps), Escape closes the top-most one (not while a popover in it
- * is open), the page behind is inert, and focus goes back to where it came from.
- */
-export function useModal(ref: React.RefObject<HTMLElement | null>, onClose: () => void) {
-  const close = useRef(onClose);
-  close.current = onClose;
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const before = document.activeElement as HTMLElement | null;
-    modals.push(el);
-    // everything beside the way from this surface up to <body> is inert: the page behind can't be tabbed or tapped
-    const behind: HTMLElement[] = [];
-    for (let n: HTMLElement | null = el; n && n !== document.body; n = n.parentElement)
-      for (const s of n.parentElement?.children ?? []) if (s !== n && s instanceof HTMLElement && !(s instanceof HTMLScriptElement) && !s.hasAttribute("data-popover")) behind.push(s);
-    const wasInert = behind.map((b) => b.inert);
-    behind.forEach((b) => (b.inert = true));
-    // focus moves in: to the field marked for it, else to the surface itself (not to some first control)
-    if (!el.contains(document.activeElement)) {
-      const target = el.querySelector<HTMLElement>("[data-autofocus]:not([disabled])");
-      if (!target && !el.hasAttribute("tabindex")) (el.tabIndex = -1), el.classList.add("outline-none");
-      (target ?? el).focus({ preventScroll: true });
-    }
-    const onKey = (e: KeyboardEvent) => {
-      if (modals.at(-1) !== el) return;
-      if (e.key === "Escape") {
-        if (document.querySelector("[data-popover]")) return; // the popover closes first
-        e.preventDefault();
-        close.current();
-      } else if (e.key === "Tab") {
-        const list = [...el.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((x) => x.offsetParent !== null || x === document.activeElement);
-        if (!list.length) return e.preventDefault();
-        const first = list[0]!;
-        const last = list.at(-1)!;
-        const active = document.activeElement;
-        if (active === el) (e.preventDefault(), (e.shiftKey ? last : first).focus());
-        else if (!el.contains(active)) {
-          // focus slipped out (or sits in a popover of this dialog): back to the start
-          if (document.querySelector("[data-popover]")?.contains(active)) return;
-          e.preventDefault();
-          first.focus();
-        } else if (e.shiftKey && active === first) (e.preventDefault(), last.focus());
-        else if (!e.shiftKey && active === last) (e.preventDefault(), first.focus());
-      }
-    };
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      modals.splice(modals.indexOf(el), 1);
-      behind.forEach((b, i) => (b.inert = wasInert[i]!));
-      if (before && document.contains(before)) before.focus({ preventScroll: true });
-    };
-  }, []);
 }
 
 /**
@@ -524,15 +453,15 @@ export function ViewMenu({ label, sections }: { label: string; sections: { title
     <Popover
       align="right"
       trigger={(p) => (
-        <button {...p} className="tap inline-flex items-center justify-center gap-1 rounded-lg px-2 py-1 text-sm text-muted hover:bg-hover hover:text-fg" aria-label={t("view.label")}>
+        <ShadcnButton variant="plain" size="none" {...p} className="tap inline-flex items-center justify-center gap-1 rounded-lg px-2 py-1 text-sm text-muted-foreground hover:bg-hover hover:text-fg" aria-label={t("view.label")}>
           {label} <ChevronDown size={14} />
-        </button>
+        </ShadcnButton>
       )}
     >
       {(close) =>
         shown.map((s, i) => (
           <div key={i} className={cx(i > 0 && "mt-1 border-t border-line pt-1")}>
-            {s.title && <p className="px-2.5 pb-0.5 pt-1 text-xs text-muted">{s.title}</p>}
+            {s.title && <p className="px-2.5 pb-0.5 pt-1 text-xs text-muted-foreground">{s.title}</p>}
             {s.options.map((o) => (
               <MenuItem key={o.value} active={o.value === s.value} onClick={() => (close(), s.value !== o.value && s.onChange(o.value))}>
                 {o.label}
@@ -565,106 +494,59 @@ export function Popover({
   triggerClass?: string;
 }) {
   const [inner, setInner] = useState(false);
+  const previous = useRef<HTMLElement | null>(null);
   const isOpen = open ?? inner;
   const set = (o: boolean) => {
+    if (o) previous.current = document.activeElement as HTMLElement;
     if (open === undefined) setInner(o);
     onOpenChange?.(o);
   };
-  const ref = useRef<HTMLSpanElement>(null);
-  const pop = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ top: number; left?: number; right?: number } | null>(null);
-  useLayoutEffect(() => {
-    if (!isOpen || !ref.current) return;
-    const r = ref.current.getBoundingClientRect();
-    const below = r.bottom + 4;
-    const top = below + 320 > window.innerHeight && r.top > 340 ? Math.max(8, r.top - 4 - (pop.current?.offsetHeight ?? 300)) : below;
-    setPos(align === "right" ? { top, right: Math.max(8, window.innerWidth - r.right) } : { top, left: Math.min(r.left, window.innerWidth - 300) });
-  }, [isOpen]);
-  useEffect(() => {
-    if (!isOpen) return;
-    const close = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && !pop.current?.contains(e.target as Node) && set(false);
-    const esc = (e: KeyboardEvent) => e.key === "Escape" && set(false);
-    document.addEventListener("mousedown", close);
-    document.addEventListener("keydown", esc);
-    return () => {
-      document.removeEventListener("mousedown", close);
-      document.removeEventListener("keydown", esc);
-    };
-  }, [isOpen]);
   return (
-    <span ref={ref} className={cx("relative inline-flex", triggerClass)}>
-      {trigger({ onClick: () => set(!isOpen), "aria-expanded": isOpen })}
-      {isOpen &&
-        createPortal(
-          <div
-            ref={pop}
-            data-popover
-            style={{ position: "fixed", top: pos?.top ?? -9999, left: pos?.left, right: pos?.right }}
-            className={cx("z-50 max-h-[70vh] min-w-48 overflow-y-auto rounded-xl border border-line bg-surface p-1 shadow-xl", className)}
-          >
-            {typeof children === "function" ? children(() => set(false)) : children}
-          </div>,
-          document.body,
-        )}
-    </span>
+    <PopoverRoot open={isOpen} onOpenChange={set}>
+      <PopoverAnchor asChild><span className={cx("relative inline-flex", triggerClass)}>
+        {trigger({ onClick: () => set(!isOpen), "aria-expanded": isOpen })}
+      </span></PopoverAnchor>
+      <PopoverContent onCloseAutoFocus={(e) => { e.preventDefault(); if (previous.current?.isConnected) previous.current.focus({ preventScroll: true }); }} data-popover align={align === "right" ? "end" : "start"} sideOffset={4}
+        className={cx("z-50 max-h-[70vh] w-auto min-w-48 overflow-y-auto rounded-xl p-1", className)}>
+        {typeof children === "function" ? children(() => set(false)) : children}
+      </PopoverContent>
+    </PopoverRoot>
   );
 }
 
 export function MenuItem({ children, onClick, danger, active, icon }: { children: ReactNode; onClick: () => void; danger?: boolean; active?: boolean; icon?: ReactNode }) {
   return (
-    <button
+    <ShadcnButton variant="plain" size="none"
       onClick={onClick}
       aria-current={active || undefined}
       className={cx("tap-row flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm hover:bg-hover", danger && "text-danger", active && "font-medium")}
     >
-      {icon && <span className="flex w-4 shrink-0 justify-center text-muted">{icon}</span>}
+      {icon && <span className="flex w-4 shrink-0 justify-center text-muted-foreground">{icon}</span>}
       <span className="min-w-0 flex-1 truncate">{children}</span>
       {/* the chosen one in a choice menu: always a check mark, as everywhere */}
-      {active && <Check size={14} className="shrink-0 text-muted" />}
-    </button>
+      {active && <Check size={14} className="shrink-0 text-muted-foreground" />}
+    </ShadcnButton>
   );
 }
 
 export function Dialog({ title, children, onClose, wide }: { title: string; children: ReactNode; onClose: () => void; wide?: boolean }) {
   const { t } = useT();
-  const ref = useRef<HTMLDivElement>(null);
-  useModal(ref, onClose);
-  return createPortal(
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/30 p-3 pt-[8vh] backdrop-blur-[2px]" onMouseDown={onClose}>
-      <div
-        ref={ref}
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-        onMouseDown={(e) => e.stopPropagation()}
-        className={cx("flex max-h-[84vh] w-full flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-2xl", wide ? "max-w-2xl" : "max-w-lg")}
-      >
-        <div className="flex items-center gap-2 border-b border-line px-4 py-3">
-          <h2 className="flex-1 font-semibold">{title}</h2>
-          <IconButton onClick={onClose} label={t("close")} icon={X} />
-        </div>
-        <div className="min-h-0 overflow-y-auto p-4">{children}</div>
-      </div>
-    </div>,
-    document.body,
-  );
+  const previous = useRef<HTMLElement | null>(document.activeElement as HTMLElement);
+  return <DialogRoot open onOpenChange={(open) => { if (!open) onClose(); }}>
+    <DialogContent onCloseAutoFocus={(e) => { e.preventDefault(); if (previous.current?.isConnected) previous.current.focus({ preventScroll: true }); }} showCloseButton={false} aria-describedby={undefined}
+      className={cx("flex max-h-[84vh] flex-col gap-0 overflow-hidden rounded-2xl p-0", wide ? "sm:max-w-2xl" : "sm:max-w-lg")}>
+      <DialogHeader className="flex-row items-center gap-2 border-b border-line px-4 py-3 text-left">
+        <DialogTitle className="flex-1 text-base">{title}</DialogTitle>
+        <IconButton onClick={onClose} label={t("close")} icon={X} />
+      </DialogHeader>
+      <div className="min-h-0 overflow-y-auto p-4">{children}</div>
+    </DialogContent>
+  </DialogRoot>;
 }
 
 /** Small segmented control. */
 export function Seg<T extends string>({ value, options, onChange, label }: { value: T; options: { value: T; label: ReactNode }[]; onChange: (v: T) => void; label: string }) {
-  return (
-    <span role="group" aria-label={label} className="inline-flex rounded-lg border border-line bg-surface-2 p-0.5 text-xs">
-      {options.map((o) => (
-        <button
-          key={o.value}
-          aria-pressed={o.value === value}
-          onClick={() => onChange(o.value)}
-          className={cx("tap rounded-md px-2 py-0.5", o.value === value ? "bg-surface font-medium text-fg shadow-sm" : "text-muted hover:text-fg")}
-        >
-          {o.label}
-        </button>
-      ))}
-    </span>
-  );
+  return <ToggleGroup type="single" value={value} onValueChange={(v) => { if (v) onChange(v as T); }} aria-label={label} className="inline-flex rounded-lg border border-line bg-secondary p-0.5 text-xs">
+    {options.map((o) => <ToggleGroupItem key={o.value} value={o.value} className="tap h-auto min-w-0 rounded-md px-2 py-0.5 text-xs data-[state=on]:bg-card data-[state=on]:font-medium data-[state=on]:shadow-sm">{o.label}</ToggleGroupItem>)}
+  </ToggleGroup>;
 }
-

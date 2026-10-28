@@ -1,3 +1,4 @@
+import { Input } from "../components/ui/input";
 import { useState } from "react";
 import { Plus, RotateCcw } from "lucide-react";
 import { restoreDefaultTypes } from "@obtion/core/setup";
@@ -21,7 +22,7 @@ export function TypesView() {
         <div className="flex-1">
           <SpaceEyebrow />
           <h1 className="page-title">{t("nav.types")}</h1>
-          <p className="text-sm text-muted">{t("types.intro")}</p>
+          <p className="text-sm text-muted-foreground">{t("types.intro")}</p>
         </div>
         <Button variant="primary" onClick={() => setCreating(true)}>
           <Plus size={14} /> {t("types.new")}
@@ -33,17 +34,17 @@ export function TypesView() {
             <TypeGlyph schema={tp.schema} />
             <span className="min-w-0 flex-1">
               <span className="block font-medium">{tp.schema!.name}</span>
-              {tp.schema!.description && <span className="block truncate text-xs text-muted">{tp.schema!.description}</span>}
+              {tp.schema!.description && <span className="block truncate text-xs text-muted-foreground">{tp.schema!.description}</span>}
             </span>
-            <span className="text-xs text-muted">{t("type.entries", { count: ix.itemsOfType(tp.id).length })}</span>
+            <span className="text-xs text-muted-foreground">{t("type.entries", { count: ix.itemsOfType(tp.id).length })}</span>
           </a>
         ))}
-        {!types.length && <p className="px-3 py-3 text-sm text-muted">{t("types.none")}</p>}
+        {!types.length && <p className="px-3 py-3 text-sm text-muted-foreground">{t("types.none")}</p>}
       </div>
       <Button variant="outline" className="mt-4" onClick={() => restoreDefaultTypes(repo.writer, getLang(), `web:${repo.device}`)}>
         <RotateCcw size={14} /> {t("types.restore")}
       </Button>
-      <p className="mt-1 text-xs text-muted">{t("types.restoreHint")}</p>
+      <p className="mt-1 text-xs text-muted-foreground">{t("types.restoreHint")}</p>
       {creating && <NewTypeDialog onClose={() => setCreating(false)} />}
     </div>
   );
@@ -64,7 +65,7 @@ export function NewTypeDialog({ onClose }: { onClose: () => void }) {
   };
   return (
     <Dialog title={t("types.new")} onClose={onClose}>
-      <input autoFocus value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && create()} placeholder={t("type.name")} className="w-full rounded-lg border border-line bg-bg px-3 py-2 text-sm outline-none" />
+      <Input autoFocus value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && create()} placeholder={t("type.name")} className="w-full rounded-lg border border-line bg-bg px-3 py-2 text-sm outline-none" />
       <div className="mt-4 flex justify-end">
         <Button variant="primary" onClick={create} disabled={!name.trim()}>
           {t("types.create")}

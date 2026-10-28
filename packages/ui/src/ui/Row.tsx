@@ -1,3 +1,4 @@
+import { Button as ShadcnButton } from "../components/ui/button";
 import { useSyncExternalStore } from "react";
 import type { Item } from "@obtion/core/model";
 import { tr } from "../i18n";
@@ -24,7 +25,7 @@ export function StatusMenu({ item, trigger }: { item: Item; trigger: (p: { onCli
       {(close) =>
         (["todo", "active", "done"] as const).map((g) => (
           <div key={g}>
-            <p className="px-2.5 pb-0.5 pt-1.5 text-xs text-muted">{t("group." + g)}</p>
+            <p className="px-2.5 pb-0.5 pt-1.5 text-xs text-muted-foreground">{t("group." + g)}</p>
             {(sp?.options ?? [])
               .filter((o) => (o.group ?? "todo") === g)
               .map((o) => (
@@ -124,7 +125,7 @@ export function Group({ heading, count, first, children }: { heading?: React.Rea
   return (
     <div className={first ? undefined : "mt-2"}>
       {heading !== undefined && (
-        <p className="truncate px-2 pb-1 pt-2 text-xs font-semibold text-muted">
+        <p className="truncate px-2 pb-1 pt-2 text-xs font-semibold text-muted-foreground">
           {heading}
           {count !== undefined && ` · ${count}`}
         </p>
@@ -179,23 +180,23 @@ export function ItemRow({
       <RowStatus item={item} />
       <a href={itemHref(item.id)} className="flex min-w-0 flex-1 flex-col justify-center self-stretch">
         {/* on a phone the title may take two lines: its telling part is often at the end */}
-        <span className={cx("block text-sm max-md:text-[15px] max-sm:line-clamp-2 sm:truncate", done && "text-muted line-through")}>{item.title || t("untitled")}</span>
+        <span className={cx("block text-sm max-md:text-[15px] max-sm:line-clamp-2 sm:truncate", done && "text-muted-foreground line-through")}>{item.title || t("untitled")}</span>
         {path && path.length > 0 && (
-          <span className="block truncate text-xs text-muted" title={pathLabel(path)}>
+          <span className="block truncate text-xs text-muted-foreground" title={pathLabel(path)}>
             {shortPath(path)}
           </span>
         )}
-        {note && <span className="block truncate text-xs text-muted">{note}</span>}
+        {note && <span className="block truncate text-xs text-muted-foreground">{note}</span>}
       </a>
       {right}
       {/* the shape tells the status; words only for what deviates */}
       {blocked && <span className="shrink-0 text-xs text-warn">{t("row.blocked")}</span>}
       {st && !done && statusShape(st.option) === "paused" && <StatusPill option={st.option} group={st.group} small />}
       {prog && prog.total > 0 && (
-        <ProgressCount done={prog.done} total={prog.total} className="w-10 shrink-0 text-right text-xs text-muted" />
+        <ProgressCount done={prog.done} total={prog.total} className="w-10 shrink-0 text-right text-xs text-muted-foreground" />
       )}
       {due && <DueLabel due={due} done={done} />}
-      {item.file && <span className="shrink-0 text-xs text-muted">{fmtBytes(lang, item.file.size)}</span>}
+      {item.file && <span className="shrink-0 text-xs text-muted-foreground">{fmtBytes(lang, item.file.size)}</span>}
     </div>
   );
 }
@@ -221,14 +222,14 @@ export function RowStatus({ item, size = 17 }: { item: Item; size?: number }) {
   const glyph = <span style={{ color: done ? "var(--ok)" : opt.color && opt.color !== "gray" ? pal(opt.color) : undefined }}><StatusGlyph option={opt} size={size} /></span>;
   return viaMenu ? (
     <StatusMenu item={item} trigger={(p) => (
-      <button {...p} className="tap-edge shrink-0 text-muted hover:text-fg" aria-label={t("row.status", { name: st.option.name })} title={st.option.name}>
+      <ShadcnButton variant="plain" size="none" {...p} className="tap-edge shrink-0 text-muted-foreground hover:text-fg" aria-label={t("row.status", { name: st.option.name })} title={st.option.name}>
         {glyph}
-      </button>
+      </ShadcnButton>
     )} />
   ) : (
-    <button onClick={() => tick(item, repo)} className="tap-edge shrink-0 text-muted hover:text-ok" aria-label={done ? t("row.reopen") : t("row.done")} title={done ? t("row.reopen") : t("row.done")}>
+    <ShadcnButton variant="plain" size="none" onClick={() => tick(item, repo)} className="tap-edge shrink-0 text-muted-foreground hover:text-ok" aria-label={done ? t("row.reopen") : t("row.done")} title={done ? t("row.reopen") : t("row.done")}>
       {glyph}
-    </button>
+    </ShadcnButton>
   );
 }
 

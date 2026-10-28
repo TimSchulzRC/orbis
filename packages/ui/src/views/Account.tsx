@@ -1,3 +1,5 @@
+import { Button as ShadcnButton } from "../components/ui/button";
+import { Input } from "../components/ui/input";
 import { BrandLogo } from "../ui/BrandLogo";
 // Before the app: signing in or creating an account on this server, joining by an invite link
 // (#/join/<code>). Then a workspace has to be open.
@@ -13,7 +15,7 @@ function Card({ title, intro, children }: { title: string; intro?: ReactNode; ch
       <div className="w-full max-w-md rounded-2xl border border-line bg-surface p-6 shadow-sm">
         <BrandLogo alt="" className="mb-4 size-10" />
         <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
-        {intro && <p className="mt-2 text-sm text-muted">{intro}</p>}
+        {intro && <p className="mt-2 text-sm text-muted-foreground">{intro}</p>}
         {children}
       </div>
     </div>
@@ -26,7 +28,7 @@ function Field({ label, ...p }: { label: string } & React.InputHTMLAttributes<HT
   return (
     <label className="mt-4 block text-sm font-medium">
       {label}
-      <input {...p} className={input} />
+      <Input {...p} className={input} />
     </label>
   );
 }
@@ -67,7 +69,7 @@ function SignIn({ inviteCode, onDone }: { inviteCode?: string; onDone?: () => vo
   };
   return (
     <form onSubmit={submit} className="mt-2">
-      {info?.firstAccount && <p className="mt-3 rounded-lg border border-line bg-surface-2 p-3 text-sm text-muted">{t("account.firstHint")}</p>}
+      {info?.firstAccount && <p className="mt-3 rounded-lg border border-line bg-surface-2 p-3 text-sm text-muted-foreground">{t("account.firstHint")}</p>}
       {mode === "up" && <Field label={t("account.name")} value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" />}
       <Field label={t("account.email")} type="email" required value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
       <Field label={t("account.password")} type="password" required minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={mode === "up" ? "new-password" : "current-password"} />
@@ -80,9 +82,9 @@ function SignIn({ inviteCode, onDone }: { inviteCode?: string; onDone?: () => vo
         {mode === "up" ? t("account.signUp") : t("account.signIn")}
       </Button>
       {canSignUp && !info?.firstAccount && (
-        <button type="button" onClick={() => setMode(mode === "up" ? "in" : "up")} className="mt-3 w-full text-center text-sm text-[var(--link)] hover:underline">
+        <ShadcnButton variant="plain" size="none" type="button" onClick={() => setMode(mode === "up" ? "in" : "up")} className="mt-3 w-full text-center text-sm text-[var(--link)] hover:underline">
           {mode === "up" ? t("account.haveAccount") : t("account.create")}
-        </button>
+        </ShadcnButton>
       )}
     </form>
   );

@@ -1,3 +1,4 @@
+import { Button as ShadcnButton } from "../components/ui/button";
 // Calendar and timeline: entries at their date or range. Dragging moves the date (and in the
 // timeline the start or the end); entries without a date are listed below.
 import { useEffect, useRef, useState } from "react";
@@ -90,25 +91,25 @@ export function CalendarView({ items, def, ctx, look }: { items: Item[]; def: Qu
     const d = diffDays(drag.from, day);
     if (d) writeSpan(p.item, key, { start: addDays(p.span.start, d), end: addDays(p.span.end, d) }, ctx);
   };
-  if (!key) return <p className="px-2 py-1.5 text-sm text-muted">{t("view.noDate")}</p>;
+  if (!key) return <p className="px-2 py-1.5 text-sm text-muted-foreground">{t("view.noDate")}</p>;
   const MAX = 3;
   return (
     <div className="text-sm">
       <div className="mb-2 flex items-center gap-1">
         <h3 className="mr-2 text-base font-semibold capitalize">{new Intl.DateTimeFormat(lang, { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(ms(month)))}</h3>
-        <button onClick={() => shift(-1)} className="tap rounded-md p-1 text-muted hover:bg-hover hover:text-fg" aria-label={t("cal.prev")}>
+        <ShadcnButton variant="plain" size="none" onClick={() => shift(-1)} className="tap rounded-md p-1 text-muted-foreground hover:bg-hover hover:text-fg" aria-label={t("cal.prev")}>
           <ChevronLeft size={16} />
-        </button>
-        <button onClick={() => setMonth(today.slice(0, 7) + "-01")} className="tap rounded-md px-2 py-0.5 text-xs text-muted hover:bg-hover hover:text-fg">
+        </ShadcnButton>
+        <ShadcnButton variant="plain" size="none" onClick={() => setMonth(today.slice(0, 7) + "-01")} className="tap rounded-md px-2 py-0.5 text-xs text-muted-foreground hover:bg-hover hover:text-fg">
           {t("time.today")}
-        </button>
-        <button onClick={() => shift(1)} className="tap rounded-md p-1 text-muted hover:bg-hover hover:text-fg" aria-label={t("cal.next")}>
+        </ShadcnButton>
+        <ShadcnButton variant="plain" size="none" onClick={() => shift(1)} className="tap rounded-md p-1 text-muted-foreground hover:bg-hover hover:text-fg" aria-label={t("cal.next")}>
           <ChevronRight size={16} />
-        </button>
+        </ShadcnButton>
       </div>
       <div className="overflow-x-auto">
         <div className="min-w-[640px] overflow-hidden rounded-xl border border-line">
-          <div className="grid grid-cols-7 border-b border-line bg-surface-2/50 text-xs text-muted">
+          <div className="grid grid-cols-7 border-b border-line bg-surface-2/50 text-xs text-muted-foreground">
             {dayNames.map((d) => (
               <div key={d} className="px-2 py-1">
                 {d}
@@ -140,7 +141,7 @@ export function CalendarView({ items, def, ctx, look }: { items: Item[]; def: Qu
                     className={cx("border-l border-line first:border-l-0", d.slice(0, 7) !== month.slice(0, 7) && "bg-surface-2/40", over === d && "bg-hover")}
                     style={{ gridColumn: n + 1, gridRow: `1 / span ${Math.min(lanes.length, MAX) + 2}` }}
                   >
-                    <span className={cx("m-1 inline-flex size-6 items-center justify-center rounded-full text-xs tabular-nums", d === today ? "bg-ink font-medium text-ink-text" : d.slice(0, 7) === month.slice(0, 7) ? "text-muted" : "text-muted")}>{+d.slice(8, 10)}</span>
+                    <span className={cx("m-1 inline-flex size-6 items-center justify-center rounded-full text-xs tabular-nums", d === today ? "bg-ink font-medium text-ink-text" : d.slice(0, 7) === month.slice(0, 7) ? "text-muted-foreground" : "text-muted-foreground")}>{+d.slice(8, 10)}</span>
                   </div>
                 ))}
                 {pos
@@ -168,7 +169,7 @@ export function CalendarView({ items, def, ctx, look }: { items: Item[]; def: Qu
                 {days.map((d, n) => {
                   const more = pos.filter((p) => p.lane >= MAX && p.s <= n && p.e >= n).length;
                   return more ? (
-                    <span key={"m" + d} className="z-[1] mx-1.5 text-xs text-muted" style={{ gridColumn: n + 1, gridRow: MAX + 2 }}>
+                    <span key={"m" + d} className="z-[1] mx-1.5 text-xs text-muted-foreground" style={{ gridColumn: n + 1, gridRow: MAX + 2 }}>
                       {t("cal.more", { count: more })}
                     </span>
                   ) : null;
@@ -189,9 +190,9 @@ function Undated({ items, label }: { items: Item[]; label: string }) {
   if (!items.length) return null;
   return (
     <div className="mt-3 text-sm">
-      <button onClick={() => setOpen(!open)} aria-expanded={open} className="tap-y flex items-center gap-1.5 text-muted hover:text-fg">
+      <ShadcnButton variant="plain" size="none" onClick={() => setOpen(!open)} aria-expanded={open} className="tap-y flex items-center gap-1.5 text-muted-foreground hover:text-fg">
         {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />} {label}
-      </button>
+      </ShadcnButton>
       {open && (
         <ul className="mt-1 space-y-1 pl-5">
           {items.map((i) => (
@@ -248,7 +249,7 @@ export function TimelineView({ items, def, ctx, look }: { items: Item[]; def: Qu
     const el = scroller.current;
     if (el) el.scrollLeft = Math.max(0, diffDays(from, today) * px - 160);
   }, [scale, key]);
-  if (!key) return <p className="px-2 py-1.5 text-sm text-muted">{t("view.noDate")}</p>;
+  if (!key) return <p className="px-2 py-1.5 text-sm text-muted-foreground">{t("view.noDate")}</p>;
   const by = def.group;
   const tab = look?.tab;
   const dated = items.filter((i) => placed.has(i.id));
@@ -326,18 +327,18 @@ export function TimelineView({ items, def, ctx, look }: { items: Item[]; def: Qu
     <div className="text-sm">
       <div className="mb-2 flex items-center gap-2">
         <Seg label={t("timeline.scale")} value={scale} onChange={setScale} options={[{ value: "week", label: t("timeline.weeks") }, { value: "month", label: t("timeline.months") }]} />
-        <button onClick={() => scroller.current && (scroller.current.scrollLeft = Math.max(0, diffDays(from, today) * px - 160))} className="tap rounded-md px-2 py-0.5 text-xs text-muted hover:bg-hover hover:text-fg">
+        <ShadcnButton variant="plain" size="none" onClick={() => scroller.current && (scroller.current.scrollLeft = Math.max(0, diffDays(from, today) * px - 160))} className="tap rounded-md px-2 py-0.5 text-xs text-muted-foreground hover:bg-hover hover:text-fg">
           {t("time.today")}
-        </button>
+        </ShadcnButton>
       </div>
       <div ref={scroller} onScroll={(e) => setScrollX(e.currentTarget.scrollLeft)} className="relative overflow-x-auto rounded-xl border border-line">
         <div style={{ width: width + LEFT }} className="relative">
           {/* scale */}
-          <div className="sticky top-0 z-[3] flex h-8 border-b border-line bg-surface-2/60 text-xs text-muted">
+          <div className="sticky top-0 z-[3] flex h-8 border-b border-line bg-surface-2/60 text-xs text-muted-foreground">
             <div className="sticky left-0 z-[2] shrink-0 border-r border-line bg-surface-2" style={{ width: LEFT }} />
             <div className="relative" style={{ width }}>
               {ticks.map((k) => (
-                <span key={k.day} className={cx("absolute top-0 h-full whitespace-nowrap border-l pl-1 pt-1.5", k.major ? "border-line font-medium text-muted" : "border-line/50")} style={{ left: diffDays(from, k.day) * px }}>
+                <span key={k.day} className={cx("absolute top-0 h-full whitespace-nowrap border-l pl-1 pt-1.5", k.major ? "border-line font-medium text-muted-foreground" : "border-line/50")} style={{ left: diffDays(from, k.day) * px }}>
                   {k.label}
                 </span>
               ))}
@@ -350,7 +351,7 @@ export function TimelineView({ items, def, ctx, look }: { items: Item[]; def: Qu
               {by && (
                 <div className="sticky left-0 flex h-9 w-fit items-center gap-2 px-2">
                   <GroupChip g={g} by={by} byLabel={byLabel} />
-                  <span className="text-xs tabular-nums text-muted">{g.items.length}</span>
+                  <span className="text-xs tabular-nums text-muted-foreground">{g.items.length}</span>
                 </div>
               )}
               {g.items.map(row)}

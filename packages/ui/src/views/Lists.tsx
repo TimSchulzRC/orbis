@@ -1,3 +1,5 @@
+import { Button as ShadcnButton } from "../components/ui/button";
+import { Input } from "../components/ui/input";
 // The lists of the app: a type's page (its entries with views as tabs, like a database in
 // Notion), the files, and the inbox. A type keeps its views; the files and the inbox have one.
 import { useEffect, useRef, useState } from "react";
@@ -142,7 +144,7 @@ function DraftBar({ onDiscard, onSave }: { onDiscard: () => void; onSave: () => 
   const { t } = useT();
   return (
     <div className="sticky top-0 z-10 mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-[var(--focus)] bg-surface px-3 py-2 text-sm" role="status">
-      <span className="mr-auto text-muted">{t("view.draft")}</span>
+      <span className="mr-auto text-muted-foreground">{t("view.draft")}</span>
       <Button variant="outline" onClick={onDiscard}>
         {t("view.discard")}
       </Button>
@@ -169,10 +171,10 @@ export function FilesPage() {
       <SpaceEyebrow />
       <div className="mb-4 flex items-center gap-3">
         <h1 className="page-title">{t("nav.files")}</h1>
-        <span className="flex-1 text-[15px] tabular-nums text-muted">{all.length}</span>
+        <span className="flex-1 text-[15px] tabular-nums text-muted-foreground">{all.length}</span>
         <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm font-medium hover:bg-hover">
           <Upload size={14} /> <span className="hidden sm:inline">{t("files.add")}</span>
-          <input type="file" multiple className="hidden" onChange={async (e) => {
+          <Input type="file" multiple className="hidden" onChange={async (e) => {
             for (const f of [...(e.target.files ?? [])]) await files.add(f, f.name);
           }} />
         </label>
@@ -180,14 +182,14 @@ export function FilesPage() {
       {kinds.length > 1 && (
         <div className="-mx-4 mb-3 flex gap-1 overflow-x-auto px-4 text-sm [scrollbar-width:none] md:mx-0 md:px-0" role="group" aria-label={t("files.filter")}>
           {[{ k: null, n: all.length }, ...kinds].map(({ k, n }) => (
-            <button
+            <ShadcnButton variant="plain" size="none"
               key={k ?? "all"}
               onClick={() => setKind(k)}
               aria-pressed={kind === k}
-              className={cx("shrink-0 whitespace-nowrap rounded-full border px-3 py-1", kind === k ? "border-[var(--focus)] bg-surface text-fg" : "border-line text-muted hover:bg-hover hover:text-fg")}
+              className={cx("shrink-0 whitespace-nowrap rounded-full border px-3 py-1", kind === k ? "border-[var(--focus)] bg-surface text-fg" : "border-line text-muted-foreground hover:bg-hover hover:text-fg")}
             >
-              {k ? t("filetype.many." + k) : t("files.all")} <span className="tabular-nums text-muted">{n}</span>
-            </button>
+              {k ? t("filetype.many." + k) : t("files.all")} <span className="tabular-nums text-muted-foreground">{n}</span>
+            </ShadcnButton>
           ))}
         </div>
       )}
@@ -228,7 +230,7 @@ export function InboxPage() {
         {/* its name and how many wait, in one line (design rules § 5.1) */}
         <div className="flex min-w-0 flex-1 items-baseline gap-2.5">
           <h1 className="page-title truncate">{t("nav.inbox")}</h1>
-          <span className="text-[15px] tabular-nums text-muted">{items.length}</span>
+          <span className="text-[15px] tabular-nums text-muted-foreground">{items.length}</span>
         </div>
         {agentSpace && (
           <Button variant="ghost" onClick={sortWithAgent} title={t("triage.withAgent")}>
@@ -275,7 +277,7 @@ function InboxRule({ name, onClose }: { name?: string; onClose: () => void }) {
         <div className="flex items-start gap-2">
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium">{name ? t("inbox.whatLandsIn", { name }) : t("inbox.whatLands")}</p>
-            <p className="text-xs text-muted">{t("inbox.ruleHint")}</p>
+            <p className="text-xs text-muted-foreground">{t("inbox.ruleHint")}</p>
           </div>
           <Button variant="ghost" onClick={restore}>
             <RotateCcw size={14} /> {t("inbox.restoreDefault")}

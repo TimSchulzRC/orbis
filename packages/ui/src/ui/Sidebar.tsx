@@ -1,3 +1,4 @@
+import { Button as ShadcnButton } from "../components/ui/button";
 // Sidebar: the workspace selector (which workspaces are seen), search and the inbox (of
 // the workspaces seen), then each of them as a block of its own (as teamspaces in Notion): its
 // name, the pinned items (informations with their children as a tree, also type pages), and its
@@ -45,7 +46,7 @@ export function Sidebar({ onSearch, onAgent }: { onSearch: () => void; onAgent: 
   const { shown } = useAccounts();
   const inbox = useInboxTotal();
   const [creating, setCreating] = useState(false);
-  const navCls = (active: boolean) => cx("flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm", active ? "bg-hover font-medium text-fg" : "text-muted hover:bg-hover hover:text-fg");
+  const navCls = (active: boolean) => cx("flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm", active ? "bg-hover font-medium text-fg" : "text-muted-foreground hover:bg-hover hover:text-fg");
 
   return (
     <aside className="flex w-[256px] shrink-0 flex-col border-r border-line bg-surface-2/50 pt-safe">
@@ -53,16 +54,16 @@ export function Sidebar({ onSearch, onAgent }: { onSearch: () => void; onAgent: 
         <SpaceSelector className="flex-1" onNew={() => setCreating(true)} />
         <SyncDot />
       </div>
-      <button onClick={onSearch} className="mx-3 mb-2 flex items-center gap-2 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm text-muted hover:text-fg">
+      <ShadcnButton variant="plain" size="none" onClick={onSearch} className="mx-3 mb-2 flex items-center gap-2 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm text-muted-foreground hover:text-fg">
         <Search size={15} />
         <span className="flex-1 text-left">{t("nav.searchPlaceholder")}</span>
         <Kbd>{shortcut("K", lang)}</Kbd>
-      </button>
+      </ShadcnButton>
       <div className="min-h-0 flex-1 overflow-y-auto pb-3">
         <nav className="flex flex-col gap-0.5 px-2" aria-label={t("nav.main")}>
           <a href="#/inbox" className={navCls(route.path.startsWith("/inbox"))}>
             <Inbox size={16} /> <span className="flex-1">{t("nav.inbox")}</span>
-            {inbox > 0 && <span className="text-xs tabular-nums text-muted">{inbox}</span>}
+            {inbox > 0 && <span className="text-xs tabular-nums text-muted-foreground">{inbox}</span>}
           </a>
         </nav>
         {/* a line above each workspace: where one ends and the next begins */}
@@ -76,9 +77,9 @@ export function Sidebar({ onSearch, onAgent }: { onSearch: () => void; onAgent: 
       </div>
       {/* below: the agent and the settings (the account, its workspaces, this device) */}
       <div className="flex flex-col gap-0.5 border-t border-line p-2">
-        <button onClick={onAgent} className={navCls(false)}>
+        <ShadcnButton variant="plain" size="none" onClick={onAgent} className={navCls(false)}>
           <Sparkles size={16} /> <span className="flex-1 text-left">{t("nav.agent")}</span> <Kbd>{shortcut("J", lang)}</Kbd>
-        </button>
+        </ShadcnButton>
         <a href="#/settings" className={navCls(route.path.startsWith("/settings"))}>
           <SlidersHorizontal size={16} /> {t("nav.settings")}
         </a>
@@ -123,26 +124,26 @@ export function SpaceTree({ space, touch }: { space: Space; touch?: boolean }) {
           if (movable(d) && d!.space !== space.id) void moveTo(d!.id, d!.space, space.id);
         }}
       >
-        <button onClick={() => setOpen(!open)} aria-expanded={open} className="-ml-1 flex min-w-0 flex-1 items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.05em] text-muted hover:text-fg">
+        <ShadcnButton variant="plain" size="none" onClick={() => setOpen(!open)} aria-expanded={open} className="-ml-1 flex min-w-0 flex-1 items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground hover:text-fg">
           <ChevronRight size={13} className={cx("shrink-0 text-faint transition-transform", open && "rotate-90")} />
           <span className="truncate">{space.name}</span>
-        </button>
+        </ShadcnButton>
         {ready && (
-          <button
+          <ShadcnButton variant="plain" size="none"
             title={t("nav.newPinned")}
             aria-label={t("nav.newPinned")}
             onClick={() => createAndOpen({ pinned: keyBetween(roots.at(-1)?.pinned ?? null, null) }, repo, space.id)}
-            className={cx("tap rounded text-muted hover:bg-hover hover:text-fg", touch ? "p-1.5" : "p-0.5 opacity-0 focus:opacity-100 group-hover/space:opacity-100")}
+            className={cx("tap rounded text-muted-foreground hover:bg-hover hover:text-fg", touch ? "p-1.5" : "p-0.5 opacity-0 focus:opacity-100 group-hover/space:opacity-100")}
           >
             <Plus size={14} />
-          </button>
+          </ShadcnButton>
         )}
         <Popover
           align="right"
           trigger={(p) => (
-            <button {...p} className={cx("tap rounded text-muted hover:bg-hover hover:text-fg", touch ? "p-1.5" : "p-0.5 opacity-0 focus:opacity-100 group-hover/space:opacity-100 aria-expanded:opacity-100")} aria-label={t("space.menu", { name: space.name })}>
+            <ShadcnButton variant="plain" size="none" {...p} className={cx("tap rounded text-muted-foreground hover:bg-hover hover:text-fg", touch ? "p-1.5" : "p-0.5 opacity-0 focus:opacity-100 group-hover/space:opacity-100 aria-expanded:opacity-100")} aria-label={t("space.menu", { name: space.name })}>
               <MoreHorizontal size={14} />
-            </button>
+            </ShadcnButton>
           )}
         >
           {(close) => (
@@ -155,17 +156,17 @@ export function SpaceTree({ space, touch }: { space: Space; touch?: boolean }) {
         </Popover>
       </div>
       {open && !ready && (
-        <a href={spaceHref(space.id, "/setup")} className={cx(row, "pl-[30px] text-muted hover:bg-hover hover:text-fg", !touch && "mx-2")}>
+        <a href={spaceHref(space.id, "/setup")} className={cx(row, "pl-[30px] text-muted-foreground hover:bg-hover hover:text-fg", !touch && "mx-2")}>
           {repo.status.loaded && (repo.status.synced || !repo.status.online) ? t("space.setUp") : t("app.syncing")}
         </a>
       )}
       {open && ready && (
         <div className={cx(!touch && "px-2")}>
           <PinnedTree touch={touch} here={here} />
-          <button onClick={() => setTypesOpen(!typesOpen)} aria-expanded={typesOpen} className={cx(row, "w-full pl-2.5 text-muted hover:bg-hover hover:text-fg")}>
+          <ShadcnButton variant="plain" size="none" onClick={() => setTypesOpen(!typesOpen)} aria-expanded={typesOpen} className={cx(row, "w-full pl-2.5 text-muted-foreground hover:bg-hover hover:text-fg")}>
             <ChevronRight size={touch ? 17 : 15} className={cx("shrink-0 text-faint transition-transform", typesOpen && "rotate-90")} />
             {t("nav.types")}
-          </button>
+          </ShadcnButton>
           {typesOpen && <TypeNav touch={touch} here={here} />}
         </div>
       )}
@@ -269,16 +270,16 @@ export function TypeNav({ touch, here }: { touch?: boolean; here: boolean }) {
             setDrop(null);
           }}
           aria-current={active(r.id) ? "page" : undefined}
-          className={cx("relative flex items-center gap-2 rounded-lg pl-[30px] pr-2", touch ? "py-2 text-[15px]" : "py-1 text-sm", active(r.id) ? "bg-hover font-medium text-fg" : "text-muted hover:bg-hover hover:text-fg")}
+          className={cx("relative flex items-center gap-2 rounded-lg pl-[30px] pr-2", touch ? "py-2 text-[15px]" : "py-1 text-sm", active(r.id) ? "bg-hover font-medium text-fg" : "text-muted-foreground hover:bg-hover hover:text-fg")}
         >
           {drop?.id === r.id && <span className={cx("absolute inset-x-1 h-0.5 rounded bg-[var(--focus)]", drop.before ? "-top-px" : "-bottom-px")} />}
           {r.icon}
           <span className="min-w-0 flex-1 truncate">{r.label}</span>
         </a>
       ))}
-      <button onClick={() => setCreating(true)} className={cx("flex items-center gap-2 rounded-lg pl-[30px] pr-2 text-muted hover:bg-hover hover:text-fg", touch ? "py-2 text-[15px]" : "py-1 text-sm")}>
+      <ShadcnButton variant="plain" size="none" onClick={() => setCreating(true)} className={cx("flex items-center gap-2 rounded-lg pl-[30px] pr-2 text-muted-foreground hover:bg-hover hover:text-fg", touch ? "py-2 text-[15px]" : "py-1 text-sm")}>
         <Plus size={touch ? 17 : 15} className="shrink-0" /> {t("types.new")}
-      </button>
+      </ShadcnButton>
       {creating && <NewTypeDialog onClose={() => setCreating(false)} />}
     </nav>
   );
@@ -398,54 +399,54 @@ function TreeNode({
         className={cx(
           "group/row relative flex items-center gap-1 rounded-lg pr-1",
           touch ? "py-2 text-[15px]" : "py-1 text-sm",
-          activeId === item.id ? "bg-hover font-medium text-fg" : "text-muted hover:bg-hover hover:text-fg",
+          activeId === item.id ? "bg-hover font-medium text-fg" : "text-muted-foreground hover:bg-hover hover:text-fg",
           drop === "inside" && "ring-2 ring-[var(--focus)]",
         )}
         style={{ paddingLeft: 4 + depth * 12 }}
       >
         {drop === "before" && <span className="absolute inset-x-1 -top-px h-0.5 rounded bg-[var(--focus)]" />}
         {drop === "after" && <span className="absolute inset-x-1 -bottom-px h-0.5 rounded bg-[var(--focus)]" />}
-        <button
+        <ShadcnButton variant="plain" size="none"
           tabIndex={-1}
           onClick={() => kids.length && toggle(key, depth)}
-          className={cx("flex shrink-0 items-center justify-center rounded text-muted", touch ? "tap -my-1.5 size-8" : "size-5", kids.length ? "hover:bg-surface-2" : "invisible")}
+          className={cx("flex shrink-0 items-center justify-center rounded text-muted-foreground", touch ? "tap -my-1.5 size-8" : "size-5", kids.length ? "hover:bg-surface-2" : "invisible")}
           aria-label={isOpen ? t("tree.collapse") : t("tree.expand")}
           aria-expanded={isOpen}
         >
           {isOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-        </button>
+        </ShadcnButton>
         {isType ? <TypeGlyph schema={item.schema} size={touch ? 17 : 15} /> : <ItemIcon item={item} size={touch ? 17 : 15} />}
         <a href={itemHref(item.id)} className="min-w-0 flex-1 truncate" title={item.title} aria-current={activeId === item.id ? "page" : undefined}>
           {isType ? ix.typePlural(item.id) : distinctLabel(item.title, parent ? ix.get(parent)?.title : undefined) || t("untitled")}
         </a>
         {secondary && (
-          <span title={t("tree.secondary", { home: ix.get(home)?.title ?? "" })} className="text-muted">
+          <span title={t("tree.secondary", { home: ix.get(home)?.title ?? "" })} className="text-muted-foreground">
             <Link2 size={12} />
           </span>
         )}
         {/* on a phone there is no hover: no invisible buttons to hit by accident */}
         {!touch && !isType && (
-          <button
+          <ShadcnButton variant="plain" size="none"
             onClick={() => {
               if (!isOpen) toggle(key, depth);
               createAndOpen({ parents: [item.id] }, repo, space);
             }}
             tabIndex={-1}
-            className="rounded p-0.5 text-muted opacity-0 hover:bg-surface-2 hover:text-fg group-hover/row:opacity-100 focus:opacity-100"
+            className="rounded p-0.5 text-muted-foreground opacity-0 hover:bg-surface-2 hover:text-fg group-hover/row:opacity-100 focus:opacity-100"
             aria-label={t("tree.newBelow")}
             title={t("tree.newBelow")}
           >
             <Plus size={13} />
-          </button>
+          </ShadcnButton>
         )}
         {!touch && <Popover
           open={menu}
           onOpenChange={setMenu}
           align="right"
           trigger={(p) => (
-            <button {...p} tabIndex={-1} className="tap rounded p-0.5 text-muted opacity-0 pointer-coarse:opacity-100 hover:bg-surface-2 hover:text-fg group-hover/row:opacity-100 focus:opacity-100" aria-label={t("more")}>
+            <ShadcnButton variant="plain" size="none" {...p} tabIndex={-1} className="tap rounded p-0.5 text-muted-foreground opacity-0 pointer-coarse:opacity-100 hover:bg-surface-2 hover:text-fg group-hover/row:opacity-100 focus:opacity-100" aria-label={t("more")}>
               <MoreHorizontal size={14} />
-            </button>
+            </ShadcnButton>
           )}
         >
           {(close) => (

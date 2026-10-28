@@ -1,3 +1,6 @@
+import { Button as ShadcnButton } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { Textarea } from "../components/ui/textarea";
 import { useEffect, useRef, useState } from "react";
 import { ArrowRight, ChevronDown, CornerDownRight, Layers, Paperclip, X } from "lucide-react";
 import { SETTINGS_ID } from "@obtion/core/model";
@@ -101,7 +104,7 @@ function CaptureField({ parent, autoFocus, onDone, compact, onSpace }: CapturePr
   return (
     <div className="rounded-2xl border border-line bg-surface px-3 py-2 shadow-sm focus-within:border-[var(--focus)]">
       <div className="flex items-start gap-2">
-        <textarea
+        <Textarea
           ref={input}
           value={text}
           autoFocus={autoFocus}
@@ -115,16 +118,16 @@ function CaptureField({ parent, autoFocus, onDone, compact, onSpace }: CapturePr
           rows={1}
           placeholder={parent ? t("capture.placeholderHere") : t("capture.placeholder")}
           title={t("capture.hint")}
-          className="max-h-48 min-h-7 flex-1 resize-none bg-transparent px-1 py-0.5 text-[15px] outline-none [field-sizing:content] placeholder:text-muted"
+          className="max-h-48 min-h-7 flex-1 resize-none bg-transparent px-1 py-0.5 text-[15px] outline-none [field-sizing:content] placeholder:text-muted-foreground"
           aria-label={t("capture.title")}
         />
-        <label className="mt-0.5 cursor-pointer rounded-md p-1 text-muted hover:bg-hover hover:text-fg" title={t("capture.attach")}>
+        <label className="mt-0.5 cursor-pointer rounded-md p-1 text-muted-foreground hover:bg-hover hover:text-fg" title={t("capture.attach")}>
           <Paperclip size={15} />
-          <input type="file" multiple className="hidden" onChange={(e) => void attach(e.target.files)} aria-label={t("capture.attach")} />
+          <Input type="file" multiple className="hidden" onChange={(e) => void attach(e.target.files)} aria-label={t("capture.attach")} />
         </label>
-        <button onClick={save} disabled={!text.trim()} className="tap mt-0.5 rounded-md p-1 text-muted enabled:text-fg enabled:hover:bg-hover disabled:opacity-40" aria-label={t("capture.save")} title={`${t("capture.save")} (↵) · ${t("capture.toAgent", { mod: modName(lang) })}`}>
+        <ShadcnButton variant="plain" size="none" onClick={save} disabled={!text.trim()} className="tap mt-0.5 rounded-md p-1 text-muted-foreground enabled:text-fg enabled:hover:bg-hover disabled:opacity-40" aria-label={t("capture.save")} title={`${t("capture.save")} (↵) · ${t("capture.toAgent", { mod: modName(lang) })}`}>
           <ArrowRight size={16} />
-        </button>
+        </ShadcnButton>
       </div>
       {picking && (
         <ItemPicker
@@ -141,11 +144,11 @@ function CaptureField({ parent, autoFocus, onDone, compact, onSpace }: CapturePr
           {onSpace && spaces.length > 1 && (
             <Popover
               trigger={(p) => (
-                <button {...p} className="tap-y inline-flex h-7 shrink-0 items-center gap-1 rounded-full border border-line px-2 text-xs hover:bg-hover" aria-label={t("capture.spaceLabel", { name: spaces.find((s) => s.id === space)?.name ?? "" })}>
-                  <Layers size={12} className="text-muted" />
+                <ShadcnButton variant="plain" size="none" {...p} className="tap-y inline-flex h-7 shrink-0 items-center gap-1 rounded-full border border-line px-2 text-xs hover:bg-hover" aria-label={t("capture.spaceLabel", { name: spaces.find((s) => s.id === space)?.name ?? "" })}>
+                  <Layers size={12} className="text-muted-foreground" />
                   {spaces.find((s) => s.id === space)?.name}
-                  <ChevronDown size={12} className="text-muted" />
-                </button>
+                  <ChevronDown size={12} className="text-muted-foreground" />
+                </ShadcnButton>
               )}
             >
               {(close) =>
@@ -160,11 +163,11 @@ function CaptureField({ parent, autoFocus, onDone, compact, onSpace }: CapturePr
           {/* the type: one chip with its symbol and an arrow; the note is preset */}
           <Popover
             trigger={(p) => (
-              <button {...p} className="tap-y inline-flex h-7 shrink-0 items-center gap-1 rounded-full border border-line px-2 text-xs hover:bg-hover" aria-label={t("capture.typeLabel", { name: typeSchema?.name ?? t("capture.note") })}>
+              <ShadcnButton variant="plain" size="none" {...p} className="tap-y inline-flex h-7 shrink-0 items-center gap-1 rounded-full border border-line px-2 text-xs hover:bg-hover" aria-label={t("capture.typeLabel", { name: typeSchema?.name ?? t("capture.note") })}>
                 {typeSchema ? <TypeGlyph schema={typeSchema} size={12} /> : <NOTE_ICON size={12} style={{ color: "var(--t-note)" }} />}
                 {typeSchema?.name ?? t("capture.note")}
-                <ChevronDown size={12} className="text-muted" />
-              </button>
+                <ChevronDown size={12} className="text-muted-foreground" />
+              </ShadcnButton>
             )}
           >
             {(close) => (
@@ -186,25 +189,25 @@ function CaptureField({ parent, autoFocus, onDone, compact, onSpace }: CapturePr
           {!parent &&
             (place ? (
               <span className="flex min-w-0 items-center">
-                <button onClick={() => setPicking(true)} className={cx(ghost, "text-fg")} title={pathOf(place)}>
-                  <CornerDownRight size={12} className="shrink-0 text-muted" />
+                <ShadcnButton variant="plain" size="none" onClick={() => setPicking(true)} className={cx(ghost, "text-fg")} title={pathOf(place)}>
+                  <CornerDownRight size={12} className="shrink-0 text-muted-foreground" />
                   <span className="truncate">{pathOf(place)}</span>
-                </button>
-                <button onClick={() => setPlace(null)} className="tap rounded-md p-1 text-muted hover:bg-hover hover:text-fg" aria-label={t("capture.placeRemove")} title={t("capture.placeRemove")}>
+                </ShadcnButton>
+                <ShadcnButton variant="plain" size="none" onClick={() => setPlace(null)} className="tap rounded-md p-1 text-muted-foreground hover:bg-hover hover:text-fg" aria-label={t("capture.placeRemove")} title={t("capture.placeRemove")}>
                   <X size={12} />
-                </button>
+                </ShadcnButton>
               </span>
             ) : (
-              <button onClick={() => setPicking(true)} className={cx(ghost, "text-muted hover:text-fg")}>
+              <ShadcnButton variant="plain" size="none" onClick={() => setPicking(true)} className={cx(ghost, "text-muted-foreground hover:text-fg")}>
                 <CornerDownRight size={12} className="shrink-0" />
                 {t("capture.placeOther")}
-              </button>
+              </ShadcnButton>
             ))}
           {offer && (
-            <button onClick={() => setPlace(offer)} className={cx(ghost, "text-muted hover:text-fg")}>
+            <ShadcnButton variant="plain" size="none" onClick={() => setPlace(offer)} className={cx(ghost, "text-muted-foreground hover:text-fg")}>
               <CornerDownRight size={12} className="shrink-0" />
               <span className="truncate">{t("capture.placeOffer", { title: ix.get(offer)!.title })}</span>
-            </button>
+            </ShadcnButton>
           )}
         </div>
       )}

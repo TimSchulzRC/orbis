@@ -1,10 +1,12 @@
+import { ModalSurface } from "./components/ui/dialog";
+import { Button as ShadcnButton } from "./components/ui/button";
 import { BrandLogo } from "./ui/BrandLogo";
 import { useEffect, useRef, useState } from "react";
 import { Sparkles, Plus, Menu, Search, Inbox, SlidersHorizontal, X } from "lucide-react";
 import { SETTINGS_ID } from "@obtion/core/model";
 import { useRepo, useRoute, useMediaQuery, itemHref, spaceHref } from "./hooks";
 import { useT } from "./i18n";
-import { cx, IconButton, useModal } from "./ui/bits";
+import { cx, IconButton } from "./ui/bits";
 import { AgentNotice } from "./ui/AgentNotice";
 import { ConfirmHost } from "./ui/feedback";
 import { AppToaster } from "./ui/toasts";
@@ -52,9 +54,9 @@ function SignedOut() {
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line bg-surface-2 px-4 py-2 text-sm" role="status">
       <span className="flex-1">{t("account.lost", { server: location.host })}</span>
-      <button onClick={() => void signOut()} className="font-medium text-[var(--link)] hover:underline">
+      <ShadcnButton variant="plain" size="none" onClick={() => void signOut()} className="font-medium text-[var(--link)] hover:underline">
         {t("account.signInAgain")}
-      </button>
+      </ShadcnButton>
     </div>
   );
 }
@@ -67,9 +69,9 @@ function TooNew() {
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line bg-surface-2 px-4 py-2 text-sm" role="status">
       <span className="flex-1">{t("format.tooNew")}</span>
-      <button onClick={() => location.reload()} className="font-medium text-[var(--link)] hover:underline">
+      <ShadcnButton variant="plain" size="none" onClick={() => location.reload()} className="font-medium text-[var(--link)] hover:underline">
         {t("format.reload")}
-      </button>
+      </ShadcnButton>
     </div>
   );
 }
@@ -138,9 +140,9 @@ function Main() {
   const setUp = !settings && (r.status.synced || (!r.status.online && r.docs.size === 0));
   const page = (() => {
     if (!globalPage(route.parts) || route.parts[0] === "setup") {
-      if (!r.status.loaded) return <div className="flex h-full items-center justify-center text-muted">{t("app.opening")}</div>;
+      if (!r.status.loaded) return <div className="flex h-full items-center justify-center text-muted-foreground">{t("app.opening")}</div>;
       if (setUp) return <Setup />;
-      if (!settings) return <div className="flex h-full items-center justify-center text-muted">{t("app.syncing")}</div>;
+      if (!settings) return <div className="flex h-full items-center justify-center text-muted-foreground">{t("app.syncing")}</div>;
     }
     switch (route.parts[0]) {
       case undefined:
@@ -172,7 +174,7 @@ function Main() {
       case "i":
         return <ItemPage id={route.parts[1]!} isNew={route.query.get("new") === "1"} />;
       default:
-        return <div className="p-8 text-muted">{t("app.notFound")}</div>;
+        return <div className="p-8 text-muted-foreground">{t("app.notFound")}</div>;
     }
   })();
   const contextItem = route.parts[0] === "i" ? r.get(route.parts[1]) : undefined;
@@ -180,12 +182,12 @@ function Main() {
 
   return (
     <div className="flex h-full">
-      <button
+      <ShadcnButton variant="plain" size="none"
         onClick={() => document.querySelector("main")?.focus()}
         className="sr-only z-50 rounded-lg border border-line bg-surface text-sm shadow-lg focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:px-3 focus:py-2"
       >
         {t("nav.skip")}
-      </button>
+      </ShadcnButton>
       {wide && <Sidebar onSearch={() => setPalette(true)} onAgent={() => toggleAgent(true)} />}
 
       <div className="flex min-w-0 flex-1 flex-col">
@@ -195,12 +197,12 @@ function Main() {
               <BrandLogo alt="" className="size-6" />
             </a>
             <SyncDot />
-            <button onClick={() => setPalette(true)} className="tap-row ml-1 flex flex-1 items-center gap-2 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm text-muted">
+            <ShadcnButton variant="plain" size="none" onClick={() => setPalette(true)} className="tap-row ml-1 flex flex-1 items-center gap-2 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm text-muted-foreground">
               <Search size={15} /> {t("nav.searchPlaceholder")}
-            </button>
-            <button onClick={() => setMenu(true)} className="tap p-1.5 text-muted" aria-label={t("nav.menu")}>
+            </ShadcnButton>
+            <ShadcnButton variant="plain" size="none" onClick={() => setMenu(true)} className="tap p-1.5 text-muted-foreground" aria-label={t("nav.menu")}>
               <Menu size={20} />
-            </button>
+            </ShadcnButton>
           </header>
         )}
         <SignedOut />
@@ -224,13 +226,13 @@ function Main() {
         </div>
       )}
       {!wide && route.parts[0] !== "i" && !(route.parts[0] === "inbox" && route.parts[1]) && !agentOpen && (
-        <button
+        <ShadcnButton variant="plain" size="none"
           onClick={() => setCaptureOpen(true)}
           aria-label={t("capture.title")}
           className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] right-4 z-20 flex size-12 items-center justify-center rounded-full bg-ink text-ink-text shadow-lg"
         >
           <Plus size={22} />
-        </button>
+        </ShadcnButton>
       )}
       {captureOpen && <CaptureSheet onClose={() => setCaptureOpen(false)} />}
       <AgentNotice />
@@ -243,12 +245,11 @@ function Main() {
 function MenuSheet({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
   const { t } = useT();
   const ref = useRef<HTMLElement>(null);
-  useModal(ref, onClose);
   return (
-    <nav ref={ref} role="dialog" aria-modal="true" className="absolute inset-x-0 bottom-0 max-h-[85vh] overflow-y-auto rounded-t-2xl border-t border-line bg-surface p-3 pb-safe shadow-2xl" aria-label={t("nav.menu")} onClick={(e) => e.stopPropagation()}>
+    <ModalSurface title={t("nav.menu")} onClose={onClose}><nav ref={ref} role="dialog" aria-modal="true" className="fixed inset-x-0 bottom-0 z-50 max-h-[85vh] overflow-y-auto rounded-t-2xl border-t border-line bg-surface p-3 pb-safe shadow-2xl" aria-label={t("nav.menu")} onClick={(e) => e.stopPropagation()}>
       <IconButton onClick={onClose} label={t("close")} icon={X} className="float-right -mr-1 -mt-1" />
       {children}
-    </nav>
+    </nav></ModalSurface>
   );
 }
 
@@ -266,8 +267,8 @@ function MobileMenu() {
       </div>
       {creating && <NewSpaceDialog onClose={() => setCreating(false)} />}
       <a href="#/inbox" className={row}>
-        <Inbox size={18} className="text-muted" /> <span className="flex-1">{t("nav.inbox")}</span>
-        {inbox > 0 && <span className="text-xs tabular-nums text-muted">{inbox}</span>}
+        <Inbox size={18} className="text-muted-foreground" /> <span className="flex-1">{t("nav.inbox")}</span>
+        {inbox > 0 && <span className="text-xs tabular-nums text-muted-foreground">{inbox}</span>}
       </a>
       {shown.map((s) => (
         <SpaceScope key={s.id} id={s.id}>
@@ -277,7 +278,7 @@ function MobileMenu() {
       ))}
       <div className="my-2 border-t border-line" />
       <a href="#/settings" className={row}>
-        <SlidersHorizontal size={18} className="text-muted" /> {t("nav.settings")}
+        <SlidersHorizontal size={18} className="text-muted-foreground" /> {t("nav.settings")}
       </a>
     </>
   );
@@ -315,7 +316,7 @@ function MobileNav({ onAgent }: { onAgent: () => void }) {
   return (
     <nav className="grid border-t border-line bg-surface pb-safe" style={{ gridTemplateColumns: `repeat(${entries.length}, minmax(0, 1fr))` }} aria-label={t("nav.main")}>
       {entries.map((e) => {
-        const cls = cx("relative flex flex-col items-center gap-0.5 py-2 text-[11px]", e.active ? "text-fg" : "text-muted");
+        const cls = cx("relative flex flex-col items-center gap-0.5 py-2 text-[11px]", e.active ? "text-fg" : "text-muted-foreground");
         const inner = (
           <>
             {e.icon}
@@ -328,9 +329,9 @@ function MobileNav({ onAgent }: { onAgent: () => void }) {
             {inner}
           </a>
         ) : (
-          <button key={e.key} onClick={e.onClick} className={cls}>
+          <ShadcnButton variant="plain" size="none" key={e.key} onClick={e.onClick} className={cls}>
             {inner}
-          </button>
+          </ShadcnButton>
         );
       })}
     </nav>

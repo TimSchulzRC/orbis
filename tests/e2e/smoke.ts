@@ -142,6 +142,7 @@ async function run() {
   const fresh = await startServer(false);
   const variants = [
     { name: "light", viewport: { width: 1440, height: 900 }, scheme: "light" as const },
+    { name: "dark", viewport: { width: 1440, height: 900 }, scheme: "dark" as const },
     { name: "phone", viewport: { width: 390, height: 844 }, scheme: "light" as const, mobile: true },
   ];
   try {
@@ -168,6 +169,18 @@ async function run() {
         }
         const phone = !!v.mobile;
         for (const r of ROUTES) await check(page, label, r, errors, undefined, { phone });
+        if (phone) await check(page, label, "/#/settings", errors, async (p) => {
+          await p.getByRole("button", { name: "Menü", exact: true }).click();
+          const menu = p.getByRole("dialog", { name: "Menü", exact: true });
+          await menu.waitFor({ state: "visible" });
+          const reachable = await menu.evaluate((el) => {
+            const box = el.getBoundingClientRect();
+            return el.contains(document.elementFromPoint(box.left + box.width / 2, box.top + 20));
+          });
+          if (!reachable) failures.push(`${label}: mobile menu is behind its backdrop`);
+          await p.keyboard.press("Escape");
+          await menu.waitFor({ state: "detached" });
+        }, { phone });
         if (serverName === "no types") for (const id of ITEMS) await check(page, label, `/#/i/${encodeURIComponent(id)}`, errors, undefined, { phone, page: true });
         if (serverName === "seeded") {
           for (const id of [...ITEMS, server.file, server.trashed]) await check(page, label, `/#/i/${encodeURIComponent(id)}`, errors, undefined, { phone, page: true });
@@ -255,11 +268,18 @@ async function run() {
           });
           if (!v.mobile)
             await check(page, label, "/", errors, async (p) => {
+              const launcher = p.getByRole("button", { name: /Suchen/ }).first();
+              if (await launcher.count()) await launcher.focus();
               await p.keyboard.press("Control+k");
               await p.waitForTimeout(250);
+              const modal = p.getByRole("dialog");
+              if (await modal.count() !== 1) failures.push(`${label}: command palette must have exactly one dialog`);
+              if (!(await modal.locator("input").evaluate((el) => el === document.activeElement))) failures.push(`${label}: command palette input is not focused`);
               await p.keyboard.type("relaunch");
               await p.waitForTimeout(250);
               await p.keyboard.press("Escape");
+              await modal.waitFor({ state: "detached" });
+              if (await launcher.count() && !(await launcher.evaluate((el) => el === document.activeElement))) failures.push(`${label}: command palette did not restore focus`);
             });
           await check(page, label, "/#/activity", errors, async (p) => {
             const undo = p.getByRole("button", { name: /Rückgängig|Undo/ }).first();
@@ -369,7 +389,7 @@ async function examplesOnSetup(browser: import("playwright-core").Browser, serve
     await p.getByRole("button", { name: "Beispiele entfernen …" }).click();
     const dialog = p.getByRole("dialog");
     // nothing was changed yet: every example is chosen
-    const unchosen = await dialog.locator("input[type=checkbox]:not(:checked)").count();
+    const unchosen = await dialog.getByRole("checkbox", { checked: false }).count();
     if (unchosen) failures.push(`${label}: ${unchosen} untouched examples count as changed`);
     await dialog.getByRole("button", { name: /Einträge entfernen/ }).click();
     const toast = p.locator("[data-sonner-toast]").filter({ hasText: "Beispiele entfernt" }).first();

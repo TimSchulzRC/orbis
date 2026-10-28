@@ -1,3 +1,6 @@
+import { ModalSurface } from "../components/ui/dialog";
+import { Button as ShadcnButton } from "../components/ui/button";
+import { Input } from "../components/ui/input";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Sparkles, CornerDownLeft, ChevronRight } from "lucide-react";
 import { SETTINGS_ID } from "@obtion/core/model";
@@ -10,7 +13,7 @@ import { useReplicas } from "./Spaces";
 import { captureSpace } from "./Capture";
 import { setTheme } from "../theme";
 import { useT, setLang, getLang } from "../i18n";
-import { ItemIcon, StatusPill, TypeGlyph, cx, modName, useModal } from "./bits";
+import { ItemIcon, StatusPill, TypeGlyph, cx, modName } from "./bits";
 import { shortPath } from "./Row";
 import { askAgent, createAndOpen } from "../actions";
 
@@ -28,7 +31,6 @@ type Entry =
  */
 export function CommandPalette({ onClose }: { onClose: () => void }) {
   const dialogRef = useRef<HTMLDivElement>(null);
-  useModal(dialogRef, onClose);
   const { t, lang } = useT();
   const [q, setQ] = useState("");
   const [sel, setSel] = useState(0);
@@ -112,9 +114,9 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/30 p-3 pt-[10vh] backdrop-blur-[2px]" onMouseDown={onClose}>
-      <div ref={dialogRef} className="flex max-h-[70vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-2xl" onMouseDown={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={t("palette.label")}>
-        <input
+    <ModalSurface title={t("palette.label")} onClose={onClose}><div className="fixed inset-0 z-50 flex items-start justify-center bg-black/30 p-3 pt-[10vh] backdrop-blur-[2px]" onMouseDown={onClose}>
+      <div ref={dialogRef} className="flex max-h-[70vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-2xl" onMouseDown={(e) => e.stopPropagation()}>
+        <Input
           autoFocus
           value={q}
           onChange={(e) => setQ(e.target.value)}
@@ -125,7 +127,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
             else if (e.key === "Enter" && items[sel]) (e.preventDefault(), run(items[sel]!));
           }}
           placeholder={t("palette.placeholder")}
-          className="border-b border-line bg-transparent px-4 py-3.5 text-base outline-none placeholder:text-muted"
+          className="border-b border-line bg-transparent px-4 py-3.5 text-base outline-none placeholder:text-muted-foreground"
         />
         <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto p-1.5">
           {items.map((it, i) => {
@@ -136,61 +138,61 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
               const n = ix.get(it.id)!;
               const st = statusOf(n, ix.schemaOf(n));
               return (
-                <button {...common}>
+                <ShadcnButton variant="plain" size="none" {...common}>
                   <ItemIcon item={n} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate">{n.title || t("untitled")}</span>
                     {ix.homePath(n.id).length > 0 ? (
-                      <span className="block truncate text-xs text-muted">{shortPath(ix.homePath(n.id))}</span>
+                      <span className="block truncate text-xs text-muted-foreground">{shortPath(ix.homePath(n.id))}</span>
                     ) : (
-                      q.trim() && n.body && <span className="block truncate text-xs text-muted">{snippet(n.body, q, 90)}</span>
+                      q.trim() && n.body && <span className="block truncate text-xs text-muted-foreground">{snippet(n.body, q, 90)}</span>
                     )}
                   </span>
                   {st && <StatusPill option={st.option} group={st.group} small />}
-                  {several && <span className="max-w-28 shrink-0 truncate text-xs text-muted">{nameOf(it.space)}</span>}
-                  {active && <CornerDownLeft size={14} className="text-muted" />}
-                </button>
+                  {several && <span className="max-w-28 shrink-0 truncate text-xs text-muted-foreground">{nameOf(it.space)}</span>}
+                  {active && <CornerDownLeft size={14} className="text-muted-foreground" />}
+                </ShadcnButton>
               );
             }
             if (it.kind === "create")
               return (
-                <button {...common}>
-                  <Plus size={16} className="text-muted" />
+                <ShadcnButton variant="plain" size="none" {...common}>
+                  <Plus size={16} className="text-muted-foreground" />
                   <span className="flex-1 truncate">
                     {it.type ? t("palette.newTyped", { name: ix.typeName(it.type) }) : t("palette.new")} <span className="font-medium">{t("palette.quoted", { text: it.title })}</span>
                   </span>
                   {it.type && <TypeGlyph schema={ix.types.get(it.type)?.schema} size={14} />}
-                  {several && <span className="max-w-28 shrink-0 truncate text-xs text-muted">{nameOf(cs)}</span>}
-                </button>
+                  {several && <span className="max-w-28 shrink-0 truncate text-xs text-muted-foreground">{nameOf(cs)}</span>}
+                </ShadcnButton>
               );
             if (it.kind === "ask")
               return (
-                <button {...common}>
-                  <Sparkles size={16} className="text-muted" />
+                <ShadcnButton variant="plain" size="none" {...common}>
+                  <Sparkles size={16} className="text-muted-foreground" />
                   <span className="flex-1 truncate">
                     {t("palette.ask")} <span className="font-medium">{it.text}</span>
                   </span>
-                </button>
+                </ShadcnButton>
               );
             if (it.kind === "cmd")
               return (
-                <button {...common}>
-                  <ChevronRight size={16} className="text-muted" />
+                <ShadcnButton variant="plain" size="none" {...common}>
+                  <ChevronRight size={16} className="text-muted-foreground" />
                   <span className="flex-1">{it.label}</span>
-                </button>
+                </ShadcnButton>
               );
             return (
-              <button {...common}>
+              <ShadcnButton variant="plain" size="none" {...common}>
                 <span className="w-4" />
-                <span className="flex-1 text-muted">{t("palette.goTo", { label: it.label })}</span>
-              </button>
+                <span className="flex-1 text-muted-foreground">{t("palette.goTo", { label: it.label })}</span>
+              </ShadcnButton>
             );
           })}
         </div>
-        <div className="flex gap-3 border-t border-line px-4 py-2 text-[11px] text-muted">
+        <div className="flex gap-3 border-t border-line px-4 py-2 text-[11px] text-muted-foreground">
           <span>{t("palette.keys", { mod: modName(lang) })}</span>
         </div>
       </div>
-    </div>
+    </div></ModalSurface>
   );
 }

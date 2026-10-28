@@ -1,3 +1,5 @@
+import { ModalSurface } from "../components/ui/dialog";
+import { Button as ShadcnButton } from "../components/ui/button";
 // Full view of an embedded image: click opens it, arrows page through all images of the page,
 // Escape closes. Shows the display version at once and the original as soon as it is here.
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
@@ -5,7 +7,6 @@ import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { repo } from "../repo";
 import { files } from "../files";
 import { useT } from "../i18n";
-import { useModal } from "./bits";
 
 let open: { ids: string[]; at: number } | null = null;
 const listeners = new Set<() => void>();
@@ -54,36 +55,35 @@ function Lightbox({ ids, start }: { ids: string[]; start: number }) {
     window.addEventListener("keydown", on, true);
     return () => window.removeEventListener("keydown", on, true);
   }, [ids.length]);
-  useModal(ref, close);
   if (!item || !f) return null;
   const nav = "absolute top-1/2 -translate-y-1/2 rounded-full bg-black/40 p-2 text-white hover:bg-black/60";
   return (
-    <div ref={ref} role="dialog" aria-modal="true" aria-label={item.title} className="fixed inset-0 z-50 flex flex-col bg-black/95 backdrop-blur-sm" onClick={close}>
+    <ModalSurface title={item.title} onClose={close}><div ref={ref} role="dialog" aria-modal="true" aria-label={item.title} className="fixed inset-0 z-50 flex flex-col bg-black/95 backdrop-blur-sm" onClick={close}>
       <div className="flex items-center gap-3 px-4 py-3 text-sm text-white/80 pt-safe" onClick={(e) => e.stopPropagation()}>
         <a href={`#/i/${encodeURIComponent(item.id)}`} onClick={close} className="min-w-0 truncate font-medium text-white hover:underline">
           {item.title}
         </a>
         {ids.length > 1 && <span className="tabular-nums text-white/60">{at + 1} / {ids.length}</span>}
-        <button onClick={close} className="tap ml-auto rounded-md p-1.5 hover:bg-white/10" aria-label={t("lightbox.close")}>
+        <ShadcnButton variant="plain" size="none" onClick={close} className="tap ml-auto rounded-md p-1.5 hover:bg-white/10" aria-label={t("lightbox.close")}>
           <X size={18} />
-        </button>
+        </ShadcnButton>
       </div>
       <div className="relative flex min-h-0 flex-1 items-center justify-center px-4">
         {src && <img src={src} alt={item.body || item.title} className="max-h-full max-w-full object-contain" onClick={(e) => e.stopPropagation()} />}
         {ids.length > 1 && (
           <>
-            <button onClick={(e) => (e.stopPropagation(), step(-1))} className={nav + " left-3"} aria-label={t("lightbox.prev")}>
+            <ShadcnButton variant="plain" size="none" onClick={(e) => (e.stopPropagation(), step(-1))} className={nav + " left-3"} aria-label={t("lightbox.prev")}>
               <ChevronLeft size={22} />
-            </button>
-            <button onClick={(e) => (e.stopPropagation(), step(1))} className={nav + " right-3"} aria-label={t("lightbox.next")}>
+            </ShadcnButton>
+            <ShadcnButton variant="plain" size="none" onClick={(e) => (e.stopPropagation(), step(1))} className={nav + " right-3"} aria-label={t("lightbox.next")}>
               <ChevronRight size={22} />
-            </button>
+            </ShadcnButton>
           </>
         )}
       </div>
       <p className="min-h-10 px-4 py-3 text-center text-sm text-white/80 pb-safe" onClick={(e) => e.stopPropagation()}>
         {item.body}
       </p>
-    </div>
+    </div></ModalSurface>
   );
 }
