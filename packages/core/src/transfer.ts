@@ -1,4 +1,4 @@
-// Moving items to another workspace – on the same server or on another one. Workspaces share
+// Moving items to another workspace. Workspaces share
 // nothing, so a move is a copy: the item and everything that hangs only below it (what the trash
 // would take along) are written into the other workspace with new ids, then the originals go to
 // the trash (deleteItem, so "Wiederherstellen" brings them back). What points outside the moved
@@ -27,6 +27,44 @@ export interface Moved {
 /** The items a move of `root` takes along: the root and what hangs only below it (no types). */
 export function movedItems(ix: Index, root: string): Item[] {
   return [root, ...onlyBelow(ix, root)].map((id) => ix.get(id)).filter((r): r is Item => !!r && !r.deleted && r.type !== META_TYPE && r.kind !== "settings" && r.kind !== "op");
+}
+
+/** What a move would change on the way, to show before it happens. Empty lists, 0: it goes over as it is. */
+export interface MovePlan {
+  items: number;
+  files: number;
+  /** types the other workspace gets a copy of (it has none of that name) */
+  copiedTypes: string[];
+  /** properties whose values become free properties there (no fitting property or option) */
+  freeProps: string[];
+  /** links, refs and relations to items that stay behind */
+  droppedLinks: number;
+}
+
+/** The plan of `copyToWorkspace` for `root` into a workspace with the index `dst`, without writing. */
+export function planMove(src: Index, root: string, dst: Index): MovePlan {
+  const items = movedItems(src, root);
+  const inside = new Set(items.map((r) => r.id));
+  const copiedTypes = new Set<string>();
+  const freeProps = new Set<string>();
+  let droppedLinks = 0;
+  for (const r of items) {
+    const from = r.type ? src.get(r.type)?.schema : undefined;
+    let to = from;
+    if (from) {
+      const same = dst.get(r.type!)?.type === META_TYPE ? r.type! : dst.typeByName(from.name);
+      if (same) to = dst.get(same)!.schema!;
+      else copiedTypes.add(from.name);
+    }
+    for (const [pid, v] of Object.entries(r.props)) {
+      const p = from?.properties.find((x) => x.id === pid) ?? from?.removedProperties.find((x) => x.id === pid);
+      const q = p && to ? target(p, to) : undefined;
+      if (p && (!q || mapValue(p, q, v) === undefined)) freeProps.add(p.name);
+    }
+    const outside = (id: string) => !inside.has(id);
+    droppedLinks += r.refs.filter(outside).length + Object.values(r.rels).flat().filter(outside).length + src.textLinks(r).filter((l) => outside(l.to)).length;
+  }
+  return { items: items.length, files: items.filter((r) => r.file).length, copiedTypes: [...copiedTypes], freeProps: [...freeProps], droppedLinks };
 }
 
 /**

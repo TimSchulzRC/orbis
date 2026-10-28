@@ -2,7 +2,7 @@ import { test, expect } from "bun:test";
 import { MemRepo } from "./helpers";
 import { runSetup, SYS } from "@obtion/core/setup";
 import { META_TYPE, initSchema, newId, initItem } from "@obtion/core/model";
-import { copyToWorkspace, movedItems } from "@obtion/core/transfer";
+import { copyToWorkspace, movedItems, planMove } from "@obtion/core/transfer";
 import { deleteItem } from "@obtion/core/trash";
 
 function workspace(lang: "de" | "en" = "de") {
@@ -21,6 +21,9 @@ test("a move takes what hangs only below; parents, refs and relations outside st
   const shared = a.add({ title: "Auch woanders", parents: [relaunch, other] });
   const blocker = a.add({ title: "Blocker", type: SYS.task, parents: [relaunch], rels: { p_blocked: [t1] } });
   expect(movedItems(a.index(), relaunch).map((r) => r.title).sort()).toEqual(["Blocker", "Relaunch", "Seiten bauen"]);
+
+  // the shipped types match: nothing changes on the way but the three links to "Anderswo"
+  expect(planMove(a.index(), relaunch, b.index())).toEqual({ items: 3, files: 0, copiedTypes: [], freeProps: [], droppedLinks: 3 });
 
   const target = b.add({ title: "Firma", pinned: "a" });
   const moved = copyToWorkspace(a.index(), relaunch, { w: b.writer, ix: b.index() }, { parent: target }, "web:test");
@@ -58,6 +61,7 @@ test("types: same name maps property by property and option by name; a missing t
     initItem(d, { kind: "info", type: META_TYPE, title: "Buch" });
     initSchema(d, { name: "Buch", icon: "book", color: "blue", properties: [{ id: "x_state", name: "stand", kind: "select", options: [{ id: "x1", name: "gelesen" }] }] });
   });
+  expect(planMove(a.index(), item, b.index())).toMatchObject({ items: 1, copiedTypes: [], freeProps: ["Autor"] });
   const m1 = copyToWorkspace(a.index(), item, { w: b.writer, ix: b.index() }, {}, "web:test");
   const got = b.index().get(m1.ids.get(item)!)!;
   expect(got.type).toBe(bBook);
@@ -67,6 +71,7 @@ test("types: same name maps property by property and option by name; a missing t
 
   // a third workspace without the type: it is copied with its properties
   const c = new MemRepo();
+  expect(planMove(a.index(), item, c.index())).toMatchObject({ copiedTypes: ["Buch"], freeProps: [] });
   const m2 = copyToWorkspace(a.index(), item, { w: c.writer, ix: c.index() }, { pinned: "a" }, "web:test");
   expect(m2.types.length).toBe(1);
   const cix = c.index();
