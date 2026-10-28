@@ -1,3 +1,4 @@
+import { BrandLogo } from "./ui/BrandLogo";
 import { useEffect, useRef, useState } from "react";
 import { Sparkles, Plus, Menu, Search, Inbox, SlidersHorizontal, X } from "lucide-react";
 import { SETTINGS_ID } from "@obtion/core/model";
@@ -191,7 +192,7 @@ function Main() {
         {!wide && (
           <header className="flex items-center gap-2 border-b border-line bg-bg/90 px-3 py-2 backdrop-blur pt-safe">
             <a href="#/inbox" className="tap flex items-center justify-center gap-2" aria-label={t("nav.inbox")}>
-              <img src="/icon.svg" alt="" className="size-6" />
+              <BrandLogo alt="" className="size-6" />
             </a>
             <SyncDot />
             <button onClick={() => setPalette(true)} className="tap-row ml-1 flex flex-1 items-center gap-2 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm text-muted">
