@@ -11,12 +11,10 @@ import { listExamples, removeExamples, restoreExamples } from "@obtion/core/exam
 import { useRepo, useSpaceId, spaceHref } from "../hooks";
 import { useT, setLang } from "../i18n";
 import { Button, Dialog, ItemIcon, Seg, SectionTitle, TypeGlyph, cx } from "../ui/bits";
-import { chooseAction, confirmAction, notify } from "../ui/feedback";
+import { chooseAction, notify } from "../ui/feedback";
 import { setTheme, useTheme } from "../theme";
-import { type Space, FolderError, agentHere, copyToFolder, deleteSpace, detach, inviteLink, leaveSpace, mcpToken, members, onServer, putOnServer, removeFolderSpace, renameSpace, replica, signOut, spaceById, useAccounts } from "../accounts";
-import { folderNow, folderSupport, pickFolder } from "../local";
-import { FolderHint, NewSpaceDialog } from "../ui/Spaces";
-import { SignIn } from "./Account";
+import { type Space, agentHere, deleteSpace, inviteLink, leaveSpace, mcpToken, members, renameSpace, replica, signOut, spaceById, useAccounts } from "../accounts";
+import { NewSpaceDialog } from "../ui/Spaces";
 
 interface Connect {
   mcpUrl: string;
@@ -123,20 +121,11 @@ function Members({ space }: { space: Space }) {
   );
 }
 
-/** The account: who is signed in, on which server, signing out – or signing in (workspaces of this computer need none). */
+/** The account: who is signed in, on which server, signing out. */
 function AccountSection() {
   const { t } = useT();
   const { account } = useAccounts();
-  if (!account)
-    return (
-      <section>
-        <SectionTitle>{t("account.title")}</SectionTitle>
-        <p className="text-sm text-muted">{t("account.signInHint", { server: location.host })}</p>
-        <div className="max-w-sm">
-          <SignIn bare />
-        </div>
-      </section>
-    );
+  if (!account) return null;
   return (
     <section>
       <SectionTitle>{t("account.title")}</SectionTitle>
@@ -156,99 +145,6 @@ function AccountSection() {
   );
 }
 
-/**
- * Where a workspace is kept – on the server, in a folder of this computer, or both – and the ways
- * between: a full copy in a folder, syncing a folder with the server, cutting it off again.
- */
-function Storage({ space }: { space: Space }) {
-  const { t } = useT();
-  const { account } = useAccounts();
-  const [folder, setFolder] = useState("");
-  const [name, setName] = useState(space.name);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  useEffect(() => void (space.folder && folderNow(space.id).then((h) => setFolder(h?.name ?? ""))), [space.id]);
-  const server = !!space.remote;
-  const run = (fn: () => Promise<unknown>) => {
-    setBusy(true);
-    setError("");
-    fn()
-      .catch((e) => setError(e instanceof FolderError ? t(`local.error.${e.message}`) : String((e as Error).message ?? e)))
-      .finally(() => setBusy(false));
-  };
-  const copy = async () => {
-    const handle = await pickFolder();
-    if (handle) await copyToFolder(space, handle);
-  };
-  const ask = async (key: "detach" | "remove", fn: (s: Space) => Promise<void>) => {
-    if (await confirmAction({ title: t(`storage.${key}Confirm`, { name: space.name }), body: t(`storage.${key}Hint`), yes: t(`storage.${key}`) })) await fn(space);
-  };
-  return (
-    <section>
-      <SectionTitle>{t("storage.title")}</SectionTitle>
-      <ul className="space-y-1 text-sm">
-        {server && <li>{t("storage.server", { server: location.host })}</li>}
-        {space.folder && <li>{t("storage.folder")}{folder && ` (${folder})`}</li>}
-      </ul>
-      {!server && <p className="mt-2 text-sm text-muted">{t("storage.onlyHere")}</p>}
-      {space.folder && !server && (
-        <form className="mt-3 flex flex-wrap items-center gap-2" onSubmit={(e) => (e.preventDefault(), run(() => renameSpace(space, name)))}>
-          <input value={name} onChange={(e) => setName(e.target.value)} aria-label={t("space.name")} className="field rounded-lg border border-line bg-surface px-3 py-1.5 text-sm" />
-          <Button type="submit" variant="outline" disabled={busy || !name.trim() || name === space.name}>
-            {t("space.rename")}
-          </Button>
-        </form>
-      )}
-      <div className="mt-4 space-y-4">
-        {server && !space.folder && folderSupport() === "yes" && (
-          <div>
-            <Button variant="outline" disabled={busy} onClick={() => run(copy)}>
-              {t("storage.copy")}
-            </Button>
-            <p className="mt-1 text-xs text-muted">{t("storage.copyHint")}</p>
-          </div>
-        )}
-        {server && !space.folder && <FolderHint />}
-        {space.folder && !server && (
-          <div>
-            {account && !account.lost ? (
-              <>
-                <Button variant="outline" disabled={busy} onClick={() => run(() => putOnServer(space))}>
-                  {t("storage.sync", { server: location.host })}
-                </Button>
-                <p className="mt-1 text-xs text-muted">{t("storage.syncHint")}</p>
-              </>
-            ) : (
-              <p className="text-sm text-muted">
-                <a href="#/settings" className="text-[var(--link)] hover:underline">
-                  {t("storage.signIn", { server: location.host })}
-                </a>
-              </p>
-            )}
-          </div>
-        )}
-        {space.folder && server && (
-          <div>
-            <Button variant="outline" disabled={busy} onClick={() => run(() => ask("detach", detach))}>
-              {t("storage.detach")}
-            </Button>
-            <p className="mt-1 text-xs text-muted">{t("storage.detachHint")}</p>
-          </div>
-        )}
-        {space.folder && !server && (
-          <div>
-            <Button variant="outline" disabled={busy} onClick={() => run(() => ask("remove", removeFolderSpace))}>
-              {t("storage.remove")}
-            </Button>
-            <p className="mt-1 text-xs text-muted">{t("storage.removeHint")}</p>
-          </div>
-        )}
-      </div>
-      {error && <p className="mt-3 text-sm text-[var(--danger-text)]">{error}</p>}
-    </section>
-  );
-}
-
 /** The account's workspaces, each a way to its own settings, and a new one. */
 function Workspaces() {
   const { t } = useT();
@@ -264,7 +160,7 @@ function Workspaces() {
             <li key={s.id}>
               <a href={spaceHref(s.id, "/workspace")} className="tap-row flex items-center gap-3 px-3 py-2.5 text-sm hover:bg-hover">
                 <span className="min-w-0 flex-1 truncate font-medium">{s.name}</span>
-                <span className="shrink-0 text-xs text-muted">{[s.folder && t("storage.local"), s.role && s.remote && t(`space.role.${s.role}`)].filter(Boolean).join(" · ")}</span>
+                <span className="shrink-0 text-xs text-muted">{t(`space.role.${s.role}`)}</span>
                 <ChevronRight size={15} className="shrink-0 text-faint" />
               </a>
             </li>
@@ -395,8 +291,6 @@ export function SpaceSettingsPage() {
   const [err, setErr] = useState(false);
   useEffect(() => void (document.title = space?.name ?? t("space.settings")), [space?.name]);
   if (!space) return null;
-  // members, agents and the sync are the server's
-  const synced = onServer(space.id);
   const newToken = () => mcpToken(space).then(setC, () => setErr(true));
   // the built-in agent needs the Claude Code CLI on the server and the server's consent: say so here
   const agentMissing = !agentHere();
@@ -418,7 +312,7 @@ export function SpaceSettingsPage() {
         <nav className="mt-4 flex flex-wrap gap-2" aria-label={t("settings.more")}>
           {[
             ["/types", t("nav.types"), Shapes],
-            ...(synced ? [["/activity", t("nav.activity"), History]] : []),
+            ["/activity", t("nav.activity"), History],
             ["/graph", t("nav.graph"), Waypoints],
             ["/trash", t("nav.trash"), Trash2],
           ].map(([path, label, I]: any) => (
@@ -429,9 +323,7 @@ export function SpaceSettingsPage() {
         </nav>
       </div>
 
-      {synced && <Members space={space} />}
-
-      <Storage space={space} />
+      <Members space={space} />
 
       <Examples />
 
@@ -459,7 +351,7 @@ export function SpaceSettingsPage() {
         )}
       </section>
 
-      {synced && <section>
+      <section>
         <SectionTitle>{t("settings.agent")}</SectionTitle>
         <p className="mb-3 text-sm text-muted">{t("settings.agentIntro")}</p>
         {agentMissing && <p className="mb-3 rounded-lg border border-line bg-surface-2 p-3 text-sm text-muted">{t("agent.noCli")}</p>}
@@ -484,9 +376,9 @@ export function SpaceSettingsPage() {
             </p>
           </div>
         )}
-      </section>}
+      </section>
 
-      {synced && <section>
+      <section>
         <SectionTitle>{t("settings.sync")}</SectionTitle>
         <dl className="grid grid-cols-[10rem_1fr] gap-y-1.5 text-sm">
           <dt className="text-muted">{t("settings.server")}</dt>
@@ -515,31 +407,27 @@ export function SpaceSettingsPage() {
             </Button>
           </div>
         </details>
-      </section>}
+      </section>
 
       <DeleteSpace space={space} />
     </div>
   );
 }
 
-/** Deleting the workspace for good: on the server only by an owner (for everyone), in a folder by whoever has it. */
+/** Deleting the workspace for good, on the server for everyone: owners only. */
 function DeleteSpace({ space }: { space: Space }) {
   const { t } = useT();
   const [error, setError] = useState("");
-  const server = !!space.remote;
-  const allowed = !server || (onServer(space.id) && space.role === "owner");
-  if (!allowed && !onServer(space.id)) return null;
-  const hint = t(`space.deleteHint.${server && space.folder ? "both" : server ? "server" : "folder"}`);
   const run = async () => {
-    const yes = await chooseAction({ title: t("space.deleteConfirm", { name: space.name }), body: hint, choices: [{ key: "yes", label: t("space.delete"), danger: true }] });
+    const yes = await chooseAction({ title: t("space.deleteConfirm", { name: space.name }), body: t("space.deleteHint"), choices: [{ key: "yes", label: t("space.delete"), danger: true }] });
     if (yes === "yes") await deleteSpace(space).catch((e) => setError(String((e as Error).message ?? e)));
   };
   return (
     <section>
       <SectionTitle>{t("space.delete")}</SectionTitle>
-      {allowed ? (
+      {space.role === "owner" ? (
         <>
-          <p className="mb-3 text-sm text-muted">{hint}</p>
+          <p className="mb-3 text-sm text-muted">{t("space.deleteHint")}</p>
           <Button variant="outline" className="text-[var(--danger-text)]" onClick={() => void run()}>
             {t("space.delete")}
           </Button>

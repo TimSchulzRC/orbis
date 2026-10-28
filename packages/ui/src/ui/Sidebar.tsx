@@ -6,14 +6,14 @@
 // added. Dropping on the upper or lower edge of a row reorders. Dropped into another workspace's
 // block, an item moves there.
 import { useEffect, useState } from "react";
-import { ChevronRight, ChevronDown, Inbox, Search, Sparkles, SlidersHorizontal, Link2, MoreHorizontal, Plus, Paperclip, Cloud, HardDrive, FolderSync } from "lucide-react";
+import { ChevronRight, ChevronDown, Inbox, Search, Sparkles, SlidersHorizontal, Link2, MoreHorizontal, Plus, Paperclip } from "lucide-react";
 import { type Item, META_TYPE, SETTINGS_ID, setSchemaField, setSettings } from "@obtion/core/model";
 import { sidebarChildren, sidebarRoots } from "@obtion/core/placement";
 import { inboxWhere } from "@obtion/core/inbox";
 import { runQuery } from "@obtion/core/query";
 import { keyBetween, keysFor } from "@obtion/core/sortkey";
 import { useRepo, useRoute, useSpaceId, itemHref, spaceHref, useLocalStorage } from "../hooks";
-import { type Space, onServer, useAccounts } from "../accounts";
+import { type Space, useAccounts } from "../accounts";
 import { useT } from "../i18n";
 import { Kbd, MenuItem, Popover, TypeGlyph, ItemIcon, cx, shortcut } from "./bits";
 import { ItemPicker } from "./Picker";
@@ -126,7 +126,6 @@ export function SpaceTree({ space, touch }: { space: Space; touch?: boolean }) {
         <button onClick={() => setOpen(!open)} aria-expanded={open} className="-ml-1 flex min-w-0 flex-1 items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.05em] text-muted hover:text-fg">
           <ChevronRight size={13} className={cx("shrink-0 text-faint transition-transform", open && "rotate-90")} />
           <span className="truncate">{space.name}</span>
-          <Where space={space} />
         </button>
         {ready && (
           <button
@@ -149,7 +148,7 @@ export function SpaceTree({ space, touch }: { space: Space; touch?: boolean }) {
           {(close) => (
             <>
               <MenuItem onClick={() => (close(), go("/workspace"))}>{t("space.settings")}</MenuItem>
-              {onServer(space.id) && <MenuItem onClick={() => (close(), go("/activity"))}>{t("nav.activity")}</MenuItem>}
+              <MenuItem onClick={() => (close(), go("/activity"))}>{t("nav.activity")}</MenuItem>
               <MenuItem onClick={() => (close(), go("/trash"))}>{t("nav.trash")}</MenuItem>
             </>
           )}
@@ -473,18 +472,5 @@ function TreeNode({
       {isOpen &&
         kids.map((k, i) => <TreeNode key={k.id} item={k} parent={item.id} siblings={kids} index={i} depth={depth + 1} isOpen={opened} toggle={toggle} activeId={activeId} keep={keep} touch={touch} />)}
     </div>
-  );
-}
-
-/** Where a workspace is kept, as a small icon with its explanation: on the server, in a folder of this computer, or both. */
-function Where({ space }: { space: Space }) {
-  const { t } = useT();
-  const key = space.folder && space.remote ? "both" : space.folder ? "folder" : "server";
-  const I = key === "both" ? FolderSync : key === "folder" ? HardDrive : Cloud;
-  const label = t(`storage.where.${key}`, { server: location.host });
-  return (
-    <span title={label} aria-label={label} role="img" className="shrink-0 text-faint">
-      <I size={12} />
-    </span>
   );
 }

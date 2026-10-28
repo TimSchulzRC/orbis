@@ -6,8 +6,7 @@
 import { useMemo, useState, useSyncExternalStore } from "react";
 import { ChevronsUpDown, Plus, SlidersHorizontal } from "lucide-react";
 import type { Repo } from "@obtion/sync";
-import { FolderError, createSpace, openFolder, replica, setShown, spaceById, useAccounts } from "../accounts";
-import { folderSupport, pickFolder } from "../local";
+import { createSpace, replica, setShown, spaceById, useAccounts } from "../accounts";
 import { ScopeContext } from "../scope";
 import { spaceHref, useSpaceId } from "../hooks";
 import { MoveError, moveToSpace, planToSpace } from "../move";
@@ -66,12 +65,10 @@ export function SpaceSelector({ className, onNew }: { className?: string; onNew:
     >
       {(close) => (
         <div className="w-72 p-1">
-          {account && (
-            <p className="truncate px-2.5 pb-0.5 pt-1.5 text-[11px] font-semibold uppercase tracking-[0.05em] text-muted">
-              {account.user.email}
-              {account.lost && ` · ${t("account.signedOut")}`}
-            </p>
-          )}
+          <p className="truncate px-2.5 pb-0.5 pt-1.5 text-[11px] font-semibold uppercase tracking-[0.05em] text-muted">
+            {account?.user.email}
+            {account?.lost && ` · ${t("account.signedOut")}`}
+          </p>
           {/* several at once: boxes, not a choice of one */}
           {spaces.map((s) => (
             <label key={s.id} className="tap-row flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm hover:bg-hover">
@@ -136,32 +133,8 @@ export function useReplicas(ids: string[]): Repo[] {
   return repos;
 }
 
-/** A workspace in a folder of this computer: one chosen now (new, or the one already in it). */
-export async function newFolderSpace(name: string): Promise<string | undefined> {
-  const handle = await pickFolder();
-  if (!handle) return;
-  try {
-    await openFolder(handle, name);
-  } catch (e) {
-    return e instanceof FolderError ? tr(`local.error.${e.message}`) : String((e as Error).message ?? e);
-  }
-}
-
-/**
- * Where a workspace can be kept besides the server: in a folder (Chromium on a computer), a hint
- * in other browsers on a computer, nothing on phones and tablets (no browser there can).
- */
-export function FolderHint() {
-  const { t } = useT();
-  if (folderSupport() !== "browser") return null;
-  return <p className="mt-3 text-xs text-muted">{t("local.onlyChromium")}</p>;
-}
-
 export function NewSpaceDialog({ onClose }: { onClose: () => void }) {
   const { t } = useT();
-  const { account } = useAccounts();
-  const folders = folderSupport() === "yes";
-  const [where, setWhere] = useState<"server" | "folder">(account ? "server" : "folder");
   const [name, setName] = useState("");
   const [error, setError] = useState("");
   return (
@@ -169,33 +142,18 @@ export function NewSpaceDialog({ onClose }: { onClose: () => void }) {
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          if (where === "server") createSpace(name).then(onClose, (err) => setError((err as Error).message));
-          else newFolderSpace(name).then((err) => (err ? setError(err) : onClose()));
+          createSpace(name).then(onClose, (err) => setError((err as Error).message));
         }}
       >
         <label className="block text-sm font-medium">
           {t("space.name")}
           <input autoFocus required value={name} onChange={(e) => setName(e.target.value)} className="field mt-1 block w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm" />
         </label>
-        {account && folders && (
-          <fieldset className="mt-4">
-            <legend className="mb-1 text-sm font-medium">{t("local.where")}</legend>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {(["server", "folder"] as const).map((w) => (
-                <button key={w} type="button" onClick={() => setWhere(w)} aria-pressed={where === w} className={cx("rounded-xl border p-3 text-left", where === w ? "border-[var(--focus)] bg-surface" : "border-line hover:bg-hover")}>
-                  <p className="text-sm font-medium">{t(w === "server" ? "local.onServer" : "local.inFolder")}</p>
-                  <p className="text-xs text-muted">{w === "server" ? t("local.onServerHint", { server: location.host }) : t("local.inFolderHint")}</p>
-                </button>
-              ))}
-            </div>
-          </fieldset>
-        )}
-        <FolderHint />
         {error && <p className="mt-3 text-sm text-[var(--danger-text)]">{error}</p>}
         <div className="mt-5 flex justify-end gap-2">
           <Button onClick={onClose}>{t("cancel")}</Button>
           <Button type="submit" variant="primary" disabled={!name.trim()}>
-            {where === "folder" ? t("local.chooseFolder") : t("space.create")}
+            {t("space.create")}
           </Button>
         </div>
       </form>

@@ -5,8 +5,7 @@
   "private": true,
   "license": "AGPL-3.0-or-later",
   "exports": {
-    ".": "./src/repo.ts",
-    "./folder": "./src/folder.ts"
+    ".": "./src/repo.ts"
   },
   "dependencies": {
     "@obtion/core": "workspace:*",
