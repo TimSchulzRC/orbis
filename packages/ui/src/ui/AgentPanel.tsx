@@ -5,7 +5,7 @@ import { Markdown } from "./Markdown";
 import { Button, Empty, cx, IconButton, ItemIcon, shortcut, useModal } from "./bits";
 import type { Repo } from "@obtion/sync";
 import { go, useRepo, useRoute } from "../hooks";
-import { agentHere, onServer, spaceById, spaceFetch, useAccounts } from "../accounts";
+import { agentHere, spaceById, spaceFetch, useAccounts } from "../accounts";
 import { globalPage } from "../scope";
 import { SpaceScope } from "./Spaces";
 import { tr, useT } from "../i18n";
@@ -109,7 +109,7 @@ function AgentChat({ space, onSpace, context, onClose, overlay }: { space: strin
   const scroller = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  useEffect(() => setAvailable(agentHere() && onServer(space)), [r.status.online, space]);
+  useEffect(() => setAvailable(agentHere()), [r.status.online]);
 
   useEffect(() => {
     localStorage.setItem(`obtion.chat.${space}`, JSON.stringify(msgs.slice(-60)));

@@ -6,7 +6,6 @@
 // - Originals: per device either "online" (loaded when opened, kept only briefly) or
 //   "local" (all originals stored here, new ones fetched as soon as their document arrives).
 // - Added offline: the document exists at once, the content waits in an upload outbox.
-// - A workspace in a folder keeps every content in the folder (files/), always all of them.
 import { openDB, type IDBPDatabase } from "idb";
 import { useContext, useEffect, useState, useSyncExternalStore } from "react";
 import { type FileMeta, type Item, fileTypeOf, initItem, mimeOf, newId, setFileMeta } from "@obtion/core/model";
@@ -77,38 +76,6 @@ async function opfsStore(name: string): Promise<BlobStore | null> {
   } catch {
     return null;
   }
-}
-
-/** Contents in the workspace's folder, shared with the other apps that open it. */
-async function folderStore(root: FileSystemDirectoryHandle): Promise<BlobStore> {
-  const dir = await root.getDirectoryHandle("files", { create: true });
-  const get = async (h: string) => {
-    try {
-      return await (await dir.getFileHandle(h)).getFile();
-    } catch {
-      return undefined;
-    }
-  };
-  return {
-    has: async (h) => !!(await get(h)),
-    get,
-    async put(h, blob) {
-      const w = await (await dir.getFileHandle(h, { create: true })).createWritable();
-      await w.write(blob);
-      await w.close();
-    },
-    async delete(h) {
-      await dir.removeEntry(h).catch(() => {});
-    },
-    async list() {
-      const out: { hash: string; size: number }[] = [];
-      for await (const [name, handle] of (dir as any).entries()) {
-        if (handle.kind !== "file" || !/^[0-9a-f]{64}$/.test(name)) continue;
-        out.push({ hash: name, size: (await (handle as FileSystemFileHandle).getFile()).size });
-      }
-      return out;
-    },
-  };
 }
 
 function idbStore(db: IDBPDatabase): BlobStore {
@@ -210,16 +177,10 @@ export class DeviceFiles {
   private local = new Set<string>();
   private missing = new Set<string>(); // not on the server (yet): shown as "Datei fehlt"
 
-  /** Ask the server whether it has a content, without downloading it (without a server: the folder). */
+  /** Ask the server whether it has a content, without downloading it. */
   async check(hash: string): Promise<void> {
     if (this.local.has(hash) || this.missing.has(hash)) return;
-    if (!this.link.server) {
-      await this.ready;
-      if (await this.store.has(hash)) this.local.add(hash);
-      else this.missing.add(hash);
-      return this.emit();
-    }
-    const res = await fetch(`${this.link.server.base}/api/blobs/${hash}?check=1`, { headers: { "x-obtion-probe": "1", ...this.auth } }).catch(() => null);
+    const res = await fetch(`${this.link.base}/api/blobs/${hash}?check=1`, { headers: { "x-obtion-probe": "1", ...this.auth } }).catch(() => null);
     if (res?.headers.get("x-obtion-missing")) {
       this.missing.add(hash);
       this.emit();
@@ -245,12 +206,7 @@ export class DeviceFiles {
   }
 
   private get auth() {
-    return { authorization: `Bearer ${this.link.server?.token}` };
-  }
-
-  /** The server's blob address of a content. */
-  private blobUrl(hash: string) {
-    return `${this.link.server?.base}/api/blobs/${hash}`;
+    return { authorization: `Bearer ${this.link.token}` };
   }
 
   private async open() {
@@ -262,8 +218,7 @@ export class DeviceFiles {
         db.createObjectStore("uploads", { keyPath: "hash" });
       },
     });
-    if (this.link.folder) this.mode = this.status.mode = "local";
-    this.store = this.link.folder ? await folderStore(await this.link.folder) : ((await opfsStore(legacy ? "blobs" : `blobs-${this.link.name}`)) ?? idbStore(this.db));
+    this.store = (await opfsStore(legacy ? "blobs" : `blobs-${this.link.name}`)) ?? idbStore(this.db);
     for (const b of await this.store.list()) this.local.add(b.hash);
     this.repo.subscribe(() => this.scheduleSync());
     this.repo.onBlob((hash) => {
@@ -284,11 +239,9 @@ export class DeviceFiles {
     this.listeners.forEach((l) => l());
   }
 
-  /** Online only or all here – for every workspace on this device but those in a folder (always all). */
   setMode(m: FileMode) {
-    if (this.link.folder) m = "local";
-    else localStorage.setItem(MODE_KEY, m);
     this.mode = m;
+    localStorage.setItem(MODE_KEY, m);
     this.scheduleSync(10);
     this.emit();
   }
@@ -301,10 +254,8 @@ export class DeviceFiles {
     if (!p) {
       p = (async () => {
         await this.ready;
-        // in a folder another app may have put it there meanwhile
-        let blob = this.local.has(hash) || this.link.folder ? await this.store.get(hash) : undefined;
-        if (blob) this.local.add(hash);
-        else {
+        let blob = this.local.has(hash) ? await this.store.get(hash) : undefined;
+        if (!blob) {
           blob = await this.fetchVerified(hash);
           if (blob && (opts.keep || this.mode === "local")) await this.save(hash, blob);
         }
@@ -325,8 +276,8 @@ export class DeviceFiles {
     const q = new URLSearchParams();
     if (name) q.set("name", name);
     if (download) q.set("download", "1");
-    q.set("t", this.link.server?.token ?? "");
-    return `${this.blobUrl(hash)}?${q}`;
+    q.set("t", this.link.token);
+    return `${this.link.base}/api/blobs/${hash}?${q}`;
   }
 
   /** Object URL of the original on this device, with its type (the PDF viewer needs it); undefined if not here. */
@@ -350,9 +301,8 @@ export class DeviceFiles {
   }
 
   private async fetchVerified(hash: string): Promise<Blob | undefined> {
-    if (!this.link.server) return undefined;
     try {
-      const res = await fetch(this.blobUrl(hash), { headers: { "x-obtion-probe": "1", ...this.auth } });
+      const res = await fetch(`${this.link.base}/api/blobs/${hash}`, { headers: { "x-obtion-probe": "1", ...this.auth } });
       if (res.status === 404 || res.headers.get("x-obtion-missing")) {
         this.missing.add(hash);
         this.emit();
@@ -463,7 +413,7 @@ export class DeviceFiles {
     }
     if (this.repo.status.online) for (const h of want) if (!this.queue.includes(h) && !this.missing.has(h)) this.queue.push(h);
     this.pump();
-    if (this.repo.status.online || !this.link.server) this.makePdfPreviews(files).catch(() => {});
+    if (this.repo.status.online) this.makePdfPreviews(files).catch(() => {});
     this.updateStatus(files);
   }
 
@@ -506,7 +456,7 @@ export class DeviceFiles {
         }
         const q = new URLSearchParams({ name: u.name });
         if (u.derived) q.set("derived", "1");
-        const res = await fetch(`${this.blobUrl(u.hash)}?${q}`, { method: "PUT", body: blob, headers: this.auth }).catch(() => null);
+        const res = await fetch(`${this.link.base}/api/blobs/${u.hash}?${q}`, { method: "PUT", body: blob, headers: this.auth }).catch(() => null);
         if (!res) break; // offline again
         if (res.ok || res.status === 415 || res.status === 422 || res.status === 413) {
           await this.db.delete("uploads", u.hash);
@@ -536,34 +486,12 @@ export class DeviceFiles {
       // leave other devices pointing at a preview that never arrives.
       const thumb = await sha256(prev.blob);
       await this.save(thumb, prev.blob);
-      const res = this.link.server ? await fetch(`${this.blobUrl(thumb)}?name=preview.webp&derived=1`, { method: "PUT", body: prev.blob, headers: this.auth }).catch(() => null) : { ok: true };
+      const res = await fetch(`${this.link.base}/api/blobs/${thumb}?name=preview.webp&derived=1`, { method: "PUT", body: prev.blob, headers: this.auth }).catch(() => null);
       if (!res?.ok) {
         this.pdfDone.delete(f.id); // try again next time
         continue;
       }
       this.repo.change(f.id, (doc) => setFileMeta(doc, { thumb, pages: m.pages ?? prev.pages }));
-    }
-  }
-
-  /** Every content here, queued for the server (a workspace from this device that now syncs). */
-  async uploadEverything() {
-    await this.ready;
-    const names = new Map<string, Upload>();
-    for (const r of this.repo.live()) {
-      if (!r.file) continue;
-      names.set(r.file.hash, { hash: r.file.hash, name: r.file.name });
-      for (const h of [r.file.thumb, r.file.display]) if (h) names.set(h, { hash: h, name: "preview.webp", derived: true });
-    }
-    for (const b of await this.store.list()) await this.enqueueUpload(names.get(b.hash) ?? { hash: b.hash, name: "file" });
-  }
-
-  /** Copy every content here into another store (the folder a workspace moves into). */
-  async copyInto(root: FileSystemDirectoryHandle) {
-    await this.ready;
-    const into = await folderStore(root);
-    for (const b of await this.store.list()) {
-      const blob = await this.store.get(b.hash);
-      if (blob) await into.put(b.hash, blob);
     }
   }
 

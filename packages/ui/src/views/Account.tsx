@@ -1,13 +1,10 @@
 // Before the app: signing in or creating an account on this server, joining by an invite link
-// (#/join/<code>) – or, without an account, a workspace in a folder on this computer. Then a
-// workspace has to be open.
+// (#/join/<code>). Then a workspace has to be open.
 import { useEffect, useState, type ReactNode } from "react";
 import { createSpace, invite, joinInvite, serverInfo, signIn, signUp, useAccounts } from "../accounts";
 import { useRoute } from "../hooks";
 import { getLang, useT } from "../i18n";
-import { folderSupport } from "../local";
 import { Button } from "../ui/bits";
-import { FolderHint, newFolderSpace } from "../ui/Spaces";
 
 function Card({ title, intro, children }: { title: string; intro?: ReactNode; children: ReactNode }) {
   return (
@@ -33,8 +30,8 @@ function Field({ label, ...p }: { label: string } & React.InputHTMLAttributes<HT
   );
 }
 
-/** Sign in or create an account on this server. `inviteCode`: creating one joins that workspace; `bare`: it gets none of its own. */
-export function SignIn({ inviteCode, onDone, bare }: { inviteCode?: string; onDone?: () => void; bare?: boolean }) {
+/** Sign in or create an account on this server. `inviteCode`: creating one joins that workspace. */
+function SignIn({ inviteCode, onDone }: { inviteCode?: string; onDone?: () => void }) {
   const { t } = useT();
   const [info, setInfo] = useState<{ signup: string; firstAccount: boolean } | null>(null);
   const [mode, setMode] = useState<"in" | "up">("in");
@@ -57,7 +54,7 @@ export function SignIn({ inviteCode, onDone, bare }: { inviteCode?: string; onDo
     setBusy(true);
     setError("");
     try {
-      if (mode === "up") await signUp({ name, email, password, invite: inviteCode, lang: getLang(), none: bare });
+      if (mode === "up") await signUp({ name, email, password, invite: inviteCode, lang: getLang() });
       else await signIn(email, password);
       onDone?.();
     } catch (err) {
@@ -131,29 +128,7 @@ function NoSpace() {
           {t("space.create")}
         </Button>
       </form>
-      <LocalStart />
     </Card>
-  );
-}
-
-/** Without an account: a workspace in a folder of this computer (where the browser can; a hint where not). */
-function LocalStart() {
-  const { t } = useT();
-  const [error, setError] = useState("");
-  if (folderSupport() === "mobile") return null;
-  return (
-    <div className="mt-6 border-t border-line pt-4">
-      {folderSupport() === "yes" && (
-        <>
-          <p className="text-sm text-muted">{t("local.start")}</p>
-          <Button variant="outline" className="mt-3 w-full" onClick={() => newFolderSpace(t("account.personal")).then((e) => setError(e ?? ""))}>
-            {t("local.chooseFolder")}
-          </Button>
-          {error && <p className="mt-3 text-sm text-[var(--danger-text)]">{error}</p>}
-        </>
-      )}
-      <FolderHint />
-    </div>
   );
 }
 
@@ -163,14 +138,7 @@ export function Gate({ children }: { children: ReactNode }) {
   const route = useRoute();
   const { account, active } = useAccounts();
   if (route.parts[0] === "join" && route.parts[1]) return <Join code={route.parts[1]} />;
-  if (!account && !active)
-    return (
-      <Card title={t("setup.welcome")} intro={t("account.intro", { server: location.host })}>
-        <SignIn />
-        <LocalStart />
-      </Card>
-    );
-  if (!account) return <>{children}</>;
+  if (!account) return <Card title={t("setup.welcome")} intro={t("account.intro", { server: location.host })}><SignIn /></Card>;
   if (!active) return account.lost ? <Card title={t("account.lostTitle")} intro={t("account.lost", { server: location.host })}><SignIn /></Card> : <NoSpace />;
   return <>{children}</>;
 }

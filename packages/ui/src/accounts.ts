@@ -1,22 +1,12 @@
-// The account signed in on the server that served this app, and the workspaces ("spaces" here):
-// those of the account on the server, and those kept in a folder on this device (see local.ts) –
-// with or without the server. Each workspace is a replica of its own with its own storage on this
-// device; one is open in the app (`repo` and `files` point at it), the others sync alongside and
-// show in the sidebar. Kept on this device: the account with its token, the last known workspaces
-// of the server (so the app opens offline), the folder workspaces, and which one is open.
-//
-// A workspace changes where it is kept: one in a folder starts syncing with the server (it is
-// uploaded into a new workspace there), one of the server gets a full copy in a folder, and a
-// folder copy is cut off from the server again (it goes on alone; the server's stays as it is).
+// The account signed in on the server that served this app, and its workspaces ("spaces" here).
+// Each workspace is a replica of its own with its own storage on this device; one is open in the
+// app (`repo` and `files` point at it), the others sync alongside and show in the sidebar. Kept on
+// this device: the account with its token, the last known workspaces (so the app opens offline)
+// and which one is open.
 import { useSyncExternalStore } from "react";
-import { openDB } from "idb";
-import * as Y from "yjs";
-import { newId } from "@obtion/core/model";
 import { Repo } from "@obtion/sync";
-import { FOLDER_FORMAT, encodeRows, readInfo, writeInfo } from "@obtion/sync/folder";
 import { browserHost, type SpaceLink } from "./browser";
 import { DeviceFiles, setFiles } from "./files";
-import { folderNow, folderOf, forgetFolder, handleDir, rememberFolder } from "./local";
 import { setRepo } from "./repo";
 import { globalPage } from "./scope";
 
@@ -33,22 +23,11 @@ export interface Account {
 export interface Space {
   id: string;
   name: string;
-  /** its workspace on this server (the same id for one that began there); none: on this device only */
-  remote?: string;
-  role?: "owner" | "member";
+  role: "owner" | "member";
   legacy?: boolean;
-  /** kept in a folder on this device, all of it (files too) */
-  folder?: boolean;
 }
 
-/** A workspace in a folder, as this device keeps it. */
-interface FolderSpace {
-  id: string;
-  name: string;
-  remote?: string;
-}
-
-const KEY = { account: "obtion.account", spaces: "obtion.spaces", active: "obtion.active", shown: "obtion.shown", folders: "obtion.folders", detached: "obtion.detached" };
+const KEY = { account: "obtion.account", spaces: "obtion.spaces", active: "obtion.active", shown: "obtion.shown" };
 const read = <T>(k: string, def: T): T => {
   try {
     return (JSON.parse(localStorage.getItem(k) ?? "null") as T) ?? def;
@@ -65,37 +44,16 @@ if (localStorage.getItem("obtion.accounts")) {
 }
 
 let account: Account | null = read(KEY.account, null);
-/** The account's workspaces on the server, as it said last. */
-let server: Space[] = read(KEY.spaces, []);
-let folders: FolderSpace[] = read(KEY.folders, []);
-/** Workspaces of the server whose folder copy was cut off from it: not shown on this device any more. */
-let detached: string[] = read(KEY.detached, []);
-let spaces: Space[] = combine();
+let spaces: Space[] = read(KEY.spaces, []);
 let active: string | null = localStorage.getItem(KEY.active);
 /** The workspaces chosen to be seen (sidebar, inbox) on this device; null: all. */
 let shown: string[] | null = read(KEY.shown, null);
 let version = 0;
 const listeners = new Set<() => void>();
 
-/** The workspaces in the app: the server's in its order (the one with a folder copy as that), then the folders of this device only. */
-function combine(): Space[] {
-  const copies = new Map(folders.filter((f) => f.remote).map((f) => [f.remote!, f]));
-  const out: Space[] = [];
-  for (const s of server) {
-    if (detached.includes(s.id)) continue;
-    const f = copies.get(s.id);
-    out.push(f ? { ...s, id: f.id, remote: s.id, folder: true } : { ...s, remote: s.id });
-  }
-  for (const f of folders) if (!out.some((x) => x.id === f.id)) out.push({ ...f, folder: true });
-  return out;
-}
-
 function save() {
-  spaces = combine();
   localStorage.setItem(KEY.account, JSON.stringify(account));
-  localStorage.setItem(KEY.spaces, JSON.stringify(server));
-  localStorage.setItem(KEY.folders, JSON.stringify(folders));
-  localStorage.setItem(KEY.detached, JSON.stringify(detached));
+  localStorage.setItem(KEY.spaces, JSON.stringify(spaces));
   if (active) localStorage.setItem(KEY.active, active);
   else localStorage.removeItem(KEY.active);
   localStorage.setItem(KEY.shown, JSON.stringify(shown));
@@ -130,15 +88,9 @@ export const spaceById = (id: string) => spaces.find((s) => s.id === id);
 
 const open = new Map<string, { repo: Repo; files: DeviceFiles }>();
 
-// the data from before accounts: the storage names they had, so this device keeps its copy
-const storeName = (s: Space) => (s.legacy ? "obtion" : `obtion-ws-${s.id}`);
-
 function link(s: Space): SpaceLink {
-  return {
-    server: s.remote && account ? { base: `${location.origin}/w/${s.remote}`, token: account.token } : undefined,
-    name: storeName(s),
-    folder: s.folder ? folderOf(s.id) : undefined,
-  };
+  // the data from before accounts: the storage names they had, so this device keeps its copy
+  return { base: `${location.origin}/w/${s.id}`, token: account!.token, name: s.legacy ? "obtion" : `obtion-ws-${s.id}` };
 }
 
 /** The replica of a workspace, opened (and syncing) from its first use on. */
@@ -174,12 +126,9 @@ export function activate(id: string) {
 /** May the account use the in-app agent? (on the server and for this account) */
 export const agentHere = () => !!account?.agent;
 
-/** Does workspace `id` sync with the server (what needs the server: activity, undo, agent, members)? */
-export const onServer = (id?: string) => !!(id && account && spaceById(id)?.remote);
-
 /** A workspace's API (/w/<id>/api/…). */
 export const spaceFetch = (id: string, path: string, init: RequestInit = {}) =>
-  fetch(`/w/${spaceById(id)?.remote}${path}`, { ...init, headers: { ...(init.headers as Record<string, string>), authorization: `Bearer ${account!.token}` } });
+  fetch(`/w/${id}${path}`, { ...init, headers: { ...(init.headers as Record<string, string>), authorization: `Bearer ${account!.token}` } });
 
 // ---------- account ----------
 
@@ -201,19 +150,16 @@ export async function refresh() {
   try {
     const me = await call("/api/account");
     Object.assign(account, { user: me.user, admin: me.admin, agent: me.agent, lost: false });
-    const known = new Map(server.map((s) => [s.id, s]));
-    server = me.workspaces.map((w: Space) => ({ ...known.get(w.id), ...w }));
-    // a folder copy is called as its workspace on the server
-    for (const f of folders) f.name = server.find((w) => w.id === f.remote)?.name ?? f.name;
-    // gone on the server (deleted, or this account removed): the copy here goes too, a folder goes on alone
-    gone = spaces.filter((s) => s.remote && known.has(s.remote) && !server.some((w) => w.id === s.remote));
-    for (const s of gone) if (s.folder) await cutOff(s);
+    const known = new Map(spaces.map((s) => [s.id, s]));
+    // gone on the server (deleted, or this account removed): the copy here goes too
+    gone = spaces.filter((s) => !me.workspaces.some((w: Space) => w.id === s.id));
+    spaces = me.workspaces.map((w: Space) => ({ ...known.get(w.id), ...w }));
   } catch (e) {
     if ((e as { status?: number }).status === 401) account.lost = true;
     else return; // offline: keep what is known
   }
-  save();
   if (!activeSpace() && spaces[0]) activate(spaces[0].id);
+  save();
   // deleting makes open replicas reload the page: last
   for (const s of gone) await forget(s);
 }
@@ -221,7 +167,7 @@ export async function refresh() {
 /** Keep the account signed in with `token` (another one signed in before leaves first). */
 async function keep(token: string) {
   const me = await call("/api/account", undefined, "GET", token);
-  if (account && account.user.id !== me.user.id) await forgetAll(true);
+  if (account && account.user.id !== me.user.id) await forgetAll();
   account = { token, user: me.user };
   await refresh();
 }
@@ -231,13 +177,13 @@ export async function signIn(email: string, password: string) {
   await keep(res.token);
 }
 
-/** Create an account – with an invite it joins that workspace instead of getting one of its own (`none`: gets none either). */
-export async function signUp(b: { name: string; email: string; password: string; invite?: string; lang: string; none?: boolean }) {
+/** Create an account – with an invite it joins that workspace instead of getting one of its own. */
+export async function signUp(b: { name: string; email: string; password: string; invite?: string; lang: string }) {
   const res = await call("/api/account/signup", b);
   await keep(res.token);
 }
 
-/** Sign out: the workspaces of the server leave this device, with their local copies; those in a folder stay (and sync again after signing in). */
+/** Sign out: the workspaces leave this device, with their local copies. */
 export async function signOut() {
   await call("/api/account/signout", {}).catch(() => {});
   await forgetAll();
@@ -246,158 +192,25 @@ export async function signOut() {
   location.reload();
 }
 
-/** The account leaves this device. Folder workspaces stay; `cut`: they no longer sync either (another account comes). */
-async function forgetAll(cut = false) {
-  const before = spaces;
-  if (cut) for (const s of before) if (s.folder) await cutOff(s);
+async function forgetAll() {
+  for (const s of spaces) await forget(s);
   account = null;
-  server = [];
+  spaces = [];
+  active = null;
   shown = null;
-  save();
-  if (!activeSpace()) active = spaces[0]?.id ?? null;
-  save();
-  // deleting makes open replicas reload the page: only once all the rest is stored
-  for (const s of before) if (!s.folder || cut) await forget(s);
 }
 
-/** Delete a workspace's local copy (after leaving it or signing out); of one in a folder only what concerns the server, the folder stays. */
+/** Delete a workspace's local copy (after leaving it or signing out). */
 async function forget(s: Space) {
-  const name = storeName(s);
+  const name = link(s).name;
   open.delete(s.id);
   const legacy = name === "obtion";
   for (const db of [name, legacy ? "obtion-files" : `${name}-files`]) indexedDB.deleteDatabase(db);
-  if (s.folder) return;
   const root = await navigator.storage?.getDirectory?.().catch(() => undefined);
   await root?.removeEntry(legacy ? "blobs" : `blobs-${name}`, { recursive: true }).catch(() => {});
 }
 
-/** A folder workspace goes on without the server: the folder no longer names it (then forget what this device knew of the server). */
-async function cutOff(s: Space) {
-  const f = folders.find((x) => x.id === s.id);
-  if (!f?.remote) return;
-  if (!detached.includes(f.remote)) detached.push(f.remote);
-  delete f.remote;
-  save();
-  // without access now: the folder keeps naming the server, which only counts when it is opened anew
-  const handle = await folderNow(s.id);
-  if (handle) {
-    const info = await readInfo(handleDir(handle));
-    await writeInfo(handleDir(handle), { id: s.id, name: info?.name ?? s.name });
-  }
-}
-
 // ---------- workspaces ----------
-
-/** A folder holds data that are no workspace (a chosen folder must be empty or one of a workspace). */
-export class FolderError extends Error {}
-
-async function isEmpty(handle: FileSystemDirectoryHandle) {
-  for await (const name of (handle as unknown as { keys(): AsyncIterable<string> }).keys()) if (!name.startsWith(".")) return false;
-  return true;
-}
-
-/**
- * A workspace in this folder: a new one in an empty folder, or the one already in it (made by
- * another app or another browser). One that syncs with this server is synced again.
- */
-export async function openFolder(handle: FileSystemDirectoryHandle, name: string) {
-  const dir = handleDir(handle);
-  const info = await readInfo(dir);
-  if (info && info.folder > FOLDER_FORMAT) throw new FolderError("tooNew");
-  if (!info && !(await isEmpty(handle))) throw new FolderError("notEmpty");
-  const id = info?.id ?? newId();
-  if (folders.some((f) => f.id === id)) return void (location.hash = `#/w/${id}/`);
-  if (!info) await writeInfo(dir, { id, name: name.trim() || "Workspace" });
-  const remote = account && info?.server?.url === location.origin ? info.server.workspace : undefined;
-  // its copy from the server knows less than the folder may: start anew and send it all
-  if (remote) await forget({ id, name: "", folder: true });
-  await rememberFolder(id, handle);
-  folders.push({ id, name: info?.name ?? name, remote });
-  if (shown) shown = [...shown, id];
-  save();
-  location.hash = `#/w/${id}/${info ? "" : "setup"}`;
-  if (!remote) return activate(id);
-  const { repo } = replica(id);
-  await repo.loaded;
-  await repo.enqueueFullUpload();
-  location.reload();
-}
-
-/** Keep a full copy of a workspace of the server in this (empty) folder: it then works from there. */
-export async function copyToFolder(s: Space, handle: FileSystemDirectoryHandle) {
-  if (!(await isEmpty(handle))) throw new FolderError("notEmpty");
-  const { repo, files } = replica(s.id);
-  await repo.saved();
-  const dir = handleDir(handle);
-  await dir.write(`updates/${Date.now().toString(36)}-copy.obu`, encodeRows([...repo.docs].map(([d, doc]) => ({ d, u: Y.encodeStateAsUpdate(doc) }))));
-  await files.copyInto(handle);
-  await writeInfo(dir, { id: s.id, name: s.name, server: { url: location.origin, workspace: s.remote! } });
-  // the data are in the folder now; the position on the server and the outbox stay here
-  const db = await openDB(storeName(s), 1);
-  await db.clear("updates");
-  db.close();
-  const root = await navigator.storage?.getDirectory?.().catch(() => undefined);
-  await root?.removeEntry(s.legacy ? "blobs" : `blobs-${storeName(s)}`, { recursive: true }).catch(() => {});
-  await rememberFolder(s.id, handle);
-  folders.push({ id: s.id, name: s.name, remote: s.remote });
-  save();
-  location.reload();
-}
-
-/** Sync a workspace of this device with the server: a new workspace there, which gets all of it. */
-export async function putOnServer(s: Space) {
-  const w = await call("/api/workspaces", { name: s.name });
-  const { repo, files } = replica(s.id);
-  await repo.loaded;
-  await repo.saved();
-  await repo.enqueueFullUpload();
-  await files.uploadEverything();
-  const dir = handleDir(await folderOf(s.id));
-  await writeInfo(dir, { id: s.id, name: s.name, server: { url: location.origin, workspace: w.id } });
-  folders.find((f) => f.id === s.id)!.remote = w.id;
-  await refresh();
-  location.reload();
-}
-
-/** Cut a folder copy off from the server: it goes on as a workspace of this device only. */
-export async function detach(s: Space) {
-  await cutOff(s);
-  // deleting makes the open replica reload the page: last
-  await forget(s);
-  location.reload();
-}
-
-/**
- * Delete a workspace for good: on the server (owners only; for every member) and in its folder,
- * where the app's files go (obtion.json, updates/, files/) and anything else stays.
- */
-export async function deleteSpace(s: Space) {
-  if (s.remote) await call(`/api/workspaces/${s.remote}`, undefined, "DELETE");
-  if (s.folder) {
-    const handle = await folderOf(s.id);
-    for (const name of ["obtion.json", "updates", "files"]) await handle.removeEntry(name, { recursive: true }).catch(() => {});
-  }
-  server = server.filter((x) => x.id !== s.remote);
-  folders = folders.filter((f) => f.id !== s.id);
-  save();
-  if (!activeSpace()) active = spaces[0]?.id ?? null;
-  save();
-  if (s.folder) await forgetFolder(s.id);
-  await forget(s);
-  location.replace("#/");
-  location.reload();
-}
-
-/** Take a workspace of this device out of the app; its folder stays as it is (and can be opened again). */
-export async function removeFolderSpace(s: Space) {
-  folders = folders.filter((f) => f.id !== s.id);
-  if (active === s.id) active = null;
-  save();
-  await forgetFolder(s.id);
-  await forget(s);
-  location.replace("#/");
-  location.reload();
-}
 
 export async function createSpace(name: string) {
   const w = await call("/api/workspaces", { name });
@@ -407,37 +220,37 @@ export async function createSpace(name: string) {
 }
 
 export async function renameSpace(s: Space, name: string) {
-  if (s.remote) await call(`/api/workspaces/${s.remote}`, { name }, "PATCH");
-  const f = folders.find((x) => x.id === s.id);
-  const handle = f && (await folderNow(s.id));
-  if (f) f.name = name;
-  if (handle) {
-    const info = await readInfo(handleDir(handle));
-    await writeInfo(handleDir(handle), { ...info, id: s.id, name });
-  }
-  save();
+  await call(`/api/workspaces/${s.id}`, { name }, "PATCH");
   await refresh();
 }
 
 /** An invite link: whoever opens it may join (with an account of this server). */
 export async function inviteLink(s: Space): Promise<string> {
-  const { code } = await call(`/api/workspaces/${s.remote}/invites`, {});
+  const { code } = await call(`/api/workspaces/${s.id}/invites`, {});
   return `${location.origin}/#/join/${code}`;
 }
 
 export function members(s: Space): Promise<{ id: string; name: string; email: string; role: string }[]> {
-  return call(`/api/workspaces/${s.remote}/members`);
+  return call(`/api/workspaces/${s.id}/members`);
 }
 
-/** Leave a workspace of the server; a folder copy of it stays as a workspace of this device. */
 export async function leaveSpace(s: Space) {
-  await call(`/api/workspaces/${s.remote}/members/${account!.user.id}`, undefined, "DELETE");
-  if (s.folder) return detach(s);
+  await call(`/api/workspaces/${s.id}/members/${account!.user.id}`, undefined, "DELETE");
   await forget(s);
-  server = server.filter((x) => x.id !== s.remote);
-  save();
+  spaces = spaces.filter((x) => x.id !== s.id);
   if (active === s.id) active = spaces[0]?.id ?? null;
   save();
+  location.replace("#/");
+  location.reload();
+}
+
+/** Delete a workspace for good on the server (owners only; for every member). */
+export async function deleteSpace(s: Space) {
+  await call(`/api/workspaces/${s.id}`, undefined, "DELETE");
+  spaces = spaces.filter((x) => x.id !== s.id);
+  if (active === s.id) active = spaces[0]?.id ?? null;
+  save();
+  await forget(s);
   location.replace("#/");
   location.reload();
 }
@@ -452,7 +265,7 @@ export const invite = (code: string): Promise<{ workspace: string; by: string; s
 export const serverInfo = (): Promise<{ signup: "open" | "invite" | "off"; firstAccount: boolean; agent: boolean }> => call("/api/info");
 
 /** An MCP token for agents on a workspace, with the ready-made commands. */
-export const mcpToken = (s: Space) => call(`/api/workspaces/${s.remote}/mcp-token`, {});
+export const mcpToken = (s: Space) => call(`/api/workspaces/${s.id}/mcp-token`, {});
 
 /**
  * The address names the workspace ("#/w/<id>/…") and opens it. A page of a workspace without it

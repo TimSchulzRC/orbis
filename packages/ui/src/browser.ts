@@ -1,20 +1,16 @@
-// The replica's platform in a browser (web app, later the desktop app's window): IndexedDB or a
-// folder on the device as storage, a workspace on the server that served the page (or none), other
-// tabs over BroadcastChannel, dialogs of the UI.
+// The replica's platform in a browser (web app, later the desktop app's window): IndexedDB as
+// storage, a workspace on the server that served the page, other tabs over
+// BroadcastChannel, dialogs of the UI.
 import { openDB, type IDBPDatabase } from "idb";
 import type { OutItem, RepoHost, ReplicaStorage, SyncSocket, TabMsg } from "@obtion/sync";
-import { folderStorage } from "@obtion/sync/folder";
 import { tr } from "./i18n";
-import { handleDir } from "./local";
 
-/** Where a workspace is: its address on the server (…/w/<id>) with the account's token, the name of its storage here, its folder. */
+/** Where a workspace is: its address on the server (…/w/<id>), the account's token, the name of its storage here. */
 export interface SpaceLink {
-  /** none: the workspace is on this device only */
-  server?: { base: string; token: string };
+  base: string;
+  token: string;
   /** IndexedDB and BroadcastChannel name; "obtion" for the data from before accounts (devices keep their copy) */
   name: string;
-  /** the folder the workspace is kept in (its data); IndexedDB then keeps only what concerns the server */
-  folder?: Promise<FileSystemDirectoryHandle>;
 }
 
 /** The replica in IndexedDB: stores "updates" (per document), "outbox", "meta" (cursor, server id). */
@@ -88,14 +84,14 @@ export function idbStorage(name: string): ReplicaStorage {
 /** The browser as the replica's platform for one workspace. The token goes as subprotocol: browsers send no headers on WebSockets. */
 export function browserHost(link: SpaceLink): RepoHost {
   const bc = typeof BroadcastChannel !== "undefined" ? new BroadcastChannel(link.name) : null;
-  const server = link.server;
   return {
-    storage: link.folder ? folderStorage(link.folder.then(handleDir), idbStorage(link.name)) : idbStorage(link.name),
+    storage: idbStorage(link.name),
     device: deviceName(),
-    connect: server && (() => new WebSocket(`${server.base.replace(/^http/, "ws")}/sync`, ["obtion", `auth.${server.token}`]) as unknown as SyncSocket),
+    connect() {
+      return new WebSocket(`${link.base.replace(/^http/, "ws")}/sync`, ["obtion", `auth.${link.token}`]) as unknown as SyncSocket;
+    },
     async post(path, body) {
-      if (!server) return null;
-      const res = await fetch(server.base + path, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${server.token}` }, body: JSON.stringify(body) }).catch(() => null);
+      const res = await fetch(link.base + path, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${link.token}` }, body: JSON.stringify(body) }).catch(() => null);
       if (!res) return null;
       return { ok: res.ok, statusText: res.statusText, body: await res.json().catch(() => ({})) };
     },
