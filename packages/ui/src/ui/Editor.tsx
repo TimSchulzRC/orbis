@@ -325,7 +325,7 @@ export function Editor({
   readOnly = false,
 }: {
   minHeight?: string;
-  /** Shown, not edited. */
+  /** Shown, not edited (the start page until "Start bearbeiten"). */
   readOnly?: boolean;
   doc: Y.Doc;
   nodeId?: string;

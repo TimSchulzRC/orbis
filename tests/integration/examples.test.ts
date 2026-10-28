@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { MemRepo, tempDir, removeTempDirs } from "../support/helpers";
 import { runSetup, SYS } from "@obtion/core/setup";
 import { EXAMPLE, EX_TYPES, exampleFiles, fileFacts, listExamples, removeExamples, restoreExamples, writeExamples } from "@obtion/core/examples";
+import { defaultStartBody } from "@obtion/core/setup";
 import { findBlocks, readBlock, runQuery } from "@obtion/core/query";
 import { inbox } from "@obtion/core/placement";
 import { setMeta, touch } from "@obtion/core/model";
@@ -44,6 +45,10 @@ for (const lang of ["de", "en"] as Lang[])
     // the inbox: four entries, one bundle; the idea mentions the project
     expect(inbox(ix).map((i) => i.id).sort()).toEqual(["ex-i-bike", "ex-i-podcast", "ex-i-references", "ex-i-trip"]);
     expect(ix.textLinks(ix.get("ex-i-references")!).map((l) => l.to)).toEqual(["ex-relaunch"]);
+    // the start page has something to show: overdue, today, active projects
+    const start = defaultStartBody(lang);
+    expect(blockTitles(m, start, 0)).toEqual([lang === "de" ? "CMS auswählen" : "Choose a CMS"]);
+    expect(blockTitles(m, start, 1)).toEqual([lang === "de" ? "Mockups für die Startseite" : "Mockups for the home page"]);
     // the query page and the reading list
     expect(blockTitles(m, ix.get("ex-week")!.body, 0).length).toBe(3);
     expect(blockTitles(m, ix.get("ex-personal")!.body, 0, "ex-personal").length).toBe(3);

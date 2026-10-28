@@ -1,4 +1,4 @@
-// Projects with their progress and next task (design rules § 2.4) – in query blocks
+// Projects with their progress and next task (design rules § 2.4) – on Start and in query blocks
 // with "spalten:fortschritt,nächste" (an overview's "Aktive Projekte").
 import { useState } from "react";
 import { ChevronRight, CornerDownRight } from "lucide-react";
