@@ -1,5 +1,5 @@
 // First setup: the default types (Karte, Projekt, Task) in the chosen language,
-// the start page and the pinned entries. After that they are ordinary data: renamable,
+// the settings and the pinned entries. After that they are ordinary data: renamable,
 // changeable, deletable. Their fixed ids (sys:*) only serve "restore default types" and imports.
 import * as Y from "yjs";
 import {
@@ -15,7 +15,6 @@ import {
   initSchema,
   newId,
   readTabs,
-  replaceBody,
   setMeta,
   setSchemaField,
   setSettings,
@@ -28,7 +27,7 @@ import { sidebarRoots } from "./placement";
 import { pluralOf } from "./plural";
 import { BLOCKED_BY, WAITING_FOR } from "./traits";
 import { keyBetween, keysFor } from "./sortkey";
-import { type Lang, LANGS, translate } from "./i18n";
+import { type Lang, translate } from "./i18n";
 import { type Cond, type QueryDef, andWhere, blockSource, tabDef } from "./query";
 
 export const SYS = {
@@ -185,62 +184,6 @@ export function restoreDefaultTypes(w: Writer, lang: Lang, origin?: string): str
   return changed;
 }
 
-/**
- * The start page: focus (overdue, today, 7 days, in progress – nothing from paused or finished
- * projects, nothing twice), active projects with their next task, inbox, recently done,
- * recently edited. All saved queries, so the page is ordinary, editable text.
- * Earlier shipped versions stay here (by number) so an unchanged page can be brought up to date.
- */
-export function defaultStartBody(lang: Lang, version = START_VERSION): string {
-  const t = (k: string) => translate(lang, `setup.start.${k}`);
-  const block = (q: QueryDef) => "```abfrage\n" + blockSource(q) + "\n```";
-  const open = { status: "open" as const };
-  const awake = version >= 2 ? [{ not: { dormant: true as const } }] : [];
-  const notSoon = version >= 3 ? [{ not: { prop: "due", op: "<=" as const, value: "+7d" } }] : [];
-  const focus = [
-    `## ${t("focus")}`,
-    block({ title: t("overdue"), hideEmpty: true, where: { and: [open, ...awake, { prop: "due", op: "<", value: "+0d" }] }, sort: [{ key: "due" }] }),
-    block({ title: t("today"), hideEmpty: true, where: { and: [open, ...awake, { prop: "due", op: ":", value: "+0d" }] } }),
-    block({ title: t("week"), hideEmpty: true, where: { and: [open, ...awake, { prop: "due", op: ">", value: "+0d" }, { prop: "due", op: "<=", value: "+7d" }] }, sort: [{ key: "due" }] }),
-    block({ title: t("inProgress"), hideEmpty: true, where: { and: [{ type: SYS.task }, { status: "active" }, ...awake, ...notSoon] } }),
-  ];
-  // since version 5 (design rules § 4.3): cards in two columns split by "---"; projects as a table
-  // with progress and next task, the inbox's newest three, "Kürzlich erledigt" closed; no "recent"
-  if (version >= 5)
-    return [
-      ...focus,
-      `\n## ${t("projects")}`,
-      block({ where: { and: [{ type: SYS.project }, { status: "active" }, ...awake] }, sort: [{ key: "updated", desc: true }], columns: ["progress", "next"] }),
-      "\n---\n",
-      `## ${t("inbox")}`,
-      block({ where: { inbox: true }, sort: [{ key: "created", desc: true }], limit: 3 }),
-      `\n## ${t("done")}`,
-      block({ hideEmpty: true, collapsed: true, where: { and: [{ status: "done" }, { prop: "done", op: ">=", value: "-7d" }] }, sort: [{ key: "done", desc: true }], limit: 6 }),
-    ].join("\n");
-  return [
-    ...focus,
-    `\n## ${t("projects")}`,
-    block(version >= 2 ? { where: { and: [{ type: SYS.project }, { status: "active" }, ...awake] }, sort: [{ key: "updated", desc: true }], columns: ["next"] } : { where: { and: [{ type: SYS.project }, { status: "active" }] }, sort: [{ key: "updated", desc: true }] }),
-    `\n## ${t("inbox")}`,
-    block({ where: { inbox: true }, sort: [{ key: "created", desc: true }], limit: 5 }),
-    ...(version >= 2 ? [`\n## ${t("done")}`, block({ hideEmpty: true, where: { and: [{ status: "done" }, { prop: "done", op: ">=", value: "-7d" }] }, sort: [{ key: "done", desc: true }], limit: 6 })] : []),
-    `\n## ${t("recent")}`,
-    // since version 4 without files: an inserted image shows through the note it is in, not as an entry of its own
-    block(version >= 4 ? { where: { and: [{ not: { inbox: true } }, { not: { file: true } }] }, sort: [{ key: "updated", desc: true }], limit: 6 } : { where: { not: { inbox: true } }, sort: [{ key: "updated", desc: true }], limit: 6 }),
-  ].join("\n");
-}
-export const START_VERSION = 5;
-
-/** A start page still exactly as an earlier version shipped it gets the current default; edited ones stay. */
-export function upgradeStartPage(w: Writer, lang: Lang): boolean {
-  const s = w.get(SETTINGS_ID);
-  if (!s || s.body === defaultStartBody(lang)) return false;
-  const earlier = Array.from({ length: START_VERSION - 1 }, (_, i) => defaultStartBody(lang, i + 1));
-  if (!earlier.includes(s.body)) return false;
-  w.change(SETTINGS_ID, (doc) => replaceBody(doc, defaultStartBody(lang)));
-  return true;
-}
-
 export const DEFAULT_CAPTURE_TYPES = [SYS.card, SYS.task, SYS.project];
 
 /**
@@ -289,11 +232,6 @@ export function defaultViews(lang: Lang): { project: Omit<ViewTab, "pos">[]; tas
   };
 }
 
-/** Is the start page still the shipped one (any language, current version)? Then it is shown in the UI language. */
-export function isDefaultStartBody(body: string): boolean {
-  return LANGS.some((l) => body === defaultStartBody(l));
-}
-
 /** The views of a type's page: the stored ones, else the defaults ("Alle" as a table). */
 export function typeTabs(type: Item, lang: Lang): ViewTab[] {
   if (type.schema?.views?.length) return type.schema.views;
@@ -318,7 +256,6 @@ export function runSetup(w: Writer, lang: Lang, origin?: string) {
     w.change(SETTINGS_ID, (doc) => {
       initItem(doc, { kind: "settings", title: "Settings" });
       setSettings(doc, { setupLang: lang, format: FORMAT, captureTypes: DEFAULT_CAPTURE_TYPES });
-      replaceBody(doc, defaultStartBody(lang));
     });
 }
 

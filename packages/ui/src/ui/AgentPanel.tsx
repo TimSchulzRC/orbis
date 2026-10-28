@@ -58,7 +58,7 @@ const WRITE_TOOLS = new Set(["create", "update", "place", "add_update", "define_
 const SPACE_KEY = "obtion.agent.space";
 
 /**
- * The agent works in one workspace: on a page of a workspace in that one, elsewhere (Start, inbox,
+ * The agent works in one workspace: on a page of a workspace in that one, elsewhere (inbox,
  * search, settings) in the one chosen last – asked from somewhere for a workspace, in that. Each
  * workspace keeps its own chat on this device.
  */

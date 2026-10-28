@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Sparkles, Plus, Menu, Search, LayoutDashboard, Inbox, SlidersHorizontal, X } from "lucide-react";
+import { Sparkles, Plus, Menu, Search, Inbox, SlidersHorizontal, X } from "lucide-react";
 import { SETTINGS_ID } from "@obtion/core/model";
 import { useRepo, useRoute, useMediaQuery, itemHref, spaceHref } from "./hooks";
 import { useT } from "./i18n";
@@ -16,7 +16,6 @@ import { CommandPalette } from "./ui/CommandPalette";
 import { AgentPanel } from "./ui/AgentPanel";
 import { CaptureSheet } from "./ui/Capture";
 import { Setup } from "./views/Setup";
-import { Start } from "./views/Start";
 import { ItemPage } from "./views/ItemPage";
 import { SearchView } from "./views/Search";
 import { FilesPage, InboxPage } from "./views/Lists";
@@ -76,7 +75,7 @@ function TooNew() {
 
 function Main() {
   const r = useRepo();
-  const { active } = useAccounts();
+  const { active, spaces } = useAccounts();
   const { t } = useT();
   const route = useRoute();
   const wide = useMediaQuery("(min-width: 1024px)");
@@ -115,6 +114,11 @@ function Main() {
     };
   });
 
+  // nothing set up in any workspace yet (a new account): the first one's setup
+  const all = useReplicas(spaces.map((s) => s.id));
+  const nothing = all.length > 0 && all.every((x) => !x.get(SETTINGS_ID) && x.status.loaded && (x.status.synced || (!x.status.online && x.docs.size === 0)));
+  useEffect(() => void (nothing && globalPage(route.parts) && location.replace(spaceHref(spaces[0]!.id, "/setup"))), [nothing, route.path]);
+
   // "#/create?title=…" – links to items that don't exist yet.
   useEffect(() => {
     if (route.parts[0] !== "create") return;
@@ -127,7 +131,7 @@ function Main() {
     }
   }, [route.path]);
 
-  // a page of a workspace waits for it and is its setup until it is set up; Start, the inbox,
+  // a page of a workspace waits for it and is its setup until it is set up; the inbox,
   // search and the settings show what is there in every workspace
   const settings = r.get(SETTINGS_ID);
   const setUp = !settings && (r.status.synced || (!r.status.online && r.docs.size === 0));
@@ -139,7 +143,8 @@ function Main() {
     }
     switch (route.parts[0]) {
       case undefined:
-        return <Start />;
+        // no start page for now: the app begins at the inbox
+        return <Redirect to="/inbox" />;
       case "inbox":
         return route.parts[1] ? <InboxEntry id={route.parts[1]} /> : <InboxPage />;
       case "search":
@@ -185,7 +190,7 @@ function Main() {
       <div className="flex min-w-0 flex-1 flex-col">
         {!wide && (
           <header className="flex items-center gap-2 border-b border-line bg-bg/90 px-3 py-2 backdrop-blur pt-safe">
-            <a href="#/" className="tap flex items-center justify-center gap-2" aria-label={t("nav.start")}>
+            <a href="#/inbox" className="tap flex items-center justify-center gap-2" aria-label={t("nav.inbox")}>
               <img src="/icon.svg" alt="" className="size-6" />
             </a>
             <SyncDot />
@@ -246,7 +251,7 @@ function MenuSheet({ onClose, children }: { onClose: () => void; children: React
   );
 }
 
-/** The phone menu (a sheet from below): the selector, Start, Eingang · the workspaces seen (as in the sidebar) · Einstellungen. */
+/** The phone menu (a sheet from below): the selector, Eingang · the workspaces seen (as in the sidebar) · Einstellungen. */
 function MobileMenu() {
   const { t } = useT();
   const { shown } = useAccounts();
@@ -259,9 +264,6 @@ function MobileMenu() {
         <SpaceSelector className="flex-1" onNew={() => setCreating(true)} />
       </div>
       {creating && <NewSpaceDialog onClose={() => setCreating(false)} />}
-      <a href="#/" className={row}>
-        <LayoutDashboard size={18} className="text-muted" /> {t("nav.start")}
-      </a>
       <a href="#/inbox" className={row}>
         <Inbox size={18} className="text-muted" /> <span className="flex-1">{t("nav.inbox")}</span>
         {inbox > 0 && <span className="text-xs tabular-nums text-muted">{inbox}</span>}
@@ -288,7 +290,7 @@ function Redirect({ to }: { to: string }) {
 }
 
 /**
- * Bottom bar on phones: Start, Eingang, Agent – with one workspace seen also its first two types
+ * Bottom bar on phones: Eingang, Agent – with one workspace seen also its first two types
  * of the sidebar (Projekte, Tasks); with several they are in the menu, each in its workspace.
  */
 function MobileNav({ onAgent }: { onAgent: () => void }) {
@@ -300,7 +302,6 @@ function MobileNav({ onAgent }: { onAgent: () => void }) {
   const ix = r?.index();
   const inbox = useInboxTotal();
   const entries = [
-    { key: "start", label: t("nav.start"), icon: <LayoutDashboard size={20} />, href: "#/", active: route.path === "/" },
     { key: "inbox", label: t("nav.inbox"), icon: <Inbox size={20} />, href: "#/inbox", active: route.path.startsWith("/inbox"), dot: inbox > 0 },
     ...(ix
       ? ix.typesInOrder().slice(0, 2).map((x) => {

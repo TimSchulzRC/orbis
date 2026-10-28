@@ -1,4 +1,4 @@
-// Workspaces side by side: the sidebar, the inbox and Start show the workspaces chosen in the
+// Workspaces side by side: the sidebar and the inbox show the workspaces chosen in the
 // selector (several at once; on this device, the account stays as it is). Each part of a page
 // that belongs to one workspace sits in its SpaceScope (useRepo and useFiles read that
 // workspace's replica there, and links inside open in it). Moving an item from one workspace into another asks first if
@@ -90,7 +90,7 @@ export function SpaceSelector({ className, onNew }: { className?: string; onNew:
 }
 
 /**
- * The workspaces seen, as chips above the inbox and Start – the same choice as the selector in
+ * The workspaces seen, as chips above the inbox – the same choice as the selector in
  * the sidebar. From "Alle", a chip shows that workspace only; else chips add and take away.
  */
 export function SpaceFilter() {

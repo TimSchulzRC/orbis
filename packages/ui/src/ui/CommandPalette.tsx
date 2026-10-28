@@ -40,7 +40,6 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   const nameOf = (space: string) => shown.find((s) => s.id === space)?.name ?? "";
   const navs = useMemo(
     () => [
-      [t("nav.start"), "#/"],
       [t("nav.inbox"), "#/inbox"],
       ...shown.flatMap((s, n) => {
         const ix = repos[n]!.index();

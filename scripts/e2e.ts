@@ -193,19 +193,7 @@ async function run() {
             }
           }, { phone });
           await check(page, label, "/#/inbox/ex-i-podcast", errors, undefined, { phone });
-          // start: the day statement is the largest text; two columns of cards on a desktop (design rules § 8)
-          await check(page, label, "/", errors, async (p) => {
-            const r = await p.evaluate(() => {
-              const h1 = document.querySelector("main h1");
-              const size = h1 ? parseFloat(getComputedStyle(h1).fontSize) : 0;
-              const larger = [...document.querySelectorAll("main *")].some((el) => el.childNodes.length && [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent!.trim()) && parseFloat(getComputedStyle(el).fontSize) > size);
-              const cols = document.querySelectorAll("main .grid > div").length;
-              return { size, larger, cols };
-            });
-            if (r.larger) failures.push(`${label}: something on Start is larger than the day statement`);
-            if (!phone && r.cols !== 2) failures.push(`${label}: Start has ${r.cols} columns`);
-          });
-          // the sidebar: the workspace's block (Start, pinned informations) and "Typen" (each type's page and the files), both
+          // the sidebar: the workspace's block (pinned informations) and "Typen" (each type's page and the files), both
           // fold and stay folded over a reload; a type's page has its views and "Typ bearbeiten";
           // the inbox offers what lands there and the default; old collection links lead on
           if (!phone && v.name === "light") {

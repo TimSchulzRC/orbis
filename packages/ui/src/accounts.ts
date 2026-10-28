@@ -46,7 +46,7 @@ if (localStorage.getItem("obtion.accounts")) {
 let account: Account | null = read(KEY.account, null);
 let spaces: Space[] = read(KEY.spaces, []);
 let active: string | null = localStorage.getItem(KEY.active);
-/** The workspaces chosen to be seen (sidebar, inbox, Start) on this device; null: all. */
+/** The workspaces chosen to be seen (sidebar, inbox) on this device; null: all. */
 let shown: string[] | null = read(KEY.shown, null);
 let version = 0;
 const listeners = new Set<() => void>();
@@ -129,16 +129,6 @@ export const agentHere = () => !!account?.agent;
 /** A workspace's API (/w/<id>/api/…). */
 export const spaceFetch = (id: string, path: string, init: RequestInit = {}) =>
   fetch(`/w/${id}${path}`, { ...init, headers: { ...(init.headers as Record<string, string>), authorization: `Bearer ${account!.token}` } });
-
-const START_KEY = "obtion.start.space";
-/** Which workspace Start takes its layout from, on this device: the account's first unless chosen. */
-export function startSpace(): Space | undefined {
-  return spaceById(localStorage.getItem(START_KEY) ?? "") ?? spaces[0];
-}
-export function setStartSpace(id: string) {
-  localStorage.setItem(START_KEY, id);
-  save();
-}
 
 // ---------- account ----------
 
@@ -264,7 +254,7 @@ export const mcpToken = (s: Space) => call(`/api/workspaces/${s.id}/mcp-token`, 
 /**
  * The address names the workspace ("#/w/<id>/…") and opens it. A page of a workspace without it
  * (a link inside the app) is the open workspace's and gets its name, so going back later returns
- * to it. Pages of no workspace (Start, inbox, search, settings) keep an address without one.
+ * to it. Pages of no workspace (inbox, search, settings) keep an address without one.
  */
 function followHash() {
   const named = /^#\/w\/([^/?]+)/.exec(location.hash)?.[1];
