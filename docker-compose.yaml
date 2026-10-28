@@ -1,18 +1,25 @@
-# Obtion on a NAS or any Docker host: clone the repository, `docker compose up -d`, open
-# http://<any address of the host>:8480. Optional settings go into .env (see .env.example;
+# Obtion on a NAS or any Docker host: clone the repository, `mkdir data`, `docker compose up -d`,
+# open http://<any address of the host>:8480. Optional settings go into .env (see .env.example;
 # not in git, so `git pull` never collides with them).
 services:
   obtion:
     build: .
     image: obtion-server
     restart: unless-stopped
+    # the owner of the data folder (`ls -n`), so its files keep that owner; never root
+    user: "${OBTION_UID:-1000}:${OBTION_GID:-1000}"
     ports:
       # on every address of the host (LAN, tailnet, …); the first account created on the page
       # becomes the admin
       - "${OBTION_BIND:-0.0.0.0}:${OBTION_PORT:-8480}:8480"
     volumes:
-      # an ordinary folder on the host: database, daily backups, files, Markdown mirror
-      - ${OBTION_DATA_DIR:-./data}:/data
+      # an ordinary folder on the host: database, daily backups, files, Markdown mirror. It has
+      # to exist (a folder Docker would create belongs to root, and the server could not write)
+      - type: bind
+        source: ${OBTION_DATA_DIR:-./data}
+        target: /data
+        bind:
+          create_host_path: false
     environment:
       OBTION_PUBLIC_URL: ${OBTION_PUBLIC_URL:-}
       OBTION_ALLOWED_HOSTS: ${OBTION_ALLOWED_HOSTS:-}

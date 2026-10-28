@@ -18,13 +18,12 @@ RUN bun install --frozen-lockfile --production --omit optional --filter @obtion/
 COPY packages/core ./packages/core
 COPY apps/server ./apps/server
 COPY --from=build /app/apps/web/dist ./apps/web/dist
-COPY docker-entrypoint.sh /usr/local/bin/obtion-entrypoint
 # COPY keeps the modes of the checkout; cloned with a strict umask (common on a NAS) the
 # server's user could not read its own code ("Module not found")
-RUN chmod -R a+rX /app/package.json /app/packages /app/apps && chmod a+rx /usr/local/bin/obtion-entrypoint
+RUN chmod -R a+rX /app/package.json /app/packages /app/apps && mkdir -p /data && chown bun:bun /data
 ENV HOST=0.0.0.0 PORT=8480 OBTION_DATA=/data
 VOLUME /data
 EXPOSE 8480
-# runs the server as the owner of /data, never as root (docker-entrypoint.sh)
-ENTRYPOINT ["obtion-entrypoint"]
+# never as root; docker compose runs it as the owner of the data folder (OBTION_UID/OBTION_GID)
+USER bun
 CMD ["bun", "apps/server/src/index.ts"]

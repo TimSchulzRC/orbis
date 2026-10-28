@@ -68,13 +68,14 @@ The image holds the server with the web app. All data live in one ordinary folde
 
 ```bash
 git clone <repository> obtion && cd obtion
+mkdir data                           # the data folder, owned by you
 docker compose up -d                 # builds the image from this repository
 ```
 
-Then open `http://<any address of the host>:8480` – its LAN address, its tailnet address or name, `http://nas:8480`. Nothing else has to be set up. Over plain HTTP the browser leaves out a few things: the app cannot be installed and does not open offline (the data stay on the device all the same). For that, put HTTPS in front – `tailscale serve`, the NAS's reverse proxy, Caddy – and open that address instead.
+Then open `http://<any address of the host>:8480` – its LAN address, its tailnet address or name, `http://nas:8480`. Over plain HTTP the browser leaves out a few things: the app cannot be installed and does not open offline (the data stay on the device all the same). For that, put HTTPS in front – `tailscale serve`, the NAS's reverse proxy, Caddy – and open that address instead.
 
 - **Settings** are optional and live in `.env` (`cp .env.example .env`; not in git, so `git pull` never collides with them); `.env.example` explains each. The server answers under IP addresses and private names (`nas`, `*.local`, `*.lan`, `*.ts.net`) by itself; a public name behind a reverse proxy goes into `OBTION_PUBLIC_URL` (more in `OBTION_ALLOWED_HOSTS`).
-- **Data:** `OBTION_DATA_DIR`, default `./data` next to the compose file – a plain folder, e.g. on the NAS's SSD. A new folder is set up by the container; an existing one keeps its owner (the server runs as that user, never as root).
+- **Data:** `OBTION_DATA_DIR`, default `./data` next to the compose file – a plain folder, e.g. on the NAS's SSD. It has to exist before the start. The server runs as its owner, never as root: `OBTION_UID` and `OBTION_GID` in `.env` (default 1000:1000; `ls -n` shows the owner's numbers), so its files keep that owner.
 - **Backup:** the server writes a consistent copy of each workspace's database to `workspaces/<id>/backups/obtion-<date>.db` once a day while it is in use and keeps the last seven. A backup job may therefore copy the whole data folder at any time, without stopping anything: `backups/` and `blobs/` (file contents, only ever added) are what counts, plus `accounts.db` and `config.json`; `obtion.db` itself may be caught mid-write and `vault/` is rebuilt at every start.
 - **Restore:** `docker compose stop`, in the workspace's folder replace `obtion.db` with a file from `backups/` and delete `obtion.db-wal` and `obtion.db-shm`, `docker compose start`. Devices notice the older state and send what they have beyond it.
 - **Update:** `git pull && docker compose up -d --build`.
