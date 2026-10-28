@@ -1,5 +1,5 @@
 // Settings in two kinds. Global (#/settings): the account, its workspaces, and what belongs to
-// this device (language, appearance, files, its name).
+// this device (language, appearance, files, its name, where Start takes its layout from).
 // A workspace's own (#/w/<id>/workspace, from its menu in the sidebar or the list here): name and
 // members, capture, examples, agents, sync, and the way to its types, activity, graph and trash.
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
@@ -13,7 +13,7 @@ import { useT, setLang } from "../i18n";
 import { Button, Dialog, ItemIcon, Seg, SectionTitle, TypeGlyph, cx } from "../ui/bits";
 import { notify } from "../ui/feedback";
 import { setTheme, useTheme } from "../theme";
-import { type Space, agentHere, inviteLink, leaveSpace, mcpToken, members, renameSpace, replica, signOut, spaceById, useAccounts } from "../accounts";
+import { type Space, agentHere, inviteLink, leaveSpace, mcpToken, members, renameSpace, replica, setStartSpace, signOut, spaceById, startSpace, useAccounts } from "../accounts";
 import { NewSpaceDialog } from "../ui/Spaces";
 
 interface Connect {
@@ -246,6 +246,29 @@ function DeviceName() {
   );
 }
 
+/** Start shows every workspace seen; its layout (the cards) comes from one of them, chosen on this device. */
+function StartLayout() {
+  const { t } = useT();
+  const { spaces } = useAccounts();
+  if (spaces.length < 2) return null;
+  return (
+    <section>
+      <SectionTitle>{t("settings.startLayout")}</SectionTitle>
+      <label className="flex items-center gap-3 text-sm">
+        <span className="text-muted">{t("settings.startLayoutFrom")}</span>
+        <select value={startSpace()?.id} onChange={(e) => setStartSpace(e.target.value)} className="tap-row rounded-md border border-line bg-surface px-2 py-1">
+          {spaces.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <p className="mt-2 text-xs text-muted">{t("settings.startLayoutHint")}</p>
+    </section>
+  );
+}
+
 /** The settings of the app on this device and the account, with its workspaces. */
 export function Settings() {
   const { t, lang } = useT();
@@ -273,6 +296,7 @@ export function Settings() {
         <p className="mt-2 text-xs text-muted">{t("settings.themeHint")}</p>
       </section>
 
+      <StartLayout />
 
       <DeviceFilesSection />
 

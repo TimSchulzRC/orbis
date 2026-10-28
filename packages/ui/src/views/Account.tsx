@@ -98,7 +98,7 @@ function Join({ code }: { code: string }) {
   }, [code]);
   const done = () => location.replace("#/");
   if (inv === undefined) return null;
-  if (inv === null) return <Card title={t("account.inviteInvalid")} intro={t("account.inviteInvalidHint")}><a href="#/inbox" className="mt-4 block text-sm text-[var(--link)] hover:underline">{t("nav.inbox")}</a></Card>;
+  if (inv === null) return <Card title={t("account.inviteInvalid")} intro={t("account.inviteInvalidHint")}><a href="#/" className="mt-4 block text-sm text-[var(--link)] hover:underline">{t("nav.start")}</a></Card>;
   return (
     <Card title={t("account.joinTitle", { workspace: inv.workspace })} intro={t("account.joinIntro", { by: inv.by, server: location.host })}>
       {acc && !acc.lost ? (

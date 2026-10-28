@@ -95,7 +95,7 @@ export function Results({ def, thisId, display, empty, compact, keyPrefix = "", 
       ) : view === "triage" ? (
         <Triage items={items} storageKey={keyPrefix} />
       ) : def.columns?.includes("progress") && !def.group ? (
-        // projects with progress and next task: a table in a card
+        // projects with progress and next task: a table in a card, like on Start
         <div className="overflow-hidden rounded-xl border border-line bg-surface">
           <ProjectTable items={items} />
         </div>

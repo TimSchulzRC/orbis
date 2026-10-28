@@ -11,7 +11,7 @@ import { runAgent } from "./agent";
 import { Blobs, MAX_BLOB } from "./blobs";
 import { Backups } from "./backup";
 import { FORMAT, PERSONAL, SETTINGS_ID, fileTypeOf } from "@obtion/core/model";
-import { addLaterDefaultProps, migrateCollections, renameShippedLabels, upgradeAreas, upgradeHideEmptyTaskFields } from "@obtion/core/setup";
+import { addLaterDefaultProps, migrateCollections, renameShippedLabels, upgradeAreas, upgradeHideEmptyTaskFields, upgradeStartPage } from "@obtion/core/setup";
 import type { Lang } from "@obtion/core/i18n";
 import { storeWriter } from "./importers";
 import { UndoError, redoStep, undoStep } from "./undo";
@@ -41,6 +41,7 @@ function upgrade(store: Store) {
   // Properties shipped after a default type was set up ("Wartet auf"): added once, nothing migrated.
   const lang = store.records.get(SETTINGS_ID)?.settings?.setupLang as Lang | undefined;
   if (lang && addLaterDefaultProps(storeWriter(store, "system:setup"), lang).length) store.flush();
+  if (lang && upgradeStartPage(storeWriter(store, "system:setup"), lang)) store.flush();
   if (lang && renameShippedLabels(storeWriter(store, "system:setup"), lang)) store.flush();
   if (upgradeHideEmptyTaskFields(storeWriter(store, "system:setup"))) store.flush();
   // collections are gone (26.10.): their views go to the types, the inbox rule to the settings

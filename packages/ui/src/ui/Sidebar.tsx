@@ -1,4 +1,4 @@
-// Sidebar: the workspace selector (which workspaces are seen), search and the inbox (of
+// Sidebar: the workspace selector (which workspaces are seen), search, Start and the inbox (of
 // the workspaces seen), then each of them as a block of its own (as teamspaces in Notion): its
 // name, the pinned items (informations with their children as a tree, also type pages), and its
 // types with the files. Blocks and what is open in them fold; that is remembered on
@@ -6,7 +6,7 @@
 // added. Dropping on the upper or lower edge of a row reorders. Dropped into another workspace's
 // block, an item moves there.
 import { useEffect, useState } from "react";
-import { ChevronRight, ChevronDown, Inbox, Search, Sparkles, SlidersHorizontal, Link2, MoreHorizontal, Plus, Paperclip } from "lucide-react";
+import { ChevronRight, ChevronDown, LayoutDashboard, Inbox, Search, Sparkles, SlidersHorizontal, Link2, MoreHorizontal, Plus, Paperclip } from "lucide-react";
 import { type Item, META_TYPE, SETTINGS_ID, setSchemaField, setSettings } from "@obtion/core/model";
 import { sidebarChildren, sidebarRoots } from "@obtion/core/placement";
 import { inboxWhere } from "@obtion/core/inbox";
@@ -60,6 +60,9 @@ export function Sidebar({ onSearch, onAgent }: { onSearch: () => void; onAgent: 
       </button>
       <div className="min-h-0 flex-1 overflow-y-auto pb-3">
         <nav className="flex flex-col gap-0.5 px-2" aria-label={t("nav.main")}>
+          <a href="#/" className={navCls(route.path === "/")}>
+            <LayoutDashboard size={16} /> <span className="flex-1">{t("nav.start")}</span>
+          </a>
           <a href="#/inbox" className={navCls(route.path.startsWith("/inbox"))}>
             <Inbox size={16} /> <span className="flex-1">{t("nav.inbox")}</span>
             {inbox > 0 && <span className="text-xs tabular-nums text-muted">{inbox}</span>}
