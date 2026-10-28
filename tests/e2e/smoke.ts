@@ -149,6 +149,7 @@ async function run() {
     await signInPage(browser, empty);
     await examplesOnSetup(browser, fresh);
     await twoWorkspaces(browser, fresh);
+    await deleteAccountOnSettings(browser, fresh);
     for (const [serverName, server] of [["empty", empty], ["seeded", seeded], ["no types", typeless]] as const) {
       for (const v of variants) {
         const context = await signedIn(browser, server, { viewport: v.viewport, colorScheme: v.scheme, isMobile: !!v.mobile, hasTouch: !!v.mobile, locale: "de-DE" });
@@ -448,6 +449,42 @@ async function twoWorkspaces(browser: import("playwright-core").Browser, server:
     if (await ask.waitFor({ timeout: 3000 }).then(() => true, () => false)) await ask.click();
     if (!(await firma(p).getByText("Arbeit").waitFor({ timeout: 8000 }).then(() => true, () => false))) failures.push(`${label}: "Arbeit" did not move into "Firma"`);
     if (await p.locator("aside section[aria-label='Persönlich'] a[href='#/i/ex-work']").count()) failures.push(`${label}: "Arbeit" is still in "Persönlich"`);
+  });
+  await context.close();
+}
+
+async function deleteAccountOnSettings(browser: import("playwright-core").Browser, server: Awaited<ReturnType<typeof startServer>>) {
+  const context = await signedIn(browser, server, { locale: "de-DE" });
+  const page = await context.newPage();
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.goto("/", { waitUntil: "load" });
+  await settle(page);
+  await check(page, "delete account", "/#/settings", errors, async (p) => {
+    await p.getByRole("button", { name: "Konto endgültig löschen", exact: true }).click();
+    const dialog = p.getByRole("dialog");
+    await dialog.getByLabel("Passwort").fill("wrong");
+    await dialog.getByRole("button", { name: "Konto endgültig löschen", exact: true }).click();
+    await dialog.getByRole("alert").filter({ hasText: "Das Passwort stimmt nicht." }).waitFor();
+    await dialog.getByLabel("Passwort").fill("geheim12345");
+    await dialog.getByRole("button", { name: "Konto endgültig löschen", exact: true }).click();
+    await dialog.getByRole("alert").filter({ hasText: "letzter Owner" }).waitFor();
+    await dialog.getByRole("button", { name: "Abbrechen", exact: true }).click();
+    // Use the existing workspace API so the final confirmation also cleans an open local replica.
+    const me = await fetch(server.url + "/api/account", { headers: { authorization: `Bearer ${server.token}` } }).then((r) => r.json());
+    for (const w of me.workspaces) {
+      const response = await fetch(`${server.url}/api/workspaces/${w.id}`, { method: "DELETE", headers: { authorization: `Bearer ${server.token}` } });
+      if (!response.ok) throw new Error("could not delete test workspace");
+    }
+    await p.getByRole("button", { name: "Konto endgültig löschen", exact: true }).click();
+    await dialog.getByLabel("Passwort").fill("geheim12345");
+    await dialog.getByRole("button", { name: "Konto endgültig löschen", exact: true }).click();
+    await p.getByRole("button", { name: "Konto anlegen", exact: true }).waitFor();
+    const stored = await p.evaluate(() => ({ account: JSON.parse(localStorage.getItem("obtion.account") ?? "null"), spaces: JSON.parse(localStorage.getItem("obtion.spaces") ?? "[]") }));
+    if (stored.account || stored.spaces.length) throw new Error("account or workspace metadata remained on this device");
+    const databases = await p.evaluate(async () => (await indexedDB.databases()).map((db) => db.name));
+    if (databases.some((name) => name === "obtion" || name === "obtion-files" || name?.startsWith("obtion-ws-")))
+      throw new Error("workspace database remained on this device");
   });
   await context.close();
 }

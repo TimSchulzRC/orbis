@@ -68,7 +68,7 @@ function writeField(doc: Y.Doc, key: string, value: unknown) {
   }
   if (area === "updates") {
     const arr = doc.getArray<any>("updates");
-    const i = arr.toArray().findIndex((u) => u.id === k);
+    const i = (arr.toArray() as any[]).findIndex((u) => u.id === k);
     if (value === undefined) return i >= 0 && arr.delete(i, 1);
     if (i < 0) arr.push([value]);
     return;

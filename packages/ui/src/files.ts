@@ -213,6 +213,7 @@ export class DeviceFiles {
     // the data from before accounts keep the names they had ("obtion" → "obtion-files", "blobs")
     const legacy = this.link.name === "obtion";
     this.db = await openDB(legacy ? "obtion-files" : `${this.link.name}-files`, 1, {
+      blocking: () => { this.db.close(); },
       upgrade(db) {
         db.createObjectStore("blobs");
         db.createObjectStore("uploads", { keyPath: "hash" });
