@@ -171,8 +171,8 @@ Projekt, Task und Karte sind Typen, eigene gehen auch – etwa [[${book}]]. Jede
 ### Abfragen
 [[${weekTitle}]] sammelt mit einem Abfrage-Block, was bald ansteht.
 
-### Agent
-Der Agent unten in der Seitenleiste liest und ändert deine Einträge auf Zuruf, etwa: „Was ist im Relaunch überfällig?“
+### MCP
+Verbinde einen MCP-Client über die Workspace-Einstellungen, um deine Einträge per Agent zu lesen und zu ändern.
 `,
       `Everything here is made up and shows how Obtion works. When you are done: Settings › Remove examples.
 
@@ -194,8 +194,8 @@ Project, task and card are types, and you can add your own – like [[${book}]].
 ### Queries
 [[${weekTitle}]] gathers what is due soon with a query block.
 
-### Agent
-The agent at the bottom of the sidebar reads and changes your entries when you ask, for example: "What is overdue in the relaunch?"
+### MCP
+Connect an MCP client in the workspace settings to read and change your entries through an agent.
 `,
     ),
   });

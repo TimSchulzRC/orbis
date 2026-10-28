@@ -26,5 +26,3 @@ services:
       OBTION_WEB_APP: ${OBTION_WEB_APP:-on}
       # who may create an account: invite (with an invite link), open (anyone), off
       OBTION_SIGNUP: ${OBTION_SIGNUP:-invite}
-      # who may use the in-app agent (the server's Claude login): admins, all, off
-      OBTION_AGENT: ${OBTION_AGENT:-admins}

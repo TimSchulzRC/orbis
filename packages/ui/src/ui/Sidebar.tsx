@@ -7,7 +7,7 @@ import { Button as ShadcnButton } from "../components/ui/button";
 // added. Dropping on the upper or lower edge of a row reorders. Dropped into another workspace's
 // block, an item moves there.
 import { useEffect, useState } from "react";
-import { ChevronRight, ChevronDown, Inbox, Search, Sparkles, SlidersHorizontal, Link2, MoreHorizontal, Plus, Paperclip } from "lucide-react";
+import { ChevronRight, ChevronDown, Inbox, Search, SlidersHorizontal, Link2, MoreHorizontal, Plus, Paperclip } from "lucide-react";
 import { type Item, META_TYPE, SETTINGS_ID, setSchemaField, setSettings } from "@obtion/core/model";
 import { sidebarChildren, sidebarRoots } from "@obtion/core/placement";
 import { inboxWhere } from "@obtion/core/inbox";
@@ -40,7 +40,7 @@ export function useInboxTotal() {
   }, 0);
 }
 
-export function Sidebar({ onSearch, onAgent }: { onSearch: () => void; onAgent: () => void }) {
+export function Sidebar({ onSearch }: { onSearch: () => void }) {
   const { t, lang } = useT();
   const route = useRoute();
   const { shown } = useAccounts();
@@ -75,11 +75,8 @@ export function Sidebar({ onSearch, onAgent }: { onSearch: () => void; onAgent: 
         ))}
         {creating && <NewSpaceDialog onClose={() => setCreating(false)} />}
       </div>
-      {/* below: the agent and the settings (the account, its workspaces, this device) */}
+      {/* below: the settings (the account, its workspaces, this device) */}
       <div className="flex flex-col gap-0.5 border-t border-line p-2">
-        <ShadcnButton variant="plain" size="none" onClick={onAgent} className={navCls(false)}>
-          <Sparkles size={16} /> <span className="flex-1 text-left">{t("nav.agent")}</span> <Kbd>{shortcut("J", lang)}</Kbd>
-        </ShadcnButton>
         <a href="#/settings" className={navCls(route.path.startsWith("/settings"))}>
           <SlidersHorizontal size={16} /> {t("nav.settings")}
         </a>

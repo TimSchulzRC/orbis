@@ -1,5 +1,5 @@
 // One workspace on the server: its own folder (workspaces/<id>/) with the database, the file
-// contents, the Markdown mirror, the daily backups and the agent's sessions – what the whole
+// contents, the Markdown mirror, the daily backups – what the whole
 // server was before accounts. Opened when it is first used; everything below sees only it, so
 // workspaces cannot reach each other's data.
 import { join } from "node:path";
@@ -7,7 +7,6 @@ import type { ServerWebSocket } from "bun";
 import { AreaError, Store } from "./store";
 import { Mirror } from "./mirror";
 import { handleMcp } from "./mcp";
-import { runAgent } from "./agent";
 import { Blobs, MAX_BLOB } from "./blobs";
 import { Backups } from "./backup";
 import { FORMAT, PERSONAL, SETTINGS_ID, fileTypeOf } from "@obtion/core/model";
@@ -163,7 +162,7 @@ export class Workspace {
    * The workspace's API for a member. `rest` is the path after /w/<id>; `actor` names the user
    * in the activity ("web:Ada@Mac-x3f9").
    */
-  async handle(req: Request, rest: string, ctx: { user: string; agent: { allowed: boolean; mcpUrl: string; token: string; model?: string } }): Promise<Response> {
+  async handle(req: Request, rest: string, ctx: { user: string }): Promise<Response> {
     const url = new URL(req.url);
     const store = this.store;
 
@@ -184,26 +183,6 @@ export class Workspace {
         if (e instanceof UndoError) return Response.json({ error: e.message }, { status: 409 });
         throw e;
       }
-    }
-
-    if (rest === "/api/agent" && req.method === "POST") {
-      if (!ctx.agent.allowed) return new Response("The agent is not available for this account", { status: 403 });
-      if (!(req.headers.get("content-type") ?? "").includes("application/json")) return new Response("JSON required", { status: 415 });
-      const body = (await req.json()) as { message: string; sessionId?: string; context?: string; model?: string };
-      if (!body.message?.trim()) return new Response("message required", { status: 400 });
-      const ac = new AbortController();
-      req.signal.addEventListener("abort", () => ac.abort());
-      const gen = runAgent({
-        message: body.message,
-        sessionId: body.sessionId,
-        context: body.context,
-        model: body.model || ctx.agent.model || "sonnet",
-        mcpUrl: ctx.agent.mcpUrl,
-        token: ctx.agent.token,
-        dataDir: this.dir,
-        signal: ac.signal,
-      });
-      return sse(gen, () => ac.abort());
     }
 
     if (rest.startsWith("/api/blobs/")) return this.blob(req, url, rest.slice("/api/blobs/".length));
@@ -245,21 +224,4 @@ export class Workspace {
 
 export function send(ws: ServerWebSocket<Conn>, msg: ServerMsg) {
   ws.send(JSON.stringify(msg));
-}
-
-function sse(gen: AsyncGenerator<unknown>, onClose: () => void): Response {
-  const enc = new TextEncoder();
-  const stream = new ReadableStream({
-    async start(controller) {
-      try {
-        for await (const ev of gen) controller.enqueue(enc.encode(`data: ${JSON.stringify(ev)}\n\n`));
-      } catch (e) {
-        controller.enqueue(enc.encode(`data: ${JSON.stringify({ type: "error", message: String(e) })}\n\n`));
-      } finally {
-        controller.close();
-      }
-    },
-    cancel: onClose,
-  });
-  return new Response(stream, { headers: { "content-type": "text/event-stream", "cache-control": "no-cache", "x-accel-buffering": "no" } });
 }

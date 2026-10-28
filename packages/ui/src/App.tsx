@@ -2,7 +2,7 @@ import { ModalSurface } from "./components/ui/dialog";
 import { Button as ShadcnButton } from "./components/ui/button";
 import { BrandLogo } from "./ui/BrandLogo";
 import { useEffect, useRef, useState } from "react";
-import { Sparkles, Plus, Menu, Search, Inbox, SlidersHorizontal, X } from "lucide-react";
+import { Plus, Menu, Search, Inbox, SlidersHorizontal, X } from "lucide-react";
 import { SETTINGS_ID } from "@obtion/core/model";
 import { useRepo, useRoute, useMediaQuery, itemHref, spaceHref } from "./hooks";
 import { useT } from "./i18n";
@@ -16,7 +16,6 @@ import { PageBoundary } from "./ui/ErrorBoundary";
 import { Sidebar, SpaceTree, useInboxTotal } from "./ui/Sidebar";
 import { SyncDot } from "./ui/SyncDot";
 import { CommandPalette } from "./ui/CommandPalette";
-import { AgentPanel } from "./ui/AgentPanel";
 import { CaptureSheet } from "./ui/Capture";
 import { Setup } from "./views/Setup";
 import { ItemPage } from "./views/ItemPage";
@@ -86,33 +85,19 @@ function Main() {
   const [menu, setMenu] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
   useEffect(() => setMenu(false), [route.path]);
-  const [agentOpen, setAgentOpen] = useState(() => localStorage.getItem("obtion.agentOpen") === "1" && matchMedia("(min-width: 1024px)").matches);
-
-  const toggleAgent = (v?: boolean) => {
-    const next = v ?? !agentOpen;
-    setAgentOpen(next);
-    localStorage.setItem("obtion.agentOpen", next ? "1" : "0");
-  };
-
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
       if (mod && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setPalette((p) => !p);
-      } else if (mod && e.key.toLowerCase() === "j") {
-        e.preventDefault();
-        toggleAgent();
       }
     };
-    const ask = () => toggleAgent(true);
     const showPalette = () => setPalette(true);
     window.addEventListener("keydown", on);
-    window.addEventListener("obtion:ask", ask);
     window.addEventListener("obtion:palette", showPalette);
     return () => {
       window.removeEventListener("keydown", on);
-      window.removeEventListener("obtion:ask", ask);
       window.removeEventListener("obtion:palette", showPalette);
     };
   });
@@ -177,7 +162,6 @@ function Main() {
         return <div className="p-8 text-muted-foreground">{t("app.notFound")}</div>;
     }
   })();
-  const contextItem = route.parts[0] === "i" ? r.get(route.parts[1]) : undefined;
   const isGraph = route.parts[0] === "graph";
 
   return (
@@ -188,7 +172,7 @@ function Main() {
       >
         {t("nav.skip")}
       </ShadcnButton>
-      {wide && <Sidebar onSearch={() => setPalette(true)} onAgent={() => toggleAgent(true)} />}
+      {wide && <Sidebar onSearch={() => setPalette(true)} />}
 
       <div className="flex min-w-0 flex-1 flex-col">
         {!wide && (
@@ -212,10 +196,9 @@ function Main() {
           <PageBoundary key={`${globalPage(route.parts) ? "" : active?.id}${route.path}`}>{page}</PageBoundary>
         </main>
         {/* an inbox entry on a phone has its actions at the bottom instead */}
-        {!wide && !(route.parts[0] === "inbox" && route.parts[1]) && <MobileNav onAgent={() => toggleAgent(true)} />}
+        {!wide && !(route.parts[0] === "inbox" && route.parts[1]) && <MobileNav />}
       </div>
 
-      {agentOpen && <AgentPanel context={contextItem} onClose={() => toggleAgent(false)} overlay={!wide} />}
       {palette && <CommandPalette onClose={() => setPalette(false)} />}
       {menu && (
         <div className="fixed inset-0 z-50 bg-black/30" onClick={() => setMenu(false)}>
@@ -225,7 +208,7 @@ function Main() {
           </MenuSheet>
         </div>
       )}
-      {!wide && route.parts[0] !== "i" && !(route.parts[0] === "inbox" && route.parts[1]) && !agentOpen && (
+      {!wide && route.parts[0] !== "i" && !(route.parts[0] === "inbox" && route.parts[1]) && (
         <ShadcnButton variant="plain" size="none"
           onClick={() => setCaptureOpen(true)}
           aria-label={t("capture.title")}
@@ -292,10 +275,10 @@ function Redirect({ to }: { to: string }) {
 }
 
 /**
- * Bottom bar on phones: Eingang, Agent – with one workspace seen also its first two types
+ * Bottom bar on phones: Eingang – with one workspace seen also its first two types
  * of the sidebar (Projekte, Tasks); with several they are in the menu, each in its workspace.
  */
-function MobileNav({ onAgent }: { onAgent: () => void }) {
+function MobileNav() {
   const { t } = useT();
   const { shown, active } = useAccounts();
   const one = shown.length === 1 ? shown[0]! : undefined;
@@ -311,7 +294,6 @@ function MobileNav({ onAgent }: { onAgent: () => void }) {
           return { key: x.id, label: ix.typePlural(x.id), icon: <I size={20} />, href: spaceHref(one!.id, `/i/${encodeURIComponent(x.id)}`), active: active?.id === one!.id && route.parts[0] === "i" && route.parts[1] === x.id };
         })
       : []),
-    { key: "agent", label: t("nav.agent"), icon: <Sparkles size={20} />, onClick: onAgent },
   ] as { key: string; label: string; icon: React.ReactNode; href?: string; onClick?: () => void; active?: boolean; dot?: boolean }[];
   return (
     <nav className="grid border-t border-line bg-surface pb-safe" style={{ gridTemplateColumns: `repeat(${entries.length}, minmax(0, 1fr))` }} aria-label={t("nav.main")}>

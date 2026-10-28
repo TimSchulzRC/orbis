@@ -5,7 +5,7 @@ import { Input } from "../components/ui/input";
 // sections appear (via their capabilities), never the layout.
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { EditorView } from "@codemirror/view";
-import { Sparkles, Trash2, RotateCcw, MoreHorizontal, Plus, AlertTriangle, ImagePlus, Scissors, ListFilter, Languages, Pin, PinOff, FilePlus, FolderInput, Link2, ArrowRightLeft } from "lucide-react";
+import { Trash2, RotateCcw, MoreHorizontal, Plus, AlertTriangle, ImagePlus, Scissors, ListFilter, Languages, Pin, PinOff, FilePlus, FolderInput, Link2, ArrowRightLeft } from "lucide-react";
 import { type Item, META_TYPE } from "@obtion/core/model";
 import { isInInbox, isOverview } from "@obtion/core/placement";
 import { wouldBeInInbox } from "@obtion/core/typeops";
@@ -26,7 +26,7 @@ import { queryBlocks, insertQueryBlock } from "../ui/QueryBlock";
 import { FilePage } from "./FilePage";
 import { TitleField } from "../ui/TitleField";
 import { TypePage } from "./TypePage";
-import { askAgent, createAndOpen } from "../actions";
+import { createAndOpen } from "../actions";
 import { INBOX_ICON, NOTE_ICON, OVERVIEW_ICON } from "../ui/icons";
 import { extractAsCard, extractType } from "../ui/extract";
 import { movedItems } from "@obtion/core/transfer";
@@ -101,7 +101,6 @@ function InfoView({ item, isNew }: { item: Item; isNew: boolean }) {
 
   const tools = (
     <>
-      <IconButton onClick={() => askAgent()} label={t("item.askAgent")} icon={Sparkles} />
       <Popover align="right" trigger={(p) => <IconButton {...p} label={t("more")} icon={MoreHorizontal} />}>
         {(close) => (
           <>
@@ -136,9 +135,6 @@ function InfoView({ item, isNew }: { item: Item; isNew: boolean }) {
                 {t("item.newTranslation", { lang: languageCode(o.name) })}
               </MenuItem>
             ))}
-            <MenuItem icon={<Languages size={14} />} onClick={() => (close(), askAgent(t("item.translatePrompt", { title: item.title, id: item.id }), t("item.translateShown", { title: item.title })))}>
-              {t("item.translate")}
-            </MenuItem>
             {others && !item.deleted && item.type !== META_TYPE && (
               <MenuItem icon={<ArrowRightLeft size={14} />} onClick={() => (close(), setMoving(true))}>
                 {t("move.menu")}
