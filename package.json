@@ -13,6 +13,8 @@
     "yjs": "^13.6.33"
   },
   "scripts": {
+    "dev:start": "bash scripts/obtion-dev start",
+    "dev:stop": "bash scripts/obtion-dev stop",
     "dev": "bun --watch apps/server/src/index.ts & bun run --cwd apps/web dev",
     "build": "bun run --cwd apps/web build",
     "dev:build": "bun run --cwd apps/web dev:build",

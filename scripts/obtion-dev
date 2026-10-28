@@ -1,0 +1,119 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+[[ $# == 1 && ( $1 == start || $1 == stop ) ]] || {
+  echo 'Usage: bun run dev:start | bun run dev:stop' >&2
+  exit 1
+}
+root=$(git rev-parse --show-toplevel)
+root=$(cd "$root" && pwd -P)
+[[ -f "$root/apps/server/src/index.ts" ]] || { echo 'Not an Obtion worktree' >&2; exit 1; }
+key=$(printf '%s' "$root" | sha256sum)
+key=${key:0:16}
+state_dir=${XDG_STATE_HOME:-$HOME/.local/state}/obtion-dev
+mkdir -p "$state_dir"
+exec 9>"$state_dir/lock"
+flock 9
+state_file=$state_dir/$key.ports
+backend_unit=obtion-dev-$key-backend.service
+web_unit=obtion-dev-$key-web.service
+bun=$(command -v bun || true)
+[[ -n $bun ]] || bun=$HOME/.bun/bin/bun
+[[ -x $bun ]] || { echo 'Bun is required' >&2; exit 1; }
+
+active() { systemctl --user is-active --quiet "$1"; }
+proxy_matches() {
+  tailscale serve status --json | "$bun" -e '
+    const config = await Bun.stdin.json();
+    const [host, port, web] = process.argv.slice(1);
+    const proxy = config.Web?.[`${host}:${port}`]?.Handlers?.["/"]?.Proxy;
+    process.exit(proxy === `http://127.0.0.1:${web}` ? 0 : 1);
+  ' "$host" "$public" "$web"
+}
+stop() {
+  systemctl --user stop "$backend_unit" "$web_unit" 2>/dev/null || true
+  if active "$backend_unit" || active "$web_unit"; then
+    echo 'Could not stop development services' >&2
+    return 1
+  fi
+  if [[ -n ${public:-} ]] && proxy_matches; then
+    tailscale serve --yes --https="$public" off
+  fi
+}
+
+public= web= backend= host=
+if [[ -f $state_file ]]; then
+  read -r public web backend host < "$state_file"
+  [[ $public =~ ^[0-9]+$ && $web =~ ^[0-9]+$ && $backend =~ ^[0-9]+$ && -n $host ]]
+fi
+if [[ $1 == stop ]]; then
+  stop
+  echo "Stopped: $root"
+  exit
+fi
+if [[ -n $public ]] && active "$backend_unit" && active "$web_unit" && proxy_matches; then
+  echo "https://$host:$public"
+  exit
+fi
+[[ -x "$root/apps/web/node_modules/.bin/vite" ]] || {
+  echo 'Run bun install in this worktree first' >&2
+  exit 1
+}
+stop
+
+reserved=' '
+for saved in "$state_dir"/*.ports; do
+  [[ -f $saved && $saved != "$state_file" ]] || continue
+  read -r p w b _ < "$saved"
+  reserved+="$p $w $b "
+done
+free_port() { [[ -z $(ss -H -ltn "sport = :$1") ]]; }
+allocate() {
+  local name=$1 first=$2 previous=${!1} candidate
+  for candidate in ${previous:+$previous} $(seq "$first" "$((first + 499))"); do
+    if [[ $reserved != *" $candidate "* ]] && free_port "$candidate"; then
+      printf -v "$name" '%s' "$candidate"
+      reserved+="$candidate "
+      return
+    fi
+  done
+  echo "No free $name port" >&2
+  return 1
+}
+allocate public 18443
+allocate web 19000
+allocate backend 20000
+host=$(tailscale status --json | "$bun" -e 'console.log((await Bun.stdin.json()).Self.DNSName.replace(/\.$/, ""))')
+url=https://$host:$public
+printf '%s %s %s %s\n' "$public" "$web" "$backend" "$host" > "$state_file"
+# Roll back a partial start, including when interrupted.
+trap 'stop' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM HUP
+service() {
+  local unit=$1
+  shift
+  systemd-run --user --collect --service-type=exec --unit="$unit" \
+    --working-directory="$root" --property=Restart=on-failure \
+    --property=RestartSec=2 --property=TimeoutStopSec=10 \
+    --setenv="PATH=$(dirname "$bun"):$PATH" --setenv="PORT=$backend" \
+    --setenv="OBTION_DEV_PUBLIC_URL=$url" --setenv="OBTION_DATA=$root/data" "$@"
+}
+service "$backend_unit" "$bun" --watch apps/server/src/index.ts
+service "$web_unit" "$bun" run --cwd apps/web dev --port "$web" --strictPort
+ready=false
+for ((attempt=0; attempt<100; attempt++)); do
+  if ! free_port "$web" && ! free_port "$backend" && active "$backend_unit" && active "$web_unit"; then
+    ready=true
+    break
+  fi
+  sleep 0.1
+done
+if [[ $ready != true ]]; then
+  echo "Servers did not start. Logs: journalctl --user -u $backend_unit -u $web_unit" >&2
+  exit 1
+fi
+tailscale serve --bg --yes --https="$public" "http://127.0.0.1:$web"
+trap - EXIT INT TERM HUP
+echo "Running in background: $root"
+echo "$url"
