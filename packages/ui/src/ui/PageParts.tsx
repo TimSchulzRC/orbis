@@ -1,3 +1,4 @@
+import { Button as ShadcnButton } from "../components/ui/button";
 // Parts every page shares (design rules § 3.1): the path line on top, the card of connections
 // ("Bezüge") and the quiet footer. Information pages and file pages use the same ones.
 import { useEffect, useState } from "react";
@@ -58,9 +59,9 @@ export function Crumbs({ item, tools, onPlaces, onPlace }: { item: Item; tools: 
           </span>
         ))}
         {others > 0 && (
-          <button onClick={onPlaces} className="tap-y ml-1 shrink-0 whitespace-nowrap rounded-full border border-line px-1.5 text-xs hover:text-fg" title={t("refs.places")}>
+          <ShadcnButton variant="plain" size="none" onClick={onPlaces} className="tap-y ml-1 shrink-0 whitespace-nowrap rounded-full border border-line px-1.5 text-xs hover:text-fg" title={t("refs.places")}>
             +{others}
-          </button>
+          </ShadcnButton>
         )}
       </>
     );
@@ -70,9 +71,9 @@ export function Crumbs({ item, tools, onPlaces, onPlace }: { item: Item; tools: 
         <a href="#/inbox" className={link}>
           {t("kind.inbox")}
         </a>
-        <button onClick={onPlace} className="tap-y ml-1 text-link hover:underline">
+        <ShadcnButton variant="plain" size="none" onClick={onPlace} className="tap-y ml-1 text-link hover:underline">
           {t("triage.place")}
-        </button>
+        </ShadcnButton>
       </>
     );
   } else if (item.pinned) {
@@ -91,7 +92,7 @@ export function Crumbs({ item, tools, onPlaces, onPlace }: { item: Item; tools: 
       );
   }
   return (
-    <div className="flex min-h-7 items-center gap-1 text-[13px] text-muted max-md:min-h-8">
+    <div className="flex min-h-7 items-center gap-1 text-[13px] text-muted-foreground max-md:min-h-8">
       <nav className="flex min-w-0 items-center gap-1" aria-label={t("item.path")}>
         {lead}
       </nav>
@@ -169,9 +170,9 @@ export function Bezuege({ item, typeArea, usedIn, placesOpen }: { item: Item; ty
           <>
             <PlaceHere target={ix.get(x)!} page={item} />
             {!fromText.includes(x) && (
-              <button onClick={(e) => (e.preventDefault(), repo.setMember(item.id, "refs", x, false))} className="tap rounded p-0.5 text-faint opacity-0 pointer-coarse:opacity-100 hover:bg-hover hover:text-fg group-hover:opacity-100 focus:opacity-100" aria-label={t("item.removeRef")}>
+              <ShadcnButton variant="plain" size="none" onClick={(e) => (e.preventDefault(), repo.setMember(item.id, "refs", x, false))} className="tap rounded p-0.5 text-faint opacity-0 pointer-coarse:opacity-100 hover:bg-hover hover:text-fg group-hover:opacity-100 focus:opacity-100" aria-label={t("item.removeRef")}>
                 <X size={12} />
-              </button>
+              </ShadcnButton>
             )}
           </>
         ),
@@ -192,9 +193,9 @@ export function Bezuege({ item, typeArea, usedIn, placesOpen }: { item: Item; ty
             <Popover
               align="right"
               trigger={(pp) => (
-                <button {...pp} onClickCapture={(e) => e.preventDefault()} className="tap rounded p-0.5 text-faint opacity-0 pointer-coarse:opacity-100 hover:bg-hover group-hover:opacity-100 focus:opacity-100" aria-label={t("more")}>
+                <ShadcnButton variant="plain" size="none" {...pp} onClickCapture={(e) => e.preventDefault()} className="tap rounded p-0.5 text-faint opacity-0 pointer-coarse:opacity-100 hover:bg-hover group-hover:opacity-100 focus:opacity-100" aria-label={t("more")}>
                   <MoreHorizontal size={13} />
-                </button>
+                </ShadcnButton>
               )}
             >
               {(close) => (
@@ -230,12 +231,12 @@ function RefRow({ page, kind, initial, force }: { page: Item; kind: RefKind; ini
   }, [force]);
   return (
     <div className="border-t border-line first:border-t-0" id={`refs-${kind.key}`}>
-      <button onClick={() => setOpen(!open)} aria-expanded={open} className="flex min-h-11 w-full items-center gap-2.5 px-3.5 text-left hover:bg-hover max-md:min-h-12">
+      <ShadcnButton variant="plain" size="none" onClick={() => setOpen(!open)} aria-expanded={open} className="flex min-h-11 w-full items-center gap-2.5 px-3.5 text-left hover:bg-hover max-md:min-h-12">
         <ChevronRight size={13} className={cx("shrink-0 text-faint transition-transform", open && "rotate-90")} aria-hidden />
         <span className="whitespace-nowrap text-sm font-medium">{kind.label}</span>
-        <span className="text-[13px] tabular-nums text-muted">{kind.items.length}</span>
-        {!open && <span className="min-w-0 flex-1 truncate text-[13px] text-muted">{kind.items.map((x) => x.item.title || t("untitled")).join(", ")}</span>}
-      </button>
+        <span className="text-[13px] tabular-nums text-muted-foreground">{kind.items.length}</span>
+        {!open && <span className="min-w-0 flex-1 truncate text-[13px] text-muted-foreground">{kind.items.map((x) => x.item.title || t("untitled")).join(", ")}</span>}
+      </ShadcnButton>
       {open && (
         <ul className="pb-2.5 pl-10 pr-3.5">
           {kind.items.map(({ item: x, note, tools }) => (
@@ -244,7 +245,7 @@ function RefRow({ page, kind, initial, force }: { page: Item; kind: RefKind; ini
               <a href={itemHref(x.id)} className="min-w-0 truncate hover:underline">
                 {x.title || x.file?.name || t("untitled")}
               </a>
-              <span className="ml-auto flex shrink-0 items-center gap-1.5 text-xs text-muted">
+              <span className="ml-auto flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
                 {note}
                 {tools}
               </span>
@@ -263,9 +264,9 @@ function PlaceHere({ target, page }: { target: Item; page: Item }) {
   if (target.kind !== "info" && target.kind !== "datei") return null;
   if (!isInInbox(target, ix) || hasPlace(target, ix) || target.type === META_TYPE || ix.wouldCycle(target.id, page.id)) return null;
   return (
-    <button onClick={(e) => (e.preventDefault(), repo.addParent(target.id, page.id))} className="tap-y rounded-md px-1.5 py-0.5 text-xs text-link hover:bg-hover">
+    <ShadcnButton variant="plain" size="none" onClick={(e) => (e.preventDefault(), repo.addParent(target.id, page.id))} className="tap-y rounded-md px-1.5 py-0.5 text-xs text-link hover:bg-hover">
       {t("links.placeHere")}
-    </button>
+    </ShadcnButton>
   );
 }
 
@@ -273,7 +274,7 @@ function PlaceHere({ target, page }: { target: Item; page: Item }) {
 export function PageFooter({ item }: { item: Item }) {
   const { t, lang } = useT();
   return (
-    <p className="mt-4 text-xs text-muted">
+    <p className="mt-4 text-xs text-muted-foreground">
       {t("item.edited")} <RelTime ts={item.updated} /> · {t("page.createdOn", { date: fmtDate(lang, todayISO(new Date(item.created)), { day: "numeric", month: "long", year: "numeric" }) })}
     </p>
   );

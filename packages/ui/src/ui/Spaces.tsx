@@ -1,3 +1,6 @@
+import { Checkbox } from "../components/ui/checkbox";
+import { Button as ShadcnButton } from "../components/ui/button";
+import { Input } from "../components/ui/input";
 // Workspaces side by side: the sidebar and the inbox show the workspaces chosen in the
 // selector (several at once; on this device, the account stays as it is). Each part of a page
 // that belongs to one workspace sits in its SpaceScope (useRepo and useFiles read that
@@ -39,7 +42,7 @@ export function SpaceEyebrow() {
   const { spaces } = useAccounts();
   const id = useSpaceId();
   if (spaces.length < 2) return null;
-  return <p className="mb-0.5 text-[13px] text-muted">{spaceById(id ?? "")?.name}</p>;
+  return <p className="mb-0.5 text-[13px] text-muted-foreground">{spaceById(id ?? "")?.name}</p>;
 }
 
 /** Which workspaces are seen: the label says it ("Alle Workspaces", one name, or the names); the menu ticks them. */
@@ -56,23 +59,23 @@ export function SpaceSelector({ className, onNew }: { className?: string; onNew:
     <Popover
       triggerClass={cx("min-w-0", className)}
       trigger={(p) => (
-        <button {...p} className="-mx-1.5 flex w-full min-w-0 items-center gap-2 rounded-lg px-1.5 py-1 text-left hover:bg-hover" aria-label={t("space.choose")}>
+        <ShadcnButton variant="plain" size="none" {...p} className="-mx-1.5 flex w-full min-w-0 items-center gap-2 rounded-lg px-1.5 py-1 text-left hover:bg-hover" aria-label={t("space.choose")}>
           <img src="/icon.svg" alt="" className="size-6 shrink-0" />
           <span className="min-w-0 flex-1 truncate text-sm font-semibold">{label}</span>
           <ChevronsUpDown size={14} className="shrink-0 text-faint" />
-        </button>
+        </ShadcnButton>
       )}
     >
       {(close) => (
         <div className="w-72 p-1">
-          <p className="truncate px-2.5 pb-0.5 pt-1.5 text-[11px] font-semibold uppercase tracking-[0.05em] text-muted">
+          <p className="truncate px-2.5 pb-0.5 pt-1.5 text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">
             {account?.user.email}
             {account?.lost && ` · ${t("account.signedOut")}`}
           </p>
           {/* several at once: boxes, not a choice of one */}
           {spaces.map((s) => (
             <label key={s.id} className="tap-row flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm hover:bg-hover">
-              <input type="checkbox" checked={ids.includes(s.id)} disabled={ids.length === 1 && ids.includes(s.id)} onChange={() => toggle(s.id)} className="size-4 accent-[var(--focus)]" />
+              <Checkbox  checked={ids.includes(s.id)} disabled={ids.length === 1 && ids.includes(s.id)} onChange={() => toggle(s.id)} className="size-4 accent-[var(--focus)]" />
               <span className="min-w-0 flex-1 truncate">{s.name}</span>
             </label>
           ))}
@@ -104,16 +107,16 @@ export function SpaceFilter() {
     const next = ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id];
     if (next.length) setShown(next);
   };
-  const chip = (on: boolean) => cx("shrink-0 whitespace-nowrap rounded-full border px-3 py-1", on ? "border-[var(--focus)] bg-surface text-fg" : "border-line text-muted hover:bg-hover hover:text-fg");
+  const chip = (on: boolean) => cx("shrink-0 whitespace-nowrap rounded-full border px-3 py-1", on ? "border-[var(--focus)] bg-surface text-fg" : "border-line text-muted-foreground hover:bg-hover hover:text-fg");
   return (
     <div className="-mx-4 mb-4 flex gap-1 overflow-x-auto px-4 text-sm [scrollbar-width:none] md:mx-0 md:px-0" role="group" aria-label={t("space.choose")}>
-      <button onClick={() => setShown(spaces.map((s) => s.id))} aria-pressed={all} className={chip(all)}>
+      <ShadcnButton variant="plain" size="none" onClick={() => setShown(spaces.map((s) => s.id))} aria-pressed={all} className={chip(all)}>
         {t("inbox.all")}
-      </button>
+      </ShadcnButton>
       {spaces.map((s) => (
-        <button key={s.id} onClick={() => pick(s.id)} aria-pressed={!all && ids.includes(s.id)} className={chip(!all && ids.includes(s.id))}>
+        <ShadcnButton variant="plain" size="none" key={s.id} onClick={() => pick(s.id)} aria-pressed={!all && ids.includes(s.id)} className={chip(!all && ids.includes(s.id))}>
           {s.name}
-        </button>
+        </ShadcnButton>
       ))}
     </div>
   );
@@ -147,7 +150,7 @@ export function NewSpaceDialog({ onClose }: { onClose: () => void }) {
       >
         <label className="block text-sm font-medium">
           {t("space.name")}
-          <input autoFocus required value={name} onChange={(e) => setName(e.target.value)} className="field mt-1 block w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm" />
+          <Input autoFocus required value={name} onChange={(e) => setName(e.target.value)} className="field mt-1 block w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm" />
         </label>
         {error && <p className="mt-3 text-sm text-[var(--danger-text)]">{error}</p>}
         <div className="mt-5 flex justify-end gap-2">

@@ -1,3 +1,5 @@
+import { Button as ShadcnButton } from "../components/ui/button";
+import { Input } from "../components/ui/input";
 // One page for every information: path, title, type properties, text, sections from
 // "Teil von", and on the right the connections. Types change the properties and which
 // sections appear (via their capabilities), never the layout.
@@ -36,8 +38,8 @@ export function ItemPage({ id, isNew }: { id: string; isNew: boolean }) {
   const { t } = useT();
   const item = r.get(id);
   if (!item || item.kind === "settings")
-    return <div className="mx-auto max-w-3xl px-6 py-16 text-center text-muted">{r.status.synced ? t("item.missing") : t("item.loading")}</div>;
-  if (item.kind === "op") return <div className="mx-auto max-w-3xl px-6 py-16 text-center text-muted">{item.title}</div>;
+    return <div className="mx-auto max-w-3xl px-6 py-16 text-center text-muted-foreground">{r.status.synced ? t("item.missing") : t("item.loading")}</div>;
+  if (item.kind === "op") return <div className="mx-auto max-w-3xl px-6 py-16 text-center text-muted-foreground">{item.title}</div>;
   if (item.kind === "datei") return <FilePage key={id} item={item} />;
   if (item.type === META_TYPE) return <TypePage key={id} item={item} />;
   return <InfoView key={id} item={item} isNew={isNew} />;
@@ -184,7 +186,7 @@ function InfoView({ item, isNew }: { item: Item; isNew: boolean }) {
       )}
       <div className="mt-2.5 flex min-h-[22px] flex-wrap items-center gap-2">
         <TypeSwitch item={item} />
-        {st && <StatusMenu item={item} trigger={(p) => <button {...p} className="tap-y inline-flex" aria-label={t("row.status", { name: st.option.name })}><StatusPill option={st.option} group={st.group} /></button>} />}
+        {st && <StatusMenu item={item} trigger={(p) => <ShadcnButton variant="plain" size="none" {...p} className="tap-y inline-flex" aria-label={t("row.status", { name: st.option.name })}><StatusPill option={st.option} group={st.group} /></ShadcnButton>} />}
         <LangSwitch item={item} />
       </div>
       {pr && <ProgressBand done={pr.done} total={pr.total} desc={progressText(item, ix, pr.done, pr.total)} />}
@@ -193,7 +195,7 @@ function InfoView({ item, isNew }: { item: Item; isNew: boolean }) {
 
       {/* 2 · text */}
       <PageText item={item} doc={doc} long={typeArea} isNew={isNew} onView={setView} hasMore={typeArea || ix.childrenOf(item.id).length > 0} />
-      <input ref={fileInput} type="file" multiple className="hidden" onChange={(e) => view && insertFilesAtCursor(view, [...(e.target.files ?? [])])} />
+      <Input ref={fileInput} type="file" multiple className="hidden" onChange={(e) => view && insertFilesAtCursor(view, [...(e.target.files ?? [])])} />
 
       {/* 3 · the type's area: main list, updates */}
       {mainType && <ChildList item={item} typeId={mainType} />}
@@ -205,9 +207,9 @@ function InfoView({ item, isNew }: { item: Item; isNew: boolean }) {
 
       {/* on a phone the main action floats above the bottom bar */}
       {mainAction && (
-        <button onClick={() => createAndOpen({ type: mainType, parents: [item.id] })} className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] right-4 z-20 flex h-12 items-center gap-1.5 rounded-full bg-ink pl-3.5 pr-[18px] text-[15px] font-semibold text-ink-text shadow-lg md:hidden">
+        <ShadcnButton variant="plain" size="none" onClick={() => createAndOpen({ type: mainType, parents: [item.id] })} className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] right-4 z-20 flex h-12 items-center gap-1.5 rounded-full bg-ink pl-3.5 pr-[18px] text-[15px] font-semibold text-ink-text shadow-lg md:hidden">
           <Plus size={18} /> {ix.typeName(mainType)}
-        </button>
+        </ShadcnButton>
       )}
       {placing && <PlacePicker item={item} onClose={() => setPlacing(false)} />}
       {refPicking && (
@@ -273,16 +275,16 @@ function PageText({ item, doc, long, isNew, onView, hasMore }: { item: Item; doc
       </div>
       {cut && (
         <div className="absolute inset-x-0 bottom-0 flex h-20 items-end bg-gradient-to-t from-[var(--bg)] to-transparent">
-          <button onClick={() => setExpanded(true)} className="tap-y text-[13px] font-medium text-muted hover:text-fg">
+          <ShadcnButton variant="plain" size="none" onClick={() => setExpanded(true)} className="tap-y text-[13px] font-medium text-muted-foreground hover:text-fg">
             {t("page.showText")}
-          </button>
+          </ShadcnButton>
         </div>
       )}
       {view && focused && (
         // while writing: a way to add a picture or a file (pasting and dragging work too)
-        <label onMouseDown={(e) => e.preventDefault()} className="tap mt-1 inline-flex cursor-pointer items-center gap-1.5 rounded-md px-1.5 py-1 text-xs text-muted focus-within:ring-2 focus-within:ring-[var(--focus)] hover:bg-hover hover:text-fg">
+        <label onMouseDown={(e) => e.preventDefault()} className="tap mt-1 inline-flex cursor-pointer items-center gap-1.5 rounded-md px-1.5 py-1 text-xs text-muted-foreground focus-within:ring-2 focus-within:ring-[var(--focus)] hover:bg-hover hover:text-fg">
           <ImagePlus size={14} /> {t("editor.addFile")}
-          <input type="file" multiple className="sr-only" onChange={(e) => insertFilesAtCursor(view, [...(e.target.files ?? [])])} />
+          <Input type="file" multiple className="sr-only" onChange={(e) => insertFilesAtCursor(view, [...(e.target.files ?? [])])} />
         </label>
       )}
     </div>
@@ -305,15 +307,15 @@ function LangSwitch({ item }: { item: Item }) {
       {versions.map((v) => {
         const here = v.item.id === item.id;
         return (
-          <button
+          <ShadcnButton variant="plain" size="none"
             key={v.item.id}
             onClick={() => !here && go(itemHref(v.item.id).slice(1))}
             aria-pressed={here}
             title={here ? v.lang : `${v.lang}: ${v.item.title}`}
-            className={cx("tap rounded-md px-2 py-0.5 font-medium tabular-nums", here ? "bg-surface text-fg shadow-sm" : "text-muted hover:text-fg")}
+            className={cx("tap rounded-md px-2 py-0.5 font-medium tabular-nums", here ? "bg-surface text-fg shadow-sm" : "text-muted-foreground hover:text-fg")}
           >
             {languageCode(v.lang)}
-          </button>
+          </ShadcnButton>
         );
       })}
     </div>
@@ -337,17 +339,17 @@ function TypeSwitch({ item }: { item: Item }) {
           </span>
         ) : (
           // no type: a plain line, not a chip – "Übersicht" and "Notiz" are no types
-          <button {...p} className={cx("tap-y inline-flex items-center gap-1 rounded px-0.5 text-[13px] hover:underline", inbox ? "text-warn" : "text-muted")} title={t("item.giveType")}>
+          <ShadcnButton variant="plain" size="none" {...p} className={cx("tap-y inline-flex items-center gap-1 rounded px-0.5 text-[13px] hover:underline", inbox ? "text-warn" : "text-muted-foreground")} title={t("item.giveType")}>
             {inbox ? <INBOX_ICON size={12} /> : overview ? <OVERVIEW_ICON size={12} /> : <NOTE_ICON size={12} />}
             {inbox ? t("kind.inbox") : overview ? t("kind.overviewCount", { count: ix.childrenOf(item.id).length }) : t("kind.note")}
-            {deletedType && <span className="text-muted">· {t("type.deletedName", { name: deletedType })}</span>}
-          </button>
+            {deletedType && <span className="text-muted-foreground">· {t("type.deletedName", { name: deletedType })}</span>}
+          </ShadcnButton>
         )
       }
     >
       {(close) => (
         <>
-          <p className="px-2.5 pb-1 pt-1.5 text-xs text-muted">{t("item.giveType")}</p>
+          <p className="px-2.5 pb-1 pt-1.5 text-xs text-muted-foreground">{t("item.giveType")}</p>
           <MenuItem active={!item.type} icon={<NOTE_ICON size={14} />} onClick={() => (repo.setType(item.id, null), close())}>
             {t("type.none")}
           </MenuItem>
@@ -400,10 +402,10 @@ function DeleteDialog({ item, onClose }: { item: Item; onClose: () => void }) {
   return (
     <Dialog title={t("delete.title", { title: item.title || t("untitled") })} onClose={onClose}>
       <p className="text-sm">{t("delete.children", { count: only.length })}</p>
-      {untyped > 0 && <p className="mt-1 text-sm text-muted">{t("delete.toInbox", { count: untyped })}</p>}
+      {untyped > 0 && <p className="mt-1 text-sm text-muted-foreground">{t("delete.toInbox", { count: untyped })}</p>}
       <ul className="mt-3 max-h-48 space-y-0.5 overflow-y-auto">
         {only.slice(0, 30).map((c) => (
-          <li key={c} className="flex items-center gap-1.5 text-sm text-muted">
+          <li key={c} className="flex items-center gap-1.5 text-sm text-muted-foreground">
             <ItemIcon item={ix.get(c)!} size={13} /> {ix.get(c)!.title || t("untitled")}
           </li>
         ))}
@@ -427,18 +429,18 @@ function MoveDialog({ item, onClose }: { item: Item; onClose: () => void }) {
   const count = movedItems(repo.index(), item.id).length - 1;
   return (
     <Dialog title={t("move.title", { title: item.title || t("untitled") })} onClose={onClose}>
-      <p className="text-sm text-muted">{count > 0 ? t("move.introBelow", { count }) : t("move.intro")}</p>
+      <p className="text-sm text-muted-foreground">{count > 0 ? t("move.introBelow", { count }) : t("move.intro")}</p>
       <ul className="mt-3 space-y-1">
         {spaces
           .filter((s) => s.id !== active?.id)
           .map((s) => (
             <li key={s.id}>
-              <button
+              <ShadcnButton variant="plain" size="none"
                 onClick={() => (onClose(), void moveTo(item.id, active!.id, s.id))}
                 className="tap-row flex w-full items-center gap-2 rounded-lg border border-line px-3 py-2 text-left text-sm hover:bg-hover"
               >
                 <span className="min-w-0 flex-1 truncate font-medium">{s.name}</span>
-              </button>
+              </ShadcnButton>
             </li>
           ))}
       </ul>

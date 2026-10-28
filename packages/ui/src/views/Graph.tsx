@@ -1,3 +1,7 @@
+import { Checkbox } from "../components/ui/checkbox";
+import { Button as ShadcnButton } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { NativeSelect } from "../components/ui/native-select";
 // Graph: informations as nodes; links, "Teil von" and relations as edges, filterable.
 import { useTheme } from "../theme";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -229,50 +233,50 @@ export function GraphView() {
     next.has(v) ? next.delete(v) : next.add(v);
     put(next);
   };
-  const chip = (on: boolean) => cx("flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs", on ? "bg-hover text-fg" : "text-muted");
+  const chip = (on: boolean) => cx("flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs", on ? "bg-hover text-fg" : "text-muted-foreground");
   return (
     <div className="relative h-full">
       <GraphCanvas data={data} highlight={highlight} />
       <div className="pointer-events-none absolute inset-x-0 top-0 flex flex-wrap items-start gap-2 p-3">
         <div className="pointer-events-auto flex flex-wrap items-center gap-1 rounded-xl border border-line bg-surface/90 p-1 shadow-sm backdrop-blur">
           {types.map((tp) => (
-            <button key={tp.id} onClick={() => toggle(hidden, tp.id, setHidden)} className={chip(!hidden.has(tp.id))} aria-pressed={!hidden.has(tp.id)}>
+            <ShadcnButton variant="plain" size="none" key={tp.id} onClick={() => toggle(hidden, tp.id, setHidden)} className={chip(!hidden.has(tp.id))} aria-pressed={!hidden.has(tp.id)}>
               <TypeGlyph schema={tp.schema} size={13} /> {tp.schema!.name}
-            </button>
+            </ShadcnButton>
           ))}
-          <button onClick={() => toggle(hidden, "", setHidden)} className={chip(!hidden.has(""))} aria-pressed={!hidden.has("")}>
+          <ShadcnButton variant="plain" size="none" onClick={() => toggle(hidden, "", setHidden)} className={chip(!hidden.has(""))} aria-pressed={!hidden.has("")}>
             <NOTE_ICON size={13} /> {t("graph.untyped")}
-          </button>
-          <button onClick={() => toggle(hidden, "#file", setHidden)} className={chip(!hidden.has("#file"))} aria-pressed={!hidden.has("#file")}>
+          </ShadcnButton>
+          <ShadcnButton variant="plain" size="none" onClick={() => toggle(hidden, "#file", setHidden)} className={chip(!hidden.has("#file"))} aria-pressed={!hidden.has("#file")}>
             <FILES_ICON size={13} /> {t("graph.files")}
-          </button>
+          </ShadcnButton>
         </div>
         <div className="pointer-events-auto flex flex-wrap items-center gap-1 rounded-xl border border-line bg-surface/90 p-1 shadow-sm backdrop-blur">
           {(["link", "part", "rel"] as EdgeKind[]).map((k) => (
-            <button key={k} onClick={() => toggle(kinds, k, setKinds)} className={chip(kinds.has(k))} aria-pressed={kinds.has(k)}>
+            <ShadcnButton variant="plain" size="none" key={k} onClick={() => toggle(kinds, k, setKinds)} className={chip(kinds.has(k))} aria-pressed={kinds.has(k)}>
               {t("graph.edge." + k)}
-            </button>
+            </ShadcnButton>
           ))}
         </div>
         <div className="pointer-events-auto flex flex-wrap items-center gap-2 rounded-xl border border-line bg-surface/90 px-2 py-1 shadow-sm backdrop-blur">
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("graph.highlight")} className="w-32 bg-transparent text-xs outline-none" aria-label={t("graph.highlight")} />
-          <select value={tag} onChange={(e) => setTag(e.target.value)} className="bg-transparent text-xs text-muted" aria-label={t("graph.tag")}>
+          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("graph.highlight")} className="w-32 bg-transparent text-xs outline-none" aria-label={t("graph.highlight")} />
+          <NativeSelect value={tag} onChange={(e) => setTag(e.target.value)} className="bg-transparent text-xs text-muted-foreground" aria-label={t("graph.tag")}>
             <option value="">{t("graph.allTags")}</option>
             {tags.map((x) => (
               <option key={x.tag} value={x.tag}>
                 #{x.tag} ({x.count})
               </option>
             ))}
-          </select>
-          <label className="flex items-center gap-1 text-xs text-muted">
-            <input type="checkbox" checked={hideOrphans} onChange={(e) => setHideOrphans(e.target.checked)} /> {t("graph.hideUnlinked")}
+          </NativeSelect>
+          <label className="flex items-center gap-1 text-xs text-muted-foreground">
+            <Checkbox  checked={hideOrphans} onCheckedChange={(checked) => setHideOrphans((checked === true))} /> {t("graph.hideUnlinked")}
           </label>
-          <label className="flex items-center gap-1 text-xs text-muted">
-            <input type="checkbox" checked={hideDone} onChange={(e) => setHideDone(e.target.checked)} /> {t("graph.hideDone")}
+          <label className="flex items-center gap-1 text-xs text-muted-foreground">
+            <Checkbox  checked={hideDone} onCheckedChange={(checked) => setHideDone((checked === true))} /> {t("graph.hideDone")}
           </label>
         </div>
       </div>
-      <div className="pointer-events-none absolute bottom-3 left-3 text-xs text-muted">{t("graph.stats", { nodes: data.nodes.length, links: data.links.length })}</div>
+      <div className="pointer-events-none absolute bottom-3 left-3 text-xs text-muted-foreground">{t("graph.stats", { nodes: data.nodes.length, links: data.links.length })}</div>
     </div>
   );
 }

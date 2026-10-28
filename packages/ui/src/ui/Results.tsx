@@ -1,3 +1,4 @@
+import { Button as ShadcnButton } from "../components/ui/button";
 // Showing query results: list, table, board, tree, gallery and triage ("sortieren").
 // Used by collections, query blocks in texts and the sections of a page.
 import { useState } from "react";
@@ -43,14 +44,14 @@ function InboxNudge({ total }: { total: number }) {
   const space = useSpaceId();
   return (
     <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 px-2 pt-1 text-sm">
-      <span className="tabular-nums text-muted">{t("inbox.waiting", { count: total })}</span>
+      <span className="tabular-nums text-muted-foreground">{t("inbox.waiting", { count: total })}</span>
       <a href="#/inbox" className="font-medium text-fg underline-offset-2 hover:underline">
         {t("inbox.sortNow")}
       </a>
       {agent && total >= 30 && (
-        <button onClick={() => askAgent(t("inbox.agentPrompt"), undefined, space)} className="inline-flex items-center gap-1 text-muted hover:text-fg">
+        <ShadcnButton variant="plain" size="none" onClick={() => askAgent(t("inbox.agentPrompt"), undefined, space)} className="inline-flex items-center gap-1 text-muted-foreground hover:text-fg">
           <Sparkles size={13} /> {t("inbox.sortWithAgent")}
-        </button>
+        </ShadcnButton>
       )}
     </div>
   );
@@ -79,7 +80,7 @@ export function Results({ def, thisId, display, empty, compact, keyPrefix = "", 
     <div>
       <MissingTypes ids={missingTypes} />
       {!items.length && !missingTypes.length && !(look?.add && (view === "table" || view === "board")) ? (
-        (empty ?? <p className="px-2 py-1.5 text-sm text-muted">{t("query.empty")}</p>)
+        (empty ?? <p className="px-2 py-1.5 text-sm text-muted-foreground">{t("query.empty")}</p>)
       ) : view === "table" ? (
         <GroupedTable items={items} def={def} ctx={ctx} look={look ?? { key: keyPrefix }} />
       ) : view === "board" ? (
@@ -102,11 +103,11 @@ export function Results({ def, thisId, display, empty, compact, keyPrefix = "", 
       ) : (
         <ListView items={items} def={def} ctx={ctx} compact={compact} look={look} />
       )}
-      {def.limit && total > res.items.length && (isInboxQuery(def) ? <InboxNudge total={total} /> : <p className="px-2 pt-1 text-xs text-muted">{t("query.more", { count: total - res.items.length })}</p>)}
+      {def.limit && total > res.items.length && (isInboxQuery(def) ? <InboxNudge total={total} /> : <p className="px-2 pt-1 text-xs text-muted-foreground">{t("query.more", { count: total - res.items.length })}</p>)}
       {res.items.length > items.length && (
-        <button onClick={() => setShown(shown + 200)} className="mt-2 w-full py-2 text-sm text-muted hover:text-fg">
+        <ShadcnButton variant="plain" size="none" onClick={() => setShown(shown + 200)} className="mt-2 w-full py-2 text-sm text-muted-foreground hover:text-fg">
           {t("query.more", { count: res.items.length - items.length })}
-        </button>
+        </ShadcnButton>
       )}
     </div>
   );
@@ -167,7 +168,7 @@ export function CellValue({ item, name, ctx }: { item: Item; name: string; ctx: 
   // computed progress reads as "2/7", like in rows and on the page (the query value stays a percentage)
   if (hit?.prop?.kind === "computed" && hit.prop.computed?.fn !== "count") {
     const pr = ctx.ix.progress(item.id, hit.prop.computed?.of);
-    return <ProgressCount done={pr.done} total={pr.total} className={pr.total ? undefined : "text-muted"} />;
+    return <ProgressCount done={pr.done} total={pr.total} className={pr.total ? undefined : "text-muted-foreground"} />;
   }
   if (!hit || hit.value === undefined || hit.value === null || hit.value === "" || (Array.isArray(hit.value) && !hit.value.length)) return <span className="text-faint">–</span>;
   const v = hit.value;
@@ -266,11 +267,11 @@ function BoardView({ items, def, ctx, look }: { items: Item[]; def: QueryDef; ct
           <section key={lane.key || "_"} className={tab?.subgroup ? "mb-4" : undefined}>
             {tab?.subgroup && (
               <div className="sticky left-0 flex w-fit items-center gap-2 px-2 py-1.5">
-                <button onClick={() => setFolded((f) => new Set(isFolded ? [...f].filter((k) => k !== lane.key) : [...f, lane.key]))} aria-expanded={!isFolded} aria-label={t(isFolded ? "table.unfold" : "table.fold")} className="tap -ml-1 rounded p-0.5 text-muted hover:bg-hover hover:text-fg">
+                <ShadcnButton variant="plain" size="none" onClick={() => setFolded((f) => new Set(isFolded ? [...f].filter((k) => k !== lane.key) : [...f, lane.key]))} aria-expanded={!isFolded} aria-label={t(isFolded ? "table.unfold" : "table.fold")} className="tap -ml-1 rounded p-0.5 text-muted-foreground hover:bg-hover hover:text-fg">
                   {isFolded ? <ChevronRight size={15} /> : <ChevronDown size={15} />}
-                </button>
+                </ShadcnButton>
                 <GroupChip g={lane} by={tab.subgroup} byLabel={subLabel} />
-                <span className="text-xs tabular-nums text-muted">{lane.items.length}</span>
+                <span className="text-xs tabular-nums text-muted-foreground">{lane.items.length}</span>
               </div>
             )}
             {!isFolded && (
@@ -291,15 +292,15 @@ function BoardView({ items, def, ctx, look }: { items: Item[]; def: QueryDef; ct
                     >
                       <p className="group/head flex items-center gap-2 px-1">
                         <GroupChip g={col} by={by} byLabel={byLabel} />
-                        <span className="text-xs tabular-nums text-muted">{cards.length}</span>
+                        <span className="text-xs tabular-nums text-muted-foreground">{cards.length}</span>
                         {look?.onLook && (
-                          <button onClick={() => look.onLook!(hiddenPatch(tab, col, true))} className="tap ml-auto rounded p-0.5 text-muted opacity-0 hover:bg-hover hover:text-fg focus-visible:opacity-100 group-hover/head:opacity-100 pointer-coarse:opacity-100" aria-label={t("view.hideColumn")} title={t("view.hideColumn")}>
+                          <ShadcnButton variant="plain" size="none" onClick={() => look.onLook!(hiddenPatch(tab, col, true))} className="tap ml-auto rounded p-0.5 text-muted-foreground opacity-0 hover:bg-hover hover:text-fg focus-visible:opacity-100 group-hover/head:opacity-100 pointer-coarse:opacity-100" aria-label={t("view.hideColumn")} title={t("view.hideColumn")}>
                             <EyeOff size={13} />
-                          </button>
+                          </ShadcnButton>
                         )}
                       </p>
                       {/* an empty column says where to drag – in rows (by project …) the empty cells stay quiet */}
-                      {!cards.length && !tab?.subgroup && <p className="rounded-lg border border-dashed border-line px-2 py-3 text-center text-xs text-muted">{t("board.dropHere")}</p>}
+                      {!cards.length && !tab?.subgroup && <p className="rounded-lg border border-dashed border-line px-2 py-3 text-center text-xs text-muted-foreground">{t("board.dropHere")}</p>}
                       {cards.map((i) => (
                         <BoardCard key={i.id} item={i} cols={def.columns ?? []} ctx={ctx} />
                       ))}
@@ -338,11 +339,11 @@ function BoardCard({ item: i, cols, ctx }: { item: Item; cols: string[]; ctx: Ev
         <span className="min-w-0 flex-1 font-medium">{i.title || t("untitled")}</span>
       </a>
       {shown.map((c) => (
-        <span key={c} className="flex min-w-0 text-xs text-muted">
+        <span key={c} className="flex min-w-0 text-xs text-muted-foreground">
           {c === "area" ? <AreaChip id={ctx.ix.area(i.id)!} /> : <CardValue item={i} name={c} ctx={ctx} />}
         </span>
       ))}
-      {pr && pr.total ? <ProgressCount done={pr.done} total={pr.total} className="text-xs text-muted" /> : null}
+      {pr && pr.total ? <ProgressCount done={pr.done} total={pr.total} className="text-xs text-muted-foreground" /> : null}
     </div>
   );
 }
@@ -430,9 +431,9 @@ function GalleryTile({ item, ctx }: { item: Item; ctx: EvalCtx }) {
           <ItemIcon item={item} size={14} className="mt-0.5 shrink-0" />
           <span className="line-clamp-2">{item.title || t("untitled")}</span>
         </span>
-        {text && <span className="line-clamp-2 text-xs text-muted">{text}</span>}
+        {text && <span className="line-clamp-2 text-xs text-muted-foreground">{text}</span>}
         {(st || (pr && pr.total > 0)) && (
-          <span className="flex items-center gap-2 text-xs text-muted">
+          <span className="flex items-center gap-2 text-xs text-muted-foreground">
             {st && <StatusPill option={st.option} group={st.group} small />}
             {pr && pr.total > 0 && <ProgressCount done={pr.done} total={pr.total} className="ml-auto" />}
           </span>
@@ -447,7 +448,7 @@ function GalleryTile({ item, ctx }: { item: Item; ctx: EvalCtx }) {
         {url ? (
           <img src={url} alt="" className="size-full object-cover transition-transform group-hover:scale-[1.02]" />
         ) : files.isMissing(hash) || files.isMissing(f?.hash) ? (
-          <span className="flex flex-col items-center gap-1 text-xs text-muted">
+          <span className="flex flex-col items-center gap-1 text-xs text-muted-foreground">
             <ItemIcon item={item} size={24} /> {t(files.missingKey(item.created))}
           </span>
         ) : (
@@ -458,7 +459,7 @@ function GalleryTile({ item, ctx }: { item: Item; ctx: EvalCtx }) {
         <ItemIcon item={item} size={12} />
         <span className="truncate">{item.title || t("untitled")}</span>
       </p>
-      {meta && <p className="truncate text-xs text-muted">{meta}</p>}
+      {meta && <p className="truncate text-xs text-muted-foreground">{meta}</p>}
       {void lang}
     </a>
   );

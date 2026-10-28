@@ -1,3 +1,8 @@
+import { Checkbox } from "../components/ui/checkbox";
+import { Button as ShadcnButton } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { Textarea } from "../components/ui/textarea";
+import { NativeSelect } from "../components/ui/native-select";
 // A type's page: the list of its entries with views as tabs (like a database in Notion). Behind
 // "…" › "Typ bearbeiten": identity, description (the agent reads it), properties and capabilities –
 // a type is an information with a schema; changing it is editing, not programming.
@@ -41,7 +46,7 @@ export function TypePage({ item }: { item: Item }) {
   useEffect(() => void (document.title = plural), [plural]);
   if (item.deleted)
     return (
-      <div className="mx-auto max-w-3xl px-6 py-16 text-center text-muted">
+      <div className="mx-auto max-w-3xl px-6 py-16 text-center text-muted-foreground">
         {t("type.isDeleted", { name: item.schema!.name })}
       </div>
     );
@@ -51,7 +56,7 @@ export function TypePage({ item }: { item: Item }) {
         <TypeGlyph schema={item.schema} size={22} />
         <div className="flex min-w-0 flex-1 items-baseline gap-2.5">
           <h1 className="page-title truncate">{plural}</h1>
-          <span className="text-[15px] tabular-nums text-muted">{ix.itemsOfType(item.id).length}</span>
+          <span className="text-[15px] tabular-nums text-muted-foreground">{ix.itemsOfType(item.id).length}</span>
         </div>
         <Popover align="right" trigger={(p) => <IconButton {...p} label={t("more")} icon={MoreHorizontal} />}>
           {(close) => (
@@ -90,9 +95,9 @@ function TypeEditor({ item, onClose }: { item: Item; onClose: () => void }) {
       <div className="flex items-start gap-3">
         <Popover
           trigger={(p) => (
-            <button {...p} className="tap mt-1 rounded-lg p-1.5 hover:bg-hover" aria-label={t("type.icon")}>
+            <ShadcnButton variant="plain" size="none" {...p} className="tap mt-1 rounded-lg p-1.5 hover:bg-hover" aria-label={t("type.icon")}>
               <TypeGlyph schema={s} size={24} />
-            </button>
+            </ShadcnButton>
           )}
         >
           {(close) => (
@@ -101,15 +106,15 @@ function TypeEditor({ item, onClose }: { item: Item; onClose: () => void }) {
                 {ICONS.map((n) => {
                   const I = ICON[n] ?? ICON.circle!;
                   return (
-                    <button key={n} onClick={() => (change((d) => setSchemaField(d, "icon", n)), close())} className={cx("tap rounded-md p-1.5 hover:bg-hover", s.icon === n && "bg-hover")} aria-label={n}>
+                    <ShadcnButton variant="plain" size="none" key={n} onClick={() => (change((d) => setSchemaField(d, "icon", n)), close())} className={cx("tap rounded-md p-1.5 hover:bg-hover", s.icon === n && "bg-hover")} aria-label={n}>
                       <I size={16} style={{ color: pal(s.color) }} />
-                    </button>
+                    </ShadcnButton>
                   );
                 })}
               </div>
               <div className="mt-2 flex flex-wrap gap-1.5 border-t border-line pt-2">
                 {COLORS.map((c) => (
-                  <button key={c} onClick={() => change((d) => setSchemaField(d, "color", c))} className={cx("size-6 rounded-full border-2", s.color === c ? "border-fg" : "border-transparent")} style={{ background: pal(c) }} aria-label={c} />
+                  <ShadcnButton variant="plain" size="none" key={c} onClick={() => change((d) => setSchemaField(d, "color", c))} className={cx("size-6 rounded-full border-2", s.color === c ? "border-fg" : "border-transparent")} style={{ background: pal(c) }} aria-label={c} />
                 ))}
               </div>
             </div>
@@ -123,9 +128,9 @@ function TypeEditor({ item, onClose }: { item: Item; onClose: () => void }) {
             className="text-2xl font-semibold tracking-tight"
             large
           />
-          <label className="mt-1 flex items-center gap-2 text-sm text-muted">
+          <label className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
             {t("type.plural")}
-            <input
+            <Input
               key={item.id + (s.plural ?? "")}
               defaultValue={ix.typePlural(item.id)}
               onBlur={(e) => e.target.value.trim() !== ix.typePlural(item.id) && change((d) => setSchemaField(d, "plural", e.target.value.trim()))}
@@ -152,8 +157,8 @@ function TypeEditor({ item, onClose }: { item: Item; onClose: () => void }) {
       </div>
 
       <label className="mt-5 block">
-        <span className="text-xs font-medium text-muted">{t("type.description")}</span>
-        <textarea
+        <span className="text-xs font-medium text-muted-foreground">{t("type.description")}</span>
+        <Textarea
           key={item.id}
           defaultValue={s.description}
           onBlur={(e) => e.target.value !== s.description && change((d) => setSchemaField(d, "description", e.target.value))}
@@ -169,26 +174,26 @@ function TypeEditor({ item, onClose }: { item: Item; onClose: () => void }) {
             {s.properties.map((p, i) => (
               <div key={p.id}>
               <div className={cx("group flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-hover", p.id === sel && "bg-selected")}>
-                <GripVertical size={14} className="text-muted" />
-                <button onClick={() => setSel(p.id)} className="tap-row flex min-w-0 flex-1 items-center gap-2 text-left">
+                <GripVertical size={14} className="text-muted-foreground" />
+                <ShadcnButton variant="plain" size="none" onClick={() => setSel(p.id)} className="tap-row flex min-w-0 flex-1 items-center gap-2 text-left">
                   <span className="truncate font-medium">{p.name}</span>
-                  <span className="ml-auto shrink-0 text-xs text-muted">{t("kind.prop." + p.kind)}</span>
-                </button>
+                  <span className="ml-auto shrink-0 text-xs text-muted-foreground">{t("kind.prop." + p.kind)}</span>
+                </ShadcnButton>
                 {/* on touch screens only on the selected row: no invisible buttons to hit */}
                 <span className={cx("flex opacity-0 group-hover:opacity-100", p.id === sel ? "opacity-100" : "pointer-coarse:hidden")}>
-                  <button disabled={i === 0} onClick={() => change((d) => upsertProp(d, p.id, { sort: keyBetween(s.properties[i - 2]?.sort ?? null, s.properties[i - 1]!.sort) }))} className="tap rounded p-0.5 text-muted hover:text-fg disabled:opacity-30" aria-label={t("type.up")}>
+                  <ShadcnButton variant="plain" size="none" disabled={i === 0} onClick={() => change((d) => upsertProp(d, p.id, { sort: keyBetween(s.properties[i - 2]?.sort ?? null, s.properties[i - 1]!.sort) }))} className="tap rounded p-0.5 text-muted-foreground hover:text-fg disabled:opacity-30" aria-label={t("type.up")}>
                     <ArrowUp size={12} />
-                  </button>
-                  <button disabled={i === s.properties.length - 1} onClick={() => change((d) => upsertProp(d, p.id, { sort: keyBetween(s.properties[i + 1]!.sort, s.properties[i + 2]?.sort ?? null) }))} className="tap rounded p-0.5 text-muted hover:text-fg disabled:opacity-30" aria-label={t("type.down")}>
+                  </ShadcnButton>
+                  <ShadcnButton variant="plain" size="none" disabled={i === s.properties.length - 1} onClick={() => change((d) => upsertProp(d, p.id, { sort: keyBetween(s.properties[i + 1]!.sort, s.properties[i + 2]?.sort ?? null) }))} className="tap rounded p-0.5 text-muted-foreground hover:text-fg disabled:opacity-30" aria-label={t("type.down")}>
                     <ArrowDown size={12} />
-                  </button>
+                  </ShadcnButton>
                 </span>
               </div>
               {/* narrow: the settings open right below the chosen property, not under the capabilities */}
               {p.id === sel && <div className="px-1 pb-2 pt-1 @3xl:hidden">{selected && <PropEditor item={item} prop={selected} />}</div>}
               </div>
             ))}
-            {!s.properties.length && <p className="px-2 py-2 text-sm text-muted">{t("type.noProps")}</p>}
+            {!s.properties.length && <p className="px-2 py-2 text-sm text-muted-foreground">{t("type.noProps")}</p>}
           </div>
           <Capabilities item={item} />
         </section>
@@ -238,24 +243,24 @@ function AddProperty({ item, onAdded }: { item: Item; onAdded: (id: string) => v
       )}
     >
       <div className="w-72 space-y-2 p-2">
-        <input autoFocus value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && !twins.length && add()} placeholder={t("props.name")} className="w-full rounded-md border border-line bg-bg px-2 py-1 text-sm outline-none" />
+        <Input autoFocus value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && !twins.length && add()} placeholder={t("props.name")} className="w-full rounded-md border border-line bg-bg px-2 py-1 text-sm outline-none" />
         {twins.length > 0 && (
           <div className="rounded-lg bg-surface-2 p-2 text-xs">
-            <p className="mb-1 text-muted">{t("type.twins")}</p>
+            <p className="mb-1 text-muted-foreground">{t("type.twins")}</p>
             {twins.map(({ tp, p }) => (
-              <button key={tp.id + p.id} onClick={() => add(p)} className="flex w-full items-center gap-1.5 rounded px-1 py-0.5 text-left hover:bg-hover">
-                <TypeGlyph schema={tp.schema} size={12} /> {tp.schema!.name} › {p.name} <span className="ml-auto text-muted">{t("kind.prop." + p.kind)}</span>
-              </button>
+              <ShadcnButton variant="plain" size="none" key={tp.id + p.id} onClick={() => add(p)} className="flex w-full items-center gap-1.5 rounded px-1 py-0.5 text-left hover:bg-hover">
+                <TypeGlyph schema={tp.schema} size={12} /> {tp.schema!.name} › {p.name} <span className="ml-auto text-muted-foreground">{t("kind.prop." + p.kind)}</span>
+              </ShadcnButton>
             ))}
           </div>
         )}
-        <select value={kind} onChange={(e) => setKind(e.target.value as PropKind)} className="w-full rounded-md border border-line bg-bg px-1.5 py-1 text-sm" aria-label={t("props.kind")}>
+        <NativeSelect value={kind} onChange={(e) => setKind(e.target.value as PropKind)} className="w-full rounded-md border border-line bg-bg px-1.5 py-1 text-sm" aria-label={t("props.kind")}>
           {PROP_KINDS.map((k) => (
             <option key={k} value={k}>
               {t("kind.prop." + k)}
             </option>
           ))}
-        </select>
+        </NativeSelect>
         <Button variant="primary" className="w-full" onClick={() => add()} disabled={!name.trim()}>
           {twins.length ? t("type.addNew") : t("props.add")}
         </Button>
@@ -278,7 +283,7 @@ function PropEditor({ item, prop }: { item: Item; prop: PropDef }) {
   const set = (patch: Partial<PropDef>) => repo.change(item.id, (d) => upsertProp(d, prop.id, patch));
   const field = (label: string, inner: React.ReactNode) => (
     <div className="mt-3">
-      <p className="text-xs font-medium text-muted">{label}</p>
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
       <div className="mt-1">{inner}</div>
     </div>
   );
@@ -290,21 +295,21 @@ function PropEditor({ item, prop }: { item: Item; prop: PropDef }) {
     <div className="rounded-xl border border-line bg-surface p-4" key={prop.id}>
       <div className="flex items-center gap-2">
         <InlineText value={prop.name} onCommit={(v) => v.trim() && set({ name: v.trim() })} className="font-semibold" label={t("props.name")} />
-        <select value={prop.kind} onChange={(e) => set({ kind: e.target.value as PropKind })} className="rounded-md border border-line bg-bg px-1.5 py-0.5 text-xs" aria-label={t("props.kind")}>
+        <NativeSelect value={prop.kind} onChange={(e) => set({ kind: e.target.value as PropKind })} className="rounded-md border border-line bg-bg px-1.5 py-0.5 text-xs" aria-label={t("props.kind")}>
           {PROP_KINDS.map((k) => (
             <option key={k} value={k}>
               {t("kind.prop." + k)}
             </option>
           ))}
-        </select>
+        </NativeSelect>
       </div>
-      <p className="mt-1 text-xs text-muted">{t("type.kindHint")}</p>
-      {field(t("type.propDescription"), <textarea key={prop.id + "d"} defaultValue={prop.description ?? ""} onBlur={(e) => set({ description: e.target.value || null as any })} rows={2} className={box} />)}
+      <p className="mt-1 text-xs text-muted-foreground">{t("type.kindHint")}</p>
+      {field(t("type.propDescription"), <Textarea key={prop.id + "d"} defaultValue={prop.description ?? ""} onBlur={(e) => set({ description: e.target.value || null as any })} rows={2} className={box} />)}
       {prop.kind !== "computed" && (
         <label className="tap-row mt-3 flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={!!prop.hideEmpty} onChange={(e) => set({ hideEmpty: e.target.checked || (null as any) })} className="accent-[var(--focus)]" />
+          <Checkbox  checked={!!prop.hideEmpty} onCheckedChange={(checked) => set({ hideEmpty: (checked === true) || (null as any) })} className="accent-[var(--focus)]" />
           <span>
-            {t("type.hideEmpty")} <span className="text-xs text-muted">– {t("type.hideEmptyHint")}</span>
+            {t("type.hideEmpty")} <span className="text-xs text-muted-foreground">– {t("type.hideEmptyHint")}</span>
           </span>
         </label>
       )}
@@ -313,7 +318,7 @@ function PropEditor({ item, prop }: { item: Item; prop: PropDef }) {
         field(
           t("type.dateRange"),
           <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={!!prop.range} onChange={(e) => set({ range: e.target.checked || (null as any) })} className="accent-[var(--focus)]" /> {t("type.range")}
+            <Checkbox  checked={!!prop.range} onCheckedChange={(checked) => set({ range: (checked === true) || (null as any) })} className="accent-[var(--focus)]" /> {t("type.range")}
           </label>,
         )}
       {prop.kind === "relation" && (
@@ -328,10 +333,10 @@ function PropEditor({ item, prop }: { item: Item; prop: PropDef }) {
           )}
           {field(
             t("type.inverse"),
-            <input key={prop.id + "i"} defaultValue={prop.inverseName ?? ""} placeholder={t("type.inverseOf", { name: prop.name })} onBlur={(e) => set({ inverseName: e.target.value.trim() || (null as any) })} className={box} />,
+            <Input key={prop.id + "i"} defaultValue={prop.inverseName ?? ""} placeholder={t("type.inverseOf", { name: prop.name })} onBlur={(e) => set({ inverseName: e.target.value.trim() || (null as any) })} className={box} />,
           )}
           <label className="mt-2 flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={!!prop.symmetric} onChange={(e) => set({ symmetric: e.target.checked || (null as any) })} className="accent-[var(--focus)]" /> {t("type.symmetric")}
+            <Checkbox  checked={!!prop.symmetric} onCheckedChange={(checked) => set({ symmetric: (checked === true) || (null as any) })} className="accent-[var(--focus)]" /> {t("type.symmetric")}
           </label>
         </>
       )}
@@ -343,14 +348,14 @@ function PropEditor({ item, prop }: { item: Item; prop: PropDef }) {
           )}
           {field(
             t("type.ofType"),
-            <select value={prop.computed?.of ?? ""} onChange={(e) => set({ computed: { fn: prop.computed?.fn ?? "progress", of: e.target.value || undefined } })} className={box}>
+            <NativeSelect value={prop.computed?.of ?? ""} onChange={(e) => set({ computed: { fn: prop.computed?.fn ?? "progress", of: e.target.value || undefined } })} className={box}>
               <option value="">{t("type.anyType")}</option>
               {types.map((x) => (
                 <option key={x.id} value={x.id}>
                   {x.schema!.name}
                 </option>
               ))}
-            </select>,
+            </NativeSelect>,
           )}
         </>
       )}
@@ -359,7 +364,7 @@ function PropEditor({ item, prop }: { item: Item; prop: PropDef }) {
           <Trash2 size={14} /> {t("type.removeProp")}
         </Button>
       </div>
-      <p className="mt-1 text-right text-xs text-muted">{t("type.removeHint")}</p>
+      <p className="mt-1 text-right text-xs text-muted-foreground">{t("type.removeHint")}</p>
     </div>
   );
 }
@@ -372,33 +377,33 @@ function OptionsEditor({ prop, onChange }: { prop: PropDef; onChange: (o: Option
     <div className="space-y-1">
       {opts.map((o, i) => (
         <div key={o.id} className="flex items-center gap-1.5">
-          <Popover trigger={(p) => <button {...p} className="size-4 shrink-0 rounded-full" style={{ background: pal(o.color ?? "gray") }} aria-label={t("type.color")} />}>
+          <Popover trigger={(p) => <ShadcnButton variant="plain" size="none" {...p} className="size-4 shrink-0 rounded-full" style={{ background: pal(o.color ?? "gray") }} aria-label={t("type.color")} />}>
             {(close) => (
               <div className="flex w-56 flex-wrap gap-1.5 p-1">
                 {COLORS.map((c) => (
-                  <button key={c} onClick={() => (upd(i, { color: c }), close())} className="size-5 rounded-full" style={{ background: pal(c) }} aria-label={c} />
+                  <ShadcnButton variant="plain" size="none" key={c} onClick={() => (upd(i, { color: c }), close())} className="size-5 rounded-full" style={{ background: pal(c) }} aria-label={c} />
                 ))}
               </div>
             )}
           </Popover>
-          <input defaultValue={o.name} onBlur={(e) => e.target.value.trim() && e.target.value !== o.name && upd(i, { name: e.target.value.trim() })} className="field min-w-0 flex-1 rounded-md bg-transparent px-1 py-0.5 text-sm outline-none hover:bg-hover" />
+          <Input defaultValue={o.name} onBlur={(e) => e.target.value.trim() && e.target.value !== o.name && upd(i, { name: e.target.value.trim() })} className="field min-w-0 flex-1 rounded-md bg-transparent px-1 py-0.5 text-sm outline-none hover:bg-hover" />
           {prop.kind === "status" && (
-            <select value={o.group ?? "todo"} onChange={(e) => upd(i, { group: e.target.value as StatusGroup })} className="rounded-md border border-line bg-bg px-1 py-0.5 text-xs" aria-label={t("type.group")}>
+            <NativeSelect value={o.group ?? "todo"} onChange={(e) => upd(i, { group: e.target.value as StatusGroup })} className="rounded-md border border-line bg-bg px-1 py-0.5 text-xs" aria-label={t("type.group")}>
               {STATUS_GROUPS.map((g) => (
                 <option key={g} value={g}>
                   {t("group." + g)}
                 </option>
               ))}
-            </select>
+            </NativeSelect>
           )}
-          <button onClick={() => onChange(opts.filter((_, n) => n !== i))} className="text-muted hover:text-danger" aria-label={t("type.removeOption")}>
+          <ShadcnButton variant="plain" size="none" onClick={() => onChange(opts.filter((_, n) => n !== i))} className="text-muted-foreground hover:text-danger" aria-label={t("type.removeOption")}>
             <X size={13} />
-          </button>
+          </ShadcnButton>
         </div>
       ))}
-      <button onClick={() => onChange([...opts, { id: shortId("o"), name: t("type.newOption"), group: prop.kind === "status" ? "todo" : undefined, color: "gray" }])} className="flex items-center gap-0.5 text-xs text-muted hover:text-fg">
+      <ShadcnButton variant="plain" size="none" onClick={() => onChange([...opts, { id: shortId("o"), name: t("type.newOption"), group: prop.kind === "status" ? "todo" : undefined, color: "gray" }])} className="flex items-center gap-0.5 text-xs text-muted-foreground hover:text-fg">
         <Plus size={12} /> {t("type.addOption")}
-      </button>
+      </ShadcnButton>
     </div>
   );
 }
@@ -419,7 +424,7 @@ function Capabilities({ item }: { item: Item }) {
     <div className="flex items-start gap-3 py-2">
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium">{label}</p>
-        <p className="text-xs text-muted">{hint}</p>
+        <p className="text-xs text-muted-foreground">{hint}</p>
       </div>
       <div className="shrink-0">{control}</div>
     </div>
@@ -431,31 +436,31 @@ function Capabilities({ item }: { item: Item }) {
         {row(
           t("caps.status"),
           t("caps.statusHint"),
-          <select value={c.status ?? ""} onChange={(e) => set("status", e.target.value || null)} className={sel} aria-label={t("caps.status")}>
+          <NativeSelect value={c.status ?? ""} onChange={(e) => set("status", e.target.value || null)} className={sel} aria-label={t("caps.status")}>
             <option value="">{t("caps.off")}</option>
             {statusProps.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
               </option>
             ))}
-          </select>,
+          </NativeSelect>,
         )}
         {row(
           t("caps.due"),
           t("caps.dueHint"),
-          <select value={c.due ?? ""} onChange={(e) => set("due", e.target.value || null)} className={sel} aria-label={t("caps.due")}>
+          <NativeSelect value={c.due ?? ""} onChange={(e) => set("due", e.target.value || null)} className={sel} aria-label={t("caps.due")}>
             <option value="">{t("caps.off")}</option>
             {dateProps.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
               </option>
             ))}
-          </select>,
+          </NativeSelect>,
         )}
         {row(
           t("caps.progress"),
           t("caps.progressHint"),
-          <select value={c.progress ? (c.progress.of ?? "*") : ""} onChange={(e) => set("progress", e.target.value ? (e.target.value === "*" ? {} : { of: e.target.value }) : null)} className={sel} aria-label={t("caps.progress")}>
+          <NativeSelect value={c.progress ? (c.progress.of ?? "*") : ""} onChange={(e) => set("progress", e.target.value ? (e.target.value === "*" ? {} : { of: e.target.value }) : null)} className={sel} aria-label={t("caps.progress")}>
             <option value="">{t("caps.off")}</option>
             <option value="*">{t("caps.anyWithStatus")}</option>
             {types.map((x) => (
@@ -463,28 +468,28 @@ function Capabilities({ item }: { item: Item }) {
                 {x.schema!.name}
               </option>
             ))}
-          </select>,
+          </NativeSelect>,
         )}
-        {row(t("caps.updates"), t("caps.updatesHint"), <input type="checkbox" checked={!!c.updates} onChange={(e) => set("updates", e.target.checked || null)} className="size-4 accent-[var(--focus)]" aria-label={t("caps.updates")} />)}
+        {row(t("caps.updates"), t("caps.updatesHint"), <Checkbox  checked={!!c.updates} onCheckedChange={(checked) => set("updates", (checked === true) || null)} className="size-4 accent-[var(--focus)]" aria-label={t("caps.updates")} />)}
         {row(
           t("caps.primaryChild"),
           t("caps.primaryChildHint"),
-          <select value={c.primaryChild ?? ""} onChange={(e) => set("primaryChild", e.target.value || null)} className={sel} aria-label={t("caps.primaryChild")}>
+          <NativeSelect value={c.primaryChild ?? ""} onChange={(e) => set("primaryChild", e.target.value || null)} className={sel} aria-label={t("caps.primaryChild")}>
             <option value="">{t("caps.off")}</option>
             {types.map((x) => (
               <option key={x.id} value={x.id}>
                 {x.schema!.name}
               </option>
             ))}
-          </select>,
+          </NativeSelect>,
         )}
         <div className="py-2">
           <label className="flex items-center gap-2 text-sm font-medium">
-            <input type="checkbox" checked={!!c.template} onChange={(e) => set("template", e.target.checked ? { body: "" } : null)} className="size-4 accent-[var(--focus)]" /> {t("caps.template")}
+            <Checkbox  checked={!!c.template} onCheckedChange={(checked) => set("template", (checked === true) ? { body: "" } : null)} className="size-4 accent-[var(--focus)]" /> {t("caps.template")}
           </label>
-          <p className="text-xs text-muted">{t("caps.templateHint")}</p>
+          <p className="text-xs text-muted-foreground">{t("caps.templateHint")}</p>
           {c.template && (
-            <textarea
+            <Textarea
               key={item.id + "tpl"}
               defaultValue={c.template.body ?? ""}
               onBlur={(e) => set("template", { ...c.template, body: e.target.value })}
@@ -521,7 +526,7 @@ function DeleteTypeDialog({ item, onClose, toTag }: { item: Item; onClose: () =>
   return (
     <Dialog title={toTag ? t("type.toTagTitle", { name: s.name }) : t("type.deleteTitle", { name: s.name })} onClose={onClose}>
       <p className="text-sm">{t("type.affects", { count: u.items.length })}</p>
-      <ul className="mt-2 space-y-1 text-sm text-muted">
+      <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
         {u.queries.length > 0 && <li>{t("type.usedInQueries", { list: u.queries.map((q) => q.title).join(", ") })}</li>}
         {u.relations.length > 0 && <li>{t("type.usedInRelations", { list: u.relations.map((r) => r.name).join(", ") })}</li>}
         {u.progress.length > 0 && <li>{t("type.usedInProgress", { list: u.progress.map((r) => r.name).join(", ") })}</li>}
@@ -543,19 +548,19 @@ function DeleteTypeDialog({ item, onClose, toTag }: { item: Item; onClose: () =>
       )}
       {mode === "tag" && (
         <label className="mt-3 flex items-center gap-2 text-sm">
-          {t("type.tagName")} <input value={tag} onChange={(e) => setTag(e.target.value)} className="rounded-md border border-line bg-bg px-2 py-1 text-sm" />
+          {t("type.tagName")} <Input value={tag} onChange={(e) => setTag(e.target.value)} className="rounded-md border border-line bg-bg px-2 py-1 text-sm" />
         </label>
       )}
       {mode === "type" && (
-        <select value={target} onChange={(e) => setTarget(e.target.value)} className="mt-3 rounded-md border border-line bg-bg px-2 py-1 text-sm">
+        <NativeSelect value={target} onChange={(e) => setTarget(e.target.value)} className="mt-3 rounded-md border border-line bg-bg px-2 py-1 text-sm">
           {others.map((x) => (
             <option key={x.id} value={x.id}>
               {x.schema!.name}
             </option>
           ))}
-        </select>
+        </NativeSelect>
       )}
-      <p className="mt-3 text-xs text-muted">{t("type.valuesKept")}</p>
+      <p className="mt-3 text-xs text-muted-foreground">{t("type.valuesKept")}</p>
       {mode !== "type" && u.inboxAfterRemove > 0 && <p className="mt-1 text-xs text-warn">{t("type.toInbox", { count: u.inboxAfterRemove })}</p>}
       <div className="mt-4 flex justify-end gap-2">
         <Button variant="outline" onClick={onClose}>
@@ -581,13 +586,13 @@ function FromTagDialog({ item, onClose }: { item: Item; onClose: () => void }) {
   return (
     <Dialog title={t("type.fromTagTitle")} onClose={onClose}>
       <label className="flex items-center gap-2 text-sm">
-        # <input value={tag} onChange={(e) => setTag(e.target.value)} className="rounded-md border border-line bg-bg px-2 py-1 text-sm" />
+        # <Input value={tag} onChange={(e) => setTag(e.target.value)} className="rounded-md border border-line bg-bg px-2 py-1 text-sm" />
       </label>
       <p className="mt-3 text-sm">{t("type.fromTagCount", { count: p.untyped.length, name: s.name, tag: tag.trim().replace(/^#/, "") })}</p>
       {p.untyped.length > 0 && (
         <details className="mt-1 text-sm">
-          <summary className="tap-y cursor-pointer text-xs text-muted hover:text-fg">{t("type.fromTagShow")}</summary>
-          <ul className="mt-1 max-h-40 space-y-0.5 overflow-y-auto text-xs text-muted">
+          <summary className="tap-y cursor-pointer text-xs text-muted-foreground hover:text-fg">{t("type.fromTagShow")}</summary>
+          <ul className="mt-1 max-h-40 space-y-0.5 overflow-y-auto text-xs text-muted-foreground">
             {p.untyped.slice(0, 50).map((id) => (
               <li key={id} className="flex items-center gap-1">
                 <ItemIcon item={ix.get(id)!} size={11} /> {ix.get(id)!.title}
@@ -600,7 +605,7 @@ function FromTagDialog({ item, onClose }: { item: Item; onClose: () => void }) {
       {p.typedOther.length > 0 && (
         <div className="mt-2 rounded-lg bg-surface-2 p-2.5 text-sm">
           <p>{t("type.fromTagConflict", { count: p.typedOther.length })}</p>
-          <ul className="mt-1 max-h-28 overflow-y-auto text-xs text-muted">
+          <ul className="mt-1 max-h-28 overflow-y-auto text-xs text-muted-foreground">
             {p.typedOther.slice(0, 20).map((id) => (
               <li key={id} className="flex items-center gap-1">
                 <ItemIcon item={ix.get(id)!} size={11} /> {ix.get(id)!.title}
@@ -611,7 +616,7 @@ function FromTagDialog({ item, onClose }: { item: Item; onClose: () => void }) {
         </div>
       )}
       <label className="mt-3 flex items-center gap-2 text-sm">
-        <input type="checkbox" checked={removeTag} onChange={(e) => setRemoveTag(e.target.checked)} className="accent-[var(--focus)]" /> {t("type.removeTagAfter", { tag })}
+        <Checkbox  checked={removeTag} onCheckedChange={(checked) => setRemoveTag((checked === true))} className="accent-[var(--focus)]" /> {t("type.removeTagAfter", { tag })}
       </label>
       <div className="mt-4 flex justify-end gap-2">
         <Button variant="outline" onClick={onClose}>
@@ -652,7 +657,7 @@ function TargetField({ target, hits, onChange }: { target?: string; hits: number
   return (
     <div className="space-y-1.5">
       <div className="flex items-center gap-2">
-        <select
+        <NativeSelect
           value={mode === "type" ? (typeId ?? "") : mode}
           onChange={(e) => {
             const v = e.target.value;
@@ -673,11 +678,11 @@ function TargetField({ target, hits, onChange }: { target?: string; hits: number
           <option value="tag">{t("type.targetTag")}</option>
           <option value="query">{t("type.targetQuery")}</option>
           <option value="new">{t("type.targetNew")}</option>
-        </select>
-        <span className="shrink-0 text-xs text-muted">{t("type.hits", { count: hits })}</span>
+        </NativeSelect>
+        <span className="shrink-0 text-xs text-muted-foreground">{t("type.hits", { count: hits })}</span>
       </div>
-      {mode === "tag" && <input defaultValue={tag ?? ""} onBlur={(e) => e.target.value.trim() && onChange("#" + e.target.value.trim().replace(/^#/, "").toLowerCase())} placeholder="#autor" className={box} />}
-      {mode === "query" && <input defaultValue={target ?? ""} onBlur={(e) => onChange(e.target.value.trim())} placeholder={t("type.targetPlaceholder")} className={cx(box, "font-mono")} />}
+      {mode === "tag" && <Input defaultValue={tag ?? ""} onBlur={(e) => e.target.value.trim() && onChange("#" + e.target.value.trim().replace(/^#/, "").toLowerCase())} placeholder="#autor" className={box} />}
+      {mode === "query" && <Input defaultValue={target ?? ""} onBlur={(e) => onChange(e.target.value.trim())} placeholder={t("type.targetPlaceholder")} className={cx(box, "font-mono")} />}
       {/* the target type does not exist yet: make it here, without leaving the editor */}
       {creating && (
         <Dialog title={t("type.targetNewTitle")} onClose={() => setCreating(false)}>
@@ -693,7 +698,7 @@ function TargetField({ target, hits, onChange }: { target?: string; hits: number
               onChange(printQuery({ where: { type: id } }, lang, repo.index()));
             }}
           >
-            <input autoFocus value={newName} onChange={(e) => setNewName(e.target.value)} placeholder={t("type.name")} className="w-full rounded-lg border border-line bg-bg px-3 py-2 text-sm outline-none" />
+            <Input autoFocus value={newName} onChange={(e) => setNewName(e.target.value)} placeholder={t("type.name")} className="w-full rounded-lg border border-line bg-bg px-3 py-2 text-sm outline-none" />
             <div className="mt-4 flex justify-end">
               <Button type="submit" variant="primary" disabled={!newName.trim()}>
                 {t("types.create")}

@@ -43,8 +43,8 @@ const highlight = HighlightStyle.define([
   { tag: t.monospace, fontFamily: "var(--font-mono)", fontSize: "0.9em", background: "var(--surface-2)", borderRadius: "3px" },
   { tag: [t.processingInstruction, t.meta], color: "var(--faint)" },
   { tag: t.link, color: "var(--focus)" },
-  { tag: t.url, color: "var(--muted)" },
-  { tag: t.quote, color: "var(--muted)", fontStyle: "italic" },
+  { tag: t.url, color: "var(--muted-foreground)" },
+  { tag: t.quote, color: "var(--muted-foreground)", fontStyle: "italic" },
   { tag: t.list, color: "inherit" },
   { tag: t.contentSeparator, color: "var(--faint)" },
 ]);

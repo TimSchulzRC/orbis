@@ -1,3 +1,4 @@
+import { Textarea } from "../components/ui/textarea";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Item } from "@obtion/core/model";
 import { repo } from "../repo";
@@ -26,7 +27,7 @@ export function TitleField({ item, autoFocus, placeholder }: { item: Item; autoF
   };
   useEffect(() => () => void (focused.current && commit()), []);
   return (
-    <textarea
+    <Textarea
       ref={ref}
       rows={1}
       value={v}

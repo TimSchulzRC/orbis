@@ -1,3 +1,5 @@
+import { Button as ShadcnButton } from "../components/ui/button";
+import { Input } from "../components/ui/input";
 import { useState } from "react";
 import { Plus, Sparkles } from "lucide-react";
 import { type Item, META_TYPE } from "@obtion/core/model";
@@ -46,7 +48,7 @@ export function ItemPicker({
   };
   return (
     <Dialog title={title} onClose={onClose}>
-      <input
+      <Input
         autoFocus
         value={q}
         onChange={(e) => (setQ(e.target.value), setSel(0))}
@@ -58,30 +60,30 @@ export function ItemPicker({
         placeholder={t("picker.search")}
         className="mb-2 w-full rounded-lg border border-line bg-bg px-3 py-2 text-sm outline-none focus:border-[var(--focus)]"
       />
-      {sugg.length > 0 && <p className="px-2 pb-1 text-xs font-medium text-muted">{t("picker.suggested")}</p>}
+      {sugg.length > 0 && <p className="px-2 pb-1 text-xs font-medium text-muted-foreground">{t("picker.suggested")}</p>}
       <div className="flex flex-col">
         {rows.map((r, i) => {
           const item = r.id ? repo.get(r.id) : undefined;
           return (
-            <button
+            <ShadcnButton variant="plain" size="none"
               key={r.id ?? "create"}
               onMouseEnter={() => setSel(i)}
               onClick={() => pick(r)}
               className={cx("flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm", i === sel && "bg-selected", i === sugg.length && sugg.length > 0 && "mt-2")}
             >
-              {item ? <ItemIcon item={item} size={15} /> : <Plus size={15} className="text-muted" />}
+              {item ? <ItemIcon item={item} size={15} /> : <Plus size={15} className="text-muted-foreground" />}
               <span className="min-w-0 flex-1 truncate">{item ? item.title || t("untitled") : t("picker.create", { title: r.create })}</span>
               {r.reason && (
-                <span className="flex shrink-0 items-center gap-1 text-xs text-muted">
+                <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
                   {r.reason === "agent" && <Sparkles size={11} />}
                   {t("picker.reason." + r.reason)}
                 </span>
               )}
               {item && !r.reason && <PathHint item={item} />}
-            </button>
+            </ShadcnButton>
           );
         })}
-        {!rows.length && <p className="px-2 py-2 text-sm text-muted">{t("picker.none")}</p>}
+        {!rows.length && <p className="px-2 py-2 text-sm text-muted-foreground">{t("picker.none")}</p>}
       </div>
     </Dialog>
   );
@@ -91,5 +93,5 @@ function PathHint({ item }: { item: Item }) {
   const ix = useIndex();
   const path = ix.homePath(item.id);
   if (!path.length) return null;
-  return <span className="max-w-[45%] shrink-0 truncate text-xs text-muted">{path.map((id) => ix.get(id)?.title).join(" › ")}</span>;
+  return <span className="max-w-[45%] shrink-0 truncate text-xs text-muted-foreground">{path.map((id) => ix.get(id)?.title).join(" › ")}</span>;
 }

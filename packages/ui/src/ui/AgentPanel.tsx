@@ -1,8 +1,12 @@
+import { ModalSurface } from "../components/ui/dialog";
+import { Button as ShadcnButton } from "../components/ui/button";
+import { Textarea } from "../components/ui/textarea";
+import { NativeSelect } from "../components/ui/native-select";
 import { useEffect, useRef, useState } from "react";
 import { X, Send, Square, Plus, Mic, Wrench, Check, AlertTriangle, Sparkles } from "lucide-react";
 import type { Item } from "@obtion/core/model";
 import { Markdown } from "./Markdown";
-import { Button, Empty, cx, IconButton, ItemIcon, shortcut, useModal } from "./bits";
+import { Button, Empty, cx, IconButton, ItemIcon, shortcut } from "./bits";
 import type { Repo } from "@obtion/sync";
 import { go, useRepo, useRoute } from "../hooks";
 import { agentHere, spaceById, spaceFetch, useAccounts } from "../accounts";
@@ -201,11 +205,10 @@ function AgentChat({ space, onSpace, context, onClose, overlay }: { space: strin
 
   // on a phone the agent covers the page: a modal sheet (focus stays in, Escape closes)
   const sheet = useRef<HTMLElement | null>(null);
-  useModal(overlay ? sheet : { current: null }, onClose);
   const suggestions = [t("agent.s1"), context ? t("agent.sContext", { title: context.title }) : t("agent.s2"), t("agent.s3"), t("agent.s4")];
 
   return (
-    <aside
+    <ModalSurface enabled={overlay} title={t("nav.agent")} onClose={onClose}><aside
       ref={sheet}
       role={overlay ? "dialog" : undefined}
       aria-modal={overlay || undefined}
@@ -216,22 +219,22 @@ function AgentChat({ space, onSpace, context, onClose, overlay }: { space: strin
       aria-label={t("nav.agent")}
     >
       <header className="flex items-center gap-2 border-b border-line px-3 py-2">
-        <Sparkles size={16} className="text-muted" />
+        <Sparkles size={16} className="text-muted-foreground" />
         <span className="font-medium">Agent</span>
         {/* how things stand, in one word: ready, not set up, offline (the server was asked, not guessed) */}
         {available !== null && (
-          <span className="inline-flex items-center gap-1 text-xs text-muted" role="status">
+          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground" role="status">
             <span className="size-1.5 rounded-full" style={{ background: available && r.status.online ? "var(--ok)" : "var(--faint)" }} />
             {!r.status.online ? t("agent.stateOffline") : available ? t("agent.stateReady") : t("agent.stateMissing")}
           </span>
         )}
-        <select
+        <NativeSelect
           value={model}
           onChange={(e) => {
             setModel(e.target.value);
             localStorage.setItem("obtion.model", e.target.value);
           }}
-          className="ml-1 rounded-md bg-transparent px-1 py-0.5 text-xs text-muted hover:bg-hover"
+          className="ml-1 rounded-md bg-transparent px-1 py-0.5 text-xs text-muted-foreground hover:bg-hover"
           aria-label={t("agent.model")}
         >
           {MODELS.map((m) => (
@@ -239,15 +242,15 @@ function AgentChat({ space, onSpace, context, onClose, overlay }: { space: strin
               {m.label} · {t(m.hint)}
             </option>
           ))}
-        </select>
+        </NativeSelect>
         {spaces.length > 1 && (
-          <select value={space} onChange={(e) => onSpace(e.target.value)} className="min-w-0 max-w-32 truncate rounded-md bg-transparent px-1 py-0.5 text-xs text-muted hover:bg-hover" aria-label={t("agent.space")}>
+          <NativeSelect value={space} onChange={(e) => onSpace(e.target.value)} className="min-w-0 max-w-32 truncate rounded-md bg-transparent px-1 py-0.5 text-xs text-muted-foreground hover:bg-hover" aria-label={t("agent.space")}>
             {spaces.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}
               </option>
             ))}
-          </select>
+          </NativeSelect>
         )}
         <IconButton onClick={newChat} label={t("agent.newChat")} icon={Plus} className="ml-auto" />
         <IconButton onClick={onClose} label={t("agent.close", { key: shortcut("J", lang) })} icon={X} />
@@ -269,14 +272,14 @@ function AgentChat({ space, onSpace, context, onClose, overlay }: { space: strin
         {available !== false && msgs.length === 0 && (
           <div className="pt-6">
             <p className="mb-1 text-lg font-medium">{t("agent.hello")}</p>
-            <p className="mb-4 text-sm text-muted">
+            <p className="mb-4 text-sm text-muted-foreground">
               {t("agent.helloHint")}
             </p>
             <div className="flex flex-col gap-2">
               {suggestions.map((s) => (
-                <button key={s} onClick={() => send(s)} className="rounded-lg border border-line px-3 py-2 text-left text-sm text-muted hover:bg-hover hover:text-fg">
+                <ShadcnButton variant="plain" size="none" key={s} onClick={() => send(s)} className="rounded-lg border border-line px-3 py-2 text-left text-sm text-muted-foreground hover:bg-hover hover:text-fg">
                   {s}
-                </button>
+                </ShadcnButton>
               ))}
             </div>
           </div>
@@ -296,7 +299,7 @@ function AgentChat({ space, onSpace, context, onClose, overlay }: { space: strin
                       title={tc.preview}
                       className={cx(
                         "inline-flex max-w-full items-center gap-1 truncate rounded-md px-1.5 py-0.5 text-xs",
-                        WRITE_TOOLS.has(tc.name) ? "bg-[color-mix(in_srgb,var(--ok)_14%,transparent)] text-ok" : "bg-surface-2 text-muted",
+                        WRITE_TOOLS.has(tc.name) ? "bg-[color-mix(in_srgb,var(--ok)_14%,transparent)] text-ok" : "bg-surface-2 text-muted-foreground",
                       )}
                     >
                       {tc.ok === undefined ? <Wrench size={11} className="animate-pulse" /> : tc.ok ? <Check size={11} /> : <AlertTriangle size={11} className="text-danger" />}
@@ -308,7 +311,7 @@ function AgentChat({ space, onSpace, context, onClose, overlay }: { space: strin
               {m.text ? (
                 <Markdown src={m.text} className="text-[15px]" />
               ) : busy && i === msgs.length - 1 ? (
-                <div className="typing flex gap-1 py-2 text-muted" aria-label={t("agent.thinking")}>
+                <div className="typing flex gap-1 py-2 text-muted-foreground" aria-label={t("agent.thinking")}>
                   <span>●</span>
                   <span>●</span>
                   <span>●</span>
@@ -322,14 +325,14 @@ function AgentChat({ space, onSpace, context, onClose, overlay }: { space: strin
 
       <div className="border-t border-line p-3">
         {context && (
-          <button
+          <ShadcnButton variant="plain" size="none"
             onClick={() => setUseContext(!useContext)}
-            className={cx("mb-2 inline-flex max-w-full items-center gap-1.5 truncate rounded-md px-2 py-0.5 text-xs", useContext ? "bg-surface-2 text-muted" : "text-muted line-through")}
+            className={cx("mb-2 inline-flex max-w-full items-center gap-1.5 truncate rounded-md px-2 py-0.5 text-xs", useContext ? "bg-surface-2 text-muted-foreground" : "text-muted-foreground line-through")}
             title={t("agent.contextHint")}
           >
             <ItemIcon item={context} size={12} />
             <span className="truncate">{context.title || t("untitled")}</span>
-          </button>
+          </ShadcnButton>
         )}
         <form
           onSubmit={(e) => {
@@ -338,7 +341,7 @@ function AgentChat({ space, onSpace, context, onClose, overlay }: { space: strin
           }}
           className="flex items-end gap-2 rounded-xl border border-line bg-bg px-2 py-1.5 focus-within:border-[var(--focus)]"
         >
-          <textarea
+          <Textarea
             ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -352,21 +355,21 @@ function AgentChat({ space, onSpace, context, onClose, overlay }: { space: strin
             data-autofocus
             placeholder={available === false ? t("agent.notSetUpShort") : t("agent.placeholder")}
             disabled={available === false}
-            className="max-h-40 flex-1 resize-none bg-transparent px-1 py-1 text-[15px] outline-none placeholder:text-muted focus-visible:outline-none"
+            className="max-h-40 flex-1 resize-none bg-transparent px-1 py-1 text-[15px] outline-none placeholder:text-muted-foreground focus-visible:outline-none"
           />
           <Dictate onText={(x) => setInput((v) => (v ? v + " " : "") + x)} />
           {busy ? (
-            <button type="button" onClick={() => abort.current?.abort()} className="rounded-lg bg-ink p-2 text-ink-text" aria-label={t("agent.stop")}>
+            <ShadcnButton variant="plain" size="none" type="button" onClick={() => abort.current?.abort()} className="rounded-lg bg-ink p-2 text-ink-text" aria-label={t("agent.stop")}>
               <Square size={14} />
-            </button>
+            </ShadcnButton>
           ) : (
-            <button type="submit" disabled={!input.trim() || available === false} className="rounded-lg bg-ink p-2 text-ink-text disabled:opacity-30" aria-label={t("agent.send")}>
+            <ShadcnButton variant="plain" size="none" type="submit" disabled={!input.trim() || available === false} className="rounded-lg bg-ink p-2 text-ink-text disabled:opacity-30" aria-label={t("agent.send")}>
               <Send size={14} />
-            </button>
+            </ShadcnButton>
           )}
         </form>
       </div>
-    </aside>
+    </aside></ModalSurface>
   );
 }
 
@@ -393,8 +396,8 @@ function Dictate({ onText }: { onText: (t: string) => void }) {
     setOn(true);
   };
   return (
-    <button type="button" onClick={toggle} className={cx("rounded-lg p-2", on ? "bg-danger text-white" : "text-muted hover:bg-hover")} aria-label={on ? tr("agent.dictateStop") : tr("agent.dictate")} title={tr("agent.dictate")}>
+    <ShadcnButton variant="plain" size="none" type="button" onClick={toggle} className={cx("rounded-lg p-2", on ? "bg-danger text-white" : "text-muted-foreground hover:bg-hover")} aria-label={on ? tr("agent.dictateStop") : tr("agent.dictate")} title={tr("agent.dictate")}>
       <Mic size={14} />
-    </button>
+    </ShadcnButton>
   );
 }

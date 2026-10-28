@@ -1,3 +1,5 @@
+import { Input } from "../components/ui/input";
+import { Textarea } from "../components/ui/textarea";
 // A file behaves like an information whose content is the file itself: title, description,
 // tags, refs, "Teil von", and "Verwendet in" instead of a folder.
 import { useEffect, useMemo, useState } from "react";
@@ -65,8 +67,8 @@ export function FilePage({ item }: { item: Item }) {
             {parents.length ? t("place.change") : t("place.place")}
           </MenuItem>
           <label className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm hover:bg-hover">
-            <Replace size={14} className="text-muted" /> {t("file.replace")}
-            <input type="file" className="hidden" onChange={(e) => (close(), e.target.files?.[0] && replace(e.target.files[0]))} />
+            <Replace size={14} className="text-muted-foreground" /> {t("file.replace")}
+            <Input type="file" className="hidden" onChange={(e) => (close(), e.target.files?.[0] && replace(e.target.files[0]))} />
           </label>
           {!item.deleted && (
             <MenuItem danger icon={<Trash2 size={14} />} onClick={() => (close(), repo.remove(item.id), history.length > 1 ? history.back() : go("/"))}>
@@ -87,7 +89,7 @@ export function FilePage({ item }: { item: Item }) {
           </Button>
         </div>
       )}
-      {missing && <p className="mb-3 rounded-lg border border-dashed border-line px-3 py-2 text-sm text-muted">{t(files.missingKey(item.created) === "file.uploading" ? "file.uploadingHint" : "file.missingHint")}</p>}
+      {missing && <p className="mb-3 rounded-lg border border-dashed border-line px-3 py-2 text-sm text-muted-foreground">{t(files.missingKey(item.created) === "file.uploading" ? "file.uploadingHint" : "file.missingHint")}</p>}
       <Crumbs item={item} tools={tools} onPlaces={() => setPicking(true)} onPlace={() => setPicking(true)} />
       <div className="mt-1.5 flex items-start gap-4">
         <div className="min-w-0 flex-1">
@@ -97,18 +99,18 @@ export function FilePage({ item }: { item: Item }) {
           <Download size={15} /> <span className="max-md:hidden">{t("file.download")}</span>
         </a>
       </div>
-      <p className="mt-2.5 flex items-center gap-1.5 text-[13px] text-muted">
+      <p className="mt-2.5 flex items-center gap-1.5 text-[13px] text-muted-foreground">
         <ItemIcon item={item} size={13} /> {facts[0]![1]}
       </p>
       {/* facts as the property block (no "+ Eigenschaft") */}
       <div className="mt-[18px] grid grid-cols-[148px_minmax(0,1fr)] gap-x-3 max-md:grid-cols-[124px_minmax(0,1fr)]">
         {[[t("file.name"), f.name] as [string, React.ReactNode], ...facts.slice(1)].map(([k, v]) => (
           <div key={k} className="contents">
-            <div className="flex min-h-8 items-center truncate text-[13px] text-muted pointer-coarse:min-h-11">{k}</div>
+            <div className="flex min-h-8 items-center truncate text-[13px] text-muted-foreground pointer-coarse:min-h-11">{k}</div>
             <div className="flex min-h-8 min-w-0 items-center break-all text-sm tabular-nums pointer-coarse:min-h-11">{v}</div>
           </div>
         ))}
-        <div className="flex min-h-8 items-center text-[13px] text-muted pointer-coarse:min-h-11">{t("item.tags")}</div>
+        <div className="flex min-h-8 items-center text-[13px] text-muted-foreground pointer-coarse:min-h-11">{t("item.tags")}</div>
         <div className="flex min-h-8 min-w-0 flex-wrap items-center gap-1.5 text-sm pointer-coarse:min-h-11">
           {item.tags.map((x) => (
             <Tag key={x} tag={x} onRemove={() => repo.setMember(item.id, "tags", x, false)} />
@@ -124,9 +126,9 @@ export function FilePage({ item }: { item: Item }) {
         {f.filetype === "pdf" && (!local || localSrc) && <iframe title={item.title} src={localSrc ?? files.serverUrl(f.hash)} className="h-[75vh] w-full bg-white" />}
         {f.filetype === "audio" && orig && <audio controls src={orig} className="w-full p-4" />}
         {f.filetype === "video" && orig && <video controls src={orig} className="w-full" />}
-        {!isImg && f.filetype !== "pdf" && f.filetype !== "audio" && f.filetype !== "video" && <div className="flex h-40 items-center justify-center text-sm text-muted">{f.name}</div>}
+        {!isImg && f.filetype !== "pdf" && f.filetype !== "audio" && f.filetype !== "video" && <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">{f.name}</div>}
       </div>
-      <textarea
+      <Textarea
         defaultValue={desc}
         key={item.id}
         onBlur={(e) => e.target.value !== item.body && repo.setBody(item.id, e.target.value)}

@@ -1,3 +1,7 @@
+import { Button as ShadcnButton } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { Textarea } from "../components/ui/textarea";
+import { NativeSelect } from "../components/ui/native-select";
 // Sections of a page, all derived from "Teil von" and the type's capabilities:
 // the main child list (e.g. tasks of a project, over all levels), same-type children
 // (sub-projects), other children, notes (children without a type) and updates.
@@ -42,10 +46,10 @@ function AddRow({ label, onAdd, autoFocus, onDone }: { label: string; onAdd: (ti
         onAdd(v.trim());
         setV("");
       }}
-      className="field-within mt-1 flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-muted focus-within:bg-hover"
+      className="field-within mt-1 flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-muted-foreground focus-within:bg-hover"
     >
       <Plus size={17} />
-      <input
+      <Input
         value={v}
         autoFocus={autoFocus}
         onChange={(e) => setV(e.target.value)}
@@ -197,9 +201,9 @@ export function BelowCard({ item, exclude, gathers, quietAdd }: { item: Item; ex
   const FEW = 8;
   const right = (x: Item) =>
     x.file ? (
-      <span className="shrink-0 text-xs tabular-nums text-muted">{fmtBytes(lang, x.file.size)}</span>
+      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{fmtBytes(lang, x.file.size)}</span>
     ) : x.kind === "info" && !ix.typeOf(x) ? (
-      <span className="shrink-0 text-xs text-muted"><RelTime ts={x.updated} /></span>
+      <span className="shrink-0 text-xs text-muted-foreground"><RelTime ts={x.updated} /></span>
     ) : (
       <DueLabel due={dueOf(x, ix.schemaOf(x))} />
     );
@@ -208,9 +212,9 @@ export function BelowCard({ item, exclude, gathers, quietAdd }: { item: Item; ex
       <SectionTitle
         count={count}
         right={
-          <button onClick={() => setAdding(true)} className="tap-y flex h-7 items-center gap-1 rounded-md px-2 text-[13px] text-muted hover:bg-hover hover:text-fg">
+          <ShadcnButton variant="plain" size="none" onClick={() => setAdding(true)} className="tap-y flex h-7 items-center gap-1 rounded-md px-2 text-[13px] text-muted-foreground hover:bg-hover hover:text-fg">
             <Plus size={14} /> {t("below.note")}
-          </button>
+          </ShadcnButton>
         }
       >
         {t("below.title")}
@@ -225,7 +229,7 @@ export function BelowCard({ item, exclude, gathers, quietAdd }: { item: Item; ex
           const all = more.has(g.key);
           return (
             <div key={g.key}>
-              <p className="px-3 pb-1 pt-2.5 text-xs font-semibold text-muted">{g.label}</p>
+              <p className="px-3 pb-1 pt-2.5 text-xs font-semibold text-muted-foreground">{g.label}</p>
               {(all ? g.items : g.items.slice(0, FEW)).map((x) => {
                 const rel = gathers ? (ix.relPath(item.id, x.id) ?? []) : [];
                 return (
@@ -233,16 +237,16 @@ export function BelowCard({ item, exclude, gathers, quietAdd }: { item: Item; ex
                     <ItemIcon item={x} size={15} className="shrink-0" />
                     <span className="flex min-w-0 flex-1 flex-col">
                       <span className="truncate text-sm max-md:text-[15px]">{x.title || x.file?.name || t("untitled")}</span>
-                      {rel.length > 0 && <span className="truncate text-xs text-muted">{shortPath(rel)}</span>}
+                      {rel.length > 0 && <span className="truncate text-xs text-muted-foreground">{shortPath(rel)}</span>}
                     </span>
                     {right(x)}
                   </a>
                 );
               })}
               {g.items.length > FEW && (
-                <button onClick={() => setMore(new Set(all ? [...more].filter((k) => k !== g.key) : [...more, g.key]))} className="tap-y block w-full border-t border-line px-3 py-2 text-left text-[13px] text-muted hover:text-fg">
+                <ShadcnButton variant="plain" size="none" onClick={() => setMore(new Set(all ? [...more].filter((k) => k !== g.key) : [...more, g.key]))} className="tap-y block w-full border-t border-line px-3 py-2 text-left text-[13px] text-muted-foreground hover:text-fg">
                   {all ? t("notes.fewer") : t("notes.all", { count: g.items.length })}
-                </button>
+                </ShadcnButton>
               )}
             </div>
           );
@@ -282,9 +286,9 @@ export function Updates({ item }: { item: Item }) {
         count={every.length || undefined}
         right={
           !writing && (
-            <button onClick={() => setWriting(true)} className="tap-y flex h-7 items-center gap-1 rounded-md px-2 text-[13px] text-muted hover:bg-hover hover:text-fg">
+            <ShadcnButton variant="plain" size="none" onClick={() => setWriting(true)} className="tap-y flex h-7 items-center gap-1 rounded-md px-2 text-[13px] text-muted-foreground hover:bg-hover hover:text-fg">
               <Plus size={14} /> {t("updates.one")}
-            </button>
+            </ShadcnButton>
           )
         }
       >
@@ -292,7 +296,7 @@ export function Updates({ item }: { item: Item }) {
       </SectionTitle>
       {writing && (
       <div className="mb-4 rounded-xl border border-line bg-surface p-3 focus-within:border-[var(--focus)]">
-        <textarea
+        <Textarea
           autoFocus
           onBlur={() => !text.trim() && setWriting(false)}
           value={text}
@@ -302,20 +306,20 @@ export function Updates({ item }: { item: Item }) {
           }}
           rows={text ? 3 : 1}
           placeholder={t("updates.placeholder")}
-          className="w-full resize-none bg-transparent px-1 text-[15px] outline-none placeholder:text-muted"
+          className="w-full resize-none bg-transparent px-1 text-[15px] outline-none placeholder:text-muted-foreground"
           aria-label={t("updates.write")}
         />
         {text && (
           <div className="mt-2 flex flex-wrap items-center gap-2">
             {sp && (
-              <select value={status} onChange={(e) => setStatus(e.target.value)} className="rounded-md border border-line bg-bg px-1.5 py-1 text-xs text-muted" aria-label={t("updates.status")}>
+              <NativeSelect value={status} onChange={(e) => setStatus(e.target.value)} className="rounded-md border border-line bg-bg px-1.5 py-1 text-xs text-muted-foreground" aria-label={t("updates.status")}>
                 <option value="">{t("updates.keepStatus")}</option>
                 {sp.options?.filter((o) => o.id !== item.props[sp.id]).map((o) => (
                   <option key={o.id} value={o.id}>
                     → {o.name}
                   </option>
                 ))}
-              </select>
+              </NativeSelect>
             )}
             <Button variant="outline" className="ml-auto" onClick={() => askAgent(t("updates.agentPrompt", { title: item.title, text: text.trim() }))}>
               <Sparkles size={14} /> {t("updates.viaAgent")}
@@ -334,7 +338,7 @@ export function Updates({ item }: { item: Item }) {
             return (
               <li key={u.id} className="relative">
                 <span className="absolute -left-[25px] top-1.5 size-2.5 rounded-full border-2 border-bg" style={{ background: u.by === "you" ? "var(--faint)" : "var(--ok)" }} />
-                <div className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted">
+                <div className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
                   <span>{fmtDateTime(lang, u.at)}</span>
                   {from.id !== item.id && (
                     <span className="inline-flex items-center gap-1">
@@ -351,9 +355,9 @@ export function Updates({ item }: { item: Item }) {
         </ol>
       )}
       {every.length > 3 && (
-        <button onClick={() => setAll(!all)} className="tap-y mt-2 text-[13px] text-muted hover:text-fg">
+        <ShadcnButton variant="plain" size="none" onClick={() => setAll(!all)} className="tap-y mt-2 text-[13px] text-muted-foreground hover:text-fg">
           {all ? t("updates.fewer") : t("updates.all", { count: every.length })}
-        </button>
+        </ShadcnButton>
       )}
     </section>
   );
@@ -364,9 +368,9 @@ function UpdateStarter({ onStart }: { onStart: () => void }) {
   const { t } = useT();
   return (
     <div className="mt-6">
-      <button onClick={onStart} className="tap-y flex h-8 items-center gap-1.5 rounded-md px-1 text-[13px] text-muted hover:bg-hover hover:text-fg">
+      <ShadcnButton variant="plain" size="none" onClick={onStart} className="tap-y flex h-8 items-center gap-1.5 rounded-md px-1 text-[13px] text-muted-foreground hover:bg-hover hover:text-fg">
         <Plus size={14} /> {t("updates.one")}
-      </button>
+      </ShadcnButton>
     </div>
   );
 }

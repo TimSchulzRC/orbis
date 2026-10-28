@@ -1,3 +1,5 @@
+import { Table as ShadcnTable, TableHeader, TableBody, TableRow, TableHead, TableCell } from "../components/ui/table";
+import { Button as ShadcnButton } from "../components/ui/button";
 // Projects with their progress and next task (design rules § 2.4) – in query blocks
 // with "spalten:fortschritt,nächste" (an overview's "Aktive Projekte").
 import { useState } from "react";
@@ -45,15 +47,15 @@ export function ProjectTable({ items }: { items: Item[] }) {
         <span className={cx("h-1.5 overflow-hidden rounded-full bg-surface-2 dark:bg-hover", phone ? "w-10" : "w-14")}>
           <span className="block h-full rounded-full" style={{ width: `${(pr.done / pr.total) * 100}%`, background: "var(--ok)" }} />
         </span>
-        <span className="text-xs tabular-nums text-muted">{new Intl.NumberFormat(lang, { style: "percent", maximumFractionDigits: 0 }).format(pr.done / pr.total)}</span>
+        <span className="text-xs tabular-nums text-muted-foreground">{new Intl.NumberFormat(lang, { style: "percent", maximumFractionDigits: 0 }).format(pr.done / pr.total)}</span>
       </span>
     );
   };
   const chevron = (i: Item) =>
     kids(i.id).length ? (
-      <button onClick={() => setOpen(new Set(open.has(i.id) ? [...open].filter((x) => x !== i.id) : [...open, i.id]))} aria-expanded={open.has(i.id)} aria-label={t(open.has(i.id) ? "start.hideSub" : "start.showSub")} className="tap shrink-0 rounded p-0.5 text-faint hover:bg-hover hover:text-fg">
+      <ShadcnButton variant="plain" size="none" onClick={() => setOpen(new Set(open.has(i.id) ? [...open].filter((x) => x !== i.id) : [...open, i.id]))} aria-expanded={open.has(i.id)} aria-label={t(open.has(i.id) ? "start.hideSub" : "start.showSub")} className="tap shrink-0 rounded p-0.5 text-faint hover:bg-hover hover:text-fg">
         <ChevronRight size={14} className={cx("transition-transform", open.has(i.id) && "rotate-90")} />
-      </button>
+      </ShadcnButton>
     ) : (
       <span className="w-[18px] shrink-0" />
     );
@@ -68,7 +70,7 @@ export function ProjectTable({ items }: { items: Item[] }) {
               <RowStatus item={i} size={16} />
               <a href={itemHref(i.id)} className="flex min-w-0 flex-1 flex-col">
                 <span className="truncate text-[15px]">{i.title || t("untitled")}</span>
-                <span className="truncate text-xs text-muted">{n ? t("row.next", { title: n.title || t("untitled") }) : [ix.homePath(i.id).slice(-1).map((p) => ix.get(p)?.title)[0], ix.progressOf(i)?.total ? "" : t("start.noTasks")].filter(Boolean).join(" · ")}</span>
+                <span className="truncate text-xs text-muted-foreground">{n ? t("row.next", { title: n.title || t("untitled") }) : [ix.homePath(i.id).slice(-1).map((p) => ix.get(p)?.title)[0], ix.progressOf(i)?.total ? "" : t("start.noTasks")].filter(Boolean).join(" · ")}</span>
               </a>
               {pct(i) ?? <span className="text-faint">–</span>}
             </div>
@@ -77,21 +79,21 @@ export function ProjectTable({ items }: { items: Item[] }) {
       </div>
     );
   return (
-    <table className="w-full border-collapse text-sm">
-      <thead>
-        <tr className="h-8 bg-[color-mix(in_srgb,var(--surface-2)_45%,var(--surface))] text-left text-xs text-muted">
-          <th className="px-3.5 font-medium">{t("start.project")}</th>
-          <th className="w-[1%] whitespace-nowrap px-3 font-medium">{t("field.progress")}</th>
-          <th className="w-[38%] px-3.5 font-medium">{t("start.nextTask")}</th>
-        </tr>
-      </thead>
-      <tbody>
+    <ShadcnTable className="w-full border-collapse text-sm">
+      <TableHeader>
+        <TableRow className="h-8 bg-[color-mix(in_srgb,var(--surface-2)_45%,var(--surface))] text-left text-xs text-muted-foreground">
+          <TableHead className="px-3.5 font-medium">{t("start.project")}</TableHead>
+          <TableHead className="w-[1%] whitespace-nowrap px-3 font-medium">{t("field.progress")}</TableHead>
+          <TableHead className="w-[38%] px-3.5 font-medium">{t("start.nextTask")}</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
         {rows.map(({ item: i, depth }) => {
           const n = nextOf(i);
           const nd = n ? dueOf(n, ix.schemaOf(n)) : undefined;
           return (
-            <tr key={i.id} data-id={i.id} className="h-10 border-t border-line hover:bg-hover">
-              <td className="max-w-0 px-3.5">
+            <TableRow key={i.id} data-id={i.id} className="h-10 border-t border-line hover:bg-hover">
+              <TableCell className="max-w-0 px-3.5">
                 <span className="flex min-w-0 items-center gap-2" style={{ paddingLeft: depth * 22 }}>
                   {depth > 0 && <CornerDownRight size={13} className="-mr-1 shrink-0 text-faint" aria-hidden />}
                   {chevron(i)}
@@ -100,9 +102,9 @@ export function ProjectTable({ items }: { items: Item[] }) {
                     {i.title || t("untitled")}
                   </a>
                 </span>
-              </td>
-              <td className="whitespace-nowrap px-3">{pct(i) ?? <span className="text-faint">–</span>}</td>
-              <td className="max-w-0 px-3.5">
+              </TableCell>
+              <TableCell className="whitespace-nowrap px-3">{pct(i) ?? <span className="text-faint">–</span>}</TableCell>
+              <TableCell className="max-w-0 px-3.5">
                 {n ? (
                   <span className="flex min-w-0 items-center gap-2">
                     <a href={itemHref(n.id)} className="min-w-0 truncate hover:underline">
@@ -111,14 +113,14 @@ export function ProjectTable({ items }: { items: Item[] }) {
                     {nd && <DueLabel due={nd} />}
                   </span>
                 ) : (
-                  <span className="text-xs text-muted">{ix.progressOf(i)?.total ? "" : t("start.noTasks")}</span>
+                  <span className="text-xs text-muted-foreground">{ix.progressOf(i)?.total ? "" : t("start.noTasks")}</span>
                 )}
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           );
         })}
-      </tbody>
-    </table>
+      </TableBody>
+    </ShadcnTable>
   );
 }
 

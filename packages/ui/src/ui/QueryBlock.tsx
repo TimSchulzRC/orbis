@@ -1,3 +1,6 @@
+import { Checkbox } from "../components/ui/checkbox";
+import { Button as ShadcnButton } from "../components/ui/button";
+import { Input } from "../components/ui/input";
 // Live query blocks inside a text: ```abfrage … ``` is stored as JSON with ids and shown
 // as its results. Text-form blocks (typed by hand or by an agent) are normalised to JSON.
 import { StrictMode, useState } from "react";
@@ -102,25 +105,25 @@ export function QueryBlockView({ src, thisId, n = 0, onChange, onDelete, readOnl
       )}
       {!readOnly && (
           <span className="qb-tools absolute right-1 top-1 z-10 flex gap-0.5 rounded-md bg-bg opacity-0 transition-opacity group-hover/qb:opacity-100">
-            <button onClick={() => (editing && save(), setEditing(!editing))} className="tap rounded p-1 text-muted hover:bg-hover hover:text-fg" aria-label={editing ? t("view.save") : t("block.edit")}>
+            <ShadcnButton variant="plain" size="none" onClick={() => (editing && save(), setEditing(!editing))} className="tap rounded p-1 text-muted-foreground hover:bg-hover hover:text-fg" aria-label={editing ? t("view.save") : t("block.edit")}>
               {editing ? <Check size={13} /> : <Pencil size={13} />}
-            </button>
-            <button onClick={onDelete} className="tap rounded p-1 text-muted hover:bg-hover hover:text-danger" aria-label={t("block.delete")}>
+            </ShadcnButton>
+            <ShadcnButton variant="plain" size="none" onClick={onDelete} className="tap rounded p-1 text-muted-foreground hover:bg-hover hover:text-danger" aria-label={t("block.delete")}>
               <Trash2 size={13} />
-            </button>
+            </ShadcnButton>
           </span>
       )}
       {editing && onChange && (
         <div className="my-2 space-y-2">
-          <input
+          <Input
             defaultValue={def.title ?? ""}
             onBlur={(e) => (e.target.value.trim() || undefined) !== def.title && edit({ ...stored, title: e.target.value.trim() || undefined })}
             placeholder={t("block.title")}
             className="w-full rounded-lg border border-line bg-bg px-2 py-1.5 text-sm outline-none"
           />
           <QueryEditor context def={{ where: baseWhere }} autoFocus={!def.where} onChange={(d) => JSON.stringify(d.where) !== JSON.stringify(baseWhere) && setDraft({ scope: "base", where: d.where })} />
-          <label className="flex items-center gap-1 text-xs text-muted">
-            <input type="checkbox" checked={!!def.hideEmpty} onChange={(e) => edit({ ...stored, hideEmpty: e.target.checked || undefined })} className="accent-[var(--focus)]" />
+          <label className="flex items-center gap-1 text-xs text-muted-foreground">
+            <Checkbox  checked={!!def.hideEmpty} onCheckedChange={(checked) => edit({ ...stored, hideEmpty: (checked === true) || undefined })} className="accent-[var(--focus)]" />
             {t("block.hideEmpty")}
           </label>
           {dirty && draft?.scope === "base" && <DraftBar onDiscard={() => setDraft(null)} onSave={save} />}
@@ -140,7 +143,7 @@ export function QueryBlockView({ src, thisId, n = 0, onChange, onDelete, readOnl
       )}
       {/* a new block shows nothing until it has a condition (not "everything") */}
       {!def.where ? (
-        <p className="py-1 text-sm text-muted">{t("query.start")}</p>
+        <p className="py-1 text-sm text-muted-foreground">{t("query.start")}</p>
       ) : (
       <Results
         def={eff}
@@ -148,7 +151,7 @@ export function QueryBlockView({ src, thisId, n = 0, onChange, onDelete, readOnl
         compact
         keyPrefix={`block:${thisId}`}
         look={{ key: `block:${thisId}:${n}:${tab.id}`, tab, onLook: onChange && !readOnly ? (p) => patchTab(tab.id, p) : undefined }}
-        empty={<p className="px-0 py-1 text-sm text-muted">{def.where && "inbox" in def.where ? t("inbox.emptyShort") : t("query.empty")}</p>}
+        empty={<p className="px-0 py-1 text-sm text-muted-foreground">{def.where && "inbox" in def.where ? t("inbox.emptyShort") : t("query.empty")}</p>}
       />
       )}
     </div>
@@ -159,7 +162,7 @@ function DraftBar({ onDiscard, onSave }: { onDiscard: () => void; onSave: () => 
   const { t } = useT();
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--focus)] px-2.5 py-1.5 text-sm" role="status">
-      <span className="mr-auto text-muted">{t("view.draft")}</span>
+      <span className="mr-auto text-muted-foreground">{t("view.draft")}</span>
       <Button variant="outline" onClick={onDiscard}>
         {t("view.discard")}
       </Button>

@@ -1,3 +1,4 @@
+import { Input } from "../components/ui/input";
 import { useState } from "react";
 import { Search as SearchIcon } from "lucide-react";
 import { type Cond, parseQuery } from "@obtion/core/query";
@@ -62,8 +63,8 @@ export function SearchView() {
   return (
     <div className="page-read">
       <div className="flex items-center gap-2 rounded-xl border border-line bg-surface px-3 py-2 focus-within:border-[var(--focus)]">
-        <SearchIcon size={16} className="text-muted" />
-        <input
+        <SearchIcon size={16} className="text-muted-foreground" />
+        <Input
           autoFocus
           value={q}
           onChange={(e) => {
@@ -77,13 +78,13 @@ export function SearchView() {
       {errors && errors.parsed.errors.length > 0 ? (
         <p className="mt-1.5 text-xs text-warn">{t("search.notUnderstood", { list: errors.parsed.errors.map((e) => explain(e, errors.ix)).join(" · ") })}</p>
       ) : (
-        <p className="mt-1.5 text-xs text-muted">{t("search.hint")}</p>
+        <p className="mt-1.5 text-xs text-muted-foreground">{t("search.hint")}</p>
       )}
       <div className="mt-5">
         {isQuery ? (
           understood.map((p) => (
             <SpaceScope key={p.space.id} id={p.space.id}>
-              {several && <h2 className="mb-1 mt-6 text-xs font-semibold uppercase tracking-[0.05em] text-muted first:mt-0">{p.space.name}</h2>}
+              {several && <h2 className="mb-1 mt-6 text-xs font-semibold uppercase tracking-[0.05em] text-muted-foreground first:mt-0">{p.space.name}</h2>}
               <Results def={p.parsed.def} />
             </SpaceScope>
           ))
@@ -91,7 +92,7 @@ export function SearchView() {
           <ul className="space-y-1">
             {hits.flatMap(({ space, ix, hits }) => [
               several && hits.length > 0 && (
-                <li key={space.id} className="pt-4 text-xs font-semibold uppercase tracking-[0.05em] text-muted first:pt-0">
+                <li key={space.id} className="pt-4 text-xs font-semibold uppercase tracking-[0.05em] text-muted-foreground first:pt-0">
                   {space.name}
                 </li>
               ),
@@ -101,13 +102,13 @@ export function SearchView() {
                   <span className="flex items-center gap-2 font-medium">
                     <ItemIcon item={h} size={15} /> {h.title || t("untitled")}
                   </span>
-                  {ix.homePath(h.id).length > 0 && <span className="block truncate pl-6 text-xs text-muted">{shortPath(ix.homePath(h.id))}</span>}
-                  {(h.body || h.file?.text) && <span className="mt-0.5 line-clamp-2 block pl-6 text-sm text-muted">{snippet(h.body || h.file?.text || "", q, 180)}</span>}
+                  {ix.homePath(h.id).length > 0 && <span className="block truncate pl-6 text-xs text-muted-foreground">{shortPath(ix.homePath(h.id))}</span>}
+                  {(h.body || h.file?.text) && <span className="mt-0.5 line-clamp-2 block pl-6 text-sm text-muted-foreground">{snippet(h.body || h.file?.text || "", q, 180)}</span>}
                 </a>
               </li>
               )),
             ])}
-            {q.trim() && hits.every((x) => !x.hits.length) && <p className="text-sm text-muted">{t("search.none")}</p>}
+            {q.trim() && hits.every((x) => !x.hits.length) && <p className="text-sm text-muted-foreground">{t("search.none")}</p>}
           </ul>
         )}
       </div>

@@ -1,3 +1,7 @@
+import { Checkbox } from "../components/ui/checkbox";
+import { Button as ShadcnButton } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { NativeSelect } from "../components/ui/native-select";
 // Properties of an item: those its type defines, free ones, and values of removed
 // properties ("Weitere Eigenschaften") – schema changes never delete values.
 import { useState } from "react";
@@ -19,7 +23,7 @@ function Row({ label, children, title }: { label: React.ReactNode; children: Rea
   return (
     <>
       {/* label and value share the row height (44 px to tap on touch screens) */}
-      <div className="tap-row flex items-start py-1 text-sm text-muted pointer-coarse:items-center pointer-coarse:py-0" title={title}>
+      <div className="tap-row flex items-start py-1 text-sm text-muted-foreground pointer-coarse:items-center pointer-coarse:py-0" title={title}>
         <span className="truncate">{label}</span>
       </div>
       <div className="tap-row flex min-h-7 min-w-0 flex-wrap items-center gap-1.5 py-0.5 text-sm">{children}</div>
@@ -46,11 +50,11 @@ export function Properties({ item, schema, compact, all, opened, focus }: { item
       ))}
       {leftovers.length > 0 && (
         <>
-          <div className="col-span-2 mt-2 text-xs font-medium text-muted">{t("props.more")}</div>
+          <div className="col-span-2 mt-2 text-xs font-medium text-muted-foreground">{t("props.more")}</div>
           {leftovers.map((p) => (
             <Row key={p.id} label={p.name}>
-              <span className="text-muted">{displayValue(item, p)}</span>
-              <Popover trigger={(pp) => <button {...pp} className="tap rounded p-0.5 text-muted hover:bg-hover" aria-label={t("more")}><ArrowRightLeft size={12} /></button>}>
+              <span className="text-muted-foreground">{displayValue(item, p)}</span>
+              <Popover trigger={(pp) => <ShadcnButton variant="plain" size="none" {...pp} className="tap rounded p-0.5 text-muted-foreground hover:bg-hover" aria-label={t("more")}><ArrowRightLeft size={12} /></ShadcnButton>}>
                 {(close) => (
                   <>
                     <MenuItem
@@ -105,7 +109,7 @@ export function PropertyField({ item, prop, autoFocus }: { item: Item; prop: Pro
         <span className="flex w-full items-center gap-1">
           <InlineText value={String(v ?? "")} onCommit={(x) => set(x.trim() || null)} placeholder={t("props.empty")} label={prop.name} autoFocus={autoFocus} className="text-sm" />
           {typeof v === "string" && /^https?:\/\//.test(v) && (
-            <a href={v} target="_blank" rel="noopener" className="text-muted hover:text-fg" aria-label={t("props.openLink")}>
+            <a href={v} target="_blank" rel="noopener" className="text-muted-foreground hover:text-fg" aria-label={t("props.openLink")}>
               <ExternalLink size={13} />
             </a>
           )}
@@ -128,7 +132,7 @@ export function PropertyField({ item, prop, autoFocus }: { item: Item; prop: Pro
       return <RangeField value={s} name={prop.name} autoFocus={autoFocus} onChange={(x) => set(x || null)} />;
     }
     case "checkbox":
-      return <input type="checkbox" checked={v === true} onChange={(e) => set(e.target.checked ? true : null)} aria-label={prop.name} className="size-4 accent-[var(--focus)]" />;
+      return <Checkbox  checked={v === true} onCheckedChange={(checked) => set((checked === true) ? true : null)} aria-label={prop.name} className="size-4 accent-[var(--focus)]" />;
     case "select":
     case "status": {
       const opt = prop.options?.find((o) => o.id === v);
@@ -136,8 +140,8 @@ export function PropertyField({ item, prop, autoFocus }: { item: Item; prop: Pro
       return (
         <>
         <label className="tap-row relative inline-flex cursor-pointer items-center">
-          {opt ? <StatusPill option={opt} /> : <span className="text-muted">{t("props.empty")}</span>}
-          <select
+          {opt ? <StatusPill option={opt} /> : <span className="text-muted-foreground">{t("props.empty")}</span>}
+          <NativeSelect
             value={String(v ?? "")}
             onChange={(e) => (prop.kind === "status" && e.target.value ? void setStatus(item, e.target.value) : set(e.target.value || null))}
             aria-label={prop.name}
@@ -159,9 +163,9 @@ export function PropertyField({ item, prop, autoFocus }: { item: Item; prop: Pro
                     {o.name}
                   </option>
                 ))}
-          </select>
+          </NativeSelect>
         </label>
-        {done && <span className="text-xs tabular-nums text-muted">{t("props.doneOn", { date: fmtDate(lang, todayISO(new Date(done))) })}</span>}
+        {done && <span className="text-xs tabular-nums text-muted-foreground">{t("props.doneOn", { date: fmtDate(lang, todayISO(new Date(done))) })}</span>}
         </>
       );
     }
@@ -174,18 +178,18 @@ export function PropertyField({ item, prop, autoFocus }: { item: Item; prop: Pro
             return (
               <span key={id} className="inline-flex items-center gap-0.5">
                 {o ? <StatusPill option={o} small /> : id}
-                <button onClick={() => set(ids.filter((x) => x !== id))} className="text-muted hover:text-fg" aria-label={t("props.removeValue")}>
+                <ShadcnButton variant="plain" size="none" onClick={() => set(ids.filter((x) => x !== id))} className="text-muted-foreground hover:text-fg" aria-label={t("props.removeValue")}>
                   <X size={11} />
-                </button>
+                </ShadcnButton>
               </span>
             );
           })}
           <Popover
             trigger={(p) =>
               ids.length ? (
-                <button {...p} className="tap rounded-md px-1 text-xs text-muted hover:bg-hover" aria-label={t("props.set", { name: prop.name })}><Plus size={12} /></button>
+                <ShadcnButton variant="plain" size="none" {...p} className="tap rounded-md px-1 text-xs text-muted-foreground hover:bg-hover" aria-label={t("props.set", { name: prop.name })}><Plus size={12} /></ShadcnButton>
               ) : (
-                <button {...p} className="tap-y -ml-1 rounded px-1 text-faint hover:bg-hover hover:text-muted" aria-label={t("props.set", { name: prop.name })}>{t("props.empty")}</button>
+                <ShadcnButton variant="plain" size="none" {...p} className="tap-y -ml-1 rounded px-1 text-faint hover:bg-hover hover:text-muted-foreground" aria-label={t("props.set", { name: prop.name })}>{t("props.empty")}</ShadcnButton>
               )
             }
           >
@@ -204,12 +208,12 @@ export function PropertyField({ item, prop, autoFocus }: { item: Item; prop: Pro
       return <RelationField item={item} prop={prop} autoOpen={autoFocus} />;
     case "computed": {
       const c = prop.computed;
-      if (c?.fn === "count") return <span className="tabular-nums text-muted">{ix.countDescendants(item.id, c.of)}</span>;
+      if (c?.fn === "count") return <span className="tabular-nums text-muted-foreground">{ix.countDescendants(item.id, c.of)}</span>;
       const p = ix.progress(item.id, c?.of);
       return p.total ? (
         <span className="flex w-full max-w-64 items-center gap-2">
           <Progress done={p.done} total={p.total} className="flex-1" />
-          <span className="text-xs tabular-nums text-muted">
+          <span className="text-xs tabular-nums text-muted-foreground">
             {p.done}/{p.total}
           </span>
         </span>
@@ -229,17 +233,17 @@ function RangeField({ value, name, autoFocus, onChange }: { value: string; name:
   const put = (x: string, y: string) => onChange(x || y ? `${x}/${y}` : "");
   if (!value && !open)
     return (
-      <button type="button" onClick={() => setOpen(true)} className="tap-y -ml-1 rounded px-1 text-muted hover:bg-hover hover:text-fg" aria-label={t("props.set", { name })}>
+      <ShadcnButton variant="plain" size="none" type="button" onClick={() => setOpen(true)} className="tap-y -ml-1 rounded px-1 text-muted-foreground hover:bg-hover hover:text-fg" aria-label={t("props.set", { name })}>
         {t("props.empty")}
-      </button>
+      </ShadcnButton>
     );
   // set: read as one line ("1. März 2026 – 30. Juni 2027"), a click opens both dates
   if (!open) {
     const long = (d: string) => (d ? fmtDate(lang, d, { day: "numeric", month: "long", year: "numeric" }) : "…");
     return (
-      <button type="button" onClick={() => setOpen(true)} className="tap-y -ml-1 rounded px-1 text-left tabular-nums hover:bg-hover" aria-label={t("props.set", { name })}>
+      <ShadcnButton variant="plain" size="none" type="button" onClick={() => setOpen(true)} className="tap-y -ml-1 rounded px-1 text-left tabular-nums hover:bg-hover" aria-label={t("props.set", { name })}>
         {long(a)} – {long(b)}
-      </button>
+      </ShadcnButton>
     );
   }
   return (
@@ -271,17 +275,17 @@ function RelationField({ item, prop, autoOpen }: { item: Item; prop: PropDef; au
           <span key={id} className="inline-flex max-w-full items-center gap-1 rounded-md bg-surface-2 py-0.5 pl-1.5 pr-0.5 text-xs">
             <ItemLink item={x} className="min-w-0" />
             {!fits(x) && <span title={t("props.notTarget", { target: prop.target })} className="text-warn"><AlertTriangle size={11} /></span>}
-            <button onClick={() => remove(id)} className="rounded px-1 text-muted hover:bg-hover hover:text-fg" aria-label={t("props.removeValue")}>
+            <ShadcnButton variant="plain" size="none" onClick={() => remove(id)} className="rounded px-1 text-muted-foreground hover:bg-hover hover:text-fg" aria-label={t("props.removeValue")}>
               <X size={11} />
-            </button>
+            </ShadcnButton>
           </span>
         );
       })}
       {/* empty: the same quiet "–" as every empty field; with values and several allowed: "+" */}
       {!ids.length ? (
-        <button type="button" onClick={() => setPicking(true)} className="tap-y -ml-1 rounded px-1 text-muted hover:bg-hover hover:text-fg" aria-label={t("props.set", { name: prop.name })}>
+        <ShadcnButton variant="plain" size="none" type="button" onClick={() => setPicking(true)} className="tap-y -ml-1 rounded px-1 text-muted-foreground hover:bg-hover hover:text-fg" aria-label={t("props.set", { name: prop.name })}>
           {t("props.empty")}
-        </button>
+        </ShadcnButton>
       ) : (
         prop.multiple && <AddButton onClick={() => setPicking(true)} aria-label={t("props.set", { name: prop.name })} />
       )}
@@ -312,14 +316,14 @@ function RelationField({ item, prop, autoOpen }: { item: Item; prop: PropDef; au
 export function FreeField({ value, onChange, name, options }: { value: FreeValue; onChange: (v: FreeValue | null) => void; name: string; options?: string[] }) {
   const { t, lang } = useT();
   const k = value.k;
-  if (k === "checkbox") return <input type="checkbox" checked={value.v === true} onChange={(e) => onChange({ k, v: e.target.checked })} aria-label={name} className="size-4 accent-[var(--focus)]" />;
+  if (k === "checkbox") return <Checkbox  checked={value.v === true} onCheckedChange={(checked) => onChange({ k, v: (checked === true) })} aria-label={name} className="size-4 accent-[var(--focus)]" />;
   if (k === "date") return <DateField value={String(value.v ?? "") || undefined} label={name} onChange={(x) => onChange(x ? { k, v: x } : null)} />;
   if (k === "number")
     return <InlineText value={typeof value.v === "number" ? String(value.v).replace(".", lang === "de" ? "," : ".") : String(value.v)} onCommit={(x) => onChange(numberValue(x) === undefined ? null : { k, v: numberValue(x)! })} label={name} className="text-sm tabular-nums" />;
   if (k === "select")
     return (
       <>
-        <input list={`opts-${name}`} defaultValue={String(value.v)} onBlur={(e) => onChange(e.target.value.trim() ? { k, v: e.target.value.trim() } : null)} aria-label={name} className="field w-40 rounded-md bg-transparent px-1 text-sm outline-none hover:bg-hover" />
+        <Input list={`opts-${name}`} defaultValue={String(value.v)} onBlur={(e) => onChange(e.target.value.trim() ? { k, v: e.target.value.trim() } : null)} aria-label={name} className="field w-40 rounded-md bg-transparent px-1 text-sm outline-none hover:bg-hover" />
         <datalist id={`opts-${name}`}>{options?.map((o) => <option key={o} value={o} />)}</datalist>
       </>
     );
@@ -341,7 +345,7 @@ export function freeOptions(name: string): string[] {
 function BlockRow({ label, title, children }: { label: React.ReactNode; title?: string; children: React.ReactNode }) {
   return (
     <>
-      <div className="flex min-h-8 items-center truncate text-[13px] text-muted pointer-coarse:min-h-11" title={title ?? (typeof label === "string" ? label : undefined)}>
+      <div className="flex min-h-8 items-center truncate text-[13px] text-muted-foreground pointer-coarse:min-h-11" title={title ?? (typeof label === "string" ? label : undefined)}>
         <span className="truncate">{label}</span>
       </div>
       <div className="group flex min-h-8 min-w-0 flex-wrap items-center gap-1.5 text-sm pointer-coarse:min-h-11">{children}</div>
@@ -390,9 +394,9 @@ export function PropertyBlock({ item, schema, noAdd }: { item: Item; schema?: Ty
       {free.map(([n, v]) => (
         <BlockRow key={"free:" + n} label={n}>
           <FreeField value={v} name={n} options={v.k === "select" ? freeOptions(n) : undefined} onChange={(x) => repo.setExtra(item.id, n, x)} />
-          <button onClick={() => repo.setExtra(item.id, n, null)} className="tap ml-auto rounded p-0.5 text-faint opacity-0 pointer-coarse:opacity-100 hover:bg-hover hover:text-fg group-hover:opacity-100 focus:opacity-100" aria-label={t("props.removeFree", { name: n })}>
+          <ShadcnButton variant="plain" size="none" onClick={() => repo.setExtra(item.id, n, null)} className="tap ml-auto rounded p-0.5 text-faint opacity-0 pointer-coarse:opacity-100 hover:bg-hover hover:text-fg group-hover:opacity-100 focus:opacity-100" aria-label={t("props.removeFree", { name: n })}>
             <X size={12} />
-          </button>
+          </ShadcnButton>
         </BlockRow>
       ))}
       {inverse.map((g) => (
@@ -406,8 +410,8 @@ export function PropertyBlock({ item, schema, noAdd }: { item: Item; schema?: Ty
       ))}
       {leftovers.map((p) => (
         <BlockRow key={"old:" + p.id} label={p.name} title={t("props.more")}>
-          <span className="text-muted">{displayValue(item, p)}</span>
-          <Popover trigger={(pp) => <button {...pp} className="tap rounded p-0.5 text-faint hover:bg-hover" aria-label={t("more")}><ArrowRightLeft size={12} /></button>}>
+          <span className="text-muted-foreground">{displayValue(item, p)}</span>
+          <Popover trigger={(pp) => <ShadcnButton variant="plain" size="none" {...pp} className="tap rounded p-0.5 text-faint hover:bg-hover" aria-label={t("more")}><ArrowRightLeft size={12} /></ShadcnButton>}>
             {(close) => (
               <>
                 <MenuItem
@@ -441,27 +445,27 @@ export function PropertyBlock({ item, schema, noAdd }: { item: Item; schema?: Ty
         <div className="col-span-2">
           {adding ? (
             <div className="flex flex-wrap items-center gap-2 py-1">
-              <input autoFocus value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => (e.key === "Enter" && addFree(), e.key === "Escape" && setAdding(false))} placeholder={t("props.name")} className="w-36 rounded-md border border-line bg-bg px-2 py-1 text-sm outline-none" />
-              <select value={kind} onChange={(e) => setKind(e.target.value as FreeKind)} className="rounded-md border border-line bg-bg px-1.5 py-1 text-sm" aria-label={t("props.kind")}>
+              <Input autoFocus value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => (e.key === "Enter" && addFree(), e.key === "Escape" && setAdding(false))} placeholder={t("props.name")} className="w-36 rounded-md border border-line bg-bg px-2 py-1 text-sm outline-none" />
+              <NativeSelect value={kind} onChange={(e) => setKind(e.target.value as FreeKind)} className="rounded-md border border-line bg-bg px-1.5 py-1 text-sm" aria-label={t("props.kind")}>
                 {FREE_KINDS.map((k) => (
                   <option key={k} value={k}>
                     {t("kind.prop." + k)}
                   </option>
                 ))}
-              </select>
-              <button onClick={addFree} className="rounded-md bg-ink px-2 py-1 text-xs text-ink-text">
+              </NativeSelect>
+              <ShadcnButton variant="plain" size="none" onClick={addFree} className="rounded-md bg-ink px-2 py-1 text-xs text-ink-text">
                 {t("props.add")}
-              </button>
-              <button onClick={() => setAdding(false)} className="text-xs text-muted">
+              </ShadcnButton>
+              <ShadcnButton variant="plain" size="none" onClick={() => setAdding(false)} className="text-xs text-muted-foreground">
                 {t("cancel")}
-              </button>
+              </ShadcnButton>
             </div>
           ) : (
             <Popover
               trigger={(pp) => (
-                <button {...pp} className="tap-y -ml-1 flex h-7 w-fit items-center gap-1 rounded-md px-1 text-[13px] text-muted hover:bg-hover hover:text-fg">
+                <ShadcnButton variant="plain" size="none" {...pp} className="tap-y -ml-1 flex h-7 w-fit items-center gap-1 rounded-md px-1 text-[13px] text-muted-foreground hover:bg-hover hover:text-fg">
                   <Plus size={13} /> {t("props.addFree")}
-                </button>
+                </ShadcnButton>
               )}
             >
               {(close) => (
