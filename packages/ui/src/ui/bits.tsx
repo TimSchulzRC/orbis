@@ -7,7 +7,7 @@ import { isInInbox, isOverview } from "@obtion/core/placement";
 import type { Index } from "@obtion/core/graph";
 import { parseDate, statusShape } from "@obtion/core/input";
 import { repo } from "../repo";
-import { itemHref } from "../hooks";
+import { itemHref, useIndex } from "../hooks";
 import { tr, useT } from "../i18n";
 import { ICON, INBOX_ICON, NOTE_ICON, OVERVIEW_ICON, TYPE_ICON, FILE_ICONS } from "./icons";
 
@@ -33,7 +33,8 @@ export function itemLook(item: Item, ix: Index = repo.index()): { icon: typeof I
 /** `ix`: the index of the item's workspace, if it is not the open one (the sidebar shows others). */
 export function ItemIcon({ item, size = 16, className, ix }: { item: Item; size?: number; className?: string; ix?: Index }) {
   const { t } = useT();
-  const look = itemLook(item, ix);
+  const here = useIndex();
+  const look = itemLook(item, ix ?? here);
   const label = ["file", "inbox", "note", "type", "overview"].includes(look.label) ? t("kind." + look.label) : look.label;
   return <look.icon size={size} style={{ color: look.color }} className={cx("shrink-0", className)} aria-label={label} />;
 }

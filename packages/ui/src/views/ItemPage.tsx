@@ -425,7 +425,6 @@ function MoveDialog({ item, onClose }: { item: Item; onClose: () => void }) {
   const { t } = useT();
   const { spaces, active } = useAccounts();
   const count = movedItems(repo.index(), item.id).length - 1;
-  const [busy, setBusy] = useState(false);
   return (
     <Dialog title={t("move.title", { title: item.title || t("untitled") })} onClose={onClose}>
       <p className="text-sm text-muted">{count > 0 ? t("move.introBelow", { count }) : t("move.intro")}</p>
@@ -435,9 +434,8 @@ function MoveDialog({ item, onClose }: { item: Item; onClose: () => void }) {
           .map((s) => (
             <li key={s.id}>
               <button
-                disabled={busy}
-                onClick={() => (setBusy(true), void moveTo(item.id, s).finally(onClose))}
-                className="tap-row flex w-full items-center gap-2 rounded-lg border border-line px-3 py-2 text-left text-sm hover:bg-hover disabled:opacity-60"
+                onClick={() => (onClose(), void moveTo(item.id, active!.id, s.id))}
+                className="tap-row flex w-full items-center gap-2 rounded-lg border border-line px-3 py-2 text-left text-sm hover:bg-hover"
               >
                 <span className="min-w-0 flex-1 truncate font-medium">{s.name}</span>
               </button>

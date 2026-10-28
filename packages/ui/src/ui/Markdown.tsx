@@ -4,8 +4,9 @@ import { fmtBytes } from "@obtion/core/i18n";
 import type { Item } from "@obtion/core/model";
 import { openLightbox } from "./Lightbox";
 import { repo } from "../repo";
-import { useRepo } from "../hooks";
-import { files } from "../files";
+import { useFiles, useRepo } from "../hooks";
+import { type DeviceFiles, files as current } from "../files";
+import type { Repo } from "@obtion/sync";
 import { getLang, tr } from "../i18n";
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
@@ -41,8 +42,9 @@ md.use({
         return { type: "wikilink", raw: m[0], embed: m[1] === "!", target: m[2]!.trim(), alias: m[4] };
       },
       renderer(t: any) {
-        const id = repo.resolveTitle(t.target);
-        const item = id ? repo.get(id) : undefined;
+        const r = rendering ?? repo;
+        const id = r.resolveTitle(t.target);
+        const item = id ? r.get(id) : undefined;
         const f = item?.file;
         const size = t.alias && /^\d+$/.test(t.alias) ? Number(t.alias) : undefined;
         if (f && t.embed) return embedHTML(item!, size);
@@ -72,12 +74,19 @@ export function embedHTML(item: Item, size?: number): string {
   return `<a class="embed-file" href="#/i/${encodeURIComponent(item.id)}">${f.thumb ? `<img data-hash="${f.thumb}" alt="">` : ""}<span><b>${esc(item.title)}</b><small>${[f.pages ? tr("file.pages", { count: f.pages }) : "", fmtBytes(getLang(), f.size)].filter(Boolean).join(" · ")}</small></span></a>`;
 }
 
-export function renderMarkdown(src: string): string {
-  return md.parse(src, { async: false }) as string;
+/** The replica whose titles [[links]] resolve against while rendering (the workspace of the text). */
+let rendering: Repo | undefined;
+export function renderMarkdown(src: string, r?: Repo): string {
+  rendering = r;
+  try {
+    return md.parse(src, { async: false }) as string;
+  } finally {
+    rendering = undefined;
+  }
 }
 
 /** Fill in file contents (from this device or the server) after rendering. */
-export function hydrateFiles(root: HTMLElement | null) {
+export function hydrateFiles(root: HTMLElement | null, files: DeviceFiles = current) {
   if (!root) return;
   root.querySelectorAll<HTMLElement>("[data-hash]").forEach((el) => {
     const hash = el.dataset.hash!;
@@ -99,9 +108,10 @@ export function hydrateFiles(root: HTMLElement | null) {
 
 export function Markdown({ src, className }: { src: string; className?: string }) {
   const r = useRepo();
+  const files = useFiles();
   const ref = useRef<HTMLDivElement>(null);
-  const html = useMemo(() => renderMarkdown(src), [src, r.version]);
-  useEffect(() => hydrateFiles(ref.current), [html]);
+  const html = useMemo(() => renderMarkdown(src, r), [src, r, r.version]);
+  useEffect(() => hydrateFiles(ref.current, files), [html]);
   // a click on an image opens the full view, paging through the images of this text
   const onClick = (e: React.MouseEvent) => {
     const img = (e.target as HTMLElement).closest<HTMLImageElement>(".embed-img img");

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { repo } from "../repo";
+import { useRepo } from "../hooks";
 import { normalizeTag } from "@obtion/core/model";
 import { cx, AddButton } from "./bits";
 import { tr } from "../i18n";
@@ -7,6 +7,7 @@ import { tr } from "../i18n";
 /** Small "+ tag" input with keyboard-selectable suggestions from existing tags. */
 /** `start`: open as a field right away (e.g. "+ Eigenschaft › Tag"); `onCancel`: it closed empty. */
 export function TagInput({ onAdd, exclude = [], start, onCancel }: { onAdd: (t: string) => void; exclude?: string[]; start?: boolean; onCancel?: () => void }) {
+  const repo = useRepo();
   const [editing, setEditing] = useState(!!start);
   const [v, setV] = useState("");
   const [sel, setSel] = useState(0);

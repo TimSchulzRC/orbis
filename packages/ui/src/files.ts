@@ -7,10 +7,11 @@
 //   "local" (all originals stored here, new ones fetched as soon as their document arrives).
 // - Added offline: the document exists at once, the content waits in an upload outbox.
 import { openDB, type IDBPDatabase } from "idb";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useContext, useEffect, useState, useSyncExternalStore } from "react";
 import { type FileMeta, type Item, fileTypeOf, initItem, mimeOf, newId, setFileMeta } from "@obtion/core/model";
 import type { Repo } from "@obtion/sync";
 import type { SpaceLink } from "./browser";
+import { ScopeContext } from "./scope";
 
 export type FileMode = "online" | "local";
 const MODE_KEY = "obtion.fileMode";
@@ -532,15 +533,16 @@ export function useFileStatus() {
 
 /** Object URL for a content hash (preview, display version or original). */
 export function useBlobUrl(hash?: string, keep = false): string | undefined {
+  const f = useContext(ScopeContext)?.files ?? files;
   const [url, setUrl] = useState<string | undefined>();
-  useSyncExternalStore(files.subscribe, files.getVersion);
+  useSyncExternalStore(f.subscribe, f.getVersion);
   useEffect(() => {
     let alive = true;
     setUrl(undefined);
-    if (hash) files.url(hash, { keep }).then((u) => alive && setUrl(u));
+    if (hash) f.url(hash, { keep }).then((u) => alive && setUrl(u));
     return () => {
       alive = false;
     };
-  }, [hash, files.hasLocal(hash ?? "")]);
+  }, [f, hash, f.hasLocal(hash ?? "")]);
   return url;
 }

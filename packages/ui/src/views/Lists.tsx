@@ -3,11 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import { ListFilter, X, MoreHorizontal, RotateCcw, SlidersHorizontal, Plus, Upload, Sparkles } from "lucide-react";
 import { type FileType, type Item, type ViewTab, SETTINGS_ID, setSettings, setTab, setTabs, shortId } from "@obtion/core/model";
-import { type QueryDef, andWhere, tabDef } from "@obtion/core/query";
+import { type QueryDef, andWhere, runQuery, tabDef } from "@obtion/core/query";
 import { inboxWhere } from "@obtion/core/inbox";
 import { keyBetween } from "@obtion/core/sortkey";
 import { resetInbox, typeTabs } from "@obtion/core/setup";
-import { useIndex, useRoute } from "../hooks";
+import { useLocalStorage, useRepo, useRoute, useSpaceId, spaceHref } from "../hooks";
+import { activate, useAccounts } from "../accounts";
+import { SpaceScope, useReplicas } from "../ui/Spaces";
 import { repo } from "../repo";
 import { useT } from "../i18n";
 import { files } from "../files";
@@ -191,27 +193,76 @@ export function FilesPage() {
   );
 }
 
-/** The inbox: a place to work through. What lands there is its rule, behind "…". */
+/**
+ * The inbox of all workspaces, each in a block of its own (sorting stays inside a workspace). A
+ * filter, remembered on this device, shows one workspace only.
+ */
 export function InboxPage() {
   const { t } = useT();
-  const ix = useIndex();
+  const { spaces } = useAccounts();
+  const [only, setOnly] = useLocalStorage<string | null>("obtion.inbox.space", null);
+  const counts = useReplicas(spaces.map((s) => s.id)).map((r) => (r.get(SETTINGS_ID) ? runQuery({ where: inboxWhere(r.index()) }, { ix: r.index() }).total : 0));
+  const filter = spaces.some((s) => s.id === only) ? only : null;
+  const shown = spaces.map((s, i) => ({ s, n: counts[i]! })).filter(({ s }) => !filter || s.id === filter);
+  const total = shown.reduce((n, x) => n + x.n, 0);
+  useEffect(() => void (document.title = t("nav.inbox")), []);
+  const chip = (on: boolean) => cx("shrink-0 whitespace-nowrap rounded-full border px-3 py-1", on ? "border-[var(--focus)] bg-surface text-fg" : "border-line text-muted hover:bg-hover hover:text-fg");
+  return (
+    <div className="page-wide">
+      {/* its name and how many wait, in one line (design rules § 5.1) */}
+      <div className="mb-4 flex min-w-0 items-baseline gap-2.5">
+        <h1 className="page-title truncate">{t("nav.inbox")}</h1>
+        <span className="text-[15px] tabular-nums text-muted">{total}</span>
+      </div>
+      {spaces.length > 1 && (
+        <div className="-mx-4 mb-4 flex gap-1 overflow-x-auto px-4 text-sm [scrollbar-width:none] md:mx-0 md:px-0" role="group" aria-label={t("inbox.filter")}>
+          <button onClick={() => setOnly(null)} aria-pressed={!filter} className={chip(!filter)}>
+            {t("inbox.all")} <span className="tabular-nums text-muted">{counts.reduce((n, x) => n + x, 0)}</span>
+          </button>
+          {spaces.map((s, i) => (
+            <button key={s.id} onClick={() => setOnly(s.id)} aria-pressed={filter === s.id} className={chip(filter === s.id)}>
+              {s.name} <span className="tabular-nums text-muted">{counts[i]}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      {shown
+        .filter(({ n }) => n > 0 || shown.length === 1)
+        .map(({ s }) => (
+          <SpaceScope key={s.id} id={s.id}>
+            <InboxBlock heading={shown.length > 1 ? s.name : undefined} />
+          </SpaceScope>
+        ))}
+      {!total && shown.length > 1 && <Empty title={t("inbox.empty")} />}
+    </div>
+  );
+}
+
+/** The inbox of one workspace: its entries to sort, and what lands there (its rule, behind "…"). */
+function InboxBlock({ heading }: { heading?: string }) {
+  const { t } = useT();
+  const repo = useRepo();
+  const space = useSpaceId()!;
+  const ix = repo.index();
   const where = inboxWhere(ix);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<QueryDef["where"] | null>(null);
   const def: QueryDef = { where, sort: [{ key: "created", desc: true }] };
   const { total } = useQuery(def);
   const restore = () => (setDraft(null), resetInbox(repo.writer), notify(t("inbox.restored")));
-  useEffect(() => void (document.title = t("nav.inbox")), []);
+  // the agent works in the open workspace: this one first
+  const sortWithAgent = () => {
+    activate(space);
+    location.hash = spaceHref(space, "/inbox");
+    askAgent(t("triage.agentPrompt"));
+  };
+  if (!repo.get(SETTINGS_ID)) return null;
   return (
-    <div className="page-wide">
-      <div className="mb-4 flex items-center gap-3">
-        {/* its name and how many wait, in one line (design rules § 5.1) */}
-        <div className="flex min-w-0 flex-1 items-baseline gap-2.5">
-          <h1 className="page-title truncate">{t("nav.inbox")}</h1>
-          <span className="text-[15px] tabular-nums text-muted">{total}</span>
-        </div>
+    <section className="mb-8" aria-label={heading}>
+      <div className="mb-2 flex min-h-8 items-center gap-3">
+        <h2 className="min-w-0 flex-1 truncate text-sm font-semibold text-muted">{heading}</h2>
         {total > 0 && (
-          <Button variant="ghost" onClick={() => askAgent(t("triage.agentPrompt"))} title={t("triage.withAgent")}>
+          <Button variant="ghost" onClick={sortWithAgent} title={t("triage.withAgent")}>
             <Sparkles size={14} /> <span className="hidden sm:inline">{t("triage.withAgent")}</span>
           </Button>
         )}
@@ -243,7 +294,7 @@ export function InboxPage() {
       {draft && JSON.stringify(draft) !== JSON.stringify(where) && (
         <DraftBar onDiscard={() => setDraft(null)} onSave={() => (repo.change(SETTINGS_ID, (d) => setSettings(d, { inbox: draft })), setDraft(null), notify(t("view.saved")))} />
       )}
-      <Results def={def} display="triage" keyPrefix="inbox" empty={<Empty title={t("inbox.empty")} />} />
-    </div>
+      <Results def={def} display="triage" keyPrefix={`inbox-${space}`} empty={<Empty title={t("inbox.empty")} />} />
+    </section>
   );
 }

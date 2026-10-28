@@ -1,17 +1,23 @@
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useContext, useEffect, useState, useSyncExternalStore } from "react";
 import { repo } from "./repo";
+import { files } from "./files";
+import { activeSpace } from "./accounts";
+import { ScopeContext } from "./scope";
 
-/** Re-render whenever the local replica changes. */
+/** Re-render whenever the replica of this part of the page changes. */
 export function useRepo() {
-  useSyncExternalStore(repo.subscribe, repo.getVersion);
-  return repo;
+  const r = useContext(ScopeContext)?.repo ?? repo;
+  useSyncExternalStore(r.subscribe, r.getVersion);
+  return r;
 }
 
 /** The derived index (structure, links, aggregation) for the current data. */
 export function useIndex() {
-  useRepo();
-  return repo.index();
+  return useRepo().index();
 }
+
+export const useFiles = () => useContext(ScopeContext)?.files ?? files;
+export const useSpaceId = () => useContext(ScopeContext)?.id ?? activeSpace()?.id;
 
 // ---------- hash router ----------
 
@@ -21,8 +27,9 @@ export interface Route {
   query: URLSearchParams;
 }
 
+/** "#/w/<workspace>/i/<id>": the workspace is taken off (accounts.ts opens it); the rest is the route. */
 function parse(): Route {
-  const raw = location.hash.replace(/^#/, "") || "/";
+  const raw = location.hash.replace(/^#/, "").replace(/^\/w\/[^/?]+/, "") || "/";
   const [path, qs] = raw.split("?");
   return { path: path!, parts: path!.split("/").filter(Boolean).map(safeDecode), query: new URLSearchParams(qs ?? "") };
 }
@@ -50,6 +57,9 @@ export function go(path: string) {
 }
 
 export const itemHref = (id: string) => `#/i/${encodeURIComponent(id)}`;
+
+/** A path in another workspace than the open one ("/i/<id>" → "#/w/<space>/i/<id>"). */
+export const spaceHref = (space: string | undefined, path: string) => (space ? `#/w/${space}${path}` : `#${path}`);
 
 export function useMediaQuery(q: string) {
   const [m, setM] = useState(() => matchMedia(q).matches);

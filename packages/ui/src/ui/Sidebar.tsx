@@ -1,8 +1,9 @@
-// Sidebar: search, Start, Eingang; "Angeheftet" – pinned informations with their children as a
-// tree, in their own order; "Typen" – the page of every type and the files, in their own order.
-// Both fold; what is open is remembered on this device (first start: everything open). In the
-// tree, dragging replaces the parent you come from; with Alt held a place is added. Dropping on
-// the upper or lower edge of a row reorders.
+// Sidebar: search and the inbox (of all workspaces), then every workspace as a block of its own
+// (as teamspaces in Notion): its name, Start, the pinned informations with their children as a
+// tree, and its types with the files. Blocks and what is open in them fold; that is remembered on
+// this device. In the tree, dragging replaces the parent you come from; with Alt held a place is
+// added. Dropping on the upper or lower edge of a row reorders. Dropped into another workspace's
+// block, an item moves there.
 import { useEffect, useState } from "react";
 import { ChevronRight, ChevronDown, LayoutDashboard, Inbox, Search, Sparkles, SlidersHorizontal, Link2, MoreHorizontal, Plus, Paperclip } from "lucide-react";
 import { type Item, SETTINGS_ID, setSchemaField, setSettings } from "@obtion/core/model";
@@ -10,36 +11,41 @@ import { sidebarChildren, sidebarRoots } from "@obtion/core/placement";
 import { inboxWhere } from "@obtion/core/inbox";
 import { runQuery } from "@obtion/core/query";
 import { keyBetween, keysFor } from "@obtion/core/sortkey";
-import { useIndex, useRoute, itemHref, useLocalStorage } from "../hooks";
-import { repo } from "../repo";
+import { useRepo, useRoute, useSpaceId, itemHref, spaceHref, useLocalStorage } from "../hooks";
+import { type Space, useAccounts } from "../accounts";
 import { useT } from "../i18n";
-import { ItemIcon, Kbd, MenuItem, Popover, TypeGlyph, cx, shortcut } from "./bits";
+import { Kbd, MenuItem, Popover, TypeGlyph, ItemIcon, cx, shortcut } from "./bits";
 import { ItemPicker } from "./Picker";
 import { SyncDot } from "./SyncDot";
 import { createAndOpen } from "../actions";
 import { NewTypeDialog } from "../views/Types";
-import { OtherSpaces, SpaceSwitcher } from "./Spaces";
+import { NewSpaceDialog, SpaceScope, moveTo, useReplicas } from "./Spaces";
 
-let dragging: { id: string; from: string | null } | null = null;
-/** What is being dragged in the tree (another workspace in the sidebar takes it: a move). */
-export function takeDragged() {
-  const d = dragging;
-  dragging = null;
-  return d;
+/** What is being dragged in the sidebar: an item (from below `from`, null: pinned) or a type row, and from which workspace. */
+let dragging: { id: string; from: string | null; space: string } | null = null;
+
+/** How many entries wait in the inboxes of all workspaces. */
+export function useInboxTotal() {
+  const { spaces } = useAccounts();
+  return useReplicas(spaces.map((s) => s.id)).reduce((n, r) => {
+    const ix = r.index();
+    return n + (r.get(SETTINGS_ID) ? runQuery({ where: inboxWhere(ix) }, { ix }).total : 0);
+  }, 0);
 }
-export const isDragging = () => !!dragging && dragging.from !== "types";
 
 export function Sidebar({ onSearch, onAgent }: { onSearch: () => void; onAgent: () => void }) {
   const { t, lang } = useT();
-  const ix = useIndex();
   const route = useRoute();
-  const inbox = runQuery({ where: inboxWhere(ix) }, { ix }).total;
+  const { spaces } = useAccounts();
+  const inbox = useInboxTotal();
+  const [creating, setCreating] = useState(false);
   const navCls = (active: boolean) => cx("flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm", active ? "bg-hover font-medium text-fg" : "text-muted hover:bg-hover hover:text-fg");
 
   return (
     <aside className="flex w-[256px] shrink-0 flex-col border-r border-line bg-surface-2/50 pt-safe">
       <div className="flex items-center gap-2 px-4 pb-2 pt-4">
-        <SpaceSwitcher />
+        <img src="/icon.svg" alt="" className="size-6 shrink-0" />
+        <span className="flex-1 font-semibold tracking-tight">Obtion</span>
         <SyncDot />
       </div>
       <button onClick={onSearch} className="mx-3 mb-2 flex items-center gap-2 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm text-muted hover:text-fg">
@@ -49,17 +55,20 @@ export function Sidebar({ onSearch, onAgent }: { onSearch: () => void; onAgent: 
       </button>
       <div className="min-h-0 flex-1 overflow-y-auto pb-3">
         <nav className="flex flex-col gap-0.5 px-2" aria-label={t("nav.main")}>
-          <a href="#/" className={navCls(route.path === "/")}>
-            <LayoutDashboard size={16} /> <span className="flex-1">{t("nav.start")}</span>
-          </a>
           <a href="#/inbox" className={navCls(route.path.startsWith("/inbox"))}>
             <Inbox size={16} /> <span className="flex-1">{t("nav.inbox")}</span>
             {inbox > 0 && <span className="text-xs tabular-nums text-muted">{inbox}</span>}
           </a>
         </nav>
-        <PinnedTree />
-        <TypeNav />
-        <OtherSpaces />
+        {spaces.map((s) => (
+          <SpaceScope key={s.id} id={s.id}>
+            <SpaceTree space={s} />
+          </SpaceScope>
+        ))}
+        <button onClick={() => setCreating(true)} className="mx-2 mt-3 flex items-center gap-2 rounded-lg px-2.5 py-1 text-xs text-muted hover:bg-hover hover:text-fg">
+          <Plus size={13} /> {t("space.new")}
+        </button>
+        {creating && <NewSpaceDialog onClose={() => setCreating(false)} />}
       </div>
       {/* below: the agent and the settings (activity, graph, trash and the language live there) */}
       <div className="flex flex-col gap-0.5 border-t border-line p-2">
@@ -74,39 +83,108 @@ export function Sidebar({ onSearch, onAgent }: { onSearch: () => void; onAgent: 
   );
 }
 
-/** A block of the sidebar with a heading that folds it (remembered on this device; open at first). */
-export function Section({ id, title, add, touch, children }: { id: string; title: string; add?: { label: string; run: () => void }; touch?: boolean; children: React.ReactNode }) {
-  const [open, setOpen] = useLocalStorage<boolean>(`obtion.sidebar.${id}`, true);
+/**
+ * One workspace in the sidebar (and the phone menu, `touch`: taller rows, no drag and drop, no
+ * hover buttons): its name folds the block, its menu leads to its settings, activity and trash.
+ * Dropping an item of another workspace onto the name moves it here.
+ */
+export function SpaceTree({ space, touch }: { space: Space; touch?: boolean }) {
+  const { t } = useT();
+  const repo = useRepo();
+  const route = useRoute();
+  const { active, spaces } = useAccounts();
+  const here = active?.id === space.id;
+  const [open, setOpen] = useLocalStorage<boolean>(`obtion.sidebar.space.${space.id}`, true);
+  const [typesOpen, setTypesOpen] = useLocalStorage<boolean>(`obtion.sidebar.types.${space.id}`, spaces.length === 1);
+  const [over, setOver] = useState(false);
+  const ix = repo.index();
+  const roots = sidebarRoots(ix);
+  const ready = !!repo.get(SETTINGS_ID);
+  const go = (path: string) => (location.hash = spaceHref(space.id, path));
+  const row = cx("flex items-center gap-2 rounded-lg pr-2", touch ? "py-2 text-[15px]" : "py-1 text-sm");
   return (
-    <section className="mt-3.5" aria-label={title}>
-      <div className={cx("flex h-7 items-center gap-0.5", touch ? "px-3" : "px-4")}>
-        <button onClick={() => setOpen(!open)} aria-expanded={open} className="-ml-1 flex flex-1 items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.05em] text-muted hover:text-fg">
-          <ChevronRight size={13} className={cx("text-faint transition-transform", open && "rotate-90")} />
-          {title}
+    <section className="mt-3.5" aria-label={space.name}>
+      <div
+        className={cx("group/space flex h-7 items-center gap-0.5 rounded-lg", touch ? "px-3" : "mx-2 px-2", over && "bg-hover ring-1 ring-[var(--focus)]")}
+        onDragOver={(e) => {
+          if (!dragging || dragging.space === space.id || dragging.from === "types") return;
+          e.preventDefault();
+          setOver(true);
+        }}
+        onDragLeave={() => setOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setOver(false);
+          const d = dragging;
+          dragging = null;
+          if (d && d.space !== space.id && d.from !== "types") void moveTo(d.id, d.space, space.id);
+        }}
+      >
+        <button onClick={() => setOpen(!open)} aria-expanded={open} className="-ml-1 flex min-w-0 flex-1 items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.05em] text-muted hover:text-fg">
+          <ChevronRight size={13} className={cx("shrink-0 text-faint transition-transform", open && "rotate-90")} />
+          <span className="truncate">{space.name}</span>
         </button>
-        {add && (
-          <button title={add.label} aria-label={add.label} onClick={add.run} className={cx("tap rounded text-muted hover:bg-hover hover:text-fg", touch ? "p-1.5" : "p-0.5")}>
+        {ready && (
+          <button
+            title={t("nav.newPinned")}
+            aria-label={t("nav.newPinned")}
+            onClick={() => createAndOpen({ pinned: keyBetween(roots.at(-1)?.pinned ?? null, null) }, repo, space.id)}
+            className={cx("tap rounded text-muted hover:bg-hover hover:text-fg", touch ? "p-1.5" : "p-0.5 opacity-0 focus:opacity-100 group-hover/space:opacity-100")}
+          >
             <Plus size={14} />
           </button>
         )}
+        <Popover
+          align="right"
+          trigger={(p) => (
+            <button {...p} className={cx("tap rounded text-muted hover:bg-hover hover:text-fg", touch ? "p-1.5" : "p-0.5 opacity-0 focus:opacity-100 group-hover/space:opacity-100 aria-expanded:opacity-100")} aria-label={t("space.menu", { name: space.name })}>
+              <MoreHorizontal size={14} />
+            </button>
+          )}
+        >
+          {(close) => (
+            <>
+              <MenuItem onClick={() => (close(), go("/settings"))}>{t("space.settings")}</MenuItem>
+              <MenuItem onClick={() => (close(), go("/activity"))}>{t("nav.activity")}</MenuItem>
+              <MenuItem onClick={() => (close(), go("/trash"))}>{t("nav.trash")}</MenuItem>
+            </>
+          )}
+        </Popover>
       </div>
-      {open && children}
+      {open && !ready && (
+        <a href={spaceHref(space.id, "/")} className={cx(row, "pl-[30px] text-muted hover:bg-hover hover:text-fg", !touch && "mx-2")}>
+          {repo.status.loaded && (repo.status.synced || !repo.status.online) ? t("space.setUp") : t("app.syncing")}
+        </a>
+      )}
+      {open && ready && (
+        <div className={cx(!touch && "px-2")}>
+          <a href={spaceHref(space.id, "/")} className={cx(row, "w-full pl-2.5", here && route.path === "/" ? "bg-hover font-medium text-fg" : "text-muted hover:bg-hover hover:text-fg")}>
+            <LayoutDashboard size={touch ? 17 : 15} className="shrink-0" /> {t("nav.start")}
+          </a>
+          <PinnedTree touch={touch} here={here} />
+          <button onClick={() => setTypesOpen(!typesOpen)} aria-expanded={typesOpen} className={cx(row, "w-full pl-2.5 text-muted hover:bg-hover hover:text-fg")}>
+            <ChevronRight size={touch ? 17 : 15} className={cx("shrink-0 text-faint transition-transform", typesOpen && "rotate-90")} />
+            {t("nav.types")}
+          </button>
+          {typesOpen && <TypeNav touch={touch} here={here} />}
+        </div>
+      )}
     </section>
   );
 }
 
 /**
- * "Angeheftet": the pinned informations with their children as a tree. What is open stays open
+ * The pinned informations of a workspace with their children as a tree. What is open stays open
  * (on this device); the way to the open page unfolds by itself, nothing closes by itself. Done
- * entries are left out, except the open page. The same block in the sidebar and the phone menu
- * (`touch`: taller rows, no drag and drop, no hover buttons).
+ * entries are left out, except the open page. `here`: the workspace is the open one.
  */
-export function PinnedTree({ touch }: { touch?: boolean }) {
-  const { t } = useT();
-  const ix = useIndex();
+export function PinnedTree({ touch, here }: { touch?: boolean; here: boolean }) {
+  const repo = useRepo();
+  const space = useSpaceId()!;
+  const ix = repo.index();
   const route = useRoute();
   const [open, setOpen] = useLocalStorage<Record<string, boolean>>("obtion.sidebar.tree", {});
-  const activeId = route.parts[0] === "i" ? route.parts[1] : undefined;
+  const activeId = here && route.parts[0] === "i" ? route.parts[1] : undefined;
   useEffect(() => {
     if (!activeId) return;
     const chain = [...ix.homePath(activeId), activeId];
@@ -122,31 +200,32 @@ export function PinnedTree({ touch }: { touch?: boolean }) {
   const keep = activeId ? [...ix.homePath(activeId), activeId] : [];
   const tree = { isOpen, toggle, activeId, keep, touch };
   return (
-    <Section id="pinned" title={t("nav.pinned")} touch={touch} add={{ label: t("nav.newPinned"), run: () => createAndOpen({ pinned: keyBetween(roots.at(-1)?.pinned ?? null, null) }) }}>
-      <div
-        className={cx("min-h-6", !touch && "px-2")}
-        onDragOver={(e) => dragging && dragging.from !== "types" && e.preventDefault()}
-        onDrop={(e) => {
-          // dropped on empty space: pinned at the end (moving away from the parent it came from)
-          if (!dragging || dragging.from === "types" || e.defaultPrevented) return;
-          if (dragging.from && !e.altKey) repo.removeParent(dragging.id, dragging.from);
-          repo.setSort(dragging.id, null, keyBetween(roots.at(-1)?.pinned ?? null, null));
-          dragging = null;
-        }}
-      >
-        {roots.map((r, i) => (
-          <TreeNode key={r.id} item={r} parent={null} siblings={roots} index={i} depth={0} {...tree} />
-        ))}
-        {!roots.length && <p className="px-2.5 py-1 text-xs text-muted">{t("nav.noPinned")}</p>}
-      </div>
-    </Section>
+    <div
+      className="min-h-1"
+      onDragOver={(e) => dragging && dragging.from !== "types" && e.preventDefault()}
+      onDrop={(e) => {
+        // dropped on empty space: pinned at the end (moving away from the parent it came from)
+        const d = dragging;
+        if (!d || d.from === "types" || e.defaultPrevented) return;
+        dragging = null;
+        if (d.space !== space) return void moveTo(d.id, d.space, space);
+        if (d.from && !e.altKey) repo.removeParent(d.id, d.from);
+        repo.setSort(d.id, null, keyBetween(roots.at(-1)?.pinned ?? null, null));
+      }}
+    >
+      {roots.map((r, i) => (
+        <TreeNode key={r.id} item={r} parent={null} siblings={roots} index={i} depth={0} {...tree} />
+      ))}
+    </div>
   );
 }
 
-/** "Typen": the page of every type and the files, in an order of their own (synced); a new type comes last. */
-export function TypeNav({ touch }: { touch?: boolean }) {
+/** The page of every type of a workspace and the files, in an order of their own (synced); a new type comes last. */
+export function TypeNav({ touch, here }: { touch?: boolean; here: boolean }) {
   const { t } = useT();
-  const ix = useIndex();
+  const repo = useRepo();
+  const space = useSpaceId()!;
+  const ix = repo.index();
   const route = useRoute();
   const [creating, setCreating] = useState(false);
   const [drop, setDrop] = useState<{ id: string; before: boolean } | null>(null);
@@ -155,7 +234,7 @@ export function TypeNav({ touch }: { touch?: boolean }) {
     ...ix.typesInOrder().map((x) => ({ id: x.id, key: x.schema!.pos, label: ix.typePlural(x.id), href: itemHref(x.id), icon: <TypeGlyph schema={x.schema} size={touch ? 17 : 15} /> })),
     { id: "files", key: filesPos, label: t("nav.files"), href: "#/files", icon: <Paperclip size={touch ? 17 : 15} className="shrink-0" /> },
   ].sort((a, b) => (a.key ?? "~") < (b.key ?? "~") ? -1 : (a.key ?? "~") > (b.key ?? "~") ? 1 : 0);
-  const active = (id: string) => (id === "files" ? route.path.startsWith("/files") : route.parts[0] === "i" && route.parts[1] === id);
+  const active = (id: string) => here && (id === "files" ? route.path.startsWith("/files") : route.parts[0] === "i" && route.parts[1] === id);
   // a new order: every row gets a fresh key, written only where it changed
   const move = (id: string, to: string, before: boolean) => {
     const order = rows.filter((r) => r.id !== id);
@@ -167,39 +246,41 @@ export function TypeNav({ touch }: { touch?: boolean }) {
       else repo.change(r.id, (d) => setSchemaField(d, "pos", k));
     });
   };
+  const ours = () => dragging?.from === "types" && dragging.space === space;
   return (
-    <Section id="types" title={t("nav.types")} touch={touch} add={{ label: t("types.new"), run: () => setCreating(true) }}>
-      <nav className={cx("flex flex-col gap-px", !touch && "px-2")}>
-        {rows.map((r) => (
-          <a
-            key={r.id}
-            href={r.href}
-            draggable={!touch}
-            onDragStart={(e) => ((dragging = { id: r.id, from: "types" }), e.dataTransfer.setData("text/plain", r.label))}
-            onDragOver={(e) => {
-              if (dragging?.from !== "types" || dragging.id === r.id) return;
-              e.preventDefault();
-              const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
-              setDrop({ id: r.id, before: e.clientY < box.top + box.height / 2 });
-            }}
-            onDragLeave={() => setDrop(null)}
-            onDrop={(e) => {
-              e.preventDefault();
-              if (dragging?.from === "types" && drop) move(dragging.id, r.id, drop.before);
-              dragging = null;
-              setDrop(null);
-            }}
-            aria-current={active(r.id) ? "page" : undefined}
-            className={cx("relative flex items-center gap-2 rounded-lg pl-[30px] pr-2", touch ? "py-2 text-[15px]" : "py-1 text-sm", active(r.id) ? "bg-hover font-medium text-fg" : "text-muted hover:bg-hover hover:text-fg")}
-          >
-            {drop?.id === r.id && <span className={cx("absolute inset-x-1 h-0.5 rounded bg-[var(--focus)]", drop.before ? "-top-px" : "-bottom-px")} />}
-            {r.icon}
-            <span className="min-w-0 flex-1 truncate">{r.label}</span>
-          </a>
-        ))}
-      </nav>
+    <nav className="flex flex-col gap-px" aria-label={t("nav.types")}>
+      {rows.map((r) => (
+        <a
+          key={r.id}
+          href={r.href}
+          draggable={!touch}
+          onDragStart={(e) => ((dragging = { id: r.id, from: "types", space }), e.dataTransfer.setData("text/plain", r.label))}
+          onDragOver={(e) => {
+            if (!ours() || dragging!.id === r.id) return;
+            e.preventDefault();
+            const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
+            setDrop({ id: r.id, before: e.clientY < box.top + box.height / 2 });
+          }}
+          onDragLeave={() => setDrop(null)}
+          onDrop={(e) => {
+            e.preventDefault();
+            if (ours() && drop) move(dragging!.id, r.id, drop.before);
+            dragging = null;
+            setDrop(null);
+          }}
+          aria-current={active(r.id) ? "page" : undefined}
+          className={cx("relative flex items-center gap-2 rounded-lg pl-[30px] pr-2", touch ? "py-2 text-[15px]" : "py-1 text-sm", active(r.id) ? "bg-hover font-medium text-fg" : "text-muted hover:bg-hover hover:text-fg")}
+        >
+          {drop?.id === r.id && <span className={cx("absolute inset-x-1 h-0.5 rounded bg-[var(--focus)]", drop.before ? "-top-px" : "-bottom-px")} />}
+          {r.icon}
+          <span className="min-w-0 flex-1 truncate">{r.label}</span>
+        </a>
+      ))}
+      <button onClick={() => setCreating(true)} className={cx("flex items-center gap-2 rounded-lg pl-[30px] pr-2 text-muted hover:bg-hover hover:text-fg", touch ? "py-2 text-[15px]" : "py-1 text-sm")}>
+        <Plus size={touch ? 17 : 15} className="shrink-0" /> {t("types.new")}
+      </button>
       {creating && <NewTypeDialog onClose={() => setCreating(false)} />}
-    </Section>
+    </nav>
   );
 }
 
@@ -242,7 +323,9 @@ function TreeNode({
   touch?: boolean;
 }) {
   const { t } = useT();
-  const ix = useIndex();
+  const repo = useRepo();
+  const space = useSpaceId()!;
+  const ix = repo.index();
   const key = `${parent ?? ""}>${item.id}`;
   const kids = sidebarChildren(item.id, ix, keep);
   const isOpen = opened(key, depth);
@@ -260,6 +343,7 @@ function TreeNode({
     dragging = null;
     setDrop(null);
     if (!d || d.id === item.id) return;
+    if (d.space !== space) return void moveTo(d.id, d.space, space, item.id);
     if (drop === "inside") {
       if (e.altKey) repo.addParent(d.id, item.id);
       else if (d.from) repo.moveParent(d.id, d.from, item.id);
@@ -289,16 +373,18 @@ function TreeNode({
       <div
         draggable={!touch}
         onDragStart={(e) => {
-          dragging = { id: item.id, from: parent };
+          dragging = { id: item.id, from: parent, space };
           e.dataTransfer.effectAllowed = "copyMove";
           e.dataTransfer.setData("text/plain", item.title);
         }}
         onDragOver={(e) => {
           if (!dragging || dragging.id === item.id || dragging.from === "types") return;
           e.preventDefault();
+          e.stopPropagation();
           const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
           const y = e.clientY - r.top;
-          setDrop(y < r.height * 0.25 ? "before" : y > r.height * 0.75 ? "after" : "inside");
+          // from another workspace only into this item: a move there
+          setDrop(dragging.space !== space ? "inside" : y < r.height * 0.25 ? "before" : y > r.height * 0.75 ? "after" : "inside");
         }}
         onDragLeave={() => setDrop(null)}
         onDrop={onDrop}
@@ -335,7 +421,7 @@ function TreeNode({
           <button
             onClick={() => {
               if (!isOpen) toggle(key, depth);
-              createAndOpen({ parents: [item.id] });
+              createAndOpen({ parents: [item.id] }, repo, space);
             }}
             tabIndex={-1}
             className="rounded p-0.5 text-muted opacity-0 hover:bg-surface-2 hover:text-fg group-hover/row:opacity-100 focus:opacity-100"

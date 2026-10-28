@@ -1,13 +1,13 @@
-import { useRef, useState } from "react";
-import { ArrowRight, ChevronDown, CornerDownRight, Paperclip, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ArrowRight, ChevronDown, CornerDownRight, Layers, Paperclip, X } from "lucide-react";
 import { SETTINGS_ID } from "@obtion/core/model";
-import { useRepo, itemHref, go } from "../hooks";
+import { useFiles, useRepo, useSpaceId, spaceHref } from "../hooks";
+import { activeSpace, spaceById, useAccounts } from "../accounts";
 import { useT } from "../i18n";
 import { askAgent, capture, extractMentions, recentPlaces, rememberPlace } from "../actions";
 import { MenuItem, Popover, TypeGlyph, cx, Dialog, modName } from "./bits";
 import { ItemPicker } from "./Picker";
-import { files } from "../files";
-import { repo } from "../repo";
+import { SpaceScope } from "./Spaces";
 import { notify } from "./feedback";
 import { NOTE_ICON } from "./icons";
 
@@ -18,30 +18,64 @@ import { NOTE_ICON } from "./icons";
  * "/name text" picks a type by name, a page mentioned with @ is offered as the place. ⌘Enter sends
  * it to the agent.
  */
-export function Capture({ parent, autoFocus, onDone, compact }: { parent?: string; autoFocus?: boolean; onDone?: () => void; compact?: boolean }) {
+export function Capture({ anywhere, ...p }: CaptureProps & { anywhere?: boolean }) {
+  const [space, setSpace] = useState(() => (anywhere ? captureSpace() : undefined));
+  if (!space) return <CaptureField {...p} />;
+  const choose = (id: string) => (setSpace(id), localStorage.setItem(LAST_SPACE, id));
+  return (
+    <SpaceScope id={space}>
+      <CaptureField {...p} onSpace={choose} />
+    </SpaceScope>
+  );
+}
+
+const LAST_SPACE = "obtion.capture.space";
+/** Where a capture from anywhere goes: the workspace the inbox is filtered to, else the one used last, else the open one. */
+function captureSpace(): string | undefined {
+  const known = (id: unknown) => (typeof id === "string" && !!spaceById(id) ? id : undefined);
+  let filter: unknown;
+  try {
+    filter = JSON.parse(localStorage.getItem("obtion.inbox.space") ?? "null");
+  } catch {}
+  return known(filter) ?? known(localStorage.getItem(LAST_SPACE)) ?? activeSpace()?.id;
+}
+
+interface CaptureProps {
+  parent?: string;
+  autoFocus?: boolean;
+  onDone?: () => void;
+  compact?: boolean;
+}
+
+function CaptureField({ parent, autoFocus, onDone, compact, onSpace }: CaptureProps & { onSpace?: (id: string) => void }) {
   const r = useRepo();
+  const files = useFiles();
+  const space = useSpaceId();
+  const { spaces } = useAccounts();
   const { t, lang } = useT();
   const [text, setText] = useState("");
   const [type, setType] = useState<string | null>(null);
   const [place, setPlace] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
+  // another workspace: its types and places, the text stays
+  useEffect(() => (setType(null), setPlace(null)), [space]);
   const ix = r.index();
   const pinned = (r.get(SETTINGS_ID)?.settings?.captureTypes ?? []).filter((id) => ix.types.has(id));
   const others = [...ix.types.values()].filter((x) => !pinned.includes(x.id)).sort((a, b) => a.schema!.name.localeCompare(b.schema!.name));
   const input = useRef<HTMLTextAreaElement>(null);
   const save = () => {
     const where = parent ?? place ?? undefined;
-    const id = capture(text, { type, parent: where });
+    const id = capture(text, { type, parent: where }, r);
     if (!id) return;
-    if (place && !parent) rememberPlace(place);
+    if (place && !parent) rememberPlace(place, r);
     // the next thought starts clean: no place or type carried over unseen
     setPlace(null);
     setType(null);
     // the notice says what it became and where, with a way there
-    const usedType = repo.get(id)?.type ?? null; // "/name" in the text can set it too
+    const usedType = r.get(id)?.type ?? null; // "/name" in the text can set it too
     const what = usedType ? ix.typeName(usedType) : t("capture.note");
     const msg = where ? t("capture.notifyUnder", { what, place: ix.get(where)?.title ?? "" }) : usedType ? t("capture.notifyAs", { what }) : t("capture.notifyInbox");
-    notify(msg, undefined, { label: t("capture.open"), run: () => go(itemHref(id).slice(1)) });
+    notify(msg, undefined, { label: t("capture.open"), run: () => (location.hash = spaceHref(space, `/i/${encodeURIComponent(id)}`)) });
     setText("");
     onDone?.();
   };
@@ -53,14 +87,14 @@ export function Capture({ parent, autoFocus, onDone, compact }: { parent?: strin
   const [focused, setFocused] = useState(!!autoFocus);
   const showRow = !compact && (focused || !!text.trim() || !!type || !!place);
   // a page mentioned with @ is offered as the place, quietly in the same row
-  const mentioned = text.includes("@") ? extractMentions(text.split("\n")[0]!).mentions.map((m) => ix.resolveTitle(m)).filter((id): id is string => !!id && ix.get(id)?.kind === "info") : [];
+  const mentioned = text.includes("@") ? extractMentions(text.split("\n")[0]!, r).mentions.map((m) => ix.resolveTitle(m)).filter((id): id is string => !!id && ix.get(id)?.kind === "info") : [];
   const offer = !parent && mentioned.find((id) => id !== place);
   const pathOf = (id: string) => [...ix.homePath(id), id].map((p) => ix.get(p)?.title ?? "").join(" › ");
   const typeSchema = type ? ix.types.get(type)?.schema : undefined;
   const attach = async (list: FileList | null) => {
     for (const f of [...(list ?? [])]) {
       const res = await files.add(f, f.name, { parent });
-      if (res?.id) notify(t("capture.notifyFile", { name: f.name }), undefined, { label: t("capture.open"), run: () => go(itemHref(res.id!).slice(1)) });
+      if (res?.id) notify(t("capture.notifyFile", { name: f.name }), undefined, { label: t("capture.open"), run: () => (location.hash = spaceHref(space, `/i/${encodeURIComponent(res.id!)}`)) });
     }
   };
   const ghost = "tap-y inline-flex h-7 min-w-0 items-center gap-1 rounded-md px-1.5 text-xs hover:bg-hover";
@@ -96,13 +130,33 @@ export function Capture({ parent, autoFocus, onDone, compact }: { parent?: strin
         <ItemPicker
           title={t("capture.placeTitle")}
           filter={(x) => x.kind === "info"}
-          suggestions={[...mentioned.map((id) => ({ id, reason: "mentioned" })), ...recentPlaces().map((id) => ({ id, reason: "recent" }))].filter((x, i, l) => l.findIndex((y) => y.id === x.id) === i)}
+          suggestions={[...mentioned.map((id) => ({ id, reason: "mentioned" })), ...recentPlaces(r).map((id) => ({ id, reason: "recent" }))].filter((x, i, l) => l.findIndex((y) => y.id === x.id) === i)}
           onPick={(id) => (setPlace(id), setPicking(false), setTimeout(() => input.current?.focus()))}
           onClose={() => (setPicking(false), setTimeout(() => input.current?.focus()))}
         />
       )}
       {showRow && (
         <div className="mt-1 flex min-w-0 items-center gap-1" onMouseDown={(e) => e.preventDefault()}>
+          {/* the workspace, when it can be chosen (capture from anywhere) */}
+          {onSpace && spaces.length > 1 && (
+            <Popover
+              trigger={(p) => (
+                <button {...p} className="tap-y inline-flex h-7 shrink-0 items-center gap-1 rounded-full border border-line px-2 text-xs hover:bg-hover" aria-label={t("capture.spaceLabel", { name: spaces.find((s) => s.id === space)?.name ?? "" })}>
+                  <Layers size={12} className="text-muted" />
+                  {spaces.find((s) => s.id === space)?.name}
+                  <ChevronDown size={12} className="text-muted" />
+                </button>
+              )}
+            >
+              {(close) =>
+                spaces.map((s) => (
+                  <MenuItem key={s.id} active={s.id === space} onClick={() => (close(), onSpace(s.id))}>
+                    {s.name}
+                  </MenuItem>
+                ))
+              }
+            </Popover>
+          )}
           {/* the type: one chip with its symbol and an arrow; the note is preset */}
           <Popover
             trigger={(p) => (
@@ -162,7 +216,7 @@ export function CaptureSheet({ onClose }: { onClose: () => void }) {
   const { t } = useT();
   return (
     <Dialog title={t("capture.title")} onClose={onClose}>
-      <Capture autoFocus onDone={onClose} />
+      <Capture anywhere autoFocus onDone={onClose} />
     </Dialog>
   );
 }

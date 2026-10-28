@@ -39,7 +39,7 @@ export function ConfirmHost() {
   };
   return (
     <Dialog title={a.title} onClose={() => done(null)}>
-      <p className="text-sm">{a.body}</p>
+      <p className="whitespace-pre-line text-sm">{a.body}</p>
       <div className="mt-4 flex flex-wrap justify-end gap-2">
         <Button variant="ghost" onClick={() => done(null)}>
           {t("cancel")}

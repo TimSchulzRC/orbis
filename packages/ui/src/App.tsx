@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Sparkles, Plus, Menu, Search, LayoutDashboard, Inbox, SlidersHorizontal, X } from "lucide-react";
 import { SETTINGS_ID } from "@obtion/core/model";
-import { inboxWhere } from "@obtion/core/inbox";
-import { runQuery } from "@obtion/core/query";
 import { useRepo, useRoute, useMediaQuery, itemHref } from "./hooks";
 import { useT } from "./i18n";
 import { cx, IconButton, useModal } from "./ui/bits";
@@ -12,7 +10,7 @@ import { AppToaster } from "./ui/toasts";
 import { LightboxHost } from "./ui/Lightbox";
 import { InboxEntry } from "./ui/Triage";
 import { PageBoundary } from "./ui/ErrorBoundary";
-import { PinnedTree, Sidebar, TypeNav } from "./ui/Sidebar";
+import { Sidebar, SpaceTree, useInboxTotal } from "./ui/Sidebar";
 import { SyncDot } from "./ui/SyncDot";
 import { CommandPalette } from "./ui/CommandPalette";
 import { AgentPanel } from "./ui/AgentPanel";
@@ -28,18 +26,16 @@ import { Activity } from "./views/Activity";
 import { TrashView } from "./views/Trash";
 import { Settings } from "./views/Settings";
 import { ICON } from "./ui/icons";
-import { OtherSpaces, SpaceSwitcher } from "./ui/Spaces";
+import { SpaceScope } from "./ui/Spaces";
 import { Gate } from "./views/Account";
 import { signOut, useAccounts } from "./accounts";
 
 export function App() {
-  const { active } = useAccounts();
   // the confirm dialog lives above everything: the sync may ask before the app has loaded
   return (
     <>
-      {/* another workspace: the app anew on its replica (repo and files point at it) */}
       <Gate>
-        <Main key={active?.id} />
+        <Main />
       </Gate>
       <ConfirmHost />
       <AppToaster />
@@ -64,6 +60,7 @@ function SignedOut() {
 
 function Main() {
   const r = useRepo();
+  const { active } = useAccounts();
   const { t } = useT();
   const route = useRoute();
   const wide = useMediaQuery("(min-width: 1024px)");
@@ -187,13 +184,14 @@ function Main() {
           </div>
         )}
         <main tabIndex={-1} className={cx("@container min-h-0 flex-1 outline-none", isGraph ? "overflow-hidden" : "overflow-y-auto")}>
-          <PageBoundary key={route.path}>{page}</PageBoundary>
+          {/* another workspace: the page anew on its replica (repo and files point at it) */}
+          <PageBoundary key={`${active?.id}${route.path}`}>{page}</PageBoundary>
         </main>
         {/* an inbox entry on a phone has its actions at the bottom instead */}
         {!wide && !(route.parts[0] === "inbox" && route.parts[1]) && <MobileNav onAgent={() => toggleAgent(true)} />}
       </div>
 
-      {agentOpen && <AgentPanel context={contextItem} onClose={() => toggleAgent(false)} overlay={!wide} />}
+      {agentOpen && <AgentPanel key={active?.id} context={contextItem} onClose={() => toggleAgent(false)} overlay={!wide} />}
       {palette && <CommandPalette onClose={() => setPalette(false)} />}
       {menu && (
         <div className="fixed inset-0 z-50 bg-black/30" onClick={() => setMenu(false)}>
@@ -232,27 +230,23 @@ function MenuSheet({ onClose, children }: { onClose: () => void; children: React
   );
 }
 
-/** The phone menu (a sheet from below): Start, Eingang · Angeheftet · Typen (as in the sidebar) · Einstellungen. */
+/** The phone menu (a sheet from below): Eingang · every workspace (as in the sidebar) · Einstellungen. */
 function MobileMenu() {
   const { t } = useT();
-  const ix = useRepo().index();
+  const { spaces } = useAccounts();
   const row = "flex min-h-11 items-center gap-3 rounded-lg px-3 text-[15px] hover:bg-hover";
-  const inbox = runQuery({ where: inboxWhere(ix) }, { ix }).total;
+  const inbox = useInboxTotal();
   return (
     <>
-      <div className="mb-2 flex px-3">
-        <SpaceSwitcher />
-      </div>
-      <a href="#/" className={row}>
-        <LayoutDashboard size={18} className="text-muted" /> {t("nav.start")}
-      </a>
       <a href="#/inbox" className={row}>
         <Inbox size={18} className="text-muted" /> <span className="flex-1">{t("nav.inbox")}</span>
         {inbox > 0 && <span className="text-xs tabular-nums text-muted">{inbox}</span>}
       </a>
-      <PinnedTree touch />
-      <TypeNav touch />
-      <OtherSpaces touch />
+      {spaces.map((s) => (
+        <SpaceScope key={s.id} id={s.id}>
+          <SpaceTree space={s} touch />
+        </SpaceScope>
+      ))}
       <div className="my-2 border-t border-line" />
       <a href="#/settings" className={row}>
         <SlidersHorizontal size={18} className="text-muted" /> {t("nav.settings")}
@@ -274,9 +268,10 @@ function MobileNav({ onAgent }: { onAgent: () => void }) {
   const r = useRepo();
   const route = useRoute();
   const ix = r.index();
+  const inbox = useInboxTotal();
   const entries = [
     { key: "start", label: t("nav.start"), icon: <LayoutDashboard size={20} />, href: "#/", active: route.path === "/" },
-    { key: "inbox", label: t("nav.inbox"), icon: <Inbox size={20} />, href: "#/inbox", active: route.path.startsWith("/inbox"), dot: runQuery({ where: inboxWhere(ix) }, { ix }).total > 0 },
+    { key: "inbox", label: t("nav.inbox"), icon: <Inbox size={20} />, href: "#/inbox", active: route.path.startsWith("/inbox"), dot: inbox > 0 },
     ...ix.typesInOrder().slice(0, 2).map((x) => {
       const I = ICON[x.schema!.icon] ?? ICON.circle!;
       return { key: x.id, label: ix.typePlural(x.id), icon: <I size={20} />, href: itemHref(x.id), active: route.parts[0] === "i" && route.parts[1] === x.id };

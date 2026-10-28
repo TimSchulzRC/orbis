@@ -1,13 +1,14 @@
 import type { ItemInit } from "@obtion/core/model";
 import { META_TYPE, SETTINGS_ID, initItem, initSchema, newId, titleKey } from "@obtion/core/model";
-import { repo } from "./repo";
+import type { Repo } from "@obtion/sync";
+import { repo as current } from "./repo";
 import { freshColor } from "@obtion/core/palette";
-import { go, itemHref } from "./hooks";
+import { itemHref, spaceHref } from "./hooks";
 
-/** Create an item locally and open it. */
-export function createAndOpen(init: ItemInit) {
+/** Create an item locally and open it – in another workspace than the open one with `space`. */
+export function createAndOpen(init: ItemInit, repo: Repo = current, space?: string) {
   const id = repo.create(init);
-  go(`/i/${encodeURIComponent(id)}?new=1`);
+  location.hash = spaceHref(space, `/i/${encodeURIComponent(id)}?new=1`);
   return id;
 }
 
@@ -21,7 +22,7 @@ export function askAgent(text?: string, shown?: string) {
  * Quick capture. "/buch Der Termin" picks the type by name prefix. Without type and
  * parent the result lands in the inbox. Returns the new id.
  */
-export function capture(text: string, opts: { type?: string | null; parent?: string } = {}): string | undefined {
+export function capture(text: string, opts: { type?: string | null; parent?: string } = {}, repo: Repo = current): string | undefined {
   let t = text.trim();
   if (!t) return;
   let type = opts.type ?? null;
@@ -36,7 +37,7 @@ export function capture(text: string, opts: { type?: string | null; parent?: str
     }
   }
   const lines = t.split("\n");
-  const { text: firstLine, mentions } = extractMentions(lines[0]!.replace(/^#+\s*/, ""));
+  const { text: firstLine, mentions } = extractMentions(lines[0]!.replace(/^#+\s*/, ""), repo);
   const title = firstLine.length > 100 ? firstLine.slice(0, 97) + "…" : firstLine;
   let body = lines.length > 1 || firstLine.length > 100 ? [firstLine, ...lines.slice(1)].join("\n") : "";
   // "@Title" mentions become [[links]]: refs, not a place – the item stays in the inbox.
@@ -46,7 +47,7 @@ export function capture(text: string, opts: { type?: string | null; parent?: str
 
 const RECENT = "obtion.recentPlaces";
 /** The places used last on this device (capture, sorting the inbox, "+ Ort"), newest first. */
-export function recentPlaces(): string[] {
+export function recentPlaces(repo: Repo = current): string[] {
   try {
     const ids = JSON.parse(localStorage.getItem(RECENT) ?? "[]") as string[];
     const ix = repo.index();
@@ -55,13 +56,13 @@ export function recentPlaces(): string[] {
     return [];
   }
 }
-export function rememberPlace(id: string) {
-  const ids = [id, ...recentPlaces().filter((x) => x !== id)].slice(0, 6);
+export function rememberPlace(id: string, repo: Repo = current) {
+  const ids = [id, ...recentPlaces(repo).filter((x) => x !== id)].slice(0, 6);
   localStorage.setItem(RECENT, JSON.stringify(ids));
 }
 
 /** Find "@Title" mentions of existing items. A mention at the end of the line is removed from the text. */
-export function extractMentions(line: string): { text: string; mentions: string[] } {
+export function extractMentions(line: string, repo: Repo = current): { text: string; mentions: string[] } {
   const ix = repo.index();
   const mentions: string[] = [];
   const text = line
@@ -83,7 +84,7 @@ export function extractMentions(line: string): { text: string; mentions: string[
 }
 
 export function settings() {
-  return repo.get(SETTINGS_ID);
+  return current.get(SETTINGS_ID);
 }
 
 export function open(id: string) {
@@ -94,7 +95,7 @@ export function open(id: string) {
 export { pluralOf } from "@obtion/core/plural";
 
 /** A new type; it appears in the sidebar under "Typen", at the end. Returns its id. */
-export function createType(name: string): string {
+export function createType(name: string, repo: Repo = current): string {
   const id = newId();
   repo.change(id, (d) => {
     initItem(d, { type: META_TYPE, title: name, createdBy: `web:${repo.device}` });

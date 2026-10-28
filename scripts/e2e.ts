@@ -3,7 +3,8 @@
 // with zero types) on free ports, opens every route and one page per kind of item in a real
 // browser – light, dark and phone – and fails on console errors, page errors, an error
 // boundary or a blank page. A fourth server is set up on the page with its examples, which are
-// removed again in the settings and brought back with "Rückgängig". Every server gets its first
+// removed again in the settings and brought back with "Rückgängig"; then it gets a second
+// workspace (sidebar, inbox filter, a move into it). Every server gets its first
 // account through the API; the browser holds it as if it had signed in (the sign-in page itself
 // is checked once).
 //   bun run test:e2e        (builds first; Chrome from ~/.cache/ms-playwright)
@@ -146,6 +147,7 @@ async function run() {
   try {
     await signInPage(browser, empty);
     await examplesOnSetup(browser, fresh);
+    await twoWorkspaces(browser, fresh);
     for (const [serverName, server] of [["empty", empty], ["seeded", seeded], ["no types", typeless]] as const) {
       for (const v of variants) {
         const context = await signedIn(browser, server, { viewport: v.viewport, colorScheme: v.scheme, isMobile: !!v.mobile, hasTouch: !!v.mobile, locale: "de-DE" });
@@ -187,7 +189,7 @@ async function run() {
             } else {
               await row.click();
               await p.waitForTimeout(400);
-              if (!p.url().includes("#/inbox/")) failures.push(`${label}: inbox entry did not open on its own page`);
+              if (!/#\/w\/[^/]+\/inbox\//.test(p.url())) failures.push(`${label}: inbox entry did not open on its own page`);
             }
           }, { phone });
           await check(page, label, "/#/inbox/ex-i-podcast", errors, undefined, { phone });
@@ -203,14 +205,14 @@ async function run() {
             if (r.larger) failures.push(`${label}: something on Start is larger than the day statement`);
             if (!phone && r.cols !== 2) failures.push(`${label}: Start has ${r.cols} columns`);
           });
-          // the sidebar: "Angeheftet" (informations) and "Typen" (each type's page and the files), both
+          // the sidebar: the workspace's block (Start, pinned informations) and "Typen" (each type's page and the files), both
           // fold and stay folded over a reload; a type's page has its views and "Typ bearbeiten";
           // the inbox offers what lands there and the default; old collection links lead on
           if (!phone && v.name === "light") {
             await check(page, label, "/#/settings", errors, async (p) => {
               const side = p.locator("aside");
-              if (!(await side.locator("section[aria-label='Angeheftet'] a[href='#/i/ex-work']").count())) failures.push(`${label}: "Arbeit" not under Angeheftet`);
-              const types = await side.locator("section[aria-label='Typen'] a").allInnerTexts();
+              if (!(await side.locator("section[aria-label='Persönlich'] a[href='#/i/ex-work']").count())) failures.push(`${label}: "Arbeit" not in the workspace's block`);
+              const types = await side.locator("nav[aria-label='Typen'] a").allInnerTexts();
               if (!["Projekte", "Tasks", "Karten", "Dateien"].every((x) => types.some((y) => y.trim() === x))) failures.push(`${label}: Typen shows ${types.join(", ")}`);
               if (await side.getByText("Sammlungen").count()) failures.push(`${label}: the sidebar still says "Sammlungen"`);
               await side.getByRole("button", { name: "Typen" }).click();
@@ -357,7 +359,7 @@ async function examplesOnSetup(browser: import("playwright-core").Browser, serve
     if (m.type() === "error") errors.push(`console error: ${m.text()}`);
   });
   const label = "fresh light";
-  const welcome = (p: Page) => p.locator("aside section[aria-label='Angeheftet']").getByText("So funktioniert Obtion");
+  const welcome = (p: Page) => p.locator("aside section[aria-label='Persönlich']").getByText("So funktioniert Obtion");
   await check(page, label, "/", errors, async (p) => {
     if (!(await p.getByRole("checkbox", { name: /Mit Beispielen starten/ }).isChecked())) failures.push(`${label}: "Mit Beispielen starten" is not preset`);
     await p.getByRole("button", { name: /Einrichten/ }).click();
@@ -380,6 +382,50 @@ async function examplesOnSetup(browser: import("playwright-core").Browser, serve
     if (await welcome(p).count()) failures.push(`${label}: the welcome note is still pinned`);
     await toast.getByRole("button", { name: /Rückgängig/ }).click();
     if (!(await welcome(p).waitFor({ timeout: 3000 }).then(() => true, () => false))) failures.push(`${label}: "Rückgängig" did not bring the examples back`);
+  });
+  await context.close();
+}
+
+/**
+ * A second workspace next to the first: it shows in the sidebar and is set up from there, the
+ * inbox filters by workspace (remembered over a reload), and a pinned area moves into it.
+ */
+async function twoWorkspaces(browser: import("playwright-core").Browser, server: Awaited<ReturnType<typeof startServer>>) {
+  const personal = server.me.workspaces[0]!.id;
+  await fetch(server.url + "/api/workspaces", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${server.token}` }, body: JSON.stringify({ name: "Firma" }) });
+  const context = await signedIn(browser, server, { viewport: { width: 1440, height: 900 }, locale: "de-DE" });
+  const page = await context.newPage();
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(`page error: ${e.message}`));
+  page.on("console", (m) => {
+    if (m.type() === "error") errors.push(`console error: ${m.text()}`);
+  });
+  const label = "two workspaces";
+  const firma = (p: Page) => p.locator("aside section[aria-label='Firma']");
+  await check(page, label, `/#/w/${personal}/`, errors, async (p) => {
+    await firma(p).getByText("Einrichten").click();
+    await p.getByRole("checkbox", { name: /Mit Beispielen starten/ }).uncheck();
+    await p.getByRole("button", { name: /^Einrichten$/ }).click();
+    if (!(await firma(p).getByText("Start").waitFor({ timeout: 8000 }).then(() => true, () => false))) failures.push(`${label}: "Firma" not set up from the sidebar`);
+    if (!(await p.locator("aside section[aria-label='Persönlich'] a[href='#/i/ex-work']").count())) failures.push(`${label}: the first workspace's block lost its pinned items`);
+  });
+  await check(page, label, "/#/inbox", errors, async (p) => {
+    const chips = p.locator("main [role=group] button");
+    if ((await chips.allInnerTexts()).map((x) => x.replace(/\s*\d+$/, "")).join(",") !== "Alle,Persönlich,Firma") failures.push(`${label}: inbox filter is ${(await chips.allInnerTexts()).join(", ")}`);
+    await chips.filter({ hasText: "Firma" }).click();
+    await p.reload();
+    await settle(p);
+    if ((await p.locator("main [aria-pressed=true]").innerText()).replace(/\s*\d+$/, "") !== "Firma") failures.push(`${label}: the inbox filter is not remembered`);
+    await p.locator("main").getByRole("button", { name: /^Alle/ }).click();
+  });
+  await check(page, label, `/#/w/${personal}/i/ex-work`, errors, async (p) => {
+    await p.locator("main").getByRole("button", { name: "Mehr" }).first().click();
+    await p.getByText("In anderen Workspace verschieben").click();
+    await p.getByRole("dialog").getByRole("button", { name: "Firma" }).click();
+    const ask = p.getByRole("dialog").getByRole("button", { name: "Verschieben" });
+    if (await ask.waitFor({ timeout: 3000 }).then(() => true, () => false)) await ask.click();
+    if (!(await firma(p).getByText("Arbeit").waitFor({ timeout: 8000 }).then(() => true, () => false))) failures.push(`${label}: "Arbeit" did not move into "Firma"`);
+    if (await p.locator("aside section[aria-label='Persönlich'] a[href='#/i/ex-work']").count()) failures.push(`${label}: "Arbeit" is still in "Persönlich"`);
   });
   await context.close();
 }

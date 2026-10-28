@@ -13,8 +13,8 @@ import { type Item, SETTINGS_ID, setMeta } from "@obtion/core/model";
 import { onlyBelow } from "@obtion/core/trash";
 import { inboxWhere } from "@obtion/core/inbox";
 import { runQuery } from "@obtion/core/query";
-import { repo } from "../repo";
-import { useIndex, itemHref, go, useMediaQuery } from "../hooks";
+import type { Repo } from "@obtion/sync";
+import { useIndex, useRepo, useSpaceId, itemHref, go, spaceHref, useMediaQuery } from "../hooks";
 import { useT } from "../i18n";
 import { createType, recentPlaces, rememberPlace } from "../actions";
 import { Button, Dialog, ItemIcon, Kbd, RelTime, Tag, TypeGlyph, cx } from "./bits";
@@ -31,7 +31,7 @@ interface Undo {
   steps: { id: string; type?: string | null; addedParents?: string[]; deleted?: boolean }[];
 }
 
-function revert(u: Undo) {
+function revert(u: Undo, repo: Repo) {
   for (const s of u.steps) {
     if (s.deleted) repo.restore(s.id);
     if (s.type !== undefined) repo.setType(s.id, s.type);
@@ -49,12 +49,13 @@ function ageGroup(created: number, now = Date.now()): "week" | "month" | "older"
 /** What can be done with entries: place, give a type, delete – each with one undo (toast, 5 s). */
 function useTriageActions() {
   const { t } = useT();
-  const ix = useIndex();
+  const repo = useRepo();
+  const ix = repo.index();
   const last = useRef<Undo | null>(null);
   const firstType = (repo.get(SETTINGS_ID)?.settings?.captureTypes ?? []).find((id) => ix.types.has(id));
   const done = (u: Undo) => {
     last.current = u;
-    notify.undo(u.label, () => (revert(u), (last.current = null)));
+    notify.undo(u.label, () => (revert(u, repo), (last.current = null)));
   };
   const short = (i?: Item) => {
     const name = i?.title || i?.file?.name || t("untitled");
@@ -89,14 +90,14 @@ function useTriageActions() {
   const place = (list: Item[], parent: string) => {
     const ok = list.filter((i) => repo.addParent(i.id, parent));
     if (!ok.length) return;
-    rememberPlace(parent);
+    rememberPlace(parent, repo);
     const where = ix.get(parent)?.title ?? "";
     done({ label: ok.length > 1 ? t("triage.placedMany", { count: ok.length, title: where }) : t("triage.placedOne", { title: short(ok[0]), place: where }), steps: ok.map((i) => ({ id: i.id, addedParents: [parent] })) });
   };
   // "u": takes back the last one (the notice offers the same)
   const undo = () => {
     if (!last.current) return;
-    revert(last.current);
+    revert(last.current, repo);
     last.current = null;
   };
   return { firstType, giveType, trash, place, undo };
@@ -105,7 +106,8 @@ function useTriageActions() {
 /** The pickers an action may need: where to (place) and which type. */
 function usePickers(place: (list: Item[], p: string) => void, giveType: (list: Item[], t: string) => void, after?: () => void) {
   const { t } = useT();
-  const ix = useIndex();
+  const repo = useRepo();
+  const ix = repo.index();
   const [placing, setPlacing] = useState<Item[] | null>(null);
   const [typing, setTyping] = useState<Item[] | null>(null);
   const node = (
@@ -113,7 +115,7 @@ function usePickers(place: (list: Item[], p: string) => void, giveType: (list: I
       {placing && (
         <ItemPicker
           title={placing.length > 1 ? t("triage.whereToMany", { count: placing.length }) : t("triage.whereTo")}
-          suggestions={placing.length === 1 ? placeSuggestions(placing[0]!) : []}
+          suggestions={placing.length === 1 ? placeSuggestions(placing[0]!, repo) : []}
           exclude={(x) => placing.some((p) => x.id === p.id || ix.wouldCycle(p.id, x.id) || !!p.parents[x.id]) || x.kind !== "info"}
           onPick={(p) => (place(placing, p), setPlacing(null), after?.())}
           onCreate={(title) => (place(placing, repo.create({ title })), setPlacing(null), after?.())}
@@ -152,9 +154,13 @@ function MarkBox({ on, onToggle, title }: { on: boolean; onToggle: () => void; t
   );
 }
 
+/** The keys go to one list only (the inbox shows one per workspace): the one used last, else the first. */
+let keyOwner: symbol | null = null;
+
 export function Triage({ items }: { items: Item[]; storageKey?: string }) {
   const { t } = useT();
   const ix = useIndex();
+  const space = useSpaceId();
   const phone = useMediaQuery("(max-width: 767px)");
   const [sel, setSel] = useState(0);
   const [marked, setMarked] = useState<Set<string>>(new Set());
@@ -162,6 +168,12 @@ export function Triage({ items }: { items: Item[]; storageKey?: string }) {
   const act = useTriageActions();
   const pick = usePickers(act.place, act.giveType, () => setMarked(new Set()));
   const list = useRef<HTMLDivElement>(null);
+  const me = useRef(Symbol()).current;
+  const claim = () => void (keyOwner = me);
+  useEffect(() => {
+    keyOwner ??= me;
+    return () => void (keyOwner === me && (keyOwner = null));
+  }, []);
 
   // what an action applies to: the marked entries, else the selected one
   const targets = (): Item[] => {
@@ -180,7 +192,7 @@ export function Triage({ items }: { items: Item[]; storageKey?: string }) {
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement;
-      if (pick.placing || pick.typing || el.closest("input, textarea, select, [contenteditable=true], .cm-editor, [role=dialog]") || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (keyOwner !== me || pick.placing || pick.typing || el.closest("input, textarea, select, [contenteditable=true], .cm-editor, [role=dialog]") || e.metaKey || e.ctrlKey || e.altKey) return;
       const cur = items[sel];
       const k = e.key;
       if (k === "J" || (k === "ArrowDown" && e.shiftKey)) {
@@ -202,7 +214,7 @@ export function Triage({ items }: { items: Item[]; storageKey?: string }) {
       else if (k === "y" && cur) pick.setTyping(targets().filter((i) => i.kind === "info"));
       else if ((k === "x" || k === "Delete") && cur) trash(targets());
       else if (k === "u" || k === "z") act.undo();
-      else if ((k === "Enter" || k === "o") && cur) go(itemHref(cur.id).slice(1));
+      else if ((k === "Enter" || k === "o") && cur) (location.hash = spaceHref(space, `/i/${encodeURIComponent(cur.id)}`));
       else return;
       e.preventDefault();
     };
@@ -243,7 +255,7 @@ export function Triage({ items }: { items: Item[]; storageKey?: string }) {
               data-triage={n}
               role="option"
               aria-selected={on}
-              onClick={() => (phone ? go(`/inbox/${encodeURIComponent(i.id)}`) : setSel(n))}
+              onClick={() => (phone ? (location.hash = spaceHref(space, `/inbox/${encodeURIComponent(i.id)}`)) : setSel(n))}
               className={cx(
                 "relative grid cursor-default items-center gap-x-2 px-3 hover:bg-hover",
                 phone ? "min-h-12 grid-cols-[44px_minmax(0,1fr)_auto] py-1.5" : "h-10 grid-cols-[24px_minmax(0,1fr)_auto_minmax(64px,auto)]",
@@ -318,14 +330,14 @@ export function Triage({ items }: { items: Item[]; storageKey?: string }) {
 
   if (phone)
     return (
-      <div className="overflow-hidden rounded-xl border border-line bg-surface">
+      <div onPointerDownCapture={claim} className="overflow-hidden rounded-xl border border-line bg-surface">
         {many && bar}
         {rows}
         {pick.node}
       </div>
     );
   return (
-    <div className="grid h-[calc(100dvh-170px)] min-h-[520px] grid-cols-[380px_minmax(0,1fr)] overflow-hidden rounded-xl border border-line bg-surface">
+    <div onPointerDownCapture={claim} onFocusCapture={claim} className="grid h-[calc(100dvh-170px)] min-h-[520px] grid-cols-[380px_minmax(0,1fr)] overflow-hidden rounded-xl border border-line bg-surface">
       <div className="flex min-h-0 min-w-0 flex-col border-r border-line">
         {bar}
         {rows}
@@ -362,13 +374,14 @@ export function Triage({ items }: { items: Item[]; storageKey?: string }) {
 /** The selected entry in full: title, when and what it mentions, the text, then what helps to decide. */
 function Detail({ item, onPlaced }: { item: Item; onPlaced: (p: string) => void }) {
   const { t } = useT();
-  const ix = useIndex();
+  const repo = useRepo();
+  const ix = repo.index();
   const mentioned = [...new Set([...ix.textLinks(item).filter((l) => !l.embed).map((l) => l.to), ...item.refs])].map((id) => ix.get(id)).filter((x): x is Item => !!x && x.kind === "info");
   const kids = ix.childrenOf(item.id).map((id) => ix.get(id)!).filter(Boolean);
   const sug = item.suggestion;
   const places = useMemo(() => {
-    const s = placeSuggestions(item).slice(0, 4).map((x) => ({ id: x.id, why: t("triage.why." + x.reason) }));
-    for (const id of recentPlaces()) if (s.length < 4 && !s.some((x) => x.id === id) && id !== item.id && !item.parents[id] && !ix.wouldCycle(item.id, id)) s.push({ id, why: t("triage.why.recent") });
+    const s = placeSuggestions(item, repo).slice(0, 4).map((x) => ({ id: x.id, why: t("triage.why." + x.reason) }));
+    for (const id of recentPlaces(repo)) if (s.length < 4 && !s.some((x) => x.id === id) && id !== item.id && !item.parents[id] && !ix.wouldCycle(item.id, id)) s.push({ id, why: t("triage.why.recent") });
     return s;
   }, [item.id, item.updated]);
   const applySuggestion = () => {
@@ -564,7 +577,8 @@ export function InboxEntry({ id }: { id: string }) {
 /** Choose a type by keyboard: type to filter, arrows, Enter, 1–9; "Neuer Typ …" at the end. */
 export function TypePicker({ current, onPick, onClose }: { current: string | null; onPick: (id: string) => void; onClose: () => void }) {
   const { t } = useT();
-  const ix = useIndex();
+  const repo = useRepo();
+  const ix = repo.index();
   const [q, setQ] = useState("");
   const [sel, setSel] = useState(0);
   const types = [...ix.types.values()].sort((a, b) => a.schema!.name.localeCompare(b.schema!.name)).filter((x) => !q.trim() || x.schema!.name.toLowerCase().includes(q.trim().toLowerCase()));
@@ -574,7 +588,7 @@ export function TypePicker({ current, onPick, onClose }: { current: string | nul
     if (!r) return;
     if (r.id) return onPick(r.id);
     const name = r.create?.trim() || prompt(t("types.new"))?.trim();
-    if (name) onPick(createType(name));
+    if (name) onPick(createType(name, repo));
   };
   return (
     <Dialog title={t("triage.chooseType")} onClose={onClose}>

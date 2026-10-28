@@ -66,6 +66,7 @@ export function useAccounts() {
 }
 
 export const activeSpace = () => spaces.find((s) => s.id === active);
+export const spaceById = (id: string) => spaces.find((s) => s.id === id);
 
 // ---------- replicas ----------
 
@@ -192,7 +193,7 @@ async function forget(s: Space) {
 export async function createSpace(name: string) {
   const w = await call("/api/workspaces", { name });
   await refresh();
-  activate(w.id);
+  location.hash = `#/w/${w.id}/`;
 }
 
 export async function renameSpace(s: Space, name: string) {
@@ -232,6 +233,19 @@ export const serverInfo = (): Promise<{ signup: "open" | "invite" | "off"; first
 /** An MCP token for agents on a workspace, with the ready-made commands. */
 export const mcpToken = (s: Space) => call(`/api/workspaces/${s.id}/mcp-token`, {});
 
-// the workspace open at the last start; the others open when they are first shown
+/**
+ * The address names the workspace ("#/w/<id>/…") and opens it. One without (a link inside the
+ * app) is the open workspace's and gets its name, so going back later returns to it.
+ */
+function followHash() {
+  const named = /^#\/w\/([^/?]+)/.exec(location.hash)?.[1];
+  if (named) {
+    if (named !== active && spaces.some((s) => s.id === named)) activate(named);
+  } else if (active) history.replaceState(history.state, "", `#/w/${active}${location.hash.slice(1) || "/"}`);
+}
+addEventListener("hashchange", followHash);
+
+// the workspace open at the last start (or named by the address); the others open when they are first shown
 if (activeSpace()) activate(active!);
 else if (spaces[0]) activate(spaces[0].id);
+followHash();

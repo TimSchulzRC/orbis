@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { Plus, Sparkles } from "lucide-react";
 import { type Item, META_TYPE } from "@obtion/core/model";
-import { repo } from "../repo";
 import { isOverview } from "@obtion/core/placement";
 import { useT } from "../i18n";
+import { useIndex, useRepo } from "../hooks";
 import { Dialog, ItemIcon, cx } from "./bits";
 
 /** Pick an item: suggestions first, then search as you type. Optionally create a new one. */
@@ -25,6 +25,7 @@ export function ItemPicker({
   onCreate?: (title: string) => void;
 }) {
   const { t } = useT();
+  const repo = useRepo();
   const [q, setQ] = useState("");
   const [sel, setSel] = useState(0);
   const ok = (i: Item) => (!exclude || !exclude(i)) && (!filter || filter(i)) && i.type !== META_TYPE;
@@ -87,7 +88,7 @@ export function ItemPicker({
 }
 
 function PathHint({ item }: { item: Item }) {
-  const ix = repo.index();
+  const ix = useIndex();
   const path = ix.homePath(item.id);
   if (!path.length) return null;
   return <span className="max-w-[45%] shrink-0 truncate text-xs text-muted">{path.map((id) => ix.get(id)?.title).join(" › ")}</span>;
