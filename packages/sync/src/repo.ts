@@ -1,6 +1,6 @@
-// A device's full replica of the server's data. Everything lives in memory and in the device's
+// A device's full replica of a workspace. Everything lives in memory and in the device's
 // storage, so the app works offline; changes go to an outbox and sync when the server is
-// reachable. No UI and no platform APIs: storage, the connection to the server and the questions
+// reachable. A workspace without a server only has the storage (a folder, see folder.ts). No UI and no platform APIs: storage, the connection to the server and the questions
 // to the user come from the platform (RepoHost) – the browser's in @obtion/ui, later the
 // desktop and mobile apps' own.
 import * as Y from "yjs";
@@ -46,6 +46,8 @@ const AREAS = [PERSONAL];
 export type OutItem = { k: string; d: string; u: string; s?: string; a?: string };
 const LOAD = Symbol("load");
 const TAB = Symbol("tab");
+/** Read from a shared folder, written there by another app: shown, and sent to the server like our own. */
+const FOLDER = Symbol("folder");
 
 /** A stored update of one document; `key` is the storage's own (for compaction). */
 export interface StoredRow {
@@ -68,6 +70,8 @@ export interface ReplicaStorage {
   serverId(): Promise<string | undefined>;
   /** Delete everything stored. */
   destroy(): Promise<void>;
+  /** Storage that others write too (a shared folder): calls fn with what they added. */
+  follow?(fn: (rows: StoredRow[]) => void): () => void;
 }
 
 /** The connection to the server's /sync endpoint (a WebSocket). */
@@ -91,8 +95,8 @@ export interface RepoHost {
   storage: ReplicaStorage;
   /** This device's name, e.g. "Mac-x3f9" (activity, origin of changes). */
   device: string;
-  /** Opens a connection to the server's sync endpoint. */
-  connect(): SyncSocket;
+  /** Opens a connection to the server's sync endpoint; none: a workspace on this device only. */
+  connect?(): SyncSocket;
   /** Sends JSON to the server's API (e.g. "/api/undo"); null when the server cannot be reached. */
   post(path: string, body: unknown): Promise<{ ok: boolean; statusText: string; body: any } | null>;
   /** Other windows on this device, if the platform has several. */
@@ -146,6 +150,10 @@ export class Repo {
   private ix: { v: number; index: Index } | null = null;
   private blobListeners = new Set<(hash: string) => void>();
 
+  private markLoaded!: () => void;
+  /** Resolves once the stored data are read (init). */
+  loaded = new Promise<void>((r) => (this.markLoaded = r));
+
   constructor(private host: RepoHost) {
     this.db = host.storage;
     this.device = host.device;
@@ -176,10 +184,12 @@ export class Repo {
     this.materialize();
     this.reindex();
     this.status.loaded = true;
+    this.markLoaded();
     this.emit();
     this.compact(byDoc).catch((e) => console.warn("compact failed", e));
 
     this.host.tabs?.listen((msg) => this.applyFromTab(msg));
+    this.db.follow?.((rows) => this.applyFromFolder(rows));
     this.connect();
     this.host.onWake?.(() => {
       if (!this.status.online) this.connect();
@@ -219,6 +229,11 @@ export class Repo {
     doc.on("update", (update: Uint8Array, origin: unknown, _doc: Y.Doc, tr: Y.Transaction) => {
       if (origin === LOAD) return;
       if (origin === TAB) {
+        this.touch(id);
+        return;
+      }
+      if (origin === FOLDER) {
+        if (this.host.connect) this.queue(id, update);
         this.touch(id);
         return;
       }
@@ -290,22 +305,27 @@ export class Repo {
   }
 
   private local(docId: string, update: Uint8Array, step?: string) {
-    const area = (this.docs.get(docId)?.getMap<any>("meta").get("area") as string | undefined) ?? PERSONAL;
-    const k = newId();
-    const item: OutItem = { k, d: docId, u: toB64(update), s: step, a: area };
-    this.outbox.set(k, item);
-    this.status.pending = this.outbox.size;
+    const item = this.host.connect ? this.queue(docId, update, step) : undefined;
     this.store({ d: docId, u: update }, item);
     this.host.tabs?.post({ d: docId, u: update });
+  }
+
+  /** Into the outbox, and to the server right away if it is connected. */
+  private queue(docId: string, update: Uint8Array, step?: string): OutItem {
+    const area = (this.docs.get(docId)?.getMap<any>("meta").get("area") as string | undefined) ?? PERSONAL;
+    const item: OutItem = { k: newId(), d: docId, u: toB64(update), s: step, a: area };
+    this.outbox.set(item.k, item);
+    this.status.pending = this.outbox.size;
     this.send({ t: "push", area, items: [item] });
+    return item;
   }
 
   // Everything one tick changed is stored in one transaction: quick to commit, so a reload
   // right after a big change (the setup writes dozens of documents) loses nothing.
-  private toStore: { row: StoredRow; out: OutItem }[] = [];
+  private toStore: { row: StoredRow; out?: OutItem }[] = [];
   private storing: Promise<void> | null = null;
 
-  private store(row: StoredRow, out: OutItem) {
+  private store(row: StoredRow, out?: OutItem) {
     this.toStore.push({ row, out });
     this.storing ??= Promise.resolve().then(() => this.storeNow());
   }
@@ -313,7 +333,7 @@ export class Repo {
   private async storeNow(): Promise<void> {
     const batch = this.toStore.splice(0);
     try {
-      await this.db.write({ rows: batch.map((b) => b.row), outbox: batch.map((b) => b.out) });
+      await this.db.write({ rows: batch.map((b) => b.row), outbox: batch.flatMap((b) => (b.out ? [b.out] : [])) });
     } catch (e) {
       // Not stored locally: stop advancing lastSeq so the server resends this doc later.
       this.persistFailed = true;
@@ -333,10 +353,14 @@ export class Repo {
     Y.applyUpdate(this.getDoc(msg.d), msg.u, TAB);
   }
 
+  private applyFromFolder(rows: StoredRow[]) {
+    for (const r of rows) Y.applyUpdate(this.getDoc(r.d), r.u, FOLDER);
+  }
+
   // ---------- sync ----------
 
   connect() {
-    if (this.ws && (this.ws.readyState === OPEN || this.ws.readyState === CONNECTING)) return;
+    if (!this.host.connect || (this.ws && (this.ws.readyState === OPEN || this.ws.readyState === CONNECTING))) return;
     const ws = this.host.connect();
     this.ws = ws;
     let ping: ReturnType<typeof setInterval> | undefined;
@@ -376,7 +400,7 @@ export class Repo {
   }
 
   /** Queue this device's full state for upload. Goes through the durable outbox, so it survives disconnects. */
-  private async enqueueFullUpload() {
+  async enqueueFullUpload() {
     const items: OutItem[] = [...this.docs].map(([d, doc]) => ({ k: newId(), d, u: toB64(Y.encodeStateAsUpdate(doc)), a: (doc.getMap<any>("meta").get("area") as string | undefined) ?? PERSONAL }));
     await this.db.write({ outbox: items });
     for (const it of items) this.outbox.set(it.k, it);

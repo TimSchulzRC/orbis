@@ -8,7 +8,7 @@ import { fmtDate, fmtNumber } from "@obtion/core/i18n";
 import { firstOfGroup, statusOf, statusProp } from "@obtion/core/traits";
 import { plainText } from "@obtion/core/search";
 import { repo } from "../repo";
-import { agentHere } from "../accounts";
+import { agentHere, onServer } from "../accounts";
 import { useIndex, useRepo, useSpaceId, itemHref, go } from "../hooks";
 import { useT } from "../i18n";
 import { askAgent } from "../actions";
@@ -31,9 +31,9 @@ export function useQuery(def: QueryDef, thisId?: string) {
 
 const isInboxQuery = (def: QueryDef) => !!def.where && "inbox" in def.where;
 
-/** Is the built-in agent available (on the server, for this account)? */
+/** Is the built-in agent available (on the server, for this account and workspace)? */
 function useAgentAvailable(): boolean {
-  return agentHere();
+  return agentHere() && onServer(useSpaceId());
 }
 
 /** Under a shortened inbox list: how much is waiting, and a clear way to work through it. */

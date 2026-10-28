@@ -5,7 +5,7 @@ import { snippet } from "@obtion/core/search";
 import { statusOf } from "@obtion/core/traits";
 import type { Item } from "@obtion/core/model";
 import { go, spaceHref } from "../hooks";
-import { useAccounts } from "../accounts";
+import { onServer, useAccounts } from "../accounts";
 import { useReplicas } from "./Spaces";
 import { captureSpace } from "./Capture";
 import { setTheme } from "../theme";
@@ -48,7 +48,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
           ...ix.typesInOrder().map((x) => [of(ix.typePlural(x.id)), spaceHref(s.id, `/i/${encodeURIComponent(x.id)}`)]),
           [of(t("nav.files")), spaceHref(s.id, "/files")],
           [of(t("nav.types")), spaceHref(s.id, "/types")],
-          [of(t("nav.activity")), spaceHref(s.id, "/activity")],
+          ...(onServer(s.id) ? [[of(t("nav.activity")), spaceHref(s.id, "/activity")]] : []),
           [of(t("nav.graph")), spaceHref(s.id, "/graph")],
           [of(t("nav.trash")), spaceHref(s.id, "/trash")],
           [several ? `${t("space.settings")} · ${s.name}` : t("space.settings"), spaceHref(s.id, "/workspace")],

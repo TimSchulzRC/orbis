@@ -129,10 +129,11 @@ export class Accounts {
 
   /**
    * Create an account and sign it in. With an invite it joins that workspace and gets none of
-   * its own; without one it gets a personal workspace. The very first account becomes the admin and
-   * takes over the data from before accounts, if there are any.
+   * its own; without one it gets a personal workspace (named `personal`; none without a name: it
+   * brings a workspace of its device). The very first account becomes the admin and takes over the
+   * data from before accounts, if there are any.
    */
-  async signUp(body: { name: string; email: string; password: string; invite?: string; personal: string }): Promise<{ token: string; user: User }> {
+  async signUp(body: { name: string; email: string; password: string; invite?: string; personal?: string }): Promise<{ token: string; user: User }> {
     if (!this.canSignUp(body.invite)) throw new AccountError(body.invite ? "invite invalid" : "signup closed", 403);
     const first = this.userCount() === 0;
     const res = await this.auth.api.signUpEmail({ body: { name: body.name.trim() || body.email.split("@")[0]!, email: body.email.trim(), password: body.password } }).catch((e) => {
@@ -145,7 +146,7 @@ export class Accounts {
       for (const w of orphans) this.addMember(w.id, user.id, "owner");
     }
     if (body.invite) this.join(body.invite, user.id);
-    else if (!this.workspacesOf(user.id).length) this.createWorkspace(user.id, body.personal);
+    else if (body.personal && !this.workspacesOf(user.id).length) this.createWorkspace(user.id, body.personal);
     return { token: res.token!, user };
   }
 

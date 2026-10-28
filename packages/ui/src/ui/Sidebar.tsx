@@ -13,7 +13,7 @@ import { inboxWhere } from "@obtion/core/inbox";
 import { runQuery } from "@obtion/core/query";
 import { keyBetween, keysFor } from "@obtion/core/sortkey";
 import { useRepo, useRoute, useSpaceId, itemHref, spaceHref, useLocalStorage } from "../hooks";
-import { type Space, useAccounts } from "../accounts";
+import { type Space, onServer, useAccounts } from "../accounts";
 import { useT } from "../i18n";
 import { Kbd, MenuItem, Popover, TypeGlyph, ItemIcon, cx, shortcut } from "./bits";
 import { ItemPicker } from "./Picker";
@@ -148,7 +148,7 @@ export function SpaceTree({ space, touch }: { space: Space; touch?: boolean }) {
           {(close) => (
             <>
               <MenuItem onClick={() => (close(), go("/workspace"))}>{t("space.settings")}</MenuItem>
-              <MenuItem onClick={() => (close(), go("/activity"))}>{t("nav.activity")}</MenuItem>
+              {onServer(space.id) && <MenuItem onClick={() => (close(), go("/activity"))}>{t("nav.activity")}</MenuItem>}
               <MenuItem onClick={() => (close(), go("/trash"))}>{t("nav.trash")}</MenuItem>
             </>
           )}

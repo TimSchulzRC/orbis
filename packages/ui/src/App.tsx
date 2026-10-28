@@ -28,7 +28,8 @@ import { ICON } from "./ui/icons";
 import { NewSpaceDialog, SpaceScope, SpaceSelector, useReplicas } from "./ui/Spaces";
 import { globalPage } from "./scope";
 import { Gate } from "./views/Account";
-import { signOut, useAccounts } from "./accounts";
+import { onServer, signOut, spaceById, useAccounts } from "./accounts";
+import { useFolderAccess } from "./local";
 
 export function App() {
   // the confirm dialog lives above everything: the sync may ask before the app has loaded
@@ -55,6 +56,23 @@ function SignedOut() {
         {t("account.signInAgain")}
       </button>
     </div>
+  );
+}
+
+/** Workspaces in a folder the browser may not open yet (after a restart): asking needs a click. */
+function FolderAccess() {
+  const { t } = useT();
+  return (
+    <>
+      {useFolderAccess().map((w) => (
+        <div key={w.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line bg-surface-2 px-4 py-2 text-sm" role="status">
+          <span className="flex-1">{t("local.access", { name: spaceById(w.id)?.name ?? "", folder: w.folder })}</span>
+          <button onClick={() => void w.allow()} className="font-medium text-[var(--link)] hover:underline">
+            {t("local.allow")}
+          </button>
+        </div>
+      ))}
+    </>
   );
 }
 
@@ -159,7 +177,8 @@ function Main() {
       case "graph":
         return <GraphView />;
       case "activity":
-        return <Activity />;
+        // the history is the server's
+        return onServer(active?.id) ? <Activity /> : <Redirect to="/" />;
       case "trash":
         return <TrashView />;
       case "settings":
@@ -203,6 +222,7 @@ function Main() {
           </header>
         )}
         <SignedOut />
+        <FolderAccess />
         <TooNew />
         <main tabIndex={-1} className={cx("@container min-h-0 flex-1 outline-none", isGraph ? "overflow-hidden" : "overflow-y-auto")}>
           {/* a page of another workspace: anew on its replica (repo and files point at it) */}

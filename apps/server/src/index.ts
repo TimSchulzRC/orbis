@@ -129,10 +129,10 @@ async function accountApi(req: Request, path: string, url: URL): Promise<Respons
   }
 
   if (path === "/api/account/signup" && req.method === "POST") {
-    const b = await body<{ name?: string; email?: string; password?: string; invite?: string; lang?: string }>(req);
+    const b = await body<{ name?: string; email?: string; password?: string; invite?: string; lang?: string; none?: boolean }>(req);
     if (!b?.email || !b.password) return json({ error: "email and password required" }, 400);
     return accounts
-      .signUp({ name: b.name ?? "", email: b.email, password: b.password, invite: b.invite || undefined, personal: b.lang === "en" ? "Personal" : "Persönlich" })
+      .signUp({ name: b.name ?? "", email: b.email, password: b.password, invite: b.invite || undefined, personal: b.none ? undefined : b.lang === "en" ? "Personal" : "Persönlich" })
       .then((r) => json(r), fail);
   }
 
