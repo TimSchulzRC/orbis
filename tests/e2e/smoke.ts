@@ -458,6 +458,8 @@ async function deleteAccountOnSettings(browser: import("playwright-core").Browse
   const page = await context.newPage();
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
+  await page.goto("/", { waitUntil: "load" });
+  await settle(page);
   await check(page, "delete account", "/#/settings", errors, async (p) => {
     await p.getByRole("button", { name: "Konto endgültig löschen", exact: true }).click();
     const dialog = p.getByRole("dialog");
@@ -477,7 +479,7 @@ async function deleteAccountOnSettings(browser: import("playwright-core").Browse
     await p.getByRole("button", { name: "Konto endgültig löschen", exact: true }).click();
     await dialog.getByLabel("Passwort").fill("geheim12345");
     await dialog.getByRole("button", { name: "Konto endgültig löschen", exact: true }).click();
-    await p.getByRole("button", { name: "Anmelden", exact: true }).waitFor();
+    await p.getByRole("button", { name: "Konto anlegen", exact: true }).waitFor();
     const stored = await p.evaluate(() => ({ account: JSON.parse(localStorage.getItem("obtion.account") ?? "null"), spaces: JSON.parse(localStorage.getItem("obtion.spaces") ?? "[]") }));
     if (stored.account || stored.spaces.length) throw new Error("account or workspace metadata remained on this device");
     const databases = await p.evaluate(async () => (await indexedDB.databases()).map((db) => db.name));
