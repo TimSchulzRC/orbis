@@ -506,7 +506,9 @@ export function Popover({
       <PopoverAnchor asChild><span className={cx("relative inline-flex", triggerClass)}>
         {trigger({ onClick: () => set(!isOpen), "aria-expanded": isOpen })}
       </span></PopoverAnchor>
-      <PopoverContent onCloseAutoFocus={(e) => { e.preventDefault(); if (previous.current?.isConnected) previous.current.focus({ preventScroll: true }); }} data-popover align={align === "right" ? "end" : "start"} sideOffset={4}
+      {/* focus goes back to where it was only if nothing took it meanwhile – a click on another
+          badge's menu has, and taking it back would close that menu again */}
+      <PopoverContent onCloseAutoFocus={(e) => { e.preventDefault(); const now = document.activeElement; if (previous.current?.isConnected && (!now || now === document.body)) previous.current.focus({ preventScroll: true }); }} data-popover align={align === "right" ? "end" : "start"} sideOffset={4}
         className={cx("z-50 max-h-[70vh] w-auto min-w-48 overflow-y-auto rounded-xl p-1", className)}>
         {typeof children === "function" ? children(() => set(false)) : children}
       </PopoverContent>
