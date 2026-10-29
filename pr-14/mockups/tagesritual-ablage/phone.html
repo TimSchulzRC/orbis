@@ -1,0 +1,499 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Obtion – Heute & Durchsicht (Handy)</title>
+<meta name="viewport" content="width=390">
+<style>
+  :root{
+    --bg:#191919; --card:#202020; --secondary:#252525; --accent:#2c2c2c; --border:#303030;
+    --fg:#ececec; --muted:#a3a3a3; --faint:#8a8a8a; --ring:#6f97ff; --amber:#f0b040;
+    --ok:#50c88c; --danger:#f06b60; --blue:#6e96ff; --violet:#b58cf0; --green:#50c88c; --teal:#46c8d2; --pink:#f082af;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{width:390px;height:844px;overflow:hidden;background:var(--bg);color:var(--fg);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased}
+  svg.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;flex:none}
+  button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+  .dot{width:8px;height:8px;border-radius:3px;flex:none;display:inline-block}
+
+  /* ---------- Heute ---------- */
+  .status{height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 26px;font-size:14px;font-weight:600}
+  .status span:last-child{font-weight:500;color:var(--muted);font-size:12px}
+  .today{padding:10px 20px 0}
+  .eyebrow{color:var(--faint);font-size:12.5px;display:flex;gap:6px;align-items:center}
+  h1{font-size:27px;font-weight:640;letter-spacing:-.02em;margin:4px 0 4px}
+  .lede{color:var(--muted);font-size:13.5px}
+  .h2{font-size:12.5px;color:var(--muted);font-weight:560;margin:22px 0 8px;display:flex;gap:8px;align-items:baseline}
+  .h2 small{color:var(--faint);font-weight:400}
+  .panel{background:var(--card);border:1px solid var(--border);border-radius:14px}
+  .task{display:flex;align-items:center;gap:11px;padding:11px 14px;border-top:1px solid #2a2a2a}
+  .task:first-child{border-top:0}
+  .cb{width:18px;height:18px;border-radius:6px;border:1.5px solid #4a4a4a;flex:none}
+  .task .t{flex:1;min-width:0}
+  .task .t div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .task .t small{font-size:11.5px;color:var(--faint);display:flex;gap:5px;align-items:center}
+  .due{font-size:11.5px;color:var(--faint)}
+  .due.late{color:var(--danger)}
+  .projs{display:flex;gap:10px;overflow:hidden;margin-right:-20px}
+  .pc{flex:none;width:150px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px}
+  .pc b{display:block;font-weight:560;font-size:13.5px;margin-top:8px}
+  .pc small{color:var(--faint);font-size:11.5px}
+  .bar{height:4px;border-radius:2px;background:#333;margin-top:10px;overflow:hidden}
+  .bar i{display:block;height:100%;border-radius:2px}
+
+  /* Ablage über der Navigation */
+  .dock{position:absolute;left:0;right:0;bottom:0;transition:transform .35s ease}
+  .tray{position:relative;margin:0 12px 10px;height:64px;border-radius:18px;background:linear-gradient(#242424,#1f1f1f);border:1px solid #353535;
+    box-shadow:0 -10px 40px rgba(0,0,0,.5);display:flex;align-items:center;gap:12px;padding:0 8px 0 104px}
+  .tray::after{content:"";position:absolute;left:12px;top:10px;width:82px;height:42px;border-radius:11px;background:#151515;box-shadow:inset 0 3px 8px rgba(0,0,0,.7);border:1px solid #2a2a2a}
+  .tray::before{content:"";position:absolute;left:14px;top:-1px;width:80px;height:3px;border-radius:0 0 3px 3px;background:linear-gradient(90deg,transparent,rgba(240,176,64,.6),transparent)}
+  .slips{position:absolute;left:16px;bottom:12px;width:76px;height:84px;overflow:hidden;z-index:2;border-radius:0 0 9px 9px}
+  .slip{position:absolute;bottom:-6px;width:58px;height:66px;border-radius:6px;background:#2a2a2a;border:1px solid #3a3a3a}
+  .slip::before{content:"";position:absolute;left:8px;right:16px;top:10px;height:3px;border-radius:2px;background:#4a4a4a;box-shadow:0 7px 0 #3d3d3d}
+  .slip.s1{left:2px;transform:rotate(-8deg) translateY(8px)}
+  .slip.s2{left:10px;transform:rotate(3deg) translateY(3px);background:#2e2e2e}
+  .slip.s3{left:16px;transform:rotate(-2deg) translateY(-2px);background:#323232;border-color:#454545}
+  .slip.s3::after{content:"";position:absolute;right:7px;top:7px;width:7px;height:7px;border-radius:50%;background:var(--amber);box-shadow:0 0 8px var(--amber)}
+  .tinfo{flex:1;display:flex;flex-direction:column;gap:5px}
+  .tinfo b{font-size:13px;font-weight:600}
+  .tinfo b span{color:var(--amber)}
+  .tinfo small{font-size:11.5px;color:var(--faint)}
+  .meter{display:flex;gap:2px}
+  .meter i{width:7px;height:4px;border-radius:2px;background:#353535}
+  .meter i.f{background:var(--amber)}
+  .add{width:46px;height:46px;border-radius:13px;background:#1a1a1a;border:1px solid var(--border);display:grid;place-items:center;color:var(--fg)}
+  .add svg{width:20px;height:20px}
+  .play{height:46px;border-radius:13px;padding:0 12px;background:rgba(240,176,64,.13);border:1px solid rgba(240,176,64,.38);color:var(--amber);display:flex;align-items:center;gap:6px;font-weight:580;font-size:13px}
+  .tabs{height:76px;border-top:1px solid #262626;background:#1b1b1b;display:flex;justify-content:space-around;padding-top:8px}
+  .tab{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10.5px;color:var(--faint);width:70px}
+  .tab svg{width:21px;height:21px}
+  .tab.on{color:var(--fg)}
+
+  /* ---------- Durchsicht (Sheet) ---------- */
+  .veil{position:absolute;inset:0;background:rgba(8,8,8,.7);backdrop-filter:blur(5px);opacity:0;pointer-events:none;transition:opacity .3s}
+  .sheet{position:absolute;left:0;right:0;bottom:0;height:800px;border-radius:24px 24px 0 0;background:#1d1d1d;border-top:1px solid #353535;
+    box-shadow:0 -20px 60px rgba(0,0,0,.6);transform:translateY(100%);transition:transform .45s cubic-bezier(.2,.8,.2,1);display:flex;flex-direction:column;padding:8px 16px 24px}
+  body.open .veil{opacity:1;pointer-events:auto}
+  body.open .sheet{transform:none}
+  body.open .dock{transform:translateY(30px)}
+  .grab{width:38px;height:5px;border-radius:3px;background:#3d3d3d;margin:0 auto 12px}
+  .shead{display:flex;align-items:center;gap:10px}
+  .moon{width:34px;height:34px;border-radius:11px;background:rgba(240,176,64,.12);border:1px solid rgba(240,176,64,.3);display:grid;place-items:center;color:var(--amber)}
+  .shead .tt{flex:1}
+  .shead b{font-size:15px;font-weight:620;display:block;line-height:1.2}
+  .shead small{font-size:11.5px;color:var(--faint)}
+  .ic-btn{width:34px;height:34px;border-radius:10px;border:1px solid var(--border);display:grid;place-items:center;color:var(--muted)}
+  .segs{display:flex;gap:4px;margin:14px 0 6px}
+  .segs i{flex:1;height:4px;border-radius:2px;background:#333}
+  .segs i.d{background:var(--ok)}
+  .segs i.a{background:var(--amber);box-shadow:0 0 10px rgba(240,176,64,.5)}
+  .done{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--faint);margin-top:6px;background:rgba(80,200,140,.07);border:1px solid rgba(80,200,140,.18);border-radius:10px;padding:7px 10px}
+  .done .ok{color:var(--ok)}
+  .done span{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .done span b{color:var(--muted);font-weight:520}
+  .done u{text-decoration:none;color:var(--muted)}
+
+  .stack{position:relative;height:306px;margin-top:14px}
+  .under{position:absolute;left:0;right:0;top:0;height:280px;border-radius:20px;background:#242424;border:1px solid #303030}
+  .under.u1{transform:translateY(24px) scale(.9);opacity:.55}
+  .under.u2{transform:translateY(12px) scale(.95);opacity:.85}
+  .item{position:absolute;inset:0 0 26px 0;border-radius:20px;background:linear-gradient(180deg,#282828,#222);border:1px solid #3c3c3c;box-shadow:0 20px 50px rgba(0,0,0,.5);
+    padding:18px 18px 16px;display:flex;flex-direction:column;transition:transform .45s cubic-bezier(.5,0,.2,1),opacity .45s;transform:rotate(-1.2deg) translateX(-6px)}
+  .item.leave{transform:translate(420px,-20px) rotate(12deg);opacity:0}
+  .meta{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--faint)}
+  .pill{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:999px;background:var(--secondary);border:1px solid var(--border);color:var(--muted)}
+  .item h3{font-size:21px;font-weight:630;letter-spacing:-.01em;margin:12px 0 8px;line-height:1.2}
+  .item p{color:#c9c9c9;font-size:14px;line-height:1.55}
+  .item .lie{margin-top:10px;font-size:11.5px;color:var(--faint)}
+  .mention{color:var(--blue);background:rgba(110,150,255,.1);border-radius:5px;padding:0 5px;white-space:nowrap}
+  .swipe{margin-top:auto;display:flex;justify-content:space-between;font-size:11px;color:var(--faint)}
+  .swipe span{display:flex;align-items:center;gap:4px}
+  .swipe .r{color:var(--blue)}
+
+  .q{font-size:13.5px;font-weight:600;margin:4px 2px 10px;display:flex;justify-content:space-between;align-items:baseline}
+  .q small{font-weight:400;color:var(--faint);font-size:11.5px}
+  .sugg{width:100%;text-align:left;border-radius:16px;border:1px solid rgba(110,150,255,.55);background:linear-gradient(160deg,rgba(110,150,255,.16),rgba(34,34,34,.95) 65%);
+    box-shadow:0 0 0 3px rgba(111,151,255,.13);padding:12px 14px;display:flex;align-items:center;gap:12px}
+  .sugg .si{width:38px;height:38px;border-radius:11px;background:rgba(110,150,255,.15);color:var(--blue);display:grid;place-items:center;flex:none}
+  .sugg .tx{flex:1}
+  .sugg small{font-size:11px;color:var(--blue);display:block}
+  .sugg b{font-size:15.5px;font-weight:600;display:block;line-height:1.25}
+  .sugg .why{font-size:11.5px;color:var(--faint)}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
+  .ch{border-radius:14px;background:#232323;border:1px solid var(--border);padding:11px 10px;display:flex;flex-direction:column;gap:6px;text-align:left;min-height:74px}
+  .ch svg{color:var(--muted);width:18px;height:18px}
+  .ch b{font-size:13px;font-weight:560;line-height:1.2}
+  .ch:active{background:#2a2a2a}
+  .minor{display:flex;gap:8px;margin-top:8px}
+  .mn{flex:1;height:42px;border-radius:12px;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;gap:6px;color:var(--muted);font-size:12.5px;background:#1f1f1f}
+  .mn.del{color:#d98a83}
+  .mn.undo{flex:0 0 42px}
+
+  .toast{position:absolute;left:50%;top:6px;transform:translate(-50%,-6px);background:#2c2c2c;border:1px solid #3c3c3c;border-radius:10px;padding:7px 11px;font-size:12px;display:flex;gap:8px;align-items:center;opacity:0;transition:.3s;white-space:nowrap;z-index:3}
+  .toast.on{opacity:1;transform:translate(-50%,0)}
+  .toast .ok{color:var(--ok)}
+
+
+  /* ---------- Erweiterung: reinschauen, Zettel greifen, suchen, ergänzen ---------- */
+  .dock{z-index:2}
+  .veil{z-index:5}
+  .sheet{z-index:6}
+  .dim{position:absolute;inset:0;z-index:1;background:rgba(10,10,10,.6);backdrop-filter:blur(2px);opacity:0;pointer-events:none;transition:opacity .3s}
+  body.s-shelf .dim,body.s-append .dim{opacity:1;pointer-events:auto}
+  .peek{position:absolute;left:6px;top:6px;bottom:6px;width:198px;border-radius:13px;z-index:1;border:1px solid transparent}
+  body.s-shelf .peek{background:rgba(240,176,64,.05);border-color:rgba(240,176,64,.22)}
+  .nub{position:absolute;left:50%;top:5px;width:26px;height:3px;margin-left:-13px;border-radius:2px;background:#3c3c3c}
+  .tinfo b{display:flex;align-items:center;gap:5px}
+  .tinfo b .chev{width:13px;height:13px;color:var(--faint);transition:transform .25s}
+  body.s-shelf .tinfo b .chev{transform:rotate(180deg);color:var(--amber)}
+  .slips{pointer-events:none;transition:opacity .25s,transform .3s}
+  .slip{pointer-events:auto;transition:transform .3s cubic-bezier(.2,.8,.2,1)}
+  body.s-slip .slip.s1{transform:rotate(-13deg) translate(-6px,2px)}
+  body.s-slip .slip.s2{transform:rotate(2deg) translateY(-4px)}
+  body.s-slip .slip.s3{transform:rotate(9deg) translate(9px,-14px);background:#383838;border-color:#585858}
+  body.s-shelf .slips{opacity:0;transform:translateY(20px)}
+  .tip{position:absolute;left:14px;bottom:calc(100% + 30px);z-index:3;background:#2b2b2b;border:1px solid #444;border-radius:11px;padding:8px 11px 9px;
+    box-shadow:0 14px 34px rgba(0,0,0,.6);white-space:nowrap;opacity:0;transform:translateY(4px);transition:.15s;pointer-events:none}
+  .tip b{display:block;font-size:13px;font-weight:560}
+  .tip small{font-size:11px;color:var(--faint)}
+  .tip small em{font-style:normal;color:var(--muted)}
+  .tip::after{content:"";position:absolute;left:46px;bottom:-5px;width:8px;height:8px;background:#2b2b2b;border-right:1px solid #444;border-bottom:1px solid #444;transform:rotate(45deg)}
+  body.s-slip .tip{opacity:1;transform:none}
+
+  /* aufgeklappte Ablage über der Leiste */
+  .shelf{position:absolute;left:8px;right:8px;bottom:calc(100% + 6px);border-radius:20px;background:linear-gradient(#252525,#202020);border:1px solid #373737;
+    box-shadow:0 -10px 50px rgba(0,0,0,.6);opacity:0;transform:translateY(20px);pointer-events:none;transition:opacity .25s,transform .35s cubic-bezier(.2,.8,.2,1)}
+  body.s-shelf .shelf{opacity:1;transform:none;pointer-events:auto}
+  .shelf .grab{margin:8px auto 4px}
+  .shd{display:flex;align-items:center;gap:8px;padding:2px 8px 10px 16px;border-bottom:1px solid #2d2d2d}
+  .shd b{font-size:14px;font-weight:600}
+  .shd b span{color:var(--amber);margin-left:3px}
+  .shd small{font-size:11.5px;color:var(--faint)}
+  .tolink{margin-left:auto;display:flex;align-items:center;gap:5px;height:30px;padding:0 9px;border-radius:9px;color:var(--faint);font-size:12px}
+  .tolink .i{width:13px;height:13px}
+  .tolink .m{color:#b08a48}
+  .rows{padding:4px 6px}
+  .row{width:100%;display:grid;grid-template-columns:30px 1fr auto;gap:11px;align-items:center;text-align:left;padding:8px 8px;border-radius:11px}
+  .row.hot{background:#2b2b2b}
+  .ri{position:relative;width:30px;height:30px;border-radius:9px;background:var(--secondary);border:1px solid #313131;display:grid;place-items:center;color:var(--faint)}
+  .ri .i{width:15px;height:15px}
+  .ri.new::after{content:"";position:absolute;right:-2px;top:-2px;width:7px;height:7px;border-radius:50%;background:var(--amber);box-shadow:0 0 0 2px #232323}
+  .ri.file{background:linear-gradient(135deg,transparent 45%,#46c8d2 46% 48%,transparent 49%),linear-gradient(45deg,transparent 60%,#f082af 61% 63%,transparent 64%),#2d2d2d}
+  .rt{min-width:0}
+  .rt b{display:block;font-weight:540;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .rt small{display:block;color:var(--faint);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .rm{display:flex;flex-direction:column;align-items:flex-end;gap:3px;font-size:11px;color:var(--faint)}
+  .rm .age{color:var(--muted)}
+  .wsa{display:inline-flex;align-items:center;gap:5px}
+  .wsa i{width:13px;height:13px;border-radius:4px;display:grid;place-items:center;font:700 8px/1 system-ui;color:#111;font-style:normal;background:linear-gradient(135deg,#6e96ff,#b58cf0)}
+  .wsa i.f{background:var(--teal)}
+  .sft{padding:9px 16px 12px;border-top:1px solid #2d2d2d;font-size:11.5px;color:var(--faint);text-align:center}
+
+  /* Notiz aus der Ablage */
+  .pnote{position:absolute;left:0;right:0;top:46px;bottom:0;z-index:4;border-radius:22px 22px 0 0;background:#1e1e1e;border-top:1px solid #383838;box-shadow:0 -20px 60px rgba(0,0,0,.6);
+    transform:translateY(102%);transition:transform .4s cubic-bezier(.2,.8,.2,1);display:flex;flex-direction:column;padding:8px 18px 20px}
+  body.s-note .pnote{transform:none}
+  body.s-note .dim{opacity:1;pointer-events:auto}
+  .nhd{display:flex;align-items:center;gap:8px;margin:2px -6px 0}
+  .back{display:flex;align-items:center;gap:4px;height:34px;padding:0 8px 0 4px;border-radius:9px;color:var(--muted);font-size:14px}
+  .saved{margin-left:auto;font-size:11.5px;color:var(--faint);display:flex;gap:4px;align-items:center}
+  .saved .i{width:12px;height:12px;color:var(--ok)}
+  .fertig{height:34px;padding:0 12px;border-radius:9px;background:var(--accent);font-size:13.5px;font-weight:560}
+  .stay{display:flex;gap:9px;align-items:flex-start;margin-top:12px;padding:9px 11px;border-radius:11px;background:rgba(240,176,64,.07);border:1px solid rgba(240,176,64,.2);font-size:12px;color:var(--faint);line-height:1.4}
+  .stay .sd{width:7px;height:7px;border-radius:50%;background:var(--amber);box-shadow:0 0 8px var(--amber);flex:none;margin-top:5px}
+  .stay b{color:#e6c07a;font-weight:560;display:block}
+  .pmeta{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--faint);margin-top:18px;flex-wrap:wrap}
+  .pnote h3{font-size:24px;font-weight:640;letter-spacing:-.015em;margin:10px 0 8px;line-height:1.2}
+  .ntext{color:#cfcfcf;font-size:15px;line-height:1.6;outline:none}
+  .ntext ul{margin-top:6px;list-style:none}
+  .ntext li{position:relative;padding-left:16px;margin-top:2px}
+  .ntext li::before{content:"";position:absolute;left:2px;top:.7em;width:5px;height:5px;border-radius:50%;background:#5a5a5a}
+  .ntext li.apnd{display:none}
+  body.appended .ntext li.apnd{display:list-item}
+  body.appended .ntext .caret.c1{display:none}
+  .justnow{font-size:10.5px;color:var(--amber);background:rgba(240,176,64,.1);border-radius:5px;padding:1px 6px;margin-left:6px;vertical-align:1px}
+  .caret{display:inline-block;width:1.5px;height:1.1em;background:var(--ring);vertical-align:-.18em;margin-left:2px;animation:blink 1.1s steps(1) infinite}
+  @keyframes blink{50%{opacity:0}}
+  .klbl{font-size:11px;color:var(--faint);letter-spacing:.03em;margin-top:18px}
+  .kid{display:flex;gap:10px;align-items:center;padding:10px 12px;border-radius:12px;background:var(--secondary);border:1px solid var(--border);margin-top:8px}
+  .kid .i{color:var(--faint)}
+  .kid b{font-weight:530;font-size:13.5px;display:block}
+  .kid small{font-size:11.5px;color:var(--faint)}
+  .kid .go{margin-left:auto;color:#555}
+  .pbar{margin-top:auto;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--faint);padding-top:12px;border-top:1px solid #2a2a2a}
+  .pbar button{margin-left:auto;height:34px;padding:0 12px;border-radius:10px;border:1px solid var(--border);color:var(--muted);font-size:12.5px;display:flex;gap:6px;align-items:center}
+
+  /* Suche */
+  .psearch{position:absolute;left:0;right:0;top:44px;bottom:76px;z-index:3;background:var(--bg);padding:8px 14px 0;opacity:0;pointer-events:none;transition:opacity .2s}
+  body.s-search .psearch{opacity:1;pointer-events:auto}
+  body.s-search .tab.on{color:var(--faint)}
+  body.s-search .tab.srch{color:var(--fg)}
+  .pin{display:flex;align-items:center;gap:10px}
+  .pin .fld{flex:1;height:42px;border-radius:12px;background:#232323;border:1px solid rgba(111,151,255,.5);box-shadow:0 0 0 3px rgba(111,151,255,.12);display:flex;align-items:center;gap:9px;padding:0 12px;font-size:15.5px}
+  .pin .fld .i{color:var(--faint)}
+  .pin .fld small{margin-left:auto;font-size:11.5px;color:var(--faint)}
+  .pin button{color:var(--muted);font-size:14px}
+  .plbl{font-size:11px;color:var(--faint);letter-spacing:.03em;padding:16px 4px 4px}
+  .psearch .row{padding:9px 6px}
+  .psearch mark{background:rgba(110,150,255,.2);color:var(--fg);border-radius:3px;padding:0 1px}
+  .inab{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:500;color:var(--amber);background:rgba(240,176,64,.1);border:1px solid rgba(240,176,64,.28);
+    border-radius:999px;padding:0 7px;height:18px;margin-bottom:3px}
+  .inab::before{content:"";width:5px;height:5px;border-radius:50%;background:var(--amber)}
+  .psearch .rt .inab{display:inline-flex}
+  .pfoot{font-size:11.5px;color:var(--faint);padding:12px 6px;border-top:1px solid #262626;margin-top:6px}
+
+  /* Ergänzen: Erfassen-Feld mit Tastatur */
+  .pcap{position:absolute;left:0;right:0;bottom:262px;z-index:4;background:#202020;border-top:1px solid #353535;border-radius:18px 18px 0 0;padding:10px 12px 10px;
+    box-shadow:0 -14px 40px rgba(0,0,0,.5);transform:translateY(calc(100% + 262px));transition:transform .35s cubic-bezier(.2,.8,.2,1)}
+  .kb{position:absolute;left:0;right:0;bottom:0;height:262px;z-index:4;background:#262626;padding:8px 3px 0;transform:translateY(100%);transition:transform .35s cubic-bezier(.2,.8,.2,1)}
+  body.s-append .pcap,body.s-append .kb{transform:none}
+  .attach{display:flex;align-items:center;gap:7px;height:32px;padding:0 11px;border-radius:10px;background:rgba(240,176,64,.08);border:1px solid rgba(240,176,64,.25);color:#dcb36a;font-size:12.5px;white-space:nowrap}
+  .attach .i{width:14px;height:14px}
+  .sugrow{display:flex;align-items:center;gap:8px}
+  .sugrow small{font-size:11px;color:var(--faint);margin-left:auto}
+  .at{color:var(--blue);background:rgba(110,150,255,.1);border-radius:4px;padding:0 4px}
+  .cin{display:flex;align-items:center;gap:10px;margin-top:10px;height:44px;border-radius:13px;background:#191919;border:1px solid rgba(111,151,255,.5);padding:0 6px 0 12px;font-size:15.5px}
+  .cin .i{color:var(--faint)}
+  .cin span{flex:1}
+  .send{width:34px;height:34px;border-radius:10px;background:var(--amber);color:#2a1d05;display:grid;place-items:center}
+  .send .i{stroke-width:2}
+  .kr{display:flex;justify-content:center;gap:5px;margin-bottom:10px}
+  .kr i{font-style:normal;width:33px;height:42px;border-radius:6px;background:#464646;display:grid;place-items:center;font-size:18px;color:#eee;box-shadow:0 1px 0 #111}
+  .kr i.w{width:44px;background:#333;font-size:13px}
+  .kr i.sp{width:186px;background:#464646;font-size:13px}
+  .kr i.ret{width:88px;background:#333;font-size:13px}
+  .switch{position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:50;display:flex;gap:1px;padding:2px;border-radius:8px;background:#121212;border:1px solid #333;font-size:10.5px;white-space:nowrap}
+  .switch button{padding:2px 5.5px;border-radius:6px;color:var(--faint)}
+  .switch button.on{background:#2c2c2c;color:var(--fg)}
+</style>
+</head>
+<body class="s-open open">
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <symbol id="sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/></symbol>
+    <symbol id="moon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></symbol>
+    <symbol id="folder" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.7-.9L9.6 3.9A2 2 0 0 0 7.9 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></symbol>
+    <symbol id="check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+    <symbol id="task" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="m9 12 2 2 4-4"/></symbol>
+    <symbol id="cardi" viewBox="0 0 24 24"><rect x="2" y="6" width="16" height="13" rx="2"/><path d="M6 6V5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-2"/></symbol>
+    <symbol id="trash" viewBox="0 0 24 24"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></symbol>
+    <symbol id="clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="undo" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></symbol>
+    <symbol id="arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+    <symbol id="arrowl" viewBox="0 0 24 24"><path d="M19 12H5M11 6l-6 6 6 6"/></symbol>
+    <symbol id="search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+    <symbol id="spark" viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8Z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8Z"/></symbol>
+    <symbol id="note" viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></symbol>
+    <symbol id="x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+    <symbol id="plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="layers" viewBox="0 0 24 24"><path d="m12 2 9 5-9 5-9-5Z"/><path d="m3 12 9 5 9-5M3 17l9 5 9-5"/></symbol>
+    <symbol id="chevup" viewBox="0 0 24 24"><path d="m18 15-6-6-6 6"/></symbol>
+    <symbol id="chevr" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+    <symbol id="corner" viewBox="0 0 24 24"><path d="m15 10 5 5-5 5"/><path d="M4 4v7a4 4 0 0 0 4 4h12"/></symbol>
+    <symbol id="link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></symbol>
+    <symbol id="train" viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="14" rx="3"/><path d="M5 11h14M9 21l-2-4M15 21l2-4M9 14h.01M15 14h.01"/></symbol>
+    <symbol id="user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol>
+    <symbol id="up" viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></symbol>
+    <symbol id="chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  </defs>
+</svg>
+
+<div class="status"><span>20:34</span><span>5G · 74 %</span></div>
+
+<section class="today">
+  <div class="eyebrow"><svg class="i" style="width:14px;height:14px"><use href="#sun"/></svg>Donnerstag, 29. Oktober</div>
+  <h1>Guten Abend, Tim.</h1>
+  <p class="lede">3 Tasks sind heute dran. In der Ablage liegen 6 Einträge.</p>
+
+  <div class="h2">Fällig <small>heute &amp; überfällig</small></div>
+  <div class="panel">
+    <div class="task"><span class="cb"></span><div class="t"><div>Steuerunterlagen zusammensuchen</div><small><span class="dot" style="background:var(--green)"></span>Persönlich</small></div><span class="due late">seit 2 T.</span></div>
+    <div class="task"><span class="cb"></span><div class="t"><div>Themen für November festlegen</div><small><span class="dot" style="background:var(--blue)"></span>Newsletter</small></div><span class="due">heute</span></div>
+    <div class="task"><span class="cb"></span><div class="t"><div>Kapitel 4 durcharbeiten</div><small><span class="dot" style="background:var(--violet)"></span>Kurs Datenbanken</small></div><span class="due">heute</span></div>
+  </div>
+
+  <div class="h2">Aktive Projekte</div>
+  <div class="projs">
+    <div class="pc"><span class="dot" style="background:var(--blue)"></span><b>Website-Relaunch</b><small>4 offen · vor 2 Std.</small><div class="bar"><i style="width:62%;background:var(--blue)"></i></div></div>
+    <div class="pc"><span class="dot" style="background:var(--violet)"></span><b>Kurs Datenbanken</b><small>Kap. 4 von 11</small><div class="bar"><i style="width:35%;background:var(--violet)"></i></div></div>
+    <div class="pc"><span class="dot" style="background:var(--teal)"></span><b>Newsletter</b><small>1 Entwurf</small><div class="bar"><i style="width:80%;background:var(--teal)"></i></div></div>
+  </div>
+
+  <div class="h2">Zuletzt bearbeitet</div>
+  <div class="panel">
+    <div class="task"><svg class="i" style="color:var(--faint)"><use href="#note"/></svg><div class="t"><div>Sitemap – Entwurf 2</div><small>Artikel · Website-Relaunch</small></div><span class="due">vor 2 Std.</span></div>
+    <div class="task"><svg class="i" style="color:var(--faint)"><use href="#cardi"/></svg><div class="t"><div>Dritte Normalform</div><small>Karte · Kurs Datenbanken</small></div><span class="due">gestern</span></div>
+  </div>
+</section>
+
+<div class="dim" id="dim"></div>
+
+<div class="dock">
+  <!-- Reinschauen: Tipp oder Wisch nach oben auf den Ablage-Teil -->
+  <div class="shelf" id="shelf">
+    <div class="grab"></div>
+    <div class="shd"><b>Ablage<span>6</span></b><small>· neueste oben</small>
+      <button class="tolink" id="toReview"><svg class="i m"><use href="#moon"/></svg>Durchsicht<svg class="i"><use href="#arrow"/></svg></button></div>
+    <div class="rows" id="rows"></div>
+    <div class="sft">Reinschauen ändert nichts – sortiert wird in der Durchsicht.</div>
+  </div>
+  <div class="tip" id="tip"><b>Angebot für Kunde Müller nachfassen</b><small>Firma · gerade eben · <em>Tippen öffnet</em></small></div>
+  <div class="tray">
+    <span class="nub"></span>
+    <button class="peek" id="peek" aria-label="In die Ablage schauen"></button>
+    <div class="slips"><div class="slip s1" data-id="podcast"></div><div class="slip s2" data-id="fahrrad"></div><div class="slip s3" data-id="mueller"></div></div>
+    <div class="tinfo"><b>Ablage <span>6</span><svg class="i chev"><use href="#chevup"/></svg></b><div class="meter"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i></i><i></i><i></i><i></i></div></div>
+    <button class="play" id="start"><svg class="i"><use href="#moon"/></svg>2 Min.</button>
+    <button class="add" id="add" aria-label="Ablegen"><svg class="i"><use href="#plus"/></svg></button>
+  </div>
+  <nav class="tabs">
+    <a class="tab on"><svg class="i"><use href="#sun"/></svg>Heute</a>
+    <a class="tab"><svg class="i"><use href="#folder"/></svg>Projekte</a>
+    <a class="tab"><svg class="i"><use href="#task"/></svg>Tasks</a>
+    <a class="tab srch" id="tabSearch"><svg class="i"><use href="#search"/></svg>Suchen</a>
+  </nav>
+</div>
+
+<!-- Eine Notiz aus der Ablage -->
+<section class="pnote">
+  <div class="grab" style="margin-bottom:6px"></div>
+  <div class="nhd"><button class="back" id="back"><svg class="i"><use href="#arrowl"/></svg>Ablage</button><span class="saved"><svg class="i"><use href="#check"/></svg>gespeichert</span><button class="fertig" id="nclose">Fertig</button></div>
+  <div class="stay"><span class="sd"></span><div><b>Bleibt in der Ablage bis zur Durchsicht.</b>Lesen und Ergänzen ändern daran nichts.</div></div>
+  <div class="pmeta" id="nMeta"></div>
+  <h3 id="nTitle"></h3>
+  <div class="ntext" id="nText" contenteditable spellcheck="false"></div>
+  <div class="pbar"><span>Liegt seit <span id="nAge">gestern</span> in der Ablage</span><button><svg class="i" style="width:14px;height:14px"><use href="#folder"/></svg>Jetzt einsortieren</button></div>
+</section>
+
+<!-- Suche: findet auch Abgelegtes -->
+<section class="psearch">
+  <div class="pin"><div class="fld"><svg class="i"><use href="#search"/></svg>Urlaub<i class="caret"></i><small>5 Treffer</small></div><button id="scancel">Abbrechen</button></div>
+  <div class="plbl">TREFFER</div>
+  <button class="row hot" data-open="urlaub"><span class="ri"><svg class="i"><use href="#layers"/></svg></span><span class="rt"><span class="inab">In der Ablage</span><b><mark>Urlaub</mark> im Herbst</b><small>Ostsee oder Bodensee – Hauptsache Wasser …</small></span><span class="rm"><span class="age">gestern</span><span class="wsa"><i>P</i></span></span></button>
+  <button class="row"><span class="ri"><svg class="i"><use href="#task"/></svg></span><span class="rt"><b><mark>Urlaub</mark>stage 2027 eintragen</b><small>Task · Arbeit · fällig 30. Nov.</small></span><span class="rm"><span class="age">3 Wo.</span><span class="wsa"><i class="f">F</i></span></span></button>
+  <button class="row"><span class="ri"><svg class="i"><use href="#user"/></svg></span><span class="rt"><b>Lisa Berger</b><small>„… im <mark>Urlaub</mark> vertritt sie Jonas“</small></span><span class="rm"><span class="age">gestern</span><span class="wsa"><i class="f">F</i></span></span></button>
+  <button class="row"><span class="ri"><svg class="i"><use href="#note"/></svg></span><span class="rt"><b>Packliste Sommer<mark>urlaub</mark></b><small>Artikel · Persönlich · 3 offen</small></span><span class="rm"><span class="age">Juli</span><span class="wsa"><i>P</i></span></span></button>
+  <div class="plbl">AKTIONEN</div>
+  <button class="row"><span class="ri"><svg class="i"><use href="#plus"/></svg></span><span class="rt"><b>„Urlaub“ in die Ablage legen</b><small>als neue Notiz, ohne Ort</small></span><span class="rm"></span></button>
+  <div class="pfoot">Einträge aus der Ablage öffnen sich, ohne die Ablage zu verlassen.</div>
+</section>
+
+<!-- Ergänzen: Erfassen-Feld mit Vorschlag -->
+<div class="pcap">
+  <div class="sugrow"><button class="attach" id="attach"><svg class="i"><use href="#corner"/></svg>An ‚Urlaub im Herbst‘ anhängen?</button><small>oder <span class="at">@Urlaub</span></small></div>
+  <div class="cin"><svg class="i"><use href="#plus"/></svg><span>Zug ab 7:40<i class="caret"></i></span><button class="send" aria-label="Neu ablegen"><svg class="i"><use href="#up"/></svg></button></div>
+</div>
+<div class="kb" id="kb"></div>
+
+<div class="veil" id="veil"></div>
+<section class="sheet">
+  <div class="grab"></div>
+  <div class="shead">
+    <div class="moon"><svg class="i"><use href="#moon"/></svg></div>
+    <div class="tt"><b>Abend-Durchsicht</b><small>2 von 6 · noch etwa 1½ Min.</small></div>
+    <button class="ic-btn" id="close" aria-label="Später weiter"><svg class="i"><use href="#chev"/></svg></button>
+  </div>
+  <div class="segs"><i class="d"></i><i class="a"></i><i></i><i></i><i></i><i></i></div>
+  <div class="done"><svg class="i ok" style="width:14px;height:14px"><use href="#check"/></svg><span><b>Fahrrad zur Inspektion bringen</b> → Task, fällig Sa</span><u>ändern</u></div>
+
+  <div class="stack">
+    <div class="under u1"></div>
+    <div class="under u2"></div>
+    <article class="item" id="item">
+      <div class="meta"><span class="pill"><svg class="i" style="width:12px;height:12px"><use href="#note"/></svg>Notiz</span>Persönlich · vor 20 Std.</div>
+      <h3>Idee: Referenzen als Fallstudien</h3>
+      <p>Statt einer Logo-Wand lieber drei Projekte richtig erzählen: Ausgangslage, was wir gemacht haben, was herauskam. Gehört zu <span class="mention">@Website-Relaunch</span>.</p>
+      <div class="lie">liegt seit einem Tag in der Ablage</div>
+      <div class="swipe"><span><svg class="i" style="width:13px;height:13px"><use href="#arrowl"/></svg>morgen wieder</span><span class="r">Vorschlag annehmen<svg class="i" style="width:13px;height:13px"><use href="#arrow"/></svg></span></div>
+    </article>
+    <div class="toast" id="toast"><svg class="i ok" style="width:14px;height:14px"><use href="#check"/></svg><span id="tt">In Website-Relaunch gelegt</span></div>
+  </div>
+
+  <div class="q">Wohin damit?<small>wischen oder tippen</small></div>
+  <button class="sugg" data-t="In Website-Relaunch gelegt">
+    <span class="si"><svg class="i" style="width:19px;height:19px"><use href="#spark"/></svg></span>
+    <span class="tx"><small>Vorschlag</small><b>Zu Website-Relaunch legen</b><span class="why">weil die Notiz das Projekt erwähnt</span></span>
+    <svg class="i" style="color:var(--blue)"><use href="#arrow"/></svg>
+  </button>
+  <div class="grid">
+    <button class="ch" data-t="Als Karte gemerkt"><svg class="i"><use href="#cardi"/></svg><b>Als Karte merken</b></button>
+    <button class="ch" data-t="Als Task angelegt"><svg class="i"><use href="#task"/></svg><b>Wird ein Task</b></button>
+    <button class="ch" data-t="Unter Arbeit gelegt"><svg class="i"><use href="#folder"/></svg><b>Anderer Ort …</b></button>
+  </div>
+  <div class="minor">
+    <button class="mn" data-t="Bleibt als lose Notiz"><svg class="i"><use href="#layers"/></svg>Lose behalten</button>
+    <button class="mn del" data-t="Weggeworfen"><svg class="i"><use href="#trash"/></svg>Weg damit</button>
+    <button class="mn undo" aria-label="Zurück"><svg class="i"><use href="#undo"/></svg></button>
+  </div>
+</section>
+
+<div class="switch"><button data-s="today">Heute</button><button data-s="shelf">Ablage</button><button data-s="note">Notiz</button><button data-s="slip">Zettel</button><button data-s="search">Suche</button><button data-s="append">Ergänzen</button><button data-s="open" class="on">Durchsicht</button></div>
+
+<script>
+  const E=[
+    {id:'mueller',t:'Angebot für Kunde Müller nachfassen',p:'Seit dem Termin am 14. keine Rückmeldung – lieber kurz anrufen als noch eine Mail schicken.',ws:'F',age:'gerade eben',when:'heute, 19:38',ic:'note',neu:1},
+    {id:'fahrrad',t:'Fahrrad zur Inspektion bringen',p:'Hinterradbremse schleift, Licht vorne flackert. Die Werkstatt hat samstags bis 13 Uhr auf.',ws:'P',age:'vor 4 Std.',when:'heute, 15:40',ic:'note'},
+    {id:'podcast',t:'Podcast-Tipp: Folge über Wissensmanagement',p:'Ab Minute 18 spannend: Notizen nach Projekten statt nach Themen ordnen.',ws:'P',age:'vor 9 Std.',when:'heute, 10:40',ic:'note'},
+    {id:'referenzen',t:'Idee: Referenzen als Fallstudien',p:'Statt einer Logo-Wand lieber drei Projekte richtig erzählen – gehört eigentlich zu Website-Relaunch.',ws:'P',age:'vor 20 Std.',when:'gestern, 23:40',ic:'note'},
+    {id:'urlaub',t:'Urlaub im Herbst',p:'Ostsee oder Bodensee – Hauptsache Wasser · 2 Notizen darunter',ws:'P',age:'gestern',when:'gestern, 18:12',ic:'layers'},
+    {id:'skizze',t:'skizze.png',p:'Datei · 1,2 MB · noch nirgends verwendet',ws:'P',age:'vor 2 Tagen',when:'Dienstag, 14:31',ic:'file'}
+  ];
+  const by=Object.fromEntries(E.map(e=>[e.id,e]));
+  const ws=(w,full)=>w==='F'?`<span class="wsa"><i class="f">F</i>${full?'Firma':''}</span>`:`<span class="wsa"><i>P</i>${full?'Persönlich':''}</span>`;
+  const ico=e=>e.ic==='file'?'<span class="ri file"></span>':`<span class="ri${e.neu?' new':''}"><svg class="i"><use href="#${e.ic}"/></svg></span>`;
+  document.getElementById('rows').innerHTML=E.map(e=>`<button class="row${e.id==='urlaub'?' hot':''}" data-open="${e.id}">${ico(e)}<span class="rt"><b>${e.t}</b><small>${e.p}</small></span><span class="rm"><span class="age">${e.age}</span>${ws(e.ws,true)}</span></button>`).join('');
+  const URLAUB=`<p>Ostsee oder Bodensee – Hauptsache Wasser und kein Laptop. Zweite Novemberwoche, Mo bis Fr.</p>
+    <ul><li>Ferienwohnung in Lindau angefragt, Antwort bis Freitag</li><li>Räder mitnehmen? Dann lieber Zug statt Auto</li>
+    <li>Unterwegs „Atomic Habits“ zu Ende lesen<i class="caret c1"></i></li><li class="apnd">Zug ab 7:40<span class="justnow">gerade angehängt</span></li></ul>
+    <div class="klbl">DARUNTER</div>
+    <div class="kid"><svg class="i"><use href="#link"/></svg><div><b>Unterkünfte</b><small>3 Links · Lindau, Wasserburg</small></div><svg class="i go"><use href="#chevr"/></svg></div>
+    <div class="kid"><svg class="i"><use href="#train"/></svg><div><b>Zugverbindungen</b><small>Notiz · 2 Zeilen</small></div><svg class="i go"><use href="#chevr"/></svg></div>`;
+  function renderNote(id){
+    const e=by[id]||by.urlaub;
+    document.getElementById('nTitle').textContent=e.t;
+    document.getElementById('nAge').textContent=e.age.replace('vor ','');
+    document.getElementById('nMeta').innerHTML=`<span class="pill"><svg class="i" style="width:12px;height:12px"><use href="#${e.ic==='file'?'note':e.ic}"/></svg>${e.ic==='file'?'Datei':'Notiz'}</span>${ws(e.ws,true)} · abgelegt ${e.when}`;
+    document.getElementById('nText').innerHTML=e.id==='urlaub'?URLAUB:`<p>${e.p}<i class="caret c1"></i></p>`;
+  }
+  document.getElementById('kb').innerHTML=['QWERTZUIOPÜ','ASDFGHJKLÖÄ','⇧YXCVBNM⌫'].map(r=>'<div class="kr">'+[...r].map(c=>`<i${'⇧⌫'.includes(c)?' class="w"':''}>${c}</i>`).join('')+'</div>').join('')+'<div class="kr"><i class="w">123</i><i class="w">@</i><i class="sp">Leerzeichen</i><i class="ret">Ablegen</i></div>';
+
+  const body=document.body,btns=document.querySelectorAll('.switch button');
+  function setState(s,id){
+    body.className='s-'+s+(s==='open'?' open':'');
+    btns.forEach(b=>b.classList.toggle('on',b.dataset.s===s));
+    if(s==='note')renderNote(id||'urlaub');
+  }
+  btns.forEach(b=>b.onclick=()=>setState(b.dataset.s));
+  const on=(id,f)=>document.getElementById(id).onclick=f;
+  on('start',()=>setState('open'));
+  on('close',()=>setState('today'));
+  on('veil',()=>setState('today'));
+  on('dim',()=>setState('today'));
+  on('peek',()=>setState(body.classList.contains('s-shelf')?'today':'shelf'));
+  on('toReview',()=>setState('open'));
+  on('back',()=>setState('shelf'));
+  on('nclose',()=>setState('today'));
+  on('tabSearch',()=>setState('search'));
+  on('scancel',()=>setState('today'));
+  on('add',()=>setState('append'));
+  on('attach',()=>{setState('note','urlaub');body.classList.add('appended')});
+  document.querySelectorAll('[data-open]').forEach(r=>r.onclick=()=>setState('note',r.dataset.open));
+  document.querySelectorAll('.slip').forEach(sl=>sl.onclick=()=>setState('note',sl.dataset.id));
+  // Wisch nach oben auf der Leiste öffnet die Ablage
+  let y0=null;const tray=document.querySelector('.tray');
+  tray.addEventListener('pointerdown',e=>y0=e.clientY);
+  tray.addEventListener('pointerup',e=>{if(y0!==null&&y0-e.clientY>30)setState('shelf');y0=null});
+
+  const item=document.getElementById('item'),toast=document.getElementById('toast'),tt=document.getElementById('tt');
+  document.querySelectorAll('[data-t]').forEach(b=>b.addEventListener('click',()=>{
+    if(item.classList.contains('leave'))return;
+    tt.textContent=b.dataset.t;item.classList.add('leave');toast.classList.add('on');
+    setTimeout(()=>{item.style.transition='none';item.classList.remove('leave');item.style.opacity=0;
+      requestAnimationFrame(()=>{item.style.transition='';item.style.opacity=1});},700);
+    setTimeout(()=>toast.classList.remove('on'),2000);
+  }));
+  setState(location.hash.slice(1)||'open');
+</script>
+</body>
+</html>
