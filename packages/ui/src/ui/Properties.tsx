@@ -9,7 +9,7 @@ import { X, Plus, ExternalLink, AlertTriangle, Trash2, ArrowRightLeft, CalendarD
 import { type FreeKind, type FreeValue, type Item, type PropDef, type TypeSchema, type Value, FREE_KINDS, todayISO } from "@obtion/core/model";
 import { fmtDate, fmtNumber } from "@obtion/core/i18n";
 import { parseQuery, matches } from "@obtion/core/query";
-import { doneAt, hasValue, priorityProp, statusOf } from "@obtion/core/traits";
+import { defaultOption, doneAt, hasValue, isSingle, isStatusProp, optionIds, priorityProp, statusOf } from "@obtion/core/traits";
 import { toFree } from "@obtion/core/typeops";
 import { repo } from "../repo";
 import { useIndex } from "../hooks";
@@ -133,22 +133,26 @@ export function PropertyField({ item, prop, autoFocus }: { item: Item; prop: Pro
     }
     case "checkbox":
       return <Checkbox  checked={v === true} onCheckedChange={(checked) => set((checked === true) ? true : null)} aria-label={prop.name} className="size-4 accent-[var(--focus)]" />;
-    case "select":
-    case "status": {
+    case "select": {
+      if (prop.multiple) return <MultiField item={item} prop={prop} />;
+      const schema = ix.schemaOf(item);
+      const isStatus = isStatusProp(schema, prop);
+      // with a default it is never empty: no "–" to pick
+      const required = !!defaultOption(prop, schema);
       const opt = prop.options?.find((o) => o.id === v);
-      const done = prop.kind === "status" ? doneAt(item, ix.schemaOf(item)) : undefined;
+      const done = isStatus ? doneAt(item, schema) : undefined;
       return (
         <>
         <label className="tap-row relative inline-flex cursor-pointer items-center">
-          {opt ? <StatusPill option={opt} /> : <span className="text-muted-foreground">{t("props.empty")}</span>}
+          {opt ? <StatusPill option={opt} group={isStatus ? (opt.group ?? "todo") : undefined} /> : <span className="text-muted-foreground">{t("props.empty")}</span>}
           <NativeSelect
             value={String(v ?? "")}
-            onChange={(e) => (prop.kind === "status" && e.target.value ? void setStatus(item, e.target.value) : set(e.target.value || null))}
+            onChange={(e) => (isStatus && e.target.value ? void setStatus(item, e.target.value) : set(e.target.value || null))}
             aria-label={prop.name}
             className="absolute inset-0 cursor-pointer opacity-0"
           >
-            {prop.kind !== "status" && <option value="">–</option>}
-            {prop.kind === "status"
+            {(!required || !opt) && <option value="">–</option>}
+            {isStatus
               ? (["todo", "active", "done"] as const).map((g) => (
                   <optgroup key={g} label={t("group." + g)}>
                     {prop.options!.filter((o) => (o.group ?? "todo") === g).map((o) => (
@@ -166,41 +170,6 @@ export function PropertyField({ item, prop, autoFocus }: { item: Item; prop: Pro
           </NativeSelect>
         </label>
         {done && <span className="text-xs tabular-nums text-muted-foreground">{t("props.doneOn", { date: fmtDate(lang, todayISO(new Date(done))) })}</span>}
-        </>
-      );
-    }
-    case "multiselect": {
-      const ids = Array.isArray(v) ? (v as string[]) : [];
-      return (
-        <>
-          {ids.map((id) => {
-            const o = prop.options?.find((x) => x.id === id);
-            return (
-              <span key={id} className="inline-flex items-center gap-0.5">
-                {o ? <StatusPill option={o} small /> : id}
-                <ShadcnButton variant="plain" size="none" onClick={() => set(ids.filter((x) => x !== id))} className="text-muted-foreground hover:text-fg" aria-label={t("props.removeValue")}>
-                  <X size={11} />
-                </ShadcnButton>
-              </span>
-            );
-          })}
-          <Popover
-            trigger={(p) =>
-              ids.length ? (
-                <ShadcnButton variant="plain" size="none" {...p} className="tap rounded-md px-1 text-xs text-muted-foreground hover:bg-hover" aria-label={t("props.set", { name: prop.name })}><Plus size={12} /></ShadcnButton>
-              ) : (
-                <ShadcnButton variant="plain" size="none" {...p} className="tap-y -ml-1 rounded px-1 text-faint hover:bg-hover hover:text-muted-foreground" aria-label={t("props.set", { name: prop.name })}>{t("props.empty")}</ShadcnButton>
-              )
-            }
-          >
-            {(close) =>
-              prop.options?.filter((o) => !ids.includes(o.id)).map((o) => (
-                <MenuItem key={o.id} onClick={() => (close(), set([...ids, o.id]))}>
-                  {o.name}
-                </MenuItem>
-              ))
-            }
-          </Popover>
         </>
       );
     }
@@ -223,6 +192,45 @@ export function PropertyField({ item, prop, autoFocus }: { item: Item; prop: Pro
     }
   }
   return null;
+}
+
+/** A select with several values: its options as badges, "+" adds one. */
+function MultiField({ item, prop }: { item: Item; prop: PropDef }) {
+  const { t } = useT();
+  const ids = optionIds(item.props[prop.id]);
+  const set = (x: string[]) => repo.setProp(item.id, prop.id, x.length ? x : null);
+  return (
+    <>
+      {ids.map((id) => {
+        const o = prop.options?.find((x) => x.id === id);
+        return (
+          <span key={id} className="inline-flex items-center gap-0.5">
+            {o ? <StatusPill option={o} small /> : id}
+            <ShadcnButton variant="plain" size="none" onClick={() => set(ids.filter((x) => x !== id))} className="text-muted-foreground hover:text-fg" aria-label={t("props.removeValue")}>
+              <X size={11} />
+            </ShadcnButton>
+          </span>
+        );
+      })}
+      <Popover
+        trigger={(p) =>
+          ids.length ? (
+            <ShadcnButton variant="plain" size="none" {...p} className="tap rounded-md px-1 text-xs text-muted-foreground hover:bg-hover" aria-label={t("props.set", { name: prop.name })}><Plus size={12} /></ShadcnButton>
+          ) : (
+            <ShadcnButton variant="plain" size="none" {...p} className="tap-y -ml-1 rounded px-1 text-faint hover:bg-hover hover:text-muted-foreground" aria-label={t("props.set", { name: prop.name })}>{t("props.empty")}</ShadcnButton>
+          )
+        }
+      >
+        {(close) =>
+          prop.options?.filter((o) => !ids.includes(o.id)).map((o) => (
+            <MenuItem key={o.id} onClick={() => (close(), set([...ids, o.id]))}>
+              {o.name}
+            </MenuItem>
+          ))
+        }
+      </Popover>
+    </>
+  );
 }
 
 /** A start–end date: empty it is one quiet "–" like every empty field; a click shows both dates. */
@@ -361,7 +369,7 @@ export interface PageHead {
 }
 
 /** Status and selections read by themselves as badges; dates by their icon. They need no label. */
-const isBadge = (p: PropDef) => p.kind === "status" || p.kind === "select";
+const isBadge = (p: PropDef) => isSingle(p);
 
 /**
  * The properties of a page under the title (design rules § 2.2). First a row of badges – the
@@ -405,7 +413,7 @@ export function PropertyBlock({ item, schema, noAdd, head = {} }: { item: Item; 
         {head.first}
         {badges.map((p) => (
           <span key={p.id} className={cx("inline-flex", quiet(p))}>
-            {p.kind === "status" ? <StatusBadge item={item} /> : <SelectBadge item={item} prop={p} />}
+            {isStatusProp(schema, p) ? <StatusBadge item={item} /> : <SelectBadge item={item} prop={p} />}
           </span>
         ))}
         {head.last}
@@ -561,6 +569,8 @@ function SelectBadge({ item, prop }: { item: Item; prop: PropDef }) {
   const v = item.props[prop.id];
   const opt = prop.options?.find((o) => o.id === v);
   const prio = priorityProp(ix.schemaOf(item))?.id === prop.id;
+  // a select with a default is never empty
+  const required = !!defaultOption(prop, ix.schemaOf(item));
   const label = !opt ? null : prio ? t("props.prioBadge", { value: lang === "de" ? opt.name.toLocaleLowerCase("de") : opt.name }) : (
     <>
       <span className="opacity-70">{prop.name}</span> {opt.name}
@@ -588,7 +598,7 @@ function SelectBadge({ item, prop }: { item: Item; prop: PropDef }) {
               <StatusPill option={o} />
             </MenuItem>
           ))}
-          {opt && (
+          {opt && !required && (
             <>
               <div className="my-1 border-t border-line" />
               <MenuItem icon={<X size={13} />} onClick={() => (close(), repo.setProp(item.id, prop.id, null))}>

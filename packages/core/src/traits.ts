@@ -1,7 +1,7 @@
 // What a type can do. Behaviour hangs on these traits – never on a type id or name.
 // Everything that reads capabilities goes through this module.
 import type * as Y from "yjs";
-import { type Capabilities, type Item, type ItemInit, type OptionDef, type PropDef, type StatusGroup, type TypeSchema, type Value, setProp, titleKey } from "./model";
+import { type Capabilities, type Item, type ItemInit, type OptionDef, type PropDef, type StatusGroup, type TypeSchema, type Value, setCapability, setProp, titleKey, upsertProp } from "./model";
 import { LANGS, translate } from "./i18n";
 import type { Index } from "./graph";
 
@@ -13,10 +13,47 @@ export function propById(schema: TypeSchema | undefined, id?: string): PropDef |
   return id ? schema?.properties.find((p) => p.id === id) : undefined;
 }
 
-/** The status property that drives ticking off, "open" in queries, boards and progress. */
+/** The status property that drives ticking off, "open" in queries, boards and progress: a select with one value. */
 export function statusProp(schema?: TypeSchema): PropDef | undefined {
   const p = propById(schema, caps(schema).status);
-  return p?.kind === "status" ? p : undefined;
+  return p?.kind === "select" && !p.multiple ? p : undefined;
+}
+
+export function isStatusProp(schema: TypeSchema | undefined, p: PropDef): boolean {
+  return statusProp(schema)?.id === p.id;
+}
+
+/** A select with several values (once "Mehrfachauswahl"). */
+export function isMulti(p: PropDef): boolean {
+  return p.kind === "select" && !!p.multiple;
+}
+
+/** A select with one value. */
+export function isSingle(p: PropDef): boolean {
+  return p.kind === "select" && !p.multiple;
+}
+
+/** The chosen options of a select as a list – also a value from before the number of values changed. */
+export function optionIds(v: Value | undefined | null): string[] {
+  return Array.isArray(v) ? v.map(String) : typeof v === "string" && v ? [v] : [];
+}
+
+/**
+ * Make a select the type's status (one per type; the one before is a plain select again): one
+ * value, never empty – its default stays or the first option is –, every option in a group.
+ * `fresh`: options for a select that has none yet.
+ */
+export function useAsStatus(doc: Y.Doc, p: PropDef, fresh: OptionDef[] = []) {
+  const options = (p.options?.length ? p.options : fresh).map((o) => ({ ...o, group: o.group ?? ("todo" as const) }));
+  setCapability(doc, "status", p.id);
+  upsertProp(doc, p.id, { kind: "select", multiple: null as any, options, default: p.default && options.some((o) => o.id === p.default) ? p.default : (options[0]?.id ?? (null as any)) });
+}
+
+/** The option new items get; a select with one is never empty. The status always has one. */
+export function defaultOption(p: PropDef, schema?: TypeSchema): string | undefined {
+  if (p.kind !== "select" || p.multiple) return undefined;
+  const d = p.default && p.options?.some((o) => o.id === p.default) ? p.default : undefined;
+  return d ?? (isStatusProp(schema, p) ? p.options?.[0]?.id : undefined);
 }
 
 /** "Termin": the date property marked as due date – "overdue" and "this week" work for any type. */
@@ -201,11 +238,13 @@ export function primaryChild(schema?: TypeSchema): string | undefined {
   return caps(schema).primaryChild;
 }
 
-/** Initial values for a new item of this type: template values, else first status option. */
+/** Initial values for a new item of this type: template values, else the selects' defaults. */
 export function initialProps(schema?: TypeSchema): Record<string, Value> {
   const out: Record<string, Value> = { ...(template(schema)?.values ?? {}) };
-  const sp = statusProp(schema);
-  if (sp && out[sp.id] === undefined && sp.options?.[0]) out[sp.id] = sp.options[0].id;
+  for (const p of schema?.properties ?? []) {
+    const d = defaultOption(p, schema);
+    if (d && out[p.id] === undefined) out[p.id] = d;
+  }
   return out;
 }
 

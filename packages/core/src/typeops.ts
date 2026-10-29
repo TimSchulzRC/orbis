@@ -24,7 +24,7 @@ import {
 import { Index } from "./graph";
 import { isInInbox } from "./placement";
 import { findBlocks, readBlock, typesIn } from "./query";
-import { initialProps, primaryChild, progressSpec } from "./traits";
+import { initialProps, isMulti, isSingle, optionIds, primaryChild, progressSpec } from "./traits";
 import type { Writer } from "./setup";
 
 export type DeleteMode = { mode: "tag"; tag: string } | { mode: "type"; target: string } | { mode: "remove" };
@@ -88,11 +88,10 @@ export function toFree(p: PropDef, v: Value | undefined, ix: Index): FreeValue |
     case "checkbox":
     case "url":
       return { k: p.kind, v: v as string | number | boolean };
-    case "select":
-    case "status":
-      return { k: "select", v: p.options?.find((o) => o.id === v)?.name ?? String(v) };
-    case "multiselect":
-      return { k: "text", v: (Array.isArray(v) ? v : [v]).map((id) => p.options?.find((o) => o.id === id)?.name ?? String(id)).join(", ") };
+    case "select": {
+      const names = optionIds(v).map((id) => p.options?.find((o) => o.id === id)?.name ?? id);
+      return p.multiple ? { k: "text", v: names.join(", ") } : { k: "select", v: names[0] ?? String(v) };
+    }
     default:
       return undefined;
   }
@@ -102,15 +101,15 @@ export function toFree(p: PropDef, v: Value | undefined, ix: Index): FreeValue |
 function mapValue(from: PropDef, to: PropDef, v: Value): Value | undefined {
   if (from.kind === to.kind && !from.options) return v;
   const optName = (id: string) => from.options?.find((o) => o.id === id)?.name;
-  if ((to.kind === "select" || to.kind === "status") && typeof v === "string") {
+  if (isSingle(to) && typeof v === "string") {
     const name = optName(v) ?? v;
     const hit = to.options?.find((o) => titleKey(o.name) === titleKey(name));
     if (hit) return hit.id;
     const group = from.options?.find((o) => o.id === v)?.group;
-    if (to.kind === "status" && group) return to.options?.find((o) => (o.group ?? "todo") === group)?.id;
+    if (group && to.options?.some((o) => o.group)) return to.options?.find((o) => (o.group ?? "todo") === group)?.id;
     return undefined;
   }
-  if (to.kind === "multiselect") {
+  if (isMulti(to)) {
     const ids = (Array.isArray(v) ? v : [v]).map((x) => optName(String(x)) ?? String(x));
     const out = ids.map((n) => to.options?.find((o) => titleKey(o.name) === titleKey(n))?.id).filter(Boolean) as string[];
     return out.length ? out : undefined;

@@ -72,10 +72,11 @@ const viewInput = z.object({
 });
 const propInput = z.object({
   name: z.string().optional(),
-  kind: z.string().optional().describe("text|number|date|checkbox|url|select|multiselect|status|relation|computed"),
+  kind: z.string().optional().describe("text|number|date|checkbox|url|select|relation|computed. A select is the type's status when capabilities.status names it; \"status\" and \"multiselect\" still work as shorthands"),
   description: z.string().optional(),
-  options: z.array(z.string()).optional().describe('for select/status: names; status options as "Name (todo|active|done)"'),
-  multiple: z.boolean().optional(),
+  options: z.array(z.string()).optional().describe('for select: names; options of the status as "Name (todo|active|done)"'),
+  multiple: z.boolean().optional().describe("relation: several targets; select: several options"),
+  default: z.string().nullable().optional().describe("select with one value: the option new entries get; it can then not be emptied (the status always has one). null: may be empty"),
   target: z.string().optional().describe("relation target as a query, e.g. type:Person"),
   inverse: z.string().optional().describe("name shown on the target, e.g. Books"),
   symmetric: z.boolean().optional(),
@@ -84,7 +85,7 @@ const propInput = z.object({
   hide_empty: z.boolean().optional().describe("pages show it only when it has a value (default: every property shows, empty as –)"),
 });
 const capInput = z.object({
-  status: z.string().nullable().optional().describe("name of a status property"),
+  status: z.string().nullable().optional().describe("name of a select property with one value: becomes the status (options get groups, a default)"),
   due_date: z.string().nullable().optional().describe("name of a date property"),
   progress: z.union([z.boolean(), z.string()]).nullable().optional().describe("true, or a type name to count only that type"),
   updates: z.boolean().optional(),

@@ -75,7 +75,8 @@ export function defaultTypes(lang: Lang): Record<string, TypeSpec> {
         {
           id: "p_status",
           name: t("prop.status"),
-          kind: "status",
+          kind: "select",
+          default: "st_backlog",
           options: [
             { id: "st_backlog", name: t("status.backlog"), group: "todo", color: "gray" },
             { id: "st_planning", name: t("status.planning"), group: "active", color: "blue" },
@@ -102,7 +103,8 @@ export function defaultTypes(lang: Lang): Record<string, TypeSpec> {
         {
           id: "p_status",
           name: t("prop.status"),
-          kind: "status",
+          kind: "select",
+          default: "st_todo",
           options: [
             { id: "st_todo", name: t("status.notStarted"), group: "todo", color: "gray" },
             { id: "st_active", name: t("status.inProgress"), group: "active", color: "amber" },

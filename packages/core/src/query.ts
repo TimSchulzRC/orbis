@@ -468,7 +468,7 @@ export function fieldOf(item: Item, name: string, ix: Index): FieldHit | undefin
   const schema = ix.schemaOf(item);
   if (key === "status") {
     const sp = statusProp(schema);
-    if (sp) return { kind: "status", value: item.props[sp.id], prop: sp };
+    if (sp) return { kind: "select", value: item.props[sp.id], prop: sp };
   }
   const p = schema?.properties.find((x) => titleKey(x.name) === key);
   if (p) {
@@ -563,9 +563,7 @@ function matchField(item: Item, c: { prop: string; op: Op; value?: FieldValue },
       const b = ["ja", "yes", "true", "1", "wahr", "x"].includes(want.toLowerCase());
       return cmp(hit.value === true ? 1 : 0, b ? 1 : 0, c.op === ":" ? ":" : c.op);
     }
-    case "select":
-    case "status":
-    case "multiselect": {
+    case "select": {
       const ids = Array.isArray(hit.value) ? (hit.value as string[]) : [String(hit.value)];
       const names = hit.prop ? ids.map((id) => hit.prop!.options?.find((o) => o.id === id)?.name ?? id) : ids;
       // option names in either language and status synonyms ("in Arbeit", "done") match too
@@ -844,7 +842,7 @@ export function groupItems(items: Item[], by: string | undefined, ctx: EvalCtx, 
       if (schemas.some((sc) => statusProp(sc))) for (const g of ["todo", "active", "done"]) add(g, { statusGroup: g });
     } else
       for (const sc of schemas) {
-        const p = by === "status" ? statusProp(sc) : sc!.properties.find((x) => titleKey(x.name) === titleKey(by) && (x.kind === "select" || x.kind === "status"));
+        const p = by === "status" ? statusProp(sc) : sc!.properties.find((x) => titleKey(x.name) === titleKey(by) && x.kind === "select");
         ranked(p);
         for (const o of p?.options ?? []) add(o.name, { label: o.name, statusGroup: by === "status" ? (o.group ?? "todo") : undefined, option: o });
       }

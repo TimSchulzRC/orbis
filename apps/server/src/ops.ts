@@ -54,7 +54,7 @@ export interface ViewInput {
 }
 const VIEW_KINDS: ViewKind[] = ["table", "board", "list", "calendar", "timeline", "gallery", "triage", "tree"];
 import { isInInbox, isOverview } from "@obtion/core/placement";
-import { caps, doneAt, dueOf, dueProp, firstOfGroup, hasUpdates, initialProps, progressSpec, statusOf, statusProp, template, writeProp } from "@obtion/core/traits";
+import { caps, doneAt, dueOf, dueProp, firstOfGroup, hasUpdates, initialProps, progressSpec, statusOf, statusProp, template, useAsStatus, writeProp } from "@obtion/core/traits";
 import { previewTagToType, typeUsage } from "@obtion/core/typeops";
 import type { Lang } from "@obtion/core/i18n";
 import { searchIds, snippet } from "@obtion/core/search";
@@ -203,6 +203,7 @@ export class Ops {
       description: p.description || undefined,
       options: p.options?.map((o) => (o.group ? `${o.name} (${o.group})` : o.name)),
       multiple: p.multiple || undefined,
+      default: p.default ? p.options?.find((o) => o.id === p.default)?.name : undefined,
       target: p.target || undefined,
       inverse: p.inverseName || undefined,
       symmetric: p.symmetric || undefined,
@@ -468,7 +469,10 @@ export class Ops {
 
   /** A value given by the agent (names, ISO dates, numbers) → stored value for the property. */
   toValue(p: PropDef, raw: unknown, ctx: Item | undefined): { value?: Value | null; rels?: string[] } {
-    if (raw === null || raw === "") return { value: null };
+    if (raw === null || raw === "") {
+      if (p.kind === "select" && !p.multiple && p.default) throw new OpError(`"${p.name}" has a default and cannot be empty; set another option.`);
+      return { value: null };
+    }
     switch (p.kind) {
       case "text":
       case "url":
@@ -490,10 +494,8 @@ export class Ops {
         if (range) return { value: range };
         throw new OpError(`"${p.name}" needs ${DATE_HELP}${p.range ? ", or start/end" : ""}; got "${raw}".`);
       }
-      case "select":
-      case "status":
-        return { value: this.option(p, String(raw)).id };
-      case "multiselect": {
+      case "select": {
+        if (!p.multiple) return { value: this.option(p, String(raw)).id };
         const list = Array.isArray(raw) ? raw : String(raw).split(",");
         return { value: list.map((x) => this.option(p, String(x)).id) };
       }
@@ -811,18 +813,32 @@ export class Ops {
       if (!p) throw new OpError(`Type ${s.name} has no property "${name}".`);
       return p;
     };
+    // "status" and "multiselect" are selects now (see legacyKind); agents may still name them
+    const legacy = (k?: string) => (k === "status" || k === "multiselect" ? "select" : k);
     const toDef = (p: PropInput, cur?: PropDef): Partial<PropDef> => {
-      if (p.kind && !PROP_KINDS.includes(p.kind as any)) throw new OpError(`Property kinds: ${PROP_KINDS.join(", ")}.`);
-      const kind = (p.kind ?? cur?.kind) as PropDef["kind"];
+      const named = legacy(p.kind);
+      if (named && !PROP_KINDS.includes(named as any)) throw new OpError(`Property kinds: ${PROP_KINDS.join(", ")}.`);
+      const kind = (named ?? cur?.kind) as PropDef["kind"];
+      const grouped = p.kind === "status" || (!!cur && statusProp(s)?.id === cur.id) || !!p.options?.some((o) => /\((todo|active|done)\)\s*$/.test(o));
       const options = p.options?.map((o) => {
         const m = /^(.*?)(?:\s*\((todo|active|done)\))?$/.exec(o)!;
         const existing = cur?.options?.find((x) => x.name === m[1]);
-        return { id: existing?.id ?? shortId("o"), name: m[1]!.trim(), group: kind === "status" ? ((m[2] as any) ?? existing?.group ?? "todo") : undefined, color: existing?.color ?? "gray" };
+        return { id: existing?.id ?? shortId("o"), name: m[1]!.trim(), group: grouped ? ((m[2] as any) ?? existing?.group ?? "todo") : undefined, color: existing?.color ?? "gray" };
       });
+      const opts = options ?? cur?.options ?? [];
+      let def: string | null | undefined;
+      if (p.default === null || p.default === "") def = null;
+      else if (p.default !== undefined) {
+        def = opts.find((o) => titleKey(o.name) === titleKey(p.default!))?.id;
+        if (!def) throw new OpError(`Default "${p.default}" is not an option of "${p.name ?? cur?.name}".`);
+      }
       let computed = cur?.computed;
       if (p.computed) computed = { fn: p.computed.startsWith("count") ? "count" : "progress", of: p.computed.includes(":") ? this.resolveType(p.computed.split(":")[1]!.trim()).id : undefined };
-      return { name: p.name, kind, description: p.description, options, multiple: p.multiple, target: p.target, inverseName: p.inverse, symmetric: p.symmetric, range: p.range, computed, hideEmpty: p.hide_empty };
+      const multiple = p.kind === "multiselect" ? true : p.kind === "status" ? (null as any) : p.multiple;
+      return { name: p.name, kind, description: p.description, options, multiple, default: def as any, target: p.target, inverseName: p.inverse, symmetric: p.symmetric, range: p.range, computed, hideEmpty: p.hide_empty };
     };
+    // properties given with the old kind "status" become the type's status (below, once they exist)
+    const asStatus = [...(input.add_properties ?? []), ...(input.change_properties ?? [])].filter((p) => p.kind === "status").map((p) => ("property" in p ? (p as any).property : p.name) as string);
     this.store.change(t.id, origin, (doc) => {
       if (input.name) (setSchemaField(doc, "name", input.name), setMeta(doc, { title: input.name }));
       if (input.plural !== undefined) setSchemaField(doc, "plural", input.plural);
@@ -845,7 +861,8 @@ export class Ops {
     });
     this.store.flush();
     const s2 = this.store.index().types.get(t.id)!.schema!;
-    const c = input.capabilities;
+    const c = input.capabilities ?? (asStatus.length ? {} : undefined);
+    if (c && c.status === undefined && asStatus.length) c.status = asStatus.at(-1)!;
     if (c) {
       const pid = (name: string | null | undefined, kind: string) => {
         if (!name) return null;
@@ -854,7 +871,12 @@ export class Ops {
         return p.id;
       };
       this.store.change(t.id, origin, (doc) => {
-        if (c.status !== undefined) setCapability(doc, "status", pid(c.status, "status"));
+        if (c.status === null) setCapability(doc, "status", null);
+        else if (c.status !== undefined) {
+          const p = s2.properties.find((x) => titleKey(x.name) === titleKey(c.status!) && x.kind === "select" && !x.multiple);
+          if (!p) throw new OpError(`"${c.status}" must be a select property with one value of ${s2.name}.`);
+          useAsStatus(doc, p);
+        }
         if (c.due_date !== undefined) setCapability(doc, "due", pid(c.due_date, "date"));
         if (c.progress !== undefined) setCapability(doc, "progress", c.progress === false || c.progress === null ? null : { of: typeof c.progress === "string" ? this.resolveType(c.progress).id : undefined });
         if (c.updates !== undefined) setCapability(doc, "updates", c.updates || null);
@@ -945,8 +967,9 @@ export interface PropInput {
   name?: string;
   kind?: string;
   description?: string;
-  options?: string[]; // "Name" or "Name (todo|active|done)" for status
-  multiple?: boolean;
+  options?: string[]; // "Name" or "Name (todo|active|done)" for the status
+  multiple?: boolean; // relation: several targets; select: several options
+  default?: string | null; // select with one value: option name new entries get (then never empty)
   target?: string;
   inverse?: string;
   symmetric?: boolean;
