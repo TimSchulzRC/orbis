@@ -9,7 +9,6 @@ GitHub Actions builds the image `ghcr.io/timschulzrc/obtion` (amd64 and arm64) f
 ```bash
 mkdir obtion && cd obtion
 # copy docker-compose.yaml here (and .env.example as .env, if needed)
-mkdir data
 docker compose up -d
 ```
 
