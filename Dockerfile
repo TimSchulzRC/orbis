@@ -28,9 +28,10 @@ FROM oven/bun:1.3-slim
 WORKDIR /app
 COPY --from=server /app ./
 COPY --from=server --chown=bun:bun /data /data
+COPY --chmod=755 scripts/docker-entrypoint.sh /usr/local/bin/obtion-entrypoint
 ENV HOST=0.0.0.0 PORT=8480 OBTION_DATA=/data
 VOLUME /data
 EXPOSE 8480
-# never as root; docker compose runs it as the owner of the data folder (OBTION_UID/OBTION_GID)
-USER bun
+# the server never runs as root: the entrypoint hands /data to its owner and starts it as them
+ENTRYPOINT ["obtion-entrypoint"]
 CMD ["bun", "apps/server/src/index.ts"]
