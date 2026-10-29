@@ -228,7 +228,7 @@ function EntryBody({ entry }: { entry: InboxEntry }) {
         <TitleField item={item} autoFocus={false} placeholder={item.file?.name} />
       </div>
       {item.file ? (
-        <FileBody item={item} />
+        <FileBody key={item.id} item={item} />
       ) : (
         <div className="mt-2 text-[15px]">
           <Editor doc={repo.getDoc(item.id)} nodeId={item.id} minHeight="min-h-24" placeholder={t("editor.placeholder")} />
@@ -256,6 +256,13 @@ function FileBody({ item }: { item: Item }) {
   const repo = useRepo();
   const f = item.file!;
   const img = useBlobUrl(f.filetype === "bild" ? (f.display ?? f.hash) : f.thumb, true);
+  // saved on leaving the field, and when the panel goes back or closes while it is being edited
+  const draft = useRef<string | null>(null);
+  const save = () => {
+    if (draft.current !== null && draft.current !== (repo.get(item.id)?.body ?? "")) repo.setBody(item.id, draft.current);
+    draft.current = null;
+  };
+  useEffect(() => save, []);
   return (
     <>
       {img ? (
@@ -266,7 +273,8 @@ function FileBody({ item }: { item: Item }) {
       <Textarea
         defaultValue={item.body}
         key={item.id}
-        onBlur={(e) => e.target.value !== item.body && repo.setBody(item.id, e.target.value)}
+        onChange={(e) => (draft.current = e.target.value)}
+        onBlur={save}
         placeholder={t("file.descriptionPlaceholder")}
         aria-label={t("file.description")}
         rows={2}
