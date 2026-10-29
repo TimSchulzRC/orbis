@@ -4,15 +4,22 @@ Notes that link to each other and projects with tasks, in one app. It runs on yo
 
 ## Running it
 
+GitHub Actions builds the image `ghcr.io/timschulzrc/obtion` (amd64 and arm64) from every push to `main`. On the server you need only [`docker-compose.yaml`](docker-compose.yaml), not the repository:
+
 ```bash
-git clone <repository> obtion && cd obtion
+mkdir obtion && cd obtion
+# copy docker-compose.yaml here (and .env.example as .env, if needed)
 mkdir data
 docker compose up -d
 ```
 
 Open `http://<address of the machine>:8480` and create the first account; it becomes the admin. Optional settings go into `.env` (see `.env.example`).
 
-Update with `git pull && docker compose up -d --build`. Everything lives in the `data` folder; back that up.
+Update with `docker compose pull && docker compose up -d`. Everything lives in the `data` folder; back that up.
+
+While the package on GitHub is private, the server has to log in once: `docker login ghcr.io -u <GitHub user>` with a [personal access token (classic)](https://github.com/settings/tokens/new?scopes=read:packages) that has only the `read:packages` scope as the password.
+
+Tags: `latest` (main), `1.2.3` and `1.2` (from a git tag `v1.2.3`), `sha-<commit>`. To build the image yourself: `docker build -t ghcr.io/timschulzrc/obtion .`
 
 ## Connecting an agent
 
