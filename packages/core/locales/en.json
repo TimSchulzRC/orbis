@@ -967,5 +967,8 @@
  "tray.sortNow": "Sort it now …",
  "tray.putDown": "put down",
  "tray.openEntry": "Open “{title}”",
- "tray.inTray": "In the tray"
+ "tray.inTray": "In the tray",
+ "capture.append": "Add to ‘{title}’?",
+ "capture.appended": "Added to “{title}”",
+ "capture.appendHint": "Tab adds it there, Enter puts it down on its own"
 }

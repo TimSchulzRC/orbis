@@ -349,6 +349,20 @@ async function run() {
             await field.fill("E2E-Notiz ohne Ort");
             await field.press("Enter");
             if (!(await p.locator("[data-sonner-toast]").filter({ hasText: "Notiz im Eingang" }).first().waitFor({ timeout: 3000 }).then(() => true, () => false))) failures.push(`${label}: no notice "Notiz im Eingang"`);
+            // the tray's field offers to add the next line to an entry in the inbox instead (Tab or the chip)
+            if (phone) {
+              await p.waitForTimeout(400);
+              field = await open();
+              row = field.locator("xpath=ancestor::div[contains(@class,'rounded-2xl')][1]");
+            }
+            await field.fill("E2E-Zeile dazu");
+            const addTo = row.getByRole("button", { name: /^An ‚.+‘ anhängen\?/ });
+            if (!(await addTo.count())) failures.push(`${label}: the tray's field does not offer to add to an entry in the inbox`);
+            else {
+              if (phone) await addTo.click();
+              else await field.press("Tab");
+              if (!(await p.locator("[data-sonner-toast]").filter({ hasText: /^An „.+“ angehängt/ }).first().waitFor({ timeout: 3000 }).then(() => true, () => false))) failures.push(`${label}: no notice "… angehängt"`);
+            }
             if (phone) {
               await p.waitForTimeout(400);
               field = await open();

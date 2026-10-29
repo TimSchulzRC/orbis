@@ -36,9 +36,13 @@ export const reviewMinutes = (count: number) => Math.max(1, Math.round(count / 3
 
 /** The tray's panel: closed, the list, or one entry in it (its key). One for the whole app. */
 let shelf: { open: boolean; at?: string } = { open: false };
+/** The entry opened last in the panel, and when: a capture may be added to it (Capture.tsx). */
+let opened: { key: string; at: number } | undefined;
 const listeners = new Set<() => void>();
 const setShelf = (s: typeof shelf) => ((shelf = s), listeners.forEach((f) => f()));
-export const openShelf = (at?: string) => setShelf({ open: true, at });
+export const openShelf = (at?: string) => ((opened = at ? { key: at, at: Date.now() } : opened), setShelf({ open: true, at }));
+/** The entry opened last, if it is in this workspace. */
+export const openedIn = (space: string) => (opened?.key.startsWith(space + "/") ? { id: opened.key.slice(space.length + 1), at: opened.at } : undefined);
 export const closeShelf = () => shelf.open && setShelf({ open: false });
 
 export function useShelf() {

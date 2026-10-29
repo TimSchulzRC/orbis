@@ -2,23 +2,27 @@ import { Button as ShadcnButton } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, ChevronDown, CornerDownRight, Layers, Paperclip, X } from "lucide-react";
-import { SETTINGS_ID } from "@obtion/core/model";
+import { ArrowRight, ChevronDown, CornerDownRight, CornerDownLeft, Layers, Paperclip, X } from "lucide-react";
+import { SETTINGS_ID, appendToBody } from "@obtion/core/model";
+import { appendTarget } from "@obtion/core/inbox";
+import { runQuery } from "@obtion/core/query";
 import { useFiles, useRepo, useSpaceId, spaceHref } from "../hooks";
 import { shownSpaces, useAccounts } from "../accounts";
 import { useT } from "../i18n";
 import { capture, extractMentions, recentPlaces, rememberPlace } from "../actions";
-import { MenuItem, Popover, TypeGlyph, cx, Dialog } from "./bits";
+import { Kbd, MenuItem, Popover, TypeGlyph, cx, Dialog } from "./bits";
 import { ItemPicker } from "./Picker";
 import { SpaceScope } from "./Spaces";
 import { notify } from "./feedback";
 import { NOTE_ICON } from "./icons";
+import { entryKey, openShelf, openedIn } from "./inbox";
 
 /**
  * Capture field: Enter saves. Preset is a note (no type); where it goes follows from the model –
  * a note without a place is in the inbox, with a place below it; a type puts it into the list of
  * the type. Below the field: the type (the only chip) and "Einsortieren …" (a plain text button).
- * "/name text" picks a type by name, a page mentioned with @ is offered as the place.
+ * "/name text" picks a type by name, a page mentioned with @ is offered as the place. In the tray
+ * (`append`) the text may instead be added to an entry still in the inbox: Tab or the chip.
  */
 export function Capture({ anywhere, ...p }: CaptureProps & { anywhere?: boolean }) {
   const [space, setSpace] = useState(() => (anywhere ? captureSpace() : undefined));
@@ -46,12 +50,14 @@ export function captureSpace(): string | undefined {
 interface CaptureProps {
   parent?: string;
   placeholder?: string;
+  /** The tray's field: may add the text to an entry in the inbox instead (Tab), Enter still puts it down. */
+  append?: boolean;
   autoFocus?: boolean;
   onDone?: () => void;
   compact?: boolean;
 }
 
-function CaptureField({ parent, placeholder, autoFocus, onDone, compact, onSpace }: CaptureProps & { onSpace?: (id: string) => void }) {
+function CaptureField({ parent, placeholder, append, autoFocus, onDone, compact, onSpace }: CaptureProps & { onSpace?: (id: string) => void }) {
   const r = useRepo();
   const files = useFiles();
   const space = useSpaceId();
@@ -83,6 +89,18 @@ function CaptureField({ parent, placeholder, autoFocus, onDone, compact, onSpace
     setText("");
     onDone?.();
   };
+  // added to an entry still in the inbox: the one put down or opened last, or the one named with "@…"
+  const target = append && !parent && text.trim() ? appendTarget(text, runQuery({ where: { inbox: true }, sort: [{ key: "created", desc: true }] }, { ix }).items, openedIn(space ?? "")) : undefined;
+  const targetTitle = target ? ix.get(target.id)?.title || t("untitled") : "";
+  const addTo = () => {
+    if (!target) return;
+    r.change(target.id, (doc) => appendToBody(doc, target.text));
+    setPlace(null);
+    setType(null);
+    notify(t("capture.appended", { title: targetTitle }), undefined, { label: t("capture.open"), run: () => openShelf(entryKey(space!, target.id)) });
+    setText("");
+    onDone?.();
+  };
   const [focused, setFocused] = useState(!!autoFocus);
   const showRow = !compact && (focused || !!text.trim() || !!type || !!place);
   // a page mentioned with @ is offered as the place, quietly in the same row
@@ -109,6 +127,7 @@ function CaptureField({ parent, placeholder, autoFocus, onDone, compact, onSpace
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) (e.preventDefault(), save());
+            else if (e.key === "Tab" && !e.shiftKey && target) (e.preventDefault(), addTo());
           }}
           rows={1}
           placeholder={placeholder ?? (parent ? t("capture.placeholderHere") : t("capture.placeholder"))}
@@ -134,7 +153,27 @@ function CaptureField({ parent, placeholder, autoFocus, onDone, compact, onSpace
         />
       )}
       {showRow && (
-        <div className="mt-1 flex min-w-0 items-center gap-1" onMouseDown={(e) => e.preventDefault()}>
+        <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1" onMouseDown={(e) => e.preventDefault()}>
+          {/* quietly first: add it to an entry in the inbox instead of putting it down on its own */}
+          {target && (
+            <ShadcnButton variant="plain" size="none" onClick={addTo} title={t("capture.appendHint")} className="tap-y inline-flex h-7 min-w-0 max-w-[60%] shrink items-center max-lg:max-w-full max-lg:basis-full gap-1 rounded-full border border-[color-mix(in_srgb,var(--t-inbox)_45%,transparent)] bg-[color-mix(in_srgb,var(--t-inbox)_10%,transparent)] px-2 text-xs text-warn hover:bg-[color-mix(in_srgb,var(--t-inbox)_18%,transparent)]">
+              <CornerDownLeft size={12} className="shrink-0" />
+              {/* only the title is cut short, the question stays */}
+              {(() => {
+                const [before, after] = t("capture.append", { title: "\u0000" }).split("\u0000");
+                return (
+                  <span className="flex min-w-0 whitespace-pre">
+                    <span className="shrink-0">{before}</span>
+                    <span className="truncate">{targetTitle}</span>
+                    <span className="shrink-0">{after}</span>
+                  </span>
+                );
+              })()}
+              <span className="max-lg:hidden">
+                <Kbd>Tab</Kbd>
+              </span>
+            </ShadcnButton>
+          )}
           {/* the workspace, when it can be chosen (capture from anywhere) */}
           {onSpace && spaces.length > 1 && (
             <Popover
@@ -214,7 +253,7 @@ export function CaptureSheet({ onClose }: { onClose: () => void }) {
   const { t } = useT();
   return (
     <Dialog title={t("capture.title")} onClose={onClose}>
-      <Capture anywhere autoFocus onDone={onClose} />
+      <Capture anywhere append autoFocus onDone={onClose} />
     </Dialog>
   );
 }

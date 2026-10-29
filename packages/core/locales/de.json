@@ -967,5 +967,8 @@
  "tray.sortNow": "Jetzt schon einsortieren …",
  "tray.putDown": "abgelegt",
  "tray.openEntry": "„{title}“ öffnen",
- "tray.inTray": "In der Ablage"
+ "tray.inTray": "In der Ablage",
+ "capture.append": "An ‚{title}‘ anhängen?",
+ "capture.appended": "An „{title}“ angehängt",
+ "capture.appendHint": "Tab hängt es an, Enter legt es neu ab"
 }

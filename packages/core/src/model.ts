@@ -533,6 +533,14 @@ export function replaceBody(doc: Y.Doc, next: string) {
   if (endNext > start) text.insert(start, next.slice(start, endNext));
 }
 
+/** Add a line at the end of the text (a new line of its own, the rest stays as it is). */
+export function appendToBody(doc: Y.Doc, line: string, now = Date.now()) {
+  const text = doc.getText("body");
+  const prev = text.toString();
+  text.insert(text.length, (prev && !prev.endsWith("\n") ? "\n" : "") + line);
+  touch(doc, now);
+}
+
 export function appendUpdate(doc: Y.Doc, entry: Omit<UpdateEntry, "id"> & { id?: string }) {
   doc.getArray<UpdateEntry>("updates").push([{ ...entry, id: entry.id ?? newId() } as UpdateEntry]);
 }

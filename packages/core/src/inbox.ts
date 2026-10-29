@@ -5,7 +5,7 @@
 // Two decisions on an entry win over any rule: kept (it stays as it is, without a place) and
 // later (back tomorrow). They are the entry's own state, not part of the rule, so "Behalten" and
 // "Morgen wieder" work whatever the rule says.
-import { type Item, SETTINGS_ID } from "./model";
+import { type Item, SETTINGS_ID, titleKey } from "./model";
 import type { Index } from "./graph";
 import type { Cond } from "./query";
 
@@ -29,4 +29,30 @@ export function setAside(item: Item, now = Date.now()): boolean {
 /** When "Morgen wieder" brings an entry back: the start of the next day, local time. */
 export function tomorrow(now = new Date()): number {
   return new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime();
+}
+
+/**
+ * What a capture could be added to instead of becoming an entry of its own: an entry still in the
+ * inbox (`entries`, newest first). "@Urlaub …" names it by the start of its title (the mention
+ * leaves the text); without "@" it is the one put down or opened last (`opened`: which, when).
+ * A mention of anything else (a place) is no append. Nothing for an empty text.
+ */
+export function appendTarget(text: string, entries: Item[], opened?: { id: string; at: number }): { id: string; text: string } | undefined {
+  const t = text.trim();
+  if (!t || !entries.length) return;
+  const at = /(^|\s)@([^@\n]+)/.exec(t);
+  if (!at) {
+    const newest = entries[0]!;
+    const seen = opened && opened.at > newest.created && entries.some((e) => e.id === opened.id);
+    return { id: seen ? opened.id : newest.id, text: t };
+  }
+  const words = at[2]!.trim().split(/\s+/);
+  for (let n = words.length; n > 0; n--) {
+    const want = titleKey(words.slice(0, n).join(" ").replace(/[.,;:!?]+$/, ""));
+    const hit = want && entries.find((e) => titleKey(e.title).startsWith(want));
+    if (!hit) continue;
+    const rest = (t.slice(0, at.index) + at[1] + words.slice(n).join(" ") + t.slice(at.index + at[0].length)).replace(/\s+/g, " ").trim();
+    return rest ? { id: hit.id, text: rest } : undefined;
+  }
+  return;
 }

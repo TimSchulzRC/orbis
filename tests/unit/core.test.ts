@@ -1,13 +1,13 @@
 import { test, expect, describe } from "bun:test";
 import * as Y from "yjs";
 import { MemRepo } from "../support/helpers";
-import { addParent, readItem, removeParent, setMeta, setProp, setSettings, initItem, META_TYPE, SETTINGS_ID, touchOnTextEdit } from "@obtion/core/model";
+import { addParent, appendToBody, readItem, removeParent, setMeta, setProp, setSettings, initItem, META_TYPE, SETTINGS_ID, touchOnTextEdit } from "@obtion/core/model";
 import { keyBetween, keysFor } from "@obtion/core/sortkey";
 import { isInInbox, isOverview, inbox, sidebarRoots, sidebarChildren } from "@obtion/core/placement";
 import { runSetup, restoreDefaultTypes, resetInbox, SYS } from "@obtion/core/setup";
 import { parseQuery, printQuery, runQuery } from "@obtion/core/query";
 import { CATALOGS } from "@obtion/core/i18n";
-import { setAside, tomorrow } from "@obtion/core/inbox";
+import { appendTarget, setAside, tomorrow } from "@obtion/core/inbox";
 import { activeProjects, dueBy, recentlyChanged } from "@obtion/core/today";
 
 describe("sort keys", () => {
@@ -205,6 +205,36 @@ describe("set aside", () => {
   test("tomorrow is the next local midnight", () => {
     const at = new Date(2026, 9, 29, 23, 40);
     expect(tomorrow(at)).toBe(new Date(2026, 9, 30).getTime());
+  });
+});
+
+describe("adding to an entry in the inbox", () => {
+  const m = new MemRepo();
+  const urlaub = m.add({ title: "Urlaub im Herbst", body: "Ostsee oder Bodensee" });
+  const idee = m.add({ title: "Idee: Referenzen" });
+  const entries = [m.get(idee)!, m.get(urlaub)!]; // newest first
+
+  test("the one put down or opened last", () => {
+    const newest = m.get(idee)!.created;
+    expect(appendTarget("Zug ab 7:40", entries)).toEqual({ id: idee, text: "Zug ab 7:40" });
+    expect(appendTarget("Zug ab 7:40", entries, { id: urlaub, at: newest + 1 })).toEqual({ id: urlaub, text: "Zug ab 7:40" });
+    // something put down after it was opened: that one
+    expect(appendTarget("Zug ab 7:40", entries, { id: urlaub, at: newest - 1 })).toEqual({ id: idee, text: "Zug ab 7:40" });
+    expect(appendTarget("  ", entries)).toBeUndefined();
+  });
+
+  test("@ names it by the start of its title and leaves the text; a mention of anything else is no append", () => {
+    expect(appendTarget("@Urlaub Zug ab 7:40", entries)).toEqual({ id: urlaub, text: "Zug ab 7:40" });
+    expect(appendTarget("Zug ab 7:40 @urlaub im", entries)).toEqual({ id: urlaub, text: "Zug ab 7:40" });
+    expect(appendTarget("Frage zu @Arbeit", entries)).toBeUndefined();
+    expect(appendTarget("@Urlaub", entries)).toBeUndefined();
+  });
+
+  test("the line goes below the text", () => {
+    m.change(urlaub, (d) => appendToBody(d, "Zug ab 7:40"));
+    expect(m.get(urlaub)!.body).toBe("Ostsee oder Bodensee\nZug ab 7:40");
+    m.change(idee, (d) => appendToBody(d, "Drei Fälle"));
+    expect(m.get(idee)!.body).toBe("Drei Fälle");
   });
 });
 
