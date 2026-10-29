@@ -3,8 +3,8 @@
 # .env next to it (see .env.example). Update: `docker compose pull && docker compose up -d`.
 services:
   obtion:
-    # built by GitHub Actions from main (see .github/workflows/ci.yml); a fixed version instead
-    # of latest with OBTION_VERSION, e.g. 1.2.3 or sha-cfc56ef
+    # built by GitHub Actions from every push to main (see .github/workflows/ci.yml); an earlier
+    # build with OBTION_VERSION, e.g. sha-cfc56ef
     image: ghcr.io/timschulzrc/obtion:${OBTION_VERSION:-latest}
     restart: unless-stopped
     # the owner of the data folder (`ls -n`), so its files keep that owner; never root

@@ -19,7 +19,7 @@ Update with `docker compose pull && docker compose up -d`. Everything lives in t
 
 While the package on GitHub is private, the server has to log in once: `docker login ghcr.io -u <GitHub user>` with a [personal access token (classic)](https://github.com/settings/tokens/new?scopes=read:packages) that has only the `read:packages` scope as the password.
 
-Tags: `latest` (main), `1.2.3` and `1.2` (from a git tag `v1.2.3`), `sha-<commit>`. To build the image yourself: `docker build -t ghcr.io/timschulzrc/obtion .`
+`latest` is always the newest `main`; every build also keeps a tag `sha-<commit>` to go back to (`OBTION_VERSION` in `.env`). To build the image yourself: `docker build -t ghcr.io/timschulzrc/obtion .`
 
 ## Connecting an agent
 

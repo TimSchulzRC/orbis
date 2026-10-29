@@ -3,7 +3,6 @@ name: CI
 on:
   push:
     branches: [main]
-    tags: ["v*"]
   pull_request:
 
 jobs:
@@ -17,8 +16,9 @@ jobs:
       - run: bun run typecheck
       - run: bun run build
 
-  # The image for docker compose: ghcr.io/<owner>/obtion, :latest from main, :1.2.3 and :1.2 from
-  # tags v1.2.3, :sha-<commit> always. Only after the checks passed, never for pull requests.
+  # The image for docker compose: ghcr.io/<owner>/obtion, :latest is always the newest main,
+  # :sha-<commit> keeps each build for going back. Only after the checks passed, never for pull
+  # requests.
   image:
     needs: check
     if: github.event_name == 'push'
@@ -39,9 +39,7 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest
             type=sha
       - uses: docker/build-push-action@v6
         with:
