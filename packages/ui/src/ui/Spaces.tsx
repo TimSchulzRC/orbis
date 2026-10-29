@@ -75,7 +75,7 @@ export function SpaceSelector({ className, onNew }: { className?: string; onNew:
           {/* several at once: boxes, not a choice of one */}
           {spaces.map((s) => (
             <label key={s.id} className="tap-row flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm hover:bg-hover">
-              <Checkbox  checked={ids.includes(s.id)} disabled={ids.length === 1 && ids.includes(s.id)} onChange={() => toggle(s.id)} className="size-4 accent-[var(--focus)]" />
+              <Checkbox  checked={ids.includes(s.id)} disabled={ids.length === 1 && ids.includes(s.id)} onCheckedChange={() => toggle(s.id)} className="size-4 accent-[var(--focus)]" />
               <span className="min-w-0 flex-1 truncate">{s.name}</span>
             </label>
           ))}

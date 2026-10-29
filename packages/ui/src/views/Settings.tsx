@@ -510,7 +510,7 @@ function Examples() {
               return (
                 <li key={e.id}>
                   <label className={cx("tap-row flex items-center gap-2 rounded-md px-2 py-1 text-sm", e.inUse ? "text-muted-foreground" : "cursor-pointer hover:bg-hover")}>
-                    <Checkbox  checked={chosen.has(e.id)} disabled={e.inUse} onChange={() => toggle(e.id)} className="size-4 shrink-0 accent-[var(--focus)]" />
+                    <Checkbox  checked={chosen.has(e.id)} disabled={e.inUse} onCheckedChange={() => toggle(e.id)} className="size-4 shrink-0 accent-[var(--focus)]" />
                     {e.isType ? <TypeGlyph schema={item?.schema} size={14} /> : item && <ItemIcon item={item} size={14} />}
                     <span className="min-w-0 truncate">{e.title || t("untitled")}</span>
                     {e.isType && <span className="text-xs text-muted-foreground">{t("examples.type")}</span>}

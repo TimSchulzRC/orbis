@@ -182,7 +182,7 @@ function MarkBox({ on, onToggle, title }: { on: boolean; onToggle: () => void; t
   const { t } = useT();
   return (
     <label className="tap-edge relative flex size-6 shrink-0 cursor-pointer items-center justify-center" onClick={(e) => e.stopPropagation()}>
-      <Checkbox  checked={on} onChange={onToggle} aria-label={t("triage.markNamed", { title })} className="size-4 cursor-pointer accent-[var(--focus)] pointer-coarse:size-[18px]" />
+      <Checkbox  checked={on} onCheckedChange={onToggle} aria-label={t("triage.markNamed", { title })} className="size-4 cursor-pointer accent-[var(--focus)] pointer-coarse:size-[18px]" />
     </label>
   );
 }
@@ -192,9 +192,10 @@ let keyOwner: symbol | null = null;
 
 /**
  * `spaceOf`: the workspace of each entry, when they come from several (the inbox); each row then
- * says which, and the entry shows and acts in its own.
+ * says which, and the entry shows and acts in its own. `entryPath`: where a tap on a phone goes
+ * (the inbox walks its own entries); else the entry's page.
  */
-export function Triage({ items, spaceOf: given }: { items: Item[]; storageKey?: string; spaceOf?: (i: Item) => string }) {
+export function Triage({ items, spaceOf: given, entryPath = (i) => `/i/${encodeURIComponent(i.id)}` }: { items: Item[]; spaceOf?: (i: Item) => string; entryPath?: (i: Item) => string }) {
   const { t } = useT();
   const here = useSpaceId()!;
   const spaceOf = (i: Item) => given?.(i) ?? here;
@@ -296,7 +297,7 @@ export function Triage({ items, spaceOf: given }: { items: Item[]; storageKey?: 
               data-triage={n}
               role="option"
               aria-selected={on}
-              onClick={() => (phone ? (location.hash = spaceHref(spaceOf(i), `/inbox/${encodeURIComponent(i.id)}`)) : setSel(n))}
+              onClick={() => (phone ? (location.hash = spaceHref(spaceOf(i), entryPath(i))) : setSel(n))}
               className={cx(
                 "relative grid cursor-default items-center gap-x-2 px-3 hover:bg-hover",
                 phone ? "min-h-12 grid-cols-[44px_minmax(0,1fr)_auto] py-1.5" : "h-10 grid-cols-[24px_minmax(0,1fr)_auto_minmax(64px,auto)]",

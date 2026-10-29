@@ -250,7 +250,7 @@ export function InboxPage() {
           <InboxRule name={shown.length > 1 ? spaceById(rule)?.name : undefined} onClose={() => setRule(null)} />
         </SpaceScope>
       )}
-      {items.length ? <Triage items={items} spaceOf={(i) => spaceOf.get(i)!} /> : <Empty title={t("inbox.empty")} />}
+      {items.length ? <Triage items={items} spaceOf={(i) => spaceOf.get(i)!} entryPath={(i) => `/inbox/${encodeURIComponent(i.id)}`} /> : <Empty title={t("inbox.empty")} />}
     </div>
   );
 }

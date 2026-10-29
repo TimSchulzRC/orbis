@@ -80,7 +80,7 @@ export function Results({ def, thisId, display, empty, compact, keyPrefix = "", 
       ) : view === "gallery" ? (
         <GalleryView items={items} ctx={ctx} />
       ) : view === "triage" ? (
-        <Triage items={items} storageKey={keyPrefix} />
+        <Triage items={items} />
       ) : def.columns?.includes("progress") && !def.group ? (
         // projects with progress and next task: a table in a card
         <div className="overflow-hidden rounded-xl border border-line bg-surface">

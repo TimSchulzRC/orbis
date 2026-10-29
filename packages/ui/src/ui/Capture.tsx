@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowRight, ChevronDown, CornerDownRight, Layers, Paperclip, X } from "lucide-react";
 import { SETTINGS_ID } from "@obtion/core/model";
 import { useFiles, useRepo, useSpaceId, spaceHref } from "../hooks";
-import { shownSpaces, spaceById, useAccounts } from "../accounts";
+import { shownSpaces, useAccounts } from "../accounts";
 import { useT } from "../i18n";
 import { capture, extractMentions, recentPlaces, rememberPlace } from "../actions";
 import { MenuItem, Popover, TypeGlyph, cx, Dialog } from "./bits";
@@ -22,6 +22,9 @@ import { NOTE_ICON } from "./icons";
  */
 export function Capture({ anywhere, ...p }: CaptureProps & { anywhere?: boolean }) {
   const [space, setSpace] = useState(() => (anywhere ? captureSpace() : undefined));
+  // the workspaces seen changed (the chips above the inbox): a capture lands where one looks
+  const shown = useAccounts().shown.map((s) => s.id).join();
+  useEffect(() => void (anywhere && setSpace(captureSpace())), [shown]);
   if (!space) return <CaptureField {...p} />;
   const choose = (id: string) => (setSpace(id), localStorage.setItem(LAST_SPACE, id));
   return (
@@ -32,14 +35,12 @@ export function Capture({ anywhere, ...p }: CaptureProps & { anywhere?: boolean 
 }
 
 const LAST_SPACE = "obtion.capture.space";
-/** Where a capture from anywhere goes: the workspace the inbox is filtered to, else the one used last, else the first seen. */
+/** Where a capture from anywhere goes: the one workspace shown, else the one used last if it is shown, else the first shown. */
 export function captureSpace(): string | undefined {
-  const known = (id: unknown) => (typeof id === "string" && !!spaceById(id) ? id : undefined);
-  let filter: unknown;
-  try {
-    filter = JSON.parse(localStorage.getItem("obtion.inbox.space") ?? "null");
-  } catch {}
-  return known(filter) ?? known(localStorage.getItem(LAST_SPACE)) ?? shownSpaces()[0]?.id;
+  const shown = shownSpaces();
+  if (shown.length === 1) return shown[0]!.id;
+  const last = localStorage.getItem(LAST_SPACE);
+  return (shown.find((s) => s.id === last) ?? shown[0])?.id;
 }
 
 interface CaptureProps {
