@@ -130,6 +130,38 @@ test("define a type and its views without code, query by type name", () => {
   expect(ops.convertPreview({ type: "Buch", direction: "type_to_tag" }).would_lose_type).toBe(2);
 });
 
+test("one kind of select: several values, a default that keeps it filled, any select as status", () => {
+  ops.defineType(
+    {
+      name: "Artikel",
+      properties: [
+        { name: "Phase", kind: "select", options: ["Idee", "Entwurf", "Fertig"], default: "Idee" },
+        { name: "Kanäle", kind: "select", multiple: true, options: ["Blog", "Newsletter"] },
+        // the old kind still works and makes it the status
+        { name: "Stand", kind: "multiselect", options: ["A", "B"] },
+      ],
+    },
+    A,
+  );
+  const info = (ops.schema() as any).types.find((x: any) => x.name === "Artikel");
+  expect(info.properties.map((p: any) => [p.name, p.kind, p.multiple ?? false, p.default])).toEqual([
+    ["Phase", "select", false, "Idee"],
+    ["Kanäle", "select", true, undefined],
+    ["Stand", "select", true, undefined],
+  ]);
+  // new entries get the default; several values take a list
+  const a = ops.create({ title: "Erster Artikel", type: "Artikel", properties: { Kanäle: "Blog, Newsletter" } }, A);
+  expect((ops.get(a.id) as any).properties).toMatchObject({ Phase: "Idee", Kanäle: "Blog, Newsletter" });
+  // with a default it cannot be emptied
+  expect(() => ops.update(a.id, { properties: { Phase: null } }, A)).toThrow(/cannot be empty/);
+  // a select with one value becomes the status: its options get groups, "done" works
+  ops.updateType("Artikel", { change_properties: [{ property: "Phase", options: ["Idee (todo)", "Entwurf (active)", "Fertig (done)"] }], capabilities: { status: "Phase" } }, A);
+  ops.update(a.id, { properties: { Phase: "erledigt" } }, A);
+  expect((ops.get(a.id) as any).properties.Phase).toBe("Fertig");
+  // several values cannot be the status
+  expect(() => ops.updateType("Artikel", { capabilities: { status: "Kanäle" } }, A)).toThrow(/one value/);
+});
+
 test("query blocks written by an agent in text form are stored as JSON and read back as text", () => {
   const o = ops.create({ title: "Arbeit", body: "Projekte:\n\n```abfrage typ:Projekt unter:diese```" }, A);
   expect(s.records.get(o.id)!.body).toContain('"type":"sys:project"');

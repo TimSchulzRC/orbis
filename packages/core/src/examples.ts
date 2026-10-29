@@ -109,7 +109,8 @@ export function writeExamples(w: Writer, lang: Lang, files: Partial<Record<Examp
         {
           id: "p_ex_read",
           name: L("Lesestatus", "Reading"),
-          kind: "status",
+          kind: "select",
+          default: "rd_want",
           options: [
             { id: "rd_want", name: L("Will ich lesen", "Want to read"), group: "todo", color: "gray" },
             { id: "rd_now", name: L("Lese ich", "Reading"), group: "active", color: "amber" },

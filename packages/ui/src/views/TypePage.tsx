@@ -27,6 +27,7 @@ import {
   upsertProp,
 } from "@obtion/core/model";
 import { COLORS, ICONS } from "@obtion/core/palette";
+import { isStatusProp, statusProp, useAsStatus } from "@obtion/core/traits";
 import { keyBetween } from "@obtion/core/sortkey";
 import { parseQuery, printQuery, runQuery } from "@obtion/core/query";
 import { type DeleteMode, deleteType, previewTagToType, tagToType, typeUsage } from "@obtion/core/typeops";
@@ -181,7 +182,7 @@ function TypeEditor({ item, onClose }: { item: Item; onClose: () => void }) {
                 <GripVertical size={14} className="text-muted-foreground" />
                 <Button variant="plain" onClick={() => setSel(p.id)} className="tap-row flex min-w-0 flex-1 items-center gap-2 text-left">
                   <span className="truncate font-medium">{p.name}</span>
-                  <span className="ml-auto shrink-0 text-xs text-muted-foreground">{t("kind.prop." + p.kind)}</span>
+                  <span className="ml-auto shrink-0 text-xs text-muted-foreground">{kindLabel(p, s.capabilities.status, t)}</span>
                 </Button>
                 {/* on touch screens only on the selected row: no invisible buttons to hit */}
                 <span className={cn("flex opacity-0 group-hover:opacity-100", p.id === sel ? "opacity-100" : "pointer-coarse:hidden")}>
@@ -230,9 +231,7 @@ function AddProperty({ item, onAdded }: { item: Item; onAdded: (id: string) => v
     const { id: _i, sort: _s, ...rest } = copy ?? ({ id: "", sort: "", name: "", kind } as PropDef);
     // copied options keep their ids: queries by option name and conversions then work the same.
     repo.change(item.id, (d) => {
-      upsertProp(d, id, { ...rest, name: name.trim(), kind: copy ? copy.kind : kind, options: copy?.options ?? (kind === "status" ? defaultStatusOptions(t) : kind === "select" || kind === "multiselect" ? [] : undefined), ...(!copy && kind === "relation" ? { inverseName: t("type.inverseOf", { name: name.trim() }) } : {}) });
-      // the first status property is what ticking off and "offen" use: switch the capability on with it
-      if ((copy ? copy.kind : kind) === "status" && !item.schema!.capabilities.status) setCapability(d, "status", id);
+      upsertProp(d, id, { ...rest, name: name.trim(), kind: copy ? copy.kind : kind, options: copy?.options ?? (kind === "select" ? [] : undefined), ...(!copy && kind === "relation" ? { inverseName: t("type.inverseOf", { name: name.trim() }) } : {}) });
     });
     onAdded(id);
     setOpen(false);
@@ -254,7 +253,7 @@ function AddProperty({ item, onAdded }: { item: Item; onAdded: (id: string) => v
             <p className="mb-1 text-muted-foreground">{t("type.twins")}</p>
             {twins.map(({ tp, p }) => (
               <Button variant="plain" key={tp.id + p.id} onClick={() => add(p)} className="flex w-full items-center gap-1.5 rounded px-1 py-0.5 text-left hover:bg-hover">
-                <TypeGlyph schema={tp.schema} size={12} /> {tp.schema.name} › {p.name} <span className="ml-auto text-muted-foreground">{t("kind.prop." + p.kind)}</span>
+                <TypeGlyph schema={tp.schema} size={12} /> {tp.schema.name} › {p.name} <span className="ml-auto text-muted-foreground">{kindLabel(p, tp.schema.capabilities.status, t)}</span>
               </Button>
             ))}
           </div>
@@ -272,6 +271,12 @@ function AddProperty({ item, onAdded }: { item: Item; onAdded: (id: string) => v
       </div>
     </Popover>
   );
+}
+
+/** "Auswahl", "Auswahl · mehrere" or "Status": a select says what it is set to. */
+function kindLabel(p: PropDef, status: string | undefined, t: T): string {
+  if (p.kind !== "select") return t("kind.prop." + p.kind);
+  return p.id === status && !p.multiple ? t("kind.prop.status") : p.multiple ? t("kind.prop.multiselect") : t("kind.prop.select");
 }
 
 function defaultStatusOptions(t: T): OptionDef[] {
@@ -297,11 +302,13 @@ function PropEditor({ item, prop }: { item: Item; prop: PropDef }) {
   // no target: anything can be chosen
   const targetHits = prop.kind !== "relation" ? 0 : prop.target ? runQuery(parseQuery(prop.target, ix).def, { ix }).total : ix.live.filter((i) => i.kind === "info").length;
   const types = [...ix.types.values()];
+  const isStatus = isStatusProp(item.schema!, prop);
+  const other = statusProp(item.schema!);
   return (
     <Card className="p-4" key={prop.id}>
       <div className="flex items-center gap-2">
         <InlineText value={prop.name} onCommit={(v) => v.trim() && set({ name: v.trim() })} className="font-semibold" label={t("props.name")} />
-        <NativeSelect value={prop.kind} onChange={(e) => set({ kind: e.target.value as PropKind })} className="rounded-md border border-line bg-bg px-1.5 py-0.5 text-xs" aria-label={t("props.kind")}>
+        <NativeSelect value={prop.kind} onChange={(e) => repo.change(item.id, (d) => (upsertProp(d, prop.id, { kind: e.target.value as PropKind }), isStatus && setCapability(d, "status", null)))} className="rounded-md border border-line bg-bg px-1.5 py-0.5 text-xs" aria-label={t("props.kind")}>
           {PROP_KINDS.map((k) => (
             <option key={k} value={k}>
               {t("kind.prop." + k)}
@@ -319,7 +326,42 @@ function PropEditor({ item, prop }: { item: Item; prop: PropDef }) {
           </span>
         </label>
       )}
-      {(prop.kind === "select" || prop.kind === "multiselect" || prop.kind === "status") && field(t("type.options"), <OptionsEditor prop={prop} onChange={(options) => set({ options })} />)}
+      {prop.kind === "select" && (
+        <>
+          {field(t("type.options"), <OptionsEditor prop={prop} grouped={isStatus} onChange={(options) => set({ options, ...(prop.default && !options.some((o) => o.id === prop.default) ? { default: isStatus ? options[0]?.id : (null as any) } : {}) })} />)}
+          {field(
+            t("type.values"),
+            // the status has one value: nothing to switch
+            isStatus ? (
+              <p className="text-sm text-muted-foreground">{t("type.statusOne")}</p>
+            ) : (
+              <Seg label={t("type.values")} value={prop.multiple ? "many" : "one"} onChange={(v) => set(v === "many" ? { multiple: true, default: null as any } : { multiple: null as any })} options={[{ value: "one", label: t("type.one") }, { value: "many", label: t("type.many") }]} />
+            ),
+          )}
+          {!prop.multiple &&
+            field(
+              t("type.default"),
+              <>
+                <NativeSelect value={prop.default ?? ""} onChange={(e) => set({ default: e.target.value || (null as any) })} className={box} aria-label={t("type.default")}>
+                  {!isStatus && <option value="">{t("type.defaultNone")}</option>}
+                  {prop.options?.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.name}
+                    </option>
+                  ))}
+                </NativeSelect>
+                {(isStatus || prop.default) && <p className="mt-1 text-xs text-muted-foreground">{t(isStatus ? "type.defaultStatusHint" : "type.defaultHint")}</p>}
+              </>,
+            )}
+          <label className="tap-row mt-3 flex items-start gap-2 text-sm">
+            <Checkbox checked={isStatus} onCheckedChange={(on) => repo.change(item.id, (d) => (on === true ? useAsStatus(d, prop, defaultStatusOptions(t)) : setCapability(d, "status", null)))} className="mt-0.5 accent-[var(--focus)]" />
+            <span>
+              {t("type.asStatus")}
+              <span className="block text-xs text-muted-foreground">{other && !isStatus ? t("type.asStatusMoves", { name: other.name }) : t("type.asStatusHint")}</span>
+            </span>
+          </label>
+        </>
+      )}
       {prop.kind === "date" &&
         field(
           t("type.dateRange"),
@@ -375,7 +417,7 @@ function PropEditor({ item, prop }: { item: Item; prop: PropDef }) {
   );
 }
 
-function OptionsEditor({ prop, onChange }: { prop: PropDef; onChange: (o: OptionDef[]) => void }) {
+function OptionsEditor({ prop, grouped, onChange }: { prop: PropDef; grouped: boolean; onChange: (o: OptionDef[]) => void }) {
   const { t } = useT();
   const opts = prop.options ?? [];
   const upd = (i: number, patch: Partial<OptionDef>) => onChange(opts.map((o, n) => (n === i ? { ...o, ...patch } : o)));
@@ -393,7 +435,7 @@ function OptionsEditor({ prop, onChange }: { prop: PropDef; onChange: (o: Option
             )}
           </Popover>
           <Input variant="bare" defaultValue={o.name} onBlur={(e) => e.target.value.trim() && e.target.value !== o.name && upd(i, { name: e.target.value.trim() })} className="field min-w-0 flex-1 rounded-md bg-transparent px-1 py-0.5 text-sm outline-none hover:bg-hover" />
-          {prop.kind === "status" && (
+          {grouped && (
             <NativeSelect value={o.group ?? "todo"} onChange={(e) => upd(i, { group: e.target.value as StatusGroup })} className="rounded-md border border-line bg-bg px-1 py-0.5 text-xs" aria-label={t("type.group")}>
               {STATUS_GROUPS.map((g) => (
                 <option key={g} value={g}>
@@ -407,7 +449,7 @@ function OptionsEditor({ prop, onChange }: { prop: PropDef; onChange: (o: Option
           </Button>
         </div>
       ))}
-      <Button variant="plain" onClick={() => onChange([...opts, { id: shortId("o"), name: t("type.newOption"), group: prop.kind === "status" ? "todo" : undefined, color: "gray" }])} className="flex items-center gap-0.5 text-xs text-muted-foreground hover:text-fg">
+      <Button variant="plain" onClick={() => onChange([...opts, { id: shortId("o"), name: t("type.newOption"), group: grouped ? "todo" : undefined, color: "gray" }])} className="flex items-center gap-0.5 text-xs text-muted-foreground hover:text-fg">
         <Plus size={12} /> {t("type.addOption")}
       </Button>
     </div>
@@ -423,7 +465,7 @@ function Capabilities({ item }: { item: Item }) {
   const s = item.schema!;
   const c = s.capabilities;
   const set = <K extends keyof typeof c>(k: K, v: (typeof c)[K] | null) => repo.change(item.id, (d) => setCapability(d, k, v));
-  const statusProps = s.properties.filter((p) => p.kind === "status");
+  const statusProps = s.properties.filter((p) => p.kind === "select" && !p.multiple);
   const dateProps = s.properties.filter((p) => p.kind === "date");
   const types = [...ix.types.values()];
   const sel = "tap-row rounded-md border border-line bg-bg px-1.5 py-0.5 text-xs";
@@ -443,7 +485,7 @@ function Capabilities({ item }: { item: Item }) {
         {row(
           t("caps.status"),
           t("caps.statusHint"),
-          <NativeSelect value={c.status ?? ""} onChange={(e) => set("status", e.target.value || null)} className={sel} aria-label={t("caps.status")}>
+          <NativeSelect value={statusProp(s)?.id ?? ""} onChange={(e) => { const p = statusProps.find((x) => x.id === e.target.value); repo.change(item.id, (d) => (p ? useAsStatus(d, p, defaultStatusOptions(t)) : setCapability(d, "status", null))); }} className={sel} aria-label={t("caps.status")}>
             <option value="">{t("caps.off")}</option>
             {statusProps.map((p) => (
               <option key={p.id} value={p.id}>

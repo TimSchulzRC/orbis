@@ -24,7 +24,7 @@ import {
 import { Index } from "./graph";
 import { isInInbox } from "./placement";
 import { findBlocks, readBlock, typesIn } from "./query";
-import { initialProps, primaryChild, progressSpec } from "./traits";
+import { initialProps, isMulti, isSingle, optionIds, primaryChild, progressSpec } from "./traits";
 import type { Writer } from "./setup";
 import { escapeRe } from "./text";
 
@@ -87,20 +87,20 @@ export function toFree(p: PropDef, v: Value | undefined): FreeValue | undefined 
     case "checkbox":
     case "url":
       return { k: p.kind, v: v as string | number | boolean };
-    case "select":
-    case "status":
-      return { k: "select", v: p.options?.find((o) => o.id === v)?.name ?? String(v) };
-    case "multiselect":
-      return { k: "text", v: (Array.isArray(v) ? v : [v]).map((id) => p.options?.find((o) => o.id === id)?.name ?? String(id)).join(", ") };
+    case "select": {
+      const names = optionIds(v).map((id) => p.options?.find((o) => o.id === id)?.name ?? id);
+      return p.multiple ? { k: "text", v: names.join(", ") } : { k: "select", v: names[0] ?? String(v) };
+    }
     default:
       return undefined;
   }
 }
 
 /**
- * Map a value from one property definition to another. Options go by name, a status falls back
- * to its group, a multiselect keeps the options that match. `byId` (moving to another workspace):
- * the same option id first, and only whole – an option without a match makes the value not fit.
+ * Map a value from one property definition to another. Options go by name, an option of the
+ * status falls back to its group, a select with several values keeps the options that match.
+ * `byId` (moving to another workspace): the same option id first, and only whole – an option
+ * without a match makes the value not fit; several values into one keep the first.
  */
 export function mapValue(from: PropDef, to: PropDef, v: Value, opts: { byId?: boolean } = {}): Value | undefined {
   if (from.kind === to.kind && !from.options) return v;
@@ -110,14 +110,18 @@ export function mapValue(from: PropDef, to: PropDef, v: Value, opts: { byId?: bo
     const name = optName(x) ?? x;
     return to.options?.find((o) => titleKey(o.name) === titleKey(name))?.id;
   };
-  if ((to.kind === "select" || to.kind === "status") && typeof v === "string") {
+  if (isSingle(to) && typeof v === "string") {
     const hit = option(v);
     if (hit || opts.byId) return hit;
     const group = from.options?.find((o) => o.id === v)?.group;
-    if (to.kind === "status" && group) return to.options?.find((o) => (o.group ?? "todo") === group)?.id;
+    if (group && to.options?.some((o) => o.group)) return to.options?.find((o) => (o.group ?? "todo") === group)?.id;
     return undefined;
   }
-  if (to.kind === "multiselect") {
+  if (isSingle(to) && opts.byId && Array.isArray(v)) {
+    const ids = v.map((x) => option(String(x)));
+    return ids.every(Boolean) ? ids[0] : undefined;
+  }
+  if (isMulti(to)) {
     const ids = (Array.isArray(v) ? v : [v]).map((x) => option(String(x)));
     if (opts.byId) return ids.every(Boolean) ? (ids as string[]) : undefined;
     const out = ids.filter(Boolean) as string[];

@@ -37,10 +37,10 @@ export function BoardView({ items, def, ctx, look }: { items: Item[]; def: Query
       if (o) void setStatus(item, o.id, repo);
       return;
     }
-    const prop = by === "status" ? statusProp(schema) : schema?.properties.find((p) => p.name.toLowerCase() === by.toLowerCase() && (p.kind === "select" || p.kind === "status"));
+    const prop = by === "status" ? statusProp(schema) : schema?.properties.find((p) => p.name.toLowerCase() === by.toLowerCase() && p.kind === "select");
     const opt = prop?.options?.find((o) => o.name === g.label);
     if (prop && opt && prop.id === statusProp(schema)?.id) void setStatus(item, opt.id, repo);
-    else if (prop && opt) repo.setProp(id, prop.id, opt.id);
+    else if (prop && opt) repo.setProp(id, prop.id, prop.multiple ? [opt.id] : opt.id);
     else if (prop && !g.key) repo.setProp(id, prop.id, null);
   };
   // more columns to the right: the edge fades, so it is clear the board scrolls

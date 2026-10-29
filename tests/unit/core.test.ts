@@ -1,6 +1,8 @@
 import { test, expect, describe, jest } from "bun:test";
 import * as Y from "yjs";
 import { MemRepo } from "../support/helpers";
+import { type TypeSchema, initSchema, readSchema } from "@obtion/core/model";
+import { initialProps, optionIds, statusProp } from "@obtion/core/traits";
 import { addParent, readItem, removeParent, setMeta, setProp, setSettings, initItem, META_TYPE, SETTINGS_ID, touchOnTextEdit } from "@obtion/core/model";
 import { keyBetween, keysFor } from "@obtion/core/sortkey";
 import { isInInbox, isOverview, inbox, sidebarRoots, sidebarChildren } from "@obtion/core/placement";
@@ -328,4 +330,44 @@ test("typing moves the change time: local text edits touch meta.updated, edits f
   } finally {
     jest.useRealTimers();
   }
+});
+
+describe("selects", () => {
+  test("schemas stored with the kinds status and multiselect read as selects", () => {
+    const d = new Y.Doc();
+    initSchema(d, {
+      name: "Alt",
+      icon: "box",
+      color: "gray",
+      description: "",
+      capabilities: { status: "p_st" },
+      properties: [
+        { id: "p_st", name: "Status", kind: "status" as any, options: [{ id: "a", name: "Offen", group: "todo" }, { id: "b", name: "Fertig", group: "done" }] },
+        { id: "p_ms", name: "Tags", kind: "multiselect" as any, options: [{ id: "x", name: "X" }] },
+        { id: "p_old", name: "Zweiter Status", kind: "status" as any, options: [{ id: "c", name: "C", group: "todo" }] },
+      ],
+    });
+    const s = readSchema(d);
+    expect(s.properties.map((p) => [p.id, p.kind, !!p.multiple, p.default])).toEqual([
+      ["p_st", "select", false, "a"],
+      ["p_ms", "select", true, undefined],
+      // not the type's status: a plain select that may be empty
+      ["p_old", "select", false, undefined],
+    ]);
+    expect(statusProp(s)?.id).toBe("p_st");
+    expect(initialProps(s)).toEqual({ p_st: "a" });
+  });
+
+  test("a select with a default fills new items; the status always starts filled", () => {
+    const s = { name: "T", icon: "box", color: "gray", description: "", capabilities: { status: "p_st" }, removedProperties: [], properties: [
+      { id: "p_st", name: "Status", kind: "select", options: [{ id: "a", name: "Offen", group: "todo" }] },
+      { id: "p_pr", name: "Prio", kind: "select", default: "m", options: [{ id: "h", name: "Hoch" }, { id: "m", name: "Mittel" }] },
+      { id: "p_x", name: "Leer", kind: "select", options: [{ id: "q", name: "Q" }] },
+      { id: "p_many", name: "Viele", kind: "select", multiple: true, default: "z", options: [{ id: "z", name: "Z" }], sort: "D" },
+    ] } as TypeSchema;
+    expect(initialProps(s)).toEqual({ p_st: "a", p_pr: "m" });
+    expect(optionIds("a")).toEqual(["a"]);
+    expect(optionIds(["a", "b"])).toEqual(["a", "b"]);
+    expect(optionIds(undefined)).toEqual([]);
+  });
 });
