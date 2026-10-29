@@ -247,13 +247,10 @@ button {
   font-size: 16px;
   background: transparent !important;
 }
-/* reading size on larger screens: 15 px, lines of about 68 characters (blocks and embeds keep the width) */
+/* reading size on larger screens: 16 px, lines of about 72 characters (blocks and embeds keep the width) */
 @media (min-width: 768px) {
-  .cm-editor {
-    font-size: 15px;
-  }
   .cm-line {
-    max-width: 68ch;
+    max-width: 72ch;
   }
 }
 .cm-editor.cm-focused {
@@ -261,14 +258,15 @@ button {
 }
 .cm-scroller {
   font-family: var(--font-sans) !important;
-  line-height: 1.65 !important;
+  line-height: 1.6 !important;
+  overflow: visible !important;
 }
 .cm-content {
   padding: 4px 0 0 0 !important;
   caret-color: var(--text) !important;
 }
 .cm-line {
-  padding: 0 !important;
+  padding: 3px 0 !important;
 }
 .cm-cursor {
   border-left-color: var(--text) !important;
@@ -316,15 +314,96 @@ button {
   max-width: 560px;
 }
 .cm-tooltip-autocomplete {
-  border-radius: 8px !important;
-  border: 1px solid var(--border) !important;
+  border-radius: 10px !important;
+  border: none !important;
   background: var(--surface) !important;
-  box-shadow: 0 8px 24px rgb(0 0 0 / 0.15);
+  box-shadow: var(--shadow-pop);
   overflow: hidden;
+  padding: 4px 0;
+}
+.cm-tooltip-autocomplete > ul {
+  max-height: min(22rem, 50vh) !important;
+  min-width: 18rem !important;
+  max-width: 22rem !important;
+  font-family: var(--font-sans) !important;
+}
+.cm-tooltip-autocomplete > ul > li {
+  margin: 0 4px;
+  border-radius: 6px;
+  padding: 3px 8px !important;
+  display: flex;
+  align-items: center;
 }
 .cm-tooltip-autocomplete ul li[aria-selected] {
   background: var(--hover) !important;
   color: var(--text) !important;
+}
+.cm-tooltip-autocomplete completion-section {
+  display: block;
+  padding: 8px 12px 4px !important;
+  border: none !important;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted-foreground);
+  opacity: 1 !important;
+}
+/* the "/" menu and page options: an icon, the name and a line on what it is */
+.cm-slash {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+.cm-slash ~ .cm-completionLabel,
+.cm-slash ~ .cm-completionDetail {
+  display: none;
+}
+.cm-slash-icon {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+}
+.cm-slash.page .cm-slash-icon {
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: none;
+  color: var(--muted-foreground);
+}
+.cm-slash-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  line-height: 1.3;
+}
+.cm-slash-name {
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cm-slash-hint {
+  font-size: 12px;
+  color: var(--muted-foreground);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cm-slash.page {
+  padding: 2px 0;
+}
+.cm-slash.page .cm-slash-text {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 8px;
 }
 .cm-completionLabel {
   font-family: var(--font-sans);
@@ -487,6 +566,19 @@ tr:hover .cell-tools button:not(.tap-y),
   margin-inline: auto;
   padding: 28px 48px 72px;
 }
+/* on a page: the path and its tools stay on top while scrolling */
+.page-read:has(> .page-bar) {
+  padding-top: 0;
+}
+.page-bar {
+  position: sticky;
+  top: 0;
+  z-index: 15;
+  margin-inline: -12px;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(8px);
+}
 .page-read {
   max-width: 760px;
 }
@@ -501,17 +593,17 @@ tr:hover .cell-tools button:not(.tap-y),
   }
 }
 
-/* Page title (§ 1.2): 28/34 on a desktop, 24/30 on a phone */
+/* Page title (§ 1.2): 36/44 on a desktop, 28/34 on a phone */
 .page-title {
-  font-size: 28px;
-  line-height: 34px;
-  font-weight: 600;
-  letter-spacing: -0.015em;
+  font-size: 36px;
+  line-height: 44px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
 @media (max-width: 767px) {
   .page-title {
-    font-size: 24px;
-    line-height: 30px;
+    font-size: 28px;
+    line-height: 34px;
   }
 }
 
@@ -520,4 +612,327 @@ tr:hover .cell-tools button:not(.tap-y),
 }
 @media (prefers-reduced-motion: reduce) {
   [data-slot] { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+/* a page's title is edited in place like its text: no ring */
+textarea.page-title.field:focus {
+  outline: none;
+}
+
+/* ---------- the editor as blocks (editor/*.ts) ---------- */
+.cm-line.cm-h {
+  padding-bottom: 1px !important;
+}
+.cm-line.cm-h1 {
+  padding-top: 1.1em !important;
+}
+.cm-line.cm-h2 {
+  padding-top: 0.9em !important;
+}
+.cm-line.cm-h3 {
+  padding-top: 0.6em !important;
+}
+.cm-content > .cm-line.cm-h:first-child {
+  padding-top: 3px !important;
+}
+.cm-bullet {
+  display: inline-block;
+  width: 1.5em;
+  text-align: center;
+  margin-left: -0.15em;
+  font-size: 1.05em;
+  line-height: 1;
+  color: var(--text);
+}
+.cm-ordered {
+  color: var(--text);
+  padding-right: 0.2em;
+}
+.cm-check {
+  position: relative;
+  display: inline-block;
+  vertical-align: -2px;
+  width: 16px;
+  height: 16px;
+  margin: 0 0.5em 0 0.15em;
+  border: 1.5px solid var(--text);
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.cm-check:hover {
+  background: var(--hover);
+}
+.cm-check.checked {
+  background: var(--focus);
+  border-color: var(--focus);
+}
+.cm-check.checked::after {
+  content: "";
+  position: absolute;
+  left: 4.5px;
+  top: 1px;
+  width: 4px;
+  height: 8px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.cm-taskline.done {
+  color: var(--muted-foreground);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--muted-foreground) 60%, transparent);
+}
+.cm-line.cm-quote {
+  border-left: 3px solid var(--text);
+  padding-left: 14px !important;
+}
+.cm-rule {
+  display: inline-block;
+  width: 100%;
+  height: 1px;
+  vertical-align: middle;
+  background: var(--border);
+}
+.cm-line.cm-codeblock {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  background: var(--surface-2);
+  padding-inline: 16px !important;
+  max-width: none;
+}
+.cm-line.cm-codeblock.first {
+  border-radius: 6px 6px 0 0;
+  padding-top: 10px !important;
+}
+.cm-line.cm-codeblock.last {
+  border-radius: 0 0 6px 6px;
+  padding-bottom: 10px !important;
+}
+.cm-line.cm-codeblock.fence {
+  color: var(--faint);
+}
+.cm-line.cm-codeblock * {
+  color: inherit !important;
+  font-size: inherit !important;
+  background: none !important;
+  padding: 0 !important;
+}
+.cm-mdlink {
+  color: var(--link);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--link) 40%, transparent);
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.cm-wikilink {
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--link) 35%, transparent);
+  text-underline-offset: 3px;
+}
+/* an empty line between blocks is a small gap, not a whole line (full height where the cursor is) */
+.cm-line.cm-blank {
+  font-size: 0.5em;
+  padding: 0 !important;
+}
+.cm-line-hint {
+  color: var(--faint);
+  pointer-events: none;
+}
+
+/* "+" and "⠿" left of the block under the pointer */
+.cm-handles {
+  position: absolute;
+  left: -52px;
+  display: flex;
+  gap: 1px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s;
+  z-index: 5;
+}
+.cm-handles.shown {
+  opacity: 1;
+  pointer-events: auto;
+}
+.cm-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  color: var(--faint);
+}
+.cm-handle:hover {
+  background: var(--hover);
+  color: var(--muted-foreground);
+}
+.cm-handle.grip {
+  width: 18px;
+  cursor: grab;
+}
+.cm-drop {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 3px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--focus) 60%, transparent);
+  display: none;
+  pointer-events: none;
+}
+.cm-drop.shown {
+  display: block;
+}
+body.cm-dragging,
+body.cm-dragging * {
+  cursor: grabbing !important;
+  user-select: none;
+}
+@media (pointer: coarse) {
+  .cm-handles {
+    display: none;
+  }
+}
+
+/* menus of the editor (block menu, "Turn into") */
+.cm-menu {
+  position: fixed;
+  z-index: 60;
+  min-width: 220px;
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: 4px;
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: var(--shadow-pop);
+  font-size: 14px;
+}
+.cm-menu-title {
+  padding: 6px 8px 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted-foreground);
+}
+.cm-menu-sep {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--border);
+}
+.cm-menu-row {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  text-align: left;
+  color: var(--text);
+  outline: none;
+}
+.cm-menu-row:hover,
+.cm-menu-row:focus-visible,
+.cm-menu-row.active {
+  background: var(--hover);
+}
+.cm-menu-row.danger {
+  color: var(--danger-text);
+}
+.cm-menu-icon {
+  display: flex;
+  color: var(--muted-foreground);
+}
+.cm-menu-row.danger .cm-menu-icon {
+  color: inherit;
+}
+.cm-menu-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cm-menu-hint {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+
+/* the toolbar above selected text */
+.cm-toolbar {
+  position: absolute;
+  z-index: 30;
+  display: none;
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow-pop);
+  font-size: 14px;
+}
+.cm-toolbar.shown {
+  display: block;
+}
+.cm-toolbar-bar {
+  display: flex;
+  align-items: center;
+  padding: 3px;
+  gap: 1px;
+}
+.cm-toolbar.linking .cm-toolbar-bar {
+  display: none;
+}
+.cm-tb {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  min-width: 28px;
+  justify-content: center;
+  padding: 0 6px;
+  border-radius: 5px;
+  color: var(--text);
+  white-space: nowrap;
+}
+.cm-tb:hover {
+  background: var(--hover);
+}
+.cm-tb.kind svg {
+  color: var(--muted-foreground);
+}
+.cm-tb-sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 4px 3px;
+  background: var(--border);
+}
+.cm-toolbar-link {
+  display: none;
+  width: 320px;
+  padding: 6px;
+}
+.cm-toolbar.linking .cm-toolbar-link {
+  display: block;
+}
+.cm-toolbar-link input {
+  width: 100%;
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  outline: none;
+  font-size: 14px;
+}
+.cm-toolbar-link input:focus {
+  border-color: var(--focus);
+}
+.cm-toolbar-results {
+  margin-top: 4px;
+}
+.cm-toolbar-results:empty {
+  display: none;
+}
+.cm-toolbar-empty {
+  padding: 6px 8px;
+  font-size: 13px;
+  color: var(--muted-foreground);
 }

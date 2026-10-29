@@ -1,0 +1,215 @@
+// Above selected text, as in Notion: turn the block into another kind, bold, italic,
+// strikethrough, code, and a link – to a page (found by its title) or to a web address.
+// ⌘B, ⌘I, ⌘⇧S, ⌘E and ⌘K do the same from the keyboard.
+import { EditorSelection, Prec } from "@codemirror/state";
+import { type EditorView, ViewPlugin, type ViewUpdate, keymap } from "@codemirror/view";
+import { Bold, ChevronDown, Code, FileText, Globe, Italic, Link2, Strikethrough } from "lucide-react";
+import { repo } from "../../repo";
+import { tr } from "../../i18n";
+import { KINDS, kindName, kindOf, setKind, toggleMark } from "./blocks";
+import { iconButton, iconHTML } from "./icons";
+import { showMenu } from "./menu";
+
+const isURL = (s: string) => /^(https?:\/\/|mailto:|www\.)\S+$/i.test(s.trim());
+
+/** Link the selected text: [[Page|text]] (or [[Page]] when the text is the title) or [text](url). */
+function link(view: EditorView, target: { page?: string; url?: string }) {
+  const { from, to } = view.state.selection.main;
+  const text = view.state.sliceDoc(from, to);
+  const insert = target.page
+    ? text.trim().toLowerCase() === target.page.toLowerCase()
+      ? `[[${target.page}]]`
+      : `[[${target.page}|${text}]]`
+    : `[${text}](${/^www\./i.test(target.url!) ? "https://" + target.url : target.url})`;
+  view.dispatch({ changes: { from, to, insert }, selection: EditorSelection.cursor(from + insert.length) });
+  view.focus();
+}
+
+class Toolbar {
+  dom: HTMLDivElement;
+  bar: HTMLDivElement;
+  linkBox: HTMLDivElement;
+  input: HTMLInputElement;
+  results: HTMLDivElement;
+  kindBtn: HTMLButtonElement;
+  pointerDown = false;
+  linking = false;
+  picked = 0;
+  hits: { title: string; type: string }[] = [];
+  constructor(readonly view: EditorView) {
+    this.dom = document.createElement("div");
+    this.dom.className = "cm-toolbar";
+    this.dom.addEventListener("mousedown", (e) => {
+      if (!(e.target as HTMLElement).closest("input")) e.preventDefault();
+    });
+    this.bar = document.createElement("div");
+    this.bar.className = "cm-toolbar-bar";
+    this.kindBtn = document.createElement("button");
+    this.kindBtn.type = "button";
+    this.kindBtn.className = "cm-tb kind";
+    this.kindBtn.addEventListener("click", () => {
+      const r = this.kindBtn.getBoundingClientRect();
+      const pos = view.state.selection.main.from;
+      const current = kindOf(view.state.doc.lineAt(pos).text);
+      showMenu({ left: r.left, top: r.bottom + 6 }, [{ title: tr("editor.turnInto"), entries: KINDS.map((k) => ({ label: kindName(k.kind), icon: k.icon, active: k.kind === current, run: () => setKind(view, pos, k.kind) })) }]).focusFirst();
+    });
+    const sep = () => Object.assign(document.createElement("span"), { className: "cm-tb-sep" });
+    const mark = (icon: typeof Bold, label: string, m: string) => {
+      const b = iconButton(icon, label, "cm-tb", 16);
+      b.addEventListener("click", () => toggleMark(view, m));
+      return b;
+    };
+    const linkBtn = iconButton(Link2, tr("editor.fmt.link") + " (⌘K)", "cm-tb wide", 16);
+    linkBtn.insertAdjacentHTML("beforeend", `<span>${tr("editor.fmt.linkShort")}</span>`);
+    linkBtn.addEventListener("click", () => this.openLink());
+    this.bar.append(
+      this.kindBtn,
+      sep(),
+      linkBtn,
+      sep(),
+      mark(Bold, tr("editor.fmt.bold") + " (⌘B)", "**"),
+      mark(Italic, tr("editor.fmt.italic") + " (⌘I)", "*"),
+      mark(Strikethrough, tr("editor.fmt.strike") + " (⌘⇧S)", "~~"),
+      mark(Code, tr("editor.fmt.code") + " (⌘E)", "`"),
+    );
+    this.linkBox = document.createElement("div");
+    this.linkBox.className = "cm-toolbar-link";
+    this.input = document.createElement("input");
+    this.input.placeholder = tr("editor.fmt.linkPlaceholder");
+    this.input.setAttribute("aria-label", tr("editor.fmt.link"));
+    this.input.addEventListener("input", () => this.search());
+    this.input.addEventListener("keydown", (e) => this.key(e));
+    this.input.addEventListener("blur", () => setTimeout(() => this.linking && !this.dom.contains(document.activeElement) && this.closeLink(false), 0));
+    this.results = document.createElement("div");
+    this.results.className = "cm-toolbar-results";
+    this.linkBox.append(this.input, this.results);
+    this.dom.append(this.bar, this.linkBox);
+    view.dom.append(this.dom);
+    view.contentDOM.addEventListener("mousedown", this.down);
+    window.addEventListener("mouseup", this.up);
+    this.place();
+  }
+  down = () => {
+    this.pointerDown = true;
+    this.place();
+  };
+  up = () => {
+    if (!this.pointerDown) return;
+    this.pointerDown = false;
+    setTimeout(() => this.place());
+  };
+  get wanted() {
+    const s = this.view.state.selection.main;
+    return !this.view.state.readOnly && (this.linking || (!s.empty && this.view.hasFocus && !this.pointerDown && !/\n/.test(this.view.state.sliceDoc(s.from, s.to).trim())));
+  }
+  place() {
+    if (!this.wanted) {
+      this.dom.classList.remove("shown");
+      return;
+    }
+    const { view } = this;
+    const s = view.state.selection.main;
+    const k = kindOf(view.state.doc.lineAt(s.from).text);
+    this.kindBtn.innerHTML = `<span>${kindName(k)}</span>${iconHTML(ChevronDown, 14)}`;
+    view.requestMeasure({
+      read: () => {
+        const a = view.coordsAtPos(s.from, 1);
+        const b = view.coordsAtPos(s.to, -1);
+        return { a, b, dom: view.dom.getBoundingClientRect() };
+      },
+      write: ({ a, b, dom }) => {
+        if (!a || !b) return;
+        this.dom.classList.add("shown");
+        const w = this.dom.offsetWidth;
+        const left = Math.max(-dom.left + 8, Math.min((a.left + (a.top === b.top ? b.right : a.left)) / 2 - w / 2 - dom.left, innerWidth - dom.left - w - 8));
+        this.dom.style.left = left + "px";
+        this.dom.style.top = a.top - dom.top - this.dom.offsetHeight - 8 + "px";
+      },
+    });
+  }
+  openLink() {
+    if (this.view.state.selection.main.empty) return;
+    this.linking = true;
+    this.dom.classList.add("linking");
+    this.input.value = "";
+    this.search();
+    this.place();
+    setTimeout(() => this.input.focus());
+  }
+  closeLink(refocus = true) {
+    this.linking = false;
+    this.dom.classList.remove("linking");
+    if (refocus) this.view.focus();
+    this.place();
+  }
+  search() {
+    const q = this.input.value;
+    const s = this.view.state.selection.main;
+    const text = this.view.state.sliceDoc(s.from, s.to);
+    const ix = repo.index();
+    const found = (q.trim() ? repo.search(q, 6) : repo.search(text, 6)).filter((r) => r.title);
+    this.hits = found.map((r) => ({ title: r.title, type: r.kind === "datei" ? tr("kind.file") : (ix.typeName(r.type) ?? "") }));
+    this.picked = 0;
+    this.results.textContent = "";
+    const rows: { icon: typeof Globe; label: string; hint: string; run: () => void }[] = [];
+    if (isURL(q)) rows.push({ icon: Globe, label: q.trim(), hint: tr("editor.fmt.linkWeb"), run: () => (this.closeLink(false), link(this.view, { url: q.trim() })) });
+    if (this.hits.length) for (const h of this.hits) rows.push({ icon: FileText, label: h.title, hint: h.type, run: () => (this.closeLink(false), link(this.view, { page: h.title })) });
+    else if (!isURL(q)) {
+      const hint = Object.assign(document.createElement("div"), { className: "cm-toolbar-empty", textContent: tr("editor.fmt.linkNone") });
+      this.results.append(hint);
+    }
+    rows.forEach((r, i) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "cm-menu-row" + (i === 0 ? " active" : "");
+      b.innerHTML = `<span class="cm-menu-icon">${iconHTML(r.icon, 15)}</span><span class="cm-menu-label"></span><span class="cm-menu-hint"></span>`;
+      b.querySelector(".cm-menu-label")!.textContent = r.label;
+      b.querySelector(".cm-menu-hint")!.textContent = r.hint;
+      b.addEventListener("click", r.run);
+      this.results.append(b);
+    });
+  }
+  key(e: KeyboardEvent) {
+    const rows = [...this.results.querySelectorAll<HTMLButtonElement>("button")];
+    if (e.key === "Escape") (e.preventDefault(), this.closeLink());
+    else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      if (!rows.length) return;
+      this.picked = (this.picked + (e.key === "ArrowDown" ? 1 : -1) + rows.length) % rows.length;
+      rows.forEach((r, i) => r.classList.toggle("active", i === this.picked));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      rows[this.picked]?.click();
+    }
+  }
+  update(u: ViewUpdate) {
+    if (u.selectionSet || u.focusChanged || u.docChanged || u.geometryChanged) {
+      if (this.linking && u.selectionSet && u.view.hasFocus) this.closeLink(false);
+      this.place();
+    }
+  }
+  destroy() {
+    this.view.contentDOM.removeEventListener("mousedown", this.down);
+    window.removeEventListener("mouseup", this.up);
+    this.dom.remove();
+  }
+}
+
+export const formatToolbar = ViewPlugin.fromClass(Toolbar);
+
+/** ⌘K on selected text: the link box (without a selection ⌘K stays the search). */
+function linkKey(view: EditorView) {
+  if (view.state.readOnly || view.state.selection.main.empty) return false;
+  view.plugin(formatToolbar)?.openLink();
+  return true;
+}
+
+export const formatKeymap = Prec.high(
+  keymap.of([
+    { key: "Mod-b", run: (v) => toggleMark(v, "**") },
+    { key: "Mod-i", run: (v) => toggleMark(v, "*") },
+    { key: "Mod-Shift-s", run: (v) => toggleMark(v, "~~") },
+    { key: "Mod-e", run: (v) => toggleMark(v, "`") },
+    { key: "Mod-k", run: linkKey },
+  ]),
+);

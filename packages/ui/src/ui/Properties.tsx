@@ -5,11 +5,11 @@ import { NativeSelect } from "../components/ui/native-select";
 // Properties of an item: those its type defines, free ones, and values of removed
 // properties ("Weitere Eigenschaften") – schema changes never delete values.
 import { useState } from "react";
-import { X, Plus, ExternalLink, AlertTriangle, Trash2, ArrowRightLeft } from "lucide-react";
+import { X, Plus, ExternalLink, AlertTriangle, Trash2, ArrowRightLeft, CalendarDays } from "lucide-react";
 import { type FreeKind, type FreeValue, type Item, type PropDef, type TypeSchema, type Value, FREE_KINDS, todayISO } from "@obtion/core/model";
 import { fmtDate, fmtNumber } from "@obtion/core/i18n";
 import { parseQuery, matches } from "@obtion/core/query";
-import { doneAt, statusProp } from "@obtion/core/traits";
+import { doneAt, hasValue, priorityProp, statusOf } from "@obtion/core/traits";
 import { toFree } from "@obtion/core/typeops";
 import { repo } from "../repo";
 import { useIndex } from "../hooks";
@@ -17,7 +17,7 @@ import { useT } from "../i18n";
 import { DateField, InlineText, ItemLink, MenuItem, Popover, Progress, StatusPill, Tag, cx, GROUP_COLOR, AddButton } from "./bits";
 import { TagInput } from "./TagInput";
 import { ItemPicker } from "./Picker";
-import { setStatus } from "./Row";
+import { StatusMenu, setStatus } from "./Row";
 
 function Row({ label, children, title }: { label: React.ReactNode; children: React.ReactNode; title?: string }) {
   return (
@@ -345,21 +345,32 @@ export function freeOptions(name: string): string[] {
 function BlockRow({ label, title, children }: { label: React.ReactNode; title?: string; children: React.ReactNode }) {
   return (
     <>
-      <div className="flex min-h-8 items-center truncate text-[13px] text-muted-foreground pointer-coarse:min-h-11" title={title ?? (typeof label === "string" ? label : undefined)}>
+      <div className="flex min-h-[34px] items-center truncate rounded-md px-1.5 text-sm text-muted-foreground pointer-coarse:min-h-11" title={title ?? (typeof label === "string" ? label : undefined)}>
         <span className="truncate">{label}</span>
       </div>
-      <div className="group flex min-h-8 min-w-0 flex-wrap items-center gap-1.5 text-sm pointer-coarse:min-h-11">{children}</div>
+      <div className="group flex min-h-[34px] min-w-0 flex-wrap items-center gap-1.5 rounded-md px-1.5 text-sm hover:bg-hover/60 pointer-coarse:min-h-11">{children}</div>
     </>
   );
 }
 
+/** What the page puts around its badges: the type in front, the languages behind, the progress under the dates. */
+export interface PageHead {
+  first?: React.ReactNode;
+  last?: React.ReactNode;
+  progress?: React.ReactNode;
+}
+
+/** Status and selections read by themselves as badges; dates by their icon. They need no label. */
+const isBadge = (p: PropDef) => p.kind === "status" || p.kind === "select";
+
 /**
- * The properties of a page as one block under the title (design rules § 2.2): the type's
- * properties in their order – without the status (it stands in the type line) and without
- * progress (the band) –, then free properties, then the other side of relations ("Blockiert
- * diese"), last the tags if any. "+ Eigenschaft" offers the empty ones, a new free one and a tag.
+ * The properties of a page under the title (design rules § 2.2). First a row of badges – the
+ * type, then status and selections in the type's order –, under it the dates, under them the
+ * progress. The rest follows with its name: the type's properties in their order, free ones,
+ * the other side of relations ("Blockiert diese"), last the tags. "+ Eigenschaft" offers the
+ * empty ones, a new free one and a tag.
  */
-export function PropertyBlock({ item, schema, noAdd }: { item: Item; schema?: TypeSchema; noAdd?: boolean }) {
+export function PropertyBlock({ item, schema, noAdd, head = {} }: { item: Item; schema?: TypeSchema; noAdd?: boolean; head?: PageHead }) {
   const { t } = useT();
   const ix = useIndex();
   // empty properties opened from "+ Eigenschaft" stay while on this page
@@ -367,9 +378,11 @@ export function PropertyBlock({ item, schema, noAdd }: { item: Item; schema?: Ty
   const [focus, setFocus] = useState<string | undefined>();
   const [adding, setAdding] = useState(false);
   const [tagging, setTagging] = useState(false);
-  const status = statusProp(schema);
-  const shown = schema ? visibleProps(item, schema, ix, opened).filter((p) => p.id !== status?.id && !(p.kind === "computed" && p.computed?.fn !== "count")) : [];
-  const empty = schema ? schema.properties.filter((p) => p.kind !== "computed" && p.id !== status?.id && !shown.some((x) => x.id === p.id)) : [];
+  const visible = schema ? visibleProps(item, schema, ix, opened).filter((p) => !(p.kind === "computed" && p.computed?.fn !== "count")) : [];
+  const badges = visible.filter(isBadge);
+  const dates = visible.filter((p) => p.kind === "date");
+  const shown = visible.filter((p) => !isBadge(p) && p.kind !== "date");
+  const empty = schema ? schema.properties.filter((p) => p.kind !== "computed" && !visible.some((x) => x.id === p.id)) : [];
   const leftovers = schema ? schema.removedProperties.filter((p) => item.props[p.id] !== undefined || item.rels[p.id]?.length) : [];
   const inverse = inverseGroups(item, ix, t);
   const free = Object.entries(item.extra);
@@ -382,10 +395,35 @@ export function PropertyBlock({ item, schema, noAdd }: { item: Item; schema?: Ty
     setName("");
     setAdding(false);
   };
-  const any = shown.length || free.length || inverse.length || item.tags.length || leftovers.length;
-  if (!any && noAdd) return null;
+  // an empty badge or date waits for the pointer, like "+ Eigenschaft" (unless just opened)
+  const quiet = (p: PropDef) => !hasValue(item, p, ix) && !opened.has(p.id) && "opacity-0 transition-opacity group-hover/props:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100";
+  const rows = shown.length || free.length || inverse.length || item.tags.length || leftovers.length || tagging;
+  if (!rows && !badges.length && !dates.length && !head.first && !head.last && !head.progress && noAdd) return null;
   return (
-    <div className="mt-[18px] grid grid-cols-[148px_minmax(0,1fr)] gap-x-3 max-md:grid-cols-[124px_minmax(0,1fr)]">
+    <div className="group/props">
+      <div className="mt-4 flex flex-wrap items-center gap-1.5">
+        {head.first}
+        {badges.map((p) => (
+          <span key={p.id} className={cx("inline-flex", quiet(p))}>
+            {p.kind === "status" ? <StatusBadge item={item} /> : <SelectBadge item={item} prop={p} />}
+          </span>
+        ))}
+        {head.last}
+      </div>
+      {dates.length > 0 && (
+        <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
+          {dates.map((p) => (
+            <span key={p.id} className={cx("inline-flex items-center gap-1.5", quiet(p))} title={p.description || p.name}>
+              <CalendarDays size={15} className="shrink-0 text-muted-foreground" aria-hidden />
+              {/* the name only where the icon alone does not say which date it is */}
+              {(dates.length > 1 || !hasValue(item, p, ix)) && <span className="text-muted-foreground">{p.name}</span>}
+              <PropertyField item={item} prop={p} autoFocus={focus === p.id} />
+            </span>
+          ))}
+        </div>
+      )}
+      {head.progress}
+      <div className={cx("-mx-1.5 grid grid-cols-[160px_minmax(0,1fr)] gap-x-1 max-md:grid-cols-[124px_minmax(0,1fr)]", rows ? "mt-4" : "mt-2")}>
       {shown.map((p) => (
         <BlockRow key={p.id} label={p.name} title={p.description || p.name}>
           <PropertyField item={item} prop={p} autoFocus={focus === p.id} />
@@ -463,8 +501,14 @@ export function PropertyBlock({ item, schema, noAdd }: { item: Item; schema?: Ty
           ) : (
             <Popover
               trigger={(pp) => (
-                <ShadcnButton variant="plain" size="none" {...pp} className="tap-y -ml-1 flex h-7 w-fit items-center gap-1 rounded-md px-1 text-[13px] text-muted-foreground hover:bg-hover hover:text-fg">
-                  <Plus size={13} /> {t("props.addFree")}
+                // quiet until the pointer is over the properties (always there on touch screens)
+                <ShadcnButton
+                  variant="plain"
+                  size="none"
+                  {...pp}
+                  className="tap-y flex h-[34px] w-fit items-center gap-1.5 rounded-md px-1.5 text-sm text-muted-foreground opacity-0 transition-opacity hover:bg-hover hover:text-fg focus:opacity-100 group-hover/props:opacity-100 aria-expanded:opacity-100 pointer-coarse:opacity-100"
+                >
+                  <Plus size={15} /> {t("props.addProperty")}
                 </ShadcnButton>
               )}
             >
@@ -484,7 +528,77 @@ export function PropertyBlock({ item, schema, noAdd }: { item: Item; schema?: Ty
           )}
         </div>
       )}
+      </div>
     </div>
+  );
+}
+
+/** The status as a badge; a click picks another. */
+function StatusBadge({ item }: { item: Item }) {
+  const { t } = useT();
+  const ix = useIndex();
+  const st = statusOf(item, ix.schemaOf(item));
+  if (!st) return null;
+  return (
+    <StatusMenu
+      item={item}
+      trigger={(p) => (
+        <ShadcnButton variant="plain" size="none" {...p} className="tap-y inline-flex" aria-label={t("row.status", { name: st.option.name })}>
+          <StatusPill option={st.option} group={st.group} />
+        </ShadcnButton>
+      )}
+    />
+  );
+}
+
+/**
+ * A selection as a badge that says what it is: "Prio hoch" for the priority, otherwise the
+ * property's name before the value ("Phase Entwurf"). Empty: the name, dashed, to pick one.
+ */
+function SelectBadge({ item, prop }: { item: Item; prop: PropDef }) {
+  const { t, lang } = useT();
+  const ix = useIndex();
+  const v = item.props[prop.id];
+  const opt = prop.options?.find((o) => o.id === v);
+  const prio = priorityProp(ix.schemaOf(item))?.id === prop.id;
+  const label = !opt ? null : prio ? t("props.prioBadge", { value: lang === "de" ? opt.name.toLocaleLowerCase("de") : opt.name }) : (
+    <>
+      <span className="opacity-70">{prop.name}</span> {opt.name}
+    </>
+  );
+  return (
+    <Popover
+      trigger={(p) => (
+        <ShadcnButton variant="plain" size="none" {...p} className="tap-y inline-flex" aria-label={t("props.set", { name: prop.name })} title={prop.description || prop.name}>
+          {opt ? (
+            <StatusPill option={opt} label={label} />
+          ) : (
+            <span className="inline-flex items-center gap-1 rounded-full border border-dashed border-line px-2 py-0.5 text-xs text-muted-foreground hover:text-fg">
+              <Plus size={11} /> {prop.name}
+            </span>
+          )}
+        </ShadcnButton>
+      )}
+    >
+      {(close) => (
+        <>
+          <p className="px-2.5 pb-1 pt-1.5 text-xs text-muted-foreground">{prop.name}</p>
+          {prop.options?.map((o) => (
+            <MenuItem key={o.id} active={o.id === v} onClick={() => (close(), repo.setProp(item.id, prop.id, o.id))}>
+              <StatusPill option={o} />
+            </MenuItem>
+          ))}
+          {opt && (
+            <>
+              <div className="my-1 border-t border-line" />
+              <MenuItem icon={<X size={13} />} onClick={() => (close(), repo.setProp(item.id, prop.id, null))}>
+                {t("props.removeValue")}
+              </MenuItem>
+            </>
+          )}
+        </>
+      )}
+    </Popover>
   );
 }
 

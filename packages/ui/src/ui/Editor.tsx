@@ -2,7 +2,7 @@
 // other devices and agents character by character.
 import { useEffect, useRef } from "react";
 import * as Y from "yjs";
-import { Compartment, EditorState, RangeSetBuilder, StateField, type Extension } from "@codemirror/state";
+import { Compartment, EditorState, Prec, RangeSetBuilder, StateField, type Extension } from "@codemirror/state";
 import {
   Decoration,
   type DecorationSet,
@@ -18,12 +18,17 @@ import {
 import { defaultKeymap, indentWithTab } from "@codemirror/commands";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
-import { insertQueryBlock } from "./QueryBlock";
 import { touchOnTextEdit } from "@obtion/core/model";
 import { embedHTML, hydrateFiles } from "./Markdown";
 import { openLightbox } from "./Lightbox";
 import { notify } from "./feedback";
-import { autocompletion, type CompletionContext, type CompletionResult } from "@codemirror/autocomplete";
+import { autocompletion, type Completion, type CompletionContext, type CompletionResult } from "@codemirror/autocomplete";
+import { FilePlus } from "lucide-react";
+import { livePreview } from "./editor/livePreview";
+import { mentionCompletion, onSlashFiles, pageOption, slashCompletion, slashRender } from "./editor/slash";
+import { blockHandles } from "./editor/handles";
+import { formatKeymap, formatToolbar } from "./editor/toolbar";
+import { moveBy } from "./editor/blocks";
 import { searchKeymap } from "@codemirror/search";
 import { tags as t } from "@lezer/highlight";
 import { yCollab, yUndoManagerKeymap } from "y-codemirror.next";
@@ -33,18 +38,18 @@ import { files } from "../files";
 import { tr } from "../i18n";
 
 const highlight = HighlightStyle.define([
-  { tag: t.heading1, fontSize: "1.5em", fontWeight: "650", lineHeight: "1.4" },
-  { tag: t.heading2, fontSize: "1.28em", fontWeight: "650" },
-  { tag: t.heading3, fontSize: "1.1em", fontWeight: "650" },
+  { tag: t.heading1, fontSize: "1.75em", fontWeight: "650", lineHeight: "1.3", letterSpacing: "-0.01em" },
+  { tag: t.heading2, fontSize: "1.4em", fontWeight: "650", lineHeight: "1.35" },
+  { tag: t.heading3, fontSize: "1.18em", fontWeight: "650" },
   { tag: [t.heading4, t.heading5, t.heading6], fontWeight: "650" },
   { tag: t.strong, fontWeight: "650" },
   { tag: t.emphasis, fontStyle: "italic" },
   { tag: t.strikethrough, textDecoration: "line-through" },
-  { tag: t.monospace, fontFamily: "var(--font-mono)", fontSize: "0.9em", background: "var(--surface-2)", borderRadius: "3px" },
+  { tag: t.monospace, fontFamily: "var(--font-mono)", fontSize: "0.86em", color: "var(--code-text)", background: "color-mix(in srgb, var(--muted-foreground) 14%, transparent)", borderRadius: "4px", padding: "0.15em 0.3em" },
   { tag: [t.processingInstruction, t.meta], color: "var(--faint)" },
   { tag: t.link, color: "var(--focus)" },
   { tag: t.url, color: "var(--muted-foreground)" },
-  { tag: t.quote, color: "var(--muted-foreground)", fontStyle: "italic" },
+  { tag: t.quote, color: "inherit" },
   { tag: t.list, color: "inherit" },
   { tag: t.contentSeparator, color: "var(--faint)" },
 ]);
@@ -209,55 +214,20 @@ const images = StateField.define<DecorationSet>({
 
 // ---------- [[ autocomplete ----------
 
-/** "/" at the start of a line: insert a query block or an image. */
-function slashCompletion(ctx: CompletionContext): CompletionResult | null {
-  const m = ctx.matchBefore(/^\s*\/[\p{L}]*$/u);
-  if (!m) return null;
-  const from = m.from + m.text.indexOf("/");
-  const clear = (view: EditorView) => view.dispatch({ changes: { from, to: ctx.pos, insert: "" } });
-  return {
-    from,
-    options: [
-      {
-        label: "/" + tr("editor.slash.query"),
-        detail: tr("editor.slash.queryHint"),
-        apply: (view: EditorView) => {
-          clear(view);
-          insertQueryBlock(view);
-        },
-      },
-      {
-        label: "/" + tr("editor.slash.image"),
-        detail: tr("editor.slash.imageHint"),
-        apply: (view: EditorView) => {
-          clear(view);
-          const input = document.createElement("input");
-          input.type = "file";
-          input.accept = "image/*";
-          input.multiple = true;
-          input.onchange = () => input.files && insertFilesAtCursor(view, [...input.files]);
-          input.click();
-        },
-      },
-    ],
-    validFor: /^\/[\p{L}]*$/u,
-  };
-}
-
 const linkCompletion = (selfId?: string) => (ctx: CompletionContext): CompletionResult | null => {
   const m = ctx.matchBefore(/\[\[[^\]\n]*$/);
   if (!m) return null;
   const q = m.text.slice(2);
   const after = ctx.state.sliceDoc(ctx.pos, ctx.pos + 2);
   const hits = (q.trim() ? repo.search(q, 40) : repo.live().sort((a, b) => b.updated - a.updated).slice(0, 40)).filter((r) => r.id !== selfId);
-  const options: { label: string; detail: string; apply: string; boost: number }[] = hits.map((r) => ({
+  const options: Completion[] = hits.map((r) => pageOption({
     label: r.title,
-    detail: r.kind === "datei" ? tr("kind.file") : (repo.index().typeName(r.type) ?? ""),
+    hint: r.kind === "datei" ? tr("kind.file") : (repo.index().typeName(r.type) ?? ""),
     apply: r.title + (after === "]]" ? "" : "]]"),
     boost: r.title.toLowerCase().startsWith(q.toLowerCase()) ? 10 : 0,
   }));
   if (q.trim() && !hits.some((h) => h.title.toLowerCase() === q.trim().toLowerCase()))
-    options.push({ label: q.trim(), detail: tr("editor.newLink"), apply: q.trim() + (after === "]]" ? "" : "]]"), boost: -10 });
+    options.push(pageOption({ label: q.trim(), hint: tr("editor.newLink"), apply: q.trim() + (after === "]]" ? "" : "]]"), boost: -10, icon: FilePlus }));
   return { from: m.from + 2, options, filter: false };
 };
 
@@ -311,6 +281,27 @@ const fileHandlers = EditorView.domEventHandlers({
 export function insertFilesAtCursor(view: EditorView, list: File[]) {
   return insertFiles(view, list, view.state.selection.main.head);
 }
+onSlashFiles(insertFilesAtCursor);
+
+function endQuote(view: EditorView) {
+  const { state } = view;
+  const s = state.selection.main;
+  const line = state.doc.lineAt(s.head);
+  if (!s.empty || !/^\s*>\s*$/.test(line.text) || s.head !== line.to) return false;
+  view.dispatch({ changes: { from: line.from, to: line.to, insert: "" } });
+  return true;
+}
+
+/** Markdown shortcuts Markdown itself does not have: "[] " starts a to-do. */
+const shortcuts = EditorView.inputHandler.of((view, from, to, text) => {
+  if (text !== " " || view.state.readOnly) return false;
+  const line = view.state.doc.lineAt(from);
+  const before = view.state.sliceDoc(line.from, from);
+  if (!/^\s*\[\]$/.test(before)) return false;
+  const start = line.from + before.indexOf("[");
+  view.dispatch({ changes: { from: start, to, insert: "- [ ] " } });
+  return true;
+});
 
 // ---------- component ----------
 
@@ -346,15 +337,30 @@ export function Editor({
     const stopTouch = touchOnTextEdit(doc); // typing moves "geändert"
     const extensions: Extension[] = [
       yCollab(ytext, null, { undoManager }),
-      keymap.of([...yUndoManagerKeymap, ...defaultKeymap, ...searchKeymap, indentWithTab]),
+      formatKeymap,
+      // Enter on an empty quote line ends the quote (Markdown would keep it going)
+      Prec.highest(keymap.of([{ key: "Enter", run: endQuote }])),
+      keymap.of([
+        ...yUndoManagerKeymap,
+        // ⌘⇧↑ / ⌘⇧↓ move the block (as in Notion), ⌥↑ / ⌥↓ the line
+        { key: "Mod-Shift-ArrowUp", run: (v) => (moveBy(v, v.state.selection.main.head, -1), true) },
+        { key: "Mod-Shift-ArrowDown", run: (v) => (moveBy(v, v.state.selection.main.head, 1), true) },
+        ...defaultKeymap,
+        ...searchKeymap,
+        indentWithTab,
+      ]),
       drawSelection(),
       markdown({ base: markdownLanguage }),
       syntaxHighlighting(highlight),
       EditorView.lineWrapping,
       wikilinks,
       quietHeadings,
+      livePreview,
       images,
-      autocompletion({ override: [linkCompletion(nodeId), slashCompletion], icons: false }),
+      autocompletion({ override: [linkCompletion(nodeId), slashCompletion, mentionCompletion(nodeId)], icons: false, addToOptions: [slashRender], maxRenderedOptions: 40 }),
+      blockHandles,
+      formatToolbar,
+      shortcuts,
       fileHandlers,
       placeholderExt(placeholder ?? tr("editor.placeholder")),
       EditorView.contentAttributes.of({ spellcheck: "true", autocapitalize: "sentences", "aria-label": tr("editor.label") }),
