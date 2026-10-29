@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Obtion – Eingang · Sortierbrett (Desktop)</title>
+<meta name="viewport" content="width=1440">
+<style>
+  :root{
+    --bg:#191919; --card:#202020; --secondary:#252525; --accent:#2c2c2c; --border:#303030;
+    --fg:#ececec; --muted:#a3a3a3; --faint:#8a8a8a; --ring:#6f97ff; --inbox:#f0b040;
+    --ok:#50c88c; --danger:#f06b60;
+    --blue:#6e96ff; --violet:#b58cf0; --green:#50c88c; --teal:#46c8d2; --pink:#f082af;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{width:1440px;height:900px;overflow:hidden;background:var(--bg);color:var(--fg);
+    font:13px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+  svg{display:block}
+  .i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+  .i.s{width:13px;height:13px}
+  .i.l{width:20px;height:20px}
+
+  /* ---------- Header ---------- */
+  header{position:absolute;left:0;top:0;right:0;height:60px;display:flex;align-items:center;gap:18px;
+    padding:0 24px;border-bottom:1px solid var(--border);background:#1b1b1b}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:600;letter-spacing:.2px;color:var(--muted)}
+  .brand b{width:22px;height:22px;border-radius:6px;background:linear-gradient(135deg,#3a3a3a,#262626);
+    border:1px solid #3a3a3a;display:grid;place-items:center;font-size:12px;color:var(--fg)}
+  .crumb{color:var(--faint)}
+  .title{display:flex;align-items:center;gap:10px;font-size:17px;font-weight:600}
+  .title .dot{width:9px;height:9px;border-radius:50%;background:var(--inbox);box-shadow:0 0 12px var(--inbox)}
+  .progress{display:flex;align-items:center;gap:12px;margin-left:10px}
+  .segs{display:flex;gap:4px}
+  .segs i{width:34px;height:6px;border-radius:3px;background:#2e2e2e}
+  .segs i.done{background:var(--ok)}
+  .segs i.hand{background:var(--inbox);box-shadow:0 0 10px rgba(240,176,64,.6)}
+  .progress span{color:var(--muted)}
+  .progress span em{font-style:normal;color:var(--fg)}
+  .spacer{flex:1}
+  .ws{display:flex;background:var(--secondary);border:1px solid var(--border);border-radius:8px;padding:3px}
+  .ws button{all:unset;padding:5px 12px;border-radius:6px;color:var(--muted);font-size:12.5px;display:flex;gap:6px;align-items:center;cursor:pointer}
+  .ws button.on{background:var(--accent);color:var(--fg)}
+  .ws .c{font-size:11px;color:var(--faint)}
+  .hbtn{width:32px;height:32px;border-radius:8px;display:grid;place-items:center;color:var(--muted);border:1px solid var(--border)}
+
+  /* ---------- Stapel (linke Spalte) ---------- */
+  aside{position:absolute;left:0;top:60px;bottom:0;width:320px;border-right:1px solid var(--border);
+    background:linear-gradient(180deg,#1c1c1c,#191919);padding:18px 16px;display:flex;flex-direction:column;gap:10px}
+  .capture{display:flex;align-items:center;gap:9px;height:38px;padding:0 12px;border-radius:9px;
+    border:1px dashed #3a3a3a;color:var(--faint)}
+  .capture kbd{margin-left:auto}
+  kbd{font:11px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--muted);background:#2a2a2a;
+    border:1px solid #363636;border-bottom-width:2px;border-radius:5px;padding:3px 5px}
+  .label{font-size:11px;letter-spacing:.9px;text-transform:uppercase;color:var(--faint);
+    display:flex;justify-content:space-between;align-items:center;margin-top:6px}
+  .stack{display:flex;flex-direction:column;gap:9px}
+  .ic{position:relative;background:var(--card);border:1px solid var(--border);border-radius:11px;
+    padding:11px 12px 11px 30px;box-shadow:0 1px 0 rgba(255,255,255,.03) inset,0 2px 6px rgba(0,0,0,.25);
+    cursor:grab;transition:transform .15s,border-color .15s}
+  .ic:hover{transform:translateX(3px);border-color:#3c3c3c}
+  .ic .grip{position:absolute;left:9px;top:13px;color:#4a4a4a}
+  .ic h4{font-size:13.5px;font-weight:550;line-height:1.3}
+  .ic p{color:var(--muted);font-size:12px;margin-top:3px;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
+  .meta{display:flex;gap:8px;align-items:center;margin-top:7px;color:var(--faint);font-size:11.5px}
+  .tag{display:inline-flex;align-items:center;gap:4px;padding:1px 7px;border-radius:99px;font-size:11px;border:1px solid}
+  .tag.firma{color:var(--teal);border-color:rgba(70,200,210,.35);background:rgba(70,200,210,.08)}
+  .tag.sub{color:var(--muted);border-color:#383838}
+  .ic.multi{box-shadow:4px 4px 0 -1px #1d1d1d,4px 4px 0 0 #2e2e2e,8px 8px 0 -1px #1b1b1b,8px 8px 0 0 #2a2a2a}
+  .ic.file{display:flex;gap:11px;align-items:center}
+  .thumb{width:46px;height:38px;border-radius:6px;flex:none;border:1px solid #3a3a3a;
+    background:
+      linear-gradient(135deg,transparent 46%,rgba(110,150,255,.55) 47%,rgba(110,150,255,.55) 50%,transparent 51%),
+      radial-gradient(circle at 70% 30%,rgba(240,130,175,.5) 0 5px,transparent 6px),
+      repeating-linear-gradient(0deg,#262626 0 7px,#2b2b2b 7px 8px);}
+  .slot{height:76px;border-radius:11px;border:1.5px dashed rgba(240,176,64,.45);
+    background:repeating-linear-gradient(-45deg,rgba(240,176,64,.04) 0 8px,transparent 8px 16px);
+    display:flex;align-items:center;justify-content:center;gap:8px;color:rgba(240,176,64,.8);font-size:12px}
+  .done{margin-top:auto;border-top:1px solid var(--border);padding-top:12px}
+  .drow{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:9px;background:rgba(80,200,140,.06);
+    border:1px solid rgba(80,200,140,.18);margin-top:8px}
+  .drow .ck{width:18px;height:18px;border-radius:50%;background:var(--ok);display:grid;place-items:center;color:#10291c;flex:none}
+  .drow .t{flex:1;min-width:0}
+  .drow .t b{display:block;font-weight:500;color:var(--muted);text-decoration:line-through;text-decoration-color:#555;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .drow .t small{color:var(--ok);font-size:11.5px}
+  .undo{color:var(--faint);font-size:11.5px;display:flex;gap:5px;align-items:center}
+
+  /* ---------- Brett ---------- */
+  main{position:absolute;left:320px;top:60px;right:0;bottom:0;padding:18px 28px 0;
+    background:
+      radial-gradient(900px 500px at 38% 22%,rgba(110,150,255,.07),transparent 70%),
+      radial-gradient(circle,rgba(255,255,255,.035) 1px,transparent 1.2px) 0 0/22px 22px;}
+  .bhead{display:flex;align-items:baseline;gap:12px;margin-bottom:10px}
+  .bhead h3{font-size:11px;letter-spacing:.9px;text-transform:uppercase;color:var(--faint);font-weight:600}
+  .bhead .why{color:var(--muted);font-size:12px;display:flex;gap:6px;align-items:center}
+  .bhead .why b{color:var(--fg);font-weight:500}
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+  .tile{position:relative;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 15px;
+    overflow:hidden;transition:opacity .2s,transform .2s,box-shadow .2s}
+  .tile .th{display:flex;align-items:center;gap:9px}
+  .tile .th .ico{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;flex:none}
+  .tile .th h5{font-size:14.5px;font-weight:600}
+  .tile .th .kind{margin-left:auto;font-size:11px;color:var(--faint)}
+  .tile .sub{color:var(--faint);font-size:11.5px;margin-top:2px;margin-left:37px}
+  .mini{margin-top:12px;display:flex;flex-direction:column;gap:5px}
+  .mini div{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12px;padding:4px 7px;border-radius:6px;background:rgba(255,255,255,.02)}
+  .mini div svg{color:var(--faint)}
+  .mini .more{color:var(--faint);background:none;padding-left:7px}
+  /* Zustände während des Ziehens */
+  .tile.dim{opacity:.32;filter:saturate(.4)}
+  .tile.lit{border-color:rgba(110,150,255,.45);box-shadow:0 0 0 1px rgba(110,150,255,.15),0 0 28px -6px rgba(110,150,255,.45)}
+  .tile.lit::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+    background:linear-gradient(180deg,rgba(110,150,255,.06),transparent 60%)}
+  .chip{position:absolute;top:12px;right:12px;font-size:11px;padding:2px 8px;border-radius:99px;
+    background:rgba(110,150,255,.14);color:#a9c0ff;border:1px solid rgba(110,150,255,.3);display:flex;gap:5px;align-items:center}
+  .tile.best{grid-column:span 2;grid-row:span 1;border:1.5px solid var(--ring);
+    background:linear-gradient(160deg,#232a3d 0%,#20232c 45%,#202020 100%);
+    box-shadow:0 0 0 5px rgba(111,151,255,.13),0 0 60px -10px rgba(111,151,255,.6),0 22px 50px -18px rgba(0,0,0,.8);
+    transform:scale(1.012)}
+  .tile.best .th h5{font-size:17px}
+  .tile.best .chip{background:var(--ring);color:#0e1630;border:none;font-weight:600}
+  .best .cols{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:12px}
+  .reasons{display:flex;gap:6px;margin:10px 0 0 37px;flex-wrap:wrap}
+  .reasons span{font-size:11.5px;color:#b9c9f5;background:rgba(111,151,255,.1);border:1px solid rgba(111,151,255,.22);border-radius:99px;padding:2px 9px}
+  .land{border:1.5px dashed rgba(111,151,255,.5);border-radius:12px;background:radial-gradient(closest-side,rgba(111,151,255,.16),transparent);height:176px}
+  .best .mini{margin-top:0}
+  .insert{position:relative;border:1.5px dashed var(--ring)!important;background:rgba(111,151,255,.1)!important;color:#c7d6ff!important;
+    animation:breathe 1.6s ease-in-out infinite}
+  @keyframes breathe{50%{background:rgba(111,151,255,.18)!important;box-shadow:0 0 18px -4px rgba(111,151,255,.6)}}
+  .insert::before{content:"";position:absolute;left:-7px;top:50%;width:7px;height:7px;border-radius:50%;background:var(--ring);transform:translate(-50%,-50%)}
+  .peek{border-left:1px solid #33384a;padding-left:14px;color:var(--muted);font-size:12px}
+  .peek .hl{color:#c7d6ff;background:rgba(111,151,255,.16);border-radius:3px;padding:0 2px}
+  .peek h6{font-size:10.5px;letter-spacing:.8px;text-transform:uppercase;color:#7f8fb8;font-weight:600;margin-bottom:6px}
+  .peek p+p{margin-top:6px}
+  .row1{height:322px}
+  .row2 .tile{height:172px}
+  .sep{height:22px}
+
+  /* Typ- und Sonderziele */
+  .lower{display:grid;grid-template-columns:1.9fr 1fr 1fr 0.9fr;gap:14px}
+  .typebar{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  .tz{position:relative;height:120px;border-radius:12px;border:1px solid var(--border);background:var(--card);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;font-size:12.5px;color:var(--muted)}
+  .tz .ico{width:30px;height:30px;border-radius:9px;display:grid;place-items:center}
+  .tz.lit{border-color:rgba(181,140,240,.55);color:var(--fg);box-shadow:0 0 26px -6px rgba(181,140,240,.55)}
+  .tz.lit small{position:absolute;bottom:6px;font-size:10.5px;color:#cdb3f5}
+  .tz.dim{opacity:.32}
+  .big{height:120px;border-radius:12px;border:1px solid var(--border);display:flex;align-items:center;gap:12px;padding:0 16px}
+  .big .ico{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;flex:none}
+  .big b{display:block;font-size:14px;font-weight:600}
+  .big small{color:var(--faint);font-size:11.5px}
+  .keep{background:linear-gradient(135deg,rgba(80,200,140,.09),#202020 70%);border-color:rgba(80,200,140,.32)}
+  .later{background:var(--card)}
+  .trash{border:1.5px dashed rgba(240,107,96,.35);background:repeating-linear-gradient(-45deg,rgba(240,107,96,.04) 0 10px,transparent 10px 20px)}
+  .trash b{color:#f3a19a}
+
+  .foot{position:absolute;left:28px;right:28px;bottom:14px;display:flex;gap:18px;color:var(--faint);font-size:12px;align-items:center}
+  .foot span{display:flex;gap:6px;align-items:center}
+
+  /* ---------- Die gezogene Karte ---------- */
+  .ghostpath{position:absolute;left:0;top:0;pointer-events:none}
+  .flying{position:absolute;left:622px;top:226px;width:250px;padding:13px 14px 13px 14px;border-radius:13px;
+    background:#262626;border:1px solid #474747;transform:rotate(-4deg);
+    box-shadow:0 30px 60px -12px rgba(0,0,0,.85),0 12px 24px -8px rgba(0,0,0,.6),0 0 0 1px rgba(240,176,64,.25);
+    z-index:5;animation:hover 2.4s ease-in-out infinite}
+  @keyframes hover{50%{transform:rotate(-3.2deg) translateY(-3px)}}
+  .flying .top{display:flex;align-items:center;gap:7px;color:var(--inbox);font-size:11px;letter-spacing:.4px}
+  .flying h4{font-size:15px;font-weight:600;margin-top:6px}
+  .flying p{color:var(--muted);font-size:12.5px;margin-top:5px}
+  .flying p .m{color:#a9c0ff;background:rgba(110,150,255,.14);border-radius:4px;padding:0 3px}
+  .cursor{position:absolute;left:846px;top:232px;z-index:6;filter:drop-shadow(0 2px 3px rgba(0,0,0,.6))}
+  .drop{position:absolute;left:662px;top:402px;z-index:6;background:var(--ring);color:#0d1530;font-weight:600;font-size:12px;
+    border-radius:8px;padding:6px 10px;display:flex;gap:7px;align-items:center;box-shadow:0 8px 20px -6px rgba(111,151,255,.8)}
+  .drop .alt{position:absolute;left:0;top:34px;white-space:nowrap;background:#262626;color:var(--muted);font-weight:400;
+    border:1px solid var(--border);border-radius:8px;padding:5px 9px;display:flex;gap:6px;align-items:center;box-shadow:0 8px 20px -8px #000}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <symbol id="folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+    <symbol id="file" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></symbol>
+    <symbol id="task" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="m8.5 12 2.5 2.5 4.5-5"/></symbol>
+    <symbol id="cards" viewBox="0 0 24 24"><rect x="3" y="7" width="14" height="13" rx="2"/><path d="M7 4h11a3 3 0 0 1 3 3v10"/></symbol>
+    <symbol id="article" viewBox="0 0 24 24"><path d="M5 4h14v16H5z"/><path d="M9 8h6M9 12h6M9 16h4"/></symbol>
+    <symbol id="person" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol>
+    <symbol id="pin" viewBox="0 0 24 24"><path d="M19 21 12 16l-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></symbol>
+    <symbol id="clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
+    <symbol id="grip" viewBox="0 0 24 24"><circle cx="9" cy="6" r=".6"/><circle cx="15" cy="6" r=".6"/><circle cx="9" cy="12" r=".6"/><circle cx="15" cy="12" r=".6"/><circle cx="9" cy="18" r=".6"/><circle cx="15" cy="18" r=".6"/></symbol>
+    <symbol id="spark" viewBox="0 0 24 24"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"/></symbol>
+    <symbol id="plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+    <symbol id="undo" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></symbol>
+    <symbol id="check" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></symbol>
+    <symbol id="area" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="link" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1"/><path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1"/></symbol>
+    <symbol id="mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></symbol>
+    <symbol id="book" viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 19V5"/></symbol>
+  </defs>
+</svg>
+
+<header>
+  <div class="brand"><b>O</b>Obtion</div>
+  <span class="crumb">/</span>
+  <div class="title"><span class="dot"></span>Eingang</div>
+  <div class="progress">
+    <div class="segs"><i class="done"></i><i class="hand"></i><i></i><i></i><i></i><i></i></div>
+    <span><em>1 abgelegt</em> · 1 in der Hand · 4 übrig</span>
+  </div>
+  <div class="spacer"></div>
+  <div class="ws">
+    <button class="on">Alle <span class="c">6</span></button>
+    <button>Persönlich <span class="c">5</span></button>
+    <button>Firma <span class="c">1</span></button>
+  </div>
+  <div class="hbtn"><svg class="i"><use href="#search"/></svg></div>
+</header>
+
+<aside>
+  <div class="capture"><svg class="i"><use href="#plus"/></svg>Etwas erfassen …<kbd>N</kbd></div>
+
+  <div class="label"><span>Stapel</span><span>neueste oben</span></div>
+  <div class="stack">
+    <div class="ic">
+      <svg class="i s grip"><use href="#grip"/></svg>
+      <h4>Angebot für Kunde Müller nachfassen</h4>
+      <div class="meta"><span class="tag firma">Firma</span>gerade eben</div>
+    </div>
+
+    <div class="slot">
+      <svg class="i s"><use href="#grip"/></svg>„Idee: Referenzen …“ ist unterwegs
+    </div>
+
+    <div class="ic">
+      <svg class="i s grip"><use href="#grip"/></svg>
+      <h4>Podcast-Tipp: Folge über Wissensmanagement</h4>
+      <p>Zettelkasten vs. PARA, ab Min. 23 spannend</p>
+      <div class="meta">vor 9 Std.</div>
+    </div>
+
+    <div class="ic multi">
+      <svg class="i s grip"><use href="#grip"/></svg>
+      <h4>Urlaub im Herbst</h4>
+      <p>Unterkünfte, Zugverbindungen</p>
+      <div class="meta"><span class="tag sub">2 Notizen darunter</span>gestern</div>
+    </div>
+
+    <div class="ic file">
+      <svg class="i s grip"><use href="#grip"/></svg>
+      <div class="thumb"></div>
+      <div>
+        <h4>skizze.png</h4>
+        <div class="meta" style="margin-top:3px">Datei · unbenutzt · vor 2 Tagen</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="done">
+    <div class="label" style="margin-top:0"><span>Gerade abgelegt</span><span style="text-transform:none;letter-spacing:0">heute 1</span></div>
+    <div class="drow">
+      <span class="ck"><svg class="i s" style="stroke-width:2.4"><use href="#check"/></svg></span>
+      <div class="t"><b>Fahrrad zur Inspektion bringen</b><small>→ Task · Persönlich</small></div>
+      <span class="undo"><svg class="i s"><use href="#undo"/></svg><kbd>U</kbd></span>
+    </div>
+  </div>
+</aside>
+
+<main>
+  <div class="bhead">
+    <h3>Passt am besten</h3>
+    <span class="why"><svg class="i s" style="color:var(--blue)"><use href="#spark"/></svg><span>für „<b>Idee: Referenzen als Fallstudien</b>“</span></span>
+  </div>
+
+  <div class="grid row1">
+    <!-- Bestes Ziel -->
+    <div class="tile best">
+      <span class="chip"><svg class="i s" style="stroke-width:2"><use href="#link"/></svg>wird im Text erwähnt</span>
+      <div class="th">
+        <span class="ico" style="background:rgba(110,150,255,.18);color:var(--blue)"><svg class="i"><use href="#folder"/></svg></span>
+        <h5>Website-Relaunch</h5>
+      </div>
+      <div class="sub">Projekt in Arbeit · zuletzt vor 2 Tagen benutzt · 14 Seiten</div>
+      <div class="reasons"><span>nennt Website-Relaunch</span><span>Startseite hat „Referenzen“</span><span>3 Ideen diese Woche</span></div>
+      <div class="cols">
+        <div class="mini">
+          <div><svg class="i s"><use href="#file"/></svg>Sitemap-Entwurf</div>
+          <div><svg class="i s"><use href="#file"/></svg>Texte Startseite</div>
+          <div class="insert"><svg class="i s" style="color:#c7d6ff"><use href="#plus"/></svg>Idee: Referenzen als Fallstudien</div>
+          <div><svg class="i s"><use href="#task"/></svg>Bildrechte klären</div>
+          <div class="more">+ 10 weitere</div>
+        </div>
+        <div class="land"></div>
+            </div>
+    </div>
+
+    <div class="tile lit">
+      <span class="chip">ähnliche Ideen</span>
+      <div class="th">
+        <span class="ico" style="background:rgba(240,130,175,.15);color:var(--pink)"><svg class="i"><use href="#folder"/></svg></span>
+        <h5>Blog</h5>
+      </div>
+      <div class="sub">Projekt · 22 Seiten</div>
+      <div class="mini">
+        <div><svg class="i s"><use href="#article"/></svg>Themenliste 2027</div>
+        <div><svg class="i s"><use href="#article"/></svg>Wie wir arbeiten</div>
+        <div><svg class="i s"><use href="#cards"/></svg>Idee: Kundenstimmen</div>
+        <div class="more">+ 19 weitere</div>
+      </div>
+    </div>
+
+    <div class="tile">
+      <div class="th">
+        <span class="ico" style="background:rgba(70,200,210,.14);color:var(--teal)"><svg class="i"><use href="#folder"/></svg></span>
+        <h5>Newsletter</h5>
+      </div>
+      <div class="sub">Projekt · 9 Seiten</div>
+      <div class="mini">
+        <div><svg class="i s"><use href="#article"/></svg>Ausgabe November</div>
+        <div><svg class="i s"><use href="#file"/></svg>Abonnenten-Ideen</div>
+        <div><svg class="i s"><use href="#task"/></svg>Vorlage aktualisieren</div>
+        <div class="more">+ 6 weitere</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sep"></div>
+  <div class="bhead"><h3>Zuletzt benutzt</h3></div>
+  <div class="grid row2">
+    <div class="tile dim">
+      <div class="th">
+        <span class="ico" style="background:rgba(80,200,140,.14);color:var(--green)"><svg class="i"><use href="#folder"/></svg></span>
+        <h5>Kurs Datenbanken</h5>
+      </div>
+      <div class="sub">Projekt in Lernen</div>
+      <div class="mini">
+        <div><svg class="i s"><use href="#cards"/></svg>Normalformen</div>
+        <div><svg class="i s"><use href="#cards"/></svg>Indizes &amp; B-Bäume</div>
+      </div>
+    </div>
+    <div class="tile dim">
+      <div class="th">
+        <span class="ico" style="background:rgba(181,140,240,.15);color:var(--violet)"><svg class="i"><use href="#folder"/></svg></span>
+        <h5>Kunden</h5>
+      </div>
+      <div class="sub">Projekt in Arbeit</div>
+      <div class="mini">
+        <div><svg class="i s"><use href="#person"/></svg>Müller GmbH</div>
+        <div><svg class="i s"><use href="#person"/></svg>Studio Kranz</div>
+      </div>
+    </div>
+    <div class="tile lit" style="border-color:rgba(110,150,255,.3)">
+      <span class="chip" style="opacity:.8">Bereich</span>
+      <div class="th">
+        <span class="ico" style="background:#2a2a2a;color:var(--muted)"><svg class="i"><use href="#area"/></svg></span>
+        <h5>Arbeit</h5>
+      </div>
+      <div class="sub">Bereich · 4 Projekte</div>
+      <div class="mini">
+        <div><svg class="i s"><use href="#folder"/></svg>Website-Relaunch · Kunden · …</div>
+      </div>
+    </div>
+    <div class="tile dim">
+      <div class="th">
+        <span class="ico" style="background:#2a2a2a;color:var(--muted)"><svg class="i"><use href="#area"/></svg></span>
+        <h5>Lernen · Persönlich</h5>
+      </div>
+      <div class="sub">2 Bereiche</div>
+      <div class="mini">
+        <div><svg class="i s"><use href="#folder"/></svg>Kurs Datenbanken · Reisen</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sep"></div>
+  <div class="bhead"><h3>Als Typ · Behalten · Weg</h3><span class="why" style="color:var(--faint)">mit <kbd>⇧</kbd> gedrückt: Ort und Typ in einem Zug</span></div>
+  <div class="lower">
+    <div class="typebar">
+      <div class="tz dim"><span class="ico" style="background:rgba(80,200,140,.12);color:var(--green)"><svg class="i l"><use href="#task"/></svg></span>Task</div>
+      <div class="tz lit"><span class="ico" style="background:rgba(181,140,240,.16);color:var(--violet)"><svg class="i l"><use href="#cards"/></svg></span>Karte<small>oft bei „Idee:“</small></div>
+      <div class="tz"><span class="ico" style="background:rgba(110,150,255,.12);color:var(--blue)"><svg class="i l"><use href="#article"/></svg></span>Artikel</div>
+      <div class="tz dim"><span class="ico" style="background:rgba(240,130,175,.12);color:var(--pink)"><svg class="i l"><use href="#book"/></svg></span>Buch · Person</div>
+    </div>
+    <div class="big keep">
+      <span class="ico" style="background:rgba(80,200,140,.16);color:var(--ok)"><svg class="i l"><use href="#pin"/></svg></span>
+      <div><b>Behalten</b><small>bleibt lose, ohne Ort – zählt als erledigt</small></div>
+    </div>
+    <div class="big later">
+      <span class="ico" style="background:rgba(240,176,64,.12);color:var(--inbox)"><svg class="i l"><use href="#clock"/></svg></span>
+      <div><b>Später</b><small>kommt Montag zurück</small></div>
+    </div>
+    <div class="big trash">
+      <span class="ico" style="background:rgba(240,107,96,.12);color:var(--danger)"><svg class="i l"><use href="#trash"/></svg></span>
+      <div><b>Papierkorb</b><small>30 Tage</small></div>
+    </div>
+  </div>
+
+  <div class="foot">
+    <span><kbd>1</kbd>–<kbd>9</kbd> Ziel direkt</span>
+    <span><kbd>Leertaste</kbd> Karte hochnehmen</span>
+    <span><kbd>Esc</kbd> zurück auf den Stapel</span>
+    <span><kbd>U</kbd> rückgängig</span>
+    <span style="margin-left:auto">Klick auf mehrere Karten im Stapel, dann gemeinsam ziehen</span>
+  </div>
+</main>
+
+<!-- Flugbahn vom Stapel-Platz zur Karte -->
+<svg class="ghostpath" width="1440" height="900">
+  <defs>
+    <linearGradient id="trail" x1="0" x2="1">
+      <stop offset="0" stop-color="#f0b040" stop-opacity=".0"/>
+      <stop offset=".5" stop-color="#f0b040" stop-opacity=".5"/>
+      <stop offset="1" stop-color="#6f97ff" stop-opacity=".8"/>
+    </linearGradient>
+  </defs>
+  <path d="M304 290 C 400 296, 520 298, 624 298" fill="none" stroke="url(#trail)" stroke-width="2" stroke-dasharray="2 6" stroke-linecap="round"/>
+</svg>
+
+<div class="flying">
+  <div class="top"><svg class="i s"><use href="#grip"/></svg>AUS DEM EINGANG · vor 20 Std.</div>
+  <h4>Idee: Referenzen als Fallstudien</h4>
+  <p>Statt Logo-Wand lieber 3 Projekte ausführlich zeigen – Problem, Weg, Ergebnis. Passt gut zum <span class="m">Website-Relaunch</span>.</p>
+</div>
+
+<svg class="cursor" width="26" height="30" viewBox="0 0 26 30">
+  <path d="M8 13V5.5a2 2 0 0 1 4 0V12m0-1.5a2 2 0 0 1 4 0V13m0-1a2 2 0 0 1 4 0v5c0 5-3 9-8 9s-7-3-9-7l-1.6-3a2 2 0 0 1 3.4-2L8 16"
+        fill="#f4f4f4" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+</svg>
+
+<div class="drop">
+  <svg class="i s" style="stroke-width:2.2"><use href="#check"/></svg>Loslassen: in Website-Relaunch
+  <div class="alt"><kbd>⇧</kbd> zusätzlich als Karte</div>
+</div>
+
+</body>
+</html>
