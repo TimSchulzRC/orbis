@@ -44,8 +44,14 @@ export const FILE_TYPES: FileType[] = ["bild", "pdf", "audio", "video", "dokumen
 export type StatusGroup = "todo" | "active" | "done";
 export const STATUS_GROUPS: StatusGroup[] = ["todo", "active", "done"];
 
-export type PropKind = "text" | "number" | "date" | "checkbox" | "url" | "select" | "multiselect" | "status" | "relation" | "computed";
-export const PROP_KINDS: PropKind[] = ["text", "number", "date", "checkbox", "url", "select", "multiselect", "status", "relation", "computed"];
+/**
+ * "select" is every choice from a list of options: one value or several (`multiple`), may stay
+ * empty or not (`default`), and is the type's status when capabilities.status names it. Stored
+ * schemas from before 30.10.2026 have the kinds "status" and "multiselect"; readSchema turns them
+ * into this (see legacyKind).
+ */
+export type PropKind = "text" | "number" | "date" | "checkbox" | "url" | "select" | "relation" | "computed";
+export const PROP_KINDS: PropKind[] = ["text", "number", "date", "checkbox", "url", "select", "relation", "computed"];
 /** Free properties (without a type) only come in simple kinds. */
 export type FreeKind = "text" | "number" | "date" | "checkbox" | "url" | "select";
 export const FREE_KINDS: FreeKind[] = ["text", "number", "date", "checkbox", "url", "select"];
@@ -53,7 +59,7 @@ export const FREE_KINDS: FreeKind[] = ["text", "number", "date", "checkbox", "ur
 export interface OptionDef {
   id: string;
   name: string;
-  group?: StatusGroup; // status options only
+  group?: StatusGroup; // options of the status only
   color?: string;
 }
 
@@ -68,7 +74,8 @@ export interface PropDef {
   kind: PropKind;
   description?: string;
   options?: OptionDef[];
-  multiple?: boolean; // relation: several targets
+  multiple?: boolean; // relation: several targets; select: several options
+  default?: string; // select with one value: the option new items get – then it is never empty
   target?: string; // relation: query in text form (e.g. "typ:Person"), only a hint
   inverseName?: string;
   symmetric?: boolean;
@@ -265,6 +272,18 @@ function plain(v: unknown): any {
   return v instanceof Y.AbstractType ? v.toJSON() : v;
 }
 
+/**
+ * The kinds "status" and "multiselect" as they were stored before 30.10.2026: a select. A status
+ * never was empty – new items got its first option –, so the type's status keeps that as default.
+ * Also for input (MCP, imports) that still names the old kinds.
+ */
+export function legacyKind(p: PropDef, isStatus: boolean): PropDef {
+  const k = p.kind as string;
+  if (k === "multiselect") return { ...p, kind: "select", multiple: true };
+  if (k === "status") return { ...p, kind: "select", multiple: undefined, default: p.default ?? (isStatus ? p.options?.[0]?.id : undefined) };
+  return p;
+}
+
 export function readSchema(doc: Y.Doc): TypeSchema {
   const s = doc.getMap<any>("schema");
   const caps = s.get("capabilities");
@@ -274,7 +293,7 @@ export function readSchema(doc: Y.Doc): TypeSchema {
     for (const [id, p] of props as Y.Map<any>) {
       const o = plain(p) ?? {};
       if (!o.name && !o.kind) continue;
-      properties.push({ ...o, id, name: o.name ?? "", kind: o.kind ?? "text", sort: o.sort ?? "V" });
+      properties.push(legacyKind({ ...o, id, name: o.name ?? "", kind: o.kind ?? "text", sort: o.sort ?? "V" }, (caps instanceof Y.Map ? caps.get("status") : caps?.status) === id));
     }
   }
   properties.sort((a, b) => (a.sort < b.sort ? -1 : a.sort > b.sort ? 1 : a.id.localeCompare(b.id)));

@@ -168,7 +168,7 @@ export function CellValue({ item, name, ctx }: { item: Item; name: string; ctx: 
       <span className="text-faint">–</span>
     );
   }
-  if (hit.kind === "status" || hit.kind === "select" || hit.kind === "multiselect") {
+  if (hit.kind === "select") {
     const ids = Array.isArray(v) ? (v as string[]) : [String(v)];
     return (
       <span className="flex flex-wrap gap-1">
@@ -228,10 +228,10 @@ function BoardView({ items, def, ctx, look }: { items: Item[]; def: QueryDef; ct
       if (o) void setStatus(item, o.id, repo);
       return;
     }
-    const prop = by === "status" ? statusProp(schema) : schema?.properties.find((p) => p.name.toLowerCase() === by.toLowerCase() && (p.kind === "select" || p.kind === "status"));
+    const prop = by === "status" ? statusProp(schema) : schema?.properties.find((p) => p.name.toLowerCase() === by.toLowerCase() && p.kind === "select");
     const opt = prop?.options?.find((o) => o.name === g.label);
     if (prop && opt && prop.id === statusProp(schema)?.id) void setStatus(item, opt.id, repo);
-    else if (prop && opt) repo.setProp(id, prop.id, opt.id);
+    else if (prop && opt) repo.setProp(id, prop.id, prop.multiple ? [opt.id] : opt.id);
     else if (prop && !g.key) repo.setProp(id, prop.id, null);
   };
   // more columns to the right: the edge fades, so it is clear the board scrolls

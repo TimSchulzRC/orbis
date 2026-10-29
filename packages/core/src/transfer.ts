@@ -177,15 +177,14 @@ function target(p: PropDef, to: TypeSchema): PropDef | undefined {
 
 /** A value for the other property; options by id, else by name. undefined: it does not fit. */
 function mapValue(p: PropDef, q: PropDef, v: Value): Value | undefined {
-  if (!["select", "status", "multiselect"].includes(p.kind)) return v;
+  if (p.kind !== "select") return v;
   const one = (id: string) => {
     if (q.options?.some((o) => o.id === id)) return id;
     const name = p.options?.find((o) => o.id === id)?.name?.trim().toLowerCase();
     return name ? q.options?.find((o) => o.name.trim().toLowerCase() === name)?.id : undefined;
   };
-  if (Array.isArray(v)) {
-    const out = v.map((x) => one(String(x)));
-    return out.every(Boolean) ? (out as string[]) : undefined;
-  }
-  return one(String(v));
+  // one value or several: as the other property takes them
+  const out = (Array.isArray(v) ? v : [v]).map((x) => one(String(x)));
+  if (!out.every(Boolean)) return undefined;
+  return q.multiple ? (out as string[]) : out[0];
 }

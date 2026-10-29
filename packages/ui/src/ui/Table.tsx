@@ -10,7 +10,7 @@ import { ChevronDown, ChevronRight, CornerDownRight, MoreHorizontal, Plus } from
 import { type ViewTab, type Item, type ItemInit, type PropDef, type StatusGroup, titleKey, todayISO } from "@obtion/core/model";
 import { type EvalCtx, type Group, type QueryDef, FIELDS, fieldOf, groupId, groupItems, pathBase, typesIn } from "@obtion/core/query";
 import { fmtDate, fmtShortDate } from "@obtion/core/i18n";
-import { dueOf, firstOfGroup, statusOf, statusProp } from "@obtion/core/traits";
+import { defaultOption, dueOf, firstOfGroup, isStatusProp, statusOf, statusProp } from "@obtion/core/traits";
 import { repo } from "../repo";
 import { itemHref, useIndex, useMediaQuery } from "../hooks";
 import { useT } from "../i18n";
@@ -169,7 +169,9 @@ function OptionCell({ item, prop }: { item: Item; prop: PropDef }) {
   const { t } = useT();
   const v = item.props[prop.id];
   const opt = prop.options?.find((o) => o.id === v);
-  const isStatus = prop.kind === "status";
+  const schema = useIndex().schemaOf(item);
+  const isStatus = isStatusProp(schema, prop);
+  const required = !!defaultOption(prop, schema);
   return (
     <label className="tap-row relative flex min-h-6 w-full cursor-pointer items-center">
       {opt ? <StatusPill option={opt} /> : <span className="text-muted-foreground">{t("props.empty")}</span>}
@@ -179,7 +181,7 @@ function OptionCell({ item, prop }: { item: Item; prop: PropDef }) {
         aria-label={prop.name}
         className="absolute inset-0 cursor-pointer opacity-0"
       >
-        {!isStatus && <option value="">–</option>}
+        {(!required || !opt) && <option value="">–</option>}
         {isStatus
           ? (["todo", "active", "done"] as const).map((g) => (
               <optgroup key={g} label={t("group." + g)}>
@@ -244,8 +246,8 @@ export function TableCell({ item, col, ctx }: { item: Item; col: string; ctx: Ev
   }
   if (!own || !p) return <CellValue item={item} name={col} ctx={ctx} />;
   switch (p.kind) {
-    case "status":
     case "select":
+      if (p.multiple) return <span className="cell-tools flex min-w-0 items-center gap-1 overflow-hidden"><PropertyField item={item} prop={p} /></span>;
       return <OptionCell item={item} prop={p} />;
     case "date":
       return p.range ? (
@@ -408,7 +410,7 @@ export function GroupedTable({ items, def, ctx, look }: { items: Item[]; def: Qu
     else if (by === "path" && g.path?.length) init.parents = [g.path.at(-1)!];
     else if (g.option) {
       const p = schema?.properties.find((x) => titleKey(x.name) === titleKey(by));
-      if (p) init.props![p.id] = p.kind === "multiselect" ? [g.option.id] : g.option.id;
+      if (p) init.props![p.id] = p.multiple ? [g.option.id] : g.option.id;
     } else if (g.ref && (by === "project" || by === "area")) init.parents = [g.ref];
     else if (g.ref) {
       const p = schema?.properties.find((x) => titleKey(x.name) === titleKey(by) && x.kind === "relation");

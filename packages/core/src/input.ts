@@ -112,13 +112,16 @@ function byName(options: OptionDef[], word: string): OptionDef | undefined {
   return options.find((o) => foldWord(o.name) === w) ?? options.find((o) => o.id === word.trim() || namesOf(o.id).includes(w));
 }
 
-/** The option of a select or status property meant by `raw`; throws InputError if unclear. */
+/** Options with groups are a status's (open, active, done): words for a group find them too. */
+const grouped = (p: PropDef) => !!p.options?.some((o) => o.group);
+
+/** The option of a select (also the status) meant by `raw`; throws InputError if unclear. */
 export function matchOption(p: PropDef, raw: string): OptionDef {
   const options = p.options ?? [];
   const hit = byName(options, raw);
   if (hit) return hit;
   const w = foldWord(raw);
-  if (p.kind === "status") {
+  if (grouped(p)) {
     if (NOT_A_STATUS.has(w))
       throw new InputError(`"${raw}" is not a status. Set "Blockiert durch" (the blocking entry) or "Wartet auf" (what it waits for, e.g. "Zertifikat vom Kunden"); optionally also a paused status.`);
     const a = STATUS_ALIASES[w];
@@ -131,8 +134,8 @@ export function matchOption(p: PropDef, raw: string): OptionDef {
       if (o) return o;
     }
   }
-  const list = options.map((o) => (p.kind === "status" ? `${o.name} (${o.group ?? "todo"})` : o.name)).join(", ");
-  throw new InputError(`"${raw}" is not an option of "${p.name}". Options: ${list}${p.kind === "status" ? "; or a group: open, active, done" : ""}.`);
+  const list = options.map((o) => (grouped(p) ? `${o.name} (${o.group ?? "todo"})` : o.name)).join(", ");
+  throw new InputError(`"${raw}" is not an option of "${p.name}". Options: ${list}${grouped(p) ? "; or a group: open, active, done" : ""}.`);
 }
 
 /** A paused option ("Pausiert", "On hold" …): active by group, but nothing to work on now. */
@@ -157,7 +160,7 @@ export function statusGroupOf(raw: string): StatusGroup | undefined {
 /** Does a status/select option match the word (name, other language, or synonym)? */
 export function optionMatches(p: PropDef, o: OptionDef, raw: string): boolean {
   try {
-    return matchOption(p, raw).id === o.id || (p.kind === "status" && !STATUS_ALIASES[foldWord(raw)]?.names && statusGroupOf(raw) === (o.group ?? "todo"));
+    return matchOption(p, raw).id === o.id || (grouped(p) && !STATUS_ALIASES[foldWord(raw)]?.names && statusGroupOf(raw) === (o.group ?? "todo"));
   } catch {
     return false;
   }
