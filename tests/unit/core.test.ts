@@ -239,6 +239,8 @@ describe("adding to an entry in the inbox", () => {
 
   test("the lines of the text stay lines", () => {
     expect(appendTarget("@Urlaub Zug buchen\nHotel reservieren", entries)).toEqual({ id: urlaub, text: "Zug buchen\nHotel reservieren" });
+    expect(appendTarget("Zug buchen\n@Urlaub\nHotel reservieren", entries)).toEqual({ id: urlaub, text: "Zug buchen\nHotel reservieren" });
+    expect(appendTarget("Zug buchen @Urlaub\nHotel reservieren", entries)).toEqual({ id: urlaub, text: "Zug buchen\nHotel reservieren" });
   });
 
   test("the line goes below the text", () => {

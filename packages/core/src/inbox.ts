@@ -56,9 +56,10 @@ export function appendTarget(text: string, entries: Item[], opened?: { id: strin
     if (!hit) continue;
     // the mention leaves, the rest of the text stays as it was typed (its lines too)
     const span = new RegExp(`^\\s*\\S+(?:\\s+\\S+){${n - 1}}`).exec(at[2]!)![0];
-    const before = t.slice(0, at.index + at[1]!.length).trimEnd();
-    const after = (at[2]!.slice(span.length) + t.slice(at.index + at[0].length)).trimStart();
-    const rest = [before, after].filter(Boolean).join(" ");
+    const before = t.slice(0, at.index + at[1]!.length).replace(/[ \t]+$/, "");
+    let after = (at[2]!.slice(span.length) + t.slice(at.index + at[0].length)).replace(/^[ \t]+/, "");
+    if (before.endsWith("\n") && after.startsWith("\n")) after = after.slice(1); // a line of only the mention goes
+    const rest = (before && after && !before.endsWith("\n") && !after.startsWith("\n") ? `${before} ${after}` : before + after).trim();
     return rest ? { id: hit.id, text: rest } : undefined;
   }
   return;
