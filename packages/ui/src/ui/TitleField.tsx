@@ -1,12 +1,14 @@
 import { Textarea } from "../components/ui/textarea";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Item } from "@obtion/core/model";
-import { repo } from "../repo";
+import { useRepo } from "../hooks";
 import { useT } from "../i18n";
 
 /** Multi-line title that wraps instead of clipping; Enter commits. */
 export function TitleField({ item, autoFocus, placeholder }: { item: Item; autoFocus: boolean; placeholder?: string }) {
   const { t } = useT();
+  // the workspace of this part of the page (the tray's panel shows entries of several)
+  const repo = useRepo();
   const [v, setV] = useState(item.title);
   const focused = useRef(false);
   const ref = useRef<HTMLTextAreaElement>(null);

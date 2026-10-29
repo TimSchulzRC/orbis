@@ -129,7 +129,7 @@ async function check(page: Page, label: string, path: string, errors: string[], 
   for (const e of errors) failures.push(`${label} ${path}: ${e}`);
 }
 
-const ROUTES = ["/", "/#/inbox", "/#/search", "/#/search?q=relaunch", "/#/types", "/#/graph", "/#/activity", "/#/trash", "/#/settings", "/#/workspace", "/#/nope", "/#/i/sys%3Aproject", "/#/i/sys%3Atask", "/#/i/sys%3Acard", "/#/i/ex-type-book", "/#/files", "/#/files?kind=bild", "/#/c/sys%3Ac-project"];
+const ROUTES = ["/", "/#/inbox", "/#/review", "/#/search", "/#/search?q=relaunch", "/#/types", "/#/graph", "/#/activity", "/#/trash", "/#/settings", "/#/workspace", "/#/nope", "/#/i/sys%3Aproject", "/#/i/sys%3Atask", "/#/i/sys%3Acard", "/#/i/ex-type-book", "/#/files", "/#/files?kind=bild", "/#/c/sys%3Ac-project"];
 // one page per kind: overview, article with translation, project, sub-project, task, card, note,
 // inbox item, inbox bundle, course with free properties, book, image, PDF, query page, welcome note
 const ITEMS = ["ex-work", "ex-art-de", "ex-relaunch", "ex-design", "ex-t-pages", "ex-k-nf", "ex-n-lecture", "ex-i-podcast", "ex-i-trip", "ex-course", "ex-b-moor", "ex-f-diagram", "ex-f-sheet", "ex-week", "ex-welcome"];
@@ -185,28 +185,67 @@ async function run() {
         if (serverName === "no types") for (const id of ITEMS) await check(page, label, `/#/i/${encodeURIComponent(id)}`, errors, undefined, { phone, page: true });
         if (serverName === "seeded") {
           for (const id of [...ITEMS, server.file, server.trashed]) await check(page, label, `/#/i/${encodeURIComponent(id)}`, errors, undefined, { phone, page: true });
-          // the inbox: hovering does not change a row's height, j/k moves the detail (desktop);
-          // on a phone an entry opens on a page of its own (design rules § 8)
-          await check(page, label, "/#/inbox", errors, async (p) => {
-            const row = p.locator("[data-triage='1']");
-            if (!(await row.count())) return;
+          // Heute: the greeting, what is due, and the tray below with the way into the review; a sheet
+          // sticking out of the tray shows its title on hover and opens in the tray's panel
+          await check(page, label, "/", errors, async (p) => {
+            const h1 = (await p.locator("main h1").innerText()).trim();
+            if (!/^Guten (Morgen|Tag|Abend), E2E\.$/.test(h1)) failures.push(`${label}: Heute greets with "${h1}"`);
+            if (!(await p.locator("main h2", { hasText: /^Fällig$/ }).count())) failures.push(`${label}: Heute shows nothing due`);
+            const tray = p.getByRole("region", { name: "Ablage" });
+            if (!(await tray.getByRole("link", { name: /Durchsicht/ }).count())) failures.push(`${label}: the tray has no way into the review`);
             if (!phone) {
-              const h0 = (await row.boundingBox())!.height;
-              await row.hover();
-              await p.waitForTimeout(150);
-              if ((await row.boundingBox())!.height !== h0) failures.push(`${label}: inbox row grows on hover`);
-              await p.keyboard.press("j");
-              await p.waitForTimeout(150);
-              const sel = (await p.locator("[data-triage][aria-selected=true]").innerText()).split("\n")[0]!.trim();
-              const shown = (await p.locator("a.text-xl").first().innerText()).trim();
-              if (!sel.startsWith(shown.slice(0, 10))) failures.push(`${label}: inbox detail does not follow j (${sel} / ${shown})`);
-            } else {
-              await row.click();
-              await p.waitForTimeout(400);
-              if (!/#\/w\/[^/]+\/inbox\//.test(p.url())) failures.push(`${label}: inbox entry did not open on its own page`);
+              const sheet = tray.locator("button[aria-label^='„']").last();
+              const title = ((await sheet.getAttribute("aria-label")) ?? "").replace(/^„|“ öffnen$/g, "");
+              await sheet.hover();
+              if (!(await sheet.getByText(title, { exact: true }).isVisible())) failures.push(`${label}: a sheet does not show its title on hover`);
+              await sheet.click();
+              const panel = p.getByRole("dialog", { name: "Ablage" });
+              if (!(await panel.getByText("Bleibt in der Ablage bis zur Durchsicht.").waitFor({ timeout: 3000 }).then(() => true, () => false))) failures.push(`${label}: a sheet does not open its entry`);
+              await p.keyboard.press("Escape");
             }
           }, { phone });
-          await check(page, label, "/#/inbox/ex-i-podcast", errors, undefined, { phone });
+          // the inbox is the tray's panel: every entry, newest first; one opens there to read and add
+          // to and stays in the inbox (looking in sorts nothing)
+          await check(page, label, "/#/inbox", errors, async (p) => {
+            const panel = p.getByRole("dialog", { name: "Ablage" });
+            if (!(await panel.waitFor({ timeout: 3000 }).then(() => true, () => false))) return void failures.push(`${label}: "#/inbox" does not open the tray's panel`);
+            const rows = panel.locator("[data-shelf]");
+            const n = await rows.count();
+            if (!n) return;
+            await rows.first().click();
+            if (!(await panel.getByText("Bleibt in der Ablage bis zur Durchsicht.").waitFor({ timeout: 3000 }).then(() => true, () => false))) return void failures.push(`${label}: an entry does not open in the panel`);
+            await panel.locator(".cm-content").click();
+            await p.keyboard.press("Control+End");
+            await p.keyboard.type(" E2E-Ergänzung");
+            await p.waitForTimeout(300);
+            await panel.getByRole("button", { name: "Ablage", exact: true }).click();
+            if ((await panel.locator("[data-shelf]").count()) !== n) failures.push(`${label}: adding to an entry took it out of the inbox`);
+            if (!(await panel.getByText("E2E-Ergänzung").count())) failures.push(`${label}: what was added does not show in the panel's list`);
+            await p.keyboard.press("Escape");
+            if (await panel.count()) failures.push(`${label}: Escape does not close the panel`);
+          }, { phone });
+          // an entry's page from before the review leads into the review, at that entry
+          await check(page, label, "/#/inbox/ex-i-podcast", errors, async (p) => {
+            if (!p.url().includes("/review?at=")) failures.push(`${label}: an old inbox entry link does not lead into the review (${p.url()})`);
+            else if (!(await p.locator("main article h2").innerText()).startsWith("Podcast")) failures.push(`${label}: the review does not begin at the linked entry`);
+          }, { phone });
+          // the review: one entry at a time; "Lose behalten" moves on and lists it as done, its undo
+          // brings it back; "Später weiter" leads back to Heute
+          await check(page, label, "/#/review", errors, async (p) => {
+            const card = p.locator("main article h2");
+            const title = (await card.innerText()).trim();
+            await p.getByRole("button", { name: /Lose behalten/ }).click();
+            await p.waitForTimeout(300);
+            if ((await card.innerText().catch(() => "")).trim() === title) failures.push(`${label}: the review did not move on after "Lose behalten"`);
+            const done = phone ? p.locator("main [aria-live]").first() : p.locator("main aside section").first();
+            if (!(await done.getByText(title.slice(0, 15)).count())) failures.push(`${label}: "${title}" is not under "Erledigt"`);
+            await (phone ? done.getByRole("button", { name: "Rückgängig" }) : done.getByRole("button", { name: `„${title}“ rückgängig machen` })).click();
+            await p.waitForTimeout(300);
+            if ((await card.innerText()).trim() !== title) failures.push(`${label}: undo in the review did not bring "${title}" back`);
+            await p.getByRole("button", { name: /Später weiter/ }).click();
+            await p.waitForTimeout(300);
+            if (!p.url().endsWith("#/")) failures.push(`${label}: "Später weiter" does not lead back to Heute (${p.url()})`);
+          }, { phone });
           // the sidebar: the workspace's block (pinned informations) and "Typen" (each type's page and the files), both
           // fold and stay folded over a reload; a type's page has its views and "Typ bearbeiten";
           // the inbox offers what lands there and the default; old collection links lead on
@@ -232,12 +271,12 @@ async function run() {
               await p.keyboard.press("Escape");
             });
             await check(page, label, "/#/inbox", errors, async (p) => {
-              await p.locator("main").getByRole("button", { name: "Mehr" }).first().click();
+              await p.getByRole("dialog", { name: "Ablage" }).getByRole("button", { name: "Mehr" }).click();
               const menu = await p.locator("[data-popover]").last().innerText();
               if (!/Was landet im Eingang\?/.test(menu) || /Sammlung/.test(menu)) failures.push(`${label}: inbox menu is "${menu.replace(/\n/g, " · ")}"`);
               // the rule opens with the way back to the default
               await p.getByText("Was landet im Eingang?").click();
-              if (!(await p.locator("main").getByRole("button", { name: /Standard wiederherstellen/ }).count())) failures.push(`${label}: the inbox rule has no "Standard wiederherstellen"`);
+              if (!(await p.getByRole("dialog", { name: "Was landet im Eingang?" }).getByRole("button", { name: /Standard wiederherstellen/ }).count())) failures.push(`${label}: the inbox rule has no "Standard wiederherstellen"`);
             });
             await check(page, label, "/#/c/sys%3Ac-task", errors, async (p) => {
               if (!p.url().includes("/i/sys%3Atask")) failures.push(`${label}: an old collection link does not lead to the type's page (${p.url()})`);
@@ -289,18 +328,18 @@ async function run() {
               await p.waitForTimeout(500);
             }
           });
-          // capturing: a note is preset (no "Eingang" to choose), "Einsortieren …" is no chip, a page
+          // capturing (in the tray): a note is preset (no "Eingang" to choose), "Einsortieren …" is no chip, a page
           // mentioned with @ is offered as the place; the notice says where it went
-          await check(page, label, "/#/inbox", errors, async (p) => {
-            // on a phone the field opens from the "+" button in a sheet, which closes after saving
+          await check(page, label, "/", errors, async (p) => {
+            // the field is in the tray; on a phone it opens from the tray's "+" in a sheet, which closes after saving
             const open = async () => {
-              if (phone) await p.locator("button[aria-label='Erfassen']").last().click();
-              const f = p.locator(phone ? "[role=dialog] textarea[aria-label='Erfassen']" : "main textarea[aria-label='Erfassen']");
+              if (phone) await p.getByRole("region", { name: "Ablage" }).locator("button[aria-label='Erfassen']").click();
+              const f = p.locator(phone ? "[role=dialog] textarea[aria-label='Erfassen']" : "[role=region][aria-label='Ablage'] textarea[aria-label='Erfassen']");
               await f.click();
               return f;
             };
             let field = await open();
-            let row = field.locator("xpath=ancestor::div[contains(@class,'rounded-2xl')]");
+            let row = field.locator("xpath=ancestor::div[contains(@class,'rounded-2xl')][1]");
             const typeBtn = row.getByRole("button", { name: "Typ: Notiz" });
             if (!(await typeBtn.count())) failures.push(`${label}: capture does not preset "Notiz"`);
             if (await row.getByRole("button", { name: "Eingang", exact: true }).count()) failures.push(`${label}: capture still offers "Eingang"`);
@@ -313,7 +352,7 @@ async function run() {
             if (phone) {
               await p.waitForTimeout(400);
               field = await open();
-              row = field.locator("xpath=ancestor::div[contains(@class,'rounded-2xl')]");
+              row = field.locator("xpath=ancestor::div[contains(@class,'rounded-2xl')][1]");
             }
             await field.fill("E2E-Frage zu @Arbeit");
             const offer = row.getByRole("button", { name: "In Arbeit einsortieren?" });
@@ -427,14 +466,17 @@ async function twoWorkspaces(browser: import("playwright-core").Browser, server:
     if (!(await p.locator("aside section[aria-label='Persönlich'] a[href='#/i/ex-work']").count())) failures.push(`${label}: the first workspace's block lost its pinned items`);
   });
   await check(page, label, "/#/inbox", errors, async (p) => {
-    const chips = p.locator("main [role=group] button");
+    const panel = p.getByRole("dialog", { name: "Ablage" });
+    const chips = panel.locator("[role=group] button");
     if ((await chips.allInnerTexts()).map((x) => x.replace(/\s*\d+$/, "")).join(",") !== "Alle,Persönlich,Firma") failures.push(`${label}: inbox filter is ${(await chips.allInnerTexts()).join(", ")}`);
     await chips.filter({ hasText: "Firma" }).click();
     await p.reload();
     await settle(p);
-    if ((await p.locator("main [aria-pressed=true]").innerText()).replace(/\s*\d+$/, "") !== "Firma") failures.push(`${label}: the inbox filter is not remembered`);
+    await p.evaluate(() => (location.hash = "#/inbox"));
+    await panel.waitFor({ timeout: 3000 }).catch(() => {});
+    if ((await panel.locator("[aria-pressed=true]").innerText()).replace(/\s*\d+$/, "") !== "Firma") failures.push(`${label}: the inbox filter is not remembered`);
     if (await p.locator("aside section[aria-label='Persönlich']").count()) failures.push(`${label}: the sidebar still shows the workspace left out`);
-    await p.locator("main").getByRole("button", { name: /^Alle/ }).click();
+    await panel.getByRole("button", { name: /^Alle/ }).click();
   });
   await check(page, label, `/#/w/${personal}/i/sys%3Aproject`, errors, async (p) => {
     await p.locator("main").getByRole("button", { name: "Mehr" }).first().click();

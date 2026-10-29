@@ -2,25 +2,28 @@ import { ModalSurface } from "./components/ui/dialog";
 import { Button as ShadcnButton } from "./components/ui/button";
 import { BrandLogo } from "./ui/BrandLogo";
 import { useEffect, useRef, useState } from "react";
-import { Plus, Menu, Search, Inbox, SlidersHorizontal, X } from "lucide-react";
+import { Menu, Search, Inbox, SlidersHorizontal, Sun, X } from "lucide-react";
 import { SETTINGS_ID } from "@obtion/core/model";
-import { useRepo, useRoute, useMediaQuery, itemHref, spaceHref } from "./hooks";
+import { useRepo, useRoute, useDesktop, itemHref, spaceHref } from "./hooks";
 import { useT } from "./i18n";
 import { cx, IconButton } from "./ui/bits";
 import { AgentNotice } from "./ui/AgentNotice";
 import { ConfirmHost } from "./ui/feedback";
 import { AppToaster } from "./ui/toasts";
 import { LightboxHost } from "./ui/Lightbox";
-import { InboxEntry } from "./ui/Triage";
 import { PageBoundary } from "./ui/ErrorBoundary";
-import { Sidebar, SpaceTree, useInboxTotal } from "./ui/Sidebar";
+import { Sidebar, SpaceTree } from "./ui/Sidebar";
 import { SyncDot } from "./ui/SyncDot";
 import { CommandPalette } from "./ui/CommandPalette";
 import { CaptureSheet } from "./ui/Capture";
 import { Setup } from "./views/Setup";
 import { ItemPage } from "./views/ItemPage";
 import { SearchView } from "./views/Search";
-import { FilesPage, InboxPage } from "./views/Lists";
+import { FilesPage } from "./views/Lists";
+import { Review } from "./views/Review";
+import { Today } from "./views/Today";
+import { Tray } from "./ui/Tray";
+import { closeShelf, entryKey, openShelf, useInboxItems, useShelf } from "./ui/inbox";
 import { TypesView } from "./views/Types";
 import { GraphView } from "./views/Graph";
 import { Activity } from "./views/Activity";
@@ -80,11 +83,17 @@ function Main() {
   const { active, spaces } = useAccounts();
   const { t } = useT();
   const route = useRoute();
-  const wide = useMediaQuery("(min-width: 1024px)");
+  const wide = useDesktop();
   const [palette, setPalette] = useState(false);
   const [menu, setMenu] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
   useEffect(() => setMenu(false), [route.path]);
+  // another page closes the tray's panel – but "#/inbox", which opens it over Heute
+  const lastPath = useRef(route.path);
+  useEffect(() => {
+    if (lastPath.current !== "/inbox" && route.path !== "/inbox") closeShelf();
+    lastPath.current = route.path;
+  }, [route.path]);
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
@@ -119,8 +128,8 @@ function Main() {
     }
   }, [route.path]);
 
-  // a page of a workspace waits for it and is its setup until it is set up; the inbox,
-  // search and the settings show what is there in every workspace
+  // a page of a workspace waits for it and is its setup until it is set up; Heute, the inbox,
+  // the review, search and the settings show what is there in every workspace
   const settings = r.get(SETTINGS_ID);
   const setUp = !settings && (r.status.synced || (!r.status.online && r.docs.size === 0));
   const page = (() => {
@@ -131,10 +140,12 @@ function Main() {
     }
     switch (route.parts[0]) {
       case undefined:
-        // no start page for now: the app begins at the inbox
-        return <Redirect to="/inbox" />;
+        return <Today />;
       case "inbox":
-        return route.parts[1] ? <InboxEntry id={route.parts[1]} /> : <InboxPage />;
+        // the inbox is the tray's panel (over Heute); an entry's own page from before the review: the review, at that entry
+        return route.parts[1] ? <Redirect to={`/review?at=${encodeURIComponent(entryKey(active!.id, route.parts[1]))}`} /> : <OpenShelf />;
+      case "review":
+        return <Review at={route.query.get("at") ?? undefined} />;
       case "search":
         return <SearchView />;
       case "files":
@@ -163,6 +174,8 @@ function Main() {
     }
   })();
   const isGraph = route.parts[0] === "graph";
+  // the tray is below every page but the review (it leads there) and, on a phone, an entry's page (its keyboard)
+  const tray = !!settings && route.parts[0] !== "review" && !(route.parts[0] === "inbox" && route.parts[1]) && (wide || route.parts[0] !== "i");
 
   return (
     <div className="flex h-full">
@@ -177,7 +190,7 @@ function Main() {
       <div className="flex min-w-0 flex-1 flex-col">
         {!wide && (
           <header className="flex items-center gap-2 border-b border-line bg-bg/90 px-3 py-2 backdrop-blur pt-safe">
-            <a href="#/inbox" className="tap flex items-center justify-center gap-2" aria-label={t("nav.inbox")}>
+            <a href="#/" className="tap flex items-center justify-center gap-2" aria-label={t("nav.today")}>
               <BrandLogo alt="" className="size-6" />
             </a>
             <SyncDot />
@@ -195,8 +208,9 @@ function Main() {
           {/* a page of another workspace: anew on its replica (repo and files point at it) */}
           <PageBoundary key={`${globalPage(route.parts) ? "" : active?.id}${route.path}`}>{page}</PageBoundary>
         </main>
-        {/* an inbox entry on a phone has its actions at the bottom instead */}
-        {!wide && !(route.parts[0] === "inbox" && route.parts[1]) && <MobileNav />}
+        {tray && <Tray desktop={wide} onCapture={() => setCaptureOpen(true)} />}
+        {/* the review on a phone is a page of its own, with its own way back */}
+        {!wide && route.parts[0] !== "review" && <MobileNav />}
       </div>
 
       {palette && <CommandPalette onClose={() => setPalette(false)} />}
@@ -207,15 +221,6 @@ function Main() {
             <MobileMenu />
           </MenuSheet>
         </div>
-      )}
-      {!wide && route.parts[0] !== "i" && !(route.parts[0] === "inbox" && route.parts[1]) && (
-        <ShadcnButton variant="plain" size="none"
-          onClick={() => setCaptureOpen(true)}
-          aria-label={t("capture.title")}
-          className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] right-4 z-20 flex size-12 items-center justify-center rounded-full bg-ink text-ink-text shadow-lg"
-        >
-          <Plus size={22} />
-        </ShadcnButton>
       )}
       {captureOpen && <CaptureSheet onClose={() => setCaptureOpen(false)} />}
       <AgentNotice />
@@ -236,19 +241,22 @@ function MenuSheet({ onClose, children }: { onClose: () => void; children: React
   );
 }
 
-/** The phone menu (a sheet from below): the selector, Eingang · the workspaces seen (as in the sidebar) · Einstellungen. */
+/** The phone menu (a sheet from below): the selector, Heute and Eingang · the workspaces seen (as in the sidebar) · Einstellungen. */
 function MobileMenu() {
   const { t } = useT();
   const { shown } = useAccounts();
   const [creating, setCreating] = useState(false);
   const row = "flex min-h-11 items-center gap-3 rounded-lg px-3 text-[15px] hover:bg-hover";
-  const inbox = useInboxTotal();
+  const inbox = useInboxItems().length;
   return (
     <>
       <div className="mb-2 flex px-3">
         <SpaceSelector className="flex-1" onNew={() => setCreating(true)} />
       </div>
       {creating && <NewSpaceDialog onClose={() => setCreating(false)} />}
+      <a href="#/" className={row}>
+        <Sun size={18} className="text-muted-foreground" /> {t("nav.today")}
+      </a>
       <a href="#/inbox" className={row}>
         <Inbox size={18} className="text-muted-foreground" /> <span className="flex-1">{t("nav.inbox")}</span>
         {inbox > 0 && <span className="text-xs tabular-nums text-muted-foreground">{inbox}</span>}
@@ -269,13 +277,19 @@ function MobileMenu() {
 
 const OLD_LISTS: Record<string, string> = { "sys:c-project": "/i/sys%3Aproject", "sys:c-task": "/i/sys%3Atask", "sys:c-card": "/i/sys%3Acard", "sys:c-files": "/files", "sys:c-images": "/files?kind=bild", "sys:inbox": "/inbox" };
 
+/** "#/inbox": Heute, with the tray's panel open. */
+function OpenShelf() {
+  useEffect(() => void (openShelf(), location.replace("#/")), []);
+  return <Today />;
+}
+
 function Redirect({ to }: { to: string }) {
   useEffect(() => location.replace("#" + to), [to]);
   return null;
 }
 
 /**
- * Bottom bar on phones: Eingang – with one workspace seen also its first two types
+ * Bottom bar on phones: Heute, Eingang – with one workspace seen also its first two types
  * of the sidebar (Projekte, Tasks); with several they are in the menu, each in its workspace.
  */
 function MobileNav() {
@@ -285,9 +299,11 @@ function MobileNav() {
   const [r] = useReplicas(one ? [one.id] : []);
   const route = useRoute();
   const ix = r?.index();
-  const inbox = useInboxTotal();
+  const inbox = useInboxItems().length;
+  const shelf = useShelf().open;
   const entries = [
-    { key: "inbox", label: t("nav.inbox"), icon: <Inbox size={20} />, href: "#/inbox", active: route.path.startsWith("/inbox"), dot: inbox > 0 },
+    { key: "today", label: t("nav.today"), icon: <Sun size={20} />, href: "#/", active: route.path === "/" && !shelf },
+    { key: "inbox", label: t("nav.inbox"), icon: <Inbox size={20} />, href: "#/inbox", active: shelf || route.path === "/review", dot: inbox > 0 },
     ...(ix
       ? ix.typesInOrder().slice(0, 2).map((x) => {
           const I = ICON[x.schema!.icon] ?? ICON.circle!;

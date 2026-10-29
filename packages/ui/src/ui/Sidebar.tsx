@@ -1,5 +1,5 @@
 import { Button as ShadcnButton } from "../components/ui/button";
-// Sidebar: the workspace selector (which workspaces are seen), search and the inbox (of
+// Sidebar: the workspace selector (which workspaces are seen), search, Heute and the inbox (of
 // the workspaces seen), then each of them as a block of its own (as teamspaces in Notion): its
 // name, the pinned items (informations with their children as a tree, also type pages), and its
 // types with the files. Blocks and what is open in them fold; that is remembered on
@@ -7,11 +7,9 @@ import { Button as ShadcnButton } from "../components/ui/button";
 // added. Dropping on the upper or lower edge of a row reorders. Dropped into another workspace's
 // block, an item moves there.
 import { useEffect, useState } from "react";
-import { ChevronRight, ChevronDown, Inbox, Search, SlidersHorizontal, Link2, MoreHorizontal, Plus, Paperclip } from "lucide-react";
+import { ChevronRight, ChevronDown, Inbox, Search, SlidersHorizontal, Link2, MoreHorizontal, Plus, Paperclip, Sun } from "lucide-react";
 import { type Item, META_TYPE, SETTINGS_ID, setSchemaField, setSettings } from "@obtion/core/model";
 import { sidebarChildren, sidebarRoots } from "@obtion/core/placement";
-import { inboxWhere } from "@obtion/core/inbox";
-import { runQuery } from "@obtion/core/query";
 import { keyBetween, keysFor } from "@obtion/core/sortkey";
 import { useRepo, useRoute, useSpaceId, itemHref, spaceHref, useLocalStorage } from "../hooks";
 import { type Space, useAccounts } from "../accounts";
@@ -21,7 +19,8 @@ import { ItemPicker } from "./Picker";
 import { SyncDot } from "./SyncDot";
 import { createAndOpen } from "../actions";
 import { NewTypeDialog } from "../views/Types";
-import { NewSpaceDialog, SpaceScope, SpaceSelector, moveTo, useReplicas } from "./Spaces";
+import { NewSpaceDialog, SpaceScope, SpaceSelector, moveTo } from "./Spaces";
+import { useInboxItems, useShelf } from "./inbox";
 
 /**
  * What is being dragged in the sidebar: an item (from below `from`, null: pinned; `type`: a pinned
@@ -31,20 +30,12 @@ let dragging: { id: string; from: string | null; space: string; type?: boolean }
 /** Can it go into another workspace? Items can (a move), type pages and rows of "Typen" not. */
 const movable = (d: typeof dragging) => !!d && d.from !== "types" && !d.type;
 
-/** How many entries wait in the inboxes of the workspaces seen. */
-export function useInboxTotal() {
-  const { shown } = useAccounts();
-  return useReplicas(shown.map((s) => s.id)).reduce((n, r) => {
-    const ix = r.index();
-    return n + (r.get(SETTINGS_ID) ? runQuery({ where: inboxWhere(ix) }, { ix }).total : 0);
-  }, 0);
-}
-
 export function Sidebar({ onSearch }: { onSearch: () => void }) {
   const { t, lang } = useT();
   const route = useRoute();
   const { shown } = useAccounts();
-  const inbox = useInboxTotal();
+  const inbox = useInboxItems().length;
+  const shelf = useShelf().open;
   const [creating, setCreating] = useState(false);
   const navCls = (active: boolean) => cx("flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm", active ? "bg-hover font-medium text-fg" : "text-muted-foreground hover:bg-hover hover:text-fg");
 
@@ -61,7 +52,10 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
       </ShadcnButton>
       <div className="min-h-0 flex-1 overflow-y-auto pb-3">
         <nav className="flex flex-col gap-0.5 px-2" aria-label={t("nav.main")}>
-          <a href="#/inbox" className={navCls(route.path.startsWith("/inbox"))}>
+          <a href="#/" className={navCls(route.path === "/" && !shelf)}>
+            <Sun size={16} /> {t("nav.today")}
+          </a>
+          <a href="#/inbox" className={navCls(shelf || route.path.startsWith("/review"))}>
             <Inbox size={16} /> <span className="flex-1">{t("nav.inbox")}</span>
             {inbox > 0 && <span className="text-xs tabular-nums text-muted-foreground">{inbox}</span>}
           </a>

@@ -13,7 +13,7 @@ import { useReplicas } from "./Spaces";
 import { captureSpace } from "./Capture";
 import { setTheme } from "../theme";
 import { useT, setLang, getLang } from "../i18n";
-import { ItemIcon, StatusPill, TypeGlyph, cx, modName } from "./bits";
+import { InTray, ItemIcon, StatusPill, TypeGlyph, cx, modName } from "./bits";
 import { shortPath } from "./Row";
 import { createAndOpen } from "../actions";
 
@@ -41,6 +41,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   const nameOf = (space: string) => shown.find((s) => s.id === space)?.name ?? "";
   const navs = useMemo(
     () => [
+      [t("nav.today"), "#/"],
       [t("nav.inbox"), "#/inbox"],
       ...shown.flatMap((s, n) => {
         const ix = repos[n]!.index();
@@ -68,7 +69,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   const captureTypes = [...pinnedTypes, ...[...ix.types.values()].filter((x) => !pinnedTypes.includes(x.id)).sort((a, b) => a.schema!.name.localeCompare(b.schema!.name)).map((x) => x.id)];
   // actions, found by typing their name
   const cmds: [string, () => void][] = [
-    [t("palette.cmd.sortInbox"), () => go("/inbox")],
+    [t("palette.cmd.sortInbox"), () => go("/review")],
     [t("palette.cmd.newType"), () => (location.hash = spaceHref(cs, "/types?new=1"))],
     [t("palette.cmd.language"), () => setLang(getLang() === "de" ? "en" : "de")],
     ...(["system", "light", "dark"] as const).map((v): [string, () => void] => [t("palette.cmd.theme", { name: t("theme." + v) }), () => setTheme(v)]),
@@ -145,6 +146,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
                       q.trim() && n.body && <span className="block truncate text-xs text-muted-foreground">{snippet(n.body, q, 90)}</span>
                     )}
                   </span>
+                  <InTray item={n} ix={ix} />
                   {st && <StatusPill option={st.option} group={st.group} small />}
                   {several && <span className="max-w-28 shrink-0 truncate text-xs text-muted-foreground">{nameOf(it.space)}</span>}
                   {active && <CornerDownLeft size={14} className="text-muted-foreground" />}

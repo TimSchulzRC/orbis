@@ -22,7 +22,7 @@ import { NOTE_ICON } from "./icons";
  */
 export function Capture({ anywhere, ...p }: CaptureProps & { anywhere?: boolean }) {
   const [space, setSpace] = useState(() => (anywhere ? captureSpace() : undefined));
-  // the workspaces seen changed (the chips above the inbox): a capture lands where one looks
+  // the workspaces seen changed (the chips above the inbox list): a capture lands where one looks
   const shown = useAccounts().shown.map((s) => s.id).join();
   useEffect(() => void (anywhere && setSpace(captureSpace())), [shown]);
   if (!space) return <CaptureField {...p} />;
@@ -45,12 +45,13 @@ export function captureSpace(): string | undefined {
 
 interface CaptureProps {
   parent?: string;
+  placeholder?: string;
   autoFocus?: boolean;
   onDone?: () => void;
   compact?: boolean;
 }
 
-function CaptureField({ parent, autoFocus, onDone, compact, onSpace }: CaptureProps & { onSpace?: (id: string) => void }) {
+function CaptureField({ parent, placeholder, autoFocus, onDone, compact, onSpace }: CaptureProps & { onSpace?: (id: string) => void }) {
   const r = useRepo();
   const files = useFiles();
   const space = useSpaceId();
@@ -110,7 +111,7 @@ function CaptureField({ parent, autoFocus, onDone, compact, onSpace }: CapturePr
             if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) (e.preventDefault(), save());
           }}
           rows={1}
-          placeholder={parent ? t("capture.placeholderHere") : t("capture.placeholder")}
+          placeholder={placeholder ?? (parent ? t("capture.placeholderHere") : t("capture.placeholder"))}
           title={t("capture.hint")}
           className="max-h-48 min-h-7 flex-1 resize-none bg-transparent px-1 py-0.5 text-[15px] outline-none [field-sizing:content] placeholder:text-muted-foreground"
           aria-label={t("capture.title")}

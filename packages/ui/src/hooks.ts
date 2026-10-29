@@ -72,6 +72,9 @@ export function useMediaQuery(q: string) {
   return m;
 }
 
+/** The one breakpoint between phone and desktop layout: the sidebar shows from here (Tailwind `lg`). */
+export const useDesktop = () => useMediaQuery("(min-width: 1024px)");
+
 export function useLocalStorage<T>(key: string, init: T): [T, (v: T) => void] {
   const [v, setV] = useState<T>(() => {
     try {

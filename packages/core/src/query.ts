@@ -8,7 +8,7 @@
 // types and free properties. The same code runs on devices, the server and for agents.
 import { type ViewTab, type FileType, type Item, type OptionDef, type PropDef, type ViewKind, FILE_TYPES, META_TYPE, titleKey, todayISO } from "./model";
 import type { Index } from "./graph";
-import { inboxWhere } from "./inbox";
+import { inboxWhere, setAside } from "./inbox";
 import { type Lang, LANGS, words } from "./i18n";
 import { dateEnd, dateStart, doneAt, dueOf, statusOf, statusProp } from "./traits";
 import { optionMatches, parseDate, statusGroupOf } from "./input";
@@ -40,7 +40,7 @@ export type Cond =
   | { linkedUnder: Ref } // verknüpft:unter:[[X]] – connected to X or to a descendant of X
   | { prop: string; op: Op; value?: FieldValue }
   | { status: StatusKey }
-  | { inbox: true } // whatever the inbox rule matches (inbox.ts)
+  | { inbox: true } // whatever the inbox rule matches, without what is set aside (inbox.ts)
   | { pinned: true }
   | { blocked: true } // an open entry under "Blockiert durch" or "Wartet auf" is set
   | { dormant: true } // it or something above it is paused or done
@@ -632,7 +632,7 @@ export function matches(item: Item, c: Cond, ctx: EvalCtx): boolean {
     if (c.status === "new") return s.group === "todo";
     return s.group === c.status;
   }
-  if ("inbox" in c) return !ctx.inInbox && matches(item, inboxWhere(ix), { ...ctx, thisId: undefined, inInbox: true });
+  if ("inbox" in c) return !ctx.inInbox && !setAside(item) && matches(item, inboxWhere(ix), { ...ctx, thisId: undefined, inInbox: true });
   if ("without" in c) {
     switch (c.without) {
       case "type":
