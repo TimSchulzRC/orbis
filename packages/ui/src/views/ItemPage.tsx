@@ -10,7 +10,7 @@ import { type Item, META_TYPE } from "@obtion/core/model";
 import { isInInbox, isOverview } from "@obtion/core/placement";
 import { wouldBeInInbox } from "@obtion/core/typeops";
 import { onlyBelow } from "@obtion/core/trash";
-import { primaryChild, hasUpdates, progressSpec, statusOf, languageCode, translations, translationInit, translationPlan } from "@obtion/core/traits";
+import { primaryChild, hasUpdates, progressSpec, statusOf, statusProp, languageCode, translations, translationInit, translationPlan } from "@obtion/core/traits";
 import { useRepo, useIndex, itemHref, go } from "../hooks";
 import { repo } from "../repo";
 import { useT, tr, getLang } from "../i18n";
@@ -164,7 +164,7 @@ function InfoView({ item, isNew }: { item: Item; isNew: boolean }) {
       )}
       {/* 1 · head: path, title with the main action, type and status, progress, properties */}
       <Crumbs item={item} tools={tools} onPlaces={() => setPlacesOpen((n) => n + 1)} onPlace={() => setPlacing(true)} />
-      <div className="mt-1.5 flex items-start gap-4">
+      <div className="mt-6 flex items-start gap-4 max-md:mt-3">
         <div data-page-title className="min-w-0 flex-1 rounded-lg">
           <TitleField item={item} autoFocus={isNew && !item.title} />
         </div>
@@ -180,14 +180,18 @@ function InfoView({ item, isNew }: { item: Item; isNew: boolean }) {
           <AlertTriangle size={12} /> {t("item.cycle", { titles: cycles.map((c) => ix.get(c)?.title).join(", ") })}
         </p>
       )}
-      <div className="mt-2.5 flex min-h-[22px] flex-wrap items-center gap-2">
-        <TypeSwitch item={item} />
-        {st && <StatusMenu item={item} trigger={(p) => <ShadcnButton variant="plain" size="none" {...p} className="tap-y inline-flex" aria-label={t("row.status", { name: st.option.name })}><StatusPill option={st.option} group={st.group} /></ShadcnButton>} />}
-        <LangSwitch item={item} />
-      </div>
       {pr && <ProgressBand done={pr.done} total={pr.total} desc={progressText(item, ix, pr.done, pr.total)} />}
-      <PropertyBlock item={item} schema={schema} />
-      <div className="mt-5 border-t border-line" />
+      {/* what the page is, then its properties – each with its name, so it is clear what it is for */}
+      <PropertyBlock
+        item={item}
+        schema={schema}
+        lead={[
+          { key: "type", label: t("item.typeRow"), node: <TypeSwitch item={item} /> },
+          ...(st ? [{ key: "status", label: statusProp(schema)?.name ?? t("item.statusRow"), node: <StatusMenu item={item} trigger={(p) => <ShadcnButton variant="plain" size="none" {...p} className="tap-y inline-flex" aria-label={t("row.status", { name: st.option.name })}><StatusPill option={st.option} group={st.group} /></ShadcnButton>} /> }] : []),
+          ...(translations(item, ix).length ? [{ key: "lang", label: t("item.languages"), node: <LangSwitch item={item} /> }] : []),
+        ]}
+      />
+      <div className="mt-2 border-t border-line" />
 
       {/* 2 · text */}
       <PageText item={item} doc={doc} long={typeArea} isNew={isNew} onView={setView} hasMore={typeArea || ix.childrenOf(item.id).length > 0} />
@@ -232,13 +236,11 @@ function progressText(item: Item, ix: ReturnType<typeof useIndex>, done: number,
 
 /**
  * The text (zone 2). Long text on a page with its own list is cut to 8 lines with "Ganzen Text
- * zeigen"; a click into it opens it. "Bild oder Datei" shows only while writing.
+ * zeigen"; a click into it opens it. Images and files come in with "/", pasting or dragging.
  */
 function PageText({ item, doc, long, isNew, onView, hasMore }: { item: Item; doc: ReturnType<typeof repo.getDoc>; long: boolean; isNew: boolean; onView: (v: EditorView | null) => void; hasMore: boolean }) {
   const { t } = useT();
   const schema = useIndex().schemaOf(item);
-  const [view, setView] = useState<EditorView | null>(null);
-  const [focused, setFocused] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   const [tall, setTall] = useState(false);
@@ -252,17 +254,13 @@ function PageText({ item, doc, long, isNew, onView, hasMore }: { item: Item; doc
   }, [long, item.id]);
   const cut = long && tall && !expanded;
   return (
-    <div
-      className="relative mt-6"
-      onFocus={() => (setFocused(true), setExpanded(true))}
-      onBlur={(e) => !e.currentTarget.contains(e.relatedTarget as Node) && setFocused(false)}
-    >
+    <div className="relative mt-6" onFocus={() => setExpanded(true)}>
       <div ref={box} className={cut ? "max-h-[200px] overflow-hidden" : undefined}>
         <Editor
           doc={doc}
           nodeId={item.id}
           autoFocus={isNew && !!item.title}
-          onView={(v) => (setView(v), onView(v))}
+          onView={onView}
           extra={[queryBlocks(item.id)]}
           // room to start writing only while the text is empty and nothing else follows
           minHeight={item.body.trim() || hasMore ? "min-h-6" : "min-h-[30vh]"}
@@ -275,13 +273,6 @@ function PageText({ item, doc, long, isNew, onView, hasMore }: { item: Item; doc
             {t("page.showText")}
           </ShadcnButton>
         </div>
-      )}
-      {view && focused && (
-        // while writing: a way to add a picture or a file (pasting and dragging work too)
-        <label onMouseDown={(e) => e.preventDefault()} className="tap mt-1 inline-flex cursor-pointer items-center gap-1.5 rounded-md px-1.5 py-1 text-xs text-muted-foreground focus-within:ring-2 focus-within:ring-[var(--focus)] hover:bg-hover hover:text-fg">
-          <ImagePlus size={14} /> {t("editor.addFile")}
-          <Input type="file" multiple className="sr-only" onChange={(e) => insertFilesAtCursor(view, [...(e.target.files ?? [])])} />
-        </label>
       )}
     </div>
   );
@@ -299,7 +290,7 @@ function LangSwitch({ item }: { item: Item }) {
   const versions = translations(item, ix);
   if (!versions.length) return null;
   return (
-    <div role="group" aria-label={t("item.languages")} className="ml-auto inline-flex rounded-lg bg-surface-2 p-0.5 text-xs">
+    <div role="group" aria-label={t("item.languages")} className="inline-flex rounded-lg bg-surface-2 p-0.5 text-xs">
       {versions.map((v) => {
         const here = v.item.id === item.id;
         return (

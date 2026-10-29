@@ -92,7 +92,7 @@ export function Crumbs({ item, tools, onPlaces, onPlace }: { item: Item; tools: 
       );
   }
   return (
-    <div className="flex min-h-7 items-center gap-1 text-[13px] text-muted-foreground max-md:min-h-8">
+    <div className="page-bar flex min-h-7 items-center gap-1 text-[13px] text-muted-foreground max-md:min-h-8">
       <nav className="flex min-w-0 items-center gap-1" aria-label={t("item.path")}>
         {lead}
       </nav>

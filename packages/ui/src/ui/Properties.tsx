@@ -345,12 +345,19 @@ export function freeOptions(name: string): string[] {
 function BlockRow({ label, title, children }: { label: React.ReactNode; title?: string; children: React.ReactNode }) {
   return (
     <>
-      <div className="flex min-h-8 items-center truncate text-[13px] text-muted-foreground pointer-coarse:min-h-11" title={title ?? (typeof label === "string" ? label : undefined)}>
+      <div className="flex min-h-[34px] items-center truncate rounded-md px-1.5 text-sm text-muted-foreground pointer-coarse:min-h-11" title={title ?? (typeof label === "string" ? label : undefined)}>
         <span className="truncate">{label}</span>
       </div>
-      <div className="group flex min-h-8 min-w-0 flex-wrap items-center gap-1.5 text-sm pointer-coarse:min-h-11">{children}</div>
+      <div className="group flex min-h-[34px] min-w-0 flex-wrap items-center gap-1.5 rounded-md px-1.5 text-sm hover:bg-hover/60 pointer-coarse:min-h-11">{children}</div>
     </>
   );
+}
+
+/** A row of the page's own (type, status, language) above the properties. */
+export interface LeadRow {
+  key: string;
+  label: string;
+  node: React.ReactNode;
 }
 
 /**
@@ -359,7 +366,7 @@ function BlockRow({ label, title, children }: { label: React.ReactNode; title?: 
  * progress (the band) –, then free properties, then the other side of relations ("Blockiert
  * diese"), last the tags if any. "+ Eigenschaft" offers the empty ones, a new free one and a tag.
  */
-export function PropertyBlock({ item, schema, noAdd }: { item: Item; schema?: TypeSchema; noAdd?: boolean }) {
+export function PropertyBlock({ item, schema, noAdd, lead = [] }: { item: Item; schema?: TypeSchema; noAdd?: boolean; lead?: LeadRow[] }) {
   const { t } = useT();
   const ix = useIndex();
   // empty properties opened from "+ Eigenschaft" stay while on this page
@@ -382,10 +389,15 @@ export function PropertyBlock({ item, schema, noAdd }: { item: Item; schema?: Ty
     setName("");
     setAdding(false);
   };
-  const any = shown.length || free.length || inverse.length || item.tags.length || leftovers.length;
+  const any = lead.length || shown.length || free.length || inverse.length || item.tags.length || leftovers.length;
   if (!any && noAdd) return null;
   return (
-    <div className="mt-[18px] grid grid-cols-[148px_minmax(0,1fr)] gap-x-3 max-md:grid-cols-[124px_minmax(0,1fr)]">
+    <div className="group/props -mx-1.5 mt-4 grid grid-cols-[160px_minmax(0,1fr)] gap-x-1 max-md:grid-cols-[124px_minmax(0,1fr)]">
+      {lead.map((r) => (
+        <BlockRow key={"lead:" + r.key} label={r.label}>
+          {r.node}
+        </BlockRow>
+      ))}
       {shown.map((p) => (
         <BlockRow key={p.id} label={p.name} title={p.description || p.name}>
           <PropertyField item={item} prop={p} autoFocus={focus === p.id} />
@@ -463,8 +475,14 @@ export function PropertyBlock({ item, schema, noAdd }: { item: Item; schema?: Ty
           ) : (
             <Popover
               trigger={(pp) => (
-                <ShadcnButton variant="plain" size="none" {...pp} className="tap-y -ml-1 flex h-7 w-fit items-center gap-1 rounded-md px-1 text-[13px] text-muted-foreground hover:bg-hover hover:text-fg">
-                  <Plus size={13} /> {t("props.addFree")}
+                // quiet until the pointer is over the properties (always there on touch screens)
+                <ShadcnButton
+                  variant="plain"
+                  size="none"
+                  {...pp}
+                  className="tap-y flex h-[34px] w-fit items-center gap-1.5 rounded-md px-1.5 text-sm text-muted-foreground opacity-0 transition-opacity hover:bg-hover hover:text-fg focus:opacity-100 group-hover/props:opacity-100 aria-expanded:opacity-100 pointer-coarse:opacity-100"
+                >
+                  <Plus size={15} /> {t("props.addProperty")}
                 </ShadcnButton>
               )}
             >
