@@ -174,8 +174,8 @@ function Main() {
     }
   })();
   const isGraph = route.parts[0] === "graph";
-  // the tray is below every page but the review (it leads there) and, on a phone, an entry's page (its keyboard)
-  const tray = !!settings && route.parts[0] !== "review" && !(route.parts[0] === "inbox" && route.parts[1]) && (wide || route.parts[0] !== "i");
+  // the tray is below every page but the review (it leads there)
+  const tray = !!settings && route.parts[0] !== "review" && !(route.parts[0] === "inbox" && route.parts[1]);
 
   return (
     <div className="flex h-full">

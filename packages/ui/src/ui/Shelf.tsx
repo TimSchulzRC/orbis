@@ -5,13 +5,15 @@ import { Button as ShadcnButton } from "../components/ui/button";
 // there. Above the tray on a desktop, as a sheet on a phone. What lands in the inbox: behind "…".
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, Maximize2, MoreHorizontal, RotateCcw, SlidersHorizontal, X } from "lucide-react";
-import { SETTINGS_ID, setSettings } from "@obtion/core/model";
+import { type Item, SETTINGS_ID, setSettings } from "@obtion/core/model";
 import type { QueryDef } from "@obtion/core/query";
 import { inboxWhere } from "@obtion/core/inbox";
 import { resetInbox } from "@obtion/core/setup";
 import { plainText } from "@obtion/core/search";
 import { fmtBytes } from "@obtion/core/i18n";
 import { useRepo, itemHref, spaceHref } from "../hooks";
+import { useBlobUrl } from "../files";
+import { Textarea } from "../components/ui/textarea";
 import { replica, spaceById, useAccounts } from "../accounts";
 import { useT } from "../i18n";
 import { Button, Dialog, IconButton, ItemIcon, Kbd, MenuItem, Popover, RelTime, cx } from "./bits";
@@ -222,19 +224,15 @@ function EntryBody({ entry }: { entry: InboxEntry }) {
           {t("tray.putDown")} <RelTime ts={item.created} />
         </span>
       </p>
-      {item.kind === "info" ? (
-        <>
-          <div className="mt-2 text-[26px] font-bold leading-8 tracking-[-0.015em] [&_textarea]:text-[26px] [&_textarea]:font-bold">
-            <TitleField item={item} autoFocus={false} />
-          </div>
-          <div className="mt-2 text-[15px]">
-            <Editor doc={repo.getDoc(item.id)} nodeId={item.id} minHeight="min-h-24" placeholder={t("editor.placeholder")} />
-          </div>
-        </>
+      <div className="mt-2 text-[26px] font-bold leading-8 tracking-[-0.015em] [&_textarea]:text-[26px] [&_textarea]:font-bold">
+        <TitleField item={item} autoFocus={false} placeholder={item.file?.name} />
+      </div>
+      {item.file ? (
+        <FileBody item={item} />
       ) : (
-        <h3 className="mt-2 text-[26px] font-bold leading-8">
-          <a href={itemHref(item.id)} className="hover:underline">{item.file?.name || item.title}</a>
-        </h3>
+        <div className="mt-2 text-[15px]">
+          <Editor doc={repo.getDoc(item.id)} nodeId={item.id} minHeight="min-h-24" placeholder={t("editor.placeholder")} />
+        </div>
       )}
       {kids.length > 0 && (
         <div className="mt-6">
@@ -249,6 +247,32 @@ function EntryBody({ entry }: { entry: InboxEntry }) {
         </div>
       )}
     </div>
+  );
+}
+
+/** A file: what it shows (a picture, else the text found in it) and its description, as on its page. */
+function FileBody({ item }: { item: Item }) {
+  const { t } = useT();
+  const repo = useRepo();
+  const f = item.file!;
+  const img = useBlobUrl(f.filetype === "bild" ? (f.display ?? f.hash) : f.thumb, true);
+  return (
+    <>
+      {img ? (
+        <img src={img} alt={item.body || item.title} className="mt-3 max-h-[40vh] w-auto rounded-lg border border-line" />
+      ) : f.text ? (
+        <p className="mt-3 line-clamp-6 text-[15px] leading-[1.65] text-muted-foreground">{plainText(f.text).slice(0, 800)}</p>
+      ) : null}
+      <Textarea
+        defaultValue={item.body}
+        key={item.id}
+        onBlur={(e) => e.target.value !== item.body && repo.setBody(item.id, e.target.value)}
+        placeholder={t("file.descriptionPlaceholder")}
+        aria-label={t("file.description")}
+        rows={2}
+        className="field mt-3 w-full resize-y bg-transparent text-[15px] leading-[1.65] outline-none placeholder:text-faint"
+      />
+    </>
   );
 }
 

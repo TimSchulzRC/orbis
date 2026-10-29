@@ -11,7 +11,7 @@ import { Check, Clock, FolderInput, Layers, List, Pause, RotateCcw, StickyNote, 
 import type { Item } from "@obtion/core/model";
 import { todayISO } from "@obtion/core/model";
 import { plainText } from "@obtion/core/search";
-import { useRepo, useSpaceId, itemHref, spaceHref, go, useDesktop } from "../hooks";
+import { useRepo, itemHref, spaceHref, go, useDesktop } from "../hooks";
 import { replica, spaceById, useAccounts } from "../accounts";
 import { useT } from "../i18n";
 import { recentPlaces } from "../actions";
@@ -107,7 +107,7 @@ export function Review({ at }: { at?: string }) {
       const k = e.key;
       // Enter on a button or link is its own
       if (k === "Enter" && el.closest("button, a")) return;
-      const first = entry && captureTypes(entry.space)[0];
+      const first = entry && offeredTypes(entry)[0];
       if (k === "u" || k === "z") undo();
       else if (!entry) return;
       else if (k === "e") pick.setPlacing([entry.item]);
@@ -316,12 +316,11 @@ function Choices({ entry, onPlace, onPick, onType, onTypes, onLater, onKeep, onT
   const { t } = useT();
   const repo = useRepo();
   const ix = repo.index();
-  const space = useSpaceId()!;
   const item = entry.item;
   const info = item.kind === "info";
   const places = placeSuggestions(item, repo).map((x) => x.id);
   for (const id of recentPlaces(repo)) if (!places.includes(id) && id !== item.id && !item.parents[id] && !ix.wouldCycle(item.id, id)) places.push(id);
-  const types = captureTypes(space).filter((x) => x !== item.type).slice(0, 3);
+  const types = offeredTypes(entry);
   const k = (key: string) => keys && <Kbd>{key}</Kbd>;
   const label = "mb-2 text-[13px] font-medium text-muted-foreground";
   return (
@@ -372,6 +371,9 @@ function Choices({ entry, onPlace, onPick, onType, onTypes, onLater, onKeep, onT
     </div>
   );
 }
+
+/** The types offered to turn an entry into: its workspace's first ones, not the one it has ("c" takes the first). */
+const offeredTypes = (e: InboxEntry) => captureTypes(e.space).filter((x) => x !== e.item.type).slice(0, 3);
 
 /** "Erledigt": what this review sorted, the last one on top, each with its undo. */
 function SortedList({ sorted, onUndo }: { sorted: Sorted[]; onUndo: (s: Sorted) => void }) {
