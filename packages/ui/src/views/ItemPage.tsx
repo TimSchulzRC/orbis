@@ -10,17 +10,16 @@ import { type Item, META_TYPE } from "@obtion/core/model";
 import { isInInbox, isOverview } from "@obtion/core/placement";
 import { wouldBeInInbox } from "@obtion/core/typeops";
 import { onlyBelow } from "@obtion/core/trash";
-import { primaryChild, hasUpdates, progressSpec, statusOf, statusProp, languageCode, translations, translationInit, translationPlan } from "@obtion/core/traits";
+import { primaryChild, hasUpdates, progressSpec, languageCode, translations, translationInit, translationPlan } from "@obtion/core/traits";
 import { useRepo, useIndex, itemHref, go } from "../hooks";
 import { repo } from "../repo";
 import { useT, tr, getLang } from "../i18n";
 import { Editor, insertFilesAtCursor } from "../ui/Editor";
-import { Button, Dialog, ItemIcon, MenuItem, Popover, ProgressBand, StatusPill, TypeChip, TypeGlyph, cx, IconButton } from "../ui/bits";
+import { Button, Dialog, ItemIcon, MenuItem, Popover, ProgressBand, TypeChip, TypeGlyph, cx, IconButton } from "../ui/bits";
 import { ItemPicker } from "../ui/Picker";
 import { PropertyBlock } from "../ui/Properties";
 import { BelowCard, ChildList, Updates, mainGrouping } from "../ui/Sections";
 import { Bezuege, Crumbs, PlacePicker } from "../ui/PageParts";
-import { StatusMenu } from "../ui/Row";
 import { pluralOf } from "@obtion/core/plural";
 import { queryBlocks, insertQueryBlock } from "../ui/QueryBlock";
 import { FilePage } from "./FilePage";
@@ -97,7 +96,6 @@ function InfoView({ item, isNew }: { item: Item; isNew: boolean }) {
   const exclude = new Set<string>(mainType ? ["type:" + mainType] : []);
   if (mainType && mainType !== item.type && mainGrouping(item) === "sub") for (const c of ix.childrenOf(item.id)) if (ix.get(c)?.type === item.type) exclude.add(c);
   const pr = progressSpec(schema) ? ix.progressOf(item) : undefined;
-  const st = statusOf(item, schema);
 
   const tools = (
     <>
@@ -180,16 +178,15 @@ function InfoView({ item, isNew }: { item: Item; isNew: boolean }) {
           <AlertTriangle size={12} /> {t("item.cycle", { titles: cycles.map((c) => ix.get(c)?.title).join(", ") })}
         </p>
       )}
-      {pr && <ProgressBand done={pr.done} total={pr.total} desc={progressText(item, ix, pr.done, pr.total)} />}
-      {/* what the page is, then its properties – each with its name, so it is clear what it is for */}
+      {/* what the page is as badges, its dates, its progress, then the properties with their names */}
       <PropertyBlock
         item={item}
         schema={schema}
-        lead={[
-          { key: "type", label: t("item.typeRow"), node: <TypeSwitch item={item} /> },
-          ...(st ? [{ key: "status", label: statusProp(schema)?.name ?? t("item.statusRow"), node: <StatusMenu item={item} trigger={(p) => <ShadcnButton variant="plain" size="none" {...p} className="tap-y inline-flex" aria-label={t("row.status", { name: st.option.name })}><StatusPill option={st.option} group={st.group} /></ShadcnButton>} /> }] : []),
-          ...(translations(item, ix).length ? [{ key: "lang", label: t("item.languages"), node: <LangSwitch item={item} /> }] : []),
-        ]}
+        head={{
+          first: <TypeSwitch item={item} />,
+          last: translations(item, ix).length > 0 && <LangSwitch item={item} />,
+          progress: pr && <ProgressBand done={pr.done} total={pr.total} desc={progressText(item, ix, pr.done, pr.total)} />,
+        }}
       />
       <div className="mt-2 border-t border-line" />
 

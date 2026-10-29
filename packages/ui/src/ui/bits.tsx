@@ -80,7 +80,7 @@ export function StatusGlyph({ option, size = 16, className }: { option: OptionDe
   );
 }
 
-export function StatusPill({ option, small, group }: { option?: OptionDef; small?: boolean; group?: StatusGroup }) {
+export function StatusPill({ option, small, group, label }: { option?: OptionDef; small?: boolean; group?: StatusGroup; label?: ReactNode }) {
   if (!option) return null;
   const c = option.color ? pal(option.color) : GROUP_COLOR[group ?? option.group ?? "todo"];
   // status options have a group and show their shape; plain select options a dot
@@ -91,7 +91,7 @@ export function StatusPill({ option, small, group }: { option?: OptionDef; small
       style={{ color: `color-mix(in srgb, ${c} 62%, var(--text))`, background: `color-mix(in srgb, ${c} 13%, transparent)` }}
     >
       {isStatus ? <StatusGlyph option={{ ...option, group: group ?? option.group }} size={12} /> : <span className="size-1.5 rounded-full" style={{ background: c }} />}
-      {option.name}
+      {label ?? option.name}
     </Badge>
   );
 }
