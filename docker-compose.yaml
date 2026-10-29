@@ -1,10 +1,11 @@
-# Obtion on a NAS or any Docker host: clone the repository, `mkdir data`, `docker compose up -d`,
-# open http://<any address of the host>:8480. Optional settings go into .env (see .env.example;
-# not in git, so `git pull` never collides with them).
+# Obtion on a NAS or any Docker host: put this file into a folder, `mkdir data` next to it,
+# `docker compose up -d`, open http://<any address of the host>:8480. Optional settings go into
+# .env next to it (see .env.example). Update: `docker compose pull && docker compose up -d`.
 services:
   obtion:
-    build: .
-    image: obtion-server
+    # built by GitHub Actions from every push to main (see .github/workflows/ci.yml); an earlier
+    # build with OBTION_VERSION, e.g. sha-cfc56ef
+    image: ghcr.io/timschulzrc/obtion:${OBTION_VERSION:-latest}
     restart: unless-stopped
     # the owner of the data folder (`ls -n`), so its files keep that owner; never root
     user: "${OBTION_UID:-1000}:${OBTION_GID:-1000}"
