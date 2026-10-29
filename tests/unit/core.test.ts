@@ -230,6 +230,17 @@ describe("adding to an entry in the inbox", () => {
     expect(appendTarget("@Urlaub", entries)).toBeUndefined();
   });
 
+  test("a mention that is exactly something else (a place) wins over an entry starting like it", () => {
+    const place = "place-urlaub";
+    const resolve = (name: string) => (name.toLowerCase() === "urlaub" ? place : undefined);
+    expect(appendTarget("Tickets @Urlaub", entries, undefined, resolve)).toBeUndefined();
+    expect(appendTarget("Tickets @Urlaub im Herbst", entries, undefined, (n) => (n === "Urlaub im Herbst" ? urlaub : resolve(n)))).toEqual({ id: urlaub, text: "Tickets" });
+  });
+
+  test("the lines of the text stay lines", () => {
+    expect(appendTarget("@Urlaub Zug buchen\nHotel reservieren", entries)).toEqual({ id: urlaub, text: "Zug buchen\nHotel reservieren" });
+  });
+
   test("the line goes below the text", () => {
     m.change(urlaub, (d) => appendToBody(d, "Zug ab 7:40"));
     expect(m.get(urlaub)!.body).toBe("Ostsee oder Bodensee\nZug ab 7:40");

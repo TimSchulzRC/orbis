@@ -35,9 +35,10 @@ export function tomorrow(now = new Date()): number {
  * What a capture could be added to instead of becoming an entry of its own: an entry still in the
  * inbox (`entries`, newest first). "@Urlaub …" names it by the start of its title (the mention
  * leaves the text); without "@" it is the one put down or opened last (`opened`: which, when).
- * A mention of anything else (a place) is no append. Nothing for an empty text.
+ * A mention that is exactly the title of anything else (`resolve`, a place) is no append. Nothing
+ * for an empty text.
  */
-export function appendTarget(text: string, entries: Item[], opened?: { id: string; at: number }): { id: string; text: string } | undefined {
+export function appendTarget(text: string, entries: Item[], opened?: { id: string; at: number }, resolve?: (title: string) => string | undefined): { id: string; text: string } | undefined {
   const t = text.trim();
   if (!t || !entries.length) return;
   const at = /(^|\s)@([^@\n]+)/.exec(t);
@@ -48,10 +49,16 @@ export function appendTarget(text: string, entries: Item[], opened?: { id: strin
   }
   const words = at[2]!.trim().split(/\s+/);
   for (let n = words.length; n > 0; n--) {
-    const want = titleKey(words.slice(0, n).join(" ").replace(/[.,;:!?]+$/, ""));
-    const hit = want && entries.find((e) => titleKey(e.title).startsWith(want));
+    const name = words.slice(0, n).join(" ").replace(/[.,;:!?]+$/, "");
+    const exact = resolve?.(name);
+    const hit = exact ? entries.find((e) => e.id === exact) : titleKey(name) && entries.find((e) => titleKey(e.title).startsWith(titleKey(name)));
+    if (exact && !hit) return; // a place: placing it is offered instead
     if (!hit) continue;
-    const rest = (t.slice(0, at.index) + at[1] + words.slice(n).join(" ") + t.slice(at.index + at[0].length)).replace(/\s+/g, " ").trim();
+    // the mention leaves, the rest of the text stays as it was typed (its lines too)
+    const span = new RegExp(`^\\s*\\S+(?:\\s+\\S+){${n - 1}}`).exec(at[2]!)![0];
+    const before = t.slice(0, at.index + at[1]!.length).trimEnd();
+    const after = (at[2]!.slice(span.length) + t.slice(at.index + at[0].length)).trimStart();
+    const rest = [before, after].filter(Boolean).join(" ");
     return rest ? { id: hit.id, text: rest } : undefined;
   }
   return;

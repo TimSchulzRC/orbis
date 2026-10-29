@@ -90,7 +90,7 @@ function CaptureField({ parent, placeholder, append, autoFocus, onDone, compact,
     onDone?.();
   };
   // added to an entry still in the inbox: the one put down or opened last, or the one named with "@…"
-  const target = append && !parent && text.trim() ? appendTarget(text, runQuery({ where: { inbox: true }, sort: [{ key: "created", desc: true }] }, { ix }).items, openedIn(space ?? "")) : undefined;
+  const target = append && !parent && text.trim() ? appendTarget(text, runQuery({ where: { inbox: true }, sort: [{ key: "created", desc: true }] }, { ix }).items, openedIn(space ?? ""), (title) => ix.resolveTitle(title)) : undefined;
   const targetTitle = target ? ix.get(target.id)?.title || t("untitled") : "";
   const addTo = () => {
     if (!target) return;
