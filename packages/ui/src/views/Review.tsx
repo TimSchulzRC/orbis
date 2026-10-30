@@ -16,7 +16,7 @@ import { type Item, todayISO } from "@obtion/core/model";
 import { plainText } from "@obtion/core/search";
 import { useRepo, useItemHref, spaceHref, go, useDesktop } from "../hooks";
 import { replica, spaceById, useAccounts } from "../accounts";
-import { useT } from "../i18n";
+import { useT, titleOf } from "../i18n";
 import { recentPlaces } from "../actions";
 import { useBlobUrl } from "../files";
 import { Button, Empty, ItemIcon, Kbd, RelTime, SectionTitle, Seg, Tag, TypeGlyph, cx, itemLook } from "../ui/bits";
@@ -92,7 +92,7 @@ export function Review({ at }: { at?: string }) {
   const record = (e: InboxEntry, what: string, undo?: Undo | null) => {
     if (!undo) return;
     const title = replica(e.space).repo.get(e.item.id)?.title ?? e.item.title; // perhaps just edited
-    setSorted((s) => [...s, { key: e.key, title: title || e.item.file?.name || t("untitled"), what, undo }]);
+    setSorted((s) => [...s, { key: e.key, title: titleOf({ title, file: e.item.file }, t), what, undo }]);
     setCur(e.key);
   };
   const placeIn = (list: Item[], p: string) => entry && record(entry, `→ ${replica(entry.space).repo.index().get(p)?.title ?? ""}`, act.place(list, p));
@@ -267,7 +267,7 @@ function EntryCard({ entry, space, more, scroller, editing, onEdit, onDone }: { 
   const look = itemLook(item, ix);
   // a loose note is a note here (it is in the inbox, that goes without saying)
   const kind = look.label === "inbox" ? t("kind.note") : ["file", "note", "overview"].includes(look.label) ? t("kind." + look.label) : look.label;
-  const kids = ix.childrenOf(item.id).map((id) => ix.get(id)!).filter(Boolean);
+  const kids = ix.items(ix.childrenOf(item.id));
   const img = useBlobUrl(item.file?.filetype === "bild" ? (item.file.display ?? item.file.hash) : item.file?.thumb, true);
   const [rest, setRest] = useState(false);
   const self = useRef<HTMLElement>(null);
@@ -355,7 +355,7 @@ function EntryCard({ entry, space, more, scroller, editing, onEdit, onDone }: { 
             )}
           </>
         ) : (
-          <h2 className="mt-4 text-[28px] font-bold leading-[34px] tracking-[-0.015em] max-lg:text-2xl">{item.title || item.file?.name || t("untitled")}</h2>
+          <h2 className="mt-4 text-[28px] font-bold leading-[34px] tracking-[-0.015em] max-lg:text-2xl">{titleOf(item, t)}</h2>
         )}
         {editing && text ? null : item.body.trim() ? (
           <div className="mt-4 max-w-[68ch] text-[15px] leading-[1.65]">
@@ -378,7 +378,7 @@ function EntryCard({ entry, space, more, scroller, editing, onEdit, onDone }: { 
             <ul className="space-y-1 text-sm">
               {kids.map((c) => (
                 <li key={c.id} className="flex items-center gap-2">
-                  <ItemIcon item={c} size={14} /> <a href={hrefOf(c.id)} className="truncate hover:underline">{c.title || t("untitled")}</a>
+                  <ItemIcon item={c} size={14} /> <a href={hrefOf(c.id)} className="truncate hover:underline">{titleOf(c, t)}</a>
                 </li>
               ))}
             </ul>
@@ -524,7 +524,7 @@ function StackList({ keys, current, byKey, onPick }: { keys: string[]; current?:
               <ShadcnButton variant="plain" size="none" onClick={() => onPick(k)} aria-current={k === current} className={cx("relative flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left hover:bg-hover", k === current && "bg-selected before:absolute before:inset-y-1.5 before:left-0 before:w-[3px] before:rounded-r before:bg-[var(--t-inbox)]")}>
                 <ItemIcon item={e.item} size={14} ix={replica(e.space).repo.index()} />
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm">{e.item.title || e.item.file?.name || t("untitled")}</span>
+                  <span className="block truncate text-sm">{titleOf(e.item, t)}</span>
                   <span className="block truncate text-xs text-muted-foreground">
                     <RelTime ts={e.item.created} />
                   </span>

@@ -10,12 +10,13 @@ import { fmtDate } from "@obtion/core/i18n";
 import { activeProjects, dueBy, recentlyChanged } from "@obtion/core/today";
 import { useDesktop, useIndex, useItemHref } from "../hooks";
 import { useAccounts } from "../accounts";
-import { useT } from "../i18n";
+import { useT, titleOf } from "../i18n";
 import { Card, DueLabel, ItemIcon, RelTime, SectionTitle, cx, itemLook, pal } from "../ui/bits";
 import { RowStatus } from "../ui/Row";
 import { SpaceScope, useReplicas } from "../ui/Spaces";
 import { useInboxItems, useShelfPinned } from "../ui/inbox";
 import { ShelfCards } from "../ui/Shelf";
+import { cmpKey } from "@obtion/core/sortkey";
 
 interface Of<T> {
   space: string;
@@ -35,7 +36,7 @@ export function Today() {
   // each workspace's part, then one list of all
   const per = shown.map((s, n) => ({ space: s.id, ix: repos[n]!.get(SETTINGS_ID) ? repos[n]!.index() : undefined }));
   const all = <T,>(f: (ix: NonNullable<(typeof per)[number]["ix"]>) => T[]): Of<T>[] => per.flatMap((p) => (p.ix ? f(p.ix).map((value) => ({ space: p.space, value })) : []));
-  const due = all((ix) => dueBy(ix, today)).sort((a, b) => (a.value.due < b.value.due ? -1 : a.value.due > b.value.due ? 1 : 0));
+  const due = all((ix) => dueBy(ix, today)).sort((a, b) => cmpKey(a.value.due, b.value.due));
   const projects = all((ix) => activeProjects(ix)).sort((a, b) => b.value.touched - a.value.touched);
   const recent = all((ix) => recentlyChanged(ix, 4)).sort((a, b) => b.value.updated - a.value.updated).slice(0, 4);
   const several = shown.length > 1;
@@ -136,7 +137,7 @@ function DueRow({ item, due, space }: { item: Item; due: string; space?: string 
     <div className={row}>
       <RowStatus item={item} />
       <a href={hrefOf(item.id)} className="flex min-w-0 flex-1 flex-col hover:underline lg:flex-row lg:items-baseline lg:gap-3">
-        <span className="truncate text-[15px]">{item.title || t("untitled")}</span>
+        <span className="truncate text-[15px]">{titleOf(item, t)}</span>
         {where && <span className="truncate text-xs text-muted-foreground lg:ml-auto">{where}</span>}
       </a>
       <DueLabel due={due} />
@@ -155,7 +156,7 @@ function ProjectRow({ item, touched, space }: { item: Item; touched: number; spa
     <a href={hrefOf(item.id)} className={cx(row, "hover:bg-hover")}>
       {prog && prog.total > 0 ? <Ring share={prog.done / prog.total} color={color} /> : <span className="flex size-8 shrink-0 items-center justify-center"><ItemIcon item={item} /></span>}
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[15px] font-medium">{item.title || t("untitled")}</span>
+        <span className="block truncate text-[15px] font-medium">{titleOf(item, t)}</span>
         <span className="block truncate text-xs text-muted-foreground">
           {prog && prog.total > 0 && <>{t("today.open", { count: prog.total - prog.done })} · </>}
           {t("today.touched")} <RelTime ts={touched} />
@@ -196,7 +197,7 @@ function RecentTile({ item }: { item: Item }) {
       <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
         <ItemIcon item={item} size={13} /> <span className="truncate">{useWhat(item)}</span>
       </span>
-      <span className="truncate text-[15px] font-semibold">{item.title || item.file?.name || t("untitled")}</span>
+      <span className="truncate text-[15px] font-semibold">{titleOf(item, t)}</span>
       <span className="text-xs text-muted-foreground">
         <RelTime ts={item.updated} />
       </span>
@@ -211,7 +212,7 @@ function RecentRow({ item }: { item: Item }) {
     <a href={hrefOf(item.id)} className={cx(row, "hover:bg-hover")}>
       <ItemIcon item={item} />
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[15px]">{item.title || item.file?.name || t("untitled")}</span>
+        <span className="block truncate text-[15px]">{titleOf(item, t)}</span>
         <span className="block truncate text-xs text-muted-foreground">{useWhat(item)}</span>
       </span>
       <span className="shrink-0 text-xs text-muted-foreground">

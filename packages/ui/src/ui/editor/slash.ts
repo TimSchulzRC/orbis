@@ -10,6 +10,8 @@ import { tr } from "../../i18n";
 import { insertQueryBlock } from "../QueryBlock";
 import { KINDS, kindName, setKind } from "./blocks";
 import { iconHTML } from "./icons";
+import { foldUmlauts, plainVowels } from "@obtion/core/text";
+import { kindHint } from "../text";
 
 /** A menu entry with an icon, a description and more words it is found by. */
 interface SlashItem {
@@ -76,7 +78,8 @@ const ITEMS: SlashItem[] = [
 
 const SECTIONS = { basic: { name: "editor.section.basic", rank: 0 }, insert: { name: "editor.section.insert", rank: 1 } };
 
-const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+/** Does `words` contain `q`, umlauts typed either way ("ueber", "über" and "uber" all find "Überschrift")? */
+const hasWord = (words: string, q: string) => [foldUmlauts, plainVowels].some((f) => f(words).includes(f(q)));
 
 /** "/" at the start of a line or after a space. */
 export function slashCompletion(ctx: CompletionContext): CompletionResult | null {
@@ -84,13 +87,12 @@ export function slashCompletion(ctx: CompletionContext): CompletionResult | null
   const m = ctx.matchBefore(/(?:^|\s)\/[\p{L}\p{N}]*$/u);
   if (!m) return null;
   const from = m.from + m.text.indexOf("/");
-  const q = norm(ctx.state.sliceDoc(from + 1, ctx.pos));
+  const q = ctx.state.sliceDoc(from + 1, ctx.pos);
   const options: Option[] = [];
   for (const it of ITEMS) {
     const kind = KINDS.find((k) => k.kind === it.id)?.kind;
     const label = kind ? kindName(kind) : tr("editor.slash." + it.id);
-    const words = norm(label + " " + tr("editor.slash." + it.id + ".keys"));
-    if (q && !words.split(/[\s,]+/).some((w) => w.startsWith(q)) && !words.includes(q)) continue;
+    if (q && !hasWord(label + " " + tr("editor.slash." + it.id + ".keys"), q)) continue;
     options.push({
       label,
       icon: it.icon,
@@ -121,7 +123,7 @@ export function mentionCompletion(selfId?: string) {
     const from = m.from + m.text.indexOf("@");
     const q = ctx.state.sliceDoc(from + 1, ctx.pos);
     if (!q && !ctx.explicit && ctx.state.sliceDoc(from - 1, from).trim()) return null;
-    const hits = (q.trim() ? repo.search(q, 20) : repo.live().sort((a, b) => b.updated - a.updated).slice(0, 12)).filter((r) => r.id !== selfId && r.title);
+    const hits = (q.trim() ? repo.search(q, 20) : [...repo.live()].sort((a, b) => b.updated - a.updated).slice(0, 12)).filter((r) => r.id !== selfId && r.title);
     // a space after a word that finds nothing: it was no mention
     if (!hits.length && /\s/.test(q)) return null;
     return {
@@ -130,7 +132,7 @@ export function mentionCompletion(selfId?: string) {
       options: hits.map((r, i) =>
         pageOption({
         label: r.title,
-        hint: r.kind === "datei" ? tr("kind.file") : (repo.index().typeName(r.type) ?? ""),
+        hint: kindHint(r, repo.index()),
         boost: -i,
         apply: (view, _c, a, b) => view.dispatch({ changes: { from: a, to: b, insert: `[[${r.title}]]` }, selection: EditorSelection.cursor(a + r.title.length + 4) }),
         }),

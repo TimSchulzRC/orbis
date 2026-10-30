@@ -1,15 +1,16 @@
 import { Marked, type Tokens } from "marked";
 import { useEffect, useMemo, useRef } from "react";
 import { fmtBytes } from "@obtion/core/i18n";
-import type { Item } from "@obtion/core/model";
+import { type Item, wikiLinkRe } from "@obtion/core/model";
 import { openLightbox } from "./Lightbox";
 import { repo } from "../repo";
 import { useFiles, useRepo } from "../hooks";
 import { type DeviceFiles, files as current } from "../files";
 import type { Repo } from "@obtion/sync";
 import { getLang, tr } from "../i18n";
+import { escapeHtml } from "./text";
 
-const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+const WIKILINK_AT_START = wikiLinkRe(true);
 
 /** A [[link]] or ![[embed]] (`alias`: the text after |, for files a width). */
 interface WikiToken extends Tokens.Generic {
@@ -24,7 +25,7 @@ const md = new Marked({ gfm: true, breaks: true });
 md.use({
   renderer: {
     // Never render raw HTML from notes or agent output.
-    html: (t) => esc(t.text),
+    html: (t) => escapeHtml(t.text),
     link(t) {
       const text = this.parser.parseInline(t.tokens);
       const internal = t.href.startsWith("#");
@@ -37,7 +38,7 @@ md.use({
         }
         if (!["http:", "https:", "mailto:"].includes(proto)) return text;
       }
-      return `<a href="${esc(t.href)}"${internal ? "" : ' target="_blank" rel="noopener"'}>${text}</a>`;
+      return `<a href="${escapeHtml(t.href)}"${internal ? "" : ' target="_blank" rel="noopener"'}>${text}</a>`;
     },
   },
   extensions: [
@@ -46,9 +47,9 @@ md.use({
       level: "inline",
       start: (src: string) => src.match(/!?\[\[/)?.index,
       tokenizer(src: string): WikiToken | undefined {
-        const m = /^(!?)\[\[([^\]|#\n]+)(#[^\]|\n]*)?(?:\|([^\]\n]*))?\]\]/.exec(src);
+        const m = WIKILINK_AT_START.exec(src);
         if (!m) return undefined;
-        return { type: "wikilink", raw: m[0], embed: m[1] === "!", target: m[2]!.trim(), alias: m[4] };
+        return { type: "wikilink", raw: m[0], embed: m[1] === "!", target: m[2]!.trim(), alias: m[4]?.slice(1) };
       },
       renderer(token) {
         const t = token as WikiToken; // made by the tokenizer above
@@ -58,11 +59,11 @@ md.use({
         const f = item?.file;
         const size = t.alias && /^\d+$/.test(t.alias) ? Number(t.alias) : undefined;
         if (f && t.embed) return embedHTML(item!, size);
-        if (f) return `<a class="file-chip" href="#/i/${encodeURIComponent(id!)}">📎 ${esc(t.alias || item!.title)} <small>${fmtBytes(getLang(), f.size)}</small></a>`;
-        const label = esc(t.alias || t.target);
+        if (f) return `<a class="file-chip" href="#/i/${encodeURIComponent(id!)}">📎 ${escapeHtml(t.alias || item!.title)} <small>${fmtBytes(getLang(), f.size)}</small></a>`;
+        const label = escapeHtml(t.alias || t.target);
         return id
           ? `<a class="wikilink" href="#/i/${encodeURIComponent(id)}">${label}</a>`
-          : `<a class="wikilink missing" href="#/create?title=${encodeURIComponent(t.target)}" title="${esc(tr("link.missing"))}">${label}</a>`;
+          : `<a class="wikilink missing" href="#/create?title=${encodeURIComponent(t.target)}" title="${escapeHtml(tr("link.missing"))}">${label}</a>`;
       },
     },
   ],
@@ -76,12 +77,12 @@ md.use({
 export function embedHTML(item: Item, size?: number): string {
   const f = item.file!;
   if (f.filetype === "bild")
-    return `<figure class="embed-img"><img data-hash="${f.display ?? f.hash}" data-id="${esc(item.id)}" data-created="${item.created}" alt="${esc(item.body || item.title)}"${size ? ` style="width:${size}px"` : ""}>${item.body ? `<figcaption>${esc(item.body)}</figcaption>` : ""}</figure>`;
+    return `<figure class="embed-img"><img data-hash="${f.display ?? f.hash}" data-id="${escapeHtml(item.id)}" data-created="${item.created}" alt="${escapeHtml(item.body || item.title)}"${size ? ` style="width:${size}px"` : ""}>${item.body ? `<figcaption>${escapeHtml(item.body)}</figcaption>` : ""}</figure>`;
   if (f.filetype === "audio" || f.filetype === "video") {
     const tag = f.filetype === "audio" ? "audio" : "video";
-    return `<figure class="embed-av"><${tag} controls preload="none" data-hash="${f.hash}" class="embed-media"></${tag}><figcaption><a href="#/i/${encodeURIComponent(item.id)}">${esc(item.title)}</a>${item.body ? ` · ${esc(item.body)}` : ""}</figcaption></figure>`;
+    return `<figure class="embed-av"><${tag} controls preload="none" data-hash="${f.hash}" class="embed-media"></${tag}><figcaption><a href="#/i/${encodeURIComponent(item.id)}">${escapeHtml(item.title)}</a>${item.body ? ` · ${escapeHtml(item.body)}` : ""}</figcaption></figure>`;
   }
-  return `<a class="embed-file" href="#/i/${encodeURIComponent(item.id)}">${f.thumb ? `<img data-hash="${f.thumb}" alt="">` : ""}<span><b>${esc(item.title)}</b><small>${[f.pages ? tr("file.pages", { count: f.pages }) : "", fmtBytes(getLang(), f.size)].filter(Boolean).join(" · ")}</small></span></a>`;
+  return `<a class="embed-file" href="#/i/${encodeURIComponent(item.id)}">${f.thumb ? `<img data-hash="${f.thumb}" alt="">` : ""}<span><b>${escapeHtml(item.title)}</b><small>${[f.pages ? tr("file.pages", { count: f.pages }) : "", fmtBytes(getLang(), f.size)].filter(Boolean).join(" · ")}</small></span></a>`;
 }
 
 /** The replica whose titles [[links]] resolve against while rendering (the workspace of the text). */

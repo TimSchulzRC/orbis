@@ -53,7 +53,7 @@ export async function moveToSpace(id: string, from: string, to: string, parent?:
   }
   const ix = dst.repo.index();
   const pinned = !parent && src.repo.get(id)?.pinned ? keyBetween(sidebarRoots(ix).at(-1)?.pinned ?? null, null) : undefined;
-  const moved = copyToWorkspace(src.repo.index(), id, { w: dst.repo.writer, ix }, { parent, pinned }, `web:${src.repo.device}`);
+  const moved = copyToWorkspace(src.repo.index(), id, { w: dst.repo.writer, ix }, { parent, pinned }, src.repo.origin);
   deleteItem(src.repo.writer, src.repo.index(), id);
   return moved.ids.get(id)!;
 }

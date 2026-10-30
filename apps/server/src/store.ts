@@ -7,7 +7,8 @@ import { Database } from "bun:sqlite";
 import * as Y from "yjs";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { type Item, type ItemInit, type UpdateEntry, PERSONAL, SETTINGS_ID, initItem, isContent, metaMap, newId, readItem } from "@obtion/core/model";
+import { type Item, type ItemInit, type UpdateEntry, PERSONAL, SETTINGS_ID, areaOf, initItem, isContent, metaMap, newId, readItem } from "@obtion/core/model";
+import { sameValue } from "@obtion/core/equal";
 import type { Lang } from "@obtion/core/i18n";
 import { Index } from "@obtion/core/graph";
 import { resolveCascade } from "@obtion/core/trash";
@@ -199,8 +200,7 @@ export class Store {
 
   private noteArea(id: string, doc: Y.Doc) {
     const meta = metaMap(doc);
-    const raw = meta.get("area");
-    const area = typeof raw === "string" ? raw : meta.has("kind") ? PERSONAL : undefined;
+    const area = meta.has("area") || meta.has("kind") ? areaOf(doc) : undefined;
     if (area) this.areas.set(id, area);
     else this.areas.delete(id);
   }
@@ -589,8 +589,6 @@ function typeTag(i: Item): string {
   return i.kind === "info" ? (i.type ?? "") : i.kind;
 }
 
-/** Equal as JSON (field values, schemas). */
-export const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
 function setDiff(field: string, a: string[], b: string[], out: FieldChange[]) {
   const added = b.filter((x) => !a.includes(x));
@@ -606,9 +604,9 @@ function diffRecords(prev: Item | undefined, next: Item): { kind: ActivityEvent[
   setDiff("tags", prev.tags, next.tags, changes);
   setDiff("refs", prev.refs, next.refs, changes);
   for (const k of new Set([...Object.keys(prev.props), ...Object.keys(next.props)]))
-    if (!same(prev.props[k], next.props[k])) changes.push({ field: "p:" + k, from: prev.props[k], to: next.props[k] });
+    if (!sameValue(prev.props[k], next.props[k])) changes.push({ field: "p:" + k, from: prev.props[k], to: next.props[k] });
   for (const k of new Set([...Object.keys(prev.extra), ...Object.keys(next.extra)]))
-    if (!same(prev.extra[k], next.extra[k])) changes.push({ field: "x:" + k, from: prev.extra[k]?.v, to: next.extra[k]?.v });
+    if (!sameValue(prev.extra[k], next.extra[k])) changes.push({ field: "x:" + k, from: prev.extra[k]?.v, to: next.extra[k]?.v });
   for (const k of new Set([...Object.keys(prev.rels), ...Object.keys(next.rels)])) setDiff("r:" + k, prev.rels[k] ?? [], next.rels[k] ?? [], changes);
   if (prev.body !== next.body) changes.push({ field: "body", from: prev.body.length, to: next.body.length });
   if (next.updates.length > prev.updates.length) for (const e of next.updates.slice(prev.updates.length)) changes.push({ field: "update", to: e.text });
@@ -616,12 +614,12 @@ function diffRecords(prev: Item | undefined, next: Item): { kind: ActivityEvent[
   if (prev.schema || next.schema) {
     const { views: va, ...sa } = prev.schema ?? ({} as NonNullable<Item["schema"]>);
     const { views: vb, ...sb } = next.schema ?? ({} as NonNullable<Item["schema"]>);
-    if (!same(sa, sb)) changes.push({ field: "schema" });
-    if (!same(va, vb)) changes.push({ field: "views" });
+    if (!sameValue(sa, sb)) changes.push({ field: "schema" });
+    if (!sameValue(va, vb)) changes.push({ field: "views" });
   }
   if (prev.file?.hash !== next.file?.hash && prev.file) changes.push({ field: "file", from: prev.file?.name, to: next.file?.name });
-  if (!same(prev.suggestion, next.suggestion)) changes.push({ field: "suggestion", to: next.suggestion ? true : undefined });
-  if (!same(prev.op, next.op)) changes.push({ field: "op", to: next.op?.undone ? "undone" : undefined });
+  if (!sameValue(prev.suggestion, next.suggestion)) changes.push({ field: "suggestion", to: next.suggestion ? true : undefined });
+  if (!sameValue(prev.op, next.op)) changes.push({ field: "op", to: next.op?.undone ? "undone" : undefined });
   let kind: ActivityEvent["kind"] = "updated";
   if (!prev.deleted && next.deleted) kind = "deleted";
   if (prev.deleted && !next.deleted) kind = "restored";

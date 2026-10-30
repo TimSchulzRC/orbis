@@ -1,12 +1,10 @@
 import type { EditorView } from "@codemirror/view";
-import { SETTINGS_ID } from "@obtion/core/model";
 import { repo } from "../repo";
 import { tr } from "../i18n";
 
 /** The type "extract" uses: the first pinned capture type (shipped: Karte). Survives deleting that type. */
 export function extractType(): string | null {
-  const ix = repo.index();
-  return (repo.get(SETTINGS_ID)?.settings?.captureTypes ?? []).find((id) => ix.types.has(id)) ?? null;
+  return repo.index().captureTypes()[0] ?? null;
 }
 
 /**

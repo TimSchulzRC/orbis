@@ -17,7 +17,7 @@ import { useRepo, itemHref, spaceHref } from "../hooks";
 import { useBlobUrl } from "../files";
 import { Textarea } from "../components/ui/textarea";
 import { replica, spaceById, useAccounts } from "../accounts";
-import { useT } from "../i18n";
+import { useT, titleOf } from "../i18n";
 import { Button, Dialog, IconButton, ItemIcon, Kbd, MenuItem, Popover, RelTime, cx } from "./bits";
 import { Editor } from "./Editor";
 import { TitleField } from "./TitleField";
@@ -26,6 +26,7 @@ import { SpaceFilter, SpaceScope } from "./Spaces";
 import { notify } from "./feedback";
 import { type InboxEntry, closeShelf, openShelf, reviewMinutes, useInboxItems, useShelf } from "./inbox";
 import { DraftBar } from "../views/Lists";
+import { sameValue } from "@obtion/core/equal";
 
 /** Where an entry opens in the review. */
 const reviewHref = (key: string) => `#/review?at=${encodeURIComponent(key)}`;
@@ -167,7 +168,7 @@ export function ShelfCards({ entries }: { entries: InboxEntry[] }) {
               variant="plain"
               size="none"
               onClick={() => openShelf(e.key)}
-              aria-label={t("tray.openEntry", { title: e.item.title || e.item.file?.name || t("untitled") })}
+              aria-label={t("tray.openEntry", { title: titleOf(e.item, t) })}
               className="flex min-w-0 flex-col items-stretch gap-1 rounded-xl border border-[color-mix(in_srgb,var(--t-inbox)_35%,var(--border))] bg-surface px-4 py-3 text-left hover:bg-hover"
             >
               <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
@@ -175,7 +176,7 @@ export function ShelfCards({ entries }: { entries: InboxEntry[] }) {
                 <RelTime ts={e.item.created} />
                 {shown.length > 1 && <span className="truncate">· {spaceById(e.space)?.name}</span>}
               </span>
-              <span className="truncate text-[15px] font-semibold">{e.item.title || e.item.file?.name || t("untitled")}</span>
+              <span className="truncate text-[15px] font-semibold">{titleOf(e.item, t)}</span>
               <span className="truncate text-xs text-muted-foreground">{line || "\u00a0"}</span>
             </ShadcnButton>
           );
@@ -213,7 +214,7 @@ function Row({ entry, n, on, space, onHover }: { entry: InboxEntry; n: number; o
         <ItemIcon item={entry.item} size={16} ix={ix} />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[15px]">{entry.item.title || entry.item.file?.name || t("untitled")}</span>
+        <span className="block truncate text-[15px]">{titleOf(entry.item, t)}</span>
         {line && <span className="block truncate text-[13px] text-muted-foreground">{line}</span>}
       </span>
       <span className="flex shrink-0 flex-col items-end text-xs text-muted-foreground">
@@ -236,7 +237,7 @@ function EntryView({ entry, desktop, pinned }: { entry: InboxEntry; desktop: boo
         <ShadcnButton variant="plain" size="none" onClick={() => openShelf()} className="tap inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[15px] text-muted-foreground hover:bg-hover hover:text-fg">
           <ArrowLeft size={16} /> {t("tray.title")}
         </ShadcnButton>
-        {desktop && <span className="min-w-0 truncate text-[15px]">/ {entry.item.title || entry.item.file?.name || t("untitled")}</span>}
+        {desktop && <span className="min-w-0 truncate text-[15px]">/ {titleOf(entry.item, t)}</span>}
         <span className="flex-1" />
         <a href={spaceHref(entry.space, `/i/${encodeURIComponent(entry.item.id)}`)} className="tap inline-flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1 text-[13px] hover:bg-hover">
           <Maximize2 size={14} /> {t("tray.openFull")}
@@ -254,7 +255,7 @@ function EntryBody({ entry }: { entry: InboxEntry }) {
   const ix = repo.index();
   const item = repo.get(entry.item.id) ?? entry.item;
   const { shown } = useAccounts();
-  const kids = ix.childrenOf(item.id).map((id) => ix.get(id)!).filter(Boolean);
+  const kids = ix.items(ix.childrenOf(item.id));
   return (
     <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6 pt-4 max-lg:px-4">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-[color-mix(in_srgb,var(--t-inbox)_40%,transparent)] bg-[color-mix(in_srgb,var(--t-inbox)_10%,transparent)] px-3.5 py-2.5 text-[13px]">
@@ -291,7 +292,7 @@ function EntryBody({ entry }: { entry: InboxEntry }) {
           <ul className="space-y-1 text-sm">
             {kids.map((c) => (
               <li key={c.id} className="flex items-center gap-2">
-                <ItemIcon item={c} size={14} /> <a href={itemHref(c.id)} className="truncate hover:underline">{c.title || t("untitled")}</a>
+                <ItemIcon item={c} size={14} /> <a href={itemHref(c.id)} className="truncate hover:underline">{titleOf(c, t)}</a>
               </li>
             ))}
           </ul>
@@ -352,7 +353,7 @@ function InboxRule({ name, onClose }: { name?: string; onClose: () => void }) {
           </Button>
         </div>
         <QueryEditor autoFocus def={{ where: draft ?? where }} onChange={(d) => setDraft(d.where ?? null)} />
-        {draft && JSON.stringify(draft) !== JSON.stringify(where) && (
+        {draft && !sameValue(draft, where) && (
           <DraftBar onDiscard={() => setDraft(null)} onSave={() => (repo.change(SETTINGS_ID, (d) => setSettings(d, { inbox: draft })), setDraft(null), notify(t("view.saved")))} />
         )}
       </div>

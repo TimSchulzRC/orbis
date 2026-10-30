@@ -3,7 +3,7 @@ import { Button as ShadcnButton } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { useEffect, useRef, useState } from "react";
 import { Plus, CornerDownLeft, ChevronRight } from "lucide-react";
-import { type Item, SETTINGS_ID } from "@obtion/core/model";
+import type { Item } from "@obtion/core/model";
 import { snippet } from "@obtion/core/search";
 import { statusOf } from "@obtion/core/traits";
 import { go, spaceHref } from "../hooks";
@@ -11,7 +11,7 @@ import { useAccounts } from "../accounts";
 import { useReplicas } from "./Spaces";
 import { captureSpace } from "./Capture";
 import { setTheme } from "../theme";
-import { useT, setLang, getLang } from "../i18n";
+import { useT, setLang, getLang, titleOf } from "../i18n";
 import { InTray, ItemIcon, StatusPill, TypeGlyph, cx, modName } from "./bits";
 import { shortPath } from "./Row";
 import { createAndOpen } from "../actions";
@@ -59,9 +59,9 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   const cs = captureSpace() ?? shown[0]!.id;
   const repo = repoOf(cs);
   const ix = repo.index();
-  const pinnedTypes = (repo.get(SETTINGS_ID)?.settings?.captureTypes ?? []).filter((id) => ix.types.has(id));
+  const pinnedTypes = ix.captureTypes();
   // "Neu: …" for every type – the pinned ones first, then the others by name (own types like "Buch" too)
-  const captureTypes = [...pinnedTypes, ...[...ix.types.values()].filter((x) => !pinnedTypes.includes(x.id)).sort((a, b) => a.schema!.name.localeCompare(b.schema!.name)).map((x) => x.id)];
+  const captureTypes = [...pinnedTypes, ...ix.typesByName().filter((x) => !pinnedTypes.includes(x.id)).map((x) => x.id)];
   // actions, found by typing their name
   const cmds: [string, () => void][] = [
     [t("palette.cmd.sortInbox"), () => go("/review")],
@@ -133,7 +133,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
                 <ShadcnButton variant="plain" size="none" {...common}>
                   <ItemIcon item={n} />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate">{n.title || t("untitled")}</span>
+                    <span className="block truncate">{titleOf(n, t)}</span>
                     {ix.homePath(n.id).length > 0 ? (
                       <span className="block truncate text-xs text-muted-foreground">{shortPath(ix.homePath(n.id))}</span>
                     ) : (

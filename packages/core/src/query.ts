@@ -6,7 +6,9 @@
 //
 // Space = AND, | = OR, - = NOT, parentheses group. Properties are found by name across all
 // types and free properties. The same code runs on devices, the server and for agents.
-import { type ViewTab, type FileType, type Item, type OptionDef, type PropDef, type ViewKind, FILE_TYPES, META_TYPE, titleKey, todayISO } from "./model";
+import { type ViewTab, type FileType, type Item, type OptionDef, type PropDef, type ViewKind, FILE_TYPES, META_TYPE, QUERY_FENCE, STATUS_GROUPS, VIEW_KINDS, optionNames, titleKey } from "./model";
+import { dateOf, todayISO } from "./date";
+import { foldUmlauts as fold } from "./text";
 import type { Index } from "./graph";
 import { inboxWhere, setAside } from "./inbox";
 import { type Lang, LANGS, words } from "./i18n";
@@ -68,7 +70,6 @@ export interface QueryDef {
 // Built-in fields, stored neutral.
 export const FIELDS = ["title", "created", "updated", "due", "done", "next", "area", "project", "subtasks", "progress"] as const;
 const GROUPS = ["path", "status", "statusGroup", "type"] as const;
-const VIEWS: ViewKind[] = ["list", "table", "board", "tree", "gallery", "triage", "calendar", "timeline"];
 const STATUS_KEYS: StatusKey[] = ["open", "new", "active", "done"];
 
 // ---------- keywords ----------
@@ -83,7 +84,7 @@ const KW_KEYS = {
   field: [...FIELDS],
   status: STATUS_KEYS,
   groupBy: [...GROUPS],
-  view: VIEWS,
+  view: VIEW_KINDS,
   filetype: FILE_TYPES,
   without: WITHOUT,
 } as const;
@@ -98,10 +99,6 @@ function tables(): Record<string, KwTable> {
     out[cat] = m;
   }
   return (kwCache = out);
-}
-
-function fold(s: string) {
-  return s.toLowerCase().replace(/ä/g, "ae").replace(/ö/g, "oe").replace(/ü/g, "ue").replace(/ß/g, "ss");
 }
 
 const kw = (cat: keyof typeof KW_KEYS, word: string) => tables()[cat]!.get(fold(word));
@@ -206,7 +203,7 @@ export function parseQuery(src: string, ix: Index): ParseResult {
     switch (key) {
       case "type": {
         if (!value) return null;
-        const mt = words("de", "q.metaType").concat(words("en", "q.metaType")).some((w) => fold(w) === fold(value));
+        const mt = LANGS.some((l) => words(l, "q.metaType").some((w) => fold(w) === fold(value)));
         if (mt) return { type: META_TYPE };
         if (ix.types.has(value)) return { type: value };
         const id = ix.typeByName(value);
@@ -430,16 +427,16 @@ export function fieldOf(item: Item, name: string, ix: Index): FieldHit | undefin
     case "title":
       return { kind: "text", value: item.title };
     case "created":
-      return { kind: "date", value: todayISO(new Date(item.created)) };
+      return { kind: "date", value: dateOf(item.created) };
     case "updated":
-      return { kind: "date", value: todayISO(new Date(item.updated)) };
+      return { kind: "date", value: dateOf(item.updated) };
     case "due": {
       const d = dueOf(item, ix.schemaOf(item));
       return d ? { kind: "date", value: d } : undefined;
     }
     case "done": {
       const d = doneAt(item, ix.schemaOf(item));
-      return d ? { kind: "date", value: todayISO(new Date(d)) } : undefined;
+      return d ? { kind: "date", value: dateOf(d) } : undefined;
     }
     case "next": {
       const n = ix.nextTask(item.id, todayISO());
@@ -456,7 +453,7 @@ export function fieldOf(item: Item, name: string, ix: Index): FieldHit | undefin
     case "progress": {
       // done share of what lies below (with a status), as a percentage
       const pr = ix.progressOf(item);
-      return pr && pr.total ? { kind: "number", value: Math.round((pr.done / pr.total) * 100) } : undefined;
+      return pr && pr.total ? { kind: "number", value: percent(pr) } : undefined;
     }
     case "subtasks": {
       // children of the entry's own type (a task's sub-tasks); none: no value
@@ -475,22 +472,21 @@ export function fieldOf(item: Item, name: string, ix: Index): FieldHit | undefin
     if (p.kind === "relation") return { kind: "relation", value: ix.relValues(item, p.id, p.symmetric), prop: p };
     if (p.kind === "computed") {
       const c = p.computed;
-      const v = c?.fn === "count" ? ix.countDescendants(item.id, c.of) : (() => {
-        const pr = ix.progress(item.id, c?.of);
-        return pr.total ? Math.round((pr.done / pr.total) * 100) : undefined;
-      })();
-      return { kind: "number", value: v, prop: p };
+      const pr = c?.fn === "count" ? undefined : ix.progress(item.id, c?.of);
+      return { kind: "number", value: pr ? (pr.total ? percent(pr) : undefined) : ix.countDescendants(item.id, c?.of), prop: p };
     }
     return { kind: p.kind, value: item.props[p.id], prop: p };
   }
   for (const [n, fv] of Object.entries(item.extra)) if (titleKey(n) === key) return { kind: fv.k, value: fv.v };
   // the other side of a relation, by its inverse name ("Blockiert diese")
   for (const t of ix.types.values())
-    for (const p of t.schema!.properties)
+    for (const p of t.schema.properties)
       if (p.kind === "relation" && !p.symmetric && p.inverseName && titleKey(p.inverseName) === key)
         return { kind: "relation", value: ix.backlinks(item.id).filter((b) => b.kind === "rel" && b.prop === p.id && ix.get(b.from)?.type === t.id).map((b) => b.from), prop: { ...p, name: p.inverseName }, inverse: true };
   return undefined;
 }
+
+const percent = (pr: { done: number; total: number }) => Math.round((pr.done / pr.total) * 100);
 
 /** A date in a query (+7d, heute, 30.10.2026, 10/30/2026 …) → ISO; "2026-10" stays a month. */
 export function relDate(v: string, today: string): string | undefined {
@@ -567,7 +563,7 @@ function matchField(item: Item, c: { prop: string; op: Op; value?: FieldValue },
     case "status":
     case "multiselect": {
       const ids = Array.isArray(hit.value) ? (hit.value as string[]) : [String(hit.value)];
-      const names = hit.prop ? ids.map((id) => hit.prop!.options?.find((o) => o.id === id)?.name ?? id) : ids;
+      const names = hit.prop ? optionNames(hit.prop, ids) : ids;
       // option names in either language and status synonyms ("in Arbeit", "done") match too
       const opts = ids.map((id) => hit.prop?.options?.find((o) => o.id === id)).filter((o): o is NonNullable<typeof o> => !!o);
       const has = names.some((n) => titleKey(n) === titleKey(want)) || ids.includes(want) || opts.some((o) => optionMatches(hit.prop!, o, want));
@@ -662,38 +658,23 @@ export function matches(item: Item, c: Cond, ctx: EvalCtx): boolean {
   return matchField(item, c, ctx);
 }
 
-/** Type ids a query refers to that no longer exist ("Typ gelöscht"). */
-export function missingTypes(c: Cond | undefined, ix: Index): string[] {
-  const out: string[] = [];
-  const walk = (x: Cond) => {
-    if ("and" in x) x.and.forEach(walk);
-    else if ("or" in x) x.or.forEach(walk);
-    else if ("not" in x) walk(x.not);
-    else if ("type" in x && x.type !== META_TYPE && !ix.types.has(x.type)) out.push(x.type);
-    else if ("typeName" in x) out.push(x.typeName);
-  };
-  if (c) walk(c);
+/** The single conditions of a query, below its and, or and not. */
+function leaves(c: Cond | undefined, out: Cond[] = []): Cond[] {
+  if (!c) return out;
+  if ("and" in c) c.and.forEach((x) => leaves(x, out));
+  else if ("or" in c) c.or.forEach((x) => leaves(x, out));
+  else if ("not" in c) leaves(c.not, out);
+  else out.push(c);
   return out;
 }
 
-function mentionsType(c: Cond | undefined, id: string): boolean {
-  if (!c) return false;
-  if ("and" in c) return c.and.some((x) => mentionsType(x, id));
-  if ("or" in c) return c.or.some((x) => mentionsType(x, id));
-  if ("not" in c) return mentionsType(c.not, id);
-  return "type" in c && c.type === id;
+/** Type ids a query refers to that no longer exist ("Typ gelöscht"). */
+export function missingTypes(c: Cond | undefined, ix: Index): string[] {
+  return leaves(c).flatMap((x) => ("type" in x && x.type !== META_TYPE && !ix.types.has(x.type) ? [x.type] : "typeName" in x ? [x.typeName] : []));
 }
 
 export function typesIn(c: Cond | undefined): string[] {
-  const out: string[] = [];
-  const walk = (x: Cond) => {
-    if ("and" in x) x.and.forEach(walk);
-    else if ("or" in x) x.or.forEach(walk);
-    else if ("not" in x) walk(x.not);
-    else if ("type" in x) out.push(x.type);
-  };
-  if (c) walk(c);
-  return out;
+  return leaves(c).flatMap((x) => ("type" in x ? [x.type] : []));
 }
 
 /** The node paths are relative to: the under:/in: target of the query, else the page. */
@@ -718,7 +699,7 @@ export interface QueryResult {
 export function runQuery(def: QueryDef, ctx: EvalCtx): QueryResult {
   const ix = ctx.ix;
   const missing = missingTypes(def.where, ix);
-  const wantTypes = mentionsType(def.where, META_TYPE);
+  const wantTypes = typesIn(def.where).includes(META_TYPE);
   let items = ix.live.filter((i) => (wantTypes || i.type !== META_TYPE) && (!def.where || matches(i, def.where, ctx)));
   items = sortItems(items, def.sort, ix);
   const total = items.length;
@@ -826,7 +807,7 @@ export function groupItems(items: Item[], by: string | undefined, ctx: EvalCtx, 
       else if (hit.prop?.options) {
         const ids = Array.isArray(hit.value) ? (hit.value as string[]) : [String(hit.value)];
         const opts = ids.map((id) => hit.prop!.options!.find((o) => o.id === id));
-        const label = opts.map((o, n) => o?.name ?? ids[n]).join(", ");
+        const label = optionNames(hit.prop, ids).join(", ");
         add(label, { label, option: opts.length === 1 ? opts[0] : undefined }, i);
       } else if (hit.kind === "item") {
         const id = String(hit.value);
@@ -841,7 +822,7 @@ export function groupItems(items: Item[], by: string | undefined, ctx: EvalCtx, 
   if (empty?.types.length && by !== "path" && by !== "type") {
     const schemas = empty.types.map((id) => ix.types.get(id)?.schema).filter(Boolean);
     if (by === "statusGroup") {
-      if (schemas.some((sc) => statusProp(sc))) for (const g of ["todo", "active", "done"]) add(g, { statusGroup: g });
+      if (schemas.some((sc) => statusProp(sc))) for (const g of STATUS_GROUPS) add(g, { statusGroup: g });
     } else
       for (const sc of schemas) {
         const p = by === "status" ? statusProp(sc) : sc!.properties.find((x) => titleKey(x.name) === titleKey(by) && (x.kind === "select" || x.kind === "status"));
@@ -852,7 +833,7 @@ export function groupItems(items: Item[], by: string | undefined, ctx: EvalCtx, 
   const allowed = statusGroupsAllowed(empty?.where);
   const out = [...groups.values()].filter((g) => g.items.length || !allowed || !g.statusGroup || allowed.has(g.statusGroup));
   const last = (a: Group, b: Group) => (a.key === "" ? 1 : 0) - (b.key === "" ? 1 : 0);
-  if (by === "path") out.sort((a, b) => (a.key === "" ? -1 : b.key === "" ? 1 : pathLabel(a, ix).localeCompare(pathLabel(b, ix))));
+  if (by === "path") out.sort((a, b) => (a.key === "" ? -1 : b.key === "" ? 1 : ix.pathText(a.path ?? []).localeCompare(ix.pathText(b.path ?? []))));
   else if (by === "statusGroup") out.sort((a, b) => last(a, b) || (FLOW[a.key] ?? 3) - (FLOW[b.key] ?? 3));
   else if (rank.size) out.sort((a, b) => last(a, b) || (rank.get(a.key) ?? 9999) - (rank.get(b.key) ?? 9999) || a.key.localeCompare(b.key));
   else out.sort((a, b) => last(a, b) || (a.label ?? a.key).localeCompare(b.label ?? b.key, undefined, { numeric: true }));
@@ -874,8 +855,6 @@ function statusGroupsAllowed(where: Cond | undefined): Set<string> | undefined {
   return out;
 }
 
-const pathLabel = (g: Group, ix: Index) => (g.path ?? []).map((id) => ix.get(id)?.title ?? "").join(" › ");
-
 // ---------- helpers ----------
 
 /** Parse a stored block: JSON (normal) or text form (typed by hand or by an agent). */
@@ -896,11 +875,20 @@ export function blockSource(def: QueryDef): string {
   return JSON.stringify(def);
 }
 
+/** A query block as it stands in the text. */
+export function queryFence(src: string): string {
+  return "```abfrage\n" + src + "\n```";
+}
+
+/** Is this the info word of a query block's fence (```abfrage, ```query)? */
+export function isQueryInfo(info: string): boolean {
+  return info === "abfrage" || info === "query";
+}
+
 /** All ```abfrage blocks in a body, with their positions. */
 export function findBlocks(body: string): { from: number; to: number; src: string }[] {
   const out: { from: number; to: number; src: string }[] = [];
-  const re = /^```(?:abfrage|query)[ \t]*(.*)\n([\s\S]*?)^```[ \t]*$/gm;
-  for (const m of body.matchAll(re)) out.push({ from: m.index!, to: m.index! + m[0].length, src: ((m[1] ?? "") + "\n" + (m[2] ?? "")).trim() });
+  for (const m of body.matchAll(QUERY_FENCE)) out.push({ from: m.index!, to: m.index! + m[0].length, src: ((m[1] ?? "") + "\n" + (m[2] ?? "")).trim() });
   // single-line form: ```abfrage typ:Task```
   const inline = /```(?:abfrage|query)[ \t]+([^`\n]+)```/g;
   for (const m of body.matchAll(inline)) if (!out.some((b) => m.index! >= b.from && m.index! < b.to)) out.push({ from: m.index!, to: m.index! + m[0].length, src: m[1]!.trim() });
@@ -915,7 +903,7 @@ export function normalizeBlocks(body: string, ix: Index): string {
   let pos = 0;
   for (const b of blocks) {
     const { def, wasText } = readBlock(b.src, ix);
-    out += body.slice(pos, b.from) + (wasText ? "```abfrage\n" + blockSource(def) + "\n```" : body.slice(b.from, b.to));
+    out += body.slice(pos, b.from) + (wasText ? queryFence(blockSource(def)) : body.slice(b.from, b.to));
     pos = b.to;
   }
   return out + body.slice(pos);
@@ -929,7 +917,7 @@ export function blocksAsText(body: string, lang: Lang, ix: Index): string {
   let pos = 0;
   for (const b of blocks) {
     const { def } = readBlock(b.src, ix);
-    out += body.slice(pos, b.from) + "```abfrage\n" + printQuery(def, lang, ix) + "\n```";
+    out += body.slice(pos, b.from) + queryFence(printQuery(def, lang, ix));
     pos = b.to;
   }
   return out + body.slice(pos);

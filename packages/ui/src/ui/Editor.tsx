@@ -15,7 +15,7 @@ import {
 import { defaultKeymap, indentWithTab } from "@codemirror/commands";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
-import { touchOnTextEdit } from "@obtion/core/model";
+import { parseWikiLinks, titleKey, touchOnTextEdit } from "@obtion/core/model";
 import { embedHTML, hydrateFiles } from "./Markdown";
 import { openLightbox } from "./Lightbox";
 import { notify } from "./feedback";
@@ -33,6 +33,7 @@ import { yCollab, yUndoManagerKeymap } from "y-codemirror.next";
 import { repo } from "../repo";
 import { files } from "../files";
 import { tr } from "../i18n";
+import { kindHint } from "./text";
 
 const highlight = HighlightStyle.define([
   { tag: t.strong, fontWeight: "650" },
@@ -76,13 +77,11 @@ class EmbedWidget extends WidgetType {
   }
 }
 
-const EMBED = /!\[\[([^\]|#\n]+)(?:\|(\d+))?[^\]]*\]\]/g;
-
 /** Ids of the images embedded in the text, in order (the full view pages through them). */
 function embeddedImages(state: EditorState): string[] {
   const out: string[] = [];
-  for (const m of state.doc.toString().matchAll(EMBED)) {
-    const id = repo.resolveTitle(m[1]!.trim());
+  for (const l of parseWikiLinks(state.doc.toString())) {
+    const id = l.embed ? repo.resolveTitle(l.target) : undefined;
     if (id && repo.get(id)?.file?.filetype === "bild") out.push(id);
   }
   return out;
@@ -94,10 +93,10 @@ function imageDecos(state: EditorState): DecorationSet {
   for (let i = 1; i <= text.lines; i++) {
     const line = text.line(i);
     if (!line.text.includes("![[")) continue;
-    for (const m of line.text.matchAll(EMBED)) {
-      const id = repo.resolveTitle(m[1]!.trim());
+    for (const l of parseWikiLinks(line.text)) {
+      const id = l.embed ? repo.resolveTitle(l.target) : undefined;
       const item = id ? repo.get(id) : undefined;
-      if (item?.file && !item.deleted) b.add(line.to, line.to, Decoration.widget({ widget: new EmbedWidget(embedHTML(item, m[2] ? Number(m[2]) : undefined)), block: true, side: 1 }));
+      if (item?.file && !item.deleted) b.add(line.to, line.to, Decoration.widget({ widget: new EmbedWidget(embedHTML(item, l.size)), block: true, side: 1 }));
     }
   }
   return b.finish();
@@ -116,14 +115,14 @@ const linkCompletion = (selfId?: string) => (ctx: CompletionContext): Completion
   if (!m) return null;
   const q = m.text.slice(2);
   const after = ctx.state.sliceDoc(ctx.pos, ctx.pos + 2);
-  const hits = (q.trim() ? repo.search(q, 40) : repo.live().sort((a, b) => b.updated - a.updated).slice(0, 40)).filter((r) => r.id !== selfId);
+  const hits = (q.trim() ? repo.search(q, 40) : [...repo.live()].sort((a, b) => b.updated - a.updated).slice(0, 40)).filter((r) => r.id !== selfId);
   const options: Completion[] = hits.map((r) => pageOption({
     label: r.title,
-    hint: r.kind === "datei" ? tr("kind.file") : (repo.index().typeName(r.type) ?? ""),
+    hint: kindHint(r, repo.index()),
     apply: r.title + (after === "]]" ? "" : "]]"),
     boost: r.title.toLowerCase().startsWith(q.toLowerCase()) ? 10 : 0,
   }));
-  if (q.trim() && !hits.some((h) => h.title.toLowerCase() === q.trim().toLowerCase()))
+  if (q.trim() && !hits.some((h) => h.title.toLowerCase() === titleKey(q)))
     options.push(pageOption({ label: q.trim(), hint: tr("editor.newLink"), apply: q.trim() + (after === "]]" ? "" : "]]"), boost: -10, icon: FilePlus }));
   return { from: m.from + 2, options, filter: false };
 };

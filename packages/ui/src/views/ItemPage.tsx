@@ -6,14 +6,14 @@ import { Input } from "../components/ui/input";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { EditorView } from "@codemirror/view";
 import { Trash2, RotateCcw, MoreHorizontal, Plus, AlertTriangle, ImagePlus, Scissors, ListFilter, Languages, Pin, PinOff, FilePlus, FolderInput, Link2, ArrowRightLeft } from "lucide-react";
-import { type Item, META_TYPE } from "@obtion/core/model";
+import { type Item, META_TYPE, titleKey } from "@obtion/core/model";
 import { isInInbox, isOverview } from "@obtion/core/placement";
 import { wouldBeInInbox } from "@obtion/core/typeops";
 import { onlyBelow } from "@obtion/core/trash";
 import { primaryChild, hasUpdates, progressSpec, languageCode, translations, translationInit, translationPlan } from "@obtion/core/traits";
 import { useRepo, useIndex, itemHref, go } from "../hooks";
 import { repo } from "../repo";
-import { useT, tr, getLang } from "../i18n";
+import { useT, tr, getLang, titleOf } from "../i18n";
 import { Editor, insertFilesAtCursor } from "../ui/Editor";
 import { Button, Dialog, ItemIcon, MenuItem, Popover, ProgressBand, TypeChip, TypeGlyph, cx, IconButton } from "../ui/bits";
 import { ItemPicker } from "../ui/Picker";
@@ -311,7 +311,7 @@ function TypeSwitch({ item }: { item: Item }) {
   const schema = ix.schemaOf(item);
   const inbox = isInInbox(item, ix);
   const overview = isOverview(item, ix);
-  const types = [...ix.types.values()].sort((a, b) => a.schema!.name.localeCompare(b.schema!.name));
+  const types = ix.typesByName();
   const deletedType = item.type && !schema ? ix.all.get(item.type)?.schema?.name : undefined;
   return (
     <Popover
@@ -338,7 +338,7 @@ function TypeSwitch({ item }: { item: Item }) {
           </MenuItem>
           {types.map((tp) => (
             <MenuItem key={tp.id} active={tp.id === item.type} icon={<TypeGlyph schema={tp.schema} size={14} />} onClick={() => (repo.setType(item.id, tp.id), close())}>
-              {tp.schema!.name}
+              {tp.schema.name}
             </MenuItem>
           ))}
         </>
@@ -351,7 +351,7 @@ function TitleClash({ item }: { item: Item }) {
   const r = useRepo();
   const { t } = useT();
   if (!item.title.trim()) return null;
-  const other = r.live().find((x) => x.id !== item.id && x.title.trim().toLowerCase() === item.title.trim().toLowerCase());
+  const other = r.live().find((x) => x.id !== item.id && titleKey(x.title) === titleKey(item.title));
   if (!other) return null;
   return (
     <p className="mt-1 text-xs text-warn">
@@ -382,13 +382,13 @@ function DeleteDialog({ item, onClose }: { item: Item; onClose: () => void }) {
   // Kept children lose this place; whether they land in the inbox is the inbox's own query.
   const untyped = wouldBeInInbox(ix, only, (i) => i, [{ ...item, deleted: true }]);
   return (
-    <Dialog title={t("delete.title", { title: item.title || t("untitled") })} onClose={onClose}>
+    <Dialog title={t("delete.title", { title: titleOf(item, t) })} onClose={onClose}>
       <p className="text-sm">{t("delete.children", { count: only.length })}</p>
       {untyped > 0 && <p className="mt-1 text-sm text-muted-foreground">{t("delete.toInbox", { count: untyped })}</p>}
       <ul className="mt-3 max-h-48 space-y-0.5 overflow-y-auto">
         {only.slice(0, 30).map((c) => (
           <li key={c} className="flex items-center gap-1.5 text-sm text-muted-foreground">
-            <ItemIcon item={ix.get(c)!} size={13} /> {ix.get(c)!.title || t("untitled")}
+            <ItemIcon item={ix.get(c)!} size={13} /> {titleOf(ix.get(c)!, t)}
           </li>
         ))}
       </ul>
@@ -410,7 +410,7 @@ function MoveDialog({ item, onClose }: { item: Item; onClose: () => void }) {
   const { spaces, active } = useAccounts();
   const count = movedItems(repo.index(), item.id).length - 1;
   return (
-    <Dialog title={t("move.title", { title: item.title || t("untitled") })} onClose={onClose}>
+    <Dialog title={t("move.title", { title: titleOf(item, t) })} onClose={onClose}>
       <p className="text-sm text-muted-foreground">{count > 0 ? t("move.introBelow", { count }) : t("move.intro")}</p>
       <ul className="mt-3 space-y-1">
         {spaces

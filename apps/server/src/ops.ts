@@ -8,6 +8,7 @@ import {
   type FreeValue,
   type Item,
   type PropDef,
+  type TypeItem,
   type StatusGroup,
   type TypeSchema,
   type Value,
@@ -17,7 +18,10 @@ import {
   appendUpdate,
   fileTypeOf,
   initItem,
-  initSchema,
+  displayTitle,
+  initType,
+  optionNames,
+  renameLinksIn,
   mimeOf,
   newId,
   parseWikiLinks,
@@ -46,7 +50,8 @@ import { isInInbox, isOverview } from "@obtion/core/placement";
 import { caps, doneAt, dueOf, dueProp, firstOfGroup, hasUpdates, initialProps, statusOf, statusProp, template, writeProp } from "@obtion/core/traits";
 import { previewTagToType, typeUsage } from "@obtion/core/typeops";
 import { searchIds, snippet } from "@obtion/core/search";
-import { keyBetween } from "@obtion/core/sortkey";
+import { keyBetween, nextPinKey } from "@obtion/core/sortkey";
+import { DAY_MS, dateOf } from "@obtion/core/date";
 import { freshColor } from "@obtion/core/palette";
 import { DATE_HELP, InputError, matchOption, parseDate, parseNumber, statusGroupOf } from "@obtion/core/input";
 import { type Writer, typeTabs } from "@obtion/core/setup";
@@ -111,7 +116,7 @@ export class Ops {
     if (exact.length > 1) throw new OpError(`Several items are titled "${r}". Use an id:\n` + exact.map((i) => `- ${this.label(i)} (id ${i.id})`).join("\n"));
     const contains = pool.filter((i) => titleKey(i.title).includes(key));
     if (contains.length === 1) return contains[0]!;
-    const sugg = (contains.length ? contains : searchIds(this.store.searchIndex, r, 8).map((id) => ix.get(id)!).filter(Boolean)).slice(0, 8);
+    const sugg = (contains.length ? contains : ix.items(searchIds(this.store.searchIndex, r, 8))).slice(0, 8);
     if (!sugg.length) throw new OpError(`Nothing matches "${r}".`);
     throw new OpError(`${contains.length ? `"${r}" matches several items` : `No item is titled "${r}"`}. Use one of these ids:\n` + sugg.map((i) => `- ${this.label(i)} (id ${i.id})`).join("\n"));
   }
@@ -131,17 +136,17 @@ export class Ops {
     return item;
   }
 
-  resolveType(ref: string): Item {
+  resolveType(ref: string): TypeItem {
     const ix = this.ix;
     const t = ix.types.get(ref) ?? ix.types.get(ix.typeByName(ref) ?? "");
-    if (!t) throw new OpError(`Unknown type "${ref}". Types: ${[...ix.types.values()].map((x) => x.schema!.name).join(", ") || "none"}. Use schema, or define_type.`);
+    if (!t) throw new OpError(`Unknown type "${ref}". Types: ${[...ix.types.values()].map((x) => x.schema.name).join(", ") || "none"}. Use schema, or define_type.`);
     return t;
   }
 
   label(i: Item) {
     const ix = this.store.index();
     const kind = i.kind === "datei" ? "file" : (ix.typeName(i.type) ?? (isInInbox(i, ix) ? "inbox" : isOverview(i, ix) ? "overview" : "note"));
-    return `${i.title || "(untitled)"} [${kind}]`;
+    return `${displayTitle(i) || "(untitled)"} [${kind}]`;
   }
 
   // ---------- reading ----------
@@ -163,8 +168,8 @@ export class Ops {
     };
   }
 
-  typeInfo(t: Item) {
-    const s = t.schema!;
+  typeInfo(t: TypeItem) {
+    const s = t.schema;
     const c = caps(s);
     const name = (pid?: string) => s.properties.find((p) => p.id === pid)?.name;
     return {
@@ -215,7 +220,7 @@ export class Ops {
         const pr = p.computed?.fn === "count" ? ix.countDescendants(i.id, p.computed.of) : ix.progress(i.id, p.computed?.of);
         out[p.name] = typeof pr === "number" ? pr : `${pr.done}/${pr.total}`;
       } else if (v !== undefined) {
-        out[p.name] = p.options ? (Array.isArray(v) ? v : [v]).map((id) => p.options!.find((o) => o.id === id)?.name ?? id).join(", ") : v;
+        out[p.name] = p.options ? optionNames(p, v).join(", ") : v;
       }
     }
     return out;
@@ -234,7 +239,7 @@ export class Ops {
     const due = dueOf(i, ix.schemaOf(i));
     if (due) out.due = due;
     const path = base ? ix.relPath(base, i.id) : ix.homePath(i.id);
-    if (path?.length) out.path = path.map((p) => ix.get(p)?.title).join(" › ");
+    if (path?.length) out.path = ix.pathText(path);
     if (i.tags.length) out.tags = i.tags;
     return out;
   }
@@ -246,7 +251,7 @@ export class Ops {
   line(i: Item, base?: string): string {
     const ix = this.store.index();
     const schema = ix.schemaOf(i);
-    const parts = [`${i.title || "(untitled)"} [${i.id}]`];
+    const parts = [`${displayTitle(i) || "(untitled)"} [${i.id}]`];
     const tn = ix.typeName(i.type);
     parts.push(i.kind === "datei" ? `file ${i.file?.filetype ?? ""}`.trim() : (tn ?? (isInInbox(i, ix) ? "inbox" : isOverview(i, ix) ? "overview" : "note")));
     if (i.pinned) parts.push("pinned");
@@ -255,11 +260,11 @@ export class Ops {
     const due = dueOf(i, schema);
     if (due && st?.group !== "done") parts.push(`due ${due}`);
     const done = doneAt(i, schema);
-    if (done) parts.push(`done ${todayISO(new Date(done))}`);
+    if (done) parts.push(`done ${dateOf(done)}`);
     const pr = ix.progressOf(i);
     if (pr?.total) parts.push(`${pr.done}/${pr.total} done`);
     const path = base ? ix.relPath(base, i.id) : ix.homePath(i.id);
-    if (path?.length) parts.push(path.map((p) => ix.get(p)?.title).join(" › "));
+    if (path?.length) parts.push(ix.pathText(path));
     const b = ix.blockers(i);
     if (b.by.length) parts.push(`⚠ blocked by ${b.by.map((x) => `"${x.title}"`).join(", ")}`);
     if (b.waiting) parts.push(`⚠ waiting for "${b.waiting}"`);
@@ -312,7 +317,7 @@ export class Ops {
         if (off.length) hints.push(`"${p.name}" of "${now.title}" is meant for ${p.target}; ${off.map((x) => `"${x.title}"`).join(", ")} ${off.length > 1 ? "don't" : "doesn't"} match. Saved anyway.`);
       }
       if (isDoneNow(now, schema) && !(prev && isDoneNow(prev, ix0.schemaOf(prev)))) {
-        const open = [...ix.descendants(id)].map((d) => ix.get(d)!).filter((d) => {
+        const open = ix.items(ix.descendants(id)).filter((d) => {
           const s = statusOf(d, ix.schemaOf(d));
           return s && s.group !== "done";
         });
@@ -348,14 +353,14 @@ export class Ops {
     delete out.path;
     const parents = ix.parentsOf(i.id);
     if (parents.length) out.part_of = parents.map((p) => `${ix.get(p)?.title}${p === ix.home(i.id) && parents.length > 1 ? " (home)" : ""}`);
-    out.path = ix.homePath(i.id).map((p) => ix.get(p)?.title).join(" › ") || undefined;
+    out.path = ix.pathText(ix.homePath(i.id)) || undefined;
     const props = this.propValues(i);
     if (Object.keys(props).length) out.properties = props;
     if (Object.keys(i.extra).length) out.free_properties = Object.fromEntries(Object.entries(i.extra).map(([k, v]) => [k, v.v]));
     const pr = ix.progressOf(i);
     if (pr) out.progress = `${pr.done}/${pr.total} done`;
     const done = doneAt(i, ix.schemaOf(i));
-    if (done) out.done = todayISO(new Date(done));
+    if (done) out.done = dateOf(done);
     const b = ix.blockers(i);
     if (b.by.length) out.blocked_by = b.by.map((x) => `${x.title} [${x.id}]`);
     if (b.waiting) out.waiting_for = b.waiting;
@@ -383,7 +388,7 @@ export class Ops {
     if (i.updates.length) out.updates = i.updates.slice(-15).map((u) => ({ at: new Date(u.at).toISOString().slice(0, 16), by: u.by, text: u.text }));
     if (includeBody && i.body) out.body = blocksAsText(i.body, this.store.lang(), ix);
     if (i.suggestion) out.suggestion = i.suggestion;
-    out.created = todayISO(new Date(i.created));
+    out.created = dateOf(i.created);
     out.updated = new Date(i.updated).toISOString().slice(0, 16);
     return out;
   }
@@ -443,7 +448,7 @@ export class Ops {
   }
 
   activity(opts: { days?: number; ref?: string; limit?: number }) {
-    const since = Date.now() - (opts.days ?? 7) * 864e5;
+    const since = Date.now() - (opts.days ?? 7) * DAY_MS;
     const doc = opts.ref ? this.resolve(opts.ref).id : undefined;
     return this.store.events({ since, doc, limit: opts.limit ?? 40 }).map((e) => ({
       at: new Date(e.ts).toISOString().slice(0, 16),
@@ -556,7 +561,7 @@ export class Ops {
     const body = input.body ? normalizeBlocks(input.body, ix) : (template(schema)?.body ?? "");
     this.noSelfLink(body, id, title);
     this.store.change(id, origin, (doc) => {
-      const pinned = input.pin ? keyBetween(this.store.live().map((i) => i.pinned).filter(Boolean).sort().at(-1) ?? null, null) : undefined;
+      const pinned = input.pin ? nextPinKey(this.store.live()) : undefined;
       initItem(doc, { title, type: type?.id ?? null, body, tags: input.tags, refs, parents, pinned, props: initialProps(schema), createdBy: origin });
       this.applyProps(doc, undefined, schema, input.properties);
       for (const [k, v] of Object.entries(input.free_properties ?? {})) setExtra(doc, k, this.freeValue(v));
@@ -593,7 +598,7 @@ export class Ops {
     if (refsAdd.includes(item.id)) throw new OpError(`"${item.title}" cannot refer to itself.`);
     const refsRem = (input.refs_remove ?? []).map((r) => this.resolve(r).id);
     const oldTitle = item.title;
-    const ownsTitle = ix.resolveTitle(oldTitle) === item.id;
+    const ownsTitle = ix.ownsTitle(item);
     this.store.change(item.id, origin, (doc) => {
       if (input.title !== undefined) setMeta(doc, { title: input.title.trim() });
       if (newType !== undefined) {
@@ -615,12 +620,9 @@ export class Ops {
   }
 
   renameLinks(oldTitle: string, newTitle: string, origin: string) {
-    const esc = oldTitle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const re = new RegExp(`(!?\\[\\[)${esc}(?=[\\]|#])`, "gi");
     for (const r of this.store.live()) {
-      if (!re.test(r.body)) continue;
-      re.lastIndex = 0;
-      this.store.change(r.id, origin, (doc) => replaceBody(doc, r.body.replace(re, (_m, open: string) => open + newTitle)));
+      const body = renameLinksIn(r.body, oldTitle, newTitle);
+      if (body !== null) this.store.change(r.id, origin, (doc) => replaceBody(doc, body));
     }
   }
 
@@ -649,7 +651,7 @@ export class Ops {
         if (!doc.getMap("parents").has(home)) addParent(doc, home);
         setHome(doc, home);
       }
-      if (input.pin === true && !item.pinned) setMeta(doc, { pinned: keyBetween(this.store.live().map((i) => i.pinned).filter(Boolean).sort().at(-1) ?? null, null) });
+      if (input.pin === true && !item.pinned) setMeta(doc, { pinned: nextPinKey(this.store.live()) });
       if (input.pin === false) setMeta(doc, { pinned: null });
       touch(doc);
     });
@@ -664,7 +666,7 @@ export class Ops {
     const item = this.target(ref, "add_update");
     const schema = this.store.index().schemaOf(item);
     if (!hasUpdates(schema)) {
-      const capable = [...this.store.index().types.values()].filter((t) => hasUpdates(t.schema)).map((t) => t.schema!.name);
+      const capable = [...this.store.index().types.values()].filter((t) => hasUpdates(t.schema)).map((t) => t.schema.name);
       throw new OpError(`"${item.title}" has no updates (its type doesn't have that capability). Types with updates: ${capable.join(", ") || "none"}. Add the text to the body instead, or to a parent that has updates.`);
     }
     let opt: string | undefined;
@@ -762,10 +764,7 @@ export class Ops {
     if (!input.name.trim()) throw new OpError("name is required.");
     if (this.ix.typeByName(input.name)) throw new OpError(`A type "${input.name}" exists already. Use update_type.`);
     const id = newId();
-    this.store.change(id, origin, (doc) => {
-      initItem(doc, { type: META_TYPE, title: input.name.trim(), createdBy: origin });
-      initSchema(doc, { name: input.name.trim(), icon: input.icon ?? "box", color: input.color ?? freshColor([...this.ix.types.values()].map((x) => x.schema?.color)), description: input.description ?? "", capabilities: {} });
-    });
+    this.store.change(id, origin, (doc) => initType(doc, { name: input.name.trim(), icon: input.icon, color: input.color ?? freshColor([...this.ix.types.values()].map((x) => x.schema.color)), description: input.description }, { createdBy: origin }));
     this.store.flush();
     this.updateType(id, { add_properties: input.properties, capabilities: input.capabilities }, origin);
     return this.typeInfo(this.store.index().types.get(id)!);
@@ -775,12 +774,12 @@ export class Ops {
   deletePreview(ref: string) {
     const t = this.resolveType(ref);
     const u = typeUsage(this.store.index(), t.id);
-    return { type: t.schema!.name, entries: u.items.length, would_land_in_inbox: u.inboxAfterRemove, used_in_queries: u.queries.map((q) => q.title), relations: u.relations.map((r) => r.name), progress: u.progress.map((p) => p.name), main_action_of: u.childOf.map((c) => c.name), note: "Deleting is confirmed in the app (type page › … › Delete type): into a tag, into another type, or remove. Values stay as free properties; it can be undone from Activity." };
+    return { type: t.schema.name, entries: u.items.length, would_land_in_inbox: u.inboxAfterRemove, used_in_queries: u.queries.map((q) => q.title), relations: u.relations.map((r) => r.name), progress: u.progress.map((p) => p.name), main_action_of: u.childOf.map((c) => c.name), note: "Deleting is confirmed in the app (type page › … › Delete type): into a tag, into another type, or remove. Values stay as free properties; it can be undone from Activity." };
   }
 
   updateType(ref: string, input: UpdateTypeInput, origin: string) {
     const t = this.resolveType(ref);
-    const s = t.schema!;
+    const s = t.schema;
     const find = (name: string) => {
       const p = s.properties.find((x) => titleKey(x.name) === titleKey(name) || x.id === name);
       if (!p) throw new OpError(`Type ${s.name} has no property "${name}".`);
@@ -818,7 +817,7 @@ export class Ops {
       for (const r of input.remove_properties ?? []) upsertProp(doc, find(r).id, { removed: true });
     });
     this.store.flush();
-    const s2 = this.store.index().types.get(t.id)!.schema!;
+    const s2 = this.store.index().types.get(t.id)!.schema;
     const c = input.capabilities;
     if (c) {
       const pid = (name: string | null | undefined, kind: string) => {
@@ -881,10 +880,10 @@ export class Ops {
     if (input.direction === "tag_to_type") {
       if (!input.tag) throw new OpError("tag is required.");
       const p = previewTagToType(ix, input.tag, t.id);
-      return { would_become_type: p.untyped.map((id) => ix.get(id)!.title), conflicts_with_other_types: p.typedOther.map((id) => this.label(ix.get(id)!)), already: p.already.length, note: `Run it in the app: type "${t.schema!.name}" › … › "Take over items from a tag".` };
+      return { would_become_type: p.untyped.map((id) => ix.get(id)!.title), conflicts_with_other_types: p.typedOther.map((id) => this.label(ix.get(id)!)), already: p.already.length, note: `Run it in the app: type "${t.schema.name}" › … › "Take over items from a tag".` };
     }
     const u = typeUsage(ix, t.id);
-    return { would_lose_type: u.items.length, values_become_free_properties: true, relations_become_refs: true, used_in_queries: u.queries.map((q) => q.title), progress_filters: u.progress.map((p) => p.name), land_in_inbox: u.inboxAfterRemove, note: `Run it in the app: type "${t.schema!.name}" › … › "Turn into a tag".` };
+    return { would_lose_type: u.items.length, values_become_free_properties: true, relations_become_refs: true, used_in_queries: u.queries.map((q) => q.title), progress_filters: u.progress.map((p) => p.name), land_in_inbox: u.inboxAfterRemove, note: `Run it in the app: type "${t.schema.name}" › … › "Turn into a tag".` };
   }
 
   async attach(input: AttachInput, origin: string) {

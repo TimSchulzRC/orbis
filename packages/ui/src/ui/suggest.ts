@@ -1,5 +1,5 @@
 import type { Item } from "@obtion/core/model";
-import { isOverview } from "@obtion/core/placement";
+import { canPlaceIn, isOverview } from "@obtion/core/placement";
 import type { Repo } from "@obtion/sync";
 import { repo as current } from "../repo";
 
@@ -11,7 +11,8 @@ export function placeSuggestions(item: Item, repo: Repo = current): { id: string
   const ix = repo.index();
   const out: ReturnType<typeof placeSuggestions> = [];
   const add = (id: string | undefined, reason: (typeof out)[number]["reason"]) => {
-    if (id && id !== item.id && !out.some((o) => o.id === id) && ix.get(id)?.kind === "info" && !ix.wouldCycle(item.id, id) && !item.parents[id]) out.push({ id, reason });
+    const target = ix.get(id);
+    if (target && !out.some((o) => o.id === target.id) && canPlaceIn(item, target, ix)) out.push({ id: target.id, reason });
   };
   for (const p of item.suggestion?.parents ?? []) add(p, "agent");
   const mentioned = [...ix.textLinks(item).map((l) => l.to), ...item.refs];

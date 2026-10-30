@@ -15,7 +15,7 @@ export function TypesView() {
   const ix = useIndex();
   const route = useRoute();
   const [creating, setCreating] = useState(route.query.get("new") === "1");
-  const types = [...ix.types.values()].sort((a, b) => a.schema!.name.localeCompare(b.schema!.name));
+  const types = ix.typesByName();
   return (
     <div className="page-read">
       <div className="mb-5 flex items-end gap-3">
@@ -33,15 +33,15 @@ export function TypesView() {
           <a key={tp.id} href={itemHref(tp.id)} className="flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-hover">
             <TypeGlyph schema={tp.schema} />
             <span className="min-w-0 flex-1">
-              <span className="block font-medium">{tp.schema!.name}</span>
-              {tp.schema!.description && <span className="block truncate text-xs text-muted-foreground">{tp.schema!.description}</span>}
+              <span className="block font-medium">{tp.schema.name}</span>
+              {tp.schema.description && <span className="block truncate text-xs text-muted-foreground">{tp.schema.description}</span>}
             </span>
             <span className="text-xs text-muted-foreground">{t("type.entries", { count: ix.itemsOfType(tp.id).length })}</span>
           </a>
         ))}
         {!types.length && <p className="px-3 py-3 text-sm text-muted-foreground">{t("types.none")}</p>}
       </div>
-      <Button variant="outline" className="mt-4" onClick={() => restoreDefaultTypes(repo.writer, getLang(), `web:${repo.device}`)}>
+      <Button variant="outline" className="mt-4" onClick={() => restoreDefaultTypes(repo.writer, getLang(), repo.origin)}>
         <RotateCcw size={14} /> {t("types.restore")}
       </Button>
       <p className="mt-1 text-xs text-muted-foreground">{t("types.restoreHint")}</p>

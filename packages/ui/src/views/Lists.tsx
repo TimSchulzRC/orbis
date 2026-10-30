@@ -4,7 +4,7 @@ import { Button as ShadcnButton } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { useEffect, useRef, useState } from "react";
 import { ListFilter, SlidersHorizontal, Plus, Upload } from "lucide-react";
-import { type FileType, type Item, type ViewTab, setTab, setTabs, shortId } from "@obtion/core/model";
+import { type FileType, type Item, type ViewTab, setTab, setTabs, shortId, FILE_TYPES } from "@obtion/core/model";
 import { type QueryDef, andWhere, tabDef } from "@obtion/core/query";
 import { keyBetween } from "@obtion/core/sortkey";
 import { typeTabs } from "@obtion/core/setup";
@@ -20,6 +20,7 @@ import { type TabEdit, ViewSettings, ViewTabs, tabName, useTabChoice, useViewFie
 import { AddFilter, QueryEditor } from "../ui/QueryEditor";
 import { notify } from "../ui/feedback";
 import { createAndOpen } from "../actions";
+import { sameValue } from "@obtion/core/equal";
 
 /**
  * The entries of a type with its views as tabs. How a view looks (kind, grouping, sorting,
@@ -39,9 +40,9 @@ export function TypeList({ type }: { type: Item }) {
   const tabWhere = draft?.tab === tab.id ? draft.where : tab.where;
   const base = { type: type.id };
   const def: QueryDef = tabDef(base, { ...tab, where: tabWhere });
-  const dirty = !!draft && JSON.stringify(draft.where) !== JSON.stringify(tabs.find((x) => x.id === draft.tab)?.where);
+  const dirty = !!draft && !sameValue(draft.where, tabs.find((x) => x.id === draft.tab)?.where);
   const saveLook = (patch: Partial<ViewTab>) => {
-    const changed = Object.entries(patch).filter(([k, v]) => JSON.stringify(v) !== JSON.stringify(tab[k as keyof ViewTab]));
+    const changed = Object.entries(patch).filter(([k, v]) => !sameValue(v, tab[k as keyof ViewTab]));
     if (!changed.length) return;
     setT(tab.id, Object.fromEntries(changed.map(([k, v]) => [k, v ?? null])));
     if (patch.kind && patch.kind !== tab.kind) notify(t("view.viewSet", { view: t("view." + patch.kind) }), () => setT(tab.id, { kind: tab.kind }));
@@ -80,7 +81,7 @@ export function TypeList({ type }: { type: Item }) {
   const { items, ctx } = useQuery(def);
   const [settings, setSettings_] = useState(false);
   const fields = useViewFields(base, items);
-  const setTabFilter = (w: QueryDef["where"]) => JSON.stringify(w) !== JSON.stringify(tabWhere) && setDraft({ tab: tab.id, where: w });
+  const setTabFilter = (w: QueryDef["where"]) => !sameValue(w, tabWhere) && setDraft({ tab: tab.id, where: w });
   const saveDraft = () => {
     if (!draft) return;
     setT(draft.tab, { where: draft.where ?? null });
@@ -151,7 +152,6 @@ export function DraftBar({ onDiscard, onSave }: { onDiscard: () => void; onSave:
   );
 }
 
-const FILE_KINDS: FileType[] = ["bild", "pdf", "audio", "video", "dokument", "sonstiges"];
 
 /** "Dateien": all files, newest first; "Alle · Bilder · PDFs · Audio" (only kinds that are there), images as a gallery. */
 export function FilesPage() {
@@ -159,7 +159,7 @@ export function FilesPage() {
   const route = useRoute();
   const [kind, setKind] = useState<FileType | null>((route.query.get("kind") as FileType | null) ?? null);
   const all = useQuery({ where: { file: true } }).items;
-  const kinds = FILE_KINDS.map((k) => ({ k, n: all.filter((i) => i.file?.filetype === k).length })).filter((x) => x.n > 0);
+  const kinds = FILE_TYPES.map((k) => ({ k, n: all.filter((i) => i.file?.filetype === k).length })).filter((x) => x.n > 0);
   const def: QueryDef = { where: kind ? { and: [{ file: true }, { filetype: kind }] } : { file: true }, sort: [{ key: "created", desc: true }] };
   useEffect(() => void (document.title = t("nav.files")), []);
   return (

@@ -5,6 +5,7 @@ import { type Item, META_TYPE } from "./model";
 import type { Index } from "./graph";
 import { dueOf, isDone, primaryChild, statusOf } from "./traits";
 import { isInInbox } from "./placement";
+import { cmpKey } from "./sortkey";
 
 /** Due by today, oldest due date first. */
 export function dueBy(ix: Index, today: string): { item: Item; due: string }[] {
@@ -16,7 +17,7 @@ export function dueBy(ix: Index, today: string): { item: Item; due: string }[] {
     if (!due || due > today || isDone(item, schema) || ix.isDormant(item)) continue;
     out.push({ item, due });
   }
-  return out.sort((a, b) => (a.due < b.due ? -1 : a.due > b.due ? 1 : a.item.title.localeCompare(b.item.title)));
+  return out.sort((a, b) => cmpKey(a.due, b.due) || a.item.title.localeCompare(b.item.title));
 }
 
 /**

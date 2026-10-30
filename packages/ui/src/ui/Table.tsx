@@ -7,17 +7,18 @@ import { Input } from "../components/ui/input";
 import { NativeSelect } from "../components/ui/native-select";
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronRight, CornerDownRight, MoreHorizontal, Plus } from "lucide-react";
-import { type ViewTab, type Item, type ItemInit, type PropDef, type StatusGroup, titleKey, todayISO } from "@obtion/core/model";
+import { type ViewTab, type Item, type ItemInit, type PropDef, type StatusGroup, titleKey, todayISO, STATUS_GROUPS } from "@obtion/core/model";
 import { type EvalCtx, type Group, type QueryDef, FIELDS, fieldOf, groupId, groupItems, pathBase, typesIn } from "@obtion/core/query";
 import { fmtDate, fmtShortDate } from "@obtion/core/i18n";
 import { dueOf, firstOfGroup, statusOf, statusProp } from "@obtion/core/traits";
 import { repo } from "../repo";
 import { itemHref, useIndex, useMediaQuery } from "../hooks";
-import { useT } from "../i18n";
+import { useT, titleOf } from "../i18n";
 import { DateField, InlineText, ItemIcon, MenuItem, Popover, StatusGlyph, StatusPill, cx, pal } from "./bits";
 import { PropertyField } from "./Properties";
 import { CellValue, defaultColumns } from "./Results";
 import { RowStatus, pathLabel, setStatus, shortPath, treeOrder } from "./Row";
+import { cmpKey } from "@obtion/core/sortkey";
 
 /** What a view adds to the query when showing it: its tab (grouping options, widths) and how to save. */
 export interface Look {
@@ -68,7 +69,7 @@ export function AreaChip({ id }: { id: string }) {
   const ix = useIndex();
   const item = ix.get(id);
   if (!item) return null;
-  const pinned = ix.live.filter((i) => i.pinned).sort((a, b) => (a.pinned! < b.pinned! ? -1 : 1));
+  const pinned = ix.live.filter((i) => i.pinned).sort((a, b) => cmpKey(a.pinned!, b.pinned!));
   const c = pal(AREA_COLORS[Math.max(0, pinned.findIndex((p) => p.id === id)) % AREA_COLORS.length]);
   return (
     <a href={itemHref(id)} className="inline-flex max-w-full items-center truncate whitespace-nowrap rounded-full px-2 py-px text-xs font-medium hover:underline" style={{ color: `color-mix(in srgb, ${c} 62%, var(--text))`, background: `color-mix(in srgb, ${c} 13%, transparent)` }}>
@@ -104,7 +105,7 @@ export function GroupChip({ g, by, byLabel }: { g: Group; by: string; byLabel: s
     return x ? (
       <a href={itemHref(x.id)} className="flex min-w-0 items-center gap-1.5 text-sm font-medium hover:underline">
         <ItemIcon item={x} size={14} className="shrink-0" />
-        <span className="truncate">{x.title || t("untitled")}</span>
+        <span className="truncate">{titleOf(x, t)}</span>
       </a>
     ) : null;
   }
@@ -181,7 +182,7 @@ function OptionCell({ item, prop }: { item: Item; prop: PropDef }) {
       >
         {!isStatus && <option value="">–</option>}
         {isStatus
-          ? (["todo", "active", "done"] as const).map((g) => (
+          ? STATUS_GROUPS.map((g) => (
               <optgroup key={g} label={t("group." + g)}>
                 {prop.options!.filter((o) => (o.group ?? "todo") === g).map((o) => (
                   <option key={o.id} value={o.id}>
@@ -380,7 +381,7 @@ export function GroupedTable({ items, def, ctx, look }: { items: Item[]; def: Qu
               )}
               <a href={itemHref(i.id)} className="flex min-w-0 items-center gap-2 hover:underline">
                 <ItemIcon item={i} size={14} className="shrink-0" />
-                <span className="truncate font-medium">{i.title || t("untitled")}</span>
+                <span className="truncate font-medium">{titleOf(i, t)}</span>
               </a>
               {kids > 0 && !isOpen && <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{kids}</span>}
             </span>
@@ -646,7 +647,7 @@ export function PageTable({
                   <div key={i.id} data-id={i.id} className="flex min-h-[52px] items-center gap-2.5 border-t border-line px-3 py-1.5 first:border-t-0" style={{ paddingLeft: 12 + depth * 22 }}>
                     <RowStatus item={i} size={16} />
                     <a href={itemHref(i.id)} className="flex min-w-0 flex-1 flex-col">
-                      <span className="line-clamp-2 text-[15px]">{i.title || t("untitled")}</span>
+                      <span className="line-clamp-2 text-[15px]">{titleOf(i, t)}</span>
                       <span className="flex min-w-0 items-center gap-2">{hints(i, g)}</span>
                     </a>
                     {cols[0] && <span className="shrink-0 text-xs">{value(i, cols[0].key)}</span>}
@@ -690,7 +691,7 @@ export function PageTable({
                         {depth > 0 && <CornerDownRight size={13} className="-mr-1 shrink-0 text-faint" aria-hidden />}
                         <RowStatus item={i} size={16} />
                         <a href={itemHref(i.id)} className="min-w-0 truncate hover:underline">
-                          {i.title || t("untitled")}
+                          {titleOf(i, t)}
                         </a>
                         {hints(i, g)}
                       </span>

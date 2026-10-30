@@ -7,6 +7,7 @@ import * as Y from "yjs";
 import {
   FORMAT,
   PERSONAL,
+  areaOf,
   SETTINGS_ID,
   type Item,
   type ItemInit,
@@ -18,6 +19,7 @@ import {
   initItem,
   isContent,
   metaMap,
+  renameLinksIn,
   newId,
   readItem,
   removeParent,
@@ -36,7 +38,7 @@ import { Index } from "@obtion/core/graph";
 import { initialProps, template, writeProp } from "@obtion/core/traits";
 import { deleteItem, resolveCascade, restoreItem } from "@obtion/core/trash";
 import type { Writer } from "@obtion/core/setup";
-import { keyBetween } from "@obtion/core/sortkey";
+import { nextPinKey } from "@obtion/core/sortkey";
 import { type ActivityEvent, type ClientMsg, type PushItem, type ServerMsg, fromB64, toB64 } from "@obtion/core/protocol";
 import type { ErrorBody, UndoRequest, UndoResult } from "@obtion/core/api";
 import { createIndex, indexRecord, searchIds } from "@obtion/core/search";
@@ -48,10 +50,6 @@ const AREAS = [PERSONAL];
 export type OutItem = PushItem & { a?: string };
 
 /** The area of a document (documents from before areas: personal). */
-function areaOf(doc: Y.Doc | undefined): string {
-  const a = doc && metaMap(doc).get("area");
-  return typeof a === "string" ? a : PERSONAL;
-}
 const LOAD = Symbol("load");
 const TAB = Symbol("tab");
 
@@ -157,6 +155,11 @@ export class Repo {
   constructor(private host: RepoHost) {
     this.db = host.storage;
     this.device = host.device;
+  }
+
+  /** Who made a change from here ("web:Mac-x3f9"): createdBy, op records, setup. */
+  get origin(): string {
+    return `web:${this.device}`;
   }
 
   // ---------- lifecycle ----------
@@ -521,8 +524,9 @@ export class Repo {
     return id ? this.records.get(id) : undefined;
   }
 
-  live(): Item[] {
-    return [...this.records.values()].filter(isContent);
+  /** Live informations and files (the index's list: sort a copy). */
+  live(): readonly Item[] {
+    return this.index().live;
   }
 
   /** Structure, titles, links, aggregation – rebuilt lazily when data changed. */
@@ -563,13 +567,13 @@ export class Repo {
     const schema = init.type ? this.records.get(init.type)?.schema : undefined;
     const props = { ...initialProps(schema), ...(init.props ?? {}) };
     const tpl = template(schema)?.body;
-    this.change(id, (doc) => initItem(doc, { createdBy: `web:${this.device}`, ...init, props, body: init.body ?? (tpl || undefined) }));
+    this.change(id, (doc) => initItem(doc, { createdBy: this.origin, ...init, props, body: init.body ?? (tpl || undefined) }));
     return id;
   }
 
   setTitle(id: string, title: string) {
     const prev = this.records.get(id);
-    const ownsTitle = !!prev && prev.title.trim() !== "" && this.resolveTitle(prev.title) === id;
+    const ownsTitle = !!prev && this.index().ownsTitle(prev);
     this.change(id, (doc) => setMeta(doc, { title }));
     if (ownsTitle && prev!.title !== title) this.renameLinks(prev!.title, title);
   }
@@ -622,8 +626,8 @@ export class Repo {
 
   /** Pin to the top of the sidebar (after everything pinned) or unpin. Pinned counts as a place. */
   pin(id: string, on: boolean) {
-    const last = this.live().map((i) => i.pinned).filter(Boolean).sort().at(-1) ?? null;
-    this.change(id, (doc) => setMeta(doc, { pinned: on ? keyBetween(last, null) : null }));
+    const pinned = on ? nextPinKey(this.live()) : null;
+    this.change(id, (doc) => setMeta(doc, { pinned }));
   }
 
   setProp(id: string, propId: string, value: Value | null) {
@@ -680,15 +684,9 @@ export class Repo {
 
   /** Keep [[links]] pointing at a renamed item. */
   renameLinks(oldTitle: string, newTitle: string) {
-    if (!newTitle.trim()) return;
-    const esc = oldTitle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const re = new RegExp(`(!?\\[\\[)${esc}(?=[\\]|#])`, "gi");
     for (const r of this.live()) {
-      if (!r.body.includes("[[")) continue;
-      re.lastIndex = 0;
-      if (!re.test(r.body)) continue;
-      re.lastIndex = 0;
-      this.setBody(r.id, r.body.replace(re, (_m, open: string) => open + newTitle));
+      const body = renameLinksIn(r.body, oldTitle, newTitle);
+      if (body !== null) this.setBody(r.id, body);
     }
   }
 }

@@ -13,7 +13,7 @@ import { createSpace, replica, setShown, spaceById, useAccounts } from "../accou
 import { ScopeContext } from "../scope";
 import { spaceHref, useSpaceId } from "../hooks";
 import { MoveError, moveToSpace, planToSpace } from "../move";
-import { useT, tr } from "../i18n";
+import { useT, tr, titleOf } from "../i18n";
 import { Button, Dialog, MenuItem, Popover, cx } from "./bits";
 import { BrandLogo } from "./BrandLogo";
 import { confirmAction, notify } from "./feedback";
@@ -180,7 +180,8 @@ export async function moveTo(id: string, from: string, to: string, parent?: stri
         plan.freeProps.length && tr("move.preview.free", { count: plan.freeProps.length, names: plan.freeProps.join(", ") }),
         plan.droppedLinks && tr("move.preview.links", { count: plan.droppedLinks, from: spaceById(from)?.name ?? "" }),
       ].filter(Boolean);
-      const title = replica(from).repo.get(id)?.title || tr("untitled");
+      const item = replica(from).repo.get(id);
+      const title = item ? titleOf(item) : tr("untitled");
       if (!(await confirmAction({ title: tr("move.preview.title", { title, workspace }), body: lines.map((l) => `– ${l}`).join("\n"), yes: tr("move.confirm") }))) return;
     }
     const moved = await moveToSpace(id, from, to, parent);

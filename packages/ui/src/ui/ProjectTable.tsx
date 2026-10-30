@@ -7,7 +7,7 @@ import { ChevronRight, CornerDownRight } from "lucide-react";
 import { type Item, todayISO } from "@obtion/core/model";
 import { dueOf } from "@obtion/core/traits";
 import { itemHref, useIndex, useMediaQuery } from "../hooks";
-import { useT } from "../i18n";
+import { useT, titleOf } from "../i18n";
 import { DueLabel, cx } from "./bits";
 import { RowStatus } from "./Row";
 
@@ -69,8 +69,8 @@ export function ProjectTable({ items }: { items: Item[] }) {
             <div key={i.id} className="flex min-h-[52px] items-center gap-2.5 border-t border-line px-3.5 py-1.5 first:border-t-0">
               <RowStatus item={i} size={16} />
               <a href={itemHref(i.id)} className="flex min-w-0 flex-1 flex-col">
-                <span className="truncate text-[15px]">{i.title || t("untitled")}</span>
-                <span className="truncate text-xs text-muted-foreground">{n ? t("row.next", { title: n.title || t("untitled") }) : [ix.homePath(i.id).slice(-1).map((p) => ix.get(p)?.title)[0], ix.progressOf(i)?.total ? "" : t("start.noTasks")].filter(Boolean).join(" · ")}</span>
+                <span className="truncate text-[15px]">{titleOf(i, t)}</span>
+                <span className="truncate text-xs text-muted-foreground">{n ? t("row.next", { title: titleOf(n, t) }) : [ix.homePath(i.id).slice(-1).map((p) => ix.get(p)?.title)[0], ix.progressOf(i)?.total ? "" : t("start.noTasks")].filter(Boolean).join(" · ")}</span>
               </a>
               {pct(i) ?? <span className="text-faint">–</span>}
             </div>
@@ -99,7 +99,7 @@ export function ProjectTable({ items }: { items: Item[] }) {
                   {chevron(i)}
                   <RowStatus item={i} size={16} />
                   <a href={itemHref(i.id)} className="min-w-0 truncate hover:underline">
-                    {i.title || t("untitled")}
+                    {titleOf(i, t)}
                   </a>
                 </span>
               </TableCell>
@@ -108,7 +108,7 @@ export function ProjectTable({ items }: { items: Item[] }) {
                 {n ? (
                   <span className="flex min-w-0 items-center gap-2">
                     <a href={itemHref(n.id)} className="min-w-0 truncate hover:underline">
-                      {n.title || t("untitled")}
+                      {titleOf(n, t)}
                     </a>
                     {nd && <DueLabel due={nd} />}
                   </span>

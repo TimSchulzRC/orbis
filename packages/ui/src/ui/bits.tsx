@@ -15,7 +15,7 @@ import type { Index } from "@obtion/core/graph";
 import { dateText, parseDate, statusShape } from "@obtion/core/input";
 import { repo } from "../repo";
 import { useIndex, useItemHref } from "../hooks";
-import { tr, useT } from "../i18n";
+import { tr, useT, titleOf } from "../i18n";
 import { ICON, INBOX_ICON, NOTE_ICON, OVERVIEW_ICON, TYPE_ICON, FILE_ICONS } from "./icons";
 
 export function cx(...c: (string | false | null | undefined)[]) {
@@ -149,7 +149,7 @@ export function ItemLink({ item, className }: { item: Item; className?: string }
   return (
     <a href={hrefOf(item.id)} className={cx("inline-flex min-w-0 items-center gap-1.5 hover:underline", className)}>
       <ItemIcon item={item} size={14} />
-      <span className="truncate">{item.title || t("untitled")}</span>
+      <span className="truncate">{titleOf(item, t)}</span>
     </a>
   );
 }

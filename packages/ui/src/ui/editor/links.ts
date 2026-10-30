@@ -11,9 +11,9 @@ import { repo } from "../../repo";
 import { tr } from "../../i18n";
 import { askText, showMenu } from "./menu";
 import { formatToolbar } from "./toolbar";
+import { wikiLinkRe } from "@obtion/core/model";
+import { webHref } from "../text";
 
-/** [[Page]], [[Page#Section]], [[Page|text]], and ![[…]] for embeds. */
-const linkRe = /(!?\[\[)([^\]|#\n]+)((?:#[^\]|\n]*)?(?:\|[^\]\n]*)?)(\]\])/g;
 
 interface Link {
   from: number;
@@ -33,9 +33,9 @@ function linksIn(state: EditorState, from: number, to: number): Link[] {
   for (let pos = from; pos <= to; ) {
     const line = state.doc.lineAt(pos);
     if (line.text.includes("[[")) {
-      for (const m of line.text.matchAll(linkRe)) {
+      for (const m of line.text.matchAll(wikiLinkRe())) {
         const start = line.from + m.index!;
-        const [all, open, title, rest] = [m[0], m[1]!, m[2]!, m[3]!];
+        const [all, open, title, rest] = [m[0], m[1] + "[[", m[2]!, (m[3] ?? "") + (m[4] ?? "")];
         const bar = rest.indexOf("|");
         const target = title + (bar >= 0 ? rest.slice(0, bar) : rest);
         const id = open === "![[" ? repo.resolveTitle(title.trim()) : undefined;
@@ -70,7 +70,7 @@ function linkAt(state: EditorState, pos: number) {
 const pageTitle = (target: string) => target.split("#")[0]!.trim();
 
 function openLink(l: Link) {
-  if (l.web) return void window.open(/^www\./i.test(l.target) ? "https://" + l.target : l.target, "_blank", "noopener");
+  if (l.web) return void window.open(webHref(l.target), "_blank", "noopener");
   const title = pageTitle(l.target);
   const id = repo.resolveTitle(title);
   if (id) go(itemHref(id).slice(1));

@@ -69,6 +69,14 @@ export function writeProp(doc: Y.Doc, schema: TypeSchema | undefined, propId: st
   } else if (meta.has("done")) meta.delete("done");
 }
 
+/** The name a catalog key has in any language, as title keys (a property found by name in either). */
+const nameCache = new Map<string, Set<string>>();
+function namesIn(key: string): Set<string> {
+  let s = nameCache.get(key);
+  if (!s) nameCache.set(key, (s = new Set(LANGS.map((l) => titleKey(translate(l, key))))));
+  return s;
+}
+
 /** Property ids of the shipped "Blockiert durch" and "Wartet auf" (both count for "blockiert"). */
 export const BLOCKED_BY = "p_blocked";
 export const WAITING_FOR = "p_waiting";
@@ -78,9 +86,8 @@ export const WAITING_FOR = "p_waiting";
  * property with that name in either language – so any type can have them.
  */
 export function blockingProps(schema?: TypeSchema): { by?: PropDef; waiting?: PropDef } {
-  const names = (key: string) => new Set(LANGS.map((l) => titleKey(translate(l, key))));
-  const byNames = names("setup.prop.blockedBy");
-  const waitNames = names("setup.prop.waitingFor");
+  const byNames = namesIn("setup.prop.blockedBy");
+  const waitNames = namesIn("setup.prop.waitingFor");
   const props = schema?.properties ?? [];
   return {
     by: props.find((p) => p.kind === "relation" && (p.id === BLOCKED_BY || byNames.has(titleKey(p.name)))),
@@ -90,13 +97,13 @@ export function blockingProps(schema?: TypeSchema): { by?: PropDef; waiting?: Pr
 
 /** The priority: a select property called "Priorität"/"Priority" (options ordered high → low). */
 export function priorityProp(schema?: TypeSchema): PropDef | undefined {
-  const names = new Set(LANGS.map((l) => titleKey(translate(l, "setup.prop.priority"))));
+  const names = namesIn("setup.prop.priority");
   return schema?.properties.find((p) => p.kind === "select" && (p.id === "p_priority" || names.has(titleKey(p.name))));
 }
 
 /** The language of an entry: a select property called "Sprache"/"Language"; its options name the languages. */
 function languageProp(schema?: TypeSchema): PropDef | undefined {
-  const names = new Set(LANGS.map((l) => titleKey(translate(l, "setup.prop.language"))));
+  const names = namesIn("setup.prop.language");
   return schema?.properties.find((p) => p.kind === "select" && names.has(titleKey(p.name)));
 }
 

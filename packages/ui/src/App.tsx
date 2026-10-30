@@ -336,7 +336,7 @@ function MobileNav() {
     { key: "inbox", label: t("nav.inbox"), icon: <Inbox size={20} />, href: "#/inbox", active: shelf || route.path === "/review", dot: inbox > 0 },
     ...(ix
       ? ix.typesInOrder().slice(0, 2).map((x) => {
-          const I = ICON[x.schema!.icon] ?? ICON.circle!;
+          const I = ICON[x.schema.icon] ?? ICON.circle!;
           return { key: x.id, label: ix.typePlural(x.id), icon: <I size={20} />, href: spaceHref(one!.id, `/i/${encodeURIComponent(x.id)}`), active: active?.id === one!.id && route.parts[0] === "i" && route.parts[1] === x.id };
         })
       : []),

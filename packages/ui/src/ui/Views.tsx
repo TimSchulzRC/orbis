@@ -184,10 +184,10 @@ export function useViewFields(where: Cond | undefined, sample: { type: string | 
   const seen = new Set<string>();
   const push = (f: ViewField) => !seen.has(titleKey(f.key)) && (seen.add(titleKey(f.key)), out.push(f));
   for (const id of typeIds)
-    for (const p of ix.types.get(id)!.schema!.properties) push({ key: p.name, label: p.name, kind: p.kind, prop: p });
+    for (const p of ix.types.get(id)!.schema.properties) push({ key: p.name, label: p.name, kind: p.kind, prop: p });
   // the other side of relations that can point here ("Blockiert diese")
   for (const ty of ix.types.values())
-    for (const p of ty.schema!.properties) {
+    for (const p of ty.schema.properties) {
       if (p.kind !== "relation" || p.symmetric || !p.inverseName) continue;
       const target = p.target ? typesIn(parseQuery(p.target, ix).def.where) : [];
       if (target.length && !target.some((x) => typeIds.includes(x))) continue;

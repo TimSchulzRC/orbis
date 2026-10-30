@@ -31,8 +31,9 @@
 //   op       Y.Map   ops only
 //   settings Y.Map   settings only
 import * as Y from "yjs";
-import { keyBetween } from "./sortkey";
+import { cmpKey, keyBetween } from "./sortkey";
 import type { Cond, QueryDef } from "./query";
+import { escapeRe } from "./text";
 
 /** The meta type "Typ": every type document has this as its type. Not a document, cannot be deleted. */
 export const META_TYPE = "sys:type";
@@ -126,7 +127,8 @@ export interface UpdateEntry {
   status?: string; // option id set together with this update
 }
 
-export type ViewKind = "list" | "table" | "board" | "tree" | "gallery" | "triage" | "calendar" | "timeline";
+export const VIEW_KINDS = ["list", "table", "board", "tree", "gallery", "triage", "calendar", "timeline"] as const;
+export type ViewKind = (typeof VIEW_KINDS)[number];
 
 export interface ViewDef {
   query?: QueryDef; // stored as JSON with ids, see query.ts
@@ -258,6 +260,9 @@ export interface Item {
   source?: string;
 }
 
+/** A type: an information of the meta type, always with its schema. */
+export type TypeItem = Item & { schema: TypeSchema };
+
 // ---------- reading ----------
 
 /** meta.deleted is true or "via:<root>" (deleted together with that root, see trash.ts). */
@@ -308,7 +313,7 @@ function readSchema(doc: Y.Doc): TypeSchema {
       properties.push({ ...d, id, name: d.name ?? "", kind: d.kind ?? "text", sort: d.sort ?? "V" });
     }
   }
-  properties.sort((a, b) => (a.sort < b.sort ? -1 : a.sort > b.sort ? 1 : a.id.localeCompare(b.id)));
+  properties.sort((a, b) => cmpKey(a.sort, b.sort) || a.id.localeCompare(b.id));
   return {
     removedProperties: properties.filter((p) => p.removed),
     name: text("name") ?? "",
@@ -390,7 +395,7 @@ export function readTabs(doc: Y.Doc): ViewTab[] {
     const t = o as Partial<ViewTab>;
     if (t.kind) tabs.push({ ...t, id, pos: t.pos ?? "V", kind: t.kind });
   }
-  tabs.sort((a, b) => (a.pos < b.pos ? -1 : a.pos > b.pos ? 1 : a.id.localeCompare(b.id)));
+  tabs.sort((a, b) => cmpKey(a.pos, b.pos) || a.id.localeCompare(b.id));
   return tabs.length ? tabs : [legacyTab(doc.getMap("view").toJSON())];
 }
 
@@ -582,6 +587,7 @@ export function setView(doc: Y.Doc, viewId: string, def: ViewDef | null) {
 export function initSchema(doc: Y.Doc, s: Partial<Omit<TypeSchema, "properties" | "removedProperties">> & { properties?: Omit<PropDef, "sort">[] }) {
   const schema = schemaMap(doc);
   for (const k of ["name", "icon", "color", "description"] as const) if (s[k] !== undefined) schema.set(k, s[k]);
+  if (s.plural) schema.set("plural", s.plural);
   if (!(schema.get("capabilities") instanceof Y.Map)) schema.set("capabilities", new Y.Map());
   if (!(schema.get("properties") instanceof Y.Map)) schema.set("properties", new Y.Map());
   for (const [k, v] of Object.entries(s.capabilities ?? {})) setCapability(doc, k as keyof Capabilities, v);
@@ -590,6 +596,12 @@ export function initSchema(doc: Y.Doc, s: Partial<Omit<TypeSchema, "properties" 
     prev = keyBetween(prev, null);
     upsertProp(doc, p.id, { ...p, sort: prev });
   }
+}
+
+/** A new type: an information of the meta type, titled like the type, with its schema. */
+export function initType(doc: Y.Doc, s: Parameters<typeof initSchema>[1] & { name: string }, init: Pick<ItemInit, "createdBy" | "created" | "source"> = {}, now = Date.now()) {
+  initItem(doc, { kind: "info", type: META_TYPE, title: s.name, ...init }, now);
+  initSchema(doc, { ...s, icon: s.icon ?? "box", description: s.description ?? "" });
 }
 
 export function setSchemaField(doc: Y.Doc, field: "name" | "plural" | "icon" | "color" | "description" | "pos", value: string) {
@@ -721,13 +733,22 @@ export function titleKey(title: string) {
   return title.trim().toLowerCase();
 }
 
-export function todayISO(d = new Date()) {
-  const z = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
-  return z.toISOString().slice(0, 10);
+export { todayISO, addDaysISO } from "./date";
+
+/** What an item is called: its title, else (a file) its file name; "" when it has neither. */
+export function displayTitle(item: Pick<Item, "title" | "file">): string {
+  return item.title || item.file?.name || "";
 }
 
-export function addDaysISO(days: number, from = new Date()) {
-  return todayISO(new Date(from.getTime() + days * 864e5));
+/** The area a document belongs to (see PERSONAL). */
+export function areaOf(doc: Y.Doc | undefined): string {
+  const a = doc && metaMap(doc).get("area");
+  return typeof a === "string" ? a : PERSONAL;
+}
+
+/** The names of the options a select, status or multiselect value holds (an unknown id as itself). */
+export function optionNames(p: PropDef, v: Value): string[] {
+  return (Array.isArray(v) ? v : [v]).map((id) => p.options?.find((o) => o.id === id)?.name ?? String(id));
 }
 
 /** Live means: not deleted and a real information or file (not an op or the settings). */
@@ -737,7 +758,38 @@ export function isContent(i: Item) {
 
 // ---------- links in the text ----------
 
+/** [[Page]], [[Page#Section]], [[Page|text]], ![[file.png|320]]: groups embed mark, target, "#section", "|text". */
 const WIKILINK = /(!?)\[\[([^\]|#\n]+)(#[^\]|\n]*)?(\|[^\]\n]*)?\]\]/g;
+
+/** A fresh copy of the wikilink pattern (its own lastIndex); `anchored` matches only at the start. */
+export function wikiLinkRe(anchored = false): RegExp {
+  return anchored ? new RegExp("^" + WIKILINK.source) : new RegExp(WIKILINK.source, "g");
+}
+
+export interface WikiLinkMatch {
+  raw: string;
+  embed: boolean;
+  target: string; // as written, not trimmed
+  section: string; // "#Section" or ""
+  label?: string; // the text after "|"
+}
+
+/** Replace every wikilink in `text` by what `fn` makes of it. */
+export function mapWikiLinks(text: string, fn: (l: WikiLinkMatch) => string): string {
+  if (!text.includes("[[")) return text;
+  return text.replace(WIKILINK, (raw, bang: string, target: string, section?: string, label?: string) => fn({ raw, embed: bang === "!", target, section: section ?? "", label: label?.slice(1) }));
+}
+
+/**
+ * The text with its [[links]] to `oldTitle` (any case, with section or label) pointing at
+ * `newTitle`; null when nothing changes.
+ */
+export function renameLinksIn(body: string, oldTitle: string, newTitle: string): string | null {
+  if (!newTitle.trim() || !body.includes("[[")) return null;
+  const re = new RegExp(`(!?\\[\\[)${escapeRe(oldTitle)}(?=[\\]|#])`, "gi");
+  const next = body.replace(re, (_m, open: string) => open + newTitle);
+  return next === body ? null : next;
+}
 
 export interface WikiLink {
   target: string;

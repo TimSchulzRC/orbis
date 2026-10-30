@@ -3,7 +3,7 @@
 // agents. Changes made there are overwritten; edit through the app or MCP.
 import { existsSync, linkSync, copyFileSync, mkdirSync, readdirSync, rmSync, unlinkSync, writeFileSync, rmdirSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { type Item, META_TYPE } from "@obtion/core/model";
+import { type Item, META_TYPE, optionNames } from "@obtion/core/model";
 import type { Index } from "@obtion/core/graph";
 import { blocksAsText } from "@obtion/core/query";
 import { isInInbox } from "@obtion/core/placement";
@@ -127,7 +127,7 @@ export class Mirror {
         const pr = ix.progress(i.id, p.computed?.of);
         if (p.computed?.fn === "count") fm[p.name] = ix.countDescendants(i.id, p.computed.of);
         else if (pr.total) fm[p.name] = `${pr.done}/${pr.total}`;
-      } else if (v !== undefined) fm[p.name] = p.options ? (Array.isArray(v) ? v : [v]).map((id) => p.options!.find((o) => o.id === id)?.name ?? id) : v;
+      } else if (v !== undefined) fm[p.name] = p.options ? optionNames(p, v) : v;
     }
     for (const [k, v] of Object.entries(i.extra)) fm[k] = v.v;
     if (i.tags.length) fm.tags = i.tags;

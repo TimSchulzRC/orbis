@@ -3,6 +3,7 @@
 // devices, the server and for agents, so everyone sees the same structure.
 import {
   type Item,
+  type TypeItem,
   type TypeSchema,
   META_TYPE,
   SETTINGS_ID,
@@ -14,6 +15,7 @@ import {
 import { blockingProps, dueOf, isDone, primaryChild, priorityProp, progressSpec, statusOf, statusProp } from "./traits";
 import { isPausedOption, sameTypeName } from "./input";
 import { pluralOf } from "./plural";
+import { cmpKey } from "./sortkey";
 
 export interface Backlink {
   from: string;
@@ -41,7 +43,7 @@ export class Index {
   /** Live informations and files (types included). */
   readonly live: Item[];
   readonly byId = new Map<string, Item>();
-  readonly types = new Map<string, Item>();
+  readonly types = new Map<string, TypeItem>();
 
   private _titles?: Map<string, string>;
   private _files?: Map<string, string>;
@@ -58,12 +60,27 @@ export class Index {
       if (!isContent(r)) continue;
       this.live.push(r);
       this.byId.set(r.id, r);
-      if (r.type === META_TYPE && r.schema) this.types.set(r.id, r);
+      if (r.type === META_TYPE && r.schema) this.types.set(r.id, r as TypeItem);
     }
   }
 
   get(id?: string | null): Item | undefined {
     return id ? this.byId.get(id) : undefined;
+  }
+
+  /** The live items of these ids, in order; gone ones are left out. */
+  items(ids: Iterable<string>): Item[] {
+    const out: Item[] = [];
+    for (const id of ids) {
+      const x = this.byId.get(id);
+      if (x) out.push(x);
+    }
+    return out;
+  }
+
+  /** Titles of these ids as a path ("Arbeit › Relaunch"). */
+  pathText(ids: string[]): string {
+    return ids.map((id) => this.get(id)?.title ?? "").join(" › ");
   }
 
   // ---------- types ----------
@@ -91,19 +108,31 @@ export class Index {
   }
 
   /** The types in their order (sidebar, phone bar): by their key, those without at the end. */
-  typesInOrder(): Item[] {
-    return [...this.types.values()].sort((a, b) => {
-      const x = a.schema!.pos ?? "~", y = b.schema!.pos ?? "~";
-      return x < y ? -1 : x > y ? 1 : a.created - b.created;
-    });
+  typesInOrder(): TypeItem[] {
+    return [...this.types.values()].sort((a, b) => cmpKey(a.schema.pos ?? "~", b.schema.pos ?? "~") || a.created - b.created);
+  }
+
+  /** The types by name (pickers, menus). */
+  typesByName(): TypeItem[] {
+    return [...this.types.values()].sort((a, b) => a.schema.name.localeCompare(b.schema.name));
+  }
+
+  /** The types pinned in the capture type picker (settings), those that still exist. */
+  captureTypes(): string[] {
+    return (this.all.get(SETTINGS_ID)?.settings?.captureTypes ?? []).filter((id) => this.types.has(id));
   }
 
   /** A type by name; singular and plural both work (Task/Tasks, Projekt/Projekte). */
   typeByName(name: string): string | undefined {
     const k = titleKey(name);
-    for (const t of this.types.values()) if (titleKey(t.schema!.name) === k || titleKey(t.title) === k) return t.id;
-    for (const t of this.types.values()) if (sameTypeName(t.schema!.name, name) || titleKey(this.typePlural(t.id)) === k) return t.id;
+    for (const t of this.types.values()) if (titleKey(t.schema.name) === k || titleKey(t.title) === k) return t.id;
+    for (const t of this.types.values()) if (sameTypeName(t.schema.name, name) || titleKey(this.typePlural(t.id)) === k) return t.id;
     return undefined;
+  }
+
+  /** A type id if it names a live type; else undefined (a filter on a deleted type is ignored). */
+  private liveType(of?: string): string | undefined {
+    return of && this.types.has(of) ? of : undefined;
   }
 
   // ---------- titles ----------
@@ -132,6 +161,11 @@ export class Index {
     // [[id|Label]] links exactly, also to titles that can't be linked by name
     return t.get(k) ?? byName ?? (this.byId.has(title.trim()) ? title.trim() : undefined);
   };
+
+  /** Do [[links]] by the item's title lead to it? Then renaming it renames them too. */
+  ownsTitle(item: Item): boolean {
+    return item.title.trim() !== "" && this.resolveTitle(item.title) === item.id;
+  }
 
   // ---------- "Teil von" ----------
 
@@ -172,7 +206,7 @@ export class Index {
       list.sort((a, b) => {
         const sa = this.byId.get(a)!.parents[p]?.sort ?? "";
         const sb = this.byId.get(b)!.parents[p]?.sort ?? "";
-        return sa < sb ? -1 : sa > sb ? 1 : (this.byId.get(a)!.title).localeCompare(this.byId.get(b)!.title);
+        return cmpKey(sa, sb) || this.byId.get(a)!.title.localeCompare(this.byId.get(b)!.title);
       });
     }
     this._parents = parents;
@@ -277,6 +311,11 @@ export class Index {
     return out;
   }
 
+  /** What an item mentions: the entries linked in its text (not embedded) and its refs. */
+  mentions(item: Item): string[] {
+    return [...this.textLinks(item).filter((l) => !l.embed).map((l) => l.to), ...item.refs];
+  }
+
   /** Unresolved [[links]] (titles that don't exist yet). */
   missingLinks(item: Item): string[] {
     return linksOf(item)
@@ -359,7 +398,7 @@ export class Index {
    * deleting or renaming a type.
    */
   progress(id: string, of?: string): { done: number; total: number } {
-    const filter = of && this.types.has(of) ? of : undefined;
+    const filter = this.liveType(of);
     let done = 0;
     let total = 0;
     for (const d of this.descendants(id)) {
@@ -385,7 +424,7 @@ export class Index {
    */
   blockers(item: Item): { by: Item[]; waiting?: string } {
     const { by, waiting } = blockingProps(this.schemaOf(item));
-    const open = by ? this.relValues(item, by.id).map((id) => this.byId.get(id)!).filter((x) => !isDone(x, this.schemaOf(x))) : [];
+    const open = by ? this.items(this.relValues(item, by.id)).filter((x) => !isDone(x, this.schemaOf(x))) : [];
     const w = waiting ? item.props[waiting.id] : undefined;
     return { by: open, waiting: typeof w === "string" && w.trim() ? w.trim() : undefined };
   }
@@ -458,7 +497,7 @@ export class Index {
   }
 
   countDescendants(id: string, of?: string): number {
-    const filter = of && this.types.has(of) ? of : undefined;
+    const filter = this.liveType(of);
     let n = 0;
     for (const d of this.descendants(id)) if (!filter || this.byId.get(d)!.type === filter) n++;
     return n;

@@ -7,6 +7,8 @@ import { EditorSelection, EditorState, type Extension, type Line, Prec, type Ran
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate, WidgetType, keymap } from "@codemirror/view";
 import { tr } from "../../i18n";
 import { blockAt, kindName } from "./blocks";
+import { isQueryInfo } from "@obtion/core/query";
+import { cx } from "../bits";
 
 class BulletWidget extends WidgetType {
   constructor(readonly depth: number) {
@@ -119,7 +121,7 @@ function build(view: EditorView): { deco: DecorationSet; atomic: DecorationSet }
           }
           case "FencedCode": {
             const info = n.node.getChild("CodeInfo");
-            if (info && /^(abfrage|query)$/i.test(state.sliceDoc(info.from, info.to).trim())) return false; // a query block draws itself
+            if (info && isQueryInfo(state.sliceDoc(info.from, info.to).trim())) return false; // a query block draws itself
             const first = state.doc.lineAt(n.from).number;
             const last = state.doc.lineAt(n.to).number;
             for (let i = first; i <= last; i++) deco.push(line(cx("cm-codeblock", i === first && "first", i === last && "last", (i === first || i === last) && "fence")).range(state.doc.line(i).from));
@@ -185,10 +187,6 @@ function build(view: EditorView): { deco: DecorationSet; atomic: DecorationSet }
   const cur = state.doc.lineAt(sel.head);
   if (focus && sel.empty && !cur.length && state.doc.length > 0 && !state.readOnly) deco.push(Decoration.widget({ widget: new HintWidget(tr("editor.lineHint")), side: 1 }).range(cur.from));
   return { deco: Decoration.set(deco, true), atomic: Decoration.set(atomic, true) };
-}
-
-function cx(...c: (string | false)[]) {
-  return c.filter(Boolean).join(" ");
 }
 
 const preview = ViewPlugin.fromClass(

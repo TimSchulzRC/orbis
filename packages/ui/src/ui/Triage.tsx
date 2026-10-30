@@ -14,7 +14,7 @@ import { ArrowRight, FolderInput, Shapes, Sparkles, Trash2, Check, X } from "luc
 import { type Item, setMeta } from "@obtion/core/model";
 import type { Index } from "@obtion/core/graph";
 import { useIndex, useRepo, useSpaceId, useItemHref, spaceHref, useDesktop } from "../hooks";
-import { useT } from "../i18n";
+import { useT, titleOf } from "../i18n";
 import { recentPlaces } from "../actions";
 import { Button, ItemIcon, Kbd, RelTime, Tag, TypeGlyph, cx } from "./bits";
 import { TagInput } from "./TagInput";
@@ -22,13 +22,13 @@ import { placeSuggestions } from "./suggest";
 import { Markdown } from "./Markdown";
 import { NOTE_ICON } from "./icons";
 import { plainText } from "@obtion/core/search";
+import { DAY_MS } from "@obtion/core/date";
 import { usePickers, useTriageActions } from "./TriageActions";
 import type { T } from "@obtion/core/i18n";
 
-const DAY = 864e5;
 /** Age groups: this week, this month, older. */
 function ageGroup(created: number, now = Date.now()): "week" | "month" | "older" {
-  const days = (now - created) / DAY;
+  const days = (now - created) / DAY_MS;
   return days <= 7 ? "week" : days <= 30 ? "month" : "older";
 }
 
@@ -39,7 +39,7 @@ function rowHint(item: Item, ix: Index, t: T): { icon: React.ReactNode; text: st
     const what = [sug.type ? ix.typeName(sug.type) : null, ...(sug.parents ?? []).map((p) => ix.get(p)?.title)].filter(Boolean).join(" · ");
     if (what) return { icon: <Sparkles size={12} />, text: what };
   }
-  const mentioned = [...ix.textLinks(item).filter((l) => !l.embed).map((l) => l.to), ...item.refs].map((id) => ix.get(id)).find((x) => x && x.kind === "info");
+  const mentioned = ix.items(ix.mentions(item)).find((x) => x.kind === "info");
   if (mentioned) return { icon: <ArrowRight size={12} />, text: mentioned.title };
   const kids = ix.childrenOf(item.id).length;
   if (kids) return { icon: <NOTE_ICON size={12} />, text: t("triage.notes", { count: kids }) };
@@ -169,10 +169,10 @@ export function Triage({ items }: { items: Item[] }) {
                 on && "bg-selected before:absolute before:inset-y-1.5 before:left-0 before:w-[3px] before:rounded-r before:bg-[var(--focus)]",
               )}
             >
-              <MarkBox on={marked.has(keyOf(i))} onToggle={() => toggle(keyOf(i))} title={i.title || i.file?.name || t("untitled")} />
+              <MarkBox on={marked.has(keyOf(i))} onToggle={() => toggle(keyOf(i))} title={titleOf(i, t)} />
               {phone ? (
                 <span className="flex min-w-0 flex-col">
-                  <span className="truncate text-[15px]">{i.title || i.file?.name || t("untitled")}</span>
+                  <span className="truncate text-[15px]">{titleOf(i, t)}</span>
                   {hint && (
                     <span className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
                       <span className="shrink-0">{hint.icon}</span>
@@ -182,7 +182,7 @@ export function Triage({ items }: { items: Item[] }) {
                 </span>
               ) : (
                 <>
-                  <span className="truncate text-sm">{i.title || i.file?.name || t("untitled")}</span>
+                  <span className="truncate text-sm">{titleOf(i, t)}</span>
                   <span className="flex max-w-[104px] items-center gap-1 overflow-hidden whitespace-nowrap text-xs text-muted-foreground">
                     {hint && (
                       <>
@@ -256,7 +256,7 @@ export function Triage({ items }: { items: Item[] }) {
             <ul className="mt-3 space-y-1 text-sm">
               {many.map((i) => (
                 <li key={keyOf(i)} className="flex items-center gap-2">
-                  <ItemIcon item={i} size={14} /> <span className="truncate">{i.title || i.file?.name || t("untitled")}</span>
+                  <ItemIcon item={i} size={14} /> <span className="truncate">{titleOf(i, t)}</span>
                 </li>
               ))}
             </ul>
@@ -283,8 +283,8 @@ function Detail({ item, onPlaced }: { item: Item; onPlaced: (p: string) => void 
   const repo = useRepo();
   const hrefOf = useItemHref();
   const ix = repo.index();
-  const mentioned = [...new Set([...ix.textLinks(item).filter((l) => !l.embed).map((l) => l.to), ...item.refs])].map((id) => ix.get(id)).filter((x): x is Item => !!x && x.kind === "info");
-  const kids = ix.childrenOf(item.id).map((id) => ix.get(id)!).filter(Boolean);
+  const mentioned = ix.items(new Set(ix.mentions(item))).filter((x) => x.kind === "info");
+  const kids = ix.items(ix.childrenOf(item.id));
   const sug = item.suggestion;
   const places = useMemo(() => {
     const s = placeSuggestions(item, repo).slice(0, 4).map((x) => ({ id: x.id, why: t("triage.why." + x.reason) }));
@@ -303,7 +303,7 @@ function Detail({ item, onPlaced }: { item: Item; onPlaced: (p: string) => void 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto px-7 py-6">
       <a href={hrefOf(item.id)} className="block text-xl font-semibold leading-[26px] hover:underline">
-        {item.title || item.file?.name || t("untitled")}
+        {titleOf(item, t)}
       </a>
       <p className="mt-1 text-xs text-muted-foreground">
         {t("triage.captured")} <RelTime ts={item.created} />
@@ -322,7 +322,7 @@ function Detail({ item, onPlaced }: { item: Item; onPlaced: (p: string) => void 
           <ul className="space-y-1 text-sm">
             {kids.map((c) => (
               <li key={c.id} className="flex items-center gap-2">
-                <ItemIcon item={c} size={14} /> <a href={hrefOf(c.id)} className="truncate hover:underline">{c.title || t("untitled")}</a>
+                <ItemIcon item={c} size={14} /> <a href={hrefOf(c.id)} className="truncate hover:underline">{titleOf(c, t)}</a>
               </li>
             ))}
           </ul>

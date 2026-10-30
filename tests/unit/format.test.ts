@@ -24,6 +24,6 @@ test("data of format 1 (27.10.2026) are read by this version", () => {
   expect(ix.get("ex-relaunch")!.title).toBe("Website-Relaunch");
   expect(ix.get("ex-relaunch")!.area).toBe(PERSONAL);
   expect(ix.parentsOf("ex-relaunch")).toEqual(["ex-work", "ex-nordlicht"]);
-  expect(ix.types.get("ex-type-book")!.schema!.plural).toBe("Bücher");
+  expect(ix.types.get("ex-type-book")!.schema.plural).toBe("Bücher");
   expect(ix.get("ex-f-diagram")!.file!.filetype).toBe("bild");
 });

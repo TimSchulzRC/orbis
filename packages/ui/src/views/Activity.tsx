@@ -6,20 +6,18 @@ import { spaceCall } from "../accounts";
 import { SpaceEyebrow } from "../ui/Spaces";
 import { Sparkles, User, Download, Bot, Cog, Undo2, Redo2 } from "lucide-react";
 import type { ActivityEvent, FieldChange } from "@obtion/core/protocol";
-import { type Item, META_TYPE } from "@obtion/core/model";
+import { type Item, META_TYPE, optionNames, type Value } from "@obtion/core/model";
 import type { Index } from "@obtion/core/graph";
 import { useRepo, useSpaceId, itemHref } from "../hooks";
-import { useT } from "../i18n";
+import { useT, titleOf } from "../i18n";
 import type { T } from "@obtion/core/i18n";
 import { Button, Empty, ItemIcon, RelTime, cx, Seg } from "../ui/bits";
-import { agentLabel } from "../ui/AgentNotice";
+import { agentLabel, agentName } from "../ui/AgentNotice";
 
 function who(origin: string, t: T) {
   const first = origin.split(",")[0]!.trim();
-  if (first.startsWith("agent:")) {
-    const name = first.slice(6);
-    return { label: agentLabel(name, t), icon: name === "chat" ? Sparkles : Bot, agent: true };
-  }
+  const name = agentName(first);
+  if (name !== undefined) return { label: agentLabel(name, t), icon: name === "chat" ? Sparkles : Bot, agent: true };
   if (first.startsWith("import:")) return { label: t("activity.import", { name: first.slice(7) }), icon: Download, agent: false };
   if (first.startsWith("system:")) return { label: t("activity.system"), icon: Cog, agent: false };
   if (first.startsWith("web:")) {
@@ -43,7 +41,7 @@ function describe(c: FieldChange, item: Item | undefined, ix: Index, t: T): stri
     const p = propName(ix, item, c.field.slice(2));
     const v = (x: unknown) => {
       if (x === undefined || x === null || x === "") return "–";
-      if (p?.options) return (Array.isArray(x) ? x : [x]).map((id) => p.options!.find((o) => o.id === id)?.name ?? String(id)).join(", ");
+      if (p?.options) return optionNames(p, x as Value).join(", ");
       return String(x);
     };
     return `${p?.name ?? c.field.slice(2)}: ${v(c.from)} → ${v(c.to)}`;
@@ -106,7 +104,7 @@ function Entry({ e, compact, noVerb }: { e: ActivityEvent; compact?: boolean; no
             <ItemIcon item={item} size={13} />
             {/* a type is named as one: its title alone reads like an entry */}
             {item.type === META_TYPE && <span className="font-normal text-muted-foreground">{t("activity.aType")}</span>}
-            {item.title || t("untitled")}
+            {titleOf(item, t)}
           </a>
         ) : (
           <span className="font-medium">{systemText(e.title, t)}</span>

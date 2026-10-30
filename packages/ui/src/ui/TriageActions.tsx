@@ -5,14 +5,15 @@ import { Button as ShadcnButton } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { useRef, useState } from "react";
 import { Check, Plus } from "lucide-react";
-import { type Item, SETTINGS_ID, setMeta } from "@obtion/core/model";
+import { type Item, setMeta, titleKey } from "@obtion/core/model";
 import type { Values } from "@obtion/core/i18n";
 import { onlyBelow } from "@obtion/core/trash";
+import { canPlaceIn } from "@obtion/core/placement";
 import { tomorrow } from "@obtion/core/inbox";
 import { useRepo } from "../hooks";
 import { replica } from "../accounts";
 import { SpaceScope } from "./Spaces";
-import { useT } from "../i18n";
+import { useT, titleOf } from "../i18n";
 import { createType, rememberPlace } from "../actions";
 import { Dialog, Kbd, TypeGlyph, cx } from "./bits";
 import { ItemPicker } from "./Picker";
@@ -36,8 +37,7 @@ export function revert(u: Undo) {
 
 /** The types a workspace offers first (its capture types, as set in its settings). */
 export function captureTypes(space: string): string[] {
-  const repo = replica(space).repo;
-  return (repo.get(SETTINGS_ID)?.settings?.captureTypes ?? []).filter((id) => repo.index().types.has(id));
+  return replica(space).repo.index().captureTypes();
 }
 
 /**
@@ -56,7 +56,7 @@ export function useTriageActions(spaceOf: (i: Item) => string, opts: { quiet?: b
     return u;
   };
   const short = (i?: Item) => {
-    const name = i?.title || i?.file?.name || t("untitled");
+    const name = i ? titleOf(i, t) : t("untitled");
     return name.length > 40 ? name.slice(0, 39) + "…" : name;
   };
   const label = (list: Item[], key: string, values: Values = {}) => (list.length > 1 ? t(key + "Many", { count: list.length, ...values }) : t(key, { ...values, title: short(list[0]), ...("title" in values ? { title: values.title } : {}) }));
@@ -75,7 +75,7 @@ export function useTriageActions(spaceOf: (i: Item) => string, opts: { quiet?: b
     let children: "trash" | "inbox" = "trash";
     if (below) {
       const c = await chooseAction({
-        title: list.length > 1 ? t("triage.deleteMany", { count: list.length }) : t("delete.title", { title: list[0]!.title || t("untitled") }),
+        title: list.length > 1 ? t("triage.deleteMany", { count: list.length }) : t("delete.title", { title: titleOf(list[0]!, t) }),
         body: t("delete.children", { count: below }),
         choices: [
           { key: "inbox", label: t("delete.backToInbox") },
@@ -151,7 +151,7 @@ function PlacePicker({ list, onPick, onClose }: { list: Item[]; onPick: (p: stri
     <ItemPicker
       title={list.length > 1 ? t("triage.whereToMany", { count: list.length }) : t("triage.whereTo")}
       suggestions={list.length === 1 ? placeSuggestions(list[0]!, repo) : []}
-      exclude={(x) => list.some((p) => x.id === p.id || ix.wouldCycle(p.id, x.id) || !!p.parents[x.id]) || x.kind !== "info"}
+      exclude={(x) => list.some((p) => !canPlaceIn(p, x, ix))}
       onPick={onPick}
       onCreate={(title) => onPick(repo.create({ title }))}
       onClose={onClose}
@@ -166,8 +166,8 @@ function TypePicker({ current, onPick, onClose }: { current: string | null; onPi
   const ix = repo.index();
   const [q, setQ] = useState("");
   const [sel, setSel] = useState(0);
-  const types = [...ix.types.values()].sort((a, b) => a.schema!.name.localeCompare(b.schema!.name)).filter((x) => !q.trim() || x.schema!.name.toLowerCase().includes(q.trim().toLowerCase()));
-  const exact = types.some((x) => x.schema!.name.toLowerCase() === q.trim().toLowerCase());
+  const types = ix.typesByName().filter((x) => !q.trim() || x.schema.name.toLowerCase().includes(titleKey(q)));
+  const exact = types.some((x) => x.schema.name.toLowerCase() === titleKey(q));
   const rows: { id?: string; create?: string }[] = [...types.map((x) => ({ id: x.id })), ...(q.trim() && !exact ? [{ create: q.trim() }] : [{ create: "" }])];
   const pick = (r?: (typeof rows)[number]) => {
     if (!r) return;
@@ -203,7 +203,7 @@ function TypePicker({ current, onPick, onClose }: { current: string | null; onPi
               className={cx("flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm", n === sel && "bg-selected", !r.id && "mt-1 border-t border-line pt-2")}
             >
               {x ? <TypeGlyph schema={x.schema} size={15} /> : <Plus size={15} className="text-muted-foreground" />}
-              <span className="min-w-0 flex-1 truncate">{x ? x.schema!.name : r.create ? t("triage.newTypeNamed", { name: r.create }) : t("triage.newType")}</span>
+              <span className="min-w-0 flex-1 truncate">{x ? x.schema.name : r.create ? t("triage.newTypeNamed", { name: r.create }) : t("triage.newType")}</span>
               {x && r.id === current && <Check size={14} className="text-ok" />}
               {x && n < 9 && !q && <Kbd>{n + 1}</Kbd>}
             </ShadcnButton>

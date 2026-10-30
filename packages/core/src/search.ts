@@ -1,5 +1,6 @@
 import MiniSearch from "minisearch";
-import { type Item, isContent, stripQueryBlocks } from "./model";
+import { type Item, isContent, mapWikiLinks, stripQueryBlocks } from "./model";
+import { foldUmlauts, plainVowels } from "./text";
 
 // Same search on server (agents) and devices (offline), so both agree.
 //
@@ -12,10 +13,7 @@ import { type Item, isContent, stripQueryBlocks } from "./model";
 const WORD = /[\p{L}\p{N}_]+(?:-[\p{L}\p{N}_]+)*/gu;
 
 /** Lower case, umlauts as two letters: the form every query term takes. */
-function foldTerm(term: string): string {
-  return term.toLowerCase().replace(/ä/g, "ae").replace(/ö/g, "oe").replace(/ü/g, "ue").replace(/ß/g, "ss");
-}
-const plainVowels = (term: string) => term.toLowerCase().replace(/ä/g, "a").replace(/ö/g, "o").replace(/ü/g, "u").replace(/ß/g, "ss");
+const foldTerm = foldUmlauts;
 
 function tokenizeForIndex(text: string): string[] {
   const out: string[] = [];
@@ -76,13 +74,13 @@ export function searchIds(idx: SearchIndex, query: string, limit = 20): string[]
 
 /** A text without Markdown marks, on one line: for excerpts and previews. */
 export function plainText(body: string): string {
-  return stripQueryBlocks(body)
+  const marks = stripQueryBlocks(body)
     .replace(/^\s*```.*$/gm, "") // code fences (the code itself stays)
     .replace(/<[^>\n]+>/g, "") // html tags
     .replace(/!\[\[[^\]]*\]\]/g, "") // embedded files show as files, not as their name
     .replace(/!\[[^\]\n]*\](\([^)\n]*\))?/g, "") // markdown images and stray ![…]
-    .replace(/^(\s*[-*+]\s+)\[[ xX]\]\s+/gm, "$1") // task list boxes
-    .replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_m, a: string, b?: string) => b ?? a)
+    .replace(/^(\s*[-*+]\s+)\[[ xX]\]\s+/gm, "$1"); // task list boxes
+  return mapWikiLinks(marks, (l) => l.label || l.target + l.section)
     .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
     .replace(/^\s*(?:[-*+]|\d+\.|#{1,6}|>)\s+/gm, "")
     .replace(/[*_`~]{1,3}/g, "")
