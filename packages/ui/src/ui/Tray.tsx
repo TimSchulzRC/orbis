@@ -5,14 +5,14 @@
 // On a phone it sits above the tab bar; the field opens from its "+" in a sheet. On Heute on a
 // desktop with room below the page the panel is pinned open above it, part of the page: the rest
 // of the height below Heute (App.tsx).
-import { Button as ShadcnButton } from "../components/ui/button";
 import { type CSSProperties, useRef } from "react";
 import { Check, ChevronDown, ChevronUp, Layers, Plus } from "lucide-react";
 import { useT } from "../i18n";
-import { cx } from "./bits";
+import { cn } from "../lib/utils";
 import { Capture } from "./Capture";
 import { type InboxEntry, dismissShelf, openShelf, useInboxItems, useShelf } from "./inbox";
 import { ShelfPanel } from "./Shelf";
+import { Button } from "./primitives";
 
 const FILL = 10;
 
@@ -23,10 +23,9 @@ export function Tray({ desktop, pinned, onCapture }: { desktop: boolean; pinned?
   const { open, at } = useShelf();
   const touch = useRef<number | null>(null);
   const tray = (
-    <div className={cx("relative flex shrink-0 items-center rounded-xl", !pinned && "group/tray", !desktop && "min-w-0 flex-1")}>
-      <ShadcnButton
+    <div className={cn("relative flex shrink-0 items-center rounded-xl", !pinned && "group/tray", !desktop && "min-w-0 flex-[1_0_0%]")}>
+      <Button
         variant="plain"
-        size="none"
         // pinned it does not close, so nothing to click
         onClick={() => !pinned && (open ? dismissShelf() : openShelf())}
         onTouchStart={(e) => (touch.current = e.touches[0]!.clientY)}
@@ -36,7 +35,7 @@ export function Tray({ desktop, pinned, onCapture }: { desktop: boolean; pinned?
         }}
         aria-expanded={pinned || open}
         aria-label={t("tray.open", { count })}
-        className={cx("relative flex min-w-0 items-center gap-2 rounded-xl py-1.5 pr-2 text-left", desktop ? "min-h-11 pl-[136px]" : "min-h-10 pl-[100px]", pinned ? "cursor-default" : cx("hover:bg-hover", open && "bg-hover"), !desktop && "flex-1")}
+        className={cn("relative flex min-w-0 items-center gap-2 rounded-xl py-1.5 pr-2 text-left", desktop ? "min-h-11 pl-[136px]" : "min-h-10 pl-[100px]", pinned ? "cursor-default" : cn("hover:bg-hover", open && "bg-hover"), !desktop && "flex-1")}
       >
         <Sheets entries={entries.slice(0, 3)} desktop={desktop} />
         <span className="flex min-w-0 flex-col gap-1.5">
@@ -46,15 +45,15 @@ export function Tray({ desktop, pinned, onCapture }: { desktop: boolean; pinned?
           <Fill count={count} />
         </span>
         {/* pinned it stays, hidden, so the field beside does not move between Heute and other pages */}
-        {open && !pinned ? <ChevronDown size={14} className="text-muted-foreground" /> : <ChevronUp size={14} className={cx("text-muted-foreground", pinned && "invisible")} />}
-      </ShadcnButton>
+        {open && !pinned ? <ChevronDown size={14} className="text-muted-foreground" /> : <ChevronUp size={14} className={cn("text-muted-foreground", pinned && "invisible")} />}
+      </Button>
     </div>
   );
   const review = count ? (
     <a
       href="#/review"
       aria-label={desktop ? undefined : t("tray.toReview")}
-      className={cx("flex h-10 shrink-0 items-center gap-2 rounded-xl border border-[color-mix(in_srgb,var(--t-inbox)_45%,transparent)] bg-[color-mix(in_srgb,var(--t-inbox)_12%,transparent)] text-sm font-semibold text-warn hover:bg-[color-mix(in_srgb,var(--t-inbox)_20%,transparent)]", desktop ? "px-3" : "w-10 justify-center")}
+      className={cn("flex h-10 shrink-0 items-center gap-2 rounded-xl border border-inbox/45 bg-inbox/12 text-sm font-semibold text-warn hover:bg-inbox/20", desktop ? "px-3" : "w-10 justify-center")}
     >
       <Layers size={16} />
       {desktop && t("tray.toReview")}
@@ -68,8 +67,8 @@ export function Tray({ desktop, pinned, onCapture }: { desktop: boolean; pinned?
     <>
       {/* the page behind the open panel: dimmed, a click closes */}
       {open && !pinned && <div className="fixed inset-0 z-30 bg-black/40" onClick={dismissShelf} aria-hidden />}
-      <div className={cx("relative z-40", pinned ? "flex min-h-[308px] flex-1 flex-col" : "shrink-0", desktop ? cx(pinned ? "px-8" : "px-6", "pb-4 pt-2") : "px-3 pb-2 pt-1")} role="region" aria-label={t("tray.title")}>
-        <div className={cx("mx-auto", desktop && "max-w-[1040px]", pinned && "flex min-h-0 w-full flex-1 flex-col")}>
+      <div className={cn("relative z-40", pinned ? "flex min-h-[308px] flex-1 flex-col" : "shrink-0", desktop ? cn(pinned ? "px-8" : "px-6", "pb-4 pt-2") : "px-3 pb-2 pt-1")} role="region" aria-label={t("tray.title")}>
+        <div className={cn("mx-auto", desktop && "max-w-[1040px]", pinned && "flex min-h-0 w-full flex-1 flex-col")}>
           {pinned ? (
             // above the sheets sticking out of the tray, which stay
             <div className="min-h-0 flex-1 pb-10">
@@ -77,7 +76,7 @@ export function Tray({ desktop, pinned, onCapture }: { desktop: boolean; pinned?
             </div>
           ) : open && (
             // on a phone an entry takes the whole screen, as a sheet
-            <div className={cx(desktop ? "absolute inset-x-6 bottom-full mx-auto max-w-[1040px] pb-10" : at ? "fixed inset-x-0 bottom-0 top-3 z-50 pt-safe" : "absolute inset-x-2 bottom-full pb-7")}>
+            <div className={cn(desktop ? "absolute inset-x-6 bottom-full mx-auto max-w-[1040px] pb-10" : at ? "fixed inset-x-0 bottom-0 top-3 z-50 pt-safe" : "absolute inset-x-2 bottom-full pb-7")}>
               <ShelfPanel desktop={desktop} />
             </div>
           )}
@@ -93,9 +92,9 @@ export function Tray({ desktop, pinned, onCapture }: { desktop: boolean; pinned?
             <div className="flex items-center gap-2 rounded-2xl bg-surface p-1.5 shadow-sm">
               {tray}
               {review}
-              <ShadcnButton variant="plain" size="none" onClick={onCapture} aria-label={t("capture.title")} className="tap flex size-10 shrink-0 items-center justify-center rounded-xl border border-line hover:bg-hover">
+              <Button variant="plain" onClick={onCapture} aria-label={t("capture.title")} className="tap flex size-10 shrink-0 items-center justify-center rounded-xl border border-line hover:bg-hover">
                 <Plus size={20} />
-              </ShadcnButton>
+              </Button>
             </div>
           )}
         </div>
@@ -118,7 +117,7 @@ const POSES: { left: [number, number]; rest: [string, string]; fan: [string, str
 function Sheets({ entries, desktop }: { entries: InboxEntry[]; desktop: boolean }) {
   const poses = POSES.slice(POSES.length - entries.length);
   return (
-    <span aria-hidden className={cx("absolute inset-y-0 left-0 z-10 block [--well:color-mix(in_srgb,var(--card)_93%,black)] dark:[--well:color-mix(in_srgb,var(--card)_65%,black)]", desktop ? "w-[120px]" : "w-[84px]")}>
+    <span aria-hidden className={cn("absolute inset-y-0 left-0 z-10 block [--well:color-mix(in_srgb,var(--card)_93%,black)] dark:[--well:color-mix(in_srgb,var(--card)_65%,black)]", desktop ? "w-[120px]" : "w-[84px]")}>
       <span className="absolute inset-0 rounded-[11px] border border-line bg-[var(--well)] shadow-[inset_0_3px_8px_rgb(0_0_0/0.12)] dark:shadow-[inset_0_3px_8px_rgb(0_0_0/0.7)]" aria-hidden />
       <span className="absolute -top-px left-0.5 h-[3px] w-[calc(100%-4px)] rounded-b-[3px] bg-[linear-gradient(90deg,transparent,color-mix(in_srgb,var(--t-inbox)_60%,transparent),transparent)]" aria-hidden />
       {/* the sheets end inside the well (long enough that lifted their lower edge stays hidden), above
@@ -132,17 +131,17 @@ function Sheets({ entries, desktop }: { entries: InboxEntry[]; desktop: boolean 
         return (
           <span
             key={e.key}
-            className={cx(
+            className={cn(
               "pointer-events-auto absolute rounded-[7px] border shadow-[0_-2px_10px_rgb(0_0_0/0.15)] transition-[rotate,translate] duration-300 ease-[cubic-bezier(.2,.8,.2,1)] [rotate:var(--r)] [translate:var(--t)] group-hover/tray:[rotate:var(--rf)] group-hover/tray:[translate:var(--tf)]",
               desktop ? "-bottom-7 h-[92px] w-[84px]" : "-bottom-6 h-[78px] w-[56px]",
               front ? "border-faint/50 bg-hover" : "border-line bg-surface-2",
             )}
             style={{ left: left[desktop ? 0 : 1], zIndex: n, ...vars({ r: rest[0], t: rest[1], rf: fan[0], tf: fan[1] }) }}
           >
-            <span className={cx("absolute left-2.5 h-[3px] rounded-full bg-faint/40", desktop ? "right-[22px] top-3" : "right-3 top-2")} />
-            <span className={cx("absolute left-2.5 h-[3px] rounded-full bg-faint/30", desktop ? "right-[22px] top-5" : "right-3 top-4")} />
-            <span className={cx("absolute left-2.5 h-[3px] rounded-full bg-faint/25", desktop ? "right-[22px] top-7" : "right-3 top-6")} />
-            {front && <span className="absolute right-2 top-2 size-2 rounded-full bg-[var(--t-inbox)] shadow-[0_0_10px_var(--t-inbox)]" />}
+            <span className={cn("absolute left-2.5 h-[3px] rounded-full bg-faint/40", desktop ? "right-[22px] top-3" : "right-3 top-2")} />
+            <span className={cn("absolute left-2.5 h-[3px] rounded-full bg-faint/30", desktop ? "right-[22px] top-5" : "right-3 top-4")} />
+            <span className={cn("absolute left-2.5 h-[3px] rounded-full bg-faint/25", desktop ? "right-[22px] top-7" : "right-3 top-6")} />
+            {front && <span className="absolute right-2 top-2 size-2 rounded-full bg-inbox shadow-[0_0_10px_var(--t-inbox)]" />}
           </span>
         );
       })}
@@ -161,7 +160,7 @@ function Fill({ count }: { count: number }) {
   return (
     <span className="flex gap-[3px]" aria-hidden>
       {Array.from({ length: FILL }, (_, n) => (
-        <span key={n} className={cx("h-1 w-2.5 rounded-full", n < count ? "bg-[var(--t-inbox)]" : "bg-line")} />
+        <span key={n} className={cn("h-1 w-2.5 rounded-full", n < count ? "bg-inbox" : "bg-line")} />
       ))}
     </span>
   );

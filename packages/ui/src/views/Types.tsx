@@ -6,7 +6,8 @@ import { useIndex, useRepo, useRoute, useSpaceId, itemHref, itemPath, spaceHref 
 import { repo } from "../repo";
 import { SpaceEyebrow } from "../ui/Spaces";
 import { useT, getLang } from "../i18n";
-import { Button, Dialog, TypeGlyph } from "../ui/bits";
+import { Button, Dialog } from "../ui/primitives";
+import { TypeGlyph } from "../ui/item-look";
 import { createType } from "../actions";
 
 /** All types. New types are data: name, then properties and capabilities in the editor. */
@@ -65,7 +66,7 @@ export function NewTypeDialog({ onClose }: { onClose: () => void }) {
   };
   return (
     <Dialog title={t("types.new")} onClose={onClose}>
-      <Input autoFocus value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && create()} placeholder={t("type.name")} className="w-full rounded-lg border border-line bg-bg px-3 py-2 text-sm outline-none" />
+      <Input autoFocus value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && create()} placeholder={t("type.name")} />
       <div className="mt-4 flex justify-end">
         <Button variant="primary" onClick={create} disabled={!name.trim()}>
           {t("types.create")}

@@ -1,7 +1,6 @@
 // One page for every information: path, title, type properties, text, sections from
 // "Teil von", and on the right the connections. Types change the properties and which
 // sections appear (via their capabilities), never the layout.
-import { Button as ShadcnButton } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { EditorView } from "@codemirror/view";
@@ -11,11 +10,14 @@ import { isInInbox, isOverview } from "@obtion/core/placement";
 import { wouldBeInInbox } from "@obtion/core/typeops";
 import { onlyBelow } from "@obtion/core/trash";
 import { primaryChild, hasUpdates, progressSpec, languageCode, translations, translationInit, translationPlan } from "@obtion/core/traits";
-import { useRepo, useIndex, itemHref, go, setParams, showTitle } from "../hooks";
+import { useRepo, useIndex, itemHref, openItem, leavePage, setParams, showTitle } from "../hooks";
 import { repo } from "../repo";
 import { useT, tr, getLang, titleOf } from "../i18n";
 import { Editor, insertFilesAtCursor } from "../ui/Editor";
-import { Button, Dialog, ItemIcon, MenuItem, Popover, ProgressBand, TypeChip, TypeGlyph, cx, IconButton } from "../ui/bits";
+import { Button, Dialog, MenuItem, Popover, IconButton } from "../ui/primitives";
+import { ItemIcon, TypeChip, TypeGlyph } from "../ui/item-look";
+import { ProgressBand } from "../ui/progress";
+import { cn } from "../lib/utils";
 import { ItemPicker } from "../ui/Picker";
 import { PropertyBlock } from "../ui/Properties";
 import { BelowCard, ChildList, Updates, mainGrouping } from "../ui/Sections";
@@ -201,7 +203,7 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
 
       {/* 2 · text */}
       <PageText item={item} doc={doc} long={typeArea} isNew={isNew} onView={setView} hasMore={typeArea || ix.childrenOf(item.id).length > 0} />
-      <Input ref={fileInput} type="file" multiple className="hidden" onChange={(e) => view && insertFilesAtCursor(view, [...(e.target.files ?? [])])} />
+      <Input variant="bare" ref={fileInput} type="file" multiple className="hidden" onChange={(e) => view && insertFilesAtCursor(view, [...(e.target.files ?? [])])} />
 
       {/* 3 · the type's area: main list, updates */}
       {mainType && <ChildList item={item} typeId={mainType} />}
@@ -213,9 +215,9 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
 
       {/* on a phone the main action floats above the bottom bar */}
       {mainAction && (
-        <ShadcnButton variant="plain" size="none" onClick={() => createAndOpen({ type: mainType, parents: [item.id] })} className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] right-4 z-20 flex h-12 items-center gap-1.5 rounded-full bg-ink pl-3.5 pr-[18px] text-[15px] font-semibold text-ink-text shadow-lg md:hidden">
+        <Button variant="plain" onClick={() => createAndOpen({ type: mainType, parents: [item.id] })} className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] right-4 z-20 flex h-12 items-center gap-1.5 rounded-full bg-ink pl-3.5 pr-[18px] text-[15px] font-semibold text-ink-text shadow-lg md:hidden">
           <Plus size={18} /> {ix.typeName(mainType)}
-        </ShadcnButton>
+        </Button>
       )}
       {placing && <PlacePicker item={item} onClose={() => setPlacing(false)} />}
       {refPicking && (
@@ -275,9 +277,9 @@ function PageText({ item, doc, long, isNew, onView, hasMore }: { item: Item; doc
       </div>
       {cut && (
         <div className="absolute inset-x-0 bottom-0 flex h-20 items-end bg-gradient-to-t from-[var(--bg)] to-transparent">
-          <ShadcnButton variant="plain" size="none" onClick={() => setExpanded(true)} className="tap-y text-[13px] font-medium text-muted-foreground hover:text-fg">
+          <Button variant="plain" onClick={() => setExpanded(true)} className="tap-y text-[13px] font-medium text-muted-foreground hover:text-fg">
             {t("page.showText")}
-          </ShadcnButton>
+          </Button>
         </div>
       )}
     </div>
@@ -300,15 +302,15 @@ function LangSwitch({ item }: { item: Item }) {
       {versions.map((v) => {
         const here = v.item.id === item.id;
         return (
-          <ShadcnButton variant="plain" size="none"
+          <Button variant="plain"
             key={v.item.id}
-            onClick={() => !here && go(itemHref(v.item.id).slice(1))}
+            onClick={() => !here && openItem(v.item.id)}
             aria-pressed={here}
             title={here ? v.lang : `${v.lang}: ${v.item.title}`}
-            className={cx("tap rounded-md px-2 py-0.5 font-medium tabular-nums", here ? "bg-surface text-fg shadow-sm" : "text-muted-foreground hover:text-fg")}
+            className={cn("tap rounded-md px-2 py-0.5 font-medium tabular-nums", here ? "bg-surface text-fg shadow-sm" : "text-muted-foreground hover:text-fg")}
           >
             {languageCode(v.lang)}
-          </ShadcnButton>
+          </Button>
         );
       })}
     </div>
@@ -332,11 +334,11 @@ function TypeSwitch({ item }: { item: Item }) {
           </span>
         ) : (
           // no type: a plain line, not a chip – "Übersicht" and "Notiz" are no types
-          <ShadcnButton variant="plain" size="none" {...p} className={cx("tap-y inline-flex items-center gap-1 rounded px-0.5 text-[13px] hover:underline", inbox ? "text-warn" : "text-muted-foreground")} title={t("item.giveType")}>
+          <Button variant="plain" {...p} className={cn("tap-y inline-flex items-center gap-1 rounded px-0.5 text-[13px] hover:underline", inbox ? "text-warn" : "text-muted-foreground")} title={t("item.giveType")}>
             {inbox ? <INBOX_ICON size={12} /> : overview ? <OVERVIEW_ICON size={12} /> : <NOTE_ICON size={12} />}
             {inbox ? t("kind.inbox") : overview ? t("kind.overviewCount", { count: ix.childrenOf(item.id).length }) : t("kind.note")}
             {deletedType && <span className="text-muted-foreground">· {t("type.deletedName", { name: deletedType })}</span>}
-          </ShadcnButton>
+          </Button>
         )
       }
     >
@@ -377,7 +379,7 @@ function TitleClash({ item }: { item: Item }) {
 
 function removeAndLeave(id: string, withChildren: boolean) {
   repo.remove(id, withChildren ? "trash" : "inbox");
-  history.length > 1 ? history.back() : go("/");
+  leavePage();
 }
 
 /** Children that only hang here: delete them too, or let them lose this place. */
@@ -406,7 +408,7 @@ function DeleteDialog({ item, onClose }: { item: Item; onClose: () => void }) {
         <Button variant="outline" onClick={() => finish(false)}>
           {t("delete.keep")}
         </Button>
-        <Button variant="primary" className="!bg-danger" onClick={() => finish(true)}>
+        <Button variant="danger" onClick={() => finish(true)}>
           {t("delete.all", { count: only.length + 1 })}
         </Button>
       </div>
@@ -427,12 +429,12 @@ function MoveDialog({ item, onClose }: { item: Item; onClose: () => void }) {
           .filter((s) => s.id !== active?.id)
           .map((s) => (
             <li key={s.id}>
-              <ShadcnButton variant="plain" size="none"
+              <Button variant="plain"
                 onClick={() => (onClose(), void moveTo(item.id, active!.id, s.id))}
                 className="tap-row flex w-full items-center gap-2 rounded-lg border border-line px-3 py-2 text-left text-sm hover:bg-hover"
               >
                 <span className="min-w-0 flex-1 truncate font-medium">{s.name}</span>
-              </ShadcnButton>
+              </Button>
             </li>
           ))}
       </ul>

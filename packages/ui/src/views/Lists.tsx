@@ -1,6 +1,5 @@
 // The lists of the app: a type's page (its entries with views as tabs, like a database in
 // Notion) and the files. A type keeps its views; the files have one. The inbox: ui/Shelf.tsx and views/Review.tsx.
-import { Button as ShadcnButton } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { useEffect, useRef, useState } from "react";
 import { ListFilter, SlidersHorizontal, Plus, Upload } from "lucide-react";
@@ -13,7 +12,8 @@ import { SpaceEyebrow } from "../ui/Spaces";
 import { repo } from "../repo";
 import { useT } from "../i18n";
 import { files } from "../files";
-import { Button, cx, Empty, IconButton } from "../ui/bits";
+import { Button, Empty, IconButton } from "../ui/primitives";
+import { cn } from "../lib/utils";
 import { Results, defaultColumns, useQuery } from "../ui/Results";
 import { viewGroups } from "../ui/Table";
 import { type TabEdit, ViewSettings, ViewTabs, tabName, useTabChoice, useViewFields } from "../ui/Views";
@@ -140,7 +140,7 @@ export function TypeList({ type }: { type: Item }) {
 export function DraftBar({ onDiscard, onSave }: { onDiscard: () => void; onSave: () => void }) {
   const { t } = useT();
   return (
-    <div className="sticky top-0 z-10 mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-[var(--focus)] bg-surface px-3 py-2 text-sm" role="status">
+    <div className="sticky top-0 z-10 mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-focus bg-surface px-3 py-2 text-sm" role="status">
       <span className="mr-auto text-muted-foreground">{t("view.draft")}</span>
       <Button variant="outline" onClick={onDiscard}>
         {t("view.discard")}
@@ -174,7 +174,7 @@ export function FilesPage() {
         <span className="flex-1 text-[15px] tabular-nums text-muted-foreground">{all.length}</span>
         <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm font-medium hover:bg-hover">
           <Upload size={14} /> <span className="hidden sm:inline">{t("files.add")}</span>
-          <Input type="file" multiple className="hidden" onChange={async (e) => {
+          <Input variant="bare" type="file" multiple className="hidden" onChange={async (e) => {
             for (const f of [...(e.target.files ?? [])]) await files.add(f, f.name);
           }} />
         </label>
@@ -182,14 +182,14 @@ export function FilesPage() {
       {kinds.length > 1 && (
         <div className="-mx-4 mb-3 flex gap-1 overflow-x-auto px-4 text-sm [scrollbar-width:none] md:mx-0 md:px-0" role="group" aria-label={t("files.filter")}>
           {[{ k: null, n: all.length }, ...kinds].map(({ k, n }) => (
-            <ShadcnButton variant="plain" size="none"
+            <Button variant="plain"
               key={k ?? "all"}
               onClick={() => setKind(k)}
               aria-pressed={kind === k}
-              className={cx("shrink-0 whitespace-nowrap rounded-full border px-3 py-1", kind === k ? "border-[var(--focus)] bg-surface text-fg" : "border-line text-muted-foreground hover:bg-hover hover:text-fg")}
+              className={cn("shrink-0 whitespace-nowrap rounded-full border px-3 py-1", kind === k ? "border-focus bg-surface text-fg" : "border-line text-muted-foreground hover:bg-hover hover:text-fg")}
             >
               {k ? t("filetype.many." + k) : t("files.all")} <span className="tabular-nums text-muted-foreground">{n}</span>
-            </ShadcnButton>
+            </Button>
           ))}
         </div>
       )}

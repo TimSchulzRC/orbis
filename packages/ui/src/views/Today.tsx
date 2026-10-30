@@ -11,7 +11,9 @@ import { activeProjects, dueBy, recentlyChanged } from "@obtion/core/today";
 import { useDesktop, useIndex, useItemHref } from "../hooks";
 import { useAccounts } from "../accounts";
 import { useT, titleOf } from "../i18n";
-import { Card, DueLabel, ItemIcon, RelTime, SectionTitle, cx, itemLook, pal } from "../ui/bits";
+import { Card, SectionTitle } from "../ui/primitives";
+import { DueLabel, ItemIcon, RelTime, itemLook, kindLabel, pal } from "../ui/item-look";
+import { cn } from "../lib/utils";
 import { RowStatus } from "../ui/Row";
 import { SpaceScope, useReplicas } from "../ui/Spaces";
 import { useInboxItems, useShelfPinned } from "../ui/inbox";
@@ -71,7 +73,7 @@ export function Today() {
       {/* the panel not pinned below (too little room): the newest entries, a way into it */}
       {desktop && !pinned && inbox > 0 && <ShelfCards entries={entries} />}
 
-      <div className={cx("mt-9 grid items-start gap-x-8 gap-y-9", due.length > 0 && projects.length > 0 && "lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]")}>
+      <div className={cn("mt-9 grid items-start gap-x-8 gap-y-9", due.length > 0 && projects.length > 0 && "lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]")}>
         {due.length > 0 && (
           <section>
             <SectionTitle count={due.length}>{t("today.dueTitle")}</SectionTitle>
@@ -153,7 +155,7 @@ function ProjectRow({ item, touched, space }: { item: Item; touched: number; spa
   const prog = ix.progressOf(item);
   const color = pal(ix.schemaOf(item)?.color);
   return (
-    <a href={hrefOf(item.id)} className={cx(row, "hover:bg-hover")}>
+    <a href={hrefOf(item.id)} className={cn(row, "hover:bg-hover")}>
       {prog && prog.total > 0 ? <Ring share={prog.done / prog.total} color={color} /> : <span className="flex size-8 shrink-0 items-center justify-center"><ItemIcon item={item} /></span>}
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[15px] font-medium">{titleOf(item, t)}</span>
@@ -183,8 +185,7 @@ function Ring({ share, color }: { share: number; color: string }) {
 function useWhat(item: Item) {
   const { t } = useT();
   const ix = useIndex();
-  const look = itemLook(item, ix);
-  const kind = ["file", "note", "overview", "inbox"].includes(look.label) ? t("kind." + look.label) : look.label;
+  const kind = kindLabel(itemLook(item, ix), t);
   const home = ix.get(ix.home(item.id));
   return [kind, home?.title].filter(Boolean).join(" · ");
 }
@@ -209,7 +210,7 @@ function RecentRow({ item }: { item: Item }) {
   const { t } = useT();
   const hrefOf = useItemHref();
   return (
-    <a href={hrefOf(item.id)} className={cx(row, "hover:bg-hover")}>
+    <a href={hrefOf(item.id)} className={cn(row, "hover:bg-hover")}>
       <ItemIcon item={item} />
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[15px]">{titleOf(item, t)}</span>

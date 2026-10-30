@@ -68,6 +68,11 @@ export function fmtNumber(lang: Lang, n: number) {
   return n.toLocaleString(locale(lang), { maximumFractionDigits: 6 });
 }
 
+/** A share (0–1) in whole percent: "42 %", "42%". */
+export function fmtPercent(lang: Lang, share: number) {
+  return new Intl.NumberFormat(locale(lang), { style: "percent", maximumFractionDigits: 0 }).format(share);
+}
+
 export function fmtRelative(lang: Lang, ts: number, now = Date.now()) {
   const rtf = new Intl.RelativeTimeFormat(locale(lang), { numeric: "auto" });
   const s = (ts - now) / 1000;

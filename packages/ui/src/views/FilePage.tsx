@@ -6,11 +6,12 @@ import { useEffect, useState } from "react";
 import { ArrowRightLeft, Download, Trash2, RotateCcw, MoreHorizontal, Replace } from "lucide-react";
 import { type Item, setFileMeta } from "@obtion/core/model";
 import { fmtBytes, fmtDate } from "@obtion/core/i18n";
-import { useIndex, go } from "../hooks";
+import { useIndex, leavePage } from "../hooks";
 import { repo } from "../repo";
 import { useT } from "../i18n";
 import { files, useBlobUrl } from "../files";
-import { Button, ItemIcon, MenuItem, Popover, Tag, IconButton } from "../ui/bits";
+import { Button, MenuItem, Popover, IconButton } from "../ui/primitives";
+import { ItemIcon, Tag } from "../ui/item-look";
 import { Bezuege, Crumbs } from "../ui/PageParts";
 import { TagInput } from "../ui/TagInput";
 import { ItemPicker } from "../ui/Picker";
@@ -68,10 +69,10 @@ export function FilePage({ item }: { item: Item }) {
           </MenuItem>
           <label className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm hover:bg-hover">
             <Replace size={14} className="text-muted-foreground" /> {t("file.replace")}
-            <Input type="file" className="hidden" onChange={(e) => (close(), e.target.files?.[0] && replace(e.target.files[0]))} />
+            <Input variant="bare" type="file" className="hidden" onChange={(e) => (close(), e.target.files?.[0] && replace(e.target.files[0]))} />
           </label>
           {!item.deleted && (
-            <MenuItem danger icon={<Trash2 size={14} />} onClick={() => (close(), repo.remove(item.id), history.length > 1 ? history.back() : go("/"))}>
+            <MenuItem danger icon={<Trash2 size={14} />} onClick={() => (close(), repo.remove(item.id), leavePage())}>
               {t("item.delete")}
             </MenuItem>
           )}
@@ -129,6 +130,7 @@ export function FilePage({ item }: { item: Item }) {
         {!isImg && f.filetype !== "pdf" && f.filetype !== "audio" && f.filetype !== "video" && <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">{f.name}</div>}
       </div>
       <Textarea
+      variant="inline"
         defaultValue={item.body}
         key={item.id}
         onBlur={(e) => e.target.value !== item.body && repo.setBody(item.id, e.target.value)}

@@ -8,7 +8,7 @@ import { useRoute, itemPath, spaceHref } from "../hooks";
 import { useAccounts } from "../accounts";
 import { SpaceScope, useReplicas } from "../ui/Spaces";
 import { useT, tr, titleOf } from "../i18n";
-import { InTray, ItemIcon } from "../ui/bits";
+import { InTray, ItemIcon } from "../ui/item-look";
 import { Results } from "../ui/Results";
 import { shortPath } from "../ui/Row";
 
@@ -62,9 +62,10 @@ export function SearchView() {
   const several = shown.length > 1;
   return (
     <div className="page-read">
-      <div className="flex items-center gap-2 rounded-xl border border-line bg-surface px-3 py-2 focus-within:border-[var(--focus)]">
+      <div className="flex items-center gap-2 rounded-xl border border-line bg-surface px-3 py-2 focus-within:border-focus">
         <SearchIcon size={16} className="text-muted-foreground" />
         <Input
+          variant="bare"
           autoFocus
           value={q}
           onChange={(e) => {

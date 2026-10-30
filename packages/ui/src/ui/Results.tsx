@@ -1,6 +1,5 @@
 // Showing query results: list, table, board, tree, gallery and triage ("sortieren").
 // Used by collections, query blocks in texts and the sections of a page.
-import { Button as ShadcnButton } from "../components/ui/button";
 import { useState } from "react";
 import { AlertTriangle, ChevronDown, ChevronRight, EyeOff } from "lucide-react";
 import { type Item, type StatusGroup, type ViewKind, todayISO } from "@obtion/core/model";
@@ -9,15 +8,18 @@ import { fmtDate, fmtNumber } from "@obtion/core/i18n";
 import { firstOfGroup, statusOf, statusProp } from "@obtion/core/traits";
 import { plainText } from "@obtion/core/search";
 import { repo } from "../repo";
-import { useIndex, useRepo, itemHref, go } from "../hooks";
+import { useIndex, useRepo, itemHref, openItem } from "../hooks";
 import { useT, titleOf } from "../i18n";
 import { files, useBlobUrl } from "../files";
-import { ItemIcon, StatusPill, cx, Tag, ProgressCount } from "./bits";
+import { ItemIcon, StatusPill, Tag } from "./item-look";
+import { cn } from "../lib/utils";
+import { ProgressCount } from "./progress";
 import { ItemRow, pathLabel, setStatus, treeOrder, Group } from "./Row";
 import { Triage } from "./Triage";
 import { CalendarView, TimelineView } from "./TimeViews";
 import { ProjectTable } from "./ProjectTable";
 import { type Look, AreaChip, GroupedTable, GroupChip, HiddenGroups, PercentBar, hiddenPatch, splitHidden } from "./Table";
+import { Button } from "./primitives";
 
 export function useQuery(def: QueryDef, thisId?: string) {
   const ix = useIndex();
@@ -89,9 +91,9 @@ export function Results({ def, thisId, display, empty, keyPrefix = "", look }: {
       )}
       {def.limit && total > res.items.length && (isInboxQuery(def) ? <InboxNudge total={total} /> : <p className="px-2 pt-1 text-xs text-muted-foreground">{t("query.more", { count: total - res.items.length })}</p>)}
       {res.items.length > items.length && (
-        <ShadcnButton variant="plain" size="none" onClick={() => setShown(shown + 200)} className="mt-2 w-full py-2 text-sm text-muted-foreground hover:text-fg">
+        <Button variant="plain" onClick={() => setShown(shown + 200)} className="mt-2 w-full py-2 text-sm text-muted-foreground hover:text-fg">
           {t("query.more", { count: res.items.length - items.length })}
-        </ShadcnButton>
+        </Button>
       )}
     </div>
   );
@@ -243,7 +245,7 @@ function BoardView({ items, def, ctx, look }: { items: Item[]; def: QueryDef; ct
   const byLabel = by === "status" || by === "statusGroup" || by === "type" ? t("group." + by) : by;
   const subLabel = tab?.subgroup ? (["status", "statusGroup", "type", "path"].includes(tab.subgroup) ? t("group." + tab.subgroup) : (FIELDS as readonly string[]).includes(tab.subgroup) ? t("field." + tab.subgroup) : tab.subgroup) : "";
   return (
-    <div ref={scroller} className={cx("-mx-2 overflow-x-auto pb-2", more && "[mask-image:linear-gradient(to_right,black_88%,transparent)]")}>
+    <div ref={scroller} className={cn("-mx-2 overflow-x-auto pb-2", more && "[mask-image:linear-gradient(to_right,black_88%,transparent)]")}>
       {lanes.map((lane) => {
         const inLane = new Set(lane.items.map((i) => i.id));
         const isFolded = folded.has(lane.key);
@@ -251,9 +253,9 @@ function BoardView({ items, def, ctx, look }: { items: Item[]; def: QueryDef; ct
           <section key={lane.key || "_"} className={tab?.subgroup ? "mb-4" : undefined}>
             {tab?.subgroup && (
               <div className="sticky left-0 flex w-fit items-center gap-2 px-2 py-1.5">
-                <ShadcnButton variant="plain" size="none" onClick={() => setFolded((f) => new Set(isFolded ? [...f].filter((k) => k !== lane.key) : [...f, lane.key]))} aria-expanded={!isFolded} aria-label={t(isFolded ? "table.unfold" : "table.fold")} className="tap -ml-1 rounded p-0.5 text-muted-foreground hover:bg-hover hover:text-fg">
+                <Button variant="plain" onClick={() => setFolded((f) => new Set(isFolded ? [...f].filter((k) => k !== lane.key) : [...f, lane.key]))} aria-expanded={!isFolded} aria-label={t(isFolded ? "table.unfold" : "table.fold")} className="tap -ml-1 rounded p-0.5 text-muted-foreground hover:bg-hover hover:text-fg">
                   {isFolded ? <ChevronRight size={15} /> : <ChevronDown size={15} />}
-                </ShadcnButton>
+                </Button>
                 <GroupChip g={lane} by={tab.subgroup} byLabel={subLabel} />
                 <span className="text-xs tabular-nums text-muted-foreground">{lane.items.length}</span>
               </div>
@@ -272,15 +274,15 @@ function BoardView({ items, def, ctx, look }: { items: Item[]; def: QueryDef; ct
                         setOver(null);
                         drop(e.dataTransfer.getData("obtion/item"), col);
                       }}
-                      className={cx("flex w-64 shrink-0 flex-col gap-1.5 rounded-xl bg-surface-2/60 p-2", !cards.length && !tab?.subgroup && "w-44", over === k && "ring-2 ring-[var(--focus)]")}
+                      className={cn("flex w-64 shrink-0 flex-col gap-1.5 rounded-xl bg-surface-2/60 p-2", !cards.length && !tab?.subgroup && "w-44", over === k && "ring-2 ring-focus")}
                     >
                       <p className="group/head flex items-center gap-2 px-1">
                         <GroupChip g={col} by={by} byLabel={byLabel} />
                         <span className="text-xs tabular-nums text-muted-foreground">{cards.length}</span>
                         {look?.onLook && (
-                          <ShadcnButton variant="plain" size="none" onClick={() => look.onLook!(hiddenPatch(tab, col, true))} className="tap ml-auto rounded p-0.5 text-muted-foreground opacity-0 hover:bg-hover hover:text-fg focus-visible:opacity-100 group-hover/head:opacity-100 pointer-coarse:opacity-100" aria-label={t("view.hideColumn")} title={t("view.hideColumn")}>
+                          <Button variant="plain" onClick={() => look.onLook!(hiddenPatch(tab, col, true))} className="tap ml-auto rounded p-0.5 text-muted-foreground opacity-0 hover:bg-hover hover:text-fg focus-visible:opacity-100 group-hover/head:opacity-100 pointer-coarse:opacity-100" aria-label={t("view.hideColumn")} title={t("view.hideColumn")}>
                             <EyeOff size={13} />
-                          </ShadcnButton>
+                          </Button>
                         )}
                       </p>
                       {/* an empty column says where to drag – in rows (by project …) the empty cells stay quiet */}
@@ -315,7 +317,7 @@ function BoardCard({ item: i, cols, ctx }: { item: Item; cols: string[]; ctx: Ev
       data-id={i.id}
       draggable
       onDragStart={(e) => e.dataTransfer.setData("obtion/item", i.id)}
-      onClick={(e) => !(e.target as HTMLElement).closest("a,button,select,input") && go(itemHref(i.id).slice(1))}
+      onClick={(e) => !(e.target as HTMLElement).closest("a,button,select,input") && openItem(i.id)}
       className="flex cursor-pointer flex-col gap-1.5 rounded-lg border border-line bg-surface p-2.5 text-sm shadow-sm hover:shadow"
     >
       <a href={itemHref(i.id)} draggable={false} className="flex items-start gap-2">

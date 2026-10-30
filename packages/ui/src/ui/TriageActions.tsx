@@ -1,7 +1,6 @@
 // What can be done with entries while sorting – place, give a type, keep, later, delete – each with
 // one undo, and the pickers they need. The sort list (Triage.tsx) and the review (views/Review.tsx)
 // share them.
-import { Button as ShadcnButton } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { useRef, useState } from "react";
 import { Check, Plus } from "lucide-react";
@@ -15,7 +14,9 @@ import { replica } from "../accounts";
 import { SpaceScope } from "./Spaces";
 import { useT, titleOf } from "../i18n";
 import { createType, rememberPlace } from "../actions";
-import { Dialog, Kbd, TypeGlyph, cx } from "./bits";
+import { Button, Dialog, Kbd } from "./primitives";
+import { TypeGlyph } from "./item-look";
+import { cn } from "../lib/utils";
 import { ItemPicker } from "./Picker";
 import { placeSuggestions } from "./suggest";
 import { chooseAction, notify } from "./feedback";
@@ -188,25 +189,25 @@ function TypePicker({ current, onPick, onClose }: { current: string | null; onPi
           else if (!q && /^[1-9]$/.test(e.key) && rows[Number(e.key) - 1]?.id) (e.preventDefault(), pick(rows[Number(e.key) - 1]));
         }}
         placeholder={t("triage.typeFilter")}
-        className="mb-2 w-full rounded-lg border border-line bg-bg px-3 py-2 text-sm outline-none focus:border-[var(--focus)]"
+        className="mb-2 focus:border-focus"
       />
       <div role="listbox" className="flex flex-col">
         {rows.map((r, n) => {
           const x = r.id ? ix.types.get(r.id) : undefined;
           return (
-            <ShadcnButton variant="plain" size="none"
+            <Button variant="plain"
               key={r.id ?? "new"}
               role="option"
               aria-selected={n === sel}
               onMouseEnter={() => setSel(n)}
               onClick={() => pick(r)}
-              className={cx("flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm", n === sel && "bg-selected", !r.id && "mt-1 border-t border-line pt-2")}
+              className={cn("flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm", n === sel && "bg-selected", !r.id && "mt-1 border-t border-line pt-2")}
             >
               {x ? <TypeGlyph schema={x.schema} size={15} /> : <Plus size={15} className="text-muted-foreground" />}
               <span className="min-w-0 flex-1 truncate">{x ? x.schema.name : r.create ? t("triage.newTypeNamed", { name: r.create }) : t("triage.newType")}</span>
               {x && r.id === current && <Check size={14} className="text-ok" />}
               {x && n < 9 && !q && <Kbd>{n + 1}</Kbd>}
-            </ShadcnButton>
+            </Button>
           );
         })}
       </div>

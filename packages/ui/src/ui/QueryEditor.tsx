@@ -2,7 +2,6 @@
 // negate, "oder …", remove; "+ Bedingung" adds one), and the same query as text for those who
 // like typing (folded away by default).
 // Typing understands every language; it is shown in the UI language. Stored is JSON.
-import { Button as ShadcnButton } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { useEffect, useState } from "react";
 import { X, Plus, ChevronLeft, HelpCircle } from "lucide-react";
@@ -11,7 +10,9 @@ import { useIndex } from "../hooks";
 import { useT } from "../i18n";
 import type { Lang, T } from "@obtion/core/i18n";
 import type { Index } from "@obtion/core/graph";
-import { MenuItem, Popover, TypeGlyph, cx } from "./bits";
+import { Button, MenuItem, Popover } from "./primitives";
+import { TypeGlyph } from "./item-look";
+import { cn } from "../lib/utils";
 import { ItemPicker } from "./Picker";
 
 type Step = "root" | "type" | "status" | "due" | "tag";
@@ -33,9 +34,9 @@ function CondPicker({ pick, onUnder, context }: { pick: (c: Cond) => void; onUnd
   const [tag, setTag] = useState("");
   const types = ix.typesByName();
   const back = (
-    <ShadcnButton variant="plain" size="none" onClick={() => setStep("root")} className="mb-1 flex items-center gap-1 px-2 text-xs text-muted-foreground hover:text-fg">
+    <Button variant="plain" onClick={() => setStep("root")} className="mb-1 flex items-center gap-1 px-2 text-xs text-muted-foreground hover:text-fg">
       <ChevronLeft size={12} /> {t("query.back")}
-    </ShadcnButton>
+    </Button>
   );
   if (step === "type")
     return (
@@ -73,12 +74,13 @@ function CondPicker({ pick, onUnder, context }: { pick: (c: Cond) => void; onUnd
       <div className="p-1">
         {back}
         <Input
+          variant="sm"
           autoFocus
           value={tag}
           onChange={(e) => setTag(e.target.value.replace(/^#/, ""))}
           onKeyDown={(e) => e.key === "Enter" && tag.trim() && (pick({ tag: tag.trim().toLowerCase() }), setTag(""))}
           placeholder={t("query.tagName")}
-          className="w-48 rounded-md border border-line bg-bg px-2 py-1 text-sm outline-none"
+          className="w-48"
         />
       </div>
     );
@@ -107,9 +109,9 @@ function Chip({ cond, ctx, off, onToggle, onNegate, onOr, onRemove, onUnder, con
     <Popover
       onOpenChange={(o) => o && setMode("menu")}
       trigger={(p) => (
-        <ShadcnButton variant="plain" size="none" {...p} className={cx("inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-line bg-bg px-1.5 py-0.5 hover:border-[var(--focus)]", off && "line-through opacity-50")} title={off ? t("query.offHint") : undefined}>
+        <Button variant="plain" {...p} className={cn("inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-line bg-bg px-1.5 py-0.5 hover:border-focus", off && "line-through opacity-50")} title={off ? t("query.offHint") : undefined}>
           {condLabel(cond, ctx)}
-        </ShadcnButton>
+        </Button>
       )}
     >
       {(close) =>
@@ -133,9 +135,9 @@ function Chip({ cond, ctx, off, onToggle, onNegate, onOr, onRemove, onUnder, con
   return (
     <span className="inline-flex items-center">
       {chip}
-      <ShadcnButton variant="plain" size="none" onClick={onRemove} className="tap -ml-0.5 rounded p-0.5 text-muted-foreground hover:bg-hover hover:text-fg" aria-label={t("query.removeCondNamed", { cond: condLabel(cond, ctx) })}>
+      <Button variant="plain" onClick={onRemove} className="tap -ml-0.5 rounded p-0.5 text-muted-foreground hover:bg-hover hover:text-fg" aria-label={t("query.removeCondNamed", { cond: condLabel(cond, ctx) })}>
         <X size={12} />
-      </ShadcnButton>
+      </Button>
     </span>
   );
 }
@@ -251,22 +253,23 @@ export function QueryEditor({ def, onChange, autoFocus, context, bare }: { def: 
         ))}
         <Popover
           trigger={(p) => (
-            <ShadcnButton variant="plain" size="none" {...p} autoFocus={autoFocus && !parts.length} className="inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-muted-foreground hover:bg-hover hover:text-fg">
+            <Button variant="plain" {...p} autoFocus={autoFocus && !parts.length} className="inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-muted-foreground hover:bg-hover hover:text-fg">
               <Plus size={12} /> {bare ? t("query.addFilter") : t("query.addCond")}
-            </ShadcnButton>
+            </Button>
           )}
         >
           {(close) => <CondPicker context={context} pick={(c) => (add(c), close())} onUnder={() => (close(), under(add))} />}
         </Popover>
         {!bare && (
-          <ShadcnButton variant="plain" size="none" onClick={() => setAsText(!asText)} className="ml-auto text-muted-foreground hover:text-fg">
+          <Button variant="plain" onClick={() => setAsText(!asText)} className="ml-auto text-muted-foreground hover:text-fg">
             {asText ? t("query.hideText") : t("query.asText")}
-          </ShadcnButton>
+          </Button>
         )}
       </div>
       {asText && (
         <div className="mt-2 flex items-center gap-1.5">
           <Input
+            variant="bare"
             value={text}
             autoFocus
             onFocus={() => setFocused(true)}
@@ -279,7 +282,7 @@ export function QueryEditor({ def, onChange, autoFocus, context, bare }: { def: 
             spellCheck={false}
             placeholder={t("query.placeholder")}
             aria-label={t("query.label")}
-            className={cx("min-w-0 flex-1 bg-transparent font-mono text-sm outline-none placeholder:text-muted-foreground", errors.length > 0 && "text-warn")}
+            className={cn("min-w-0 flex-1 bg-transparent font-mono text-sm outline-none placeholder:text-muted-foreground", errors.length > 0 && "text-warn")}
           />
           <span title={t("query.help")} className="cursor-help text-muted-foreground" aria-label={t("query.help")}>
             <HelpCircle size={14} />

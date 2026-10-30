@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState, useSyncExternalStore } from "react";
+import { type KeyboardEvent, useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { repo } from "./repo";
 import { files } from "./files";
 import { activeSpace } from "./accounts";
@@ -29,15 +29,20 @@ interface Route {
   space?: string;
 }
 
+/** "#/w/<workspace>/i/<id>?x": the workspace, if the address names one, and the rest ("/i/<id>?x"). */
+export function parseHash(hash = location.hash): { space?: string; rest: string } {
+  const raw = hash.replace(/^#/, "");
+  const named = /^\/w\/([^/?]+)/.exec(raw);
+  return { space: named?.[1], rest: (named ? raw.slice(named[0].length) : raw) || "/" };
+}
+
 /**
- * "#/w/<workspace>/i/<id>": the workspace is taken off (accounts.ts opens it); the rest is the route.
+ * The workspace is taken off (accounts.ts opens it); the rest is the route.
  * An item's title after its id ("/i/<id>/<title>") is only for people reading the address.
  */
 function parse(): Route {
-  const hash = location.hash.replace(/^#/, "");
-  const space = /^\/w\/([^/?]+)/.exec(hash)?.[1];
-  const raw = hash.replace(/^\/w\/[^/?]+/, "") || "/";
-  const [whole, qs] = raw.split("?");
+  const { space, rest } = parseHash();
+  const [whole, qs] = rest.split("?");
   const path = whole!.startsWith("/i/") ? whole!.split("/").slice(0, 3).join("/") : whole!;
   return { path, parts: path.split("/").filter(Boolean).map(safeDecode), query: new URLSearchParams(qs ?? ""), space };
 }
@@ -66,8 +71,11 @@ export function useRoute(): Route {
   );
 }
 
-export function go(path: string) {
-  location.hash = path;
+/** Opens a path ("/i/<id>"), in workspace `space` if given; `replace` leaves the current page out of the history. */
+export function navigate(path: string, opts: { space?: string; replace?: boolean } = {}) {
+  const href = spaceHref(opts.space, path);
+  if (opts.replace) location.replace(href);
+  else location.hash = href;
 }
 
 /** Another address for the page shown, without a step in the history (a filter, a view, a title). */
@@ -114,6 +122,12 @@ export function showTitle(title: string) {
   if (next !== location.hash.replace(/^#/, "")) replaceHash(next);
 }
 
+/** Opens an entry's page; `query` e.g. "?new=1". */
+export const openItem = (id: string, opts: { space?: string; replace?: boolean; query?: string } = {}) => navigate(itemPath(id) + (opts.query ?? ""), opts);
+
+/** Away from a page that is gone (deleted, left): back where one came from, else to the start. */
+export const leavePage = () => (history.length > 1 ? history.back() : navigate("/"));
+
 /** A path in another workspace than the open one ("/i/<id>" → "#/w/<space>/i/<id>"). */
 export const spaceHref = (space: string | undefined, path: string) => (space ? `#/w/${space}${path}` : `#${path}`);
 
@@ -136,6 +150,41 @@ export function useMediaQuery(q: string) {
 
 /** The one breakpoint between phone and desktop layout: the sidebar shows from here (Tailwind `lg`). */
 export const useDesktop = () => useMediaQuery("(min-width: 1024px)");
+/** Below Tailwind `md`: one column, phone-sized controls. */
+export const PHONE = "(max-width: 767px)";
+export const usePhone = () => useMediaQuery(PHONE);
+/** Below Tailwind `sm`: too narrow for side-by-side columns (tables, timelines). */
+export const useNarrow = () => useMediaQuery("(max-width: 640px)");
+
+/** The page's title in the browser tab, in the current language. */
+export function useDocumentTitle(title: string | undefined) {
+  useEffect(() => void (title && (document.title = title)), [title]);
+}
+
+/** Focus is in a field, an editor or a dialog: single-key shortcuts of a page stay off. */
+export const isTypingTarget = (el: Element) => !!el.closest("input, textarea, select, [contenteditable=true], .cm-editor, [role=dialog]");
+
+/**
+ * A field's own copy of `value` while it has the focus (what is typed is not overwritten by a sync
+ * meanwhile); without the focus it follows `value`. Enter leaves the field, Escape reverts and leaves.
+ */
+export function useFocusDraft<V>(value: V) {
+  const [draft, setDraft] = useState(value);
+  const focused = useRef(false);
+  useEffect(() => {
+    if (!focused.current) setDraft(value);
+  }, [value]);
+  return {
+    draft,
+    setDraft,
+    focused,
+    onKeyDown: (e: KeyboardEvent<HTMLElement>) => {
+      const el = e.currentTarget;
+      if (e.key === "Enter") (e.preventDefault(), el.blur());
+      if (e.key === "Escape") (setDraft(value), setTimeout(() => el.blur()));
+    },
+  };
+}
 
 export function useLocalStorage<T>(key: string, init: T): [T, (v: T) => void] {
   const [v, setV] = useState<T>(() => {

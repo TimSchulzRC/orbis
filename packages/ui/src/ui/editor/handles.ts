@@ -9,7 +9,7 @@ import { tr } from "../../i18n";
 import { KINDS, blockAt, deleteBlock, duplicateBlock, kindName, kindOf, moveBlock, moveBy, setKind } from "./blocks";
 import { iconButton } from "./icons";
 import { showMenu } from "./menu";
-import { MOD } from "../bits";
+import { MOD } from "../../lib/platform";
 
 /** ⌥ on Apple devices, Alt elsewhere (the keys that move a line). */
 const ALT = MOD === "⌘" ? "⌥" : "Alt ";

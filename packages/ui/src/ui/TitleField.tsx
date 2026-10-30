@@ -30,6 +30,7 @@ export function TitleField({ item, autoFocus, placeholder }: { item: Item; autoF
   useEffect(() => () => void (focused.current && commit()), []);
   return (
     <Textarea
+      variant="inline"
       ref={ref}
       rows={1}
       value={v}

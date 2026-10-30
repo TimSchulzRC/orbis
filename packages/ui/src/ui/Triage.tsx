@@ -8,7 +8,6 @@
 // Phone: the list; tapping opens the entry. (The inbox has its own ways: the tray's panel to look
 // in, the review to sort – views/Review.tsx.)
 import { Checkbox } from "../components/ui/checkbox";
-import { Button as ShadcnButton } from "../components/ui/button";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, FolderInput, Shapes, Sparkles, Trash2, Check, X } from "lucide-react";
 import { type Item, setMeta } from "@obtion/core/model";
@@ -16,7 +15,9 @@ import type { Index } from "@obtion/core/graph";
 import { useIndex, useRepo, useSpaceId, useItemHref, itemPath, spaceHref, useDesktop } from "../hooks";
 import { useT, titleOf } from "../i18n";
 import { recentPlaces } from "../actions";
-import { Button, ItemIcon, Kbd, RelTime, Tag, TypeGlyph, cx } from "./bits";
+import { Button, Kbd } from "./primitives";
+import { ItemIcon, RelTime, Tag, TypeGlyph } from "./item-look";
+import { cn } from "../lib/utils";
 import { TagInput } from "./TagInput";
 import { placeSuggestions } from "./suggest";
 import { Markdown } from "./Markdown";
@@ -163,10 +164,10 @@ export function Triage({ items }: { items: Item[] }) {
               role="option"
               aria-selected={on}
               onClick={() => (phone ? (location.hash = spaceHref(here, itemPath(i.id))) : setSel(n))}
-              className={cx(
+              className={cn(
                 "relative grid cursor-default items-center gap-x-2 px-3 hover:bg-hover",
                 phone ? "min-h-12 grid-cols-[44px_minmax(0,1fr)_auto] py-1.5" : "h-10 grid-cols-[24px_minmax(0,1fr)_auto_minmax(64px,auto)]",
-                on && "bg-selected before:absolute before:inset-y-1.5 before:left-0 before:w-[3px] before:rounded-r before:bg-[var(--focus)]",
+                on && "bg-selected before:absolute before:inset-y-1.5 before:left-0 before:w-[3px] before:rounded-r before:bg-focus",
               )}
             >
               <MarkBox on={marked.has(keyOf(i))} onToggle={() => toggle(keyOf(i))} title={titleOf(i, t)} />
@@ -201,9 +202,9 @@ export function Triage({ items }: { items: Item[] }) {
         );
       })}
       {items.length > limit && (
-        <ShadcnButton variant="plain" size="none" onClick={() => setLimit(limit + 60)} className="w-full py-3 text-sm text-muted-foreground hover:text-fg">
+        <Button variant="plain" onClick={() => setLimit(limit + 60)} className="w-full py-3 text-sm text-muted-foreground hover:text-fg">
           {t("query.more", { count: items.length - limit })}
-        </ShadcnButton>
+        </Button>
       )}
     </div>
   );
@@ -351,9 +352,9 @@ function Detail({ item, onPlaced }: { item: Item; onPlaced: (p: string) => void 
             <Button variant="outline" onClick={applySuggestion} className="h-7 shrink-0 px-2 text-[13px]">
               <Check size={13} /> {t("triage.accept")}
             </Button>
-            <ShadcnButton variant="plain" size="none" onClick={() => repo.change(item.id, (doc) => setMeta(doc, { suggestion: null }))} className="tap shrink-0 rounded p-1 text-faint hover:bg-hover hover:text-fg" aria-label={t("triage.dismiss")}>
+            <Button variant="plain" onClick={() => repo.change(item.id, (doc) => setMeta(doc, { suggestion: null }))} className="tap shrink-0 rounded p-1 text-faint hover:bg-hover hover:text-fg" aria-label={t("triage.dismiss")}>
               <X size={14} />
-            </ShadcnButton>
+            </Button>
           </div>
         </div>
       )}
@@ -362,10 +363,10 @@ function Detail({ item, onPlaced }: { item: Item; onPlaced: (p: string) => void 
           <p className={k}>{t("triage.placeIn")}</p>
           <div className="flex flex-wrap gap-1.5">
             {places.map((p) => (
-              <ShadcnButton variant="plain" size="none" key={p.id} onClick={() => onPlaced(p.id)} className="tap-y inline-flex h-[30px] items-center gap-1.5 whitespace-nowrap rounded-lg border border-line bg-surface px-2.5 text-[13px] hover:bg-hover">
+              <Button variant="plain" key={p.id} onClick={() => onPlaced(p.id)} className="tap-y inline-flex h-[30px] items-center gap-1.5 whitespace-nowrap rounded-lg border border-line bg-surface px-2.5 text-[13px] hover:bg-hover">
                 <FolderInput size={13} className="text-muted-foreground" /> {ix.get(p.id)?.title}
                 <span className="text-xs text-muted-foreground">{p.why}</span>
-              </ShadcnButton>
+              </Button>
             ))}
           </div>
         </div>

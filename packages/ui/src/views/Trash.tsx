@@ -6,7 +6,8 @@ import { notify } from "../ui/feedback";
 import { itemHref, useRepo } from "../hooks";
 import { SpaceEyebrow } from "../ui/Spaces";
 import { useT, titleOf } from "../i18n";
-import { Button, Empty, ItemIcon, RelTime } from "../ui/bits";
+import { Button, Empty } from "../ui/primitives";
+import { ItemIcon, RelTime } from "../ui/item-look";
 
 export function TrashView() {
   const r = useRepo();

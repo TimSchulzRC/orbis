@@ -1,13 +1,13 @@
 // Full view of an embedded image: click opens it, arrows page through all images of the page,
 // Escape closes. Shows the display version at once and the original as soon as it is here.
 import { ModalSurface } from "../components/ui/dialog";
-import { Button as ShadcnButton } from "../components/ui/button";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { repo } from "../repo";
 import { files } from "../files";
 import { itemHref } from "../hooks";
 import { useT } from "../i18n";
+import { Button } from "./primitives";
 
 let open: { ids: string[]; at: number } | null = null;
 const listeners = new Set<() => void>();
@@ -64,20 +64,20 @@ function Lightbox({ ids, start }: { ids: string[]; start: number }) {
           {item.title}
         </a>
         {ids.length > 1 && <span className="tabular-nums text-white/60">{at + 1} / {ids.length}</span>}
-        <ShadcnButton variant="plain" size="none" onClick={close} className="tap ml-auto rounded-md p-1.5 hover:bg-white/10" aria-label={t("lightbox.close")}>
+        <Button variant="plain" onClick={close} className="tap ml-auto rounded-md p-1.5 hover:bg-white/10" aria-label={t("lightbox.close")}>
           <X size={18} />
-        </ShadcnButton>
+        </Button>
       </div>
       <div className="relative flex min-h-0 flex-1 items-center justify-center px-4">
         {src && <img src={src} alt={item.body || item.title} className="max-h-full max-w-full object-contain" onClick={(e) => e.stopPropagation()} />}
         {ids.length > 1 && (
           <>
-            <ShadcnButton variant="plain" size="none" onClick={(e) => (e.stopPropagation(), step(-1))} className={nav + " left-3"} aria-label={t("lightbox.prev")}>
+            <Button variant="plain" onClick={(e) => (e.stopPropagation(), step(-1))} className={nav + " left-3"} aria-label={t("lightbox.prev")}>
               <ChevronLeft size={22} />
-            </ShadcnButton>
-            <ShadcnButton variant="plain" size="none" onClick={(e) => (e.stopPropagation(), step(1))} className={nav + " right-3"} aria-label={t("lightbox.next")}>
+            </Button>
+            <Button variant="plain" onClick={(e) => (e.stopPropagation(), step(1))} className={nav + " right-3"} aria-label={t("lightbox.next")}>
               <ChevronRight size={22} />
-            </ShadcnButton>
+            </Button>
           </>
         )}
       </div>

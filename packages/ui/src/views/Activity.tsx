@@ -1,6 +1,5 @@
 // Activity: every change with its origin (which device, which agent, import). Bulk
 // operations like deleting a type are listed here and can be undone.
-import { Button as ShadcnButton } from "../components/ui/button";
 import { useEffect, useState } from "react";
 import { spaceCall } from "../accounts";
 import { SpaceEyebrow } from "../ui/Spaces";
@@ -11,7 +10,9 @@ import type { Index } from "@obtion/core/graph";
 import { useRepo, useSpaceId, itemHref } from "../hooks";
 import { useT, titleOf } from "../i18n";
 import type { T } from "@obtion/core/i18n";
-import { Button, Empty, ItemIcon, RelTime, cx, Seg } from "../ui/bits";
+import { Button, Empty, Seg } from "../ui/primitives";
+import { ItemIcon, RelTime } from "../ui/item-look";
+import { cn } from "../lib/utils";
 import { agentLabel, agentName } from "../ui/AgentNotice";
 
 function who(origin: string, t: T) {
@@ -110,7 +111,7 @@ function Entry({ e, compact, noVerb }: { e: ActivityEvent; compact?: boolean; no
           <span className="font-medium">{systemText(e.title, t)}</span>
         )}
       </div>
-      {changes.length > 0 && <div className={cx("text-muted-foreground", compact ? "line-clamp-2 text-xs" : "text-sm")}>{changes.join(" · ")}</div>}
+      {changes.length > 0 && <div className={cn("text-muted-foreground", compact ? "line-clamp-2 text-xs" : "text-sm")}>{changes.join(" · ")}</div>}
     </>
   );
 }
@@ -119,7 +120,7 @@ function Avatar({ origin }: { origin: string }) {
   const { t } = useT();
   const w = who(origin, t);
   return (
-    <span className={cx("mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full", w.agent ? "text-ok" : "text-muted-foreground")} style={{ background: w.agent ? "color-mix(in srgb, var(--ok) 14%, transparent)" : "var(--surface-2)" }}>
+    <span className={cn("mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full", w.agent ? "text-ok" : "text-muted-foreground")} style={{ background: w.agent ? "color-mix(in srgb, var(--ok) 14%, transparent)" : "var(--surface-2)" }}>
       <w.icon size={13} />
     </span>
   );
@@ -166,7 +167,7 @@ function StepGroup({ events, onChanged }: { events: ActivityEvent[]; onChanged: 
       <div className="min-w-0 flex-1">
         <span className="font-medium">{w.label}</span>
         {head.undoes && <span className="text-muted-foreground"> {t(head.redo ? "activity.redoStep" : "activity.undoStep")}</span>}
-        <ul className={cx("space-y-1", events.length > 1 && "mt-0.5")}>
+        <ul className={cn("space-y-1", events.length > 1 && "mt-0.5")}>
           {events.map((e) => (
             <li key={e.id}>
               <Entry e={e} noVerb={!!head.undoes} />
@@ -179,7 +180,7 @@ function StepGroup({ events, onChanged }: { events: ActivityEvent[]; onChanged: 
           {head.step && !head.undoes && !restored && (
             <>
               {undone && <span>· {t("activity.stepUndone")}</span>}
-              <Button className="!px-1.5 !py-0.5 text-xs" disabled={busy || !r.status.online} onClick={run}>
+              <Button small className="text-xs" disabled={busy || !r.status.online} onClick={run}>
                 {undone ? <Redo2 size={12} /> : <Undo2 size={12} />} {undone ? t("activity.redo") : t("activity.undo")}
               </Button>
             </>
@@ -242,9 +243,9 @@ export function Activity() {
         </ul>
       )}
       {more && events.length > 0 && (
-        <ShadcnButton variant="plain" size="none" onClick={() => load(events.at(-1)!.id)} className="mt-6 text-sm text-muted-foreground hover:text-fg">
+        <Button variant="plain" onClick={() => load(events.at(-1)!.id)} className="mt-6 text-sm text-muted-foreground hover:text-fg">
           {t("activity.more")}
-        </ShadcnButton>
+        </Button>
       )}
     </div>
   );

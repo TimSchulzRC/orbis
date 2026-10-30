@@ -7,7 +7,7 @@ import { type ExampleFile, exampleFiles, fileFacts, writeExamples } from "@obtio
 import { repo } from "../repo";
 import { files } from "../files";
 import { setLang } from "../i18n";
-import { Button, Seg } from "../ui/bits";
+import { Button, Seg } from "../ui/primitives";
 import { BrandLogo } from "../ui/BrandLogo";
 
 /** First setup: choose the language (the shipped types are created in it), with or without the examples. */

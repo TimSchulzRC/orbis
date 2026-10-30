@@ -1,15 +1,16 @@
 // Projects with their progress and next task (design rules § 2.4) – in query blocks
 // with "spalten:fortschritt,nächste" (an overview's "Aktive Projekte").
 import { Table as ShadcnTable, TableHeader, TableBody, TableRow, TableHead, TableCell } from "../components/ui/table";
-import { Button as ShadcnButton } from "../components/ui/button";
 import { useState } from "react";
 import { ChevronRight, CornerDownRight } from "lucide-react";
 import { type Item, todayISO } from "@obtion/core/model";
 import { dueOf } from "@obtion/core/traits";
 import { itemHref, useIndex, useMediaQuery } from "../hooks";
 import { useT, titleOf } from "../i18n";
-import { DueLabel, cx } from "./bits";
+import { DueLabel } from "./item-look";
+import { cn } from "../lib/utils";
 import { RowStatus } from "./Row";
+import { Button } from "./primitives";
 
 /**
  * Active projects (design rules § 2.4): project · progress (bar and percent) · next task. Sub-
@@ -44,7 +45,7 @@ export function ProjectTable({ items }: { items: Item[] }) {
     if (!pr || !pr.total) return null;
     return (
       <span className="flex items-center gap-2">
-        <span className={cx("h-1.5 overflow-hidden rounded-full bg-surface-2 dark:bg-hover", phone ? "w-10" : "w-14")}>
+        <span className={cn("h-1.5 overflow-hidden rounded-full bg-surface-2 dark:bg-hover", phone ? "w-10" : "w-14")}>
           <span className="block h-full rounded-full" style={{ width: `${(pr.done / pr.total) * 100}%`, background: "var(--ok)" }} />
         </span>
         <span className="text-xs tabular-nums text-muted-foreground">{new Intl.NumberFormat(lang, { style: "percent", maximumFractionDigits: 0 }).format(pr.done / pr.total)}</span>
@@ -53,9 +54,9 @@ export function ProjectTable({ items }: { items: Item[] }) {
   };
   const chevron = (i: Item) =>
     kids(i.id).length ? (
-      <ShadcnButton variant="plain" size="none" onClick={() => setOpen(new Set(open.has(i.id) ? [...open].filter((x) => x !== i.id) : [...open, i.id]))} aria-expanded={open.has(i.id)} aria-label={t(open.has(i.id) ? "start.hideSub" : "start.showSub")} className="tap shrink-0 rounded p-0.5 text-faint hover:bg-hover hover:text-fg">
-        <ChevronRight size={14} className={cx("transition-transform", open.has(i.id) && "rotate-90")} />
-      </ShadcnButton>
+      <Button variant="plain" onClick={() => setOpen(new Set(open.has(i.id) ? [...open].filter((x) => x !== i.id) : [...open, i.id]))} aria-expanded={open.has(i.id)} aria-label={t(open.has(i.id) ? "start.hideSub" : "start.showSub")} className="tap shrink-0 rounded p-0.5 text-faint hover:bg-hover hover:text-fg">
+        <ChevronRight size={14} className={cn("transition-transform", open.has(i.id) && "rotate-90")} />
+      </Button>
     ) : (
       <span className="w-[18px] shrink-0" />
     );

@@ -2,7 +2,6 @@
 // "+"), cells edited in place, progress as "60 %" with a bar, sub-items indented below their
 // parent and folded until opened. Columns keep their width and order per view.
 import { Table as ShadcnTable, TableHeader, TableBody, TableRow, TableHead, TableCell as ShadcnTableCell } from "../components/ui/table";
-import { Button as ShadcnButton } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { NativeSelect } from "../components/ui/native-select";
 import { useEffect, useRef, useState } from "react";
@@ -14,7 +13,10 @@ import { dueOf, firstOfGroup, statusOf, statusProp } from "@obtion/core/traits";
 import { repo } from "../repo";
 import { itemHref, useIndex, useMediaQuery } from "../hooks";
 import { useT, titleOf } from "../i18n";
-import { DateField, InlineText, ItemIcon, MenuItem, Popover, StatusGlyph, StatusPill, cx, pal } from "./bits";
+import { DateField, InlineText } from "./fields";
+import { ItemIcon, StatusGlyph, StatusPill, pal } from "./item-look";
+import { Button, MenuItem, Popover } from "./primitives";
+import { cn } from "../lib/utils";
 import { PropertyField } from "./Properties";
 import { CellValue, defaultColumns } from "./Results";
 import { RowStatus, pathLabel, setStatus, shortPath, treeOrder } from "./Row";
@@ -140,10 +142,10 @@ export function HiddenGroups({ groups, by, byLabel, onShow }: { groups: Group[];
   if (!groups.length) return null;
   return (
     <div className="sticky left-0 w-fit px-2 py-1 text-sm">
-      <ShadcnButton variant="plain" size="none" onClick={() => setOpen(!open)} aria-expanded={open} className="tap-y flex items-center gap-1.5 text-muted-foreground hover:text-fg">
+      <Button variant="plain" onClick={() => setOpen(!open)} aria-expanded={open} className="tap-y flex items-center gap-1.5 text-muted-foreground hover:text-fg">
         {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         {t("view.hiddenGroups", { count: groups.length })}
-      </ShadcnButton>
+      </Button>
       {open && (
         <ul className="mt-1 space-y-1 pl-5">
           {groups.map((g) => (
@@ -151,9 +153,9 @@ export function HiddenGroups({ groups, by, byLabel, onShow }: { groups: Group[];
               <GroupChip g={g} by={by} byLabel={byLabel} />
               <span className="text-xs tabular-nums text-muted-foreground">{g.items.length}</span>
               {onShow && (
-                <ShadcnButton variant="plain" size="none" onClick={() => onShow(g)} className="tap rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-hover hover:text-fg">
+                <Button variant="plain" onClick={() => onShow(g)} className="tap rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-hover hover:text-fg">
                   {t("view.showGroup")}
-                </ShadcnButton>
+                </Button>
               )}
             </li>
           ))}
@@ -175,10 +177,10 @@ function OptionCell({ item, prop }: { item: Item; prop: PropDef }) {
     <label className="tap-row relative flex min-h-6 w-full cursor-pointer items-center">
       {opt ? <StatusPill option={opt} /> : <span className="text-muted-foreground">{t("props.empty")}</span>}
       <NativeSelect
+        overlay
         value={String(v ?? "")}
         onChange={(e) => (isStatus && e.target.value ? void setStatus(item, e.target.value) : repo.setProp(item.id, prop.id, e.target.value || null))}
         aria-label={prop.name}
-        className="absolute inset-0 cursor-pointer opacity-0"
       >
         {!isStatus && <option value="">–</option>}
         {isStatus
@@ -210,9 +212,9 @@ function RangeCell({ item, prop }: { item: Item; prop: PropDef }) {
   return (
     <Popover
       trigger={(p) => (
-        <ShadcnButton variant="plain" size="none" {...p} className="tap-y w-full truncate text-left tabular-nums hover:text-fg" aria-label={t("props.set", { name: prop.name })}>
+        <Button variant="plain" {...p} className="tap-y w-full truncate text-left tabular-nums hover:text-fg" aria-label={t("props.set", { name: prop.name })}>
           {a || b ? `${a ? fmtDate(lang, a) : "…"} – ${b ? fmtDate(lang, b) : "…"}` : <span className="text-muted-foreground">{t("props.empty")}</span>}
-        </ShadcnButton>
+        </Button>
       )}
     >
       <div className="flex flex-wrap items-center gap-1 p-2 text-sm">
@@ -324,7 +326,7 @@ export function GroupedTable({ items, def, ctx, look }: { items: Item[]; def: Qu
   const head = (
     <TableHeader>
       <TableRow className="text-left text-xs text-muted-foreground">
-        <TableHead className={cx(sticky, "relative border-b border-line px-2 py-1.5 font-medium")}>
+        <TableHead className={cn(sticky, "relative border-b border-line px-2 py-1.5 font-medium")}>
           {t("field.title")}
           {look?.onLook && <Resizer onPointerDown={(e) => resize("title", e)} />}
         </TableHead>
@@ -370,12 +372,12 @@ export function GroupedTable({ items, def, ctx, look }: { items: Item[]; def: Qu
       if (kids && !isOpen) hideBelow = depth;
       out.push(
         <TableRow key={i.id} data-id={i.id} className="group/row hover:bg-hover">
-          <ShadcnTableCell className={cx(sticky, "border-b border-line px-2 py-1 align-middle group-hover/row:bg-hover")}>
+          <ShadcnTableCell className={cn(sticky, "border-b border-line px-2 py-1 align-middle group-hover/row:bg-hover")}>
             <span className="flex min-w-0 items-center gap-1" style={{ paddingLeft: depth * 20 }}>
               {kids ? (
-                <ShadcnButton variant="plain" size="none" onClick={() => open(i.id, !isOpen)} aria-expanded={isOpen} aria-label={t(isOpen ? "table.closeSub" : "table.openSub", { count: kids })} className="tap -ml-1 shrink-0 rounded p-0.5 text-muted-foreground hover:bg-surface-2 hover:text-fg">
+                <Button variant="plain" onClick={() => open(i.id, !isOpen)} aria-expanded={isOpen} aria-label={t(isOpen ? "table.closeSub" : "table.openSub", { count: kids })} className="tap -ml-1 shrink-0 rounded p-0.5 text-muted-foreground hover:bg-surface-2 hover:text-fg">
                   {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                </ShadcnButton>
+                </Button>
               ) : (
                 depth > 0 && <span className="w-4 shrink-0" />
               )}
@@ -427,17 +429,17 @@ export function GroupedTable({ items, def, ctx, look }: { items: Item[]; def: Qu
           <section key={g.key || "_"} className={heads ? "mb-5" : undefined} aria-label={heads ? g.label || g.key || byLabel : undefined}>
             {heads && (
               <div className="group/head sticky left-0 flex w-fit max-w-full items-center gap-2 px-2 py-1.5">
-                <ShadcnButton variant="plain" size="none" onClick={() => fold(g.key, !isFolded)} aria-expanded={!isFolded} aria-label={t(isFolded ? "table.unfold" : "table.fold")} className="tap -ml-1 rounded p-0.5 text-muted-foreground hover:bg-hover hover:text-fg">
+                <Button variant="plain" onClick={() => fold(g.key, !isFolded)} aria-expanded={!isFolded} aria-label={t(isFolded ? "table.unfold" : "table.fold")} className="tap -ml-1 rounded p-0.5 text-muted-foreground hover:bg-hover hover:text-fg">
                   {isFolded ? <ChevronRight size={15} /> : <ChevronDown size={15} />}
-                </ShadcnButton>
+                </Button>
                 <GroupChip g={g} by={by} byLabel={byLabel} />
                 <span className="text-xs tabular-nums text-muted-foreground">{g.items.length}</span>
                 <span className="flex items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover/head:opacity-100 pointer-coarse:opacity-100">
                   <Popover
                     trigger={(p) => (
-                      <ShadcnButton variant="plain" size="none" {...p} className="tap rounded p-0.5 text-muted-foreground hover:bg-hover hover:text-fg" aria-label={t("table.groupMenu")}>
+                      <Button variant="plain" {...p} className="tap rounded p-0.5 text-muted-foreground hover:bg-hover hover:text-fg" aria-label={t("table.groupMenu")}>
                         <MoreHorizontal size={15} />
-                      </ShadcnButton>
+                      </Button>
                     )}
                   >
                     {(close) => (
@@ -478,7 +480,7 @@ export function GroupedTable({ items, def, ctx, look }: { items: Item[]; def: Qu
 }
 
 function Resizer({ onPointerDown }: { onPointerDown: (e: React.PointerEvent) => void }) {
-  return <span onPointerDown={onPointerDown} onDragStart={(e) => e.preventDefault()} className="absolute -right-1 top-0 z-[2] h-full w-2 cursor-col-resize touch-none hover:bg-[var(--focus)]/40" aria-hidden />;
+  return <span onPointerDown={onPointerDown} onDragStart={(e) => e.preventDefault()} className="absolute -right-1 top-0 z-[2] h-full w-2 cursor-col-resize touch-none hover:bg-focus/40" aria-hidden />;
 }
 
 /** Number of sub-items right after row n (deeper rows until one at the same depth or above). */
@@ -510,6 +512,7 @@ function NewRowButton({ init, label, compact }: { init: ItemInit; label: string;
   if (typing)
     return (
       <Input
+        variant="sm"
         ref={ref}
         value={title}
         onChange={(e) => setTitle(e.target.value)}
@@ -520,17 +523,17 @@ function NewRowButton({ init, label, compact }: { init: ItemInit; label: string;
         }}
         placeholder={t("table.newTitle")}
         aria-label={aria}
-        className={cx("field rounded-md border border-line bg-bg px-2 py-1 text-sm outline-none", compact ? "w-48" : "ml-2 mt-1 w-72")}
+        className={cn("field", compact ? "w-48" : "ml-2 mt-1 w-72")}
       />
     );
   return compact ? (
-    <ShadcnButton variant="plain" size="none" onClick={() => setTyping(true)} className="tap rounded p-0.5 text-muted-foreground hover:bg-hover hover:text-fg" aria-label={aria} title={aria}>
+    <Button variant="plain" onClick={() => setTyping(true)} className="tap rounded p-0.5 text-muted-foreground hover:bg-hover hover:text-fg" aria-label={aria} title={aria}>
       <Plus size={15} />
-    </ShadcnButton>
+    </Button>
   ) : (
-    <ShadcnButton variant="plain" size="none" onClick={() => setTyping(true)} aria-label={aria} className="tap-y flex items-center gap-1.5 px-2 py-1.5 text-sm text-muted-foreground hover:text-fg">
+    <Button variant="plain" onClick={() => setTyping(true)} aria-label={aria} className="tap-y flex items-center gap-1.5 px-2 py-1.5 text-sm text-muted-foreground hover:text-fg">
       <Plus size={14} /> {label}
-    </ShadcnButton>
+    </Button>
   );
 }
 
@@ -593,7 +596,7 @@ export function PageTable({
       const today = todayISO();
       const st = statusOf(i, ix.schemaOf(i));
       if (!d) return <span className="text-faint">–</span>;
-      return <span className={cx("tabular-nums", st?.group !== "done" && d < today ? "text-danger" : d === today ? "text-warn" : "text-fg")}>{d === today ? t("time.today") : fmtShortDate(lang, d)}</span>;
+      return <span className={cn("tabular-nums", st?.group !== "done" && d < today ? "text-danger" : d === today ? "text-warn" : "text-fg")}>{d === today ? t("time.today") : fmtShortDate(lang, d)}</span>;
     }
     const hit = fieldOf(i, key, ix);
     if (hit?.prop?.options && typeof hit.value === "string") {
@@ -607,8 +610,8 @@ export function PageTable({
     const st = ref ? statusOf(ref, ix.schemaOf(ref)) : undefined;
     const pr = ref ? ix.progressOf(ref) : undefined;
     return (
-      <ShadcnButton variant="plain" size="none" onClick={() => fold(g.key, !isFolded)} aria-expanded={!isFolded} className="flex w-full min-w-0 items-center gap-2 text-left text-[13px]">
-        <ChevronRight size={13} className={cx("shrink-0 text-faint transition-transform", !isFolded && "rotate-90")} aria-hidden />
+      <Button variant="plain" onClick={() => fold(g.key, !isFolded)} aria-expanded={!isFolded} className="flex w-full min-w-0 items-center gap-2 text-left text-[13px]">
+        <ChevronRight size={13} className={cn("shrink-0 text-faint transition-transform", !isFolded && "rotate-90")} aria-hidden />
         {st && <span className="shrink-0" style={{ color: st.group === "done" ? "var(--ok)" : st.option.color && st.option.color !== "gray" ? pal(st.option.color) : "var(--muted-foreground)" }}><StatusGlyph option={st.option} size={14} /></span>}
         <span className="truncate font-semibold">{g.label}</span>
         {pr && pr.total > 0 && (
@@ -620,7 +623,7 @@ export function PageTable({
           </>
         )}
         <span className="ml-auto shrink-0 text-xs tabular-nums text-muted-foreground md:ml-0">{t("children.openCount", { count: openCount(g.items) })}</span>
-      </ShadcnButton>
+      </Button>
     );
   };
   const sub = "bg-[color-mix(in_srgb,var(--surface-2)_45%,var(--surface))]";
@@ -628,9 +631,9 @@ export function PageTable({
     <div className="flex min-h-10 items-center gap-3 border-t border-line px-3 text-[13px] text-muted-foreground">
       {add && <NewRowButton init={add.init} label={add.label} />}
       {done && done.count > 0 && (
-        <ShadcnButton variant="plain" size="none" onClick={done.toggle} className="tap-y ml-auto whitespace-nowrap hover:text-fg">
+        <Button variant="plain" onClick={done.toggle} className="tap-y ml-auto whitespace-nowrap hover:text-fg">
           {done.shown ? t("children.doneHide") : narrow ? t("children.doneShort", { count: done.count }) : t("children.doneShow", { count: done.count })}
-        </ShadcnButton>
+        </Button>
       )}
     </div>
   );
@@ -641,7 +644,7 @@ export function PageTable({
           const isFolded = grouped && folded.has(g.key);
           return (
             <div key={g.key}>
-              {grouped && <div className={cx("flex h-9 items-center px-3", sub, gi > 0 && "border-t border-line")}>{groupHead(g, isFolded)}</div>}
+              {grouped && <div className={cn("flex h-9 items-center px-3", sub, gi > 0 && "border-t border-line")}>{groupHead(g, isFolded)}</div>}
               {!isFolded &&
                 treeOrder(g.items).map(({ item: i, depth }) => (
                   <div key={i.id} data-id={i.id} className="flex min-h-[52px] items-center gap-2.5 border-t border-line px-3 py-1.5 first:border-t-0" style={{ paddingLeft: 12 + depth * 22 }}>
@@ -663,7 +666,7 @@ export function PageTable({
     <div className="overflow-hidden rounded-xl border border-line bg-surface">
       <ShadcnTable className="w-full border-collapse text-sm">
         <TableHeader>
-          <TableRow className={cx("h-8 text-left text-xs text-muted-foreground", sub)}>
+          <TableRow className={cn("h-8 text-left text-xs text-muted-foreground", sub)}>
             <TableHead className="px-3 font-medium">{head}</TableHead>
             {cols.map((c) => (
               <TableHead key={c.key} className="w-[1%] whitespace-nowrap px-3 font-medium">
@@ -677,7 +680,7 @@ export function PageTable({
           return (
             <TableBody key={g.key}>
               {grouped && (
-                <TableRow className={cx("h-10 border-t border-line", sub)}>
+                <TableRow className={cn("h-10 border-t border-line", sub)}>
                   <ShadcnTableCell colSpan={cols.length + 1} className="px-3">
                     {groupHead(g, isFolded)}
                   </ShadcnTableCell>

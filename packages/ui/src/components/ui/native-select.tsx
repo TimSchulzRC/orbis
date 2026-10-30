@@ -2,18 +2,23 @@ import * as React from "react"
 import { cn } from "../../lib/utils"
 import { ChevronDownIcon } from "lucide-react"
 
+/**
+ * `overlay`: an invisible select over a chip (the chip is its look), in the chip's positioning
+ * context; `full`: takes the whole width.
+ */
 function NativeSelect({
   className,
   size = "default",
+  overlay,
+  full,
   ...props
-}: Omit<React.ComponentProps<"select">, "size"> & { size?: "sm" | "default" }) {
-  // Transparent selects overlay a status chip and must stay in its positioning context.
-  if (className?.split(" ").includes("absolute")) {
-    return <select data-slot="native-select" className={className} {...props} />;
+}: Omit<React.ComponentProps<"select">, "size"> & { size?: "sm" | "default"; overlay?: boolean; full?: boolean }) {
+  if (overlay) {
+    return <select data-slot="native-select" className={cn("absolute inset-0 cursor-pointer opacity-0", className)} {...props} />;
   }
   return (
     <div
-      className={cn("group/native-select relative min-w-0 w-fit has-[select:disabled]:opacity-50", className?.includes("w-full") && "w-full")}
+      className={cn("group/native-select relative min-w-0 w-fit has-[select:disabled]:opacity-50", full && "w-full")}
       data-slot="native-select-wrapper"
     >
       <select

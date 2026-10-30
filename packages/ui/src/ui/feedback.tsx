@@ -2,7 +2,7 @@
 // confirmation dialog for the few things that need one. Both live outside any page.
 import { useEffect, useSyncExternalStore } from "react";
 import { useT } from "../i18n";
-import { Button, Dialog } from "./bits";
+import { Button, Dialog } from "./primitives";
 
 // short notices: sonner (see toasts.tsx); kept here so callers import one place for feedback
 export { notify } from "./toasts";
@@ -45,7 +45,7 @@ export function ConfirmHost() {
           {t("cancel")}
         </Button>
         {a.choices.map((c, i) => (
-          <Button key={c.key} variant={c.primary ? "primary" : "outline"} className={c.danger ? "!bg-danger !text-white" : undefined} autoFocus={i === a.choices.length - 1} onClick={() => done(c.key)}>
+          <Button key={c.key} variant={c.danger ? "danger" : c.primary ? "primary" : "outline"} autoFocus={i === a.choices.length - 1} onClick={() => done(c.key)}>
             {c.label}
           </Button>
         ))}
