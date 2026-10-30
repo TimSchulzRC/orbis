@@ -97,6 +97,8 @@ function Main() {
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
+      // taken by a field already (⌘K on selected text links it)
+      if (e.defaultPrevented) return;
       if (mod && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setPalette((p) => !p);

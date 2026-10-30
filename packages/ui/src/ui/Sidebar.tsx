@@ -37,21 +37,22 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
   const inbox = useInboxItems().length;
   const shelf = useShelf().open;
   const [creating, setCreating] = useState(false);
-  const navCls = (active: boolean) => cx("flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm", active ? "bg-hover font-medium text-fg" : "text-muted-foreground hover:bg-hover hover:text-fg");
+  const navCls = (active: boolean) => cx("flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm", active ? "bg-hover font-medium text-fg" : "text-muted-foreground hover:bg-hover hover:text-fg");
 
   return (
     <aside className="flex w-[256px] shrink-0 flex-col border-r border-line bg-surface-2/50 pt-safe">
-      <div className="flex items-center gap-2 px-4 pb-2 pt-4">
+      <div className="flex items-center gap-2 px-4 pb-1.5 pt-3">
         <SpaceSelector className="flex-1" onNew={() => setCreating(true)} />
         <SyncDot />
       </div>
-      <ShadcnButton variant="plain" size="none" onClick={onSearch} className="mx-3 mb-2 flex items-center gap-2 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm text-muted-foreground hover:text-fg">
-        <Search size={15} />
-        <span className="flex-1 text-left">{t("nav.searchPlaceholder")}</span>
-        <Kbd>{shortcut("K", lang)}</Kbd>
-      </ShadcnButton>
       <div className="min-h-0 flex-1 overflow-y-auto pb-3">
-        <nav className="flex flex-col gap-0.5 px-2" aria-label={t("nav.main")}>
+        <nav className="flex flex-col gap-px px-2" aria-label={t("nav.main")}>
+          <ShadcnButton variant="plain" size="none" onClick={onSearch} className={cx(navCls(false), "group/search")}>
+            <Search size={16} /> <span className="flex-1 text-left">{t("nav.search")}</span>
+            <span className="opacity-0 transition-opacity group-hover/search:opacity-100">
+              <Kbd>{shortcut("K", lang)}</Kbd>
+            </span>
+          </ShadcnButton>
           <a href="#/" className={navCls(route.path === "/" && !shelf)}>
             <Sun size={16} /> {t("nav.today")}
           </a>

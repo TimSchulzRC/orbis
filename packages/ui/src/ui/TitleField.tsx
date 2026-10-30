@@ -44,7 +44,7 @@ export function TitleField({ item, autoFocus, placeholder }: { item: Item; autoF
         if (e.key === "Escape") (setV(item.title), setTimeout(() => (e.target as HTMLTextAreaElement).blur()));
       }}
       data-large
-      className="field page-title block w-full resize-none overflow-hidden bg-transparent outline-none placeholder:text-faint"
+      className="field page-title block w-full resize-none overflow-hidden bg-transparent outline-none placeholder:text-faint focus-visible:ring-0"
     />
   );
 }

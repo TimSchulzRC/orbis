@@ -111,6 +111,8 @@ export default defineConfig({
       "/api": toServer(),
       "/mcp": toServer(),
       "/sync": toServer(true),
+      // a workspace's sync, files and activity
+      "/w/": toServer(true),
     },
   },
 });
