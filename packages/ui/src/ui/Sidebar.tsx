@@ -20,7 +20,7 @@ import { SyncDot } from "./SyncDot";
 import { createAndOpen } from "../actions";
 import { NewTypeDialog } from "../views/Types";
 import { NewSpaceDialog, SpaceScope, SpaceSelector, moveTo } from "./Spaces";
-import { useInboxItems, useShelf } from "./inbox";
+import { useInboxItems } from "./inbox";
 
 /**
  * What is being dragged in the sidebar: an item (from below `from`, null: pinned; `type`: a pinned
@@ -35,7 +35,6 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
   const route = useRoute();
   const { shown } = useAccounts();
   const inbox = useInboxItems().length;
-  const shelf = useShelf().open;
   const [creating, setCreating] = useState(false);
   const navCls = (active: boolean) => cx("flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm", active ? "bg-hover font-medium text-fg" : "text-muted-foreground hover:bg-hover hover:text-fg");
 
@@ -53,10 +52,10 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
               <Kbd>{shortcut("K", lang)}</Kbd>
             </span>
           </ShadcnButton>
-          <a href="#/" className={navCls(route.path === "/" && !shelf)}>
+          <a href="#/" className={navCls(route.path === "/")}>
             <Sun size={16} /> {t("nav.today")}
           </a>
-          <a href="#/inbox" className={navCls(shelf || route.path.startsWith("/review"))}>
+          <a href="#/review" className={navCls(route.path.startsWith("/review"))}>
             <Inbox size={16} /> <span className="flex-1">{t("nav.inbox")}</span>
             {inbox > 0 && <span className="text-xs tabular-nums text-muted-foreground">{inbox}</span>}
           </a>

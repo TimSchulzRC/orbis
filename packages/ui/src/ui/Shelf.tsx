@@ -3,8 +3,10 @@ import { Button as ShadcnButton } from "../components/ui/button";
 // first, with a line of its text, its workspace and age; one opens here to read and add to it and
 // stays in the inbox – sorting is the review's (views/Review.tsx), here only a quiet link leads
 // there. Above the tray on a desktop, as a sheet on a phone. What lands in the inbox: behind "…".
+// On Heute on a desktop it is part of the page (`pinned`): always open, it does not close. Without
+// room for it there, Heute shows the newest entries as cards (ShelfCards), each opens the panel.
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, ArrowRight, Maximize2, MoreHorizontal, RotateCcw, SlidersHorizontal, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, ArrowUp, Maximize2, MoreHorizontal, RotateCcw, SlidersHorizontal, X } from "lucide-react";
 import { type Item, SETTINGS_ID, setSettings } from "@obtion/core/model";
 import type { QueryDef } from "@obtion/core/query";
 import { inboxWhere } from "@obtion/core/inbox";
@@ -28,7 +30,8 @@ import { DraftBar } from "../views/Lists";
 /** Where an entry opens in the review. */
 export const reviewHref = (key: string) => `#/review?at=${encodeURIComponent(key)}`;
 
-export function ShelfPanel({ desktop }: { desktop: boolean }) {
+export function ShelfPanel({ desktop, pinned }: { desktop: boolean; pinned?: boolean }) {
+  const { t } = useT();
   const { at } = useShelf();
   const entries = useInboxItems();
   const entry = at ? entries.find((e) => e.key === at) : undefined;
@@ -39,36 +42,40 @@ export function ShelfPanel({ desktop }: { desktop: boolean }) {
     const on = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || e.defaultPrevented || document.querySelector("[role=dialog][data-state=open], [data-radix-popper-content-wrapper]")) return;
       if (entry) openShelf();
-      else closeShelf();
+      else if (!pinned) closeShelf();
     };
     window.addEventListener("keydown", on);
     return () => window.removeEventListener("keydown", on);
   }, [!!entry]);
   return (
     <div
-      role="dialog"
-      aria-label={useT().t("tray.title")}
+      // pinned it is part of the tray's region, else a dialog over the page
+      role={pinned ? undefined : "dialog"}
+      aria-label={pinned ? undefined : t("tray.title")}
+      data-shelf-panel={pinned ? "pinned" : "open"}
       // a link inside leads away: the panel closes behind it
       onClickCapture={(e) => (e.target as HTMLElement).closest("a[href]") && closeShelf()}
       className={cx(
-        "flex flex-col overflow-hidden border border-line bg-surface shadow-[0_18px_50px_-12px_rgb(0_0_0/0.45)]",
-        desktop ? "max-h-[min(640px,calc(100dvh-160px))] rounded-2xl" : entry ? "h-full rounded-t-2xl" : "max-h-[min(70dvh,560px)] rounded-2xl",
+        "flex flex-col overflow-hidden border border-line bg-surface",
+        pinned
+          ? "h-full rounded-2xl shadow-[0_6px_24px_-12px_rgb(0_0_0/0.25)]"
+          : cx("shadow-[0_18px_50px_-12px_rgb(0_0_0/0.45)]", desktop ? "max-h-[min(640px,calc(100dvh-160px))] rounded-2xl" : entry ? "h-full rounded-t-2xl" : "max-h-[min(70dvh,560px)] rounded-2xl"),
       )}
     >
       {!desktop && <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-line" aria-hidden />}
-      {entry ? <EntryView entry={entry} desktop={desktop} /> : <List entries={entries} desktop={desktop} />}
+      {entry ? <EntryView entry={entry} desktop={desktop} pinned={pinned} /> : <List entries={entries} desktop={desktop} pinned={pinned} />}
     </div>
   );
 }
 
-/** The list: newest first; ↑↓ choose, ↵ opens, Esc closes. */
-function List({ entries, desktop }: { entries: InboxEntry[]; desktop: boolean }) {
+/** The list: newest first; ↑↓ choose, ↵ opens, Esc closes (pinned: it stays, and takes the focus only when clicked). */
+function List({ entries, desktop, pinned }: { entries: InboxEntry[]; desktop: boolean; pinned?: boolean }) {
   const { t } = useT();
   const { shown } = useAccounts();
   const [sel, setSel] = useState(0);
   const [rule, setRule] = useState<string | null>(null);
   const box = useRef<HTMLDivElement>(null);
-  useEffect(() => void box.current?.focus(), []);
+  useEffect(() => void (!pinned && box.current?.focus()), []);
   useEffect(() => void box.current?.querySelector(`[data-shelf="${sel}"]`)?.scrollIntoView({ block: "nearest" }), [sel]);
   return (
     <>
@@ -121,7 +128,7 @@ function List({ entries, desktop }: { entries: InboxEntry[]; desktop: boolean })
         <span className="min-w-0 flex-1">{t("tray.lookHint")}</span>
         {desktop && (
           <span className="flex shrink-0 items-center gap-1 text-xs">
-            <Kbd>↑</Kbd> <Kbd>↓</Kbd> {t("tray.keys.choose")} <Kbd>↵</Kbd> {t("triage.keys.open")} <Kbd>Esc</Kbd>
+            <Kbd>↑</Kbd> <Kbd>↓</Kbd> {t("tray.keys.choose")} <Kbd>↵</Kbd> {t("triage.keys.open")} {!pinned && <Kbd>Esc</Kbd>}
           </span>
         )}
       </div>
@@ -131,6 +138,50 @@ function List({ entries, desktop }: { entries: InboxEntry[]; desktop: boolean })
         </SpaceScope>
       )}
     </>
+  );
+}
+
+/** The newest entries side by side, as on Heute: a card opens the panel at it, "Alle ansehen" at the list. */
+export function ShelfCards({ entries }: { entries: InboxEntry[] }) {
+  const { t, lang } = useT();
+  const { shown } = useAccounts();
+  return (
+    <section data-shelf-cards className="mt-9">
+      <div className="mb-2.5 flex min-h-8 items-center gap-2">
+        <h2 className="text-[15px] font-semibold leading-[22px]">
+          {t("tray.title")} <span className="tabular-nums text-warn">{entries.length}</span>
+        </h2>
+        <span className="text-[13px] text-muted-foreground">· {t("tray.newestFirst")}</span>
+        <span className="flex-1" />
+        <ShadcnButton variant="plain" size="none" onClick={() => openShelf()} className="tap-y inline-flex items-center gap-1 rounded-md px-1.5 text-[13px] text-muted-foreground hover:text-fg">
+          {t("tray.showAll")} <ArrowUp size={14} />
+        </ShadcnButton>
+      </div>
+      <div className="grid grid-cols-2 gap-3 @3xl:grid-cols-4">
+        {entries.slice(0, 4).map((e) => {
+          const ix = replica(e.space).repo.index();
+          const line = preview(e, t, lang, ix.childrenOf(e.item.id).length);
+          return (
+            <ShadcnButton
+              key={e.key}
+              variant="plain"
+              size="none"
+              onClick={() => openShelf(e.key)}
+              aria-label={t("tray.openEntry", { title: e.item.title || e.item.file?.name || t("untitled") })}
+              className="flex min-w-0 flex-col items-stretch gap-1 rounded-xl border border-[color-mix(in_srgb,var(--t-inbox)_35%,var(--border))] bg-surface px-4 py-3 text-left hover:bg-hover"
+            >
+              <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+                <ItemIcon item={e.item} size={13} ix={ix} />
+                <RelTime ts={e.item.created} />
+                {shown.length > 1 && <span className="truncate">· {spaceById(e.space)?.name}</span>}
+              </span>
+              <span className="truncate text-[15px] font-semibold">{e.item.title || e.item.file?.name || t("untitled")}</span>
+              <span className="truncate text-xs text-muted-foreground">{line || "\u00a0"}</span>
+            </ShadcnButton>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
@@ -177,7 +228,7 @@ function Row({ entry, n, on, space, onHover }: { entry: InboxEntry; n: number; o
  * One entry, to read and add to: its title and text editable, the notes below it. It stays in the
  * inbox – the banner says so, with the way to sort it now in the review.
  */
-function EntryView({ entry, desktop }: { entry: InboxEntry; desktop: boolean }) {
+function EntryView({ entry, desktop, pinned }: { entry: InboxEntry; desktop: boolean; pinned?: boolean }) {
   const { t } = useT();
   return (
     <SpaceScope id={entry.space}>
@@ -190,7 +241,7 @@ function EntryView({ entry, desktop }: { entry: InboxEntry; desktop: boolean }) 
         <a href={spaceHref(entry.space, `/i/${encodeURIComponent(entry.item.id)}`)} className="tap inline-flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1 text-[13px] hover:bg-hover">
           <Maximize2 size={14} /> {t("tray.openFull")}
         </a>
-        {desktop ? <IconButton icon={X} label={t("close")} onClick={closeShelf} /> : <Button onClick={closeShelf} className="font-semibold">{t("tray.done")}</Button>}
+        {pinned ? null : desktop ? <IconButton icon={X} label={t("close")} onClick={closeShelf} /> : <Button onClick={closeShelf} className="font-semibold">{t("tray.done")}</Button>}
       </div>
       <EntryBody entry={entry} />
     </SpaceScope>

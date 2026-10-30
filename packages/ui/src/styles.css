@@ -963,3 +963,23 @@ body.cm-dragging * {
   font-size: 13px;
   color: var(--muted-foreground);
 }
+
+/* To or from Heute on a desktop (hooks.ts useRoute): the page changes at once, only the tray
+   moves – leaving Heute its open panel folds down into the bar, coming back it unfolds. The
+   bottom stays in place, so the bar stays where it is. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+}
+::view-transition-group(shelf) {
+  overflow: hidden;
+  border-radius: 1rem;
+  animation-duration: 340ms;
+  animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+::view-transition-old(shelf),
+::view-transition-new(shelf) {
+  height: 100%;
+  object-fit: none;
+  object-position: bottom;
+}

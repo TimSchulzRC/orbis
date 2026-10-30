@@ -41,6 +41,16 @@ const setShelf = (s: typeof shelf) => ((shelf = s), listeners.forEach((f) => f()
 export const openShelf = (at?: string) => setShelf({ open: true, at });
 export const closeShelf = () => shelf.open && setShelf({ open: false });
 
+/** Pinned open on Heute (a desktop with room below the page, App.tsx): Heute then leaves out its own sight of the entries. */
+let pinned = false;
+const pinListeners = new Set<() => void>();
+export const setShelfPinned = (p: boolean) => p !== pinned && ((pinned = p), pinListeners.forEach((f) => f()));
+export const useShelfPinned = () =>
+  useSyncExternalStore(
+    (f) => (pinListeners.add(f), () => pinListeners.delete(f)),
+    () => pinned,
+  );
+
 export function useShelf() {
   return useSyncExternalStore(
     (f) => (listeners.add(f), () => listeners.delete(f)),

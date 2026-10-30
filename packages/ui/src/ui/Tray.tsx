@@ -3,7 +3,9 @@ import { Button as ShadcnButton } from "../components/ui/button";
 // to put something down, and the way into the review with how long it takes. Two ways in: the
 // tray itself opens its panel to look in (Shelf.tsx; on a phone also a swipe up), the button
 // starts the review to sort. The sheets sticking out are the newest entries, each opens itself.
-// On a phone it sits above the tab bar; the field opens from its "+" in a sheet.
+// On a phone it sits above the tab bar; the field opens from its "+" in a sheet. On Heute on a
+// desktop with room below the page the panel is pinned open above it, part of the page: the rest
+// of the height below Heute (App.tsx).
 import { useRef } from "react";
 import { Check, ChevronDown, ChevronUp, Layers, Plus } from "lucide-react";
 import { useT } from "../i18n";
@@ -15,7 +17,7 @@ import { spaceById, useAccounts } from "../accounts";
 
 const FILL = 10;
 
-export function Tray({ desktop, onCapture }: { desktop: boolean; onCapture: () => void }) {
+export function Tray({ desktop, pinned, onCapture }: { desktop: boolean; pinned?: boolean; onCapture: () => void }) {
   const { t } = useT();
   const entries = useInboxItems();
   const count = entries.length;
@@ -27,13 +29,14 @@ export function Tray({ desktop, onCapture }: { desktop: boolean; onCapture: () =
       <ShadcnButton
         variant="plain"
         size="none"
-        onClick={() => (open ? closeShelf() : openShelf())}
+        // pinned it does not close: back to the list
+        onClick={() => (pinned ? openShelf() : open ? closeShelf() : openShelf())}
         onTouchStart={(e) => (touch.current = e.touches[0]!.clientY)}
         onTouchEnd={(e) => {
           if (touch.current !== null && touch.current - (e.changedTouches[0]?.clientY ?? 0) > 40) (e.preventDefault(), openShelf());
           touch.current = null;
         }}
-        aria-expanded={open}
+        aria-expanded={pinned || open}
         aria-label={t("tray.open", { count })}
         className={cx("flex min-w-0 items-center gap-2 rounded-xl py-1.5 pl-[58px] pr-2 text-left hover:bg-hover", !desktop && "flex-1", open && "bg-hover")}
       >
@@ -43,7 +46,7 @@ export function Tray({ desktop, onCapture }: { desktop: boolean; onCapture: () =
           </span>
           <Fill count={count} />
         </span>
-        {open ? <ChevronDown size={14} className="text-muted-foreground" /> : <ChevronUp size={14} className="text-muted-foreground" />}
+        {pinned ? null : open ? <ChevronDown size={14} className="text-muted-foreground" /> : <ChevronUp size={14} className="text-muted-foreground" />}
       </ShadcnButton>
     </div>
   );
@@ -66,10 +69,15 @@ export function Tray({ desktop, onCapture }: { desktop: boolean; onCapture: () =
   return (
     <>
       {/* the page behind the open panel: dimmed, a click closes */}
-      {open && <div className="fixed inset-0 z-30 bg-black/40" onClick={closeShelf} aria-hidden />}
-      <div className={cx("relative z-40 shrink-0", desktop ? "px-6 pb-4 pt-2" : "px-3 pb-2 pt-1")} role="region" aria-label={t("tray.title")}>
-        <div className={cx("mx-auto", desktop && "max-w-[1040px]")}>
-          {open && (
+      {open && !pinned && <div className="fixed inset-0 z-30 bg-black/40" onClick={closeShelf} aria-hidden />}
+      <div className={cx("relative z-40", pinned ? "flex min-h-[308px] flex-1 flex-col" : "shrink-0", desktop ? cx(pinned ? "px-8" : "px-6", "pb-4 pt-2") : "px-3 pb-2 pt-1")} role="region" aria-label={t("tray.title")}>
+        {/* panel and bar as one: leaving Heute the panel folds into the bar, coming back it unfolds (styles.css) */}
+        <div style={desktop ? { viewTransitionName: "shelf" } : undefined} className={cx("mx-auto", desktop && "max-w-[1040px]", pinned && "flex min-h-0 w-full flex-1 flex-col")}>
+          {pinned ? (
+            <div className="min-h-0 flex-1 pb-2">
+              <ShelfPanel desktop pinned />
+            </div>
+          ) : open && (
             // on a phone an entry takes the whole screen, as a sheet
             <div className={cx(desktop ? "absolute inset-x-6 bottom-full mx-auto max-w-[1040px] pb-2" : at ? "fixed inset-x-0 bottom-0 top-3 z-50 pt-safe" : "absolute inset-x-2 bottom-full pb-1")}>
               <ShelfPanel desktop={desktop} />

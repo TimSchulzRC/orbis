@@ -1,7 +1,7 @@
 import { ModalSurface } from "./components/ui/dialog";
 import { Button as ShadcnButton } from "./components/ui/button";
 import { BrandLogo } from "./ui/BrandLogo";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Menu, Search, Inbox, SlidersHorizontal, Sun, X } from "lucide-react";
 import { SETTINGS_ID } from "@obtion/core/model";
 import { useRepo, useRoute, useDesktop, itemHref, spaceHref } from "./hooks";
@@ -23,7 +23,7 @@ import { FilesPage } from "./views/Lists";
 import { Review } from "./views/Review";
 import { Today } from "./views/Today";
 import { Tray } from "./ui/Tray";
-import { closeShelf, entryKey, openShelf, useInboxItems, useShelf } from "./ui/inbox";
+import { closeShelf, entryKey, openShelf, setShelfPinned, useInboxItems, useShelf } from "./ui/inbox";
 import { TypesView } from "./views/Types";
 import { GraphView } from "./views/Graph";
 import { Activity } from "./views/Activity";
@@ -176,8 +176,13 @@ function Main() {
     }
   })();
   const isGraph = route.parts[0] === "graph";
-  // the tray is below every page but the review (it leads there)
+  // the tray is below every page but the review (it leads there); on Heute on a desktop with its panel open, as part of the
+  // page – if it fits below it, else Heute shows the newest entries and the panel opens over the page as elsewhere
   const tray = !!settings && route.parts[0] !== "review" && !(route.parts[0] === "inbox" && route.parts[1]);
+  const column = useRef<HTMLDivElement>(null);
+  const main = useRef<HTMLElement>(null);
+  const pinned = useRoom(tray && wide && (route.parts[0] === undefined || route.parts[0] === "inbox"), column, main, route.path);
+  useEffect(() => void setShelfPinned(pinned), [pinned]);
 
   return (
     <div className="flex h-full">
@@ -189,7 +194,7 @@ function Main() {
       </ShadcnButton>
       {wide && <Sidebar onSearch={() => setPalette(true)} />}
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div ref={column} className="flex min-w-0 flex-1 flex-col">
         {!wide && (
           <header className="flex items-center gap-2 border-b border-line bg-bg/90 px-3 py-2 backdrop-blur pt-safe">
             <a href="#/" className="tap flex items-center justify-center gap-2" aria-label={t("nav.today")}>
@@ -206,11 +211,12 @@ function Main() {
         )}
         <SignedOut />
         <TooNew />
-        <main tabIndex={-1} className={cx("@container min-h-0 flex-1 outline-none", isGraph ? "overflow-hidden" : "overflow-y-auto")}>
+        {/* with the panel pinned below: as tall as Heute is, the panel takes the rest */}
+        <main ref={main} tabIndex={-1} className={cx("@container min-h-0 outline-none", pinned ? "flex-initial" : "flex-1", isGraph ? "overflow-hidden" : "overflow-y-auto")}>
           {/* a page of another workspace: anew on its replica (repo and files point at it) */}
           <PageBoundary key={`${globalPage(route.parts) ? "" : active?.id}${route.path}`}>{page}</PageBoundary>
         </main>
-        {tray && <Tray desktop={wide} onCapture={() => setCaptureOpen(true)} />}
+        {tray && <Tray desktop={wide} pinned={pinned} onCapture={() => setCaptureOpen(true)} />}
         {/* the review on a phone is a page of its own, with its own way back */}
         {!wide && route.parts[0] !== "review" && <MobileNav />}
       </div>
@@ -229,6 +235,29 @@ function Main() {
       <LightboxHost />
     </div>
   );
+}
+
+/**
+ * Room for the tray's panel below the page (Heute, `on`): at least 220 px under it besides the bar (two entries;
+ * less and the cards above take no more room than it would), measured as it
+ * changes. Heute without it shows the newest entries instead (data-shelf-cards): they don't count, else it never comes back.
+ */
+function useRoom(on: boolean, column: React.RefObject<HTMLDivElement | null>, main: React.RefObject<HTMLElement | null>, path: string) {
+  const [room, setRoom] = useState(true);
+  useLayoutEffect(() => {
+    const page = main.current?.firstElementChild as HTMLElement | null | undefined;
+    if (!on || !column.current || !page) return;
+    const measure = () => {
+      const cards = page.querySelector<HTMLElement>("[data-shelf-cards]");
+      const height = page.offsetHeight - (cards ? cards.offsetHeight + parseFloat(getComputedStyle(cards).marginTop) : 0);
+      setRoom(column.current!.clientHeight - height - 88 >= 220);
+    };
+    const ro = new ResizeObserver(measure);
+    ro.observe(column.current);
+    ro.observe(page);
+    return () => ro.disconnect();
+  }, [on, path]);
+  return on && room;
 }
 
 /** The phone menu as a sheet from below: a modal surface (focus stays in, Escape closes). */

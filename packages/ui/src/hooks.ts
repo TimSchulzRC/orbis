@@ -1,4 +1,5 @@
 import { useContext, useEffect, useState, useSyncExternalStore } from "react";
+import { flushSync } from "react-dom";
 import { repo } from "./repo";
 import { files } from "./files";
 import { activeSpace } from "./accounts";
@@ -42,14 +43,24 @@ function safeDecode(s: string) {
   }
 }
 
+/** The route, one for the whole app. To or from Heute on a desktop as a view transition: the tray's open panel folds into the bar or unfolds from it (styles.css). */
+let route = parse();
+const routeListeners = new Set<() => void>();
+const isToday = (r: Route) => r.path === "/" || r.path === "/inbox";
+window.addEventListener("hashchange", () => {
+  const next = parse();
+  const swap = () => ((route = next), routeListeners.forEach((f) => f()));
+  const moves = isToday(route) !== isToday(next) && matchMedia("(min-width: 1024px)").matches && !matchMedia("(prefers-reduced-motion: reduce)").matches;
+  // one after the other quickly: the earlier is skipped, which is no error
+  if (moves && document.startViewTransition) document.startViewTransition(() => flushSync(swap)).ready.catch(() => {});
+  else swap();
+});
+
 export function useRoute(): Route {
-  const [route, setRoute] = useState(parse);
-  useEffect(() => {
-    const on = () => setRoute(parse());
-    window.addEventListener("hashchange", on);
-    return () => window.removeEventListener("hashchange", on);
-  }, []);
-  return route;
+  return useSyncExternalStore(
+    (f) => (routeListeners.add(f), () => routeListeners.delete(f)),
+    () => route,
+  );
 }
 
 export function go(path: string) {
