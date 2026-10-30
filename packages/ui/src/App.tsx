@@ -238,7 +238,8 @@ function Main() {
 }
 
 /**
- * Room for the tray's panel below the page (Heute, `on`): at least 300 px under it besides the bar, measured as it
+ * Room for the tray's panel below the page (Heute, `on`): at least 220 px under it besides the bar (two entries;
+ * less and the cards above take no more room than it would), measured as it
  * changes. Heute without it shows the newest entries instead (data-shelf-cards): they don't count, else it never comes back.
  */
 function useRoom(on: boolean, column: React.RefObject<HTMLDivElement | null>, main: React.RefObject<HTMLElement | null>, path: string) {
@@ -249,7 +250,7 @@ function useRoom(on: boolean, column: React.RefObject<HTMLDivElement | null>, ma
     const measure = () => {
       const cards = page.querySelector<HTMLElement>("[data-shelf-cards]");
       const height = page.offsetHeight - (cards ? cards.offsetHeight + parseFloat(getComputedStyle(cards).marginTop) : 0);
-      setRoom(column.current!.clientHeight - height - 88 >= 300);
+      setRoom(column.current!.clientHeight - height - 88 >= 220);
     };
     const ro = new ResizeObserver(measure);
     ro.observe(column.current);

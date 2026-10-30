@@ -70,7 +70,7 @@ export function Tray({ desktop, pinned, onCapture }: { desktop: boolean; pinned?
     <>
       {/* the page behind the open panel: dimmed, a click closes */}
       {open && !pinned && <div className="fixed inset-0 z-30 bg-black/40" onClick={closeShelf} aria-hidden />}
-      <div className={cx("relative z-40", pinned ? "flex min-h-[300px] flex-1 flex-col" : "shrink-0", desktop ? cx(pinned ? "px-8" : "px-6", "pb-4 pt-2") : "px-3 pb-2 pt-1")} role="region" aria-label={t("tray.title")}>
+      <div className={cx("relative z-40", pinned ? "flex min-h-[308px] flex-1 flex-col" : "shrink-0", desktop ? cx(pinned ? "px-8" : "px-6", "pb-4 pt-2") : "px-3 pb-2 pt-1")} role="region" aria-label={t("tray.title")}>
         {/* panel and bar as one: leaving Heute the panel folds into the bar, coming back it unfolds (styles.css) */}
         <div style={desktop ? { viewTransitionName: "shelf" } : undefined} className={cx("mx-auto", desktop && "max-w-[1040px]", pinned && "flex min-h-0 w-full flex-1 flex-col")}>
           {pinned ? (
