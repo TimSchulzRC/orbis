@@ -186,7 +186,8 @@ async function run() {
         if (serverName === "seeded") {
           for (const id of [...ITEMS, server.file, server.trashed]) await check(page, label, `/#/i/${encodeURIComponent(id)}`, errors, undefined, { phone, page: true });
           // Heute: the greeting, what is due, and the tray below with the way into the review; a sheet
-          // sticking out of the tray shows its title on hover and opens in the tray's panel
+          // sticking out of the tray shows its title on hover and opens in the tray's panel (on a desktop
+          // with room below Heute pinned open there, else over the page)
           await check(page, label, "/", errors, async (p) => {
             const h1 = (await p.locator("main h1").innerText()).trim();
             if (!/^Guten (Morgen|Tag|Abend), E2E\.$/.test(h1)) failures.push(`${label}: Heute greets with "${h1}"`);
@@ -199,7 +200,7 @@ async function run() {
               await sheet.hover();
               if (!(await sheet.getByText(title, { exact: true }).isVisible())) failures.push(`${label}: a sheet does not show its title on hover`);
               await sheet.click();
-              const panel = p.getByRole("dialog", { name: "Ablage" });
+              const panel = p.locator("[data-shelf-panel]");
               if (!(await panel.getByText("Bleibt in der Ablage bis zur Durchsicht.").waitFor({ timeout: 3000 }).then(() => true, () => false))) failures.push(`${label}: a sheet does not open its entry`);
               await p.keyboard.press("Escape");
             }
@@ -207,7 +208,7 @@ async function run() {
           // the inbox is the tray's panel: every entry, newest first; one opens there to read and add
           // to and stays in the inbox (looking in sorts nothing)
           await check(page, label, "/#/inbox", errors, async (p) => {
-            const panel = p.getByRole("dialog", { name: "Ablage" });
+            const panel = p.locator("[data-shelf-panel]");
             if (!(await panel.waitFor({ timeout: 3000 }).then(() => true, () => false))) return void failures.push(`${label}: "#/inbox" does not open the tray's panel`);
             const rows = panel.locator("[data-shelf]");
             const n = await rows.count();
@@ -221,8 +222,10 @@ async function run() {
             await panel.getByRole("button", { name: "Ablage", exact: true }).click();
             if ((await panel.locator("[data-shelf]").count()) !== n) failures.push(`${label}: adding to an entry took it out of the inbox`);
             if (!(await panel.getByText("E2E-Ergänzung").count())) failures.push(`${label}: what was added does not show in the panel's list`);
+            const pinned = (await panel.getAttribute("data-shelf-panel")) === "pinned";
             await p.keyboard.press("Escape");
-            if (await panel.count()) failures.push(`${label}: Escape does not close the panel`);
+            if (!pinned && (await panel.count())) failures.push(`${label}: Escape does not close the panel`);
+            if (pinned && !(await panel.count())) failures.push(`${label}: Escape closes the panel pinned on Heute`);
           }, { phone });
           // an entry's page from before the review leads into the review, at that entry
           await check(page, label, "/#/inbox/ex-i-podcast", errors, async (p) => {
@@ -271,7 +274,7 @@ async function run() {
               await p.keyboard.press("Escape");
             });
             await check(page, label, "/#/inbox", errors, async (p) => {
-              await p.getByRole("dialog", { name: "Ablage" }).getByRole("button", { name: "Mehr" }).click();
+              await p.locator("[data-shelf-panel]").getByRole("button", { name: "Mehr" }).click();
               const menu = await p.locator("[data-popover]").last().innerText();
               if (!/Was landet im Eingang\?/.test(menu) || /Sammlung/.test(menu)) failures.push(`${label}: inbox menu is "${menu.replace(/\n/g, " · ")}"`);
               // the rule opens with the way back to the default
@@ -466,7 +469,7 @@ async function twoWorkspaces(browser: import("playwright-core").Browser, server:
     if (!(await p.locator("aside section[aria-label='Persönlich'] a[href='#/i/ex-work']").count())) failures.push(`${label}: the first workspace's block lost its pinned items`);
   });
   await check(page, label, "/#/inbox", errors, async (p) => {
-    const panel = p.getByRole("dialog", { name: "Ablage" });
+    const panel = p.locator("[data-shelf-panel]");
     const chips = panel.locator("[role=group] button");
     if ((await chips.allInnerTexts()).map((x) => x.replace(/\s*\d+$/, "")).join(",") !== "Alle,Persönlich,Firma") failures.push(`${label}: inbox filter is ${(await chips.allInnerTexts()).join(", ")}`);
     await chips.filter({ hasText: "Firma" }).click();

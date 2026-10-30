@@ -31,6 +31,7 @@ import { DraftBar } from "../views/Lists";
 export const reviewHref = (key: string) => `#/review?at=${encodeURIComponent(key)}`;
 
 export function ShelfPanel({ desktop, pinned }: { desktop: boolean; pinned?: boolean }) {
+  const { t } = useT();
   const { at } = useShelf();
   const entries = useInboxItems();
   const entry = at ? entries.find((e) => e.key === at) : undefined;
@@ -48,8 +49,10 @@ export function ShelfPanel({ desktop, pinned }: { desktop: boolean; pinned?: boo
   }, [!!entry]);
   return (
     <div
-      role={pinned ? "region" : "dialog"}
-      aria-label={useT().t("tray.title")}
+      // pinned it is part of the tray's region, else a dialog over the page
+      role={pinned ? undefined : "dialog"}
+      aria-label={pinned ? undefined : t("tray.title")}
+      data-shelf-panel={pinned ? "pinned" : "open"}
       // a link inside leads away: the panel closes behind it
       onClickCapture={(e) => (e.target as HTMLElement).closest("a[href]") && closeShelf()}
       className={cx(
