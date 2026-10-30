@@ -6,7 +6,7 @@ import { Button as ShadcnButton } from "../components/ui/button";
 // On a phone it sits above the tab bar; the field opens from its "+" in a sheet. On Heute on a
 // desktop with room below the page the panel is pinned open above it, part of the page: the rest
 // of the height below Heute (App.tsx).
-import { useRef } from "react";
+import { type CSSProperties, useRef } from "react";
 import { Check, ChevronDown, ChevronUp, Layers, Plus } from "lucide-react";
 import { useT } from "../i18n";
 import { RelTime, cx } from "./bits";
@@ -24,8 +24,8 @@ export function Tray({ desktop, pinned, onCapture }: { desktop: boolean; pinned?
   const { open, at } = useShelf();
   const touch = useRef<number | null>(null);
   const tray = (
-    <div className={cx("relative flex shrink-0 items-center rounded-xl", !desktop && "min-w-0 flex-1")}>
-      <Sheets entries={entries.slice(0, 3)} />
+    <div className={cx("group/tray relative flex shrink-0 items-center rounded-xl", !desktop && "min-w-0 flex-1")}>
+      <Sheets entries={entries.slice(0, 3)} desktop={desktop} />
       <ShadcnButton
         variant="plain"
         size="none"
@@ -38,7 +38,7 @@ export function Tray({ desktop, pinned, onCapture }: { desktop: boolean; pinned?
         }}
         aria-expanded={pinned || open}
         aria-label={t("tray.open", { count })}
-        className={cx("flex min-w-0 items-center gap-2 rounded-xl py-1.5 pl-[58px] pr-2 text-left hover:bg-hover", !desktop && "flex-1", open && "bg-hover")}
+        className={cx("flex min-w-0 items-center gap-2 rounded-xl py-1.5 pr-2 text-left", desktop ? "min-h-11 pl-[136px]" : "min-h-10 pl-[100px]", "hover:bg-hover", !desktop && "flex-1", open && "bg-hover")}
       >
         <span className="flex min-w-0 flex-col gap-1.5">
           <span className="text-sm font-semibold leading-none">
@@ -74,12 +74,14 @@ export function Tray({ desktop, pinned, onCapture }: { desktop: boolean; pinned?
         {/* panel and bar as one: leaving Heute the panel folds into the bar, coming back it unfolds (styles.css) */}
         <div style={desktop ? { viewTransitionName: "shelf" } : undefined} className={cx("mx-auto", desktop && "max-w-[1040px]", pinned && "flex min-h-0 w-full flex-1 flex-col")}>
           {pinned ? (
-            <div className="min-h-0 flex-1 pb-2">
+            // above the sheets sticking out of the tray, which stay
+            <div className="min-h-0 flex-1 pb-10">
               <ShelfPanel desktop pinned />
             </div>
           ) : open && (
             // on a phone an entry takes the whole screen, as a sheet
-            <div className={cx(desktop ? "absolute inset-x-6 bottom-full mx-auto max-w-[1040px] pb-2" : at ? "fixed inset-x-0 bottom-0 top-3 z-50 pt-safe" : "absolute inset-x-2 bottom-full pb-1")}>
+            // above the sheets sticking out of the tray, which stay
+            <div className={cx(desktop ? "absolute inset-x-6 bottom-full mx-auto max-w-[1040px] pb-10" : at ? "fixed inset-x-0 bottom-0 top-3 z-50 pt-safe" : "absolute inset-x-2 bottom-full pb-7")}>
               <ShelfPanel desktop={desktop} />
             </div>
           )}
@@ -107,34 +109,54 @@ export function Tray({ desktop, pinned, onCapture }: { desktop: boolean; pinned?
 }
 
 /**
- * The newest entries as sheets sticking out of the tray, one a little above the other: its title
- * on hover (and focus), a click opens it in the panel. A dot while anything waits.
+ * Back to front: where a sheet rests in the well, fanned out while the tray is hovered, and lifted
+ * while it is hovered itself.
  */
-function Sheets({ entries }: { entries: InboxEntry[] }) {
+const POSES = [
+  { left: [4, 2], rest: ["-8deg", "0 10px"], fan: ["-14deg", "-10px 0"], lift: "-10px -12px" },
+  { left: [18, 12], rest: ["3deg", "0 4px"], fan: ["2deg", "0 -8px"], lift: "0 -18px" },
+  { left: [30, 20], rest: ["-2deg", "0 -2px"], fan: ["10deg", "14px -6px"], lift: "14px -16px" },
+];
+
+/**
+ * The newest entries as sheets sticking out of a well in the tray, the newest in front: its title
+ * on hover (and focus), a click opens it in the panel. A dot on the newest.
+ */
+function Sheets({ entries, desktop }: { entries: InboxEntry[]; desktop: boolean }) {
   const { t } = useT();
   const { shown } = useAccounts();
+  const poses = POSES.slice(POSES.length - entries.length);
   return (
-    <span className="absolute bottom-1.5 left-1.5 z-10 block h-9 w-11">
-      <span className="absolute inset-x-0 bottom-0 h-3 rounded-b-lg border border-t-0 border-line bg-surface-2" aria-hidden />
-      {/* oldest of them at the back, the newest in front */}
+    <span className={cx("absolute inset-y-0 left-0 z-10 block", desktop ? "w-[120px]" : "w-[84px]")}>
+      <span className="absolute inset-0 rounded-[11px] border border-line bg-black/[.06] shadow-[inset_0_3px_8px_rgb(0_0_0/0.12)] dark:bg-black/30 dark:shadow-[inset_0_3px_8px_rgb(0_0_0/0.7)]" aria-hidden />
+      <span className="absolute -top-px left-0.5 h-[3px] w-[calc(100%-4px)] rounded-b-[3px] bg-[linear-gradient(90deg,transparent,color-mix(in_srgb,var(--t-inbox)_60%,transparent),transparent)]" aria-hidden />
+      {/* the sheets end inside the well, above they may stick out (and show their titles) */}
+      <span className="absolute inset-0 [clip-path:inset(-300px_-300px_4px_-300px)]">
       {[...entries].reverse().map((e, n, all) => {
         const front = n === all.length - 1;
-        const angle = (n - (all.length - 1) / 2) * 6;
+        const { left, rest, fan, lift } = poses[n]!;
+        const title = e.item.title || e.item.file?.name || t("untitled");
         return (
           <ShadcnButton
             key={e.key}
             variant="plain"
             size="none"
             onClick={() => openShelf(e.key)}
-            aria-label={t("tray.openEntry", { title: e.item.title || e.item.file?.name || t("untitled") })}
-            className="group absolute bottom-1.5 h-6 w-7 rounded-[5px] border border-line bg-surface shadow-sm transition-transform hover:-translate-y-1 focus-visible:-translate-y-1"
-            style={{ left: 6 + n * 3, rotate: `${angle}deg`, zIndex: n }}
+            aria-label={t("tray.openEntry", { title })}
+            className={cx(
+              "group absolute rounded-[7px] border shadow-[0_-2px_10px_rgb(0_0_0/0.15)] transition-[rotate,translate] duration-300 ease-[cubic-bezier(.2,.8,.2,1)] [rotate:var(--r)] [translate:var(--t)] group-hover/tray:[rotate:var(--rf)] group-hover/tray:[translate:var(--tf)] hover:[translate:var(--tl)]! focus-visible:[rotate:var(--rf)]! focus-visible:[translate:var(--tl)]!",
+              desktop ? "-bottom-1.5 h-[74px] w-[84px]" : "-bottom-1 h-[62px] w-[56px]",
+              front ? "border-faint/50 bg-hover" : "border-line bg-surface-2",
+              "hover:border-faint hover:bg-hover",
+            )}
+            style={{ left: left[desktop ? 0 : 1], zIndex: n, ...vars({ r: rest[0], t: rest[1], rf: fan[0], tf: fan[1], tl: lift }) }}
           >
-            <span className="absolute inset-x-1 top-1.5 h-px bg-line" aria-hidden />
-            <span className="absolute inset-x-1 top-3 h-px bg-line" aria-hidden />
-            {front && <span className="absolute -right-1 -top-1 size-2 rounded-full bg-[var(--t-inbox)]" aria-hidden />}
-            <span className="pointer-events-none absolute bottom-full left-0 mb-2 hidden w-max max-w-[280px] rounded-lg border border-line bg-surface px-2.5 py-1.5 text-left shadow-lg group-hover:block group-focus-visible:block" style={{ rotate: `${-angle}deg` }}>
-              <span className="block truncate text-[13px] font-semibold text-fg">{e.item.title || e.item.file?.name || t("untitled")}</span>
+            <span className={cx("absolute left-2.5 h-[3px] rounded-full bg-faint/40", desktop ? "right-[22px] top-3" : "right-3 top-2")} aria-hidden />
+            <span className={cx("absolute left-2.5 h-[3px] rounded-full bg-faint/30", desktop ? "right-[22px] top-5" : "right-3 top-4")} aria-hidden />
+            <span className={cx("absolute left-2.5 h-[3px] rounded-full bg-faint/25", desktop ? "right-[22px] top-7" : "right-3 top-6")} aria-hidden />
+            {front && <span className="absolute right-2 top-2 size-2 rounded-full bg-[var(--t-inbox)] shadow-[0_0_10px_var(--t-inbox)]" aria-hidden />}
+            <span className="pointer-events-none absolute bottom-full left-0 mb-2 hidden w-max max-w-[320px] rounded-lg border border-line bg-surface px-3 py-2 text-left shadow-lg [rotate:calc(var(--r)*-1)] group-hover:block group-focus-visible:block group-hover/tray:[rotate:calc(var(--rf)*-1)]">
+              <span className="block truncate text-[13px] font-semibold text-fg">{title}</span>
               <span className="block text-xs text-muted-foreground">
                 {shown.length > 1 && <>{spaceById(e.space)?.name} · </>}
                 <RelTime ts={e.item.created} />
@@ -143,9 +165,12 @@ function Sheets({ entries }: { entries: InboxEntry[] }) {
           </ShadcnButton>
         );
       })}
+      </span>
     </span>
   );
 }
+
+const vars = (v: Record<string, string>) => Object.fromEntries(Object.entries(v).map(([k, x]) => [`--${k}`, x])) as CSSProperties;
 
 /** How full the tray is: one of ten marks per entry, amber. */
 function Fill({ count }: { count: number }) {
