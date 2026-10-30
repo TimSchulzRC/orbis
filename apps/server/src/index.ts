@@ -25,6 +25,9 @@ const PUBLIC_URL = process.env.OBTION_PUBLIC_URL ?? "";
 const WEB_APP = !/^(off|0|false|no)$/i.test(process.env.OBTION_WEB_APP ?? "on");
 /** Who may create an account (the first one always may, it becomes the admin): open | invite | off. */
 const SIGNUP = (["open", "invite", "off"].includes(process.env.OBTION_SIGNUP ?? "") ? process.env.OBTION_SIGNUP : "invite") as SignupPolicy;
+/** Set when the image is built (Dockerfile): 0.0.1, 0.0.2-nightly.20261030.41 or dev; the commit it was built from. */
+const VERSION = process.env.OBTION_BUILD_VERSION || "dev";
+const COMMIT = (process.env.OBTION_BUILD_COMMIT ?? "").slice(0, 7);
 
 mkdirSync(DATA, { recursive: true });
 const configPath = join(DATA, "config.json");
@@ -52,7 +55,7 @@ function workspace(id: string): Workspace | undefined {
   return w;
 }
 
-console.log(`[obtion] ${accounts.userCount()} accounts, signup ${SIGNUP}, data in ${DATA}`);
+console.log(`[obtion] ${VERSION}${COMMIT ? ` (${COMMIT})` : ""}, ${accounts.userCount()} accounts, signup ${SIGNUP}, data in ${DATA}`);
 
 // ---------- http ----------
 
@@ -119,7 +122,7 @@ async function serveStatic(path: string): Promise<Response> {
 /** The account API: who am I, my workspaces, invites, tokens. `null`: not this path. */
 async function accountApi(req: Request, path: string, url: URL): Promise<Response | null> {
   if (path === "/api/info") {
-    return json({ signup: SIGNUP, firstAccount: accounts.userCount() === 0 });
+    return json({ signup: SIGNUP, firstAccount: accounts.userCount() === 0, version: VERSION, commit: COMMIT });
   }
 
   if (path === "/api/account/signup" && req.method === "POST") {

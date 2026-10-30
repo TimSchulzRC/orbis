@@ -1,0 +1,129 @@
+name: Release
+
+# Three channels of one image, ghcr.io/<owner>/obtion (the desktop app shall follow the same):
+#   dev      every push to main (ci.yml): :dev and :sha-<commit>
+#   nightly  this workflow, checked every half hour: a new one when main has commits the last one
+#            lacks and that one is at least six hours old; by hand without the wait.
+#            :nightly and :0.0.2-nightly.20261030.1, a GitHub pre-release v0.0.2-nightly.20261030.1
+#   stable   this workflow, only by hand: the commit of the latest nightly, so stable only ever
+#            ships what ran as nightly. :stable, :latest and :0.0.2, a GitHub release v0.0.2
+# The last number of a version counts the stable releases; a new middle one (0.1.0: beta) is
+# given by hand as version. Details in .github/scripts/resolve-release.sh.
+
+on:
+  schedule:
+    # not at minute zero, when GitHub's scheduled jobs are busiest
+    - cron: "8,38 * * * *"
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: Channel
+        type: choice
+        default: nightly
+        options: [nightly, stable]
+      version:
+        description: "Only for stable, e.g. 0.1.0. Default: the version the latest nightly led up to."
+        required: false
+        type: string
+
+# one nightly at a time (a waiting one checks again when it starts), stable apart from it
+concurrency:
+  group: release-${{ inputs.channel == 'stable' && 'stable' || 'nightly' }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    if: github.ref == 'refs/heads/main'
+    # like ci.yml: the self-hosted runner when the repository variable RUNNER says so
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    permissions:
+      contents: read
+      packages: read
+    outputs:
+      skip: ${{ steps.resolve.outputs.skip }}
+      sha: ${{ steps.resolve.outputs.sha }}
+      version: ${{ steps.resolve.outputs.version }}
+      tags: ${{ steps.resolve.outputs.tags }}
+      notes: ${{ steps.resolve.outputs.notes }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/scripts
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: resolve
+        run: bash .github/scripts/resolve-release.sh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHANNEL: ${{ inputs.channel || 'nightly' }}
+          EVENT: ${{ github.event_name }}
+          SHA: ${{ github.sha }}
+          VERSION_INPUT: ${{ inputs.version }}
+
+  release:
+    needs: resolve
+    if: needs.resolve.outputs.skip == 'false'
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    permissions:
+      contents: write
+      packages: write
+    env:
+      SELF_HOSTED: ${{ vars.RUNNER != '' }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+      # builder and cache as in ci.yml
+      - uses: docker/setup-buildx-action@v4
+        with:
+          driver: ${{ env.SELF_HOSTED == 'true' && 'docker' || 'docker-container' }}
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ github.repository }}
+          labels: |
+            org.opencontainers.image.version=${{ needs.resolve.outputs.version }}
+            org.opencontainers.image.revision=${{ needs.resolve.outputs.sha }}
+      # the same commit dev ran, built again only to carry its version
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ needs.resolve.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            OBTION_BUILD_VERSION=${{ needs.resolve.outputs.version }}
+            OBTION_BUILD_COMMIT=${{ needs.resolve.outputs.sha }}
+          cache-from: ${{ env.SELF_HOSTED != 'true' && 'type=gha' || '' }}
+          cache-to: ${{ env.SELF_HOSTED != 'true' && 'type=gha,mode=max' || '' }}
+      - name: Remove local image tags
+        if: always() && env.SELF_HOSTED == 'true'
+        run: docker image rm $(tr , ' ' <<< "$TAGS") || true
+        env:
+          TAGS: ${{ needs.resolve.outputs.tags }}
+      # after the image: a release always has its image
+      - name: GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.resolve.outputs.version }}
+          SHA: ${{ needs.resolve.outputs.sha }}
+          NOTES: ${{ needs.resolve.outputs.notes }}
+          CHANNEL: ${{ inputs.channel || 'nightly' }}
+        run: |
+          args=(--target "$SHA" --title "Obtion $VERSION" --generate-notes)
+          [[ -n $NOTES ]] && args+=(--notes-start-tag "$NOTES")
+          if [[ $CHANNEL == stable ]]; then args+=(--latest); else args+=(--prerelease --latest=false); fi
+          gh release create "v$VERSION" "${args[@]}"

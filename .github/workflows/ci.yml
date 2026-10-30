@@ -6,7 +6,7 @@ on:
   pull_request:
 
 # A newer push to the same branch or pull request cancels the run still going: no runner time for
-# outdated commits, and an older image build can never overwrite a newer :latest.
+# outdated commits, and an older image build can never overwrite a newer :dev.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -38,9 +38,9 @@ jobs:
           done
           exit $failed
 
-  # The image for docker compose: ghcr.io/<owner>/obtion, :latest is always the newest main,
-  # :sha-<commit> keeps each build for going back. Only after the checks passed, never for pull
-  # requests.
+  # The dev channel of the image ghcr.io/<owner>/obtion: :dev is always the newest main,
+  # :sha-<commit> keeps each build (release.yml builds nightly and stable only from commits that
+  # have one). Only after the checks passed, never for pull requests.
   image:
     needs: check
     if: github.event_name == 'push'
@@ -68,7 +68,7 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
-            type=raw,value=latest
+            type=raw,value=dev
             type=sha
       - uses: docker/build-push-action@v7
         with:
@@ -77,6 +77,9 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            OBTION_BUILD_VERSION=dev
+            OBTION_BUILD_COMMIT=${{ github.sha }}
           cache-from: ${{ env.SELF_HOSTED != 'true' && 'type=gha' || '' }}
           cache-to: ${{ env.SELF_HOSTED != 'true' && 'type=gha,mode=max' || '' }}
       # the docker builder also keeps the pushed image locally: drop exactly these tags, the build

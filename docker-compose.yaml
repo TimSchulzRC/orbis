@@ -3,8 +3,8 @@
 # .env.example). Update: `docker compose pull && docker compose up -d`.
 services:
   obtion:
-    # built by GitHub Actions from every push to main (see .github/workflows/ci.yml); an earlier
-    # build with OBTION_VERSION, e.g. sha-cfc56ef
+    # the channel or a fixed version with OBTION_VERSION: latest (= stable, the default), nightly,
+    # dev, or e.g. 0.0.2 (see .github/workflows/release.yml)
     image: ghcr.io/timschulzrc/obtion:${OBTION_VERSION:-latest}
     restart: unless-stopped
     ports:

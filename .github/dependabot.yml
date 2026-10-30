@@ -1,0 +1,7 @@
+# Newer base images for the Dockerfile, which pins them to a digest.
+version: 2
+updates:
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly

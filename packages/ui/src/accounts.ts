@@ -274,7 +274,7 @@ export async function joinInvite(code: string) {
 }
 
 export const invite = (code: string): Promise<{ workspace: string; by: string; signup: boolean }> => call(`/api/invites/${code}`);
-export const serverInfo = (): Promise<{ signup: "open" | "invite" | "off"; firstAccount: boolean }> => call("/api/info");
+export const serverInfo = (): Promise<{ signup: "open" | "invite" | "off"; firstAccount: boolean; version: string; commit: string }> => call("/api/info");
 
 /** An MCP token for agents on a workspace, with the ready-made commands. */
 export const mcpToken = (s: Space) => call(`/api/workspaces/${s.id}/mcp-token`, {});
