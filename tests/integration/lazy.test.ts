@@ -2,13 +2,10 @@
 // let go is loaded again from snapshot + log, and everything works on it as before.
 import { test, expect, afterAll } from "bun:test";
 import { tempDir, removeTempDirs } from "../support/helpers";
+import { setupStore, stepOf, tool } from "../support/store";
 import * as Y from "yjs";
 import { AreaError, Store } from "@obtion/server/store";
-import { Ops } from "@obtion/server/ops";
-import { handleMcp } from "@obtion/server/mcp";
 import { undoStep } from "@obtion/server/undo";
-import { runSetup } from "@obtion/core/setup";
-import { storeWriter } from "@obtion/server/importers";
 import { PERSONAL as P, readItem } from "@obtion/core/model";
 
 afterAll(removeTempDirs);
@@ -17,14 +14,12 @@ const AG = "agent:test";
 const body = (s: Store, id: string) => s.records.get(id)?.body;
 
 function seeded(n: number, cacheSize = 3) {
-  const dir = tempDir("obtion-lazy-");
-  const s = new Store(dir, cacheSize);
-  runSetup(storeWriter(s, "system:setup"), "de");
+  const { dir, s, ops } = setupStore("obtion-lazy-", cacheSize);
   const ids = Array.from({ length: n }, (_, i) => s.create({ title: `Notiz ${i}`, body: `Text ${i}` }, "seed"));
   for (const [i, id] of ids.entries()) s.change(id, "seed", (d) => d.getText("body").insert(0, `Neu ${i} `));
   s.flush();
   s.trim();
-  return { dir, s, ids };
+  return { dir, s, ops, ids };
 }
 
 test("a start reads every document once, but keeps none of them in memory", () => {
@@ -102,14 +97,13 @@ test("sync: a device's change to a document not in memory merges with the server
 });
 
 test("undo works on documents that are no longer in memory", () => {
-  const { s } = seeded(0);
-  const ops = new Ops(s);
+  const { s, ops } = seeded(0);
   const out = ops.call(AG, () => {
     ops.create({ title: "Garten", type: "Projekt", properties: { Status: "Planung" } }, AG);
     ops.create({ title: "Beet umgraben", type: "Task", parents: ["Garten"] }, AG);
     return "ok";
   });
-  const step = /\(step (s\w+)/.exec(out)![1]!;
+  const step = stepOf(out);
   ops.call(AG, () => (ops.update("Garten", { properties: { Status: "aktiv" } }, AG), "ok"));
   for (let i = 0; i < 6; i++) s.create({ title: `Füller ${i}` }, "seed");
   s.trim();
@@ -123,14 +117,8 @@ test("undo works on documents that are no longer in memory", () => {
 
 test("MCP tools change documents that are not in memory", async () => {
   const { s, ids } = seeded(6);
-  const req = new Request("http://127.0.0.1/mcp", {
-    method: "POST",
-    headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "update", arguments: { ref: ids[0], title: "Umbenannt", body: "Neuer Text" } } }),
-  });
   expect(s.loaded.has(ids[0]!)).toBe(false);
-  const res = ((await (await handleMcp(s, req)).json()) as any).result;
-  expect(res.isError).toBeFalsy();
+  expect((await tool(s, "update", { ref: ids[0], title: "Umbenannt", body: "Neuer Text" })).error).toBe(false);
   expect(s.records.get(ids[0]!)).toMatchObject({ title: "Umbenannt", body: "Neuer Text" });
   expect(s.events({ doc: ids[0] })[0]).toMatchObject({ kind: "updated", origin: expect.stringContaining("agent") });
 });

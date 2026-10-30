@@ -1,4 +1,4 @@
-import { test, expect, describe } from "bun:test";
+import { test, expect, describe, jest } from "bun:test";
 import * as Y from "yjs";
 import { MemRepo } from "../support/helpers";
 import { addParent, readItem, removeParent, setMeta, setProp, setSettings, initItem, META_TYPE, SETTINGS_ID, touchOnTextEdit } from "@obtion/core/model";
@@ -297,30 +297,35 @@ test("readItem ignores uninitialised and legacy documents", () => {
   expect(readItem("x", d)!.props).toEqual({});
 });
 
-test("typing moves the change time: local text edits touch meta.updated, edits from elsewhere don't", async () => {
-  const doc = new Y.Doc();
-  initItem(doc, { title: "Notiz", body: "Alt", created: 1000, updated: 1000 });
-  let now = 50_000;
-  const stop = touchOnTextEdit(doc, 3000, () => now);
-  const updated = () => doc.getMap<any>("meta").get("updated");
-  doc.getText("body").insert(3, " und neu"); // typed here
-  await Bun.sleep(5);
-  expect(updated()).toBe(50_000);
-  // a burst: the next stamp waits for the window, then the last edit counts
-  now = 51_000;
-  doc.getText("body").insert(0, "x");
-  await Bun.sleep(5);
-  expect(updated()).toBe(50_000);
-  now = 53_000;
-  await Bun.sleep(2050);
-  expect(updated()).toBe(53_000);
-  // an edit that arrives from another device brings its own time
-  const other = new Y.Doc();
-  Y.applyUpdate(other, Y.encodeStateAsUpdate(doc));
-  other.getText("body").insert(0, "y");
-  now = 90_000;
-  Y.applyUpdate(doc, Y.encodeStateAsUpdate(other, Y.encodeStateVector(doc)));
-  await Bun.sleep(5);
-  expect(updated()).toBe(53_000);
-  stop();
+test("typing moves the change time: local text edits touch meta.updated, edits from elsewhere don't", () => {
+  jest.useFakeTimers();
+  try {
+    const doc = new Y.Doc();
+    initItem(doc, { title: "Notiz", body: "Alt", created: 1000, updated: 1000 });
+    let now = 50_000;
+    const stop = touchOnTextEdit(doc, 3000, () => now);
+    const updated = () => doc.getMap<any>("meta").get("updated");
+    doc.getText("body").insert(3, " und neu"); // typed here
+    jest.advanceTimersByTime(0);
+    expect(updated()).toBe(50_000);
+    // a burst: the next stamp waits for the window, then the last edit counts
+    now = 51_000;
+    doc.getText("body").insert(0, "x");
+    jest.advanceTimersByTime(1999);
+    expect(updated()).toBe(50_000);
+    now = 53_000;
+    jest.advanceTimersByTime(1);
+    expect(updated()).toBe(53_000);
+    // an edit that arrives from another device brings its own time
+    const other = new Y.Doc();
+    Y.applyUpdate(other, Y.encodeStateAsUpdate(doc));
+    other.getText("body").insert(0, "y");
+    now = 90_000;
+    Y.applyUpdate(doc, Y.encodeStateAsUpdate(other, Y.encodeStateVector(doc)));
+    jest.advanceTimersByTime(3000);
+    expect(updated()).toBe(53_000);
+    stop();
+  } finally {
+    jest.useRealTimers();
+  }
 });

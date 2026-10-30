@@ -1,7 +1,7 @@
 import { test, expect } from "bun:test";
 import { MemRepo } from "../support/helpers";
 import { runSetup, SYS, upgradeHideEmptyTaskFields } from "@obtion/core/setup";
-import { META_TYPE, initItem, initSchema, setProp, upsertProp } from "@obtion/core/model";
+import { setProp, upsertProp } from "@obtion/core/model";
 import { deleteType, previewTagToType, tagToType, typeUsage, wouldBeInInbox } from "@obtion/core/typeops";
 import { isInInbox } from "@obtion/core/placement";
 import { languageCode, translations, translationInit, translationPlan, visibleProps } from "@obtion/core/traits";
@@ -9,23 +9,17 @@ import { languageCode, translations, translationInit, translationPlan, visiblePr
 function books() {
   const m = new MemRepo();
   runSetup(m.writer, "de");
-  m.change("t_person", (d) => {
-    initItem(d, { type: META_TYPE, title: "Person" });
-    initSchema(d, { name: "Person", icon: "user", color: "pink" });
-  });
-  m.change("t_buch", (d) => {
-    initItem(d, { type: META_TYPE, title: "Buch" });
-    initSchema(d, {
-      name: "Buch",
-      icon: "book",
-      color: "brown",
-      capabilities: { status: "p_lese" },
-      properties: [
-        { id: "p_autor", name: "Autor", kind: "relation", target: "typ:Person", inverseName: "Bücher", multiple: true },
-        { id: "p_lese", name: "Status", kind: "status", options: [{ id: "o1", name: "Will lesen", group: "todo" }, { id: "o2", name: "Gelesen", group: "done" }] },
-        { id: "p_bew", name: "Bewertung", kind: "number" },
-      ],
-    });
+  m.addType("t_person", { name: "Person", icon: "user", color: "pink" });
+  m.addType("t_buch", {
+    name: "Buch",
+    icon: "book",
+    color: "brown",
+    capabilities: { status: "p_lese" },
+    properties: [
+      { id: "p_autor", name: "Autor", kind: "relation", target: "typ:Person", inverseName: "Bücher", multiple: true },
+      { id: "p_lese", name: "Status", kind: "status", options: [{ id: "o1", name: "Will lesen", group: "todo" }, { id: "o2", name: "Gelesen", group: "done" }] },
+      { id: "p_bew", name: "Bewertung", kind: "number" },
+    ],
   });
   const hamming = m.add({ title: "Richard Hamming", type: "t_person" });
   const b1 = m.add({ title: "The Art of Doing Science", type: "t_buch", rels: { p_autor: [hamming] }, props: { p_lese: "o2", p_bew: 5 } });
@@ -83,10 +77,7 @@ test("relations: inverse side via backlinks, symmetric relations stored once", (
   const { m, hamming, b1 } = books();
   const ix = m.index();
   expect(ix.backlinks(hamming).filter((b) => b.kind === "rel").map((b) => b.from)).toEqual([b1]);
-  m.change("t_art", (d) => {
-    initItem(d, { type: META_TYPE, title: "Artikel" });
-    initSchema(d, { name: "Artikel", properties: [{ id: "p_tr", name: "Übersetzung", kind: "relation", symmetric: true }] });
-  });
+  m.addType("t_art", { name: "Artikel", properties: [{ id: "p_tr", name: "Übersetzung", kind: "relation", symmetric: true }] });
   const en = m.add({ title: "Why I'm blogging again", type: "t_art" });
   const de = m.add({ title: "Warum ich wieder blogge", type: "t_art", rels: { p_tr: [en] } });
   const ix2 = m.index();
@@ -96,16 +87,13 @@ test("relations: inverse side via backlinks, symmetric relations stored once", (
 
 test("language switch: versions through a symmetric relation, each with a language; nothing without", () => {
   const m = new MemRepo();
-  m.change("t_art", (d) => {
-    initItem(d, { type: META_TYPE, title: "Article" });
-    initSchema(d, {
-      name: "Article",
-      properties: [
-        { id: "p_l", name: "Language", kind: "select", options: [{ id: "de", name: "Deutsch" }, { id: "en", name: "EN" }] },
-        { id: "p_tr", name: "Übersetzung", kind: "relation", symmetric: true },
-        { id: "p_src", name: "Quelle", kind: "relation" },
-      ],
-    });
+  m.addType("t_art", {
+    name: "Article",
+    properties: [
+      { id: "p_l", name: "Language", kind: "select", options: [{ id: "de", name: "Deutsch" }, { id: "en", name: "EN" }] },
+      { id: "p_tr", name: "Übersetzung", kind: "relation", symmetric: true },
+      { id: "p_src", name: "Quelle", kind: "relation" },
+    ],
   });
   const en = m.add({ title: "Why I'm blogging again", type: "t_art", props: { p_l: "en" } });
   const de = m.add({ title: "Warum ich wieder blogge", type: "t_art", props: { p_l: "de" }, rels: { p_tr: [en] } });
@@ -137,16 +125,13 @@ test("delete preview: kept children without type land in the inbox, typed ones a
 test("pages show every property of a type, empty ones too – except those marked to show only when set", () => {
   const m = new MemRepo();
   runSetup(m.writer, "de");
-  m.change("t_book", (d) => {
-    initItem(d, { type: META_TYPE, title: "Buch" });
-    initSchema(d, {
-      name: "Buch",
-      properties: [
-        { id: "p_autor", name: "Autor", kind: "relation" },
-        { id: "p_isbn", name: "ISBN", kind: "text", hideEmpty: true },
-        { id: "p_n", name: "Kapitel", kind: "computed", computed: { fn: "progress" } },
-      ],
-    });
+  m.addType("t_book", {
+    name: "Buch",
+    properties: [
+      { id: "p_autor", name: "Autor", kind: "relation" },
+      { id: "p_isbn", name: "ISBN", kind: "text", hideEmpty: true },
+      { id: "p_n", name: "Kapitel", kind: "computed", computed: { fn: "progress" } },
+    ],
   });
   const b = m.add({ title: "Neues Buch", type: "t_book" });
   const ix = m.index();
@@ -181,15 +166,12 @@ test("the one-time upgrade marks only the two task fields, once – a later choi
 
 test("a new language version: same type, places and home, the other language, linked as translation", () => {
   const m = new MemRepo();
-  m.change("t_art", (d) => {
-    initItem(d, { type: META_TYPE, title: "Artikel" });
-    initSchema(d, {
-      name: "Artikel",
-      properties: [
-        { id: "p_l", name: "Sprache", kind: "select", options: [{ id: "de", name: "DE" }, { id: "en", name: "EN" }] },
-        { id: "p_tr", name: "Übersetzung", kind: "relation", symmetric: true },
-      ],
-    });
+  m.addType("t_art", {
+    name: "Artikel",
+    properties: [
+      { id: "p_l", name: "Sprache", kind: "select", options: [{ id: "de", name: "DE" }, { id: "en", name: "EN" }] },
+      { id: "p_tr", name: "Übersetzung", kind: "relation", symmetric: true },
+    ],
   });
   const blog = m.add({ title: "Blog" });
   const web = m.add({ title: "Website" });

@@ -2,24 +2,16 @@
 import { test, expect, afterAll } from "bun:test";
 import { copyFileSync, existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import * as Y from "yjs";
 import { Store } from "@obtion/server/store";
 import { Backups } from "@obtion/server/backup";
-import { initItem } from "@obtion/core/model";
-import { tempDir, removeTempDirs } from "../support/helpers";
+import { docUpdate, tempDir, removeTempDirs } from "../support/helpers";
 
 afterAll(removeTempDirs);
-
-function note(title: string): Uint8Array {
-  const d = new Y.Doc();
-  d.transact(() => initItem(d, { title }));
-  return Y.encodeStateAsUpdate(d);
-}
 
 test("a copy per day that opens as a store of its own, the oldest dropped beyond the limit", () => {
   const dir = tempDir("obtion-backup-");
   const store = new Store(dir);
-  store.applyRemote("a", note("Erste Notiz"), "web:laptop");
+  store.applyRemote("a", docUpdate({ title: "Erste Notiz" }), "web:laptop");
   const backups = new Backups(store, join(dir, "backups"), 2);
 
   const first = backups.run("2026-10-01")!;

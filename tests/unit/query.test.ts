@@ -2,16 +2,13 @@ import { test, expect, describe } from "bun:test";
 import { MemRepo } from "../support/helpers";
 import { runSetup, SYS, addLaterDefaultProps, renameShippedLabels } from "@obtion/core/setup";
 import { parseQuery, printQuery, runQuery, groupItems, normalizeBlocks, findBlocks, readBlock, blocksAsText, shownByBlocks, tabDef } from "@obtion/core/query";
-import { addDaysISO, todayISO, initItem, initSchema, META_TYPE, removeProp, setMember } from "@obtion/core/model";
+import { addDaysISO, removeProp, setMember } from "@obtion/core/model";
 
 function world() {
   const m = new MemRepo();
   runSetup(m.writer, "de");
   const person = "t_person";
-  m.change(person, (d) => {
-    initItem(d, { type: META_TYPE, title: "Person" });
-    initSchema(d, { name: "Person", icon: "user", color: "pink", properties: [{ id: "p_rolle", name: "Rolle", kind: "text" }] });
-  });
+  m.addType(person, { name: "Person", icon: "user", color: "pink", properties: [{ id: "p_rolle", name: "Rolle", kind: "text" }] });
   const arbeit = m.add({ title: "Arbeit", pinned: "V" });
   const einv = m.add({ title: "Relaunch", type: SYS.project, parents: [arbeit], props: { p_status: "st_active" } });
   const fr = m.add({ title: "Relaunch Frankreich", type: SYS.project, parents: [einv], props: { p_status: "st_active" } });
@@ -106,7 +103,6 @@ describe("query language", () => {
     expect(b.length).toBe(1);
     expect(readBlock(b[0]!.src, w.ix).wasText).toBe(false);
     expect(blocksAsText(norm, "en", w.ix)).toContain("type:Task status:open under:this");
-    expect(todayISO().length).toBe(10);
   });
 
   test("view keywords", () => {
@@ -157,7 +153,7 @@ test("blockiert: an open blocker or a waiting-for text; ohne:offene-kinder", () 
   expect(run("blockiert")).toEqual(["B", "C"]);
   expect(run("blocked")).toEqual(["B", "C"]);
   expect(run("typ:Task -blockiert ohne:offene-kinder status:offen")).toEqual(["A", "D1"]);
-  expect(run("type:Task without:open-children")).toEqual(["A", "C", "C1", "D1"].concat(["B"]).sort());
+  expect(run("type:Task without:open-children")).toEqual(["A", "B", "C", "C1", "D1"]);
   // the blocker is done: B is free again
   m.change(a, (doc) => doc.getMap("props").set("p_status", "st_done"));
   expect(run("blockiert")).toEqual(["C"]);

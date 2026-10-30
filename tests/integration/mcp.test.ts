@@ -1,35 +1,22 @@
 import { test, expect, beforeEach, afterAll } from "bun:test";
-import { tempDir, removeTempDirs } from "../support/helpers";
-import { Store } from "@obtion/server/store";
-import { handleMcp } from "@obtion/server/mcp";
-import { runSetup } from "@obtion/core/setup";
+import { removeTempDirs } from "../support/helpers";
+import { rpc as storeRpc, setupStore, tool as storeTool } from "../support/store";
+import type { Store } from "@obtion/server/store";
 import { storeWriter } from "@obtion/server/importers";
 import { deleteType } from "@obtion/core/typeops";
 
 afterAll(removeTempDirs);
 
 let s: Store;
-beforeEach(() => {
-  s = new Store(tempDir("obtion-mcp-"));
-  runSetup(storeWriter(s, "system:setup"), "de");
-  s.flush();
-});
+beforeEach(() => ({ s } = setupStore("obtion-mcp-")));
 
-let rpcId = 0;
-async function rpc(method: string, params: unknown) {
-  const req = new Request("http://127.0.0.1/mcp", {
-    method: "POST",
-    headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: ++rpcId, method, params }),
-  });
-  const res = await handleMcp(s, req);
-  return (await res.json()) as any;
-}
-async function tool(name: string, args: unknown): Promise<{ text: string; error: boolean }> {
-  const r = await rpc("tools/call", { name, arguments: args });
-  return { text: r.result.content.map((c: { text: string }) => c.text).join("\n"), error: !!r.result.isError };
-}
+const rpc = (method: string, params: unknown) => storeRpc(s, method, params);
+const tool = (name: string, args: unknown) => storeTool(s, name, args);
 const count = () => s.live().length;
+
+const weeklyReview = async (store: Store) => (await storeRpc(store, "prompts/get", { name: "weekly_review" })).result.messages[0].content.text as string;
+/** The queries the weekly review tells the agent to run, as written in its prompt. */
+const reviewQueries = [...(await weeklyReview(setupStore("obtion-mcp-").s)).matchAll(/query "([^"]+)"/g)].map((m) => m[1]!);
 
 test("all or nothing: one bad item in a create call, nothing is created", async () => {
   const before = count();
@@ -98,16 +85,13 @@ test("a link to the item itself is refused", async () => {
 test("prompts process_inbox and weekly_review", async () => {
   const r = await rpc("prompts/list", {});
   expect(r.result.prompts.map((p: { name: string }) => p.name).sort()).toEqual(["process_inbox", "weekly_review"]);
-  const w = await rpc("prompts/get", { name: "weekly_review" });
-  const text = w.result.messages[0].content.text as string;
+  const text = await weeklyReview(s);
   for (const part of ["done>-7d", "blocked", "14 days", "inbox"]) expect(text).toContain(part);
+  expect(reviewQueries).toHaveLength(4);
 });
 
-test("the queries the weekly review uses parse", async () => {
-  for (const q of ["done>-7d", "status:open due<today", "blocked status:open", "inbox"]) {
-    const r = await tool("query", { query: q });
-    expect([q, r.error]).toEqual([q, false]);
-  }
+test.each(reviewQueries)("the weekly review's query %p parses", async (q) => {
+  expect((await tool("query", { query: q })).error).toBe(false);
 });
 
 test("with zero types the agent still reads, creates, queries and gets told how to start a type", async () => {

@@ -5,7 +5,7 @@ import { runSetup, SYS } from "@obtion/core/setup";
 import { EXAMPLE, EX_TYPES, exampleFiles, fileFacts, listExamples, removeExamples, restoreExamples, writeExamples } from "@obtion/core/examples";
 import { findBlocks, readBlock, runQuery } from "@obtion/core/query";
 import { inbox } from "@obtion/core/placement";
-import { setMeta, touch } from "@obtion/core/model";
+import { touch } from "@obtion/core/model";
 import { Store } from "@obtion/server/store";
 import { Blobs, sha256 } from "@obtion/server/blobs";
 import { setUp } from "@obtion/server/importers";
@@ -95,8 +95,8 @@ test("removeExamples ignores ids that are not examples", () => {
   const m = world();
   const own = m.add({ title: "Eigenes" });
   expect(removeExamples(m.writer, m.index(), [own, SYS.project])).toEqual([]);
-  m.change(own, (d) => setMeta(d, { title: "Eigenes 2" }));
   expect(m.index().get(own)).toBeDefined();
+  expect(m.index().types.has(SYS.project)).toBe(true);
 });
 
 test("on the server: set up with the examples, the files' contents stored", async () => {
