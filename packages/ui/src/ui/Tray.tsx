@@ -45,7 +45,8 @@ export function Tray({ desktop, pinned, onCapture }: { desktop: boolean; pinned?
           </span>
           <Fill count={count} />
         </span>
-        {pinned ? null : open ? <ChevronDown size={14} className="text-muted-foreground" /> : <ChevronUp size={14} className="text-muted-foreground" />}
+        {/* pinned it stays, hidden, so the field beside does not move between Heute and other pages */}
+        {open && !pinned ? <ChevronDown size={14} className="text-muted-foreground" /> : <ChevronUp size={14} className={cx("text-muted-foreground", pinned && "invisible")} />}
       </ShadcnButton>
     </div>
   );
