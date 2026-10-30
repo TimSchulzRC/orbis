@@ -1,6 +1,7 @@
 // "Heute", the start page: a greeting and in one sentence what the day holds, then what is due
 // (today and overdue), the projects in progress and what was changed last – of every workspace
-// seen. What waits in the inbox is in the tray below (Tray.tsx); here it is only counted.
+// seen. What waits in the inbox: on a desktop the tray's panel as a column of the page (Shelf.tsx,
+// no tray below here), on a phone in the tray below (Tray.tsx), here only counted.
 // Sections with nothing in them are left out.
 import { useEffect } from "react";
 import { Sun } from "lucide-react";
@@ -15,6 +16,7 @@ import { Card, DueLabel, ItemIcon, RelTime, SectionTitle, cx, itemLook, pal } fr
 import { RowStatus } from "../ui/Row";
 import { SpaceScope, useReplicas } from "../ui/Spaces";
 import { useInboxItems } from "../ui/inbox";
+import { ShelfPanel } from "../ui/Shelf";
 
 interface Of<T> {
   space: string;
@@ -41,10 +43,10 @@ export function Today() {
   const hour = new Date().getHours();
   const part = hour < 5 ? "evening" : hour < 11 ? "morning" : hour < 18 ? "day" : "evening";
   const name = account?.user.name.trim().split(/\s+/)[0];
-  // the inbox count opens the tray's panel, amber as the tray: the sentence around it comes in two parts
+  // the inbox count opens the tray's panel (beside, brings it into view), amber as the tray: the sentence around it comes in two parts
   const [before, after] = t("today.inbox", { count: inbox, n: "\u0000" }).split("\u0000");
-  return (
-    <div className="page-wide">
+  const page = (
+    <>
       <p className="flex items-center gap-2 text-sm text-muted-foreground">
         <Sun size={15} /> {fmtDate(lang, today, { weekday: "long", day: "numeric", month: "long" })}
       </p>
@@ -64,7 +66,7 @@ export function Today() {
         )}
       </p>
 
-      <div className={cx("mt-9 grid items-start gap-x-8 gap-y-9", due.length > 0 && projects.length > 0 && "lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]")}>
+      <div className={cx("mt-9 grid items-start gap-x-8 gap-y-9", due.length > 0 && projects.length > 0 && (desktop ? "@3xl:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]" : "lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]"))}>
         {due.length > 0 && (
           <section>
             <SectionTitle count={due.length}>{t("today.dueTitle")}</SectionTitle>
@@ -95,7 +97,7 @@ export function Today() {
         <section className="mt-9">
           <SectionTitle>{t("today.recentTitle")}</SectionTitle>
           {desktop ? (
-            <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 gap-3 @3xl:grid-cols-4">
               {recent.map(({ space, value }) => (
                 <SpaceScope key={`${space}/${value.id}`} id={space}>
                   <RecentTile item={value} />
@@ -113,6 +115,16 @@ export function Today() {
           )}
         </section>
       )}
+    </>
+  );
+  if (!desktop) return <div className="page-wide">{page}</div>;
+  // on a desktop: the page and beside it the tray's panel, which stays in view while scrolling
+  return (
+    <div className="page-wide grid grid-cols-[minmax(0,1fr)_400px] items-start gap-x-10" style={{ maxWidth: 1240 }}>
+      <div className="@container min-w-0">{page}</div>
+      <aside className="sticky top-7 h-[calc(100dvh-56px)] max-h-[860px] min-h-[420px]">
+        <ShelfPanel desktop embedded />
+      </aside>
     </div>
   );
 }

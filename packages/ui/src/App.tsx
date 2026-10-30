@@ -176,8 +176,9 @@ function Main() {
     }
   })();
   const isGraph = route.parts[0] === "graph";
-  // the tray is below every page but the review (it leads there)
-  const tray = !!settings && route.parts[0] !== "review" && !(route.parts[0] === "inbox" && route.parts[1]);
+  // the tray is below every page but the review (it leads there) and, on a desktop, Heute (its panel is on the page)
+  const today = route.parts[0] === undefined || (route.parts[0] === "inbox" && !route.parts[1]);
+  const tray = !!settings && route.parts[0] !== "review" && !(route.parts[0] === "inbox" && route.parts[1]) && !(wide && today);
 
   return (
     <div className="flex h-full">

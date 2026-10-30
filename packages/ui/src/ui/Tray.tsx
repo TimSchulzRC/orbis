@@ -3,17 +3,16 @@ import { Button as ShadcnButton } from "../components/ui/button";
 // to put something down, and the way into the review with how long it takes. Two ways in: the
 // tray itself opens its panel to look in (Shelf.tsx; on a phone also a swipe up), the button
 // starts the review to sort. The sheets sticking out are the newest entries, each opens itself.
-// On a phone it sits above the tab bar; the field opens from its "+" in a sheet.
+// On a phone it sits above the tab bar; the field opens from its "+" in a sheet. On Heute on a
+// desktop there is none: the panel is part of the page there.
 import { useRef } from "react";
-import { Check, ChevronDown, ChevronUp, Layers, Plus } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Plus } from "lucide-react";
 import { useT } from "../i18n";
 import { RelTime, cx } from "./bits";
 import { Capture } from "./Capture";
-import { type InboxEntry, closeShelf, openShelf, reviewMinutes, useInboxItems, useShelf } from "./inbox";
-import { ShelfPanel } from "./Shelf";
+import { type InboxEntry, closeShelf, openShelf, useInboxItems, useShelf } from "./inbox";
+import { Fill, ShelfPanel, ToReview } from "./Shelf";
 import { spaceById, useAccounts } from "../accounts";
-
-const FILL = 10;
 
 export function Tray({ desktop, onCapture }: { desktop: boolean; onCapture: () => void }) {
   const { t } = useT();
@@ -48,16 +47,7 @@ export function Tray({ desktop, onCapture }: { desktop: boolean; onCapture: () =
     </div>
   );
   const review = count ? (
-    <a href="#/review" className="flex h-10 shrink-0 items-center gap-2 rounded-xl border border-[color-mix(in_srgb,var(--t-inbox)_45%,transparent)] bg-[color-mix(in_srgb,var(--t-inbox)_12%,transparent)] px-3.5 text-sm font-semibold text-warn hover:bg-[color-mix(in_srgb,var(--t-inbox)_20%,transparent)]">
-      <Layers size={16} />
-      {desktop ? (
-        <>
-          {t("review.title")} <span className="font-normal opacity-80">· {t("tray.minutes", { count: reviewMinutes(count) })}</span>
-        </>
-      ) : (
-        <span aria-label={`${t("review.title")} · ${t("tray.minutes", { count: reviewMinutes(count) })}`}>{t("tray.minutesShort", { count: reviewMinutes(count) })}</span>
-      )}
-    </a>
+    <ToReview count={count} short={!desktop} />
   ) : (
     <span className="flex h-10 shrink-0 items-center gap-1.5 px-2 text-sm text-muted-foreground">
       <Check size={15} className="text-ok" /> {t("tray.empty")}
@@ -76,7 +66,8 @@ export function Tray({ desktop, onCapture }: { desktop: boolean; onCapture: () =
             </div>
           )}
           {desktop ? (
-            <div className="flex items-center gap-3 rounded-2xl border border-line bg-surface p-2 shadow-[0_6px_24px_-12px_rgb(0_0_0/0.25)]">
+            // the same as the shelf on Heute: coming from there, it moves down into this (styles.css)
+            <div style={{ viewTransitionName: "shelf" }} className="flex items-center gap-3 rounded-2xl border border-line bg-surface p-2 shadow-[0_6px_24px_-12px_rgb(0_0_0/0.25)]">
               {tray}
               <div className="min-w-0 flex-1">
                 <Capture anywhere placeholder={t("tray.placeholder")} />
@@ -135,17 +126,6 @@ function Sheets({ entries }: { entries: InboxEntry[] }) {
           </ShadcnButton>
         );
       })}
-    </span>
-  );
-}
-
-/** How full the tray is: one of ten marks per entry, amber. */
-function Fill({ count }: { count: number }) {
-  return (
-    <span className="flex gap-[3px]" aria-hidden>
-      {Array.from({ length: FILL }, (_, n) => (
-        <span key={n} className={cx("h-1 w-2.5 rounded-full", n < count ? "bg-[var(--t-inbox)]" : "bg-line")} />
-      ))}
     </span>
   );
 }
