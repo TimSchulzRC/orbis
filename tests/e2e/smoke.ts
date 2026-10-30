@@ -185,25 +185,15 @@ async function run() {
         if (serverName === "no types") for (const id of ITEMS) await check(page, label, `/#/i/${encodeURIComponent(id)}`, errors, undefined, { phone, page: true });
         if (serverName === "seeded") {
           for (const id of [...ITEMS, server.file, server.trashed]) await check(page, label, `/#/i/${encodeURIComponent(id)}`, errors, undefined, { phone, page: true });
-          // Heute: the greeting, what is due, and the tray below with the way into the review; a sheet
-          // sticking out of the tray shows its title on hover and opens in the tray's panel (on a desktop
-          // with room below Heute pinned open there, else over the page)
+          // Heute: the greeting, what is due, and the tray below with the way into the review; the
+          // sheets sticking out of the tray are part of its button, none opens an entry of its own
           await check(page, label, "/", errors, async (p) => {
             const h1 = (await p.locator("main h1").innerText()).trim();
             if (!/^Guten (Morgen|Tag|Abend), E2E\.$/.test(h1)) failures.push(`${label}: Heute greets with "${h1}"`);
             if (!(await p.locator("main h2", { hasText: /^Fällig$/ }).count())) failures.push(`${label}: Heute shows nothing due`);
             const tray = p.getByRole("region", { name: "Eingang" });
             if (!(await tray.getByRole("link", { name: /Einsortieren/ }).count())) failures.push(`${label}: the tray has no way into the review`);
-            if (!phone) {
-              const sheet = tray.locator("button[aria-label^='„']").last();
-              const title = ((await sheet.getAttribute("aria-label")) ?? "").replace(/^„|“ öffnen$/g, "");
-              await sheet.hover();
-              if (!(await sheet.getByText(title, { exact: true }).isVisible())) failures.push(`${label}: a sheet does not show its title on hover`);
-              await sheet.click();
-              const panel = p.locator("[data-shelf-panel]");
-              if (!(await panel.getByText("Bleibt im Eingang bis zum Einsortieren.").waitFor({ timeout: 3000 }).then(() => true, () => false))) failures.push(`${label}: a sheet does not open its entry`);
-              await p.keyboard.press("Escape");
-            }
+            if (await tray.locator("button[aria-label^='„']").count()) failures.push(`${label}: a sheet in the tray opens an entry of its own`);
           }, { phone });
           // the inbox is the tray's panel: every entry, newest first; one opens there to read and add
           // to and stays in the inbox (looking in sorts nothing)

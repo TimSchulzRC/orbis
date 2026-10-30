@@ -991,7 +991,6 @@
  "tray.open": "Inbox: {count, plural, one {# entry} other {# entries}}",
  "tray.placeholder": "Put something down …",
  "tray.minutes": "about {count} min",
- "tray.minutesShort": "{count} min",
  "tray.empty": "All sorted",
  "review.title": "Inbox",
  "review.view": "Inbox view",
