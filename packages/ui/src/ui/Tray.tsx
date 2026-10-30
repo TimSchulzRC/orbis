@@ -4,7 +4,8 @@ import { Button as ShadcnButton } from "../components/ui/button";
 // tray itself opens its panel to look in (Shelf.tsx; on a phone also a swipe up), the button
 // starts the review to sort. The sheets sticking out are the newest entries, each opens itself.
 // On a phone it sits above the tab bar; the field opens from its "+" in a sheet. On Heute on a
-// desktop the panel is pinned open above it, part of the page: the rest of the height below Heute.
+// desktop the panel is pinned open above it, part of the page: the rest of the height below Heute,
+// at least 360 px (too little: Heute and the panel scroll together).
 import { useRef } from "react";
 import { Check, ChevronDown, ChevronUp, Layers, Plus } from "lucide-react";
 import { useT } from "../i18n";
@@ -69,7 +70,7 @@ export function Tray({ desktop, pinned, onCapture }: { desktop: boolean; pinned?
     <>
       {/* the page behind the open panel: dimmed, a click closes */}
       {open && !pinned && <div className="fixed inset-0 z-30 bg-black/40" onClick={closeShelf} aria-hidden />}
-      <div className={cx("relative z-40", pinned ? "flex min-h-[360px] flex-1 flex-col" : "shrink-0", desktop ? "px-6 pb-4 pt-2" : "px-3 pb-2 pt-1")} role="region" aria-label={t("tray.title")}>
+      <div className={cx("relative z-40", pinned ? "flex min-h-[360px] flex-1 flex-col" : "shrink-0", desktop ? cx(pinned ? "px-8" : "px-6", "pb-4 pt-2") : "px-3 pb-2 pt-1")} role="region" aria-label={t("tray.title")}>
         {/* panel and bar as one: leaving Heute the panel folds into the bar, coming back it unfolds (styles.css) */}
         <div style={desktop ? { viewTransitionName: "shelf" } : undefined} className={cx("mx-auto", desktop && "max-w-[1040px]", pinned && "flex min-h-0 w-full flex-1 flex-col")}>
           {pinned ? (
@@ -83,7 +84,8 @@ export function Tray({ desktop, pinned, onCapture }: { desktop: boolean; pinned?
             </div>
           )}
           {desktop ? (
-            <div className="flex items-center gap-3 rounded-2xl border border-line bg-surface p-2 shadow-[0_6px_24px_-12px_rgb(0_0_0/0.25)]">
+            // pinned: on the bottom while Heute and the panel scroll, as the tray on other pages
+            <div className={cx("flex items-center gap-3 rounded-2xl border border-line bg-surface p-2 shadow-[0_6px_24px_-12px_rgb(0_0_0/0.25)]", pinned && "sticky bottom-4")}>
               {tray}
               <div className="min-w-0 flex-1">
                 <Capture anywhere placeholder={t("tray.placeholder")} />

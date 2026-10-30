@@ -190,7 +190,8 @@ function Main() {
       </ShadcnButton>
       {wide && <Sidebar onSearch={() => setPalette(true)} />}
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      {/* with the panel pinned below Heute, page and panel scroll as one (the bar stays at the bottom) */}
+      <div className={cx("flex min-w-0 flex-1 flex-col", pinned && "overflow-y-auto")}>
         {!wide && (
           <header className="flex items-center gap-2 border-b border-line bg-bg/90 px-3 py-2 backdrop-blur pt-safe">
             <a href="#/" className="tap flex items-center justify-center gap-2" aria-label={t("nav.today")}>
@@ -208,7 +209,7 @@ function Main() {
         <SignedOut />
         <TooNew />
         {/* with the panel pinned below: as tall as Heute is, the panel takes the rest */}
-        <main tabIndex={-1} className={cx("@container min-h-0 outline-none", pinned ? "flex-initial" : "flex-1", isGraph ? "overflow-hidden" : "overflow-y-auto")}>
+        <main tabIndex={-1} className={cx("@container outline-none", pinned ? "flex-none" : "min-h-0 flex-1", isGraph ? "overflow-hidden" : !pinned && "overflow-y-auto")}>
           {/* a page of another workspace: anew on its replica (repo and files point at it) */}
           <PageBoundary key={`${globalPage(route.parts) ? "" : active?.id}${route.path}`}>{page}</PageBoundary>
         </main>
