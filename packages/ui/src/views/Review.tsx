@@ -11,7 +11,7 @@ import { Button as ShadcnButton } from "../components/ui/button";
 // among the suggestions in `Choices`.
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import type { EditorView } from "@codemirror/view";
-import { ArrowUpRight, Check, Clock, FolderInput, Layers, List, Pencil, RotateCcw, Shapes, StickyNote, Trash2, Undo2 } from "lucide-react";
+import { Check, Clock, FolderInput, Layers, List, Maximize2, Pencil, RotateCcw, Shapes, StickyNote, Trash2, Undo2 } from "lucide-react";
 import type { Item } from "@obtion/core/model";
 import { todayISO } from "@obtion/core/model";
 import { plainText } from "@obtion/core/search";
@@ -256,7 +256,8 @@ function Steps({ total, done }: { total: number; done: number }) {
  * The entry in full: what it is, where from and how old, the title, the text, the notes below.
  * Always as tall, so the choices below never move; a long entry scrolls inside, a fade at the
  * bottom says there is more. A click into it edits title and text right there (a file only its
- * title); a quiet "Bearbeiten" in the corner does the same and becomes "Fertig".
+ * title); a quiet "Bearbeiten" in the corner below does the same and becomes "Fertig". A click
+ * outside the card ends it too.
  */
 function EntryCard({ entry, space, more, scroller, editing, onEdit, onDone }: { entry: InboxEntry; space?: string; more: number; scroller: React.RefObject<HTMLDivElement | null>; editing: { at: Edit } | null; onEdit: (at: Edit) => void; onDone: () => void }) {
   const { t } = useT();
@@ -269,7 +270,18 @@ function EntryCard({ entry, space, more, scroller, editing, onEdit, onDone }: { 
   const kids = ix.childrenOf(item.id).map((id) => ix.get(id)!).filter(Boolean);
   const img = useBlobUrl(item.file?.filetype === "bild" ? (item.file.display ?? item.file.hash) : item.file?.thumb, true);
   const [rest, setRest] = useState(false);
+  const self = useRef<HTMLElement>(null);
   const at = editing?.at;
+  // a click outside the card ends editing (not one in what the editor opened: a menu, a picture)
+  useEffect(() => {
+    if (!editing) return;
+    const on = (e: PointerEvent) => {
+      const el = e.target as Element;
+      if (!self.current?.contains(el) && !el.closest?.(".cm-menu, .cm-tooltip, [role=dialog], [data-radix-popper-content-wrapper]")) onDone();
+    };
+    document.addEventListener("pointerdown", on, true);
+    return () => document.removeEventListener("pointerdown", on, true);
+  }, [!!editing]);
   const text = !item.file;
   // the title clicked (or a file, which has no text here): the caret where clicked, else at its end
   useEffect(() => {
@@ -302,6 +314,7 @@ function EntryCard({ entry, space, more, scroller, editing, onEdit, onDone }: { 
       {more > 0 && <div className="absolute inset-x-4 -bottom-2 h-6 rounded-2xl border border-line bg-surface opacity-60" aria-hidden />}
       {more > 1 && <div className="absolute inset-x-8 -bottom-4 h-6 rounded-2xl border border-line bg-surface opacity-30" aria-hidden />}
       <article
+        ref={self}
         className={cx(
           "relative flex h-[clamp(240px,calc(100dvh-460px),440px)] flex-col overflow-hidden rounded-2xl border bg-surface shadow-sm max-lg:h-[clamp(200px,calc(100dvh-440px),440px)]",
           editing ? "border-[color-mix(in_srgb,var(--focus)_55%,transparent)] ring-4 ring-[color-mix(in_srgb,var(--focus)_12%,transparent)]" : "cursor-text border-line",
@@ -313,7 +326,8 @@ function EntryCard({ entry, space, more, scroller, editing, onEdit, onDone }: { 
           onEdit({ x: e.clientX, y: e.clientY, title: el.closest("h2") ? (caret ?? Infinity) : undefined });
         }}
       >
-        <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-8 py-7 max-lg:px-5 max-lg:py-5">
+        <div className="relative min-h-0 flex-1">
+        <div ref={scroller} className="h-full overflow-y-auto px-8 pb-3 pt-7 max-lg:px-5 max-lg:pt-5">
         <div className="flex items-start gap-2 text-[13px] text-muted-foreground">
           <p className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 pt-0.5">
             <span className="inline-flex items-center gap-1.5 rounded-full border border-line px-2 py-0.5 text-fg">
@@ -324,19 +338,9 @@ function EntryCard({ entry, space, more, scroller, editing, onEdit, onDone }: { 
               {t("triage.captured")} <RelTime ts={item.created} />
             </span>
           </p>
-          <span className="flex shrink-0 items-center gap-1">
-            <a href={itemHref(item.id)} className="tap rounded-md p-1 hover:bg-hover hover:text-fg" aria-label={t("review.open")} title={t("review.open")}>
-              <ArrowUpRight size={15} />
-            </a>
-            <ShadcnButton
-              variant="plain"
-              size="none"
-              onClick={() => (editing ? onDone() : onEdit(null))}
-              className={cx("tap inline-flex h-7 items-center gap-1.5 rounded-md px-2 font-medium hover:bg-hover hover:text-fg", editing && "border border-line bg-surface text-fg")}
-            >
-              {editing ? <Check size={14} className="text-ok" /> : <Pencil size={13} />} {t(editing ? "review.editDone" : "review.edit")}
-            </ShadcnButton>
-          </span>
+          <a href={itemHref(item.id)} className="tap -mr-1.5 -mt-1 shrink-0 rounded-md p-1.5 hover:bg-hover hover:text-fg" aria-label={t("review.open")} title={t("review.open")}>
+            <Maximize2 size={15} />
+          </a>
         </div>
         {editing ? (
           <>
@@ -381,7 +385,24 @@ function EntryCard({ entry, space, more, scroller, editing, onEdit, onDone }: { 
           </div>
         )}
         </div>
-        {rest && <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 rounded-b-2xl bg-gradient-to-t from-surface to-transparent" aria-hidden />}
+        {rest && <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-surface to-transparent" aria-hidden />}
+        </div>
+        {/* "Bearbeiten", while editing "Fertig" in the colour of the card's frame */}
+        <div className="shrink-0 px-8 pb-4 pt-1 max-lg:px-5 max-lg:pb-3">
+          <ShadcnButton
+            variant="plain"
+            size="none"
+            onClick={() => (editing ? onDone() : onEdit(null))}
+            className={cx(
+              "tap inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[13px] font-medium",
+              editing
+                ? "border-[color-mix(in_srgb,var(--focus)_40%,transparent)] bg-[color-mix(in_srgb,var(--focus)_10%,transparent)] text-[var(--focus)] hover:bg-[color-mix(in_srgb,var(--focus)_16%,transparent)]"
+                : "border-transparent text-muted-foreground hover:bg-hover hover:text-fg",
+            )}
+          >
+            {editing ? <Check size={15} /> : <Pencil size={14} />} {t(editing ? "review.editDone" : "review.edit")}
+          </ShadcnButton>
+        </div>
       </article>
     </div>
   );

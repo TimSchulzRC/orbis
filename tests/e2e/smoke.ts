@@ -238,7 +238,7 @@ async function run() {
           }, { phone });
           // editing in the review: a click on the title edits it there, the keys rest (their hints hide,
           // "s" is a letter), "Fertig" ends it; "Bearbeiten" puts the caret at the end of the text,
-          // Esc ends it. Both put back as they were.
+          // Esc ends it, so does a click outside the card. Both put back as they were.
           await check(page, label, "/#/review", errors, async (p) => {
             const article = p.locator("main article");
             const title = (await article.locator("h2").innerText()).trim();
@@ -260,6 +260,9 @@ async function run() {
             await p.keyboard.press("Escape");
             if (await article.locator("textarea").count()) failures.push(`${label}: Esc does not end editing`);
             if (!(await article.getByText(/ Ys$/).count())) failures.push(`${label}: the text typed in the review is not there`);
+            await p.getByRole("button", { name: "Bearbeiten" }).click();
+            await p.locator("main h1").click();
+            if (await article.locator("textarea").count()) failures.push(`${label}: a click outside the card does not end editing`);
             await p.getByRole("button", { name: "Bearbeiten" }).click();
             await p.waitForTimeout(200);
             for (let i = 0; i < 3; i++) await p.keyboard.press("Backspace");
