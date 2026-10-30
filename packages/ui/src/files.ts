@@ -13,7 +13,7 @@ import type { Repo } from "@obtion/sync";
 import type { SpaceLink } from "./browser";
 import { ScopeContext } from "./scope";
 
-export type FileMode = "online" | "local";
+type FileMode = "online" | "local";
 const MODE_KEY = "obtion.fileMode";
 
 interface Upload {
@@ -156,7 +156,7 @@ async function pdfPreview(blob: Blob): Promise<{ blob: Blob; pages: number } | u
 
 // ---------- the device file store ----------
 
-export interface FileStatus {
+interface FileStatus {
   mode: FileMode;
   originals: number; // files whose original is on this device
   total: number;
@@ -525,11 +525,6 @@ function shownItself(repo: Repo): Set<string> {
 export let files: DeviceFiles;
 export function setFiles(f: DeviceFiles) {
   files = f;
-}
-
-export function useFileStatus() {
-  useSyncExternalStore(files.subscribe, files.getVersion);
-  return files.status;
 }
 
 /** Object URL for a content hash (preview, display version or original). */

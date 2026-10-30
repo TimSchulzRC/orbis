@@ -1,5 +1,4 @@
 import { Checkbox } from "../components/ui/checkbox";
-import { Input } from "../components/ui/input";
 import { useState } from "react";
 import { type Lang, detectLang, translate } from "@obtion/core/i18n";
 import type { FileMeta } from "@obtion/core/model";
@@ -50,7 +49,7 @@ export function Setup() {
         </div>
         <p className="mt-4 text-xs text-muted-foreground">{t("setup.types")}</p>
         <label className="mt-5 flex cursor-pointer gap-3 rounded-xl border border-line p-3 hover:bg-hover">
-          <Checkbox  checked={examples} onCheckedChange={(checked) => setExamples((checked === true))} className="mt-0.5 size-4 shrink-0 accent-[var(--focus)]" />
+          <Checkbox checked={examples} onCheckedChange={(checked) => setExamples(checked === true)} className="mt-0.5 size-4 shrink-0" />
           <span>
             <span className="block text-sm font-medium">{t("setup.examples")}</span>
             <span className="block text-xs text-muted-foreground">{t("setup.examplesHint")}</span>

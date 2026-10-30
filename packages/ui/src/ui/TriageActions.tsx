@@ -1,8 +1,8 @@
-import { Button as ShadcnButton } from "../components/ui/button";
-import { Input } from "../components/ui/input";
 // What can be done with entries while sorting – place, give a type, keep, later, delete – each with
 // one undo, and the pickers they need. The sort list (Triage.tsx) and the review (views/Review.tsx)
 // share them.
+import { Button as ShadcnButton } from "../components/ui/button";
+import { Input } from "../components/ui/input";
 import { useRef, useState } from "react";
 import { Check, Plus } from "lucide-react";
 import { type Item, SETTINGS_ID, setMeta } from "@obtion/core/model";
@@ -159,7 +159,7 @@ function PlacePicker({ list, onPick, onClose }: { list: Item[]; onPick: (p: stri
 }
 
 /** Choose a type by keyboard: type to filter, arrows, Enter, 1–9; "Neuer Typ …" at the end. */
-export function TypePicker({ current, onPick, onClose }: { current: string | null; onPick: (id: string) => void; onClose: () => void }) {
+function TypePicker({ current, onPick, onClose }: { current: string | null; onPick: (id: string) => void; onClose: () => void }) {
   const { t } = useT();
   const repo = useRepo();
   const ix = repo.index();

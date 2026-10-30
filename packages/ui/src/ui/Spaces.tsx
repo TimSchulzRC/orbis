@@ -1,11 +1,11 @@
-import { Checkbox } from "../components/ui/checkbox";
-import { Button as ShadcnButton } from "../components/ui/button";
-import { Input } from "../components/ui/input";
 // Workspaces side by side: the sidebar and the inbox show the workspaces chosen in the
 // selector (several at once; on this device, the account stays as it is). Each part of a page
 // that belongs to one workspace sits in its SpaceScope (useRepo and useFiles read that
 // workspace's replica there, and links inside open in it). Moving an item from one workspace into another asks first if
 // something changes on the way (a type copied, values that become free properties, links left behind).
+import { Checkbox } from "../components/ui/checkbox";
+import { Button as ShadcnButton } from "../components/ui/button";
+import { Input } from "../components/ui/input";
 import { useMemo, useState, useSyncExternalStore } from "react";
 import { ChevronsUpDown, Plus, SlidersHorizontal } from "lucide-react";
 import type { Repo } from "@obtion/sync";
@@ -76,7 +76,7 @@ export function SpaceSelector({ className, onNew }: { className?: string; onNew:
           {/* several at once: boxes, not a choice of one */}
           {spaces.map((s) => (
             <label key={s.id} className="tap-row flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm hover:bg-hover">
-              <Checkbox  checked={ids.includes(s.id)} disabled={ids.length === 1 && ids.includes(s.id)} onCheckedChange={() => toggle(s.id)} className="size-4 accent-[var(--focus)]" />
+              <Checkbox checked={ids.includes(s.id)} disabled={ids.length === 1 && ids.includes(s.id)} onCheckedChange={() => toggle(s.id)} className="size-4" />
               <span className="min-w-0 flex-1 truncate">{s.name}</span>
             </label>
           ))}

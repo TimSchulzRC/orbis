@@ -1,10 +1,10 @@
+// The table of a view, like Notion: grouped (each group with its chip, count, fold, "…" and
+// "+"), cells edited in place, progress as "60 %" with a bar, sub-items indented below their
+// parent and folded until opened. Columns keep their width and order per view.
 import { Table as ShadcnTable, TableHeader, TableBody, TableRow, TableHead, TableCell as ShadcnTableCell } from "../components/ui/table";
 import { Button as ShadcnButton } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { NativeSelect } from "../components/ui/native-select";
-// The table of a view, like Notion: grouped (each group with its chip, count, fold, "…" and
-// "+"), cells edited in place, progress as "60 %" with a bar, sub-items indented below their
-// parent and folded until opened. Columns keep their width and order per view.
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronRight, CornerDownRight, MoreHorizontal, Plus } from "lucide-react";
 import { type ViewTab, type Item, type ItemInit, type PropDef, type StatusGroup, titleKey, todayISO } from "@obtion/core/model";

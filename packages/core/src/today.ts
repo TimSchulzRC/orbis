@@ -40,7 +40,7 @@ export function activeProjects(ix: Index): { item: Item; touched: number }[] {
 /** Changed last: informations and files, not types and not what still waits in the inbox. */
 export function recentlyChanged(ix: Index, limit: number): Item[] {
   return ix.live
-    .filter((i) => (i.kind === "info" || i.kind === "datei") && i.type !== META_TYPE && !isInInbox(i, ix))
+    .filter((i) => i.type !== META_TYPE && !isInInbox(i, ix))
     .sort((a, b) => b.updated - a.updated)
     .slice(0, limit);
 }

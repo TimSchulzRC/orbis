@@ -1,4 +1,3 @@
-import { Button as ShadcnButton } from "../components/ui/button";
 // The tray ("Eingang") below every page: how much waits in the inbox (a fill in amber), a field
 // to put something down, and the way into the review with how long it takes. Two ways in: the
 // tray itself opens its panel to look in (Shelf.tsx; on a phone also a swipe up), the button
@@ -6,6 +5,7 @@ import { Button as ShadcnButton } from "../components/ui/button";
 // On a phone it sits above the tab bar; the field opens from its "+" in a sheet. On Heute on a
 // desktop with room below the page the panel is pinned open above it, part of the page: the rest
 // of the height below Heute (App.tsx).
+import { Button as ShadcnButton } from "../components/ui/button";
 import { type CSSProperties, useRef } from "react";
 import { Check, ChevronDown, ChevronUp, Layers, Plus } from "lucide-react";
 import { useT } from "../i18n";
@@ -76,7 +76,6 @@ export function Tray({ desktop, pinned, onCapture }: { desktop: boolean; pinned?
             </div>
           ) : open && (
             // on a phone an entry takes the whole screen, as a sheet
-            // above the sheets sticking out of the tray, which stay
             <div className={cx(desktop ? "absolute inset-x-6 bottom-full mx-auto max-w-[1040px] pb-10" : at ? "fixed inset-x-0 bottom-0 top-3 z-50 pt-safe" : "absolute inset-x-2 bottom-full pb-7")}>
               <ShelfPanel desktop={desktop} />
             </div>

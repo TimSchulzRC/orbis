@@ -1,5 +1,5 @@
 import type { EditorView } from "@codemirror/view";
-import { type Item, SETTINGS_ID } from "@obtion/core/model";
+import { SETTINGS_ID } from "@obtion/core/model";
 import { repo } from "../repo";
 import { tr } from "../i18n";
 
@@ -13,7 +13,7 @@ export function extractType(): string | null {
  * "Als Karte herauslösen": the selected paragraph becomes a new standalone item, and a
  * link to it takes its place. Without a selection the paragraph at the cursor is used.
  */
-export function extractAsCard(_from: Item, view: EditorView) {
+export function extractAsCard(view: EditorView) {
   const sel = view.state.selection.main;
   let { from, to } = sel;
   if (from === to) {

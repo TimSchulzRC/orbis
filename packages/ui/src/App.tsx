@@ -263,9 +263,8 @@ function useRoom(on: boolean, column: React.RefObject<HTMLDivElement | null>, ma
 /** The phone menu as a sheet from below: a modal surface (focus stays in, Escape closes). */
 function MenuSheet({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
   const { t } = useT();
-  const ref = useRef<HTMLElement>(null);
   return (
-    <ModalSurface title={t("nav.menu")} onClose={onClose}><nav ref={ref} role="dialog" aria-modal="true" className="fixed inset-x-0 bottom-0 z-50 max-h-[85vh] overflow-y-auto rounded-t-2xl border-t border-line bg-surface p-3 pb-safe shadow-2xl" aria-label={t("nav.menu")} onClick={(e) => e.stopPropagation()}>
+    <ModalSurface title={t("nav.menu")} onClose={onClose}><nav role="dialog" aria-modal="true" className="fixed inset-x-0 bottom-0 z-50 max-h-[85vh] overflow-y-auto rounded-t-2xl border-t border-line bg-surface p-3 pb-safe shadow-2xl" aria-label={t("nav.menu")} onClick={(e) => e.stopPropagation()}>
       <IconButton onClick={onClose} label={t("close")} icon={X} className="float-right -mr-1 -mt-1" />
       {children}
     </nav></ModalSurface>
@@ -332,7 +331,7 @@ function MobileNav() {
   const ix = r?.index();
   const inbox = useInboxItems().length;
   const shelf = useShelf().open;
-  const entries = [
+  const entries: { key: string; label: string; icon: React.ReactNode; href: string; active?: boolean; dot?: boolean }[] = [
     { key: "today", label: t("nav.today"), icon: <Sun size={20} />, href: "#/", active: route.path === "/" && !shelf },
     { key: "inbox", label: t("nav.inbox"), icon: <Inbox size={20} />, href: "#/inbox", active: shelf || route.path === "/review", dot: inbox > 0 },
     ...(ix
@@ -341,7 +340,7 @@ function MobileNav() {
           return { key: x.id, label: ix.typePlural(x.id), icon: <I size={20} />, href: spaceHref(one!.id, `/i/${encodeURIComponent(x.id)}`), active: active?.id === one!.id && route.parts[0] === "i" && route.parts[1] === x.id };
         })
       : []),
-  ] as { key: string; label: string; icon: React.ReactNode; href?: string; onClick?: () => void; active?: boolean; dot?: boolean }[];
+  ];
   return (
     <nav className="grid border-t border-line bg-surface pb-safe" style={{ gridTemplateColumns: `repeat(${entries.length}, minmax(0, 1fr))` }} aria-label={t("nav.main")}>
       {entries.map((e) => {
@@ -353,14 +352,10 @@ function MobileNav() {
             {e.dot && <span className="absolute right-[22%] top-1 size-1.5 rounded-full" style={{ background: "var(--t-inbox)" }} />}
           </>
         );
-        return e.href ? (
+        return (
           <a key={e.key} href={e.href} className={cls}>
             {inner}
           </a>
-        ) : (
-          <ShadcnButton variant="plain" size="none" key={e.key} onClick={e.onClick} className={cls}>
-            {inner}
-          </ShadcnButton>
         );
       })}
     </nav>

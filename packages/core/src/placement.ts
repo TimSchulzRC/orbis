@@ -15,13 +15,9 @@ export function isOverview(item: Item, ix: Index): boolean {
   return item.kind === "info" && ix.childrenOf(item.id).length > 0;
 }
 
-export function isPinned(item: Item): boolean {
-  return !!item.pinned;
-}
-
 /** Has a place: a parent or pinned. */
 export function hasPlace(item: Item, ix: Index): boolean {
-  return isPinned(item) || ix.parentsOf(item.id).length > 0;
+  return !!item.pinned || ix.parentsOf(item.id).length > 0;
 }
 
 export function isInInbox(item: Item, ix: Index): boolean {

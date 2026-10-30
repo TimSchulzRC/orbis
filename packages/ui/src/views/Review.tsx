@@ -1,4 +1,3 @@
-import { Button as ShadcnButton } from "../components/ui/button";
 // The review (the page "Eingang", the act "einsortieren"): the inbox one entry at a time, as a
 // stack. The entry on top, always as tall (a long one scrolls inside), so what can become of it
 // stays in place below – a place, a type, back tomorrow, kept as it is, deleted – and on a
@@ -9,11 +8,11 @@ import { Button as ShadcnButton } from "../components/ui/button";
 //
 // A suggestion (the agent's or the app's own) is not shown yet; it would be the first answer
 // among the suggestions in `Choices`.
+import { Button as ShadcnButton } from "../components/ui/button";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import type { EditorView } from "@codemirror/view";
 import { Check, Clock, FolderInput, Layers, List, Maximize2, Pencil, RotateCcw, Shapes, StickyNote, Trash2, Undo2 } from "lucide-react";
-import type { Item } from "@obtion/core/model";
-import { todayISO } from "@obtion/core/model";
+import { type Item, todayISO } from "@obtion/core/model";
 import { plainText } from "@obtion/core/search";
 import { useRepo, useItemHref, spaceHref, go, useDesktop } from "../hooks";
 import { replica, spaceById, useAccounts } from "../accounts";
@@ -44,11 +43,11 @@ type Edit = { x: number; y: number; title?: number } | null;
 let session: { day: string; order: string[]; sorted: Sorted[]; at?: string } | null = null;
 
 /** Where the review and the list switch to each other. */
-export function StackListSwitch({ value }: { value: "stack" | "list" }) {
+function StackListSwitch() {
   const { t } = useT();
   return (
     <Seg
-      value={value}
+      value="stack"
       label={t("review.view")}
       onChange={(v) => go(v === "stack" ? "/review" : "/inbox")}
       options={[
@@ -221,12 +220,12 @@ function ReviewHead({ total, at, sorted, minutes }: { total: number; at: number;
             {total > sorted && <> · {t("review.minutesLeft", { count: minutes })}</>}
           </p>
         </div>
-        {desktop && <StackListSwitch value="stack" />}
+        {desktop && <StackListSwitch />}
       </div>
       {total > 0 && <Steps total={total} done={sorted} />}
       {!desktop && (
         <div className="mt-3">
-          <StackListSwitch value="stack" />
+          <StackListSwitch />
         </div>
       )}
     </header>

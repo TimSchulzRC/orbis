@@ -13,7 +13,7 @@ import { askText, showMenu } from "./menu";
 import { formatToolbar } from "./toolbar";
 
 /** [[Page]], [[Page#Section]], [[Page|text]], and ![[…]] for embeds. */
-export const linkRe = /(!?\[\[)([^\]|#\n]+)((?:#[^\]|\n]*)?(?:\|[^\]\n]*)?)(\]\])/g;
+const linkRe = /(!?\[\[)([^\]|#\n]+)((?:#[^\]|\n]*)?(?:\|[^\]\n]*)?)(\]\])/g;
 
 interface Link {
   from: number;

@@ -1,10 +1,10 @@
-import { Button as ShadcnButton } from "../components/ui/button";
 // The tray's panel ("Eingang"): looking in, not sorting. Every entry of the workspaces seen, newest
 // first, with a line of its text, its workspace and age; one opens here to read and add to it and
 // stays in the inbox – sorting is the review's (views/Review.tsx), here only a quiet link leads
 // there. Above the tray on a desktop, as a sheet on a phone. What lands in the inbox: behind "…".
 // On Heute on a desktop it is part of the page (`pinned`): always open, it does not close. Without
 // room for it there, Heute shows the newest entries as cards (ShelfCards), each opens the panel.
+import { Button as ShadcnButton } from "../components/ui/button";
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, ArrowUp, Maximize2, MoreHorizontal, RotateCcw, SlidersHorizontal, X } from "lucide-react";
 import { type Item, SETTINGS_ID, setSettings } from "@obtion/core/model";
@@ -28,7 +28,7 @@ import { type InboxEntry, closeShelf, openShelf, reviewMinutes, useInboxItems, u
 import { DraftBar } from "../views/Lists";
 
 /** Where an entry opens in the review. */
-export const reviewHref = (key: string) => `#/review?at=${encodeURIComponent(key)}`;
+const reviewHref = (key: string) => `#/review?at=${encodeURIComponent(key)}`;
 
 export function ShelfPanel({ desktop, pinned }: { desktop: boolean; pinned?: boolean }) {
   const { t } = useT();
@@ -282,7 +282,7 @@ function EntryBody({ entry }: { entry: InboxEntry }) {
         <FileBody key={item.id} item={item} />
       ) : (
         <div className="mt-2 text-[15px]">
-          <Editor doc={repo.getDoc(item.id)} nodeId={item.id} minHeight="min-h-24" placeholder={t("editor.placeholder")} />
+          <Editor doc={repo.getDoc(item.id)} nodeId={item.id} minHeight="min-h-24" />
         </div>
       )}
       {kids.length > 0 && (

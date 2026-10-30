@@ -1,8 +1,8 @@
-import { ModalSurface } from "../components/ui/dialog";
-import { Button as ShadcnButton } from "../components/ui/button";
 // Full view of an embedded image: click opens it, arrows page through all images of the page,
 // Escape closes. Shows the display version at once and the original as soon as it is here.
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { ModalSurface } from "../components/ui/dialog";
+import { Button as ShadcnButton } from "../components/ui/button";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { repo } from "../repo";
 import { files } from "../files";
@@ -32,7 +32,6 @@ function Lightbox({ ids, start }: { ids: string[]; start: number }) {
   const [src, setSrc] = useState<string | undefined>();
   const item = repo.get(ids[at]!);
   const f = item?.file;
-  const ref = useRef<HTMLDivElement>(null);
   const close = () => ((open = null), emit());
   const step = (d: number) => setAt((a) => (a + d + ids.length) % ids.length);
   useEffect(() => {
@@ -58,7 +57,7 @@ function Lightbox({ ids, start }: { ids: string[]; start: number }) {
   if (!item || !f) return null;
   const nav = "absolute top-1/2 -translate-y-1/2 rounded-full bg-black/40 p-2 text-white hover:bg-black/60";
   return (
-    <ModalSurface title={item.title} onClose={close}><div ref={ref} role="dialog" aria-modal="true" aria-label={item.title} className="fixed inset-0 z-50 flex flex-col bg-black/95 backdrop-blur-sm" onClick={close}>
+    <ModalSurface title={item.title} onClose={close}><div role="dialog" aria-modal="true" aria-label={item.title} className="fixed inset-0 z-50 flex flex-col bg-black/95 backdrop-blur-sm" onClick={close}>
       <div className="flex items-center gap-3 px-4 py-3 text-sm text-white/80 pt-safe" onClick={(e) => e.stopPropagation()}>
         <a href={`#/i/${encodeURIComponent(item.id)}`} onClick={close} className="min-w-0 truncate font-medium text-white hover:underline">
           {item.title}

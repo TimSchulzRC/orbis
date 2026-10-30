@@ -1,7 +1,7 @@
+// The lists of the app: a type's page (its entries with views as tabs, like a database in
+// Notion) and the files. A type keeps its views; the files have one. The inbox: ui/Shelf.tsx and views/Review.tsx.
 import { Button as ShadcnButton } from "../components/ui/button";
 import { Input } from "../components/ui/input";
-// The lists of the app: a type's page (its entries with views as tabs, like a database in
-// Notion) and the files. A type keeps its views; the files have one. The inbox: Inbox.tsx.
 import { useEffect, useRef, useState } from "react";
 import { ListFilter, SlidersHorizontal, Plus, Upload } from "lucide-react";
 import { type FileType, type Item, type ViewTab, setTab, setTabs, shortId } from "@obtion/core/model";

@@ -5,8 +5,7 @@
 // Sections with nothing in them are left out.
 import { useEffect } from "react";
 import { Sun } from "lucide-react";
-import type { Item } from "@obtion/core/model";
-import { SETTINGS_ID, todayISO } from "@obtion/core/model";
+import { type Item, SETTINGS_ID, todayISO } from "@obtion/core/model";
 import { fmtDate } from "@obtion/core/i18n";
 import { activeProjects, dueBy, recentlyChanged } from "@obtion/core/today";
 import { useDesktop, useIndex, useItemHref } from "../hooks";

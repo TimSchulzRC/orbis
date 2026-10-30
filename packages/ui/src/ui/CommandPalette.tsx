@@ -3,10 +3,9 @@ import { Button as ShadcnButton } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { useEffect, useRef, useState } from "react";
 import { Plus, CornerDownLeft, ChevronRight } from "lucide-react";
-import { SETTINGS_ID } from "@obtion/core/model";
+import { type Item, SETTINGS_ID } from "@obtion/core/model";
 import { snippet } from "@obtion/core/search";
 import { statusOf } from "@obtion/core/traits";
-import type { Item } from "@obtion/core/model";
 import { go, spaceHref } from "../hooks";
 import { useAccounts } from "../accounts";
 import { useReplicas } from "./Spaces";
@@ -29,7 +28,6 @@ type Entry =
  * for new entries.
  */
 export function CommandPalette({ onClose }: { onClose: () => void }) {
-  const dialogRef = useRef<HTMLDivElement>(null);
   const { t, lang } = useT();
   const [q, setQ] = useState("");
   const [sel, setSel] = useState(0);
@@ -109,7 +107,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
 
   return (
     <ModalSurface title={t("palette.label")} onClose={onClose}><div className="fixed inset-0 z-50 flex items-start justify-center bg-black/30 p-3 pt-[10vh] backdrop-blur-[2px]" onMouseDown={onClose}>
-      <div ref={dialogRef} className="flex max-h-[70vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-2xl" onMouseDown={(e) => e.stopPropagation()}>
+      <div className="flex max-h-[70vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-2xl" onMouseDown={(e) => e.stopPropagation()}>
         <Input
           autoFocus
           value={q}

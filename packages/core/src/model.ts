@@ -262,7 +262,7 @@ export interface Item {
 
 /** meta.deleted is true or "via:<root>" (deleted together with that root, see trash.ts). */
 export const VIA = "via:";
-export function viaRoot(raw: unknown): string | undefined {
+function viaRoot(raw: unknown): string | undefined {
   return typeof raw === "string" && raw.startsWith(VIA) ? raw.slice(VIA.length) : undefined;
 }
 
@@ -270,7 +270,7 @@ function plain(v: unknown): any {
   return v instanceof Y.AbstractType ? v.toJSON() : v;
 }
 
-export function readSchema(doc: Y.Doc): TypeSchema {
+function readSchema(doc: Y.Doc): TypeSchema {
   const s = doc.getMap<any>("schema");
   const caps = s.get("capabilities");
   const props = s.get("properties");
@@ -446,7 +446,7 @@ export function touchOnTextEdit(doc: Y.Doc, every = 3000, clock: () => number = 
     if (timer) (clearTimeout(timer), stamp());
   };
 }
-export const TOUCH_ORIGIN = "touch";
+const TOUCH_ORIGIN = "touch";
 
 /** Add a parent. The first parent becomes the home. */
 export function addParent(doc: Y.Doc, parentId: string, sort?: string, at = Date.now()) {
@@ -721,7 +721,7 @@ export function stripQueryBlocks(body: string) {
   return body.includes("```") ? body.replace(QUERY_FENCE, "") : body;
 }
 
-export const IMAGE_EXT = /\.(png|jpe?g|gif|webp|avif|bmp|svg|heic)$/i;
+const IMAGE_EXT = /\.(png|jpe?g|gif|webp|avif|bmp|svg|heic)$/i;
 
 /** Looks like a file name ("x.pdf", "y.png") rather than an information title. */
 export function looksLikeFileName(name: string) {

@@ -3,7 +3,7 @@
 import type { ComponentType } from "react";
 import { iconHTML } from "./icons";
 
-export interface MenuEntry {
+interface MenuEntry {
   label: string;
   icon?: ComponentType<{ size?: number }>;
   active?: boolean;
@@ -65,10 +65,6 @@ export function showMenu(at: { left: number; top: number }, sections: { title?: 
   setTimeout(() => document.addEventListener("mousedown", outside, true));
   open = { close };
   return { close, focusFirst: () => focus(0) };
-}
-
-export function closeMenu() {
-  open?.close();
 }
 
 /** A one-line field at a point of the screen; Enter gives its text, Escape or a click elsewhere null. */

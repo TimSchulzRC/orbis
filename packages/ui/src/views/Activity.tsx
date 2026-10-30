@@ -1,6 +1,6 @@
-import { Button as ShadcnButton } from "../components/ui/button";
 // Activity: every change with its origin (which device, which agent, import). Bulk
 // operations like deleting a type are listed here and can be undone.
+import { Button as ShadcnButton } from "../components/ui/button";
 import { useEffect, useState } from "react";
 import { spaceFetch } from "../accounts";
 import { SpaceEyebrow } from "../ui/Spaces";

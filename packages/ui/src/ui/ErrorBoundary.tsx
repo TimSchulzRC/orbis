@@ -1,6 +1,6 @@
-import { Button as ShadcnButton } from "../components/ui/button";
 // A rendering error on one page shows what went wrong and offers "Neu laden" – never a blank
 // page. The rest of the app (sidebar, agent) keeps working.
+import { Button as ShadcnButton } from "../components/ui/button";
 import { Component, type ReactNode } from "react";
 import { RotateCw } from "lucide-react";
 import { tr } from "../i18n";

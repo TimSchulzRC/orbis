@@ -1,14 +1,13 @@
 import { Button as ShadcnButton } from "../components/ui/button";
 import { useSyncExternalStore } from "react";
 import type { Item } from "@obtion/core/model";
-import { tr } from "../i18n";
 import { confirmAction, notify } from "./feedback";
 import { dueOf, firstOfGroup, isDone, primaryChild, statusOf, statusProp } from "@obtion/core/traits";
 import { fmtBytes } from "@obtion/core/i18n";
 import type { Repo } from "@obtion/sync";
 import { repo as current } from "../repo";
 import { useItemHref, useRepo } from "../hooks";
-import { useT } from "../i18n";
+import { tr, useT } from "../i18n";
 import { DueLabel, ItemIcon, MenuItem, Popover, StatusGlyph, StatusPill, cx, pal, ProgressCount } from "./bits";
 import { statusShape } from "@obtion/core/input";
 
@@ -41,7 +40,7 @@ export function StatusMenu({ item, trigger }: { item: Item; trigger: (p: { onCli
 }
 
 /** Open entries with a status somewhere below (they would stay open if this is closed). */
-export function openBelow(item: Item, repo: Repo = current): Item[] {
+function openBelow(item: Item, repo: Repo = current): Item[] {
   const ix = repo.index();
   return [...ix.descendants(item.id)].map((d) => ix.get(d)!).filter((x) => {
     const s = statusOf(x, ix.schemaOf(x));
@@ -89,9 +88,6 @@ function useLingering(id: string) {
   );
   return lingering.has(id);
 }
-addEventListener("beforeunload", () => {
-  for (const [, t] of lingering) clearTimeout(t);
-});
 
 /**
  * The ring in a list: ticks a task off (or reopens it). Entries with open entries below ask
@@ -150,15 +146,11 @@ export function ItemRow({
   item,
   path,
   sub,
-  compact,
-  right,
   note,
 }: {
   item: Item;
   path?: string[]; // ancestors to show under the title
-  sub?: boolean | number; // indent as sub-item (or depth)
-  compact?: boolean;
-  right?: React.ReactNode;
+  sub?: number; // depth as sub-item
   note?: React.ReactNode; // a second line, e.g. a project's next task
 }) {
   const { t, lang } = useT();
@@ -176,7 +168,7 @@ export function ItemRow({
     <div
       data-id={item.id}
       className={cx("tap-row group flex min-h-11 items-center gap-2.5 rounded-lg px-2 py-1 hover:bg-hover max-md:min-h-[52px]", !!sub && "pl-[calc(8px+var(--depth)*24px)] max-sm:pl-[calc(8px+var(--depth)*14px)]")}
-      style={sub ? ({ "--depth": sub === true ? 1 : sub } as React.CSSProperties) : undefined}
+      style={sub ? ({ "--depth": sub } as React.CSSProperties) : undefined}
     >
       <RowStatus item={item} />
       <a href={hrefOf(item.id)} className="flex min-w-0 flex-1 flex-col justify-center self-stretch">
@@ -189,7 +181,6 @@ export function ItemRow({
         )}
         {note && <span className="block truncate text-xs text-muted-foreground">{note}</span>}
       </a>
-      {right}
       {/* the shape tells the status; words only for what deviates */}
       {blocked && <span className="shrink-0 text-xs text-warn">{t("row.blocked")}</span>}
       {st && !done && statusShape(st.option) === "paused" && <StatusPill option={st.option} group={st.group} small />}

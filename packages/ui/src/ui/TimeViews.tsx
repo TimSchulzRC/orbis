@@ -1,6 +1,6 @@
-import { Button as ShadcnButton } from "../components/ui/button";
 // Calendar and timeline: entries at their date or range. Dragging moves the date (and in the
 // timeline the start or the end); entries without a date are listed below.
+import { Button as ShadcnButton } from "../components/ui/button";
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { type Item, type PropDef, titleKey, todayISO } from "@obtion/core/model";
@@ -17,8 +17,8 @@ import { type Look, GroupChip, HiddenGroups, hiddenPatch, splitHidden } from "./
 const DAY = 86400000;
 const ms = (iso: string) => Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10));
 const iso = (t: number) => new Date(t).toISOString().slice(0, 10);
-export const addDays = (d: string, n: number) => iso(ms(d) + n * DAY);
-export const diffDays = (a: string, b: string) => Math.round((ms(b) - ms(a)) / DAY);
+const addDays = (d: string, n: number) => iso(ms(d) + n * DAY);
+const diffDays = (a: string, b: string) => Math.round((ms(b) - ms(a)) / DAY);
 const weekday = (d: string) => new Date(ms(d)).getUTCDay(); // 0 = Sunday
 const firstDay = (lang: string) => (lang === "en" ? 0 : 1);
 const startOfWeek = (d: string, lang: string) => addDays(d, -((weekday(d) - firstDay(lang) + 7) % 7));
@@ -32,7 +32,7 @@ interface Span {
 }
 
 /** The date a view places entries by: chosen, else the first date property (a due date before others). */
-export function dateKey(def: QueryDef, items: Item[], ctx: EvalCtx, chosen?: string): string | undefined {
+function dateKey(def: QueryDef, items: Item[], ctx: EvalCtx, chosen?: string): string | undefined {
   if (chosen) return chosen;
   const types = [...new Set([...typesIn(def.where), ...items.slice(0, 100).map((i) => i.type ?? "")])].map((id) => ctx.ix.types.get(id)?.schema).filter(Boolean);
   for (const s of types) {
@@ -141,7 +141,7 @@ export function CalendarView({ items, def, ctx, look }: { items: Item[]; def: Qu
                     className={cx("border-l border-line first:border-l-0", d.slice(0, 7) !== month.slice(0, 7) && "bg-surface-2/40", over === d && "bg-hover")}
                     style={{ gridColumn: n + 1, gridRow: `1 / span ${Math.min(lanes.length, MAX) + 2}` }}
                   >
-                    <span className={cx("m-1 inline-flex size-6 items-center justify-center rounded-full text-xs tabular-nums", d === today ? "bg-ink font-medium text-ink-text" : d.slice(0, 7) === month.slice(0, 7) ? "text-muted-foreground" : "text-muted-foreground")}>{+d.slice(8, 10)}</span>
+                    <span className={cx("m-1 inline-flex size-6 items-center justify-center rounded-full text-xs tabular-nums", d === today ? "bg-ink font-medium text-ink-text" : "text-muted-foreground")}>{+d.slice(8, 10)}</span>
                   </div>
                 ))}
                 {pos

@@ -1,11 +1,11 @@
-import { Checkbox } from "../components/ui/checkbox";
-import { Button as ShadcnButton } from "../components/ui/button";
-import { Input } from "../components/ui/input";
-import { NativeSelect } from "../components/ui/native-select";
 // Settings in two kinds. Global (#/settings): the account, its workspaces, and what belongs to
 // this device (language, appearance, files, its name).
 // A workspace's own (#/w/<id>/workspace, from its menu in the sidebar or the list here): name and
 // members, capture, examples, agents, sync, and the way to its types, activity, graph and trash.
+import { Checkbox } from "../components/ui/checkbox";
+import { Button as ShadcnButton } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { NativeSelect } from "../components/ui/native-select";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { Copy, Check, Eye, EyeOff, RotateCcw, ChevronRight, History, Shapes, Trash2, Waypoints } from "lucide-react";
 import { SETTINGS_ID, setSettings } from "@obtion/core/model";
@@ -325,7 +325,6 @@ export function Settings() {
         <p className="mt-2 text-xs text-muted-foreground">{t("settings.themeHint")}</p>
       </section>
 
-
       <DeviceFilesSection />
 
       <DeviceName />
@@ -523,7 +522,7 @@ function Examples() {
               return (
                 <li key={e.id}>
                   <label className={cx("tap-row flex items-center gap-2 rounded-md px-2 py-1 text-sm", e.inUse ? "text-muted-foreground" : "cursor-pointer hover:bg-hover")}>
-                    <Checkbox  checked={chosen.has(e.id)} disabled={e.inUse} onCheckedChange={() => toggle(e.id)} className="size-4 shrink-0 accent-[var(--focus)]" />
+                    <Checkbox checked={chosen.has(e.id)} disabled={e.inUse} onCheckedChange={() => toggle(e.id)} className="size-4 shrink-0" />
                     {e.isType ? <TypeGlyph schema={item?.schema} size={14} /> : item && <ItemIcon item={item} size={14} />}
                     <span className="min-w-0 truncate">{e.title || t("untitled")}</span>
                     {e.isType && <span className="text-xs text-muted-foreground">{t("examples.type")}</span>}

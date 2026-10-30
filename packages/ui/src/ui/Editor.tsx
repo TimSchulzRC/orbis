@@ -137,7 +137,7 @@ function localStamp(d = new Date()) {
 }
 
 /** Insert files at a position: stored on this device at once, uploaded when the server is reachable. */
-async function insertFiles(view: EditorView, list: File[], pos: number, parent?: string) {
+async function insertFiles(view: EditorView, list: File[], pos: number) {
   let at = pos;
   for (const f of list) {
     const name = f.name && f.name !== "image.png" ? f.name : `${tr("editor.pastedImage")} ${localStamp()}.${(f.type.split("/")[1] || "png").replace("jpeg", "jpg")}`;
@@ -153,7 +153,6 @@ async function insertFiles(view: EditorView, list: File[], pos: number, parent?:
       notify.error(tr("editor.fileFailed"));
     }
   }
-  void parent;
 }
 
 const fileHandlers = EditorView.domEventHandlers({
@@ -169,7 +168,7 @@ const fileHandlers = EditorView.domEventHandlers({
     if (!list.length) return false;
     e.preventDefault();
     const pos = view.posAtCoords({ x: e.clientX, y: e.clientY }) ?? view.state.selection.main.head;
-    insertFiles(view, list, view.state.doc.lineAt(pos).to + (view.state.doc.lineAt(pos).length ? 0 : 0));
+    insertFiles(view, list, view.state.doc.lineAt(pos).to);
     return true;
   },
 });

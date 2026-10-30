@@ -561,7 +561,7 @@ function matchField(item: Item, c: { prop: string; op: Op; value?: FieldValue },
     }
     case "checkbox": {
       const b = ["ja", "yes", "true", "1", "wahr", "x"].includes(want.toLowerCase());
-      return cmp(hit.value === true ? 1 : 0, b ? 1 : 0, c.op === ":" ? ":" : c.op);
+      return cmp(hit.value === true ? 1 : 0, b ? 1 : 0, c.op);
     }
     case "select":
     case "status":
@@ -728,7 +728,7 @@ export function runQuery(def: QueryDef, ctx: EvalCtx): QueryResult {
 
 const GROUP_RANK: Record<string, number> = { active: 0, todo: 1, done: 3 };
 
-export function sortItems(items: Item[], sort: QueryDef["sort"], ix: Index): Item[] {
+function sortItems(items: Item[], sort: QueryDef["sort"], ix: Index): Item[] {
   const keyed = items.map((i) => ({ i, k: sortKeys(i, sort, ix) }));
   keyed.sort((a, b) => {
     for (let n = 0; n < a.k.length; n++) {
@@ -864,7 +864,7 @@ export function groupItems(items: Item[], by: string | undefined, ctx: EvalCtx, 
  * top-level conditions; undefined when it does not say. Empty option groups outside of it are
  * not shown – "Erledigt · 0" under "offene Tasks" says nothing.
  */
-export function statusGroupsAllowed(where: Cond | undefined): Set<string> | undefined {
+function statusGroupsAllowed(where: Cond | undefined): Set<string> | undefined {
   let out: Set<string> | undefined;
   for (const c of where ? ("and" in where ? where.and : [where]) : []) {
     if (!("status" in c)) continue;

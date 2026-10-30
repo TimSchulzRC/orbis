@@ -1,12 +1,11 @@
-import { Button as ShadcnButton } from "../components/ui/button";
 // Parts every page shares (design rules § 3.1): the path line on top, the card of connections
 // ("Bezüge") and the quiet footer. Information pages and file pages use the same ones.
+import { Button as ShadcnButton } from "../components/ui/button";
 import { useEffect, useState } from "react";
 import { ChevronRight, MoreHorizontal, Pin, Star, X } from "lucide-react";
-import { type Item, META_TYPE } from "@obtion/core/model";
+import { type Item, META_TYPE, todayISO } from "@obtion/core/model";
 import { hasPlace, isInInbox } from "@obtion/core/placement";
 import { fmtDate } from "@obtion/core/i18n";
-import { todayISO } from "@obtion/core/model";
 import { repo } from "../repo";
 import { itemHref, useIndex, useMediaQuery } from "../hooks";
 import { useT } from "../i18n";
@@ -271,7 +270,7 @@ function PlaceHere({ target, page }: { target: Item; page: Item }) {
 }
 
 /** "Geändert vor 2 Std. · erstellt am 1. März 2026" – the last line of a page. */
-export function PageFooter({ item }: { item: Item }) {
+function PageFooter({ item }: { item: Item }) {
   const { t, lang } = useT();
   return (
     <p className="mt-4 text-xs text-muted-foreground">

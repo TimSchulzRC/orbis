@@ -14,7 +14,7 @@ export interface SpaceLink {
 }
 
 /** The replica in IndexedDB: stores "updates" (per document), "outbox", "meta" (cursor, server id). */
-export function idbStorage(name: string): ReplicaStorage {
+function idbStorage(name: string): ReplicaStorage {
   let db!: IDBPDatabase;
   return {
     async open() {
@@ -132,7 +132,7 @@ export function browserHost(link: SpaceLink): RepoHost {
   };
 }
 
-export function deviceName(): string {
+function deviceName(): string {
   const saved = localStorage.getItem("obtion.device");
   if (saved) return saved;
   const ua = navigator.userAgent;

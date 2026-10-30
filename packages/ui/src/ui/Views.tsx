@@ -1,9 +1,8 @@
-import { Checkbox } from "../components/ui/checkbox";
-import { Button as ShadcnButton } from "../components/ui/button";
-import { Input } from "../components/ui/input";
-import { NativeSelect } from "../components/ui/native-select";
 // Views as tabs: each tab its own kind, filter (added to the query), grouping, sorting and
 // properties. The tab bar and the panel to set a view up; a type's page and query blocks share them.
+import { Checkbox } from "../components/ui/checkbox";
+import { Button as ShadcnButton } from "../components/ui/button";
+import { NativeSelect } from "../components/ui/native-select";
 import { useState } from "react";
 import { CalendarDays, ChartGantt, ChevronLeft, ChevronRight, Copy, GripVertical, LayoutGrid, List, ListChecks, ListTree, Plus, SlidersHorizontal, SquareKanban, Table2, Trash2, X } from "lucide-react";
 import { type ViewTab, type PropDef, type ViewKind, titleKey } from "@obtion/core/model";
@@ -17,8 +16,8 @@ import { QueryEditor } from "./QueryEditor";
 import { GroupChip } from "./Table";
 
 /** The kinds offered for a new tab, in this order. */
-export const TAB_KINDS: ViewKind[] = ["table", "board", "timeline", "calendar", "list", "gallery", "triage"];
-export const KIND_ICON: Record<ViewKind, React.ComponentType<{ size?: number; className?: string }>> = {
+const TAB_KINDS: ViewKind[] = ["table", "board", "timeline", "calendar", "list", "gallery", "triage"];
+const KIND_ICON: Record<ViewKind, React.ComponentType<{ size?: number; className?: string }>> = {
   table: Table2,
   board: SquareKanban,
   list: List,
@@ -168,7 +167,7 @@ export function ViewTabs({ tabs, active, onPick, edit, right }: { tabs: ViewTab[
 
 // ---------- what a view can show and group by ----------
 
-export interface ViewField {
+interface ViewField {
   key: string; // stored in columns / sort / group: a built-in field or the property's name
   label: string;
   kind: PropDef["kind"] | "item" | "tags" | "builtin-date";
@@ -203,7 +202,7 @@ export function useViewFields(where: Cond | undefined, sample: { type: string | 
 }
 
 /** The name of a column, sort or group key in the UI language. */
-export function fieldLabel(key: string, fields: ViewField[], t: (k: string) => string): string {
+function fieldLabel(key: string, fields: ViewField[], t: (k: string) => string): string {
   if (key === "status" || key === "statusGroup" || key === "type" || key === "path") return t("group." + key);
   if ((FIELDS as readonly string[]).includes(key)) return t("field." + key);
   if (key === "tags") return t("item.tags");
@@ -212,7 +211,7 @@ export function fieldLabel(key: string, fields: ViewField[], t: (k: string) => s
 
 // ---------- the panel to set a view up ----------
 
-export interface FilterDraft {
+interface FilterDraft {
   where: Cond | undefined;
   onChange: (where: Cond | undefined) => void;
   dirty: boolean;
@@ -284,7 +283,7 @@ export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter
           </NativeSelect>
           {tab.group && (
             <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Checkbox  checked={!!tab.hideEmpty} onCheckedChange={(checked) => onLook({ hideEmpty: (checked === true) || undefined })} className="accent-[var(--focus)]" />
+              <Checkbox checked={!!tab.hideEmpty} onCheckedChange={(checked) => onLook({ hideEmpty: checked === true || undefined })} />
               {t("view.hideEmpty")}
             </label>
           )}
@@ -300,10 +299,8 @@ export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter
                 <li key={g.key || "_"}>
                   <label className="flex cursor-pointer items-center gap-1.5">
                     <Checkbox
-
                       checked={!hidden}
-                      onCheckedChange={(checked) => onLook({ hiddenGroups: (checked === true) ? (tab.hiddenGroups ?? []).filter((x) => x !== groupId(g)) : [...(tab.hiddenGroups ?? []), groupId(g)] })}
-                      className="accent-[var(--focus)]"
+                      onCheckedChange={(checked) => onLook({ hiddenGroups: checked === true ? (tab.hiddenGroups ?? []).filter((x) => x !== groupId(g)) : [...(tab.hiddenGroups ?? []), groupId(g)] })}
                     />
                     <GroupChip g={g} by={tab.group!} byLabel={fieldLabel(tab.group!, fields, t)} />
                   </label>
@@ -397,9 +394,8 @@ export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter
                   <label className={cx("inline-flex cursor-pointer items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs", on ? "border-line bg-bg text-fg" : "border-dashed border-line text-muted-foreground hover:text-fg")}>
                     {on && <GripVertical size={11} className="cursor-grab text-muted-foreground" aria-hidden />}
                     <Checkbox
-
                       checked={on}
-                      onCheckedChange={(checked) => onLook({ columns: (checked === true) ? [...shown, f.key] : shown.filter((k) => titleKey(k) !== titleKey(f.key)) })}
+                      onCheckedChange={(checked) => onLook({ columns: checked === true ? [...shown, f.key] : shown.filter((k) => titleKey(k) !== titleKey(f.key)) })}
                       className="sr-only"
                     />
                     {f.label}

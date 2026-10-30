@@ -1,19 +1,6 @@
-// Colours for types (each with a light and a dark value) and the icon names types can use.
-export const PALETTE: Record<string, [string, string]> = {
-  blue: ["#2f6ae0", "#6e96ff"],
-  violet: ["#8b4fd8", "#b58cf0"],
-  green: ["#23905f", "#50c88c"],
-  slate: ["#5c6b80", "#94a3b8"],
-  teal: ["#0d828c", "#46c8d2"],
-  pink: ["#c84078", "#f082af"],
-  brown: ["#9a6b45", "#c79a73"],
-  amber: ["#be780a", "#f0b040"],
-  red: ["#d1453b", "#f06b60"],
-  indigo: ["#4f55d8", "#9399ff"],
-  olive: ["#6b7a1f", "#b4c35a"],
-  gray: ["#706258", "#c4b6aa"],
-};
-export const COLORS = Object.keys(PALETTE);
+// Colours for types (their light and dark values are --pal-* in packages/ui/src/theme.css) and the icon names types can use.
+export const COLORS = ["blue", "violet", "green", "slate", "teal", "pink", "brown", "amber", "red", "indigo", "olive", "gray"] as const;
+export type Color = (typeof COLORS)[number];
 
 export const ICONS = [
   "sticky-note", "map", "folder-kanban", "circle-check", "book", "user", "pen-line", "graduation-cap", "building-2",

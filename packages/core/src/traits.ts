@@ -9,7 +9,7 @@ export function caps(schema?: TypeSchema): Capabilities {
   return schema?.capabilities ?? {};
 }
 
-export function propById(schema: TypeSchema | undefined, id?: string): PropDef | undefined {
+function propById(schema: TypeSchema | undefined, id?: string): PropDef | undefined {
   return id ? schema?.properties.find((p) => p.id === id) : undefined;
 }
 
@@ -25,7 +25,7 @@ export function dueProp(schema?: TypeSchema): PropDef | undefined {
   return p?.kind === "date" ? p : undefined;
 }
 
-export function statusOptions(schema?: TypeSchema): OptionDef[] {
+function statusOptions(schema?: TypeSchema): OptionDef[] {
   return statusProp(schema)?.options ?? [];
 }
 
@@ -95,12 +95,12 @@ export function priorityProp(schema?: TypeSchema): PropDef | undefined {
 }
 
 /** The language of an entry: a select property called "Sprache"/"Language"; its options name the languages. */
-export function languageProp(schema?: TypeSchema): PropDef | undefined {
+function languageProp(schema?: TypeSchema): PropDef | undefined {
   const names = new Set(LANGS.map((l) => titleKey(translate(l, "setup.prop.language"))));
-  return schema?.properties.find((p) => p.kind === "select" && !p.removed && names.has(titleKey(p.name)));
+  return schema?.properties.find((p) => p.kind === "select" && names.has(titleKey(p.name)));
 }
 
-export function languageOf(item: Item, schema?: TypeSchema): string | undefined {
+function languageOf(item: Item, schema?: TypeSchema): string | undefined {
   const p = languageProp(schema);
   const v = p ? item.props[p.id] : undefined;
   return p?.options?.find((o) => o.id === v)?.name;
@@ -123,7 +123,7 @@ export function translations(item: Item, ix: Pick<Index, "get" | "schemaOf" | "r
   if (!own) return [];
   const out: { item: Item; lang: string }[] = [];
   for (const p of schema?.properties ?? []) {
-    if (p.kind !== "relation" || !p.symmetric || p.removed) continue;
+    if (p.kind !== "relation" || !p.symmetric) continue;
     for (const id of ix.relValues(item, p.id, true)) {
       const other = ix.get(id);
       const lang = other && languageOf(other, ix.schemaOf(other));
@@ -141,7 +141,7 @@ export function translations(item: Item, ix: Pick<Index, "get" | "schemaOf" | "r
 export function translationPlan(item: Item, ix: Pick<Index, "get" | "schemaOf" | "relValues">): { language: PropDef; relation: PropDef; missing: OptionDef[] } | undefined {
   const schema = ix.schemaOf(item);
   const language = languageProp(schema);
-  const relation = schema?.properties.find((p) => p.kind === "relation" && p.symmetric && !p.removed);
+  const relation = schema?.properties.find((p) => p.kind === "relation" && p.symmetric);
   if (!language || !relation) return undefined;
   const have = new Set([String(item.props[language.id] ?? ""), ...translations(item, ix).map((v) => String(v.item.props[language.id] ?? ""))]);
   const missing = (language.options ?? []).filter((o) => !have.has(o.id));
