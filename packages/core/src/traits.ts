@@ -1,7 +1,7 @@
 // What a type can do. Behaviour hangs on these traits – never on a type id or name.
 // Everything that reads capabilities goes through this module.
 import type * as Y from "yjs";
-import { type Capabilities, type Item, type ItemInit, type OptionDef, type PropDef, type StatusGroup, type TypeSchema, type Value, setProp, titleKey } from "./model";
+import { type Capabilities, type Item, type ItemInit, type OptionDef, type PropDef, type StatusGroup, type TypeSchema, type Value, metaMap, setProp, titleKey } from "./model";
 import { LANGS, translate } from "./i18n";
 import type { Index } from "./graph";
 
@@ -63,7 +63,7 @@ export function writeProp(doc: Y.Doc, schema: TypeSchema | undefined, propId: st
   const groupOf = (v: unknown) => (v == null ? undefined : (sp.options?.find((o) => o.id === v)?.group ?? "todo"));
   const was = groupOf(doc.getMap("props").get(propId));
   setProp(doc, propId, value);
-  const meta = doc.getMap<any>("meta");
+  const meta = metaMap(doc);
   if (groupOf(value) === "done") {
     if (was !== "done" || !meta.has("done")) meta.set("done", at);
   } else if (meta.has("done")) meta.delete("done");

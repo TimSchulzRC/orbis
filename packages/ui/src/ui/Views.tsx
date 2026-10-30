@@ -14,6 +14,7 @@ import { useT } from "../i18n";
 import { Button, InlineText, MenuItem, Popover, Seg, cx } from "./bits";
 import { QueryEditor } from "./QueryEditor";
 import { GroupChip } from "./Table";
+import type { T } from "@obtion/core/i18n";
 
 /** The kinds offered for a new tab, in this order. */
 const TAB_KINDS: ViewKind[] = ["table", "board", "timeline", "calendar", "list", "gallery", "triage"];
@@ -28,7 +29,7 @@ const KIND_ICON: Record<ViewKind, React.ComponentType<{ size?: number; className
   timeline: ChartGantt,
 };
 
-export const tabName = (tab: Pick<ViewTab, "name" | "kind">, t: (k: string) => string) => tab.name || t("view." + tab.kind);
+export const tabName = (tab: Pick<ViewTab, "name" | "kind">, t: T) => tab.name || t("view." + tab.kind);
 
 /** The tab this device showed last for `key` (a type's page, a block); an unknown one: the first. */
 export function useTabChoice(key: string, tabs: ViewTab[]): [ViewTab, (id: string) => void] {
@@ -202,7 +203,7 @@ export function useViewFields(where: Cond | undefined, sample: { type: string | 
 }
 
 /** The name of a column, sort or group key in the UI language. */
-function fieldLabel(key: string, fields: ViewField[], t: (k: string) => string): string {
+function fieldLabel(key: string, fields: ViewField[], t: T): string {
   if (key === "status" || key === "statusGroup" || key === "type" || key === "path") return t("group." + key);
   if ((FIELDS as readonly string[]).includes(key)) return t("field." + key);
   if (key === "tags") return t("item.tags");

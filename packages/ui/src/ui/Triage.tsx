@@ -23,6 +23,7 @@ import { Markdown } from "./Markdown";
 import { NOTE_ICON } from "./icons";
 import { plainText } from "@obtion/core/search";
 import { usePickers, useTriageActions } from "./TriageActions";
+import type { T } from "@obtion/core/i18n";
 
 const DAY = 864e5;
 /** Age groups: this week, this month, older. */
@@ -32,7 +33,7 @@ function ageGroup(created: number, now = Date.now()): "week" | "month" | "older"
 }
 
 /** The quiet hint of a row: the agent's suggestion, a mentioned place, or the notes bundled below. */
-function rowHint(item: Item, ix: Index, t: (k: string, v?: Record<string, unknown>) => string): { icon: React.ReactNode; text: string } | null {
+function rowHint(item: Item, ix: Index, t: T): { icon: React.ReactNode; text: string } | null {
   const sug = item.suggestion;
   if (sug) {
     const what = [sug.type ? ix.typeName(sug.type) : null, ...(sug.parents ?? []).map((p) => ix.get(p)?.title)].filter(Boolean).join(" · ");

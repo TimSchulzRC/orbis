@@ -4,7 +4,8 @@ import { Button as ShadcnButton } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { BrandLogo } from "../ui/BrandLogo";
 import { useEffect, useState, type ReactNode } from "react";
-import { createSpace, invite, joinInvite, serverInfo, signIn, signUp, useAccounts } from "../accounts";
+import { createSpace, errorText, invite, joinInvite, serverInfo, signIn, signUp, useAccounts } from "../accounts";
+import type { InviteInfo, ServerInfo } from "@obtion/core/api";
 import { useRoute } from "../hooks";
 import { getLang, useT } from "../i18n";
 import { Button } from "../ui/bits";
@@ -36,7 +37,7 @@ function Field({ label, ...p }: { label: string } & React.InputHTMLAttributes<HT
 /** Sign in or create an account on this server. `inviteCode`: creating one joins that workspace. */
 function SignIn({ inviteCode, onDone }: { inviteCode?: string; onDone?: () => void }) {
   const { t } = useT();
-  const [info, setInfo] = useState<{ signup: string; firstAccount: boolean } | null>(null);
+  const [info, setInfo] = useState<ServerInfo | null>(null);
   const [mode, setMode] = useState<"in" | "up">("in");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -61,8 +62,7 @@ function SignIn({ inviteCode, onDone }: { inviteCode?: string; onDone?: () => vo
       else await signIn(email, password);
       onDone?.();
     } catch (err) {
-      const status = (err as { status?: number }).status;
-      setError(status === 401 ? t("account.wrong") : status === 429 ? t("account.tooMany") : status === 409 || status === 422 ? t("account.exists") : status === 403 ? t("account.closed") : (err as Error).message);
+      setError(errorText(err, t, "signIn"));
     } finally {
       setBusy(false);
     }
@@ -93,7 +93,7 @@ function SignIn({ inviteCode, onDone }: { inviteCode?: string; onDone?: () => vo
 /** Joining a workspace by its invite link: with the account signed in here, or a new one. */
 function Join({ code }: { code: string }) {
   const { t } = useT();
-  const [inv, setInv] = useState<{ workspace: string; by: string } | null | undefined>();
+  const [inv, setInv] = useState<InviteInfo | null | undefined>();
   const [error, setError] = useState("");
   const { account: acc } = useAccounts();
   useEffect(() => {
@@ -108,7 +108,7 @@ function Join({ code }: { code: string }) {
         <>
           <p className="mt-4 text-sm">{t("account.joinAs", { email: acc.user.email })}</p>
           {error && <p className="mt-3 text-sm text-[var(--danger-text)]">{error}</p>}
-          <Button variant="primary" className="mt-6 w-full" onClick={() => joinInvite(code).then(done, (e) => setError((e as Error).message))}>
+          <Button variant="primary" className="mt-6 w-full" onClick={() => joinInvite(code).then(done, (e) => setError(errorText(e, t, "space")))}>
             {t("account.join")}
           </Button>
         </>

@@ -55,7 +55,7 @@ export function FilePage({ item }: { item: Item }) {
   const replace = async (file: File) => {
     const meta = await files.prepare(file, f.name);
     repo.change(item.id, (doc) =>
-      setFileMeta(doc, { ...meta, name: f.name, display: meta.display ?? (null as any), thumb: meta.thumb ?? (null as any), pages: null as any, text: null as any, duration: null as any, history: [...(f.history ?? []), { hash: f.hash, at: Date.now() }] }),
+      setFileMeta(doc, { ...meta, name: f.name, display: meta.display ?? null, thumb: meta.thumb ?? null, pages: null, text: null, duration: null, history: [...(f.history ?? []), { hash: f.hash, at: Date.now() }] }),
     );
   };
   const tools = (

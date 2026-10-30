@@ -38,7 +38,7 @@ async function opfsStore(name: string): Promise<BlobStore | null> {
     if (!root) return null;
     const dir = await root.getDirectoryHandle(name, { create: true });
     const probe = await dir.getFileHandle(".probe", { create: true });
-    if (typeof (probe as any).createWritable !== "function") return null;
+    if (typeof probe.createWritable !== "function") return null;
     return {
       async has(h) {
         try {
@@ -57,7 +57,7 @@ async function opfsStore(name: string): Promise<BlobStore | null> {
       },
       async put(h, blob) {
         const fh = await dir.getFileHandle(h, { create: true });
-        const w = await (fh as any).createWritable();
+        const w = await fh.createWritable();
         await w.write(blob);
         await w.close();
       },
@@ -66,7 +66,7 @@ async function opfsStore(name: string): Promise<BlobStore | null> {
       },
       async list() {
         const out: { hash: string; size: number }[] = [];
-        for await (const [name, handle] of (dir as any).entries()) {
+        for await (const [name, handle] of dir.entries()) {
           if (name.startsWith(".")) continue;
           out.push({ hash: name, size: (await (handle as FileSystemFileHandle).getFile()).size });
         }
@@ -143,7 +143,7 @@ async function pdfPreview(blob: Blob): Promise<{ blob: Blob; pages: number } | u
     const canvas = document.createElement("canvas");
     canvas.width = Math.round(v.width);
     canvas.height = Math.round(v.height);
-    await page.render({ canvas, canvasContext: canvas.getContext("2d")!, viewport: v } as any).promise;
+    await page.render({ canvas, canvasContext: canvas.getContext("2d")!, viewport: v }).promise;
     const out = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/webp", 0.8));
     const pages = doc.numPages;
     await task.destroy();

@@ -7,17 +7,17 @@ import { Button, Dialog } from "./bits";
 // short notices: sonner (see toasts.tsx); kept here so callers import one place for feedback
 export { notify } from "./toasts";
 
-type Choice = { key: string; label: string; primary?: boolean; danger?: boolean };
+type Choice<K extends string = string> = { key: K; label: string; primary?: boolean; danger?: boolean };
 type Ask = { title: string; body: string; choices: Choice[]; resolve: (v: string | null) => void };
 let ask: Ask | null = null;
 const askListeners = new Set<() => void>();
 const askSub = (l: () => void) => (askListeners.add(l), () => void askListeners.delete(l));
 
 /** Ask, with several answers; resolves the chosen key, or null for "cancel". */
-export function chooseAction(opts: { title: string; body: string; choices: Choice[] }): Promise<string | null> {
-  return new Promise((resolve) => {
+export function chooseAction<K extends string>(opts: { title: string; body: string; choices: Choice<K>[] }): Promise<K | null> {
+  return new Promise<K | null>((resolve) => {
     ask?.resolve(null);
-    ask = { ...opts, resolve };
+    ask = { ...opts, resolve: resolve as (v: string | null) => void }; // answers are keys of the choices
     askListeners.forEach((l) => l());
   });
 }

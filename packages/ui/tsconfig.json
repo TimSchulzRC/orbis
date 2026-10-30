@@ -1,5 +1,5 @@
 {
   "extends": "../../tsconfig.base.json",
-  "compilerOptions": { "lib": ["ESNext", "DOM", "DOM.Iterable"], "jsx": "react-jsx", "types": ["vite/client"] },
+  "compilerOptions": { "lib": ["ESNext", "DOM", "DOM.Iterable", "DOM.AsyncIterable"], "jsx": "react-jsx", "types": ["vite/client"] },
   "include": ["src"]
 }

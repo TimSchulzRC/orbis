@@ -73,6 +73,8 @@ function GraphCanvas({ data, highlight }: { data: { nodes: GNode[]; links: GLink
   const theme = useTheme().resolved;
   const hl = useRef<Set<string> | undefined>(highlight);
   hl.current = highlight;
+  const links = useRef(new Map<string, Set<string>>()); // id -> its neighbours
+  const fitted = useRef(false);
 
   useEffect(() => {
     const el = host.current!;
@@ -80,7 +82,8 @@ function GraphCanvas({ data, highlight }: { data: { nodes: GNode[]; links: GLink
     const text = cssVar("--text");
     const faint = cssVar("--muted"); // labels are text: muted keeps 4.5:1
     const line = cssVar("--border");
-    const neighbours = new Map<string, Set<string>>();
+    const neighbours = (links.current = new Map());
+    fitted.current = false;
     const g = new ForceGraph<GNode, GLink>(el)
       .backgroundColor("rgba(0,0,0,0)")
       .nodeId("id")
@@ -129,8 +132,8 @@ function GraphCanvas({ data, highlight }: { data: { nodes: GNode[]; links: GLink
       .onNodeClick((n) => go(`/i/${encodeURIComponent(n.id)}`))
       .cooldownTicks(200)
       .onEngineStop(() => {
-        if (!(g as any).__fitted) {
-          (g as any).__fitted = true;
+        if (!fitted.current) {
+          fitted.current = true;
           g.zoomToFit(400, 60);
         }
       });
@@ -141,7 +144,6 @@ function GraphCanvas({ data, highlight }: { data: { nodes: GNode[]; links: GLink
       g.height(el.clientHeight);
     });
     ro.observe(el);
-    (g as any).__neighbours = neighbours;
     return () => {
       ro.disconnect();
       g._destructor();
@@ -150,7 +152,7 @@ function GraphCanvas({ data, highlight }: { data: { nodes: GNode[]; links: GLink
 
   useEffect(() => {
     const g = graph.current!;
-    const neighbours: Map<string, Set<string>> = (g as any).__neighbours;
+    const neighbours = links.current;
     neighbours.clear();
     for (const l of data.links) {
       const s = typeof l.source === "string" ? l.source : l.source.id;
@@ -167,7 +169,7 @@ function GraphCanvas({ data, highlight }: { data: { nodes: GNode[]; links: GLink
       return o ? Object.assign(o, { title: n.title, color: n.color, deg: n.deg }) : { ...n };
     });
     g.graphData({ nodes, links: data.links.map((l) => ({ ...l })) });
-    (g as any).__fitted = false;
+    fitted.current = false;
   }, [data]);
 
   // Highlight changes don't move nodes, so the paused canvas must be told to repaint.

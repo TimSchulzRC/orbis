@@ -9,12 +9,13 @@ import { X, Plus, ChevronLeft, HelpCircle } from "lucide-react";
 import { type Cond, type QueryDef, parseQuery, printQuery } from "@obtion/core/query";
 import { useIndex } from "../hooks";
 import { useT } from "../i18n";
-import type { Lang } from "@obtion/core/i18n";
+import type { Lang, T } from "@obtion/core/i18n";
+import type { Index } from "@obtion/core/graph";
 import { MenuItem, Popover, TypeGlyph, cx } from "./bits";
 import { ItemPicker } from "./Picker";
 
 type Step = "root" | "type" | "status" | "due" | "tag";
-type Ctx = { ix: ReturnType<typeof useIndex>; t: (k: string, v?: Record<string, unknown>) => string; lang: Lang };
+type Ctx = { ix: Index; t: T; lang: Lang };
 
 /** How a condition reads on its chip: the text form, "nicht …" for a negation. */
 function condLabel(c: Cond, { ix, t, lang }: Ctx): string {

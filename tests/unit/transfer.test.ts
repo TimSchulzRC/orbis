@@ -61,7 +61,7 @@ test("types: same name maps property by property and option by name; a missing t
   expect(m2.types.length).toBe(1);
   const cix = c.index();
   const copy = cix.get(m2.ids.get(item)!)!;
-  expect(copy.type).toBe(m2.types[0]);
+  expect([copy.type]).toEqual(m2.types);
   expect(cix.get(m2.types[0]!)!.schema!.properties.map((p) => p.name)).toEqual(["Autor", "Stand"]);
   expect(copy.props).toEqual({ p_author: "Ann", p_state: "o1" });
   expect(copy.pinned).toBe("a");

@@ -1,9 +1,14 @@
 // UI language per device: switchable in the menu, the device language is preselected.
 import { useSyncExternalStore } from "react";
-import { type Lang, type T, detectLang, makeT } from "@obtion/core/i18n";
+import { type Lang, type T, type Values, LANGS, detectLang, makeT } from "@obtion/core/i18n";
 
 const KEY = "obtion.lang";
-let lang: Lang = (localStorage.getItem(KEY) as Lang | null) ?? detectLang(navigator.language);
+function stored(): Lang | undefined {
+  const v = localStorage.getItem(KEY);
+  return LANGS.find((l) => l === v);
+}
+
+let lang: Lang = stored() ?? detectLang(navigator.language);
 let t: T = makeT(lang);
 const listeners = new Set<() => void>();
 document.documentElement.lang = lang;
@@ -19,7 +24,7 @@ export function setLang(l: Lang) {
   listeners.forEach((f) => f());
 }
 /** Translate outside of React (confirm dialogs, editor widgets). */
-export function tr(key: string, values?: Record<string, unknown>) {
+export function tr(key: string, values?: Values) {
   return t(key, values);
 }
 

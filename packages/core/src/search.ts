@@ -46,7 +46,7 @@ export function createIndex() {
       if (field === "body") return stripQueryBlocks(doc.body) + (doc.file ? ` ${doc.file.name} ${doc.file.text ?? ""}` : "") + (doc.schema ? ` ${doc.schema.description}` : "");
       if (field === "props")
         return [...Object.values(doc.props).filter((v) => typeof v === "string" && !/^(st|pr)_/.test(v)), ...Object.entries(doc.extra).map(([k, v]) => `${k} ${v.v}`)].join(" ");
-      return (doc as any)[field] ?? "";
+      return field === "title" || field === "id" ? doc[field] : "";
     },
     searchOptions: {
       tokenize: tokenizeForSearch,

@@ -12,7 +12,7 @@ import type { QueryDef } from "@obtion/core/query";
 import { inboxWhere } from "@obtion/core/inbox";
 import { resetInbox } from "@obtion/core/setup";
 import { plainText } from "@obtion/core/search";
-import { fmtBytes } from "@obtion/core/i18n";
+import { type Lang, type T, fmtBytes } from "@obtion/core/i18n";
 import { useRepo, itemHref, spaceHref } from "../hooks";
 import { useBlobUrl } from "../files";
 import { Textarea } from "../components/ui/textarea";
@@ -186,11 +186,11 @@ export function ShelfCards({ entries }: { entries: InboxEntry[] }) {
 }
 
 /** What an entry says in one line: its text, else what it is (a file, notes below). */
-function preview(e: InboxEntry, t: (k: string, v?: Record<string, unknown>) => string, lang: string, notes: number): string {
+function preview(e: InboxEntry, t: T, lang: Lang, notes: number): string {
   const i = e.item;
   const text = plainText(i.body || i.file?.text || "").slice(0, 200);
   if (text) return notes ? `${text} · ${t("triage.notes", { count: notes })}` : text;
-  if (i.file) return [t("kind.file"), fmtBytes(lang as "de" | "en", i.file.size)].join(" · ");
+  if (i.file) return [t("kind.file"), fmtBytes(lang, i.file.size)].join(" · ");
   return notes ? t("triage.notes", { count: notes }) : "";
 }
 

@@ -3,10 +3,13 @@ import { isOverview } from "@obtion/core/placement";
 import type { Repo } from "@obtion/sync";
 import { repo as current } from "../repo";
 
+/** Why the picker suggests an entry ("picker.reason.*"). */
+export type PickReason = "agent" | "mentioned" | "parent" | "similar" | "target" | "recent";
+
 /** Places to suggest for an item: the agent's suggestion, mentioned items, their parents, similar overviews. */
-export function placeSuggestions(item: Item, repo: Repo = current): { id: string; reason: "agent" | "mentioned" | "parent" | "similar" }[] {
+export function placeSuggestions(item: Item, repo: Repo = current): { id: string; reason: Exclude<PickReason, "target" | "recent"> }[] {
   const ix = repo.index();
-  const out: { id: string; reason: "agent" | "mentioned" | "parent" | "similar" }[] = [];
+  const out: ReturnType<typeof placeSuggestions> = [];
   const add = (id: string | undefined, reason: (typeof out)[number]["reason"]) => {
     if (id && id !== item.id && !out.some((o) => o.id === id) && ix.get(id)?.kind === "info" && !ix.wouldCycle(item.id, id) && !item.parents[id]) out.push({ id, reason });
   };

@@ -119,7 +119,7 @@ export function browserHost(link: SpaceLink): RepoHost {
           { key: "replace", label: tr("sync.otherServer.replace"), primary: true },
         ],
       });
-      return answer === "upload" || answer === "replace" ? answer : null;
+      return answer;
     },
     async confirmDiscard(count) {
       const { chooseAction } = await import("./ui/feedback");

@@ -17,16 +17,9 @@ import { useT, setLang } from "../i18n";
 import { Button, Dialog, ItemIcon, Seg, SectionTitle, TypeGlyph, cx } from "../ui/bits";
 import { chooseAction, notify } from "../ui/feedback";
 import { setTheme, useTheme } from "../theme";
-import { type Space, deleteAccount, deleteSpace, inviteLink, leaveSpace, mcpToken, members, renameSpace, replica, serverInfo, signOut, spaceById, useAccounts } from "../accounts";
+import { type Space, deleteAccount, deleteSpace, errorText, inviteLink, leaveSpace, mcpToken, members, renameSpace, replica, serverInfo, signOut, spaceById, useAccounts } from "../accounts";
 import { NewSpaceDialog } from "../ui/Spaces";
-
-interface Connect {
-  mcpUrl: string;
-  token: string;
-  claudeCode: string;
-  json: unknown;
-  vault: string;
-}
+import type { McpConnect, Member } from "@obtion/core/api";
 
 /** navigator.clipboard exists only over HTTPS; opened as http://<address> the old way copies. */
 function copyText(text: string) {
@@ -77,14 +70,14 @@ function CopyBox({ text, secret, label }: { text: string; secret?: string; label
 function Members({ space }: { space: Space }) {
   const { t } = useT();
   const [name, setName] = useState(space.name);
-  const [list, setList] = useState<{ id: string; name: string; email: string; role: string }[]>([]);
+  const [list, setList] = useState<Member[]>([]);
   const [link, setLink] = useState("");
   const [error, setError] = useState("");
   useEffect(() => {
     members(space).then(setList, () => {});
   }, [space.id]);
   const owner = space.role === "owner";
-  const fail = (e: unknown) => setError((e as Error).message === "last owner" ? t("space.lastOwner") : (e as Error).message);
+  const fail = (e: unknown) => setError(errorText(e, t, "space"));
   return (
     <section>
       <SectionTitle>{t("space.members")}</SectionTitle>
@@ -166,8 +159,7 @@ function DeleteAccountDialog({ onClose }: { onClose: () => void }) {
         setError("");
         try { await deleteAccount(password); }
         catch (e) {
-          const message = (e as Error).message;
-          setError(t(message === "last owner" ? "account.deleteOwner" : message === "invalid password" ? "account.deletePassword" : "account.offline"));
+          setError(errorText(e, t, "deleteAccount"));
           setBusy(false);
         }
       }}>
@@ -340,7 +332,7 @@ export function SpaceSettingsPage() {
   const { t } = useT();
   const space = spaceById(useSpaceId() ?? "");
   // an MCP token is made on request (each is a new one, shown once)
-  const [c, setC] = useState<Connect | null>(null);
+  const [c, setC] = useState<McpConnect | null>(null);
   const [err, setErr] = useState(false);
   useEffect(() => void (document.title = space?.name ?? t("space.settings")), [space?.name]);
   if (!space) return null;
@@ -361,12 +353,12 @@ export function SpaceSettingsPage() {
         <h1 className="page-title">{space.name}</h1>
         {/* the workspace's other pages: one click from here */}
         <nav className="mt-4 flex flex-wrap gap-2" aria-label={t("settings.more")}>
-          {[
+          {([
             ["/types", t("nav.types"), Shapes],
             ["/activity", t("nav.activity"), History],
             ["/graph", t("nav.graph"), Waypoints],
             ["/trash", t("nav.trash"), Trash2],
-          ].map(([path, label, I]: any) => (
+          ] as const).map(([path, label, I]) => (
             <a key={path} href={spaceHref(space.id, path)} className="tap-y inline-flex h-8 items-center gap-1.5 rounded-lg border border-line bg-surface px-3 text-sm hover:bg-hover">
               <I size={15} className="text-muted-foreground" /> {label}
             </a>
@@ -470,7 +462,7 @@ function DeleteSpace({ space }: { space: Space }) {
   const [error, setError] = useState("");
   const run = async () => {
     const yes = await chooseAction({ title: t("space.deleteConfirm", { name: space.name }), body: t("space.deleteHint"), choices: [{ key: "yes", label: t("space.delete"), danger: true }] });
-    if (yes === "yes") await deleteSpace(space).catch((e) => setError(String((e as Error).message ?? e)));
+    if (yes === "yes") await deleteSpace(space).catch((e) => setError(errorText(e, t, "space")));
   };
   return (
     <section>

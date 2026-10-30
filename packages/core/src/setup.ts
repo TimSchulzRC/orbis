@@ -13,6 +13,7 @@ import {
   SETTINGS_ID,
   initItem,
   initSchema,
+  metaMap,
   newId,
   readTabs,
   setMeta,
@@ -268,8 +269,8 @@ export function upgradeAreas(w: Writer, docs: Iterable<[string, Y.Doc]>): number
   const settings = w.get(SETTINGS_ID)?.settings;
   if (!settings || settings.upgrades?.includes(KEY)) return 0;
   const ids: string[] = []; // one document at a time: the server reads them from its database
-  for (const [id, d] of docs) if (d.getMap<any>("meta").has("kind") && !d.getMap<any>("meta").has("area")) ids.push(id);
-  for (const id of ids) w.change(id, (d) => d.getMap<any>("meta").set("area", PERSONAL));
+  for (const [id, d] of docs) if (metaMap(d).has("kind") && !metaMap(d).has("area")) ids.push(id);
+  for (const id of ids) w.change(id, (d) => metaMap(d).set("area", PERSONAL));
   w.change(SETTINGS_ID, (d) => setSettings(d, { format: Math.max(settings.format ?? 0, FORMAT), upgrades: [...(settings.upgrades ?? []), KEY] }));
   return ids.length;
 }
@@ -292,13 +293,14 @@ export function migrateCollections(w: Writer, ix: Index, docs: Iterable<[string,
   const given = new Set<string>(); // types that got their views (the first collection wins)
   let lastPin = sidebarRoots(ix).at(-1)?.pinned ?? null;
   for (const [id, doc] of docs) {
-    const meta = doc.getMap<any>("meta");
+    const meta = metaMap(doc);
     if (meta.get("kind") !== "sammlung" || meta.get("deleted")) continue;
-    const name: string = meta.get("name") ?? "";
-    const where = doc.getMap<any>("query").get("where") as Cond | undefined;
+    const raw = meta.get("name");
+    const name = typeof raw === "string" ? raw : "";
+    const where = doc.getMap("query").get("where") as Cond | undefined;
     const tabs = readTabs(doc);
     const type = SHIPPED_FOR[id] ?? (where && "type" in where ? where.type : undefined);
-    const pos: string | undefined = doc.getMap<any>("pin").get("sidebar") || undefined; // its place in the sidebar
+    const pos = (doc.getMap("pin").get("sidebar") as string | undefined) || undefined; // its place in the sidebar
     if (meta.get("system") === "eingang") {
       const own = where && JSON.stringify(where) !== JSON.stringify(DEFAULT_INBOX_WHERE);
       if (own) w.change(SETTINGS_ID, (d) => setSettings(d, { inbox: where }));

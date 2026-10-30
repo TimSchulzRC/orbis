@@ -7,7 +7,8 @@ import { NativeSelect } from "../components/ui/native-select";
 import { useState } from "react";
 import { X, Plus, ExternalLink, AlertTriangle, Trash2, ArrowRightLeft, CalendarDays } from "lucide-react";
 import { type FreeKind, type FreeValue, type Item, type PropDef, type TypeSchema, type Value, FREE_KINDS, todayISO } from "@obtion/core/model";
-import { fmtDate } from "@obtion/core/i18n";
+import { type T, fmtDate } from "@obtion/core/i18n";
+import type { Index } from "@obtion/core/graph";
 import { numberText, parseNumber } from "@obtion/core/input";
 import { parseQuery, matches } from "@obtion/core/query";
 import { doneAt, hasValue, priorityProp, statusOf, visibleProps } from "@obtion/core/traits";
@@ -225,7 +226,7 @@ function RelationField({ item, prop, autoOpen }: { item: Item; prop: PropDef; au
       {picking && (
         <ItemPicker
           title={prop.name}
-          suggestions={ix.live.filter((x) => target && x.id !== item.id && fits(x) && !ids.includes(x.id)).slice(0, 8).map((x) => ({ id: x.id, reason: "target" as any }))}
+          suggestions={ix.live.filter((x) => target && x.id !== item.id && fits(x) && !ids.includes(x.id)).slice(0, 8).map((x) => ({ id: x.id, reason: "target" as const }))}
           exclude={(x) => x.id === item.id || ids.includes(x.id)}
           onPick={(id) => {
             if (!prop.multiple) for (const old of own) repo.setRel(item.id, prop.id, old, false);
@@ -536,7 +537,7 @@ function SelectBadge({ item, prop }: { item: Item; prop: PropDef }) {
 }
 
 /** Other entries' relations pointing here, under the relation's inverse name ("Blockiert diese"). */
-function inverseGroups(item: Item, ix: ReturnType<typeof useIndex>, t: (k: string, v?: Record<string, unknown>) => string): { label: string; ids: string[] }[] {
+function inverseGroups(item: Item, ix: Index, t: T): { label: string; ids: string[] }[] {
   const groups = new Map<string, { label: string; ids: string[] }>();
   for (const b of ix.backlinks(item.id)) {
     if (b.kind !== "rel") continue;

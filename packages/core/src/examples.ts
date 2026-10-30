@@ -4,7 +4,8 @@
 // language of the setup and marked with meta.source = "example", so "Beispiele entfernen" in the
 // settings finds exactly these again. Fixed ids (ex-*): running it twice adds nothing.
 // Used by the setup page (client), `cli.ts setup --examples` and `bun run seed:demo` alike.
-import { type FileMeta, type ItemInit, META_TYPE, appendUpdate, addDaysISO, fileTypeOf, initItem, initSchema, setFileMeta, setMeta, setSchemaField, todayISO } from "./model";
+import type * as Y from "yjs";
+import { type FileMeta, type ItemInit, META_TYPE, appendUpdate, addDaysISO, fileTypeOf, initItem, initSchema, metaMap, setFileMeta, setMeta, setSchemaField, todayISO } from "./model";
 import type { Index } from "./graph";
 import { SYS, type Writer } from "./setup";
 import { BLOCKED_BY } from "./traits";
@@ -71,7 +72,7 @@ export function writeExamples(w: Writer, lang: Lang, files: Partial<Record<Examp
   const hoursAgo = (h: number) => now - h * H; // the inbox: from the last day
   const written: string[] = [];
 
-  function put(id: string, init: ItemInit, extra?: (doc: import("yjs").Doc) => void) {
+  function put(id: string, init: ItemInit, extra?: (doc: Y.Doc) => void) {
     if (w.get(id)) return id;
     clock += 12 * H;
     const created = init.created ?? Math.min(clock, now - 30 * H);
@@ -83,7 +84,7 @@ export function writeExamples(w: Writer, lang: Lang, files: Partial<Record<Examp
     written.push(id);
     return id;
   }
-  const doneAt = (daysAgo: number) => (doc: import("yjs").Doc) => doc.getMap<any>("meta").set("done", now - daysAgo * 24 * H);
+  const doneAt = (daysAgo: number) => (doc: Y.Doc) => metaMap(doc).set("done", now - daysAgo * 24 * H);
 
   // ---------- own types: Person, Buch, Artikel ----------
   const type = (id: string, spec: Parameters<typeof initSchema>[1], plural: string) => {

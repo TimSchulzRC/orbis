@@ -2,7 +2,7 @@
 // operations like deleting a type are listed here and can be undone.
 import { Button as ShadcnButton } from "../components/ui/button";
 import { useEffect, useState } from "react";
-import { spaceFetch } from "../accounts";
+import { spaceCall } from "../accounts";
 import { SpaceEyebrow } from "../ui/Spaces";
 import { Sparkles, User, Download, Bot, Cog, Undo2, Redo2 } from "lucide-react";
 import type { ActivityEvent, FieldChange } from "@obtion/core/protocol";
@@ -133,7 +133,7 @@ const SYSTEM_TEXTS: [RegExp, string][] = [
   [/^Imported (\d+) projects and tasks from Notion$/, "activity.sys.notion"],
   [/^Migrated (\d+) items to the new model$/, "activity.sys.migrated"],
 ];
-function systemText(text: string, t: (k: string, v?: Record<string, unknown>) => string): string {
+function systemText(text: string, t: T): string {
   for (const [re, key] of SYSTEM_TEXTS) {
     const m = re.exec(text);
     if (m) return t(key, { count: Number(m[1]) });
@@ -213,9 +213,8 @@ export function Activity() {
   const [more, setMore] = useState(true);
   const [error, setError] = useState(false);
   const load = (before?: number) =>
-    spaceFetch(space, `/api/activity?limit=60${before ? `&before=${before}` : ""}`)
-      .then((res) => res.json())
-      .then((list: ActivityEvent[]) => {
+    spaceCall<ActivityEvent[]>(space, `/api/activity?limit=60${before ? `&before=${before}` : ""}`)
+      .then((list) => {
         setEvents((ev) => (before ? [...ev, ...list] : list));
         setMore(list.length === 60);
         setError(false);

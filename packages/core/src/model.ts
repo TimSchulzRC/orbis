@@ -266,53 +266,82 @@ function viaRoot(raw: unknown): string | undefined {
   return typeof raw === "string" && raw.startsWith(VIA) ? raw.slice(VIA.length) : undefined;
 }
 
-function plain(v: unknown): any {
+/** A JSON value or a nested Yjs type (a property, a tab, the capabilities). */
+function plain(v: unknown): unknown {
   return v instanceof Y.AbstractType ? v.toJSON() : v;
 }
 
+function isObject(v: unknown): v is Record<string, unknown> {
+  return !!v && typeof v === "object" && !Array.isArray(v);
+}
+
+/** The top-level maps of a document (see the list above; query, view and pin: former collections). */
+export const DOC_MAPS = ["meta", "parents", "props", "extra", "rels", "tags", "refs", "views", "schema", "tabs", "file", "op", "settings", "query", "view", "pin"] as const;
+
+/** What meta holds: scalars and the suggestion. Narrow on reading, the data comes from other devices. */
+export type MetaValue = string | number | boolean | Suggestion;
+
+export function metaMap(doc: Y.Doc): Y.Map<MetaValue> {
+  return doc.getMap<MetaValue>("meta");
+}
+
+/** Scalars, and the capabilities and properties as nested maps. */
+export function schemaMap(doc: Y.Doc): Y.Map<unknown> {
+  return doc.getMap<unknown>("schema");
+}
+
 function readSchema(doc: Y.Doc): TypeSchema {
-  const s = doc.getMap<any>("schema");
-  const caps = s.get("capabilities");
+  const s = schemaMap(doc);
+  const text = (k: string) => {
+    const v = s.get(k);
+    return typeof v === "string" ? v : undefined;
+  };
+  const caps = plain(s.get("capabilities"));
   const props = s.get("properties");
   const properties: PropDef[] = [];
   if (props instanceof Y.Map) {
-    for (const [id, p] of props as Y.Map<any>) {
-      const o = plain(p) ?? {};
-      if (!o.name && !o.kind) continue;
-      properties.push({ ...o, id, name: o.name ?? "", kind: o.kind ?? "text", sort: o.sort ?? "V" });
+    for (const [id, p] of props) {
+      const o = plain(p);
+      if (!isObject(o)) continue;
+      const d = o as Partial<PropDef>;
+      if (!d.name && !d.kind) continue;
+      properties.push({ ...d, id, name: d.name ?? "", kind: d.kind ?? "text", sort: d.sort ?? "V" });
     }
   }
   properties.sort((a, b) => (a.sort < b.sort ? -1 : a.sort > b.sort ? 1 : a.id.localeCompare(b.id)));
   return {
     removedProperties: properties.filter((p) => p.removed),
-    name: s.get("name") ?? "",
-    plural: s.get("plural") || undefined,
-    pos: s.get("pos") || undefined,
-    icon: s.get("icon") ?? "circle",
-    color: s.get("color") ?? "slate",
-    description: s.get("description") ?? "",
-    capabilities: (caps instanceof Y.Map ? caps.toJSON() : caps) ?? {},
+    name: text("name") ?? "",
+    plural: text("plural") || undefined,
+    pos: text("pos") || undefined,
+    icon: text("icon") ?? "circle",
+    color: text("color") ?? "slate",
+    description: text("description") ?? "",
+    capabilities: isObject(caps) ? (caps as Capabilities) : {},
     properties: properties.filter((p) => !p.removed),
   };
 }
 
 export function readItem(id: string, doc: Y.Doc): Item | null {
-  const meta = doc.getMap<any>("meta");
-  const kind = meta.get("kind") as Kind | undefined;
+  const meta = metaMap(doc);
+  const kind = meta.get("kind");
   // not initialised yet (half-synced), or a legacy document (a former collection)
-  if (!kind || (kind as string) === "sammlung") return null;
-  const relsMap = doc.getMap<any>("rels");
+  if (typeof kind !== "string" || !kind || kind === "sammlung") return null;
   const rels: Record<string, string[]> = {};
-  for (const [p, m] of relsMap) if (m instanceof Y.Map && m.size) rels[p] = [...m.keys()];
+  for (const [p, m] of doc.getMap<unknown>("rels")) if (m instanceof Y.Map && m.size) rels[p] = [...m.keys()];
   const str = (k: string) => {
     const v = meta.get(k);
     return v === undefined || v === null || v === "" ? undefined : String(v);
   };
+  const num = (k: string) => {
+    const v = meta.get(k);
+    return typeof v === "number" ? v : undefined;
+  };
   const item: Item = {
     id,
-    kind,
+    kind: kind as Kind,
     area: str("area") ?? PERSONAL,
-    title: (meta.get("title") as string) ?? "",
+    title: str("title") ?? "",
     type: str("type") ?? null,
     home: str("home") ?? null,
     pinned: str("pinned"),
@@ -330,21 +359,23 @@ export function readItem(id: string, doc: Y.Doc): Item | null {
     createdBy: str("createdBy"),
     deleted: meta.get("deleted") === true || viaRoot(meta.get("deleted")) !== undefined,
     deletedVia: viaRoot(meta.get("deleted")),
-    doneAt: typeof meta.get("done") === "number" ? meta.get("done") : undefined,
+    doneAt: num("done"),
     source: str("source"),
   };
-  if (typeof meta.get("kept") === "number") item.kept = meta.get("kept");
-  if (typeof meta.get("later") === "number") item.later = meta.get("later");
+  const kept = num("kept");
+  const later = num("later");
+  if (kept !== undefined) item.kept = kept;
+  if (later !== undefined) item.later = later;
   const sug = meta.get("suggestion");
-  if (sug && typeof sug === "object") item.suggestion = sug as Suggestion;
+  if (sug && typeof sug === "object") item.suggestion = sug;
   if (item.type === META_TYPE) {
     item.schema = readSchema(doc);
     if (doc.getMap("tabs").size) item.schema.views = readTabs(doc);
   }
-  if (kind === "datei") item.file = doc.getMap<any>("file").toJSON() as FileMeta;
-  if (kind === "op") item.op = doc.getMap<any>("op").toJSON() as OpRecord;
+  if (kind === "datei") item.file = doc.getMap("file").toJSON() as FileMeta;
+  if (kind === "op") item.op = doc.getMap("op").toJSON() as OpRecord;
   if (kind === "settings") {
-    const s = doc.getMap<any>("settings").toJSON();
+    const s: Partial<SettingsRecord> = doc.getMap("settings").toJSON();
     item.settings = { setupLang: s.setupLang, format: typeof s.format === "number" ? s.format : undefined, captureTypes: s.captureTypes ?? [], upgrades: s.upgrades ?? [], inbox: s.inbox ?? undefined, filesPos: s.filesPos ?? undefined };
   }
   return item;
@@ -353,12 +384,14 @@ export function readItem(id: string, doc: Y.Doc): Item | null {
 /** The stored tabs of a document, in order; none stored: its old single view (former collections). */
 export function readTabs(doc: Y.Doc): ViewTab[] {
   const tabs: ViewTab[] = [];
-  for (const [id, v] of doc.getMap<any>("tabs")) {
+  for (const [id, v] of doc.getMap<unknown>("tabs")) {
     const o = plain(v);
-    if (o && typeof o === "object" && o.kind) tabs.push({ ...o, id, pos: o.pos ?? "V" });
+    if (!isObject(o)) continue;
+    const t = o as Partial<ViewTab>;
+    if (t.kind) tabs.push({ ...t, id, pos: t.pos ?? "V", kind: t.kind });
   }
   tabs.sort((a, b) => (a.pos < b.pos ? -1 : a.pos > b.pos ? 1 : a.id.localeCompare(b.id)));
-  return tabs.length ? tabs : [legacyTab(doc.getMap<any>("view").toJSON())];
+  return tabs.length ? tabs : [legacyTab(doc.getMap("view").toJSON())];
 }
 
 // ---------- writing (call inside doc.transact) ----------
@@ -383,7 +416,7 @@ export interface ItemInit {
 }
 
 export function initItem(doc: Y.Doc, init: ItemInit, now = Date.now()) {
-  const meta = doc.getMap<any>("meta");
+  const meta = metaMap(doc);
   meta.set("kind", init.kind ?? "info");
   meta.set("area", init.area ?? PERSONAL);
   meta.set("title", init.title ?? "");
@@ -405,8 +438,8 @@ export function initItem(doc: Y.Doc, init: ItemInit, now = Date.now()) {
 export type MetaField = "title" | "type" | "home" | "pinned" | "deleted" | "source" | "suggestion" | "kept" | "later";
 
 /** Set meta fields; null or "" clears. */
-export function setMeta(doc: Y.Doc, fields: Partial<Record<MetaField, unknown>>, now = Date.now()) {
-  const meta = doc.getMap<any>("meta");
+export function setMeta(doc: Y.Doc, fields: Partial<Record<MetaField, MetaValue | null>>, now = Date.now()) {
+  const meta = metaMap(doc);
   for (const [k, v] of Object.entries(fields)) {
     if (v === undefined) continue;
     if (v === null || v === "" || v === false) {
@@ -417,7 +450,7 @@ export function setMeta(doc: Y.Doc, fields: Partial<Record<MetaField, unknown>>,
 }
 
 export function touch(doc: Y.Doc, now = Date.now()) {
-  doc.getMap<any>("meta").set("updated", now);
+  metaMap(doc).set("updated", now);
 }
 
 /**
@@ -453,10 +486,11 @@ export function addParent(doc: Y.Doc, parentId: string, sort?: string, at = Date
   const parents = doc.getMap<ParentLink>("parents");
   if (parents.has(parentId)) return;
   // a file has exactly one parent (where else it is used shows under "Verwendet in"): a new place replaces the old one
-  if (doc.getMap<any>("meta").get("kind") === "datei") for (const k of [...parents.keys()]) parents.delete(k);
+  const meta = metaMap(doc);
+  if (meta.get("kind") === "datei") for (const k of [...parents.keys()]) parents.delete(k);
   parents.set(parentId, { sort: sort ?? keyBetween(null, null), at });
-  const meta = doc.getMap<any>("meta");
-  if (!meta.get("home") || !parents.has(meta.get("home"))) meta.set("home", parentId);
+  const home = meta.get("home");
+  if (typeof home !== "string" || !home || !parents.has(home)) meta.set("home", parentId);
 }
 
 export function setParentSort(doc: Y.Doc, parentId: string, sort: string) {
@@ -470,7 +504,7 @@ export function removeParent(doc: Y.Doc, parentId: string) {
   const parents = doc.getMap<ParentLink>("parents");
   if (!parents.has(parentId)) return;
   parents.delete(parentId);
-  const meta = doc.getMap<any>("meta");
+  const meta = metaMap(doc);
   if (meta.get("home") === parentId) {
     const next = [...parents.entries()].sort((a, b) => a[1].at - b[1].at || a[0].localeCompare(b[0]))[0];
     if (next) meta.set("home", next[0]);
@@ -479,7 +513,7 @@ export function removeParent(doc: Y.Doc, parentId: string) {
 }
 
 export function setHome(doc: Y.Doc, parentId: string) {
-  if (doc.getMap("parents").has(parentId)) doc.getMap<any>("meta").set("home", parentId);
+  if (doc.getMap("parents").has(parentId)) metaMap(doc).set("home", parentId);
 }
 
 export function setProp(doc: Y.Doc, propId: string, value: Value | null | undefined) {
@@ -497,7 +531,7 @@ export function setExtra(doc: Y.Doc, name: string, value: FreeValue | null | und
 }
 
 export function setRel(doc: Y.Doc, propId: string, target: string, on: boolean) {
-  const rels = doc.getMap<any>("rels");
+  const rels = doc.getMap<unknown>("rels");
   let m = rels.get(propId);
   if (!(m instanceof Y.Map)) {
     if (!on) return;
@@ -546,7 +580,7 @@ export function setView(doc: Y.Doc, viewId: string, def: ViewDef | null) {
 // ---------- types (schema) ----------
 
 export function initSchema(doc: Y.Doc, s: Partial<Omit<TypeSchema, "properties" | "removedProperties">> & { properties?: Omit<PropDef, "sort">[] }) {
-  const schema = doc.getMap<any>("schema");
+  const schema = schemaMap(doc);
   for (const k of ["name", "icon", "color", "description"] as const) if (s[k] !== undefined) schema.set(k, s[k]);
   if (!(schema.get("capabilities") instanceof Y.Map)) schema.set("capabilities", new Y.Map());
   if (!(schema.get("properties") instanceof Y.Map)) schema.set("properties", new Y.Map());
@@ -559,29 +593,28 @@ export function initSchema(doc: Y.Doc, s: Partial<Omit<TypeSchema, "properties" 
 }
 
 export function setSchemaField(doc: Y.Doc, field: "name" | "plural" | "icon" | "color" | "description" | "pos", value: string) {
-  if (value) doc.getMap<any>("schema").set(field, value);
-  else doc.getMap<any>("schema").delete(field);
+  if (value) schemaMap(doc).set(field, value);
+  else schemaMap(doc).delete(field);
 }
 
 export function setCapability<K extends keyof Capabilities>(doc: Y.Doc, key: K, value: Capabilities[K] | null | undefined) {
-  const schema = doc.getMap<any>("schema");
-  let caps = schema.get("capabilities");
-  if (!(caps instanceof Y.Map)) schema.set("capabilities", (caps = new Y.Map()));
+  const caps = subMap(schemaMap(doc), "capabilities");
   if (value === null || value === undefined || value === false) caps.delete(key);
   else caps.set(key, value);
 }
 
+/** A change of a record: undefined leaves a field, null clears it. */
+export type Patch<T> = { [K in keyof T]?: T[K] | null };
+
 /** Each property is its own Y.Map, so two devices can change different properties at once. */
-export function upsertProp(doc: Y.Doc, propId: string, patch: Partial<Omit<PropDef, "id">>) {
-  const schema = doc.getMap<any>("schema");
-  let props = schema.get("properties");
-  if (!(props instanceof Y.Map)) schema.set("properties", (props = new Y.Map()));
-  let p = props.get(propId);
-  if (!(p instanceof Y.Map)) {
-    p = new Y.Map();
+export function upsertProp(doc: Y.Doc, propId: string, patch: Patch<Omit<PropDef, "id">>) {
+  const props = subMap(schemaMap(doc), "properties");
+  const found = props.get(propId);
+  const p = found instanceof Y.Map ? found : new Y.Map<unknown>();
+  if (p !== found) {
     props.set(propId, p);
     if (!patch.sort) {
-      const last = [...(props as Y.Map<any>).values()].map((x: any) => (x instanceof Y.Map ? x.get("sort") : undefined)).filter(Boolean).sort().at(-1);
+      const last = [...props.values()].map((x) => (x instanceof Y.Map ? x.get("sort") : undefined)).filter((x): x is string => typeof x === "string" && !!x).sort().at(-1);
       p.set("sort", keyBetween(last ?? null, null));
     }
   }
@@ -599,8 +632,8 @@ export function removeProp(doc: Y.Doc, propId: string) {
 
 // ---------- files, ops, settings ----------
 
-export function setFileMeta(doc: Y.Doc, patch: { [K in keyof FileMeta]?: FileMeta[K] | null }) {
-  const f = doc.getMap<any>("file");
+export function setFileMeta(doc: Y.Doc, patch: Patch<FileMeta>) {
+  const f = doc.getMap<unknown>("file");
   for (const [k, v] of Object.entries(patch)) {
     if (v === undefined) continue;
     if (v === null) f.delete(k);
@@ -609,36 +642,48 @@ export function setFileMeta(doc: Y.Doc, patch: { [K in keyof FileMeta]?: FileMet
 }
 
 export function setOp(doc: Y.Doc, patch: Partial<OpRecord>) {
-  const o = doc.getMap<any>("op");
+  const o = doc.getMap<unknown>("op");
   for (const [k, v] of Object.entries(patch)) if (v !== undefined) o.set(k, v);
 }
 
 /** Change one tab: undefined leaves a field, null clears it; `null` as the patch removes the tab. */
-export function setTab(doc: Y.Doc, id: string, patch: { [K in keyof Omit<ViewTab, "id">]?: ViewTab[K] | null } | null) {
-  const tabs = doc.getMap<any>("tabs");
+export function setTab(doc: Y.Doc, id: string, patch: Patch<Omit<ViewTab, "id">> | null) {
+  const tabs = doc.getMap<unknown>("tabs");
   if (patch === null) tabs.delete(id);
   else {
     let m = tabs.get(id);
-    if (!(m instanceof Y.Map)) tabs.set(id, (m = toMap(plain(m) ?? {})));
+    if (!(m instanceof Y.Map)) {
+      const o = plain(m);
+      tabs.set(id, (m = toMap(isObject(o) ? o : {})));
+    }
     for (const [k, v] of Object.entries(patch)) {
       if (v === undefined) continue;
       if (v === null || (Array.isArray(v) && !v.length)) m.delete(k);
       else m.set(k, v);
     }
   }
-  doc.getMap<any>("meta").set("updated", Date.now());
+  touch(doc);
 }
 
 /** Replace all tabs; an empty list goes back to the defaults ("Ansichten zurücksetzen"). */
 export function setTabs(doc: Y.Doc, list: Omit<ViewTab, "pos">[]) {
-  const tabs = doc.getMap<any>("tabs");
+  const tabs = doc.getMap<unknown>("tabs");
   for (const k of [...tabs.keys()]) tabs.delete(k);
   let pos: string | null = null;
   for (const { id, ...t } of list) {
     pos = keyBetween(pos, null);
     tabs.set(id, toMap({ ...t, pos }));
   }
-  doc.getMap<any>("meta").set("updated", Date.now());
+  touch(doc);
+}
+
+/** The nested map under `key`, created if missing. */
+function subMap(parent: Y.Map<unknown>, key: string): Y.Map<unknown> {
+  const m = parent.get(key);
+  if (m instanceof Y.Map) return m;
+  const fresh = new Y.Map<unknown>();
+  parent.set(key, fresh);
+  return fresh;
 }
 
 function toMap(o: Record<string, unknown>): Y.Map<unknown> {
@@ -647,8 +692,8 @@ function toMap(o: Record<string, unknown>): Y.Map<unknown> {
   return m;
 }
 
-export function setSettings(doc: Y.Doc, patch: { [K in keyof SettingsRecord]?: SettingsRecord[K] | null }) {
-  const s = doc.getMap<any>("settings");
+export function setSettings(doc: Y.Doc, patch: Patch<SettingsRecord>) {
+  const s = doc.getMap<unknown>("settings");
   for (const [k, v] of Object.entries(patch)) if (v === null) s.delete(k);
   else if (v !== undefined) s.set(k, v);
 }

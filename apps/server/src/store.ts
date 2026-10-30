@@ -7,7 +7,7 @@ import { Database } from "bun:sqlite";
 import * as Y from "yjs";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { type Item, type ItemInit, PERSONAL, SETTINGS_ID, initItem, isContent, newId, readItem } from "@obtion/core/model";
+import { type Item, type ItemInit, type UpdateEntry, PERSONAL, SETTINGS_ID, initItem, isContent, metaMap, newId, readItem } from "@obtion/core/model";
 import type { Lang } from "@obtion/core/i18n";
 import { Index } from "@obtion/core/graph";
 import { resolveCascade } from "@obtion/core/trash";
@@ -198,8 +198,9 @@ export class Store {
   }
 
   private noteArea(id: string, doc: Y.Doc) {
-    const meta = doc.getMap<any>("meta");
-    const area = (meta.get("area") as string | undefined) ?? (meta.has("kind") ? PERSONAL : undefined);
+    const meta = metaMap(doc);
+    const raw = meta.get("area");
+    const area = typeof raw === "string" ? raw : meta.has("kind") ? PERSONAL : undefined;
     if (area) this.areas.set(id, area);
     else this.areas.delete(id);
   }
@@ -245,19 +246,22 @@ export class Store {
   private capFuture(docId: string) {
     const doc = this.getDoc(docId);
     const max = Date.now() + 10 * 60_000;
-    const meta = doc.getMap<any>("meta");
-    const late = ["created", "updated", "done"].filter((k) => typeof meta.get(k) === "number" && meta.get(k) > max);
-    const updates = doc.getArray<any>("updates");
-    const lateUpdates = (updates.toArray() as any[]).map((u, i) => [u, i] as const).filter(([u]) => typeof u?.at === "number" && u.at > max);
+    const meta = metaMap(doc);
+    const late = ["created", "updated", "done"].filter((k) => {
+      const v = meta.get(k);
+      return typeof v === "number" && v > max;
+    });
+    const updates: (UpdateEntry | undefined)[] = doc.getArray<UpdateEntry | undefined>("updates").toArray();
+    const lateUpdates = updates.map((u, i) => [u, i] as const).filter(([u]) => typeof u?.at === "number" && u.at > max);
     if (!late.length && !lateUpdates.length) return;
     const now = Date.now();
     this.change(
       docId,
       "system:clock",
       (d) => {
-        const m = d.getMap<any>("meta");
+        const m = metaMap(d);
         for (const k of late) m.set(k, now);
-        const arr = d.getArray<any>("updates");
+        const arr = d.getArray<UpdateEntry | undefined>("updates");
         for (const [u, i] of lateUpdates) {
           arr.delete(i, 1);
           arr.insert(i, [{ ...u, at: now }]);
@@ -499,13 +503,14 @@ export class Store {
 
   events(opts: { since?: number; doc?: string; limit?: number; before?: number } = {}): ActivityEvent[] {
     const where: string[] = [];
-    const args: any[] = [];
+    const args: (string | number)[] = [];
     if (opts.since) (where.push("ts >= ?"), args.push(opts.since));
     if (opts.before) (where.push("id < ?"), args.push(opts.before));
     if (opts.doc) (where.push("doc = ?"), args.push(opts.doc));
     const sql = `SELECT * FROM events ${where.length ? "WHERE " + where.join(" AND ") : ""} ORDER BY id DESC LIMIT ?`;
     args.push(opts.limit ?? 50);
-    const rows = (this.db.query(sql).all(...args) as any[]).map((r) => ({ ...r, step: r.step ?? undefined, changes: JSON.parse(r.changes || "[]") })) as ActivityEvent[];
+    const found = this.db.query(sql).all(...args) as (Omit<ActivityEvent, "step" | "changes"> & { step: string | null; changes: string | null })[];
+    const rows: ActivityEvent[] = found.map((r) => ({ ...r, step: r.step ?? undefined, changes: JSON.parse(r.changes || "[]") }));
     for (const e of rows) if (e.step) Object.assign(e, this.stepState(e.step));
     return rows;
   }

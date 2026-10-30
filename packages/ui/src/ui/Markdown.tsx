@@ -1,4 +1,4 @@
-import { Marked } from "marked";
+import { Marked, type Tokens } from "marked";
 import { useEffect, useMemo, useRef } from "react";
 import { fmtBytes } from "@obtion/core/i18n";
 import type { Item } from "@obtion/core/model";
@@ -10,6 +10,15 @@ import type { Repo } from "@obtion/sync";
 import { getLang, tr } from "../i18n";
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+
+/** A [[link]] or ![[embed]] (`alias`: the text after |, for files a width). */
+interface WikiToken extends Tokens.Generic {
+  type: "wikilink";
+  raw: string;
+  embed: boolean;
+  target: string;
+  alias?: string;
+}
 
 const md = new Marked({ gfm: true, breaks: true });
 md.use({
@@ -36,12 +45,13 @@ md.use({
       name: "wikilink",
       level: "inline",
       start: (src: string) => src.match(/!?\[\[/)?.index,
-      tokenizer(src: string) {
+      tokenizer(src: string): WikiToken | undefined {
         const m = /^(!?)\[\[([^\]|#\n]+)(#[^\]|\n]*)?(?:\|([^\]\n]*))?\]\]/.exec(src);
         if (!m) return undefined;
         return { type: "wikilink", raw: m[0], embed: m[1] === "!", target: m[2]!.trim(), alias: m[4] };
       },
-      renderer(t: any) {
+      renderer(token) {
+        const t = token as WikiToken; // made by the tokenizer above
         const r = rendering ?? repo;
         const id = r.resolveTitle(t.target);
         const item = id ? r.get(id) : undefined;

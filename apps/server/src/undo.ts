@@ -6,19 +6,15 @@
 // The undo is itself a step (steps.undoes), so undoing it again is "Wiederholen".
 import * as Y from "yjs";
 import { type Store, same } from "./store";
-import { replaceBody, touch } from "@obtion/core/model";
+import { type UpdateEntry, DOC_MAPS, metaMap, replaceBody, touch } from "@obtion/core/model";
+import type { UndoResult } from "@obtion/core/api";
 
 export class UndoError extends Error {}
 
-export interface UndoResult {
-  step: string; // the new step that did the undo
-  undid: string; // the step that was taken back
-  changed: string[]; // documents changed back
-  trashed: string[]; // documents the step had created
-  kept: { doc: string; field: string }[]; // changed again later: newer value kept
-}
-
 type Fields = Map<string, unknown>;
+
+/** Maps read field by field on their own below. */
+const NESTED = new Set<string>(["meta", "rels", "schema"]);
 
 /** Every field of a document as "area:key" → JSON-comparable value. */
 function fields(doc: Y.Doc): Fields {
@@ -26,15 +22,13 @@ function fields(doc: Y.Doc): Fields {
   const put = (k: string, v: unknown) => {
     if (v !== undefined) out.set(k, v instanceof Y.AbstractType ? v.toJSON() : v);
   };
-  for (const [k, v] of doc.getMap<any>("meta").entries()) if (k !== "updated") put("meta:" + k, v);
-  for (const name of ["parents", "props", "extra", "tags", "refs", "views", "file", "op", "settings", "query", "view", "tabs", "pin"])
-    for (const [k, v] of doc.getMap<any>(name).entries()) put(`${name}:${k}`, v);
-  for (const [prop, set] of doc.getMap<any>("rels").entries()) if (set instanceof Y.Map) for (const t of set.keys()) put(`rels:${prop}:${t}`, true);
+  for (const [k, v] of metaMap(doc).entries()) if (k !== "updated") put("meta:" + k, v);
+  for (const name of DOC_MAPS) if (!NESTED.has(name)) for (const [k, v] of doc.getMap<unknown>(name).entries()) put(`${name}:${k}`, v);
+  for (const [prop, set] of doc.getMap<unknown>("rels").entries()) if (set instanceof Y.Map) for (const t of set.keys()) put(`rels:${prop}:${t}`, true);
   const body = doc.getText("body").toString();
   if (body) out.set("body", body);
-  for (const u of doc.getArray<any>("updates").toArray()) put("updates:" + u.id, u);
-  const schema = doc.getMap<any>("schema");
-  for (const [k, v] of schema.entries()) {
+  for (const u of doc.getArray<UpdateEntry>("updates").toArray()) put("updates:" + u.id, u);
+  for (const [k, v] of doc.getMap<unknown>("schema").entries()) {
     if (k === "properties" && v instanceof Y.Map) for (const [pid, p] of v.entries()) put("schema.prop:" + pid, p);
     else if (k === "capabilities" && v instanceof Y.Map) for (const [c, cv] of v.entries()) put("schema.cap:" + c, cv);
     else put("schema:" + k, v);
@@ -58,27 +52,30 @@ function writeField(doc: Y.Doc, key: string, value: unknown) {
   const k = rest.join(":");
   if (area === "rels") {
     const [prop, target] = [rest[0]!, rest.slice(1).join(":")];
-    const rels = doc.getMap<any>("rels");
-    let set = rels.get(prop);
+    const rels = doc.getMap<unknown>("rels");
+    const set = rels.get(prop);
     if (value === undefined) return set instanceof Y.Map && set.delete(target);
-    if (!(set instanceof Y.Map)) rels.set(prop, (set = new Y.Map()));
-    return set.set(target, true);
+    if (set instanceof Y.Map) return set.set(target, true);
+    const fresh = new Y.Map<unknown>();
+    rels.set(prop, fresh);
+    return fresh.set(target, true);
   }
   if (area === "updates") {
-    const arr = doc.getArray<any>("updates");
-    const i = (arr.toArray() as any[]).findIndex((u) => u.id === k);
+    const arr = doc.getArray<UpdateEntry>("updates");
+    const i = arr.toArray().findIndex((u: UpdateEntry) => u.id === k);
     if (value === undefined) return i >= 0 && arr.delete(i, 1);
-    if (i < 0) arr.push([value]);
+    if (i < 0) arr.push([value as UpdateEntry]);
     return;
   }
   if (area === "schema.prop" || area === "schema.cap") {
-    const schema = doc.getMap<any>("schema");
+    const schema = doc.getMap<unknown>("schema");
     const name = area === "schema.prop" ? "properties" : "capabilities";
-    let m = schema.get(name);
-    if (!(m instanceof Y.Map)) schema.set(name, (m = new Y.Map()));
+    const found = schema.get(name);
+    const m = found instanceof Y.Map ? found : new Y.Map<unknown>();
+    if (m !== found) schema.set(name, m);
     return value === undefined ? m.delete(k) : m.set(k, area === "schema.prop" ? toY(value) : value);
   }
-  const map = doc.getMap<any>(area === "schema" ? "schema" : area!);
+  const map = doc.getMap<unknown>(area!);
   if (value === undefined) map.delete(k);
   else map.set(k, area === "tabs" ? toY(value) : value); // a tab is a map of its own
 }
@@ -110,7 +107,7 @@ export function undoStep(store: Store, stepId: string, actor: string): UndoResul
           if (!before.has("meta:kind")) {
             // created in this step: to the trash (unless it is there already)
             if (current.get("meta:deleted") !== true) {
-              store.change(id, actor, (doc) => doc.getMap<any>("meta").set("deleted", true));
+              store.change(id, actor, (doc) => metaMap(doc).set("deleted", true));
               res.trashed.push(id);
             }
             continue;

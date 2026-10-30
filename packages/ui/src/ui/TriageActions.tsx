@@ -6,6 +6,7 @@ import { Input } from "../components/ui/input";
 import { useRef, useState } from "react";
 import { Check, Plus } from "lucide-react";
 import { type Item, SETTINGS_ID, setMeta } from "@obtion/core/model";
+import type { Values } from "@obtion/core/i18n";
 import { onlyBelow } from "@obtion/core/trash";
 import { tomorrow } from "@obtion/core/inbox";
 import { useRepo } from "../hooks";
@@ -58,7 +59,7 @@ export function useTriageActions(spaceOf: (i: Item) => string, opts: { quiet?: b
     const name = i?.title || i?.file?.name || t("untitled");
     return name.length > 40 ? name.slice(0, 39) + "…" : name;
   };
-  const label = (list: Item[], key: string, values: Record<string, unknown> = {}) => (list.length > 1 ? t(key + "Many", { count: list.length, ...values }) : t(key, { ...values, title: short(list[0]), ...("title" in values ? { title: values.title } : {}) }));
+  const label = (list: Item[], key: string, values: Values = {}) => (list.length > 1 ? t(key + "Many", { count: list.length, ...values }) : t(key, { ...values, title: short(list[0]), ...("title" in values ? { title: values.title } : {}) }));
   const giveType = (list: Item[], type: string) => {
     const infos = list.filter((i) => i.kind === "info");
     if (!infos.length) return;
@@ -82,7 +83,7 @@ export function useTriageActions(spaceOf: (i: Item) => string, opts: { quiet?: b
         ],
       });
       if (!c) return null;
-      children = c as "trash" | "inbox";
+      children = c;
     }
     const u = done({ label: label(list, children === "inbox" && below ? "triage.trashedKeep" : "triage.trashed", { count: below, title: short(list[0]) }), steps: list.map((i) => ({ space: spaceOf(i), id: i.id, deleted: true })) });
     for (const i of list) repoOf(i).remove(i.id, children);
