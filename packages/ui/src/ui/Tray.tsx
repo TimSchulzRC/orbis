@@ -113,7 +113,7 @@ export function Tray({ desktop, pinned, onCapture }: { desktop: boolean; pinned?
  * while it is hovered itself.
  */
 const POSES = [
-  { left: [4, 2], rest: ["-8deg", "0 10px"], fan: ["-14deg", "-10px 0"], lift: "-10px -12px" },
+  { left: [9, 6], rest: ["-8deg", "0 10px"], fan: ["-14deg", "-5px 0"], lift: "-5px -12px" },
   { left: [18, 12], rest: ["3deg", "0 4px"], fan: ["2deg", "0 -8px"], lift: "0 -18px" },
   { left: [30, 20], rest: ["-2deg", "0 -2px"], fan: ["10deg", "14px -6px"], lift: "14px -16px" },
 ];
@@ -127,8 +127,8 @@ function Sheets({ entries, desktop }: { entries: InboxEntry[]; desktop: boolean 
   const { shown } = useAccounts();
   const poses = POSES.slice(POSES.length - entries.length);
   return (
-    <span className={cx("absolute inset-y-0 left-0 z-10 block", desktop ? "w-[120px]" : "w-[84px]")}>
-      <span className="absolute inset-0 rounded-[11px] border border-line bg-black/[.06] shadow-[inset_0_3px_8px_rgb(0_0_0/0.12)] dark:bg-black/30 dark:shadow-[inset_0_3px_8px_rgb(0_0_0/0.7)]" aria-hidden />
+    <span className={cx("absolute inset-y-0 left-0 z-10 block [--well:color-mix(in_srgb,var(--card)_93%,black)] dark:[--well:color-mix(in_srgb,var(--card)_65%,black)]", desktop ? "w-[120px]" : "w-[84px]")}>
+      <span className="absolute inset-0 rounded-[11px] border border-line bg-[var(--well)] shadow-[inset_0_3px_8px_rgb(0_0_0/0.12)] dark:shadow-[inset_0_3px_8px_rgb(0_0_0/0.7)]" aria-hidden />
       <span className="absolute -top-px left-0.5 h-[3px] w-[calc(100%-4px)] rounded-b-[3px] bg-[linear-gradient(90deg,transparent,color-mix(in_srgb,var(--t-inbox)_60%,transparent),transparent)]" aria-hidden />
       {/* the sheets end inside the well (long enough that lifted their lower edge stays hidden), above
           they may stick out and show their titles; cut off by overflow, as a clip-path would let a
@@ -170,6 +170,8 @@ function Sheets({ entries, desktop }: { entries: InboxEntry[]; desktop: boolean 
       })}
       </span>
       </span>
+      {/* where they are cut off, the sheets fade into the dark of the well */}
+      <span className="pointer-events-none absolute inset-x-px bottom-px z-10 h-4 rounded-b-[10px] bg-[linear-gradient(to_top,var(--well)_6px,transparent)]" aria-hidden />
     </span>
   );
 }
