@@ -123,7 +123,7 @@ try {
   await page.mouse.click(lr.x + lr.width - 4, lr.y + lr.height / 2);
   await page.keyboard.press("End");
   await page.keyboard.type(" /Link");
-  await page.waitForSelector(".cm-tooltip-autocomplete");
+  await page.waitForSelector(".cm-tooltip-autocomplete li[aria-selected]");
   await page.keyboard.press("Enter");
   await page.keyboard.type("So funkt");
   await page.waitForTimeout(300);
@@ -176,6 +176,11 @@ try {
   await page.mouse.move(tb.x + 40, tb.y + tb.height / 2);
   await page.waitForTimeout(100);
   expect(!!(await page.$(".cm-handles.shown")), "moving the pointer shows them again");
+  await page.keyboard.press("ArrowUp");
+  await page.waitForTimeout(200);
+  expect(!(await page.$(".cm-handles.shown")), "moving the cursor with the keys hides them too");
+  await page.mouse.move(tb.x + 30, tb.y + tb.height / 2);
+  await page.waitForTimeout(100);
 
   // selecting everything and typing replaces everything, the heading's "# " too
   await page.keyboard.press("Control+a");
