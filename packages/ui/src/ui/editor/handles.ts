@@ -113,7 +113,11 @@ export const blockHandles = ViewPlugin.fromClass(
         const r = view.contentDOM.getBoundingClientRect();
         const y = Math.max(r.top + 1, Math.min(r.bottom - 1, m.clientY));
         const over = blockAtY(view, y);
-        const before = y < (over.top + over.bottom) / 2;
+        let before = y < (over.top + over.bottom) / 2;
+        // as in Notion, the gap right below the block is no place of its own (it is where the
+        // block is already): over the block that is the line above it, over the next one below that
+        if (over.from === b.from) before = true;
+        else if (before && over.from === b.to + 1) before = false;
         target = before ? over.from : over.to >= view.state.doc.length ? view.state.doc.length : over.to + 1;
         this.drop.style.top = (before ? over.top : over.bottom) - dom.top - 1 + "px";
         this.drop.classList.add("shown");

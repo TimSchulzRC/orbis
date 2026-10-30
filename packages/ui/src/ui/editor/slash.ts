@@ -62,7 +62,8 @@ const ITEMS: SlashItem[] = [
     icon: Link2,
     section: "insert",
     run: (view, pos) => {
-      view.dispatch({ changes: { from: pos, insert: "[[" }, selection: EditorSelection.cursor(pos + 2) });
+      // the "@" search: no brackets to see while choosing the page
+      view.dispatch({ changes: { from: pos, insert: "@" }, selection: EditorSelection.cursor(pos + 1) });
       startCompletion(view);
     },
   },

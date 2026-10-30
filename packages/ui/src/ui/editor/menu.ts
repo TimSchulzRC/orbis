@@ -70,3 +70,37 @@ export function showMenu(at: { left: number; top: number }, sections: { title?: 
 export function closeMenu() {
   open?.close();
 }
+
+/** A one-line field at a point of the screen; Enter gives its text, Escape or a click elsewhere null. */
+export function askText(at: { left: number; top: number }, value: string, label: string): Promise<string | null> {
+  open?.close();
+  return new Promise((resolve) => {
+    const box = document.createElement("div");
+    box.className = "cm-menu cm-ask";
+    const input = document.createElement("input");
+    input.className = "cm-ask-input";
+    input.value = value;
+    input.setAttribute("aria-label", label);
+    input.placeholder = label;
+    box.append(input);
+    document.body.append(box);
+    box.style.left = Math.max(8, Math.min(at.left, innerWidth - box.offsetWidth - 8)) + "px";
+    box.style.top = at.top + "px";
+    const done = (v: string | null) => {
+      if (!box.isConnected) return;
+      box.remove();
+      document.removeEventListener("mousedown", outside, true);
+      open = null;
+      resolve(v);
+    };
+    const outside = (e: MouseEvent) => !box.contains(e.target as Node) && done(null);
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") (e.preventDefault(), done(input.value));
+      else if (e.key === "Escape") (e.preventDefault(), done(null));
+    });
+    setTimeout(() => document.addEventListener("mousedown", outside, true));
+    open = { close: () => done(null) };
+    input.focus();
+    input.select();
+  });
+}

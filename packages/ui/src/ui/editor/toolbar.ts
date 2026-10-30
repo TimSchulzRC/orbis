@@ -12,10 +12,9 @@ import { showMenu } from "./menu";
 
 const isURL = (s: string) => /^(https?:\/\/|mailto:|www\.)\S+$/i.test(s.trim());
 
-/** Link the selected text: [[Page|text]] (or [[Page]] when the text is the title) or [text](url). */
-function link(view: EditorView, target: { page?: string; url?: string }) {
+/** Link the selected text (or `text` in its place): [[Page|text]] (or [[Page]] when the text is the title) or [text](url). */
+function link(view: EditorView, target: { page?: string; url?: string }, text = view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.to)) {
   const { from, to } = view.state.selection.main;
-  const text = view.state.sliceDoc(from, to);
   const insert = target.page
     ? text.trim().toLowerCase() === target.page.toLowerCase()
       ? `[[${target.page}]]`
@@ -35,6 +34,8 @@ class Toolbar {
   pointerDown = false;
   linking = false;
   picked = 0;
+  /** The text of the link whose target changes (the selection is the whole link then). */
+  relinkText: string | null = null;
   hits: { title: string; type: string }[] = [];
   constructor(readonly view: EditorView) {
     this.dom = document.createElement("div");
@@ -127,17 +128,25 @@ class Toolbar {
       },
     });
   }
-  openLink() {
+  /** The link box for the selected text, or, with `relink`, for a new target of the selected link. */
+  openLink(relink?: { text: string; target: string }) {
     if (this.view.state.selection.main.empty) return;
     this.linking = true;
+    this.relinkText = relink?.text ?? null;
     this.dom.classList.add("linking");
-    this.input.value = "";
+    this.input.value = relink?.target ?? "";
     this.search();
     this.place();
-    setTimeout(() => this.input.focus());
+    setTimeout(() => (this.input.focus(), this.input.select()));
+  }
+  choose(target: { page?: string; url?: string }) {
+    const text = this.relinkText ?? undefined;
+    this.closeLink(false);
+    link(this.view, target, text);
   }
   closeLink(refocus = true) {
     this.linking = false;
+    this.relinkText = null;
     this.dom.classList.remove("linking");
     if (refocus) this.view.focus();
     this.place();
@@ -145,15 +154,15 @@ class Toolbar {
   search() {
     const q = this.input.value;
     const s = this.view.state.selection.main;
-    const text = this.view.state.sliceDoc(s.from, s.to);
+    const text = this.relinkText ?? this.view.state.sliceDoc(s.from, s.to);
     const ix = repo.index();
     const found = (q.trim() ? repo.search(q, 6) : repo.search(text, 6)).filter((r) => r.title);
     this.hits = found.map((r) => ({ title: r.title, type: r.kind === "datei" ? tr("kind.file") : (ix.typeName(r.type) ?? "") }));
     this.picked = 0;
     this.results.textContent = "";
     const rows: { icon: typeof Globe; label: string; hint: string; run: () => void }[] = [];
-    if (isURL(q)) rows.push({ icon: Globe, label: q.trim(), hint: tr("editor.fmt.linkWeb"), run: () => (this.closeLink(false), link(this.view, { url: q.trim() })) });
-    if (this.hits.length) for (const h of this.hits) rows.push({ icon: FileText, label: h.title, hint: h.type, run: () => (this.closeLink(false), link(this.view, { page: h.title })) });
+    if (isURL(q)) rows.push({ icon: Globe, label: q.trim(), hint: tr("editor.fmt.linkWeb"), run: () => this.choose({ url: q.trim() }) });
+    if (this.hits.length) for (const h of this.hits) rows.push({ icon: FileText, label: h.title, hint: h.type, run: () => this.choose({ page: h.title }) });
     else if (!isURL(q)) {
       const hint = Object.assign(document.createElement("div"), { className: "cm-toolbar-empty", textContent: tr("editor.fmt.linkNone") });
       this.results.append(hint);

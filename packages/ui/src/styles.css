@@ -619,16 +619,29 @@ textarea.page-title.field:focus {
 }
 
 /* ---------- the editor as blocks (editor/*.ts) ---------- */
+/* the size sits on the line, so an empty heading is as high as a written one */
 .cm-line.cm-h {
   padding-bottom: 1px !important;
+  font-weight: 650;
 }
 .cm-line.cm-h1 {
-  padding-top: 1.1em !important;
+  padding-top: 0.63em !important;
+  font-size: 1.75em;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
 }
 .cm-line.cm-h2 {
-  padding-top: 0.9em !important;
+  padding-top: 0.64em !important;
+  font-size: 1.4em;
+  line-height: 1.35;
 }
 .cm-line.cm-h3 {
+  padding-top: 0.51em !important;
+  font-size: 1.18em;
+}
+.cm-line.cm-h4,
+.cm-line.cm-h5,
+.cm-line.cm-h6 {
   padding-top: 0.6em !important;
 }
 .cm-content > .cm-line.cm-h:first-child {
@@ -729,11 +742,6 @@ textarea.page-title.field:focus {
   text-decoration-color: color-mix(in srgb, var(--link) 35%, transparent);
   text-underline-offset: 3px;
 }
-/* an empty line between blocks is a small gap, not a whole line (full height where the cursor is) */
-.cm-line.cm-blank {
-  font-size: 0.5em;
-  padding: 0 !important;
-}
 .cm-line-hint {
   color: var(--faint);
   pointer-events: none;
@@ -807,6 +815,22 @@ body.cm-dragging * {
   background: var(--surface);
   box-shadow: var(--shadow-pop);
   font-size: 14px;
+}
+.cm-ask {
+  min-width: 280px;
+}
+.cm-ask-input {
+  width: 100%;
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  outline: none;
+  font-size: 14px;
+}
+.cm-ask-input:focus {
+  border-color: var(--focus);
 }
 .cm-menu-title {
   padding: 6px 8px 4px;
