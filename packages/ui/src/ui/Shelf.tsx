@@ -2,10 +2,10 @@ import { Button as ShadcnButton } from "../components/ui/button";
 // The tray's panel ("Ablage"): looking in, not sorting. Every entry of the workspaces seen, newest
 // first, with a line of its text, its workspace and age; one opens here to read and add to it and
 // stays in the inbox – sorting is the review's (views/Review.tsx), here only a quiet link leads
-// there. Above the tray on a desktop, as a sheet on a phone; on Heute on a desktop part of the page
-// (`embedded`), with the tray's field and review below it. What lands in the inbox: behind "…".
+// there. Above the tray on a desktop, as a sheet on a phone. What lands in the inbox: behind "…".
+// On Heute on a desktop it is part of the page (`pinned`): always open, it does not close.
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, ArrowRight, Layers, Maximize2, MoreHorizontal, RotateCcw, SlidersHorizontal, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Maximize2, MoreHorizontal, RotateCcw, SlidersHorizontal, X } from "lucide-react";
 import { type Item, SETTINGS_ID, setSettings } from "@obtion/core/model";
 import type { QueryDef } from "@obtion/core/query";
 import { inboxWhere } from "@obtion/core/inbox";
@@ -22,7 +22,6 @@ import { Editor } from "./Editor";
 import { TitleField } from "./TitleField";
 import { QueryEditor } from "./QueryEditor";
 import { SpaceFilter, SpaceScope } from "./Spaces";
-import { Capture } from "./Capture";
 import { notify } from "./feedback";
 import { type InboxEntry, closeShelf, openShelf, reviewMinutes, useInboxItems, useShelf } from "./inbox";
 import { DraftBar } from "../views/Lists";
@@ -30,9 +29,7 @@ import { DraftBar } from "../views/Lists";
 /** Where an entry opens in the review. */
 export const reviewHref = (key: string) => `#/review?at=${encodeURIComponent(key)}`;
 
-/** The panel; `embedded`: on the page, always there – Escape only leads from an entry back to the list. */
-export function ShelfPanel({ desktop, embedded }: { desktop: boolean; embedded?: boolean }) {
-  const { t } = useT();
+export function ShelfPanel({ desktop, pinned }: { desktop: boolean; pinned?: boolean }) {
   const { at } = useShelf();
   const entries = useInboxItems();
   const entry = at ? entries.find((e) => e.key === at) : undefined;
@@ -43,78 +40,38 @@ export function ShelfPanel({ desktop, embedded }: { desktop: boolean; embedded?:
     const on = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || e.defaultPrevented || document.querySelector("[role=dialog][data-state=open], [data-radix-popper-content-wrapper]")) return;
       if (entry) openShelf();
-      else if (!embedded) closeShelf();
+      else if (!pinned) closeShelf();
     };
     window.addEventListener("keydown", on);
     return () => window.removeEventListener("keydown", on);
   }, [!!entry]);
   return (
     <div
-      role={embedded ? "region" : "dialog"}
-      aria-label={t("tray.title")}
+      role={pinned ? "region" : "dialog"}
+      aria-label={useT().t("tray.title")}
       // a link inside leads away: the panel closes behind it
       onClickCapture={(e) => (e.target as HTMLElement).closest("a[href]") && closeShelf()}
-      // the same as the tray below other pages: leaving Heute it moves down into it (styles.css)
-      style={embedded ? { viewTransitionName: "shelf" } : undefined}
       className={cx(
         "flex flex-col overflow-hidden border border-line bg-surface",
-        embedded
+        pinned
           ? "h-full rounded-2xl shadow-[0_6px_24px_-12px_rgb(0_0_0/0.25)]"
           : cx("shadow-[0_18px_50px_-12px_rgb(0_0_0/0.45)]", desktop ? "max-h-[min(640px,calc(100dvh-160px))] rounded-2xl" : entry ? "h-full rounded-t-2xl" : "max-h-[min(70dvh,560px)] rounded-2xl"),
       )}
     >
-      {!desktop && !embedded && <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-line" aria-hidden />}
-      {entry ? <EntryView entry={entry} desktop={desktop} embedded={embedded} /> : <List entries={entries} desktop={desktop} embedded={embedded} />}
-      {embedded && (
-        // the tray's bar, at the panel's foot
-        <div className="flex shrink-0 items-center gap-2 border-t border-line bg-surface-2/50 p-2">
-          <div className="min-w-0 flex-1">
-            <Capture anywhere placeholder={t("tray.placeholder")} />
-          </div>
-          {entries.length > 0 && <ToReview count={entries.length} short />}
-        </div>
-      )}
+      {!desktop && <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-line" aria-hidden />}
+      {entry ? <EntryView entry={entry} desktop={desktop} pinned={pinned} /> : <List entries={entries} desktop={desktop} pinned={pinned} />}
     </div>
   );
 }
 
-/** The way into the review with how long it takes, amber; `short`: only the minutes. */
-export function ToReview({ count, short }: { count: number; short?: boolean }) {
-  const { t } = useT();
-  const minutes = t("tray.minutes", { count: reviewMinutes(count) });
-  return (
-    <a href="#/review" className="flex h-10 shrink-0 items-center gap-2 rounded-xl border border-[color-mix(in_srgb,var(--t-inbox)_45%,transparent)] bg-[color-mix(in_srgb,var(--t-inbox)_12%,transparent)] px-3.5 text-sm font-semibold text-warn hover:bg-[color-mix(in_srgb,var(--t-inbox)_20%,transparent)]">
-      <Layers size={16} />
-      {short ? (
-        <span aria-label={`${t("review.title")} · ${minutes}`}>{t("tray.minutesShort", { count: reviewMinutes(count) })}</span>
-      ) : (
-        <>
-          {t("review.title")} <span className="font-normal opacity-80">· {minutes}</span>
-        </>
-      )}
-    </a>
-  );
-}
-
-/** How full the tray is: one of ten marks per entry, amber. */
-export function Fill({ count }: { count: number }) {
-  return (
-    <span className="flex gap-[3px]" aria-hidden>
-      {Array.from({ length: 10 }, (_, n) => (
-        <span key={n} className={cx("h-1 w-2.5 rounded-full", n < count ? "bg-[var(--t-inbox)]" : "bg-line")} />
-      ))}
-    </span>
-  );
-}
-
-/** The list: newest first; ↑↓ choose, ↵ opens, Esc closes. Embedded: the review is below, no hints. */
-function List({ entries, desktop, embedded }: { entries: InboxEntry[]; desktop: boolean; embedded?: boolean }) {
+/** The list: newest first; ↑↓ choose, ↵ opens, Esc closes (pinned: it stays, and takes the focus only when clicked). */
+function List({ entries, desktop, pinned }: { entries: InboxEntry[]; desktop: boolean; pinned?: boolean }) {
   const { t } = useT();
   const { shown } = useAccounts();
   const [sel, setSel] = useState(0);
   const [rule, setRule] = useState<string | null>(null);
   const box = useRef<HTMLDivElement>(null);
-  useEffect(() => void (!embedded && box.current?.focus()), []);
+  useEffect(() => void (!pinned && box.current?.focus()), []);
   useEffect(() => void box.current?.querySelector(`[data-shelf="${sel}"]`)?.scrollIntoView({ block: "nearest" }), [sel]);
   return (
     <>
@@ -122,10 +79,9 @@ function List({ entries, desktop, embedded }: { entries: InboxEntry[]; desktop: 
         <h2 className="text-[15px] font-semibold">
           {t("tray.title")} <span className="tabular-nums text-warn">{entries.length}</span>
         </h2>
-        {embedded ? <Fill count={entries.length} /> : desktop && <span className="text-[13px] text-muted-foreground">· {t("tray.newestFirst")}</span>}
+        {desktop && <span className="text-[13px] text-muted-foreground">· {t("tray.newestFirst")}</span>}
         <span className="flex-1" />
-        {embedded && <span className="text-[13px] text-muted-foreground">{t("tray.newestFirst")}</span>}
-        {!embedded && entries.length > 0 && (
+        {entries.length > 0 && (
           <a href="#/review" className="tap-y inline-flex items-center gap-1 rounded-md px-1.5 text-[13px] text-muted-foreground hover:text-fg">
             {t("tray.toReview")} {desktop && <>· {t("tray.minutes", { count: reviewMinutes(entries.length) })}</>} <ArrowRight size={14} />
           </a>
@@ -164,16 +120,14 @@ function List({ entries, desktop, embedded }: { entries: InboxEntry[]; desktop: 
           <p className="px-4 py-8 text-center text-[15px] text-muted-foreground">{t("inbox.empty")}</p>
         )}
       </div>
-      {!embedded && (
-        <div className="flex shrink-0 items-center gap-3 border-t border-line px-5 py-2.5 text-[13px] text-muted-foreground">
-          <span className="min-w-0 flex-1">{t("tray.lookHint")}</span>
-          {desktop && (
-            <span className="flex shrink-0 items-center gap-1 text-xs">
-              <Kbd>↑</Kbd> <Kbd>↓</Kbd> {t("tray.keys.choose")} <Kbd>↵</Kbd> {t("triage.keys.open")} <Kbd>Esc</Kbd>
-            </span>
-          )}
-        </div>
-      )}
+      <div className="flex shrink-0 items-center gap-3 border-t border-line px-5 py-2.5 text-[13px] text-muted-foreground">
+        <span className="min-w-0 flex-1">{t("tray.lookHint")}</span>
+        {desktop && (
+          <span className="flex shrink-0 items-center gap-1 text-xs">
+            <Kbd>↑</Kbd> <Kbd>↓</Kbd> {t("tray.keys.choose")} <Kbd>↵</Kbd> {t("triage.keys.open")} {!pinned && <Kbd>Esc</Kbd>}
+          </span>
+        )}
+      </div>
       {rule && shown.some((s) => s.id === rule) && (
         <SpaceScope id={rule}>
           <InboxRule name={shown.length > 1 ? spaceById(rule)?.name : undefined} onClose={() => setRule(null)} />
@@ -226,7 +180,7 @@ function Row({ entry, n, on, space, onHover }: { entry: InboxEntry; n: number; o
  * One entry, to read and add to: its title and text editable, the notes below it. It stays in the
  * inbox – the banner says so, with the way to sort it now in the review.
  */
-function EntryView({ entry, desktop, embedded }: { entry: InboxEntry; desktop: boolean; embedded?: boolean }) {
+function EntryView({ entry, desktop, pinned }: { entry: InboxEntry; desktop: boolean; pinned?: boolean }) {
   const { t } = useT();
   return (
     <SpaceScope id={entry.space}>
@@ -234,12 +188,12 @@ function EntryView({ entry, desktop, embedded }: { entry: InboxEntry; desktop: b
         <ShadcnButton variant="plain" size="none" onClick={() => openShelf()} className="tap inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[15px] text-muted-foreground hover:bg-hover hover:text-fg">
           <ArrowLeft size={16} /> {t("tray.title")}
         </ShadcnButton>
-        {desktop && !embedded && <span className="min-w-0 truncate text-[15px]">/ {entry.item.title || entry.item.file?.name || t("untitled")}</span>}
+        {desktop && <span className="min-w-0 truncate text-[15px]">/ {entry.item.title || entry.item.file?.name || t("untitled")}</span>}
         <span className="flex-1" />
-        <a href={spaceHref(entry.space, `/i/${encodeURIComponent(entry.item.id)}`)} className="tap inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-line px-2.5 py-1 text-[13px] hover:bg-hover">
+        <a href={spaceHref(entry.space, `/i/${encodeURIComponent(entry.item.id)}`)} className="tap inline-flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1 text-[13px] hover:bg-hover">
           <Maximize2 size={14} /> {t("tray.openFull")}
         </a>
-        {embedded ? null : desktop ? <IconButton icon={X} label={t("close")} onClick={closeShelf} /> : <Button onClick={closeShelf} className="font-semibold">{t("tray.done")}</Button>}
+        {pinned ? null : desktop ? <IconButton icon={X} label={t("close")} onClick={closeShelf} /> : <Button onClick={closeShelf} className="font-semibold">{t("tray.done")}</Button>}
       </div>
       <EntryBody entry={entry} />
     </SpaceScope>

@@ -4,17 +4,19 @@ import { Button as ShadcnButton } from "../components/ui/button";
 // tray itself opens its panel to look in (Shelf.tsx; on a phone also a swipe up), the button
 // starts the review to sort. The sheets sticking out are the newest entries, each opens itself.
 // On a phone it sits above the tab bar; the field opens from its "+" in a sheet. On Heute on a
-// desktop there is none: the panel is part of the page there.
+// desktop the panel is pinned open above it, part of the page: the rest of the height below Heute.
 import { useRef } from "react";
-import { Check, ChevronDown, ChevronUp, Plus } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Layers, Plus } from "lucide-react";
 import { useT } from "../i18n";
 import { RelTime, cx } from "./bits";
 import { Capture } from "./Capture";
-import { type InboxEntry, closeShelf, openShelf, useInboxItems, useShelf } from "./inbox";
-import { Fill, ShelfPanel, ToReview } from "./Shelf";
+import { type InboxEntry, closeShelf, openShelf, reviewMinutes, useInboxItems, useShelf } from "./inbox";
+import { ShelfPanel } from "./Shelf";
 import { spaceById, useAccounts } from "../accounts";
 
-export function Tray({ desktop, onCapture }: { desktop: boolean; onCapture: () => void }) {
+const FILL = 10;
+
+export function Tray({ desktop, pinned, onCapture }: { desktop: boolean; pinned?: boolean; onCapture: () => void }) {
   const { t } = useT();
   const entries = useInboxItems();
   const count = entries.length;
@@ -26,13 +28,14 @@ export function Tray({ desktop, onCapture }: { desktop: boolean; onCapture: () =
       <ShadcnButton
         variant="plain"
         size="none"
-        onClick={() => (open ? closeShelf() : openShelf())}
+        // pinned it does not close: back to the list
+        onClick={() => (pinned ? openShelf() : open ? closeShelf() : openShelf())}
         onTouchStart={(e) => (touch.current = e.touches[0]!.clientY)}
         onTouchEnd={(e) => {
           if (touch.current !== null && touch.current - (e.changedTouches[0]?.clientY ?? 0) > 40) (e.preventDefault(), openShelf());
           touch.current = null;
         }}
-        aria-expanded={open}
+        aria-expanded={pinned || open}
         aria-label={t("tray.open", { count })}
         className={cx("flex min-w-0 items-center gap-2 rounded-xl py-1.5 pl-[58px] pr-2 text-left hover:bg-hover", !desktop && "flex-1", open && "bg-hover")}
       >
@@ -42,12 +45,21 @@ export function Tray({ desktop, onCapture }: { desktop: boolean; onCapture: () =
           </span>
           <Fill count={count} />
         </span>
-        {open ? <ChevronDown size={14} className="text-muted-foreground" /> : <ChevronUp size={14} className="text-muted-foreground" />}
+        {pinned ? null : open ? <ChevronDown size={14} className="text-muted-foreground" /> : <ChevronUp size={14} className="text-muted-foreground" />}
       </ShadcnButton>
     </div>
   );
   const review = count ? (
-    <ToReview count={count} short={!desktop} />
+    <a href="#/review" className="flex h-10 shrink-0 items-center gap-2 rounded-xl border border-[color-mix(in_srgb,var(--t-inbox)_45%,transparent)] bg-[color-mix(in_srgb,var(--t-inbox)_12%,transparent)] px-3.5 text-sm font-semibold text-warn hover:bg-[color-mix(in_srgb,var(--t-inbox)_20%,transparent)]">
+      <Layers size={16} />
+      {desktop ? (
+        <>
+          {t("review.title")} <span className="font-normal opacity-80">· {t("tray.minutes", { count: reviewMinutes(count) })}</span>
+        </>
+      ) : (
+        <span aria-label={`${t("review.title")} · ${t("tray.minutes", { count: reviewMinutes(count) })}`}>{t("tray.minutesShort", { count: reviewMinutes(count) })}</span>
+      )}
+    </a>
   ) : (
     <span className="flex h-10 shrink-0 items-center gap-1.5 px-2 text-sm text-muted-foreground">
       <Check size={15} className="text-ok" /> {t("tray.empty")}
@@ -56,18 +68,22 @@ export function Tray({ desktop, onCapture }: { desktop: boolean; onCapture: () =
   return (
     <>
       {/* the page behind the open panel: dimmed, a click closes */}
-      {open && <div className="fixed inset-0 z-30 bg-black/40" onClick={closeShelf} aria-hidden />}
-      <div className={cx("relative z-40 shrink-0", desktop ? "px-6 pb-4 pt-2" : "px-3 pb-2 pt-1")} role="region" aria-label={t("tray.title")}>
-        <div className={cx("mx-auto", desktop && "max-w-[1040px]")}>
-          {open && (
+      {open && !pinned && <div className="fixed inset-0 z-30 bg-black/40" onClick={closeShelf} aria-hidden />}
+      <div className={cx("relative z-40", pinned ? "flex min-h-[360px] flex-1 flex-col" : "shrink-0", desktop ? "px-6 pb-4 pt-2" : "px-3 pb-2 pt-1")} role="region" aria-label={t("tray.title")}>
+        {/* panel and bar as one: leaving Heute the panel folds into the bar, coming back it unfolds (styles.css) */}
+        <div style={desktop ? { viewTransitionName: "shelf" } : undefined} className={cx("mx-auto", desktop && "max-w-[1040px]", pinned && "flex min-h-0 w-full flex-1 flex-col")}>
+          {pinned ? (
+            <div className="min-h-0 flex-1 pb-2">
+              <ShelfPanel desktop pinned />
+            </div>
+          ) : open && (
             // on a phone an entry takes the whole screen, as a sheet
             <div className={cx(desktop ? "absolute inset-x-6 bottom-full mx-auto max-w-[1040px] pb-2" : at ? "fixed inset-x-0 bottom-0 top-3 z-50 pt-safe" : "absolute inset-x-2 bottom-full pb-1")}>
               <ShelfPanel desktop={desktop} />
             </div>
           )}
           {desktop ? (
-            // the same as the shelf on Heute: coming from there, it moves down into this (styles.css)
-            <div style={{ viewTransitionName: "shelf" }} className="flex items-center gap-3 rounded-2xl border border-line bg-surface p-2 shadow-[0_6px_24px_-12px_rgb(0_0_0/0.25)]">
+            <div className="flex items-center gap-3 rounded-2xl border border-line bg-surface p-2 shadow-[0_6px_24px_-12px_rgb(0_0_0/0.25)]">
               {tray}
               <div className="min-w-0 flex-1">
                 <Capture anywhere placeholder={t("tray.placeholder")} />
@@ -126,6 +142,17 @@ function Sheets({ entries }: { entries: InboxEntry[] }) {
           </ShadcnButton>
         );
       })}
+    </span>
+  );
+}
+
+/** How full the tray is: one of ten marks per entry, amber. */
+function Fill({ count }: { count: number }) {
+  return (
+    <span className="flex gap-[3px]" aria-hidden>
+      {Array.from({ length: FILL }, (_, n) => (
+        <span key={n} className={cx("h-1 w-2.5 rounded-full", n < count ? "bg-[var(--t-inbox)]" : "bg-line")} />
+      ))}
     </span>
   );
 }

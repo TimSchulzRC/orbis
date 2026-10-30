@@ -176,9 +176,9 @@ function Main() {
     }
   })();
   const isGraph = route.parts[0] === "graph";
-  // the tray is below every page but the review (it leads there) and, on a desktop, Heute (its panel is on the page)
-  const today = route.parts[0] === undefined || (route.parts[0] === "inbox" && !route.parts[1]);
-  const tray = !!settings && route.parts[0] !== "review" && !(route.parts[0] === "inbox" && route.parts[1]) && !(wide && today);
+  // the tray is below every page but the review (it leads there); on Heute on a desktop with its panel open, as part of the page
+  const tray = !!settings && route.parts[0] !== "review" && !(route.parts[0] === "inbox" && route.parts[1]);
+  const pinned = tray && wide && (route.parts[0] === undefined || route.parts[0] === "inbox");
 
   return (
     <div className="flex h-full">
@@ -207,11 +207,12 @@ function Main() {
         )}
         <SignedOut />
         <TooNew />
-        <main tabIndex={-1} className={cx("@container min-h-0 flex-1 outline-none", isGraph ? "overflow-hidden" : "overflow-y-auto")}>
+        {/* with the panel pinned below: as tall as Heute is, the panel takes the rest */}
+        <main tabIndex={-1} className={cx("@container min-h-0 outline-none", pinned ? "flex-initial" : "flex-1", isGraph ? "overflow-hidden" : "overflow-y-auto")}>
           {/* a page of another workspace: anew on its replica (repo and files point at it) */}
           <PageBoundary key={`${globalPage(route.parts) ? "" : active?.id}${route.path}`}>{page}</PageBoundary>
         </main>
-        {tray && <Tray desktop={wide} onCapture={() => setCaptureOpen(true)} />}
+        {tray && <Tray desktop={wide} pinned={pinned} onCapture={() => setCaptureOpen(true)} />}
         {/* the review on a phone is a page of its own, with its own way back */}
         {!wide && route.parts[0] !== "review" && <MobileNav />}
       </div>

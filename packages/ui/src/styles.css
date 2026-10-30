@@ -964,9 +964,9 @@ body.cm-dragging * {
   color: var(--muted-foreground);
 }
 
-/* To or from Heute on a desktop (hooks.ts useRoute): the page changes at once, only the tray's
-   panel moves – from its column on Heute down into the bar below the page, and back. The bottom
-   of each stays in place, so the field at the panel's foot becomes the bar's. */
+/* To or from Heute on a desktop (hooks.ts useRoute): the page changes at once, only the tray
+   moves – leaving Heute its open panel folds down into the bar, coming back it unfolds. The
+   bottom stays in place, so the bar stays where it is. */
 ::view-transition-old(root),
 ::view-transition-new(root) {
   animation: none;
@@ -981,5 +981,5 @@ body.cm-dragging * {
 ::view-transition-new(shelf) {
   height: 100%;
   object-fit: none;
-  object-position: left bottom;
+  object-position: bottom;
 }

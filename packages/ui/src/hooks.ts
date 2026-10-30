@@ -43,7 +43,7 @@ function safeDecode(s: string) {
   }
 }
 
-/** The route, one for the whole app. To or from Heute on a desktop as a view transition: the tray's panel moves between the page and the bar below (styles.css). */
+/** The route, one for the whole app. To or from Heute on a desktop as a view transition: the tray's open panel folds into the bar or unfolds from it (styles.css). */
 let route = parse();
 const routeListeners = new Set<() => void>();
 const isToday = (r: Route) => r.path === "/" || r.path === "/inbox";
