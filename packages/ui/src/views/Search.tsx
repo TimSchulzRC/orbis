@@ -4,7 +4,7 @@ import { Search as SearchIcon } from "lucide-react";
 import { type Cond, parseQuery } from "@obtion/core/query";
 import { snippet } from "@obtion/core/search";
 import type { Index } from "@obtion/core/graph";
-import { useRoute, itemPath, spaceHref } from "../hooks";
+import { useRoute, itemPath, spaceHref, useDocumentTitle } from "../hooks";
 import { useAccounts } from "../accounts";
 import { SpaceScope, useReplicas } from "../ui/Spaces";
 import { useT, tr, titleOf } from "../i18n";
@@ -46,6 +46,7 @@ function onlyText(c: Cond): boolean {
  */
 export function SearchView() {
   const { t } = useT();
+  useDocumentTitle(t("nav.search"));
   const { shown } = useAccounts();
   const repos = useReplicas(shown.map((s) => s.id));
   const route = useRoute();

@@ -10,10 +10,8 @@ import { PHONE } from "../lib/platform";
 const PLAIN = 5000; // a notice to read
 const WITH_ACTION = 7000; // one with "Rückgängig" or "Öffnen": a little longer
 
-/** A short notice; with `undo` it offers "Rückgängig", with `action` another step ("Öffnen"). */
-export function notify(text: string, undo?: () => void, action?: { label: string; run: () => void }) {
-  if (undo) return notify.undo(text, undo);
-  if (action) return notify.action(text, action.label, action.run);
+/** A short notice; `.undo` offers "Rückgängig", `.action` another step ("Öffnen"), `.error` says what failed. */
+export function notify(text: string) {
   toast(text, { duration: PLAIN });
 }
 /** "„Titel“ im Papierkorb · Rückgängig" – the same for every undo. `id`: a notice that grows instead of repeating. */

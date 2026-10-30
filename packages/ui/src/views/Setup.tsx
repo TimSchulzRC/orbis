@@ -4,14 +4,15 @@ import { type Lang, detectLang, translate } from "@obtion/core/i18n";
 import type { FileMeta } from "@obtion/core/model";
 import { runSetup } from "@obtion/core/setup";
 import { type ExampleFile, exampleFiles, fileFacts, writeExamples } from "@obtion/core/examples";
-import { repo } from "../repo";
-import { files } from "../files";
 import { setLang } from "../i18n";
 import { Button, Seg } from "../ui/primitives";
 import { BrandLogo } from "../ui/BrandLogo";
+import { useFiles, useRepo } from "../hooks";
 
 /** First setup: choose the language (the shipped types are created in it), with or without the examples. */
 export function Setup() {
+  const repo = useRepo();
+  const files = useFiles();
   const [lang, setL] = useState<Lang>(detectLang(navigator.language));
   const [examples, setExamples] = useState(true);
   const [busy, setBusy] = useState(false);

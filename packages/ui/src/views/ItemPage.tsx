@@ -10,7 +10,7 @@ import { isInInbox, isOverview } from "@obtion/core/placement";
 import { wouldBeInInbox } from "@obtion/core/typeops";
 import { onlyBelow } from "@obtion/core/trash";
 import { primaryChild, hasUpdates, progressSpec, languageCode, translations, translationInit, translationPlan } from "@obtion/core/traits";
-import { useRepo, useIndex, itemHref, openItem, leavePage, setParams, showTitle } from "../hooks";
+import { useRepo, useIndex, itemHref, openItem, leavePage, setParams, showTitle, useDocumentTitle } from "../hooks";
 import { repo } from "../repo";
 import { useT, tr, getLang, titleOf } from "../i18n";
 import { Editor, insertFilesAtCursor } from "../ui/Editor";
@@ -68,12 +68,14 @@ function isBlank(i: Item) {
 }
 
 function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
+  const repo = useRepo();
   // "?new=1" is for opening it once: gone from the address, so a reload or Back later does not take it as new
   const [isNew] = useState(created);
   useEffect(() => void setParams({ new: null }), []);
   const r = useRepo();
   const ix = useIndex();
   const { t } = useT();
+  useDocumentTitle(titleOf(item, t));
   const doc = useMemo(() => r.getDoc(item.id), [item.id]);
   const schema = ix.schemaOf(item);
   const [view, setView] = useState<EditorView | null>(null);
@@ -319,6 +321,7 @@ function LangSwitch({ item }: { item: Item }) {
 }
 
 function TypeSwitch({ item }: { item: Item }) {
+  const repo = useRepo();
   const ix = useIndex();
   const { t } = useT();
   const schema = ix.schemaOf(item);
@@ -419,6 +422,7 @@ function DeleteDialog({ item, onClose }: { item: Item; onClose: () => void }) {
 
 /** "In anderen Workspace verschieben": with what hangs only below it; here it goes to the trash. */
 function MoveDialog({ item, onClose }: { item: Item; onClose: () => void }) {
+  const repo = useRepo();
   const { t } = useT();
   const { spaces, active } = useAccounts();
   const count = movedItems(repo.index(), item.id).length - 1;

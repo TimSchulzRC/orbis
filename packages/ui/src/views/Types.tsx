@@ -2,8 +2,7 @@ import { Input } from "../components/ui/input";
 import { useState } from "react";
 import { Plus, RotateCcw } from "lucide-react";
 import { restoreDefaultTypes } from "@obtion/core/setup";
-import { useIndex, useRepo, useRoute, useSpaceId, itemHref, spaceHref, openItem } from "../hooks";
-import { repo } from "../repo";
+import { useIndex, useRepo, useRoute, useSpaceId, itemHref, spaceHref, openItem, useDocumentTitle } from "../hooks";
 import { SpaceEyebrow } from "../ui/Spaces";
 import { useT, getLang } from "../i18n";
 import { Card, Button, Dialog } from "../ui/primitives";
@@ -12,7 +11,9 @@ import { createType } from "../actions";
 
 /** All types. New types are data: name, then properties and capabilities in the editor. */
 export function TypesView() {
+  const repo = useRepo();
   const { t } = useT();
+  useDocumentTitle(t("nav.types"));
   const ix = useIndex();
   const route = useRoute();
   const [creating, setCreating] = useState(route.query.get("new") === "1");

@@ -8,7 +8,7 @@ import { Sun } from "lucide-react";
 import { type Item, SETTINGS_ID, todayISO } from "@obtion/core/model";
 import { fmtDate } from "@obtion/core/i18n";
 import { activeProjects, dueBy, recentlyChanged } from "@obtion/core/today";
-import { useDesktop, useIndex, useItemHref } from "../hooks";
+import { useDesktop, useIndex, useItemHref, useDocumentTitle } from "../hooks";
 import { useAccounts } from "../accounts";
 import { useT, titleOf } from "../i18n";
 import { Card, SectionTitle } from "../ui/primitives";
@@ -34,7 +34,7 @@ export function Today() {
   const inbox = entries.length;
   const pinned = useShelfPinned();
   const today = todayISO();
-  useEffect(() => void (document.title = t("nav.today")), []);
+  useDocumentTitle(t("nav.today"));
   // each workspace's part, then one list of all
   const per = shown.map((s, n) => ({ space: s.id, ix: repos[n]!.get(SETTINGS_ID) ? repos[n]!.index() : undefined }));
   const all = <T,>(f: (ix: NonNullable<(typeof per)[number]["ix"]>) => T[]): Of<T>[] => per.flatMap((p) => (p.ix ? f(p.ix).map((value) => ({ space: p.space, value })) : []));

@@ -11,7 +11,7 @@ import { SETTINGS_ID, setSettings } from "@obtion/core/model";
 import { fmtBytes } from "@obtion/core/i18n";
 import { resetInbox } from "@obtion/core/setup";
 import { listExamples, removeExamples, restoreExamples } from "@obtion/core/examples";
-import { useRepo, useSpaceId, spaceHref } from "../hooks";
+import { useRepo, useSpaceId, spaceHref, useDocumentTitle } from "../hooks";
 import { useT, setLang } from "../i18n";
 import { Button, Dialog, Seg, SectionTitle } from "../ui/primitives";
 import { ItemIcon, TypeGlyph } from "../ui/item-look";
@@ -296,6 +296,7 @@ function Version() {
 /** The settings of the app on this device and the account, with its workspaces. */
 export function Settings() {
   const { t, lang } = useT();
+  useDocumentTitle(t("nav.settings"));
   const theme = useTheme();
   return (
     <div className="page-read space-y-10">
@@ -337,7 +338,7 @@ export function SpaceSettingsPage() {
   // an MCP token is made on request (each is a new one, shown once)
   const [c, setC] = useState<McpConnect | null>(null);
   const [err, setErr] = useState(false);
-  useEffect(() => void (document.title = space?.name ?? t("space.settings")), [space?.name]);
+  useDocumentTitle(space?.name ?? t("space.settings"));
   if (!space) return null;
   const newToken = () => mcpToken(space).then(setC, () => setErr(true));
   const s = r.status;

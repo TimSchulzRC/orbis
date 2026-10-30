@@ -7,9 +7,8 @@ import { type FileType, type Item, type ViewTab, setTab, setTabs, shortId, FILE_
 import { type QueryDef, andWhere, tabDef } from "@obtion/core/query";
 import { keyBetween } from "@obtion/core/sortkey";
 import { typeTabs } from "@obtion/core/setup";
-import { setParams, useRoute } from "../hooks";
+import { setParams, useRoute, useDocumentTitle, useFiles, useRepo } from "../hooks";
 import { SpaceEyebrow } from "../ui/Spaces";
-import { repo } from "../repo";
 import { useT } from "../i18n";
 import { files } from "../files";
 import { Button, Empty, IconButton } from "../ui/primitives";
@@ -27,6 +26,7 @@ import { sameValue } from "@obtion/core/equal";
  * columns) is saved at once; trying out a filter is a draft until "Speichern".
  */
 export function TypeList({ type }: { type: Item }) {
+  const repo = useRepo();
   const { t, lang } = useT();
   const tabs = typeTabs(type, lang);
   const [tab, pickTab] = useTabChoice(type.id, tabs, true);
@@ -45,7 +45,7 @@ export function TypeList({ type }: { type: Item }) {
     const changed = Object.entries(patch).filter(([k, v]) => !sameValue(v, tab[k as keyof ViewTab]));
     if (!changed.length) return;
     setT(tab.id, Object.fromEntries(changed.map(([k, v]) => [k, v ?? null])));
-    if (patch.kind && patch.kind !== tab.kind) notify(t("view.viewSet", { view: t("view." + patch.kind) }), () => setT(tab.id, { kind: tab.kind }));
+    if (patch.kind && patch.kind !== tab.kind) notify.undo(t("view.viewSet", { view: t("view." + patch.kind) }), () => setT(tab.id, { kind: tab.kind }));
   };
   // leaving with an unsaved filter: say that it was not kept
   const dirtyRef = useRef(false);
@@ -73,7 +73,7 @@ export function TypeList({ type }: { type: Item }) {
       const { id: _, ...whole } = tabs.find((x) => x.id === id)!;
       setT(id, null);
       if (draft?.tab === id) setDraft(null);
-      notify(t("view.removed", { name: tabName(whole, t) }), () => setT(id, whole));
+      notify.undo(t("view.removed", { name: tabName(whole, t) }), () => setT(id, whole));
     },
     move: (id, pos) => setT(id, { pos }),
     settings: () => setSettings_(true),
@@ -159,13 +159,14 @@ const kindOf = (param: string | null) => (FILE_TYPES.find((k) => KIND_PARAM[k] =
 
 /** "Dateien": all files, newest first; "Alle · Bilder · PDFs · Audio" (only kinds that are there), images as a gallery. */
 export function FilesPage() {
+  const files = useFiles();
   const { t } = useT();
   const kind = kindOf(useRoute().query.get("kind"));
   const setKind = (k: FileType | null) => setParams({ kind: k && KIND_PARAM[k] });
   const all = useQuery({ where: { file: true } }).items;
   const kinds = FILE_TYPES.map((k) => ({ k, n: all.filter((i) => i.file?.filetype === k).length })).filter((x) => x.n > 0);
   const def: QueryDef = { where: kind ? { and: [{ file: true }, { filetype: kind }] } : { file: true }, sort: [{ key: "created", desc: true }] };
-  useEffect(() => void (document.title = t("nav.files")), []);
+  useDocumentTitle(t("nav.files"));
   return (
     <div className="page-wide">
       <SpaceEyebrow />

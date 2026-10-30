@@ -79,7 +79,7 @@ function CaptureField({ parent, placeholder, autoFocus, onDone, compact, onSpace
     const usedType = r.get(id)?.type ?? null; // "/name" in the text can set it too
     const what = usedType ? ix.typeName(usedType) : t("capture.note");
     const msg = where ? t("capture.notifyUnder", { what, place: ix.get(where)?.title ?? "" }) : usedType ? t("capture.notifyAs", { what }) : t("capture.notifyInbox");
-    notify(msg, undefined, { label: t("capture.open"), run: () => openItem(id, { space }) });
+    notify.action(msg, t("capture.open"), () => openItem(id, { space }));
     setText("");
     onDone?.();
   };
@@ -93,7 +93,7 @@ function CaptureField({ parent, placeholder, autoFocus, onDone, compact, onSpace
   const attach = async (list: FileList | null) => {
     for (const f of [...(list ?? [])]) {
       const res = await files.add(f, f.name, { parent });
-      if (res?.id) notify(t("capture.notifyFile", { name: f.name }), undefined, { label: t("capture.open"), run: () => openItem(res.id!, { space }) });
+      if (res?.id) notify.action(t("capture.notifyFile", { name: f.name }), t("capture.open"), () => openItem(res.id!, { space }));
     }
   };
   const ghost = "tap-y inline-flex h-7 min-w-0 items-center gap-1 rounded-md px-1.5 text-xs hover:bg-hover";

@@ -30,8 +30,7 @@ import { COLORS, ICONS } from "@obtion/core/palette";
 import { keyBetween } from "@obtion/core/sortkey";
 import { parseQuery, printQuery, runQuery } from "@obtion/core/query";
 import { type DeleteMode, deleteType, previewTagToType, tagToType, typeUsage } from "@obtion/core/typeops";
-import { useIndex, useRoute, navigate, setParams } from "../hooks";
-import { repo } from "../repo";
+import { useIndex, useRoute, navigate, setParams, useDocumentTitle, useRepo } from "../hooks";
 import { useT } from "../i18n";
 import { Card, Button, Dialog, MenuItem, Popover, SectionTitle, Seg, AddButton, IconButton, MoreMenu } from "../ui/primitives";
 import { InlineText } from "../ui/fields";
@@ -44,13 +43,14 @@ import { createType } from "../actions";
 import type { T } from "@obtion/core/i18n";
 
 export function TypePage({ item }: { item: Item }) {
+  const repo = useRepo();
   const { t } = useT();
   const ix = useIndex();
   const route = useRoute();
   const [editing, setEditing] = useState(route.query.get("edit") === "1");
   useEffect(() => void setParams({ edit: null }), []);
   const plural = ix.typePlural(item.id);
-  useEffect(() => void (document.title = plural), [plural]);
+  useDocumentTitle(plural);
   if (item.deleted)
     return (
       <div className="mx-auto max-w-3xl px-6 py-16 text-center text-muted-foreground">
@@ -89,6 +89,7 @@ export function TypePage({ item }: { item: Item }) {
 
 /** "Typ bearbeiten": name, plural, symbol, description, properties, capabilities – above the list. */
 function TypeEditor({ item, onClose }: { item: Item; onClose: () => void }) {
+  const repo = useRepo();
   const { t } = useT();
   const ix = useIndex();
   const s = item.schema!;
@@ -218,6 +219,7 @@ function TypeEditor({ item, onClose }: { item: Item; onClose: () => void }) {
 // ---------- properties ----------
 
 function AddProperty({ item, onAdded }: { item: Item; onAdded: (id: string) => void }) {
+  const repo = useRepo();
   const { t } = useT();
   const ix = useIndex();
   const [open, setOpen] = useState(false);
@@ -286,6 +288,7 @@ function defaultStatusOptions(t: T): OptionDef[] {
 }
 
 function PropEditor({ item, prop }: { item: Item; prop: PropDef }) {
+  const repo = useRepo();
   const { t } = useT();
   const ix = useIndex();
   const set = (patch: Patch<Omit<PropDef, "id">>) => repo.change(item.id, (d) => upsertProp(d, prop.id, patch));
@@ -419,6 +422,7 @@ function OptionsEditor({ prop, onChange }: { prop: PropDef; onChange: (o: Option
 // ---------- capabilities ----------
 
 function Capabilities({ item }: { item: Item }) {
+  const repo = useRepo();
   const { t } = useT();
   const ix = useIndex();
   const s = item.schema!;
@@ -515,6 +519,7 @@ function Capabilities({ item }: { item: Item }) {
 // ---------- delete / convert ----------
 
 function DeleteTypeDialog({ item, onClose, toTag }: { item: Item; onClose: () => void; toTag?: boolean }) {
+  const repo = useRepo();
   const { t } = useT();
   const ix = useIndex();
   const s = item.schema!;
@@ -583,6 +588,7 @@ function DeleteTypeDialog({ item, onClose, toTag }: { item: Item; onClose: () =>
 }
 
 function FromTagDialog({ item, onClose }: { item: Item; onClose: () => void }) {
+  const repo = useRepo();
   const { t } = useT();
   const ix = useIndex();
   const s = item.schema!;
@@ -650,6 +656,7 @@ function FromTagDialog({ item, onClose }: { item: Item; onClose: () => void }) {
  * any query as text. Stored as query text, e.g. "typ:Person" or "#autor".
  */
 function TargetField({ target, hits, onChange }: { target?: string; hits: number; onChange: (t: string) => void }) {
+  const repo = useRepo();
   const { t, lang } = useT();
   const ix = useIndex();
   const where = target ? parseQuery(target, ix).def.where : undefined;

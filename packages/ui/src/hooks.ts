@@ -1,4 +1,4 @@
-import { type KeyboardEvent, useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { type KeyboardEvent as ReactKeyboardEvent, useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { repo } from "./repo";
 import { files } from "./files";
 import { activeSpace } from "./accounts";
@@ -166,6 +166,17 @@ export function useDocumentTitle(title: string | undefined) {
   useEffect(() => void (title && (document.title = title)), [title]);
 }
 
+/** Keys on the whole window while the component lives: one listener, `on` sees the state of the last render. */
+export function useWindowKeys(on: (e: KeyboardEvent) => void) {
+  const latest = useRef(on);
+  latest.current = on;
+  useEffect(() => {
+    const f = (e: KeyboardEvent) => latest.current(e);
+    addEventListener("keydown", f);
+    return () => removeEventListener("keydown", f);
+  }, []);
+}
+
 /** Focus is in a field, an editor or a dialog: single-key shortcuts of a page stay off. */
 export const isTypingTarget = (el: Element) => !!el.closest("input, textarea, select, [contenteditable=true], .cm-editor, [role=dialog]");
 
@@ -183,7 +194,7 @@ export function useFocusDraft<V>(value: V) {
     draft,
     setDraft,
     focused,
-    onKeyDown: (e: KeyboardEvent<HTMLElement>) => {
+    onKeyDown: (e: ReactKeyboardEvent<HTMLElement>) => {
       const el = e.currentTarget;
       if (e.key === "Enter") (e.preventDefault(), el.blur());
       if (e.key === "Escape") (setDraft(value), setTimeout(() => el.blur()));

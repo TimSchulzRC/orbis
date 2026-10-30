@@ -7,7 +7,7 @@ import { Sparkles, User, Download, Bot, Cog, Undo2, Redo2 } from "lucide-react";
 import type { ActivityEvent, FieldChange } from "@obtion/core/protocol";
 import { type Item, META_TYPE, optionNames, type Value } from "@obtion/core/model";
 import type { Index } from "@obtion/core/graph";
-import { useRepo, useSpaceId, itemHref } from "../hooks";
+import { useRepo, useSpaceId, itemHref, useDocumentTitle } from "../hooks";
 import { useT, titleOf } from "../i18n";
 import type { T } from "@obtion/core/i18n";
 import { Button, Empty, Seg } from "../ui/primitives";
@@ -207,6 +207,7 @@ export function Activity() {
   const r = useRepo();
   const space = useSpaceId()!;
   const { t } = useT();
+  useDocumentTitle(t("nav.activity"));
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [filter, setFilter] = useState<"all" | "agent" | "you">("all");
   const [more, setMore] = useState(true);

@@ -74,7 +74,7 @@ export async function setStatus(item: Item, optionId: string, repo: Repo = curre
     }
   }
   repo.setProp(item.id, sp.id, optionId);
-  if (closing) notify(tr("tick.done", { title: titleOf(item), name: opt.name }), () => repo.setProp(item.id, sp.id, (before as string) ?? null));
+  if (closing) notify.undo(tr("tick.done", { title: titleOf(item), name: opt.name }), () => repo.setProp(item.id, sp.id, (before as string) ?? null));
   return true;
 }
 

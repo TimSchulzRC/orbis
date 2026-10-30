@@ -6,10 +6,9 @@ import { useEffect, useState } from "react";
 import { ArrowRightLeft, Download, Trash2, RotateCcw, Replace } from "lucide-react";
 import { type Item, setFileMeta } from "@obtion/core/model";
 import { fmtBytes, fmtDate } from "@obtion/core/i18n";
-import { useIndex, leavePage } from "../hooks";
-import { repo } from "../repo";
-import { useT } from "../i18n";
-import { files, useBlobUrl } from "../files";
+import { useIndex, leavePage, useDocumentTitle, useFiles, useRepo } from "../hooks";
+import { useT, titleOf } from "../i18n";
+import { useBlobUrl } from "../files";
 import { Button, MenuItem, IconButton, MoreMenu } from "../ui/primitives";
 import { ItemIcon, Tag } from "../ui/item-look";
 import { Bezuege, Crumbs } from "../ui/PageParts";
@@ -20,7 +19,10 @@ import { fmtDuration } from "../ui/Results";
 import { dateOf } from "@obtion/core/date";
 
 export function FilePage({ item }: { item: Item }) {
+  const repo = useRepo();
+  const files = useFiles();
   const { t, lang } = useT();
+  useDocumentTitle(titleOf(item, t));
   const ix = useIndex();
   const f = item.file!;
   const [picking, setPicking] = useState(false);

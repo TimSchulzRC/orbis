@@ -13,7 +13,7 @@ import type { EditorView } from "@codemirror/view";
 import { Check, Clock, FolderInput, Layers, List, Maximize2, Pencil, RotateCcw, Shapes, StickyNote, Trash2, Undo2 } from "lucide-react";
 import { type Item, todayISO } from "@obtion/core/model";
 import { plainText } from "@obtion/core/search";
-import { useRepo, useItemHref, spaceHref, navigate, useDesktop, openItem } from "../hooks";
+import { useRepo, useItemHref, spaceHref, navigate, useDesktop, openItem, isTypingTarget, useDocumentTitle, useWindowKeys } from "../hooks";
 import { replica, spaceById, useAccounts } from "../accounts";
 import { useT, titleOf } from "../i18n";
 import { recentPlaces } from "../actions";
@@ -86,8 +86,8 @@ export function Review({ at }: { at?: string }) {
     (document.activeElement as HTMLElement | null)?.blur();
     setEditing(null);
   };
-  useEffect(() => void (closed.current || (session = { day: todayISO(), order: order.current, sorted, at: key })));
-  useEffect(() => void (document.title = t("review.title")), []);
+  useEffect(() => void (closed.current || (session = { day: todayISO(), order: order.current, sorted, at: key })), [sorted, key]);
+  useDocumentTitle(t("review.title"));
 
   const act = useTriageActions(() => entry!.space, { quiet: true });
   const record = (e: InboxEntry, what: string, undo?: Undo | null) => {
@@ -118,37 +118,33 @@ export function Review({ at }: { at?: string }) {
     navigate("/");
   };
 
-  useEffect(() => {
-    const on = (e: KeyboardEvent) => {
-      const el = e.target as HTMLElement;
-      // while editing the keys are the text's; Esc (unless the editor used it) ends it
-      if (editing) {
-        if (e.key === "Escape" && !e.defaultPrevented && !pick.placing && !pick.typing) stopEditing();
-        return;
-      }
-      if (pick.placing || pick.typing || el.closest("input, textarea, select, [contenteditable=true], .cm-editor, [role=dialog]") || e.metaKey || e.ctrlKey || e.altKey) return;
-      const k = e.key;
-      // Enter on a button or link is its own
-      if (k === "Enter" && el.closest("button, a")) return;
-      const first = entry && offeredTypes(entry)[0];
-      if (k === "u" || k === "z") undo();
-      else if (!entry) return;
-      else if (k === "e") pick.setPlacing([entry.item]);
-      else if (k === "c" && first && entry.item.kind === "info") typeAs([entry.item], first);
-      else if (k === "y" && entry.item.kind === "info") pick.setTyping([entry.item]);
-      else if (k === "s") later();
-      else if (k === "b") keep();
-      else if (k === "x" || k === "Delete") trash();
-      // arrows up and down scroll a long entry in its card
-      else if (k === "ArrowDown" || k === "ArrowUp") card.current?.scrollBy({ top: k === "ArrowDown" ? 80 : -80 });
-      else if (k === "j" || k === "ArrowRight") step(1);
-      else if (k === "k" || k === "ArrowLeft") step(-1);
-      else if (k === "Enter" || k === "o") openItem(entry.item.id, { space: entry.space });
-      else return;
-      e.preventDefault();
-    };
-    window.addEventListener("keydown", on);
-    return () => window.removeEventListener("keydown", on);
+  useWindowKeys((e) => {
+    const el = e.target as HTMLElement;
+    // while editing the keys are the text's; Esc (unless the editor used it) ends it
+    if (editing) {
+      if (e.key === "Escape" && !e.defaultPrevented && !pick.placing && !pick.typing) stopEditing();
+      return;
+    }
+    if (pick.placing || pick.typing || isTypingTarget(el) || e.metaKey || e.ctrlKey || e.altKey) return;
+    const k = e.key;
+    // Enter on a button or link is its own
+    if (k === "Enter" && el.closest("button, a")) return;
+    const first = entry && offeredTypes(entry)[0];
+    if (k === "u" || k === "z") undo();
+    else if (!entry) return;
+    else if (k === "e") pick.setPlacing([entry.item]);
+    else if (k === "c" && first && entry.item.kind === "info") typeAs([entry.item], first);
+    else if (k === "y" && entry.item.kind === "info") pick.setTyping([entry.item]);
+    else if (k === "s") later();
+    else if (k === "b") keep();
+    else if (k === "x" || k === "Delete") trash();
+    // arrows up and down scroll a long entry in its card
+    else if (k === "ArrowDown" || k === "ArrowUp") card.current?.scrollBy({ top: k === "ArrowDown" ? 80 : -80 });
+    else if (k === "j" || k === "ArrowRight") step(1);
+    else if (k === "k" || k === "ArrowLeft") step(-1);
+    else if (k === "Enter" || k === "o") openItem(entry.item.id, { space: entry.space });
+    else return;
+    e.preventDefault();
   });
 
   const total = sorted.length + left.length;

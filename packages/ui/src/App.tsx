@@ -105,7 +105,7 @@ function Main() {
       window.removeEventListener("keydown", on);
       window.removeEventListener("obtion:palette", showPalette);
     };
-  });
+  }, []);
 
   // nothing set up in any workspace yet (a new account): the first one's setup
   const all = useReplicas(spaces.map((s) => s.id));

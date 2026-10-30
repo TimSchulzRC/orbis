@@ -3,7 +3,7 @@ import type { Item } from "@obtion/core/model";
 import { cascadeCount } from "@obtion/core/trash";
 import { isInInbox } from "@obtion/core/placement";
 import { notify } from "../ui/feedback";
-import { itemHref, useRepo } from "../hooks";
+import { itemHref, useRepo, useDocumentTitle } from "../hooks";
 import { SpaceEyebrow } from "../ui/Spaces";
 import { useT, titleOf } from "../i18n";
 import { Button, Empty } from "../ui/primitives";
@@ -12,6 +12,7 @@ import { ItemIcon, RelTime } from "../ui/item-look";
 export function TrashView() {
   const r = useRepo();
   const { t } = useT();
+  useDocumentTitle(t("nav.trash"));
   // Items deleted together with a root are listed with it and come back with it.
   const withRoot = (i: Item) => !!i.deletedVia && !!r.records.get(i.deletedVia)?.deleted;
   const items = [...r.records.values()].filter((i) => i.deleted && !withRoot(i) && (i.kind === "info" || i.kind === "datei")).sort((a, b) => b.updated - a.updated);

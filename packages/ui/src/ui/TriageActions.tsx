@@ -149,28 +149,33 @@ function TypePicker({ current, onPick, onClose }: { current: string | null; onPi
   const ix = repo.index();
   const [q, setQ] = useState("");
   const [sel, setSel] = useState(0);
+  // "Neuer Typ …" without a name: the field asks for one
+  const [naming, setNaming] = useState(false);
+  const field = useRef<HTMLInputElement>(null);
   const types = ix.typesByName().filter((x) => !q.trim() || x.schema.name.toLowerCase().includes(titleKey(q)));
   const exact = types.some((x) => x.schema.name.toLowerCase() === titleKey(q));
   const rows: { id?: string; create?: string }[] = [...types.map((x) => ({ id: x.id })), ...(q.trim() && !exact ? [{ create: q.trim() }] : [{ create: "" }])];
   const pick = (r?: (typeof rows)[number]) => {
     if (!r) return;
     if (r.id) return onPick(r.id);
-    const name = r.create?.trim() || prompt(t("types.new"))?.trim();
+    const name = r.create?.trim();
     if (name) onPick(createType(name, repo));
+    else (setNaming(true), field.current?.focus());
   };
   return (
     <Dialog title={t("triage.chooseType")} onClose={onClose}>
       <Input
+        ref={field}
         autoFocus
         value={q}
         onChange={(e) => (setQ(e.target.value), setSel(0))}
         onKeyDown={(e) => {
           if (e.key === "ArrowDown") (e.preventDefault(), setSel((s) => Math.min(rows.length - 1, s + 1)));
           else if (e.key === "ArrowUp") (e.preventDefault(), setSel((s) => Math.max(0, s - 1)));
-          else if (e.key === "Enter") (e.preventDefault(), pick(rows[sel]));
+          else if (e.key === "Enter") (e.preventDefault(), pick(naming && q.trim() ? { create: q } : rows[sel]));
           else if (!q && /^[1-9]$/.test(e.key) && rows[Number(e.key) - 1]?.id) (e.preventDefault(), pick(rows[Number(e.key) - 1]));
         }}
-        placeholder={t("triage.typeFilter")}
+        placeholder={naming ? t("types.new") : t("triage.typeFilter")}
         className="mb-2 focus:border-focus"
       />
       <div role="listbox" className="flex flex-col">

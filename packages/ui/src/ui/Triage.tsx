@@ -12,7 +12,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, FolderInput, Shapes, Sparkles, Trash2, Check, X } from "lucide-react";
 import { type Item, setMeta } from "@obtion/core/model";
 import type { Index } from "@obtion/core/graph";
-import { useIndex, useRepo, useSpaceId, useItemHref, spaceHref, useDesktop, openItem } from "../hooks";
+import { useIndex, useRepo, useSpaceId, useItemHref, spaceHref, useDesktop, openItem, isTypingTarget, useWindowKeys } from "../hooks";
 import { useT, titleOf } from "../i18n";
 import { recentPlaces } from "../actions";
 import { Card, Button, Kbd } from "./primitives";
@@ -89,11 +89,8 @@ export function Triage({ items }: { items: Item[] }) {
     setMarked((m) => (on === undefined || on !== m.has(id) ? toggled(m, id) : m));
   const trash = (l: Item[]) => void act.trash(l).then((ok) => ok && setMarked(new Set()));
 
-  // the handler sees this render's state; the listener stays the same
-  const onKey = useRef<(e: KeyboardEvent) => void>(null);
-  onKey.current = (e) => {
-    const el = e.target as HTMLElement;
-    if (keyOwner !== me || pick.placing || pick.typing || el.closest("input, textarea, select, [contenteditable=true], .cm-editor, [role=dialog]") || e.metaKey || e.ctrlKey || e.altKey) return;
+  useWindowKeys((e) => {
+    if (keyOwner !== me || pick.placing || pick.typing || isTypingTarget(e.target as Element) || e.metaKey || e.ctrlKey || e.altKey) return;
     const cur = items[sel];
     const k = e.key;
     if (k === "J" || (k === "ArrowDown" && e.shiftKey)) {
@@ -118,12 +115,7 @@ export function Triage({ items }: { items: Item[] }) {
     else if ((k === "Enter" || k === "o") && cur) openItem(cur.id, { space: spaceOf(cur) });
     else return;
     e.preventDefault();
-  };
-  useEffect(() => {
-    const on = (e: KeyboardEvent) => onKey.current?.(e);
-    window.addEventListener("keydown", on);
-    return () => window.removeEventListener("keydown", on);
-  }, []);
+  });
   useEffect(() => {
     // after an action the entry leaves: the selection stays at its place, so the next one is selected
     if (sel >= items.length && items.length) setSel(items.length - 1);

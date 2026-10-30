@@ -8,7 +8,7 @@ import ForceGraph from "force-graph";
 import { type Item, META_TYPE } from "@obtion/core/model";
 import type { Index } from "@obtion/core/graph";
 import { isDone, statusProp } from "@obtion/core/traits";
-import { useRepo, openItem } from "../hooks";
+import { useRepo, openItem, useDocumentTitle } from "../hooks";
 import { useT } from "../i18n";
 import { cn, toggled } from "../lib/utils";
 import { TypeGlyph } from "../ui/item-look";
@@ -189,6 +189,7 @@ function GraphCanvas({ data, highlight }: { data: { nodes: GNode[]; links: GLink
 export function GraphView() {
   const r = useRepo();
   const { t } = useT();
+  useDocumentTitle(t("nav.graph"));
   const ix = r.index();
   const types = ix.typesByName();
   // "" = without type, "#file" = files
