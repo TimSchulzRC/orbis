@@ -40,18 +40,22 @@ export function capture(text: string, opts: { type?: string | null; parent?: str
 }
 
 const RECENT = "obtion.recentPlaces";
-/** The places used last on this device (capture, sorting the inbox, "+ Ort"), newest first. */
-export function recentPlaces(repo: Repo = current): string[] {
+function storedPlaces(): string[] {
   try {
-    const ids = JSON.parse(localStorage.getItem(RECENT) ?? "[]") as string[];
-    const ix = repo.index();
-    return ids.filter((id) => ix.get(id)?.kind === "info");
+    const ids = JSON.parse(localStorage.getItem(RECENT) ?? "[]");
+    return Array.isArray(ids) ? ids.filter((x): x is string => typeof x === "string") : [];
   } catch {
     return [];
   }
 }
-export function rememberPlace(id: string, repo: Repo = current) {
-  const ids = [id, ...recentPlaces(repo).filter((x) => x !== id)].slice(0, 6);
+/** The places used last on this device (capture, sorting the inbox, "+ Ort"), newest first. */
+export function recentPlaces(repo: Repo = current): string[] {
+  const ix = repo.index();
+  return storedPlaces().filter((id) => ix.get(id)?.kind === "info").slice(0, 6);
+}
+/** One list for all workspaces: ids from other workspaces stay, each workspace reads its own. */
+export function rememberPlace(id: string) {
+  const ids = [id, ...storedPlaces().filter((x) => x !== id)].slice(0, 30);
   localStorage.setItem(RECENT, JSON.stringify(ids));
 }
 

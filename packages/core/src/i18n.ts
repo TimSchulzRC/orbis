@@ -39,7 +39,7 @@ export function detectLang(pref?: string | null): Lang {
   return l.startsWith("de") ? "de" : "en";
 }
 
-const locale = (lang: Lang) => (lang === "de" ? "de-DE" : "en-GB");
+const locale = (lang: Lang) => (lang === "de" ? "de-DE" : "en-US");
 
 export function fmtDate(lang: Lang, iso: string | undefined, opts: Intl.DateTimeFormatOptions = { day: "2-digit", month: "2-digit", year: "numeric" }) {
   if (!iso) return "";

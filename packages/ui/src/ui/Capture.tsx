@@ -71,7 +71,7 @@ function CaptureField({ parent, placeholder, autoFocus, onDone, compact, onSpace
     const where = parent ?? place ?? undefined;
     const id = capture(text, { type, parent: where }, r);
     if (!id) return;
-    if (place && !parent) rememberPlace(place, r);
+    if (place && !parent) rememberPlace(place);
     // the next thought starts clean: no place or type carried over unseen
     setPlace(null);
     setType(null);

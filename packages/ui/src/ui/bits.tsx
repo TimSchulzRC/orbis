@@ -12,9 +12,9 @@ import { type Item, type OptionDef, type StatusGroup, type TypeSchema, META_TYPE
 import { fmtRelative, fmtShortDate } from "@obtion/core/i18n";
 import { isInInbox, isOverview } from "@obtion/core/placement";
 import type { Index } from "@obtion/core/graph";
-import { parseDate, statusShape } from "@obtion/core/input";
+import { dateText, parseDate, statusShape } from "@obtion/core/input";
 import { repo } from "../repo";
-import { itemHref, useIndex } from "../hooks";
+import { useIndex, useItemHref } from "../hooks";
 import { tr, useT } from "../i18n";
 import { ICON, INBOX_ICON, NOTE_ICON, OVERVIEW_ICON, TYPE_ICON, FILE_ICONS } from "./icons";
 
@@ -145,8 +145,9 @@ export function ProgressCount({ done, total, className }: { done: number; total:
 /** A link to an entry; `wrap`: long titles break into lines instead of being cut off (narrow columns). */
 export function ItemLink({ item, className, showIcon = true, wrap }: { item: Item; className?: string; showIcon?: boolean; wrap?: boolean }) {
   const { t } = useT();
+  const hrefOf = useItemHref();
   return (
-    <a href={itemHref(item.id)} className={cx("inline-flex min-w-0 gap-1.5 hover:underline", wrap ? "items-start" : "items-center", className)}>
+    <a href={hrefOf(item.id)} className={cx("inline-flex min-w-0 gap-1.5 hover:underline", wrap ? "items-start" : "items-center", className)}>
       {showIcon && <ItemIcon item={item} size={14} className={wrap ? "mt-0.5 shrink-0" : undefined} />}
       <span className={wrap ? "min-w-0 break-words" : "truncate"}>{item.title || t("untitled")}</span>
     </a>
@@ -371,17 +372,10 @@ export function InlineText({
   );
 }
 
-/** Date input that only commits complete, plausible dates. */
-/** An ISO date as the app language writes it: 30.10.2026 (de) or 10/30/2026 (en). */
-export function dateText(lang: string, iso?: string): string {
-  const m = iso && /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
-  if (!m) return "";
-  return lang === "de" ? `${m[3]}.${m[2]}.${m[1]}` : `${m[2]}/${m[3]}/${m[1]}`;
-}
-
 /**
- * A date in the app language (not the browser's): typed as 30.10.2026, 10/30/2026, morgen,
- * Freitag … (read like the agent's input), or picked from the calendar.
+ * Date input that only commits complete, plausible dates, in the app language (not the
+ * browser's): typed as 30.10.2026, 10/30/2026, morgen, Freitag … (read like the agent's input),
+ * or picked from the calendar.
  */
 export function DateField({ value, onChange, label, className, autoFocus }: { value?: string; onChange: (v: string) => void; label: string; className?: string; autoFocus?: boolean }) {
   const { t, lang } = useT();

@@ -7,7 +7,8 @@ import { NativeSelect } from "../components/ui/native-select";
 import { useState } from "react";
 import { X, Plus, ExternalLink, AlertTriangle, Trash2, ArrowRightLeft, CalendarDays } from "lucide-react";
 import { type FreeKind, type FreeValue, type Item, type PropDef, type TypeSchema, type Value, FREE_KINDS, todayISO } from "@obtion/core/model";
-import { fmtDate, fmtNumber } from "@obtion/core/i18n";
+import { fmtDate } from "@obtion/core/i18n";
+import { numberText, parseNumber } from "@obtion/core/input";
 import { parseQuery, matches } from "@obtion/core/query";
 import { doneAt, hasValue, priorityProp, statusOf } from "@obtion/core/traits";
 import { toFree } from "@obtion/core/typeops";
@@ -91,11 +92,6 @@ function displayValue(item: Item, p: PropDef): string {
   return String(v);
 }
 
-export function numberValue(s: string): number | undefined {
-  const n = Number(s.trim().replace(/\s/g, "").replace(",", "."));
-  return s.trim() === "" || isNaN(n) ? undefined : n;
-}
-
 export function PropertyField({ item, prop, autoFocus }: { item: Item; prop: PropDef; autoFocus?: boolean }) {
   const { t, lang } = useT();
   const ix = useIndex();
@@ -118,8 +114,8 @@ export function PropertyField({ item, prop, autoFocus }: { item: Item; prop: Pro
     case "number":
       return (
         <InlineText
-          value={typeof v === "number" ? fmtNumber(lang, v).replace(/\./g, lang === "de" ? "" : ".") : ""}
-          onCommit={(x) => set(numberValue(x) ?? null)}
+          value={typeof v === "number" ? numberText(lang, v) : ""}
+          onCommit={(x) => set(parseNumber(lang, x) ?? null)}
           placeholder={t("props.empty")}
           label={prop.name}
           autoFocus={autoFocus}
@@ -319,7 +315,7 @@ export function FreeField({ value, onChange, name, options }: { value: FreeValue
   if (k === "checkbox") return <Checkbox  checked={value.v === true} onCheckedChange={(checked) => onChange({ k, v: (checked === true) })} aria-label={name} className="size-4 accent-[var(--focus)]" />;
   if (k === "date") return <DateField value={String(value.v ?? "") || undefined} label={name} onChange={(x) => onChange(x ? { k, v: x } : null)} />;
   if (k === "number")
-    return <InlineText value={typeof value.v === "number" ? String(value.v).replace(".", lang === "de" ? "," : ".") : String(value.v)} onCommit={(x) => onChange(numberValue(x) === undefined ? null : { k, v: numberValue(x)! })} label={name} className="text-sm tabular-nums" />;
+    return <InlineText value={typeof value.v === "number" ? numberText(lang, value.v) : String(value.v)} onCommit={(x) => { const n = parseNumber(lang, x); onChange(n === undefined ? null : { k, v: n }); }} label={name} className="text-sm tabular-nums" />;
   if (k === "select")
     return (
       <>

@@ -9,7 +9,7 @@ import type { Item } from "@obtion/core/model";
 import { SETTINGS_ID, todayISO } from "@obtion/core/model";
 import { fmtDate } from "@obtion/core/i18n";
 import { activeProjects, dueBy, recentlyChanged } from "@obtion/core/today";
-import { itemHref, useDesktop, useIndex } from "../hooks";
+import { useDesktop, useIndex, useItemHref } from "../hooks";
 import { useAccounts } from "../accounts";
 import { useT } from "../i18n";
 import { Card, DueLabel, ItemIcon, RelTime, SectionTitle, cx, itemLook, pal } from "../ui/bits";
@@ -129,13 +129,14 @@ const row = "flex min-h-12 items-center gap-3 border-b border-line px-4 py-2 las
 /** A due entry: tick it off, where it belongs, when it was due. */
 function DueRow({ item, due, space }: { item: Item; due: string; space?: string }) {
   const { t } = useT();
+  const hrefOf = useItemHref();
   const ix = useIndex();
   const project = ix.get(ix.project(item.id));
   const where = [project?.title, space].filter(Boolean).join(" · ");
   return (
     <div className={row}>
       <RowStatus item={item} />
-      <a href={itemHref(item.id)} className="flex min-w-0 flex-1 flex-col hover:underline lg:flex-row lg:items-baseline lg:gap-3">
+      <a href={hrefOf(item.id)} className="flex min-w-0 flex-1 flex-col hover:underline lg:flex-row lg:items-baseline lg:gap-3">
         <span className="truncate text-[15px]">{item.title || t("untitled")}</span>
         {where && <span className="truncate text-xs text-muted-foreground lg:ml-auto">{where}</span>}
       </a>
@@ -147,11 +148,12 @@ function DueRow({ item, due, space }: { item: Item; due: string; space?: string 
 /** A project in progress: its progress as a ring (only with entries to count), what is open, when touched. */
 function ProjectRow({ item, touched, space }: { item: Item; touched: number; space?: string }) {
   const { t, lang } = useT();
+  const hrefOf = useItemHref();
   const ix = useIndex();
   const prog = ix.progressOf(item);
   const color = pal(ix.schemaOf(item)?.color);
   return (
-    <a href={itemHref(item.id)} className={cx(row, "hover:bg-hover")}>
+    <a href={hrefOf(item.id)} className={cx(row, "hover:bg-hover")}>
       {prog && prog.total > 0 ? <Ring share={prog.done / prog.total} color={color} /> : <span className="flex size-8 shrink-0 items-center justify-center"><ItemIcon item={item} /></span>}
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[15px] font-medium">{item.title || t("untitled")}</span>
@@ -189,8 +191,9 @@ function useWhat(item: Item) {
 
 function RecentTile({ item }: { item: Item }) {
   const { t } = useT();
+  const hrefOf = useItemHref();
   return (
-    <a href={itemHref(item.id)} className="flex min-w-0 flex-col gap-1 rounded-xl border border-line bg-surface px-4 py-3 hover:bg-hover">
+    <a href={hrefOf(item.id)} className="flex min-w-0 flex-col gap-1 rounded-xl border border-line bg-surface px-4 py-3 hover:bg-hover">
       <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
         <ItemIcon item={item} size={13} /> <span className="truncate">{useWhat(item)}</span>
       </span>
@@ -204,8 +207,9 @@ function RecentTile({ item }: { item: Item }) {
 
 function RecentRow({ item }: { item: Item }) {
   const { t } = useT();
+  const hrefOf = useItemHref();
   return (
-    <a href={itemHref(item.id)} className={cx(row, "hover:bg-hover")}>
+    <a href={hrefOf(item.id)} className={cx(row, "hover:bg-hover")}>
       <ItemIcon item={item} />
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[15px]">{item.title || item.file?.name || t("untitled")}</span>

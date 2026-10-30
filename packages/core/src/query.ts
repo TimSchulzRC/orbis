@@ -11,7 +11,7 @@ import type { Index } from "./graph";
 import { inboxWhere, setAside } from "./inbox";
 import { type Lang, LANGS, words } from "./i18n";
 import { dateEnd, dateStart, doneAt, dueOf, statusOf, statusProp } from "./traits";
-import { optionMatches, parseDate, statusGroupOf } from "./input";
+import { optionMatches, parseDate, parseNumber, statusGroupOf } from "./input";
 
 /** Is this word the name of a status option of some type? Then it means that option, not a group. */
 function byOptionName(ix: Index, word: string): boolean {
@@ -501,8 +501,8 @@ export function relDate(v: string, today: string): string | undefined {
 function num(v: unknown): number | undefined {
   if (typeof v === "number") return v;
   if (typeof v !== "string") return undefined;
-  const n = Number(v.replace(/\s/g, "").replace(",", "."));
-  return isNaN(n) ? undefined : n;
+  const n = Number(v.replace(/\s/g, ""));
+  return isNaN(n) ? parseNumber("de", v) : n;
 }
 
 function cmp(a: number | string, b: number | string, op: Op): boolean {
@@ -956,5 +956,5 @@ export function andWhere(a: Cond | undefined, b: Cond | undefined): Cond | undef
 
 /** What a view shows: the base query AND the tab's filter, with the tab's look. */
 export function tabDef(base: Cond | undefined, tab: ViewTab): QueryDef {
-  return { where: base ? andWhere(base, tab.where) : undefined, sort: tab.sort, group: tab.group, columns: tab.columns, view: tab.kind };
+  return { where: andWhere(base, tab.where), sort: tab.sort, group: tab.group, columns: tab.columns, view: tab.kind };
 }
