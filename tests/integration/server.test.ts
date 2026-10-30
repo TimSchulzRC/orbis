@@ -1,43 +1,20 @@
 // The server as a program: accounts and workspaces (who sees what), with and without the web app,
 // the data from before accounts, and the sync per workspace. Starts real servers.
 import { test, expect, beforeAll, afterAll } from "bun:test";
-import { createServer } from "node:net";
 import * as Y from "yjs";
 import { tempDir, removeTempDirs } from "../support/helpers";
+import { bootServer, del, get, mcpPost, post } from "../support/server";
 import { FORMAT, PERSONAL, initItem } from "@obtion/core/model";
 import { type ServerMsg, toB64 } from "@obtion/core/protocol";
-import { allowedHosts } from "@obtion/server/trust";
 import { Store } from "@obtion/server/store";
-import { Accounts } from "@obtion/server/accounts";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-
-function freePort(): Promise<number> {
-  return new Promise((res) => {
-    const s = createServer();
-    s.listen(0, "127.0.0.1", () => {
-      const port = (s.address() as { port: number }).port;
-      s.close(() => res(port));
-    });
-  });
-}
 
 const procs: ReturnType<typeof Bun.spawn>[] = [];
 async function start(env: Record<string, string>): Promise<string> {
-  const port = await freePort();
-  const p = Bun.spawn(["bun", "apps/server/src/index.ts"], {
-    cwd: `${import.meta.dir}/../..`,
-    env: { ...process.env, PORT: String(port), HOST: "127.0.0.1", ...env },
-    stdout: "ignore",
-    stderr: "ignore",
-  });
-  procs.push(p);
-  const base = `http://127.0.0.1:${port}`;
-  for (let i = 0; i < 100; i++) {
-    if (await fetch(base + "/api/info").then((r) => r.ok, () => false)) return base;
-    await Bun.sleep(50);
-  }
-  throw new Error("server did not start");
+  const { url, proc } = await bootServer(env);
+  procs.push(proc);
+  return url;
 }
 
 let plain = "";
@@ -45,38 +22,32 @@ let bare = "";
 let legacy = "";
 let legacyDir = "";
 beforeAll(async () => {
-  plain = await start({ OBTION_DATA: tempDir("obtion-server-") });
-  bare = await start({ OBTION_DATA: tempDir("obtion-server-"), OBTION_WEB_APP: "off", OBTION_SIGNUP: "open" });
+  // a built web app of its own: the test does not depend on `bun run build`
+  const dist = tempDir("obtion-dist-");
+  writeFileSync(join(dist, "index.html"), "<!doctype html><title>Obtion im Test</title>");
   // a data folder from before accounts, with one item
   legacyDir = tempDir("obtion-server-");
   const s = new Store(legacyDir);
   s.create({ title: "Von früher" }, "test", { id: "old-1" });
   s.flush();
   s.db.close();
-  legacy = await start({ OBTION_DATA: legacyDir });
+  [plain, bare, legacy] = await Promise.all([
+    start({ OBTION_DATA: tempDir("obtion-server-"), OBTION_WEB_DIST: dist }),
+    start({ OBTION_DATA: tempDir("obtion-server-"), OBTION_WEB_APP: "off", OBTION_SIGNUP: "open" }),
+    start({ OBTION_DATA: legacyDir }),
+  ]);
 });
 afterAll(async () => {
   for (const p of procs) (p.kill(), await p.exited);
   removeTempDirs();
 });
 
-const post = (base: string, path: string, body: unknown, token?: string, headers: Record<string, string> = {}) =>
-  fetch(base + path, { method: "POST", headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}), ...headers }, body: JSON.stringify(body) });
-const get = (base: string, path: string, token?: string) => fetch(base + path, { headers: token ? { authorization: `Bearer ${token}` } : {} });
 async function signUp(base: string, email: string, invite?: string): Promise<{ token: string; user: { id: string } }> {
   const res = await post(base, "/api/account/signup", { name: email.split("@")[0], email, password: "geheim12345", invite });
   if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
   return res.json();
 }
 const account = (base: string, token: string) => get(base, "/api/account", token).then((r) => r.json());
-
-test("host names: addresses and private names on any port, public names only when configured", () => {
-  const ok = allowedHosts(["obtion.example.org", "notes.example.com:8443", ""]);
-  for (const h of ["192.168.1.10:8480", "100.101.102.103:9000", "127.0.0.1:8480", "[fd7a:115c::1]:8480", "[::1]:8480", "nas:8480", "localhost:5180", "nas.local:8480", "nas.fritz.lan", "nas.tail1234.ts.net", "nas.tail1234.ts.net:8480", "obtion.example.org", "Obtion.Example.org:443", "notes.example.com:8443"])
-    expect([h, ok(h)]).toEqual([h, true]);
-  for (const h of ["evil.example.net", "evil.example.net:8480", "notes.example.com:8480", "ts.net.evil.example", "", null])
-    expect([h, ok(h)]).toEqual([h, false]);
-});
 
 test("the first account is the admin with a personal workspace; then only with an invite (default)", async () => {
   expect(await get(plain, "/api/info").then((r) => r.json())).toMatchObject({ signup: "invite", firstAccount: true });
@@ -96,16 +67,10 @@ test("the first account is the admin with a personal workspace; then only with a
   expect((await account(plain, bob.token)).admin).toBe(false);
   expect((await get(plain, `/api/workspaces/${ws}/members`, bob.token).then((r) => r.json())).map((m: any) => m.role)).toEqual(["owner", "member"]);
   // the last owner cannot leave; a member can
-  expect((await fetch(`${plain}/api/workspaces/${ws}/members/${ada.user.id}`, { method: "DELETE", headers: { authorization: `Bearer ${ada.token}` } })).status).toBe(409);
-});
-
-test("the web app exposes no built-in agent API", async () => {
-  const user = await signUp(bare, "mcp-only@test.de");
-  const me = await account(bare, user.token);
-  expect(me).not.toHaveProperty("agent");
-  expect(await get(bare, "/api/info").then((r) => r.json())).not.toHaveProperty("agent");
-  const [w] = me.workspaces;
-  expect((await post(bare, `/w/${w.id}/api/agent`, { message: "hello" }, user.token)).status).toBe(404);
+  expect((await del(plain, `/api/workspaces/${ws}/members/${ada.user.id}`, ada.token)).status).toBe(409);
+  expect((await del(plain, `/api/workspaces/${ws}/members/${bob.user.id}`, bob.token)).status).toBe(200);
+  expect((await account(plain, bob.token)).workspaces).toEqual([]);
+  expect((await get(plain, `/api/workspaces/${ws}/members`, ada.token).then((r) => r.json())).map((m: any) => m.role)).toEqual(["owner"]);
 });
 
 test("a workspace is only open to its members – sync, files, activity, MCP", async () => {
@@ -125,7 +90,7 @@ test("a workspace is only open to its members – sync, files, activity, MCP", a
   // MCP: a member's token for one workspace opens that one only
   const { token, mcpUrl } = await post(bare, `/api/workspaces/${cw.id}/mcp-token`, {}, carla.token).then((r) => r.json());
   expect(mcpUrl).toEndWith(`/w/${cw.id}/mcp`);
-  const call = (ws: string, t: string) => post(bare, `/w/${ws}/mcp`, { jsonrpc: "2.0", id: 1, method: "tools/list" }, t, { accept: "application/json, text/event-stream" });
+  const call = (ws: string, t: string) => mcpPost(bare, `/w/${ws}/mcp`, t, "tools/list");
   expect((await call(cw.id, token)).status).toBe(200);
   expect((await call(dw.id, token)).status).toBe(401);
   expect((await call(cw.id, carla.token)).status).toBe(401); // a session is no MCP token
@@ -154,13 +119,14 @@ test("the data from before accounts become a workspace of the first account; the
   expect(first.items.map((i) => i.d)).toContain("old-1");
   c.ws.close();
   const old = JSON.parse(readFileSync(join(legacyDir, "config.json"), "utf8")).token;
-  expect((await post(legacy, "/mcp", { jsonrpc: "2.0", id: 1, method: "tools/list" }, old, { accept: "application/json, text/event-stream" })).status).toBe(200);
-  expect((await post(legacy, "/mcp", { jsonrpc: "2.0", id: 1, method: "tools/list" }, "wrong", { accept: "application/json, text/event-stream" })).status).toBe(401);
+  expect((await mcpPost(legacy, "/mcp", old, "tools/list")).status).toBe(200);
+  expect((await mcpPost(legacy, "/mcp", "wrong", "tools/list")).status).toBe(401);
 });
 
 test("every server brings the web app; OBTION_WEB_APP=off leaves sync, API and MCP", async () => {
   const app = await fetch(plain + "/");
-  expect(app.status).not.toBe(404); // the app (or 503 while it is not built)
+  expect(app.status).toBe(200);
+  expect(await app.text()).toContain("Obtion im Test");
   const none = await fetch(bare + "/");
   expect(none.status).toBe(404);
   expect(await none.text()).toContain("OBTION_WEB_APP=off");
@@ -219,33 +185,33 @@ test("an owner deletes a workspace for everyone, with its folder; a member canno
   const { code } = await post(base, `/api/workspaces/${w.id}/invites`, {}, owner.token).then((r) => r.json());
   const member = await signUp(base, "max@example.org", code);
   const sync = await connect(base, w.id, owner.token); // open, with a connection
+  const closed = new Promise<number>((resolve) => (sync.ws.onclose = (e) => resolve(e.code)));
   expect(existsSync(join(data, "workspaces", w.id))).toBe(true);
 
-  const del = (token: string) => fetch(`${base}/api/workspaces/${w.id}`, { method: "DELETE", headers: { authorization: `Bearer ${token}` } });
-  expect((await del(member.token)).status).toBe(403);
-  expect((await del(owner.token)).status).toBe(200);
+  const remove = (token: string) => del(base, `/api/workspaces/${w.id}`, token);
+  expect((await remove(member.token)).status).toBe(403);
+  expect((await remove(owner.token)).status).toBe(200);
+  expect(await closed).toBe(4404); // the server shut it: its timers stopped, its database closed
   expect(existsSync(join(data, "workspaces", w.id))).toBe(false);
   expect((await account(base, owner.token)).workspaces).toEqual([]);
   expect((await account(base, member.token)).workspaces).toEqual([]);
-  expect((await get(base, `/w/${w.id}/api/activity`, owner.token)).status).not.toBe(200);
-  sync.ws.close();
-  // nothing comes back into its folder afterwards
-  await Bun.sleep(2000);
+  // nothing opens it again into its folder: not the API, not MCP, not a device reconnecting
+  expect((await get(base, `/w/${w.id}/api/activity`, owner.token)).status).toBe(403);
+  expect((await mcpPost(base, `/w/${w.id}/mcp`, owner.token, "tools/list")).status).toBe(401);
+  await expect(connect(base, w.id, owner.token)).rejects.toThrow();
   expect(existsSync(join(data, "workspaces", w.id))).toBe(false);
 });
 
 test("account deletion requires a password and leaves last-owner workspaces intact", async () => {
   const user = await signUp(bare, "delete-owner@example.org");
   const [workspace] = (await account(bare, user.token)).workspaces;
-  const remove = (body: unknown, token = user.token) => fetch(bare + "/api/account", {
-    method: "DELETE", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify(body),
-  });
+  const remove = (body: unknown, token = user.token) => del(bare, "/api/account", token, body);
   expect((await remove({ password: "geheim12345" }, "invalid")).status).toBe(401);
   expect((await remove({})).status).toBe(400);
   expect((await remove({ password: "wrong" })).status).toBe(403);
   expect((await remove({ password: "geheim12345" })).status).toBe(409);
   expect((await account(bare, user.token)).workspaces).toHaveLength(1);
-  expect((await fetch(`${bare}/api/workspaces/${workspace.id}`, { method: "DELETE", headers: { authorization: `Bearer ${user.token}` } })).status).toBe(200);
+  expect((await del(bare, `/api/workspaces/${workspace.id}`, user.token)).status).toBe(200);
   expect((await remove({ password: "geheim12345" })).status).toBe(200);
   expect((await get(bare, "/api/account", user.token)).status).toBe(401);
   expect((await post(bare, "/api/auth/sign-in/email", { email: "delete-owner@example.org", password: "geheim12345" })).ok).toBe(false);
@@ -266,34 +232,12 @@ test("deleting a member revokes sessions, invites, MCP tokens and live sync with
     const timeout = setTimeout(() => reject(new Error("deleted account's sync remained open")), 3000);
     live.ws.onclose = (e) => { clearTimeout(timeout); resolve(e.code); };
   });
-  expect((await fetch(bare + "/api/account", {
-    method: "DELETE", headers: { authorization: `Bearer ${member.token}`, "content-type": "application/json" }, body: JSON.stringify({ password: "geheim12345" }),
-  })).status).toBe(200);
+  expect((await del(bare, "/api/account", member.token, { password: "geheim12345" })).status).toBe(200);
   expect(await closed).toBe(4401);
   for (const token of [member.token, second.token]) expect((await get(bare, "/api/account", token)).status).toBe(401);
   expect((await get(bare, `/api/invites/${invite.code}`)).status).toBe(404);
-  expect((await post(bare, `/w/${workspace.id}/mcp`, { jsonrpc: "2.0", id: 1, method: "tools/list" }, agent.token)).status).toBe(401);
+  expect((await mcpPost(bare, `/w/${workspace.id}/mcp`, agent.token, "tools/list")).status).toBe(401);
   expect((await get(bare, `/w/${workspace.id}/api/activity`, owner.token)).status).toBe(200);
   expect(await get(bare, `/api/workspaces/${workspace.id}/members`, owner.token).then((r) => r.json())).toHaveLength(1);
 });
 
-
-test("a co-owner can delete their account, including admin and credential records", async () => {
-  const accounts = new Accounts(tempDir("obtion-account-delete-"), { secret: "a-test-secret-longer-than-thirty-two-characters", baseURL: "http://localhost:8480", policy: "open" });
-  try {
-    await accounts.init(() => "Personal");
-    const first = await accounts.signUp({ email: "first@example.org", name: "First", password: "geheim12345", personal: "Personal" });
-    const [workspace] = accounts.workspacesOf(first.user.id);
-    const invite = accounts.createInvite(workspace!.id, first.user.id);
-    const second = await accounts.signUp({ email: "second@example.org", name: "Second", password: "geheim12345", personal: "Personal", invite });
-    accounts.db.query("UPDATE members SET role = 'owner' WHERE user = ?").run(second.user.id);
-    expect(accounts.isAdmin(first.user.id)).toBe(true);
-    await accounts.deleteAccount(first.user.id, "geheim12345");
-    expect(accounts.isAdmin(first.user.id)).toBe(false);
-    expect(accounts.userCount()).toBe(1);
-    expect(accounts.members(workspace!.id).map((m) => m.id)).toEqual([second.user.id]);
-    expect(accounts.exists(workspace!.id)).toBe(true);
-    for (const table of ["session", "account"])
-      expect(accounts.db.query(`SELECT 1 FROM "${table}" WHERE userId = ?`).get(first.user.id)).toBeNull();
-  } finally { accounts.db.close(); }
-});

@@ -1,6 +1,6 @@
 import { test, expect, afterAll } from "bun:test";
 import * as Y from "yjs";
-import { MemRepo, tempDir, removeTempDirs } from "../support/helpers";
+import { MemRepo, docUpdate, tempDir, removeTempDirs } from "../support/helpers";
 import { FORMAT, PERSONAL, SETTINGS_ID, initItem, readItem } from "@obtion/core/model";
 import { runSetup, upgradeAreas } from "@obtion/core/setup";
 import { AreaError, Store } from "@obtion/server/store";
@@ -19,6 +19,7 @@ test("new documents belong to the personal area; documents from before are read 
 test("upgrade: every document from before gets the personal area, the data format 1 – once", () => {
   const m = new MemRepo();
   runSetup(m.writer, "de");
+  expect(m.get(SETTINGS_ID)!.settings!.format).toBe(FORMAT); // a fresh setup carries it already
   const a = m.add({ title: "A" });
   // as before areas: no mark in the documents, no format
   for (const d of m.docs.values()) d.getMap("meta").delete("area");
@@ -32,22 +33,10 @@ test("upgrade: every document from before gets the personal area, the data forma
   expect(upgradeAreas(m.writer, m.docs)).toBe(0);
 });
 
-test("a fresh setup carries the format", () => {
-  const m = new MemRepo();
-  runSetup(m.writer, "en");
-  expect(m.get(SETTINGS_ID)!.settings!.format).toBe(FORMAT);
-});
-
-function update(id: string, area?: string) {
-  const d = new Y.Doc({ guid: id });
-  d.transact(() => initItem(d, { title: id, area }));
-  return Y.encodeStateAsUpdate(d);
-}
-
 test("server log: every row has its area; cursors and catch-up per area; areas never mix", () => {
   const s = new Store(tempDir("obtion-area-"));
-  s.applyRemote("p1", update("p1"), "web:x");
-  s.applyRemote("t1", update("t1", "team-a"), "web:x", undefined, undefined, "team-a");
+  s.applyRemote("p1", docUpdate({ id: "p1", title: "p1" }), "web:x");
+  s.applyRemote("t1", docUpdate({ id: "t1", title: "t1", area: "team-a" }), "web:x", undefined, undefined, "team-a");
   const rows = s.db.query("SELECT doc, area FROM updates ORDER BY seq").all() as { doc: string; area: string }[];
   expect(rows).toEqual([
     { doc: "p1", area: PERSONAL },
@@ -60,5 +49,5 @@ test("server log: every row has its area; cursors and catch-up per area; areas n
   expect(s.knowsCursor(PERSONAL, 1, s.last(PERSONAL).uid)).toBe(true);
   expect(s.knowsCursor(PERSONAL, 2, s.last("team-a").uid)).toBe(false);
   // a change for a personal document sent as the team's is refused
-  expect(() => s.applyRemote("p1", update("p1"), "web:x", undefined, undefined, "team-a")).toThrow(AreaError);
+  expect(() => s.applyRemote("p1", docUpdate({ id: "p1", title: "p1" }), "web:x", undefined, undefined, "team-a")).toThrow(AreaError);
 });

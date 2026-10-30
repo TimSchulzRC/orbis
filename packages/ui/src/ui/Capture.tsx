@@ -98,7 +98,7 @@ function CaptureField({ parent, placeholder, autoFocus, onDone, compact, onSpace
   };
   const ghost = "tap-y inline-flex h-7 min-w-0 items-center gap-1 rounded-md px-1.5 text-xs hover:bg-hover";
   return (
-    <div className="rounded-2xl border border-line bg-surface px-3 py-2 shadow-sm focus-within:border-[var(--focus)]">
+    <div data-capture className="rounded-2xl border border-line bg-surface px-3 py-2 shadow-sm focus-within:border-[var(--focus)]">
       <div className="flex items-start gap-2">
         <Textarea
           ref={input}

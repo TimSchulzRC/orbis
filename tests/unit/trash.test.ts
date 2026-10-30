@@ -1,6 +1,5 @@
 import { test, expect } from "bun:test";
-import * as Y from "yjs";
-import { MemRepo } from "../support/helpers";
+import { MemRepo, fork, sync } from "../support/helpers";
 import { runSetup, SYS } from "@obtion/core/setup";
 import { addParent, removeParent, setMeta } from "@obtion/core/model";
 import { deleteItem, restoreItem, cascadeCount } from "@obtion/core/trash";
@@ -14,17 +13,6 @@ function repo() {
 const del = (m: MemRepo, id: string, children: "trash" | "inbox" = "trash") => deleteItem(m.writer, m.index(), id, children);
 const restore = (m: MemRepo, id: string) => restoreItem(m.writer, m.records(), id);
 const alive = (m: MemRepo, id: string) => !!m.index().get(id);
-
-/** A second device: a full copy of the documents, merged back with sync(). */
-function fork(m: MemRepo): MemRepo {
-  const c = new MemRepo();
-  for (const [id, d] of m.docs) Y.applyUpdate(c.doc(id), Y.encodeStateAsUpdate(d));
-  return c;
-}
-function sync(a: MemRepo, b: MemRepo) {
-  for (const [id, d] of a.docs) Y.applyUpdate(b.doc(id), Y.encodeStateAsUpdate(d));
-  for (const [id, d] of b.docs) Y.applyUpdate(a.doc(id), Y.encodeStateAsUpdate(d));
-}
 
 function project(m: MemRepo) {
   const arbeit = m.add({ title: "Arbeit", pinned: "a" });

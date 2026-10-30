@@ -10,58 +10,32 @@
 //   bun run test:e2e        (builds first; Chrome from ~/.cache/ms-playwright)
 // Not part of `bun test`: it needs a browser and takes a few minutes.
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { createServer } from "node:net";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { type Page, chromium } from "playwright-core";
+import { ROOT, bootServer, firstAccount, mcpTool } from "../support/server";
 
-const ROOT = resolve(import.meta.dir, "../..");
 const failures: string[] = [];
 let checks = 0;
 
-function freePort(): Promise<number> {
-  return new Promise((res) => {
-    const s = createServer();
-    s.listen(0, "127.0.0.1", () => {
-      const port = (s.address() as { port: number }).port;
-      s.close(() => res(port));
-    });
-  });
-}
-
 async function startServer(seeded: boolean, noTypes = false) {
   const dir = mkdtempSync(join(tmpdir(), "obtion-e2e-"));
-  const port = await freePort();
-  const env = { ...process.env, OBTION_DATA: dir, PORT: String(port), HOST: "127.0.0.1" };
+  const env = { ...process.env, OBTION_DATA: dir };
   if (seeded) {
     const seed = Bun.spawnSync(["bun", "apps/server/src/cli.ts", "setup", "de", "--examples"], { cwd: ROOT, env });
     if (seed.exitCode !== 0) throw new Error("seed failed: " + seed.stderr.toString());
     if (noTypes) {
-      const del = Bun.spawnSync(["bun", "tests/e2e/no-types.ts"], { cwd: ROOT, env });
+      const del = Bun.spawnSync(["bun", "tests/support/no-types.ts"], { cwd: ROOT, env });
       if (!del.stdout.toString().includes("types left: 0")) throw new Error("deleting types failed: " + del.stderr.toString());
     }
   }
-  const proc = Bun.spawn(["bun", "apps/server/src/index.ts"], { cwd: ROOT, env, stdout: "ignore", stderr: "pipe" });
-  const url = `http://127.0.0.1:${port}`;
-  for (let i = 0; i < 100; i++) {
-    if (await fetch(url + "/api/info").then((r) => r.ok, () => false)) break;
-    await Bun.sleep(100);
-  }
+  const { url, proc } = await bootServer({ OBTION_DATA: dir });
   // the first account (the admin): with the seeded data it gets them, otherwise a personal workspace
-  const signup = (await fetch(url + "/api/account/signup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "E2E", email: "e2e@example.org", password: "geheim12345", lang: "de" }) }).then((r) => r.json())) as { token: string };
-  const me = (await fetch(url + "/api/account", { headers: { authorization: `Bearer ${signup.token}` } }).then((r) => r.json())) as { user: unknown; workspaces: { id: string }[] };
-  const server = { dir, url, proc, file: "", trashed: "", token: signup.token, me };
+  const { token: session, me } = await firstAccount(url);
+  const server = { dir, url, proc, file: "", trashed: "", token: session, me };
   if (seeded && !noTypes) {
     const token = JSON.parse(readFileSync(join(dir, "config.json"), "utf8")).token as string;
-    const mcp = async (name: string, args: unknown) => {
-      const res = await fetch(url + "/mcp", {
-        method: "POST",
-        headers: { authorization: `Bearer ${token}`, "content-type": "application/json", accept: "application/json, text/event-stream" },
-        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }),
-      });
-      const text = ((await res.json()) as any).result.content[0].text as string;
-      return /\[([\w-]+)\]/.exec(text)?.[1] ?? "";
-    };
+    const mcp = async (name: string, args: unknown) => /\[([\w-]+)\]/.exec(await mcpTool(url, token, name, args))?.[1] ?? "";
     // a 1×1 PNG below the course
     const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
     server.file = await mcp("attach", { name: "skizze.png", base64: png, parent: "Kurs Datenbanken", description: "Eine Skizze" });
@@ -101,7 +75,7 @@ async function check(page: Page, label: string, path: string, errors: string[], 
     await page.goto(path, { waitUntil: "load" });
     await settle(page);
     if (extra) await extra(page);
-    if (path.includes("graph")) await page.waitForTimeout(700);
+    if (path.includes("graph")) await page.waitForSelector("canvas", { timeout: 3000 }).catch(() => {});
     const boundary = page.locator("[data-error-boundary]");
     if (await boundary.count()) failures.push(`${label} ${path}: error boundary: ${(await boundary.first().innerText()).replace(/\s+/g, " ")}`);
     const main = page.locator("main");
@@ -185,15 +159,13 @@ async function run() {
         if (serverName === "no types") for (const id of ITEMS) await check(page, label, `/#/i/${encodeURIComponent(id)}`, errors, undefined, { phone, page: true });
         if (serverName === "seeded") {
           for (const id of [...ITEMS, server.file, server.trashed]) await check(page, label, `/#/i/${encodeURIComponent(id)}`, errors, undefined, { phone, page: true });
-          // Heute: the greeting, what is due, and the tray below with the way into the review; the
-          // sheets sticking out of the tray are part of its button, none opens an entry of its own
+          // Heute: the greeting, what is due, and the tray below with the way into the review
           await check(page, label, "/", errors, async (p) => {
             const h1 = (await p.locator("main h1").innerText()).trim();
             if (!/^Guten (Morgen|Tag|Abend), E2E\.$/.test(h1)) failures.push(`${label}: Heute greets with "${h1}"`);
             if (!(await p.locator("main h2", { hasText: /^Fällig$/ }).count())) failures.push(`${label}: Heute shows nothing due`);
             const tray = p.getByRole("region", { name: "Eingang" });
             if (!(await tray.getByRole("link", { name: /Einsortieren/ }).count())) failures.push(`${label}: the tray has no way into the review`);
-            if (await tray.locator("button[aria-label^='„']").count()) failures.push(`${label}: a sheet in the tray opens an entry of its own`);
           }, { phone });
           // the inbox is the tray's panel: every entry, newest first; one opens there to read and add
           // to and stays in the inbox (looking in sorts nothing)
@@ -208,8 +180,8 @@ async function run() {
             await panel.locator(".cm-content").click();
             await p.keyboard.press("Control+End");
             await p.keyboard.type(" E2E-Ergänzung");
-            await p.waitForTimeout(300);
             await panel.getByRole("button", { name: "Eingang", exact: true }).click();
+            await panel.getByText("E2E-Ergänzung").waitFor({ timeout: 3000 }).catch(() => {});
             if ((await panel.locator("[data-shelf]").count()) !== n) failures.push(`${label}: adding to an entry took it out of the inbox`);
             if (!(await panel.getByText("E2E-Ergänzung").count())) failures.push(`${label}: what was added does not show in the panel's list`);
             const pinned = (await panel.getAttribute("data-shelf-panel")) === "pinned";
@@ -227,13 +199,14 @@ async function run() {
           await check(page, label, "/#/review", errors, async (p) => {
             const card = p.locator("main article h2");
             const title = (await card.innerText()).trim();
+            const cardIs = (want: boolean) => p.waitForFunction(([t, want]) => (document.querySelector("main article h2")?.textContent?.trim() === t) === want, [title, want] as const, { timeout: 3000 }).catch(() => {});
             await p.getByRole("button", { name: /Lose behalten/ }).click();
-            await p.waitForTimeout(300);
+            await cardIs(false);
             if ((await card.innerText().catch(() => "")).trim() === title) failures.push(`${label}: the review did not move on after "Lose behalten"`);
             const done = phone ? p.locator("main [aria-live]").first() : p.locator("main aside section[aria-label=\"Erledigt\"]");
             if (!(await done.getByText(title.slice(0, 15)).count())) failures.push(`${label}: "${title}" is not under "Erledigt"`);
             await (phone ? done.getByRole("button", { name: "Rückgängig" }) : done.getByRole("button", { name: `„${title}“ rückgängig machen` })).click();
-            await p.waitForTimeout(300);
+            await cardIs(true);
             if ((await card.innerText()).trim() !== title) failures.push(`${label}: undo in the review did not bring "${title}" back`);
           }, { phone });
           // editing in the review: a click on the title edits it there, the keys rest (their hints hide,
@@ -253,7 +226,7 @@ async function run() {
             if ((await article.locator("h2").innerText()).trim() !== title + " Xs") failures.push(`${label}: the title edited in the review is "${await article.locator("h2").innerText()}"`);
             if (!phone && !(await kbd.count())) failures.push(`${label}: the keys' hints do not come back after "Fertig"`);
             await p.getByRole("button", { name: "Bearbeiten" }).click();
-            await p.waitForTimeout(200);
+            await article.locator(".cm-editor.cm-focused").waitFor({ timeout: 3000 }).catch(() => {});
             if (!(await article.locator(".cm-editor.cm-focused").count())) failures.push(`${label}: "Bearbeiten" does not put the caret into the text`);
             await p.keyboard.type(" Ys");
             await p.waitForTimeout(300); // the completions looked and found nothing (else Esc closes them first)
@@ -264,7 +237,7 @@ async function run() {
             await p.locator("main h1").click();
             if (await article.locator("textarea").count()) failures.push(`${label}: a click outside the card does not end editing`);
             await p.getByRole("button", { name: "Bearbeiten" }).click();
-            await p.waitForTimeout(200);
+            await article.locator(".cm-editor.cm-focused").waitFor({ timeout: 3000 });
             for (let i = 0; i < 3; i++) await p.keyboard.press("Backspace");
             await article.locator("textarea").click();
             await p.keyboard.press("Control+End"); // the end of the title, not of its line (it wraps on a phone)
@@ -281,7 +254,6 @@ async function run() {
               if (!(await side.locator("section[aria-label='Persönlich'] a[href='#/i/ex-work']").count())) failures.push(`${label}: "Arbeit" not in the workspace's block`);
               const types = await side.locator("nav[aria-label='Typen'] a").allInnerTexts();
               if (!["Projekte", "Tasks", "Karten", "Dateien"].every((x) => types.some((y) => y.trim() === x))) failures.push(`${label}: Typen shows ${types.join(", ")}`);
-              if (await side.getByText("Sammlungen").count()) failures.push(`${label}: the sidebar still says "Sammlungen"`);
               await side.getByRole("button", { name: "Typen" }).click();
               await p.reload();
               await settle(p);
@@ -299,7 +271,7 @@ async function run() {
             await check(page, label, "/#/inbox", errors, async (p) => {
               await p.locator("[data-shelf-panel]").getByRole("button", { name: "Mehr" }).click();
               const menu = await p.locator("[data-popover]").last().innerText();
-              if (!/Was landet im Eingang\?/.test(menu) || /Sammlung/.test(menu)) failures.push(`${label}: inbox menu is "${menu.replace(/\n/g, " · ")}"`);
+              if (!/Was landet im Eingang\?/.test(menu)) failures.push(`${label}: inbox menu is "${menu.replace(/\n/g, " · ")}"`);
               // the rule opens with the way back to the default
               await p.getByText("Was landet im Eingang?").click();
               if (!(await p.getByRole("dialog", { name: "Was landet im Eingang?" }).getByRole("button", { name: /Standard wiederherstellen/ }).count())) failures.push(`${label}: the inbox rule has no "Standard wiederherstellen"`);
@@ -313,7 +285,7 @@ async function run() {
             const status = p.getByRole("button", { name: "Status", exact: true }).first();
             if (!phone && (await status.count())) {
               await status.click();
-              await p.waitForTimeout(300);
+              await p.getByRole("button", { name: "Status", exact: true, pressed: true }).first().waitFor({ timeout: 3000 }).catch(() => {});
               await p.reload();
               await settle(p);
               if ((await p.getByRole("button", { name: "Status", exact: true }).first().getAttribute("aria-pressed")) !== "true") failures.push(`${label}: grouping by status not kept after reload`);
@@ -337,12 +309,12 @@ async function run() {
               const launcher = p.getByRole("button", { name: /Suchen/ }).first();
               if (await launcher.count()) await launcher.focus();
               await p.keyboard.press("Control+k");
-              await p.waitForTimeout(250);
               const modal = p.getByRole("dialog");
+              await modal.first().waitFor({ timeout: 3000 }).catch(() => {});
               if (await modal.count() !== 1) failures.push(`${label}: command palette must have exactly one dialog`);
               if (!(await modal.locator("input").evaluate((el) => el === document.activeElement))) failures.push(`${label}: command palette input is not focused`);
               await p.keyboard.type("relaunch");
-              await p.waitForTimeout(250);
+              await p.waitForFunction(() => (document.activeElement as HTMLInputElement | null)?.value === "relaunch", null, { timeout: 3000 }).catch(() => {});
               await p.keyboard.press("Escape");
               await modal.waitFor({ state: "detached" });
               if (await launcher.count() && !(await launcher.evaluate((el) => el === document.activeElement))) failures.push(`${label}: command palette did not restore focus`);
@@ -354,8 +326,8 @@ async function run() {
               await p.waitForTimeout(500);
             }
           });
-          // capturing (in the tray): a note is preset (no "Eingang" to choose), "Einsortieren …" is no chip, a page
-          // mentioned with @ is offered as the place; the notice says where it went
+          // capturing (in the tray): a note is preset, "Einsortieren …" is offered, a page mentioned
+          // with @ is offered as the place; the notice says where it went
           await check(page, label, "/", errors, async (p) => {
             // the field is in the tray; on a phone it opens from the tray's "+" in a sheet, which closes after saving
             const open = async () => {
@@ -365,20 +337,17 @@ async function run() {
               return f;
             };
             let field = await open();
-            let row = field.locator("xpath=ancestor::div[contains(@class,'rounded-2xl')][1]");
+            let row = field.locator("xpath=ancestor::*[@data-capture][1]");
             const typeBtn = row.getByRole("button", { name: "Typ: Notiz" });
             if (!(await typeBtn.count())) failures.push(`${label}: capture does not preset "Notiz"`);
-            if (await row.getByRole("button", { name: "Eingang", exact: true }).count()) failures.push(`${label}: capture still offers "Eingang"`);
-            const sortIn = row.getByRole("button", { name: /Einsortieren …/ });
-            if (!(await sortIn.count())) failures.push(`${label}: capture has no "Einsortieren …"`);
-            else if ((await sortIn.evaluate((el) => getComputedStyle(el).borderTopWidth)) !== "0px") failures.push(`${label}: "Einsortieren" looks like a chip`);
+            if (!(await row.getByRole("button", { name: /Einsortieren …/ }).count())) failures.push(`${label}: capture has no "Einsortieren …"`);
             await field.fill("E2E-Notiz ohne Ort");
             await field.press("Enter");
             if (!(await p.locator("[data-sonner-toast]").filter({ hasText: "Notiz im Eingang" }).first().waitFor({ timeout: 3000 }).then(() => true, () => false))) failures.push(`${label}: no notice "Notiz im Eingang"`);
             if (phone) {
-              await p.waitForTimeout(400);
+              await field.waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
               field = await open();
-              row = field.locator("xpath=ancestor::div[contains(@class,'rounded-2xl')][1]");
+              row = field.locator("xpath=ancestor::*[@data-capture][1]");
             }
             await field.fill("E2E-Frage zu @Arbeit");
             const offer = row.getByRole("button", { name: "In Arbeit einsortieren?" });

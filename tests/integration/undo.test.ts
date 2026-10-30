@@ -1,11 +1,11 @@
 import { test, expect, beforeEach, afterAll } from "bun:test";
-import { tempDir, removeTempDirs } from "../support/helpers";
+import { removeTempDirs } from "../support/helpers";
+import { setupStore, stepOf } from "../support/store";
 import * as Y from "yjs";
-import { Store } from "@obtion/server/store";
-import { Ops } from "@obtion/server/ops";
+import type { Store } from "@obtion/server/store";
+import type { Ops } from "@obtion/server/ops";
 import { undoStep, redoStep, UndoError } from "@obtion/server/undo";
-import { runSetup, typeTabs, SYS } from "@obtion/core/setup";
-import { storeWriter } from "@obtion/server/importers";
+import { typeTabs, SYS } from "@obtion/core/setup";
 import { initItem, setMeta, setTab, setTabs } from "@obtion/core/model";
 
 afterAll(removeTempDirs);
@@ -13,14 +13,8 @@ afterAll(removeTempDirs);
 let s: Store;
 let ops: Ops;
 const AG = "agent:test";
-beforeEach(() => {
-  s = new Store(tempDir("obtion-undo-"));
-  runSetup(storeWriter(s, "system:setup"), "de");
-  s.flush();
-  ops = new Ops(s);
-});
+beforeEach(() => ({ s, ops } = setupStore("obtion-undo-")));
 const byTitle = (t: string) => s.records.get(s.index().resolveTitle(t) ?? [...s.records.values()].find((r) => r.title === t)?.id ?? "")!;
-const stepOf = (out: string) => /\(step (s\w+)/.exec(out)![1]!;
 
 test("one agent step with several changes is taken back as a whole, across items", () => {
   ops.call(AG, () => (ops.create({ title: "Nordlicht · Frankreich", type: "Projekt", properties: { Status: "Planung" } }, AG), "ok"));
@@ -107,7 +101,7 @@ test("undoing a creation sends the new item to the trash; text typed later stays
   expect(it.body).toBe("Mehr Text");
 });
 
-test("the undo tool takes back the agent's own last step", async () => {
+test("the undo tool takes back the agent's own last step", () => {
   ops.call(AG, () => (ops.create({ title: "Eins" }, AG), "ok"));
   ops.call(AG, () => (ops.create({ title: "Zwei" }, AG), "ok"));
   expect(ops.lastStep(AG, false)).toBeDefined();
@@ -129,7 +123,7 @@ test("a device's raw update without a step is logged as before", () => {
   expect(s.events({ limit: 1 })[0]!.step).toBeUndefined();
 });
 
-test("a saved filter in a type's view shows in the activity, can be undone, and the default views come back", () => {
+test("a saved filter in a type's view shows in the activity and can be undone", () => {
   const before = typeTabs(s.records.get(SYS.card)!, "de");
   // what "Speichern" writes after trying a filter in the view "Alle" of "Karten" (the defaults go along)
   const out = ops.call("web:tim@laptop", () => {
@@ -142,12 +136,4 @@ test("a saved filter in a type's view shows in the activity, can be undone, and 
   expect(ev.step).toBe(step);
   undoStep(s, step, "web:tim@laptop");
   expect(typeTabs(s.records.get(SYS.card)!, "de")).toEqual(before);
-  // "Ansichten zurücksetzen": the stored views go, the defaults show again
-  s.change(SYS.card, "web:tim@laptop", (d) => setTab(d, "v_x", { kind: "board", pos: "W" }));
-  s.flush();
-  expect(s.records.get(SYS.card)!.schema!.views!.map((t) => t.kind)).toEqual(["board"]);
-  s.change(SYS.card, "web:tim@laptop", (d) => setTabs(d, []));
-  s.flush();
-  expect(s.records.get(SYS.card)!.schema!.views).toBeUndefined();
-  expect(typeTabs(s.records.get(SYS.card)!, "de").map((t) => t.kind)).toEqual(["table"]);
 });

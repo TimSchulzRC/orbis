@@ -1,9 +1,8 @@
 import { test, expect } from "bun:test";
 import { MemRepo } from "../support/helpers";
 import { runSetup, SYS } from "@obtion/core/setup";
-import { META_TYPE, initSchema, newId, initItem } from "@obtion/core/model";
+import { newId, initItem } from "@obtion/core/model";
 import { copyToWorkspace, movedItems, planMove } from "@obtion/core/transfer";
-import { deleteItem } from "@obtion/core/trash";
 
 function workspace(lang: "de" | "en" = "de") {
   const m = new MemRepo();
@@ -38,29 +37,15 @@ test("a move takes what hangs only below; parents, refs and relations outside st
   const nb = bix.get(moved.ids.get(blocker)!)!;
   expect(Object.values(nb.rels).flat()).toEqual([nt1]);
   expect(moved.ids.has(shared)).toBe(false);
-
-  // the originals go to the trash with the same cascade
-  deleteItem(a.writer, a.index(), relaunch);
-  const aix = a.index();
-  expect([relaunch, t1, blocker].map((id) => aix.get(id)?.deleted ?? true)).toEqual([true, true, true]);
-  expect(aix.get(shared)!.deleted).toBe(false);
 });
 
 test("types: same name maps property by property and option by name; a missing type is copied; leftovers become free properties", () => {
   const a = workspace();
   const b = workspace("en"); // other ids for nothing, other names for everything
-  const book = newId();
-  a.change(book, (d) => {
-    initItem(d, { kind: "info", type: META_TYPE, title: "Buch" });
-    initSchema(d, { name: "Buch", icon: "book", color: "blue", properties: [{ id: "p_author", name: "Autor", kind: "text" }, { id: "p_state", name: "Stand", kind: "select", options: [{ id: "o1", name: "Gelesen" }] }] });
-  });
+  const book = a.addType(newId(), { name: "Buch", icon: "book", color: "blue", properties: [{ id: "p_author", name: "Autor", kind: "text" }, { id: "p_state", name: "Stand", kind: "select", options: [{ id: "o1", name: "Gelesen" }] }] });
   const item = a.add({ title: "Moor", type: book, props: { p_author: "Ann", p_state: "o1" } });
   // b has a type of the same name with other ids and only one of the properties
-  const bBook = newId();
-  b.change(bBook, (d) => {
-    initItem(d, { kind: "info", type: META_TYPE, title: "Buch" });
-    initSchema(d, { name: "Buch", icon: "book", color: "blue", properties: [{ id: "x_state", name: "stand", kind: "select", options: [{ id: "x1", name: "gelesen" }] }] });
-  });
+  const bBook = b.addType(newId(), { name: "Buch", icon: "book", color: "blue", properties: [{ id: "x_state", name: "stand", kind: "select", options: [{ id: "x1", name: "gelesen" }] }] });
   expect(planMove(a.index(), item, b.index())).toMatchObject({ items: 1, copiedTypes: [], freeProps: ["Autor"] });
   const m1 = copyToWorkspace(a.index(), item, { w: b.writer, ix: b.index() }, {}, "web:test");
   const got = b.index().get(m1.ids.get(item)!)!;

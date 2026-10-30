@@ -3,40 +3,24 @@
 // only with the cursor at the start of its text, a link's menu changes its text and target or
 // takes it away, and a block dragged just below itself stays put while one dragged onto the next
 // block swaps with it.
-//   bun run build && bun tests/e2e/editor.ts        (Chrome from ~/.cache/ms-playwright)
+//   bun run test:e2e:editor        (builds first; Chrome from ~/.cache/ms-playwright)
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { createServer } from "node:net";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { type Page, chromium } from "playwright-core";
+import { ROOT, bootServer, firstAccount, mcpTool } from "../support/server";
 
-const ROOT = resolve(import.meta.dir, "../..");
 const failures: string[] = [];
 const expect = (ok: boolean, what: string) => (ok ? console.log("ok  " + what) : (failures.push(what), console.log("FAIL " + what)));
 
-const port = await new Promise<number>((res) => {
-  const s = createServer();
-  s.listen(0, "127.0.0.1", () => {
-    const p = (s.address() as { port: number }).port;
-    s.close(() => res(p));
-  });
-});
 const dir = mkdtempSync(join(tmpdir(), "obtion-editor-"));
-const env = { ...process.env, OBTION_DATA: dir, PORT: String(port), HOST: "127.0.0.1" };
-Bun.spawnSync(["bun", "apps/server/src/cli.ts", "setup", "de", "--examples"], { cwd: ROOT, env });
-const proc = Bun.spawn(["bun", "apps/server/src/index.ts"], { cwd: ROOT, env, stdout: "ignore", stderr: "inherit" });
-const url = `http://127.0.0.1:${port}`;
-for (let i = 0; i < 100 && !(await fetch(url + "/api/info").then((r) => r.ok, () => false)); i++) await Bun.sleep(100);
-const signup = (await fetch(url + "/api/account/signup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "E2E", email: "e2e@example.org", password: "geheim12345", lang: "de" }) }).then((r) => r.json())) as { token: string };
-const me = (await fetch(url + "/api/account", { headers: { authorization: `Bearer ${signup.token}` } }).then((r) => r.json())) as { user: unknown; workspaces: { id: string }[] };
+Bun.spawnSync(["bun", "apps/server/src/cli.ts", "setup", "de", "--examples"], { cwd: ROOT, env: { ...process.env, OBTION_DATA: dir } });
+const { url, proc } = await bootServer({ OBTION_DATA: dir }, "inherit");
+const signup = await firstAccount(url);
+const me = signup.me;
 const token = JSON.parse(readFileSync(join(dir, "config.json"), "utf8")).token as string;
 const body = ["# Überschrift", "Erster Absatz mit [[Kurs Datenbanken|dem Kurs]] darin.", "", "Zweiter mit [Beispiel](https://example.org).", "Dritter Absatz", "Vierter Absatz"].join("\n");
-const created = await fetch(url + "/mcp", {
-  method: "POST",
-  headers: { authorization: `Bearer ${token}`, "content-type": "application/json", accept: "application/json, text/event-stream" },
-  body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "create", arguments: { items: [{ title: "Editor-Test", body }] } } }),
-}).then((r) => r.json() as Promise<any>);
-const id = /\[([\w-]+)\]/.exec(created.result.content[0].text)![1]!;
+const id = /\[([\w-]+)\]/.exec(await mcpTool(url, token, "create", { items: [{ title: "Editor-Test", body }] }))![1]!;
 
 const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext({ baseURL: url, viewport: { width: 1280, height: 900 }, locale: "de-DE" });
@@ -56,6 +40,8 @@ page.on("pageerror", (e) => errors.push(e.message));
 const lines = (p: Page) => p.$$eval(".cm-content .cm-line", (ls) => ls.map((l) => ({ text: (l as HTMLElement).innerText, top: Math.round(l.getBoundingClientRect().top), h: Math.round(l.getBoundingClientRect().height), w: Math.round(l.getBoundingClientRect().width) })));
 const doc = (p: Page) => p.$eval(".cm-content", (el) => ((el as any).cmTile.root.view.state.doc.toString() as string));
 const same = (a: { top: number; h: number }[], b: { top: number; h: number }[]) => a.length === b.length && a.every((l, i) => l.top === b[i]!.top && l.h === b[i]!.h);
+/** Whether the selector matches (or, with `false`, stops matching) within a second. */
+const shows = (selector: string, want = true) => page.waitForSelector(selector, { state: want ? "attached" : "detached", timeout: 1000 }).then(() => true, () => false);
 
 try {
   await page.goto(`/#/i/${id}`);
@@ -109,7 +95,7 @@ try {
   await page.click(".cm-wikilink", { button: "right" });
   await page.click(".cm-menu-row:has-text('Ziel ändern')");
   await page.fill(".cm-toolbar-link input", "So funktioniert");
-  await page.waitForTimeout(200);
+  await page.waitForSelector(".cm-toolbar-results .cm-menu-row.active:has-text('So funktioniert Obtion')");
   await page.keyboard.press("Enter");
   const d1 = await doc(page);
   expect(d1.includes("[[So funktioniert Obtion|den Kurs DB]]"), "the link's target changes and its text stays: " + JSON.stringify(d1.split("\n")[1]));
@@ -126,7 +112,7 @@ try {
   await page.click(".cm-tooltip-autocomplete li:has-text('Link auf Seite')");
   await page.waitForFunction(() => (document.querySelector(".cm-content") as any).cmTile.root.view.state.doc.toString().endsWith(" @"));
   await page.keyboard.type("So funkt");
-  await page.waitForTimeout(300);
+  await page.waitForTimeout(300); // the completion ignores Enter right after it opens (interactionDelay)
   const typed = (await lines(page)).at(-1)!.text;
   expect(typed.endsWith("@So funkt"), "the page is searched after an @: " + JSON.stringify(typed));
   await page.keyboard.press("Enter");
@@ -139,8 +125,7 @@ try {
     const ls = await page.$$(".cm-content .cm-line");
     const r = (await ls[from]!.boundingBox())!;
     await page.mouse.move(r.x + 20, r.y + r.height / 2);
-    await page.waitForTimeout(100);
-    const grip = (await page.$(".cm-handles.shown .grip"))!;
+    const grip = (await page.waitForSelector(".cm-handles.shown .grip"))!;
     const g = (await grip.boundingBox())!;
     await page.mouse.move(g.x + g.width / 2, g.y + g.height / 2);
     await page.mouse.down();
@@ -166,21 +151,17 @@ try {
   const tb = (await tl.boundingBox())!;
   await page.mouse.move(tb.x + 30, tb.y + tb.height / 2);
   await page.mouse.click(tb.x + tb.width - 4, tb.y + tb.height / 2);
-  await page.waitForTimeout(100);
-  expect(!!(await page.$(".cm-handles.shown")), "the handles show under the pointer");
+  expect(await shows(".cm-handles.shown"), "the handles show under the pointer");
   await page.keyboard.press("End");
   await page.keyboard.press("Enter");
   await page.keyboard.type("N");
   expect((await page.$eval(".cm-handles", (b) => getComputedStyle(b).opacity)) === "0", "typing hides the handles at once, without fading");
   await page.keyboard.type("eue Zeile");
-  await page.waitForTimeout(200);
-  expect(!(await page.$(".cm-handles.shown")), "typing hides the handles");
+  expect(await shows(".cm-handles.shown", false), "typing hides the handles");
   await page.mouse.move(tb.x + 40, tb.y + tb.height / 2);
-  await page.waitForTimeout(100);
-  expect(!!(await page.$(".cm-handles.shown")), "moving the pointer shows them again");
+  expect(await shows(".cm-handles.shown"), "moving the pointer shows them again");
   await page.keyboard.press("ArrowUp");
-  await page.waitForTimeout(200);
-  expect(!(await page.$(".cm-handles.shown")), "moving the cursor with the keys hides them too");
+  expect(await shows(".cm-handles.shown", false), "moving the cursor with the keys hides them too");
   await page.mouse.move(tb.x + 30, tb.y + tb.height / 2);
   await page.waitForTimeout(100);
 

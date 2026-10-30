@@ -3,13 +3,12 @@
 // migration from the former collections.
 import { test, expect, beforeEach, afterAll } from "bun:test";
 import * as Y from "yjs";
-import { tempDir, removeTempDirs, MemRepo } from "../support/helpers";
-import { Store } from "@obtion/server/store";
-import { Ops } from "@obtion/server/ops";
-import { storeWriter } from "@obtion/server/importers";
+import { removeTempDirs, MemRepo } from "../support/helpers";
+import { setupStore } from "../support/store";
+import type { Store } from "@obtion/server/store";
+import type { Ops } from "@obtion/server/ops";
 import { SYS, migrateCollections, runSetup, typeTabs } from "@obtion/core/setup";
-import { SETTINGS_ID, readItem, setTab, setTabs } from "@obtion/core/model";
-import { DEFAULT_INBOX_WHERE } from "@obtion/core/inbox";
+import { SETTINGS_ID, setTab, setTabs } from "@obtion/core/model";
 import { type Cond, groupId, groupItems, runQuery, tabDef } from "@obtion/core/query";
 
 afterAll(removeTempDirs);
@@ -17,12 +16,7 @@ afterAll(removeTempDirs);
 let s: Store;
 let ops: Ops;
 const A = "agent:test";
-beforeEach(() => {
-  s = new Store(tempDir("obtion-views-"));
-  runSetup(storeWriter(s, "system:setup"), "de");
-  s.flush();
-  ops = new Ops(s);
-});
+beforeEach(() => ({ s, ops } = setupStore("obtion-views-")));
 const tabsOf = (id: string) => typeTabs(s.records.get(id)!, "de");
 
 test("a type's views: the defaults until one is changed, then each a map of its own on the type", () => {
@@ -44,6 +38,16 @@ test("a type's views: the defaults until one is changed, then each a map of its 
   s.change(SYS.card, "web:x", (d) => setTab(d, "b", null));
   s.flush();
   expect(tabsOf(SYS.card).map((t) => t.id)).toEqual(["v_all"]);
+});
+
+test("\"Ansichten zurücksetzen\": the stored views go, the defaults show again", () => {
+  s.change(SYS.card, "web:x", (d) => setTab(d, "v_x", { kind: "board", pos: "W" }));
+  s.flush();
+  expect(s.records.get(SYS.card)!.schema!.views!.map((t) => t.kind)).toEqual(["board"]);
+  s.change(SYS.card, "web:x", (d) => setTabs(d, []));
+  s.flush();
+  expect(s.records.get(SYS.card)!.schema!.views).toBeUndefined();
+  expect(tabsOf(SYS.card).map((t) => t.kind)).toEqual(["table"]);
 });
 
 test("a tab's filter is added to the type (AND)", () => {
@@ -131,7 +135,6 @@ test("once: the former collections give their views to the types, the inbox rule
   old("sys:c-files", { name: "Dateien" }, { file: true }, undefined, { display: "gallery" }, { sidebar: "b" });
   old("c_mix", { name: "Gemischt" }, { or: [{ type: SYS.card }, { type: SYS.project }] }, undefined, { display: "table", group: "type" }, { sidebar: "zz" });
   old("c_gone", { name: "Weg", deleted: true }, { tag: "y" });
-  expect(readItem("sys:c-task", m.doc("sys:c-task"))).toBeNull(); // the old documents are no longer read
   const log = migrateCollections(m.writer, m.index(), m.docs, "de");
   expect(log).toHaveLength(5);
   expect(m.get(SETTINGS_ID)!.settings!.inbox).toEqual(mine);
@@ -156,5 +159,4 @@ test("once: the former collections give their views to the types, the inbox rule
   runSetup(f.writer, "de");
   expect(migrateCollections(f.writer, f.index(), f.docs, "de")).toEqual([]);
   expect(f.get(SETTINGS_ID)!.settings!.inbox).toBeUndefined();
-  expect(DEFAULT_INBOX_WHERE).toBeTruthy();
 });

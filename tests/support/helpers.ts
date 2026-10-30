@@ -2,7 +2,7 @@ import * as Y from "yjs";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type Item, type ItemInit, initItem, readItem, newId } from "@obtion/core/model";
+import { type Item, type ItemInit, META_TYPE, initItem, initSchema, readItem, newId } from "@obtion/core/model";
 import { Index } from "@obtion/core/graph";
 import { resolveCascade } from "@obtion/core/trash";
 import type { Writer } from "@obtion/core/setup";
@@ -43,6 +43,14 @@ export class MemRepo {
     this.change(id, (d) => initItem(d, init));
     return id;
   }
+  /** A type page: the item and its schema, titled after the schema's name. */
+  addType(id: string, schema: Parameters<typeof initSchema>[1]): string {
+    this.change(id, (d) => {
+      initItem(d, { type: META_TYPE, title: schema.name });
+      initSchema(d, schema);
+    });
+    return id;
+  }
   records(): Map<string, Item> {
     const m = new Map<string, Item>();
     for (const id of this.docs.keys()) {
@@ -55,4 +63,22 @@ export class MemRepo {
   index() {
     return new Index(this.records());
   }
+}
+
+/** A second device: a full copy of the documents, merged back with sync(). */
+export function fork(m: MemRepo): MemRepo {
+  const c = new MemRepo();
+  for (const [id, d] of m.docs) Y.applyUpdate(c.doc(id), Y.encodeStateAsUpdate(d));
+  return c;
+}
+export function sync(a: MemRepo, b: MemRepo) {
+  for (const [id, d] of a.docs) Y.applyUpdate(b.doc(id), Y.encodeStateAsUpdate(d));
+  for (const [id, d] of b.docs) Y.applyUpdate(a.doc(id), Y.encodeStateAsUpdate(d));
+}
+
+/** A new item's whole state as one update, as a device sends it; with an id the document has it as guid. */
+export function docUpdate({ id, title, area }: { id?: string; title: string; area?: string }): Uint8Array {
+  const d = new Y.Doc(id ? { guid: id } : undefined);
+  d.transact(() => initItem(d, { title, area }));
+  return Y.encodeStateAsUpdate(d);
 }

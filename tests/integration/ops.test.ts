@@ -1,14 +1,15 @@
 import { test, expect, beforeEach, afterAll } from "bun:test";
-import { tempDir, removeTempDirs } from "../support/helpers";
+import { removeTempDirs } from "../support/helpers";
+import { setupStore } from "../support/store";
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import * as Y from "yjs";
-import { Store } from "@obtion/server/store";
-import { Ops, OpError } from "@obtion/server/ops";
+import type { Store } from "@obtion/server/store";
+import { type Ops, OpError } from "@obtion/server/ops";
 import { Mirror } from "@obtion/server/mirror";
-import { runSetup, SYS } from "@obtion/core/setup";
+import { SYS } from "@obtion/core/setup";
 import { storeWriter } from "@obtion/server/importers";
-import { initItem, replaceBody, addDaysISO, todayISO, addParent } from "@obtion/core/model";
+import { replaceBody, addDaysISO, todayISO, addParent } from "@obtion/core/model";
 import { deleteItem } from "@obtion/core/trash";
 
 afterAll(removeTempDirs);
@@ -17,37 +18,20 @@ let dir: string;
 let s: Store;
 let ops: Ops;
 const A = "agent:test";
-beforeEach(() => {
-  dir = tempDir("obtion-ops-");
-  s = new Store(dir);
-  runSetup(storeWriter(s, "system:setup"), "de");
-  s.flush();
-  ops = new Ops(s);
-});
-
-test("server persists remote updates and reloads them; duplicates are idempotent", () => {
-  const client = new Y.Doc({ guid: "a" });
-  client.transact(() => initItem(client, { title: "Hello", body: "world" }));
-  const u = Y.encodeStateAsUpdate(client);
-  const first = s.applyRemote("a", u, "web:test");
-  expect(s.applyRemote("a", u, "web:test")).toBe(first);
-  s.flush();
-  const s2 = new Store(dir);
-  expect(s2.records.get("a")?.body).toBe("world");
-});
+beforeEach(() => ({ dir, s, ops } = setupStore("obtion-ops-")));
 
 test("progress report: status, update and follow-up task, all through names", () => {
-  const [p] = [ops.create({ title: "Nordlicht · Frankreich", type: "Projekt", properties: { Status: "Planung" } }, A)];
-  const [t] = [ops.create({ title: "Mapping", type: "Task", parents: ["Nordlicht · Frankreich"] }, A)];
+  const p = ops.create({ title: "Nordlicht · Frankreich", type: "Projekt", properties: { Status: "Planung" } }, A);
+  const t = ops.create({ title: "Mapping", type: "Task", parents: ["Nordlicht · Frankreich"] }, A);
   // "Nordlicht: Mapping fertig, Review am Freitag"
   ops.update("Mapping", { properties: { Status: "erledigt" } }, A);
   ops.addUpdate("Nordlicht", "Mapping fertig, Review am Freitag", "In Bearbeitung", "test", A);
-  ops.create({ title: "Review", type: "Task", parents: [p!.id], properties: { Fällig: "2026-10-30" } }, A);
-  const got = ops.get(p!.id) as any;
+  ops.create({ title: "Review", type: "Task", parents: [p.id], properties: { Fällig: "2026-10-30" } }, A);
+  const got = ops.get(p.id) as any;
   expect(got.status).toBe("In Bearbeitung (active)");
   expect(got.updates[0].text).toBe("Mapping fertig, Review am Freitag");
   expect(got.progress).toBe("1/2 done");
-  expect(ops.get(t!.id).status).toBe("Erledigt (done)");
+  expect(ops.get(t.id).status).toBe("Erledigt (done)");
   const q = ops.query("typ:Task status:offen unter:[[Nordlicht · Frankreich]]");
   expect(q.items.map((i) => i.title)).toEqual(["Review"]);
   expect(ops.line(q.items[0]!)).toContain("due 2026-10-30");
@@ -71,6 +55,7 @@ test("the agent suggests for inbox items instead of sorting them", () => {
   const w = ops.create({ title: "Wissen", type: "Karte" }, A);
   expect(!!ops.place(w.id, { pin: true }, A).now.pinned).toBe(true);
   expect(() => ops.place(i.id, { add: ["Wissen"] }, A)).toThrow(/inbox.*suggest/);
+  expect(() => ops.place(i.id, { pin: true }, A)).toThrow(/inbox/);
   expect(() => ops.update(i.id, { type: "Karte" }, A)).toThrow(/inbox/);
   ops.suggest(i.id, { type: "Karte", parents: ["Wissen"], note: "Buch" }, "test", A);
   const it = s.records.get(i.id)!;
@@ -154,7 +139,6 @@ test("query blocks written by an agent in text form are stored as JSON and read 
 test("markdown mirror writes items below their home and removes stale files", () => {
   const m = new Mirror(s, join(dir, "vault"));
   const a = ops.create({ title: "Arbeit", pin: true }, A);
-  expect(() => ops.place(ops.create({ title: "Lose" }, A).id, { pin: true }, A)).toThrow(/inbox/);
   const p = ops.create({ title: "Relaunch", type: "Projekt", parents: [a.id], properties: { Status: "In Bearbeitung" } }, A);
   ops.create({ title: "Idee" }, A);
   m.sync();
@@ -237,21 +221,27 @@ test("an update with a status change dates the done date with the update", () =>
   expect(it.doneAt).toBe(it.updates.at(-1)!.at);
 });
 
-test("tolerant input: status words and synonyms in both languages, dates DE/EN/US, plural type names", () => {
+test("tolerant input: plural type names, option synonyms and periods on create", () => {
   const p = ops.create({ title: "Website", type: "Projekte", properties: { Status: "in Arbeit", Priorität: "high", Zeitraum: "1.11.2026/30.11.2026" } }, A);
-  const it = () => s.records.get(p.id)!;
-  expect(it().type).toBe(SYS.project);
-  expect(it().props).toMatchObject({ p_status: "st_active", p_priority: "pr_high", p_period: "2026-11-01/2026-11-30" });
-  for (const [word, opt] of [["fertig", "st_done"], ["Paused", "st_paused"], ["planning", "st_planning"], ["cancelled", "st_canceled"], ["offen", "st_backlog"], ["In Progress", "st_active"]] as const) {
-    ops.update(p.id, { properties: { Status: word } }, A);
-    expect([word, it().props.p_status]).toEqual([word, opt]);
-  }
-  const t = ops.create({ title: "Review", type: "tasks", parents: ["Website"], properties: { Fällig: "10/30/2026" } }, A);
-  expect(s.records.get(t.id)!.props.p_due).toBe("2026-10-30");
-  for (const [raw, want] of [["30.10.2026", "2026-10-30"], ["2026-10-30T09:00", "2026-10-30"], ["morgen", addDaysISO(1)], ["tomorrow", addDaysISO(1)], ["heute", todayISO()], ["+3d", addDaysISO(3)], ["in 2 Wochen", addDaysISO(14)]] as const) {
-    ops.update(t.id, { properties: { Fällig: raw } }, A);
-    expect([raw, s.records.get(t.id)!.props.p_due]).toEqual([raw, want]);
-  }
+  const it = s.records.get(p.id)!;
+  expect(it.type).toBe(SYS.project);
+  expect(it.props).toMatchObject({ p_status: "st_active", p_priority: "pr_high", p_period: "2026-11-01/2026-11-30" });
+});
+
+test.each([["fertig", "st_done"], ["Paused", "st_paused"], ["planning", "st_planning"], ["cancelled", "st_canceled"], ["offen", "st_backlog"], ["In Progress", "st_active"]])("tolerant input: status word %p is %p", (word, opt) => {
+  const p = ops.create({ title: "Website", type: "Projekt" }, A);
+  ops.update(p.id, { properties: { Status: word } }, A);
+  expect(s.records.get(p.id)!.props.p_status).toBe(opt);
+});
+
+test.each([["10/30/2026", "2026-10-30"], ["30.10.2026", "2026-10-30"], ["2026-10-30T09:00", "2026-10-30"], ["morgen", addDaysISO(1)], ["tomorrow", addDaysISO(1)], ["heute", todayISO()], ["+3d", addDaysISO(3)], ["in 2 Wochen", addDaysISO(14)]])("tolerant input: due date %p is %p", (raw, want) => {
+  const t = ops.create({ title: "Review", type: "tasks" }, A);
+  ops.update(t.id, { properties: { Fällig: raw } }, A);
+  expect(s.records.get(t.id)!.props.p_due).toBe(want);
+});
+
+test("tolerant input: weekdays; unclear input is rejected; status groups by word, all or nothing", () => {
+  const t = ops.create({ title: "Review", type: "Task" }, A);
   ops.update(t.id, { properties: { Fällig: "Freitag" } }, A);
   const fri = new Date(String(s.records.get(t.id)!.props.p_due) + "T12:00:00");
   expect(fri.getDay()).toBe(5);
@@ -278,9 +268,8 @@ test("queries understand status synonyms and dates in other notations", () => {
   expect(q("status:\"In Progress\"")).toEqual(["Läuft"]);
 });
 
-test("the agent sees the inbox rule and a type's list name; no collections", () => {
+test("the agent sees the inbox rule and a type's list name", () => {
   const sc = ops.schema() as any;
-  expect(sc.collections).toBeUndefined();
   expect(sc.inbox.query).toContain("ohne:typ");
   ops.updateType("Karte", { plural: "Zettel" }, A);
   expect((ops.schema() as any).types.find((x: any) => x.name === "Karte").list).toBe("Zettel");

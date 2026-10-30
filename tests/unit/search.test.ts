@@ -22,7 +22,7 @@ test("handles multi-word German queries with spelling variants", () => {
   expect(find("Treffen Juergen")).toEqual(["Treffen mit Jürgen"]);
   expect(find("Strasse Muell").sort()).toEqual(["Andere Notiz", "Treffen mit Jürgen"]);
   expect(find("Straße Müll").sort()).toEqual(["Andere Notiz", "Treffen mit Jürgen"]);
-  for (const q of ["neue Idee", "Klasse Projekt", "foo OR OR bar", "\"unclosed", "((", "*", "~^"]) expect(() => find(q), q).not.toThrow();
+  for (const q of ["neue Idee", "Klasse Projekt", "foo OR OR bar", "\"unclosed", "((", "*", "~^"]) expect(find(q), q).toBeArray();
 });
 
 test("matches hyphenated words and ignores punctuation-only queries", () => {
