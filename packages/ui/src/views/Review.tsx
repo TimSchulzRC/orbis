@@ -3,12 +3,12 @@ import { Button as ShadcnButton } from "../components/ui/button";
 // stack. The entry on top, always as tall (a long one scrolls inside), so what can become of it
 // stays in place below – a place, a type, back tomorrow, kept as it is, deleted – and on a
 // desktop beside it what is still waiting and what this review sorted (each with its undo).
-// What was sorted stays until the review is closed: "Später weiter" leaves it for later today.
+// What was sorted stays for the rest of the day when the page is left, until the review is finished.
 //
 // A suggestion (the agent's or the app's own) is not shown yet; it would be the first answer
 // among the suggestions in `Choices`.
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { Check, Clock, FolderInput, Layers, List, Pause, RotateCcw, Shapes, StickyNote, Trash2, Undo2, X } from "lucide-react";
+import { Check, Clock, FolderInput, Layers, List, RotateCcw, Shapes, StickyNote, Trash2, Undo2 } from "lucide-react";
 import type { Item } from "@obtion/core/model";
 import { todayISO } from "@obtion/core/model";
 import { plainText } from "@obtion/core/search";
@@ -97,8 +97,8 @@ export function Review({ at }: { at?: string }) {
     const next = left[i + d];
     if (next) setCur(next);
   };
-  const close = (keepForLater: boolean) => {
-    if (!keepForLater) (closed.current = true), (session = null);
+  const close = () => {
+    (closed.current = true), (session = null);
     go("/");
   };
 
@@ -139,8 +139,6 @@ export function Review({ at }: { at?: string }) {
       at={entry ? sorted.length + 1 : total}
       sorted={sorted.length}
       minutes={reviewMinutes(left.length)}
-      onLater={() => close(true)}
-      onClose={() => close(false)}
     />
   );
   const body = entry ? (
@@ -149,7 +147,7 @@ export function Review({ at }: { at?: string }) {
       <Choices entry={entry} onPlace={(p) => placeIn([entry.item], p)} onPick={() => pick.setPlacing([entry.item])} onType={(type) => typeAs([entry.item], type)} onTypes={() => pick.setTyping([entry.item])} onLater={later} onKeep={keep} onTrash={trash} onUndo={sorted.length ? () => undo() : undefined} keys={desktop} />
     </SpaceScope>
   ) : (
-    <Finished count={sorted.length} onDone={() => close(false)} />
+    <Finished count={sorted.length} onDone={close} />
   );
 
   if (!desktop)
@@ -185,15 +183,10 @@ export function Review({ at }: { at?: string }) {
   );
 }
 
-/** The head: what it is, how far ("2 von 6"), the switch to the list, "Später weiter", close. */
-function ReviewHead({ total, at, sorted, minutes, onLater, onClose }: { total: number; at: number; sorted: number; minutes: number; onLater: () => void; onClose: () => void }) {
+/** The head: what it is, how far ("2 von 6"), the switch to the list. */
+function ReviewHead({ total, at, sorted, minutes }: { total: number; at: number; sorted: number; minutes: number }) {
   const { t } = useT();
   const desktop = useDesktop();
-  const pause = (
-    <Button variant="outline" onClick={onLater}>
-      <Pause size={14} /> {t("review.pause")}
-    </Button>
-  );
   return (
     <header>
       <div className="flex items-center gap-3">
@@ -207,21 +200,12 @@ function ReviewHead({ total, at, sorted, minutes, onLater, onClose }: { total: n
             {total > sorted && <> · {t("review.minutesLeft", { count: minutes })}</>}
           </p>
         </div>
-        {desktop && (
-          <>
-            <StackListSwitch value="stack" />
-            {pause}
-          </>
-        )}
-        <ShadcnButton variant="plain" size="none" onClick={onClose} className="tap inline-flex items-center justify-center rounded-lg border border-line p-1.5 text-muted-foreground hover:bg-hover hover:text-fg" aria-label={t("review.close")} title={t("review.close")}>
-          <X size={16} />
-        </ShadcnButton>
+        {desktop && <StackListSwitch value="stack" />}
       </div>
       {total > 0 && <Steps total={total} done={sorted} />}
       {!desktop && (
-        <div className="mt-3 flex items-center justify-between gap-2">
+        <div className="mt-3">
           <StackListSwitch value="stack" />
-          {pause}
         </div>
       )}
     </header>
@@ -329,10 +313,10 @@ function EntryCard({ entry, space, more, scroller }: { entry: InboxEntry; space?
 }
 
 /**
- * What can become of it. Five tiles, always the same and in the same place: put it somewhere, turn
+ * What can become of it. Five buttons, always the same and in the same place: put it somewhere, turn
  * it into a type (only a loose note), back tomorrow, keep it as it is, delete it. Below in one line
  * the quick ways: the first type ("c") and places it mentions or used last; the rest is in the
- * pickers. Keys quietly in the tiles on a desktop.
+ * pickers. Keys quietly in the buttons on a desktop.
  */
 function Choices({ entry, onPlace, onPick, onType, onTypes, onLater, onKeep, onTrash, onUndo, keys }: { entry: InboxEntry; onPlace: (p: string) => void; onPick: () => void; onType: (type: string) => void; onTypes: () => void; onLater: () => void; onKeep: () => void; onTrash: () => void; onUndo?: () => void; keys: boolean }) {
   const { t } = useT();
@@ -350,26 +334,25 @@ function Choices({ entry, onPlace, onPick, onType, onTypes, onLater, onKeep, onT
       onClick={onClick}
       disabled={opts.disabled}
       className={cx(
-        "tap flex h-auto min-w-0 flex-col items-center justify-center gap-1 rounded-xl border px-2 py-2.5 text-[13px] font-medium leading-tight whitespace-normal disabled:opacity-40 max-lg:px-0.5 max-lg:text-[11px]",
-        opts.primary ? "border-transparent bg-primary text-primary-foreground hover:bg-primary/90" : "border-line bg-surface hover:bg-hover",
+        "tap flex h-9 flex-[1_0_auto] items-center gap-1.5 whitespace-nowrap rounded-lg border px-2 text-[13px] font-medium disabled:opacity-40 max-lg:min-w-0",
+        opts.primary ? "border-transparent bg-primary text-primary-foreground hover:bg-primary/90 max-lg:col-span-2" : "border-line bg-surface hover:bg-hover",
         opts.danger && "text-danger",
       )}
     >
       {icon}
-      <span className="flex items-center gap-1.5 text-center">
-        {label} {keys && <Kbd>{key}</Kbd>}
-      </span>
+      <span className="min-w-0 flex-1 truncate px-1 text-center">{label}</span>
+      {keys && <Kbd>{key}</Kbd>}
     </ShadcnButton>
   );
   const chip = "tap inline-flex h-7 max-w-[220px] shrink-0 items-center gap-1.5 rounded-full border border-line bg-surface px-2.5 text-[13px] hover:bg-hover";
   return (
     <div className="mt-6 space-y-3">
-      <div className="grid grid-cols-5 gap-2 max-lg:gap-1.5">
-        {tile(<FolderInput size={17} />, t("review.placeAction"), "e", onPick, { primary: true })}
-        {tile(<Shapes size={17} />, t("review.convertAction"), "y", onTypes, { disabled: !info })}
-        {tile(<Clock size={17} />, t("review.later"), "s", onLater)}
-        {tile(<StickyNote size={17} />, t("review.keep"), "b", onKeep)}
-        {tile(<Trash2 size={17} />, t("triage.delete"), "x", onTrash, { danger: true })}
+      <div className="flex flex-wrap gap-2 max-lg:grid max-lg:grid-cols-2">
+        {tile(<FolderInput size={15} />, t("review.placeAction"), "e", onPick, { primary: true })}
+        {tile(<Shapes size={15} />, t("review.convertAction"), "y", onTypes, { disabled: !info })}
+        {tile(<Clock size={15} />, t("review.later"), "s", onLater)}
+        {tile(<StickyNote size={15} />, t("review.keep"), "b", onKeep)}
+        {tile(<Trash2 size={15} />, t("triage.delete"), "x", onTrash, { danger: true })}
       </div>
       <div className="flex min-h-8 items-center gap-2">
         <span className="shrink-0 text-[13px] text-muted-foreground">{t("review.suggested")}</span>

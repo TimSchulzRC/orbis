@@ -223,7 +223,7 @@ async function run() {
             else if (!(await p.locator("main article h2").innerText()).startsWith("Podcast")) failures.push(`${label}: the review does not begin at the linked entry`);
           }, { phone });
           // the review: one entry at a time; "Lose behalten" moves on and lists it as done, its undo
-          // brings it back; "Später weiter" leads back to Heute
+          // brings it back
           await check(page, label, "/#/review", errors, async (p) => {
             const card = p.locator("main article h2");
             const title = (await card.innerText()).trim();
@@ -235,9 +235,6 @@ async function run() {
             await (phone ? done.getByRole("button", { name: "Rückgängig" }) : done.getByRole("button", { name: `„${title}“ rückgängig machen` })).click();
             await p.waitForTimeout(300);
             if ((await card.innerText()).trim() !== title) failures.push(`${label}: undo in the review did not bring "${title}" back`);
-            await p.getByRole("button", { name: /Später weiter/ }).click();
-            await p.waitForTimeout(300);
-            if (!p.url().endsWith("#/")) failures.push(`${label}: "Später weiter" does not lead back to Heute (${p.url()})`);
           }, { phone });
           // the sidebar: the workspace's block (pinned informations) and "Typen" (each type's page and the files), both
           // fold and stay folded over a reload; a type's page has its views and "Typ bearbeiten";
