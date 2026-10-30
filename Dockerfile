@@ -4,8 +4,16 @@
 # both are made on the build platform; the last stage only copies (no emulation needed).
 FROM --platform=$BUILDPLATFORM oven/bun:1.3 AS build
 WORKDIR /app
+# the manifests first: the install stays cached until a dependency changes, not with every commit
+COPY package.json bun.lock ./
+COPY packages/core/package.json packages/core/
+COPY packages/sync/package.json packages/sync/
+COPY packages/ui/package.json packages/ui/
+COPY apps/server/package.json apps/server/
+COPY apps/web/package.json apps/web/
+RUN bun install --frozen-lockfile
 COPY . .
-RUN bun install --frozen-lockfile && bun run build
+RUN bun run build
 
 FROM --platform=$BUILDPLATFORM oven/bun:1.3-slim AS server
 WORKDIR /app
@@ -16,13 +24,15 @@ COPY packages/sync/package.json packages/sync/
 COPY packages/ui/package.json packages/ui/
 COPY apps/server/package.json apps/server/
 COPY apps/web/package.json apps/web/
-RUN bun install --frozen-lockfile --production --omit optional --filter @obtion/server
+# COPY keeps the modes of the checkout; cloned with a strict umask the server's user could not
+# read its own code ("Module not found"). The dependencies get it here, cached with the install;
+# after the code only the code, so a commit doesn't rewrite all of node_modules.
+RUN bun install --frozen-lockfile --production --omit optional --filter @obtion/server \
+  && chmod -R a+rX /app && mkdir /data
 COPY packages/core ./packages/core
 COPY apps/server ./apps/server
 COPY --from=build /app/apps/web/dist ./apps/web/dist
-# COPY keeps the modes of the checkout; cloned with a strict umask the server's user could not
-# read its own code ("Module not found")
-RUN chmod -R a+rX /app && mkdir /data
+RUN chmod -R a+rX packages/core apps/server apps/web/dist
 
 FROM oven/bun:1.3-slim
 WORKDIR /app

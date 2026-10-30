@@ -5,16 +5,38 @@ on:
     branches: [main]
   pull_request:
 
+# A newer push to the same branch or pull request cancels the run still going: no runner time for
+# outdated commits, and an older image build can never overwrite a newer :latest.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   check:
-    runs-on: ubuntu-latest
+    # The self-hosted runner (label "obtion") when the repository variable RUNNER says so, otherwise
+    # GitHub's: RUNNER=obtion switches to our own hardware, deleting the variable switches back.
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
-      - run: bun test
-      - run: bun run typecheck
-      - run: bun run build
+      # tests, typecheck and build don't depend on each other: in parallel they take half the time.
+      # Each one's output is printed in its own group, the step fails if any of them failed.
+      - name: Test, typecheck, build
+        run: |
+          mkdir -p "$RUNNER_TEMP/check"
+          bun test > "$RUNNER_TEMP/check/test.log" 2>&1 & test=$!
+          bun run typecheck > "$RUNNER_TEMP/check/typecheck.log" 2>&1 & typecheck=$!
+          bun run build > "$RUNNER_TEMP/check/build.log" 2>&1 & build=$!
+          failed=0
+          for name in test typecheck build; do
+            if wait "${!name}"; then result=ok; else result=FAILED; failed=1; fi
+            echo "::group::$name: $result"
+            cat "$RUNNER_TEMP/check/$name.log"
+            echo "::endgroup::"
+            [ "$result" = ok ] || echo "::error::$name failed"
+          done
+          exit $failed
 
   # The image for docker compose: ghcr.io/<owner>/obtion, :latest is always the newest main,
   # :sha-<commit> keeps each build for going back. Only after the checks passed, never for pull
@@ -22,13 +44,20 @@ jobs:
   image:
     needs: check
     if: github.event_name == 'push'
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
     permissions:
       contents: read
       packages: write
+    env:
+      SELF_HOSTED: ${{ vars.RUNNER != '' }}
     steps:
       - uses: actions/checkout@v4
+      # Self-hosted: the Docker daemon's own builder (containerd image store), its build cache stays
+      # on the machine between runs, nothing to export. GitHub's runners start empty each time and
+      # carry the cache through the GitHub Actions cache instead.
       - uses: docker/setup-buildx-action@v3
+        with:
+          driver: ${{ env.SELF_HOSTED == 'true' && 'docker' || 'docker-container' }}
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -48,5 +77,10 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: ${{ env.SELF_HOSTED != 'true' && 'type=gha' || '' }}
+          cache-to: ${{ env.SELF_HOSTED != 'true' && 'type=gha,mode=max' || '' }}
+      # the docker builder also keeps the pushed image locally: drop exactly these tags, the build
+      # cache stays (other containers on the machine are none of CI's business)
+      - name: Remove local image tags
+        if: always() && env.SELF_HOSTED == 'true' && steps.meta.outcome == 'success'
+        run: docker image rm ${{ join(fromJSON(steps.meta.outputs.json).tags, ' ') }} || true
