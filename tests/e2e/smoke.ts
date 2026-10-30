@@ -236,6 +236,39 @@ async function run() {
             await p.waitForTimeout(300);
             if ((await card.innerText()).trim() !== title) failures.push(`${label}: undo in the review did not bring "${title}" back`);
           }, { phone });
+          // editing in the review: a click on the title edits it there, the keys rest (their hints hide,
+          // "s" is a letter), "Fertig" ends it; "Bearbeiten" puts the caret at the end of the text,
+          // Esc ends it. Both put back as they were.
+          await check(page, label, "/#/review", errors, async (p) => {
+            const article = p.locator("main article");
+            const title = (await article.locator("h2").innerText()).trim();
+            const kbd = p.locator("main kbd").filter({ visible: true });
+            await article.locator("h2").click({ position: { x: 3, y: 17 } });
+            if (!(await article.locator("textarea").count())) return void failures.push(`${label}: a click on the title does not edit it`);
+            if (await kbd.count()) failures.push(`${label}: the keys' hints stay while editing`);
+            if ((await article.locator("textarea").evaluate((e: HTMLTextAreaElement) => e.selectionStart)) > 1) failures.push(`${label}: the caret is not where the title was clicked`);
+            await p.keyboard.press("Control+End");
+            await p.keyboard.type(" Xs");
+            await p.getByRole("button", { name: "Fertig" }).click();
+            if ((await article.locator("h2").innerText()).trim() !== title + " Xs") failures.push(`${label}: the title edited in the review is "${await article.locator("h2").innerText()}"`);
+            if (!phone && !(await kbd.count())) failures.push(`${label}: the keys' hints do not come back after "Fertig"`);
+            await p.getByRole("button", { name: "Bearbeiten" }).click();
+            await p.waitForTimeout(200);
+            if (!(await article.locator(".cm-editor.cm-focused").count())) failures.push(`${label}: "Bearbeiten" does not put the caret into the text`);
+            await p.keyboard.type(" Ys");
+            await p.waitForTimeout(300); // the completions looked and found nothing (else Esc closes them first)
+            await p.keyboard.press("Escape");
+            if (await article.locator("textarea").count()) failures.push(`${label}: Esc does not end editing`);
+            if (!(await article.getByText(/ Ys$/).count())) failures.push(`${label}: the text typed in the review is not there`);
+            await p.getByRole("button", { name: "Bearbeiten" }).click();
+            await p.waitForTimeout(200);
+            for (let i = 0; i < 3; i++) await p.keyboard.press("Backspace");
+            await article.locator("textarea").click();
+            await p.keyboard.press("Control+End"); // the end of the title, not of its line (it wraps on a phone)
+            for (let i = 0; i < 3; i++) await p.keyboard.press("Backspace");
+            await p.getByRole("button", { name: "Fertig" }).click();
+            if ((await article.locator("h2").innerText()).trim() !== title) failures.push(`${label}: the title is not back to "${title}"`);
+          }, { phone });
           // the sidebar: the workspace's block (pinned informations) and "Typen" (each type's page and the files), both
           // fold and stay folded over a reload; a type's page has its views and "Typ bearbeiten";
           // the inbox offers what lands there and the default; old collection links lead on

@@ -4,11 +4,14 @@ import { Button as ShadcnButton } from "../components/ui/button";
 // stays in place below – a place, a type, back tomorrow, kept as it is, deleted – and on a
 // desktop beside it what is still waiting and what this review sorted (each with its undo).
 // What was sorted stays for the rest of the day when the page is left, until the review is finished.
+// A click into the entry (or "Bearbeiten") edits it in place, a typo fixed on the way; the keys rest
+// meanwhile, and "Fertig" or any choice below ends it.
 //
 // A suggestion (the agent's or the app's own) is not shown yet; it would be the first answer
 // among the suggestions in `Choices`.
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { Check, Clock, FolderInput, Layers, List, RotateCcw, Shapes, StickyNote, Trash2, Undo2 } from "lucide-react";
+import type { EditorView } from "@codemirror/view";
+import { ArrowUpRight, Check, Clock, FolderInput, Layers, List, Pencil, RotateCcw, Shapes, StickyNote, Trash2, Undo2 } from "lucide-react";
 import type { Item } from "@obtion/core/model";
 import { todayISO } from "@obtion/core/model";
 import { plainText } from "@obtion/core/search";
@@ -19,6 +22,8 @@ import { recentPlaces } from "../actions";
 import { useBlobUrl } from "../files";
 import { Button, Empty, ItemIcon, Kbd, RelTime, SectionTitle, Seg, Tag, TypeGlyph, cx, itemLook } from "../ui/bits";
 import { Markdown } from "../ui/Markdown";
+import { Editor } from "../ui/Editor";
+import { TitleField } from "../ui/TitleField";
 import { SpaceScope } from "../ui/Spaces";
 import { placeSuggestions } from "../ui/suggest";
 import { type InboxEntry, reviewMinutes, useInboxItems } from "../ui/inbox";
@@ -31,6 +36,9 @@ interface Sorted {
   what: string;
   undo: Undo;
 }
+
+/** Editing the entry shown: where it was clicked (the caret goes there; `title`: its place in the title), none from the button. */
+type Edit = { x: number; y: number; title?: number } | null;
 
 /** The review of today on this device: kept when leaving it ("Später weiter"), not over a reload. */
 let session: { day: string; order: string[]; sorted: Sorted[]; at?: string } | null = null;
@@ -71,13 +79,21 @@ export function Review({ at }: { at?: string }) {
   const pickAt = (k?: string) => (k && left.includes(k) ? k : (order.current.slice(order.current.indexOf(k ?? "") + 1).find((x) => left.includes(x)) ?? left.at(-1)));
   const key = pickAt(cur);
   const entry = key ? byKey.get(key) : undefined;
+  // editing belongs to the entry shown: another one (sorted, stepped to, undone) starts unedited
+  const [editing, setEditing] = useState<{ key?: string; at: Edit } | null>(null);
+  if (editing && editing.key !== key) setEditing(null);
+  const stopEditing = () => {
+    (document.activeElement as HTMLElement | null)?.blur();
+    setEditing(null);
+  };
   useEffect(() => void (closed.current || (session = { day: todayISO(), order: order.current, sorted, at: key })));
   useEffect(() => void (document.title = t("review.title")), []);
 
   const act = useTriageActions(() => entry!.space, { quiet: true });
   const record = (e: InboxEntry, what: string, undo?: Undo | null) => {
     if (!undo) return;
-    setSorted((s) => [...s, { key: e.key, title: e.item.title || e.item.file?.name || t("untitled"), what, undo }]);
+    const title = replica(e.space).repo.get(e.item.id)?.title ?? e.item.title; // perhaps just edited
+    setSorted((s) => [...s, { key: e.key, title: title || e.item.file?.name || t("untitled"), what, undo }]);
     setCur(e.key);
   };
   const placeIn = (list: Item[], p: string) => entry && record(entry, `→ ${replica(entry.space).repo.index().get(p)?.title ?? ""}`, act.place(list, p));
@@ -105,6 +121,11 @@ export function Review({ at }: { at?: string }) {
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement;
+      // while editing the keys are the text's; Esc (unless the editor used it) ends it
+      if (editing) {
+        if (e.key === "Escape" && !e.defaultPrevented && !pick.placing && !pick.typing) stopEditing();
+        return;
+      }
       if (pick.placing || pick.typing || el.closest("input, textarea, select, [contenteditable=true], .cm-editor, [role=dialog]") || e.metaKey || e.ctrlKey || e.altKey) return;
       const k = e.key;
       // Enter on a button or link is its own
@@ -143,8 +164,8 @@ export function Review({ at }: { at?: string }) {
   );
   const body = entry ? (
     <SpaceScope id={entry.space}>
-      <EntryCard key={entry.key} entry={entry} space={several ? spaceById(entry.space)?.name : undefined} more={left.length - 1} scroller={card} />
-      <Choices entry={entry} onPlace={(p) => placeIn([entry.item], p)} onPick={() => pick.setPlacing([entry.item])} onType={(type) => typeAs([entry.item], type)} onTypes={() => pick.setTyping([entry.item])} onLater={later} onKeep={keep} onTrash={trash} onUndo={sorted.length ? () => undo() : undefined} keys={desktop} />
+      <EntryCard key={entry.key} entry={entry} space={several ? spaceById(entry.space)?.name : undefined} more={left.length - 1} scroller={card} editing={editing} onEdit={(at) => setEditing({ key, at })} onDone={stopEditing} />
+      <Choices entry={entry} onPlace={(p) => placeIn([entry.item], p)} onPick={() => (stopEditing(), pick.setPlacing([entry.item]))} onType={(type) => typeAs([entry.item], type)} onTypes={() => (stopEditing(), pick.setTyping([entry.item]))} onLater={later} onKeep={keep} onTrash={trash} onUndo={sorted.length ? () => undo() : undefined} keys={desktop} quiet={!!editing} />
     </SpaceScope>
   ) : (
     <Finished count={sorted.length} onDone={close} />
@@ -157,7 +178,7 @@ export function Review({ at }: { at?: string }) {
         onTouchStart={(e) => (touch.current = e.touches[0]!.clientX)}
         onTouchEnd={(e) => {
           const dx = (e.changedTouches[0]?.clientX ?? 0) - (touch.current ?? 0);
-          if (Math.abs(dx) > 70) step(dx < 0 ? 1 : -1);
+          if (!editing && Math.abs(dx) > 70) step(dx < 0 ? 1 : -1);
           touch.current = null;
         }}
       >
@@ -234,9 +255,10 @@ function Steps({ total, done }: { total: number; done: number }) {
 /**
  * The entry in full: what it is, where from and how old, the title, the text, the notes below.
  * Always as tall, so the choices below never move; a long entry scrolls inside, a fade at the
- * bottom says there is more.
+ * bottom says there is more. A click into it edits title and text right there (a file only its
+ * title); a quiet "Bearbeiten" in the corner does the same and becomes "Fertig".
  */
-function EntryCard({ entry, space, more, scroller }: { entry: InboxEntry; space?: string; more: number; scroller: React.RefObject<HTMLDivElement | null> }) {
+function EntryCard({ entry, space, more, scroller, editing, onEdit, onDone }: { entry: InboxEntry; space?: string; more: number; scroller: React.RefObject<HTMLDivElement | null>; editing: { at: Edit } | null; onEdit: (at: Edit) => void; onDone: () => void }) {
   const { t } = useT();
   const repo = useRepo();
   const ix = repo.index();
@@ -247,6 +269,23 @@ function EntryCard({ entry, space, more, scroller }: { entry: InboxEntry; space?
   const kids = ix.childrenOf(item.id).map((id) => ix.get(id)!).filter(Boolean);
   const img = useBlobUrl(item.file?.filetype === "bild" ? (item.file.display ?? item.file.hash) : item.file?.thumb, true);
   const [rest, setRest] = useState(false);
+  const at = editing?.at;
+  const text = !item.file;
+  // the title clicked (or a file, which has no text here): the caret where clicked, else at its end
+  useEffect(() => {
+    if (!editing || (text && at?.title === undefined)) return;
+    const el = scroller.current?.querySelector("textarea");
+    const n = Math.min(at?.title ?? Infinity, el?.value.length ?? 0);
+    el?.focus();
+    el?.setSelectionRange(n, n);
+  }, [!!editing]);
+  // the text clicked: the caret where it was clicked, else at its end
+  const placeCaret = (v: EditorView | null) => {
+    if (!v || at?.title !== undefined) return;
+    v.focus();
+    // after the editor's first measure: before it, its heights are guesses
+    requestAnimationFrame(() => v.dom.isConnected && v.dispatch({ selection: { anchor: (at && v.posAtCoords(at, false)) ?? v.state.doc.length } }));
+  };
   useEffect(() => {
     const el = scroller.current;
     if (!el) return;
@@ -262,23 +301,59 @@ function EntryCard({ entry, space, more, scroller }: { entry: InboxEntry; space?
       {/* the stack: the next entries lie below this one */}
       {more > 0 && <div className="absolute inset-x-4 -bottom-2 h-6 rounded-2xl border border-line bg-surface opacity-60" aria-hidden />}
       {more > 1 && <div className="absolute inset-x-8 -bottom-4 h-6 rounded-2xl border border-line bg-surface opacity-30" aria-hidden />}
-      <article className="relative flex h-[clamp(240px,calc(100dvh-460px),440px)] flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-sm max-lg:h-[clamp(200px,calc(100dvh-440px),440px)]">
+      <article
+        className={cx(
+          "relative flex h-[clamp(240px,calc(100dvh-460px),440px)] flex-col overflow-hidden rounded-2xl border bg-surface shadow-sm max-lg:h-[clamp(200px,calc(100dvh-440px),440px)]",
+          editing ? "border-[color-mix(in_srgb,var(--focus)_55%,transparent)] ring-4 ring-[color-mix(in_srgb,var(--focus)_12%,transparent)]" : "cursor-text border-line",
+        )}
+        onClick={(e) => {
+          const el = e.target as HTMLElement;
+          if (editing || el.closest("a, button, img") || getSelection()?.toString()) return;
+          const caret = document.caretPositionFromPoint?.(e.clientX, e.clientY)?.offset ?? document.caretRangeFromPoint?.(e.clientX, e.clientY)?.startOffset; // Safari has only the latter
+          onEdit({ x: e.clientX, y: e.clientY, title: el.closest("h2") ? (caret ?? Infinity) : undefined });
+        }}
+      >
         <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-8 py-7 max-lg:px-5 max-lg:py-5">
-        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-muted-foreground">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-line px-2 py-0.5 text-fg">
-            <ItemIcon item={item} size={13} /> {kind}
+        <div className="flex items-start gap-2 text-[13px] text-muted-foreground">
+          <p className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 pt-0.5">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-line px-2 py-0.5 text-fg">
+              <ItemIcon item={item} size={13} /> {kind}
+            </span>
+            {space && <span>{space}</span>}
+            <span>
+              {t("triage.captured")} <RelTime ts={item.created} />
+            </span>
+          </p>
+          <span className="flex shrink-0 items-center gap-1">
+            <a href={itemHref(item.id)} className="tap rounded-md p-1 hover:bg-hover hover:text-fg" aria-label={t("review.open")} title={t("review.open")}>
+              <ArrowUpRight size={15} />
+            </a>
+            <ShadcnButton
+              variant="plain"
+              size="none"
+              onClick={() => (editing ? onDone() : onEdit(null))}
+              className={cx("tap inline-flex h-7 items-center gap-1.5 rounded-md px-2 font-medium hover:bg-hover hover:text-fg", editing && "border border-line bg-surface text-fg")}
+            >
+              {editing ? <Check size={14} className="text-ok" /> : <Pencil size={13} />} {t(editing ? "review.editDone" : "review.edit")}
+            </ShadcnButton>
           </span>
-          {space && <span>{space}</span>}
-          <span>
-            {t("triage.captured")} <RelTime ts={item.created} />
-          </span>
-        </p>
-        <h2 className="mt-4 text-[28px] font-bold leading-[34px] tracking-[-0.015em] max-lg:text-2xl">
-          <a href={itemHref(item.id)} className="hover:underline">
-            {item.title || item.file?.name || t("untitled")}
-          </a>
-        </h2>
-        {item.body.trim() ? (
+        </div>
+        {editing ? (
+          <>
+            {/* as large as the title it replaces (over the page title's own size), so nothing below moves */}
+            <div className="mt-4 [&_textarea]:text-[28px]! [&_textarea]:leading-[34px]! [&_textarea]:tracking-[-0.015em]! max-lg:[&_textarea]:text-2xl!">
+              <TitleField item={item} autoFocus={false} placeholder={item.file?.name} />
+            </div>
+            {text && (
+              <div className="mt-3 max-w-[68ch] text-[15px] leading-[1.65]">
+                <Editor doc={repo.getDoc(item.id)} nodeId={item.id} minHeight="min-h-24" onView={placeCaret} />
+              </div>
+            )}
+          </>
+        ) : (
+          <h2 className="mt-4 text-[28px] font-bold leading-[34px] tracking-[-0.015em] max-lg:text-2xl">{item.title || item.file?.name || t("untitled")}</h2>
+        )}
+        {editing && text ? null : item.body.trim() ? (
           <div className="mt-4 max-w-[68ch] text-[15px] leading-[1.65]">
             <Markdown src={item.body} />
           </div>
@@ -316,9 +391,10 @@ function EntryCard({ entry, space, more, scroller }: { entry: InboxEntry; space?
  * What can become of it. Five buttons, always the same and in the same place: put it somewhere, turn
  * it into a type (only a loose note), back tomorrow, keep it as it is, delete it. Below in one line
  * the quick ways: the first type ("c") and places it mentions or used last; the rest is in the
- * pickers. Keys quietly in the buttons on a desktop.
+ * pickers. Keys quietly in the buttons on a desktop; hidden while the entry is edited (their room
+ * kept, so the buttons stay where they are).
  */
-function Choices({ entry, onPlace, onPick, onType, onTypes, onLater, onKeep, onTrash, onUndo, keys }: { entry: InboxEntry; onPlace: (p: string) => void; onPick: () => void; onType: (type: string) => void; onTypes: () => void; onLater: () => void; onKeep: () => void; onTrash: () => void; onUndo?: () => void; keys: boolean }) {
+function Choices({ entry, onPlace, onPick, onType, onTypes, onLater, onKeep, onTrash, onUndo, keys, quiet }: { entry: InboxEntry; onPlace: (p: string) => void; onPick: () => void; onType: (type: string) => void; onTypes: () => void; onLater: () => void; onKeep: () => void; onTrash: () => void; onUndo?: () => void; keys: boolean; quiet: boolean }) {
   const { t } = useT();
   const repo = useRepo();
   const ix = repo.index();
@@ -327,6 +403,7 @@ function Choices({ entry, onPlace, onPick, onType, onTypes, onLater, onKeep, onT
   const places = placeSuggestions(item, repo).map((x) => x.id);
   for (const id of recentPlaces(repo)) if (!places.includes(id) && id !== item.id && !item.parents[id] && !ix.wouldCycle(item.id, id)) places.push(id);
   const type = info ? offeredTypes(entry)[0] : undefined;
+  const hint = (k: string) => keys && <span className={cx("inline-flex", quiet && "invisible")}><Kbd>{k}</Kbd></span>;
   const tile = (icon: ReactNode, label: string, key: string, onClick: () => void, opts: { primary?: boolean; danger?: boolean; disabled?: boolean } = {}) => (
     <ShadcnButton
       variant="plain"
@@ -341,7 +418,7 @@ function Choices({ entry, onPlace, onPick, onType, onTypes, onLater, onKeep, onT
     >
       {icon}
       <span className="min-w-0 flex-1 truncate px-1 text-center">{label}</span>
-      {keys && <Kbd>{key}</Kbd>}
+      {hint(key)}
     </ShadcnButton>
   );
   const chip = "tap inline-flex h-7 max-w-[220px] shrink-0 items-center gap-1.5 rounded-full border border-line bg-surface px-2.5 text-[13px] hover:bg-hover";
@@ -361,7 +438,7 @@ function Choices({ entry, onPlace, onPick, onType, onTypes, onLater, onKeep, onT
             <ShadcnButton variant="plain" size="none" onClick={() => onType(type)} className={chip}>
               <TypeGlyph schema={ix.types.get(type)?.schema} size={13} />
               <span className="truncate">{t("review.asType", { type: ix.typeName(type) ?? "" })}</span>
-              {keys && <Kbd>c</Kbd>}
+              {hint("c")}
             </ShadcnButton>
           )}
           {places.slice(0, 3).map((id) => (
@@ -373,7 +450,7 @@ function Choices({ entry, onPlace, onPick, onType, onTypes, onLater, onKeep, onT
           {!places.length && !type && <span className="text-[13px] text-muted-foreground">–</span>}
         </div>
         <Button onClick={onUndo} disabled={!onUndo} className="shrink-0">
-          <Undo2 size={15} /> {t("review.back")} {keys && <Kbd>u</Kbd>}
+          <Undo2 size={15} /> {t("review.back")} {hint("u")}
         </Button>
       </div>
     </div>
