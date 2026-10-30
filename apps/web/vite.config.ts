@@ -92,7 +92,8 @@ export default defineConfig({
       },
       workbox: {
         navigateFallback: "/index.html",
-        navigateFallbackDenylist: [/^\/api/, /^\/mcp/, /^\/sync/],
+        // app routes live in the hash (#/w/<id>/…): every /w/ path is the server's (files, sync, MCP)
+        navigateFallbackDenylist: [/^\/api/, /^\/mcp/, /^\/w\//],
         globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
       },
@@ -110,7 +111,6 @@ export default defineConfig({
     proxy: {
       "/api": toServer(),
       "/mcp": toServer(),
-      "/sync": toServer(true),
       // a workspace's sync, files and activity
       "/w/": toServer(true),
     },

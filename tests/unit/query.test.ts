@@ -1,7 +1,7 @@
 import { test, expect, describe } from "bun:test";
 import { MemRepo } from "../support/helpers";
 import { runSetup, SYS, addLaterDefaultProps, renameShippedLabels } from "@obtion/core/setup";
-import { parseQuery, printQuery, runQuery, groupItems, normalizeBlocks, findBlocks, readBlock, blocksAsText, shownByBlocks } from "@obtion/core/query";
+import { parseQuery, printQuery, runQuery, groupItems, normalizeBlocks, findBlocks, readBlock, blocksAsText, shownByBlocks, tabDef } from "@obtion/core/query";
 import { addDaysISO, todayISO, initItem, initSchema, META_TYPE, removeProp, setMember } from "@obtion/core/model";
 
 function world() {
@@ -209,4 +209,11 @@ test("files under a project: below it, or used in an entry below it (embedded, l
   expect(titles).toEqual(["direkt.pdf", "plan.pdf", "ref.pdf", "spec.pdf"]);
   // in: (directly below) stays strict
   expect(runQuery(parseQuery("datei in:[[Projekt]]", ix).def, { ix }).items.map((i) => i.title)).toEqual(["direkt.pdf"]);
+});
+
+test("a view's filter applies without a base query too", () => {
+  const where = { tag: "x" };
+  expect(tabDef(undefined, { id: "t", pos: "a", kind: "list", where }).where).toEqual(where);
+  expect(tabDef({ type: "t_a" }, { id: "t", pos: "a", kind: "list" }).where).toEqual({ type: "t_a" });
+  expect(tabDef({ type: "t_a" }, { id: "t", pos: "a", kind: "list", where }).where).toEqual({ and: [{ type: "t_a" }, where] });
 });

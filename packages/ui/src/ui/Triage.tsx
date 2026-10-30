@@ -13,7 +13,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, FolderInput, Shapes, Sparkles, Trash2, Check, X } from "lucide-react";
 import { type Item, setMeta } from "@obtion/core/model";
 import type { Index } from "@obtion/core/graph";
-import { useIndex, useRepo, useSpaceId, itemHref, spaceHref, useDesktop } from "../hooks";
+import { useIndex, useRepo, useSpaceId, useItemHref, spaceHref, useDesktop } from "../hooks";
 import { replica, spaceById } from "../accounts";
 import { SpaceScope } from "./Spaces";
 import { useT } from "../i18n";
@@ -100,38 +100,41 @@ export function Triage({ items, spaceOf: given }: { items: Item[]; spaceOf?: (i:
     });
   const trash = (l: Item[]) => void act.trash(l).then((ok) => ok && setMarked(new Set()));
 
+  // the handler sees this render's state; the listener stays the same
+  const onKey = useRef<(e: KeyboardEvent) => void>(null);
+  onKey.current = (e) => {
+    const el = e.target as HTMLElement;
+    if (keyOwner !== me || pick.placing || pick.typing || el.closest("input, textarea, select, [contenteditable=true], .cm-editor, [role=dialog]") || e.metaKey || e.ctrlKey || e.altKey) return;
+    const cur = items[sel];
+    const k = e.key;
+    if (k === "J" || (k === "ArrowDown" && e.shiftKey)) {
+      if (cur) toggle(keyOf(cur), true);
+      const n = Math.min(items.length - 1, sel + 1);
+      if (items[n]) toggle(keyOf(items[n]!), true);
+      setSel(n);
+    } else if (k === "K" || (k === "ArrowUp" && e.shiftKey)) {
+      if (cur) toggle(keyOf(cur), true);
+      const n = Math.max(0, sel - 1);
+      if (items[n]) toggle(keyOf(items[n]!), true);
+      setSel(n);
+    } else if (k === "j" || k === "ArrowDown") setSel((s) => Math.min(items.length - 1, s + 1));
+    else if (k === "k" || k === "ArrowUp") setSel((s) => Math.max(0, s - 1));
+    else if (k === " " && cur) toggle(keyOf(cur));
+    else if (k === "Escape" && marked.size) setMarked(new Set());
+    else if (k === "e" && cur) pick.setPlacing(targets());
+    else if (k === "c" && act.firstType(cur) && cur && new Set(targets().map(spaceOf)).size === 1) (act.giveType(targets(), act.firstType(cur)!), setMarked(new Set()));
+    else if (k === "y" && cur) pick.setTyping(targets().filter((i) => i.kind === "info"));
+    else if ((k === "x" || k === "Delete") && cur) trash(targets());
+    else if (k === "u" || k === "z") act.undo();
+    else if ((k === "Enter" || k === "o") && cur) (location.hash = spaceHref(spaceOf(cur), `/i/${encodeURIComponent(cur.id)}`));
+    else return;
+    e.preventDefault();
+  };
   useEffect(() => {
-    const on = (e: KeyboardEvent) => {
-      const el = e.target as HTMLElement;
-      if (keyOwner !== me || pick.placing || pick.typing || el.closest("input, textarea, select, [contenteditable=true], .cm-editor, [role=dialog]") || e.metaKey || e.ctrlKey || e.altKey) return;
-      const cur = items[sel];
-      const k = e.key;
-      if (k === "J" || (k === "ArrowDown" && e.shiftKey)) {
-        if (cur) toggle(keyOf(cur), true);
-        const n = Math.min(items.length - 1, sel + 1);
-        if (items[n]) toggle(keyOf(items[n]!), true);
-        setSel(n);
-      } else if (k === "K" || (k === "ArrowUp" && e.shiftKey)) {
-        if (cur) toggle(keyOf(cur), true);
-        const n = Math.max(0, sel - 1);
-        if (items[n]) toggle(keyOf(items[n]!), true);
-        setSel(n);
-      } else if (k === "j" || k === "ArrowDown") setSel((s) => Math.min(items.length - 1, s + 1));
-      else if (k === "k" || k === "ArrowUp") setSel((s) => Math.max(0, s - 1));
-      else if (k === " " && cur) toggle(keyOf(cur));
-      else if (k === "Escape" && marked.size) setMarked(new Set());
-      else if (k === "e" && cur) pick.setPlacing(targets());
-      else if (k === "c" && act.firstType(cur) && cur && new Set(targets().map(spaceOf)).size === 1) (act.giveType(targets(), act.firstType(cur)!), setMarked(new Set()));
-      else if (k === "y" && cur) pick.setTyping(targets().filter((i) => i.kind === "info"));
-      else if ((k === "x" || k === "Delete") && cur) trash(targets());
-      else if (k === "u" || k === "z") act.undo();
-      else if ((k === "Enter" || k === "o") && cur) (location.hash = spaceHref(spaceOf(cur), `/i/${encodeURIComponent(cur.id)}`));
-      else return;
-      e.preventDefault();
-    };
+    const on = (e: KeyboardEvent) => onKey.current?.(e);
     window.addEventListener("keydown", on);
     return () => window.removeEventListener("keydown", on);
-  });
+  }, []);
   useEffect(() => {
     // after an action the entry leaves: the selection stays at its place, so the next one is selected
     if (sel >= items.length && items.length) setSel(items.length - 1);
@@ -291,6 +294,7 @@ export function Triage({ items, spaceOf: given }: { items: Item[]; spaceOf?: (i:
 function Detail({ item, onPlaced }: { item: Item; onPlaced: (p: string) => void }) {
   const { t } = useT();
   const repo = useRepo();
+  const hrefOf = useItemHref();
   const ix = repo.index();
   const mentioned = [...new Set([...ix.textLinks(item).filter((l) => !l.embed).map((l) => l.to), ...item.refs])].map((id) => ix.get(id)).filter((x): x is Item => !!x && x.kind === "info");
   const kids = ix.childrenOf(item.id).map((id) => ix.get(id)!).filter(Boolean);
@@ -299,7 +303,7 @@ function Detail({ item, onPlaced }: { item: Item; onPlaced: (p: string) => void 
     const s = placeSuggestions(item, repo).slice(0, 4).map((x) => ({ id: x.id, why: t("triage.why." + x.reason) }));
     for (const id of recentPlaces(repo)) if (s.length < 4 && !s.some((x) => x.id === id) && id !== item.id && !item.parents[id] && !ix.wouldCycle(item.id, id)) s.push({ id, why: t("triage.why.recent") });
     return s;
-  }, [item.id, item.updated]);
+  }, [item, repo, ix, t]);
   const applySuggestion = () => {
     if (!sug) return;
     if (sug.type && ix.types.has(sug.type)) repo.setType(item.id, sug.type);
@@ -311,7 +315,7 @@ function Detail({ item, onPlaced }: { item: Item; onPlaced: (p: string) => void 
   const k = "mb-1.5 text-xs font-semibold text-muted-foreground";
   return (
     <div className="min-h-0 flex-1 overflow-y-auto px-7 py-6">
-      <a href={itemHref(item.id)} className="block text-xl font-semibold leading-[26px] hover:underline">
+      <a href={hrefOf(item.id)} className="block text-xl font-semibold leading-[26px] hover:underline">
         {item.title || item.file?.name || t("untitled")}
       </a>
       <p className="mt-1 text-xs text-muted-foreground">
@@ -331,7 +335,7 @@ function Detail({ item, onPlaced }: { item: Item; onPlaced: (p: string) => void 
           <ul className="space-y-1 text-sm">
             {kids.map((c) => (
               <li key={c.id} className="flex items-center gap-2">
-                <ItemIcon item={c} size={14} /> <a href={itemHref(c.id)} className="truncate hover:underline">{c.title || t("untitled")}</a>
+                <ItemIcon item={c} size={14} /> <a href={hrefOf(c.id)} className="truncate hover:underline">{c.title || t("untitled")}</a>
               </li>
             ))}
           </ul>

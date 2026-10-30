@@ -15,7 +15,7 @@ import { Check, Clock, FolderInput, Layers, List, Maximize2, Pencil, RotateCcw, 
 import type { Item } from "@obtion/core/model";
 import { todayISO } from "@obtion/core/model";
 import { plainText } from "@obtion/core/search";
-import { useRepo, itemHref, spaceHref, go, useDesktop } from "../hooks";
+import { useRepo, useItemHref, spaceHref, go, useDesktop } from "../hooks";
 import { replica, spaceById, useAccounts } from "../accounts";
 import { useT } from "../i18n";
 import { recentPlaces } from "../actions";
@@ -261,6 +261,7 @@ function Steps({ total, done }: { total: number; done: number }) {
  */
 function EntryCard({ entry, space, more, scroller, editing, onEdit, onDone }: { entry: InboxEntry; space?: string; more: number; scroller: React.RefObject<HTMLDivElement | null>; editing: { at: Edit } | null; onEdit: (at: Edit) => void; onDone: () => void }) {
   const { t } = useT();
+  const hrefOf = useItemHref();
   const repo = useRepo();
   const ix = repo.index();
   const item = repo.get(entry.item.id) ?? entry.item;
@@ -338,7 +339,7 @@ function EntryCard({ entry, space, more, scroller, editing, onEdit, onDone }: { 
               {t("triage.captured")} <RelTime ts={item.created} />
             </span>
           </p>
-          <a href={itemHref(item.id)} className="tap -mr-1.5 -mt-1 shrink-0 rounded-md p-1.5 hover:bg-hover hover:text-fg" aria-label={t("review.open")} title={t("review.open")}>
+          <a href={hrefOf(item.id)} className="tap -mr-1.5 -mt-1 shrink-0 rounded-md p-1.5 hover:bg-hover hover:text-fg" aria-label={t("review.open")} title={t("review.open")}>
             <Maximize2 size={15} />
           </a>
         </div>
@@ -378,7 +379,7 @@ function EntryCard({ entry, space, more, scroller, editing, onEdit, onDone }: { 
             <ul className="space-y-1 text-sm">
               {kids.map((c) => (
                 <li key={c.id} className="flex items-center gap-2">
-                  <ItemIcon item={c} size={14} /> <a href={itemHref(c.id)} className="truncate hover:underline">{c.title || t("untitled")}</a>
+                  <ItemIcon item={c} size={14} /> <a href={hrefOf(c.id)} className="truncate hover:underline">{c.title || t("untitled")}</a>
                 </li>
               ))}
             </ul>

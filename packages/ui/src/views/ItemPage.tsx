@@ -139,7 +139,7 @@ function InfoView({ item, isNew }: { item: Item; isNew: boolean }) {
               </MenuItem>
             )}
             {!item.deleted && (
-              <MenuItem danger icon={<Trash2 size={14} />} onClick={() => (close(), setDeleting(true))}>
+              <MenuItem danger icon={<Trash2 size={14} />} onClick={() => (close(), onlyBelow(ix, item.id).length ? setDeleting(true) : removeAndLeave(item.id, false))}>
                 {t("item.delete")}
               </MenuItem>
             )}
@@ -367,20 +367,20 @@ function TitleClash({ item }: { item: Item }) {
 
 // ---------- delete ----------
 
+function removeAndLeave(id: string, withChildren: boolean) {
+  repo.remove(id, withChildren ? "trash" : "inbox");
+  history.length > 1 ? history.back() : go("/");
+}
+
 /** Children that only hang here: delete them too, or let them lose this place. */
 function DeleteDialog({ item, onClose }: { item: Item; onClose: () => void }) {
   const ix = useIndex();
   const { t } = useT();
   const only = onlyBelow(ix, item.id);
   const finish = (withChildren: boolean) => {
-    repo.remove(item.id, withChildren ? "trash" : "inbox");
+    removeAndLeave(item.id, withChildren);
     onClose();
-    history.length > 1 ? history.back() : go("/");
   };
-  if (!only.length) {
-    finish(false);
-    return null;
-  }
   // Kept children lose this place; whether they land in the inbox is the inbox's own query.
   const untyped = wouldBeInInbox(ix, only, (i) => i, [{ ...item, deleted: true }]);
   return (

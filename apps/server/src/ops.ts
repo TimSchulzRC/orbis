@@ -48,7 +48,7 @@ import { previewTagToType, typeUsage } from "@obtion/core/typeops";
 import { searchIds, snippet } from "@obtion/core/search";
 import { keyBetween } from "@obtion/core/sortkey";
 import { freshColor } from "@obtion/core/palette";
-import { DATE_HELP, InputError, matchOption, parseDate, statusGroupOf } from "@obtion/core/input";
+import { DATE_HELP, InputError, matchOption, parseDate, parseNumber, statusGroupOf } from "@obtion/core/input";
 import { type Writer, typeTabs } from "@obtion/core/setup";
 import { deleteItem, onlyBelow, restoreItem } from "@obtion/core/trash";
 import { fromB64 } from "@obtion/core/protocol";
@@ -463,8 +463,10 @@ export class Ops {
       case "url":
         return { value: String(raw) };
       case "number": {
-        const n = typeof raw === "number" ? raw : Number(String(raw).replace(",", "."));
-        if (isNaN(n)) throw new OpError(`"${p.name}" needs a number, got "${raw}".`);
+        // plain notation first (1234.5), then German (1.234,5 / 1,5)
+        const s = String(raw).trim();
+        const n = typeof raw === "number" ? raw : isNaN(Number(s)) ? parseNumber("de", s) : Number(s);
+        if (n === undefined || isNaN(n)) throw new OpError(`"${p.name}" needs a number, got "${raw}".`);
         return { value: n };
       }
       case "checkbox":

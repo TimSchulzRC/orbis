@@ -7,7 +7,7 @@ import { dueOf, firstOfGroup, isDone, primaryChild, statusOf, statusProp } from 
 import { fmtBytes } from "@obtion/core/i18n";
 import type { Repo } from "@obtion/sync";
 import { repo as current } from "../repo";
-import { itemHref, useRepo } from "../hooks";
+import { useItemHref, useRepo } from "../hooks";
 import { useT } from "../i18n";
 import { DueLabel, ItemIcon, MenuItem, Popover, StatusGlyph, StatusPill, cx, pal, ProgressCount } from "./bits";
 import { statusShape } from "@obtion/core/input";
@@ -163,6 +163,7 @@ export function ItemRow({
 }) {
   const { t, lang } = useT();
   const repo = useRepo();
+  const hrefOf = useItemHref();
   const ix = repo.index();
   const schema = ix.schemaOf(item);
   const st = statusOf(item, schema);
@@ -178,7 +179,7 @@ export function ItemRow({
       style={sub ? ({ "--depth": sub === true ? 1 : sub } as React.CSSProperties) : undefined}
     >
       <RowStatus item={item} />
-      <a href={itemHref(item.id)} className="flex min-w-0 flex-1 flex-col justify-center self-stretch">
+      <a href={hrefOf(item.id)} className="flex min-w-0 flex-1 flex-col justify-center self-stretch">
         {/* on a phone the title may take two lines: its telling part is often at the end */}
         <span className={cx("block text-sm max-md:text-[15px] max-sm:line-clamp-2 sm:truncate", done && "text-muted-foreground line-through")}>{item.title || t("untitled")}</span>
         {path && path.length > 0 && (

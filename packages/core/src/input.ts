@@ -4,7 +4,7 @@
 // (InputError) instead of guessed.
 import { type OptionDef, type PropDef, type StatusGroup, addDaysISO } from "./model";
 import { defaultTypes } from "./setup";
-import { LANGS } from "./i18n";
+import { type Lang, LANGS } from "./i18n";
 
 export class InputError extends Error {}
 
@@ -75,7 +75,37 @@ export function parseDate(input: string, today: string): string | undefined {
   return undefined;
 }
 
+/** An ISO date as typed in the app language: 30.10.2026 (de) or 10/30/2026 (en, read back by parseDate). */
+export function dateText(lang: Lang, iso?: string): string {
+  const m = iso && /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!m) return "";
+  return lang === "de" ? `${m[3]}.${m[2]}.${m[1]}` : `${m[2]}/${m[3]}/${m[1]}`;
+}
+
 export const DATE_HELP = "a date like 2026-10-30, 30.10.2026, 10/30/2026, today/heute, tomorrow/morgen, a weekday or +3d";
+
+// ---------- numbers ----------
+
+/** A number for an input field in the app language, without grouping: 1234,5 (de) or 1234.5 (en). */
+export function numberText(lang: Lang, n: number): string {
+  const s = String(n);
+  return lang === "de" ? s.replace(".", ",") : s;
+}
+
+/**
+ * A number as typed in the app language → number, or undefined if it is none. Takes grouping
+ * (1.234,5 / 1,234.5) and spaces; a lone other separator that is not grouping counts as the
+ * decimal mark (1.5 in German, 1,5 in English).
+ */
+export function parseNumber(lang: Lang, input: string): number | undefined {
+  const [dec, group] = lang === "de" ? [",", "."] : [".", ","];
+  let [int = "", frac, ...more] = input.replace(/[\s']/g, "").split(dec);
+  if (more.length) return undefined;
+  if (new RegExp(`^[+-]?\\d{1,3}(\\${group}\\d{3})+$`).test(int)) int = int.split(group).join("");
+  else if (frac === undefined) int = int.replace(group, ".");
+  const s = frac === undefined ? int : `${int}.${frac}`;
+  return /^[+-]?(\d+\.?\d*|\.\d+)$/.test(s) ? Number(s) : undefined;
+}
 
 // ---------- status and options ----------
 

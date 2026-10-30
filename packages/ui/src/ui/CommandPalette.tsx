@@ -1,7 +1,7 @@
 import { ModalSurface } from "../components/ui/dialog";
 import { Button as ShadcnButton } from "../components/ui/button";
 import { Input } from "../components/ui/input";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Plus, CornerDownLeft, ChevronRight } from "lucide-react";
 import { SETTINGS_ID } from "@obtion/core/model";
 import { snippet } from "@obtion/core/search";
@@ -39,27 +39,24 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   const repoOf = (space: string) => repos[shown.findIndex((s) => s.id === space)] ?? repos[0]!;
   const several = shown.length > 1;
   const nameOf = (space: string) => shown.find((s) => s.id === space)?.name ?? "";
-  const navs = useMemo(
-    () => [
-      [t("nav.today"), "#/"],
-      [t("nav.inbox"), "#/inbox"],
-      ...shown.flatMap((s, n) => {
-        const ix = repos[n]!.index();
-        const of = (label: string) => (several ? `${label} · ${s.name}` : label);
-        return [
-          ...ix.typesInOrder().map((x) => [of(ix.typePlural(x.id)), spaceHref(s.id, `/i/${encodeURIComponent(x.id)}`)]),
-          [of(t("nav.files")), spaceHref(s.id, "/files")],
-          [of(t("nav.types")), spaceHref(s.id, "/types")],
-          [of(t("nav.activity")), spaceHref(s.id, "/activity")],
-          [of(t("nav.graph")), spaceHref(s.id, "/graph")],
-          [of(t("nav.trash")), spaceHref(s.id, "/trash")],
-          [several ? `${t("space.settings")} · ${s.name}` : t("space.settings"), spaceHref(s.id, "/workspace")],
-        ];
-      }),
+  const navs = [
+    [t("nav.today"), "#/"],
+    [t("nav.inbox"), "#/inbox"],
+    ...shown.flatMap((s, n) => {
+      const ix = repos[n]!.index();
+      const of = (label: string) => (several ? `${label} · ${s.name}` : label);
+      return [
+        ...ix.typesInOrder().map((x) => [of(ix.typePlural(x.id)), spaceHref(s.id, `/i/${encodeURIComponent(x.id)}`)]),
+        [of(t("nav.files")), spaceHref(s.id, "/files")],
+        [of(t("nav.types")), spaceHref(s.id, "/types")],
+        [of(t("nav.activity")), spaceHref(s.id, "/activity")],
+        [of(t("nav.graph")), spaceHref(s.id, "/graph")],
+        [of(t("nav.trash")), spaceHref(s.id, "/trash")],
+        [several ? `${t("space.settings")} · ${s.name}` : t("space.settings"), spaceHref(s.id, "/workspace")],
+      ];
+    }),
       [t("nav.settings"), "#/settings"],
-    ],
-    [],
-  );
+  ];
   // something new goes where a capture from anywhere goes
   const cs = captureSpace() ?? shown[0]!.id;
   const repo = repoOf(cs);
@@ -75,7 +72,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
     ...(["system", "light", "dark"] as const).map((v): [string, () => void] => [t("palette.cmd.theme", { name: t("theme." + v) }), () => setTheme(v)]),
   ];
 
-  const items: Entry[] = useMemo(() => {
+  const items: Entry[] = (() => {
     const out: Entry[] = [];
     const query = q.trim();
     const lq = query.toLowerCase();
@@ -96,9 +93,8 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
     }
     if (!query) for (const [label, path] of navs) out.push({ kind: "nav", label: label!, path: path! });
     return out;
-  }, [q]);
+  })();
 
-  useEffect(() => setSel(0), [q]);
   useEffect(() => {
     listRef.current?.querySelector(`[data-i="${sel}"]`)?.scrollIntoView({ block: "nearest" });
   }, [sel]);
@@ -117,7 +113,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
         <Input
           autoFocus
           value={q}
-          onChange={(e) => setQ(e.target.value)}
+          onChange={(e) => (setQ(e.target.value), setSel(0))}
           onKeyDown={(e) => {
             if (e.key === "ArrowDown") (e.preventDefault(), setSel((s) => Math.min(items.length - 1, s + 1)));
             else if (e.key === "ArrowUp") (e.preventDefault(), setSel((s) => Math.max(0, s - 1)));

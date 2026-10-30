@@ -66,6 +66,12 @@ export const itemHref = (id: string) => `#/i/${encodeURIComponent(id)}`;
 /** A path in another workspace than the open one ("/i/<id>" → "#/w/<space>/i/<id>"). */
 export const spaceHref = (space: string | undefined, path: string) => (space ? `#/w/${space}${path}` : `#${path}`);
 
+/** itemHref in the workspace this part of the page belongs to, so a link opened in a new tab lands there too. */
+export function useItemHref() {
+  const space = useSpaceId();
+  return (id: string) => spaceHref(space, `/i/${encodeURIComponent(id)}`);
+}
+
 export function useMediaQuery(q: string) {
   const [m, setM] = useState(() => matchMedia(q).matches);
   useEffect(() => {

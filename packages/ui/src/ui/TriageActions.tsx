@@ -93,7 +93,7 @@ export function useTriageActions(spaceOf: (i: Item) => string, opts: { quiet?: b
     const repo = repoOf(list[0]!);
     const ok = list.filter((i) => repo.addParent(i.id, parent));
     if (!ok.length) return;
-    rememberPlace(parent, repo);
+    rememberPlace(parent);
     const where = repo.index().get(parent)?.title ?? "";
     return done({ label: ok.length > 1 ? t("triage.placedMany", { count: ok.length, title: where }) : t("triage.placedOne", { title: short(ok[0]), place: where }), steps: ok.map((i) => ({ space: spaceOf(i), id: i.id, addedParents: [parent] })) });
   };

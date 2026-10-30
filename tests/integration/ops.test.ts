@@ -135,6 +135,13 @@ test("define a type and its views without code, query by type name", () => {
   const person = ops.get("Richard Hamming") as any;
   expect(person.related_by).toEqual(["Bücher: The Art"]);
   expect((ops.get("The Art") as any).properties).toMatchObject({ Autor: ["Richard Hamming"], Bewertung: 5, Status: "Will lesen" });
+  // numbers in plain or German notation
+  for (const [raw, n] of [["4.5", 4.5], ["4,5", 4.5], ["1.234,5", 1234.5]] as const) {
+    ops.update("The Art", { properties: { Bewertung: raw } }, A);
+    expect((ops.get("The Art") as any).properties.Bewertung).toBe(n);
+  }
+  expect(() => ops.update("The Art", { properties: { Bewertung: "viel" } }, A)).toThrow(/number/);
+  ops.update("The Art", { properties: { Bewertung: 5 } }, A);
   expect(ops.convertPreview({ type: "Buch", direction: "type_to_tag" }).would_lose_type).toBe(2);
 });
 
