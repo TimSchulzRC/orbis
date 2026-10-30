@@ -7,9 +7,6 @@ import {
   Decoration,
   type DecorationSet,
   EditorView,
-  MatchDecorator,
-  ViewPlugin,
-  type ViewUpdate,
   WidgetType,
   keymap,
   placeholder as placeholderExt,
@@ -25,6 +22,7 @@ import { notify } from "./feedback";
 import { autocompletion, type Completion, type CompletionContext, type CompletionResult } from "@codemirror/autocomplete";
 import { FilePlus } from "lucide-react";
 import { livePreview } from "./editor/livePreview";
+import { links } from "./editor/links";
 import { mentionCompletion, onSlashFiles, pageOption, slashCompletion, slashRender } from "./editor/slash";
 import { blockHandles } from "./editor/handles";
 import { formatKeymap, formatToolbar } from "./editor/toolbar";
@@ -33,15 +31,10 @@ import { searchKeymap } from "@codemirror/search";
 import { tags as t } from "@lezer/highlight";
 import { yCollab, yUndoManagerKeymap } from "y-codemirror.next";
 import { repo } from "../repo";
-import { go, itemHref } from "../hooks";
 import { files } from "../files";
 import { tr } from "../i18n";
 
 const highlight = HighlightStyle.define([
-  { tag: t.heading1, fontSize: "1.75em", fontWeight: "650", lineHeight: "1.3", letterSpacing: "-0.01em" },
-  { tag: t.heading2, fontSize: "1.4em", fontWeight: "650", lineHeight: "1.35" },
-  { tag: t.heading3, fontSize: "1.18em", fontWeight: "650" },
-  { tag: [t.heading4, t.heading5, t.heading6], fontWeight: "650" },
   { tag: t.strong, fontWeight: "650" },
   { tag: t.emphasis, fontStyle: "italic" },
   { tag: t.strikethrough, textDecoration: "line-through" },
@@ -53,102 +46,6 @@ const highlight = HighlightStyle.define([
   { tag: t.list, color: "inherit" },
   { tag: t.contentSeparator, color: "var(--faint)" },
 ]);
-
-// ---------- wikilinks ----------
-
-const linkRe = /(!?\[\[)([^\]|#\n]+)((?:#[^\]|\n]*)?(?:\|[^\]\n]*)?)(\]\])/g;
-
-const linkDecorator = new MatchDecorator({
-  regexp: linkRe,
-  decorate(add, from, _to, m) {
-    const target = m[2]!.trim();
-    const id = repo.resolveTitle(target);
-    if (m[1] === "![[" && id && repo.get(id)?.file?.filetype === "bild") return;
-    const exists = !!id;
-    const open = m[1]!.length;
-    add(from, from + open, Decoration.mark({ class: "cm-bracket-dim" }));
-    add(from + open, from + open + m[2]!.length + m[3]!.length, Decoration.mark({ class: exists ? "cm-wikilink" : "cm-wikilink missing", attributes: { "data-target": target } }));
-    add(from + open + m[2]!.length + m[3]!.length, from + m[0].length, Decoration.mark({ class: "cm-bracket-dim" }));
-  },
-});
-
-const wikilinks = ViewPlugin.fromClass(
-  class {
-    decorations: DecorationSet;
-    constructor(view: EditorView) {
-      this.decorations = linkDecorator.createDeco(view);
-    }
-    update(u: ViewUpdate) {
-      this.decorations = linkDecorator.updateDeco(u, this.decorations);
-    }
-  },
-  {
-    decorations: (v) => v.decorations,
-    eventHandlers: {
-      click(e) {
-        const el = (e.target as HTMLElement).closest("[data-target]") as HTMLElement | null;
-        if (!el) return false;
-        const target = el.dataset.target!;
-        const id = repo.resolveTitle(target);
-        e.preventDefault();
-        if (id) go(itemHref(id).slice(1));
-        else go(`/create?title=${encodeURIComponent(target)}`);
-        return true;
-      },
-    },
-  },
-);
-
-// ---------- quiet markup: the syntax only shows on the line being edited ----------
-// Elsewhere the text reads like text: no "# " before headings, no [[ ]] around links, no target
-// before an |alias, and no ![[file]] source where the file is shown below it.
-
-function quietRanges(line: { from: number; text: string }): [number, number][] {
-  const out: [number, number][] = [];
-  const h = /^(#{1,6} )/.exec(line.text);
-  if (h) out.push([line.from, line.from + h[1]!.length]);
-  for (const m of line.text.matchAll(linkRe)) {
-    const start = line.from + m.index!;
-    const [all, open, target, rest] = [m[0], m[1]!, m[2]!, m[3]!];
-    if (open === "![[") {
-      const id = repo.resolveTitle(target.trim());
-      if (id && repo.get(id)?.file) out.push([start, start + all.length]); // the embed shows it
-      continue;
-    }
-    out.push([start, start + open.length]);
-    const bar = rest.indexOf("|");
-    if (bar >= 0) out.push([start + open.length, start + open.length + target.length + bar + 1]);
-    out.push([start + all.length - 2, start + all.length]);
-  }
-  return out;
-}
-
-function headingDecos(view: EditorView): DecorationSet {
-  const b = new RangeSetBuilder<Decoration>();
-  const sel = view.state.selection.main;
-  for (const { from, to } of view.visibleRanges) {
-    for (let pos = from; pos <= to; ) {
-      const line = view.state.doc.lineAt(pos);
-      const active = view.hasFocus && sel.from <= line.to && sel.to >= line.from;
-      if (!active) for (const [a, z] of quietRanges(line)) b.add(a, z, Decoration.replace({}));
-      pos = line.to + 1;
-    }
-  }
-  return b.finish();
-}
-
-const quietHeadings = ViewPlugin.fromClass(
-  class {
-    decorations: DecorationSet;
-    constructor(view: EditorView) {
-      this.decorations = headingDecos(view);
-    }
-    update(u: ViewUpdate) {
-      if (u.docChanged || u.selectionSet || u.viewportChanged || u.focusChanged) this.decorations = headingDecos(u.view);
-    }
-  },
-  { decorations: (v) => v.decorations },
-);
 
 // ---------- file embeds ----------
 
@@ -353,8 +250,7 @@ export function Editor({
       markdown({ base: markdownLanguage }),
       syntaxHighlighting(highlight),
       EditorView.lineWrapping,
-      wikilinks,
-      quietHeadings,
+      links,
       livePreview,
       images,
       autocompletion({ override: [linkCompletion(nodeId), slashCompletion, mentionCompletion(nodeId)], icons: false, addToOptions: [slashRender], maxRenderedOptions: 40 }),

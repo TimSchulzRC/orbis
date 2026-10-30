@@ -45,10 +45,10 @@ export function setKind(view: EditorView, pos: number, kind: BlockKind) {
   const from = line.from + m[1]!.length;
   const old = m[2] ?? "";
   const prefix = KINDS.find((k) => k.kind === kind)!.prefix;
-  const tx = view.state.update({ changes: { from, to: from + old.length, insert: prefix }, scrollIntoView: true });
+  const changes = view.state.changes({ from, to: from + old.length, insert: prefix });
   const head = view.state.selection.main.head;
   const inLine = head >= line.from && head <= line.to;
-  view.dispatch(tx, { selection: EditorSelection.cursor(inLine ? tx.changes.mapPos(head, 1) : tx.changes.mapPos(line.to, 1)) });
+  view.dispatch({ changes, selection: EditorSelection.cursor(changes.mapPos(inLine ? Math.max(head, from + old.length) : line.to, 1)), scrollIntoView: true });
   view.focus();
 }
 
@@ -67,9 +67,9 @@ export function moveBlock(view: EditorView, b: { from: number; to: number }, tar
   const text = doc.sliceString(b.from, b.to);
   const remove = b.to < doc.length ? { from: b.from, to: b.to + 1 } : { from: Math.max(0, b.from - 1), to: b.to };
   const insert = target >= doc.length ? { from: doc.length, insert: "\n" + text } : { from: target, insert: text + "\n" };
-  const tx = view.state.update({ changes: [remove, insert] });
-  const start = tx.changes.mapPos(insert.from, insert.from >= doc.length ? 1 : -1) + (target >= doc.length ? 1 : 0);
-  view.dispatch(tx, { selection: EditorSelection.cursor(start + text.length), scrollIntoView: true });
+  const changes = view.state.changes([remove, insert]);
+  const start = changes.mapPos(insert.from, -1) + (target >= doc.length ? 1 : 0);
+  view.dispatch({ changes, selection: EditorSelection.cursor(start + text.length), scrollIntoView: true });
 }
 
 export function moveBy(view: EditorView, pos: number, dir: -1 | 1) {

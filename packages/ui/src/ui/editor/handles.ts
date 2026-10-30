@@ -65,6 +65,7 @@ export const blockHandles = ViewPlugin.fromClass(
       this.drop.className = "cm-drop";
       view.dom.append(this.box, this.drop);
       window.addEventListener("mousemove", this.move);
+      view.contentDOM.addEventListener("keydown", this.keydown);
     }
     move = (e: MouseEvent) => {
       if (this.dragging) return;
@@ -83,6 +84,7 @@ export const blockHandles = ViewPlugin.fromClass(
       const c = view.coordsAtPos(b.from, 1);
       const mid = c ? (c.top + c.bottom) / 2 : b.top + 13;
       this.box.style.top = mid - 12 - dom.top + "px";
+      this.box.classList.remove("instant");
       this.box.classList.add("shown");
     }
     hide() {
@@ -113,7 +115,11 @@ export const blockHandles = ViewPlugin.fromClass(
         const r = view.contentDOM.getBoundingClientRect();
         const y = Math.max(r.top + 1, Math.min(r.bottom - 1, m.clientY));
         const over = blockAtY(view, y);
-        const before = y < (over.top + over.bottom) / 2;
+        let before = y < (over.top + over.bottom) / 2;
+        // as in Notion, the gap right below the block is no place of its own (it is where the
+        // block is already): over the block that is the line above it, over the next one below that
+        if (over.from === b.from) before = true;
+        else if (before && over.from === b.to + 1) before = false;
         target = before ? over.from : over.to >= view.state.doc.length ? view.state.doc.length : over.to + 1;
         this.drop.style.top = (before ? over.top : over.bottom) - dom.top - 1 + "px";
         this.drop.classList.add("shown");
@@ -136,8 +142,16 @@ export const blockHandles = ViewPlugin.fromClass(
       window.addEventListener("mousemove", move);
       window.addEventListener("mouseup", up);
     }
+    /** Any key in the text (typing, arrows) hides the handles until the pointer moves again, as the mouse pointer hides. */
+    keydown = () => {
+      if (this.dragging) return;
+      cancelAnimationFrame(this.frame);
+      this.box.classList.add("instant"); // gone at once, without fading
+      this.hide();
+    };
     destroy() {
       window.removeEventListener("mousemove", this.move);
+      this.view.contentDOM.removeEventListener("keydown", this.keydown);
       cancelAnimationFrame(this.frame);
       this.box.remove();
       this.drop.remove();
