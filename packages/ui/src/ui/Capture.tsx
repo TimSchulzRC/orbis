@@ -3,7 +3,6 @@ import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
 import { useEffect, useRef, useState } from "react";
 import { ArrowRight, ChevronDown, CornerDownRight, Layers, Paperclip, X } from "lucide-react";
-import { SETTINGS_ID } from "@obtion/core/model";
 import { useFiles, useRepo, useSpaceId, spaceHref } from "../hooks";
 import { shownSpaces, useAccounts } from "../accounts";
 import { useT } from "../i18n";
@@ -64,8 +63,8 @@ function CaptureField({ parent, placeholder, autoFocus, onDone, compact, onSpace
   // another workspace: its types and places, the text stays
   useEffect(() => (setType(null), setPlace(null)), [space]);
   const ix = r.index();
-  const pinned = (r.get(SETTINGS_ID)?.settings?.captureTypes ?? []).filter((id) => ix.types.has(id));
-  const others = [...ix.types.values()].filter((x) => !pinned.includes(x.id)).sort((a, b) => a.schema!.name.localeCompare(b.schema!.name));
+  const pinned = ix.captureTypes();
+  const others = ix.typesByName().filter((x) => !pinned.includes(x.id));
   const input = useRef<HTMLTextAreaElement>(null);
   const save = () => {
     const where = parent ?? place ?? undefined;
@@ -88,7 +87,7 @@ function CaptureField({ parent, placeholder, autoFocus, onDone, compact, onSpace
   // a page mentioned with @ is offered as the place, quietly in the same row
   const mentioned = text.includes("@") ? extractMentions(text.split("\n")[0]!, r).mentions.map((m) => ix.resolveTitle(m)).filter((id): id is string => !!id && ix.get(id)?.kind === "info") : [];
   const offer = !parent && mentioned.find((id) => id !== place);
-  const pathOf = (id: string) => [...ix.homePath(id), id].map((p) => ix.get(p)?.title ?? "").join(" › ");
+  const pathOf = (id: string) => ix.pathText([...ix.homePath(id), id]);
   const typeSchema = type ? ix.types.get(type)?.schema : undefined;
   const attach = async (list: FileList | null) => {
     for (const f of [...(list ?? [])]) {
@@ -173,7 +172,7 @@ function CaptureField({ parent, placeholder, autoFocus, onDone, compact, onSpace
                 {[...pinned.map((id) => ix.types.get(id)!), ...others].map((x, i) => (
                   <div key={x.id} className={i === pinned.length && pinned.length ? "mt-1 border-t border-line pt-1" : undefined}>
                     <MenuItem active={type === x.id} icon={<TypeGlyph schema={x.schema} size={14} />} onClick={() => (setType(x.id), close())}>
-                      {x.schema!.name}
+                      {x.schema.name}
                     </MenuItem>
                   </div>
                 ))}

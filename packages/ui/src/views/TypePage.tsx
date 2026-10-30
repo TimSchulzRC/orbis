@@ -24,6 +24,7 @@ import {
   setSchemaField,
   setTabs,
   shortId,
+  titleKey,
   upsertProp,
 } from "@obtion/core/model";
 import { COLORS, ICONS } from "@obtion/core/palette";
@@ -220,7 +221,7 @@ function AddProperty({ item, onAdded }: { item: Item; onAdded: (id: string) => v
   const [kind, setKind] = useState<PropKind>("text");
   // Same name on another type: offer to copy its settings (the types stay independent).
   const twins = name.trim()
-    ? [...ix.types.values()].flatMap((tp) => (tp.id === item.id ? [] : tp.schema!.properties.filter((p) => p.name.toLowerCase() === name.trim().toLowerCase()).map((p) => ({ tp, p }))))
+    ? [...ix.types.values()].flatMap((tp) => (tp.id === item.id ? [] : tp.schema.properties.filter((p) => p.name.toLowerCase() === titleKey(name)).map((p) => ({ tp, p }))))
     : [];
   const add = (copy?: PropDef) => {
     if (!name.trim()) return;
@@ -252,7 +253,7 @@ function AddProperty({ item, onAdded }: { item: Item; onAdded: (id: string) => v
             <p className="mb-1 text-muted-foreground">{t("type.twins")}</p>
             {twins.map(({ tp, p }) => (
               <ShadcnButton variant="plain" size="none" key={tp.id + p.id} onClick={() => add(p)} className="flex w-full items-center gap-1.5 rounded px-1 py-0.5 text-left hover:bg-hover">
-                <TypeGlyph schema={tp.schema} size={12} /> {tp.schema!.name} › {p.name} <span className="ml-auto text-muted-foreground">{t("kind.prop." + p.kind)}</span>
+                <TypeGlyph schema={tp.schema} size={12} /> {tp.schema.name} › {p.name} <span className="ml-auto text-muted-foreground">{t("kind.prop." + p.kind)}</span>
               </ShadcnButton>
             ))}
           </div>
@@ -355,7 +356,7 @@ function PropEditor({ item, prop }: { item: Item; prop: PropDef }) {
               <option value="">{t("type.anyType")}</option>
               {types.map((x) => (
                 <option key={x.id} value={x.id}>
-                  {x.schema!.name}
+                  {x.schema.name}
                 </option>
               ))}
             </NativeSelect>,
@@ -468,7 +469,7 @@ function Capabilities({ item }: { item: Item }) {
             <option value="*">{t("caps.anyWithStatus")}</option>
             {types.map((x) => (
               <option key={x.id} value={x.id}>
-                {x.schema!.name}
+                {x.schema.name}
               </option>
             ))}
           </NativeSelect>,
@@ -481,7 +482,7 @@ function Capabilities({ item }: { item: Item }) {
             <option value="">{t("caps.off")}</option>
             {types.map((x) => (
               <option key={x.id} value={x.id}>
-                {x.schema!.name}
+                {x.schema.name}
               </option>
             ))}
           </NativeSelect>,
@@ -522,7 +523,7 @@ function DeleteTypeDialog({ item, onClose, toTag }: { item: Item; onClose: () =>
     const m: DeleteMode = mode === "tag" ? { mode: "tag", tag } : mode === "type" ? { mode: "type", target } : { mode: "remove" };
     const label =
       mode === "tag" ? t("op.typeToTag", { name: s.name, tag }) : mode === "type" ? t("op.typeToType", { name: s.name, target: ix.typeName(target) }) : t("op.typeRemoved", { name: s.name });
-    deleteType(repo.writer, ix, item.id, m, label, `web:${repo.device}`);
+    deleteType(repo.writer, ix, item.id, m, label, repo.origin);
     onClose();
     go("/types");
   };
@@ -558,7 +559,7 @@ function DeleteTypeDialog({ item, onClose, toTag }: { item: Item; onClose: () =>
         <NativeSelect value={target} onChange={(e) => setTarget(e.target.value)} className="mt-3 rounded-md border border-line bg-bg px-2 py-1 text-sm">
           {others.map((x) => (
             <option key={x.id} value={x.id}>
-              {x.schema!.name}
+              {x.schema.name}
             </option>
           ))}
         </NativeSelect>
@@ -629,7 +630,7 @@ function FromTagDialog({ item, onClose }: { item: Item; onClose: () => void }) {
           variant="primary"
           disabled={!n && !(removeTag && p.already.length)}
           onClick={() => {
-            tagToType(repo.writer, ix, tag, item.id, { replaceTypes: replace, removeTag }, t("op.tagToType", { tag, name: s.name }), `web:${repo.device}`);
+            tagToType(repo.writer, ix, tag, item.id, { replaceTypes: replace, removeTag }, t("op.tagToType", { tag, name: s.name }), repo.origin);
             onClose();
           }}
         >
@@ -653,7 +654,7 @@ function TargetField({ target, hits, onChange }: { target?: string; hits: number
   const [mode, setMode] = useState<"type" | "tag" | "query">(typeId || !target ? "type" : tag ? "tag" : "query");
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
-  const types = [...ix.types.values()].sort((a, b) => a.schema!.name.localeCompare(b.schema!.name));
+  const types = ix.typesByName();
   const box = "w-full rounded-md border border-line bg-bg px-2 py-1 text-sm outline-none";
   return (
     <div className="space-y-1.5">
@@ -673,7 +674,7 @@ function TargetField({ target, hits, onChange }: { target?: string; hits: number
           <option value="">{t("type.targetAny")}</option>
           {types.map((x) => (
             <option key={x.id} value={x.id}>
-              {x.schema!.name}
+              {x.schema.name}
             </option>
           ))}
           <option value="tag">{t("type.targetTag")}</option>

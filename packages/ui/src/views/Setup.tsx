@@ -25,7 +25,7 @@ export function Setup() {
         const meta = await files.prepare(new Blob([f.bytes], { type: f.mime }), f.name);
         metas[f.key] = { ...fileFacts(f, meta.hash), ...meta };
       }
-    runSetup(repo.writer, lang, `web:${repo.device}`);
+    runSetup(repo.writer, lang, repo.origin);
     if (examples) writeExamples(repo.writer, lang, metas);
   };
   const t = (k: string) => translate(lang, k);

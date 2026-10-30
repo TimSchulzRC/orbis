@@ -6,7 +6,7 @@ import { Input } from "../components/ui/input";
 import { NativeSelect } from "../components/ui/native-select";
 import { useState } from "react";
 import { X, Plus, ExternalLink, AlertTriangle, Trash2, ArrowRightLeft, CalendarDays } from "lucide-react";
-import { type FreeKind, type FreeValue, type Item, type PropDef, type TypeSchema, type Value, FREE_KINDS, todayISO } from "@obtion/core/model";
+import { type FreeKind, type FreeValue, type Item, type PropDef, type TypeSchema, type Value, FREE_KINDS, STATUS_GROUPS, optionNames, todayISO } from "@obtion/core/model";
 import { type T, fmtDate } from "@obtion/core/i18n";
 import type { Index } from "@obtion/core/graph";
 import { numberText, parseNumber } from "@obtion/core/input";
@@ -20,13 +20,14 @@ import { DateField, InlineText, ItemLink, MenuItem, Popover, Progress, StatusPil
 import { TagInput } from "./TagInput";
 import { ItemPicker } from "./Picker";
 import { StatusMenu, setStatus } from "./Row";
+import { dateOf } from "@obtion/core/date";
 
 function displayValue(item: Item, p: PropDef): string {
   const v = item.props[p.id];
   const ix = repo.index();
   if (item.rels[p.id]?.length) return item.rels[p.id]!.map((id) => ix.get(id)?.title ?? id).join(", ");
   if (v === undefined) return "";
-  if (p.options) return (Array.isArray(v) ? v : [v]).map((id) => p.options!.find((o) => o.id === id)?.name ?? String(id)).join(", ");
+  if (p.options) return optionNames(p, v).join(", ");
   return String(v);
 }
 
@@ -83,7 +84,7 @@ export function PropertyField({ item, prop, autoFocus }: { item: Item; prop: Pro
           >
             {prop.kind !== "status" && <option value="">–</option>}
             {prop.kind === "status"
-              ? (["todo", "active", "done"] as const).map((g) => (
+              ? STATUS_GROUPS.map((g) => (
                   <optgroup key={g} label={t("group." + g)}>
                     {prop.options!.filter((o) => (o.group ?? "todo") === g).map((o) => (
                       <option key={o.id} value={o.id}>
@@ -99,7 +100,7 @@ export function PropertyField({ item, prop, autoFocus }: { item: Item; prop: Pro
                 ))}
           </NativeSelect>
         </label>
-        {done && <span className="text-xs tabular-nums text-muted-foreground">{t("props.doneOn", { date: fmtDate(lang, todayISO(new Date(done))) })}</span>}
+        {done && <span className="text-xs tabular-nums text-muted-foreground">{t("props.doneOn", { date: fmtDate(lang, dateOf(done)) })}</span>}
         </>
       );
     }

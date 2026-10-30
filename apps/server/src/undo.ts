@@ -5,7 +5,8 @@
 //   later, then the newer value stays. A document the step created goes to the trash.
 // The undo is itself a step (steps.undoes), so undoing it again is "Wiederholen".
 import * as Y from "yjs";
-import { type Store, same } from "./store";
+import type { Store } from "./store";
+import { sameValue } from "@obtion/core/equal";
 import { type UpdateEntry, DOC_MAPS, metaMap, replaceBody, touch } from "@obtion/core/model";
 import type { UndoResult } from "@obtion/core/api";
 
@@ -114,8 +115,8 @@ export function undoStep(store: Store, stepId: string, actor: string): UndoResul
           }
           const back: [string, unknown][] = [];
           for (const key of new Set([...before.keys(), ...after.keys()])) {
-            if (same(before.get(key), after.get(key))) continue; // the step did not touch it
-            if (!same(current.get(key), after.get(key))) {
+            if (sameValue(before.get(key), after.get(key))) continue; // the step did not touch it
+            if (!sameValue(current.get(key), after.get(key))) {
               res.kept.push({ doc: id, field: key });
               continue;
             }

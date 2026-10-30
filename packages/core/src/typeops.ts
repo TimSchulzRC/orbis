@@ -26,6 +26,7 @@ import { isInInbox } from "./placement";
 import { findBlocks, readBlock, typesIn } from "./query";
 import { initialProps, primaryChild, progressSpec } from "./traits";
 import type { Writer } from "./setup";
+import { escapeRe } from "./text";
 
 export type DeleteMode = { mode: "tag"; tag: string } | { mode: "type"; target: string } | { mode: "remove" };
 
@@ -52,7 +53,7 @@ export function typeUsage(ix: Index, typeId: string): TypeUsage {
   const progress: TypeUsage["progress"] = [];
   const childOf: TypeUsage["childOf"] = [];
   for (const t of ix.types.values()) {
-    const s = t.schema!;
+    const s = t.schema;
     for (const p of s.properties) {
       if (p.kind === "relation" && p.target && name && new RegExp(`:\\s*"?${escapeRe(name)}"?(\\s|$|\\))`, "i").test(p.target)) relations.push({ type: t.id, prop: p.id, name: `${s.name} › ${p.name}` });
       if (p.kind === "computed" && p.computed?.of === typeId) progress.push({ type: t.id, name: `${s.name} › ${p.name}` });
@@ -76,8 +77,6 @@ export function wouldBeInInbox(ix: Index, ids: string[], change: (i: Item) => It
   return ids.filter((id) => isInInbox(after.get(id)!, after)).length;
 }
 
-const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
 /** A typed value as a free property (simple kinds only). */
 export function toFree(p: PropDef, v: Value | undefined): FreeValue | undefined {
   if (v === undefined || v === null || v === "") return undefined;
@@ -98,21 +97,30 @@ export function toFree(p: PropDef, v: Value | undefined): FreeValue | undefined 
   }
 }
 
-/** Map a value from one property definition to another (by option name, status group as fallback). */
-function mapValue(from: PropDef, to: PropDef, v: Value): Value | undefined {
+/**
+ * Map a value from one property definition to another. Options go by name, a status falls back
+ * to its group, a multiselect keeps the options that match. `byId` (moving to another workspace):
+ * the same option id first, and only whole – an option without a match makes the value not fit.
+ */
+export function mapValue(from: PropDef, to: PropDef, v: Value, opts: { byId?: boolean } = {}): Value | undefined {
   if (from.kind === to.kind && !from.options) return v;
   const optName = (id: string) => from.options?.find((o) => o.id === id)?.name;
+  const option = (x: string) => {
+    if (opts.byId && to.options?.some((o) => o.id === x)) return x;
+    const name = optName(x) ?? x;
+    return to.options?.find((o) => titleKey(o.name) === titleKey(name))?.id;
+  };
   if ((to.kind === "select" || to.kind === "status") && typeof v === "string") {
-    const name = optName(v) ?? v;
-    const hit = to.options?.find((o) => titleKey(o.name) === titleKey(name));
-    if (hit) return hit.id;
+    const hit = option(v);
+    if (hit || opts.byId) return hit;
     const group = from.options?.find((o) => o.id === v)?.group;
     if (to.kind === "status" && group) return to.options?.find((o) => (o.group ?? "todo") === group)?.id;
     return undefined;
   }
   if (to.kind === "multiselect") {
-    const ids = (Array.isArray(v) ? v : [v]).map((x) => optName(String(x)) ?? String(x));
-    const out = ids.map((n) => to.options?.find((o) => titleKey(o.name) === titleKey(n))?.id).filter(Boolean) as string[];
+    const ids = (Array.isArray(v) ? v : [v]).map((x) => option(String(x)));
+    if (opts.byId) return ids.every(Boolean) ? (ids as string[]) : undefined;
+    const out = ids.filter(Boolean) as string[];
     return out.length ? out : undefined;
   }
   if (["text", "url"].includes(to.kind)) return typeof v === "string" ? (optName(v) ?? v) : String(v);

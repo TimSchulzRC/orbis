@@ -1,5 +1,6 @@
 // Lucide icons as SVG markup for the editor's own DOM (menus, handles, toolbar), which is not React.
 import type { ComponentType } from "react";
+import { escapeHtml } from "../text";
 
 type IconNode = [string, Record<string, string>][];
 const cache = new Map<unknown, IconNode>();
@@ -15,12 +16,10 @@ function nodeOf(icon: unknown): IconNode {
   return node;
 }
 
-const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
-
 /** The icon's SVG, as lucide-react draws it. */
 export function iconHTML(icon: ComponentType<{ size?: number }>, size = 16): string {
   const shapes = nodeOf(icon)
-    .map(([tag, attrs]) => `<${tag} ${Object.entries(attrs).filter(([k]) => k !== "key").map(([k, v]) => `${k}="${esc(String(v))}"`).join(" ")}/>`)
+    .map(([tag, attrs]) => `<${tag} ${Object.entries(attrs).filter(([k]) => k !== "key").map(([k, v]) => `${k}="${escapeHtml(String(v))}"`).join(" ")}/>`)
     .join("");
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${shapes}</svg>`;
 }

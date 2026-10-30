@@ -5,13 +5,13 @@
 // settings finds exactly these again. Fixed ids (ex-*): running it twice adds nothing.
 // Used by the setup page (client), `cli.ts setup --examples` and `bun run seed:demo` alike.
 import type * as Y from "yjs";
-import { type FileMeta, type ItemInit, META_TYPE, appendUpdate, addDaysISO, fileTypeOf, initItem, initSchema, metaMap, setFileMeta, setMeta, setSchemaField, todayISO } from "./model";
+import { type FileMeta, type ItemInit, META_TYPE, appendUpdate, addDaysISO, fileTypeOf, initItem, initType, metaMap, setFileMeta, setMeta, todayISO } from "./model";
 import type { Index } from "./graph";
 import { SYS, type Writer } from "./setup";
 import { BLOCKED_BY } from "./traits";
 import { keysFor } from "./sortkey";
-import { blockSource, type QueryDef } from "./query";
-import { type Lang, translate } from "./i18n";
+import { blockSource, queryFence, type QueryDef } from "./query";
+import { type Lang, translate, words } from "./i18n";
 
 export const EXAMPLE = "example";
 export const EXAMPLE_ORIGIN = "system:examples";
@@ -62,8 +62,8 @@ export function exampleFiles(lang: Lang): ExampleFile[] {
 export function writeExamples(w: Writer, lang: Lang, files: Partial<Record<ExampleFile["key"], FileMeta>>, now = Date.now()): string[] {
   const L = (de: string, en: string) => (lang === "de" ? de : en);
   const t = (k: string) => translate(lang, `setup.${k}`);
-  const typeKey = translate(lang, "q.key.type").split(",")[0];
-  const block = (q: QueryDef) => "```abfrage\n" + blockSource(q) + "\n```\n";
+  const typeKey = words(lang, "q.key.type")[0];
+  const block = (q: QueryDef) => queryFence(blockSource(q)) + "\n";
   const here = { this: true as const };
   const day = (n: number) => (n === 0 ? todayISO() : addDaysISO(n));
   const H = 3600_000;
@@ -87,13 +87,9 @@ export function writeExamples(w: Writer, lang: Lang, files: Partial<Record<Examp
   const doneAt = (daysAgo: number) => (doc: Y.Doc) => metaMap(doc).set("done", now - daysAgo * 24 * H);
 
   // ---------- own types: Person, Buch, Artikel ----------
-  const type = (id: string, spec: Parameters<typeof initSchema>[1], plural: string) => {
+  const type = (id: string, spec: Parameters<typeof initType>[1], plural: string) => {
     if (w.get(id)) return;
-    w.change(id, (doc) => {
-      initItem(doc, { type: META_TYPE, title: spec.name!, source: EXAMPLE, createdBy: EXAMPLE_ORIGIN, created: now - 22 * 24 * H });
-      initSchema(doc, spec);
-      setSchemaField(doc, "plural", plural);
-    });
+    w.change(id, (doc) => initType(doc, { ...spec, plural }, { source: EXAMPLE, createdBy: EXAMPLE_ORIGIN, created: now - 22 * 24 * H }));
     written.push(id);
   };
   const person = "Person";

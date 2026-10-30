@@ -5,19 +5,13 @@
 import { type OptionDef, type PropDef, type StatusGroup, addDaysISO } from "./model";
 import { defaultTypes } from "./setup";
 import { type Lang, LANGS } from "./i18n";
+import { foldUmlauts } from "./text";
 
 export class InputError extends Error {}
 
 /** Lower case, umlauts as two letters, spaces/hyphens/underscores as one "_". */
 function foldWord(s: string): string {
-  return s
-    .trim()
-    .toLowerCase()
-    .replace(/ä/g, "ae")
-    .replace(/ö/g, "oe")
-    .replace(/ü/g, "ue")
-    .replace(/ß/g, "ss")
-    .replace(/[\s_-]+/g, "_");
+  return foldUmlauts(s.trim()).replace(/[\s_-]+/g, "_");
 }
 
 // ---------- dates ----------

@@ -352,7 +352,7 @@ export class DeviceFiles {
     const meta = await this.prepare(file, unique, hash);
     const id = newId();
     this.repo.change(id, (doc) => {
-      initItem(doc, { kind: "datei", title: unique, parents: opts.parent ? [opts.parent] : [], createdBy: `web:${this.repo.device}` });
+      initItem(doc, { kind: "datei", title: unique, parents: opts.parent ? [opts.parent] : [], createdBy: this.repo.origin });
       setFileMeta(doc, meta);
     });
     this.scheduleSync(10);

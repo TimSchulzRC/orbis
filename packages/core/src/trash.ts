@@ -9,12 +9,17 @@ import { type Item, META_TYPE, VIA, setMeta, removeParent } from "./model";
 import type { Index } from "./graph";
 import type { Writer } from "./setup";
 
+/** The parents of a record that exist among `records` (itself as its own parent does not count). */
+function knownParents(r: Item | undefined, records: Map<string, Item>): string[] {
+  return r ? Object.keys(r.parents).filter((p) => p !== r.id && records.has(p)) : [];
+}
+
 /** Recompute `deleted` of cascaded items from their roots. Replaces changed records in place. */
 export function resolveCascade(records: Map<string, Item>): void {
   const via = [...records.values()].filter((r) => r.deletedVia);
   if (!via.length) return;
   const memo = new Map<string, boolean>();
-  const parentsOf = (id: string) => Object.keys(records.get(id)?.parents ?? {}).filter((p) => p !== id && records.has(p));
+  const parentsOf = (id: string) => knownParents(records.get(id), records);
   const above = (root: string, id: string) => {
     const seen = new Set<string>();
     const stack = parentsOf(id);
@@ -93,7 +98,7 @@ export function restoreItem(w: Writer, records: Map<string, Item>, id: string): 
   w.change(id, (doc) => setMeta(doc, { deleted: null }));
   const back: string[] = [];
   for (const r of mine) {
-    const ps = Object.keys(r.parents).filter((p) => p !== r.id && after.has(p));
+    const ps = knownParents(r, after);
     const deadParent = ps.length > 0 && ps.every((p) => after.get(p)!.deleted) ? ps.map((p) => after.get(p)!) : undefined;
     if (deadParent) {
       // still only below deleted entries: it now belongs to their cascade

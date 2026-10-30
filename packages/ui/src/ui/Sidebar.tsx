@@ -10,7 +10,7 @@ import { useEffect, useState } from "react";
 import { ChevronRight, ChevronDown, Inbox, Search, SlidersHorizontal, Link2, MoreHorizontal, Plus, Paperclip, Sun } from "lucide-react";
 import { type Item, META_TYPE, SETTINGS_ID, setSchemaField, setSettings } from "@obtion/core/model";
 import { sidebarChildren, sidebarRoots } from "@obtion/core/placement";
-import { keyBetween, keysFor } from "@obtion/core/sortkey";
+import { keyBetween, keysFor, cmpKey } from "@obtion/core/sortkey";
 import { useRepo, useRoute, useSpaceId, itemHref, spaceHref, useLocalStorage } from "../hooks";
 import { type Space, useAccounts } from "../accounts";
 import { useT } from "../i18n";
@@ -224,9 +224,9 @@ function TypeNav({ touch, here }: { touch?: boolean; here: boolean }) {
   const [drop, setDrop] = useState<{ id: string; before: boolean } | null>(null);
   const filesPos = ix.all.get(SETTINGS_ID)?.settings?.filesPos;
   const rows = [
-    ...ix.typesInOrder().map((x) => ({ id: x.id, key: x.schema!.pos, label: ix.typePlural(x.id), href: itemHref(x.id), icon: <TypeGlyph schema={x.schema} size={touch ? 17 : 15} /> })),
+    ...ix.typesInOrder().map((x) => ({ id: x.id, key: x.schema.pos, label: ix.typePlural(x.id), href: itemHref(x.id), icon: <TypeGlyph schema={x.schema} size={touch ? 17 : 15} /> })),
     { id: "files", key: filesPos, label: t("nav.files"), href: "#/files", icon: <Paperclip size={touch ? 17 : 15} className="shrink-0" /> },
-  ].sort((a, b) => (a.key ?? "~") < (b.key ?? "~") ? -1 : (a.key ?? "~") > (b.key ?? "~") ? 1 : 0);
+  ].sort((a, b) => cmpKey(a.key ?? "~", b.key ?? "~"));
   const active = (id: string) => here && (id === "files" ? route.path.startsWith("/files") : route.parts[0] === "i" && route.parts[1] === id);
   // a new order: every row gets a fresh key, written only where it changed
   const move = (id: string, to: string, before: boolean) => {

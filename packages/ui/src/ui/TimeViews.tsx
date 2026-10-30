@@ -3,22 +3,20 @@
 import { Button as ShadcnButton } from "../components/ui/button";
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
-import { type Item, type PropDef, titleKey, todayISO } from "@obtion/core/model";
+import { type Item, type PropDef, titleKey } from "@obtion/core/model";
+import { addDays, diffDays, todayISO } from "@obtion/core/date";
 import { type EvalCtx, type Group, type QueryDef, fieldOf, groupItems, typesIn } from "@obtion/core/query";
 import { dueProp } from "@obtion/core/traits";
 import { repo } from "../repo";
 import { go, itemHref, useMediaQuery } from "../hooks";
-import { useT } from "../i18n";
+import { useT, titleOf } from "../i18n";
 import { ItemIcon, ItemLink, Seg, cx } from "./bits";
 import { type Look, GroupChip, HiddenGroups, hiddenPatch, splitHidden } from "./Table";
 
 // ---------- dates (ISO strings, computed in UTC so no time zone moves a day) ----------
 
-const DAY = 86400000;
 const ms = (iso: string) => Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10));
 const iso = (t: number) => new Date(t).toISOString().slice(0, 10);
-const addDays = (d: string, n: number) => iso(ms(d) + n * DAY);
-const diffDays = (a: string, b: string) => Math.round((ms(b) - ms(a)) / DAY);
 const weekday = (d: string) => new Date(ms(d)).getUTCDay(); // 0 = Sunday
 const firstDay = (lang: string) => (lang === "en" ? 0 : 1);
 const startOfWeek = (d: string, lang: string) => addDays(d, -((weekday(d) - firstDay(lang) + 7) % 7));
@@ -163,7 +161,7 @@ export function CalendarView({ items, def, ctx, look }: { items: Item[]; def: Qu
                       style={{ gridColumn: `${p.s + 1} / ${p.e + 2}`, gridRow: p.lane + 2 }}
                     >
                       <ItemIcon item={p.item} size={12} className="shrink-0" />
-                      <span className="truncate">{p.item.title || t("untitled")}</span>
+                      <span className="truncate">{titleOf(p.item, t)}</span>
                     </a>
                   ))}
                 {days.map((d, n) => {
@@ -302,7 +300,7 @@ export function TimelineView({ items, def, ctx, look }: { items: Item[]; def: Qu
         <div className="sticky left-0 z-[2] flex h-full shrink-0 items-center gap-2 border-r border-line bg-bg px-2 group-hover/row:bg-hover" style={{ width: LEFT }}>
           <ItemIcon item={i} size={14} className="shrink-0" />
           <a href={itemHref(i.id)} className="truncate hover:underline">
-            {i.title || t("untitled")}
+            {titleOf(i, t)}
           </a>
         </div>
         <div className="relative h-full" style={{ width }}>
@@ -315,7 +313,7 @@ export function TimelineView({ items, def, ctx, look }: { items: Item[]; def: Qu
             {canEdit && <span onPointerDown={(e) => drag(i, "start", e)} className="absolute inset-y-0 left-0 w-2 cursor-ew-resize" aria-hidden />}
             {/* a long bar keeps its name in view while scrolling */}
             <span className="truncate" style={{ paddingLeft: Math.max(0, Math.min(scrollX - x, w - 120)) }}>
-              {i.title || t("untitled")}
+              {titleOf(i, t)}
             </span>
             {canEdit && <span onPointerDown={(e) => drag(i, "end", e)} className="absolute inset-y-0 right-0 w-2 cursor-ew-resize" aria-hidden />}
           </div>

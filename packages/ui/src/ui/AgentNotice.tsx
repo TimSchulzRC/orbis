@@ -17,7 +17,8 @@ function visible(id: string): HTMLElement[] {
   return rows;
 }
 
-function agentName(origin: string): string | undefined {
+/** The agent of a change ("agent:claude-code, …" → "claude-code"); undefined when no agent made it. */
+export function agentName(origin: string): string | undefined {
   const first = origin.split(",")[0]!.trim();
   return first.startsWith("agent:") ? first.slice(6) : undefined;
 }

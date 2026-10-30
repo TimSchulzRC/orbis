@@ -2,9 +2,9 @@ import { Button as ShadcnButton } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { useState } from "react";
 import { Plus, Sparkles } from "lucide-react";
-import { type Item, META_TYPE } from "@obtion/core/model";
+import { type Item, META_TYPE, titleKey } from "@obtion/core/model";
 import { isOverview } from "@obtion/core/placement";
-import { useT } from "../i18n";
+import { useT, titleOf } from "../i18n";
 import { useIndex, useRepo } from "../hooks";
 import { Dialog, ItemIcon, cx } from "./bits";
 import type { PickReason } from "./suggest";
@@ -35,13 +35,13 @@ export function ItemPicker({
   const sugg = q.trim() ? [] : suggestions.filter((s) => repo.get(s.id) && ok(repo.get(s.id)!));
   // overviews (items with children) first: they are the usual places
   const ix = repo.index();
-  const found = (q.trim() ? repo.search(q, 60) : repo.live().sort((a, b) => b.updated - a.updated))
+  const found = (q.trim() ? repo.search(q, 60) : [...repo.live()].sort((a, b) => b.updated - a.updated))
     .filter(ok)
     .sort((a, b) => Number(isOverview(b, ix)) - Number(isOverview(a, ix)))
     .filter((i) => !sugg.some((s) => s.id === i.id))
     .slice(0, 12);
   const rows: { id?: string; reason?: PickReason; create?: string }[] = [...sugg, ...found.map((i) => ({ id: i.id }))];
-  if (onCreate && q.trim() && !found.some((i) => i.title.toLowerCase() === q.trim().toLowerCase())) rows.push({ create: q.trim() });
+  if (onCreate && q.trim() && !found.some((i) => i.title.toLowerCase() === titleKey(q))) rows.push({ create: q.trim() });
   const pick = (r?: (typeof rows)[number]) => {
     if (!r) return;
     if (r.create) onCreate!(r.create);
@@ -73,7 +73,7 @@ export function ItemPicker({
               className={cx("flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm", i === sel && "bg-selected", i === sugg.length && sugg.length > 0 && "mt-2")}
             >
               {item ? <ItemIcon item={item} size={15} /> : <Plus size={15} className="text-muted-foreground" />}
-              <span className="min-w-0 flex-1 truncate">{item ? item.title || t("untitled") : t("picker.create", { title: r.create })}</span>
+              <span className="min-w-0 flex-1 truncate">{item ? titleOf(item, t) : t("picker.create", { title: r.create })}</span>
               {r.reason && (
                 <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
                   {r.reason === "agent" && <Sparkles size={11} />}
@@ -94,5 +94,5 @@ function PathHint({ item }: { item: Item }) {
   const ix = useIndex();
   const path = ix.homePath(item.id);
   if (!path.length) return null;
-  return <span className="max-w-[45%] shrink-0 truncate text-xs text-muted-foreground">{path.map((id) => ix.get(id)?.title).join(" › ")}</span>;
+  return <span className="max-w-[45%] shrink-0 truncate text-xs text-muted-foreground">{ix.pathText(path)}</span>;
 }

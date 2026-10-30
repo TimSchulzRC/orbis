@@ -30,3 +30,15 @@ export function keysFor(n: number): string[] {
   for (let i = 0; i < n; i++) out.push((prev = keyBetween(prev, null)));
   return out;
 }
+
+/** Plain string order: for sort keys (as keyBetween builds them) and ISO dates. */
+export function cmpKey(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+/** The pin key after everything pinned so far: pinning puts an entry at the end of the sidebar. */
+export function nextPinKey(items: Iterable<{ pinned?: string }>): string {
+  let last: string | null = null;
+  for (const i of items) if (i.pinned && (last === null || i.pinned > last)) last = i.pinned;
+  return keyBetween(last, null);
+}

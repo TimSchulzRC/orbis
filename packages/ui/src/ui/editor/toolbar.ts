@@ -9,6 +9,8 @@ import { tr } from "../../i18n";
 import { KINDS, kindName, kindOf, setKind, toggleMark } from "./blocks";
 import { iconButton, iconHTML } from "./icons";
 import { showMenu } from "./menu";
+import { titleKey } from "@obtion/core/model";
+import { kindHint, webHref } from "../text";
 
 const isURL = (s: string) => /^(https?:\/\/|mailto:|www\.)\S+$/i.test(s.trim());
 
@@ -16,10 +18,10 @@ const isURL = (s: string) => /^(https?:\/\/|mailto:|www\.)\S+$/i.test(s.trim());
 function link(view: EditorView, target: { page?: string; url?: string }, text = view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.to)) {
   const { from, to } = view.state.selection.main;
   const insert = target.page
-    ? text.trim().toLowerCase() === target.page.toLowerCase()
+    ? titleKey(text) === target.page.toLowerCase()
       ? `[[${target.page}]]`
       : `[[${target.page}|${text}]]`
-    : `[${text}](${/^www\./i.test(target.url!) ? "https://" + target.url : target.url})`;
+    : `[${text}](${webHref(target.url!)})`;
   view.dispatch({ changes: { from, to, insert }, selection: EditorSelection.cursor(from + insert.length) });
   view.focus();
 }
@@ -157,7 +159,7 @@ class Toolbar {
     const text = this.relinkText ?? this.view.state.sliceDoc(s.from, s.to);
     const ix = repo.index();
     const found = (q.trim() ? repo.search(q, 6) : repo.search(text, 6)).filter((r) => r.title);
-    this.hits = found.map((r) => ({ title: r.title, type: r.kind === "datei" ? tr("kind.file") : (ix.typeName(r.type) ?? "") }));
+    this.hits = found.map((r) => ({ title: r.title, type: kindHint(r, ix) }));
     this.picked = 0;
     this.results.textContent = "";
     const rows: { icon: typeof Globe; label: string; hint: string; run: () => void }[] = [];

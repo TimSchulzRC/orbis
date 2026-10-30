@@ -7,7 +7,7 @@ import type { Index } from "@obtion/core/graph";
 import { useRoute, spaceHref } from "../hooks";
 import { useAccounts } from "../accounts";
 import { SpaceScope, useReplicas } from "../ui/Spaces";
-import { useT, tr } from "../i18n";
+import { useT, tr, titleOf } from "../i18n";
 import { InTray, ItemIcon } from "../ui/bits";
 import { Results } from "../ui/Results";
 import { shortPath } from "../ui/Row";
@@ -17,7 +17,7 @@ function explain(err: string, ix: Index): string {
   const [kind, ...rest] = err.split(":");
   const value = rest.join(":");
   if (kind === "type") {
-    const names = [...ix.types.values()].map((x) => x.schema!.name);
+    const names = [...ix.types.values()].map((x) => x.schema.name);
     const near = names.find((n) => distance(n.toLowerCase(), value.toLowerCase()) <= 2 || n.toLowerCase().startsWith(value.toLowerCase().slice(0, 3)));
     return near ? tr("search.unknownTypeNear", { name: value, near }) : tr("search.unknownType", { name: value, list: names.join(", ") });
   }
@@ -100,7 +100,7 @@ export function SearchView() {
               <li key={`${space.id}/${h.id}`}>
                 <a href={spaceHref(space.id, `/i/${encodeURIComponent(h.id)}`)} className="-mx-2 block rounded-lg px-2 py-1.5 hover:bg-hover">
                   <span className="flex items-center gap-2 font-medium">
-                    <ItemIcon item={h} size={15} /> {h.title || t("untitled")} <InTray item={h} ix={ix} />
+                    <ItemIcon item={h} size={15} /> {titleOf(h, t)} <InTray item={h} ix={ix} />
                   </span>
                   {ix.homePath(h.id).length > 0 && <span className="block truncate pl-6 text-xs text-muted-foreground">{shortPath(ix.homePath(h.id))}</span>}
                   {(h.body || h.file?.text) && <span className="mt-0.5 line-clamp-2 block pl-6 text-sm text-muted-foreground">{snippet(h.body || h.file?.text || "", q, 180)}</span>}

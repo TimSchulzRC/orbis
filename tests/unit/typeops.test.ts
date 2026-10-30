@@ -141,7 +141,7 @@ test("pages show every property of a type, empty ones too – except those marke
   expect(shown()).toEqual(["Autor", "ISBN"]);
   expect(visibleProps(ix.get(b)!, ix.schemaOf(ix.get(b)!)!, ix, new Set(["p_isbn"])).map((p) => p.name)).toContain("ISBN"); // opened via "+ Eigenschaft"
   // the shipped task: "Blockiert durch" and "Wartet auf" only when set
-  const task = m.index().types.get(SYS.task)!.schema!;
+  const task = m.index().types.get(SYS.task)!.schema;
   expect(task.properties.filter((p) => p.hideEmpty).map((p) => p.id).sort()).toEqual(["p_blocked", "p_waiting"]);
 });
 
@@ -153,11 +153,11 @@ test("the one-time upgrade marks only the two task fields, once – a later choi
     upsertProp(d, "p_blocked", { hideEmpty: null as any });
     upsertProp(d, "p_waiting", { hideEmpty: null as any });
   });
-  const marked = () => m.index().types.get(SYS.task)!.schema!.properties.filter((p) => p.hideEmpty).map((p) => p.id).sort();
+  const marked = () => m.index().types.get(SYS.task)!.schema.properties.filter((p) => p.hideEmpty).map((p) => p.id).sort();
   expect(marked()).toEqual([]);
   expect(upgradeHideEmptyTaskFields(m.writer)).toBe(true);
   expect(marked()).toEqual(["p_blocked", "p_waiting"]);
-  expect(m.index().types.get(SYS.project)!.schema!.properties.filter((p) => p.hideEmpty).map((p) => p.id)).toEqual(["p_blocked"]); // shipped that way
+  expect(m.index().types.get(SYS.project)!.schema.properties.filter((p) => p.hideEmpty).map((p) => p.id)).toEqual(["p_blocked"]); // shipped that way
   // the user turns one off: the upgrade does not come back
   m.change(SYS.task, (d) => upsertProp(d, "p_waiting", { hideEmpty: null as any }));
   expect(upgradeHideEmptyTaskFields(m.writer)).toBe(false);

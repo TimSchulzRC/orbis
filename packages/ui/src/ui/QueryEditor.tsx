@@ -31,7 +31,7 @@ function CondPicker({ pick, onUnder, context }: { pick: (c: Cond) => void; onUnd
   const { t } = useT();
   const [step, setStep] = useState<Step>("root");
   const [tag, setTag] = useState("");
-  const types = [...ix.types.values()].sort((a, b) => a.schema!.name.localeCompare(b.schema!.name));
+  const types = ix.typesByName();
   const back = (
     <ShadcnButton variant="plain" size="none" onClick={() => setStep("root")} className="mb-1 flex items-center gap-1 px-2 text-xs text-muted-foreground hover:text-fg">
       <ChevronLeft size={12} /> {t("query.back")}
@@ -43,7 +43,7 @@ function CondPicker({ pick, onUnder, context }: { pick: (c: Cond) => void; onUnd
         {back}
         {types.map((x) => (
           <MenuItem key={x.id} icon={<TypeGlyph schema={x.schema} size={14} />} onClick={() => pick({ type: x.id })}>
-            {x.schema!.name}
+            {x.schema.name}
           </MenuItem>
         ))}
       </>

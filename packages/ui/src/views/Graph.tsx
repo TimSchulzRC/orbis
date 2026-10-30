@@ -189,7 +189,7 @@ export function GraphView() {
   const r = useRepo();
   const { t } = useT();
   const ix = r.index();
-  const types = [...ix.types.values()].sort((a, b) => a.schema!.name.localeCompare(b.schema!.name));
+  const types = ix.typesByName();
   // "" = without type, "#file" = files
   const [hidden, setHidden] = useState<Set<string>>(() => new Set(["#file"]));
   const [kinds, setKinds] = useState<Set<EdgeKind>>(() => new Set<EdgeKind>(["link", "part", "rel"]));
@@ -224,7 +224,7 @@ export function GraphView() {
         <div className="pointer-events-auto flex flex-wrap items-center gap-1 rounded-xl border border-line bg-surface/90 p-1 shadow-sm backdrop-blur">
           {types.map((tp) => (
             <ShadcnButton variant="plain" size="none" key={tp.id} onClick={() => toggle(hidden, tp.id, setHidden)} className={chip(!hidden.has(tp.id))} aria-pressed={!hidden.has(tp.id)}>
-              <TypeGlyph schema={tp.schema} size={13} /> {tp.schema!.name}
+              <TypeGlyph schema={tp.schema} size={13} /> {tp.schema.name}
             </ShadcnButton>
           ))}
           <ShadcnButton variant="plain" size="none" onClick={() => toggle(hidden, "", setHidden)} className={chip(!hidden.has(""))} aria-pressed={!hidden.has("")}>

@@ -3,16 +3,17 @@
 import { Button as ShadcnButton } from "../components/ui/button";
 import { useEffect, useState } from "react";
 import { ChevronRight, MoreHorizontal, Pin, Star, X } from "lucide-react";
-import { type Item, META_TYPE, todayISO } from "@obtion/core/model";
-import { hasPlace, isInInbox } from "@obtion/core/placement";
+import { type Item, META_TYPE } from "@obtion/core/model";
+import { canPlaceIn, hasPlace, isInInbox } from "@obtion/core/placement";
 import { fmtDate } from "@obtion/core/i18n";
 import { repo } from "../repo";
 import { itemHref, useIndex, useMediaQuery } from "../hooks";
-import { useT } from "../i18n";
+import { useT, titleOf } from "../i18n";
 import { ItemIcon, MenuItem, Popover, RelTime, SectionTitle, cx } from "./bits";
 import { ItemPicker } from "./Picker";
 import { placeSuggestions } from "./suggest";
 import { rememberPlace } from "../actions";
+import { dateOf } from "@obtion/core/date";
 
 /** Remember per device whether a row of a page is open (folding is a view, not a change of the page). */
 function useOpen(key: string, initial: boolean): [boolean, (o: boolean) => void] {
@@ -104,12 +105,11 @@ export function Crumbs({ item, tools, onPlaces, onPlace }: { item: Item; tools: 
 export function PlacePicker({ item, onClose }: { item: Item; onClose: () => void }) {
   const ix = useIndex();
   const { t } = useT();
-  const parents = ix.parentsOf(item.id);
   return (
     <ItemPicker
       title={t("place.add")}
       suggestions={placeSuggestions(item)}
-      exclude={(x) => x.id === item.id || ix.wouldCycle(item.id, x.id) || parents.includes(x.id) || x.kind !== "info"}
+      exclude={(x) => !canPlaceIn(item, x, ix)}
       onPick={(pid) => {
         repo.addParent(item.id, pid);
         rememberPlace(pid);
@@ -234,7 +234,7 @@ function RefRow({ page, kind, initial, force }: { page: Item; kind: RefKind; ini
         <ChevronRight size={13} className={cx("shrink-0 text-faint transition-transform", open && "rotate-90")} aria-hidden />
         <span className="whitespace-nowrap text-sm font-medium">{kind.label}</span>
         <span className="text-[13px] tabular-nums text-muted-foreground">{kind.items.length}</span>
-        {!open && <span className="min-w-0 flex-1 truncate text-[13px] text-muted-foreground">{kind.items.map((x) => x.item.title || t("untitled")).join(", ")}</span>}
+        {!open && <span className="min-w-0 flex-1 truncate text-[13px] text-muted-foreground">{kind.items.map((x) => titleOf(x.item, t)).join(", ")}</span>}
       </ShadcnButton>
       {open && (
         <ul className="pb-2.5 pl-10 pr-3.5">
@@ -242,7 +242,7 @@ function RefRow({ page, kind, initial, force }: { page: Item; kind: RefKind; ini
             <li key={x.id} className="group relative flex min-h-8 items-center gap-2 text-sm">
               <ItemIcon item={x} size={14} className="shrink-0" />
               <a href={itemHref(x.id)} className="min-w-0 truncate hover:underline">
-                {x.title || x.file?.name || t("untitled")}
+                {titleOf(x, t)}
               </a>
               <span className="ml-auto flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
                 {note}
@@ -260,7 +260,6 @@ function RefRow({ page, kind, initial, force }: { page: Item; kind: RefKind; ini
 function PlaceHere({ target, page }: { target: Item; page: Item }) {
   const ix = useIndex();
   const { t } = useT();
-  if (target.kind !== "info" && target.kind !== "datei") return null;
   if (!isInInbox(target, ix) || hasPlace(target, ix) || target.type === META_TYPE || ix.wouldCycle(target.id, page.id)) return null;
   return (
     <ShadcnButton variant="plain" size="none" onClick={(e) => (e.preventDefault(), repo.addParent(target.id, page.id))} className="tap-y rounded-md px-1.5 py-0.5 text-xs text-link hover:bg-hover">
@@ -274,7 +273,7 @@ function PageFooter({ item }: { item: Item }) {
   const { t, lang } = useT();
   return (
     <p className="mt-4 text-xs text-muted-foreground">
-      {t("item.edited")} <RelTime ts={item.updated} /> · {t("page.createdOn", { date: fmtDate(lang, todayISO(new Date(item.created)), { day: "numeric", month: "long", year: "numeric" }) })}
+      {t("item.edited")} <RelTime ts={item.updated} /> · {t("page.createdOn", { date: fmtDate(lang, dateOf(item.created), { day: "numeric", month: "long", year: "numeric" }) })}
     </p>
   );
 }

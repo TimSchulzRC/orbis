@@ -1,4 +1,4 @@
-import { type ItemInit, META_TYPE, initItem, initSchema, newId, titleKey } from "@obtion/core/model";
+import { type ItemInit, initType, newId, titleKey } from "@obtion/core/model";
 import type { Repo } from "@obtion/sync";
 import { repo as current } from "./repo";
 import { freshColor } from "@obtion/core/palette";
@@ -23,7 +23,7 @@ export function capture(text: string, opts: { type?: string | null; parent?: str
   if (slash) {
     const ix = repo.index();
     const want = titleKey(slash[1]!);
-    const hit = [...ix.types.values()].find((x) => titleKey(x.schema!.name).startsWith(want));
+    const hit = [...ix.types.values()].find((x) => titleKey(x.schema.name).startsWith(want));
     if (hit) {
       type = hit.id;
       t = t.slice(slash[0].length);
@@ -83,9 +83,6 @@ export function extractMentions(line: string, repo: Repo = current): { text: str
 /** A new type; it appears in the sidebar under "Typen", at the end. Returns its id. */
 export function createType(name: string, repo: Repo = current): string {
   const id = newId();
-  repo.change(id, (d) => {
-    initItem(d, { type: META_TYPE, title: name, createdBy: `web:${repo.device}` });
-    initSchema(d, { name, icon: "box", color: freshColor([...repo.index().types.values()].map((x) => x.schema?.color)), description: "", capabilities: {} });
-  });
+  repo.change(id, (d) => initType(d, { name, color: freshColor([...repo.index().types.values()].map((x) => x.schema.color)) }, { createdBy: repo.origin }));
   return id;
 }

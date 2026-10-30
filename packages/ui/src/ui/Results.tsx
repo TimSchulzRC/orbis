@@ -10,7 +10,7 @@ import { firstOfGroup, statusOf, statusProp } from "@obtion/core/traits";
 import { plainText } from "@obtion/core/search";
 import { repo } from "../repo";
 import { useIndex, useRepo, itemHref, go } from "../hooks";
-import { useT } from "../i18n";
+import { useT, titleOf } from "../i18n";
 import { files, useBlobUrl } from "../files";
 import { ItemIcon, StatusPill, cx, Tag, ProgressCount } from "./bits";
 import { ItemRow, pathLabel, setStatus, treeOrder, Group } from "./Row";
@@ -118,7 +118,7 @@ function ListView({ items, def, ctx, look }: { items: Item[]; def: QueryDef; ctx
             const rel = base ? ix.relPath(base, i.id) : ix.homePath(i.id);
             const showPath = def.group !== "path" && !depth && rel && rel.length > 0 ? rel : undefined;
             const next = withNext ? ix.nextTask(i.id, todayISO()) : undefined;
-            return <ItemRow key={i.id} item={i} sub={depth} path={showPath} note={next && t("row.next", { title: next.title || t("untitled") })} />;
+            return <ItemRow key={i.id} item={i} sub={depth} path={showPath} note={next && t("row.next", { title: titleOf(next, t) })} />;
           })}
         </Group>
       ))}
@@ -320,7 +320,7 @@ function BoardCard({ item: i, cols, ctx }: { item: Item; cols: string[]; ctx: Ev
     >
       <a href={itemHref(i.id)} draggable={false} className="flex items-start gap-2">
         <ItemIcon item={i} size={14} className="mt-0.5 shrink-0" />
-        <span className="min-w-0 flex-1 font-medium">{i.title || t("untitled")}</span>
+        <span className="min-w-0 flex-1 font-medium">{titleOf(i, t)}</span>
       </a>
       {shown.map((c) => (
         <span key={c} className="flex min-w-0 text-xs text-muted-foreground">
@@ -413,7 +413,7 @@ function GalleryTile({ item, ctx }: { item: Item; ctx: EvalCtx }) {
       <a href={itemHref(item.id)} className="group flex min-w-0 flex-col gap-1.5 self-start rounded-xl border border-line bg-surface p-3 hover:bg-hover">
         <span className="flex min-w-0 items-start gap-1.5 text-sm font-medium">
           <ItemIcon item={item} size={14} className="mt-0.5 shrink-0" />
-          <span className="line-clamp-2">{item.title || t("untitled")}</span>
+          <span className="line-clamp-2">{titleOf(item, t)}</span>
         </span>
         {text && <span className="line-clamp-2 text-xs text-muted-foreground">{text}</span>}
         {(st || (pr && pr.total > 0)) && (
@@ -441,7 +441,7 @@ function GalleryTile({ item, ctx }: { item: Item; ctx: EvalCtx }) {
       </div>
       <p className="mt-1.5 flex min-w-0 items-center gap-1.5 text-xs font-medium">
         <ItemIcon item={item} size={12} />
-        <span className="truncate">{item.title || t("untitled")}</span>
+        <span className="truncate">{titleOf(item, t)}</span>
       </p>
       {meta && <p className="truncate text-xs text-muted-foreground">{meta}</p>}
     </a>

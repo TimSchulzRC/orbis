@@ -1,10 +1,7 @@
 // What agents give the tools, once: the MCP server checks it with these schemas, the operations
 // (ops.ts) take the types inferred from them.
 import { z } from "zod";
-import { PROP_KINDS, type ViewKind } from "@obtion/core/model";
-
-/** The kinds of view of a type's page (core has the type ViewKind, but no list of them). */
-export const VIEW_KINDS = ["table", "board", "list", "calendar", "timeline", "gallery", "triage", "tree"] as const satisfies readonly ViewKind[];
+import { PROP_KINDS, VIEW_KINDS } from "@obtion/core/model";
 
 /** Property values by property name. */
 const values = z.record(z.string(), z.any());

@@ -5,7 +5,7 @@ import { isInInbox } from "@obtion/core/placement";
 import { notify } from "../ui/feedback";
 import { useRepo } from "../hooks";
 import { SpaceEyebrow } from "../ui/Spaces";
-import { useT } from "../i18n";
+import { useT, titleOf } from "../i18n";
 import { Button, Empty, ItemIcon, RelTime } from "../ui/bits";
 
 export function TrashView() {
@@ -21,7 +21,7 @@ export function TrashView() {
     for (let n = 0; id && n < 4; n++) {
       const p = r.records.get(id);
       if (!p) break;
-      out.unshift(p.title || t("untitled"));
+      out.unshift(titleOf(p, t));
       id = p.home ?? Object.keys(p.parents)[0];
     }
     return out;
@@ -32,9 +32,9 @@ export function TrashView() {
     setTimeout(() => {
       const ix = r.index();
       const now = ix.get(i.id);
-      const path = now ? ix.homePath(i.id).map((p) => ix.get(p)?.title) : [];
-      const title = i.title || t("untitled");
-      notify(path.length ? t("trash.restoredUnder", { title, place: path.join(" › ") }) : now && isInInbox(now, ix) ? t("trash.restoredInbox", { title }) : t("trash.restored", { title }));
+      const path = now ? ix.homePath(i.id) : [];
+      const title = titleOf(i, t);
+      notify(path.length ? t("trash.restoredUnder", { title, place: ix.pathText(path) }) : now && isInInbox(now, ix) ? t("trash.restoredInbox", { title }) : t("trash.restored", { title }));
     }, 50);
   };
   return (
@@ -49,7 +49,7 @@ export function TrashView() {
               <ItemIcon item={i} size={15} />
               <span className="flex min-w-0 flex-1 flex-col">
                 <a href={`#/i/${encodeURIComponent(i.id)}`} className="truncate hover:underline">
-                  {i.title || t("untitled")}
+                  {titleOf(i, t)}
                 </a>
                 {pathOf(i).length > 0 && <span className="truncate text-xs text-muted-foreground">{pathOf(i).join(" › ")}</span>}
               </span>

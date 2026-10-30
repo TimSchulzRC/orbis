@@ -6,13 +6,13 @@ import {
   type Capabilities,
   type Item,
   type PropDef,
+  type SettingsRecord,
   type ViewTab,
   FORMAT,
-  META_TYPE,
   PERSONAL,
   SETTINGS_ID,
   initItem,
-  initSchema,
+  initType,
   metaMap,
   newId,
   readTabs,
@@ -22,14 +22,15 @@ import {
   setTabs,
   upsertProp,
 } from "./model";
+import { sameValue } from "./equal";
 import { DEFAULT_INBOX_WHERE } from "./inbox";
 import type { Index } from "./graph";
 import { sidebarRoots } from "./placement";
 import { pluralOf } from "./plural";
 import { BLOCKED_BY, WAITING_FOR } from "./traits";
 import { keyBetween, keysFor } from "./sortkey";
-import { type Lang, translate } from "./i18n";
-import { type Cond, type QueryDef, andWhere, blockSource, tabDef } from "./query";
+import { type Lang, translate, words } from "./i18n";
+import { type Cond, type QueryDef, andWhere, blockSource, queryFence, tabDef } from "./query";
 
 export const SYS = {
   card: "sys:card",
@@ -46,7 +47,7 @@ type TypeSpec = { name: string; icon: string; color: string; description: string
 
 export function defaultTypes(lang: Lang): Record<string, TypeSpec> {
   const t = (k: string) => translate(lang, `setup.${k}`);
-  const typeKey = translate(lang, "q.key.type").split(",")[0];
+  const typeKey = words(lang, "q.key.type")[0];
   const priority: Omit<PropDef, "sort"> = {
     id: "p_priority",
     name: t("prop.priority"),
@@ -123,10 +124,20 @@ export function defaultTypes(lang: Lang): Record<string, TypeSpec> {
 }
 
 function createType(w: Writer, id: string, spec: TypeSpec, origin?: string) {
-  w.change(id, (doc) => {
-    initItem(doc, { kind: "info", type: META_TYPE, title: spec.name, createdBy: origin });
-    initSchema(doc, spec);
-  });
+  w.change(id, (doc) => initType(doc, spec, { createdBy: origin }));
+}
+
+/**
+ * A one-time data upgrade: runs `fn` unless the settings say it ran (`key`), then marks it, so
+ * it never runs again – even if the user later undoes its effect. undefined: it ran before (or
+ * there are no settings yet).
+ */
+function runOnce<T>(w: Writer, key: string, fn: (settings: SettingsRecord) => T): T | undefined {
+  const settings = w.get(SETTINGS_ID)?.settings;
+  if (!settings || settings.upgrades?.includes(key)) return undefined;
+  const out = fn(settings);
+  w.change(SETTINGS_ID, (doc) => setSettings(doc, { upgrades: [...(settings.upgrades ?? []), key] }));
+  return out;
 }
 
 /**
@@ -193,16 +204,16 @@ const DEFAULT_CAPTURE_TYPES = [SYS.card, SYS.task, SYS.project];
  * user turns the option off afterwards, it stays off.
  */
 export function upgradeHideEmptyTaskFields(w: Writer): boolean {
-  const KEY = "task-hide-empty-1";
-  const settings = w.get(SETTINGS_ID)?.settings;
-  if (!settings || settings.upgrades?.includes(KEY)) return false;
-  const task = w.get(SYS.task);
-  if (task?.schema)
-    w.change(SYS.task, (doc) => {
-      for (const id of [BLOCKED_BY, WAITING_FOR]) if (task.schema!.properties.some((p) => p.id === id)) upsertProp(doc, id, { hideEmpty: true });
-    });
-  w.change(SETTINGS_ID, (doc) => setSettings(doc, { upgrades: [...(settings.upgrades ?? []), KEY] }));
-  return true;
+  return (
+    runOnce(w, "task-hide-empty-1", () => {
+      const task = w.get(SYS.task);
+      if (task?.schema)
+        w.change(SYS.task, (doc) => {
+          for (const id of [BLOCKED_BY, WAITING_FOR]) if (task.schema!.properties.some((p) => p.id === id)) upsertProp(doc, id, { hideEmpty: true });
+        });
+      return true;
+    }) ?? false
+  );
 }
 
 /**
@@ -265,14 +276,15 @@ export function runSetup(w: Writer, lang: Lang, origin?: string) {
  * the data the format version 1. Returns how many documents were marked.
  */
 export function upgradeAreas(w: Writer, docs: Iterable<[string, Y.Doc]>): number {
-  const KEY = "areas-1";
-  const settings = w.get(SETTINGS_ID)?.settings;
-  if (!settings || settings.upgrades?.includes(KEY)) return 0;
-  const ids: string[] = []; // one document at a time: the server reads them from its database
-  for (const [id, d] of docs) if (metaMap(d).has("kind") && !metaMap(d).has("area")) ids.push(id);
-  for (const id of ids) w.change(id, (d) => metaMap(d).set("area", PERSONAL));
-  w.change(SETTINGS_ID, (d) => setSettings(d, { format: Math.max(settings.format ?? 0, FORMAT), upgrades: [...(settings.upgrades ?? []), KEY] }));
-  return ids.length;
+  return (
+    runOnce(w, "areas-1", (settings) => {
+      const ids: string[] = []; // one document at a time: the server reads them from its database
+      for (const [id, d] of docs) if (metaMap(d).has("kind") && !metaMap(d).has("area")) ids.push(id);
+      for (const id of ids) w.change(id, (d) => metaMap(d).set("area", PERSONAL));
+      w.change(SETTINGS_ID, (d) => setSettings(d, { format: Math.max(settings.format ?? 0, FORMAT) }));
+      return ids.length;
+    }) ?? 0
+  );
 }
 
 /** The collections shipped for the default types (until 26.10.). */
@@ -286,9 +298,10 @@ const SHIPPED_FOR: Record<string, string> = { "sys:c-project": SYS.project, "sys
  * The old documents stay as they are and are no longer read. Returns what happened, for the log.
  */
 export function migrateCollections(w: Writer, ix: Index, docs: Iterable<[string, Y.Doc]>, lang: Lang): string[] {
-  const KEY = "no-collections-1";
-  const settings = w.get(SETTINGS_ID)?.settings;
-  if (!settings || settings.upgrades?.includes(KEY)) return [];
+  return runOnce(w, "no-collections-1", () => collectionsToViews(w, ix, docs, lang)) ?? [];
+}
+
+function collectionsToViews(w: Writer, ix: Index, docs: Iterable<[string, Y.Doc]>, lang: Lang): string[] {
   const log: string[] = [];
   const given = new Set<string>(); // types that got their views (the first collection wins)
   let lastPin = sidebarRoots(ix).at(-1)?.pinned ?? null;
@@ -302,16 +315,16 @@ export function migrateCollections(w: Writer, ix: Index, docs: Iterable<[string,
     const type = SHIPPED_FOR[id] ?? (where && "type" in where ? where.type : undefined);
     const pos = (doc.getMap("pin").get("sidebar") as string | undefined) || undefined; // its place in the sidebar
     if (meta.get("system") === "eingang") {
-      const own = where && JSON.stringify(where) !== JSON.stringify(DEFAULT_INBOX_WHERE);
+      const own = where && !sameValue(where, DEFAULT_INBOX_WHERE);
       if (own) w.change(SETTINGS_ID, (d) => setSettings(d, { inbox: where }));
       log.push(`${name}: ${own ? "its own rule to the settings" : "the default rule"}`);
-    } else if (type && ix.types.get(type) && !ix.types.get(type)!.schema!.views && !given.has(type)) {
+    } else if (type && ix.types.get(type) && !ix.types.get(type)!.schema.views && !given.has(type)) {
       given.add(type);
       // what the collection filtered beyond the type stays in every view
       const parts = where && "and" in where ? where.and : where ? [where] : [];
-      const rest = parts.filter((c) => JSON.stringify(c) !== JSON.stringify({ type }));
+      const rest = parts.filter((c) => !sameValue(c, { type }));
       const extra: Cond | undefined = rest.length > 1 ? { and: rest } : rest[0];
-      const schema = ix.types.get(type)!.schema!;
+      const schema = ix.types.get(type)!.schema;
       w.change(type, (d) => {
         setTabs(d, tabs.map(({ pos: _, ...tab }) => ({ ...tab, where: andWhere(extra, tab.where) })));
         if (name && name !== pluralOf(schema.name, lang)) setSchemaField(d, "plural", name);
@@ -325,10 +338,9 @@ export function migrateCollections(w: Writer, ix: Index, docs: Iterable<[string,
       const page = newId();
       const pin = pos ? (lastPin = keyBetween(lastPin, null)) : undefined;
       const def: QueryDef = tabs.length > 1 ? { where, tabs } : tabDef(where, tabs[0]!);
-      w.change(page, (d) => initItem(d, { title: name, pinned: pin, body: "```abfrage\n" + blockSource(def) + "\n```" }));
+      w.change(page, (d) => initItem(d, { title: name, pinned: pin, body: queryFence(blockSource(def)) }));
       log.push(`${name}: now the page ${page} with a query block${pin ? ", pinned" : ""}`);
     }
   }
-  w.change(SETTINGS_ID, (d) => setSettings(d, { upgrades: [...(settings.upgrades ?? []), KEY] }));
   return log;
 }

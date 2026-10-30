@@ -9,11 +9,12 @@
 // takes the values property by property (same id, else same name and kind; options by id, else by
 // name). A type the other workspace does not have is copied there. Values without a place become
 // free properties, as when a property is removed.
-import { type Item, type PropDef, type TypeSchema, type Value, META_TYPE, addParent, appendUpdate, initItem, initSchema, newId, setCapability, setExtra, setFileMeta, setHome, setMeta, setProp, setRel, setSchemaField } from "./model";
+import { type Item, type PropDef, type TypeSchema, META_TYPE, addParent, appendUpdate, initItem, initType, mapWikiLinks, newId, setExtra, setFileMeta, setHome, setMeta, setProp, setRel, titleKey } from "./model";
 import type { Index } from "./graph";
 import type { Writer } from "./setup";
+import { statusProp } from "./traits";
 import { onlyBelow } from "./trash";
-import { toFree } from "./typeops";
+import { mapValue, toFree } from "./typeops";
 
 export interface Moved {
   /** old id → new id, the root first */
@@ -52,14 +53,14 @@ export function planMove(src: Index, root: string, dst: Index): MovePlan {
     const from = r.type ? src.get(r.type)?.schema : undefined;
     let to = from;
     if (from) {
-      const same = dst.get(r.type!)?.type === META_TYPE ? r.type! : dst.typeByName(from.name);
-      if (same) to = dst.get(same)!.schema!;
+      const same = sameType(r.type!, from, dst);
+      if (same) to = dst.types.get(same)!.schema;
       else copiedTypes.add(from.name);
     }
     for (const [pid, v] of Object.entries(r.props)) {
-      const p = from?.properties.find((x) => x.id === pid) ?? from?.removedProperties.find((x) => x.id === pid);
+      const p = propOf(from, pid);
       const q = p && to ? target(p, to) : undefined;
-      if (p && (!q || mapValue(p, q, v) === undefined)) freeProps.add(p.name);
+      if (p && (!q || mapValue(p, q, v, { byId: true }) === undefined)) freeProps.add(p.name);
     }
     const outside = (id: string) => !inside.has(id);
     droppedLinks += r.refs.filter(outside).length + Object.values(r.rels).flat().filter(outside).length + src.textLinks(r).filter((l) => outside(l.to)).length;
@@ -82,29 +83,28 @@ export function copyToWorkspace(src: Index, root: string, dst: { w: Writer; ix: 
   for (const t of new Set(items.map((r) => r.type).filter((t): t is string => !!t))) {
     const from = src.get(t)?.schema;
     if (!from) continue;
-    const same = dst.ix.get(t)?.type === META_TYPE ? t : dst.ix.typeByName(from.name);
+    const same = sameType(t, from, dst.ix);
     if (same) {
-      types.set(t, { id: same, from, to: dst.ix.get(same)!.schema! });
+      types.set(t, { id: same, from, to: dst.ix.types.get(same)!.schema });
       continue;
     }
     const id = newId();
     dst.w.change(id, (doc) => {
-      initItem(doc, { kind: "info", type: META_TYPE, title: from.name, createdBy: by }, now);
-      initSchema(doc, { name: from.name, icon: from.icon, color: from.color, description: from.description, properties: from.properties.map(({ sort: _s, ...p }) => p) });
-      for (const [k, v] of Object.entries(from.capabilities)) setCapability(doc, k as keyof TypeSchema["capabilities"], v as never);
-      if (from.plural) setSchemaField(doc, "plural", from.plural);
+      const { name, plural, icon, color, description, capabilities } = from;
+      initType(doc, { name, plural, icon, color, description, capabilities, properties: from.properties.map(({ sort: _s, ...p }) => p) }, { createdBy: by }, now);
     });
     created.push(id);
     types.set(t, { id, from, to: from });
   }
 
   const relink = (body: string) =>
-    body.replace(/(!?\[\[)([^\]|#\n]+)((?:#[^\]|\n]*)?)((?:\|[^\]\n]*)?)\]\]/g, (m, open: string, target: string, anchor: string, label: string) => {
-      const id = target.trim();
-      if (!src.get(id)) return m; // a title: resolves by name in the other workspace
+    mapWikiLinks(body, (l) => {
+      const id = l.target.trim();
+      if (!src.get(id)) return l.raw; // a title: resolves by name in the other workspace
+      const open = l.embed ? "![[" : "[[";
       const to = ids.get(id);
-      if (to) return `${open}${to}${anchor}${label}]]`;
-      return `${open}${label ? label.slice(1) : src.get(id)!.title}${anchor}]]`;
+      if (to) return `${open}${to}${l.section}${l.label !== undefined ? "|" + l.label : ""}]]`;
+      return `${open}${l.label || src.get(id)!.title}${l.section}]]`;
     });
 
   for (const r of items) {
@@ -140,9 +140,9 @@ export function copyToWorkspace(src: Index, root: string, dst: { w: Writer; ix: 
       }
       // values of the type's properties, relations among the moved items
       for (const [pid, v] of Object.entries(r.props)) {
-        const p = map?.from.properties.find((x) => x.id === pid) ?? map?.from.removedProperties.find((x) => x.id === pid);
+        const p = propOf(map?.from, pid);
         const q = p && map ? target(p, map.to) : undefined;
-        const value = p && q ? mapValue(p, q, v) : undefined;
+        const value = p && q ? mapValue(p, q, v, { byId: true }) : undefined;
         if (q && value !== undefined) setProp(doc, q.id, value);
         else if (p) {
           const free = toFree(p, v);
@@ -154,11 +154,10 @@ export function copyToWorkspace(src: Index, root: string, dst: { w: Writer; ix: 
         const q = p && map ? target(p, map.to) : undefined;
         for (const t of targets) if (q && ids.has(t)) setRel(doc, q.id, ids.get(t)!, true);
       }
-      const status = map?.from.capabilities.status;
+      const p = statusProp(map?.from);
+      const q = p ? target(p, map!.to) : undefined;
       for (const u of r.updates) {
-        const p = status ? map!.from.properties.find((x) => x.id === status) : undefined;
-        const q = p ? target(p, map!.to) : undefined;
-        const opt = u.status && p && q ? mapValue(p, q, u.status) : undefined;
+        const opt = u.status && p && q ? mapValue(p, q, u.status, { byId: true }) : undefined;
         appendUpdate(doc, { at: u.at, text: u.text, by: u.by, ...(typeof opt === "string" ? { status: opt } : {}) });
       }
     });
@@ -168,24 +167,18 @@ export function copyToWorkspace(src: Index, root: string, dst: { w: Writer; ix: 
   return { ids, hashes, types: created };
 }
 
+/** The type of the other workspace that takes items of type `id`: the same id (the shipped types), else the same name. */
+function sameType(id: string, from: TypeSchema, dst: Index): string | undefined {
+  return dst.types.has(id) ? id : dst.typeByName(from.name);
+}
+
+/** A property of the type by id, also a removed one (its values are still there). */
+function propOf(s: TypeSchema | undefined, id: string): PropDef | undefined {
+  return s?.properties.find((x) => x.id === id) ?? s?.removedProperties.find((x) => x.id === id);
+}
+
 /** The property of the other type that takes a value: same id and kind, else same name and kind. */
 function target(p: PropDef, to: TypeSchema): PropDef | undefined {
   if (p.kind === "computed") return undefined;
-  const key = (s: string) => s.trim().toLowerCase();
-  return to.properties.find((q) => q.id === p.id && q.kind === p.kind) ?? to.properties.find((q) => key(q.name) === key(p.name) && q.kind === p.kind);
-}
-
-/** A value for the other property; options by id, else by name. undefined: it does not fit. */
-function mapValue(p: PropDef, q: PropDef, v: Value): Value | undefined {
-  if (!["select", "status", "multiselect"].includes(p.kind)) return v;
-  const one = (id: string) => {
-    if (q.options?.some((o) => o.id === id)) return id;
-    const name = p.options?.find((o) => o.id === id)?.name?.trim().toLowerCase();
-    return name ? q.options?.find((o) => o.name.trim().toLowerCase() === name)?.id : undefined;
-  };
-  if (Array.isArray(v)) {
-    const out = v.map((x) => one(String(x)));
-    return out.every(Boolean) ? (out as string[]) : undefined;
-  }
-  return one(String(v));
+  return to.properties.find((q) => q.id === p.id && q.kind === p.kind) ?? to.properties.find((q) => titleKey(q.name) === titleKey(p.name) && q.kind === p.kind);
 }

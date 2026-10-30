@@ -1,13 +1,13 @@
 import { Button as ShadcnButton } from "../components/ui/button";
 import { useSyncExternalStore } from "react";
-import type { Item } from "@obtion/core/model";
+import { type Item, STATUS_GROUPS } from "@obtion/core/model";
 import { confirmAction, notify } from "./feedback";
 import { dueOf, firstOfGroup, isDone, primaryChild, statusOf, statusProp } from "@obtion/core/traits";
 import { fmtBytes } from "@obtion/core/i18n";
 import type { Repo } from "@obtion/sync";
 import { repo as current } from "../repo";
 import { useItemHref, useRepo } from "../hooks";
-import { tr, useT } from "../i18n";
+import { tr, useT, titleOf } from "../i18n";
 import { DueLabel, ItemIcon, MenuItem, Popover, StatusGlyph, StatusPill, cx, pal, ProgressCount } from "./bits";
 import { statusShape } from "@obtion/core/input";
 
@@ -22,7 +22,7 @@ export function StatusMenu({ item, trigger }: { item: Item; trigger: (p: { onCli
   return (
     <Popover trigger={trigger}>
       {(close) =>
-        (["todo", "active", "done"] as const).map((g) => (
+        STATUS_GROUPS.map((g) => (
           <div key={g}>
             <p className="px-2.5 pb-0.5 pt-1.5 text-xs text-muted-foreground">{t("group." + g)}</p>
             {(sp?.options ?? [])
@@ -42,7 +42,7 @@ export function StatusMenu({ item, trigger }: { item: Item; trigger: (p: { onCli
 /** Open entries with a status somewhere below (they would stay open if this is closed). */
 function openBelow(item: Item, repo: Repo = current): Item[] {
   const ix = repo.index();
-  return [...ix.descendants(item.id)].map((d) => ix.get(d)!).filter((x) => {
+  return ix.items(ix.descendants(item.id)).filter((x) => {
     const s = statusOf(x, ix.schemaOf(x));
     return !!s && s.group !== "done";
   });
@@ -64,7 +64,7 @@ export async function setStatus(item: Item, optionId: string, repo: Repo = curre
     const open = openBelow(item, repo);
     if (open.length) {
       const ok = await confirmAction({
-        title: tr("tick.openTitle", { title: item.title || tr("untitled") }),
+        title: tr("tick.openTitle", { title: titleOf(item) }),
         body: tr("tick.openBody", { count: open.length, titles: open.slice(0, 3).map((x) => `„${x.title}“`).join(", ") }),
         yes: tr("tick.closeAnyway", { name: opt.name }),
       });
@@ -72,7 +72,7 @@ export async function setStatus(item: Item, optionId: string, repo: Repo = curre
     }
   }
   repo.setProp(item.id, sp.id, optionId);
-  if (closing) notify(tr("tick.done", { title: item.title || tr("untitled"), name: opt.name }), () => repo.setProp(item.id, sp.id, (before as string) ?? null));
+  if (closing) notify(tr("tick.done", { title: titleOf(item), name: opt.name }), () => repo.setProp(item.id, sp.id, (before as string) ?? null));
   return true;
 }
 
@@ -132,8 +132,7 @@ export function Group({ heading, count, first, children }: { heading?: React.Rea
 }
 
 export function pathLabel(ids: string[], repo: Repo = current) {
-  const ix = repo.index();
-  return ids.map((id) => ix.get(id)?.title ?? "").join(" › ");
+  return repo.index().pathText(ids);
 }
 
 /** Where an entry lives, short: the last two places of its home path ("… › Frankreich › Nordlicht"). */
@@ -173,7 +172,7 @@ export function ItemRow({
       <RowStatus item={item} />
       <a href={hrefOf(item.id)} className="flex min-w-0 flex-1 flex-col justify-center self-stretch">
         {/* on a phone the title may take two lines: its telling part is often at the end */}
-        <span className={cx("block text-sm max-md:text-[15px] max-sm:line-clamp-2 sm:truncate", done && "text-muted-foreground line-through")}>{item.title || t("untitled")}</span>
+        <span className={cx("block text-sm max-md:text-[15px] max-sm:line-clamp-2 sm:truncate", done && "text-muted-foreground line-through")}>{titleOf(item, t)}</span>
         {path && path.length > 0 && (
           <span className="block truncate text-xs text-muted-foreground" title={pathLabel(path)}>
             {shortPath(path)}

@@ -4,7 +4,7 @@ import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
 import { useEffect, useState } from "react";
 import { ArrowRightLeft, Download, Trash2, RotateCcw, MoreHorizontal, Replace } from "lucide-react";
-import { type Item, setFileMeta, todayISO } from "@obtion/core/model";
+import { type Item, setFileMeta } from "@obtion/core/model";
 import { fmtBytes, fmtDate } from "@obtion/core/i18n";
 import { useIndex, go } from "../hooks";
 import { repo } from "../repo";
@@ -16,6 +16,7 @@ import { TagInput } from "../ui/TagInput";
 import { ItemPicker } from "../ui/Picker";
 import { TitleField } from "../ui/TitleField";
 import { fmtDuration } from "../ui/Results";
+import { dateOf } from "@obtion/core/date";
 
 export function FilePage({ item }: { item: Item }) {
   const { t, lang } = useT();
@@ -48,7 +49,7 @@ export function FilePage({ item }: { item: Item }) {
   const facts: [string, React.ReactNode][] = [
     [t("file.type"), `${t("filetype." + f.filetype)} · ${(f.name.split(".").pop() ?? "").toUpperCase()}`],
     [t("file.size"), [f.width && f.height ? `${f.width} × ${f.height}` : "", f.pages ? t("file.pages", { count: f.pages }) : "", f.duration ? fmtDuration(f.duration) : "", fmtBytes(lang, f.size)].filter(Boolean).join(" · ")],
-    [t("file.added"), `${fmtDate(lang, todayISO(new Date(item.created)))}${item.createdBy?.includes("@") ? " · " + item.createdBy.split("@")[1]!.split("-")[0] : ""}`],
+    [t("file.added"), `${fmtDate(lang, dateOf(item.created))}${item.createdBy?.includes("@") ? " · " + item.createdBy.split("@")[1]!.split("-")[0] : ""}`],
     [t("file.here"), local ? t("file.local") : t("file.online")],
   ];
   /** "Ersetzen": new content, same document; the old version stays in the history. */

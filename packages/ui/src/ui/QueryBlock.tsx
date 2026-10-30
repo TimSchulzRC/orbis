@@ -9,8 +9,8 @@ import { StateEffect, StateField, type EditorState, type Extension, RangeSetBuil
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, WidgetType } from "@codemirror/view";
 import { Pencil, Trash2, Check } from "lucide-react";
 import { type ViewTab, MAIN_TAB, legacyTab, shortId } from "@obtion/core/model";
-import { keyBetween } from "@obtion/core/sortkey";
-import { type QueryDef, andWhere, blockSource, findBlocks, readBlock, runQuery } from "@obtion/core/query";
+import { keyBetween, cmpKey } from "@obtion/core/sortkey";
+import { type QueryDef, andWhere, blockSource, findBlocks, readBlock, runQuery, queryFence } from "@obtion/core/query";
 import { repo } from "../repo";
 import { useIndex } from "../hooks";
 import { useT } from "../i18n";
@@ -19,6 +19,7 @@ import { viewGroups } from "./Table";
 import { type TabEdit, ViewSettings, ViewTabs, tabName, useTabChoice, useViewFields } from "./Views";
 import { QueryEditor } from "./QueryEditor";
 import { Button, SectionTitle } from "./bits";
+import { sameValue } from "@obtion/core/equal";
 
 /** A block's views: its tabs, or its one look as the only tab. */
 function blockTabs(def: QueryDef): ViewTab[] {
@@ -40,7 +41,7 @@ function QueryBlockView({ src, thisId, n = 0, onChange, onDelete, readOnly }: { 
   const tabWhere = draft?.scope === tab.id ? draft.where : tab.where;
   const def: QueryDef = { ...stored, where: baseWhere };
   const savedWhere = draft ? (draft.scope === "base" ? stored.where : tabs.find((x) => x.id === draft.scope)?.where) : undefined;
-  const dirty = !!draft && JSON.stringify(draft.where) !== JSON.stringify(savedWhere);
+  const dirty = !!draft && !sameValue(draft.where, savedWhere);
   /** Write the views: several as tabs, a single one as the block's own look (its filter joins the query). */
   const writeTabs = (next: ViewTab[], base: QueryDef = stored) => {
     const first = next[0]!;
@@ -61,7 +62,7 @@ function QueryBlockView({ src, thisId, n = 0, onChange, onDelete, readOnly }: { 
   const edit = (d: QueryDef) => {
     const { where: _w, ...look } = d;
     const { where: _s, ...was } = stored;
-    if (JSON.stringify(look) !== JSON.stringify(was)) onChange?.({ ...look, where: stored.where });
+    if (!sameValue(look, was)) onChange?.({ ...look, where: stored.where });
   };
   const save = () => {
     if (dirty && onChange && draft) {
@@ -87,7 +88,7 @@ function QueryBlockView({ src, thisId, n = 0, onChange, onDelete, readOnly }: { 
       pickTab(nid);
     },
     remove: (id) => writeTabs(tabs.filter((x) => x.id !== id)),
-    move: (id, pos) => writeTabs(tabs.map((x) => (x.id === id ? { ...x, pos } : x)).sort((a, b) => (a.pos < b.pos ? -1 : a.pos > b.pos ? 1 : 0))),
+    move: (id, pos) => writeTabs(tabs.map((x) => (x.id === id ? { ...x, pos } : x)).sort((a, b) => cmpKey(a.pos, b.pos))),
     settings: () => setEditing(true),
   };
   const eff: QueryDef = { ...def, where: andWhere(def.where, tabWhere), view: tab.kind, sort: tab.sort, group: tab.group, columns: tab.columns };
@@ -121,7 +122,7 @@ function QueryBlockView({ src, thisId, n = 0, onChange, onDelete, readOnly }: { 
             placeholder={t("block.title")}
             className="w-full rounded-lg border border-line bg-bg px-2 py-1.5 text-sm outline-none"
           />
-          <QueryEditor context def={{ where: baseWhere }} autoFocus={!def.where} onChange={(d) => JSON.stringify(d.where) !== JSON.stringify(baseWhere) && setDraft({ scope: "base", where: d.where })} />
+          <QueryEditor context def={{ where: baseWhere }} autoFocus={!def.where} onChange={(d) => !sameValue(d.where, baseWhere) && setDraft({ scope: "base", where: d.where })} />
           <label className="flex items-center gap-1 text-xs text-muted-foreground">
             <Checkbox checked={!!def.hideEmpty} onCheckedChange={(checked) => edit({ ...stored, hideEmpty: checked === true || undefined })} />
             {t("block.hideEmpty")}
@@ -138,7 +139,7 @@ function QueryBlockView({ src, thisId, n = 0, onChange, onDelete, readOnly }: { 
           groups={viewGroups(items, eff, ctx)}
           onLook={(p) => patchTab(tab.id, p)}
           onClose={() => (save(), setEditing(false))}
-          filter={tabs.length > 1 ? { where: tabWhere, onChange: (x) => JSON.stringify(x) !== JSON.stringify(tabWhere) && setDraft({ scope: tab.id, where: x }), dirty: dirty && draft?.scope === tab.id, save, discard: () => setDraft(null) } : undefined}
+          filter={tabs.length > 1 ? { where: tabWhere, onChange: (x) => !sameValue(x, tabWhere) && setDraft({ scope: tab.id, where: x }), dirty: dirty && draft?.scope === tab.id, save, discard: () => setDraft(null) } : undefined}
         />
       )}
       {/* a new block shows nothing until it has a condition (not "everything") */}
@@ -209,14 +210,14 @@ class BlockWidget extends WidgetType {
       if (b) view.dispatch({ changes: { from: b.from, to: b.to, insert: text } });
     };
     const { wasText, def } = readBlock(this.src, repo.index());
-    if (wasText) queueMicrotask(() => replace("```abfrage\n" + blockSource(def) + "\n```"));
+    if (wasText) queueMicrotask(() => replace(queryFence(blockSource(def))));
     this.root!.render(
       <StrictMode>
         <QueryBlockView
           src={this.src}
           thisId={this.thisId}
           n={this.n}
-          onChange={(d) => replace("```abfrage\n" + blockSource(d) + "\n```")}
+          onChange={(d) => replace(queryFence(blockSource(d)))}
           onDelete={() => {
             const b = findBlocks(view.state.doc.toString())[this.n];
             if (b) view.dispatch({ changes: { from: b.from, to: Math.min(view.state.doc.length, b.to + 1), insert: "" } });
@@ -330,6 +331,6 @@ export function insertQueryBlock(view: EditorView, def: QueryDef = {}) {
   const pos = view.state.selection.main.head;
   const line = view.state.doc.lineAt(pos);
   const at = line.length ? line.to : pos;
-  const text = (line.length ? "\n" : "") + "```abfrage\n" + blockSource(def) + "\n```\n";
+  const text = (line.length ? "\n" : "") + queryFence(blockSource(def)) + "\n";
   view.dispatch({ changes: { from: at, insert: text } });
 }

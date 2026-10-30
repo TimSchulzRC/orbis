@@ -23,7 +23,7 @@ import {
 import { type Lang, CATALOGS, translate } from "@obtion/core/i18n";
 import { SYS, defaultTypes, runSetup, type Writer } from "@obtion/core/setup";
 import { EXAMPLE_ORIGIN, addExamples, fileFacts } from "@obtion/core/examples";
-import { keyBetween } from "@obtion/core/sortkey";
+import { nextPinKey } from "@obtion/core/sortkey";
 import { dueProp, statusProp } from "@obtion/core/traits";
 import type { Store } from "./store";
 import { type Blobs, sha256 } from "./blobs";
@@ -84,7 +84,7 @@ const STATUS_GROUP: Record<string, "todo" | "active" | "done"> = {
 function statusOption(schema: TypeSchema | undefined, name?: string): string | undefined {
   const p = statusProp(schema);
   if (!p || !name) return undefined;
-  const k = name.trim().toLowerCase();
+  const k = titleKey(name);
   const names = [k];
   const key = STATUS_KEYS[k];
   if (key) for (const lang of Object.keys(CATALOGS) as Lang[]) names.push(translate(lang, `setup.status.${key}`).toLowerCase());
@@ -114,7 +114,7 @@ const AREA_NAME: Record<string, Record<Lang, string>> = {
 
 /** "Work (MOC)", "Studium (MOC)" … → the area they stand for. */
 function areaOfTitle(title: string): string | undefined {
-  const k = title.replace(/\s*\(MOC\)\s*$/i, "").trim().toLowerCase();
+  const k = titleKey(title.replace(/\s*\(MOC\)\s*$/i, ""));
   return AREA_KEY[k];
 }
 
@@ -153,8 +153,7 @@ function ensureType(w: Writer, ref: string, lang: Lang, store: Store): string {
 
 /** The next pinned position (after everything pinned so far). */
 function nextPin(store: Store): string {
-  const last = store.live().map((i) => i.pinned).filter(Boolean).sort().at(-1);
-  return keyBetween(last ?? null, null);
+  return nextPinKey(store.live());
 }
 
 /** A pinned information without a type (an overview once it has children) with this title; created if missing. */

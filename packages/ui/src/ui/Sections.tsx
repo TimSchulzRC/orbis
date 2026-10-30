@@ -14,11 +14,12 @@ import { groupItems, runQuery, shownByBlocks } from "@obtion/core/query";
 import { dueOf, dueProp, isDone, priorityProp, statusOf, statusProp } from "@obtion/core/traits";
 import { repo } from "../repo";
 import { itemHref, useIndex } from "../hooks";
-import { useT, tr } from "../i18n";
+import { useT, tr, titleOf } from "../i18n";
 import { Button, DueLabel, ItemIcon, RelTime, Seg, SectionTitle, ViewMenu } from "./bits";
 import { type PageGroup, PageTable } from "./Table";
 import { shortPath } from "./Row";
-import { agentLabel } from "./AgentNotice";
+import { agentLabel, agentName } from "./AgentNotice";
+import { cmpKey } from "@obtion/core/sortkey";
 
 /**
  * What a list of entries of a type is called: the name of the type's list (a plural, "Tasks",
@@ -75,16 +76,16 @@ export function mainGrouping(item: Item): "sub" | "status" {
 export function ChildList({ item, typeId }: { item: Item; typeId: string }) {
   const { t } = useT();
   const ix = useIndex();
-  const schema = ix.types.get(typeId)!.schema!;
+  const schema = ix.types.get(typeId)!.schema;
   const v: ViewDef = { showDone: false, ...(item.views.main ?? {}) };
   const setV = (patch: Partial<ViewDef>) => repo.setView(item.id, "main", { ...v, ...patch });
   const same = item.type === typeId; // sub-tasks of a task
-  const all = [...ix.descendants(item.id)].map((id) => ix.get(id)!).filter((x) => x && x.type === typeId && !x.deleted);
+  const all = ix.items(ix.descendants(item.id)).filter((x) => x.type === typeId && !x.deleted);
   const doneCount = all.filter((x) => isDone(x, schema)).length;
   const shown = v.showDone ? all : all.filter((x) => !isDone(x, schema));
   const rank = (x: Item) => ({ active: 0, todo: 1, done: 2 })[statusOf(x, schema)?.group ?? "todo"];
   const due = (x: Item) => dueOf(x, schema) ?? "9999";
-  const sorted = [...shown].sort((a, b) => rank(a) - rank(b) || (due(a) < due(b) ? -1 : due(a) > due(b) ? 1 : a.title.localeCompare(b.title)));
+  const sorted = [...shown].sort((a, b) => rank(a) - rank(b) || cmpKey(due(a), due(b)) || a.title.localeCompare(b.title));
   // a query block in the text lists these already (e.g. "Offene Tasks", unter:diese): one list per page
   const inText = shownByBlocks(item, ix);
   const open = all.filter((x) => !isDone(x, schema));
@@ -98,7 +99,7 @@ export function ChildList({ item, typeId }: { item: Item; typeId: string }) {
       </section>
     ) : null;
   // sub-projects: children of the page's own type; each one a group
-  const subs = same ? [] : ix.childrenOf(item.id).map((id) => ix.get(id)!).filter((x) => x && x.type === item.type && !x.deleted);
+  const subs = same ? [] : ix.items(ix.childrenOf(item.id)).filter((x) => x.type === item.type && !x.deleted);
   const by = subs.length ? mainGrouping(item) : "sub";
   let groups: PageGroup[];
   if (by === "status")
@@ -107,8 +108,8 @@ export function ChildList({ item, typeId }: { item: Item; typeId: string }) {
     const subOf = (x: Item) => (ix.relPath(item.id, x.id) ?? []).find((p) => subs.some((s) => s.id === p));
     const direct = sorted.filter((x) => !subOf(x));
     groups = [
-      ...(direct.length || !subs.length ? [{ key: "direct", label: t("children.directIn", { title: item.title || t("untitled") }), items: direct }] : []),
-      ...subs.map((s) => ({ key: s.id, label: s.title || t("untitled"), ref: s.id, items: sorted.filter((x) => subOf(x) === s.id) })),
+      ...(direct.length || !subs.length ? [{ key: "direct", label: t("children.directIn", { title: titleOf(item, t) }), items: direct }] : []),
+      ...subs.map((s) => ({ key: s.id, label: titleOf(s, t), ref: s.id, items: sorted.filter((x) => subOf(x) === s.id) })),
     ];
   }
   const cols = [
@@ -173,7 +174,7 @@ export function BelowCard({ item, exclude, gathers, quietAdd }: { item: Item; ex
   const [adding, setAdding] = useState(false);
   const [more, setMore] = useState<Set<string>>(new Set());
   const hidden = shownByBlocks(item, ix);
-  const direct = ix.childrenOf(item.id).map((id) => ix.get(id)!).filter((c) => c && !c.deleted && !hidden.has(c.id) && !exclude.has(c.id) && !(c.type && exclude.has("type:" + c.type)));
+  const direct = ix.items(ix.childrenOf(item.id)).filter((c) => !c.deleted && !hidden.has(c.id) && !exclude.has(c.id) && !(c.type && exclude.has("type:" + c.type)));
   // without a type: overviews (they have entries below) apart from notes
   const untyped = gathers ? notesBelow(item, ix) : direct.filter((c) => c.kind === "info" && !ix.typeOf(c));
   const overviews = untyped.filter((c) => ix.childrenOf(c.id).length > 0);
@@ -234,7 +235,7 @@ export function BelowCard({ item, exclude, gathers, quietAdd }: { item: Item; ex
                   <a key={x.id} href={itemHref(x.id)} data-id={x.id} className="flex min-h-11 items-center gap-2.5 border-t border-line px-3 py-1.5 first-of-type:border-t-0 hover:bg-hover max-md:min-h-[52px]">
                     <ItemIcon item={x} size={15} className="shrink-0" />
                     <span className="flex min-w-0 flex-1 flex-col">
-                      <span className="truncate text-sm max-md:text-[15px]">{x.title || x.file?.name || t("untitled")}</span>
+                      <span className="truncate text-sm max-md:text-[15px]">{titleOf(x, t)}</span>
                       {rel.length > 0 && <span className="truncate text-xs text-muted-foreground">{shortPath(rel)}</span>}
                     </span>
                     {right(x)}
@@ -340,7 +341,7 @@ export function Updates({ item }: { item: Item }) {
                       · <ItemIcon item={from} size={11} /> {from.title}
                     </span>
                   )}
-                  <span title={u.by}>· {u.by === "you" ? t("updates.you") : u.by.startsWith("import:") ? t("updates.import") : agentLabel(u.by.replace(/^agent:/, ""), t)}</span>
+                  <span title={u.by}>· {u.by === "you" ? t("updates.you") : u.by.startsWith("import:") ? t("updates.import") : agentLabel(agentName(u.by) ?? u.by, t)}</span>
                   {opt && <span>· {t("updates.statusTo", { name: opt.name })}</span>}
                 </div>
                 <div className="whitespace-pre-wrap text-[15px]">{u.text}</div>
