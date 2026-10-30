@@ -152,6 +152,22 @@ try {
   expect(JSON.stringify(await order()) === JSON.stringify([start[1], start[0]]), "dropped there the two swap: " + JSON.stringify(await order()));
   await page.screenshot({ path: join(tmpdir(), "obtion-editor.png") });
 
+  // typing hides "+" and "⠿" until the pointer moves again
+  const tl = (await page.$$(".cm-content .cm-line"))[1]!;
+  const tb = (await tl.boundingBox())!;
+  await page.mouse.move(tb.x + 30, tb.y + tb.height / 2);
+  await page.mouse.click(tb.x + tb.width - 4, tb.y + tb.height / 2);
+  await page.waitForTimeout(100);
+  expect(!!(await page.$(".cm-handles.shown")), "the handles show under the pointer");
+  await page.keyboard.press("End");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("Neue Zeile");
+  await page.waitForTimeout(200);
+  expect(!(await page.$(".cm-handles.shown")), "typing hides the handles");
+  await page.mouse.move(tb.x + 40, tb.y + tb.height / 2);
+  await page.waitForTimeout(100);
+  expect(!!(await page.$(".cm-handles.shown")), "moving the pointer shows them again");
+
   // selecting everything and typing replaces everything, the heading's "# " too
   await page.keyboard.press("Control+a");
   await page.keyboard.type("Neu");

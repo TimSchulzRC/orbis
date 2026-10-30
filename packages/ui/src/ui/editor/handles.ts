@@ -3,7 +3,7 @@
 // move, delete). Not on touch screens and not in read-only text.
 import { startCompletion } from "@codemirror/autocomplete";
 import { EditorSelection } from "@codemirror/state";
-import { type EditorView, ViewPlugin } from "@codemirror/view";
+import { type EditorView, ViewPlugin, type ViewUpdate } from "@codemirror/view";
 import { ArrowDown, ArrowUp, Copy, GripVertical, Plus, Trash2 } from "lucide-react";
 import { tr } from "../../i18n";
 import { KINDS, blockAt, deleteBlock, duplicateBlock, kindName, kindOf, moveBlock, moveBy, setKind } from "./blocks";
@@ -139,6 +139,13 @@ export const blockHandles = ViewPlugin.fromClass(
       };
       window.addEventListener("mousemove", move);
       window.addEventListener("mouseup", up);
+    }
+    /** Typing hides the handles until the pointer moves again (as in Notion): the lines move under them. */
+    update(u: ViewUpdate) {
+      if (!this.dragging && u.transactions.some((tr) => tr.isUserEvent("input") || tr.isUserEvent("delete") || tr.isUserEvent("undo") || tr.isUserEvent("redo"))) {
+        cancelAnimationFrame(this.frame);
+        this.hide();
+      }
     }
     destroy() {
       window.removeEventListener("mousemove", this.move);
