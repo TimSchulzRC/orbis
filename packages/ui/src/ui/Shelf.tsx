@@ -1,5 +1,5 @@
 import { Button as ShadcnButton } from "../components/ui/button";
-// The tray's panel ("Ablage"): looking in, not sorting. Every entry of the workspaces seen, newest
+// The tray's panel ("Eingang"): looking in, not sorting. Every entry of the workspaces seen, newest
 // first, with a line of its text, its workspace and age; one opens here to read and add to it and
 // stays in the inbox – sorting is the review's (views/Review.tsx), here only a quiet link leads
 // there. Above the tray on a desktop, as a sheet on a phone. What lands in the inbox: behind "…".

@@ -199,7 +199,7 @@ test("files under a project: below it, or used in an entry below it (embedded, l
   const proj = m.add({ title: "Projekt" });
   const note = m.add({ title: "Meeting", parents: [proj], body: "Siehe ![[spec.pdf]] und [[plan.pdf]]." });
   m.add({ kind: "datei", title: "spec.pdf" }); // no place of its own: embedded in the meeting
-  m.add({ kind: "datei", title: "plan.pdf", parents: [m.add({ title: "Ablage" })] }); // placed elsewhere, linked in the meeting
+  m.add({ kind: "datei", title: "plan.pdf", parents: [m.add({ title: "Archiv" })] }); // placed elsewhere, linked in the meeting
   m.add({ kind: "datei", title: "direkt.pdf", parents: [proj] });
   m.add({ kind: "datei", title: "fremd.pdf" });
   const r = m.add({ kind: "datei", title: "ref.pdf" });

@@ -283,7 +283,7 @@ export function modName(lang: string): string {
   return MOD === "⌘" ? "⌘" : lang === "de" ? "Strg" : "Ctrl";
 }
 
-/** A quiet amber mark on a hit that still waits in the inbox ("In der Ablage"); nothing otherwise. */
+/** A quiet amber mark on a hit that still waits in the inbox ("Im Eingang"); nothing otherwise. */
 export function InTray({ item, ix }: { item: Item; ix: Index }) {
   if (!isInInbox(item, ix)) return null;
   return (
