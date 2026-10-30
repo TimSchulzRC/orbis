@@ -4,7 +4,7 @@
 import { Input } from "../components/ui/input";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { EditorView } from "@codemirror/view";
-import { Trash2, RotateCcw, MoreHorizontal, Plus, AlertTriangle, ImagePlus, Scissors, ListFilter, Languages, Pin, PinOff, FilePlus, FolderInput, Link2, ArrowRightLeft } from "lucide-react";
+import { Trash2, RotateCcw, Plus, AlertTriangle, ImagePlus, Scissors, ListFilter, Languages, Pin, PinOff, FilePlus, FolderInput, Link2, ArrowRightLeft } from "lucide-react";
 import { type Item, META_TYPE, titleKey } from "@obtion/core/model";
 import { isInInbox, isOverview } from "@obtion/core/placement";
 import { wouldBeInInbox } from "@obtion/core/typeops";
@@ -14,20 +14,21 @@ import { useRepo, useIndex, itemHref, openItem, leavePage, setParams, showTitle 
 import { repo } from "../repo";
 import { useT, tr, getLang, titleOf } from "../i18n";
 import { Editor, insertFilesAtCursor } from "../ui/Editor";
-import { Button, Dialog, MenuItem, Popover, IconButton } from "../ui/primitives";
+import { Button, Dialog, MenuItem, Popover, IconButton, MoreMenu } from "../ui/primitives";
 import { ItemIcon, TypeChip, TypeGlyph } from "../ui/item-look";
 import { ProgressBand } from "../ui/progress";
 import { cn } from "../lib/utils";
 import { ItemPicker } from "../ui/Picker";
 import { PropertyBlock } from "../ui/Properties";
 import { BelowCard, ChildList, Updates, mainGrouping } from "../ui/Sections";
-import { Bezuege, Crumbs, PlacePicker } from "../ui/PageParts";
+import { Bezuege, Crumbs } from "../ui/PageParts";
+import { PlacePicker } from "../ui/Picker";
 import { pluralOf } from "@obtion/core/plural";
 import { queryBlocks, insertQueryBlock } from "../ui/QueryBlock";
 import { FilePage } from "./FilePage";
 import { TitleField } from "../ui/TitleField";
 import { TypePage } from "./TypePage";
-import { createAndOpen } from "../actions";
+import { createAndOpen, rememberPlace } from "../actions";
 import { INBOX_ICON, NOTE_ICON, OVERVIEW_ICON } from "../ui/icons";
 import { extractAsCard, extractType } from "../ui/extract";
 import { movedItems } from "@obtion/core/transfer";
@@ -111,7 +112,7 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
   const pr = progressSpec(schema) ? ix.progressOf(item) : undefined;
 
   const tools = (
-    <Popover align="right" trigger={(p) => <IconButton {...p} label={t("more")} icon={MoreHorizontal} />}>
+    <MoreMenu>
       {(close) => (
         <>
           <MenuItem icon={<FolderInput size={14} />} onClick={() => (close(), setPlacing(true))}>
@@ -157,7 +158,7 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
           )}
         </>
       )}
-    </Popover>
+    </MoreMenu>
   );
   const mainAction = mainType && mainType !== item.type && !item.deleted;
 
@@ -219,7 +220,7 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
           <Plus size={18} /> {ix.typeName(mainType)}
         </Button>
       )}
-      {placing && <PlacePicker item={item} onClose={() => setPlacing(false)} />}
+      {placing && <PlacePicker list={[item]} title={t("place.add")} onPick={(pid) => (repo.addParent(item.id, pid), rememberPlace(pid), setPlacing(false))} onClose={() => setPlacing(false)} />}
       {refPicking && (
         <ItemPicker
           title={t("item.addRef")}

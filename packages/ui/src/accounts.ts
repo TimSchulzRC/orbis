@@ -7,11 +7,12 @@ import { useSyncExternalStore } from "react";
 import { Repo } from "@obtion/sync";
 import type { AccountInfo, ErrorBody, InviteCode, InviteInfo, McpConnect, Member, Ok, ServerInfo, SignedIn, User, WorkspaceInfo } from "@obtion/core/api";
 import type { T } from "@obtion/core/i18n";
-import { browserHost, type SpaceLink } from "./browser";
+import { browserHost, storageNames, type SpaceLink } from "./browser";
 import { DeviceFiles, setFiles } from "./files";
 import { setRepo } from "./repo";
 import { globalPage } from "./scope";
 import { KEYS } from "./ui/storage";
+import { navigate, parseHash, spaceHref } from "./hooks";
 
 export interface Account {
   token: string;
@@ -84,8 +85,7 @@ export const spaceById = (id: string) => spaces.find((s) => s.id === id);
 const open = new Map<string, { repo: Repo; files: DeviceFiles }>();
 
 function link(s: Space): SpaceLink {
-  // the data from before accounts: the storage names they had, so this device keeps its copy
-  return { base: `${location.origin}/w/${s.id}`, token: account!.token, name: s.legacy ? "obtion" : `obtion-ws-${s.id}` };
+  return { base: `${location.origin}/w/${s.id}`, token: account!.token, storage: storageNames(s) };
 }
 
 /** The replica of a workspace, opened (and syncing) from its first use on. */
@@ -198,7 +198,7 @@ export async function signOut() {
   await call<Ok>("/api/account/signout", {}).catch(() => {});
   await forgetAll();
   save();
-  location.replace("#/");
+  navigate("/", { replace: true });
   location.reload();
 }
 
@@ -207,7 +207,7 @@ export async function deleteAccount(password: string) {
   await call<Ok>("/api/account", { password }, "DELETE");
   await forgetAll();
   save();
-  location.replace("#/");
+  navigate("/", { replace: true });
   location.reload();
 }
 
@@ -224,16 +224,15 @@ async function forgetAll() {
 
 /** Delete a workspace's local copy (after leaving it or signing out). */
 async function forget(s: Space) {
-  const name = s.legacy ? "obtion" : `obtion-ws-${s.id}`;
+  const names = storageNames(s);
   open.delete(s.id);
-  const legacy = name === "obtion";
-  await Promise.all([name, legacy ? "obtion-files" : `${name}-files`].map((db) => new Promise<void>((resolve, reject) => {
+  await Promise.all([names.replica, names.files].map((db) => new Promise<void>((resolve, reject) => {
     const request = indexedDB.deleteDatabase(db);
     request.onsuccess = () => resolve();
     request.onerror = () => reject(request.error);
   })));
   const root = await navigator.storage?.getDirectory?.().catch(() => undefined);
-  await root?.removeEntry(legacy ? "blobs" : `blobs-${name}`, { recursive: true }).catch(() => {});
+  await root?.removeEntry(names.blobs, { recursive: true }).catch(() => {});
 }
 
 // ---------- workspaces ----------
@@ -242,7 +241,7 @@ export async function createSpace(name: string) {
   const w = await call<WorkspaceInfo>("/api/workspaces", { name });
   if (shown) shown = [...shown, w.id];
   await refresh();
-  location.hash = `#/w/${w.id}/setup`;
+  navigate("/setup", { space: w.id });
 }
 
 export async function renameSpace(s: Space, name: string) {
@@ -266,7 +265,7 @@ export async function leaveSpace(s: Space) {
   spaces = spaces.filter((x) => x.id !== s.id);
   if (active === s.id) active = spaces[0]?.id ?? null;
   save();
-  location.replace("#/");
+  navigate("/", { replace: true });
   location.reload();
 }
 
@@ -277,7 +276,7 @@ export async function deleteSpace(s: Space) {
   if (active === s.id) active = spaces[0]?.id ?? null;
   save();
   await forget(s);
-  location.replace("#/");
+  navigate("/", { replace: true });
   location.reload();
 }
 
@@ -299,11 +298,11 @@ export const mcpToken = (s: Space) => call<McpConnect>(`/api/workspaces/${s.id}/
  * to it. Pages of no workspace (inbox, search, settings) keep an address without one.
  */
 function followHash() {
-  const named = /^#\/w\/([^/?]+)/.exec(location.hash)?.[1];
+  const { space: named, rest } = parseHash();
   if (named) {
     if (named !== active && spaces.some((s) => s.id === named)) activate(named);
-  } else if (active && !globalPage((location.hash.slice(1).split("?")[0] ?? "").split("/").filter(Boolean)))
-    history.replaceState(history.state, "", `#/w/${active}${location.hash.slice(1) || "/"}`);
+  } else if (active && !globalPage((rest.split("?")[0] ?? "").split("/").filter(Boolean)))
+    history.replaceState(history.state, "", spaceHref(active, rest));
 }
 addEventListener("hashchange", followHash);
 

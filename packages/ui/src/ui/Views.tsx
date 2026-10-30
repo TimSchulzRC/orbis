@@ -10,7 +10,7 @@ import { statusProp } from "@obtion/core/traits";
 import { keyBetween } from "@obtion/core/sortkey";
 import { setParams, useIndex, useLocalStorage, useRoute } from "../hooks";
 import { useT } from "../i18n";
-import { Button, MenuItem, Popover, Seg } from "./primitives";
+import { Card, Button, MenuItem, Popover, Seg, IconButton } from "./primitives";
 import { InlineText } from "./fields";
 import { cn, moveInArray } from "../lib/utils";
 import { QueryEditor } from "./QueryEditor";
@@ -243,14 +243,12 @@ export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter
   const label = "w-28 shrink-0 text-xs text-muted-foreground";
   const kindsHere = kinds.includes(tab.kind) ? kinds : [...kinds, tab.kind];
   return (
-    <div className="mb-4 space-y-3 rounded-xl border border-line bg-surface p-3 text-sm">
+    <Card className="mb-4 space-y-3 p-3 text-sm">
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1 overflow-x-auto [scrollbar-width:none]">
           <Seg label={t("view.label")} value={tab.kind} onChange={(k) => onLook({ kind: k })} options={kindsHere.map((k) => ({ value: k, label: t("view." + k) }))} />
         </div>
-        <Button variant="plain" onClick={onClose} className="tap rounded-md p-1 text-muted-foreground hover:bg-hover hover:text-fg" aria-label={t("view.closeSettings")}>
-          <X size={15} />
-        </Button>
+        <IconButton size="sm" icon={X} iconSize={15} onClick={onClose} label={t("view.closeSettings")} />
       </div>
 
       {filter && <div>
@@ -357,9 +355,7 @@ export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter
                 <Button variant="plain" onClick={() => onLook({ sort: (tab.sort ?? []).map((x, m) => (m === n ? { ...x, desc: !x.desc || undefined } : x)) })} className="tap rounded px-1 text-xs text-muted-foreground hover:bg-hover hover:text-fg">
                   {s.desc ? t("view.desc") : t("view.asc")}
                 </Button>
-                <Button variant="plain" onClick={() => onLook({ sort: (tab.sort ?? []).filter((_, m) => m !== n) })} className="tap rounded p-0.5 text-muted-foreground hover:bg-hover hover:text-fg" aria-label={t("view.sortRemove")}>
-                  <X size={12} />
-                </Button>
+                <IconButton size="xs" icon={X} iconSize={12} onClick={() => onLook({ sort: (tab.sort ?? []).filter((_, m) => m !== n) })} label={t("view.sortRemove")} />
               </span>
             ))}
             <Button variant="plain" onClick={() => onLook({ sort: [...(tab.sort ?? []), { key: sortable.find((k) => !(tab.sort ?? []).some((s) => s.key === k)) ?? "title" }] })} className="tap inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-hover hover:text-fg">
@@ -403,6 +399,6 @@ export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter
           </ul>
         </div>
       )}
-    </div>
+    </Card>
   );
 }

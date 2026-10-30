@@ -24,7 +24,7 @@ export class PageBoundary extends Component<{ children: ReactNode }, { error: Er
         <h1 className="text-lg font-semibold">{tr("error.title")}</h1>
         <p className="mt-2 text-sm text-muted-foreground">{tr("error.hint")}</p>
         <pre className="mt-4 overflow-x-auto rounded-lg bg-surface-2 px-3 py-2 text-left text-xs text-muted-foreground">{error.message}</pre>
-        <Button variant="plain" onClick={() => location.reload()} className="mt-5 inline-flex items-center gap-1.5 rounded-lg bg-ink px-3 py-1.5 text-sm text-ink-text">
+        <Button variant="primary" onClick={() => location.reload()} className="mt-5 px-3">
           <RotateCw size={14} /> {tr("error.reload")}
         </Button>
       </div>

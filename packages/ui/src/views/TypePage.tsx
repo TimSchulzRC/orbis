@@ -6,7 +6,7 @@ import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
 import { NativeSelect } from "../components/ui/native-select";
 import { useEffect, useState } from "react";
-import { MoreHorizontal, Plus, Trash2, GripVertical, ArrowUp, ArrowDown, Tag as TagIcon, X, Pencil, Pin, RotateCcw } from "lucide-react";
+import { Plus, Trash2, GripVertical, ArrowUp, ArrowDown, Tag as TagIcon, X, Pencil, Pin, RotateCcw } from "lucide-react";
 import type * as Y from "yjs";
 import {
   type Item,
@@ -33,7 +33,7 @@ import { type DeleteMode, deleteType, previewTagToType, tagToType, typeUsage } f
 import { useIndex, useRoute, navigate, setParams } from "../hooks";
 import { repo } from "../repo";
 import { useT } from "../i18n";
-import { Button, Dialog, MenuItem, Popover, SectionTitle, Seg, AddButton, IconButton } from "../ui/primitives";
+import { Card, Button, Dialog, MenuItem, Popover, SectionTitle, Seg, AddButton, IconButton, MoreMenu } from "../ui/primitives";
 import { InlineText } from "../ui/fields";
 import { ItemIcon, TypeGlyph, pal } from "../ui/item-look";
 import { cn } from "../lib/utils";
@@ -65,7 +65,7 @@ export function TypePage({ item }: { item: Item }) {
           <h1 className="page-title truncate">{plural}</h1>
           <span className="text-[15px] tabular-nums text-muted-foreground">{ix.itemsOfType(item.id).length}</span>
         </div>
-        <Popover align="right" trigger={(p) => <IconButton {...p} label={t("more")} icon={MoreHorizontal} />}>
+        <MoreMenu>
           {(close) => (
             <>
               <MenuItem icon={<Pencil size={14} />} onClick={() => (close(), setEditing(!editing))}>
@@ -79,7 +79,7 @@ export function TypePage({ item }: { item: Item }) {
               </MenuItem>
             </>
           )}
-        </Popover>
+        </MoreMenu>
       </div>
       {editing && <TypeEditor item={item} onClose={() => setEditing(false)} />}
       <TypeList type={item} />
@@ -98,7 +98,7 @@ function TypeEditor({ item, onClose }: { item: Item; onClose: () => void }) {
   const selected = s.properties.find((p) => p.id === sel);
 
   return (
-    <div className="@container mb-6 rounded-xl border border-line bg-surface p-4 md:p-5">
+    <Card className="@container mb-6 p-4 md:p-5">
       <div className="flex items-start gap-3">
         <Popover
           trigger={(p) => (
@@ -146,7 +146,7 @@ function TypeEditor({ item, onClose }: { item: Item; onClose: () => void }) {
             />
           </label>
         </div>
-        <Popover align="right" trigger={(p) => <IconButton {...p} label={t("more")} icon={MoreHorizontal} />}>
+        <MoreMenu>
           {(close) => (
             <>
               <MenuItem icon={<TagIcon size={14} />} onClick={() => (close(), setDialog("fromTag"))}>
@@ -160,7 +160,7 @@ function TypeEditor({ item, onClose }: { item: Item; onClose: () => void }) {
               </MenuItem>
             </>
           )}
-        </Popover>
+        </MoreMenu>
         <IconButton icon={X} label={t("view.closeSettings")} onClick={onClose} />
       </div>
 
@@ -178,7 +178,7 @@ function TypeEditor({ item, onClose }: { item: Item; onClose: () => void }) {
       <div className="mt-8 grid grid-cols-[minmax(0,1fr)] gap-6 @3xl:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
         <section>
           <SectionTitle right={<AddProperty item={item} onAdded={setSel} />}>{t("type.properties")}</SectionTitle>
-          <div className="rounded-xl border border-line bg-surface p-1">
+          <Card className="p-1">
             {s.properties.map((p, i) => (
               <div key={p.id}>
               <div className={cn("group flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-hover", p.id === sel && "bg-selected")}>
@@ -202,7 +202,7 @@ function TypeEditor({ item, onClose }: { item: Item; onClose: () => void }) {
               </div>
             ))}
             {!s.properties.length && <p className="px-2 py-2 text-sm text-muted-foreground">{t("type.noProps")}</p>}
-          </div>
+          </Card>
           <Capabilities item={item} />
         </section>
         <section className="hidden @3xl:block">{selected ? <PropEditor item={item} prop={selected} /> : null}</section>
@@ -211,7 +211,7 @@ function TypeEditor({ item, onClose }: { item: Item; onClose: () => void }) {
       {dialog === "delete" && <DeleteTypeDialog item={item} onClose={() => setDialog(null)} />}
       {dialog === "toTag" && <DeleteTypeDialog item={item} onClose={() => setDialog(null)} toTag />}
       {dialog === "fromTag" && <FromTagDialog item={item} onClose={() => setDialog(null)} />}
-    </div>
+    </Card>
   );
 }
 
@@ -300,7 +300,7 @@ function PropEditor({ item, prop }: { item: Item; prop: PropDef }) {
   const targetHits = prop.kind !== "relation" ? 0 : prop.target ? runQuery(parseQuery(prop.target, ix).def, { ix }).total : ix.live.filter((i) => i.kind === "info").length;
   const types = [...ix.types.values()];
   return (
-    <div className="rounded-xl border border-line bg-surface p-4" key={prop.id}>
+    <Card className="p-4" key={prop.id}>
       <div className="flex items-center gap-2">
         <InlineText value={prop.name} onCommit={(v) => v.trim() && set({ name: v.trim() })} className="font-semibold" label={t("props.name")} />
         <NativeSelect value={prop.kind} onChange={(e) => set({ kind: e.target.value as PropKind })} className="rounded-md border border-line bg-bg px-1.5 py-0.5 text-xs" aria-label={t("props.kind")}>
@@ -373,7 +373,7 @@ function PropEditor({ item, prop }: { item: Item; prop: PropDef }) {
         </Button>
       </div>
       <p className="mt-1 text-right text-xs text-muted-foreground">{t("type.removeHint")}</p>
-    </div>
+    </Card>
   );
 }
 
@@ -440,7 +440,7 @@ function Capabilities({ item }: { item: Item }) {
   return (
     <div className="mt-8">
       <SectionTitle>{t("caps.title")}</SectionTitle>
-      <div className="divide-y divide-line rounded-xl border border-line bg-surface px-3">
+      <Card className="divide-y divide-line px-3">
         {row(
           t("caps.status"),
           t("caps.statusHint"),
@@ -507,7 +507,7 @@ function Capabilities({ item }: { item: Item }) {
             />
           )}
         </div>
-      </div>
+      </Card>
     </div>
   );
 }

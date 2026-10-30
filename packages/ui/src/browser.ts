@@ -6,12 +6,23 @@ import type { OutItem, RepoHost, ReplicaStorage, SyncSocket, TabMsg } from "@obt
 import { tr } from "./i18n";
 import { KEYS, readJSON, writeJSON } from "./ui/storage";
 
-/** Where a workspace is: its address on the server (…/w/<id>), the account's token, the name of its storage here. */
+/** Where a workspace is: its address on the server (…/w/<id>), the account's token, the names of its storage here. */
 export interface SpaceLink {
   base: string;
   token: string;
-  /** IndexedDB and BroadcastChannel name; "obtion" for the data from before accounts (devices keep their copy) */
-  name: string;
+  storage: StorageNames;
+}
+
+export type StorageNames = ReturnType<typeof storageNames>;
+
+/**
+ * The names of a workspace's storage on this device: the replica (IndexedDB and BroadcastChannel),
+ * its files (IndexedDB) and their blobs (OPFS). The data from before accounts keeps the names it had.
+ */
+export function storageNames(space: { id: string; legacy?: boolean }) {
+  if (space.legacy) return { replica: "obtion", files: "obtion-files", blobs: "blobs" };
+  const replica = `obtion-ws-${space.id}`;
+  return { replica, files: `${replica}-files`, blobs: `blobs-${replica}` };
 }
 
 /** The replica in IndexedDB: stores "updates" (per document), "outbox", "meta" (cursor, server id). */
@@ -85,9 +96,9 @@ function idbStorage(name: string): ReplicaStorage {
 
 /** The browser as the replica's platform for one workspace. The token goes as subprotocol: browsers send no headers on WebSockets. */
 export function browserHost(link: SpaceLink): RepoHost {
-  const bc = typeof BroadcastChannel !== "undefined" ? new BroadcastChannel(link.name) : null;
+  const bc = typeof BroadcastChannel !== "undefined" ? new BroadcastChannel(link.storage.replica) : null;
   return {
-    storage: idbStorage(link.name),
+    storage: idbStorage(link.storage.replica),
     device: deviceName(),
     connect() {
       return new WebSocket(`${link.base.replace(/^http/, "ws")}/sync`, ["obtion", `auth.${link.token}`]) as unknown as SyncSocket;

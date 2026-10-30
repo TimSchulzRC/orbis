@@ -20,7 +20,7 @@ import { CalendarView, TimelineView } from "./TimeViews";
 import { ProjectTable } from "./ProjectTable";
 import { type Look, GroupedTable } from "./Table";
 import { AreaChip, GroupChip, HiddenGroups, fieldLabel, hiddenPatch, splitHidden } from "./groups";
-import { Button } from "./primitives";
+import { Card, Button, IconButton } from "./primitives";
 
 export function useQuery(def: QueryDef, thisId?: string) {
   const ix = useIndex();
@@ -84,9 +84,9 @@ export function Results({ def, thisId, display, empty, keyPrefix = "", look }: {
         <Triage items={items} />
       ) : def.columns?.includes("progress") && !def.group ? (
         // projects with progress and next task: a table in a card
-        <div className="overflow-hidden rounded-xl border border-line bg-surface">
+        <Card className="overflow-hidden">
           <ProjectTable items={items} />
-        </div>
+        </Card>
       ) : (
         <ListView items={items} def={def} ctx={ctx} look={look} />
       )}
@@ -281,9 +281,7 @@ function BoardView({ items, def, ctx, look }: { items: Item[]; def: QueryDef; ct
                         <GroupChip g={col} by={by} byLabel={byLabel} />
                         <span className="text-xs tabular-nums text-muted-foreground">{cards.length}</span>
                         {look?.onLook && (
-                          <Button variant="plain" onClick={() => look.onLook!(hiddenPatch(tab, col, true))} className="tap ml-auto rounded p-0.5 text-muted-foreground opacity-0 hover:bg-hover hover:text-fg focus-visible:opacity-100 group-hover/head:opacity-100 pointer-coarse:opacity-100" aria-label={t("view.hideColumn")} title={t("view.hideColumn")}>
-                            <EyeOff size={13} />
-                          </Button>
+                          <IconButton size="xs" icon={EyeOff} iconSize={13} onClick={() => look.onLook!(hiddenPatch(tab, col, true))} label={t("view.hideColumn")} className="ml-auto opacity-0 focus-visible:opacity-100 group-hover/head:opacity-100 pointer-coarse:opacity-100" />
                         )}
                       </p>
                       {/* an empty column says where to drag – in rows (by project …) the empty cells stay quiet */}

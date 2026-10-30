@@ -2,11 +2,11 @@ import { Input } from "../components/ui/input";
 import { useState } from "react";
 import { Plus, RotateCcw } from "lucide-react";
 import { restoreDefaultTypes } from "@obtion/core/setup";
-import { useIndex, useRepo, useRoute, useSpaceId, itemHref, itemPath, spaceHref } from "../hooks";
+import { useIndex, useRepo, useRoute, useSpaceId, itemHref, spaceHref, openItem } from "../hooks";
 import { repo } from "../repo";
 import { SpaceEyebrow } from "../ui/Spaces";
 import { useT, getLang } from "../i18n";
-import { Button, Dialog } from "../ui/primitives";
+import { Card, Button, Dialog } from "../ui/primitives";
 import { TypeGlyph } from "../ui/item-look";
 import { createType } from "../actions";
 
@@ -29,7 +29,7 @@ export function TypesView() {
           <Plus size={14} /> {t("types.new")}
         </Button>
       </div>
-      <div className="rounded-xl border border-line bg-surface p-1">
+      <Card className="p-1">
         {types.map((tp) => (
           <a key={tp.id} href={itemHref(tp.id)} className="flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-hover">
             <TypeGlyph schema={tp.schema} />
@@ -41,7 +41,7 @@ export function TypesView() {
           </a>
         ))}
         {!types.length && <p className="px-3 py-3 text-sm text-muted-foreground">{t("types.none")}</p>}
-      </div>
+      </Card>
       <Button variant="outline" className="mt-4" onClick={() => restoreDefaultTypes(repo.writer, getLang(), repo.origin)}>
         <RotateCcw size={14} /> {t("types.restore")}
       </Button>
@@ -62,7 +62,7 @@ export function NewTypeDialog({ onClose }: { onClose: () => void }) {
     if (!n) return;
     const id = createType(n, repo);
     onClose();
-    location.hash = spaceHref(space, `${itemPath(id)}?edit=1`);
+    openItem(id, { space, query: "?edit=1" });
   };
   return (
     <Dialog title={t("types.new")} onClose={onClose}>

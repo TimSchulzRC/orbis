@@ -5,7 +5,7 @@ import { Plus, CornerDownLeft, ChevronRight } from "lucide-react";
 import type { Item } from "@obtion/core/model";
 import { snippet } from "@obtion/core/search";
 import { statusOf } from "@obtion/core/traits";
-import { navigate, itemPath, spaceHref } from "../hooks";
+import { navigate, itemPath, spaceHref, openItem } from "../hooks";
 import { useAccounts } from "../accounts";
 import { useReplicas } from "./Spaces";
 import { captureSpace } from "./Capture";
@@ -67,7 +67,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   // actions, found by typing their name
   const cmds: [string, () => void][] = [
     [t("palette.cmd.sortInbox"), () => navigate("/review")],
-    [t("palette.cmd.newType"), () => (location.hash = spaceHref(cs, "/types?new=1"))],
+    [t("palette.cmd.newType"), () => navigate("/types?new=1", { space: cs })],
     [t("palette.cmd.language"), () => setLang(getLang() === "de" ? "en" : "de")],
     ...(["system", "light", "dark"] as const).map((v): [string, () => void] => [t("palette.cmd.theme", { name: t("theme." + v) }), () => setTheme(v)]),
   ];
@@ -101,7 +101,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
 
   const run = (it: Entry) => {
     onClose();
-    if (it.kind === "item") location.hash = spaceHref(it.space, itemPath(it.id));
+    if (it.kind === "item") openItem(it.id, { space: it.space });
     else if (it.kind === "create") createAndOpen({ type: it.type, title: it.title }, repo, cs);
     else if (it.kind === "nav") location.hash = it.path;
     else if (it.kind === "cmd") it.run();

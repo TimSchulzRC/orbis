@@ -130,8 +130,13 @@ export const openItem = (id: string, opts: { space?: string; replace?: boolean; 
 /** Away from a page that is gone (deleted, left): back where one came from, else to the start. */
 export const leavePage = () => (history.length > 1 ? history.back() : navigate("/"));
 
-/** A path in another workspace than the open one ("/i/<id>" → "#/w/<space>/i/<id>"). */
-export const spaceHref = (space: string | undefined, path: string) => (space ? `#/w/${space}${path}` : `#${path}`);
+/**
+ * A path in another workspace than the open one ("/i/<id>" → "#/w/<space>/i/<id>"). A function
+ * declaration, like parseHash: accounts.ts uses both while hooks.ts is still loading.
+ */
+export function spaceHref(space: string | undefined, path: string) {
+  return space ? `#/w/${space}${path}` : `#${path}`;
+}
 
 /** itemHref in the workspace this part of the page belongs to, so a link opened in a new tab lands there too. */
 export function useItemHref() {

@@ -14,7 +14,7 @@ import { dueOf, dueProp, isDone, priorityProp, statusOf, statusProp } from "@obt
 import { repo } from "../repo";
 import { itemHref, useIndex } from "../hooks";
 import { useT, tr, titleOf } from "../i18n";
-import { Button, Seg, SectionTitle, ViewMenu } from "./primitives";
+import { Card, Button, Seg, SectionTitle, ViewMenu, SectionAction } from "./primitives";
 import { DueLabel, ItemIcon, RelTime } from "./item-look";
 import { type PageGroup, PageTable } from "./Table";
 import { shortPath } from "./Row";
@@ -212,14 +212,12 @@ export function BelowCard({ item, exclude, gathers, quietAdd }: { item: Item; ex
       <SectionTitle
         count={count}
         right={
-          <Button variant="plain" onClick={() => setAdding(true)} className="tap-y flex h-7 items-center gap-1 rounded-md px-2 text-[13px] text-muted-foreground hover:bg-hover hover:text-fg">
-            <Plus size={14} /> {t("below.note")}
-          </Button>
+          <SectionAction onClick={() => setAdding(true)}>{t("below.note")}</SectionAction>
         }
       >
         {t("below.title")}
       </SectionTitle>
-      <div className="overflow-hidden rounded-xl border border-line bg-surface">
+      <Card className="overflow-hidden">
         {adding && (
           <div className="border-b border-line px-1">
             <AddRow label={t("below.addNote")} autoFocus onAdd={addNote} onDone={() => setAdding(false)} />
@@ -251,7 +249,7 @@ export function BelowCard({ item, exclude, gathers, quietAdd }: { item: Item; ex
             </div>
           );
         })}
-      </div>
+      </Card>
     </section>
   );
 }
@@ -286,16 +284,14 @@ export function Updates({ item }: { item: Item }) {
         count={every.length || undefined}
         right={
           !writing && (
-            <Button variant="plain" onClick={() => setWriting(true)} className="tap-y flex h-7 items-center gap-1 rounded-md px-2 text-[13px] text-muted-foreground hover:bg-hover hover:text-fg">
-              <Plus size={14} /> {t("updates.one")}
-            </Button>
+            <SectionAction onClick={() => setWriting(true)}>{t("updates.one")}</SectionAction>
           )
         }
       >
         {t("updates.title")}
       </SectionTitle>
       {writing && (
-      <div className="mb-4 rounded-xl border border-line bg-surface p-3 focus-within:border-focus">
+      <Card className="mb-4 p-3 focus-within:border-focus">
         <Textarea
           autoFocus
           onBlur={() => !text.trim() && setWriting(false)}
@@ -326,7 +322,7 @@ export function Updates({ item }: { item: Item }) {
             </Button>
           </div>
         )}
-      </div>
+      </Card>
       )}
       {entries.length > 0 && (
         <ol className="relative ml-1 space-y-4 border-l border-line pl-5">
@@ -365,9 +361,9 @@ function UpdateStarter({ onStart }: { onStart: () => void }) {
   const { t } = useT();
   return (
     <div className="mt-6">
-      <Button variant="plain" onClick={onStart} className="tap-y flex h-8 items-center gap-1.5 rounded-md px-1 text-[13px] text-muted-foreground hover:bg-hover hover:text-fg">
-        <Plus size={14} /> {t("updates.one")}
-      </Button>
+      <SectionAction onClick={onStart} className="h-8 gap-1.5 px-1">
+        {t("updates.one")}
+      </SectionAction>
     </div>
   );
 }

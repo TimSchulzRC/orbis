@@ -3,14 +3,14 @@
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
 import { useEffect, useState } from "react";
-import { ArrowRightLeft, Download, Trash2, RotateCcw, MoreHorizontal, Replace } from "lucide-react";
+import { ArrowRightLeft, Download, Trash2, RotateCcw, Replace } from "lucide-react";
 import { type Item, setFileMeta } from "@obtion/core/model";
 import { fmtBytes, fmtDate } from "@obtion/core/i18n";
 import { useIndex, leavePage } from "../hooks";
 import { repo } from "../repo";
 import { useT } from "../i18n";
 import { files, useBlobUrl } from "../files";
-import { Button, MenuItem, Popover, IconButton } from "../ui/primitives";
+import { Button, MenuItem, IconButton, MoreMenu } from "../ui/primitives";
 import { ItemIcon, Tag } from "../ui/item-look";
 import { Bezuege, Crumbs } from "../ui/PageParts";
 import { TagInput } from "../ui/TagInput";
@@ -61,7 +61,7 @@ export function FilePage({ item }: { item: Item }) {
     );
   };
   const tools = (
-    <Popover align="right" trigger={(p) => <IconButton {...p} label={t("more")} icon={MoreHorizontal} />}>
+    <MoreMenu>
       {(close) => (
         <>
           <MenuItem icon={<ArrowRightLeft size={14} />} onClick={() => (close(), setPicking(true))}>
@@ -78,7 +78,7 @@ export function FilePage({ item }: { item: Item }) {
           )}
         </>
       )}
-    </Popover>
+    </MoreMenu>
   );
   return (
     <div className="page-read">

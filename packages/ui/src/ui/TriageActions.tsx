@@ -7,7 +7,6 @@ import { Check, Plus } from "lucide-react";
 import { type Item, setMeta, titleKey } from "@obtion/core/model";
 import type { Values } from "@obtion/core/i18n";
 import { onlyBelow } from "@obtion/core/trash";
-import { canPlaceIn } from "@obtion/core/placement";
 import { tomorrow } from "@obtion/core/inbox";
 import { useRepo } from "../hooks";
 import { replica } from "../accounts";
@@ -17,8 +16,7 @@ import { createType, rememberPlace } from "../actions";
 import { Button, Dialog, Kbd } from "./primitives";
 import { TypeGlyph } from "./item-look";
 import { cn } from "../lib/utils";
-import { ItemPicker } from "./Picker";
-import { placeSuggestions } from "./suggest";
+import { PlacePicker } from "./Picker";
 import { chooseAction, notify } from "./feedback";
 
 export interface Undo {
@@ -142,22 +140,6 @@ export function usePickers(spaceOf: (i: Item) => string, place: (list: Item[], p
     </>
   );
   return { node, placing, typing, setPlacing, setTyping };
-}
-
-function PlacePicker({ list, onPick, onClose }: { list: Item[]; onPick: (p: string) => void; onClose: () => void }) {
-  const { t } = useT();
-  const repo = useRepo();
-  const ix = repo.index();
-  return (
-    <ItemPicker
-      title={list.length > 1 ? t("triage.whereToMany", { count: list.length }) : t("triage.whereTo")}
-      suggestions={list.length === 1 ? placeSuggestions(list[0]!, repo) : []}
-      exclude={(x) => list.some((p) => !canPlaceIn(p, x, ix))}
-      onPick={onPick}
-      onCreate={(title) => onPick(repo.create({ title }))}
-      onClose={onClose}
-    />
-  );
 }
 
 /** Choose a type by keyboard: type to filter, arrows, Enter, 1–9; "Neuer Typ …" at the end. */

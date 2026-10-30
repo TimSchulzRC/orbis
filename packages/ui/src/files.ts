@@ -211,16 +211,14 @@ export class DeviceFiles {
   }
 
   private async open() {
-    // the data from before accounts keep the names they had ("obtion" → "obtion-files", "blobs")
-    const legacy = this.link.name === "obtion";
-    this.db = await openDB(legacy ? "obtion-files" : `${this.link.name}-files`, 1, {
+    this.db = await openDB(this.link.storage.files, 1, {
       blocking: () => { this.db.close(); },
       upgrade(db) {
         db.createObjectStore("blobs");
         db.createObjectStore("uploads", { keyPath: "hash" });
       },
     });
-    this.store = (await opfsStore(legacy ? "blobs" : `blobs-${this.link.name}`)) ?? idbStore(this.db);
+    this.store = (await opfsStore(this.link.storage.blobs)) ?? idbStore(this.db);
     for (const b of await this.store.list()) this.local.add(b.hash);
     this.repo.subscribe(() => this.scheduleSync());
     this.repo.onBlob((hash) => {

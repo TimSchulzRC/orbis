@@ -13,12 +13,12 @@ import type { EditorView } from "@codemirror/view";
 import { Check, Clock, FolderInput, Layers, List, Maximize2, Pencil, RotateCcw, Shapes, StickyNote, Trash2, Undo2 } from "lucide-react";
 import { type Item, todayISO } from "@obtion/core/model";
 import { plainText } from "@obtion/core/search";
-import { useRepo, useItemHref, itemPath, spaceHref, navigate, useDesktop } from "../hooks";
+import { useRepo, useItemHref, spaceHref, navigate, useDesktop, openItem } from "../hooks";
 import { replica, spaceById, useAccounts } from "../accounts";
 import { useT, titleOf } from "../i18n";
 import { recentPlaces } from "../actions";
 import { useBlobUrl } from "../files";
-import { Button, Empty, Kbd, SectionTitle, Seg } from "../ui/primitives";
+import { Button, Empty, Kbd, SectionTitle, Seg, IconButton } from "../ui/primitives";
 import { ItemIcon, RelTime, Tag, TypeGlyph, itemLook, kindLabel } from "../ui/item-look";
 import { cn } from "../lib/utils";
 import { Markdown } from "../ui/Markdown";
@@ -143,7 +143,7 @@ export function Review({ at }: { at?: string }) {
       else if (k === "ArrowDown" || k === "ArrowUp") card.current?.scrollBy({ top: k === "ArrowDown" ? 80 : -80 });
       else if (k === "j" || k === "ArrowRight") step(1);
       else if (k === "k" || k === "ArrowLeft") step(-1);
-      else if (k === "Enter" || k === "o") location.hash = spaceHref(entry.space, itemPath(entry.item.id));
+      else if (k === "Enter" || k === "o") openItem(entry.item.id, { space: entry.space });
       else return;
       e.preventDefault();
     };
@@ -494,9 +494,7 @@ function SortedList({ sorted, onUndo }: { sorted: Sorted[]; onUndo: (s: Sorted) 
                 <span className="block truncate text-sm">{s.title}</span>
                 <span className="block truncate text-xs text-muted-foreground">{s.what}</span>
               </span>
-              <Button variant="plain" onClick={() => onUndo(s)} className="tap shrink-0 rounded-md p-1 text-muted-foreground hover:bg-hover hover:text-fg" aria-label={t("review.undoNamed", { title: s.title })} title={t("triage.undo")}>
-                <RotateCcw size={14} />
-              </Button>
+              <IconButton size="sm" icon={RotateCcw} iconSize={14} onClick={() => onUndo(s)} title={t("triage.undo")} label={t("review.undoNamed", { title: s.title })} className="shrink-0" />
             </li>
           ))}
         </ul>

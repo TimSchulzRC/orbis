@@ -5,7 +5,7 @@
 // On Heute on a desktop it is part of the page (`pinned`): always open, it does not close. Without
 // room for it there, Heute shows the newest entries as cards (ShelfCards), each opens the panel.
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, ArrowUp, Maximize2, MoreHorizontal, RotateCcw, SlidersHorizontal, X } from "lucide-react";
+import { ArrowLeft, ArrowUp, Maximize2, RotateCcw, SlidersHorizontal, X } from "lucide-react";
 import { type Item, SETTINGS_ID, setSettings } from "@obtion/core/model";
 import type { QueryDef } from "@obtion/core/query";
 import { inboxWhere } from "@obtion/core/inbox";
@@ -17,7 +17,7 @@ import { useBlobUrl } from "../files";
 import { Textarea } from "../components/ui/textarea";
 import { replica, spaceById, useAccounts } from "../accounts";
 import { useT, titleOf } from "../i18n";
-import { Button, Dialog, IconButton, Kbd, MenuItem, Popover } from "./primitives";
+import { Button, Dialog, IconButton, Kbd, MenuItem, MoreMenu } from "./primitives";
 import { ItemIcon, RelTime } from "./item-look";
 import { cn } from "../lib/utils";
 import { Editor } from "./Editor";
@@ -87,7 +87,7 @@ function List({ entries, desktop, pinned }: { entries: InboxEntry[]; desktop: bo
         </h2>
         {desktop && <span className="text-[13px] text-muted-foreground">· {t("tray.newestFirst")}</span>}
         <span className="flex-1" />
-        <Popover align="right" trigger={(p) => <IconButton {...p} label={t("more")} icon={MoreHorizontal} />}>
+        <MoreMenu>
           {(close) =>
             shown.map((s) => (
               <MenuItem key={s.id} icon={<SlidersHorizontal size={14} />} onClick={() => (close(), setRule(s.id))}>
@@ -95,7 +95,7 @@ function List({ entries, desktop, pinned }: { entries: InboxEntry[]; desktop: bo
               </MenuItem>
             ))
           }
-        </Popover>
+        </MoreMenu>
       </div>
       {/* several workspaces: which of them, as in the sidebar's selector */}
       <div className="shrink-0 px-5 pt-3 empty:hidden [&>div]:mb-1">

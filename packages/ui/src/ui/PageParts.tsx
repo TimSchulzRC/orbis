@@ -1,19 +1,16 @@
 // Parts every page shares (design rules § 3.1): the path line on top, the card of connections
 // ("Bezüge") and the quiet footer. Information pages and file pages use the same ones.
 import { useEffect, useState } from "react";
-import { ChevronRight, MoreHorizontal, Pin, Star, X } from "lucide-react";
+import { ChevronRight, Pin, Star, X } from "lucide-react";
 import { type Item, META_TYPE } from "@obtion/core/model";
-import { canPlaceIn, hasPlace, isInInbox } from "@obtion/core/placement";
+import { hasPlace, isInInbox } from "@obtion/core/placement";
 import { fmtDate } from "@obtion/core/i18n";
 import { repo } from "../repo";
 import { itemHref, useIndex, useLocalStorage, usePhone } from "../hooks";
 import { useT, titleOf } from "../i18n";
 import { ItemIcon, RelTime } from "./item-look";
-import { Button, MenuItem, Popover, SectionTitle } from "./primitives";
+import { Card, Button, IconButton, MenuItem, MoreMenu, REVEAL, SectionTitle } from "./primitives";
 import { cn } from "../lib/utils";
-import { ItemPicker } from "./Picker";
-import { placeSuggestions } from "./suggest";
-import { rememberPlace } from "../actions";
 import { dateOf } from "@obtion/core/date";
 import { KEYS } from "./storage";
 
@@ -100,30 +97,6 @@ export function Crumbs({ item, tools, onPlaces, onPlace }: { item: Item; tools: 
   );
 }
 
-/** Choosing a place for an entry (from the path line, the page menu or "Orte"). */
-export function PlacePicker({ item, onClose }: { item: Item; onClose: () => void }) {
-  const ix = useIndex();
-  const { t } = useT();
-  return (
-    <ItemPicker
-      title={t("place.add")}
-      suggestions={placeSuggestions(item)}
-      exclude={(x) => !canPlaceIn(item, x, ix)}
-      onPick={(pid) => {
-        repo.addParent(item.id, pid);
-        rememberPlace(pid);
-        onClose();
-      }}
-      onCreate={(title) => {
-        const pid = repo.create({ title });
-        repo.addParent(item.id, pid);
-        onClose();
-      }}
-      onClose={onClose}
-    />
-  );
-}
-
 // ---------- Bezüge ----------
 
 interface RefKind {
@@ -168,9 +141,7 @@ export function Bezuege({ item, typeArea, usedIn, placesOpen }: { item: Item; ty
           <>
             <PlaceHere target={ix.get(x)!} page={item} />
             {!fromText.includes(x) && (
-              <Button variant="plain" onClick={(e) => (e.preventDefault(), repo.setMember(item.id, "refs", x, false))} className="tap rounded p-0.5 text-faint opacity-0 pointer-coarse:opacity-100 hover:bg-hover hover:text-fg group-hover:opacity-100 focus:opacity-100" aria-label={t("item.removeRef")}>
-                <X size={12} />
-              </Button>
+              <IconButton size="xs" icon={X} iconSize={12} onClick={(e) => (e.preventDefault(), repo.setMember(item.id, "refs", x, false))} className={cn("text-faint", REVEAL.any)} label={t("item.removeRef")} />
             )}
           </>
         ),
@@ -188,21 +159,14 @@ export function Bezuege({ item, typeArea, usedIn, placesOpen }: { item: Item; ty
           item: ix.get(p)!,
           note: p === home ? <span className="flex items-center gap-1"><Star size={11} aria-hidden /> {t("place.home")}</span> : undefined,
           tools: (
-            <Popover
-              align="right"
-              trigger={(pp) => (
-                <Button variant="plain" {...pp} onClickCapture={(e) => e.preventDefault()} className="tap rounded p-0.5 text-faint opacity-0 pointer-coarse:opacity-100 hover:bg-hover group-hover:opacity-100 focus:opacity-100" aria-label={t("more")}>
-                  <MoreHorizontal size={13} />
-                </Button>
-              )}
-            >
+            <MoreMenu size="xs" iconSize={13} onClickCapture={(e) => e.preventDefault()} className={cn("text-faint", REVEAL.any)}>
               {(close) => (
                 <>
                   {p !== home && <MenuItem onClick={() => (close(), repo.setHome(item.id, p))}>{t("place.makeHome")}</MenuItem>}
                   <MenuItem onClick={() => (close(), repo.removeParent(item.id, p))}>{t("place.removeHere")}</MenuItem>
                 </>
               )}
-            </Popover>
+            </MoreMenu>
           ),
         })),
     });
@@ -210,11 +174,11 @@ export function Bezuege({ item, typeArea, usedIn, placesOpen }: { item: Item; ty
   return (
     <section className="mt-10 max-md:mt-8">
       <SectionTitle>{t("refs.title")}</SectionTitle>
-      <div className="overflow-hidden rounded-xl border border-line bg-surface">
+      <Card className="overflow-hidden">
         {kinds.map((k) => (
           <RefRow key={k.key} page={item} kind={k} initial={!typeArea && k.items.length <= 5} force={k.key === "places" ? placesOpen : undefined} />
         ))}
-      </div>
+      </Card>
       <PageFooter item={item} />
     </section>
   );

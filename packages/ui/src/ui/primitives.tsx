@@ -63,6 +63,15 @@ export function AddButton({ children, className, icon: Icon = Plus, ...rest }: C
   );
 }
 
+/** The one quiet action of a section head ("+ Notiz", "+ Update"). */
+export function SectionAction({ children, className, icon: Icon = Plus, ...rest }: ComponentProps<"button"> & { icon?: ComponentType<{ size?: number }> }) {
+  return (
+    <ShadcnButton variant="plain" size="none" type="button" {...rest} className={cn("tap-y flex h-7 items-center gap-1 rounded-md px-2 text-[13px] text-muted-foreground hover:bg-hover hover:text-fg", className)}>
+      <Icon size={14} /> {children}
+    </ShadcnButton>
+  );
+}
+
 /** A property without a value: "Leer", to click and fill in. */
 export function EmptyValueButton({ className, ...rest }: Omit<ComponentProps<"button">, "children">) {
   const { t } = useT();

@@ -6,14 +6,14 @@
 // added. Dropping on the upper or lower edge of a row reorders. Dropped into another workspace's
 // block, an item moves there.
 import { useEffect, useState } from "react";
-import { ChevronRight, ChevronDown, Inbox, Search, SlidersHorizontal, Link2, MoreHorizontal, Plus, Paperclip, Sun } from "lucide-react";
+import { ChevronRight, ChevronDown, Inbox, Search, SlidersHorizontal, Link2, Plus, Paperclip, Sun } from "lucide-react";
 import { type Item, META_TYPE, SETTINGS_ID, setSchemaField, setSettings } from "@obtion/core/model";
 import { sidebarChildren, sidebarRoots } from "@obtion/core/placement";
 import { keyBetween, keysFor, cmpKey } from "@obtion/core/sortkey";
-import { useRepo, useRoute, useSpaceId, itemPath, spaceHref, useLocalStorage } from "../hooks";
+import { useRepo, useRoute, useSpaceId, itemHref, itemPath, navigate, spaceHref, useLocalStorage } from "../hooks";
 import { type Space, useAccounts } from "../accounts";
 import { useT } from "../i18n";
-import { Button, Kbd, MenuItem, Popover } from "./primitives";
+import { Button, IconButton, Kbd, MenuItem, MoreMenu, Popover, REVEAL } from "./primitives";
 import { TypeGlyph, ItemIcon } from "./item-look";
 import { cn, moveInArray } from "../lib/utils";
 import { shortcut } from "../lib/platform";
@@ -98,7 +98,7 @@ export function SpaceTree({ space, touch }: { space: Space; touch?: boolean }) {
   const ix = repo.index();
   const roots = sidebarRoots(ix);
   const ready = !!repo.get(SETTINGS_ID);
-  const go = (path: string) => (location.hash = spaceHref(space.id, path));
+  const go = (path: string) => navigate(path, { space: space.id });
   const row = cn("flex items-center gap-2 rounded-lg pr-2", touch ? "py-2 text-[15px]" : "py-1 text-sm");
   return (
     <section className="mt-3" aria-label={space.name}>
@@ -123,23 +123,16 @@ export function SpaceTree({ space, touch }: { space: Space; touch?: boolean }) {
           <span className="truncate">{space.name}</span>
         </Button>
         {ready && (
-          <Button variant="plain"
-            title={t("nav.newPinned")}
-            aria-label={t("nav.newPinned")}
+          <IconButton
+            size="xs"
+            icon={Plus}
+            iconSize={14}
+            label={t("nav.newPinned")}
             onClick={() => createAndOpen({ pinned: keyBetween(roots.at(-1)?.pinned ?? null, null) }, repo, space.id)}
-            className={cn("tap rounded text-muted-foreground hover:bg-hover hover:text-fg", touch ? "p-1.5" : "p-0.5 opacity-0 focus:opacity-100 group-hover/space:opacity-100")}
-          >
-            <Plus size={14} />
-          </Button>
+            className={touch ? "p-1.5" : "opacity-0 focus:opacity-100 group-hover/space:opacity-100"}
+          />
         )}
-        <Popover
-          align="right"
-          trigger={(p) => (
-            <Button variant="plain" {...p} className={cn("tap rounded text-muted-foreground hover:bg-hover hover:text-fg", touch ? "p-1.5" : "p-0.5 opacity-0 focus:opacity-100 group-hover/space:opacity-100 aria-expanded:opacity-100")} aria-label={t("space.menu", { name: space.name })}>
-              <MoreHorizontal size={14} />
-            </Button>
-          )}
-        >
+        <MoreMenu size="xs" iconSize={14} label={t("space.menu", { name: space.name })} className={touch ? "p-1.5" : "opacity-0 focus:opacity-100 group-hover/space:opacity-100 aria-expanded:opacity-100"}>
           {(close) => (
             <>
               <MenuItem onClick={() => (close(), go("/settings"))}>{t("space.settings")}</MenuItem>
@@ -147,7 +140,7 @@ export function SpaceTree({ space, touch }: { space: Space; touch?: boolean }) {
               <MenuItem onClick={() => (close(), go("/trash"))}>{t("nav.trash")}</MenuItem>
             </>
           )}
-        </Popover>
+        </MoreMenu>
       </div>
       {open && !ready && (
         <a href={spaceHref(space.id, "/setup")} className={cn(row, "pl-[30px] text-muted-foreground hover:bg-hover hover:text-fg", !touch && "mx-2")}>
@@ -432,14 +425,7 @@ function TreeNode({
             <Plus size={13} />
           </Button>
         )}
-        {!touch && <Popover
-          align="right"
-          trigger={(p) => (
-            <Button variant="plain" {...p} tabIndex={-1} className="tap rounded p-0.5 text-muted-foreground opacity-0 pointer-coarse:opacity-100 hover:bg-surface-2 hover:text-fg group-hover/row:opacity-100 focus:opacity-100" aria-label={t("more")}>
-              <MoreHorizontal size={14} />
-            </Button>
-          )}
-        >
+        {!touch && <MoreMenu size="xs" iconSize={14} tabIndex={-1} className={cn("hover:bg-surface-2", REVEAL.row)}>
           {(close) => (
             <>
               <MenuItem onClick={() => (close(), repo.pin(item.id, !item.pinned))}>{item.pinned ? t("item.unpin") : t("item.pin")}</MenuItem>
@@ -448,7 +434,7 @@ function TreeNode({
               {parent && secondary && <MenuItem onClick={() => (close(), repo.setHome(item.id, parent))}>{t("place.makeHome")}</MenuItem>}
             </>
           )}
-        </Popover>}
+        </MoreMenu>}
       </div>
       {picking && (
         <ItemPicker

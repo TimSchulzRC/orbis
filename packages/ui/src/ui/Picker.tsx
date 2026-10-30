@@ -2,13 +2,13 @@ import { Input } from "../components/ui/input";
 import { useState } from "react";
 import { Plus, Sparkles } from "lucide-react";
 import { type Item, META_TYPE, titleKey } from "@obtion/core/model";
-import { isOverview } from "@obtion/core/placement";
+import { canPlaceIn, isOverview } from "@obtion/core/placement";
 import { useT, titleOf } from "../i18n";
 import { useIndex, useRepo } from "../hooks";
 import { Button, Dialog } from "./primitives";
 import { ItemIcon } from "./item-look";
 import { cn } from "../lib/utils";
-import type { PickReason } from "./suggest";
+import { type PickReason, placeSuggestions } from "./suggest";
 
 /** Pick an item: suggestions first, then search as you type. Optionally create a new one. */
 export function ItemPicker({
@@ -96,4 +96,21 @@ function PathHint({ item }: { item: Item }) {
   const path = ix.homePath(item.id);
   if (!path.length) return null;
   return <span className="max-w-[45%] shrink-0 truncate text-xs text-muted-foreground">{ix.pathText(path)}</span>;
+}
+
+/** Where to put entries (one or several, of one workspace): a place they may all go below, or a new one. */
+export function PlacePicker({ list, title, onPick, onClose }: { list: Item[]; title?: string; onPick: (place: string) => void; onClose: () => void }) {
+  const { t } = useT();
+  const repo = useRepo();
+  const ix = repo.index();
+  return (
+    <ItemPicker
+      title={title ?? (list.length > 1 ? t("triage.whereToMany", { count: list.length }) : t("triage.whereTo"))}
+      suggestions={list.length === 1 ? placeSuggestions(list[0]!, repo) : []}
+      exclude={(x) => list.some((p) => !canPlaceIn(p, x, ix))}
+      onPick={onPick}
+      onCreate={(name) => onPick(repo.create({ title: name }))}
+      onClose={onClose}
+    />
+  );
 }

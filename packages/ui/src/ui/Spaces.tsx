@@ -10,7 +10,7 @@ import { ChevronsUpDown, Plus, SlidersHorizontal } from "lucide-react";
 import type { Repo } from "@obtion/sync";
 import { createSpace, replica, setShown, spaceById, useAccounts } from "../accounts";
 import { ScopeContext, globalPage } from "../scope";
-import { itemPath, spaceHref, useSpaceId } from "../hooks";
+import { spaceHref, useSpaceId, navigate, openItem, parseHash } from "../hooks";
 import { MoveError, moveToSpace, planToSpace } from "../move";
 import { useT, tr, titleOf } from "../i18n";
 import { Button, Dialog, MenuItem, Popover } from "./primitives";
@@ -28,7 +28,7 @@ export function SpaceScope({ id, children }: { id: string; children: React.React
     // a page of no workspace ("#/settings", "#/review") stays one
     if (!href?.startsWith("#/") || href.startsWith("#/w/") || globalPage(href.slice(1).split("?")[0]!.split("/").filter(Boolean))) return;
     e.preventDefault();
-    location.hash = spaceHref(id, href.slice(1));
+    navigate(parseHash(href).rest, { space: id });
   };
   return (
     <ScopeContext.Provider value={value}>
@@ -85,7 +85,7 @@ export function SpaceSelector({ className, onNew }: { className?: string; onNew:
           <MenuItem icon={<Plus size={14} />} onClick={() => (close(), onNew())}>
             {t("space.new")}
           </MenuItem>
-          <MenuItem icon={<SlidersHorizontal size={14} />} onClick={() => (close(), (location.hash = "#/settings"))}>
+          <MenuItem icon={<SlidersHorizontal size={14} />} onClick={() => (close(), navigate("/settings"))}>
             {t("nav.settings")}
           </MenuItem>
         </div>
@@ -186,7 +186,7 @@ export async function moveTo(id: string, from: string, to: string, parent?: stri
       if (!(await confirmAction({ title: tr("move.preview.title", { title, workspace }), body: lines.map((l) => `– ${l}`).join("\n"), yes: tr("move.confirm") }))) return;
     }
     const moved = await moveToSpace(id, from, to, parent);
-    notify.action(tr("move.done", { workspace }), tr("move.open"), () => (location.hash = spaceHref(to, itemPath(moved))));
+    notify.action(tr("move.done", { workspace }), tr("move.open"), () => openItem(moved, { space: to }));
   } catch (e) {
     notify(e instanceof MoveError ? tr(`move.error.${e.message}`) : String((e as Error).message ?? e));
   }

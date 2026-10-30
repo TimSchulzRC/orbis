@@ -10,7 +10,7 @@ import { repo } from "../repo";
 import { openItem, itemHref, useLocalStorage, useNarrow } from "../hooks";
 import { useT, titleOf } from "../i18n";
 import { ItemIcon, ItemLink } from "./item-look";
-import { Button, Seg } from "./primitives";
+import { Button, Seg, IconButton } from "./primitives";
 import { cn } from "../lib/utils";
 import { type Look } from "./Table";
 import { GroupChip, HiddenGroups, fieldLabel, hiddenPatch, splitHidden } from "./groups";
@@ -99,15 +99,11 @@ export function CalendarView({ items, def, ctx, look }: { items: Item[]; def: Qu
     <div className="text-sm">
       <div className="mb-2 flex items-center gap-1">
         <h3 className="mr-2 text-base font-semibold capitalize">{new Intl.DateTimeFormat(lang, { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(ms(month)))}</h3>
-        <Button variant="plain" onClick={() => shift(-1)} className="tap rounded-md p-1 text-muted-foreground hover:bg-hover hover:text-fg" aria-label={t("cal.prev")}>
-          <ChevronLeft size={16} />
-        </Button>
+        <IconButton size="sm" icon={ChevronLeft} onClick={() => shift(-1)} label={t("cal.prev")} />
         <Button variant="plain" onClick={() => setMonth(today.slice(0, 7) + "-01")} className="tap rounded-md px-2 py-0.5 text-xs text-muted-foreground hover:bg-hover hover:text-fg">
           {t("time.today")}
         </Button>
-        <Button variant="plain" onClick={() => shift(1)} className="tap rounded-md p-1 text-muted-foreground hover:bg-hover hover:text-fg" aria-label={t("cal.next")}>
-          <ChevronRight size={16} />
-        </Button>
+        <IconButton size="sm" icon={ChevronRight} onClick={() => shift(1)} label={t("cal.next")} />
       </div>
       <div className="overflow-x-auto">
         <div className="min-w-[640px] overflow-hidden rounded-xl border border-line">

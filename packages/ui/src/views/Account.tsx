@@ -5,7 +5,7 @@ import { BrandLogo } from "../ui/BrandLogo";
 import { useEffect, useState, type ReactNode } from "react";
 import { createSpace, errorText, invite, joinInvite, serverInfo, signIn, signUp, useAccounts } from "../accounts";
 import type { InviteInfo, ServerInfo } from "@obtion/core/api";
-import { useRoute } from "../hooks";
+import { useRoute, navigate } from "../hooks";
 import { getLang, useT } from "../i18n";
 import { Button } from "../ui/primitives";
 
@@ -98,7 +98,7 @@ function Join({ code }: { code: string }) {
   useEffect(() => {
     invite(code).then(setInv, () => setInv(null));
   }, [code]);
-  const done = () => location.replace("#/");
+  const done = () => navigate("/", { replace: true });
   if (inv === undefined) return null;
   if (inv === null) return <Card title={t("account.inviteInvalid")} intro={t("account.inviteInvalidHint")}><a href="#/inbox" className="mt-4 block text-sm text-link hover:underline">{t("nav.inbox")}</a></Card>;
   return (

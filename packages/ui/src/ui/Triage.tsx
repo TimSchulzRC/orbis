@@ -12,10 +12,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, FolderInput, Shapes, Sparkles, Trash2, Check, X } from "lucide-react";
 import { type Item, setMeta } from "@obtion/core/model";
 import type { Index } from "@obtion/core/graph";
-import { useIndex, useRepo, useSpaceId, useItemHref, itemPath, spaceHref, useDesktop } from "../hooks";
+import { useIndex, useRepo, useSpaceId, useItemHref, spaceHref, useDesktop, openItem } from "../hooks";
 import { useT, titleOf } from "../i18n";
 import { recentPlaces } from "../actions";
-import { Button, Kbd } from "./primitives";
+import { Card, Button, Kbd } from "./primitives";
 import { ItemIcon, RelTime, Tag, TypeGlyph } from "./item-look";
 import { cn, toggled } from "../lib/utils";
 import { TagInput } from "./TagInput";
@@ -115,7 +115,7 @@ export function Triage({ items }: { items: Item[] }) {
     else if (k === "y" && cur) pick.setTyping(targets().filter((i) => i.kind === "info"));
     else if ((k === "x" || k === "Delete") && cur) trash(targets());
     else if (k === "u" || k === "z") act.undo();
-    else if ((k === "Enter" || k === "o") && cur) (location.hash = spaceHref(spaceOf(cur), itemPath(cur.id)));
+    else if ((k === "Enter" || k === "o") && cur) openItem(cur.id, { space: spaceOf(cur) });
     else return;
     e.preventDefault();
   };
@@ -158,7 +158,7 @@ export function Triage({ items }: { items: Item[] }) {
               data-triage={n}
               role="option"
               aria-selected={on}
-              onClick={() => (phone ? (location.hash = spaceHref(here, itemPath(i.id))) : setSel(n))}
+              onClick={() => (phone ? openItem(i.id, { space: here }) : setSel(n))}
               className={cn(
                 "relative grid cursor-default items-center gap-x-2 px-3 hover:bg-hover",
                 phone ? "min-h-12 grid-cols-[44px_minmax(0,1fr)_auto] py-1.5" : "h-10 grid-cols-[24px_minmax(0,1fr)_auto_minmax(64px,auto)]",
@@ -233,14 +233,14 @@ export function Triage({ items }: { items: Item[] }) {
 
   if (phone)
     return (
-      <div onPointerDownCapture={claim} className="overflow-hidden rounded-xl border border-line bg-surface">
+      <Card onPointerDownCapture={claim} className="overflow-hidden">
         {many && bar}
         {rows}
         {pick.node}
-      </div>
+      </Card>
     );
   return (
-    <div onPointerDownCapture={claim} onFocusCapture={claim} className="grid h-[calc(100dvh-170px)] min-h-[520px] grid-cols-[380px_minmax(0,1fr)] overflow-hidden rounded-xl border border-line bg-surface">
+    <Card onPointerDownCapture={claim} onFocusCapture={claim} className="grid h-[calc(100dvh-170px)] min-h-[520px] grid-cols-[380px_minmax(0,1fr)] overflow-hidden">
       <div className="flex min-h-0 min-w-0 flex-col border-r border-line">
         {bar}
         {rows}
@@ -269,7 +269,7 @@ export function Triage({ items }: { items: Item[] }) {
         />
       </div>
       {pick.node}
-    </div>
+    </Card>
   );
 }
 

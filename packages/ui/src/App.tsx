@@ -3,7 +3,7 @@ import { BrandLogo } from "./ui/BrandLogo";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Menu, Search, Inbox, SlidersHorizontal, Sun, X } from "lucide-react";
 import { SETTINGS_ID } from "@obtion/core/model";
-import { useRepo, useRoute, useDesktop, itemHref, itemPath, spaceHref } from "./hooks";
+import { useRepo, useRoute, useDesktop, itemHref, itemPath, spaceHref, navigate, openItem } from "./hooks";
 import { useT } from "./i18n";
 import { cn } from "./lib/utils";
 import { Button, IconButton } from "./ui/primitives";
@@ -53,14 +53,7 @@ function SignedOut() {
   const { t } = useT();
   const { account } = useAccounts();
   if (!account?.lost) return null;
-  return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line bg-surface-2 px-4 py-2 text-sm" role="status">
-      <span className="flex-1">{t("account.lost", { server: location.host })}</span>
-      <Button variant="plain" onClick={() => void signOut()} className="font-medium text-link hover:underline">
-        {t("account.signInAgain")}
-      </Button>
-    </div>
-  );
+  return <StatusBanner action={{ label: t("account.signInAgain"), run: () => void signOut() }}>{t("account.lost", { server: location.host })}</StatusBanner>;
 }
 
 /** A newer app wrote data in one of the workspaces: this one only reads them until reloaded. */
@@ -68,11 +61,16 @@ function TooNew() {
   const { t } = useT();
   const { spaces } = useAccounts();
   if (!useReplicas(spaces.map((s) => s.id)).some((r) => r.readOnly)) return null;
+  return <StatusBanner action={{ label: t("format.reload"), run: () => location.reload() }}>{t("format.tooNew")}</StatusBanner>;
+}
+
+/** A line across the top about the whole app, with the one thing to do about it. */
+function StatusBanner({ children, action }: { children: React.ReactNode; action: { label: string; run: () => void } }) {
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line bg-surface-2 px-4 py-2 text-sm" role="status">
-      <span className="flex-1">{t("format.tooNew")}</span>
-      <Button variant="plain" onClick={() => location.reload()} className="font-medium text-link hover:underline">
-        {t("format.reload")}
+      <span className="flex-1">{children}</span>
+      <Button variant="plain" onClick={action.run} className="font-medium text-link hover:underline">
+        {action.label}
       </Button>
     </div>
   );
@@ -112,17 +110,17 @@ function Main() {
   // nothing set up in any workspace yet (a new account): the first one's setup
   const all = useReplicas(spaces.map((s) => s.id));
   const nothing = all.length > 0 && all.every((x) => !x.get(SETTINGS_ID) && x.status.loaded && (x.status.synced || (!x.status.online && x.docs.size === 0)));
-  useEffect(() => void (nothing && globalPage(route.parts, route.space) && location.replace(spaceHref(spaces[0]!.id, "/setup"))), [nothing, route.path]);
+  useEffect(() => void (nothing && globalPage(route.parts, route.space) && navigate("/setup", { space: spaces[0]!.id, replace: true })), [nothing, route.path]);
 
   // "#/create?title=…" – links to items that don't exist yet.
   useEffect(() => {
     if (route.parts[0] !== "create") return;
     const title = route.query.get("title") ?? "";
     const existing = title ? r.resolveTitle(title) : undefined;
-    if (existing) location.replace(itemHref(existing));
+    if (existing) openItem(existing, { replace: true });
     else {
       const id = r.create({ title });
-      location.replace(`${itemHref(id)}?new=1`);
+      openItem(id, { replace: true, query: "?new=1" });
     }
   }, [route.path]);
 
@@ -316,7 +314,7 @@ function oldAddress(parts: string[]): string | undefined {
 const OLD_LISTS: Record<string, string> = { "sys:c-project": "/i/sys:project", "sys:c-task": "/i/sys:task", "sys:c-card": "/i/sys:card", "sys:c-files": "/files", "sys:c-images": "/files?kind=image", "sys:inbox": "/inbox" };
 
 function Redirect({ to }: { to: string }) {
-  useEffect(() => location.replace("#" + to), [to]);
+  useEffect(() => navigate(to, { replace: true }), [to]);
   return null;
 }
 

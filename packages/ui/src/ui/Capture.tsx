@@ -2,11 +2,11 @@ import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
 import { useEffect, useRef, useState } from "react";
 import { ArrowRight, ChevronDown, CornerDownRight, Layers, Paperclip, X } from "lucide-react";
-import { useFiles, useRepo, useSpaceId, itemPath, spaceHref } from "../hooks";
+import { useFiles, useRepo, useSpaceId, spaceHref, openItem } from "../hooks";
 import { shownSpaces, useAccounts } from "../accounts";
 import { useT } from "../i18n";
 import { capture, extractMentions, recentPlaces, rememberPlace } from "../actions";
-import { Button, MenuItem, Popover, Dialog } from "./primitives";
+import { Button, MenuItem, Popover, Dialog, IconButton } from "./primitives";
 import { TypeGlyph } from "./item-look";
 import { cn } from "../lib/utils";
 import { ItemPicker } from "./Picker";
@@ -79,7 +79,7 @@ function CaptureField({ parent, placeholder, autoFocus, onDone, compact, onSpace
     const usedType = r.get(id)?.type ?? null; // "/name" in the text can set it too
     const what = usedType ? ix.typeName(usedType) : t("capture.note");
     const msg = where ? t("capture.notifyUnder", { what, place: ix.get(where)?.title ?? "" }) : usedType ? t("capture.notifyAs", { what }) : t("capture.notifyInbox");
-    notify(msg, undefined, { label: t("capture.open"), run: () => (location.hash = spaceHref(space, itemPath(id))) });
+    notify(msg, undefined, { label: t("capture.open"), run: () => openItem(id, { space }) });
     setText("");
     onDone?.();
   };
@@ -93,7 +93,7 @@ function CaptureField({ parent, placeholder, autoFocus, onDone, compact, onSpace
   const attach = async (list: FileList | null) => {
     for (const f of [...(list ?? [])]) {
       const res = await files.add(f, f.name, { parent });
-      if (res?.id) notify(t("capture.notifyFile", { name: f.name }), undefined, { label: t("capture.open"), run: () => (location.hash = spaceHref(space, itemPath(res.id!))) });
+      if (res?.id) notify(t("capture.notifyFile", { name: f.name }), undefined, { label: t("capture.open"), run: () => openItem(res.id!, { space }) });
     }
   };
   const ghost = "tap-y inline-flex h-7 min-w-0 items-center gap-1 rounded-md px-1.5 text-xs hover:bg-hover";
@@ -189,9 +189,7 @@ function CaptureField({ parent, placeholder, autoFocus, onDone, compact, onSpace
                   <CornerDownRight size={12} className="shrink-0 text-muted-foreground" />
                   <span className="truncate">{pathOf(place)}</span>
                 </Button>
-                <Button variant="plain" onClick={() => setPlace(null)} className="tap rounded-md p-1 text-muted-foreground hover:bg-hover hover:text-fg" aria-label={t("capture.placeRemove")} title={t("capture.placeRemove")}>
-                  <X size={12} />
-                </Button>
+                <IconButton size="sm" icon={X} iconSize={12} onClick={() => setPlace(null)} label={t("capture.placeRemove")} />
               </span>
             ) : (
               <Button variant="plain" onClick={() => setPicking(true)} className={cn(ghost, "text-muted-foreground hover:text-fg")}>

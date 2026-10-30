@@ -10,7 +10,7 @@ import { useIndex } from "../hooks";
 import { useT } from "../i18n";
 import type { Lang, T } from "@obtion/core/i18n";
 import type { Index } from "@obtion/core/graph";
-import { Button, MenuItem, Popover } from "./primitives";
+import { Button, MenuItem, Popover, IconButton } from "./primitives";
 import { TypeGlyph } from "./item-look";
 import { cn } from "../lib/utils";
 import { ItemPicker } from "./Picker";
@@ -135,9 +135,7 @@ function Chip({ cond, ctx, off, onToggle, onNegate, onOr, onRemove, onUnder, con
   return (
     <span className="inline-flex items-center">
       {chip}
-      <Button variant="plain" onClick={onRemove} className="tap -ml-0.5 rounded p-0.5 text-muted-foreground hover:bg-hover hover:text-fg" aria-label={t("query.removeCondNamed", { cond: condLabel(cond, ctx) })}>
-        <X size={12} />
-      </Button>
+      <IconButton size="xs" icon={X} iconSize={12} onClick={onRemove} label={t("query.removeCondNamed", { cond: condLabel(cond, ctx) })} className="-ml-0.5" />
     </span>
   );
 }
