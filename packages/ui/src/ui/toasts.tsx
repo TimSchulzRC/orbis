@@ -1,10 +1,10 @@
-// All short notices go through sonner: one <Toaster> at the bottom centre (on a phone above the
-// bottom bar), at most three at a time, in the app's light or dark, coloured only for errors.
+// All short notices go through sonner (the shadcn <Toaster>): one at the bottom centre (on a phone
+// above the bottom bar), at most three at a time, on the app's surface; errors only get a red icon.
 // `notify` keeps one look everywhere: a sentence, and "Rückgängig" or one other step.
 import { useEffect, useState } from "react";
-import { Toaster, toast } from "sonner";
+import { toast } from "sonner";
+import { Toaster } from "../components/ui/sonner";
 import { tr } from "../i18n";
-import { useTheme } from "../theme";
 
 const PLAIN = 5000; // a notice to read
 const WITH_ACTION = 7000; // one with "Rückgängig" or "Öffnen": a little longer
@@ -23,8 +23,7 @@ notify.action = (text: string, label: string, run: () => void) => {
   toast(text, { duration: WITH_ACTION, action: { label, onClick: run } });
 };
 notify.error = (text: string) => {
-  // the only coloured notice: a soft red with the error text colour (4.5:1)
-  toast.error(text, { duration: WITH_ACTION, style: { background: "color-mix(in srgb, var(--danger) 10%, var(--surface))", color: "var(--danger-text)", border: "1px solid color-mix(in srgb, var(--danger) 35%, transparent)" } });
+  toast.error(text, { duration: WITH_ACTION });
 };
 
 /**
@@ -66,25 +65,14 @@ function useOffset(): number {
 }
 
 export function AppToaster() {
-  const { resolved } = useTheme();
   const bottom = useOffset();
   return (
     <Toaster
       position="bottom-center"
-      theme={resolved}
       visibleToasts={3}
-      richColors
       offset={{ bottom: `calc(${bottom}px + env(safe-area-inset-bottom))` }}
       mobileOffset={{ bottom: `calc(${bottom}px + env(safe-area-inset-bottom))`, left: 16, right: 16 }}
-      toastOptions={{
-        // neutral: ink on the page (like the primary button), radius 12; the action as a quiet link
-        style: { background: "var(--ink)", color: "var(--ink-text)", border: "1px solid var(--ink)", borderRadius: 12, fontSize: 14, fontFamily: "var(--font-sans)" },
-        classNames: {
-          actionButton: "!bg-transparent !font-semibold !text-[var(--ink-text)] !underline !underline-offset-2 !text-sm !px-1",
-          cancelButton: "!bg-transparent !text-[var(--ink-text)]",
-          error: "!border-[var(--danger)]",
-        },
-      }}
+      toastOptions={{ classNames: { error: "[&_[data-icon]]:text-destructive" } }}
     />
   );
 }
