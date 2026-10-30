@@ -1,7 +1,8 @@
 import { Button as ShadcnButton } from "../components/ui/button";
-// The review ("Durchsicht"): the inbox one entry at a time, as a stack. The entry in full on top,
-// below what can become of it – a place, a type, back tomorrow, kept as it is, deleted – and on
-// a desktop beside it what this review sorted (each with its undo) and what is still waiting.
+// The review (the page "Eingang", the act "einsortieren"): the inbox one entry at a time, as a
+// stack. The entry in full on top, below what can become of it – a place, a type, back tomorrow,
+// kept as it is, deleted – and on a desktop beside it what this review sorted (each with its
+// undo) and what is still waiting.
 // What was sorted stays until the review is closed: "Später weiter" leaves it for later today.
 //
 // A suggestion (the agent's or the app's own) is not shown yet; it would be the first answer
