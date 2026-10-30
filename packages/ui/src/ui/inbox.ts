@@ -1,11 +1,11 @@
 // The inbox of the workspaces seen, built once for every view of it: the tray and its panel, the
 // review, Heute, the sidebar and the phone's bar. Each entry is sorted in its own workspace; ids are
 // unique within a workspace only, so an entry is known by its key "<workspace>/<id>".
-import { useSyncExternalStore } from "react";
 import { type Item, SETTINGS_ID } from "@obtion/core/model";
 import { runQuery } from "@obtion/core/query";
 import { useAccounts } from "../accounts";
 import { useReplicas } from "./Spaces";
+import { createStore } from "../lib/store";
 
 export interface InboxEntry {
   key: string;
@@ -38,53 +38,40 @@ export const reviewMinutes = (count: number) => Math.max(1, Math.round(count / 3
  * Open, it is a step in the history, so Back closes it (on a phone else Back leaves the app);
  * on Heute that step is "#/inbox", elsewhere the page's own address once more.
  */
-let shelf: { open: boolean; at?: string } = { open: false };
-const listeners = new Set<() => void>();
-const setShelf = (s: typeof shelf) => ((shelf = s), listeners.forEach((f) => f()));
+const shelf = createStore<{ open: boolean; at?: string }>({ open: false });
 const onInbox = () => location.hash.split("?")[0] === "#/inbox";
 const onToday = () => ["", "#", "#/"].includes(location.hash.split("?")[0]!);
 
 export function openShelf(at?: string) {
-  if (!shelf.open && !onInbox()) {
+  if (!shelf.get().open && !onInbox()) {
     if (onToday()) {
       location.hash = "#/inbox";
       history.replaceState({ ...history.state, shelf: true }, "");
     } else history.pushState({ ...history.state, shelf: true }, "");
   }
-  setShelf({ open: true, at });
+  shelf.set({ open: true, at });
 }
 
 /** Closed as a link leads away from it: the step stays behind, Back comes to it again. */
-export const closeShelf = () => shelf.open && setShelf({ open: false });
+export const closeShelf = () => shelf.get().open && shelf.set({ open: false });
 
 /** Closed by hand (its button, Escape, a click beside it): as Back would. */
 export function dismissShelf() {
-  if (!shelf.open) return;
+  if (!shelf.get().open) return;
   if (history.state?.shelf) return history.back();
-  setShelf({ open: false });
+  shelf.set({ open: false });
   if (onInbox()) location.replace("#/");
 }
 
 /** Open as the step in the history is (Back, Forward, a reload, another page); an entry chosen in it stays. */
 export function syncShelf() {
   const open = !!history.state?.shelf || onInbox();
-  if (open !== shelf.open) setShelf({ open });
+  if (open !== shelf.get().open) shelf.set({ open });
 }
 addEventListener("popstate", syncShelf);
 
 /** Pinned open on Heute (a desktop with room below the page, App.tsx): Heute then leaves out its own sight of the entries. */
-let pinned = false;
-const pinListeners = new Set<() => void>();
-export const setShelfPinned = (p: boolean) => p !== pinned && ((pinned = p), pinListeners.forEach((f) => f()));
-export const useShelfPinned = () =>
-  useSyncExternalStore(
-    (f) => (pinListeners.add(f), () => pinListeners.delete(f)),
-    () => pinned,
-  );
-
-export function useShelf() {
-  return useSyncExternalStore(
-    (f) => (listeners.add(f), () => listeners.delete(f)),
-    () => shelf,
-  );
-}
+const pinned = createStore(false);
+export const setShelfPinned = (p: boolean) => p !== pinned.get() && pinned.set(p);
+export const useShelfPinned = pinned.use;
+export const useShelf = shelf.use;

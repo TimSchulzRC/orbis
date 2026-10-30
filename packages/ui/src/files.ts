@@ -12,9 +12,10 @@ import { type FileMeta, type Item, fileTypeOf, initItem, mimeOf, newId, setFileM
 import type { Repo } from "@obtion/sync";
 import type { SpaceLink } from "./browser";
 import { ScopeContext } from "./scope";
+import { KEYS } from "./ui/storage";
 
 type FileMode = "online" | "local";
-const MODE_KEY = "obtion.fileMode";
+const MODE_KEY = KEYS.fileMode;
 
 interface Upload {
   hash: string;

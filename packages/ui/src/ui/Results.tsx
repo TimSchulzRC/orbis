@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { AlertTriangle, ChevronDown, ChevronRight, EyeOff } from "lucide-react";
 import { type Item, type StatusGroup, type ViewKind, todayISO } from "@obtion/core/model";
-import { type QueryDef, type EvalCtx, type Group as QGroup, FIELDS, fieldOf, groupItems, pathBase, runQuery, typesIn } from "@obtion/core/query";
+import { type QueryDef, type EvalCtx, type Group as QGroup, fieldOf, groupItems, pathBase, runQuery, viewTypeIds } from "@obtion/core/query";
 import { fmtDate, fmtNumber } from "@obtion/core/i18n";
 import { firstOfGroup, statusOf, statusProp } from "@obtion/core/traits";
 import { plainText } from "@obtion/core/search";
@@ -13,12 +13,13 @@ import { useT, titleOf } from "../i18n";
 import { files, useBlobUrl } from "../files";
 import { ItemIcon, StatusPill, Tag } from "./item-look";
 import { cn } from "../lib/utils";
-import { ProgressCount } from "./progress";
+import { PercentBar, ProgressCount } from "./progress";
 import { ItemRow, pathLabel, setStatus, treeOrder, Group } from "./Row";
 import { Triage } from "./Triage";
 import { CalendarView, TimelineView } from "./TimeViews";
 import { ProjectTable } from "./ProjectTable";
-import { type Look, AreaChip, GroupedTable, GroupChip, HiddenGroups, PercentBar, hiddenPatch, splitHidden } from "./Table";
+import { type Look, GroupedTable } from "./Table";
+import { AreaChip, GroupChip, HiddenGroups, fieldLabel, hiddenPatch, splitHidden } from "./groups";
 import { Button } from "./primitives";
 
 export function useQuery(def: QueryDef, thisId?: string) {
@@ -109,7 +110,7 @@ function ListView({ items, def, ctx, look }: { items: Item[]; def: QueryDef; ctx
   // "spalten:nächste" in a list: each entry shows its next task below the title
   const withNext = def.columns?.includes("next");
   const by = def.group ?? "";
-  const byLabel = ["status", "statusGroup", "type", "path"].includes(by) ? t("group." + by) : (FIELDS as readonly string[]).includes(by) ? t("field." + by) : by;
+  const byLabel = fieldLabel(by, t);
   return (
     <div className="-mx-2">
       {groups.map((g, gi) => (
@@ -213,7 +214,7 @@ function BoardView({ items, def, ctx, look }: { items: Item[]; def: QueryDef; ct
   const by = def.group && def.group !== "path" ? def.group : "status";
   const tab = look?.tab;
   // every option is a column, also an empty one – a place to drag to ("Erledigt" before anything is done)
-  const typeIds = [...new Set([...typesIn(def.where), ...items.map((i) => i.type ?? "")])].filter((id) => ix.types.has(id));
+  const typeIds = viewTypeIds(def.where, items, ix, items.length);
   const [columns, hiddenCols] = splitHidden(groupItems(items, by, ctx, undefined, tab?.hideEmpty ? undefined : { types: typeIds, where: def.where }).filter((g) => !tab?.hideEmpty || g.items.length), tab);
   const lanes = tab?.subgroup ? groupItems(items, tab.subgroup, ctx).filter((g) => g.items.length) : [{ key: "", items } as QGroup];
   const [over, setOver] = useState<string | null>(null);
@@ -242,8 +243,8 @@ function BoardView({ items, def, ctx, look }: { items: Item[]; def: QueryDef; ct
     check();
     el.onscroll = check;
   };
-  const byLabel = by === "status" || by === "statusGroup" || by === "type" ? t("group." + by) : by;
-  const subLabel = tab?.subgroup ? (["status", "statusGroup", "type", "path"].includes(tab.subgroup) ? t("group." + tab.subgroup) : (FIELDS as readonly string[]).includes(tab.subgroup) ? t("field." + tab.subgroup) : tab.subgroup) : "";
+  const byLabel = fieldLabel(by, t);
+  const subLabel = tab?.subgroup ? fieldLabel(tab.subgroup, t) : "";
   return (
     <div ref={scroller} className={cn("-mx-2 overflow-x-auto pb-2", more && "[mask-image:linear-gradient(to_right,black_88%,transparent)]")}>
       {lanes.map((lane) => {

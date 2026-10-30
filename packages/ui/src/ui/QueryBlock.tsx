@@ -14,7 +14,7 @@ import { repo } from "../repo";
 import { useIndex } from "../hooks";
 import { useT } from "../i18n";
 import { Results, defaultColumns, useQuery } from "./Results";
-import { viewGroups } from "./Table";
+import { viewGroups } from "./groups";
 import { type TabEdit, ViewSettings, ViewTabs, tabName, useTabChoice, useViewFields } from "./Views";
 import { QueryEditor } from "./QueryEditor";
 import { Button, SectionTitle } from "./primitives";

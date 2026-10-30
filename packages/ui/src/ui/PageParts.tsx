@@ -6,7 +6,7 @@ import { type Item, META_TYPE } from "@obtion/core/model";
 import { canPlaceIn, hasPlace, isInInbox } from "@obtion/core/placement";
 import { fmtDate } from "@obtion/core/i18n";
 import { repo } from "../repo";
-import { itemHref, useIndex, useMediaQuery } from "../hooks";
+import { itemHref, useIndex, useLocalStorage, usePhone } from "../hooks";
 import { useT, titleOf } from "../i18n";
 import { ItemIcon, RelTime } from "./item-look";
 import { Button, MenuItem, Popover, SectionTitle } from "./primitives";
@@ -15,15 +15,13 @@ import { ItemPicker } from "./Picker";
 import { placeSuggestions } from "./suggest";
 import { rememberPlace } from "../actions";
 import { dateOf } from "@obtion/core/date";
+import { KEYS } from "./storage";
 
 /** Remember per device whether a row of a page is open (folding is a view, not a change of the page). */
 function useOpen(key: string, initial: boolean): [boolean, (o: boolean) => void] {
-  const k = `obtion.open.${key}`;
-  const [open, setOpenState] = useState(() => {
-    const v = localStorage.getItem(k);
-    return v === null ? initial : v === "1";
-  });
-  return [open, (o) => (localStorage.setItem(k, o ? "1" : "0"), setOpenState(o))];
+  const [open, setOpen] = useLocalStorage(KEYS.open(key), initial);
+  // stored as "1"/"0" by older versions
+  return [!!open, setOpen];
 }
 
 // ---------- path line ----------
@@ -36,7 +34,7 @@ function useOpen(key: string, initial: boolean): [boolean, (o: boolean) => void]
 export function Crumbs({ item, tools, onPlaces, onPlace }: { item: Item; tools: React.ReactNode; onPlaces: () => void; onPlace: () => void }) {
   const ix = useIndex();
   const { t } = useT();
-  const narrow = useMediaQuery("(max-width: 767px)");
+  const narrow = usePhone();
   const path = ix.homePath(item.id);
   const others = ix.parentsOf(item.id).length - 1;
   const link = "max-w-[16rem] truncate hover:text-fg hover:underline";

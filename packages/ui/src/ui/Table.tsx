@@ -3,21 +3,23 @@
 // parent and folded until opened. Columns keep their width and order per view.
 import { Table as ShadcnTable, TableHeader, TableBody, TableRow, TableHead, TableCell as ShadcnTableCell } from "../components/ui/table";
 import { Input } from "../components/ui/input";
-import { NativeSelect } from "../components/ui/native-select";
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, ChevronRight, CornerDownRight, MoreHorizontal, Plus } from "lucide-react";
-import { type ViewTab, type Item, type ItemInit, type PropDef, type StatusGroup, titleKey, todayISO, STATUS_GROUPS } from "@obtion/core/model";
-import { type EvalCtx, type Group, type QueryDef, FIELDS, fieldOf, groupId, groupItems, pathBase, typesIn } from "@obtion/core/query";
-import { fmtDate, fmtShortDate } from "@obtion/core/i18n";
+import { ChevronDown, ChevronRight, CornerDownRight, Plus } from "lucide-react";
+import { type ViewTab, type Item, type ItemInit, type PropDef, type StatusGroup, parseRange, titleKey } from "@obtion/core/model";
+import { type EvalCtx, type Group, type QueryDef, FIELDS, fieldOf, groupId, groupItems, pathBase, viewTypeIds } from "@obtion/core/query";
+import { fmtDate } from "@obtion/core/i18n";
 import { dueOf, firstOfGroup, statusOf, statusProp } from "@obtion/core/traits";
 import { repo } from "../repo";
-import { itemHref, useIndex, useMediaQuery } from "../hooks";
+import { itemHref, useIndex, useNarrow, usePhone, useStoredSet } from "../hooks";
 import { useT, titleOf } from "../i18n";
 import { DateField, InlineText } from "./fields";
-import { ItemIcon, StatusGlyph, StatusPill, pal } from "./item-look";
-import { Button, MenuItem, Popover } from "./primitives";
-import { cn } from "../lib/utils";
-import { PropertyField } from "./Properties";
+import { DueLabel, EmptyDash, ItemIcon, StatusGlyph, StatusPill, pal, statusColor, tint } from "./item-look";
+import { Button, Card, IconButton, MenuItem, MoreMenu, Popover } from "./primitives";
+import { PercentBar, ProgressCount } from "./progress";
+import { startPointerDrag } from "../lib/drag";
+import { cn, moveInArray } from "../lib/utils";
+import { OptionSelect, PropertyField, RangeEditor } from "./Properties";
+import { AreaChip, GroupChip, HiddenGroups, fieldLabel, hiddenPatch, splitHidden } from "./groups";
 import { CellValue, defaultColumns } from "./Results";
 import { RowStatus, pathLabel, setStatus, shortPath, treeOrder } from "./Row";
 import { cmpKey } from "@obtion/core/sortkey";
@@ -29,20 +31,6 @@ export interface Look {
   onLook?: (patch: Partial<ViewTab>) => void;
   /** "+ Task" in each group: new entries of this type (with the group's value). */
   add?: { type: string; init?: ItemInit };
-}
-
-// ---------- per-device memory ----------
-
-function useStoredSet(key: string): [Set<string>, (id: string, on: boolean) => void, (ids: string[]) => void] {
-  const [set, setSet] = useState<Set<string>>(() => {
-    try {
-      return new Set(JSON.parse(localStorage.getItem(key) ?? "[]"));
-    } catch {
-      return new Set();
-    }
-  });
-  const save = (next: Set<string>) => (localStorage.setItem(key, JSON.stringify([...next])), setSet(next));
-  return [set, (id, on) => save(new Set(on ? [...set, id] : [...set].filter((x) => x !== id))), (ids) => save(new Set(ids))];
 }
 
 // ---------- column widths ----------
@@ -63,165 +51,22 @@ function defaultWidth(col: string, items: Item[], ctx: EvalCtx): number {
   return 160;
 }
 
-// ---------- chips ----------
-
-/** "Bereich": the top place as a chip, coloured by its place in the sidebar. */
-const AREA_COLORS = ["blue", "green", "violet", "amber", "teal", "pink", "indigo", "brown", "olive", "red"];
-export function AreaChip({ id }: { id: string }) {
-  const ix = useIndex();
-  const item = ix.get(id);
-  if (!item) return null;
-  const pinned = ix.live.filter((i) => i.pinned).sort((a, b) => cmpKey(a.pinned!, b.pinned!));
-  const c = pal(AREA_COLORS[Math.max(0, pinned.findIndex((p) => p.id === id)) % AREA_COLORS.length]);
-  return (
-    <a href={itemHref(id)} className="inline-flex max-w-full items-center truncate whitespace-nowrap rounded-full px-2 py-px text-xs font-medium hover:underline" style={{ color: `color-mix(in srgb, ${c} 62%, var(--text))`, background: `color-mix(in srgb, ${c} 13%, transparent)` }}>
-      {item.title}
-    </a>
-  );
-}
-
-/** Progress as "60 %" with a bar – in the app language. */
-export function PercentBar({ done, total }: { done: number; total: number }) {
-  const { t, lang } = useT();
-  if (!total) return <span className="text-faint">–</span>;
-  const share = done / total;
-  return (
-    <span className="flex w-full items-center gap-2" title={t("progress.title", { done, total })}>
-      <span className="w-11 shrink-0 text-right text-xs tabular-nums text-muted-foreground">{new Intl.NumberFormat(lang, { style: "percent", maximumFractionDigits: 0 }).format(share)}</span>
-      <span className="h-1 min-w-8 flex-1 overflow-hidden rounded-full bg-surface-2" role="progressbar" aria-valuenow={Math.round(share * 100)} aria-valuemin={0} aria-valuemax={100} aria-label={t("progress.label")}>
-        <span className="block h-full rounded-full" style={{ width: `${share * 100}%`, background: "var(--ok)" }} />
-      </span>
-    </span>
-  );
-}
-
-/** The chip a group starts with: its status or option in colour, the entry it stands for, or "Ohne …". */
-export function GroupChip({ g, by, byLabel }: { g: Group; by: string; byLabel: string }) {
-  const { t } = useT();
-  const ix = useIndex();
-  if (by === "statusGroup" && g.key) return <StatusPill option={{ id: g.key, name: t("group." + g.key), group: g.key as StatusGroup, color: undefined }} />;
-  if (g.option) return <StatusPill option={g.option} group={by === "status" ? (g.statusGroup as StatusGroup) : undefined} />;
-  if (g.ref && by === "area") return <AreaChip id={g.ref} />;
-  if (g.ref) {
-    const x = ix.get(g.ref);
-    return x ? (
-      <a href={itemHref(x.id)} className="flex min-w-0 items-center gap-1.5 text-sm font-medium hover:underline">
-        <ItemIcon item={x} size={14} className="shrink-0" />
-        <span className="truncate">{titleOf(x, t)}</span>
-      </a>
-    ) : null;
-  }
-  if (by === "path") return <span className="truncate text-sm font-medium">{g.path?.length ? pathLabel(g.path) : t("group.thisLevel")}</span>;
-  if (!g.key) return <span className="text-sm text-muted-foreground">{t("group.without", { name: byLabel })}</span>;
-  return <span className="truncate text-sm font-medium">{g.label || g.key}</span>;
-}
-
-/** Every group a view can have (with the empty options), for choosing which to show. */
-export function viewGroups(items: Item[], def: QueryDef, ctx: EvalCtx): Group[] {
-  if (!def.group) return [];
-  const typeIds = [...new Set([...typesIn(def.where), ...items.slice(0, 200).map((i) => i.type ?? "")])].filter((id) => ctx.ix.types.has(id));
-  return groupItems(items, def.group, ctx, pathBase(def, ctx), { types: typeIds, where: def.where });
-}
-
-/** Split a view's groups into the shown ones and the ones hidden by hand. */
-export function splitHidden(groups: Group[], tab?: ViewTab): [Group[], Group[]] {
-  const hidden = new Set(tab?.hiddenGroups ?? []);
-  return [groups.filter((g) => !hidden.has(groupId(g))), groups.filter((g) => hidden.has(groupId(g)))];
-}
-
-/** Hide a group in a view, or show it again. */
-export function hiddenPatch(tab: ViewTab | undefined, g: Group, hide: boolean): Partial<ViewTab> {
-  const ids = (tab?.hiddenGroups ?? []).filter((x) => x !== groupId(g));
-  return { hiddenGroups: hide ? [...ids, groupId(g)] : ids };
-}
-
-/** Below the last group: "3 ausgeblendete Gruppen" – a click shows them, each can come back. */
-export function HiddenGroups({ groups, by, byLabel, onShow }: { groups: Group[]; by: string; byLabel: string; onShow?: (g: Group) => void }) {
-  const { t } = useT();
-  const [open, setOpen] = useState(false);
-  if (!groups.length) return null;
-  return (
-    <div className="sticky left-0 w-fit px-2 py-1 text-sm">
-      <Button variant="plain" onClick={() => setOpen(!open)} aria-expanded={open} className="tap-y flex items-center gap-1.5 text-muted-foreground hover:text-fg">
-        {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-        {t("view.hiddenGroups", { count: groups.length })}
-      </Button>
-      {open && (
-        <ul className="mt-1 space-y-1 pl-5">
-          {groups.map((g) => (
-            <li key={g.key || "_"} className="flex items-center gap-2">
-              <GroupChip g={g} by={by} byLabel={byLabel} />
-              <span className="text-xs tabular-nums text-muted-foreground">{g.items.length}</span>
-              {onShow && (
-                <Button variant="plain" onClick={() => onShow(g)} className="tap rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-hover hover:text-fg">
-                  {t("view.showGroup")}
-                </Button>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
 // ---------- cells ----------
-
-/** A status or select value: its chip; a click opens the choice right there. */
-function OptionCell({ item, prop }: { item: Item; prop: PropDef }) {
-  const { t } = useT();
-  const v = item.props[prop.id];
-  const opt = prop.options?.find((o) => o.id === v);
-  const isStatus = prop.kind === "status";
-  return (
-    <label className="tap-row relative flex min-h-6 w-full cursor-pointer items-center">
-      {opt ? <StatusPill option={opt} /> : <span className="text-muted-foreground">{t("props.empty")}</span>}
-      <NativeSelect
-        overlay
-        value={String(v ?? "")}
-        onChange={(e) => (isStatus && e.target.value ? void setStatus(item, e.target.value) : repo.setProp(item.id, prop.id, e.target.value || null))}
-        aria-label={prop.name}
-      >
-        {!isStatus && <option value="">–</option>}
-        {isStatus
-          ? STATUS_GROUPS.map((g) => (
-              <optgroup key={g} label={t("group." + g)}>
-                {prop.options!.filter((o) => (o.group ?? "todo") === g).map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {o.name}
-                  </option>
-                ))}
-              </optgroup>
-            ))
-          : prop.options?.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.name}
-              </option>
-            ))}
-      </NativeSelect>
-    </label>
-  );
-}
 
 /** A start–end date: shown as one line; a click opens both dates. */
 function RangeCell({ item, prop }: { item: Item; prop: PropDef }) {
   const { t, lang } = useT();
   const v = typeof item.props[prop.id] === "string" ? (item.props[prop.id] as string) : "";
-  const [a = "", b = ""] = v ? v.split("/") : [];
-  const put = (x: string, y: string) => repo.setProp(item.id, prop.id, x || y ? `${x}/${y}` : null);
+  const { start, end } = parseRange(v);
   return (
     <Popover
       trigger={(p) => (
         <Button variant="plain" {...p} className="tap-y w-full truncate text-left tabular-nums hover:text-fg" aria-label={t("props.set", { name: prop.name })}>
-          {a || b ? `${a ? fmtDate(lang, a) : "…"} – ${b ? fmtDate(lang, b) : "…"}` : <span className="text-muted-foreground">{t("props.empty")}</span>}
+          {start || end ? `${start ? fmtDate(lang, start) : "…"} – ${end ? fmtDate(lang, end) : "…"}` : <span className="text-muted-foreground">{t("props.empty")}</span>}
         </Button>
       )}
     >
-      <div className="flex flex-wrap items-center gap-1 p-2 text-sm">
-        <DateField value={a || undefined} label={t("props.start")} autoFocus={!a} onChange={(x) => put(x, b)} />
-        <span className="text-faint">–</span>
-        <DateField value={b || undefined} label={t("props.end")} onChange={(x) => put(a, x)} />
-      </div>
+      <RangeEditor value={v} onChange={(x) => repo.setProp(item.id, prop.id, x || null)} autoFocus={!start} className="p-2 text-sm" />
     </Popover>
   );
 }
@@ -232,11 +77,11 @@ export function TableCell({ item, col, ctx }: { item: Item; col: string; ctx: Ev
   const ix = ctx.ix;
   if (col === "area") {
     const a = ix.area(item.id);
-    return a ? <AreaChip id={a} /> : <span className="text-faint">–</span>;
+    return a ? <AreaChip id={a} /> : <EmptyDash />;
   }
   if (col === "progress") {
     const pr = ix.progressOf(item);
-    return pr ? <PercentBar done={pr.done} total={pr.total} /> : <span className="text-faint">–</span>;
+    return pr ? <PercentBar done={pr.done} total={pr.total} /> : <EmptyDash />;
   }
   const hit = fieldOf(item, col, ix);
   const p = hit?.prop;
@@ -249,7 +94,7 @@ export function TableCell({ item, col, ctx }: { item: Item; col: string; ctx: Ev
   switch (p.kind) {
     case "status":
     case "select":
-      return <OptionCell item={item} prop={p} />;
+      return <OptionSelect item={item} prop={p} className="flex min-h-6 w-full" />;
     case "date":
       return p.range ? (
         <RangeCell item={item} prop={p} />
@@ -278,7 +123,7 @@ export function GroupedTable({ items, def, ctx, look }: { items: Item[]; def: Qu
   const key = look?.key ?? "";
   const tab = look?.tab;
   const cols = def.columns?.length ? def.columns : defaultColumns(items, ctx);
-  const typeIds = [...new Set([...typesIn(def.where), ...items.slice(0, 200).map((i) => i.type ?? "")])].filter((id) => ix.types.has(id));
+  const typeIds = viewTypeIds(def.where, items, ix);
   const by = def.group;
   const all = by ? groupItems(items, by, ctx, pathBase(def, ctx), tab?.hideEmpty ? undefined : { types: typeIds, where: def.where }).filter((g) => !tab?.hideEmpty || g.items.length) : [{ key: "", items } as Group];
   const [groups, hiddenGroups] = by ? splitHidden(all, tab) : [all, []];
@@ -290,7 +135,7 @@ export function GroupedTable({ items, def, ctx, look }: { items: Item[]; def: Qu
   const [live, setLive] = useState<Record<string, number>>({});
   const width = (c: string) => live[c] ?? tab?.widths?.[c] ?? defaultWidth(c, items, ctx);
   // on a phone the title column leaves room for the next one; the table scrolls sideways
-  const narrow = useMediaQuery("(max-width: 640px)");
+  const narrow = useNarrow();
   const titleW = narrow ? Math.min(width("title"), 190) : width("title");
   const total = titleW + cols.reduce((s, c) => s + width(c), 0);
   const label = (c: string) => {
@@ -304,7 +149,7 @@ export function GroupedTable({ items, def, ctx, look }: { items: Item[]; def: Qu
     }
     return c;
   };
-  const byLabel = by ? (by === "status" || by === "statusGroup" || by === "type" || by === "path" ? t("group." + by) : label(by)) : "";
+  const byLabel = by ? fieldLabel(by, t, [{ key: by, label: label(by) }]) : "";
   const [dragCol, setDragCol] = useState<string | null>(null);
   const resize = (c: string, e: React.PointerEvent) => {
     e.preventDefault();
@@ -312,15 +157,13 @@ export function GroupedTable({ items, def, ctx, look }: { items: Item[]; def: Qu
     const x0 = e.clientX;
     const w0 = width(c);
     let w = w0;
-    const move = (ev: PointerEvent) => ((w = Math.max(60, Math.min(800, Math.round(w0 + ev.clientX - x0)))), setLive((l) => ({ ...l, [c]: w })));
-    const up = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
-      if (w !== w0) look?.onLook?.({ widths: { ...(tab?.widths ?? {}), [c]: w } });
-      setTimeout(() => setLive((l) => (({ [c]: _, ...rest }) => rest)(l)), 0);
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
+    startPointerDrag(
+      (ev) => ((w = Math.max(60, Math.min(800, Math.round(w0 + ev.clientX - x0)))), setLive((l) => ({ ...l, [c]: w }))),
+      () => {
+        if (w !== w0) look?.onLook?.({ widths: { ...(tab?.widths ?? {}), [c]: w } });
+        setTimeout(() => setLive((l) => (({ [c]: _, ...rest }) => rest)(l)), 0);
+      },
+    );
   };
   const sticky = "sticky left-0 z-[1] bg-bg";
   const head = (
@@ -339,9 +182,9 @@ export function GroupedTable({ items, def, ctx, look }: { items: Item[]; def: Qu
             onDragOver={(e) => dragCol && e.preventDefault()}
             onDrop={() => {
               if (!dragCol || dragCol === c) return;
-              const rest = cols.filter((x) => x !== dragCol);
-              const at = rest.indexOf(c) + (cols.indexOf(dragCol) < cols.indexOf(c) ? 1 : 0);
-              look?.onLook?.({ columns: [...rest.slice(0, at), dragCol, ...rest.slice(at)] });
+              const from = cols.indexOf(dragCol);
+              const to = cols.indexOf(c);
+              look?.onLook?.({ columns: moveInArray(cols, from, from < to ? to + 1 : to) });
             }}
             className="relative truncate whitespace-nowrap border-b border-l border-line px-2 py-1.5 font-medium"
           >
@@ -375,9 +218,7 @@ export function GroupedTable({ items, def, ctx, look }: { items: Item[]; def: Qu
           <ShadcnTableCell className={cn(sticky, "border-b border-line px-2 py-1 align-middle group-hover/row:bg-hover")}>
             <span className="flex min-w-0 items-center gap-1" style={{ paddingLeft: depth * 20 }}>
               {kids ? (
-                <Button variant="plain" onClick={() => open(i.id, !isOpen)} aria-expanded={isOpen} aria-label={t(isOpen ? "table.closeSub" : "table.openSub", { count: kids })} className="tap -ml-1 shrink-0 rounded p-0.5 text-muted-foreground hover:bg-surface-2 hover:text-fg">
-                  {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                </Button>
+                <IconButton size="xs" icon={isOpen ? ChevronDown : ChevronRight} iconSize={14} onClick={() => open(i.id, !isOpen)} aria-expanded={isOpen} label={t(isOpen ? "table.closeSub" : "table.openSub", { count: kids })} className="-ml-1 shrink-0 hover:bg-surface-2" />
               ) : (
                 depth > 0 && <span className="w-4 shrink-0" />
               )}
@@ -429,19 +270,11 @@ export function GroupedTable({ items, def, ctx, look }: { items: Item[]; def: Qu
           <section key={g.key || "_"} className={heads ? "mb-5" : undefined} aria-label={heads ? g.label || g.key || byLabel : undefined}>
             {heads && (
               <div className="group/head sticky left-0 flex w-fit max-w-full items-center gap-2 px-2 py-1.5">
-                <Button variant="plain" onClick={() => fold(g.key, !isFolded)} aria-expanded={!isFolded} aria-label={t(isFolded ? "table.unfold" : "table.fold")} className="tap -ml-1 rounded p-0.5 text-muted-foreground hover:bg-hover hover:text-fg">
-                  {isFolded ? <ChevronRight size={15} /> : <ChevronDown size={15} />}
-                </Button>
+                <IconButton size="xs" icon={isFolded ? ChevronRight : ChevronDown} iconSize={15} onClick={() => fold(g.key, !isFolded)} aria-expanded={!isFolded} label={t(isFolded ? "table.unfold" : "table.fold")} className="-ml-1" />
                 <GroupChip g={g} by={by} byLabel={byLabel} />
                 <span className="text-xs tabular-nums text-muted-foreground">{g.items.length}</span>
                 <span className="flex items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover/head:opacity-100 pointer-coarse:opacity-100">
-                  <Popover
-                    trigger={(p) => (
-                      <Button variant="plain" {...p} className="tap rounded p-0.5 text-muted-foreground hover:bg-hover hover:text-fg" aria-label={t("table.groupMenu")}>
-                        <MoreHorizontal size={15} />
-                      </Button>
-                    )}
-                  >
+                  <MoreMenu align="left" size="xs" iconSize={15} label={t("table.groupMenu")}>
                     {(close) => (
                       <>
                         {look?.onLook && <MenuItem onClick={() => (close(), look.onLook!(hiddenPatch(tab, g, true)))}>{t("view.hideGroup")}</MenuItem>}
@@ -454,7 +287,7 @@ export function GroupedTable({ items, def, ctx, look }: { items: Item[]; def: Qu
                         )}
                       </>
                     )}
-                  </Popover>
+                  </MoreMenu>
                   {init && <NewRowButton init={init} label={t("table.addIn", { name: ix.typeName(init.type ?? null) ?? "" })} compact />}
                 </span>
               </div>
@@ -527,9 +360,7 @@ function NewRowButton({ init, label, compact }: { init: ItemInit; label: string;
       />
     );
   return compact ? (
-    <Button variant="plain" onClick={() => setTyping(true)} className="tap rounded p-0.5 text-muted-foreground hover:bg-hover hover:text-fg" aria-label={aria} title={aria}>
-      <Plus size={15} />
-    </Button>
+    <IconButton size="xs" icon={Plus} iconSize={15} onClick={() => setTyping(true)} label={aria} />
   ) : (
     <Button variant="plain" onClick={() => setTyping(true)} aria-label={aria} className="tap-y flex items-center gap-1.5 px-2 py-1.5 text-sm text-muted-foreground hover:text-fg">
       <Plus size={14} /> {label}
@@ -573,7 +404,7 @@ export function PageTable({
 }) {
   const { t, lang } = useT();
   const ix = useIndex();
-  const narrow = useMediaQuery("(max-width: 767px)");
+  const narrow = usePhone();
   const [folded, fold] = useStoredSet(`obtion.fold.${foldKey}`);
   const grouped = groups.length > 1 || !!groups[0]?.ref;
   const openCount = (items: Item[]) => items.filter((i) => statusOf(i, ix.schemaOf(i))?.group !== "done").length;
@@ -584,7 +415,7 @@ export function PageTable({
     const blocked = !!st && st.group !== "done" && ix.isBlocked(i);
     return (
       <>
-        {pr && pr.total > 0 && <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{`${pr.done}/${pr.total}`}</span>}
+        {pr && pr.total > 0 && <ProgressCount done={pr.done} total={pr.total} className="shrink-0 text-xs text-muted-foreground" />}
         {blocked && <span className="shrink-0 text-xs text-warn">{t("row.blocked")}</span>}
         {rel.length > 0 && <span className="min-w-0 truncate text-xs text-muted-foreground">{shortPath(rel)}</span>}
       </>
@@ -593,15 +424,12 @@ export function PageTable({
   const value = (i: Item, key: string) => {
     if (key === "due") {
       const d = dueOf(i, ix.schemaOf(i));
-      const today = todayISO();
-      const st = statusOf(i, ix.schemaOf(i));
-      if (!d) return <span className="text-faint">–</span>;
-      return <span className={cn("tabular-nums", st?.group !== "done" && d < today ? "text-danger" : d === today ? "text-warn" : "text-fg")}>{d === today ? t("time.today") : fmtShortDate(lang, d)}</span>;
+      return d ? <DueLabel due={d} done={statusOf(i, ix.schemaOf(i))?.group === "done"} cell /> : <EmptyDash />;
     }
     const hit = fieldOf(i, key, ix);
     if (hit?.prop?.options && typeof hit.value === "string") {
       const o = hit.prop.options.find((x) => x.id === hit.value);
-      return o ? <StatusPill option={o} small /> : <span className="text-faint">–</span>;
+      return o ? <StatusPill option={o} small /> : <EmptyDash />;
     }
     return <CellValue item={i} name={key} ctx={{ ix }} />;
   };
@@ -612,16 +440,9 @@ export function PageTable({
     return (
       <Button variant="plain" onClick={() => fold(g.key, !isFolded)} aria-expanded={!isFolded} className="flex w-full min-w-0 items-center gap-2 text-left text-[13px]">
         <ChevronRight size={13} className={cn("shrink-0 text-faint transition-transform", !isFolded && "rotate-90")} aria-hidden />
-        {st && <span className="shrink-0" style={{ color: st.group === "done" ? "var(--ok)" : st.option.color && st.option.color !== "gray" ? pal(st.option.color) : "var(--muted-foreground)" }}><StatusGlyph option={st.option} size={14} /></span>}
+        {st && <span className="shrink-0" style={{ color: statusColor(st.option, st.group === "done") ?? "var(--muted-foreground)" }}><StatusGlyph option={st.option} size={14} /></span>}
         <span className="truncate font-semibold">{g.label}</span>
-        {pr && pr.total > 0 && (
-          <>
-            <span className="h-1.5 w-16 shrink-0 overflow-hidden rounded-full bg-surface-2 dark:bg-hover max-md:w-12" aria-hidden>
-              <span className="block h-full rounded-full" style={{ width: `${(pr.done / pr.total) * 100}%`, background: "var(--ok)" }} />
-            </span>
-            <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{new Intl.NumberFormat(lang, { style: "percent", maximumFractionDigits: 0 }).format(pr.done / pr.total)}</span>
-          </>
-        )}
+        {pr && <PercentBar done={pr.done} total={pr.total} inline barClass="w-16 max-md:w-12" />}
         <span className="ml-auto shrink-0 text-xs tabular-nums text-muted-foreground md:ml-0">{t("children.openCount", { count: openCount(g.items) })}</span>
       </Button>
     );
@@ -639,7 +460,7 @@ export function PageTable({
   );
   if (narrow)
     return (
-      <div className="overflow-hidden rounded-xl border border-line bg-surface">
+      <Card className="overflow-hidden">
         {groups.map((g, gi) => {
           const isFolded = grouped && folded.has(g.key);
           return (
@@ -660,10 +481,10 @@ export function PageTable({
           );
         })}
         {foot}
-      </div>
+      </Card>
     );
   return (
-    <div className="overflow-hidden rounded-xl border border-line bg-surface">
+    <Card className="overflow-hidden">
       <ShadcnTable className="w-full border-collapse text-sm">
         <TableHeader>
           <TableRow className={cn("h-8 text-left text-xs text-muted-foreground", sub)}>
@@ -711,6 +532,6 @@ export function PageTable({
         })}
       </ShadcnTable>
       {foot}
-    </div>
+    </Card>
   );
 }

@@ -13,6 +13,7 @@ import { ItemPicker } from "./Picker";
 import { SpaceScope } from "./Spaces";
 import { notify } from "./feedback";
 import { NOTE_ICON } from "./icons";
+import { KEYS, readJSON, writeJSON } from "./storage";
 
 /**
  * Capture field: Enter saves. Preset is a note (no type); where it goes follows from the model –
@@ -26,7 +27,7 @@ export function Capture({ anywhere, ...p }: CaptureProps & { anywhere?: boolean 
   const shown = useAccounts().shown.map((s) => s.id).join();
   useEffect(() => void (anywhere && setSpace(captureSpace())), [shown]);
   if (!space) return <CaptureField {...p} />;
-  const choose = (id: string) => (setSpace(id), localStorage.setItem(LAST_SPACE, id));
+  const choose = (id: string) => (setSpace(id), writeJSON(KEYS.captureSpace, id));
   return (
     <SpaceScope id={space}>
       <CaptureField {...p} onSpace={choose} />
@@ -34,12 +35,11 @@ export function Capture({ anywhere, ...p }: CaptureProps & { anywhere?: boolean 
   );
 }
 
-const LAST_SPACE = "obtion.capture.space";
 /** Where a capture from anywhere goes: the one workspace shown, else the one used last if it is shown, else the first shown. */
 export function captureSpace(): string | undefined {
   const shown = shownSpaces();
   if (shown.length === 1) return shown[0]!.id;
-  const last = localStorage.getItem(LAST_SPACE);
+  const last = readJSON(KEYS.captureSpace, "");
   return (shown.find((s) => s.id === last) ?? shown[0])?.id;
 }
 

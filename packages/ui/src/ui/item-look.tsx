@@ -156,15 +156,15 @@ export function RelTime({ ts }: { ts: number }) {
   return <time dateTime={new Date(ts).toISOString()}>{fmtRelative(lang, ts)}</time>;
 }
 
-/** A due date: red once overdue (unless done), amber today. */
-export function DueLabel({ due, done, className }: { due?: string; done?: boolean; className?: string }) {
+/** A due date: red once overdue (unless done), amber today. `cell`: in a table's column, as big as the other values. */
+export function DueLabel({ due, done, cell }: { due?: string; done?: boolean; cell?: boolean }) {
   const { t, lang } = useT();
   if (!due) return null;
   const today = todayISO();
   const overdue = !done && due < today;
   const isToday = due === today;
   return (
-    <span className={cn("whitespace-nowrap text-xs tabular-nums", overdue ? "font-medium text-danger" : isToday ? "font-medium text-warn" : "text-muted-foreground", className)}>
+    <span className={cn("whitespace-nowrap tabular-nums", !cell && "text-xs", !cell && (overdue || isToday) && "font-medium", overdue ? "text-danger" : isToday ? "text-warn" : cell ? "text-fg" : "text-muted-foreground")}>
       {isToday ? t("time.today") : fmtShortDate(lang, due)}
     </span>
   );

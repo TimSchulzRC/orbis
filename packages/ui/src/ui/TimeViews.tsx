@@ -2,17 +2,20 @@
 // timeline the start or the end); entries without a date are listed below.
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
-import { type Item, type PropDef, titleKey } from "@obtion/core/model";
+import { type Item, type PropDef, formatRange, parseRange, titleKey } from "@obtion/core/model";
 import { addDays, diffDays, todayISO } from "@obtion/core/date";
-import { type EvalCtx, type Group, type QueryDef, fieldOf, groupItems, typesIn } from "@obtion/core/query";
+import { type EvalCtx, type Group, type QueryDef, fieldOf, groupItems, viewTypeIds } from "@obtion/core/query";
 import { dueProp } from "@obtion/core/traits";
 import { repo } from "../repo";
-import { openItem, itemHref, useMediaQuery } from "../hooks";
+import { openItem, itemHref, useLocalStorage, useNarrow } from "../hooks";
 import { useT, titleOf } from "../i18n";
 import { ItemIcon, ItemLink } from "./item-look";
 import { Button, Seg } from "./primitives";
 import { cn } from "../lib/utils";
-import { type Look, GroupChip, HiddenGroups, hiddenPatch, splitHidden } from "./Table";
+import { type Look } from "./Table";
+import { GroupChip, HiddenGroups, fieldLabel, hiddenPatch, splitHidden } from "./groups";
+import { KEYS } from "./storage";
+import { startPointerDrag } from "../lib/drag";
 
 // ---------- dates (ISO strings, computed in UTC so no time zone moves a day) ----------
 
@@ -33,9 +36,9 @@ interface Span {
 /** The date a view places entries by: chosen, else the first date property (a due date before others). */
 function dateKey(def: QueryDef, items: Item[], ctx: EvalCtx, chosen?: string): string | undefined {
   if (chosen) return chosen;
-  const types = [...new Set([...typesIn(def.where), ...items.slice(0, 100).map((i) => i.type ?? "")])].map((id) => ctx.ix.types.get(id)?.schema).filter(Boolean);
-  for (const s of types) {
-    const p = s!.properties.find((x) => x.kind === "date" && x.range) ?? dueProp(s) ?? s!.properties.find((x) => x.kind === "date");
+  for (const id of viewTypeIds(def.where, items, ctx.ix, 100)) {
+    const s = ctx.ix.types.get(id)!.schema;
+    const p = s.properties.find((x) => x.kind === "date" && x.range) ?? dueProp(s) ?? s.properties.find((x) => x.kind === "date");
     if (p) return p.name;
   }
   return undefined;
@@ -44,7 +47,7 @@ function dateKey(def: QueryDef, items: Item[], ctx: EvalCtx, chosen?: string): s
 function spanOf(item: Item, key: string, ctx: EvalCtx): Span | undefined {
   const hit = fieldOf(item, key, ctx.ix);
   if (!hit || hit.kind !== "date" || typeof hit.value !== "string" || !hit.value) return undefined;
-  const [a = "", b = ""] = hit.value.split("/");
+  const { start: a, end: b } = parseRange(hit.value);
   const start = isDay(a) ? a : isDay(b) ? b : undefined;
   const end = isDay(b) ? b : start;
   if (!start || !end) return undefined;
@@ -62,7 +65,7 @@ function writable(item: Item, key: string, ctx: EvalCtx): PropDef | undefined {
 function writeSpan(item: Item, key: string, span: Span, ctx: EvalCtx) {
   const p = writable(item, key, ctx);
   if (!p) return;
-  repo.setProp(item.id, p.id, p.range ? `${span.start}/${span.end}` : span.start);
+  repo.setProp(item.id, p.id, p.range ? formatRange(span.start, span.end) : span.start);
 }
 
 // ---------- calendar ----------
@@ -221,8 +224,7 @@ export function TimelineView({ items, def, ctx, look }: { items: Item[]; def: Qu
   const { t, lang } = useT();
   const key = dateKey(def, items, ctx, look?.tab?.date);
   const today = todayISO();
-  const [scale, setScaleState] = useState<Scale>(() => (localStorage.getItem("obtion.timeline.scale") as Scale) || "week");
-  const setScale = (s: Scale) => (localStorage.setItem("obtion.timeline.scale", s), setScaleState(s));
+  const [scale, setScale] = useLocalStorage<Scale>(KEYS.timelineScale, "week");
   const px = PX[scale];
   // while dragging: the changed span of one entry, written on release
   const [live, setLive] = useState<{ id: string; span: Span } | null>(null);
@@ -242,7 +244,7 @@ export function TimelineView({ items, def, ctx, look }: { items: Item[]; def: Qu
   const width = days * px;
   const scroller = useRef<HTMLDivElement>(null);
   const [scrollX, setScrollX] = useState(0);
-  const narrow = useMediaQuery("(max-width: 640px)");
+  const narrow = useNarrow();
   useEffect(() => {
     // start with today in view, a bit from the left
     const el = scroller.current;
@@ -253,7 +255,7 @@ export function TimelineView({ items, def, ctx, look }: { items: Item[]; def: Qu
   const tab = look?.tab;
   const dated = items.filter((i) => placed.has(i.id));
   const [groups, hiddenGroups] = by ? splitHidden(groupItems(dated, by, ctx).filter((g) => g.items.length), tab) : [[{ key: "", items: dated } as Group], []];
-  const byLabel = by ? (["status", "statusGroup", "type", "path"].includes(by) ? t("group." + by) : by) : "";
+  const byLabel = by ? fieldLabel(by, t) : "";
   // the scale: month names (and week starts in the week scale)
   const ticks: { day: string; label: string; major: boolean }[] = [];
   for (let d = from; ms(d) <= ms(to); d = addDays(d, 1)) {
@@ -269,26 +271,24 @@ export function TimelineView({ items, def, ctx, look }: { items: Item[]; def: Qu
     const x0 = e.clientX;
     let span = span0;
     let moved = false;
-    const move = (ev: PointerEvent) => {
-      const d = Math.round((ev.clientX - x0) / px);
-      if (d) moved = true;
-      span =
-        mode === "move"
-          ? { start: addDays(span0.start, d), end: addDays(span0.end, d) }
-          : mode === "start"
-            ? { start: ms(addDays(span0.start, d)) > ms(span0.end) ? span0.end : addDays(span0.start, d), end: span0.end }
-            : { start: span0.start, end: ms(addDays(span0.end, d)) < ms(span0.start) ? span0.start : addDays(span0.end, d) };
-      setLive({ id: item.id, span });
-    };
-    const up = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
-      setLive(null);
-      if (!moved) return mode === "move" && openItem(item.id);
-      if (span.start !== span0.start || span.end !== span0.end) writeSpan(item, key, span, ctx);
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
+    startPointerDrag(
+      (ev) => {
+        const d = Math.round((ev.clientX - x0) / px);
+        if (d) moved = true;
+        span =
+          mode === "move"
+            ? { start: addDays(span0.start, d), end: addDays(span0.end, d) }
+            : mode === "start"
+              ? { start: ms(addDays(span0.start, d)) > ms(span0.end) ? span0.end : addDays(span0.start, d), end: span0.end }
+              : { start: span0.start, end: ms(addDays(span0.end, d)) < ms(span0.start) ? span0.start : addDays(span0.end, d) };
+        setLive({ id: item.id, span });
+      },
+      () => {
+        setLive(null);
+        if (!moved) return void (mode === "move" && openItem(item.id));
+        if (span.start !== span0.start || span.end !== span0.end) writeSpan(item, key, span, ctx);
+      },
+    );
   };
   const LEFT = narrow ? 130 : 220; // the names column; on a phone it leaves room for the bars
   const row = (i: Item) => {

@@ -17,7 +17,7 @@ import { useT, titleOf } from "../i18n";
 import { recentPlaces } from "../actions";
 import { Button, Kbd } from "./primitives";
 import { ItemIcon, RelTime, Tag, TypeGlyph } from "./item-look";
-import { cn } from "../lib/utils";
+import { cn, toggled } from "../lib/utils";
 import { TagInput } from "./TagInput";
 import { placeSuggestions } from "./suggest";
 import { Markdown } from "./Markdown";
@@ -86,12 +86,7 @@ export function Triage({ items }: { items: Item[] }) {
     return m.length ? m : items[sel] ? [items[sel]!] : [];
   };
   const toggle = (id: string, on?: boolean) =>
-    setMarked((m) => {
-      const n = new Set(m);
-      if (on ?? !n.has(id)) n.add(id);
-      else n.delete(id);
-      return n;
-    });
+    setMarked((m) => (on === undefined || on !== m.has(id) ? toggled(m, id) : m));
   const trash = (l: Item[]) => void act.trash(l).then((ok) => ok && setMarked(new Set()));
 
   // the handler sees this render's state; the listener stays the same

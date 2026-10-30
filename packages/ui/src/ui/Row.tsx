@@ -1,4 +1,3 @@
-import { useSyncExternalStore } from "react";
 import { type Item, STATUS_GROUPS } from "@obtion/core/model";
 import { confirmAction, notify } from "./feedback";
 import { dueOf, firstOfGroup, isDone, primaryChild, statusOf, statusProp } from "@obtion/core/traits";
@@ -10,6 +9,7 @@ import { tr, useT, titleOf } from "../i18n";
 import { DueLabel, ItemIcon, StatusGlyph, StatusPill, pal } from "./item-look";
 import { Button, MenuItem, Popover } from "./primitives";
 import { cn } from "../lib/utils";
+import { createStore } from "../lib/store";
 import { ProgressCount } from "./progress";
 import { statusShape } from "@obtion/core/input";
 
@@ -80,14 +80,10 @@ export async function setStatus(item: Item, optionId: string, repo: Repo = curre
 
 // Ticked entries stay visible, struck through, for a moment before they leave the list.
 const lingering = new Map<string, ReturnType<typeof setTimeout>>();
-const lingerListeners = new Set<() => void>();
-let lingerVersion = 0;
-const lingerEmit = () => (lingerVersion++, lingerListeners.forEach((l) => l()));
+const lingerVersion = createStore(0);
+const lingerEmit = () => lingerVersion.set(lingerVersion.get() + 1);
 function useLingering(id: string) {
-  useSyncExternalStore(
-    (l) => (lingerListeners.add(l), () => void lingerListeners.delete(l)),
-    () => lingerVersion,
-  );
+  lingerVersion.use();
   return lingering.has(id);
 }
 

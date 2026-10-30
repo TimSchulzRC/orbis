@@ -3,6 +3,8 @@ import { repo } from "./repo";
 import { files } from "./files";
 import { activeSpace } from "./accounts";
 import { ScopeContext } from "./scope";
+import { readJSON, writeJSON } from "./ui/storage";
+import { PHONE } from "./lib/platform";
 
 /** Re-render whenever the replica of this part of the page changes. */
 export function useRepo() {
@@ -150,8 +152,6 @@ export function useMediaQuery(q: string) {
 
 /** The one breakpoint between phone and desktop layout: the sidebar shows from here (Tailwind `lg`). */
 export const useDesktop = () => useMediaQuery("(min-width: 1024px)");
-/** Below Tailwind `md`: one column, phone-sized controls. */
-export const PHONE = "(max-width: 767px)";
 export const usePhone = () => useMediaQuery(PHONE);
 /** Below Tailwind `sm`: too narrow for side-by-side columns (tables, timelines). */
 export const useNarrow = () => useMediaQuery("(max-width: 640px)");
@@ -186,20 +186,21 @@ export function useFocusDraft<V>(value: V) {
   };
 }
 
+/** A value this device keeps (ui/storage.ts names the keys). */
 export function useLocalStorage<T>(key: string, init: T): [T, (v: T) => void] {
-  const [v, setV] = useState<T>(() => {
-    try {
-      const s = localStorage.getItem(key);
-      return s ? (JSON.parse(s) as T) : init;
-    } catch {
-      return init;
-    }
-  });
+  const [v, setV] = useState<T>(() => readJSON(key, init));
   return [
     v,
     (n: T) => {
       setV(n);
-      localStorage.setItem(key, JSON.stringify(n));
+      writeJSON(key, n);
     },
   ];
+}
+
+/** A stored set of ids (folded groups, opened rows). */
+export function useStoredSet(key: string): [Set<string>, (id: string, on: boolean) => void, (ids: string[]) => void] {
+  const [ids, setIds] = useLocalStorage<string[]>(key, []);
+  const set = new Set(ids);
+  return [set, (id, on) => setIds(on ? [...set.add(id)] : ids.filter((x) => x !== id)), setIds];
 }

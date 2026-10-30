@@ -11,6 +11,7 @@ import { browserHost, type SpaceLink } from "./browser";
 import { DeviceFiles, setFiles } from "./files";
 import { setRepo } from "./repo";
 import { globalPage } from "./scope";
+import { KEYS } from "./ui/storage";
 
 export interface Account {
   token: string;
@@ -22,7 +23,6 @@ export interface Account {
 
 export type Space = WorkspaceInfo;
 
-const KEY = { account: "obtion.account", spaces: "obtion.spaces", active: "obtion.active", shown: "obtion.shown" };
 const read = <T>(k: string, def: T): T => {
   try {
     return (JSON.parse(localStorage.getItem(k) ?? "null") as T) ?? def;
@@ -32,26 +32,26 @@ const read = <T>(k: string, def: T): T => {
 };
 
 // the app could hold accounts of other servers for a day (2026-10-27): keep the one of this server
-if (localStorage.getItem("obtion.accounts")) {
-  const mine = read<{ server: string }[]>("obtion.accounts", []).find((a) => a.server === location.origin);
-  if (mine) localStorage.setItem(KEY.account, JSON.stringify(mine));
-  for (const k of ["obtion.accounts", KEY.spaces, KEY.active]) localStorage.removeItem(k);
+if (localStorage.getItem(KEYS.legacyAccounts)) {
+  const mine = read<{ server: string }[]>(KEYS.legacyAccounts, []).find((a) => a.server === location.origin);
+  if (mine) localStorage.setItem(KEYS.account, JSON.stringify(mine));
+  for (const k of [KEYS.legacyAccounts, KEYS.spaces, KEYS.active]) localStorage.removeItem(k);
 }
 
-let account: Account | null = read(KEY.account, null);
-let spaces: Space[] = read(KEY.spaces, []);
-let active: string | null = localStorage.getItem(KEY.active);
+let account: Account | null = read(KEYS.account, null);
+let spaces: Space[] = read(KEYS.spaces, []);
+let active: string | null = localStorage.getItem(KEYS.active);
 /** The workspaces chosen to be seen (sidebar, inbox) on this device; null: all. */
-let shown: string[] | null = read(KEY.shown, null);
+let shown: string[] | null = read(KEYS.shown, null);
 let version = 0;
 const listeners = new Set<() => void>();
 
 function save() {
-  localStorage.setItem(KEY.account, JSON.stringify(account));
-  localStorage.setItem(KEY.spaces, JSON.stringify(spaces));
-  if (active) localStorage.setItem(KEY.active, active);
-  else localStorage.removeItem(KEY.active);
-  localStorage.setItem(KEY.shown, JSON.stringify(shown));
+  localStorage.setItem(KEYS.account, JSON.stringify(account));
+  localStorage.setItem(KEYS.spaces, JSON.stringify(spaces));
+  if (active) localStorage.setItem(KEYS.active, active);
+  else localStorage.removeItem(KEYS.active);
+  localStorage.setItem(KEYS.shown, JSON.stringify(shown));
   version++;
   for (const l of listeners) l();
 }

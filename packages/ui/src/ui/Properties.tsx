@@ -5,7 +5,7 @@ import { Input } from "../components/ui/input";
 import { NativeSelect } from "../components/ui/native-select";
 import { useState } from "react";
 import { X, Plus, ExternalLink, AlertTriangle, Trash2, ArrowRightLeft, CalendarDays } from "lucide-react";
-import { type FreeKind, type FreeValue, type Item, type PropDef, type TypeSchema, type Value, FREE_KINDS, STATUS_GROUPS, optionNames, todayISO } from "@obtion/core/model";
+import { type FreeKind, type FreeValue, type Item, type PropDef, type TypeSchema, type Value, FREE_KINDS, STATUS_GROUPS, formatRange, optionNames, parseRange, todayISO } from "@obtion/core/model";
 import { type T, fmtDate } from "@obtion/core/i18n";
 import type { Index } from "@obtion/core/graph";
 import { numberText, parseNumber } from "@obtion/core/input";
@@ -16,9 +16,9 @@ import { repo } from "../repo";
 import { useIndex } from "../hooks";
 import { useT } from "../i18n";
 import { DateField, InlineText } from "./fields";
-import { ItemLink, StatusPill, Tag } from "./item-look";
-import { Button, MenuItem, Popover, AddButton } from "./primitives";
-import { Progress } from "./progress";
+import { EmptyDash, ItemLink, StatusPill, Tag } from "./item-look";
+import { Button, EmptyValueButton, IconButton, MenuItem, Popover, AddButton, REVEAL } from "./primitives";
+import { Progress, ProgressCount } from "./progress";
 import { cn } from "../lib/utils";
 import { TagInput } from "./TagInput";
 import { ItemPicker } from "./Picker";
@@ -73,37 +73,11 @@ export function PropertyField({ item, prop, autoFocus }: { item: Item; prop: Pro
       return <Checkbox checked={v === true} onCheckedChange={(checked) => set(checked === true ? true : null)} aria-label={prop.name} className="size-4" />;
     case "select":
     case "status": {
-      const opt = prop.options?.find((o) => o.id === v);
       const done = prop.kind === "status" ? doneAt(item, ix.schemaOf(item)) : undefined;
       return (
         <>
-        <label className="tap-row relative inline-flex cursor-pointer items-center">
-          {opt ? <StatusPill option={opt} /> : <span className="text-muted-foreground">{t("props.empty")}</span>}
-          <NativeSelect
-            overlay
-            value={String(v ?? "")}
-            onChange={(e) => (prop.kind === "status" && e.target.value ? void setStatus(item, e.target.value) : set(e.target.value || null))}
-            aria-label={prop.name}
-          >
-            {prop.kind !== "status" && <option value="">–</option>}
-            {prop.kind === "status"
-              ? STATUS_GROUPS.map((g) => (
-                  <optgroup key={g} label={t("group." + g)}>
-                    {prop.options!.filter((o) => (o.group ?? "todo") === g).map((o) => (
-                      <option key={o.id} value={o.id}>
-                        {o.name}
-                      </option>
-                    ))}
-                  </optgroup>
-                ))
-              : prop.options?.map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {o.name}
-                  </option>
-                ))}
-          </NativeSelect>
-        </label>
-        {done && <span className="text-xs tabular-nums text-muted-foreground">{t("props.doneOn", { date: fmtDate(lang, dateOf(done)) })}</span>}
+          <OptionSelect item={item} prop={prop} className="inline-flex" />
+          {done && <span className="text-xs tabular-nums text-muted-foreground">{t("props.doneOn", { date: fmtDate(lang, dateOf(done)) })}</span>}
         </>
       );
     }
@@ -151,46 +125,81 @@ export function PropertyField({ item, prop, autoFocus }: { item: Item; prop: Pro
       return p.total ? (
         <span className="flex w-full max-w-64 items-center gap-2">
           <Progress done={p.done} total={p.total} className="flex-1" />
-          <span className="text-xs tabular-nums text-muted-foreground">
-            {p.done}/{p.total}
-          </span>
+          <ProgressCount done={p.done} total={p.total} className="text-xs text-muted-foreground" />
         </span>
       ) : (
-        <span className="text-faint">–</span>
+        <EmptyDash />
       );
     }
   }
   return null;
 }
 
+/** A status or select value: its chip with an invisible select over it, so a click picks right there. */
+export function OptionSelect({ item, prop, className }: { item: Item; prop: PropDef; className?: string }) {
+  const { t } = useT();
+  const v = item.props[prop.id];
+  const opt = prop.options?.find((o) => o.id === v);
+  const isStatus = prop.kind === "status";
+  return (
+    <label className={cn("tap-row relative cursor-pointer items-center", className)}>
+      {opt ? <StatusPill option={opt} /> : <span className="text-muted-foreground">{t("props.empty")}</span>}
+      <NativeSelect
+        overlay
+        value={String(v ?? "")}
+        onChange={(e) => (isStatus && e.target.value ? void setStatus(item, e.target.value) : repo.setProp(item.id, prop.id, e.target.value || null))}
+        aria-label={prop.name}
+      >
+        {!isStatus && <option value="">–</option>}
+        {isStatus
+          ? STATUS_GROUPS.map((g) => (
+              <optgroup key={g} label={t("group." + g)}>
+                {prop.options!.filter((o) => (o.group ?? "todo") === g).map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.name}
+                  </option>
+                ))}
+              </optgroup>
+            ))
+          : prop.options?.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.name}
+              </option>
+            ))}
+      </NativeSelect>
+    </label>
+  );
+}
+
+/** Start and end of a range as two date fields. */
+export function RangeEditor({ value, onChange, autoFocus, className }: { value: string; onChange: (v: string) => void; autoFocus?: boolean; className?: string }) {
+  const { t } = useT();
+  const { start, end } = parseRange(value);
+  return (
+    <span className={cn("flex flex-wrap items-center gap-1", className)}>
+      <DateField value={start || undefined} label={t("props.start")} autoFocus={autoFocus} onChange={(x) => onChange(formatRange(x, end))} />
+      <EmptyDash />
+      <DateField value={end || undefined} label={t("props.end")} onChange={(x) => onChange(formatRange(start, x))} />
+    </span>
+  );
+}
+
 /** A start–end date: empty it is one quiet "–" like every empty field; a click shows both dates. */
 function RangeField({ value, name, autoFocus, onChange }: { value: string; name: string; autoFocus?: boolean; onChange: (v: string) => void }) {
   const { t, lang } = useT();
   const [open, setOpen] = useState(!!autoFocus);
-  const [a, b] = value ? [value.split("/")[0] ?? "", value.split("/")[1] ?? ""] : ["", ""];
-  const put = (x: string, y: string) => onChange(x || y ? `${x}/${y}` : "");
-  if (!value && !open)
-    return (
-      <Button variant="plain" type="button" onClick={() => setOpen(true)} className="tap-y -ml-1 rounded px-1 text-muted-foreground hover:bg-hover hover:text-fg" aria-label={t("props.set", { name })}>
-        {t("props.empty")}
-      </Button>
-    );
+  if (!value && !open) return <EmptyValueButton type="button" onClick={() => setOpen(true)} aria-label={t("props.set", { name })} />;
   // set: read as one line ("1. März 2026 – 30. Juni 2027"), a click opens both dates
   if (!open) {
+    const { start, end } = parseRange(value);
     const long = (d: string) => (d ? fmtDate(lang, d, { day: "numeric", month: "long", year: "numeric" }) : "…");
     return (
       <Button variant="plain" type="button" onClick={() => setOpen(true)} className="tap-y -ml-1 rounded px-1 text-left tabular-nums hover:bg-hover" aria-label={t("props.set", { name })}>
-        {long(a)} – {long(b)}
+        {long(start)} – {long(end)}
       </Button>
     );
   }
-  return (
-    <span className="flex flex-wrap items-center gap-1">
-      <DateField value={a || undefined} label={t("props.start")} autoFocus={open} onChange={(x) => put(x, b)} />
-      <span className="text-faint">–</span>
-      <DateField value={b || undefined} label={t("props.end")} onChange={(x) => put(a, x)} />
-    </span>
-  );
+  return <RangeEditor value={value} onChange={onChange} autoFocus />;
 }
 
 function RelationField({ item, prop, autoOpen }: { item: Item; prop: PropDef; autoOpen?: boolean }) {
@@ -221,9 +230,7 @@ function RelationField({ item, prop, autoOpen }: { item: Item; prop: PropDef; au
       })}
       {/* empty: the same quiet "–" as every empty field; with values and several allowed: "+" */}
       {!ids.length ? (
-        <Button variant="plain" type="button" onClick={() => setPicking(true)} className="tap-y -ml-1 rounded px-1 text-muted-foreground hover:bg-hover hover:text-fg" aria-label={t("props.set", { name: prop.name })}>
-          {t("props.empty")}
-        </Button>
+        <EmptyValueButton type="button" onClick={() => setPicking(true)} aria-label={t("props.set", { name: prop.name })} />
       ) : (
         prop.multiple && <AddButton onClick={() => setPicking(true)} aria-label={t("props.set", { name: prop.name })} />
       )}
@@ -370,9 +377,7 @@ export function PropertyBlock({ item, schema, noAdd, head = {} }: { item: Item; 
       {free.map(([n, v]) => (
         <BlockRow key={"free:" + n} label={n}>
           <FreeField value={v} name={n} options={v.k === "select" ? freeOptions(n) : undefined} onChange={(x) => repo.setExtra(item.id, n, x)} />
-          <Button variant="plain" onClick={() => repo.setExtra(item.id, n, null)} className="tap ml-auto rounded p-0.5 text-faint opacity-0 pointer-coarse:opacity-100 hover:bg-hover hover:text-fg group-hover:opacity-100 focus:opacity-100" aria-label={t("props.removeFree", { name: n })}>
-            <X size={12} />
-          </Button>
+          <IconButton size="xs" icon={X} iconSize={12} onClick={() => repo.setExtra(item.id, n, null)} className={cn("ml-auto text-faint", REVEAL.any)} label={t("props.removeFree", { name: n })} />
         </BlockRow>
       ))}
       {inverse.map((g) => (

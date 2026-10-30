@@ -3,6 +3,7 @@ import type { Repo } from "@obtion/sync";
 import { repo as current } from "./repo";
 import { freshColor } from "@obtion/core/palette";
 import { itemPath, spaceHref } from "./hooks";
+import { KEYS } from "./ui/storage";
 
 /** Create an item locally and open it – in another workspace than the open one with `space`. */
 export function createAndOpen(init: ItemInit, repo: Repo = current, space?: string) {
@@ -38,7 +39,7 @@ export function capture(text: string, opts: { type?: string | null; parent?: str
   return repo.create({ title, body, type, parents: opts.parent ? [opts.parent] : [] });
 }
 
-const RECENT = "obtion.recentPlaces";
+const RECENT = KEYS.recentPlaces;
 function storedPlaces(): string[] {
   try {
     const ids = JSON.parse(localStorage.getItem(RECENT) ?? "[]");

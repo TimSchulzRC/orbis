@@ -9,5 +9,8 @@ export function modName(lang: string): string {
   return MOD === "⌘" ? "⌘" : lang === "de" ? "Strg" : "Ctrl";
 }
 
+/** Below Tailwind `md`: one column, phone-sized controls (usePhone). */
+export const PHONE = "(max-width: 767px)";
+
 /** A touch screen as the main pointer: bigger targets, pickers instead of typing. */
 export const isCoarse = () => matchMedia("(pointer: coarse)").matches;

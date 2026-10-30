@@ -4,6 +4,7 @@
 import { openDB, type IDBPDatabase } from "idb";
 import type { OutItem, RepoHost, ReplicaStorage, SyncSocket, TabMsg } from "@obtion/sync";
 import { tr } from "./i18n";
+import { KEYS, readJSON, writeJSON } from "./ui/storage";
 
 /** Where a workspace is: its address on the server (…/w/<id>), the account's token, the name of its storage here. */
 export interface SpaceLink {
@@ -23,7 +24,7 @@ function idbStorage(name: string): ReplicaStorage {
         blocking: () => {
           db.close();
           // Signing out already clears the account and will reload after all copies are removed.
-          if (localStorage.getItem("obtion.account") !== "null") location.reload();
+          if (localStorage.getItem(KEYS.account) !== "null") location.reload();
         },
         upgrade(db) {
           db.createObjectStore("updates", { autoIncrement: true });
@@ -133,11 +134,14 @@ export function browserHost(link: SpaceLink): RepoHost {
 }
 
 function deviceName(): string {
-  const saved = localStorage.getItem("obtion.device");
+  const saved = readJSON(KEYS.device, "");
   if (saved) return saved;
   const ua = navigator.userAgent;
   const name = /iPhone/.test(ua) ? "iPhone" : /iPad/.test(ua) ? "iPad" : /Android/.test(ua) ? "Android" : /Mac/.test(ua) ? "Mac" : /Windows/.test(ua) ? "Windows" : "Browser";
   const full = `${name}-${Math.random().toString(36).slice(2, 6)}`;
-  localStorage.setItem("obtion.device", full);
+  setDeviceName(full);
   return full;
 }
+
+/** How this device is named in the history of changes. */
+export const setDeviceName = (name: string) => writeJSON(KEYS.device, name);

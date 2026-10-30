@@ -15,12 +15,13 @@ import { useRepo, useSpaceId, spaceHref } from "../hooks";
 import { useT, setLang } from "../i18n";
 import { Button, Dialog, Seg, SectionTitle } from "../ui/primitives";
 import { ItemIcon, TypeGlyph } from "../ui/item-look";
-import { cn } from "../lib/utils";
+import { cn, toggled } from "../lib/utils";
 import { chooseAction, notify } from "../ui/feedback";
 import { setTheme, useTheme } from "../theme";
 import { type Space, deleteAccount, deleteSpace, errorText, inviteLink, leaveSpace, mcpToken, members, renameSpace, replica, serverInfo, signOut, spaceById, useAccounts } from "../accounts";
 import { NewSpaceDialog } from "../ui/Spaces";
 import type { McpConnect, Member } from "@obtion/core/api";
+import { setDeviceName } from "../browser";
 
 /** navigator.clipboard exists only over HTTPS; opened as http://<address> the old way copies. */
 function copyText(text: string) {
@@ -270,7 +271,7 @@ function DeviceName() {
           onChange={(e) => setDevice(e.target.value)}
           onBlur={() => {
             const name = device.trim() || first;
-            localStorage.setItem("obtion.device", name);
+            setDeviceName(name);
             for (const s of spaces) replica(s.id).repo.device = name;
           }}
           className="bg-surface"
@@ -492,7 +493,7 @@ function Examples() {
   const list = listExamples(ix);
   const [chosen, setChosen] = useState<Set<string> | null>(null); // while the preview is open
   if (!list.length) return null;
-  const toggle = (id: string) => setChosen((c) => new Set(c!.has(id) ? [...c!].filter((x) => x !== id) : [...c!, id]));
+  const toggle = (id: string) => setChosen((c) => toggled(c!, id));
   const remove = () => {
     const ids = removeExamples(r.writer, ix, [...chosen!]);
     setChosen(null);

@@ -15,7 +15,7 @@ import { files } from "../files";
 import { Button, Empty, IconButton } from "../ui/primitives";
 import { cn } from "../lib/utils";
 import { Results, defaultColumns, useQuery } from "../ui/Results";
-import { viewGroups } from "../ui/Table";
+import { viewGroups } from "../ui/groups";
 import { type TabEdit, ViewSettings, ViewTabs, tabName, useTabChoice, useViewFields } from "../ui/Views";
 import { AddFilter, QueryEditor } from "../ui/QueryEditor";
 import { notify } from "../ui/feedback";

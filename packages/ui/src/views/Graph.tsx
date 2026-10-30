@@ -10,7 +10,7 @@ import type { Index } from "@obtion/core/graph";
 import { isDone, statusProp } from "@obtion/core/traits";
 import { useRepo, openItem } from "../hooks";
 import { useT } from "../i18n";
-import { cn } from "../lib/utils";
+import { cn, toggled } from "../lib/utils";
 import { TypeGlyph } from "../ui/item-look";
 import { NOTE_ICON, FILES_ICON } from "../ui/icons";
 import { Button } from "../ui/primitives";
@@ -212,11 +212,6 @@ export function GraphView() {
     return new Set((byTitle.length ? byTitle : r.search(q, 15)).map((n) => n.id));
   }, [q, r.version]);
   const tags = useMemo(() => ix.tags().slice(0, 80), [r.version]);
-  const toggle = <T,>(set: Set<T>, v: T, put: (s: Set<T>) => void) => {
-    const next = new Set(set);
-    next.has(v) ? next.delete(v) : next.add(v);
-    put(next);
-  };
   const chip = (on: boolean) => cn("flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs", on ? "bg-hover text-fg" : "text-muted-foreground");
   return (
     <div className="relative h-full">
@@ -224,20 +219,20 @@ export function GraphView() {
       <div className="pointer-events-none absolute inset-x-0 top-0 flex flex-wrap items-start gap-2 p-3">
         <div className="pointer-events-auto flex flex-wrap items-center gap-1 rounded-xl border border-line bg-surface/90 p-1 shadow-sm backdrop-blur">
           {types.map((tp) => (
-            <Button variant="plain" key={tp.id} onClick={() => toggle(hidden, tp.id, setHidden)} className={chip(!hidden.has(tp.id))} aria-pressed={!hidden.has(tp.id)}>
+            <Button variant="plain" key={tp.id} onClick={() => setHidden(toggled(hidden, tp.id))} className={chip(!hidden.has(tp.id))} aria-pressed={!hidden.has(tp.id)}>
               <TypeGlyph schema={tp.schema} size={13} /> {tp.schema.name}
             </Button>
           ))}
-          <Button variant="plain" onClick={() => toggle(hidden, "", setHidden)} className={chip(!hidden.has(""))} aria-pressed={!hidden.has("")}>
+          <Button variant="plain" onClick={() => setHidden(toggled(hidden, ""))} className={chip(!hidden.has(""))} aria-pressed={!hidden.has("")}>
             <NOTE_ICON size={13} /> {t("graph.untyped")}
           </Button>
-          <Button variant="plain" onClick={() => toggle(hidden, "#file", setHidden)} className={chip(!hidden.has("#file"))} aria-pressed={!hidden.has("#file")}>
+          <Button variant="plain" onClick={() => setHidden(toggled(hidden, "#file"))} className={chip(!hidden.has("#file"))} aria-pressed={!hidden.has("#file")}>
             <FILES_ICON size={13} /> {t("graph.files")}
           </Button>
         </div>
         <div className="pointer-events-auto flex flex-wrap items-center gap-1 rounded-xl border border-line bg-surface/90 p-1 shadow-sm backdrop-blur">
           {(["link", "part", "rel"] as EdgeKind[]).map((k) => (
-            <Button variant="plain" key={k} onClick={() => toggle(kinds, k, setKinds)} className={chip(kinds.has(k))} aria-pressed={kinds.has(k)}>
+            <Button variant="plain" key={k} onClick={() => setKinds(toggled(kinds, k))} className={chip(kinds.has(k))} aria-pressed={kinds.has(k)}>
               {t("graph.edge." + k)}
             </Button>
           ))}

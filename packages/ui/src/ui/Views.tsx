@@ -5,17 +5,18 @@ import { NativeSelect } from "../components/ui/native-select";
 import { useState } from "react";
 import { CalendarDays, ChartGantt, ChevronLeft, ChevronRight, Copy, GripVertical, LayoutGrid, List, ListChecks, ListTree, Plus, SlidersHorizontal, SquareKanban, Table2, Trash2, X } from "lucide-react";
 import { type ViewTab, type PropDef, type ViewKind, titleKey } from "@obtion/core/model";
-import { type Cond, type Group, FIELDS, groupId, parseQuery, typesIn } from "@obtion/core/query";
+import { type Cond, type Group, groupId, parseQuery, typesIn, viewTypeIds } from "@obtion/core/query";
 import { statusProp } from "@obtion/core/traits";
 import { keyBetween } from "@obtion/core/sortkey";
-import { setParams, useIndex, useRoute } from "../hooks";
+import { setParams, useIndex, useLocalStorage, useRoute } from "../hooks";
 import { useT } from "../i18n";
 import { Button, MenuItem, Popover, Seg } from "./primitives";
 import { InlineText } from "./fields";
-import { cn } from "../lib/utils";
+import { cn, moveInArray } from "../lib/utils";
 import { QueryEditor } from "./QueryEditor";
-import { GroupChip } from "./Table";
+import { GroupChip, fieldLabel } from "./groups";
 import type { T } from "@obtion/core/i18n";
+import { KEYS } from "./storage";
 
 /** The kinds offered for a new tab, in this order. */
 const TAB_KINDS: ViewKind[] = ["table", "board", "timeline", "calendar", "list", "gallery", "triage"];
@@ -37,11 +38,10 @@ export const tabName = (tab: Pick<ViewTab, "name" | "kind">, t: T) => tab.name |
  * `inAddress` (a page's own tabs): the address names it ("?view=<tab>"), so a shared link shows the same.
  */
 export function useTabChoice(key: string, tabs: ViewTab[], inAddress?: boolean): [ViewTab, (id: string) => void] {
-  const k = "obtion.tab." + key;
   const named = useRoute().query.get("view");
-  const [id, setId] = useState(() => localStorage.getItem(k));
+  const [id, setId] = useLocalStorage<string | null>(KEYS.tab(key), null);
   const tab = (inAddress && named ? tabs.find((x) => x.id === named) : undefined) ?? tabs.find((x) => x.id === id) ?? tabs[0]!;
-  return [tab, (x) => (localStorage.setItem(k, x), setId(x), inAddress && setParams({ view: x }))];
+  return [tab, (x) => (setId(x), inAddress && setParams({ view: x }))];
 }
 
 export interface TabEdit {
@@ -184,7 +184,7 @@ interface ViewField {
 export function useViewFields(where: Cond | undefined, sample: { type: string | null }[] = []): ViewField[] {
   const ix = useIndex();
   const { t } = useT();
-  const typeIds = [...new Set([...typesIn(where), ...sample.slice(0, 200).map((i) => i.type ?? "")])].filter((id) => ix.types.has(id));
+  const typeIds = viewTypeIds(where, sample, ix);
   const out: ViewField[] = [];
   const seen = new Set<string>();
   const push = (f: ViewField) => !seen.has(titleKey(f.key)) && (seen.add(titleKey(f.key)), out.push(f));
@@ -208,13 +208,6 @@ export function useViewFields(where: Cond | undefined, sample: { type: string | 
 }
 
 /** The name of a column, sort or group key in the UI language. */
-function fieldLabel(key: string, fields: ViewField[], t: T): string {
-  if (key === "status" || key === "statusGroup" || key === "type" || key === "path") return t("group." + key);
-  if ((FIELDS as readonly string[]).includes(key)) return t("field." + key);
-  if (key === "tags") return t("item.tags");
-  return fields.find((f) => titleKey(f.key) === titleKey(key))?.label ?? key;
-}
-
 // ---------- the panel to set a view up ----------
 
 interface FilterDraft {
@@ -283,7 +276,7 @@ export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter
             <option value="">{t("view.noGroup")}</option>
             {groupable.map((g) => (
               <option key={g} value={g}>
-                {fieldLabel(g, fields, t)}
+                {fieldLabel(g, t, fields)}
               </option>
             ))}
           </NativeSelect>
@@ -308,7 +301,7 @@ export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter
                       checked={!hidden}
                       onCheckedChange={(checked) => onLook({ hiddenGroups: checked === true ? (tab.hiddenGroups ?? []).filter((x) => x !== groupId(g)) : [...(tab.hiddenGroups ?? []), groupId(g)] })}
                     />
-                    <GroupChip g={g} by={tab.group!} byLabel={fieldLabel(tab.group!, fields, t)} />
+                    <GroupChip g={g} by={tab.group!} byLabel={fieldLabel(tab.group!, t, fields)} />
                   </label>
                 </li>
               );
@@ -323,7 +316,7 @@ export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter
             <option value="">{t("view.noGroup")}</option>
             {groupable.filter((g) => g !== (tab.group ?? "status")).map((g) => (
               <option key={g} value={g}>
-                {fieldLabel(g, fields, t)}
+                {fieldLabel(g, t, fields)}
               </option>
             ))}
           </NativeSelect>
@@ -357,7 +350,7 @@ export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter
                 >
                   {[...new Set([s.key, ...sortable])].map((k) => (
                     <option key={k} value={k}>
-                      {fieldLabel(k, fields, t)}
+                      {fieldLabel(k, t, fields)}
                     </option>
                   ))}
                 </NativeSelect>
@@ -381,7 +374,7 @@ export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter
         <div className={cn(row, "items-start")}>
           <span className={cn(label, "pt-1")}>{tab.kind === "table" ? t("view.columns") : t("view.cardProps")}</span>
           <ul className="flex min-w-0 flex-1 flex-wrap gap-1.5">
-            {[...shown.map((k) => fields.find((f) => titleKey(f.key) === titleKey(k)) ?? { key: k, label: fieldLabel(k, fields, t), kind: "text" as const }), ...fields.filter((f) => !shown.some((k) => titleKey(k) === titleKey(f.key)))].map((f) => {
+            {[...shown.map((k) => fields.find((f) => titleKey(f.key) === titleKey(k)) ?? { key: k, label: fieldLabel(k, t, fields), kind: "text" as const }), ...fields.filter((f) => !shown.some((k) => titleKey(k) === titleKey(f.key)))].map((f) => {
               const on = shown.some((k) => titleKey(k) === titleKey(f.key));
               return (
                 <li
@@ -391,9 +384,7 @@ export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter
                   onDragOver={(e) => dragCol && on && e.preventDefault()}
                   onDrop={() => {
                     if (!dragCol || dragCol === f.key) return;
-                    const rest = shown.filter((k) => k !== dragCol);
-                    const at = rest.indexOf(f.key);
-                    onLook({ columns: [...rest.slice(0, at), dragCol, ...rest.slice(at)] });
+                    onLook({ columns: moveInArray(shown, shown.indexOf(dragCol), shown.indexOf(f.key)) });
                     setDragCol(null);
                   }}
                 >

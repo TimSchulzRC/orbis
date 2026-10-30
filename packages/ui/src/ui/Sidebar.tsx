@@ -15,7 +15,7 @@ import { type Space, useAccounts } from "../accounts";
 import { useT } from "../i18n";
 import { Button, Kbd, MenuItem, Popover } from "./primitives";
 import { TypeGlyph, ItemIcon } from "./item-look";
-import { cn } from "../lib/utils";
+import { cn, moveInArray } from "../lib/utils";
 import { shortcut } from "../lib/platform";
 import { ItemPicker } from "./Picker";
 import { SyncDot } from "./SyncDot";
@@ -23,6 +23,7 @@ import { createAndOpen } from "../actions";
 import { NewTypeDialog } from "../views/Types";
 import { NewSpaceDialog, SpaceScope, SpaceSelector, moveTo } from "./Spaces";
 import { useInboxItems } from "./inbox";
+import { KEYS } from "./storage";
 
 /**
  * What is being dragged in the sidebar: an item (from below `from`, null: pinned; `type`: a pinned
@@ -91,8 +92,8 @@ export function SpaceTree({ space, touch }: { space: Space; touch?: boolean }) {
   const repo = useRepo();
   const { active, shown } = useAccounts();
   const here = active?.id === space.id;
-  const [open, setOpen] = useLocalStorage<boolean>(`obtion.sidebar.space.${space.id}`, true);
-  const [typesOpen, setTypesOpen] = useLocalStorage<boolean>(`obtion.sidebar.types.${space.id}`, shown.length === 1);
+  const [open, setOpen] = useLocalStorage<boolean>(KEYS.sidebarSpace(space.id), true);
+  const [typesOpen, setTypesOpen] = useLocalStorage<boolean>(KEYS.sidebarTypes(space.id), shown.length === 1);
   const [over, setOver] = useState(false);
   const ix = repo.index();
   const roots = sidebarRoots(ix);
@@ -178,7 +179,7 @@ function PinnedTree({ touch, here }: { touch?: boolean; here: boolean }) {
   const space = useSpaceId()!;
   const ix = repo.index();
   const route = useRoute();
-  const [open, setOpen] = useLocalStorage<Record<string, boolean>>("obtion.sidebar.tree", {});
+  const [open, setOpen] = useLocalStorage<Record<string, boolean>>(KEYS.sidebarTree, {});
   const activeId = here && route.parts[0] === "i" ? route.parts[1] : undefined;
   useEffect(() => {
     if (!activeId) return;
@@ -232,8 +233,7 @@ function TypeNav({ touch, here }: { touch?: boolean; here: boolean }) {
   const active = (id: string) => here && (id === "files" ? route.path.startsWith("/files") : route.parts[0] === "i" && route.parts[1] === id);
   // a new order: every row gets a fresh key, written only where it changed
   const move = (id: string, to: string, before: boolean) => {
-    const order = rows.filter((r) => r.id !== id);
-    order.splice(order.findIndex((r) => r.id === to) + (before ? 0 : 1), 0, rows.find((r) => r.id === id)!);
+    const order = moveInArray(rows, rows.findIndex((r) => r.id === id), rows.findIndex((r) => r.id === to) + (before ? 0 : 1));
     keysFor(order.length).forEach((k, i) => {
       const r = order[i]!;
       if (r.key === k) return;
