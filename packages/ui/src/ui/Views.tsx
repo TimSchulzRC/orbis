@@ -10,7 +10,7 @@ import { statusProp } from "@obtion/core/traits";
 import { keyBetween } from "@obtion/core/sortkey";
 import { setParams, useIndex, useLocalStorage, useRoute } from "../hooks";
 import { useT } from "../i18n";
-import { Card, Button, MenuItem, Popover, Seg, IconButton } from "./primitives";
+import { Card, Button, MenuItem, Popover, Seg, IconButton, DraftBar } from "./primitives";
 import { InlineText } from "./fields";
 import { cn, moveInArray } from "../lib/utils";
 import { QueryEditor } from "./QueryEditor";
@@ -255,15 +255,7 @@ export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter
         <p className="mb-1 text-xs text-muted-foreground">{t("view.filter")}</p>
         <QueryEditor def={{ where: filter.where }} onChange={(d) => filter.onChange(d.where)} />
         {filter.dirty && (
-          <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-focus px-2.5 py-1.5" role="status">
-            <span className="mr-auto text-muted-foreground">{t("view.draft")}</span>
-            <Button variant="outline" onClick={filter.discard}>
-              {t("view.discard")}
-            </Button>
-            <Button variant="primary" onClick={filter.save}>
-              {t("view.save")}
-            </Button>
-          </div>
+          <DraftBar onDiscard={filter.discard} onSave={filter.save} className="mt-2" />
         )}
       </div>}
 

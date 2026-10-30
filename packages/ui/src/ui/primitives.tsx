@@ -82,6 +82,27 @@ export function EmptyValueButton({ className, ...rest }: Omit<ComponentProps<"bu
   );
 }
 
+/** A changed view or filter not saved yet: "Entwurf · Verwerfen · Speichern". */
+export function DraftBar({ onDiscard, onSave, className }: { onDiscard: () => void; onSave: () => void; className?: string }) {
+  const { t } = useT();
+  return (
+    <div className={cn("flex flex-wrap items-center gap-2 rounded-lg border border-focus px-2.5 py-1.5 text-sm", className)} role="status">
+      <span className="mr-auto text-muted-foreground">{t("view.draft")}</span>
+      <Button variant="outline" onClick={onDiscard}>
+        {t("view.discard")}
+      </Button>
+      <Button variant="primary" onClick={onSave}>
+        {t("view.save")}
+      </Button>
+    </div>
+  );
+}
+
+/** In place of a page that cannot show (yet): one quiet line, centred; `fill`: in the middle of the whole area. */
+export function PagePlaceholder({ children, fill }: { children: ReactNode; fill?: boolean }) {
+  return <div className={fill ? "flex h-full items-center justify-center text-muted-foreground" : "mx-auto max-w-3xl px-6 py-16 text-center text-muted-foreground"}>{children}</div>;
+}
+
 /**
  * A whole surface with nothing to show (inbox, an empty list, a start without anything):
  * centred, one sentence, at most one button. Never for a single section – that one is left out.

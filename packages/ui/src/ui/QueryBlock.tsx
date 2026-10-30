@@ -17,7 +17,7 @@ import { Results, defaultColumns, useQuery } from "./Results";
 import { viewGroups } from "./groups";
 import { type TabEdit, ViewSettings, ViewTabs, tabName, useTabChoice, useViewFields } from "./Views";
 import { QueryEditor } from "./QueryEditor";
-import { Button, SectionTitle } from "./primitives";
+import { Button, SectionTitle, DraftBar } from "./primitives";
 import { sameValue } from "@obtion/core/equal";
 
 /** A block's views: its tabs, or its one look as the only tab. */
@@ -154,21 +154,6 @@ function QueryBlockView({ src, thisId, n = 0, onChange, onDelete, readOnly }: { 
         empty={<p className="px-0 py-1 text-sm text-muted-foreground">{def.where && "inbox" in def.where ? t("inbox.emptyShort") : t("query.empty")}</p>}
       />
       )}
-    </div>
-  );
-}
-
-function DraftBar({ onDiscard, onSave }: { onDiscard: () => void; onSave: () => void }) {
-  const { t } = useT();
-  return (
-    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-focus px-2.5 py-1.5 text-sm" role="status">
-      <span className="mr-auto text-muted-foreground">{t("view.draft")}</span>
-      <Button variant="outline" onClick={onDiscard}>
-        {t("view.discard")}
-      </Button>
-      <Button variant="primary" onClick={onSave}>
-        {t("view.save")}
-      </Button>
     </div>
   );
 }

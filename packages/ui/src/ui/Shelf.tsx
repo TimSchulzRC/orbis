@@ -17,8 +17,8 @@ import { useBlobUrl } from "../files";
 import { Textarea } from "../components/ui/textarea";
 import { replica, spaceById, useAccounts } from "../accounts";
 import { useT, titleOf } from "../i18n";
-import { Button, Dialog, IconButton, Kbd, MenuItem, MoreMenu } from "./primitives";
-import { ItemIcon, RelTime } from "./item-look";
+import { Button, Dialog, IconButton, Kbd, MenuItem, MoreMenu, DraftBar } from "./primitives";
+import { ItemIcon, RelTime, BelowList } from "./item-look";
 import { cn } from "../lib/utils";
 import { Editor } from "./Editor";
 import { TitleField } from "./TitleField";
@@ -26,8 +26,8 @@ import { QueryEditor } from "./QueryEditor";
 import { SpaceFilter, SpaceScope } from "./Spaces";
 import { notify } from "./feedback";
 import { type InboxEntry, closeShelf, dismissShelf, openShelf, useInboxItems, useShelf } from "./inbox";
-import { DraftBar } from "../views/Lists";
 import { sameValue } from "@obtion/core/equal";
+import { filePreview } from "./text";
 
 /** Where an entry opens in the review. */
 const reviewHref = (key: string) => `#/review?at=${encodeURIComponent(key)}`;
@@ -280,18 +280,7 @@ function EntryBody({ entry }: { entry: InboxEntry }) {
           <Editor doc={repo.getDoc(item.id)} nodeId={item.id} minHeight="min-h-24" />
         </div>
       )}
-      {kids.length > 0 && (
-        <div className="mt-6">
-          <p className="mb-1.5 text-xs font-semibold text-muted-foreground">{t("below.title")}</p>
-          <ul className="space-y-1 text-sm">
-            {kids.map((c) => (
-              <li key={c.id} className="flex items-center gap-2">
-                <ItemIcon item={c} size={14} /> <a href={itemHref(c.id)} className="truncate hover:underline">{titleOf(c, t)}</a>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      <BelowList items={kids} className="mt-6" />
     </div>
   );
 }
@@ -314,7 +303,7 @@ function FileBody({ item }: { item: Item }) {
       {img ? (
         <img src={img} alt={item.body || item.title} className="mt-3 max-h-[40vh] w-auto rounded-lg border border-line" />
       ) : f.text ? (
-        <p className="mt-3 line-clamp-6 text-[15px] leading-[1.65] text-muted-foreground">{plainText(f.text).slice(0, 800)}</p>
+        <p className="mt-3 line-clamp-6 text-[15px] leading-[1.65] text-muted-foreground">{filePreview(f.text)}</p>
       ) : null}
       <Textarea
       variant="inline"
@@ -349,7 +338,7 @@ function InboxRule({ name, onClose }: { name?: string; onClose: () => void }) {
         </div>
         <QueryEditor autoFocus def={{ where: draft ?? where }} onChange={(d) => setDraft(d.where ?? null)} />
         {draft && !sameValue(draft, where) && (
-          <DraftBar onDiscard={() => setDraft(null)} onSave={() => (repo.change(SETTINGS_ID, (d) => setSettings(d, { inbox: draft })), setDraft(null), notify(t("view.saved")))} />
+          <DraftBar className="sticky top-0 z-10 mb-3 rounded-xl bg-surface px-3 py-2" onDiscard={() => setDraft(null)} onSave={() => (repo.change(SETTINGS_ID, (d) => setSettings(d, { inbox: draft })), setDraft(null), notify(t("view.saved")))} />
         )}
       </div>
     </Dialog>

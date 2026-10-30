@@ -6,7 +6,7 @@ import { SETTINGS_ID } from "@obtion/core/model";
 import { useRepo, useRoute, useDesktop, itemHref, itemPath, spaceHref, navigate, openItem } from "./hooks";
 import { useT } from "./i18n";
 import { cn } from "./lib/utils";
-import { Button, IconButton } from "./ui/primitives";
+import { Button, IconButton, PagePlaceholder } from "./ui/primitives";
 import { AgentNotice } from "./ui/AgentNotice";
 import { ConfirmHost } from "./ui/feedback";
 import { AppToaster } from "./ui/toasts";
@@ -133,11 +133,11 @@ function Main() {
   const page = (() => {
     if (old !== undefined) return <Redirect to={old.startsWith("/review") ? old : spaceHref(route.space ?? active?.id, old).slice(1)} />;
     // a workspace in the address this account is not in (any more): not the open one's page instead
-    if (route.space && !spaces.some((s) => s.id === route.space)) return <div className="mx-auto max-w-3xl px-6 py-16 text-center text-muted-foreground">{t("app.noSpace")}</div>;
+    if (route.space && !spaces.some((s) => s.id === route.space)) return <PagePlaceholder>{t("app.noSpace")}</PagePlaceholder>;
     if (!global || route.parts[0] === "setup") {
-      if (!r.status.loaded) return <div className="flex h-full items-center justify-center text-muted-foreground">{t("app.opening")}</div>;
+      if (!r.status.loaded) return <PagePlaceholder fill>{t("app.opening")}</PagePlaceholder>;
       if (setUp) return <Setup />;
-      if (!settings) return <div className="flex h-full items-center justify-center text-muted-foreground">{t("app.syncing")}</div>;
+      if (!settings) return <PagePlaceholder fill>{t("app.syncing")}</PagePlaceholder>;
     }
     switch (route.parts[0]) {
       case undefined:

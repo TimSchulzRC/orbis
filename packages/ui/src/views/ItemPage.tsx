@@ -14,14 +14,14 @@ import { useRepo, useIndex, itemHref, openItem, leavePage, setParams, showTitle,
 import { repo } from "../repo";
 import { useT, tr, getLang, titleOf } from "../i18n";
 import { Editor, insertFilesAtCursor } from "../ui/Editor";
-import { Button, Dialog, MenuItem, Popover, IconButton, MoreMenu } from "../ui/primitives";
+import { Button, Dialog, MenuItem, Popover, IconButton, MoreMenu, PagePlaceholder } from "../ui/primitives";
 import { ItemIcon, TypeChip, TypeGlyph } from "../ui/item-look";
 import { ProgressBand } from "../ui/progress";
 import { cn } from "../lib/utils";
 import { ItemPicker } from "../ui/Picker";
 import { PropertyBlock } from "../ui/Properties";
 import { BelowCard, ChildList, Updates, mainGrouping } from "../ui/Sections";
-import { Bezuege, Crumbs } from "../ui/PageParts";
+import { Bezuege, Crumbs, TrashBanner } from "../ui/PageParts";
 import { PlacePicker } from "../ui/Picker";
 import { pluralOf } from "@obtion/core/plural";
 import { queryBlocks, insertQueryBlock } from "../ui/QueryBlock";
@@ -48,8 +48,8 @@ export function ItemPage({ id, isNew }: { id: string; isNew: boolean }) {
     return () => clearTimeout(wait);
   }, [id, title]);
   if (!item || item.kind === "settings")
-    return <div className="mx-auto max-w-3xl px-6 py-16 text-center text-muted-foreground">{r.status.synced ? t("item.missing") : t("item.loading")}</div>;
-  if (item.kind === "op") return <div className="mx-auto max-w-3xl px-6 py-16 text-center text-muted-foreground">{item.title}</div>;
+    return <PagePlaceholder>{r.status.synced ? t("item.missing") : t("item.loading")}</PagePlaceholder>;
+  if (item.kind === "op") return <PagePlaceholder>{item.title}</PagePlaceholder>;
   if (item.kind === "datei") return <FilePage key={id} item={item} />;
   if (item.type === META_TYPE) return <TypePage key={id} item={item} />;
   return <InfoView key={id} item={item} isNew={isNew} />;
@@ -167,12 +167,7 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
   return (
     <div className="page-read">
       {item.deleted && (
-        <div className="mb-4 flex items-center gap-3 rounded-lg bg-[color-mix(in_srgb,var(--danger)_10%,transparent)] px-3 py-2 text-sm text-danger">
-          {t("item.inTrash")}
-          <Button onClick={() => r.restore(item.id)} className="ml-auto">
-            <RotateCcw size={14} /> {t("item.restore")}
-          </Button>
-        </div>
+        <TrashBanner onRestore={() => r.restore(item.id)} />
       )}
       {/* 1 · head: path, title with the main action, type and status, progress, properties */}
       <Crumbs item={item} tools={tools} onPlaces={() => setPlacesOpen((n) => n + 1)} onPlace={() => setPlacing(true)} />

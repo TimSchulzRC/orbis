@@ -16,7 +16,7 @@ import { useIndex, useRepo, useSpaceId, useItemHref, spaceHref, useDesktop, open
 import { useT, titleOf } from "../i18n";
 import { recentPlaces } from "../actions";
 import { Card, Button, Kbd } from "./primitives";
-import { ItemIcon, RelTime, Tag, TypeGlyph } from "./item-look";
+import { ItemIcon, RelTime, Tag, TypeGlyph, BelowList } from "./item-look";
 import { cn, toggled } from "../lib/utils";
 import { TagInput } from "./TagInput";
 import { placeSuggestions } from "./suggest";
@@ -26,6 +26,7 @@ import { plainText } from "@obtion/core/search";
 import { DAY_MS } from "@obtion/core/date";
 import { usePickers, useTriageActions } from "./TriageActions";
 import type { T } from "@obtion/core/i18n";
+import { filePreview } from "./text";
 
 /** Age groups: this week, this month, older. */
 function ageGroup(created: number, now = Date.now()): "week" | "month" | "older" {
@@ -302,20 +303,9 @@ function Detail({ item, onPlaced }: { item: Item; onPlaced: (p: string) => void 
           <Markdown src={item.body} />
         </div>
       ) : item.file?.text ? (
-        <p className="mt-4 max-w-[64ch] text-[15px] leading-[1.65] text-muted-foreground">{plainText(item.file.text).slice(0, 800)}</p>
+        <p className="mt-4 max-w-[64ch] text-[15px] leading-[1.65] text-muted-foreground">{filePreview(item.file.text)}</p>
       ) : null}
-      {kids.length > 0 && (
-        <div className={section}>
-          <p className={k}>{t("below.title")}</p>
-          <ul className="space-y-1 text-sm">
-            {kids.map((c) => (
-              <li key={c.id} className="flex items-center gap-2">
-                <ItemIcon item={c} size={14} /> <a href={hrefOf(c.id)} className="truncate hover:underline">{titleOf(c, t)}</a>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      <BelowList items={kids} className={section} />
       {item.tags.length > 0 && (
       <div className={section}>
         <p className={k}>{t("item.tags")}</p>

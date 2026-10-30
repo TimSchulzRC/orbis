@@ -32,15 +32,15 @@ import { parseQuery, printQuery, runQuery } from "@obtion/core/query";
 import { type DeleteMode, deleteType, previewTagToType, tagToType, typeUsage } from "@obtion/core/typeops";
 import { useIndex, useRoute, navigate, setParams, useDocumentTitle, useRepo } from "../hooks";
 import { useT } from "../i18n";
-import { Card, Button, Dialog, MenuItem, Popover, SectionTitle, Seg, AddButton, IconButton, MoreMenu } from "../ui/primitives";
+import { Card, Button, Dialog, MenuItem, Popover, SectionTitle, Seg, AddButton, IconButton, MoreMenu, PagePlaceholder } from "../ui/primitives";
 import { InlineText } from "../ui/fields";
 import { ItemIcon, TypeGlyph, pal } from "../ui/item-look";
 import { cn } from "../lib/utils";
 import { ICON } from "../ui/icons";
 import { TypeList } from "./Lists";
 import { notify } from "../ui/feedback";
-import { createType } from "../actions";
 import type { T } from "@obtion/core/i18n";
+import { NewTypeDialog } from "./Types";
 
 export function TypePage({ item }: { item: Item }) {
   const repo = useRepo();
@@ -51,12 +51,7 @@ export function TypePage({ item }: { item: Item }) {
   useEffect(() => void setParams({ edit: null }), []);
   const plural = ix.typePlural(item.id);
   useDocumentTitle(plural);
-  if (item.deleted)
-    return (
-      <div className="mx-auto max-w-3xl px-6 py-16 text-center text-muted-foreground">
-        {t("type.isDeleted", { name: item.schema!.name })}
-      </div>
-    );
+  if (item.deleted) return <PagePlaceholder>{t("type.isDeleted", { name: item.schema!.name })}</PagePlaceholder>;
   return (
     <div className="page-wide">
       <div className="mb-4 flex items-center gap-3">
@@ -664,7 +659,6 @@ function TargetField({ target, hits, onChange }: { target?: string; hits: number
   const tag = where && "tag" in where ? where.tag : undefined;
   const [mode, setMode] = useState<"type" | "tag" | "query">(typeId || !target ? "type" : tag ? "tag" : "query");
   const [creating, setCreating] = useState(false);
-  const [newName, setNewName] = useState("");
   const types = ix.typesByName();
   const box = "w-full rounded-md border border-line bg-bg px-2 py-1 text-sm outline-none";
   return (
@@ -699,27 +693,11 @@ function TargetField({ target, hits, onChange }: { target?: string; hits: number
       {mode === "query" && <Input defaultValue={target ?? ""} onBlur={(e) => onChange(e.target.value.trim())} placeholder={t("type.targetPlaceholder")} variant="sm" className="font-mono" />}
       {/* the target type does not exist yet: make it here, without leaving the editor */}
       {creating && (
-        <Dialog title={t("type.targetNewTitle")} onClose={() => setCreating(false)}>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              const n = newName.trim();
-              if (!n) return;
-              const id = createType(n);
-              setCreating(false);
-              setNewName("");
-              setMode("type");
-              onChange(printQuery({ where: { type: id } }, lang, repo.index()));
-            }}
-          >
-            <Input autoFocus value={newName} onChange={(e) => setNewName(e.target.value)} placeholder={t("type.name")} />
-            <div className="mt-4 flex justify-end">
-              <Button type="submit" variant="primary" disabled={!newName.trim()}>
-                {t("types.create")}
-              </Button>
-            </div>
-          </form>
-        </Dialog>
+        <NewTypeDialog
+          title={t("type.targetNewTitle")}
+          onClose={() => setCreating(false)}
+          onCreated={(id) => (setMode("type"), onChange(printQuery({ where: { type: id } }, lang, repo.index())))}
+        />
       )}
     </div>
   );

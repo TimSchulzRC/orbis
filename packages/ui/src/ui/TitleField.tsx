@@ -1,7 +1,7 @@
 import { Textarea } from "../components/ui/textarea";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import type { Item } from "@obtion/core/model";
-import { useRepo } from "../hooks";
+import { useFocusDraft, useRepo } from "../hooks";
 import { useT } from "../i18n";
 
 /** Multi-line title that wraps instead of clipping; Enter commits. */
@@ -9,12 +9,8 @@ export function TitleField({ item, autoFocus, placeholder }: { item: Item; autoF
   const { t } = useT();
   // the workspace of this part of the page (the tray's panel shows entries of several)
   const repo = useRepo();
-  const [v, setV] = useState(item.title);
-  const focused = useRef(false);
+  const { draft: v, setDraft: setV, focused, onKeyDown } = useFocusDraft(item.title);
   const ref = useRef<HTMLTextAreaElement>(null);
-  useEffect(() => {
-    if (!focused.current) setV(item.title);
-  }, [item.title]);
   useLayoutEffect(() => {
     const el = ref.current!;
     el.style.height = "auto";
@@ -40,10 +36,7 @@ export function TitleField({ item, autoFocus, placeholder }: { item: Item; autoF
       onFocus={() => (focused.current = true)}
       onBlur={commit}
       onChange={(e) => setV(e.target.value.replace(/\n/g, " "))}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") (e.preventDefault(), (e.target as HTMLTextAreaElement).blur());
-        if (e.key === "Escape") (setV(item.title), setTimeout(() => (e.target as HTMLTextAreaElement).blur()));
-      }}
+      onKeyDown={onKeyDown}
       data-large
       className="field page-title block w-full resize-none overflow-hidden bg-transparent outline-none placeholder:text-faint focus-visible:ring-0"
     />

@@ -7,6 +7,8 @@ import en from "../locales/en.json";
 
 export type Lang = "de" | "en";
 export const LANGS: Lang[] = ["de", "en"];
+/** Each language in itself, for choosing one. */
+export const ENDONYMS: Record<Lang, string> = { de: "Deutsch", en: "English" };
 export const CATALOGS: Record<Lang, Record<string, string>> = { de, en };
 
 const cache = new Map<string, IntlMessageFormat>();

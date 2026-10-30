@@ -52,27 +52,31 @@ export function TypesView() {
   );
 }
 
-/** "Neuer Typ": a name; the type's page opens with "Typ bearbeiten". */
-export function NewTypeDialog({ onClose }: { onClose: () => void }) {
+/** "Neuer Typ": a name. Then `onCreated`, else the type's page opens with "Typ bearbeiten". */
+export function NewTypeDialog({ title, onClose, onCreated }: { title?: string; onClose: () => void; onCreated?: (id: string) => void }) {
   const { t } = useT();
   const repo = useRepo();
   const space = useSpaceId();
   const [name, setName] = useState("");
-  const create = () => {
+  const create = (e: React.FormEvent) => {
+    e.preventDefault();
     const n = name.trim();
     if (!n) return;
     const id = createType(n, repo);
     onClose();
-    openItem(id, { space, query: "?edit=1" });
+    if (onCreated) onCreated(id);
+    else openItem(id, { space, query: "?edit=1" });
   };
   return (
-    <Dialog title={t("types.new")} onClose={onClose}>
-      <Input autoFocus value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && create()} placeholder={t("type.name")} />
-      <div className="mt-4 flex justify-end">
-        <Button variant="primary" onClick={create} disabled={!name.trim()}>
-          {t("types.create")}
-        </Button>
-      </div>
+    <Dialog title={title ?? t("types.new")} onClose={onClose}>
+      <form onSubmit={create}>
+        <Input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder={t("type.name")} />
+        <div className="mt-4 flex justify-end">
+          <Button type="submit" variant="primary" disabled={!name.trim()}>
+            {t("types.create")}
+          </Button>
+        </div>
+      </form>
     </Dialog>
   );
 }

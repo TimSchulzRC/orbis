@@ -11,7 +11,7 @@ import { setParams, useRoute, useDocumentTitle, useFiles, useRepo } from "../hoo
 import { SpaceEyebrow } from "../ui/Spaces";
 import { useT } from "../i18n";
 import { files } from "../files";
-import { Button, Empty, IconButton } from "../ui/primitives";
+import { Button, Empty, IconButton, DraftBar } from "../ui/primitives";
 import { cn } from "../lib/utils";
 import { Results, defaultColumns, useQuery } from "../ui/Results";
 import { viewGroups } from "../ui/groups";
@@ -122,7 +122,7 @@ export function TypeList({ type }: { type: Item }) {
           <QueryEditor bare def={{ where: tabWhere }} onChange={(d) => setTabFilter(d.where)} />
         </div>
       )}
-      {dirty && <DraftBar onDiscard={() => setDraft(null)} onSave={saveDraft} />}
+      {dirty && <DraftBar className="sticky top-0 z-10 mb-3 rounded-xl bg-surface px-3 py-2" onDiscard={() => setDraft(null)} onSave={saveDraft} />}
       {!items.length && tabWhere ? (
         // empty because of the view's filter: say so, with the way out
         <Empty title={t("view.emptyFiltered")}>
@@ -136,22 +136,6 @@ export function TypeList({ type }: { type: Item }) {
     </>
   );
 }
-
-export function DraftBar({ onDiscard, onSave }: { onDiscard: () => void; onSave: () => void }) {
-  const { t } = useT();
-  return (
-    <div className="sticky top-0 z-10 mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-focus bg-surface px-3 py-2 text-sm" role="status">
-      <span className="mr-auto text-muted-foreground">{t("view.draft")}</span>
-      <Button variant="outline" onClick={onDiscard}>
-        {t("view.discard")}
-      </Button>
-      <Button variant="primary" onClick={onSave}>
-        {t("view.save")}
-      </Button>
-    </div>
-  );
-}
-
 
 /** The kinds of files as the address names them ("?kind=image"); German ones from before still work. */
 const KIND_PARAM: Record<FileType, string> = { bild: "image", pdf: "pdf", audio: "audio", video: "video", dokument: "document", sonstiges: "other" };

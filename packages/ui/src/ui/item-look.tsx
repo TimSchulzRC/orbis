@@ -141,6 +141,25 @@ export function ItemLink({ item, className }: { item: Item; className?: string }
   );
 }
 
+/** "Darunter": the entries below one, as plain links (the inbox's views of an entry). */
+export function BelowList({ items, className }: { items: Item[]; className?: string }) {
+  const { t } = useT();
+  const hrefOf = useItemHref();
+  if (!items.length) return null;
+  return (
+    <div className={className}>
+      <p className="mb-1.5 text-xs font-semibold text-muted-foreground">{t("below.title")}</p>
+      <ul className="space-y-1 text-sm">
+        {items.map((c) => (
+          <li key={c.id} className="flex items-center gap-2">
+            <ItemIcon item={c} size={14} /> <a href={hrefOf(c.id)} className="truncate hover:underline">{titleOf(c, t)}</a>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 /** A quiet amber mark on a hit that still waits in the inbox ("Im Eingang"); nothing otherwise. */
 export function InTray({ item, ix }: { item: Item; ix: Index }) {
   if (!isInInbox(item, ix)) return null;

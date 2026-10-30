@@ -1,7 +1,7 @@
 // Parts every page shares (design rules § 3.1): the path line on top, the card of connections
 // ("Bezüge") and the quiet footer. Information pages and file pages use the same ones.
 import { useEffect, useState } from "react";
-import { ChevronRight, Pin, Star, X } from "lucide-react";
+import { ChevronRight, Pin, RotateCcw, Star, X } from "lucide-react";
 import { type Item, META_TYPE } from "@obtion/core/model";
 import { hasPlace, isInInbox } from "@obtion/core/placement";
 import { fmtDate } from "@obtion/core/i18n";
@@ -93,6 +93,19 @@ export function Crumbs({ item, tools, onPlaces, onPlace }: { item: Item; tools: 
         {lead}
       </nav>
       <div className="ml-auto flex shrink-0 items-center">{tools}</div>
+    </div>
+  );
+}
+
+/** Over a page in the trash: says so, and brings it back. */
+export function TrashBanner({ onRestore }: { onRestore: () => void }) {
+  const { t } = useT();
+  return (
+    <div className="mb-4 flex items-center gap-3 rounded-lg bg-[color-mix(in_srgb,var(--danger)_10%,transparent)] px-3 py-2 text-sm text-danger">
+      {t("item.inTrash")}
+      <Button onClick={onRestore} className="ml-auto">
+        <RotateCcw size={14} /> {t("item.restore")}
+      </Button>
     </div>
   );
 }

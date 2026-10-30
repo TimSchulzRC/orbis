@@ -8,7 +8,7 @@ import { NativeSelect } from "../components/ui/native-select";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { Copy, Check, Eye, EyeOff, RotateCcw, ChevronRight, History, Shapes, Trash2, Waypoints } from "lucide-react";
 import { SETTINGS_ID, setSettings } from "@obtion/core/model";
-import { fmtBytes } from "@obtion/core/i18n";
+import { ENDONYMS, LANGS, fmtBytes } from "@obtion/core/i18n";
 import { resetInbox } from "@obtion/core/setup";
 import { listExamples, removeExamples, restoreExamples } from "@obtion/core/examples";
 import { useRepo, useSpaceId, spaceHref, useDocumentTitle } from "../hooks";
@@ -311,7 +311,7 @@ export function Settings() {
 
       <section>
         <SectionTitle>{t("settings.language")}</SectionTitle>
-        <Seg label={t("settings.language")} value={lang} onChange={setLang} options={[{ value: "de", label: "Deutsch" }, { value: "en", label: "English" }]} />
+        <Seg label={t("settings.language")} value={lang} onChange={setLang} options={LANGS.map((l) => ({ value: l, label: ENDONYMS[l] }))} />
         <p className="mt-2 text-xs text-muted-foreground">{t("settings.languageHint")}</p>
       </section>
 

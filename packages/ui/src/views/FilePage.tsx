@@ -11,7 +11,7 @@ import { useT, titleOf } from "../i18n";
 import { useBlobUrl } from "../files";
 import { Button, MenuItem, IconButton, MoreMenu } from "../ui/primitives";
 import { ItemIcon, Tag } from "../ui/item-look";
-import { Bezuege, Crumbs } from "../ui/PageParts";
+import { Bezuege, Crumbs, TrashBanner } from "../ui/PageParts";
 import { TagInput } from "../ui/TagInput";
 import { ItemPicker } from "../ui/Picker";
 import { TitleField } from "../ui/TitleField";
@@ -85,12 +85,7 @@ export function FilePage({ item }: { item: Item }) {
   return (
     <div className="page-read">
       {item.deleted && (
-        <div className="mb-4 flex items-center gap-3 rounded-lg bg-[color-mix(in_srgb,var(--danger)_10%,transparent)] px-3 py-2 text-sm text-danger">
-          {t("item.inTrash")}
-          <Button onClick={() => repo.restore(item.id)} className="ml-auto">
-            <RotateCcw size={14} /> {t("item.restore")}
-          </Button>
-        </div>
+        <TrashBanner onRestore={() => repo.restore(item.id)} />
       )}
       {missing && <p className="mb-3 rounded-lg border border-dashed border-line px-3 py-2 text-sm text-muted-foreground">{t(files.missingKey(item.created) === "file.uploading" ? "file.uploadingHint" : "file.missingHint")}</p>}
       <Crumbs item={item} tools={tools} onPlaces={() => setPicking(true)} onPlace={() => setPicking(true)} />
