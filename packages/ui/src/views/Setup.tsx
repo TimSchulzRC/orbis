@@ -9,6 +9,7 @@ import { repo } from "../repo";
 import { files } from "../files";
 import { setLang } from "../i18n";
 import { Button, Seg } from "../ui/bits";
+import { BrandLogo } from "../ui/BrandLogo";
 
 /** First setup: choose the language (the shipped types are created in it), with or without the examples. */
 export function Setup() {
@@ -32,7 +33,7 @@ export function Setup() {
   return (
     <div className="flex h-full items-center justify-center p-6">
       <div className="w-full max-w-md rounded-2xl border border-line bg-surface p-6 shadow-sm">
-        <img src="/icon.svg" alt="" className="mb-4 size-10" />
+        <BrandLogo className="mb-4 size-10" />
         <h1 className="text-2xl font-semibold tracking-tight">{t("setup.welcome")}</h1>
         <p className="mt-2 text-sm text-muted-foreground">{t("setup.intro")}</p>
         <div className="mt-6 flex items-center justify-between">

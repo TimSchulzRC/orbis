@@ -15,6 +15,7 @@ import { spaceHref, useSpaceId } from "../hooks";
 import { MoveError, moveToSpace, planToSpace } from "../move";
 import { useT, tr } from "../i18n";
 import { Button, Dialog, MenuItem, Popover, cx } from "./bits";
+import { BrandLogo } from "./BrandLogo";
 import { confirmAction, notify } from "./feedback";
 
 /** A part of the page that belongs to workspace `id`. A link clicked inside opens there. */
@@ -60,7 +61,7 @@ export function SpaceSelector({ className, onNew }: { className?: string; onNew:
       triggerClass={cx("min-w-0", className)}
       trigger={(p) => (
         <ShadcnButton variant="plain" size="none" {...p} className="-mx-1.5 flex w-full min-w-0 items-center gap-2 rounded-lg px-1.5 py-1 text-left hover:bg-hover" aria-label={t("space.choose")}>
-          <img src="/icon.svg" alt="" className="size-6 shrink-0" />
+          <BrandLogo className="size-6 shrink-0" />
           <span className="min-w-0 flex-1 truncate text-sm font-semibold">{label}</span>
           <ChevronsUpDown size={14} className="shrink-0 text-faint" />
         </ShadcnButton>
