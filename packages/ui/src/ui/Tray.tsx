@@ -115,7 +115,7 @@ export function Tray({ desktop, pinned, onCapture }: { desktop: boolean; pinned?
 const POSES = [
   { left: [9, 6], rest: ["-8deg", "0 10px"], fan: ["-14deg", "-5px 0"], lift: "-5px -12px" },
   { left: [18, 12], rest: ["3deg", "0 4px"], fan: ["2deg", "0 -8px"], lift: "0 -18px" },
-  { left: [30, 20], rest: ["-2deg", "0 -2px"], fan: ["10deg", "14px -6px"], lift: "14px -16px" },
+  { left: [30, 20], rest: ["-2deg", "0 -2px"], fan: ["8deg", "0 -6px"], lift: "1px -16px" },
 ];
 
 /**
