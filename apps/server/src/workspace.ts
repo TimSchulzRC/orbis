@@ -15,6 +15,7 @@ import { addLaterDefaultProps, migrateCollections, renameShippedLabels, upgradeA
 import { SETUP_ORIGIN, storeWriter } from "./importers";
 import { UndoError, redoStep, undoStep } from "./undo";
 import { type ClientMsg, type ServerMsg, type WireUpdate, fromB64, toB64 } from "@obtion/core/protocol";
+import { z } from "zod";
 
 export interface Conn {
   userId: string;
@@ -60,6 +61,23 @@ const AREAS = new Set([PERSONAL]);
 
 /** Who did something, as the activity names them: "web:Ada", from a device "web:Ada@Mac-x3f9". */
 export const actorOf = (user: string, device?: unknown) => `web:${user}${device ? "@" + String(device).slice(0, 40) : ""}`;
+
+/** What a device may send on the sync socket; anything else is dropped. */
+const clientMsg: z.ZodType<ClientMsg> = z.discriminatedUnion("t", [
+  z.object({ t: z.literal("hello"), area: z.string().optional(), since: z.number(), sinceId: z.string().optional(), device: z.string().optional() }),
+  z.object({ t: z.literal("push"), area: z.string().optional(), items: z.array(z.object({ k: z.string(), d: z.string(), u: z.string(), s: z.string().optional() })) }),
+  z.object({ t: z.literal("ping") }),
+]);
+
+/** A message from a device, or null when it is not one (not JSON, wrong shape). */
+export function parseClientMsg(raw: string): ClientMsg | null {
+  try {
+    const r = clientMsg.safeParse(JSON.parse(raw));
+    return r.success ? r.data : null;
+  } catch {
+    return null;
+  }
+}
 
 export class Workspace {
   store: Store;
@@ -113,7 +131,7 @@ export class Workspace {
   // ---------- sync ----------
 
   hello(ws: ServerWebSocket<Conn>, msg: Extract<ClientMsg, { t: "hello" }>) {
-    const area = typeof msg.area === "string" ? msg.area : PERSONAL; // apps from before areas: personal
+    const area = msg.area ?? PERSONAL; // apps from before areas: personal
     if (!AREAS.has(area)) return send(ws, { t: "denied", area });
     if (msg.device) ws.data.origin = actorOf(ws.data.user, msg.device);
     const store = this.store;
@@ -138,12 +156,12 @@ export class Workspace {
     else if (msg.t === "push") {
       // only after the welcome: the client has to know which server it writes to (server-id check);
       // no ack, so its outbox keeps the changes and sends them again after the next hello
-      const area = typeof msg.area === "string" ? msg.area : PERSONAL;
+      const area = msg.area ?? PERSONAL;
       if (!ws.data.areas.has(area)) return;
       const keys: string[] = [];
       for (const it of msg.items) {
         try {
-          const step = typeof it.s === "string" && /^[\w-]{1,40}$/.test(it.s) ? it.s : undefined;
+          const step = it.s && /^[\w-]{1,40}$/.test(it.s) ? it.s : undefined;
           this.store.applyRemote(it.d, fromB64(it.u), ws.data.origin, ws, step, area);
           keys.push(it.k);
         } catch (e) {

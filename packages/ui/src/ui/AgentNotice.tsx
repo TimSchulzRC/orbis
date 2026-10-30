@@ -5,6 +5,7 @@ import type { ActivityEvent } from "@obtion/core/protocol";
 import { repo } from "../repo";
 import { useT } from "../i18n";
 import { notify } from "./toasts";
+import type { T } from "@obtion/core/i18n";
 
 function visible(id: string): HTMLElement[] {
   const onPage = decodeURIComponent(location.hash.replace(/^#\/i\//, "")) === id;
@@ -22,7 +23,7 @@ function agentName(origin: string): string | undefined {
 }
 
 /** A readable name for an agent id: "claude-code", "claude" → Claude; anything else → Agent. */
-export function agentLabel(id: string, t: (k: string) => string): string {
+export function agentLabel(id: string, t: T): string {
   return /claude/i.test(id) ? "Claude" : t("activity.agent");
 }
 

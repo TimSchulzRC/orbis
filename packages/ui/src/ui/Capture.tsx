@@ -128,7 +128,7 @@ function CaptureField({ parent, placeholder, autoFocus, onDone, compact, onSpace
         <ItemPicker
           title={t("capture.placeTitle")}
           filter={(x) => x.kind === "info"}
-          suggestions={[...mentioned.map((id) => ({ id, reason: "mentioned" })), ...recentPlaces(r).map((id) => ({ id, reason: "recent" }))].filter((x, i, l) => l.findIndex((y) => y.id === x.id) === i)}
+          suggestions={[...mentioned.map((id) => ({ id, reason: "mentioned" as const })), ...recentPlaces(r).map((id) => ({ id, reason: "recent" as const }))].filter((x, i, l) => l.findIndex((y) => y.id === x.id) === i)}
           onPick={(id) => (setPlace(id), setPicking(false), setTimeout(() => input.current?.focus()))}
           onClose={() => (setPicking(false), setTimeout(() => input.current?.focus()))}
         />

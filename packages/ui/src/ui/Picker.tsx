@@ -7,6 +7,7 @@ import { isOverview } from "@obtion/core/placement";
 import { useT } from "../i18n";
 import { useIndex, useRepo } from "../hooks";
 import { Dialog, ItemIcon, cx } from "./bits";
+import type { PickReason } from "./suggest";
 
 /** Pick an item: suggestions first, then search as you type. Optionally create a new one. */
 export function ItemPicker({
@@ -23,7 +24,7 @@ export function ItemPicker({
   onClose: () => void;
   exclude?: (i: Item) => boolean;
   filter?: (i: Item) => boolean;
-  suggestions?: { id: string; reason: string }[];
+  suggestions?: { id: string; reason: PickReason }[];
   onCreate?: (title: string) => void;
 }) {
   const { t } = useT();
@@ -39,7 +40,7 @@ export function ItemPicker({
     .sort((a, b) => Number(isOverview(b, ix)) - Number(isOverview(a, ix)))
     .filter((i) => !sugg.some((s) => s.id === i.id))
     .slice(0, 12);
-  const rows: { id?: string; reason?: string; create?: string }[] = [...sugg, ...found.map((i) => ({ id: i.id }))];
+  const rows: { id?: string; reason?: PickReason; create?: string }[] = [...sugg, ...found.map((i) => ({ id: i.id }))];
   if (onCreate && q.trim() && !found.some((i) => i.title.toLowerCase() === q.trim().toLowerCase())) rows.push({ create: q.trim() });
   const pick = (r?: (typeof rows)[number]) => {
     if (!r) return;

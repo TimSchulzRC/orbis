@@ -8,9 +8,11 @@ import { Textarea } from "../components/ui/textarea";
 import { NativeSelect } from "../components/ui/native-select";
 import { useEffect, useState } from "react";
 import { MoreHorizontal, Plus, Trash2, GripVertical, ArrowUp, ArrowDown, Tag as TagIcon, X, Pencil, Pin, RotateCcw } from "lucide-react";
+import type * as Y from "yjs";
 import {
   type Item,
   type OptionDef,
+  type Patch,
   type PropDef,
   type PropKind,
   type StatusGroup,
@@ -36,6 +38,7 @@ import { ICON } from "../ui/icons";
 import { TypeList } from "./Lists";
 import { notify } from "../ui/feedback";
 import { createType } from "../actions";
+import type { T } from "@obtion/core/i18n";
 
 export function TypePage({ item }: { item: Item }) {
   const { t } = useT();
@@ -87,7 +90,7 @@ function TypeEditor({ item, onClose }: { item: Item; onClose: () => void }) {
   const s = item.schema!;
   const [sel, setSel] = useState<string | undefined>(s.properties[0]?.id);
   const [dialog, setDialog] = useState<null | "delete" | "fromTag" | "toTag">(null);
-  const change = (fn: (doc: any) => void) => repo.change(item.id, fn);
+  const change = (fn: (doc: Y.Doc) => void) => repo.change(item.id, fn);
   const selected = s.properties.find((p) => p.id === sel);
 
   return (
@@ -269,7 +272,7 @@ function AddProperty({ item, onAdded }: { item: Item; onAdded: (id: string) => v
   );
 }
 
-function defaultStatusOptions(t: (k: string) => string): OptionDef[] {
+function defaultStatusOptions(t: T): OptionDef[] {
   return [
     { id: shortId("st"), name: t("group.todo"), group: "todo", color: "gray" },
     { id: shortId("st"), name: t("group.active"), group: "active", color: "amber" },
@@ -280,7 +283,7 @@ function defaultStatusOptions(t: (k: string) => string): OptionDef[] {
 function PropEditor({ item, prop }: { item: Item; prop: PropDef }) {
   const { t } = useT();
   const ix = useIndex();
-  const set = (patch: Partial<PropDef>) => repo.change(item.id, (d) => upsertProp(d, prop.id, patch));
+  const set = (patch: Patch<Omit<PropDef, "id">>) => repo.change(item.id, (d) => upsertProp(d, prop.id, patch));
   const field = (label: string, inner: React.ReactNode) => (
     <div className="mt-3">
       <p className="text-xs font-medium text-muted-foreground">{label}</p>
@@ -304,10 +307,10 @@ function PropEditor({ item, prop }: { item: Item; prop: PropDef }) {
         </NativeSelect>
       </div>
       <p className="mt-1 text-xs text-muted-foreground">{t("type.kindHint")}</p>
-      {field(t("type.propDescription"), <Textarea key={prop.id + "d"} defaultValue={prop.description ?? ""} onBlur={(e) => set({ description: e.target.value || null as any })} rows={2} className={box} />)}
+      {field(t("type.propDescription"), <Textarea key={prop.id + "d"} defaultValue={prop.description ?? ""} onBlur={(e) => set({ description: e.target.value || null })} rows={2} className={box} />)}
       {prop.kind !== "computed" && (
         <label className="tap-row mt-3 flex items-center gap-2 text-sm">
-          <Checkbox checked={!!prop.hideEmpty} onCheckedChange={(checked) => set({ hideEmpty: checked === true || (null as any) })} />
+          <Checkbox checked={!!prop.hideEmpty} onCheckedChange={(checked) => set({ hideEmpty: checked === true || null })} />
           <span>
             {t("type.hideEmpty")} <span className="text-xs text-muted-foreground">– {t("type.hideEmptyHint")}</span>
           </span>
@@ -318,25 +321,25 @@ function PropEditor({ item, prop }: { item: Item; prop: PropDef }) {
         field(
           t("type.dateRange"),
           <label className="flex items-center gap-2 text-sm">
-            <Checkbox checked={!!prop.range} onCheckedChange={(checked) => set({ range: checked === true || (null as any) })} /> {t("type.range")}
+            <Checkbox checked={!!prop.range} onCheckedChange={(checked) => set({ range: checked === true || null })} /> {t("type.range")}
           </label>,
         )}
       {prop.kind === "relation" && (
         <>
           {field(
             t("type.target"),
-            <TargetField key={prop.id + "t"} target={prop.target} hits={targetHits} onChange={(target) => set({ target: target || (null as any) })} />,
+            <TargetField key={prop.id + "t"} target={prop.target} hits={targetHits} onChange={(target) => set({ target: target || null })} />,
           )}
           {field(
             t("type.count"),
-            <Seg label={t("type.count")} value={prop.multiple ? "many" : "one"} onChange={(v) => set({ multiple: v === "many" || (null as any) })} options={[{ value: "one", label: t("type.one") }, { value: "many", label: t("type.many") }]} />,
+            <Seg label={t("type.count")} value={prop.multiple ? "many" : "one"} onChange={(v) => set({ multiple: v === "many" || null })} options={[{ value: "one", label: t("type.one") }, { value: "many", label: t("type.many") }]} />,
           )}
           {field(
             t("type.inverse"),
-            <Input key={prop.id + "i"} defaultValue={prop.inverseName ?? ""} placeholder={t("type.inverseOf", { name: prop.name })} onBlur={(e) => set({ inverseName: e.target.value.trim() || (null as any) })} className={box} />,
+            <Input key={prop.id + "i"} defaultValue={prop.inverseName ?? ""} placeholder={t("type.inverseOf", { name: prop.name })} onBlur={(e) => set({ inverseName: e.target.value.trim() || null })} className={box} />,
           )}
           <label className="mt-2 flex items-center gap-2 text-sm">
-            <Checkbox checked={!!prop.symmetric} onCheckedChange={(checked) => set({ symmetric: checked === true || (null as any) })} /> {t("type.symmetric")}
+            <Checkbox checked={!!prop.symmetric} onCheckedChange={(checked) => set({ symmetric: checked === true || null })} /> {t("type.symmetric")}
           </label>
         </>
       )}

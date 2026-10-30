@@ -31,6 +31,7 @@ import { extractAsCard, extractType } from "../ui/extract";
 import { movedItems } from "@obtion/core/transfer";
 import { useAccounts } from "../accounts";
 import { moveTo } from "../ui/Spaces";
+import type { Index } from "@obtion/core/graph";
 
 export function ItemPage({ id, isNew }: { id: string; isNew: boolean }) {
   const r = useRepo();
@@ -222,7 +223,7 @@ function InfoView({ item, isNew }: { item: Item; isNew: boolean }) {
 }
 
 /** "2 von 9 Tasks erledigt, alle Ebenen" / "1 von 2 Unteraufgaben erledigt". */
-function progressText(item: Item, ix: ReturnType<typeof useIndex>, done: number, total: number): string {
+function progressText(item: Item, ix: Index, done: number, total: number): string {
   const of = progressSpec(ix.schemaOf(item))?.of;
   if (of && of === item.type) return tr("progress.subtasks", { done, total });
   const name = of ? (ix.typeName(of) ?? "") : "";

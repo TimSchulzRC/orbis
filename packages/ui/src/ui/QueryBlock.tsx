@@ -172,6 +172,9 @@ function DraftBar({ onDiscard, onSave }: { onDiscard: () => void; onSave: () => 
   );
 }
 
+/** The React root of a block's element: a changed block keeps it (updateDOM). */
+const roots = new WeakMap<HTMLElement, Root>();
+
 class BlockWidget extends WidgetType {
   root?: Root;
   constructor(
@@ -188,13 +191,13 @@ class BlockWidget extends WidgetType {
     const el = document.createElement("div");
     el.className = "cm-queryblock";
     this.root = createRoot(el);
-    (el as any).qbRoot = this.root;
+    roots.set(el, this.root);
     this.mount(view);
     return el;
   }
   /** A changed block keeps its element and React state (editing, chosen tab): only new props. */
   override updateDOM(dom: HTMLElement, view: EditorView) {
-    const root = (dom as any).qbRoot as Root | undefined;
+    const root = roots.get(dom);
     if (!root) return false;
     this.root = root;
     this.mount(view);

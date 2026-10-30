@@ -185,8 +185,8 @@ async function probe(path: string): Promise<{ width?: number; height?: number; d
   const out = await new Response(p.stdout).text();
   await p.exited;
   try {
-    const j = JSON.parse(out);
-    const s = (j.streams ?? []).find((x: any) => x.width) ?? {};
+    const j: { streams?: { width?: number; height?: number }[]; format?: { duration?: string } } = JSON.parse(out);
+    const s = (j.streams ?? []).find((x) => x.width) ?? {};
     const d = Number(j.format?.duration);
     return { width: s.width, height: s.height, duration: isNaN(d) ? undefined : Math.round(d) };
   } catch {
@@ -194,18 +194,18 @@ async function probe(path: string): Promise<{ width?: number; height?: number; d
   }
 }
 
-let pdfjs: any;
+let pdfjs: typeof import("pdfjs-dist/legacy/build/pdf.mjs") | undefined;
 async function pdfInfo(path: string): Promise<{ pages: number; text?: string }> {
   pdfjs ??= await import("pdfjs-dist/legacy/build/pdf.mjs");
   const data = new Uint8Array(await Bun.file(path).arrayBuffer());
-  const task = pdfjs.getDocument({ data, isEvalSupported: false, disableFontFace: true, verbosity: 0 });
+  const task = pdfjs.getDocument({ data, disableFontFace: true, verbosity: 0 });
   const doc = await task.promise;
-  const pages = doc.numPages as number;
+  const pages = doc.numPages;
   let text = "";
   for (let i = 1; i <= Math.min(pages, 60) && text.length < 40_000; i++) {
     const page = await doc.getPage(i);
     const tc = await page.getTextContent();
-    text += tc.items.map((x: any) => x.str).join(" ").replace(/\s+/g, " ") + "\n";
+    text += tc.items.map((x) => ("str" in x ? x.str : "")).join(" ").replace(/\s+/g, " ") + "\n";
   }
   await task.destroy();
   return { pages, text: text.trim().slice(0, 40_000) || undefined };

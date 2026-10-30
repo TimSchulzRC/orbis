@@ -5,6 +5,8 @@
 // and which one is open.
 import { useSyncExternalStore } from "react";
 import { Repo } from "@obtion/sync";
+import type { AccountInfo, ErrorBody, InviteCode, InviteInfo, McpConnect, Member, Ok, ServerInfo, SignedIn, User, WorkspaceInfo } from "@obtion/core/api";
+import type { T } from "@obtion/core/i18n";
 import { browserHost, type SpaceLink } from "./browser";
 import { DeviceFiles, setFiles } from "./files";
 import { setRepo } from "./repo";
@@ -12,18 +14,13 @@ import { globalPage } from "./scope";
 
 export interface Account {
   token: string;
-  user: { id: string; name: string; email: string };
+  user: User;
   admin?: boolean;
   /** the server no longer accepts the token: sign in again */
   lost?: boolean;
 }
 
-export interface Space {
-  id: string;
-  name: string;
-  role: "owner" | "member";
-  legacy?: boolean;
-}
+export type Space = WorkspaceInfo;
 
 const KEY = { account: "obtion.account", spaces: "obtion.spaces", active: "obtion.active", shown: "obtion.shown" };
 const read = <T>(k: string, def: T): T => {
@@ -121,21 +118,39 @@ function activate(id: string) {
   }
 }
 
-/** A workspace's API (/w/<id>/api/…). */
-export const spaceFetch = (id: string, path: string, init: RequestInit = {}) =>
-  fetch(`/w/${id}${path}`, { ...init, headers: { ...(init.headers as Record<string, string>), authorization: `Bearer ${account!.token}` } });
-
 // ---------- account ----------
 
-async function call(path: string, body?: unknown, method = body === undefined ? "GET" : "POST", token = account?.token) {
+/** A call of the server's API that failed: the HTTP status and the server's error. */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public status: number,
+  ) {
+    super(message);
+  }
+}
+
+async function call<R>(path: string, body?: unknown, method = body === undefined ? "GET" : "POST", token = account?.token): Promise<R> {
   const res = await fetch(path, {
     method,
     headers: { ...(body !== undefined ? { "content-type": "application/json" } : {}), ...(token ? { authorization: `Bearer ${token}` } : {}) },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw Object.assign(new Error(data.error ?? res.statusText), { status: res.status });
-  return data;
+  const data: unknown = await res.json().catch(() => ({}));
+  if (!res.ok) throw new ApiError((data as Partial<ErrorBody> | null)?.error ?? res.statusText, res.status);
+  return data as R;
+}
+
+/** A workspace's API (/w/<id>/api/…). */
+export const spaceCall = <R>(id: string, path: string) => call<R>(`/w/${id}${path}`);
+
+/** What to tell the user when a call failed: signing in or up, a workspace action, deleting the account. */
+export function errorText(e: unknown, t: T, what: "signIn" | "space" | "deleteAccount"): string {
+  const status = e instanceof ApiError ? e.status : undefined;
+  const message = e instanceof Error ? e.message : String(e);
+  if (what === "signIn") return status === 401 ? t("account.wrong") : status === 429 ? t("account.tooMany") : status === 409 || status === 422 ? t("account.exists") : status === 403 ? t("account.closed") : message;
+  if (what === "deleteAccount") return t(message === "last owner" ? "account.deleteOwner" : message === "invalid password" ? "account.deletePassword" : "account.offline");
+  return message === "last owner" ? t("space.lastOwner") : message;
 }
 
 /** Ask the server for the account's workspaces (and whether the token still counts). */
@@ -143,14 +158,14 @@ export async function refresh() {
   if (!account) return;
   let gone: Space[] = [];
   try {
-    const me = await call("/api/account");
+    const me = await call<AccountInfo>("/api/account");
     Object.assign(account, { user: me.user, admin: me.admin, lost: false });
     const known = new Map(spaces.map((s) => [s.id, s]));
     // gone on the server (deleted, or this account removed): the copy here goes too
-    gone = spaces.filter((s) => !me.workspaces.some((w: Space) => w.id === s.id));
-    spaces = me.workspaces.map((w: Space) => ({ ...known.get(w.id), ...w }));
+    gone = spaces.filter((s) => !me.workspaces.some((w) => w.id === s.id));
+    spaces = me.workspaces.map((w) => ({ ...known.get(w.id), ...w }));
   } catch (e) {
-    if ((e as { status?: number }).status === 401) account.lost = true;
+    if (e instanceof ApiError && e.status === 401) account.lost = true;
     else return; // offline: keep what is known
   }
   if (!activeSpace() && spaces[0]) activate(spaces[0].id);
@@ -161,26 +176,26 @@ export async function refresh() {
 
 /** Keep the account signed in with `token` (another one signed in before leaves first). */
 async function keep(token: string) {
-  const me = await call("/api/account", undefined, "GET", token);
+  const me = await call<AccountInfo>("/api/account", undefined, "GET", token);
   if (account && account.user.id !== me.user.id) await forgetAll();
   account = { token, user: me.user };
   await refresh();
 }
 
 export async function signIn(email: string, password: string) {
-  const res = await call("/api/auth/sign-in/email", { email, password });
+  const res = await call<SignedIn>("/api/auth/sign-in/email", { email, password });
   await keep(res.token);
 }
 
 /** Create an account – with an invite it joins that workspace instead of getting one of its own. */
 export async function signUp(b: { name: string; email: string; password: string; invite?: string; lang: string }) {
-  const res = await call("/api/account/signup", b);
+  const res = await call<SignedIn>("/api/account/signup", b);
   await keep(res.token);
 }
 
 /** Sign out: the workspaces leave this device, with their local copies. */
 export async function signOut() {
-  await call("/api/account/signout", {}).catch(() => {});
+  await call<Ok>("/api/account/signout", {}).catch(() => {});
   await forgetAll();
   save();
   location.replace("#/");
@@ -189,7 +204,7 @@ export async function signOut() {
 
 /** Delete the account on this server, then remove this device's workspace copies. */
 export async function deleteAccount(password: string) {
-  await call("/api/account", { password }, "DELETE");
+  await call<Ok>("/api/account", { password }, "DELETE");
   await forgetAll();
   save();
   location.replace("#/");
@@ -224,29 +239,29 @@ async function forget(s: Space) {
 // ---------- workspaces ----------
 
 export async function createSpace(name: string) {
-  const w = await call("/api/workspaces", { name });
+  const w = await call<WorkspaceInfo>("/api/workspaces", { name });
   if (shown) shown = [...shown, w.id];
   await refresh();
   location.hash = `#/w/${w.id}/setup`;
 }
 
 export async function renameSpace(s: Space, name: string) {
-  await call(`/api/workspaces/${s.id}`, { name }, "PATCH");
+  await call<Ok>(`/api/workspaces/${s.id}`, { name }, "PATCH");
   await refresh();
 }
 
 /** An invite link: whoever opens it may join (with an account of this server). */
 export async function inviteLink(s: Space): Promise<string> {
-  const { code } = await call(`/api/workspaces/${s.id}/invites`, {});
+  const { code } = await call<InviteCode>(`/api/workspaces/${s.id}/invites`, {});
   return `${location.origin}/#/join/${code}`;
 }
 
-export function members(s: Space): Promise<{ id: string; name: string; email: string; role: string }[]> {
+export function members(s: Space): Promise<Member[]> {
   return call(`/api/workspaces/${s.id}/members`);
 }
 
 export async function leaveSpace(s: Space) {
-  await call(`/api/workspaces/${s.id}/members/${account!.user.id}`, undefined, "DELETE");
+  await call<Ok>(`/api/workspaces/${s.id}/members/${account!.user.id}`, undefined, "DELETE");
   await forget(s);
   spaces = spaces.filter((x) => x.id !== s.id);
   if (active === s.id) active = spaces[0]?.id ?? null;
@@ -257,7 +272,7 @@ export async function leaveSpace(s: Space) {
 
 /** Delete a workspace for good on the server (owners only; for every member). */
 export async function deleteSpace(s: Space) {
-  await call(`/api/workspaces/${s.id}`, undefined, "DELETE");
+  await call<Ok>(`/api/workspaces/${s.id}`, undefined, "DELETE");
   spaces = spaces.filter((x) => x.id !== s.id);
   if (active === s.id) active = spaces[0]?.id ?? null;
   save();
@@ -267,16 +282,16 @@ export async function deleteSpace(s: Space) {
 }
 
 export async function joinInvite(code: string) {
-  const w = await call(`/api/invites/${code}`, {});
+  const w = await call<WorkspaceInfo>(`/api/invites/${code}`, {});
   await refresh();
   activate(w.id);
 }
 
-export const invite = (code: string): Promise<{ workspace: string; by: string; signup: boolean }> => call(`/api/invites/${code}`);
-export const serverInfo = (): Promise<{ signup: "open" | "invite" | "off"; firstAccount: boolean; version: string; commit: string }> => call("/api/info");
+export const invite = (code: string) => call<InviteInfo>(`/api/invites/${code}`);
+export const serverInfo = () => call<ServerInfo>("/api/info");
 
 /** An MCP token for agents on a workspace, with the ready-made commands. */
-export const mcpToken = (s: Space) => call(`/api/workspaces/${s.id}/mcp-token`, {});
+export const mcpToken = (s: Space) => call<McpConnect>(`/api/workspaces/${s.id}/mcp-token`, {});
 
 /**
  * The address names the workspace ("#/w/<id>/…") and opens it. A page of a workspace without it

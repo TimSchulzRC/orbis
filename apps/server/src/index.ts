@@ -8,10 +8,10 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve, extname } from "node:path";
 import type { ServerWebSocket } from "bun";
 import { Store } from "./store";
-import { Accounts, AccountError, type SignupPolicy, type User, randomToken } from "./accounts";
-import { type Conn, Workspace, actorOf } from "./workspace";
+import { Accounts, AccountError, randomToken } from "./accounts";
+import type { AccountInfo, InviteCode, InviteInfo, McpConnect, Ok, ServerInfo, SignupPolicy, SignupRequest, User } from "@obtion/core/api";
+import { type Conn, Workspace, actorOf, parseClientMsg } from "./workspace";
 import { type Lang, LANGS, translate } from "@obtion/core/i18n";
-import type { ClientMsg } from "@obtion/core/protocol";
 import { allowedHosts } from "./trust";
 import { DATA, MAX_WS_MESSAGE, PORT } from "./config";
 import { body, fail, json } from "./http";
@@ -121,11 +121,11 @@ async function serveStatic(path: string): Promise<Response> {
 /** The account API: who am I, my workspaces, invites, tokens. `null`: not this path. */
 async function accountApi(req: Request, path: string, url: URL): Promise<Response | null> {
   if (path === "/api/info") {
-    return json({ signup: SIGNUP, firstAccount: accounts.userCount() === 0, version: VERSION, commit: COMMIT });
+    return json<ServerInfo>({ signup: SIGNUP, firstAccount: accounts.userCount() === 0, version: VERSION, commit: COMMIT });
   }
 
   if (path === "/api/account/signup" && req.method === "POST") {
-    const b = await body<{ name?: string; email?: string; password?: string; invite?: string; lang?: string }>(req);
+    const b = await body<SignupRequest>(req);
     if (!b?.email || !b.password) return fail(400, "email and password required");
     return accounts
       .signUp({ name: b.name ?? "", email: b.email, password: b.password, invite: b.invite || undefined, personal: personal(b.lang) })
@@ -136,7 +136,7 @@ async function accountApi(req: Request, path: string, url: URL): Promise<Respons
     const code = path.slice("/api/invites/".length);
     const inv = accounts.invite(code);
     if (!inv) return fail(404, "invite invalid");
-    if (req.method === "GET") return json({ workspace: inv.name, by: inv.by, signup: accounts.canSignUp(code) });
+    if (req.method === "GET") return json<InviteInfo>({ workspace: inv.name, by: inv.by, signup: accounts.canSignUp(code) });
   }
 
   const token = tokenOf(req);
@@ -144,7 +144,7 @@ async function accountApi(req: Request, path: string, url: URL): Promise<Respons
   if (!user) return path.startsWith("/api/account") || path.startsWith("/api/workspaces") || path.startsWith("/api/invites/") ? fail(401, "unauthorized") : null;
   try {
     if (path === "/api/account" && req.method === "GET") {
-      return json({ user, admin: accounts.isAdmin(user.id), workspaces: accounts.workspacesOf(user.id) });
+      return json<AccountInfo>({ user, admin: accounts.isAdmin(user.id), workspaces: accounts.workspacesOf(user.id) });
     }
     if (path === "/api/account" && req.method === "DELETE") {
       const b = await body<{ password?: unknown }>(req);
@@ -152,9 +152,9 @@ async function accountApi(req: Request, path: string, url: URL): Promise<Respons
       await accounts.deleteAccount(user.id, b.password);
       for (const w of open.values())
         for (const ws of w.conns) if (ws.data.userId === user.id) ws.close(4401, "account deleted");
-      return json({ ok: true });
+      return json<Ok>({ ok: true });
     }
-    if (path === "/api/account/signout" && req.method === "POST") return (await accounts.signOut(token!), json({ ok: true }));
+    if (path === "/api/account/signout" && req.method === "POST") return (await accounts.signOut(token!), json<Ok>({ ok: true }));
     if (path === "/api/workspaces" && req.method === "POST") {
       const b = await body<{ name?: string }>(req);
       if (!b?.name?.trim()) return fail(400, "name required");
@@ -171,21 +171,21 @@ async function accountApi(req: Request, path: string, url: URL): Promise<Respons
         open.get(id)?.shut();
         open.delete(id);
         accounts.deleteWorkspace(id, user.id);
-        return json({ ok: true });
+        return json<Ok>({ ok: true });
       }
       if (sub === "" && req.method === "PATCH") {
         accounts.rename(id, user.id, (await body<{ name?: string }>(req))?.name ?? "");
-        return json({ ok: true });
+        return json<Ok>({ ok: true });
       }
       if (sub === "/members" && req.method === "GET") return json(accounts.members(id));
-      if (sub.startsWith("/members/") && req.method === "DELETE") return (accounts.removeMember(id, user.id, sub.slice("/members/".length)), json({ ok: true }));
-      if (sub === "/invites" && req.method === "POST") return json({ code: accounts.createInvite(id, user.id) });
+      if (sub.startsWith("/members/") && req.method === "DELETE") return (accounts.removeMember(id, user.id, sub.slice("/members/".length)), json<Ok>({ ok: true }));
+      if (sub === "/invites" && req.method === "POST") return json<InviteCode>({ code: accounts.createInvite(id, user.id) });
       // MCP: a token for agents on this workspace, shown once
       if (sub === "/mcp-token" && req.method === "POST") {
         const base = PUBLIC_URL || `${url.protocol}//${req.headers.get("host")}`;
         const mcpUrl = `${base}/w/${id}/mcp`;
         const t = accounts.mcpToken(id, user.id);
-        return json({
+        return json<McpConnect>({
           mcpUrl,
           token: t,
           claudeCode: `claude mcp add --transport http obtion ${mcpUrl} --header "Authorization: Bearer ${t}" -s user`,
@@ -268,13 +268,8 @@ const server = Bun.serve<Conn>({
         ws.close(4401, "membership ended");
         return;
       }
-      let msg: ClientMsg;
-      try {
-        msg = JSON.parse(String(raw));
-      } catch {
-        return;
-      }
-      open.get(ws.data.workspace)?.message(ws, msg);
+      const msg = parseClientMsg(String(raw));
+      if (msg) open.get(ws.data.workspace)?.message(ws, msg);
     },
   },
 });

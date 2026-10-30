@@ -12,28 +12,8 @@ import { betterAuth } from "better-auth";
 import { bearer } from "better-auth/plugins";
 import { getMigrations } from "better-auth/db/migration";
 import { newId } from "@obtion/core/model";
+import type { Member, Role, SignedIn, SignupPolicy, User, WorkspaceInfo } from "@obtion/core/api";
 import { sha256 } from "./blobs";
-
-/** Who may create an account: anyone, only with an invite link, or nobody (the first account always may). */
-export type SignupPolicy = "open" | "invite" | "off";
-
-export interface User {
-  id: string;
-  name: string;
-  email: string;
-}
-
-export interface WorkspaceInfo {
-  id: string;
-  name: string;
-  role: "owner" | "member";
-  /** The data of the server from before accounts: devices keep their local copy of it. */
-  legacy?: boolean;
-}
-
-export interface Member extends User {
-  role: WorkspaceInfo["role"];
-}
 
 /** A workspace name as stored: trimmed, at most 80 characters. */
 const workspaceName = (name: string) => name.trim().slice(0, 80);
@@ -140,7 +120,7 @@ export class Accounts {
    * its own; without one it gets a personal workspace. The very first account becomes the admin and
    * takes over the data from before accounts, if there are any.
    */
-  async signUp(body: { name: string; email: string; password: string; invite?: string; personal: string }): Promise<{ token: string; user: User }> {
+  async signUp(body: { name: string; email: string; password: string; invite?: string; personal: string }): Promise<SignedIn> {
     if (!this.canSignUp(body.invite)) throw new AccountError(body.invite ? "invite invalid" : "signup closed", 403);
     const first = this.userCount() === 0;
     const res = await this.auth.api.signUpEmail({ body: { name: body.name.trim() || body.email.split("@")[0]!, email: body.email.trim(), password: body.password } }).catch((e) => {
@@ -185,12 +165,12 @@ export class Accounts {
   // ---------- workspaces ----------
 
   workspacesOf(user: string): WorkspaceInfo[] {
-    const rows = this.db.query("SELECT w.id, w.name, w.legacy, m.role FROM members m JOIN workspaces w ON w.id = m.workspace WHERE m.user = ? ORDER BY m.joined").all(user) as { id: string; name: string; legacy: number; role: WorkspaceInfo["role"] }[];
+    const rows = this.db.query("SELECT w.id, w.name, w.legacy, m.role FROM members m JOIN workspaces w ON w.id = m.workspace WHERE m.user = ? ORDER BY m.joined").all(user) as { id: string; name: string; legacy: number; role: Role }[];
     return rows.map((r) => ({ id: r.id, name: r.name, role: r.role, ...(r.legacy ? { legacy: true } : {}) }));
   }
 
-  role(workspace: string, user: string): WorkspaceInfo["role"] | undefined {
-    return (this.db.query("SELECT role FROM members WHERE workspace = ? AND user = ?").get(workspace, user) as { role: WorkspaceInfo["role"] } | null)?.role;
+  role(workspace: string, user: string): Role | undefined {
+    return (this.db.query("SELECT role FROM members WHERE workspace = ? AND user = ?").get(workspace, user) as { role: Role } | null)?.role;
   }
 
   createWorkspace(user: string, name: string): WorkspaceInfo {
@@ -217,7 +197,7 @@ export class Accounts {
     rmSync(this.dir(workspace), { recursive: true, force: true });
   }
 
-  private addMember(workspace: string, user: string, role: WorkspaceInfo["role"]) {
+  private addMember(workspace: string, user: string, role: Role) {
     this.db.query("INSERT OR IGNORE INTO members (workspace, user, role, joined) VALUES (?, ?, ?, ?)").run(workspace, user, role, Date.now());
   }
 

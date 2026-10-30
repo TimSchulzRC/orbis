@@ -1,7 +1,7 @@
 // UI language. Everything the app ships is stored language-neutral (keys, ids) and only
 // translated for display. Catalogs are ICU messages (plural, placeholders) per language;
 // a missing key falls back to English, then to the key itself.
-import { IntlMessageFormat } from "intl-messageformat";
+import { IntlMessageFormat, type PrimitiveType } from "intl-messageformat";
 import de from "../locales/de.json";
 import en from "../locales/en.json";
 
@@ -11,7 +11,10 @@ export const CATALOGS: Record<Lang, Record<string, string>> = { de, en };
 
 const cache = new Map<string, IntlMessageFormat>();
 
-export function translate(lang: Lang, key: string, values?: Record<string, unknown>): string {
+/** Placeholder values of a message. */
+export type Values = Record<string, PrimitiveType>;
+
+export function translate(lang: Lang, key: string, values?: Values): string {
   const msg = CATALOGS[lang][key] ?? CATALOGS.en[key];
   if (msg === undefined) return key;
   if (!values && !msg.includes("{")) return msg;
@@ -19,13 +22,14 @@ export function translate(lang: Lang, key: string, values?: Record<string, unkno
   let f = cache.get(ck);
   if (!f) cache.set(ck, (f = new IntlMessageFormat(msg, lang)));
   try {
-    return String(f.format(values as any));
-  } catch {
+    return String(f.format(values));
+  } catch (e) {
+    console.warn(`[i18n] ${lang} ${key}:`, e);
     return msg;
   }
 }
 
-export type T = (key: string, values?: Record<string, unknown>) => string;
+export type T = (key: string, values?: Values) => string;
 export const makeT = (lang: Lang): T => (key, values) => translate(lang, key, values);
 
 /** Words a catalog accepts for a query keyword: comma separated, the first is printed. */

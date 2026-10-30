@@ -20,13 +20,21 @@ export interface WireUpdate {
   o?: string; // origin (who made the change)
 }
 
+/** A change pushed by a replica: k its key in the outbox (acked by it), s the step (user action) it belongs to. */
+export interface PushItem {
+  k: string;
+  d: string;
+  u: string;
+  s?: string;
+}
+
 export type ClientMsg =
   | { t: "hello"; area?: string; since: number; sinceId?: string; device?: string }
-  | { t: "push"; area?: string; items: { k: string; d: string; u: string; s?: string }[] } // s: the step (user action) it belongs to
+  | { t: "push"; area?: string; items: PushItem[] }
   | { t: "ping" };
 
 export type ServerMsg =
-  | { t: "welcome"; hub: string; area: string; seq: number; format: number } // hub: the server id (old name, kept on the wire)
+  | { t: "welcome"; hub: string; area: string; seq: number; format?: number } // hub: the server id (old name, kept on the wire); no format: a server from before format versions
   | { t: "denied"; area: string } // an area this device may not sync
   | { t: "updates"; area: string; items: WireUpdate[]; last: number; lastId?: string; initial?: boolean; done?: boolean; reset?: boolean }
   | { t: "ack"; area: string; keys: string[]; last: number; lastId?: string }

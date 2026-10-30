@@ -104,7 +104,7 @@ export function Tray({ desktop, pinned, onCapture }: { desktop: boolean; pinned?
 }
 
 /** Back to front: where a sheet rests in the well, and fanned out while the tray is hovered. */
-const POSES = [
+const POSES: { left: [number, number]; rest: [string, string]; fan: [string, string] }[] = [
   { left: [9, 6], rest: ["-8deg", "0 10px"], fan: ["-14deg", "-5px 0"] },
   { left: [18, 12], rest: ["3deg", "0 4px"], fan: ["2deg", "0 -8px"] },
   { left: [30, 20], rest: ["-2deg", "0 -2px"], fan: ["8deg", "0 -6px"] },

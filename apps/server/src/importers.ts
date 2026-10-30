@@ -4,6 +4,7 @@ import { type Stats, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join, relative } from "node:path";
 import {
   type TypeSchema,
+  type Value,
   META_TYPE,
   addParent,
   fileTypeOf,
@@ -372,11 +373,18 @@ interface NotionOptions {
   taskType: string;
 }
 
+/** The export file: projects as objects, tasks as rows. */
+interface NotionExport {
+  projects: { id: string; title: string; area?: string; status?: string; priority?: string; start?: string; end?: string; summary?: string; created: string }[];
+  /** id, title, status, priority, due, tags, project, parent, blocked by, created */
+  tasks: [string, string, string | null, string | null, string | null, string[], string | null, string | null, string[], string][];
+}
+
 /** Projects → project type below the area's pinned overview; tasks and sub-items → task type below project / parent task. */
 export function importNotion(store: Store, file: string, opts: NotionOptions, log: Log) {
   const origin = "import:notion";
   const w = storeWriter(store, origin);
-  const data = JSON.parse(readFileSync(file, "utf8"));
+  const data: NotionExport = JSON.parse(readFileSync(file, "utf8"));
   const projectType = ensureType(w, opts.projectType, opts.lang, store);
   const taskType = ensureType(w, opts.taskType, opts.lang, store);
   const ix = store.index();
@@ -387,7 +395,7 @@ export function importNotion(store: Store, file: string, opts: NotionOptions, lo
   for (const p of data.projects) {
     if (store.records.get(idFor(p.id))) continue;
     const parents = p.area ? [ensurePinnedOverview(w, store, areaName(p.area, opts.lang))] : [];
-    const props: Record<string, any> = {};
+    const props: Record<string, Value> = {};
     const st = statusOption(ps, p.status);
     if (st && statusProp(ps)) props[statusProp(ps)!.id] = st;
     const pr = priorityOption(ps, p.priority);
@@ -397,23 +405,23 @@ export function importNotion(store: Store, file: string, opts: NotionOptions, lo
     w.change(idFor(p.id), (doc) => initItem(doc, { title: p.title, type: projectType, parents, props, source: `notion:${p.id}`, created: Date.parse(p.created) }));
     made++;
   }
-  const taskProject = new Map<string, string | null>(data.tasks.map((t: any[]) => [t[0], t[6]]));
+  const taskProject = new Map<string, string | null>(data.tasks.map((t) => [t[0], t[6]]));
   for (const t of data.tasks) {
     const [nid, title, status, priority, due, tags, project, parent, blockedBy, created] = t;
     if (store.records.get(idFor(nid))) continue;
     const proj = project ?? (parent ? taskProject.get(parent) : null);
     const parents = parent ? [idFor(parent)] : proj ? [idFor(proj)] : [];
-    const props: Record<string, any> = {};
-    const st = statusOption(ts, status);
+    const props: Record<string, Value> = {};
+    const st = statusOption(ts, status ?? undefined);
     if (st && statusProp(ts)) props[statusProp(ts)!.id] = st;
-    const pr = priorityOption(ts, priority);
+    const pr = priorityOption(ts, priority ?? undefined);
     if (pr) props.p_priority = pr;
     const dp = dueProp(ts);
     if (due && dp) props[dp.id] = due;
     const rel = ts?.properties.find((x) => x.kind === "relation" && x.id === "p_blocked");
     w.change(idFor(nid), (doc) => {
       initItem(doc, { title, type: taskType, parents, props, tags, source: `notion:${nid}`, created: Date.parse(created) });
-      if (rel) for (const b of blockedBy as string[]) setRel(doc, rel.id, idFor(b), true);
+      if (rel) for (const b of blockedBy) setRel(doc, rel.id, idFor(b), true);
     });
     made++;
   }

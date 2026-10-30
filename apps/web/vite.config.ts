@@ -5,7 +5,8 @@ import { VitePWA } from "vite-plugin-pwa";
 import { copyFileSync, mkdirSync, readdirSync, renameSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
-import type { Plugin } from "vite";
+import type { Plugin, ProxyOptions } from "vite";
+import type { ClientRequest } from "node:http";
 
 /** pdf.js (used by @obtion/ui) decodes JBIG2 and JPEG 2000 images with WebAssembly it loads from a folder. */
 const pdfjs = dirname(createRequire(createRequire(import.meta.url).resolve("@obtion/ui")).resolve("pdfjs-dist/package.json"));
@@ -52,13 +53,13 @@ const devPublic = process.env.OBTION_DEV_PUBLIC_URL ? new URL(process.env.OBTION
  * only answers to the hosts it serves under (DNS rebinding guard) and checks Origin against Host
  * (CSRF, cross-site WebSocket); the dev server may run on any port or tailnet name.
  */
-function toServer(ws = false) {
+function toServer(ws = false): ProxyOptions {
   return {
     target: server,
     ws,
     changeOrigin: true,
-    configure: (proxy: any) => {
-      const own = (req: any) => req.getHeader?.("origin") !== undefined && req.setHeader("origin", server);
+    configure: (proxy) => {
+      const own = (req: ClientRequest) => req.getHeader("origin") !== undefined && req.setHeader("origin", server);
       proxy.on("proxyReq", own);
       proxy.on("proxyReqWs", own);
     },

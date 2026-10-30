@@ -17,6 +17,7 @@ import {
   appendUpdate,
   initItem,
   isContent,
+  metaMap,
   newId,
   readItem,
   removeParent,
@@ -36,14 +37,21 @@ import { initialProps, template, writeProp } from "@obtion/core/traits";
 import { deleteItem, resolveCascade, restoreItem } from "@obtion/core/trash";
 import type { Writer } from "@obtion/core/setup";
 import { keyBetween } from "@obtion/core/sortkey";
-import { type ActivityEvent, type ClientMsg, type ServerMsg, fromB64, toB64 } from "@obtion/core/protocol";
+import { type ActivityEvent, type ClientMsg, type PushItem, type ServerMsg, fromB64, toB64 } from "@obtion/core/protocol";
+import type { ErrorBody, UndoRequest, UndoResult } from "@obtion/core/api";
 import { createIndex, indexRecord, searchIds } from "@obtion/core/search";
 
 const REMOTE = Symbol("remote");
 /** The areas this device holds. One until teams come (see PERSONAL); the cursor below is its. */
 const AREAS = [PERSONAL];
-/** An outbox entry: key, document, update (base64), step, area. */
-export type OutItem = { k: string; d: string; u: string; s?: string; a?: string };
+/** An outbox entry: a push item and its area. */
+export type OutItem = PushItem & { a?: string };
+
+/** The area of a document (documents from before areas: personal). */
+function areaOf(doc: Y.Doc | undefined): string {
+  const a = doc && metaMap(doc).get("area");
+  return typeof a === "string" ? a : PERSONAL;
+}
 const LOAD = Symbol("load");
 const TAB = Symbol("tab");
 
@@ -94,7 +102,7 @@ export interface RepoHost {
   /** Opens a connection to the server's sync endpoint. */
   connect(): SyncSocket;
   /** Sends JSON to the server's API (e.g. "/api/undo"); null when the server cannot be reached. */
-  post(path: string, body: unknown): Promise<{ ok: boolean; statusText: string; body: any } | null>;
+  post(path: string, body: unknown): Promise<{ ok: boolean; statusText: string; body: unknown } | null>;
   /** Other windows on this device, if the platform has several. */
   tabs?: { post(msg: TabMsg): void; listen(fn: (msg: TabMsg) => void): void };
   /** Calls fn whenever it is worth trying the server again (back online, app in front). */
@@ -275,7 +283,7 @@ export class Repo {
     const doc = tr.doc;
     const body: unknown = doc.getText("body");
     const meta: unknown = doc.getMap("meta");
-    const typing = [...tr.changed.keys()].every((t: unknown) => t === body || (t === meta && [...tr.changed.get(t as Y.AbstractType<any>)!].every((k) => k === "updated")));
+    const typing = [...tr.changed].every(([t, keys]) => t === body || (t === meta && [...keys].every((k) => k === "updated")));
     const now = Date.now();
     const c = this.curStep;
     const goOn = c && (this.sameTick || (typing && c.typing && c.doc === docId && now - c.at < 120_000));
@@ -290,7 +298,7 @@ export class Repo {
   }
 
   private local(docId: string, update: Uint8Array, step?: string) {
-    const area = (this.docs.get(docId)?.getMap<any>("meta").get("area") as string | undefined) ?? PERSONAL;
+    const area = areaOf(this.docs.get(docId));
     const k = newId();
     const item: OutItem = { k, d: docId, u: toB64(update), s: step, a: area };
     this.outbox.set(k, item);
@@ -377,7 +385,7 @@ export class Repo {
 
   /** Queue this device's full state for upload. Goes through the durable outbox, so it survives disconnects. */
   private async enqueueFullUpload() {
-    const items: OutItem[] = [...this.docs].map(([d, doc]) => ({ k: newId(), d, u: toB64(Y.encodeStateAsUpdate(doc)), a: (doc.getMap<any>("meta").get("area") as string | undefined) ?? PERSONAL }));
+    const items: OutItem[] = [...this.docs].map(([d, doc]) => ({ k: newId(), d, u: toB64(Y.encodeStateAsUpdate(doc)), a: areaOf(doc) }));
     await this.db.write({ outbox: items });
     for (const it of items) this.outbox.set(it.k, it);
     this.status.pending = this.outbox.size;
@@ -479,10 +487,10 @@ export class Repo {
    */
   async undo(step: string, redo = false): Promise<{ ok: true; changed: number; kept: number } | { ok: false; error: string }> {
     await this.flushOutbox();
-    const res = await this.host.post("/api/undo", { step, redo, device: this.device });
+    const res = await this.host.post("/api/undo", { step, redo, device: this.device } satisfies UndoRequest);
     if (!res) return { ok: false, error: "offline" };
-    const body = res.body ?? {};
-    if (!res.ok) return { ok: false, error: body.error ?? res.statusText };
+    if (!res.ok) return { ok: false, error: (res.body as Partial<ErrorBody> | null)?.error ?? res.statusText };
+    const body = res.body as UndoResult;
     return { ok: true, changed: body.changed.length + body.trashed.length, kept: body.kept.length };
   }
 
@@ -596,7 +604,7 @@ export class Repo {
   moveParent(id: string, from: string | null, to: string, sort?: string): boolean {
     if (this.index().wouldCycle(id, to)) return false;
     this.change(id, (doc) => {
-      const wasHome = from && doc.getMap<any>("meta").get("home") === from;
+      const wasHome = from && metaMap(doc).get("home") === from;
       addParent(doc, to, sort);
       if (from && from !== to) removeParent(doc, from);
       if (wasHome) setHome(doc, to);

@@ -41,7 +41,7 @@ export function TypeList({ type }: { type: Item }) {
   const def: QueryDef = tabDef(base, { ...tab, where: tabWhere });
   const dirty = !!draft && JSON.stringify(draft.where) !== JSON.stringify(tabs.find((x) => x.id === draft.tab)?.where);
   const saveLook = (patch: Partial<ViewTab>) => {
-    const changed = Object.entries(patch).filter(([k, v]) => JSON.stringify(v) !== JSON.stringify((tab as any)[k]));
+    const changed = Object.entries(patch).filter(([k, v]) => JSON.stringify(v) !== JSON.stringify(tab[k as keyof ViewTab]));
     if (!changed.length) return;
     setT(tab.id, Object.fromEntries(changed.map(([k, v]) => [k, v ?? null])));
     if (patch.kind && patch.kind !== tab.kind) notify(t("view.viewSet", { view: t("view." + patch.kind) }), () => setT(tab.id, { kind: tab.kind }));
