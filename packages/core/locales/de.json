@@ -999,8 +999,6 @@
  "review.position": "{at} von {count}",
  "review.minutesLeft": "noch ca. {count} Min.",
  "review.empty": "Nichts einzusortieren",
- "review.pause": "Später weiter",
- "review.close": "Einsortieren beenden",
  "review.placeAction": "Ablegen",
  "review.convertAction": "Umwandeln",
  "review.suggested": "Vorschläge",

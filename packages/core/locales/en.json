@@ -999,8 +999,6 @@
  "review.position": "{at} of {count}",
  "review.minutesLeft": "about {count} min left",
  "review.empty": "Nothing to sort",
- "review.pause": "Continue later",
- "review.close": "Stop sorting",
  "review.placeAction": "Put away",
  "review.convertAction": "Turn into",
  "review.suggested": "Suggestions",
