@@ -3,9 +3,10 @@ import { Button as ShadcnButton } from "../components/ui/button";
 // first, with a line of its text, its workspace and age; one opens here to read and add to it and
 // stays in the inbox – sorting is the review's (views/Review.tsx), here only a quiet link leads
 // there. Above the tray on a desktop, as a sheet on a phone. What lands in the inbox: behind "…".
-// On Heute on a desktop it is part of the page (`pinned`): always open, it does not close.
+// On Heute on a desktop it is part of the page (`pinned`): always open, it does not close. Without
+// room for it there, Heute shows the newest entries as cards (ShelfCards), each opens the panel.
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, ArrowRight, Maximize2, MoreHorizontal, RotateCcw, SlidersHorizontal, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, ArrowUp, Maximize2, MoreHorizontal, RotateCcw, SlidersHorizontal, X } from "lucide-react";
 import { type Item, SETTINGS_ID, setSettings } from "@obtion/core/model";
 import type { QueryDef } from "@obtion/core/query";
 import { inboxWhere } from "@obtion/core/inbox";
@@ -134,6 +135,50 @@ function List({ entries, desktop, pinned }: { entries: InboxEntry[]; desktop: bo
         </SpaceScope>
       )}
     </>
+  );
+}
+
+/** The newest entries side by side, as on Heute: a card opens the panel at it, "Alle ansehen" at the list. */
+export function ShelfCards({ entries }: { entries: InboxEntry[] }) {
+  const { t, lang } = useT();
+  const { shown } = useAccounts();
+  return (
+    <section data-shelf-cards className="mt-9">
+      <div className="mb-2.5 flex min-h-8 items-center gap-2">
+        <h2 className="text-[15px] font-semibold leading-[22px]">
+          {t("tray.title")} <span className="tabular-nums text-warn">{entries.length}</span>
+        </h2>
+        <span className="text-[13px] text-muted-foreground">· {t("tray.newestFirst")}</span>
+        <span className="flex-1" />
+        <ShadcnButton variant="plain" size="none" onClick={() => openShelf()} className="tap-y inline-flex items-center gap-1 rounded-md px-1.5 text-[13px] text-muted-foreground hover:text-fg">
+          {t("tray.showAll")} <ArrowUp size={14} />
+        </ShadcnButton>
+      </div>
+      <div className="grid grid-cols-2 gap-3 @3xl:grid-cols-4">
+        {entries.slice(0, 4).map((e) => {
+          const ix = replica(e.space).repo.index();
+          const line = preview(e, t, lang, ix.childrenOf(e.item.id).length);
+          return (
+            <ShadcnButton
+              key={e.key}
+              variant="plain"
+              size="none"
+              onClick={() => openShelf(e.key)}
+              aria-label={t("tray.openEntry", { title: e.item.title || e.item.file?.name || t("untitled") })}
+              className="flex min-w-0 flex-col items-stretch gap-1 rounded-xl border border-[color-mix(in_srgb,var(--t-inbox)_35%,var(--border))] bg-surface px-4 py-3 text-left hover:bg-hover"
+            >
+              <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+                <ItemIcon item={e.item} size={13} ix={ix} />
+                <RelTime ts={e.item.created} />
+                {shown.length > 1 && <span className="truncate">· {spaceById(e.space)?.name}</span>}
+              </span>
+              <span className="truncate text-[15px] font-semibold">{e.item.title || e.item.file?.name || t("untitled")}</span>
+              <span className="truncate text-xs text-muted-foreground">{line || "\u00a0"}</span>
+            </ShadcnButton>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 

@@ -1,7 +1,7 @@
 // "Heute", the start page: a greeting and in one sentence what the day holds, then what is due
 // (today and overdue), the projects in progress and what was changed last – of every workspace
 // seen. What waits in the inbox is in the tray below (Tray.tsx), on a desktop with its panel open
-// below the page; here it is only counted.
+// below the page; without room for that the newest entries are cards here (ShelfCards).
 // Sections with nothing in them are left out.
 import { useEffect } from "react";
 import { Sun } from "lucide-react";
@@ -15,7 +15,8 @@ import { useT } from "../i18n";
 import { Card, DueLabel, ItemIcon, RelTime, SectionTitle, cx, itemLook, pal } from "../ui/bits";
 import { RowStatus } from "../ui/Row";
 import { SpaceScope, useReplicas } from "../ui/Spaces";
-import { useInboxItems } from "../ui/inbox";
+import { useInboxItems, useShelfPinned } from "../ui/inbox";
+import { ShelfCards } from "../ui/Shelf";
 
 interface Of<T> {
   space: string;
@@ -27,7 +28,9 @@ export function Today() {
   const desktop = useDesktop();
   const { shown, account } = useAccounts();
   const repos = useReplicas(shown.map((s) => s.id));
-  const inbox = useInboxItems().length;
+  const entries = useInboxItems();
+  const inbox = entries.length;
+  const pinned = useShelfPinned();
   const today = todayISO();
   useEffect(() => void (document.title = t("nav.today")), []);
   // each workspace's part, then one list of all
@@ -65,6 +68,8 @@ export function Today() {
           t("today.inboxEmpty")
         )}
       </p>
+      {/* the panel not pinned below (too little room): the newest entries, a way into it */}
+      {desktop && !pinned && inbox > 0 && <ShelfCards entries={entries} />}
 
       <div className={cx("mt-9 grid items-start gap-x-8 gap-y-9", due.length > 0 && projects.length > 0 && "lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]")}>
         {due.length > 0 && (
