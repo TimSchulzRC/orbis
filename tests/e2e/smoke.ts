@@ -192,8 +192,8 @@ async function run() {
             const h1 = (await p.locator("main h1").innerText()).trim();
             if (!/^Guten (Morgen|Tag|Abend), E2E\.$/.test(h1)) failures.push(`${label}: Heute greets with "${h1}"`);
             if (!(await p.locator("main h2", { hasText: /^Fällig$/ }).count())) failures.push(`${label}: Heute shows nothing due`);
-            const tray = p.getByRole("region", { name: "Ablage" });
-            if (!(await tray.getByRole("link", { name: /Durchsicht/ }).count())) failures.push(`${label}: the tray has no way into the review`);
+            const tray = p.getByRole("region", { name: "Eingang" });
+            if (!(await tray.getByRole("link", { name: /Einsortieren/ }).count())) failures.push(`${label}: the tray has no way into the review`);
             if (!phone) {
               const sheet = tray.locator("button[aria-label^='„']").last();
               const title = ((await sheet.getAttribute("aria-label")) ?? "").replace(/^„|“ öffnen$/g, "");
@@ -201,7 +201,7 @@ async function run() {
               if (!(await sheet.getByText(title, { exact: true }).isVisible())) failures.push(`${label}: a sheet does not show its title on hover`);
               await sheet.click();
               const panel = p.locator("[data-shelf-panel]");
-              if (!(await panel.getByText("Bleibt in der Ablage bis zur Durchsicht.").waitFor({ timeout: 3000 }).then(() => true, () => false))) failures.push(`${label}: a sheet does not open its entry`);
+              if (!(await panel.getByText("Bleibt im Eingang bis zum Einsortieren.").waitFor({ timeout: 3000 }).then(() => true, () => false))) failures.push(`${label}: a sheet does not open its entry`);
               await p.keyboard.press("Escape");
             }
           }, { phone });
@@ -214,12 +214,12 @@ async function run() {
             const n = await rows.count();
             if (!n) return;
             await rows.first().click();
-            if (!(await panel.getByText("Bleibt in der Ablage bis zur Durchsicht.").waitFor({ timeout: 3000 }).then(() => true, () => false))) return void failures.push(`${label}: an entry does not open in the panel`);
+            if (!(await panel.getByText("Bleibt im Eingang bis zum Einsortieren.").waitFor({ timeout: 3000 }).then(() => true, () => false))) return void failures.push(`${label}: an entry does not open in the panel`);
             await panel.locator(".cm-content").click();
             await p.keyboard.press("Control+End");
             await p.keyboard.type(" E2E-Ergänzung");
             await p.waitForTimeout(300);
-            await panel.getByRole("button", { name: "Ablage", exact: true }).click();
+            await panel.getByRole("button", { name: "Eingang", exact: true }).click();
             if ((await panel.locator("[data-shelf]").count()) !== n) failures.push(`${label}: adding to an entry took it out of the inbox`);
             if (!(await panel.getByText("E2E-Ergänzung").count())) failures.push(`${label}: what was added does not show in the panel's list`);
             const pinned = (await panel.getAttribute("data-shelf-panel")) === "pinned";
@@ -336,8 +336,8 @@ async function run() {
           await check(page, label, "/", errors, async (p) => {
             // the field is in the tray; on a phone it opens from the tray's "+" in a sheet, which closes after saving
             const open = async () => {
-              if (phone) await p.getByRole("region", { name: "Ablage" }).locator("button[aria-label='Erfassen']").click();
-              const f = p.locator(phone ? "[role=dialog] textarea[aria-label='Erfassen']" : "[role=region][aria-label='Ablage'] textarea[aria-label='Erfassen']");
+              if (phone) await p.getByRole("region", { name: "Eingang" }).locator("button[aria-label='Erfassen']").click();
+              const f = p.locator(phone ? "[role=dialog] textarea[aria-label='Erfassen']" : "[role=region][aria-label='Eingang'] textarea[aria-label='Erfassen']");
               await f.click();
               return f;
             };

@@ -1,5 +1,5 @@
 import { Button as ShadcnButton } from "../components/ui/button";
-// The tray ("Ablage") below every page: how much waits in the inbox (a fill in amber), a field
+// The tray ("Eingang") below every page: how much waits in the inbox (a fill in amber), a field
 // to put something down, and the way into the review with how long it takes. Two ways in: the
 // tray itself opens its panel to look in (Shelf.tsx; on a phone also a swipe up), the button
 // starts the review to sort. The sheets sticking out are the newest entries, each opens itself.
@@ -42,7 +42,7 @@ export function Tray({ desktop, pinned, onCapture }: { desktop: boolean; pinned?
       >
         <span className="flex min-w-0 flex-col gap-1.5">
           <span className="text-sm font-semibold leading-none">
-            {t("tray.title")} <span className="tabular-nums text-warn">{count}</span>
+            {t("tray.title")} · <span className="tabular-nums text-warn">{count}</span>
           </span>
           <Fill count={count} />
         </span>
@@ -55,10 +55,10 @@ export function Tray({ desktop, pinned, onCapture }: { desktop: boolean; pinned?
       <Layers size={16} />
       {desktop ? (
         <>
-          {t("review.title")} <span className="font-normal opacity-80">· {t("tray.minutes", { count: reviewMinutes(count) })}</span>
+          {t("tray.toReview")} <span className="font-normal opacity-80">· {t("tray.minutes", { count: reviewMinutes(count) })}</span>
         </>
       ) : (
-        <span aria-label={`${t("review.title")} · ${t("tray.minutes", { count: reviewMinutes(count) })}`}>{t("tray.minutesShort", { count: reviewMinutes(count) })}</span>
+        <span aria-label={`${t("tray.toReview")} · ${t("tray.minutes", { count: reviewMinutes(count) })}`}>{t("tray.minutesShort", { count: reviewMinutes(count) })}</span>
       )}
     </a>
   ) : (
