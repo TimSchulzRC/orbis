@@ -954,7 +954,6 @@
  "tray.title": "Eingang",
  "tray.open": "Eingang: {count, plural, one {# Eintrag} other {# Einträge}}",
  "tray.placeholder": "Etwas ablegen …",
- "tray.minutes": "ca. {count} Min.",
  "tray.empty": "Alles einsortiert",
  "review.title": "Eingang",
  "review.view": "Ansicht des Eingangs",
