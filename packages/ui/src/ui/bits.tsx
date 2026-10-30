@@ -7,7 +7,7 @@ import { Button as ShadcnButton } from "../components/ui/button";
 import { Dialog as DialogRoot, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { Popover as PopoverRoot, PopoverAnchor, PopoverContent } from "../components/ui/popover";
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { X, Check, ChevronDown, ChevronRight, CircleCheck, CirclePause, CircleX, CalendarDays, Plus } from "lucide-react";
+import { X, Check, ChevronDown, CircleCheck, CirclePause, CircleX, CalendarDays, Plus } from "lucide-react";
 import { type Item, type OptionDef, type StatusGroup, type TypeSchema, META_TYPE, todayISO } from "@obtion/core/model";
 import { fmtRelative, fmtShortDate } from "@obtion/core/i18n";
 import { isInInbox, isOverview } from "@obtion/core/placement";
@@ -142,14 +142,14 @@ export function ProgressCount({ done, total, className }: { done: number; total:
   );
 }
 
-/** A link to an entry; `wrap`: long titles break into lines instead of being cut off (narrow columns). */
-export function ItemLink({ item, className, showIcon = true, wrap }: { item: Item; className?: string; showIcon?: boolean; wrap?: boolean }) {
+/** A link to an entry. */
+export function ItemLink({ item, className }: { item: Item; className?: string }) {
   const { t } = useT();
   const hrefOf = useItemHref();
   return (
-    <a href={hrefOf(item.id)} className={cx("inline-flex min-w-0 gap-1.5 hover:underline", wrap ? "items-start" : "items-center", className)}>
-      {showIcon && <ItemIcon item={item} size={14} className={wrap ? "mt-0.5 shrink-0" : undefined} />}
-      <span className={wrap ? "min-w-0 break-words" : "truncate"}>{item.title || t("untitled")}</span>
+    <a href={hrefOf(item.id)} className={cx("inline-flex min-w-0 items-center gap-1.5 hover:underline", className)}>
+      <ItemIcon item={item} size={14} />
+      <span className="truncate">{item.title || t("untitled")}</span>
     </a>
   );
 }
@@ -217,26 +217,13 @@ export function Empty({ icon, title, children }: { icon?: ReactNode; title: stri
 
 /**
  * The one section head (design rules § 2.1): title 15/600, a count in muted, at most one quiet
- * action or one switch on the right. Collapsible: the whole head is the button, a chevron in
- * front of the title. No capitals, no symbol before the title.
+ * action or one switch on the right. No capitals, no symbol before the title.
  */
-export function SectionTitle({ children, count, right, open, onToggle, className }: { children: ReactNode; count?: ReactNode; right?: ReactNode; open?: boolean; onToggle?: () => void; className?: string }) {
-  const head = (
-    <>
-      {onToggle && <ChevronRight size={14} className={cx("shrink-0 text-faint transition-transform", open && "rotate-90")} aria-hidden />}
-      <h2 className="truncate text-[15px] font-semibold leading-[22px] text-fg">{children}</h2>
-      {count !== undefined && count !== null && count !== "" && <span className="shrink-0 text-[13px] tabular-nums text-muted-foreground">{count}</span>}
-    </>
-  );
+export function SectionTitle({ children, count, right, className }: { children: ReactNode; count?: ReactNode; right?: ReactNode; className?: string }) {
   return (
     <div className={cx("mb-2.5 flex min-h-8 items-center gap-2", className)}>
-      {onToggle ? (
-        <ShadcnButton variant="plain" size="none" type="button" onClick={onToggle} aria-expanded={!!open} className="tap-y -ml-1 flex min-w-0 items-center gap-2 rounded-md px-1 text-left hover:bg-hover">
-          {head}
-        </ShadcnButton>
-      ) : (
-        head
-      )}
+      <h2 className="truncate text-[15px] font-semibold leading-[22px] text-fg">{children}</h2>
+      {count !== undefined && count !== null && count !== "" && <span className="shrink-0 text-[13px] tabular-nums text-muted-foreground">{count}</span>}
       {right && <div className="ml-auto flex shrink-0 items-center gap-1.5">{right}</div>}
     </div>
   );
@@ -485,7 +472,6 @@ export function Popover({
   open,
   onOpenChange,
   align = "left",
-  className,
   triggerClass,
 }: {
   trigger: (p: { onClick: () => void; "aria-expanded": boolean }) => ReactNode;
@@ -493,7 +479,6 @@ export function Popover({
   open?: boolean;
   onOpenChange?: (o: boolean) => void;
   align?: "left" | "right";
-  className?: string;
   /** around the trigger (e.g. to let it take the free width) */
   triggerClass?: string;
 }) {
@@ -513,7 +498,7 @@ export function Popover({
       {/* focus goes back to where it was only if nothing took it meanwhile – a click on another
           badge's menu has, and taking it back would close that menu again */}
       <PopoverContent onCloseAutoFocus={(e) => { e.preventDefault(); const now = document.activeElement; if (previous.current?.isConnected && (!now || now === document.body)) previous.current.focus({ preventScroll: true }); }} data-popover align={align === "right" ? "end" : "start"} sideOffset={4}
-        className={cx("z-50 max-h-[70vh] w-auto min-w-48 overflow-y-auto rounded-xl p-1", className)}>
+        className="z-50 max-h-[70vh] w-auto min-w-48 overflow-y-auto rounded-xl p-1">
         {typeof children === "function" ? children(() => set(false)) : children}
       </PopoverContent>
     </PopoverRoot>

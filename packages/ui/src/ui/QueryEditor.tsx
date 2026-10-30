@@ -1,13 +1,12 @@
-import { Button as ShadcnButton } from "../components/ui/button";
-import { Input } from "../components/ui/input";
 // One query, two ways in: conditions as chips to click (each opens a short menu: switch off,
 // negate, "oder …", remove; "+ Bedingung" adds one), and the same query as text for those who
 // like typing (folded away by default).
 // Typing understands every language; it is shown in the UI language. Stored is JSON.
+import { Button as ShadcnButton } from "../components/ui/button";
+import { Input } from "../components/ui/input";
 import { useEffect, useState } from "react";
 import { X, Plus, ChevronLeft, HelpCircle } from "lucide-react";
-import type { Cond, QueryDef } from "@obtion/core/query";
-import { parseQuery, printQuery } from "@obtion/core/query";
+import { type Cond, type QueryDef, parseQuery, printQuery } from "@obtion/core/query";
 import { useIndex } from "../hooks";
 import { useT } from "../i18n";
 import type { Lang } from "@obtion/core/i18n";
@@ -18,8 +17,8 @@ type Step = "root" | "type" | "status" | "due" | "tag";
 type Ctx = { ix: ReturnType<typeof useIndex>; t: (k: string, v?: Record<string, unknown>) => string; lang: Lang };
 
 /** How a condition reads on its chip: the text form, "nicht …" for a negation. */
-export function label(c: Cond, { ix, t, lang }: Ctx): string {
-  return "not" in c ? `${t("query.not")} ${label(c.not, { ix, t, lang })}` : printQuery({ where: c }, lang, ix);
+function condLabel(c: Cond, { ix, t, lang }: Ctx): string {
+  return "not" in c ? `${t("query.not")} ${condLabel(c.not, { ix, t, lang })}` : printQuery({ where: c }, lang, ix);
 }
 
 /**
@@ -108,7 +107,7 @@ function Chip({ cond, ctx, off, onToggle, onNegate, onOr, onRemove, onUnder, con
       onOpenChange={(o) => o && setMode("menu")}
       trigger={(p) => (
         <ShadcnButton variant="plain" size="none" {...p} className={cx("inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-line bg-bg px-1.5 py-0.5 hover:border-[var(--focus)]", off && "line-through opacity-50")} title={off ? t("query.offHint") : undefined}>
-          {label(cond, ctx)}
+          {condLabel(cond, ctx)}
         </ShadcnButton>
       )}
     >
@@ -133,7 +132,7 @@ function Chip({ cond, ctx, off, onToggle, onNegate, onOr, onRemove, onUnder, con
   return (
     <span className="inline-flex items-center">
       {chip}
-      <ShadcnButton variant="plain" size="none" onClick={onRemove} className="tap -ml-0.5 rounded p-0.5 text-muted-foreground hover:bg-hover hover:text-fg" aria-label={t("query.removeCondNamed", { cond: label(cond, ctx) })}>
+      <ShadcnButton variant="plain" size="none" onClick={onRemove} className="tap -ml-0.5 rounded p-0.5 text-muted-foreground hover:bg-hover hover:text-fg" aria-label={t("query.removeCondNamed", { cond: condLabel(cond, ctx) })}>
         <X size={12} />
       </ShadcnButton>
     </span>

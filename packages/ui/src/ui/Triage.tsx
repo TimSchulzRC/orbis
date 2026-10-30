@@ -1,5 +1,3 @@
-import { Checkbox } from "../components/ui/checkbox";
-import { Button as ShadcnButton } from "../components/ui/button";
 // "Sortieren" (design rules § 5): go through entries and decide – place, give a type, delete.
 // Works for any list or query block; the inbox is just one. An entry leaves the list as
 // soon as it no longer matches the query. The actions live in TriageActions.tsx.
@@ -9,13 +7,13 @@ import { Button as ShadcnButton } from "../components/ui/button";
 // marked (box, Space, Shift+j/k); then a bar of the same height acts on all of them.
 // Phone: the list; tapping opens the entry. (The inbox has its own ways: the tray's panel to look
 // in, the review to sort – views/Review.tsx.)
+import { Checkbox } from "../components/ui/checkbox";
+import { Button as ShadcnButton } from "../components/ui/button";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, FolderInput, Shapes, Sparkles, Trash2, Check, X } from "lucide-react";
 import { type Item, setMeta } from "@obtion/core/model";
 import type { Index } from "@obtion/core/graph";
 import { useIndex, useRepo, useSpaceId, useItemHref, spaceHref, useDesktop } from "../hooks";
-import { replica, spaceById } from "../accounts";
-import { SpaceScope } from "./Spaces";
 import { useT } from "../i18n";
 import { recentPlaces } from "../actions";
 import { Button, ItemIcon, Kbd, RelTime, Tag, TypeGlyph, cx } from "./bits";
@@ -52,7 +50,7 @@ function MarkBox({ on, onToggle, title }: { on: boolean; onToggle: () => void; t
   const { t } = useT();
   return (
     <label className="tap-edge relative flex size-6 shrink-0 cursor-pointer items-center justify-center" onClick={(e) => e.stopPropagation()}>
-      <Checkbox  checked={on} onCheckedChange={onToggle} aria-label={t("triage.markNamed", { title })} className="size-4 cursor-pointer accent-[var(--focus)] pointer-coarse:size-[18px]" />
+      <Checkbox checked={on} onCheckedChange={onToggle} aria-label={t("triage.markNamed", { title })} className="size-4 cursor-pointer pointer-coarse:size-[18px]" />
     </label>
   );
 }
@@ -60,18 +58,12 @@ function MarkBox({ on, onToggle, title }: { on: boolean; onToggle: () => void; t
 /** The keys go to one list only (a page may show several): the one used last, else the first. */
 let keyOwner: symbol | null = null;
 
-/**
- * `spaceOf`: the workspace of each entry, when they come from several; each row then says which,
- * and the entry shows and acts in its own.
- */
-export function Triage({ items, spaceOf: given }: { items: Item[]; spaceOf?: (i: Item) => string }) {
+export function Triage({ items }: { items: Item[] }) {
   const { t } = useT();
   const here = useSpaceId()!;
-  const spaceOf = (i: Item) => given?.(i) ?? here;
-  // ids are unique within a workspace only (the examples have the same ones everywhere)
-  const keyOf = (i: Item) => `${spaceOf(i)}/${i.id}`;
-  const ixOf = (i: Item) => replica(spaceOf(i)).repo.index();
-  const several = !!given && new Set(items.map(spaceOf)).size > 1;
+  const ix = useIndex();
+  const spaceOf = (_: Item) => here;
+  const keyOf = (i: Item) => i.id;
   const phone = !useDesktop();
   const [sel, setSel] = useState(0);
   const [marked, setMarked] = useState<Set<string>>(new Set());
@@ -156,7 +148,7 @@ export function Triage({ items, spaceOf: given }: { items: Item[]; spaceOf?: (i:
         const g = ageGroup(i.created);
         const head = sorted && (n === 0 || ageGroup(shown[n - 1]!.created) !== g);
         const count = head ? shown.filter((x) => ageGroup(x.created) === g).length : 0;
-        const hint = rowHint(i, ixOf(i), t);
+        const hint = rowHint(i, ix, t);
         const on = n === sel && !phone;
         return (
           <div key={keyOf(i)}>
@@ -169,7 +161,7 @@ export function Triage({ items, spaceOf: given }: { items: Item[]; spaceOf?: (i:
               data-triage={n}
               role="option"
               aria-selected={on}
-              onClick={() => (phone ? (location.hash = spaceHref(spaceOf(i), `/i/${encodeURIComponent(i.id)}`)) : setSel(n))}
+              onClick={() => (phone ? (location.hash = spaceHref(here, `/i/${encodeURIComponent(i.id)}`)) : setSel(n))}
               className={cx(
                 "relative grid cursor-default items-center gap-x-2 px-3 hover:bg-hover",
                 phone ? "min-h-12 grid-cols-[44px_minmax(0,1fr)_auto] py-1.5" : "h-10 grid-cols-[24px_minmax(0,1fr)_auto_minmax(64px,auto)]",
@@ -201,7 +193,6 @@ export function Triage({ items, spaceOf: given }: { items: Item[]; spaceOf?: (i:
                 </>
               )}
               <span className="whitespace-nowrap text-right text-xs text-muted-foreground">
-                {several && <span className="font-medium">{spaceById(spaceOf(i))?.name} · </span>}
                 <RelTime ts={i.created} />
               </span>
             </div>
@@ -264,26 +255,21 @@ export function Triage({ items, spaceOf: given }: { items: Item[]; spaceOf?: (i:
             <ul className="mt-3 space-y-1 text-sm">
               {many.map((i) => (
                 <li key={keyOf(i)} className="flex items-center gap-2">
-                  <ItemIcon item={i} size={14} ix={ixOf(i)} /> <span className="truncate">{i.title || i.file?.name || t("untitled")}</span>
+                  <ItemIcon item={i} size={14} /> <span className="truncate">{i.title || i.file?.name || t("untitled")}</span>
                 </li>
               ))}
             </ul>
           </div>
         ) : current ? (
-          <SpaceScope id={spaceOf(current)}>
-            <Detail item={current} onPlaced={(p) => act.place([current], p)} />
-          </SpaceScope>
+          <Detail item={current} onPlaced={(p) => act.place([current], p)} />
         ) : null}
-        <SpaceScope id={current ? spaceOf(current) : here}>
-          <ActionBar
-            onPlace={() => pick.setPlacing(targets())}
-            onType={() => pick.setTyping(targets().filter((i) => i.kind === "info"))}
-            toType={!many && current?.kind === "info" && act.firstType(current) && act.firstType(current) !== current.type ? act.firstType(current) : undefined}
-            onToType={(type) => act.giveType(targets(), type)}
-            onTrash={() => trash(targets())}
-            keys
-          />
-        </SpaceScope>
+        <ActionBar
+          onPlace={() => pick.setPlacing(targets())}
+          onType={() => pick.setTyping(targets().filter((i) => i.kind === "info"))}
+          toType={!many && current?.kind === "info" && act.firstType(current) && act.firstType(current) !== current.type ? act.firstType(current) : undefined}
+          onToType={(type) => act.giveType(targets(), type)}
+          onTrash={() => trash(targets())}
+        />
       </div>
       {pick.node}
     </div>
@@ -388,7 +374,7 @@ function Detail({ item, onPlaced }: { item: Item; onPlaced: (p: string) => void 
 }
 
 /** The fixed action bar under the detail: Einordnen (primary), Typ wählen, Zur Karte, Löschen; key hints below. */
-function ActionBar({ onPlace, onType, toType, onToType, onTrash, keys }: { onPlace: () => void; onType: () => void; toType?: string; onToType: (t: string) => void; onTrash: () => void; keys?: boolean }) {
+function ActionBar({ onPlace, onType, toType, onToType, onTrash }: { onPlace: () => void; onType: () => void; toType?: string; onToType: (t: string) => void; onTrash: () => void }) {
   const { t } = useT();
   const ix = useIndex();
   return (
@@ -410,19 +396,17 @@ function ActionBar({ onPlace, onType, toType, onToType, onTrash, keys }: { onPla
           <Trash2 size={15} /> {t("triage.delete")} <Kbd>x</Kbd>
         </Button>
       </div>
-      {keys && (
-        <p className="flex flex-wrap gap-x-3 px-7 pb-3 text-xs text-muted-foreground">
-          <span>
-            <Kbd>j</Kbd> <Kbd>k</Kbd> {t("triage.keys.next")}
-          </span>
-          <span>
-            <Kbd>{t("triage.keys.space")}</Kbd> {t("triage.keys.select")}
-          </span>
-          <span>
-            <Kbd>u</Kbd> {t("triage.keys.undo")}
-          </span>
-        </p>
-      )}
+      <p className="flex flex-wrap gap-x-3 px-7 pb-3 text-xs text-muted-foreground">
+        <span>
+          <Kbd>j</Kbd> <Kbd>k</Kbd> {t("triage.keys.next")}
+        </span>
+        <span>
+          <Kbd>{t("triage.keys.space")}</Kbd> {t("triage.keys.select")}
+        </span>
+        <span>
+          <Kbd>u</Kbd> {t("triage.keys.undo")}
+        </span>
+      </p>
     </div>
   );
 }

@@ -76,7 +76,7 @@ export function embedHTML(item: Item, size?: number): string {
 
 /** The replica whose titles [[links]] resolve against while rendering (the workspace of the text). */
 let rendering: Repo | undefined;
-export function renderMarkdown(src: string, r?: Repo): string {
+function renderMarkdown(src: string, r?: Repo): string {
   rendering = r;
   try {
     return md.parse(src, { async: false }) as string;

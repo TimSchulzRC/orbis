@@ -1,13 +1,13 @@
+// A type's page: the list of its entries with views as tabs (like a database in Notion). Behind
+// "…" › "Typ bearbeiten": identity, description (the agent reads it), properties and capabilities –
+// a type is an information with a schema; changing it is editing, not programming.
 import { Checkbox } from "../components/ui/checkbox";
 import { Button as ShadcnButton } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
 import { NativeSelect } from "../components/ui/native-select";
-// A type's page: the list of its entries with views as tabs (like a database in Notion). Behind
-// "…" › "Typ bearbeiten": identity, description (the agent reads it), properties and capabilities –
-// a type is an information with a schema; changing it is editing, not programming.
 import { useEffect, useState } from "react";
-import { MoreHorizontal, Plus, Trash2, GripVertical, ArrowUp, ArrowDown, Layers, Tag as TagIcon, X, Pencil, Pin, RotateCcw } from "lucide-react";
+import { MoreHorizontal, Plus, Trash2, GripVertical, ArrowUp, ArrowDown, Tag as TagIcon, X, Pencil, Pin, RotateCcw } from "lucide-react";
 import {
   type Item,
   type OptionDef,
@@ -223,7 +223,7 @@ function AddProperty({ item, onAdded }: { item: Item; onAdded: (id: string) => v
     if (!name.trim()) return;
     const id = shortId("p");
     const { id: _i, sort: _s, ...rest } = copy ?? ({ id: "", sort: "", name: "", kind } as PropDef);
-    // options get fresh ids? No: keeping them lets queries by option name and conversions work the same.
+    // copied options keep their ids: queries by option name and conversions then work the same.
     repo.change(item.id, (d) => {
       upsertProp(d, id, { ...rest, name: name.trim(), kind: copy ? copy.kind : kind, options: copy?.options ?? (kind === "status" ? defaultStatusOptions(t) : kind === "select" || kind === "multiselect" ? [] : undefined), ...(!copy && kind === "relation" ? { inverseName: t("type.inverseOf", { name: name.trim() }) } : {}) });
       // the first status property is what ticking off and "offen" use: switch the capability on with it
@@ -307,7 +307,7 @@ function PropEditor({ item, prop }: { item: Item; prop: PropDef }) {
       {field(t("type.propDescription"), <Textarea key={prop.id + "d"} defaultValue={prop.description ?? ""} onBlur={(e) => set({ description: e.target.value || null as any })} rows={2} className={box} />)}
       {prop.kind !== "computed" && (
         <label className="tap-row mt-3 flex items-center gap-2 text-sm">
-          <Checkbox  checked={!!prop.hideEmpty} onCheckedChange={(checked) => set({ hideEmpty: (checked === true) || (null as any) })} className="accent-[var(--focus)]" />
+          <Checkbox checked={!!prop.hideEmpty} onCheckedChange={(checked) => set({ hideEmpty: checked === true || (null as any) })} />
           <span>
             {t("type.hideEmpty")} <span className="text-xs text-muted-foreground">– {t("type.hideEmptyHint")}</span>
           </span>
@@ -318,7 +318,7 @@ function PropEditor({ item, prop }: { item: Item; prop: PropDef }) {
         field(
           t("type.dateRange"),
           <label className="flex items-center gap-2 text-sm">
-            <Checkbox  checked={!!prop.range} onCheckedChange={(checked) => set({ range: (checked === true) || (null as any) })} className="accent-[var(--focus)]" /> {t("type.range")}
+            <Checkbox checked={!!prop.range} onCheckedChange={(checked) => set({ range: checked === true || (null as any) })} /> {t("type.range")}
           </label>,
         )}
       {prop.kind === "relation" && (
@@ -336,7 +336,7 @@ function PropEditor({ item, prop }: { item: Item; prop: PropDef }) {
             <Input key={prop.id + "i"} defaultValue={prop.inverseName ?? ""} placeholder={t("type.inverseOf", { name: prop.name })} onBlur={(e) => set({ inverseName: e.target.value.trim() || (null as any) })} className={box} />,
           )}
           <label className="mt-2 flex items-center gap-2 text-sm">
-            <Checkbox  checked={!!prop.symmetric} onCheckedChange={(checked) => set({ symmetric: (checked === true) || (null as any) })} className="accent-[var(--focus)]" /> {t("type.symmetric")}
+            <Checkbox checked={!!prop.symmetric} onCheckedChange={(checked) => set({ symmetric: checked === true || (null as any) })} /> {t("type.symmetric")}
           </label>
         </>
       )}
@@ -470,7 +470,7 @@ function Capabilities({ item }: { item: Item }) {
             ))}
           </NativeSelect>,
         )}
-        {row(t("caps.updates"), t("caps.updatesHint"), <Checkbox  checked={!!c.updates} onCheckedChange={(checked) => set("updates", (checked === true) || null)} className="size-4 accent-[var(--focus)]" aria-label={t("caps.updates")} />)}
+        {row(t("caps.updates"), t("caps.updatesHint"), <Checkbox checked={!!c.updates} onCheckedChange={(checked) => set("updates", checked === true || null)} className="size-4" aria-label={t("caps.updates")} />)}
         {row(
           t("caps.primaryChild"),
           t("caps.primaryChildHint"),
@@ -485,7 +485,7 @@ function Capabilities({ item }: { item: Item }) {
         )}
         <div className="py-2">
           <label className="flex items-center gap-2 text-sm font-medium">
-            <Checkbox  checked={!!c.template} onCheckedChange={(checked) => set("template", (checked === true) ? { body: "" } : null)} className="size-4 accent-[var(--focus)]" /> {t("caps.template")}
+            <Checkbox checked={!!c.template} onCheckedChange={(checked) => set("template", checked === true ? { body: "" } : null)} className="size-4" /> {t("caps.template")}
           </label>
           <p className="text-xs text-muted-foreground">{t("caps.templateHint")}</p>
           {c.template && (
@@ -511,7 +511,7 @@ function DeleteTypeDialog({ item, onClose, toTag }: { item: Item; onClose: () =>
   const ix = useIndex();
   const s = item.schema!;
   const u = typeUsage(ix, item.id);
-  const [mode, setMode] = useState<"tag" | "type" | "remove">(toTag ? "tag" : "tag");
+  const [mode, setMode] = useState<"tag" | "type" | "remove">("tag");
   const [tag, setTag] = useState(s.name.toLowerCase().replace(/\s+/g, "-"));
   const others = [...ix.types.values()].filter((x) => x.id !== item.id);
   const [target, setTarget] = useState(others[0]?.id ?? "");
@@ -616,7 +616,7 @@ function FromTagDialog({ item, onClose }: { item: Item; onClose: () => void }) {
         </div>
       )}
       <label className="mt-3 flex items-center gap-2 text-sm">
-        <Checkbox  checked={removeTag} onCheckedChange={(checked) => setRemoveTag((checked === true))} className="accent-[var(--focus)]" /> {t("type.removeTagAfter", { tag })}
+        <Checkbox checked={removeTag} onCheckedChange={(checked) => setRemoveTag(checked === true)} /> {t("type.removeTagAfter", { tag })}
       </label>
       <div className="mt-4 flex justify-end gap-2">
         <Button variant="outline" onClick={onClose}>
@@ -636,8 +636,6 @@ function FromTagDialog({ item, onClose }: { item: Item; onClose: () => void }) {
     </Dialog>
   );
 }
-
-export { Layers };
 
 /**
  * What a relation may point to: a type (the usual case), a tag, or – for those who want it –

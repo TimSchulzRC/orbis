@@ -26,7 +26,7 @@ export interface Moved {
 
 /** The items a move of `root` takes along: the root and what hangs only below it (no types). */
 export function movedItems(ix: Index, root: string): Item[] {
-  return [root, ...onlyBelow(ix, root)].map((id) => ix.get(id)).filter((r): r is Item => !!r && !r.deleted && r.type !== META_TYPE && r.kind !== "settings" && r.kind !== "op");
+  return [root, ...onlyBelow(ix, root)].map((id) => ix.get(id)).filter((r): r is Item => !!r && r.type !== META_TYPE);
 }
 
 /** What a move would change on the way, to show before it happens. Empty lists, 0: it goes over as it is. */
@@ -145,7 +145,7 @@ export function copyToWorkspace(src: Index, root: string, dst: { w: Writer; ix: 
         const value = p && q ? mapValue(p, q, v) : undefined;
         if (q && value !== undefined) setProp(doc, q.id, value);
         else if (p) {
-          const free = toFree(p, v, src);
+          const free = toFree(p, v);
           if (free && r.extra[p.name] === undefined) setExtra(doc, p.name, free);
         }
       }

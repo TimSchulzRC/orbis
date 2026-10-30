@@ -80,7 +80,7 @@ export class Index {
   typeName(id?: string | null): string | undefined {
     if (!id) return undefined;
     if (id === META_TYPE) return undefined;
-    return (this.types.get(id) ?? this.all.get(id))?.schema?.name;
+    return this.all.get(id)?.schema?.name;
   }
 
   /** The name of a type's list: its plural ("Bücher"), a guess in the setup language while unset. */
@@ -232,13 +232,9 @@ export class Index {
     return d;
   }
 
-  isAncestor(ancestor: string, id: string): boolean {
-    return this.descendants(ancestor).has(id);
-  }
-
   /** Would putting `child` under `parent` create a cycle? */
   wouldCycle(child: string, parent: string): boolean {
-    return child === parent || this.isAncestor(child, parent);
+    return child === parent || this.descendants(child).has(parent);
   }
 
   /**
@@ -293,7 +289,6 @@ export class Index {
       const m = new Map<string, Backlink[]>();
       const add = (to: string, b: Backlink) => (m.get(to) ?? m.set(to, []).get(to)!).push(b);
       for (const r of this.live) {
-        if (r.kind !== "info" && r.kind !== "datei") continue;
         const seen = new Set<string>();
         for (const l of this.textLinks(r)) {
           const k = l.to + (l.embed ? "e" : "l");

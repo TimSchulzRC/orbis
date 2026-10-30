@@ -2,8 +2,7 @@
 // review, Heute, the sidebar and the phone's bar. Each entry is sorted in its own workspace; ids are
 // unique within a workspace only, so an entry is known by its key "<workspace>/<id>".
 import { useSyncExternalStore } from "react";
-import type { Item } from "@obtion/core/model";
-import { SETTINGS_ID } from "@obtion/core/model";
+import { type Item, SETTINGS_ID } from "@obtion/core/model";
 import { runQuery } from "@obtion/core/query";
 import { useAccounts } from "../accounts";
 import { useReplicas } from "./Spaces";

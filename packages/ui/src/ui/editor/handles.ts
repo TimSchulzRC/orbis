@@ -26,7 +26,7 @@ function blockAtY(view: EditorView, y: number) {
 }
 
 /** The menu of a block, at a point of the screen. */
-export function blockMenu(view: EditorView, pos: number, at: { left: number; top: number }) {
+function blockMenu(view: EditorView, pos: number, at: { left: number; top: number }) {
   const line = view.state.doc.lineAt(pos);
   const current = kindOf(line.text);
   const fenced = blockAt(view.state, pos).to !== line.to || line.text.startsWith("```");

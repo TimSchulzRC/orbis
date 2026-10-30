@@ -1,7 +1,7 @@
-import { Table as ShadcnTable, TableHeader, TableBody, TableRow, TableHead, TableCell } from "../components/ui/table";
-import { Button as ShadcnButton } from "../components/ui/button";
 // Projects with their progress and next task (design rules § 2.4) – in query blocks
 // with "spalten:fortschritt,nächste" (an overview's "Aktive Projekte").
+import { Table as ShadcnTable, TableHeader, TableBody, TableRow, TableHead, TableCell } from "../components/ui/table";
+import { Button as ShadcnButton } from "../components/ui/button";
 import { useState } from "react";
 import { ChevronRight, CornerDownRight } from "lucide-react";
 import { type Item, todayISO } from "@obtion/core/model";

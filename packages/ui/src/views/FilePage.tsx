@@ -1,8 +1,8 @@
-import { Input } from "../components/ui/input";
-import { Textarea } from "../components/ui/textarea";
 // A file behaves like an information whose content is the file itself: title, description,
 // tags, refs, "Teil von", and "Verwendet in" instead of a folder.
-import { useEffect, useMemo, useState } from "react";
+import { Input } from "../components/ui/input";
+import { Textarea } from "../components/ui/textarea";
+import { useEffect, useState } from "react";
 import { ArrowRightLeft, Download, Trash2, RotateCcw, MoreHorizontal, Replace } from "lucide-react";
 import { type Item, setFileMeta, todayISO } from "@obtion/core/model";
 import { fmtBytes, fmtDate } from "@obtion/core/i18n";
@@ -45,7 +45,6 @@ export function FilePage({ item }: { item: Item }) {
     };
   }, [f.hash, local]);
   const missing = files.isMissing(f.hash);
-  const desc = useMemo(() => item.body, [item.body]);
   const facts: [string, React.ReactNode][] = [
     [t("file.type"), `${t("filetype." + f.filetype)} · ${(f.name.split(".").pop() ?? "").toUpperCase()}`],
     [t("file.size"), [f.width && f.height ? `${f.width} × ${f.height}` : "", f.pages ? t("file.pages", { count: f.pages }) : "", f.duration ? fmtDuration(f.duration) : "", fmtBytes(lang, f.size)].filter(Boolean).join(" · ")],
@@ -129,7 +128,7 @@ export function FilePage({ item }: { item: Item }) {
         {!isImg && f.filetype !== "pdf" && f.filetype !== "audio" && f.filetype !== "video" && <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">{f.name}</div>}
       </div>
       <Textarea
-        defaultValue={desc}
+        defaultValue={item.body}
         key={item.id}
         onBlur={(e) => e.target.value !== item.body && repo.setBody(item.id, e.target.value)}
         placeholder={t("file.descriptionPlaceholder")}

@@ -12,7 +12,7 @@ import { type Item, isContent, stripQueryBlocks } from "./model";
 const WORD = /[\p{L}\p{N}_]+(?:-[\p{L}\p{N}_]+)*/gu;
 
 /** Lower case, umlauts as two letters: the form every query term takes. */
-export function foldTerm(term: string): string {
+function foldTerm(term: string): string {
   return term.toLowerCase().replace(/ä/g, "ae").replace(/ö/g, "oe").replace(/ü/g, "ue").replace(/ß/g, "ss");
 }
 const plainVowels = (term: string) => term.toLowerCase().replace(/ä/g, "a").replace(/ö/g, "o").replace(/ü/g, "u").replace(/ß/g, "ss");

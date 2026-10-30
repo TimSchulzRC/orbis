@@ -1,17 +1,16 @@
+// Sections of a page, all derived from "Teil von" and the type's capabilities:
+// the main child list (e.g. tasks of a project, over all levels), same-type children
+// (sub-projects), other children, notes (children without a type) and updates.
 import { Button as ShadcnButton } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
 import { NativeSelect } from "../components/ui/native-select";
-// Sections of a page, all derived from "Teil von" and the type's capabilities:
-// the main child list (e.g. tasks of a project, over all levels), same-type children
-// (sub-projects), other children, notes (children without a type) and updates.
 import { useState } from "react";
 import { Plus, Send } from "lucide-react";
 import { type Item, type ViewDef, titleKey } from "@obtion/core/model";
 import type { Index } from "@obtion/core/graph";
-import { LANGS, translate } from "@obtion/core/i18n";
+import { LANGS, fmtBytes, fmtDateTime, translate } from "@obtion/core/i18n";
 import { groupItems, runQuery, shownByBlocks } from "@obtion/core/query";
-import { fmtBytes, fmtDateTime } from "@obtion/core/i18n";
 import { dueOf, dueProp, isDone, priorityProp, statusOf, statusProp } from "@obtion/core/traits";
 import { repo } from "../repo";
 import { itemHref, useIndex } from "../hooks";
@@ -34,7 +33,7 @@ function listTitle(ix: Index, typeId: string, same: boolean): string {
   return isTask ? tr("children.subtasks") : tr("children.subOf", { name: plural });
 }
 
-/** A quiet count next to a section title. */
+/** A field to add an entry by its title. */
 function AddRow({ label, onAdd, autoFocus, onDone }: { label: string; onAdd: (title: string) => void; autoFocus?: boolean; onDone?: () => void }) {
   const [v, setV] = useState("");
   return (
@@ -149,12 +148,12 @@ export function ChildList({ item, typeId }: { item: Item; typeId: string }) {
 }
 
 /** Files of a page that gathers: below it, or used in an entry below it (same as the query unter:diese). */
-export function filesBelow(item: Item, ix: Index): Item[] {
+function filesBelow(item: Item, ix: Index): Item[] {
   return runQuery({ where: { and: [{ file: true }, { under: { id: item.id } }] }, sort: [{ key: "created", desc: true }] }, { ix, thisId: item.id }).items;
 }
 
 /** Notes (entries without a type) on every level below, for pages that gather like a project. */
-export function notesBelow(item: Item, ix: Index): Item[] {
+function notesBelow(item: Item, ix: Index): Item[] {
   const hidden = shownByBlocks(item, ix);
   return [...ix.descendants(item.id)]
     .map((id) => ix.get(id)!)

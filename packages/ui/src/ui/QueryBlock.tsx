@@ -1,8 +1,8 @@
+// Live query blocks inside a text: ```abfrage … ``` is stored as JSON with ids and shown
+// as its results. Text-form blocks (typed by hand or by an agent) are normalised to JSON.
 import { Checkbox } from "../components/ui/checkbox";
 import { Button as ShadcnButton } from "../components/ui/button";
 import { Input } from "../components/ui/input";
-// Live query blocks inside a text: ```abfrage … ``` is stored as JSON with ids and shown
-// as its results. Text-form blocks (typed by hand or by an agent) are normalised to JSON.
 import { StrictMode, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { StateEffect, StateField, type EditorState, type Extension, RangeSetBuilder } from "@codemirror/state";
@@ -26,7 +26,7 @@ function blockTabs(def: QueryDef): ViewTab[] {
   return [{ ...legacyTab({ display: def.view, sort: def.sort, group: def.group, columns: def.columns }), ...(def.tabs?.[0] ? { widths: def.tabs[0].widths, name: def.tabs[0].name } : {}) }];
 }
 
-export function QueryBlockView({ src, thisId, n = 0, onChange, onDelete, readOnly }: { src: string; thisId?: string; n?: number; onChange?: (def: QueryDef) => void; onDelete?: () => void; readOnly?: boolean }) {
+function QueryBlockView({ src, thisId, n = 0, onChange, onDelete, readOnly }: { src: string; thisId?: string; n?: number; onChange?: (def: QueryDef) => void; onDelete?: () => void; readOnly?: boolean }) {
   const ix = useIndex();
   const { t } = useT();
   const { def: stored } = readBlock(src, ix);
@@ -123,7 +123,7 @@ export function QueryBlockView({ src, thisId, n = 0, onChange, onDelete, readOnl
           />
           <QueryEditor context def={{ where: baseWhere }} autoFocus={!def.where} onChange={(d) => JSON.stringify(d.where) !== JSON.stringify(baseWhere) && setDraft({ scope: "base", where: d.where })} />
           <label className="flex items-center gap-1 text-xs text-muted-foreground">
-            <Checkbox  checked={!!def.hideEmpty} onCheckedChange={(checked) => edit({ ...stored, hideEmpty: (checked === true) || undefined })} className="accent-[var(--focus)]" />
+            <Checkbox checked={!!def.hideEmpty} onCheckedChange={(checked) => edit({ ...stored, hideEmpty: checked === true || undefined })} />
             {t("block.hideEmpty")}
           </label>
           {dirty && draft?.scope === "base" && <DraftBar onDiscard={() => setDraft(null)} onSave={save} />}
@@ -148,7 +148,6 @@ export function QueryBlockView({ src, thisId, n = 0, onChange, onDelete, readOnl
       <Results
         def={eff}
         thisId={thisId}
-        compact
         keyPrefix={`block:${thisId}`}
         look={{ key: `block:${thisId}:${n}:${tab.id}`, tab, onLook: onChange && !readOnly ? (p) => patchTab(tab.id, p) : undefined }}
         empty={<p className="px-0 py-1 text-sm text-muted-foreground">{def.where && "inbox" in def.where ? t("inbox.emptyShort") : t("query.empty")}</p>}

@@ -82,7 +82,7 @@ class HintWidget extends WidgetType {
 
 const hide = Decoration.replace({});
 /** A heading's "# ", with the space that makes it one. */
-export const HEADING = /^(#{1,6}) /;
+const HEADING = /^(#{1,6}) /;
 const line = (cls: string) => Decoration.line({ class: cls });
 const INLINE: Record<string, string> = { Emphasis: "EmphasisMark", StrongEmphasis: "EmphasisMark", Strikethrough: "StrikethroughMark", InlineCode: "CodeMark" };
 

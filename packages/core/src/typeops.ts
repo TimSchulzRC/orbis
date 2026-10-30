@@ -79,7 +79,7 @@ export function wouldBeInInbox(ix: Index, ids: string[], change: (i: Item) => It
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /** A typed value as a free property (simple kinds only). */
-export function toFree(p: PropDef, v: Value | undefined, ix: Index): FreeValue | undefined {
+export function toFree(p: PropDef, v: Value | undefined): FreeValue | undefined {
   if (v === undefined || v === null || v === "") return undefined;
   switch (p.kind) {
     case "text":
@@ -174,11 +174,8 @@ function convertItem(doc: Y.Doc, item: Item, from: TypeSchema | undefined, ix: I
     const mapped = match ? mapValue(p, match, v) : undefined;
     if (match && mapped !== undefined) {
       setP(match.id, mapped);
-      if (match.id !== p.id) {
-        /* old value stays under its old id as well, so undo is exact */
-      }
     } else {
-      const fv = toFree(p, v, ix);
+      const fv = toFree(p, v);
       if (fv) setX(p.name, fv);
     }
   }
@@ -253,7 +250,7 @@ export function tagToType(w: Writer, ix: Index, tag: string, typeId: string, opt
     w.change(id, (doc) => {
       items.push(
         convertItem(doc, item, ix.schemaOf(item), ix, {
-          type: item.type === typeId ? typeId : typeId,
+          type: typeId,
           schema: item.type === typeId ? undefined : target,
           removeTag: opts.removeTag ? normalizeTag(tag) : undefined,
         }),

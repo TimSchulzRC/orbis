@@ -8,7 +8,7 @@ import type { EditorView } from "@codemirror/view";
 import { CheckSquare, Heading1, Heading2, Heading3, List, ListOrdered, Quote, Type } from "lucide-react";
 import { tr } from "../../i18n";
 
-export type BlockKind = "text" | "h1" | "h2" | "h3" | "bullet" | "number" | "todo" | "quote";
+type BlockKind = "text" | "h1" | "h2" | "h3" | "bullet" | "number" | "todo" | "quote";
 
 export const KINDS: { kind: BlockKind; prefix: string; icon: ComponentType<{ size?: number }> }[] = [
   { kind: "text", prefix: "", icon: Type },

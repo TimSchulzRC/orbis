@@ -1,8 +1,8 @@
+// Before the app: signing in or creating an account on this server, joining by an invite link
+// (#/join/<code>). Then a workspace has to be open.
 import { Button as ShadcnButton } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { BrandLogo } from "../ui/BrandLogo";
-// Before the app: signing in or creating an account on this server, joining by an invite link
-// (#/join/<code>). Then a workspace has to be open.
 import { useEffect, useState, type ReactNode } from "react";
 import { createSpace, invite, joinInvite, serverInfo, signIn, signUp, useAccounts } from "../accounts";
 import { useRoute } from "../hooks";

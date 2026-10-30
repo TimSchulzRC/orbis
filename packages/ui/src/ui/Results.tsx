@@ -1,6 +1,6 @@
-import { Button as ShadcnButton } from "../components/ui/button";
 // Showing query results: list, table, board, tree, gallery and triage ("sortieren").
 // Used by collections, query blocks in texts and the sections of a page.
+import { Button as ShadcnButton } from "../components/ui/button";
 import { useState } from "react";
 import { AlertTriangle, ChevronDown, ChevronRight, EyeOff } from "lucide-react";
 import { type Item, type StatusGroup, type ViewKind, todayISO } from "@obtion/core/model";
@@ -9,7 +9,7 @@ import { fmtDate, fmtNumber } from "@obtion/core/i18n";
 import { firstOfGroup, statusOf, statusProp } from "@obtion/core/traits";
 import { plainText } from "@obtion/core/search";
 import { repo } from "../repo";
-import { useIndex, useRepo, useSpaceId, itemHref, go } from "../hooks";
+import { useIndex, useRepo, itemHref, go } from "../hooks";
 import { useT } from "../i18n";
 import { files, useBlobUrl } from "../files";
 import { ItemIcon, StatusPill, cx, Tag, ProgressCount } from "./bits";
@@ -18,8 +18,6 @@ import { Triage } from "./Triage";
 import { CalendarView, TimelineView } from "./TimeViews";
 import { ProjectTable } from "./ProjectTable";
 import { type Look, AreaChip, GroupedTable, GroupChip, HiddenGroups, PercentBar, hiddenPatch, splitHidden } from "./Table";
-
-export const VIEWS: ViewKind[] = ["list", "table", "board", "calendar", "timeline", "tree", "gallery", "triage"];
 
 export function useQuery(def: QueryDef, thisId?: string) {
   const ix = useIndex();
@@ -43,7 +41,7 @@ function InboxNudge({ total }: { total: number }) {
   );
 }
 
-export function MissingTypes({ ids }: { ids: string[] }) {
+function MissingTypes({ ids }: { ids: string[] }) {
   const { t } = useT();
   const ix = useIndex();
   if (!ids.length) return null;
@@ -54,7 +52,7 @@ export function MissingTypes({ ids }: { ids: string[] }) {
   );
 }
 
-export function Results({ def, thisId, display, empty, compact, keyPrefix = "", look }: { def: QueryDef; thisId?: string; display?: ViewKind; empty?: React.ReactNode; compact?: boolean; keyPrefix?: string; look?: Look }) {
+export function Results({ def, thisId, display, empty, keyPrefix = "", look }: { def: QueryDef; thisId?: string; display?: ViewKind; empty?: React.ReactNode; keyPrefix?: string; look?: Look }) {
   const { t } = useT();
   const res = useQuery(def, thisId);
   const { total, missingTypes, ctx } = res;
@@ -87,7 +85,7 @@ export function Results({ def, thisId, display, empty, compact, keyPrefix = "", 
           <ProjectTable items={items} />
         </div>
       ) : (
-        <ListView items={items} def={def} ctx={ctx} compact={compact} look={look} />
+        <ListView items={items} def={def} ctx={ctx} look={look} />
       )}
       {def.limit && total > res.items.length && (isInboxQuery(def) ? <InboxNudge total={total} /> : <p className="px-2 pt-1 text-xs text-muted-foreground">{t("query.more", { count: total - res.items.length })}</p>)}
       {res.items.length > items.length && (
@@ -101,7 +99,7 @@ export function Results({ def, thisId, display, empty, compact, keyPrefix = "", 
 
 // ---------- list ----------
 
-export function ListView({ items, def, ctx, compact, look }: { items: Item[]; def: QueryDef; ctx: EvalCtx; compact?: boolean; look?: Look }) {
+function ListView({ items, def, ctx, look }: { items: Item[]; def: QueryDef; ctx: EvalCtx; look?: Look }) {
   const { t } = useT();
   const base = pathBase(def, ctx);
   const [groups, hidden] = def.group ? splitHidden(groupItems(items, def.group, ctx, base), look?.tab) : [groupItems(items, def.group, ctx, base), []];
@@ -120,7 +118,7 @@ export function ListView({ items, def, ctx, compact, look }: { items: Item[]; de
             const rel = base ? ix.relPath(base, i.id) : ix.homePath(i.id);
             const showPath = def.group !== "path" && !depth && rel && rel.length > 0 ? rel : undefined;
             const next = withNext ? ix.nextTask(i.id, todayISO()) : undefined;
-            return <ItemRow key={i.id} item={i} sub={depth} path={showPath} compact={compact} note={next && t("row.next", { title: next.title || t("untitled") })} />;
+            return <ItemRow key={i.id} item={i} sub={depth} path={showPath} note={next && t("row.next", { title: next.title || t("untitled") })} />;
           })}
         </Group>
       ))}
@@ -370,7 +368,7 @@ function TreeView({ items }: { items: Item[] }) {
     seen.has(i.id) ? null : (
       <div key={i.id}>
         <div style={{ paddingLeft: depth * 18 }}>
-          <ItemRow item={i} compact />
+          <ItemRow item={i} />
         </div>
         {(kids.get(i.id) ?? []).map((k) => render(k, depth + 1, new Set([...seen, i.id])))}
       </div>
@@ -401,7 +399,7 @@ function firstImage(item: Item): string | undefined {
 }
 
 function GalleryTile({ item, ctx }: { item: Item; ctx: EvalCtx }) {
-  const { t, lang } = useT();
+  const { t } = useT();
   const hash = firstImage(item);
   const url = useBlobUrl(hash, true);
   const f = item.file;
@@ -446,7 +444,6 @@ function GalleryTile({ item, ctx }: { item: Item; ctx: EvalCtx }) {
         <span className="truncate">{item.title || t("untitled")}</span>
       </p>
       {meta && <p className="truncate text-xs text-muted-foreground">{meta}</p>}
-      {void lang}
     </a>
   );
 }

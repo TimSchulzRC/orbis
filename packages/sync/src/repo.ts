@@ -346,7 +346,7 @@ export class Repo {
       this.status.synced = false;
       this.emit();
       // The outbox is pushed after the server's "welcome" was checked (see onMessage).
-      for (const area of AREAS) this.send({ t: "hello", area, since: this.status.lastSeq, sinceId: this.lastId, client: this.device, device: this.device });
+      for (const area of AREAS) this.send({ t: "hello", area, since: this.status.lastSeq, sinceId: this.lastId, device: this.device });
       ping = setInterval(() => this.send({ t: "ping" }), 25000);
     };
     // Handle messages strictly in order (the server-identity check must finish before updates apply).
@@ -420,7 +420,7 @@ export class Repo {
         this.status.lastSeq = 0;
         this.lastId = undefined;
         await this.db.write({ cursor: { lastSeq: 0 } });
-        this.send({ t: "hello", area: msg.area, since: 0, client: this.device, device: this.device });
+        this.send({ t: "hello", area: msg.area, since: 0, device: this.device });
       }
       this.serverId = msg.hub;
       if (known !== msg.hub) await this.db.write({ serverId: msg.hub });

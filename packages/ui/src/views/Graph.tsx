@@ -1,8 +1,8 @@
+// Graph: informations as nodes; links, "Teil von" and relations as edges, filterable.
 import { Checkbox } from "../components/ui/checkbox";
 import { Button as ShadcnButton } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { NativeSelect } from "../components/ui/native-select";
-// Graph: informations as nodes; links, "Teil von" and relations as edges, filterable.
 import { useTheme } from "../theme";
 import { useEffect, useMemo, useRef, useState } from "react";
 import ForceGraph from "force-graph";
@@ -66,19 +66,7 @@ function buildGraph(ix: Index, items: Item[], kinds: Set<EdgeKind>) {
   return { nodes, links };
 }
 
-function GraphCanvas({
-  data,
-  focus,
-  highlight,
-  height,
-  onReady,
-}: {
-  data: { nodes: GNode[]; links: GLink[] };
-  focus?: string;
-  highlight?: Set<string>;
-  height?: number;
-  onReady?: (g: ForceGraph<GNode, GLink>) => void;
-}) {
+function GraphCanvas({ data, highlight }: { data: { nodes: GNode[]; links: GLink[] }; highlight?: Set<string> }) {
   const host = useRef<HTMLDivElement>(null);
   const graph = useRef<ForceGraph<GNode, GLink> | null>(null);
   const hover = useRef<GNode | null>(null);
@@ -115,18 +103,13 @@ function GraphCanvas({
         else ctx.arc(n.x!, n.y!, r, 0, 2 * Math.PI);
         ctx.fillStyle = colorOf(n.color);
         ctx.fill();
-        if (n.id === focus) {
-          ctx.lineWidth = 2 / scale;
-          ctx.strokeStyle = text;
-          ctx.stroke();
-        }
-        const showLabel = n.id === focus || h?.id === n.id || (h && neighbours.get(h.id)?.has(n.id)) || scale > 2.2 || (scale > 1 && n.deg > 6) || (lit?.has(n.id) && lit.size < 30);
+        const showLabel = h?.id === n.id || (h && neighbours.get(h.id)?.has(n.id)) || scale > 2.2 || (scale > 1 && n.deg > 6) || (lit?.has(n.id) && lit.size < 30);
         if (showLabel && !dim) {
           const fs = Math.max(10 / scale, 2.5);
-          ctx.font = `${n.id === focus || h?.id === n.id ? 600 : 400} ${fs}px system-ui, sans-serif`;
+          ctx.font = `${h?.id === n.id ? 600 : 400} ${fs}px system-ui, sans-serif`;
           ctx.textAlign = "center";
           ctx.textBaseline = "top";
-          ctx.fillStyle = h?.id === n.id || n.id === focus ? text : faint;
+          ctx.fillStyle = h?.id === n.id ? text : faint;
           const label = n.title.length > 40 ? n.title.slice(0, 38) + "…" : n.title;
           ctx.fillText(label, n.x!, n.y! + r + 1.5);
         }
@@ -155,11 +138,10 @@ function GraphCanvas({
     graph.current = g;
     const ro = new ResizeObserver(() => {
       g.width(el.clientWidth);
-      g.height(height ?? el.clientHeight);
+      g.height(el.clientHeight);
     });
     ro.observe(el);
     (g as any).__neighbours = neighbours;
-    onReady?.(g);
     return () => {
       ro.disconnect();
       g._destructor();
@@ -185,8 +167,7 @@ function GraphCanvas({
       return o ? Object.assign(o, { title: n.title, color: n.color, deg: n.deg }) : { ...n };
     });
     g.graphData({ nodes, links: data.links.map((l) => ({ ...l })) });
-    if (focus) setTimeout(() => g.zoomToFit(400, 30), 600);
-    else (g as any).__fitted = false;
+    (g as any).__fitted = false;
   }, [data]);
 
   // Highlight changes don't move nodes, so the paused canvas must be told to repaint.
@@ -199,7 +180,7 @@ function GraphCanvas({
     return () => clearTimeout(t);
   }, [highlight]);
 
-  return <div ref={host} style={height ? { height } : undefined} className={height ? "w-full" : "absolute inset-0"} />;
+  return <div ref={host} className="absolute inset-0" />;
 }
 
 export function GraphView() {
@@ -269,10 +250,10 @@ export function GraphView() {
             ))}
           </NativeSelect>
           <label className="flex items-center gap-1 text-xs text-muted-foreground">
-            <Checkbox  checked={hideOrphans} onCheckedChange={(checked) => setHideOrphans((checked === true))} /> {t("graph.hideUnlinked")}
+            <Checkbox checked={hideOrphans} onCheckedChange={(checked) => setHideOrphans(checked === true)} /> {t("graph.hideUnlinked")}
           </label>
           <label className="flex items-center gap-1 text-xs text-muted-foreground">
-            <Checkbox  checked={hideDone} onCheckedChange={(checked) => setHideDone((checked === true))} /> {t("graph.hideDone")}
+            <Checkbox checked={hideDone} onCheckedChange={(checked) => setHideDone(checked === true)} /> {t("graph.hideDone")}
           </label>
         </div>
       </div>

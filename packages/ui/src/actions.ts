@@ -1,9 +1,8 @@
-import type { ItemInit } from "@obtion/core/model";
-import { META_TYPE, SETTINGS_ID, initItem, initSchema, newId, titleKey } from "@obtion/core/model";
+import { type ItemInit, META_TYPE, initItem, initSchema, newId, titleKey } from "@obtion/core/model";
 import type { Repo } from "@obtion/sync";
 import { repo as current } from "./repo";
 import { freshColor } from "@obtion/core/palette";
-import { itemHref, spaceHref } from "./hooks";
+import { spaceHref } from "./hooks";
 
 /** Create an item locally and open it – in another workspace than the open one with `space`. */
 export function createAndOpen(init: ItemInit, repo: Repo = current, space?: string) {
@@ -80,17 +79,6 @@ export function extractMentions(line: string, repo: Repo = current): { text: str
     .trim();
   return { text: text || line.trim(), mentions };
 }
-
-export function settings() {
-  return current.get(SETTINGS_ID);
-}
-
-export function open(id: string) {
-  location.hash = itemHref(id);
-}
-
-/** A guess at the plural of a type name, for the name of its list (editable). */
-export { pluralOf } from "@obtion/core/plural";
 
 /** A new type; it appears in the sidebar under "Typen", at the end. Returns its id. */
 export function createType(name: string, repo: Repo = current): string {

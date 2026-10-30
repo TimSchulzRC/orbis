@@ -2,7 +2,7 @@
 // index.html sets <html data-theme> before the first paint (no flash); this keeps it current.
 import { useSyncExternalStore } from "react";
 
-export type ThemeChoice = "system" | "light" | "dark";
+type ThemeChoice = "system" | "light" | "dark";
 const KEY = "obtion.theme";
 /** The page background per mode: browser bar and PWA status bar take it on. */
 const BAR = { light: "#f7f6f3", dark: "#191919" } as const;
@@ -10,7 +10,7 @@ const BAR = { light: "#f7f6f3", dark: "#191919" } as const;
 const media = matchMedia("(prefers-color-scheme: dark)");
 const listeners = new Set<() => void>();
 
-export function themeChoice(): ThemeChoice {
+function themeChoice(): ThemeChoice {
   const v = localStorage.getItem(KEY);
   return v === "light" || v === "dark" ? v : "system";
 }

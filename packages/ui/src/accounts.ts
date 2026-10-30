@@ -110,7 +110,7 @@ export function unsynced(): boolean {
 }
 
 /** Open a workspace in the app. */
-export function activate(id: string) {
+function activate(id: string) {
   if (!spaces.some((s) => s.id === id)) return;
   const r = replica(id);
   setRepo(r.repo);
@@ -120,7 +120,6 @@ export function activate(id: string) {
     save();
   }
 }
-
 
 /** A workspace's API (/w/<id>/api/…). */
 export const spaceFetch = (id: string, path: string, init: RequestInit = {}) =>

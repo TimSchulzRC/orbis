@@ -6,8 +6,10 @@ import { normalizeTag } from "@obtion/core/model";
 import { cx, AddButton } from "./bits";
 import { tr } from "../i18n";
 
-/** Small "+ tag" input with keyboard-selectable suggestions from existing tags. */
-/** `start`: open as a field right away (e.g. "+ Eigenschaft › Tag"); `onCancel`: it closed empty. */
+/**
+ * Small "+ tag" input with keyboard-selectable suggestions from existing tags. `start`: open as
+ * a field right away (e.g. "+ Eigenschaft › Tag"); `onCancel`: it closed empty.
+ */
 export function TagInput({ onAdd, exclude = [], start, onCancel }: { onAdd: (t: string) => void; exclude?: string[]; start?: boolean; onCancel?: () => void }) {
   const repo = useRepo();
   const [editing, setEditing] = useState(!!start);
@@ -16,12 +18,12 @@ export function TagInput({ onAdd, exclude = [], start, onCancel }: { onAdd: (t: 
   const q = normalizeTag(v);
   const suggestions = useMemo(() => {
     if (!editing || !q) return [];
-    const all = repo.index().tags().filter((t) => !exclude.includes(t.tag) && (!q || t.tag.includes(q)));
+    const all = repo.index().tags().filter((t) => !exclude.includes(t.tag) && t.tag.includes(q));
     // Prefix matches first, then by usage.
     return all.sort((a, b) => Number(b.tag.startsWith(q)) - Number(a.tag.startsWith(q)) || b.count - a.count).slice(0, 8);
   }, [q, editing]);
   // Option list: existing tags, plus "create" for a new one when typed text isn't an exact match.
-  const options = [...suggestions.map((s) => ({ tag: s.tag, count: s.count as number | null }))];
+  const options = suggestions.map((s) => ({ tag: s.tag, count: s.count as number | null }));
   if (q && !suggestions.some((s) => s.tag === q)) options.push({ tag: q, count: null });
   const add = (t?: string) => {
     const tag = normalizeTag(t ?? "");

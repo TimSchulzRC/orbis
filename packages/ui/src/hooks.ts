@@ -21,8 +21,8 @@ export const useSpaceId = () => useContext(ScopeContext)?.id ?? activeSpace()?.i
 
 // ---------- hash router ----------
 
-export interface Route {
-  path: string; // e.g. "/n/abc"
+interface Route {
+  path: string; // e.g. "/i/abc"
   parts: string[];
   query: URLSearchParams;
 }

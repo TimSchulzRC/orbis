@@ -1,4 +1,3 @@
-import { Button as ShadcnButton } from "../components/ui/button";
 // Sidebar: the workspace selector (which workspaces are seen), search, Heute and the inbox (of
 // the workspaces seen), then each of them as a block of its own (as teamspaces in Notion): its
 // name, the pinned items (informations with their children as a tree, also type pages), and its
@@ -6,6 +5,7 @@ import { Button as ShadcnButton } from "../components/ui/button";
 // this device. In the tree, dragging replaces the parent you come from; with Alt held a place is
 // added. Dropping on the upper or lower edge of a row reorders. Dropped into another workspace's
 // block, an item moves there.
+import { Button as ShadcnButton } from "../components/ui/button";
 import { useEffect, useState } from "react";
 import { ChevronRight, ChevronDown, Inbox, Search, SlidersHorizontal, Link2, MoreHorizontal, Plus, Paperclip, Sun } from "lucide-react";
 import { type Item, META_TYPE, SETTINGS_ID, setSchemaField, setSettings } from "@obtion/core/model";
@@ -171,7 +171,7 @@ export function SpaceTree({ space, touch }: { space: Space; touch?: boolean }) {
  * (on this device); the way to the open page unfolds by itself, nothing closes by itself. Done
  * entries are left out, except the open page. `here`: the workspace is the open one.
  */
-export function PinnedTree({ touch, here }: { touch?: boolean; here: boolean }) {
+function PinnedTree({ touch, here }: { touch?: boolean; here: boolean }) {
   const repo = useRepo();
   const space = useSpaceId()!;
   const ix = repo.index();
@@ -214,7 +214,7 @@ export function PinnedTree({ touch, here }: { touch?: boolean; here: boolean }) 
 }
 
 /** The page of every type of a workspace and the files, in an order of their own (synced); a new type comes last. */
-export function TypeNav({ touch, here }: { touch?: boolean; here: boolean }) {
+function TypeNav({ touch, here }: { touch?: boolean; here: boolean }) {
   const { t } = useT();
   const repo = useRepo();
   const space = useSpaceId()!;
@@ -282,7 +282,7 @@ export function TypeNav({ touch, here }: { touch?: boolean; here: boolean }) {
  * only what it adds: "… Frankreich". Anything else keeps its title and is cut at the end (the
  * full title is the tooltip) – never stumps like "… im Alltag".
  */
-export function distinctLabel(title: string, parentTitle?: string): string {
+function distinctLabel(title: string, parentTitle?: string): string {
   const p = parentTitle?.trim();
   if (!p || title.length <= p.length) return title;
   if (title.slice(0, p.length).toLowerCase() !== p.toLowerCase()) return title;
@@ -327,7 +327,6 @@ function TreeNode({
   // a second place of the same item: below a non-home parent, or at the top while it also has a parent
   const secondary = parent !== null ? home !== parent : !!home;
   const [drop, setDrop] = useState<"before" | "inside" | "after" | null>(null);
-  const [menu, setMenu] = useState(false);
   const [picking, setPicking] = useState(false);
 
   const sortOf = (x: Item) => (parent ? (x.parents[parent]?.sort ?? "") : (x.pinned ?? ""));
@@ -432,8 +431,6 @@ function TreeNode({
           </ShadcnButton>
         )}
         {!touch && <Popover
-          open={menu}
-          onOpenChange={setMenu}
           align="right"
           trigger={(p) => (
             <ShadcnButton variant="plain" size="none" {...p} tabIndex={-1} className="tap rounded p-0.5 text-muted-foreground opacity-0 pointer-coarse:opacity-100 hover:bg-surface-2 hover:text-fg group-hover/row:opacity-100 focus:opacity-100" aria-label={t("more")}>

@@ -1,87 +1,24 @@
+// Properties of an item: those its type defines, free ones, and values of removed
+// properties ("Weitere Eigenschaften") – schema changes never delete values.
 import { Checkbox } from "../components/ui/checkbox";
 import { Button as ShadcnButton } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { NativeSelect } from "../components/ui/native-select";
-// Properties of an item: those its type defines, free ones, and values of removed
-// properties ("Weitere Eigenschaften") – schema changes never delete values.
 import { useState } from "react";
 import { X, Plus, ExternalLink, AlertTriangle, Trash2, ArrowRightLeft, CalendarDays } from "lucide-react";
 import { type FreeKind, type FreeValue, type Item, type PropDef, type TypeSchema, type Value, FREE_KINDS, todayISO } from "@obtion/core/model";
 import { fmtDate } from "@obtion/core/i18n";
 import { numberText, parseNumber } from "@obtion/core/input";
 import { parseQuery, matches } from "@obtion/core/query";
-import { doneAt, hasValue, priorityProp, statusOf } from "@obtion/core/traits";
+import { doneAt, hasValue, priorityProp, statusOf, visibleProps } from "@obtion/core/traits";
 import { toFree } from "@obtion/core/typeops";
 import { repo } from "../repo";
 import { useIndex } from "../hooks";
 import { useT } from "../i18n";
-import { DateField, InlineText, ItemLink, MenuItem, Popover, Progress, StatusPill, Tag, cx, GROUP_COLOR, AddButton } from "./bits";
+import { DateField, InlineText, ItemLink, MenuItem, Popover, Progress, StatusPill, Tag, cx, AddButton } from "./bits";
 import { TagInput } from "./TagInput";
 import { ItemPicker } from "./Picker";
 import { StatusMenu, setStatus } from "./Row";
-
-function Row({ label, children, title }: { label: React.ReactNode; children: React.ReactNode; title?: string }) {
-  return (
-    <>
-      {/* label and value share the row height (44 px to tap on touch screens) */}
-      <div className="tap-row flex items-start py-1 text-sm text-muted-foreground pointer-coarse:items-center pointer-coarse:py-0" title={title}>
-        <span className="truncate">{label}</span>
-      </div>
-      <div className="tap-row flex min-h-7 min-w-0 flex-wrap items-center gap-1.5 py-0.5 text-sm">{children}</div>
-    </>
-  );
-}
-
-const grid = "grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-3 sm:grid-cols-[8.5rem_minmax(0,1fr)]";
-
-export { hasValue, visibleProps } from "@obtion/core/traits";
-import { visibleProps } from "@obtion/core/traits";
-
-export function Properties({ item, schema, compact, all, opened, focus }: { item: Item; schema: TypeSchema; compact?: boolean; all?: boolean; opened?: Set<string>; focus?: string }) {
-  const { t } = useT();
-  const ix = useIndex();
-  const leftovers = schema.removedProperties.filter((p) => item.props[p.id] !== undefined || item.rels[p.id]?.length);
-  const props = all ? schema.properties : visibleProps(item, schema, ix, opened ?? new Set());
-  return (
-    <div className={cx(compact ? "" : "mt-4", grid)}>
-      {props.map((p) => (
-        <Row key={p.id} label={p.name} title={p.description}>
-          <PropertyField item={item} prop={p} autoFocus={focus === p.id} />
-        </Row>
-      ))}
-      {leftovers.length > 0 && (
-        <>
-          <div className="col-span-2 mt-2 text-xs font-medium text-muted-foreground">{t("props.more")}</div>
-          {leftovers.map((p) => (
-            <Row key={p.id} label={p.name}>
-              <span className="text-muted-foreground">{displayValue(item, p)}</span>
-              <Popover trigger={(pp) => <ShadcnButton variant="plain" size="none" {...pp} className="tap rounded p-0.5 text-muted-foreground hover:bg-hover" aria-label={t("more")}><ArrowRightLeft size={12} /></ShadcnButton>}>
-                {(close) => (
-                  <>
-                    <MenuItem
-                      onClick={() => {
-                        close();
-                        const fv = toFree(p, item.props[p.id], repo.index());
-                        if (fv) repo.setExtra(item.id, p.name, fv);
-                        for (const r of item.rels[p.id] ?? []) repo.setMember(item.id, "refs", r, true);
-                        repo.setProp(item.id, p.id, null);
-                      }}
-                    >
-                      {t("props.toFree")}
-                    </MenuItem>
-                    <MenuItem danger icon={<Trash2 size={13} />} onClick={() => (close(), repo.setProp(item.id, p.id, null))}>
-                      {t("props.removeValue")}
-                    </MenuItem>
-                  </>
-                )}
-              </Popover>
-            </Row>
-          ))}
-        </>
-      )}
-    </div>
-  );
-}
 
 function displayValue(item: Item, p: PropDef): string {
   const v = item.props[p.id];
@@ -128,7 +65,7 @@ export function PropertyField({ item, prop, autoFocus }: { item: Item; prop: Pro
       return <RangeField value={s} name={prop.name} autoFocus={autoFocus} onChange={(x) => set(x || null)} />;
     }
     case "checkbox":
-      return <Checkbox  checked={v === true} onCheckedChange={(checked) => set((checked === true) ? true : null)} aria-label={prop.name} className="size-4 accent-[var(--focus)]" />;
+      return <Checkbox checked={v === true} onCheckedChange={(checked) => set(checked === true ? true : null)} aria-label={prop.name} className="size-4" />;
     case "select":
     case "status": {
       const opt = prop.options?.find((o) => o.id === v);
@@ -309,10 +246,10 @@ function RelationField({ item, prop, autoOpen }: { item: Item; prop: PropDef; au
 
 // ---------- free properties ----------
 
-export function FreeField({ value, onChange, name, options }: { value: FreeValue; onChange: (v: FreeValue | null) => void; name: string; options?: string[] }) {
+function FreeField({ value, onChange, name, options }: { value: FreeValue; onChange: (v: FreeValue | null) => void; name: string; options?: string[] }) {
   const { t, lang } = useT();
   const k = value.k;
-  if (k === "checkbox") return <Checkbox  checked={value.v === true} onCheckedChange={(checked) => onChange({ k, v: (checked === true) })} aria-label={name} className="size-4 accent-[var(--focus)]" />;
+  if (k === "checkbox") return <Checkbox checked={value.v === true} onCheckedChange={(checked) => onChange({ k, v: checked === true })} aria-label={name} className="size-4" />;
   if (k === "date") return <DateField value={String(value.v ?? "") || undefined} label={name} onChange={(x) => onChange(x ? { k, v: x } : null)} />;
   if (k === "number")
     return <InlineText value={typeof value.v === "number" ? numberText(lang, value.v) : String(value.v)} onCommit={(x) => { const n = parseNumber(lang, x); onChange(n === undefined ? null : { k, v: n }); }} label={name} className="text-sm tabular-nums" />;
@@ -326,7 +263,7 @@ export function FreeField({ value, onChange, name, options }: { value: FreeValue
   return <InlineText value={String(value.v ?? "")} onCommit={(x) => onChange(x.trim() ? { k, v: x.trim() } : null)} placeholder={t("props.empty")} label={name} className="text-sm" />;
 }
 
-export function freeOptions(name: string): string[] {
+function freeOptions(name: string): string[] {
   const set = new Set<string>();
   for (const i of repo.live()) {
     const v = Object.entries(i.extra).find(([n]) => n.toLowerCase() === name.toLowerCase())?.[1];
@@ -350,7 +287,7 @@ function BlockRow({ label, title, children }: { label: React.ReactNode; title?: 
 }
 
 /** What the page puts around its badges: the type in front, the languages behind, the progress under the dates. */
-export interface PageHead {
+interface PageHead {
   first?: React.ReactNode;
   last?: React.ReactNode;
   progress?: React.ReactNode;
@@ -451,7 +388,7 @@ export function PropertyBlock({ item, schema, noAdd, head = {} }: { item: Item; 
                 <MenuItem
                   onClick={() => {
                     close();
-                    const fv = toFree(p, item.props[p.id], repo.index());
+                    const fv = toFree(p, item.props[p.id]);
                     if (fv) repo.setExtra(item.id, p.name, fv);
                     for (const r of item.rels[p.id] ?? []) repo.setMember(item.id, "refs", r, true);
                     repo.setProp(item.id, p.id, null);
@@ -614,5 +551,3 @@ function inverseGroups(item: Item, ix: ReturnType<typeof useIndex>, t: (k: strin
   }
   return [...groups.values()];
 }
-
-export { GROUP_COLOR, fmtDate };

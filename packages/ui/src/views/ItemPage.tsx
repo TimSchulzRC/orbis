@@ -1,8 +1,8 @@
-import { Button as ShadcnButton } from "../components/ui/button";
-import { Input } from "../components/ui/input";
 // One page for every information: path, title, type properties, text, sections from
 // "Teil von", and on the right the connections. Types change the properties and which
 // sections appear (via their capabilities), never the layout.
+import { Button as ShadcnButton } from "../components/ui/button";
+import { Input } from "../components/ui/input";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { EditorView } from "@codemirror/view";
 import { Trash2, RotateCcw, MoreHorizontal, Plus, AlertTriangle, ImagePlus, Scissors, ListFilter, Languages, Pin, PinOff, FilePlus, FolderInput, Link2, ArrowRightLeft } from "lucide-react";
@@ -98,55 +98,53 @@ function InfoView({ item, isNew }: { item: Item; isNew: boolean }) {
   const pr = progressSpec(schema) ? ix.progressOf(item) : undefined;
 
   const tools = (
-    <>
-      <Popover align="right" trigger={(p) => <IconButton {...p} label={t("more")} icon={MoreHorizontal} />}>
-        {(close) => (
-          <>
-            <MenuItem icon={<FolderInput size={14} />} onClick={() => (close(), setPlacing(true))}>
-              {ix.parentsOf(item.id).length ? t("place.addAnother") : t("place.place")}
+    <Popover align="right" trigger={(p) => <IconButton {...p} label={t("more")} icon={MoreHorizontal} />}>
+      {(close) => (
+        <>
+          <MenuItem icon={<FolderInput size={14} />} onClick={() => (close(), setPlacing(true))}>
+            {ix.parentsOf(item.id).length ? t("place.addAnother") : t("place.place")}
+          </MenuItem>
+          <MenuItem icon={<Link2 size={14} />} onClick={() => (close(), setRefPicking(true))}>
+            {t("item.addRef")}
+          </MenuItem>
+          <MenuItem icon={<ImagePlus size={14} />} onClick={() => (close(), fileInput.current?.click())}>
+            {t("editor.addFile")}
+          </MenuItem>
+          {view && (
+            <MenuItem icon={<ListFilter size={14} />} onClick={() => (close(), insertQueryBlock(view))}>
+              {t("item.insertQuery")}
             </MenuItem>
-            <MenuItem icon={<Link2 size={14} />} onClick={() => (close(), setRefPicking(true))}>
-              {t("item.addRef")}
+          )}
+          {view && (
+            <MenuItem icon={<Scissors size={14} />} onClick={() => (close(), extractAsCard(view))}>
+              {t("item.extract", { name: extractTypeName() })}
             </MenuItem>
-            <MenuItem icon={<ImagePlus size={14} />} onClick={() => (close(), fileInput.current?.click())}>
-              {t("editor.addFile")}
+          )}
+          <MenuItem icon={item.pinned ? <PinOff size={14} /> : <Pin size={14} />} onClick={() => (close(), repo.pin(item.id, !item.pinned))}>
+            {item.pinned ? t("item.unpin") : t("item.pin")}
+          </MenuItem>
+          <MenuItem icon={<FilePlus size={14} />} onClick={() => (close(), createAndOpen({ parents: [item.id] }))}>
+            {t("item.newBelow")}
+          </MenuItem>
+          {/* a language version of its own: same type and places, the other language, linked */}
+          {translationPlan(item, ix)?.missing.map((o) => (
+            <MenuItem key={o.id} icon={<Languages size={14} />} onClick={() => (close(), createAndOpen(translationInit(item, ix, o.id)!))}>
+              {t("item.newTranslation", { lang: languageCode(o.name) })}
             </MenuItem>
-            {view && (
-              <MenuItem icon={<ListFilter size={14} />} onClick={() => (close(), insertQueryBlock(view))}>
-                {t("item.insertQuery")}
-              </MenuItem>
-            )}
-            {view && (
-              <MenuItem icon={<Scissors size={14} />} onClick={() => (close(), extractAsCard(item, view))}>
-                {t("item.extract", { name: extractTypeName() })}
-              </MenuItem>
-            )}
-            <MenuItem icon={item.pinned ? <PinOff size={14} /> : <Pin size={14} />} onClick={() => (close(), repo.pin(item.id, !item.pinned))}>
-              {item.pinned ? t("item.unpin") : t("item.pin")}
+          ))}
+          {others && !item.deleted && item.type !== META_TYPE && (
+            <MenuItem icon={<ArrowRightLeft size={14} />} onClick={() => (close(), setMoving(true))}>
+              {t("move.menu")}
             </MenuItem>
-            <MenuItem icon={<FilePlus size={14} />} onClick={() => (close(), createAndOpen({ parents: [item.id] }))}>
-              {t("item.newBelow")}
+          )}
+          {!item.deleted && (
+            <MenuItem danger icon={<Trash2 size={14} />} onClick={() => (close(), onlyBelow(ix, item.id).length ? setDeleting(true) : removeAndLeave(item.id, false))}>
+              {t("item.delete")}
             </MenuItem>
-            {/* a language version of its own: same type and places, the other language, linked */}
-            {translationPlan(item, ix)?.missing.map((o) => (
-              <MenuItem key={o.id} icon={<Languages size={14} />} onClick={() => (close(), createAndOpen(translationInit(item, ix, o.id)!))}>
-                {t("item.newTranslation", { lang: languageCode(o.name) })}
-              </MenuItem>
-            ))}
-            {others && !item.deleted && item.type !== META_TYPE && (
-              <MenuItem icon={<ArrowRightLeft size={14} />} onClick={() => (close(), setMoving(true))}>
-                {t("move.menu")}
-              </MenuItem>
-            )}
-            {!item.deleted && (
-              <MenuItem danger icon={<Trash2 size={14} />} onClick={() => (close(), onlyBelow(ix, item.id).length ? setDeleting(true) : removeAndLeave(item.id, false))}>
-                {t("item.delete")}
-              </MenuItem>
-            )}
-          </>
-        )}
-      </Popover>
-    </>
+          )}
+        </>
+      )}
+    </Popover>
   );
   const mainAction = mainType && mainType !== item.type && !item.deleted;
 
@@ -347,7 +345,6 @@ function TypeSwitch({ item }: { item: Item }) {
     </Popover>
   );
 }
-
 
 function TitleClash({ item }: { item: Item }) {
   const r = useRepo();

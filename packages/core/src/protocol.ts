@@ -21,7 +21,7 @@ export interface WireUpdate {
 }
 
 export type ClientMsg =
-  | { t: "hello"; area?: string; since: number; sinceId?: string; client: string; device?: string }
+  | { t: "hello"; area?: string; since: number; sinceId?: string; device?: string }
   | { t: "push"; area?: string; items: { k: string; d: string; u: string; s?: string }[] } // s: the step (user action) it belongs to
   | { t: "ping" };
 

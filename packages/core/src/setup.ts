@@ -184,7 +184,7 @@ export function restoreDefaultTypes(w: Writer, lang: Lang, origin?: string): str
   return changed;
 }
 
-export const DEFAULT_CAPTURE_TYPES = [SYS.card, SYS.task, SYS.project];
+const DEFAULT_CAPTURE_TYPES = [SYS.card, SYS.task, SYS.project];
 
 /**
  * Once: the shipped task shows "Blockiert durch" and "Wartet auf" only when set (pages show every
@@ -210,7 +210,7 @@ export function upgradeHideEmptyTaskFields(w: Writer): boolean {
  * priority. Names and columns in the setup language (like the type names); a view named like its
  * kind keeps no name, so it follows the UI language.
  */
-export function defaultViews(lang: Lang): { project: Omit<ViewTab, "pos">[]; task: Omit<ViewTab, "pos">[] } {
+function defaultViews(lang: Lang): { project: Omit<ViewTab, "pos">[]; task: Omit<ViewTab, "pos">[] } {
   const p = (k: string) => translate(lang, `setup.prop.${k}`);
   const v = (k: string) => translate(lang, `setup.view.${k}`);
   const projectCols = [p("status"), "area", p("period"), p("priority"), p("progress"), p("blockedBy")];

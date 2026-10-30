@@ -76,10 +76,9 @@ export function writeExamples(w: Writer, lang: Lang, files: Partial<Record<Examp
     clock += 12 * H;
     const created = init.created ?? Math.min(clock, now - 30 * H);
     w.change(id, (doc) => {
+      // updated stays created until the user changes it: that is how "Beispiele entfernen" tells edited ones
       initItem(doc, { source: EXAMPLE, createdBy: EXAMPLE_ORIGIN, ...init, created });
       extra?.(doc);
-      // untouched until the user changes it: that is how "Beispiele entfernen" tells edited ones
-      doc.getMap<any>("meta").set("updated", created);
     });
     written.push(id);
     return id;
@@ -93,11 +92,10 @@ export function writeExamples(w: Writer, lang: Lang, files: Partial<Record<Examp
       initItem(doc, { type: META_TYPE, title: spec.name!, source: EXAMPLE, createdBy: EXAMPLE_ORIGIN, created: now - 22 * 24 * H });
       initSchema(doc, spec);
       setSchemaField(doc, "plural", plural);
-      doc.getMap<any>("meta").set("updated", now - 22 * 24 * H);
     });
     written.push(id);
   };
-  const person = L("Person", "Person");
+  const person = "Person";
   const book = L("Buch", "Book");
   const article = L("Artikel", "Article");
   type(EX_TYPES.person, { name: person, icon: "user", color: "teal", description: L("Menschen, zum Beispiel Autorinnen und Autoren.", "People, for example authors."), capabilities: {}, properties: [] }, L("Personen", "People"));
@@ -437,7 +435,7 @@ ${box(456, L("Kurs", "Course"), [L("Kursnr.", "Course no."), L("Titel", "Title")
 }
 
 /** A one-page PDF with plain text (Helvetica, WinAnsi), built by hand: no library needed. */
-export function tinyPdf(lines: string[]): Uint8Array<ArrayBuffer> {
+function tinyPdf(lines: string[]): Uint8Array<ArrayBuffer> {
   const WIN: Record<string, number> = { "–": 0x96, "„": 0x84, "“": 0x93, "”": 0x94, "’": 0x92 };
   const enc = (s: string) =>
     [...s]

@@ -9,7 +9,7 @@ import { type Lang, LANGS } from "./i18n";
 export class InputError extends Error {}
 
 /** Lower case, umlauts as two letters, spaces/hyphens/underscores as one "_". */
-export function foldWord(s: string): string {
+function foldWord(s: string): string {
   return s
     .trim()
     .toLowerCase()
