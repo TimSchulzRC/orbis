@@ -130,8 +130,11 @@ function Sheets({ entries, desktop }: { entries: InboxEntry[]; desktop: boolean 
     <span className={cx("absolute inset-y-0 left-0 z-10 block", desktop ? "w-[120px]" : "w-[84px]")}>
       <span className="absolute inset-0 rounded-[11px] border border-line bg-black/[.06] shadow-[inset_0_3px_8px_rgb(0_0_0/0.12)] dark:bg-black/30 dark:shadow-[inset_0_3px_8px_rgb(0_0_0/0.7)]" aria-hidden />
       <span className="absolute -top-px left-0.5 h-[3px] w-[calc(100%-4px)] rounded-b-[3px] bg-[linear-gradient(90deg,transparent,color-mix(in_srgb,var(--t-inbox)_60%,transparent),transparent)]" aria-hidden />
-      {/* the sheets end inside the well, above they may stick out (and show their titles) */}
-      <span className="absolute inset-0 [clip-path:inset(-300px_-300px_4px_-300px)]">
+      {/* the sheets end inside the well (long enough that lifted their lower edge stays hidden), above
+          they may stick out and show their titles; cut off by overflow, as a clip-path would let a
+          fanned sheet make the page scroll */}
+      <span className="pointer-events-none absolute -inset-x-[300px] -top-[300px] bottom-1 overflow-clip">
+      <span className="absolute inset-y-0 left-[300px] right-[300px]">
       {[...entries].reverse().map((e, n, all) => {
         const front = n === all.length - 1;
         const { left, rest, fan, lift } = poses[n]!;
@@ -144,8 +147,8 @@ function Sheets({ entries, desktop }: { entries: InboxEntry[]; desktop: boolean 
             onClick={() => openShelf(e.key)}
             aria-label={t("tray.openEntry", { title })}
             className={cx(
-              "group absolute rounded-[7px] border shadow-[0_-2px_10px_rgb(0_0_0/0.15)] transition-[rotate,translate] duration-300 ease-[cubic-bezier(.2,.8,.2,1)] [rotate:var(--r)] [translate:var(--t)] group-hover/tray:[rotate:var(--rf)] group-hover/tray:[translate:var(--tf)] hover:[translate:var(--tl)]! focus-visible:[rotate:var(--rf)]! focus-visible:[translate:var(--tl)]!",
-              desktop ? "-bottom-1.5 h-[74px] w-[84px]" : "-bottom-1 h-[62px] w-[56px]",
+              "group pointer-events-auto absolute rounded-[7px] border shadow-[0_-2px_10px_rgb(0_0_0/0.15)] transition-[rotate,translate] duration-300 ease-[cubic-bezier(.2,.8,.2,1)] [rotate:var(--r)] [translate:var(--t)] group-hover/tray:[rotate:var(--rf)] group-hover/tray:[translate:var(--tf)] hover:[translate:var(--tl)]! focus-visible:[rotate:var(--rf)]! focus-visible:[translate:var(--tl)]!",
+              desktop ? "-bottom-7 h-[92px] w-[84px]" : "-bottom-6 h-[78px] w-[56px]",
               front ? "border-faint/50 bg-hover" : "border-line bg-surface-2",
               "hover:border-faint hover:bg-hover",
             )}
@@ -165,6 +168,7 @@ function Sheets({ entries, desktop }: { entries: InboxEntry[]; desktop: boolean 
           </ShadcnButton>
         );
       })}
+      </span>
       </span>
     </span>
   );
