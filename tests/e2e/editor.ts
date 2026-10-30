@@ -123,8 +123,8 @@ try {
   await page.mouse.click(lr.x + lr.width - 4, lr.y + lr.height / 2);
   await page.keyboard.press("End");
   await page.keyboard.type(" /Link");
-  await page.waitForSelector(".cm-tooltip-autocomplete li[aria-selected]");
-  await page.keyboard.press("Enter");
+  await page.click(".cm-tooltip-autocomplete li:has-text('Link auf Seite')");
+  await page.waitForFunction(() => (document.querySelector(".cm-content") as any).cmTile.root.view.state.doc.toString().endsWith(" @"));
   await page.keyboard.type("So funkt");
   await page.waitForTimeout(300);
   const typed = (await lines(page)).at(-1)!.text;
@@ -170,7 +170,9 @@ try {
   expect(!!(await page.$(".cm-handles.shown")), "the handles show under the pointer");
   await page.keyboard.press("End");
   await page.keyboard.press("Enter");
-  await page.keyboard.type("Neue Zeile");
+  await page.keyboard.type("N");
+  expect((await page.$eval(".cm-handles", (b) => getComputedStyle(b).opacity)) === "0", "typing hides the handles at once, without fading");
+  await page.keyboard.type("eue Zeile");
   await page.waitForTimeout(200);
   expect(!(await page.$(".cm-handles.shown")), "typing hides the handles");
   await page.mouse.move(tb.x + 40, tb.y + tb.height / 2);

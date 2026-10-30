@@ -84,6 +84,7 @@ export const blockHandles = ViewPlugin.fromClass(
       const c = view.coordsAtPos(b.from, 1);
       const mid = c ? (c.top + c.bottom) / 2 : b.top + 13;
       this.box.style.top = mid - 12 - dom.top + "px";
+      this.box.classList.remove("instant");
       this.box.classList.add("shown");
     }
     hide() {
@@ -145,6 +146,7 @@ export const blockHandles = ViewPlugin.fromClass(
     keydown = () => {
       if (this.dragging) return;
       cancelAnimationFrame(this.frame);
+      this.box.classList.add("instant"); // gone at once, without fading
       this.hide();
     };
     destroy() {

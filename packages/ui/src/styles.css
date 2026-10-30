@@ -758,6 +758,9 @@ textarea.page-title.field:focus {
   transition: opacity 0.12s;
   z-index: 5;
 }
+.cm-handles.instant {
+  transition: none;
+}
 .cm-handles.shown {
   opacity: 1;
   pointer-events: auto;
