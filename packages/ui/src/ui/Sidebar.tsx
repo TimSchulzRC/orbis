@@ -98,7 +98,7 @@ export function SpaceTree({ space, touch }: { space: Space; touch?: boolean }) {
   const go = (path: string) => (location.hash = spaceHref(space.id, path));
   const row = cx("flex items-center gap-2 rounded-lg pr-2", touch ? "py-2 text-[15px]" : "py-1 text-sm");
   return (
-    <section className="mt-2" aria-label={space.name}>
+    <section className="mt-3" aria-label={space.name}>
       <div
         className={cx("group/space flex h-7 items-center gap-0.5 rounded-lg", touch ? "px-3" : "mx-2 px-2", over && "bg-hover ring-1 ring-[var(--focus)]")}
         onDragOver={(e) => {
@@ -154,8 +154,9 @@ export function SpaceTree({ space, touch }: { space: Space; touch?: boolean }) {
       {open && ready && (
         <div className={cx(!touch && "px-2")}>
           <PinnedTree touch={touch} here={here} />
-          <ShadcnButton variant="plain" size="none" onClick={() => setTypesOpen(!typesOpen)} aria-expanded={typesOpen} className={cx(row, "w-full pl-2.5 text-muted-foreground hover:bg-hover hover:text-fg")}>
-            <ChevronRight size={touch ? 17 : 15} className={cx("shrink-0 text-faint transition-transform", typesOpen && "rotate-90")} />
+          {/* a label over the types, not a row like the pinned: smaller, no hover */}
+          <ShadcnButton variant="plain" size="none" onClick={() => setTypesOpen(!typesOpen)} aria-expanded={typesOpen} className={cx("mt-2 flex w-full items-center gap-1 pl-2.5 font-medium text-muted-foreground hover:text-fg", touch ? "py-1.5 text-[13px]" : "py-1 text-xs")}>
+            <ChevronRight size={12} className={cx("shrink-0 text-faint transition-transform", typesOpen && "rotate-90")} />
             {t("nav.types")}
           </ShadcnButton>
           {typesOpen && <TypeNav touch={touch} here={here} />}
