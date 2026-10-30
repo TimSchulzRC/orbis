@@ -1,12 +1,12 @@
 // The tray's panel ("Eingang"): looking in, not sorting. Every entry of the workspaces seen, newest
 // first, with a line of its text, its workspace and age; one opens here to read and add to it and
-// stays in the inbox – sorting is the review's (views/Review.tsx), here only a quiet link leads
-// there. Above the tray on a desktop, as a sheet on a phone. What lands in the inbox: behind "…".
+// stays in the inbox – sorting is the review's (views/Review.tsx), reached from the tray's own
+// button. Above the tray on a desktop, as a sheet on a phone. What lands in the inbox: behind "…".
 // On Heute on a desktop it is part of the page (`pinned`): always open, it does not close. Without
 // room for it there, Heute shows the newest entries as cards (ShelfCards), each opens the panel.
 import { Button as ShadcnButton } from "../components/ui/button";
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, ArrowRight, ArrowUp, Maximize2, MoreHorizontal, RotateCcw, SlidersHorizontal, X } from "lucide-react";
+import { ArrowLeft, ArrowUp, Maximize2, MoreHorizontal, RotateCcw, SlidersHorizontal, X } from "lucide-react";
 import { type Item, SETTINGS_ID, setSettings } from "@obtion/core/model";
 import type { QueryDef } from "@obtion/core/query";
 import { inboxWhere } from "@obtion/core/inbox";
@@ -24,7 +24,7 @@ import { TitleField } from "./TitleField";
 import { QueryEditor } from "./QueryEditor";
 import { SpaceFilter, SpaceScope } from "./Spaces";
 import { notify } from "./feedback";
-import { type InboxEntry, closeShelf, openShelf, reviewMinutes, useInboxItems, useShelf } from "./inbox";
+import { type InboxEntry, closeShelf, openShelf, useInboxItems, useShelf } from "./inbox";
 import { DraftBar } from "../views/Lists";
 import { sameValue } from "@obtion/core/equal";
 
@@ -86,11 +86,6 @@ function List({ entries, desktop, pinned }: { entries: InboxEntry[]; desktop: bo
         </h2>
         {desktop && <span className="text-[13px] text-muted-foreground">· {t("tray.newestFirst")}</span>}
         <span className="flex-1" />
-        {entries.length > 0 && (
-          <a href="#/review" className="tap-y inline-flex items-center gap-1 rounded-md px-1.5 text-[13px] text-muted-foreground hover:text-fg">
-            {t("tray.toReview")} {desktop && <>· {t("tray.minutes", { count: reviewMinutes(entries.length) })}</>} <ArrowRight size={14} />
-          </a>
-        )}
         <Popover align="right" trigger={(p) => <IconButton {...p} label={t("more")} icon={MoreHorizontal} />}>
           {(close) =>
             shown.map((s) => (
