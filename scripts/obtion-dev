@@ -41,6 +41,29 @@ stop() {
   fi
 }
 
+# Sign in the test account (created on first start) and write a page that hands its token to the app.
+login_page=$root/apps/web/node_modules/.obtion-dev/login.html
+login() {
+  "$bun" -e '
+    const [port, page] = process.argv.slice(1);
+    const base = `http://127.0.0.1:${port}`;
+    const creds = { email: "dev@obtion.test", password: "obtion-dev" };
+    const post = (path, body) => fetch(base + path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    let info;
+    for (let i = 0; i < 50 && !info; i++) info = await fetch(`${base}/api/info`).then((r) => r.json(), () => Bun.sleep(200));
+    if (!info) (console.error("Server not reachable"), process.exit(1));
+    const res = info.firstAccount ? await post("/api/account/signup", { name: "Dev", lang: "de", ...creds }) : await post("/api/auth/sign-in/email", creds);
+    if (!res.ok) (console.error(`No test account ${creds.email} in this data (${res.status})`), process.exit(1));
+    const { token, user } = await res.json();
+    const account = JSON.stringify({ token, user: { id: user.id, name: user.name, email: user.email } });
+    await Bun.write(page, `<!doctype html><script>localStorage.setItem("obtion.account", ${JSON.stringify(account)}); location.replace("/");</script>`);
+    console.log(`Test account: ${creds.email} / ${creds.password}`);
+  ' "$backend" "$login_page"
+}
+signed_in_url() {
+  if login; then echo "$url/node_modules/.obtion-dev/login.html"; else echo 'Could not sign in the test account' >&2; echo "$url"; fi
+}
+
 # Stop every service managed by this script, including units whose state file is gone.
 stop_all() {
   local units unit saved
@@ -107,7 +130,8 @@ if [[ $1 == stop ]]; then
   exit
 fi
 if [[ -n $public ]] && active "$backend_unit" && active "$web_unit" && proxy_matches; then
-  echo "https://$host:$public"
+  url=https://$host:$public
+  signed_in_url
   exit
 fi
 [[ -x "$root/apps/web/node_modules/.bin/vite" ]] || {
@@ -171,4 +195,4 @@ fi
 tailscale serve --bg --yes --https="$public" "http://127.0.0.1:$web"
 trap - EXIT INT TERM HUP
 echo "Running in background: $root"
-echo "$url"
+signed_in_url
