@@ -1,6 +1,6 @@
 // Bringing data in: from an Obsidian vault and from the Notion export. Sources are only read. Re-running is safe: the same source
 // gives the same item (source key or deterministic id), no duplicates.
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { type Stats, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join, relative } from "node:path";
 import {
   type TypeSchema,
@@ -8,6 +8,7 @@ import {
   addParent,
   fileTypeOf,
   initItem,
+  initSchema,
   mimeOf,
   newId,
   normalizeTag,
@@ -23,9 +24,11 @@ import { SYS, defaultTypes, runSetup, type Writer } from "@obtion/core/setup";
 import { EXAMPLE_ORIGIN, addExamples, fileFacts } from "@obtion/core/examples";
 import { keyBetween } from "@obtion/core/sortkey";
 import { dueProp, statusProp } from "@obtion/core/traits";
-import { initSchema } from "@obtion/core/model";
 import type { Store } from "./store";
 import { type Blobs, sha256 } from "./blobs";
+
+/** Who the setup and the upgrades of shipped types act as. */
+export const SETUP_ORIGIN = "system:setup";
 
 export function storeWriter(store: Store, origin: string, quiet = true): Writer {
   return {
@@ -36,7 +39,7 @@ export function storeWriter(store: Store, origin: string, quiet = true): Writer 
 
 /** First setup on the server, optionally with the examples: the same code the setup page runs. */
 export async function setUp(store: Store, blobs: Blobs, lang: Lang, opts: { examples?: boolean; quiet?: boolean } = {}) {
-  runSetup(storeWriter(store, "system:setup", opts.quiet), lang, "system:setup");
+  runSetup(storeWriter(store, SETUP_ORIGIN, opts.quiet), lang, SETUP_ORIGIN);
   if (opts.examples)
     await addExamples(storeWriter(store, EXAMPLE_ORIGIN, opts.quiet), lang, async (f) => {
       const hash = sha256(f.bytes);
@@ -46,9 +49,7 @@ export async function setUp(store: Store, blobs: Blobs, lang: Lang, opts: { exam
   store.flush();
 }
 
-export interface Log {
-  (msg: string): void;
-}
+export type Log = (msg: string) => void;
 
 // ---------- shared mapping ----------
 
@@ -79,7 +80,7 @@ const STATUS_GROUP: Record<string, "todo" | "active" | "done"> = {
 };
 
 /** Find the status option for a name: same name, the same status in another language, else by group. */
-export function statusOption(schema: TypeSchema | undefined, name?: string): string | undefined {
+function statusOption(schema: TypeSchema | undefined, name?: string): string | undefined {
   const p = statusProp(schema);
   if (!p || !name) return undefined;
   const k = name.trim().toLowerCase();
@@ -92,7 +93,7 @@ export function statusOption(schema: TypeSchema | undefined, name?: string): str
   return group ? p.options?.find((o) => (o.group ?? "todo") === group)?.id : undefined;
 }
 
-export function priorityOption(schema: TypeSchema | undefined, name?: string): string | undefined {
+function priorityOption(schema: TypeSchema | undefined, name?: string): string | undefined {
   if (!name) return undefined;
   const p = schema?.properties.find((x) => x.id === "p_priority" || /^(priorit(ä|a)t|priority)$/i.test(x.name));
   if (!p?.options) return undefined;
@@ -111,18 +112,18 @@ const AREA_NAME: Record<string, Record<Lang, string>> = {
 };
 
 /** "Work (MOC)", "Studium (MOC)" … → the area they stand for. */
-export function areaOfTitle(title: string): string | undefined {
+function areaOfTitle(title: string): string | undefined {
   const k = title.replace(/\s*\(MOC\)\s*$/i, "").trim().toLowerCase();
   return AREA_KEY[k];
 }
 
-export function areaName(area: string, lang: Lang): string {
+function areaName(area: string, lang: Lang): string {
   const k = AREA_KEY[area.toLowerCase()];
   return k ? AREA_NAME[k]![lang] : area;
 }
 
 /** The type with this id or name; a missing default type is created from the shipped definition. */
-export function ensureType(w: Writer, ref: string, lang: Lang, store: Store): string {
+function ensureType(w: Writer, ref: string, lang: Lang, store: Store): string {
   const ix = store.index();
   if (ix.types.has(ref)) return ref;
   const byName = ix.typeByName(ref);
@@ -156,7 +157,7 @@ function nextPin(store: Store): string {
 }
 
 /** A pinned information without a type (an overview once it has children) with this title; created if missing. */
-export function ensurePinnedOverview(w: Writer, store: Store, title: string): string {
+function ensurePinnedOverview(w: Writer, store: Store, title: string): string {
   const ix = store.index();
   const hit = ix.live.find((i) => i.kind === "info" && titleKey(i.title) === titleKey(title) && ix.parentsOf(i.id).length === 0 && (i.pinned || !i.type));
   if (hit) {
@@ -186,8 +187,11 @@ function pinTopLevel(w: Writer, store: Store, ids: string[]): number {
 
 // ---------- files ----------
 
+/** When a file on disk was made: its birth time where the system keeps one, else when it last changed. */
+const createdAt = (st: Stats) => Math.min(st.birthtimeMs || st.mtimeMs, st.mtimeMs);
+
 /** A file from disk as a file item; same content gives the same id. */
-export async function importFile(w: Writer, store: Store, blobs: Blobs, path: string, opts: { created?: number; source?: string } = {}): Promise<string> {
+async function importFile(w: Writer, store: Store, blobs: Blobs, path: string, opts: { created?: number; source?: string } = {}): Promise<string> {
   const hash = await blobs.putFile(path);
   const name = basename(path);
   // same content under the same name = same item; the same content under another name stays linkable by that name
@@ -196,7 +200,7 @@ export async function importFile(w: Writer, store: Store, blobs: Blobs, path: st
   const st = statSync(path);
   const mime = mimeOf(name);
   w.change(id, (doc) => {
-    initItem(doc, { kind: "datei", title: name, created: opts.created ?? Math.min(st.birthtimeMs || st.mtimeMs, st.mtimeMs), source: opts.source });
+    initItem(doc, { kind: "datei", title: name, created: opts.created ?? createdAt(st), source: opts.source });
     setFileMeta(doc, { hash, name, mime, filetype: fileTypeOf(name, mime), size: st.size });
   });
   return id;
@@ -223,7 +227,7 @@ function parseCreated(s?: string): number | undefined {
   return new Date(`${m[3]}-${m[2]}-${m[1]}T12:00:00`).getTime();
 }
 
-export interface ObsidianOptions {
+interface ObsidianOptions {
   lang: Lang;
   mocParents: boolean;
 }
@@ -274,12 +278,14 @@ export async function importObsidian(store: Store, blobs: Blobs, vault: string, 
     const fm = text.match(/^---\n([\s\S]*?)\n---\n?/);
     if (fm) {
       try {
-        const y = (Bun as any).YAML.parse(fm[1]) ?? {};
+        const y = (Bun.YAML.parse(fm[1]!) ?? {}) as Record<string, any>;
         const t = y.tags ?? y.Tags;
         if (Array.isArray(t)) tags.push(...t.map(String));
         else if (typeof t === "string") tags.push(...t.split(/[ ,]+/));
         if (y.created) created = Date.parse(y.created) || undefined;
-      } catch {}
+      } catch (e) {
+        log(`${rel}: frontmatter not read (${(e as Error).message})`);
+      }
       text = text.slice(fm[0].length);
     }
     const out: string[] = [];
@@ -308,8 +314,7 @@ export async function importObsidian(store: Store, blobs: Blobs, vault: string, 
     if (top === "Encounters" || top === "Readwise") type = null;
     const isMap = rel.includes("• MOCs") || tags.some((t) => /^#?map$/i.test(t));
     if (isMap) type = null; // a MOC is an information without type; its children make it an overview
-    let area: string | undefined;
-    if (isMap && !area) area = areaOfTitle(title);
+    let area = isMap ? areaOfTitle(title) : undefined;
     if (top === "Spaces") {
       area = AREA[parts[1]!];
       tags.push(...parts.slice(2, -1).filter((p) => !["Areas", "Projects", "• MOCs"].includes(p)));
@@ -326,7 +331,7 @@ export async function importObsidian(store: Store, blobs: Blobs, vault: string, 
     }
     const id = newId();
     w.change(id, (doc) =>
-      initItem(doc, { title, body, tags, type, parents, source, created: created ?? Math.min(st.birthtimeMs || st.mtimeMs, st.mtimeMs), updated: st.mtimeMs }),
+      initItem(doc, { title, body, tags, type, parents, source, created: created ?? createdAt(st), updated: st.mtimeMs }),
     );
     if (refs.length) pendingRefs.push({ id, refs });
     if (isMap) maps.push(id);
@@ -355,15 +360,13 @@ export async function importObsidian(store: Store, blobs: Blobs, vault: string, 
     }
   store.flush();
   const pinned = pinTopLevel(w, store, maps);
-  store.db.query("INSERT INTO events (ts, doc, title, type, kind, origin, changes) VALUES (?, ?, ?, ?, ?, ?, ?)").run(
-    Date.now(), "", `Imported ${made} notes from Obsidian`, "import", "created", origin, "[]",
-  );
+  store.logEvent(`Imported ${made} notes from Obsidian`, origin);
   log(`Obsidian: ${made} notes (${skipped} already there), ${refCount} Refs:: resolved, ${placed} cards placed below MOCs, ${pinned} top-level MOCs pinned.`);
 }
 
 // ---------- Notion ----------
 
-export interface NotionOptions {
+interface NotionOptions {
   lang: Lang;
   projectType: string; // id or name; created if missing
   taskType: string;
@@ -415,8 +418,6 @@ export function importNotion(store: Store, file: string, opts: NotionOptions, lo
     made++;
   }
   store.flush();
-  store.db.query("INSERT INTO events (ts, doc, title, type, kind, origin, changes) VALUES (?, ?, ?, ?, ?, ?, ?)").run(
-    Date.now(), "", `Imported ${made} projects and tasks from Notion`, "import", "created", origin, "[]",
-  );
+  store.logEvent(`Imported ${made} projects and tasks from Notion`, origin);
   log(`Notion: ${made} projects/tasks.`);
 }

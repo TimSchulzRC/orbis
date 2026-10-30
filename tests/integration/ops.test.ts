@@ -197,7 +197,7 @@ test("types are never deleted or changed through the item tools; only update_typ
   expect(s.seq).toBe(seq); // nothing written
   expect(s.index().types.size).toBe(3);
   expect(s.index().get(s.index().resolveTitle("Website")!)!.type).toBe(SYS.project);
-  const preview = ops.updateType("Projekt", { delete_preview: true }, A) as any;
+  const preview = ops.deletePreview("Projekt");
   expect(preview.entries).toBe(1);
   expect(s.index().types.has(SYS.project)).toBe(true);
   // the shared trash refuses a type as well; the app deletes types through deleteType

@@ -3,40 +3,72 @@
 //   bun apps/server/src/cli.ts setup [de|en] [--examples]
 //   bun apps/server/src/cli.ts import-obsidian <vault> [--no-moc-parents]
 //   bun apps/server/src/cli.ts import-notion <json> [--project-type Projekt] [--task-type Task]
+//   bun apps/server/src/cli.ts gc [--force]
 //   bun apps/server/src/cli.ts stats
 import { existsSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
+import { parseArgs } from "node:util";
 import { Store } from "./store";
 import { workspaceDirs } from "./accounts";
 import { Blobs } from "./blobs";
-import { runSetup, SYS } from "@obtion/core/setup";
+import { SYS } from "@obtion/core/setup";
 import { META_TYPE } from "@obtion/core/model";
-import type { Lang } from "@obtion/core/i18n";
-import { importNotion, importObsidian, setUp, storeWriter } from "./importers";
+import { type Lang, LANGS } from "@obtion/core/i18n";
+import { importNotion, importObsidian, setUp } from "./importers";
+import { DATA, PORT } from "./config";
 
-const DATA = resolve(process.env.OBTION_DATA ?? "data");
-const args = process.argv.slice(2);
-const cmd = args[0];
-const flag = (name: string) => args.includes(`--${name}`);
-const opt = (name: string, def?: string) => {
-  const i = args.indexOf(`--${name}`);
-  return i >= 0 ? args[i + 1] : def;
-};
-const positional = args.slice(1).filter((a, i, all) => !a.startsWith("--") && !(i > 0 && all[i - 1]!.startsWith("--") && !["--no-moc-parents", "--force", "--examples"].includes(all[i - 1]!)));
+const USAGE = `usage: cli.ts <command> [--workspace <id>] [--lang de|en]
+  setup [de|en] [--examples]
+  import-obsidian <vault> [--no-moc-parents]
+  import-notion <json> [--project-type X] [--task-type Y]
+  gc [--force]      files no item points to: lists them, --force removes them
+  stats
+--force on other commands: run although a server answers on :${PORT}`;
 
-const port = process.env.PORT ?? 8480;
-const running = await fetch(`http://127.0.0.1:${port}/api/info`, { signal: AbortSignal.timeout(800) }).then(
+function usage(): never {
+  console.error(USAGE);
+  process.exit(1);
+}
+
+let parsed;
+try {
+  parsed = parseArgs({
+    allowPositionals: true,
+    options: {
+      workspace: { type: "string" },
+      lang: { type: "string" },
+      examples: { type: "boolean" },
+      force: { type: "boolean" },
+      "no-moc-parents": { type: "boolean" },
+      "project-type": { type: "string" },
+      "task-type": { type: "string" },
+    },
+  });
+} catch (e) {
+  console.error((e as Error).message);
+  usage();
+}
+const { values: opts, positionals } = parsed;
+const [cmd, arg] = positionals;
+const isLang = (l: string | undefined): l is Lang => LANGS.includes(l as Lang);
+if (opts.lang !== undefined && !isLang(opts.lang)) usage();
+if (!["setup", "import-obsidian", "import-notion", "gc", "stats"].includes(cmd ?? "")) usage();
+if ((cmd === "import-obsidian" || cmd === "import-notion") && !arg) usage();
+if (cmd === "setup" && arg !== undefined && !isLang(arg)) usage();
+
+const running = await fetch(`http://127.0.0.1:${PORT}/api/info`, { signal: AbortSignal.timeout(800) }).then(
   () => true,
   () => false,
 );
-if (running && cmd !== "stats" && !flag("force")) {
-  console.error(`A server is running on :${port}. Stop it first, then run this again.`);
+// gc never runs beside a server: a device may be uploading a file whose item has not arrived yet
+if (running && cmd !== "stats" && (cmd === "gc" || !opts.force)) {
+  console.error(`A server is running on :${PORT}. Stop it first, then run this again.`);
   process.exit(1);
 }
 
 /** The folder of the workspace to work on (see the top). */
 function workspaceDir(): string {
-  const id = opt("workspace");
+  const id = opts.workspace;
   const dirs = workspaceDirs(DATA);
   if (id) {
     const dir = dirs.find((d) => basename(d) === id);
@@ -52,8 +84,7 @@ function workspaceDir(): string {
 const DIR = workspaceDir();
 const store = new Store(DIR);
 const blobs = new Blobs(join(DIR, "blobs"), store);
-const lang = (opt("lang", store.records.get("sys:settings")?.settings?.setupLang ?? "de") as Lang) ?? "de";
-const log = (m: string) => console.log(m);
+const lang = (opts.lang as Lang | undefined) ?? store.lang();
 
 if (cmd === "stats") {
   const by = new Map<string, number>();
@@ -67,16 +98,21 @@ if (cmd === "stats") {
   console.log(Object.fromEntries(by), { seq: store.seq, server: store.serverId, filesMissingContent: missing.length });
   for (const r of missing.slice(0, 20)) console.log("  missing:", r.title, r.id);
 } else if (cmd === "setup") {
-  await setUp(store, blobs, (positional[0] as Lang) ?? lang, { examples: flag("examples"), quiet: false });
-  log(flag("examples") ? "Set up, with the examples." : "Set up.");
+  await setUp(store, blobs, (arg as Lang | undefined) ?? lang, { examples: opts.examples, quiet: false });
+  console.log(opts.examples ? "Set up, with the examples." : "Set up.");
 } else if (cmd === "import-obsidian") {
-  runSetup(storeWriter(store, "system:setup"), lang, "system:setup");
-  await importObsidian(store, blobs, resolve(positional[0] ?? `${process.env.HOME}/second_brain`), { lang, mocParents: !flag("no-moc-parents") }, log);
+  await setUp(store, blobs, lang);
+  await importObsidian(store, blobs, resolve(arg!), { lang, mocParents: !opts["no-moc-parents"] }, console.log);
 } else if (cmd === "import-notion") {
-  runSetup(storeWriter(store, "system:setup"), lang, "system:setup");
-  importNotion(store, resolve(positional[0] ?? "seed/notion.json"), { lang, projectType: opt("project-type", SYS.project)!, taskType: opt("task-type", SYS.task)! }, log);
-} else {
-  console.log("usage: cli.ts setup [de|en] [--examples] | import-obsidian <vault> | import-notion <json> [--project-type X] [--task-type Y] | stats   [--workspace <id>]");
-  process.exit(1);
+  await setUp(store, blobs, lang);
+  importNotion(store, resolve(arg!), { lang, projectType: opts["project-type"] ?? SYS.project, taskType: opts["task-type"] ?? SYS.task }, console.log);
+} else if (cmd === "gc") {
+  const sizes = new Map<string, number>();
+  for (const hash of blobs.collect(true)) sizes.set(hash, blobs.size(hash));
+  const total = [...sizes.values()].reduce((a, b) => a + b, 0);
+  for (const [hash, size] of sizes) console.log(`  ${hash}  ${size} bytes`);
+  const summary = `${sizes.size} file(s) no item points to, ${(total / 1024 / 1024).toFixed(1)} MB`;
+  if (!opts.force) console.log(`${summary}. Nothing removed; run with --force to remove them.`);
+  else console.log(`${summary}: removed ${blobs.collect().length}.`);
 }
 store.flush();

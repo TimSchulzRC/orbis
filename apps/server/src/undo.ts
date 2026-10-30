@@ -5,8 +5,8 @@
 //   later, then the newer value stays. A document the step created goes to the trash.
 // The undo is itself a step (steps.undoes), so undoing it again is "Wiederholen".
 import * as Y from "yjs";
-import type { Store } from "./store";
-import { replaceBody } from "@obtion/core/model";
+import { type Store, same } from "./store";
+import { replaceBody, touch } from "@obtion/core/model";
 
 export class UndoError extends Error {}
 
@@ -41,8 +41,6 @@ function fields(doc: Y.Doc): Fields {
   }
   return out;
 }
-
-const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
 function toY(v: unknown): unknown {
   if (v && typeof v === "object" && !Array.isArray(v)) {
@@ -129,7 +127,7 @@ export function undoStep(store: Store, stepId: string, actor: string): UndoResul
           if (!back.length) continue;
           store.change(id, actor, (doc) => {
             for (const [k, v] of back) writeField(doc, k, v);
-            doc.getMap<any>("meta").set("updated", Date.now());
+            touch(doc);
           });
           res.changed.push(id);
         }

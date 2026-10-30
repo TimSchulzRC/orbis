@@ -1,6 +1,6 @@
 // Daily copies of the database in data/backups, consistent while the server runs (VACUUM INTO),
 // so a backup job on the host may copy the data folder at any time. File contents need no copy:
-// blobs/ only ever gains files, each written once under its hash.
+// blobs/ only gains files, each written once under its hash (only `cli.ts gc` removes any).
 import { existsSync, mkdirSync, readdirSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import type { Store } from "./store";
