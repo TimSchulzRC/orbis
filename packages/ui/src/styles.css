@@ -72,15 +72,16 @@ body {
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior-y: none;
 }
-/* In the base layer, so a field that shows focus on its container (outline-none) has one ring only. */
+/* In the base layer, so a field that shows focus on its container (outline-none) has one ring only,
+   and a button's cursor gives way to a cursor-* utility. */
 @layer base {
   :focus-visible {
     outline: 2px solid var(--focus);
     outline-offset: 2px;
   }
-}
-button {
-  cursor: pointer;
+  button {
+    cursor: pointer;
+  }
 }
 ::selection {
   background: color-mix(in srgb, var(--focus) 28%, transparent);
@@ -962,24 +963,4 @@ body.cm-dragging * {
   padding: 6px 8px;
   font-size: 13px;
   color: var(--muted-foreground);
-}
-
-/* To or from Heute on a desktop (hooks.ts useRoute): the page changes at once, only the tray
-   moves – leaving Heute its open panel folds down into the bar, coming back it unfolds. The
-   bottom stays in place, so the bar stays where it is. */
-::view-transition-old(root),
-::view-transition-new(root) {
-  animation: none;
-}
-::view-transition-group(shelf) {
-  overflow: hidden;
-  border-radius: 1rem;
-  animation-duration: 340ms;
-  animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-::view-transition-old(shelf),
-::view-transition-new(shelf) {
-  height: 100%;
-  object-fit: none;
-  object-position: bottom;
 }

@@ -23,12 +23,12 @@ export function Tray({ desktop, pinned, onCapture }: { desktop: boolean; pinned?
   const { open, at } = useShelf();
   const touch = useRef<number | null>(null);
   const tray = (
-    <div className={cx("group/tray relative flex shrink-0 items-center rounded-xl", !desktop && "min-w-0 flex-1")}>
+    <div className={cx("relative flex shrink-0 items-center rounded-xl", !pinned && "group/tray", !desktop && "min-w-0 flex-1")}>
       <ShadcnButton
         variant="plain"
         size="none"
-        // pinned it does not close: back to the list
-        onClick={() => (pinned ? openShelf() : open ? closeShelf() : openShelf())}
+        // pinned it does not close, so nothing to click
+        onClick={() => !pinned && (open ? closeShelf() : openShelf())}
         onTouchStart={(e) => (touch.current = e.touches[0]!.clientY)}
         onTouchEnd={(e) => {
           if (touch.current !== null && touch.current - (e.changedTouches[0]?.clientY ?? 0) > 40) (e.preventDefault(), openShelf());
@@ -36,7 +36,7 @@ export function Tray({ desktop, pinned, onCapture }: { desktop: boolean; pinned?
         }}
         aria-expanded={pinned || open}
         aria-label={t("tray.open", { count })}
-        className={cx("relative flex min-w-0 items-center gap-2 rounded-xl py-1.5 pr-2 text-left", desktop ? "min-h-11 pl-[136px]" : "min-h-10 pl-[100px]", "hover:bg-hover", !desktop && "flex-1", open && "bg-hover")}
+        className={cx("relative flex min-w-0 items-center gap-2 rounded-xl py-1.5 pr-2 text-left", desktop ? "min-h-11 pl-[136px]" : "min-h-10 pl-[100px]", pinned ? "cursor-default" : cx("hover:bg-hover", open && "bg-hover"), !desktop && "flex-1")}
       >
         <Sheets entries={entries.slice(0, 3)} desktop={desktop} />
         <span className="flex min-w-0 flex-col gap-1.5">
@@ -68,8 +68,7 @@ export function Tray({ desktop, pinned, onCapture }: { desktop: boolean; pinned?
       {/* the page behind the open panel: dimmed, a click closes */}
       {open && !pinned && <div className="fixed inset-0 z-30 bg-black/40" onClick={closeShelf} aria-hidden />}
       <div className={cx("relative z-40", pinned ? "flex min-h-[308px] flex-1 flex-col" : "shrink-0", desktop ? cx(pinned ? "px-8" : "px-6", "pb-4 pt-2") : "px-3 pb-2 pt-1")} role="region" aria-label={t("tray.title")}>
-        {/* panel and bar as one: leaving Heute the panel folds into the bar, coming back it unfolds (styles.css) */}
-        <div style={desktop ? { viewTransitionName: "shelf" } : undefined} className={cx("mx-auto", desktop && "max-w-[1040px]", pinned && "flex min-h-0 w-full flex-1 flex-col")}>
+        <div className={cx("mx-auto", desktop && "max-w-[1040px]", pinned && "flex min-h-0 w-full flex-1 flex-col")}>
           {pinned ? (
             // above the sheets sticking out of the tray, which stay
             <div className="min-h-0 flex-1 pb-10">
