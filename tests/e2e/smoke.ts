@@ -237,7 +237,7 @@ async function run() {
             await p.getByRole("button", { name: /Lose behalten/ }).click();
             await p.waitForTimeout(300);
             if ((await card.innerText().catch(() => "")).trim() === title) failures.push(`${label}: the review did not move on after "Lose behalten"`);
-            const done = phone ? p.locator("main [aria-live]").first() : p.locator("main aside section").first();
+            const done = phone ? p.locator("main [aria-live]").first() : p.locator("main aside section[aria-label=\"Erledigt\"]");
             if (!(await done.getByText(title.slice(0, 15)).count())) failures.push(`${label}: "${title}" is not under "Erledigt"`);
             await (phone ? done.getByRole("button", { name: "Rückgängig" }) : done.getByRole("button", { name: `„${title}“ rückgängig machen` })).click();
             await p.waitForTimeout(300);

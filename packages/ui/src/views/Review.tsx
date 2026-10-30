@@ -1,13 +1,14 @@
 import { Button as ShadcnButton } from "../components/ui/button";
-// The review ("Durchsicht"): the inbox one entry at a time, as a stack. The entry in full on top,
-// below what can become of it – a place, a type, back tomorrow, kept as it is, deleted – and on
-// a desktop beside it what this review sorted (each with its undo) and what is still waiting.
+// The review ("Durchsicht"): the inbox one entry at a time, as a stack. The entry on top, always
+// as tall (a long one scrolls inside), so what can become of it stays in place below – a place, a
+// type, back tomorrow, kept as it is, deleted – and on a desktop beside it what is still waiting
+// and what this review sorted (each with its undo).
 // What was sorted stays until the review is closed: "Später weiter" leaves it for later today.
 //
 // A suggestion (the agent's or the app's own) is not shown yet; it would be the first answer
-// above "Ort" in `Choices`.
-import { useEffect, useRef, useState } from "react";
-import { Check, Clock, FolderInput, Layers, List, Pause, RotateCcw, StickyNote, Trash2, Undo2, X } from "lucide-react";
+// among the suggestions in `Choices`.
+import { type ReactNode, useEffect, useRef, useState } from "react";
+import { Check, Clock, FolderInput, Layers, List, Pause, RotateCcw, Shapes, StickyNote, Trash2, Undo2, X } from "lucide-react";
 import type { Item } from "@obtion/core/model";
 import { todayISO } from "@obtion/core/model";
 import { plainText } from "@obtion/core/search";
@@ -63,6 +64,7 @@ export function Review({ at }: { at?: string }) {
   const [sorted, setSorted] = useState<Sorted[]>(() => session?.sorted ?? []);
   const [cur, setCur] = useState<string | undefined>(at ?? session?.at);
   const closed = useRef(false);
+  const card = useRef<HTMLDivElement>(null);
   const byKey = new Map(entries.map((e) => [e.key, e]));
   const left = order.current.filter((k) => byKey.has(k) && !sorted.some((s) => s.key === k));
   // the entry shown: the chosen one while it waits, else the next after its place
@@ -116,7 +118,8 @@ export function Review({ at }: { at?: string }) {
       else if (k === "s") later();
       else if (k === "b") keep();
       else if (k === "x" || k === "Delete") trash();
-      // arrows up and down stay the page's (a long note scrolls)
+      // arrows up and down scroll a long entry in its card
+      else if (k === "ArrowDown" || k === "ArrowUp") card.current?.scrollBy({ top: k === "ArrowDown" ? 80 : -80 });
       else if (k === "j" || k === "ArrowRight") step(1);
       else if (k === "k" || k === "ArrowLeft") step(-1);
       else if (k === "Enter" || k === "o") location.hash = spaceHref(entry.space, `/i/${encodeURIComponent(entry.item.id)}`);
@@ -142,7 +145,7 @@ export function Review({ at }: { at?: string }) {
   );
   const body = entry ? (
     <SpaceScope id={entry.space}>
-      <EntryCard entry={entry} space={several ? spaceById(entry.space)?.name : undefined} more={left.length - 1} />
+      <EntryCard key={entry.key} entry={entry} space={several ? spaceById(entry.space)?.name : undefined} more={left.length - 1} scroller={card} />
       <Choices entry={entry} onPlace={(p) => placeIn([entry.item], p)} onPick={() => pick.setPlacing([entry.item])} onType={(type) => typeAs([entry.item], type)} onTypes={() => pick.setTyping([entry.item])} onLater={later} onKeep={keep} onTrash={trash} onUndo={sorted.length ? () => undo() : undefined} keys={desktop} />
     </SpaceScope>
   ) : (
@@ -161,9 +164,9 @@ export function Review({ at }: { at?: string }) {
         }}
       >
         {head}
-        {/* the last one sorted, with its way back: the phone's "Erledigt" */}
-        {sorted.length > 0 && <LastSorted s={sorted.at(-1)!} onUndo={() => undo()} />}
         <div className="mt-4">{body}</div>
+        {/* the last one sorted, with its way back: the phone's "Erledigt", below so nothing above moves */}
+        {sorted.length > 0 && <LastSorted s={sorted.at(-1)!} onUndo={() => undo()} />}
         {pick.node}
       </div>
     );
@@ -173,8 +176,8 @@ export function Review({ at }: { at?: string }) {
       <div className="mt-6 grid grid-cols-[minmax(0,1fr)_300px] items-start gap-8">
         <div className="min-w-0">{body}</div>
         <aside className="flex flex-col gap-4" aria-label={t("review.title")}>
-          <SortedList sorted={sorted} onUndo={undo} />
           <StackList keys={left} current={key} byKey={byKey} onPick={setCur} />
+          <SortedList sorted={sorted} onUndo={undo} />
         </aside>
       </div>
       {pick.node}
@@ -244,8 +247,12 @@ function Steps({ total, done }: { total: number; done: number }) {
   );
 }
 
-/** The entry in full: what it is, where from and how old, the title, the text, the notes below. */
-function EntryCard({ entry, space, more }: { entry: InboxEntry; space?: string; more: number }) {
+/**
+ * The entry in full: what it is, where from and how old, the title, the text, the notes below.
+ * Always as tall, so the choices below never move; a long entry scrolls inside, a fade at the
+ * bottom says there is more.
+ */
+function EntryCard({ entry, space, more, scroller }: { entry: InboxEntry; space?: string; more: number; scroller: React.RefObject<HTMLDivElement | null> }) {
   const { t } = useT();
   const repo = useRepo();
   const ix = repo.index();
@@ -255,12 +262,24 @@ function EntryCard({ entry, space, more }: { entry: InboxEntry; space?: string; 
   const kind = look.label === "inbox" ? t("kind.note") : ["file", "note", "overview"].includes(look.label) ? t("kind." + look.label) : look.label;
   const kids = ix.childrenOf(item.id).map((id) => ix.get(id)!).filter(Boolean);
   const img = useBlobUrl(item.file?.filetype === "bild" ? (item.file.display ?? item.file.hash) : item.file?.thumb, true);
+  const [rest, setRest] = useState(false);
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    const measure = () => setRest(el.scrollHeight - el.scrollTop - el.clientHeight > 4);
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    for (const c of el.children) ro.observe(c);
+    el.addEventListener("scroll", measure, { passive: true });
+    return () => (ro.disconnect(), el.removeEventListener("scroll", measure));
+  }, []);
   return (
     <div className="relative">
       {/* the stack: the next entries lie below this one */}
       {more > 0 && <div className="absolute inset-x-4 -bottom-2 h-6 rounded-2xl border border-line bg-surface opacity-60" aria-hidden />}
       {more > 1 && <div className="absolute inset-x-8 -bottom-4 h-6 rounded-2xl border border-line bg-surface opacity-30" aria-hidden />}
-      <article className="relative rounded-2xl border border-line bg-surface px-8 py-7 shadow-sm max-lg:px-5 max-lg:py-5">
+      <article className="relative flex h-[clamp(240px,calc(100dvh-460px),440px)] flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-sm max-lg:h-[clamp(200px,calc(100dvh-440px),440px)]">
+        <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-8 py-7 max-lg:px-5 max-lg:py-5">
         <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-muted-foreground">
           <span className="inline-flex items-center gap-1.5 rounded-full border border-line px-2 py-0.5 text-fg">
             <ItemIcon item={item} size={13} /> {kind}
@@ -302,15 +321,18 @@ function EntryCard({ entry, space, more }: { entry: InboxEntry; space?: string; 
             </ul>
           </div>
         )}
+        </div>
+        {rest && <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 rounded-b-2xl bg-gradient-to-t from-surface to-transparent" aria-hidden />}
       </article>
     </div>
   );
 }
 
 /**
- * What can become of it, one area each: a place (the picker; places it mentions or used last
- * beside it), a type (the workspace's first types), or none of both – back tomorrow, kept as it
- * is, deleted. Keys quietly in the buttons on a desktop.
+ * What can become of it. Five tiles, always the same and in the same place: put it somewhere, turn
+ * it into a type (only a loose note), back tomorrow, keep it as it is, delete it. Below in one line
+ * the quick ways: the first type ("c") and places it mentions or used last; the rest is in the
+ * pickers. Keys quietly in the tiles on a desktop.
  */
 function Choices({ entry, onPlace, onPick, onType, onTypes, onLater, onKeep, onTrash, onUndo, keys }: { entry: InboxEntry; onPlace: (p: string) => void; onPick: () => void; onType: (type: string) => void; onTypes: () => void; onLater: () => void; onKeep: () => void; onTrash: () => void; onUndo?: () => void; keys: boolean }) {
   const { t } = useT();
@@ -320,52 +342,55 @@ function Choices({ entry, onPlace, onPick, onType, onTypes, onLater, onKeep, onT
   const info = item.kind === "info";
   const places = placeSuggestions(item, repo).map((x) => x.id);
   for (const id of recentPlaces(repo)) if (!places.includes(id) && id !== item.id && !item.parents[id] && !ix.wouldCycle(item.id, id)) places.push(id);
-  const types = offeredTypes(entry);
-  const k = (key: string) => keys && <Kbd>{key}</Kbd>;
-  const label = "mb-2 text-[13px] font-medium text-muted-foreground";
-  return (
-    <div className="mt-8 space-y-5">
-      <section aria-label={t("review.place")}>
-        <p className={label}>{t("review.place")}</p>
-        <div className="flex flex-wrap items-center gap-1.5">
-          <Button variant="primary" onClick={onPick}>
-            <FolderInput size={15} /> {t("review.placePick")} {k("e")}
-          </Button>
-          {places.slice(0, 3).map((id) => (
-            <Button key={id} variant="outline" onClick={() => onPlace(id)} className="max-w-[240px]">
-              <span className="truncate">{ix.get(id)?.title}</span>
-            </Button>
-          ))}
-        </div>
-      </section>
-      {info && (
-        <section aria-label={t("review.convert")}>
-          <p className={label}>{t("review.convert")}</p>
-          <div className="flex flex-wrap items-center gap-1.5">
-            {types.map((id, n) => (
-              <Button key={id} variant="outline" onClick={() => onType(id)}>
-                <TypeGlyph schema={ix.types.get(id)?.schema} size={14} /> {ix.typeName(id)} {n === 0 && k("c")}
-              </Button>
-            ))}
-            <Button onClick={onTypes}>
-              {types.length ? t("review.otherType") : t("triage.type")} {k("y")}
-            </Button>
-          </div>
-        </section>
+  const type = info ? offeredTypes(entry)[0] : undefined;
+  const tile = (icon: ReactNode, label: string, key: string, onClick: () => void, opts: { primary?: boolean; danger?: boolean; disabled?: boolean } = {}) => (
+    <ShadcnButton
+      variant="plain"
+      size="none"
+      onClick={onClick}
+      disabled={opts.disabled}
+      className={cx(
+        "tap flex h-auto min-w-0 flex-col items-center justify-center gap-1 rounded-xl border px-2 py-2.5 text-[13px] font-medium leading-tight whitespace-normal disabled:opacity-40 max-lg:px-0.5 max-lg:text-[11px]",
+        opts.primary ? "border-transparent bg-primary text-primary-foreground hover:bg-primary/90" : "border-line bg-surface hover:bg-hover",
+        opts.danger && "text-danger",
       )}
-      <div className="flex flex-wrap items-center gap-1.5 border-t border-line pt-4">
-        <Button onClick={onLater}>
-          <Clock size={15} /> {t("review.later")} {k("s")}
-        </Button>
-        <Button onClick={onKeep}>
-          <StickyNote size={15} /> {t("review.keep")} {k("b")}
-        </Button>
-        <Button onClick={onTrash} className="text-danger hover:text-danger">
-          <Trash2 size={15} /> {t("triage.delete")} {k("x")}
-        </Button>
-        <span className="flex-1" />
-        <Button onClick={onUndo} disabled={!onUndo}>
-          <Undo2 size={15} /> {t("review.back")} {k("u")}
+    >
+      {icon}
+      <span className="flex items-center gap-1.5 text-center">
+        {label} {keys && <Kbd>{key}</Kbd>}
+      </span>
+    </ShadcnButton>
+  );
+  const chip = "tap inline-flex h-7 max-w-[220px] shrink-0 items-center gap-1.5 rounded-full border border-line bg-surface px-2.5 text-[13px] hover:bg-hover";
+  return (
+    <div className="mt-6 space-y-3">
+      <div className="grid grid-cols-5 gap-2 max-lg:gap-1.5">
+        {tile(<FolderInput size={17} />, t("review.placeAction"), "e", onPick, { primary: true })}
+        {tile(<Shapes size={17} />, t("review.convertAction"), "y", onTypes, { disabled: !info })}
+        {tile(<Clock size={17} />, t("review.later"), "s", onLater)}
+        {tile(<StickyNote size={17} />, t("review.keep"), "b", onKeep)}
+        {tile(<Trash2 size={17} />, t("triage.delete"), "x", onTrash, { danger: true })}
+      </div>
+      <div className="flex min-h-8 items-center gap-2">
+        <span className="shrink-0 text-[13px] text-muted-foreground">{t("review.suggested")}</span>
+        <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto [scrollbar-width:none]">
+          {type && (
+            <ShadcnButton variant="plain" size="none" onClick={() => onType(type)} className={chip}>
+              <TypeGlyph schema={ix.types.get(type)?.schema} size={13} />
+              <span className="truncate">{t("review.asType", { type: ix.typeName(type) ?? "" })}</span>
+              {keys && <Kbd>c</Kbd>}
+            </ShadcnButton>
+          )}
+          {places.slice(0, 3).map((id) => (
+            <ShadcnButton key={id} variant="plain" size="none" onClick={() => onPlace(id)} className={chip} title={t("review.placeIn", { place: ix.get(id)?.title ?? "" })}>
+              <FolderInput size={13} className="shrink-0 text-muted-foreground" />
+              <span className="truncate">{ix.get(id)?.title}</span>
+            </ShadcnButton>
+          ))}
+          {!places.length && !type && <span className="text-[13px] text-muted-foreground">–</span>}
+        </div>
+        <Button onClick={onUndo} disabled={!onUndo} className="shrink-0">
+          <Undo2 size={15} /> {t("review.back")} {keys && <Kbd>u</Kbd>}
         </Button>
       </div>
     </div>
@@ -379,7 +404,7 @@ const offeredTypes = (e: InboxEntry) => captureTypes(e.space).filter((x) => x !=
 function SortedList({ sorted, onUndo }: { sorted: Sorted[]; onUndo: (s: Sorted) => void }) {
   const { t } = useT();
   return (
-    <section className="rounded-xl border border-line bg-surface p-4" aria-live="polite">
+    <section className="rounded-xl border border-line bg-surface p-4" aria-label={t("review.sorted")} aria-live="polite">
       <SectionTitle count={sorted.length} className="mb-1">{t("review.sorted")}</SectionTitle>
       {sorted.length ? (
         <ul className="flex flex-col">
@@ -436,7 +461,7 @@ function StackList({ keys, current, byKey, onPick }: { keys: string[]; current?:
 function LastSorted({ s, onUndo }: { s: Sorted; onUndo: () => void }) {
   const { t } = useT();
   return (
-    <div className="mt-3 flex items-center gap-2 rounded-xl border border-[color-mix(in_srgb,var(--ok)_35%,transparent)] bg-[color-mix(in_srgb,var(--ok)_8%,transparent)] px-3 py-2 text-[13px]" aria-live="polite">
+    <div className="mt-4 flex items-center gap-2 rounded-xl border border-[color-mix(in_srgb,var(--ok)_35%,transparent)] bg-[color-mix(in_srgb,var(--ok)_8%,transparent)] px-3 py-2 text-[13px]" aria-live="polite">
       <Check size={15} className="shrink-0 text-ok" />
       <span className="min-w-0 flex-1 truncate">
         {s.title} <span className="text-muted-foreground">· {s.what}</span>
