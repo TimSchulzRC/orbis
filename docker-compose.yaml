@@ -8,8 +8,7 @@ services:
     image: ghcr.io/timschulzrc/obtion:${OBTION_VERSION:-latest}
     restart: unless-stopped
     ports:
-      # on every address of the host (LAN, tailnet, …); the first account created on the page
-      # becomes the admin
+      # on every address of the host (LAN, tailnet, …)
       - "${OBTION_BIND:-0.0.0.0}:${OBTION_PORT:-8480}:8480"
     volumes:
       # an ordinary folder on the host: database, daily backups, files, Markdown mirror. Created

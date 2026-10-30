@@ -7,7 +7,8 @@ import { Database } from "bun:sqlite";
 import * as Y from "yjs";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { type Item, type ItemInit, PERSONAL, initItem, isContent, newId, readItem } from "@obtion/core/model";
+import { type Item, type ItemInit, PERSONAL, SETTINGS_ID, initItem, isContent, newId, readItem } from "@obtion/core/model";
+import type { Lang } from "@obtion/core/i18n";
 import { Index } from "@obtion/core/graph";
 import { resolveCascade } from "@obtion/core/trash";
 import type { ActivityEvent, FieldChange } from "@obtion/core/protocol";
@@ -486,7 +487,15 @@ export class Store {
     return this._ix;
   }
 
-  resolveTitle = (title: string) => this.index().resolveTitle(title);
+  /** The language the workspace was set up in; undefined before the setup. */
+  setupLang(): Lang | undefined {
+    return this.records.get(SETTINGS_ID)?.settings?.setupLang as Lang | undefined;
+  }
+
+  /** The workspace's language: the setup's, German before it. */
+  lang(): Lang {
+    return this.setupLang() ?? "de";
+  }
 
   events(opts: { since?: number; doc?: string; limit?: number; before?: number } = {}): ActivityEvent[] {
     const where: string[] = [];
@@ -499,6 +508,11 @@ export class Store {
     const rows = (this.db.query(sql).all(...args) as any[]).map((r) => ({ ...r, step: r.step ?? undefined, changes: JSON.parse(r.changes || "[]") })) as ActivityEvent[];
     for (const e of rows) if (e.step) Object.assign(e, this.stepState(e.step));
     return rows;
+  }
+
+  /** An activity entry of its own, not about one document (an import). */
+  logEvent(title: string, origin: string) {
+    this.db.query("INSERT INTO events (ts, doc, title, type, kind, origin, changes) VALUES (?, ?, ?, ?, ?, ?, ?)").run(Date.now(), "", title, "import", "created", origin, "[]");
   }
 
   /** Is a step an undo (of which step) – or a redo, an undo of an undo – and is it undone right now? */
@@ -523,7 +537,6 @@ export class Store {
   kvSet(key: string, value: string) {
     this.db.query("INSERT OR REPLACE INTO kv (key, value) VALUES (?, ?)").run(key, value);
   }
-
 }
 
 // ---------- helpers ----------
@@ -571,7 +584,8 @@ function typeTag(i: Item): string {
   return i.kind === "info" ? (i.type ?? "") : i.kind;
 }
 
-const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+/** Equal as JSON (field values, schemas). */
+export const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
 function setDiff(field: string, a: string[], b: string[], out: FieldChange[]) {
   const added = b.filter((x) => !a.includes(x));
@@ -579,7 +593,7 @@ function setDiff(field: string, a: string[], b: string[], out: FieldChange[]) {
   if (added.length || removed.length) out.push({ field, from: removed, to: added });
 }
 
-export function diffRecords(prev: Item | undefined, next: Item): { kind: ActivityEvent["kind"]; changes: FieldChange[] } {
+function diffRecords(prev: Item | undefined, next: Item): { kind: ActivityEvent["kind"]; changes: FieldChange[] } {
   if (!prev) return { kind: next.deleted ? "deleted" : "created", changes: [] };
   const changes: FieldChange[] = [];
   for (const f of ["title", "type", "home", "pinned"] as const) if (prev[f] !== next[f]) changes.push({ field: f, from: prev[f] ?? undefined, to: next[f] ?? undefined });

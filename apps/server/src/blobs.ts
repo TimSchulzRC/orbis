@@ -7,12 +7,11 @@ import { join } from "node:path";
 import { type FileMeta, type Item, setFileMeta } from "@obtion/core/model";
 import type { Store } from "./store";
 
-export const MAX_BLOB = 512 * 1024 * 1024;
 const HASH = /^[0-9a-f]{64}$/;
 const FFMPEG = Bun.which("ffmpeg");
 const FFPROBE = Bun.which("ffprobe");
 
-export function sha256(data: Uint8Array | ArrayBuffer): string {
+export function sha256(data: Uint8Array | ArrayBuffer | string): string {
   return new Bun.CryptoHasher("sha256").update(data).digest("hex");
 }
 
@@ -76,12 +75,15 @@ export class Blobs {
     return out;
   }
 
-  /** Remove contents no file (not even one in the trash or in a history) points to. */
-  collect(): number {
+  /**
+   * Contents no file (not even one in the trash or in a history) points to; removed unless
+   * `dryRun`. Run by hand only (cli.ts gc): copies in backups/ may still point to them.
+   */
+  collect(dryRun = false): string[] {
     const keep = this.referenced();
-    let n = 0;
-    for (const name of readdirSync(this.dir)) if (HASH.test(name) && !keep.has(name)) (unlinkSync(join(this.dir, name)), n++);
-    return n;
+    const unused = readdirSync(this.dir).filter((name) => HASH.test(name) && !keep.has(name));
+    if (!dryRun) for (const hash of unused) unlinkSync(this.path(hash));
+    return unused;
   }
 
   // ---------- derived data ----------
@@ -193,7 +195,7 @@ async function probe(path: string): Promise<{ width?: number; height?: number; d
 }
 
 let pdfjs: any;
-export async function pdfInfo(path: string): Promise<{ pages: number; text?: string }> {
+async function pdfInfo(path: string): Promise<{ pages: number; text?: string }> {
   pdfjs ??= await import("pdfjs-dist/legacy/build/pdf.mjs");
   const data = new Uint8Array(await Bun.file(path).arrayBuffer());
   const task = pdfjs.getDocument({ data, isEvalSupported: false, disableFontFace: true, verbosity: 0 });

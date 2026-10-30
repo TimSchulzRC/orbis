@@ -12,6 +12,7 @@ import { betterAuth } from "better-auth";
 import { bearer } from "better-auth/plugins";
 import { getMigrations } from "better-auth/db/migration";
 import { newId } from "@obtion/core/model";
+import { sha256 } from "./blobs";
 
 /** Who may create an account: anyone, only with an invite link, or nobody (the first account always may). */
 export type SignupPolicy = "open" | "invite" | "off";
@@ -30,6 +31,13 @@ export interface WorkspaceInfo {
   legacy?: boolean;
 }
 
+export interface Member extends User {
+  role: WorkspaceInfo["role"];
+}
+
+/** A workspace name as stored: trimmed, at most 80 characters. */
+const workspaceName = (name: string) => name.trim().slice(0, 80);
+
 export class AccountError extends Error {
   constructor(
     message: string,
@@ -42,8 +50,7 @@ export class AccountError extends Error {
 /** What a server folder held before accounts: it becomes the first workspace (see migrateLegacy). */
 const LEGACY_ENTRIES = ["obtion.db", "obtion.db-wal", "obtion.db-shm", "blobs", "vault", "backups", "agent"];
 
-const hash = (token: string) => new Bun.CryptoHasher("sha256").update(token).digest("hex");
-const randomToken = () => Buffer.from(crypto.getRandomValues(new Uint8Array(24))).toString("base64url");
+export const randomToken = () => Buffer.from(crypto.getRandomValues(new Uint8Array(24))).toString("base64url");
 
 export class Accounts {
   db: Database;
@@ -117,6 +124,7 @@ export class Accounts {
     return (this.db.query('SELECT count(*) AS n FROM "user"').get() as { n: number }).n;
   }
 
+  /** The first account is marked as the admin; no right depends on it (yet). */
   isAdmin(user: string): boolean {
     return !!this.db.query("SELECT 1 FROM admins WHERE user = ?").get(user);
   }
@@ -187,16 +195,18 @@ export class Accounts {
 
   createWorkspace(user: string, name: string): WorkspaceInfo {
     const id = newId();
+    const clean = workspaceName(name) || "Workspace";
     mkdirSync(this.dir(id), { recursive: true });
-    this.db.query("INSERT INTO workspaces (id, name, created) VALUES (?, ?, ?)").run(id, name.trim().slice(0, 80) || "Workspace", Date.now());
+    this.db.query("INSERT INTO workspaces (id, name, created) VALUES (?, ?, ?)").run(id, clean, Date.now());
     this.addMember(id, user, "owner");
-    return { id, name, role: "owner" };
+    return { id, name: clean, role: "owner" };
   }
 
   rename(workspace: string, user: string, name: string) {
     if (this.role(workspace, user) !== "owner") throw new AccountError("only owners rename", 403);
-    if (!name.trim()) throw new AccountError("name required");
-    this.db.query("UPDATE workspaces SET name = ? WHERE id = ?").run(name.trim().slice(0, 80), workspace);
+    const clean = workspaceName(name);
+    if (!clean) throw new AccountError("name required");
+    this.db.query("UPDATE workspaces SET name = ? WHERE id = ?").run(clean, workspace);
   }
 
   /** An owner deletes a workspace: for everyone, with its folder (data, files, backups). Close it first. */
@@ -211,8 +221,8 @@ export class Accounts {
     this.db.query("INSERT OR IGNORE INTO members (workspace, user, role, joined) VALUES (?, ?, ?, ?)").run(workspace, user, role, Date.now());
   }
 
-  members(workspace: string): { id: string; name: string; email: string; role: string }[] {
-    return this.db.query('SELECT u.id, u.name, u.email, m.role FROM members m JOIN "user" u ON u.id = m.user WHERE m.workspace = ? ORDER BY m.joined').all(workspace) as any[];
+  members(workspace: string): Member[] {
+    return this.db.query('SELECT u.id, u.name, u.email, m.role FROM members m JOIN "user" u ON u.id = m.user WHERE m.workspace = ? ORDER BY m.joined').all(workspace) as Member[];
   }
 
   /**
@@ -253,16 +263,16 @@ export class Accounts {
   // ---------- MCP tokens ----------
 
   /** A token for agents (Claude Code, Claude Desktop) on one workspace, as this user. Shown once. */
-  mcpToken(workspace: string, user: string, label = "mcp"): string {
+  mcpToken(workspace: string, user: string): string {
     if (!this.role(workspace, user)) throw new AccountError("not a member", 403);
     const token = "obt_" + randomToken();
-    this.db.query("INSERT INTO tokens (hash, user, workspace, label, created) VALUES (?, ?, ?, ?, ?)").run(hash(token), user, workspace, label, Date.now());
+    this.db.query("INSERT INTO tokens (hash, user, workspace, label, created) VALUES (?, ?, ?, ?, ?)").run(sha256(token), user, workspace, "mcp", Date.now());
     return token;
   }
 
   /** The user an MCP token stands for on this workspace (and is still a member), or undefined. */
   mcpUser(workspace: string, token: string): User | undefined {
-    const row = this.db.query('SELECT u.id, u.name, u.email FROM tokens t JOIN "user" u ON u.id = t.user JOIN members m ON m.workspace = t.workspace AND m.user = t.user WHERE t.hash = ? AND t.workspace = ?').get(hash(token), workspace) as User | null;
+    const row = this.db.query('SELECT u.id, u.name, u.email FROM tokens t JOIN "user" u ON u.id = t.user JOIN members m ON m.workspace = t.workspace AND m.user = t.user WHERE t.hash = ? AND t.workspace = ?').get(sha256(token), workspace) as User | null;
     return row ?? undefined;
   }
 }

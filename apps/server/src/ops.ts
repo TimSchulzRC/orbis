@@ -1,18 +1,18 @@
 // Agent operations (used by the MCP server). Everything is driven by data: the agent reads
 // the schema (types, their descriptions, properties, capabilities) and works through
 // names – no type is special in code. The web app edits its replica directly.
+import * as Y from "yjs";
 import {
   type ViewTab,
   type FreeKind,
   type FreeValue,
   type Item,
   type PropDef,
+  type StatusGroup,
   type TypeSchema,
   type Value,
-  type ViewKind,
   FREE_KINDS,
   META_TYPE,
-  PROP_KINDS,
   addParent,
   appendUpdate,
   fileTypeOf,
@@ -36,38 +36,32 @@ import {
   shortId,
   titleKey,
   todayISO,
+  touch,
   upsertProp,
 } from "@obtion/core/model";
 import type { Index } from "@obtion/core/graph";
 import { blocksAsText, matches, normalizeBlocks, parseQuery, printQuery, runQuery, relDate, tabDef, typesIn, type Cond, type QueryDef } from "@obtion/core/query";
 import { inboxWhere } from "@obtion/core/inbox";
-
-/** A view (tab) of a type's page, as agents give it: its own filter and look in query text. */
-export interface ViewInput {
-  name?: string;
-  view?: ViewKind;
-  query?: string; // filter added to the type, plus sort:, group:, columns:, view:
-  subgroup?: string;
-  hide_empty_groups?: boolean;
-  hidden_groups?: string[]; // group names (status or option names, titles) to hide
-  date?: string;
-}
-const VIEW_KINDS: ViewKind[] = ["table", "board", "list", "calendar", "timeline", "gallery", "triage", "tree"];
 import { isInInbox, isOverview } from "@obtion/core/placement";
-import { caps, doneAt, dueOf, dueProp, firstOfGroup, hasUpdates, initialProps, progressSpec, statusOf, statusProp, template, writeProp } from "@obtion/core/traits";
+import { caps, doneAt, dueOf, dueProp, firstOfGroup, hasUpdates, initialProps, statusOf, statusProp, template, writeProp } from "@obtion/core/traits";
 import { previewTagToType, typeUsage } from "@obtion/core/typeops";
-import type { Lang } from "@obtion/core/i18n";
 import { searchIds, snippet } from "@obtion/core/search";
 import { keyBetween } from "@obtion/core/sortkey";
 import { freshColor } from "@obtion/core/palette";
 import { DATE_HELP, InputError, matchOption, parseDate, statusGroupOf } from "@obtion/core/input";
 import { type Writer, typeTabs } from "@obtion/core/setup";
 import { deleteItem, onlyBelow, restoreItem } from "@obtion/core/trash";
+import { fromB64 } from "@obtion/core/protocol";
 import type { Store } from "./store";
-import type { Blobs } from "./blobs";
-import { sha256 } from "./blobs";
+import { type Blobs, sha256 } from "./blobs";
+import { MAX_ATTACH } from "./config";
+import type { AttachInput, ConvertInput, CreateInput, DefineTypeInput, PlaceInput, PropInput, SuggestInput, UpdateInput, UpdateTypeInput, ViewInput } from "./schemas";
 
 export class OpError extends Error {}
+
+/** The query syntax, for agents (the MCP instructions) and in the error for a query not understood. */
+export const QUERY_HELP =
+  "type:Name #tag under:[[X]] in:[[X]] linked:[[X]] linked:under:[[X]] status:open|new|active|done (open = new or active) property:value property<value property:empty without:type|parents|children|usage pinned inbox blocked dormant (it or something above it paused or done) file filetype:image|pdf; space=AND, |=OR, -=NOT, (…); sort:field group:path|status|type limit:n. German keywords work too.";
 
 /** Characters that end or split a [[link]] target: such titles can't be linked by title. */
 const UNLINKABLE = /[#|[\]^]/;
@@ -100,10 +94,6 @@ export class Ops {
   /** Writer for shared operations, with this call's origin. */
   private writer(origin: string): Writer {
     return { change: (id, fn) => this.store.change(id, origin, fn), get: (id) => this.store.records.get(id) };
-  }
-
-  lang(): Lang {
-    return (this.store.records.get("sys:settings")?.settings?.setupLang as Lang) ?? "de";
   }
 
   // ---------- resolving ----------
@@ -159,10 +149,10 @@ export class Ops {
   schema() {
     const ix = this.ix;
     return {
-      ui_language: this.lang(),
+      ui_language: this.store.lang(),
       today: todayISO(),
       types: [...ix.types.values()].map((t) => this.typeInfo(t)),
-      inbox: { query: printQuery({ where: inboxWhere(ix) }, this.lang(), ix) },
+      inbox: { query: printQuery({ where: inboxWhere(ix) }, this.store.lang(), ix) },
       notes: [
         "Items without a type, without a parent and not pinned are in the inbox (its query, see inbox.query, decides).",
         "Every type has its page: a list of its entries with views as tabs (see views; change them with update_type).",
@@ -191,7 +181,7 @@ export class Ops {
       },
       entries: this.store.index().itemsOfType(t.id).length,
       list: this.store.index().typePlural(t.id),
-      views: typeTabs(t, this.lang()).map((v) => this.viewInfo(v)),
+      views: typeTabs(t, this.store.lang()).map((v) => this.viewInfo(v)),
     };
   }
 
@@ -391,7 +381,7 @@ export class Ops {
     const desc = [...ix.descendants(i.id)].length;
     if (desc > kids.length) out.descendants_total = desc;
     if (i.updates.length) out.updates = i.updates.slice(-15).map((u) => ({ at: new Date(u.at).toISOString().slice(0, 16), by: u.by, text: u.text }));
-    if (includeBody && i.body) out.body = blocksAsText(i.body, this.lang(), ix);
+    if (includeBody && i.body) out.body = blocksAsText(i.body, this.store.lang(), ix);
     if (i.suggestion) out.suggestion = i.suggestion;
     out.created = todayISO(new Date(i.created));
     out.updated = new Date(i.updated).toISOString().slice(0, 16);
@@ -403,21 +393,20 @@ export class Ops {
     const ix = this.ix;
     const typeId = ix.typeByName(q.trim().replace(/^\[\[|\]\]$/g, ""));
     let def: QueryDef;
-    if (typeId) def = tabDef({ type: typeId }, typeTabs(ix.types.get(typeId)!, this.lang())[0]!);
+    if (typeId) def = tabDef({ type: typeId }, typeTabs(ix.types.get(typeId)!, this.store.lang())[0]!);
     else {
       const p = parseQuery(q, ix);
-      if (p.errors.length) throw new OpError(`Query not understood: ${p.errors.join(", ")}. Syntax: type:Name #tag under:[[X]] in:[[X]] linked:[[X]] linked:under:[[X]] status:open|active|done property:value property<value property:empty without:type|parents|children|usage pinned inbox file filetype:image|pdf; space=AND, |=OR, -=NOT, (…); sort:field group:path|status|type limit:n. German keywords work too.`);
+      if (p.errors.length) throw new OpError(`Query not understood: ${p.errors.join(", ")}. Syntax: ${QUERY_HELP}`);
       def = p.def;
     }
     const thisId = opts.context ? this.resolve(opts.context).id : undefined;
     const res = runQuery(def, { ix, thisId });
-    const base = thisId;
     return {
-      query: printQuery(def, this.lang(), ix),
+      query: printQuery(def, this.store.lang(), ix),
       list: typeId ? ix.typePlural(typeId) : undefined,
       total: res.total,
       missing_types: res.missingTypes.length ? res.missingTypes : undefined,
-      base,
+      base: thisId,
       items: res.items.slice(0, opts.limit ?? def.limit ?? 60),
     };
   }
@@ -492,10 +481,10 @@ export class Ops {
       }
       case "select":
       case "status":
-        return { value: this.option(p, String(raw)).id };
+        return { value: matchOption(p, String(raw)).id };
       case "multiselect": {
         const list = Array.isArray(raw) ? raw : String(raw).split(",");
-        return { value: list.map((x) => this.option(p, String(x)).id) };
+        return { value: list.map((x) => matchOption(p, String(x)).id) };
       }
       case "relation": {
         const list = Array.isArray(raw) ? raw : [raw];
@@ -507,14 +496,6 @@ export class Ops {
         throw new OpError(`"${p.name}" is computed and cannot be set.`);
     }
     return {};
-  }
-
-  private option(p: PropDef, raw: string) {
-    try {
-      return matchOption(p, raw);
-    } catch (e) {
-      throw e instanceof InputError ? new OpError(e.message) : e;
-    }
   }
 
   private freeValue(raw: unknown, kind?: FreeKind): FreeValue | null {
@@ -534,11 +515,17 @@ export class Ops {
     }
   }
 
-  /** Apply property values by name; unknown names are an error that lists the known ones. */
-  private applyProps(doc: any, item: Item | undefined, schema: TypeSchema | undefined, props: Record<string, unknown> | undefined) {
+  /** A property by name (or id); an unknown name is an error that lists the known ones. */
+  private prop(schema: TypeSchema | undefined, name: string): PropDef {
+    const p = schema?.properties.find((x) => titleKey(x.name) === titleKey(name) || x.id === name);
+    if (!p) throw new OpError(`Unknown property "${name}"${schema ? ` on type ${schema.name}. Properties: ${schema.properties.map((x) => x.name).join(", ") || "none"}` : " (no type)"}. For a property without type use free_properties.`);
+    return p;
+  }
+
+  /** Apply property values by name. */
+  private applyProps(doc: Y.Doc, item: Item | undefined, schema: TypeSchema | undefined, props: Record<string, unknown> | undefined) {
     for (const [name, raw] of Object.entries(props ?? {})) {
-      const p = schema?.properties.find((x) => titleKey(x.name) === titleKey(name) || x.id === name);
-      if (!p) throw new OpError(`Unknown property "${name}"${schema ? ` on type ${schema.name}. Properties: ${schema.properties.map((x) => x.name).join(", ") || "none"}` : " (no type)"}. For a property without type use free_properties.`);
+      const p = this.prop(schema, name);
       const { value, rels } = this.toValue(p, raw, item);
       if (rels) {
         if (!p.multiple) for (const old of item?.rels[p.id] ?? []) setRel(doc, p.id, old, false);
@@ -555,8 +542,8 @@ export class Ops {
 
   // ---------- writing ----------
 
-  create(input: { type?: string; title: string; body?: string; tags?: string[]; refs?: string[]; parents?: string[]; pin?: boolean; properties?: Record<string, unknown>; free_properties?: Record<string, unknown> }, origin: string): Item {
-    const title = input.title?.trim();
+  create(input: CreateInput, origin: string): Item {
+    const title = input.title.trim();
     if (!title) throw new OpError("title is required.");
     const ix = this.ix;
     const type = input.type ? this.resolveType(input.type) : undefined;
@@ -576,24 +563,7 @@ export class Ops {
     return this.store.records.get(id)!;
   }
 
-  update(
-    ref: string,
-    input: {
-      title?: string;
-      type?: string | null;
-      properties?: Record<string, unknown>;
-      free_properties?: Record<string, unknown>;
-      tags_add?: string[];
-      tags_remove?: string[];
-      refs_add?: string[];
-      refs_remove?: string[];
-      body?: string;
-      body_mode?: "replace" | "append" | "prepend";
-      old_text?: string;
-      new_text?: string;
-    },
-    origin: string,
-  ): Item {
+  update(ref: string, input: UpdateInput, origin: string): Item {
     const item = this.target(ref, "update");
     const ix = this.store.index();
     if (input.type !== undefined) {
@@ -635,7 +605,7 @@ export class Ops {
       for (const r of refsAdd) setMember(doc, "refs", r, true);
       for (const r of refsRem) setMember(doc, "refs", r, false);
       if (body !== undefined) replaceBody(doc, body);
-      setMeta(doc, {});
+      touch(doc);
     });
     if (ownsTitle && input.title && input.title.trim() !== oldTitle) this.renameLinks(oldTitle, input.title.trim(), origin);
     this.store.flush();
@@ -652,7 +622,7 @@ export class Ops {
     }
   }
 
-  place(ref: string, input: { add?: string[]; remove?: string[]; home?: string; pin?: boolean }, origin: string) {
+  place(ref: string, input: PlaceInput, origin: string) {
     const item = this.target(ref, "place");
     const ix = this.store.index();
     if (input.add?.length || input.pin) this.guardInbox(item, input.pin ? "pinning it" : "placing it");
@@ -679,7 +649,7 @@ export class Ops {
       }
       if (input.pin === true && !item.pinned) setMeta(doc, { pinned: keyBetween(this.store.live().map((i) => i.pinned).filter(Boolean).sort().at(-1) ?? null, null) });
       if (input.pin === false) setMeta(doc, { pinned: null });
-      setMeta(doc, {});
+      touch(doc);
     });
     this.store.flush();
     const after = this.store.index();
@@ -705,7 +675,7 @@ export class Ops {
     this.store.change(item.id, origin, (doc) => {
       appendUpdate(doc, { at, text: text.trim(), by, status: opt });
       if (opt && sp) writeProp(doc, schema, sp.id, opt, at);
-      setMeta(doc, {});
+      touch(doc);
     });
     this.store.flush();
     return this.store.records.get(item.id)!;
@@ -726,8 +696,9 @@ export class Ops {
         const named = (() => {
           try {
             return matchOption(sp, group);
-          } catch {
-            return undefined;
+          } catch (e) {
+            if (e instanceof InputError) return undefined;
+            throw e;
           }
         })();
         const id = named?.id ?? (g ? firstOfGroup(schema, g)?.id : undefined) ?? (this.toValue(sp, group, item).value as string);
@@ -737,12 +708,12 @@ export class Ops {
       }
     }
     if (errors.length) throw new OpError(errors.join(" "));
-    for (const p of plan) this.store.change(p.item.id, origin, (doc) => (writeProp(doc, p.schema, p.prop, p.id), setMeta(doc, {})));
+    for (const p of plan) this.store.change(p.item.id, origin, (doc) => (writeProp(doc, p.schema, p.prop, p.id), touch(doc)));
     this.store.flush();
     return plan.map((p) => this.store.records.get(p.item.id)!);
   }
 
-  suggest(ref: string, input: { type?: string; parents?: string[]; properties?: Record<string, unknown>; note?: string }, by: string, origin: string) {
+  suggest(ref: string, input: SuggestInput, by: string, origin: string) {
     const item = this.target(ref, "suggest");
     if (input.type && item.kind !== "info") throw new OpError(`"${item.title}" is a file. Files have no type; suggest a place instead.`);
     if (item.kind === "datei" && (input.parents?.length ?? 0) > 1) throw new OpError(`"${item.title}" is a file, and a file has exactly one parent. Suggest one place.`);
@@ -751,8 +722,7 @@ export class Ops {
     const schema = type ? this.store.index().types.get(type)?.schema : this.store.index().schemaOf(item);
     const props: Record<string, Value> = {};
     for (const [name, raw] of Object.entries(input.properties ?? {})) {
-      const p = schema?.properties.find((x) => titleKey(x.name) === titleKey(name));
-      if (!p) continue;
+      const p = this.prop(schema, name);
       const v = this.toValue(p, raw, item).value;
       if (v !== undefined && v !== null) props[p.id] = v;
     }
@@ -784,10 +754,10 @@ export class Ops {
     return { item, back: back.length };
   }
 
-  // ---------- types and collections ----------
+  // ---------- types ----------
 
-  defineType(input: { name: string; description?: string; icon?: string; color?: string; properties?: PropInput[]; capabilities?: CapInput }, origin: string) {
-    if (!input.name?.trim()) throw new OpError("name is required.");
+  defineType(input: DefineTypeInput, origin: string) {
+    if (!input.name.trim()) throw new OpError("name is required.");
     if (this.ix.typeByName(input.name)) throw new OpError(`A type "${input.name}" exists already. Use update_type.`);
     const id = newId();
     this.store.change(id, origin, (doc) => {
@@ -799,12 +769,15 @@ export class Ops {
     return this.typeInfo(this.store.index().types.get(id)!);
   }
 
-  updateType(ref: string, input: { delete_preview?: boolean; name?: string; plural?: string; views?: ViewInput[]; description?: string; icon?: string; color?: string; add_properties?: PropInput[]; change_properties?: (PropInput & { property: string })[]; remove_properties?: string[]; capabilities?: CapInput }, origin: string) {
+  /** What deleting a type would affect. Deleting itself is confirmed in the app. */
+  deletePreview(ref: string) {
     const t = this.resolveType(ref);
-    if (input.delete_preview) {
-      const u = typeUsage(this.store.index(), t.id);
-      return { type: t.schema!.name, entries: u.items.length, would_land_in_inbox: u.inboxAfterRemove, used_in_queries: u.queries.map((q) => q.title), relations: u.relations.map((r) => r.name), progress: u.progress.map((p) => p.name), main_action_of: u.childOf.map((c) => c.name), note: "Deleting is confirmed in the app (type page › … › Delete type): into a tag, into another type, or remove. Values stay as free properties; it can be undone from Activity." } as any;
-    }
+    const u = typeUsage(this.store.index(), t.id);
+    return { type: t.schema!.name, entries: u.items.length, would_land_in_inbox: u.inboxAfterRemove, used_in_queries: u.queries.map((q) => q.title), relations: u.relations.map((r) => r.name), progress: u.progress.map((p) => p.name), main_action_of: u.childOf.map((c) => c.name), note: "Deleting is confirmed in the app (type page › … › Delete type): into a tag, into another type, or remove. Values stay as free properties; it can be undone from Activity." };
+  }
+
+  updateType(ref: string, input: UpdateTypeInput, origin: string) {
+    const t = this.resolveType(ref);
     const s = t.schema!;
     const find = (name: string) => {
       const p = s.properties.find((x) => titleKey(x.name) === titleKey(name) || x.id === name);
@@ -812,12 +785,11 @@ export class Ops {
       return p;
     };
     const toDef = (p: PropInput, cur?: PropDef): Partial<PropDef> => {
-      if (p.kind && !PROP_KINDS.includes(p.kind as any)) throw new OpError(`Property kinds: ${PROP_KINDS.join(", ")}.`);
-      const kind = (p.kind ?? cur?.kind) as PropDef["kind"];
+      const kind = p.kind ?? cur?.kind;
       const options = p.options?.map((o) => {
         const m = /^(.*?)(?:\s*\((todo|active|done)\))?$/.exec(o)!;
         const existing = cur?.options?.find((x) => x.name === m[1]);
-        return { id: existing?.id ?? shortId("o"), name: m[1]!.trim(), group: kind === "status" ? ((m[2] as any) ?? existing?.group ?? "todo") : undefined, color: existing?.color ?? "gray" };
+        return { id: existing?.id ?? shortId("o"), name: m[1]!.trim(), group: kind === "status" ? ((m[2] as StatusGroup | undefined) ?? existing?.group ?? "todo") : undefined, color: existing?.color ?? "gray" };
       });
       let computed = cur?.computed;
       if (p.computed) computed = { fn: p.computed.startsWith("count") ? "count" : "progress", of: p.computed.includes(":") ? this.resolveType(p.computed.split(":")[1]!.trim()).id : undefined };
@@ -870,13 +842,12 @@ export class Ops {
   toTabs(views: ViewInput[], type: Item): Omit<ViewTab, "pos">[] {
     const ix = this.ix;
     const where: Cond = { type: type.id };
-    const current = typeTabs(type, this.lang());
+    const current = typeTabs(type, this.store.lang());
     if (!views.length) throw new OpError("A type's page needs at least one view.");
     return views.map((v, n) => {
       const p = v.query ? parseQuery(v.query, ix) : { def: {} as QueryDef, errors: [] };
       if (p.errors.length) throw new OpError(`View "${v.name ?? n + 1}": query not understood: ${p.errors.join(", ")}.`);
       const kind = v.view ?? p.def.view ?? "table";
-      if (!VIEW_KINDS.includes(kind)) throw new OpError(`View kinds: ${VIEW_KINDS.join(", ")}.`);
       const same = current.find((t) => (t.name ?? "") === (v.name ?? "") && (v.name || t.kind === kind));
       const hiddenGroups = v.hidden_groups?.length ? v.hidden_groups.map((name) => this.groupKey(p.def.group, name, where)) : undefined;
       return { id: same?.id ?? shortId("v"), name: v.name || undefined, kind, where: p.def.where, sort: p.def.sort, group: p.def.group, columns: p.def.columns, subgroup: v.subgroup, hideEmpty: v.hide_empty_groups || undefined, hiddenGroups, date: v.date };
@@ -887,7 +858,7 @@ export class Ops {
   groupKey(by: string | undefined, name: string, where: Cond | undefined): string {
     const ix = this.ix;
     const k = titleKey(name);
-    if (by === "statusGroup") return { offen: "todo", open: "todo", todo: "todo", aktiv: "active", active: "active", erledigt: "done", done: "done" }[k] ?? name;
+    if (by === "statusGroup") return statusGroupOf(name) ?? name;
     const types = typesIn(where).map((id) => ix.types.get(id)?.schema).filter(Boolean);
     for (const sc of types.length ? types : [...ix.types.values()].map((x) => x.schema)) {
       const p = by === "status" ? statusProp(sc) : sc?.properties.find((x) => titleKey(x.name) === titleKey(by ?? ""));
@@ -898,11 +869,11 @@ export class Ops {
   }
 
   viewInfo(t: ViewTab) {
-    return { name: t.name ?? null, hidden_groups: t.hiddenGroups, query: printQuery({ where: t.where, sort: t.sort, group: t.group, columns: t.columns, view: t.kind }, this.lang(), this.ix), subgroup: t.subgroup, hide_empty_groups: t.hideEmpty, date: t.date };
+    return { name: t.name ?? null, hidden_groups: t.hiddenGroups, query: printQuery({ where: t.where, sort: t.sort, group: t.group, columns: t.columns, view: t.kind }, this.store.lang(), this.ix), subgroup: t.subgroup, hide_empty_groups: t.hideEmpty, date: t.date };
   }
 
   /** Tag ↔ type: preview only. The user runs it in the app. */
-  convertPreview(input: { tag?: string; type: string; direction: "tag_to_type" | "type_to_tag" }) {
+  convertPreview(input: ConvertInput) {
     const t = this.resolveType(input.type);
     const ix = this.ix;
     if (input.direction === "tag_to_type") {
@@ -914,10 +885,10 @@ export class Ops {
     return { would_lose_type: u.items.length, values_become_free_properties: true, relations_become_refs: true, used_in_queries: u.queries.map((q) => q.title), progress_filters: u.progress.map((p) => p.name), land_in_inbox: u.inboxAfterRemove, note: `Run it in the app: type "${t.schema!.name}" › … › "Turn into a tag".` };
   }
 
-  async attach(input: { name: string; url?: string; base64?: string; parent?: string; tags?: string[]; description?: string }, origin: string) {
+  async attach(input: AttachInput, origin: string) {
     if (!this.blobs) throw new OpError("Files are not available.");
     let data: Uint8Array;
-    if (input.base64) data = Uint8Array.from(atob(input.base64), (c) => c.charCodeAt(0));
+    if (input.base64) data = fromB64(input.base64);
     else if (input.url) {
       const u = new URL(input.url);
       if (!["http:", "https:"].includes(u.protocol)) throw new OpError("Only http(s) URLs.");
@@ -925,7 +896,7 @@ export class Ops {
       if (!res.ok) throw new OpError(`Download failed: ${res.status}`);
       data = new Uint8Array(await res.arrayBuffer());
     } else throw new OpError("Give url or base64.");
-    if (data.length > 50 * 1024 * 1024) throw new OpError("File too large (max 50 MB via agent).");
+    if (data.length > MAX_ATTACH) throw new OpError(`File too large (max ${MAX_ATTACH / 1024 / 1024} MB via agent).`);
     const hash = sha256(data);
     await this.blobs.put(hash, data);
     const parent = input.parent ? this.resolve(input.parent).id : undefined;
@@ -940,28 +911,3 @@ export class Ops {
     return this.store.records.get(id)!;
   }
 }
-
-export interface PropInput {
-  name?: string;
-  kind?: string;
-  description?: string;
-  options?: string[]; // "Name" or "Name (todo|active|done)" for status
-  multiple?: boolean;
-  target?: string;
-  inverse?: string;
-  symmetric?: boolean;
-  range?: boolean;
-  computed?: string; // "progress", "progress:Task", "count:Task"
-  hide_empty?: boolean;
-}
-
-export interface CapInput {
-  status?: string | null;
-  due_date?: string | null;
-  progress?: boolean | string | null;
-  updates?: boolean;
-  main_action?: string | null;
-  template?: string | null;
-}
-
-export { progressSpec };

@@ -8,39 +8,42 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve, extname } from "node:path";
 import type { ServerWebSocket } from "bun";
 import { Store } from "./store";
-import { INSTRUCTIONS } from "./mcp";
-import { Accounts, AccountError, type SignupPolicy } from "./accounts";
-import { type Conn, Workspace } from "./workspace";
-import { SETTINGS_ID } from "@obtion/core/model";
+import { Accounts, AccountError, type SignupPolicy, type User, randomToken } from "./accounts";
+import { type Conn, Workspace, actorOf } from "./workspace";
+import { type Lang, LANGS, translate } from "@obtion/core/i18n";
 import type { ClientMsg } from "@obtion/core/protocol";
 import { allowedHosts } from "./trust";
+import { DATA, MAX_WS_MESSAGE, PORT } from "./config";
+import { body, fail, json } from "./http";
 
-const PORT = Number(process.env.PORT ?? 8480);
 const HOST = process.env.HOST ?? "127.0.0.1";
-const DATA = resolve(process.env.OBTION_DATA ?? "data");
 /** The built web app (apps/web/dist); OBTION_WEB_DIST points elsewhere. */
 const DIST = resolve(process.env.OBTION_WEB_DIST ?? join(import.meta.dir, "../../web/dist"));
 const PUBLIC_URL = process.env.OBTION_PUBLIC_URL ?? "";
 /** Every server brings the web app; OBTION_WEB_APP=off makes it a server for sync, API and MCP only. */
 const WEB_APP = !/^(off|0|false|no)$/i.test(process.env.OBTION_WEB_APP ?? "on");
-/** Who may create an account (the first one always may, it becomes the admin): open | invite | off. */
+/** Who may create an account (the first one always may): open | invite | off. */
 const SIGNUP = (["open", "invite", "off"].includes(process.env.OBTION_SIGNUP ?? "") ? process.env.OBTION_SIGNUP : "invite") as SignupPolicy;
 
 mkdirSync(DATA, { recursive: true });
 const configPath = join(DATA, "config.json");
-const random = () => Buffer.from(crypto.getRandomValues(new Uint8Array(24))).toString("base64url");
 // token: the MCP token from before accounts (still opens the data from then at /mcp);
-const config: { token: string; authSecret?: string } = existsSync(configPath) ? JSON.parse(readFileSync(configPath, "utf8")) : { token: random() };
+// authSecret: signs the sessions (Better Auth)
+const config: { token: string; authSecret?: string } = existsSync(configPath) ? JSON.parse(readFileSync(configPath, "utf8")) : { token: randomToken() };
 const freshConfig = !config.authSecret || !existsSync(configPath);
-config.authSecret ??= random() + random();
+config.authSecret ??= randomToken() + randomToken();
 if (freshConfig) writeFileSync(configPath, JSON.stringify(config, null, 2), { mode: 0o600 });
 
 const accounts = new Accounts(DATA, { secret: config.authSecret, baseURL: PUBLIC_URL || `http://${HOST}:${PORT}`, policy: SIGNUP });
+
+/** The name of a personal workspace, in the language of the app (German if unknown). */
+const personal = (lang?: string) => translate(LANGS.includes(lang as Lang) ? (lang as Lang) : "de", "account.personal");
+
 await accounts.init((dir) => {
   const s = new Store(dir);
-  const lang = s.records.get(SETTINGS_ID)?.settings?.setupLang;
+  const lang = s.lang();
   s.db.close();
-  return lang === "en" ? "Personal" : "Persönlich";
+  return personal(lang);
 });
 const legacyId = (accounts.db.query("SELECT id FROM workspaces WHERE legacy = 1").get() as { id: string } | null)?.id;
 
@@ -48,7 +51,7 @@ const legacyId = (accounts.db.query("SELECT id FROM workspaces WHERE legacy = 1"
 const open = new Map<string, Workspace>();
 function workspace(id: string): Workspace | undefined {
   let w = open.get(id);
-  if (!w && accounts.exists(id)) open.set(id, (w = new Workspace(id, accounts.dir(id))));
+  if (!w && accounts.exists(id)) open.set(id, (w = new Workspace(accounts.dir(id))));
   return w;
 }
 
@@ -88,16 +91,13 @@ function tokenOf(req: Request): string | undefined {
     ?.slice(5);
 }
 
-const json = (x: unknown, status = 200) => Response.json(x, { status });
-const fail = (e: unknown) => {
-  if (e instanceof AccountError) return json({ error: e.message }, e.status);
+const accountError = (e: unknown) => {
+  if (e instanceof AccountError) return fail(e.status, e.message);
   throw e;
 };
 
-async function body<T>(req: Request): Promise<T | null> {
-  if (!(req.headers.get("content-type") ?? "").includes("application/json")) return null;
-  return (await req.json().catch(() => null)) as T | null;
-}
+/** How a user shows up in a workspace (activity, devices): their first name. */
+const firstName = (user: User) => user.name.split(/\s+/)[0] || user.email.split("@")[0]!;
 
 async function serveStatic(path: string): Promise<Response> {
   const clean = path.replace(/\.\.+/g, "");
@@ -115,7 +115,6 @@ async function serveStatic(path: string): Promise<Response> {
   });
 }
 
-
 /** The account API: who am I, my workspaces, invites, tokens. `null`: not this path. */
 async function accountApi(req: Request, path: string, url: URL): Promise<Response | null> {
   if (path === "/api/info") {
@@ -124,29 +123,29 @@ async function accountApi(req: Request, path: string, url: URL): Promise<Respons
 
   if (path === "/api/account/signup" && req.method === "POST") {
     const b = await body<{ name?: string; email?: string; password?: string; invite?: string; lang?: string }>(req);
-    if (!b?.email || !b.password) return json({ error: "email and password required" }, 400);
+    if (!b?.email || !b.password) return fail(400, "email and password required");
     return accounts
-      .signUp({ name: b.name ?? "", email: b.email, password: b.password, invite: b.invite || undefined, personal: b.lang === "en" ? "Personal" : "Persönlich" })
-      .then((r) => json(r), fail);
+      .signUp({ name: b.name ?? "", email: b.email, password: b.password, invite: b.invite || undefined, personal: personal(b.lang) })
+      .then((r) => json(r), accountError);
   }
 
   if (path.startsWith("/api/invites/")) {
     const code = path.slice("/api/invites/".length);
     const inv = accounts.invite(code);
-    if (!inv) return json({ error: "invite invalid" }, 404);
+    if (!inv) return fail(404, "invite invalid");
     if (req.method === "GET") return json({ workspace: inv.name, by: inv.by, signup: accounts.canSignUp(code) });
   }
 
   const token = tokenOf(req);
   const user = await accounts.userOf(token);
-  if (!user) return path.startsWith("/api/account") || path.startsWith("/api/workspaces") || path.startsWith("/api/invites/") ? json({ error: "unauthorized" }, 401) : null;
+  if (!user) return path.startsWith("/api/account") || path.startsWith("/api/workspaces") || path.startsWith("/api/invites/") ? fail(401, "unauthorized") : null;
   try {
     if (path === "/api/account" && req.method === "GET") {
       return json({ user, admin: accounts.isAdmin(user.id), workspaces: accounts.workspacesOf(user.id) });
     }
     if (path === "/api/account" && req.method === "DELETE") {
       const b = await body<{ password?: unknown }>(req);
-      if (typeof b?.password !== "string") return json({ error: "password required" }, 400);
+      if (typeof b?.password !== "string") return fail(400, "password required");
       await accounts.deleteAccount(user.id, b.password);
       for (const w of open.values())
         for (const ws of w.conns) if (ws.data.userId === user.id) ws.close(4401, "account deleted");
@@ -155,16 +154,17 @@ async function accountApi(req: Request, path: string, url: URL): Promise<Respons
     if (path === "/api/account/signout" && req.method === "POST") return (await accounts.signOut(token!), json({ ok: true }));
     if (path === "/api/workspaces" && req.method === "POST") {
       const b = await body<{ name?: string }>(req);
-      if (!b?.name?.trim()) return json({ error: "name required" }, 400);
+      if (!b?.name?.trim()) return fail(400, "name required");
       return json(accounts.createWorkspace(user.id, b.name));
     }
     if (path.startsWith("/api/invites/") && req.method === "POST") return json(accounts.join(path.slice("/api/invites/".length), user.id));
-    const m = path.match(/^\/api\/workspaces\/([\w-]+)(\/[\w/-]*)?$/);
+    const m = path.match(/^\/api\/workspaces\/(?<id>[\w-]+)(?<sub>\/[\w/-]*)?$/)?.groups;
     if (m) {
-      const [, id, sub = ""] = m as unknown as [string, string, string?];
-      if (!accounts.role(id, user.id)) return json({ error: "not a member" }, 403);
+      const id = m.id!;
+      const sub = m.sub ?? "";
+      if (!accounts.role(id, user.id)) return fail(403, "not a member");
       if (sub === "" && req.method === "DELETE") {
-        if (accounts.role(id, user.id) !== "owner") return json({ error: "only owners delete" }, 403);
+        if (accounts.role(id, user.id) !== "owner") return fail(403, "only owners delete");
         open.get(id)?.shut();
         open.delete(id);
         accounts.deleteWorkspace(id, user.id);
@@ -188,12 +188,11 @@ async function accountApi(req: Request, path: string, url: URL): Promise<Respons
           claudeCode: `claude mcp add --transport http obtion ${mcpUrl} --header "Authorization: Bearer ${t}" -s user`,
           json: { mcpServers: { obtion: { type: "http", url: mcpUrl, headers: { Authorization: `Bearer ${t}` } } } },
           vault: join(accounts.dir(id), "vault"),
-          instructions: INSTRUCTIONS,
         });
       }
     }
   } catch (e) {
-    return fail(e);
+    return accountError(e);
   }
   return null;
 }
@@ -209,53 +208,52 @@ const server = Bun.serve<Conn>({
 
     // sign-in and sign-up of the app's own page (Better Auth; accounts are created through /api/account/signup)
     if (path.startsWith("/api/auth/")) {
-      if (!sameOrigin(req)) return new Response("Forbidden", { status: 403 });
-      if (path.startsWith("/api/auth/sign-up")) return new Response("Not found", { status: 404 });
+      if (!sameOrigin(req)) return fail(403, "forbidden");
+      if (path.startsWith("/api/auth/sign-up")) return fail(404, "not found");
       return accounts.auth.handler(req);
     }
 
     const api = path.startsWith("/api/") || path.startsWith("/w/") || path === "/mcp";
     // a change without a token must come from this site (CSRF): without one only the sign-up is open
-    if (api && req.method !== "GET" && !tokenOf(req) && !sameOrigin(req)) return new Response("Forbidden", { status: 403 });
+    if (api && req.method !== "GET" && !tokenOf(req) && !sameOrigin(req)) return fail(403, "forbidden");
 
     if (path === "/mcp") {
       // the MCP address from before accounts: its token opens the data from then
       const old = legacyId ? workspace(legacyId) : undefined;
-      if (!old || req.headers.get("authorization") !== `Bearer ${config.token}`) return json({ error: "unauthorized" }, 401);
+      if (!old || req.headers.get("authorization") !== `Bearer ${config.token}`) return fail(401, "unauthorized");
       return old.mcp(req);
     }
 
-    if (path.startsWith("/api/")) return (await accountApi(req, path, url)) ?? new Response("Not found", { status: 404 });
+    if (path.startsWith("/api/")) return (await accountApi(req, path, url)) ?? fail(404, "not found");
 
-    const m = path.match(/^\/w\/([\w-]{1,40})(\/.*)$/);
+    const m = path.match(/^\/w\/(?<id>[\w-]{1,40})(?<rest>\/.*)$/)?.groups;
     if (m) {
-      const [, id, rest] = m as unknown as [string, string, string];
+      const id = m.id!;
+      const rest = m.rest!;
       const token = tokenOf(req) ?? (req.method === "GET" && rest.startsWith("/api/blobs/") ? (url.searchParams.get("t") ?? undefined) : undefined);
       if (rest === "/mcp") {
         const user = token && accounts.mcpUser(id, token);
-        if (!user || !workspace(id)) return json({ error: "unauthorized" }, 401);
+        if (!user || !workspace(id)) return fail(401, "unauthorized");
         return workspace(id)!.mcp(req);
       }
       const user = await accounts.userOf(token);
-      if (!user) return json({ error: "unauthorized" }, 401);
-      if (!accounts.role(id, user.id)) return json({ error: "not a member" }, 403);
+      if (!user) return fail(401, "unauthorized");
+      if (!accounts.role(id, user.id)) return fail(403, "not a member");
       const w = workspace(id);
-      if (!w) return json({ error: "no such workspace" }, 404);
+      if (!w) return fail(404, "no such workspace");
+      const name = firstName(user);
       if (rest === "/sync") {
-        const name = user.name.split(/\s+/)[0] || user.email.split("@")[0]!;
-        const ok = srv.upgrade(req, { data: { workspace: id, areas: new Set<string>(), origin: `web:${name}`, user: name, userId: user.id }, headers: { "sec-websocket-protocol": "obtion" } });
-        return ok ? undefined : new Response("Expected WebSocket", { status: 400 });
+        const ok = srv.upgrade(req, { data: { workspace: id, areas: new Set<string>(), origin: actorOf(name), user: name, userId: user.id }, headers: { "sec-websocket-protocol": "obtion" } });
+        return ok ? undefined : fail(400, "expected WebSocket");
       }
-      return w.handle(req, rest, {
-        user: user.name.split(/\s+/)[0] || user.email.split("@")[0]!,
-      });
+      return w.handle(req, rest, { user: name });
     }
 
     if (!WEB_APP) return new Response("This Obtion server serves sync, API and MCP only (OBTION_WEB_APP=off).", { status: 404 });
     return serveStatic(path);
   },
   websocket: {
-    maxPayloadLength: 64 * 1024 * 1024,
+    maxPayloadLength: MAX_WS_MESSAGE,
     open(ws) {
       open.get(ws.data.workspace)?.conns.add(ws);
     },

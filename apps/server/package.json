@@ -7,9 +7,6 @@
   "exports": {
     "./*": "./src/*.ts"
   },
-  "scripts": {
-    "start": "bun src/index.ts"
-  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",
     "@obtion/core": "workspace:*",

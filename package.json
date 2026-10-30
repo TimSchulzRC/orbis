@@ -29,6 +29,6 @@
     "setup": "bun apps/server/src/cli.ts setup",
     "stats": "bun apps/server/src/cli.ts stats",
     "import:obsidian": "bun apps/server/src/cli.ts import-obsidian",
-    "import:notion": "bun apps/server/src/cli.ts import-notion seed/notion.json"
+    "import:notion": "bun apps/server/src/cli.ts import-notion"
   }
 }

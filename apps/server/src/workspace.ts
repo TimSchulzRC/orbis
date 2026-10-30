@@ -1,18 +1,18 @@
 // One workspace on the server: its own folder (workspaces/<id>/) with the database, the file
-// contents, the Markdown mirror, the daily backups – what the whole
-// server was before accounts. Opened when it is first used; everything below sees only it, so
+// contents, the Markdown mirror, the daily backups – what the whole server was before accounts. Opened when it is first used; everything below sees only it, so
 // workspaces cannot reach each other's data.
 import { join } from "node:path";
 import type { ServerWebSocket } from "bun";
 import { AreaError, Store } from "./store";
 import { Mirror } from "./mirror";
 import { handleMcp } from "./mcp";
-import { Blobs, MAX_BLOB } from "./blobs";
+import { Blobs } from "./blobs";
+import { MAX_BLOB } from "./config";
+import { body, fail, json } from "./http";
 import { Backups } from "./backup";
-import { FORMAT, PERSONAL, SETTINGS_ID, fileTypeOf } from "@obtion/core/model";
+import { FORMAT, PERSONAL, fileTypeOf } from "@obtion/core/model";
 import { addLaterDefaultProps, migrateCollections, renameShippedLabels, upgradeAreas, upgradeHideEmptyTaskFields } from "@obtion/core/setup";
-import type { Lang } from "@obtion/core/i18n";
-import { storeWriter } from "./importers";
+import { SETUP_ORIGIN, storeWriter } from "./importers";
 import { UndoError, redoStep, undoStep } from "./undo";
 import { type ClientMsg, type ServerMsg, type WireUpdate, fromB64, toB64 } from "@obtion/core/protocol";
 
@@ -39,15 +39,16 @@ async function sniffImage(path: string): Promise<string> {
 /** One-time upgrades of older data, as the server ran them at start before workspaces. */
 function upgrade(store: Store) {
   // Properties shipped after a default type was set up ("Wartet auf"): added once, nothing migrated.
-  const lang = store.records.get(SETTINGS_ID)?.settings?.setupLang as Lang | undefined;
-  if (lang && addLaterDefaultProps(storeWriter(store, "system:setup"), lang).length) store.flush();
-  if (lang && renameShippedLabels(storeWriter(store, "system:setup"), lang)) store.flush();
-  if (upgradeHideEmptyTaskFields(storeWriter(store, "system:setup"))) store.flush();
+  const lang = store.setupLang();
+  const w = storeWriter(store, SETUP_ORIGIN);
+  if (lang && addLaterDefaultProps(w, lang).length) store.flush();
+  if (lang && renameShippedLabels(w, lang)) store.flush();
+  if (upgradeHideEmptyTaskFields(w)) store.flush();
   // collections are gone (26.10.): their views go to the types, the inbox rule to the settings
-  const moved = lang ? migrateCollections(storeWriter(store, "system:setup"), store.index(), store.eachDoc(), lang) : [];
+  const moved = lang ? migrateCollections(w, store.index(), store.eachDoc(), lang) : [];
   if (moved.length) (store.flush(), console.log(`[obtion] collections migrated:\n  ${moved.join("\n  ")}`));
   // areas (27.10.): every document from before belongs to the personal area
-  const marked = upgradeAreas(storeWriter(store, "system:setup"), store.eachDoc());
+  const marked = upgradeAreas(w, store.eachDoc());
   if (marked) (store.flush(), console.log(`[obtion] areas: ${marked} documents marked as personal`));
 }
 
@@ -57,6 +58,9 @@ function upgrade(store: Store) {
  */
 const AREAS = new Set([PERSONAL]);
 
+/** Who did something, as the activity names them: "web:Ada", from a device "web:Ada@Mac-x3f9". */
+export const actorOf = (user: string, device?: unknown) => `web:${user}${device ? "@" + String(device).slice(0, 40) : ""}`;
+
 export class Workspace {
   store: Store;
   blobs: Blobs;
@@ -64,10 +68,7 @@ export class Workspace {
   private backups: Backups;
   private mirror: Mirror;
 
-  constructor(
-    public id: string,
-    public dir: string,
-  ) {
+  constructor(dir: string) {
     this.store = new Store(dir);
     upgrade(this.store);
     this.blobs = new Blobs(join(dir, "blobs"), this.store);
@@ -114,7 +115,7 @@ export class Workspace {
   hello(ws: ServerWebSocket<Conn>, msg: Extract<ClientMsg, { t: "hello" }>) {
     const area = typeof msg.area === "string" ? msg.area : PERSONAL; // apps from before areas: personal
     if (!AREAS.has(area)) return send(ws, { t: "denied", area });
-    if (msg.device) ws.data.origin = `web:${ws.data.user}@${String(msg.device).slice(0, 40)}`;
+    if (msg.device) ws.data.origin = actorOf(ws.data.user, msg.device);
     const store = this.store;
     const last = store.last(area);
     send(ws, { t: "welcome", hub: store.serverId, area, seq: last.seq, format: FORMAT });
@@ -158,10 +159,7 @@ export class Workspace {
 
   // ---------- http: /w/<id>/<rest> ----------
 
-  /**
-   * The workspace's API for a member. `rest` is the path after /w/<id>; `actor` names the user
-   * in the activity ("web:Ada@Mac-x3f9").
-   */
+  /** The workspace's API for a member. `rest` is the path after /w/<id>; `ctx.user` is their first name. */
   async handle(req: Request, rest: string, ctx: { user: string }): Promise<Response> {
     const url = new URL(req.url);
     const store = this.store;
@@ -169,24 +167,23 @@ export class Workspace {
     if (rest === "/api/activity") {
       const before = Number(url.searchParams.get("before") ?? 0) || undefined;
       const doc = url.searchParams.get("doc") ?? undefined;
-      return Response.json(store.events({ before, doc, limit: Number(url.searchParams.get("limit") ?? 60) }));
+      return json(store.events({ before, doc, limit: Number(url.searchParams.get("limit") ?? 60) }));
     }
 
     if (rest === "/api/undo" && req.method === "POST") {
-      if (!(req.headers.get("content-type") ?? "").includes("application/json")) return new Response("JSON required", { status: 415 });
-      const body = (await req.json()) as { step?: string; redo?: boolean; device?: string };
-      if (typeof body.step !== "string") return new Response("step required", { status: 400 });
-      const actor = `web:${ctx.user}${body.device ? "@" + String(body.device).slice(0, 40) : ""}`;
+      if (!(req.headers.get("content-type") ?? "").includes("application/json")) return fail(415, "JSON required");
+      const b = await body<{ step?: unknown; redo?: boolean; device?: unknown }>(req);
+      if (typeof b?.step !== "string") return fail(400, "step required");
       try {
-        return Response.json((body.redo ? redoStep : undoStep)(store, body.step, actor));
+        return json((b.redo ? redoStep : undoStep)(store, b.step, actorOf(ctx.user, b.device)));
       } catch (e) {
-        if (e instanceof UndoError) return Response.json({ error: e.message }, { status: 409 });
+        if (e instanceof UndoError) return fail(409, e.message);
         throw e;
       }
     }
 
     if (rest.startsWith("/api/blobs/")) return this.blob(req, url, rest.slice("/api/blobs/".length));
-    return new Response("Not found", { status: 404 });
+    return fail(404, "not found");
   }
 
   mcp(req: Request): Promise<Response> {
@@ -195,17 +192,17 @@ export class Workspace {
 
   private async blob(req: Request, url: URL, hash: string): Promise<Response> {
     const { blobs, store } = this;
-    if (!Blobs.valid(hash)) return new Response("bad hash", { status: 400 });
+    if (!Blobs.valid(hash)) return fail(400, "bad hash");
     if (req.method === "PUT") {
       const name = url.searchParams.get("name") ?? "";
-      if (!UPLOAD_OK(name) && !url.searchParams.has("derived")) return new Response("File type not allowed", { status: 415 });
-      if (Number(req.headers.get("content-length") ?? 0) > MAX_BLOB) return new Response("Too large", { status: 413 });
+      if (!UPLOAD_OK(name) && !url.searchParams.has("derived")) return fail(415, "file type not allowed");
+      if (Number(req.headers.get("content-length") ?? 0) > MAX_BLOB) return fail(413, "too large");
       const data = new Uint8Array(await req.arrayBuffer());
-      if (data.length > MAX_BLOB) return new Response("Too large", { status: 413 });
-      return (await blobs.put(hash, data)) ? Response.json({ ok: true }) : new Response("Hash mismatch", { status: 422 });
+      if (data.length > MAX_BLOB) return fail(413, "too large");
+      return (await blobs.put(hash, data)) ? json({ ok: true }) : fail(422, "hash mismatch");
     }
     // the app asks politely (no error in the console) and shows "Datei fehlt"
-    if (!blobs.has(hash)) return req.headers.get("x-obtion-probe") ? new Response(null, { status: 204, headers: { "x-obtion-missing": "1" } }) : new Response("Not found", { status: 404 });
+    if (!blobs.has(hash)) return req.headers.get("x-obtion-probe") ? new Response(null, { status: 204, headers: { "x-obtion-missing": "1" } }) : fail(404, "not found");
     if (url.searchParams.has("check")) return new Response(null, { status: 204 });
     const rec = store.live().find((r) => r.file?.hash === hash) ?? [...store.records.values()].find((r) => r.file?.hash === hash);
     const mime = rec?.file?.mime ?? (await sniffImage(blobs.path(hash))); // derived versions: WebP (or PNG/JPEG from a device)
@@ -222,6 +219,6 @@ export class Workspace {
   }
 }
 
-export function send(ws: ServerWebSocket<Conn>, msg: ServerMsg) {
+function send(ws: ServerWebSocket<Conn>, msg: ServerMsg) {
   ws.send(JSON.stringify(msg));
 }

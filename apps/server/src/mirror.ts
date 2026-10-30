@@ -7,7 +7,7 @@ import { type Item, META_TYPE } from "@obtion/core/model";
 import type { Index } from "@obtion/core/graph";
 import { blocksAsText } from "@obtion/core/query";
 import { isInInbox } from "@obtion/core/placement";
-import type { Lang } from "@obtion/core/i18n";
+import { type Lang, translate } from "@obtion/core/i18n";
 import type { Store } from "./store";
 import type { Blobs } from "./blobs";
 
@@ -52,14 +52,10 @@ export class Mirror {
     }
   }
 
-  private lang(): Lang {
-    return (this.store.records.get("sys:settings")?.settings?.setupLang as Lang) ?? "de";
-  }
-
   /** Compute every file, write what changed, remove what is gone. */
   sync() {
     const ix = this.store.index();
-    const lang = this.lang();
+    const lang = this.store.lang();
     const want = new Map<string, { content?: string; blob?: string }>();
     const used = new Set<string>();
     const unique = (path: string, id: string) => {
@@ -73,7 +69,7 @@ export class Mirror {
       if (path.length) return path.join("/");
       if (i.pinned) return "."; // pinned items without a parent sit at the top of the mirror
       if (i.type === META_TYPE) return lang === "de" ? "_Typen" : "_Types";
-      if (isInInbox(i, ix)) return lang === "de" ? "Eingang" : "Inbox";
+      if (isInInbox(i, ix)) return translate(lang, "nav.inbox");
       const tn = ix.typeName(i.type);
       if (tn) return safe(tn);
       return lang === "de" ? "Ohne Ort" : "No place";
@@ -84,7 +80,7 @@ export class Mirror {
         continue;
       }
       // An item with children gets a folder of the same name for them (folder note style).
-      want.set(unique(`${folderOf(i)}/${safe(i.title || "Untitled")}.md`.replace(/^\.\//, ""), i.id), { content: this.render(i, ix, lang) });
+      want.set(unique(`${folderOf(i)}/${safe(i.title)}.md`.replace(/^\.\//, ""), i.id), { content: this.render(i, ix, lang) });
     }
     want.set("README.md", { content: "# Obtion mirror\n\nGenerated from the Obtion database: every information as Markdown below its home. Read freely; changes made here are overwritten. To change data, use the app or the MCP tools.\n" });
 
@@ -152,7 +148,7 @@ export class Mirror {
     }
     out += blocksAsText(i.body, lang, ix).trimEnd() + "\n";
     const kids = ix.childrenOf(i.id).map((c) => ix.get(c)!);
-    if (kids.length) out += `\n## ${lang === "de" ? "Darunter" : "Below"}\n\n` + kids.map((k) => `- [[${k.title}]]${ix.typeName(k.type) ? ` (${ix.typeName(k.type)})` : ""}`).join("\n") + "\n";
+    if (kids.length) out += `\n## ${translate(lang, "below.title")}\n\n` + kids.map((k) => `- [[${k.title}]]${ix.typeName(k.type) ? ` (${ix.typeName(k.type)})` : ""}`).join("\n") + "\n";
     if (i.updates.length) out += "\n## Updates\n\n" + i.updates.map((e) => `- ${new Date(e.at).toISOString().slice(0, 16).replace("T", " ")} (${e.by}): ${e.text}`).join("\n") + "\n";
     return out;
   }
