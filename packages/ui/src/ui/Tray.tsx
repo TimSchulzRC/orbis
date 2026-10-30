@@ -82,7 +82,7 @@ export function Tray({ desktop, pinned, onCapture }: { desktop: boolean; pinned?
             </div>
           )}
           {desktop ? (
-            <div className="flex items-center gap-3 rounded-2xl border border-line bg-surface p-2 shadow-[0_6px_24px_-12px_rgb(0_0_0/0.25)]">
+            <div className="flex items-center gap-3 rounded-2xl bg-surface p-2 shadow-[0_6px_24px_-12px_rgb(0_0_0/0.25)]">
               {tray}
               <div className="min-w-0 flex-1">
                 <Capture anywhere placeholder={t("tray.placeholder")} />
@@ -90,7 +90,7 @@ export function Tray({ desktop, pinned, onCapture }: { desktop: boolean; pinned?
               {review}
             </div>
           ) : (
-            <div className="flex items-center gap-2 rounded-2xl border border-line bg-surface p-1.5 shadow-sm">
+            <div className="flex items-center gap-2 rounded-2xl bg-surface p-1.5 shadow-sm">
               {tray}
               {review}
               <ShadcnButton variant="plain" size="none" onClick={onCapture} aria-label={t("capture.title")} className="tap flex size-10 shrink-0 items-center justify-center rounded-xl border border-line hover:bg-hover">

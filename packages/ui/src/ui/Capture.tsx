@@ -113,7 +113,7 @@ function CaptureField({ parent, placeholder, autoFocus, onDone, compact, onSpace
           rows={1}
           placeholder={placeholder ?? (parent ? t("capture.placeholderHere") : t("capture.placeholder"))}
           title={t("capture.hint")}
-          className="max-h-48 min-h-7 flex-1 resize-none bg-transparent px-1 py-0.5 text-[15px] outline-none [field-sizing:content] placeholder:text-muted-foreground"
+          className="max-h-48 min-h-7 flex-1 resize-none rounded-none border-0 bg-transparent px-1 py-0.5 text-[15px] shadow-none outline-none focus-visible:ring-0 dark:bg-transparent [field-sizing:content] placeholder:text-muted-foreground"
           aria-label={t("capture.title")}
         />
         <label className="mt-0.5 cursor-pointer rounded-md p-1 text-muted-foreground hover:bg-hover hover:text-fg" title={t("capture.attach")}>
