@@ -1,7 +1,8 @@
 // Browser check of the editor's quiet Markdown: clicking around a page moves nothing (empty
-// lines, headings, links keep their height and width), "#" and link brackets never show, a link's
-// menu changes its text and target or takes it away, and a block dragged just below itself stays
-// put while one dragged onto the next block swaps with it.
+// lines, headings, links keep their height and width), link brackets never show, a heading's "#"
+// only with the cursor at the start of its text, a link's menu changes its text and target or
+// takes it away, and a block dragged just below itself stays put while one dragged onto the next
+// block swaps with it.
 //   bun run build && bun tests/e2e/editor.ts        (Chrome from ~/.cache/ms-playwright)
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
@@ -78,16 +79,24 @@ try {
   const blank = before[2]!;
   expect(blank.h === before[4]!.h, `an empty line is as high as a text line (${blank.h} vs ${before[4]!.h})`);
 
-  // typing at the start of the heading keeps it a heading; Home + typing too
+  // a heading's "#" show only with the cursor at the start of its text
+  const head = () => page.$eval(".cm-content", (el) => (el as any).cmTile.root.view.state.selection.main.head as number);
   const h = (await page.$$(".cm-content .cm-line"))[0]!;
   const hr = (await h.boundingBox())!;
-  await page.mouse.click(hr.x + 1, hr.y + hr.height / 2);
+  await page.mouse.click(hr.x + 60, hr.y + hr.height / 2);
+  expect(!(await lines(page))[0]!.text.includes("#"), "clicked into a heading, its # stay hidden");
   await page.keyboard.press("Home");
-  await page.keyboard.type("X");
-  expect((await doc(page)).startsWith("# XÜberschrift"), "typing at the start of a heading writes into it: " + JSON.stringify((await doc(page)).split("\n")[0]));
+  expect((await lines(page))[0]!.text.startsWith("# Überschrift"), "at the start of its text they show");
+  await page.keyboard.press("ArrowLeft");
+  await page.keyboard.type("#");
+  expect((await doc(page)).startsWith("## Überschrift\n") && !!(await page.$(".cm-line.cm-h2")), "typing a # there makes it a level deeper");
+  await page.keyboard.press("End");
+  expect(!(await lines(page))[0]!.text.includes("#"), "at its end they hide again");
+  await page.keyboard.press("Home");
   await page.keyboard.press("Backspace");
+  expect((await doc(page)).startsWith("# Überschrift\n"), "Backspace at the start of the text takes one level away");
   await page.keyboard.press("Backspace");
-  expect((await doc(page)).startsWith("Überschrift\n"), "Backspace at its start turns the heading into text");
+  expect((await doc(page)).startsWith("Überschrift\n"), "and after the last one it is text");
   await page.keyboard.type("# ");
   expect((await doc(page)).startsWith("# Überschrift\n"), "\"# \" makes it a heading again");
 
