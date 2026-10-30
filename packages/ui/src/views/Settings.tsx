@@ -17,7 +17,7 @@ import { useT, setLang } from "../i18n";
 import { Button, Dialog, ItemIcon, Seg, SectionTitle, TypeGlyph, cx } from "../ui/bits";
 import { chooseAction, notify } from "../ui/feedback";
 import { setTheme, useTheme } from "../theme";
-import { type Space, deleteAccount, deleteSpace, inviteLink, leaveSpace, mcpToken, members, renameSpace, replica, signOut, spaceById, useAccounts } from "../accounts";
+import { type Space, deleteAccount, deleteSpace, inviteLink, leaveSpace, mcpToken, members, renameSpace, replica, serverInfo, signOut, spaceById, useAccounts } from "../accounts";
 import { NewSpaceDialog } from "../ui/Spaces";
 
 interface Connect {
@@ -287,6 +287,17 @@ function DeviceName() {
   );
 }
 
+/** Which build the server runs (dev, nightly or stable): with three instances, the one this is. Offline: nothing. */
+function Version() {
+  const { t } = useT();
+  const [info, setInfo] = useState<{ version: string; commit: string }>();
+  useEffect(() => {
+    serverInfo().then(setInfo, () => {});
+  }, []);
+  if (!info?.version) return null;
+  return <p className="text-xs text-muted-foreground">{t("settings.version", { version: info.version + (info.commit ? ` (${info.commit})` : "") })}</p>;
+}
+
 /** The settings of the app on this device and the account, with its workspaces. */
 export function Settings() {
   const { t, lang } = useT();
@@ -318,6 +329,8 @@ export function Settings() {
       <DeviceFilesSection />
 
       <DeviceName />
+
+      <Version />
     </div>
   );
 }

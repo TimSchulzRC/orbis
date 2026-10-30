@@ -804,6 +804,7 @@
  "settings.device": "This device",
  "settings.deviceName": "Name in Activity",
  "settings.deviceHint": "Takes effect on the next connection.",
+ "settings.version": "Obtion {version}",
  "item.insertQuery": "Insert query",
  "item.languages": "Language versions",
  "app.newVersion": "A new version is available",

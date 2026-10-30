@@ -804,6 +804,7 @@
  "settings.device": "Dieses Gerät",
  "settings.deviceName": "Name in der Aktivität",
  "settings.deviceHint": "Gilt ab der nächsten Verbindung.",
+ "settings.version": "Obtion {version}",
  "item.insertQuery": "Abfrage einfügen",
  "item.languages": "Sprachfassungen",
  "app.newVersion": "Neue Version verfügbar",
