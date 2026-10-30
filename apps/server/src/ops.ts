@@ -448,7 +448,7 @@ export class Ops {
         return this.line(i) + (next ? ` · next: “${next.title}”` : "") + (i.updates.length ? ` · last update: “${i.updates.at(-1)!.text}”` : "");
       }),
       blocked: ix.live.filter((i) => statusOf(i, ix.schemaOf(i))?.group !== "done" && ix.isBlocked(i)).map((i) => this.line(i)),
-      inbox: runQuery({ where: inboxWhere(ix) }, { ix }).total,
+      inbox: runQuery({ where: { inbox: true } }, { ix }).total,
       recent_activity: this.activity({ days: 3, limit: 10 }),
     };
   }

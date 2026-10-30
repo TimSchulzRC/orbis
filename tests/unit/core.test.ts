@@ -7,6 +7,8 @@ import { isInInbox, isOverview, inbox, sidebarRoots, sidebarChildren } from "@ob
 import { runSetup, restoreDefaultTypes, resetInbox, SYS } from "@obtion/core/setup";
 import { parseQuery, printQuery, runQuery } from "@obtion/core/query";
 import { CATALOGS } from "@obtion/core/i18n";
+import { setAside, tomorrow } from "@obtion/core/inbox";
+import { activeProjects, dueBy, recentlyChanged } from "@obtion/core/today";
 
 describe("sort keys", () => {
   test("between always sorts between", () => {
@@ -176,6 +178,55 @@ describe("the inbox", () => {
     m.change(SETTINGS_ID, (d) => setSettings(d, { inbox: { or: [{ tag: "book" }, { inbox: true }] } }));
     const ix = m.index();
     expect(runQuery(parseQuery("inbox", ix).def, { ix }).items.map((i) => i.title)).toEqual(["Book"]);
+  });
+});
+
+describe("set aside", () => {
+  test("kept leaves the inbox for good, later until its time – whatever the rule says", () => {
+    const m = new MemRepo();
+    runSetup(m.writer, "de");
+    const kept = m.add({ title: "Gedanke" });
+    const later = m.add({ title: "Morgen" });
+    const back = m.add({ title: "Wieder da" });
+    m.change(kept, (d) => setMeta(d, { kept: 1 }));
+    m.change(later, (d) => setMeta(d, { later: Date.now() + 60_000 }));
+    m.change(back, (d) => setMeta(d, { later: Date.now() - 1 }));
+    // a rule that would take them all: set aside still wins
+    m.change(SETTINGS_ID, (d) => setSettings(d, { inbox: { or: [{ without: "type" }] } }));
+    const ix = m.index();
+    expect(inbox(ix).map((i) => i.title).sort()).toEqual(["Wieder da"]);
+    expect(runQuery(parseQuery("eingang", ix).def, { ix }).items.map((i) => i.title)).toEqual(["Wieder da"]);
+    expect(setAside(ix.get(later)!, Date.now() + 120_000)).toBe(false);
+    // undone: back in the inbox
+    m.change(kept, (d) => setMeta(d, { kept: null }));
+    expect(isInInbox(m.index().get(kept)!, m.index())).toBe(true);
+  });
+
+  test("tomorrow is the next local midnight", () => {
+    const at = new Date(2026, 9, 29, 23, 40);
+    expect(tomorrow(at)).toBe(new Date(2026, 9, 30).getTime());
+  });
+});
+
+describe("today", () => {
+  test("due by today, active projects with their last change, changed last without the inbox", () => {
+    const m = new MemRepo();
+    runSetup(m.writer, "de");
+    const relaunch = m.add({ title: "Relaunch", type: SYS.project, props: { p_status: "st_active" }, updated: 100 });
+    const paused = m.add({ title: "Pausiert", type: SYS.project, props: { p_status: "st_paused" } });
+    m.add({ title: "Unterprojekt", type: SYS.project, props: { p_status: "st_active" }, parents: [relaunch] });
+    m.add({ title: "Überfällig", type: SYS.task, props: { p_due: "2026-10-27" }, parents: [relaunch], updated: 500 });
+    m.add({ title: "Heute", type: SYS.task, props: { p_due: "2026-10-29" } });
+    m.add({ title: "Erledigt", type: SYS.task, props: { p_due: "2026-10-28", p_status: "st_done" } });
+    m.add({ title: "Morgen", type: SYS.task, props: { p_due: "2026-10-30" } });
+    m.add({ title: "Im pausierten", type: SYS.task, props: { p_due: "2026-10-01" }, parents: [paused] });
+    m.add({ title: "Lose Idee", updated: 900 });
+    const ix = m.index();
+    expect(dueBy(ix, "2026-10-29").map((x) => x.item.title)).toEqual(["Überfällig", "Heute"]);
+    const active = activeProjects(ix);
+    expect(active.map((x) => x.item.title)).toEqual(["Relaunch"]);
+    expect(active[0]!.touched).toBeGreaterThanOrEqual(500);
+    expect(recentlyChanged(ix, 50).some((i) => i.title === "Lose Idee")).toBe(false);
   });
 });
 

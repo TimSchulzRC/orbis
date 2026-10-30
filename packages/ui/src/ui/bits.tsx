@@ -283,6 +283,16 @@ export function modName(lang: string): string {
   return MOD === "⌘" ? "⌘" : lang === "de" ? "Strg" : "Ctrl";
 }
 
+/** A quiet amber mark on a hit that still waits in the inbox ("In der Ablage"); nothing otherwise. */
+export function InTray({ item, ix }: { item: Item; ix: Index }) {
+  if (!isInInbox(item, ix)) return null;
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-[color-mix(in_srgb,var(--t-inbox)_45%,transparent)] px-1.5 text-[11px] font-medium leading-[18px] text-warn">
+      <span className="size-1.5 rounded-full bg-[var(--t-inbox)]" aria-hidden /> {tr("tray.inTray")}
+    </span>
+  );
+}
+
 export function Kbd({ children }: { children: ReactNode }) {
   return <kbd className="rounded border border-line bg-surface-2 px-1 font-mono text-[10px] text-muted-foreground">{children}</kbd>;
 }

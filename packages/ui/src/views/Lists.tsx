@@ -1,23 +1,19 @@
 import { Button as ShadcnButton } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 // The lists of the app: a type's page (its entries with views as tabs, like a database in
-// Notion), the files, and the inbox. A type keeps its views; the files and the inbox have one.
+// Notion) and the files. A type keeps its views; the files have one. The inbox: Inbox.tsx.
 import { useEffect, useRef, useState } from "react";
-import { ListFilter, X, MoreHorizontal, RotateCcw, SlidersHorizontal, Plus, Upload } from "lucide-react";
-import { type FileType, type Item, type ViewTab, SETTINGS_ID, setSettings, setTab, setTabs, shortId } from "@obtion/core/model";
-import { type QueryDef, andWhere, runQuery, tabDef } from "@obtion/core/query";
-import { inboxWhere } from "@obtion/core/inbox";
+import { ListFilter, SlidersHorizontal, Plus, Upload } from "lucide-react";
+import { type FileType, type Item, type ViewTab, setTab, setTabs, shortId } from "@obtion/core/model";
+import { type QueryDef, andWhere, tabDef } from "@obtion/core/query";
 import { keyBetween } from "@obtion/core/sortkey";
-import { resetInbox, typeTabs } from "@obtion/core/setup";
-import { useRepo, useRoute, useMediaQuery } from "../hooks";
-import { Capture } from "../ui/Capture";
-import { spaceById, useAccounts } from "../accounts";
-import { SpaceEyebrow, SpaceFilter, SpaceScope, useReplicas } from "../ui/Spaces";
-import { Triage } from "../ui/Triage";
+import { typeTabs } from "@obtion/core/setup";
+import { useRoute } from "../hooks";
+import { SpaceEyebrow } from "../ui/Spaces";
 import { repo } from "../repo";
 import { useT } from "../i18n";
 import { files } from "../files";
-import { Button, MenuItem, Popover, cx, Empty, IconButton } from "../ui/bits";
+import { Button, cx, Empty, IconButton } from "../ui/bits";
 import { Results, defaultColumns, useQuery } from "../ui/Results";
 import { viewGroups } from "../ui/Table";
 import { type TabEdit, ViewSettings, ViewTabs, tabName, useTabChoice, useViewFields } from "../ui/Views";
@@ -140,7 +136,7 @@ export function TypeList({ type }: { type: Item }) {
   );
 }
 
-function DraftBar({ onDiscard, onSave }: { onDiscard: () => void; onSave: () => void }) {
+export function DraftBar({ onDiscard, onSave }: { onDiscard: () => void; onSave: () => void }) {
   const { t } = useT();
   return (
     <div className="sticky top-0 z-10 mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-[var(--focus)] bg-surface px-3 py-2 text-sm" role="status">
@@ -195,91 +191,5 @@ export function FilesPage() {
       )}
       <Results def={def} display={kind === "bild" ? "gallery" : "list"} keyPrefix="files" empty={<Empty title={t("files.empty")} />} />
     </div>
-  );
-}
-
-/**
- * The inbox: one list of the entries of the workspaces seen (the selector in the sidebar, also
- * here above the list), newest first; each entry is sorted in its own workspace. What lands there
- * is each workspace's rule, behind "…".
- */
-export function InboxPage() {
-  const { t } = useT();
-  const { shown } = useAccounts();
-  const [rule, setRule] = useState<string | null>(null);
-  const repos = useReplicas(shown.map((s) => s.id));
-  const wide = useMediaQuery("(min-width: 768px)");
-  const spaceOf = new WeakMap<Item, string>();
-  const per = shown.map((s, n) => {
-    const r = repos[n]!;
-    if (!r.get(SETTINGS_ID)) return [];
-    const ix = r.index();
-    const items = runQuery({ where: inboxWhere(ix), sort: [{ key: "created", desc: true }] }, { ix }).items;
-    for (const i of items) spaceOf.set(i, s.id);
-    return items;
-  });
-  const items = per.flat().sort((a, b) => b.created - a.created);
-  useEffect(() => void (document.title = t("nav.inbox")), []);
-  return (
-    <div className="page-wide">
-      <div className="mb-4 flex items-center gap-3">
-        {/* its name and how many wait, in one line (design rules § 5.1) */}
-        <div className="flex min-w-0 flex-1 items-baseline gap-2.5">
-          <h1 className="page-title truncate">{t("nav.inbox")}</h1>
-          <span className="text-[15px] tabular-nums text-muted-foreground">{items.length}</span>
-        </div>
-        <Popover align="right" trigger={(p) => <IconButton {...p} label={t("more")} icon={MoreHorizontal} />}>
-          {(close) =>
-            shown.map((s) => (
-              <MenuItem key={s.id} icon={<SlidersHorizontal size={14} />} onClick={() => (close(), setRule(s.id))}>
-                {shown.length > 1 ? t("inbox.whatLandsIn", { name: s.name }) : t("inbox.whatLands")}
-              </MenuItem>
-            ))
-          }
-        </Popover>
-      </div>
-      <SpaceFilter />
-      {/* on the phone the "+" button captures */}
-      {wide && (
-        <div className="mb-5">
-          <Capture anywhere />
-        </div>
-      )}
-      {rule && shown.some((s) => s.id === rule) && (
-        <SpaceScope id={rule}>
-          <InboxRule name={shown.length > 1 ? spaceById(rule)?.name : undefined} onClose={() => setRule(null)} />
-        </SpaceScope>
-      )}
-      {items.length ? <Triage items={items} spaceOf={(i) => spaceOf.get(i)!} /> : <Empty title={t("inbox.empty")} />}
-    </div>
-  );
-}
-
-/** What lands in a workspace's inbox: its rule (a draft until "Speichern") and the way back to the default. */
-function InboxRule({ name, onClose }: { name?: string; onClose: () => void }) {
-  const { t } = useT();
-  const repo = useRepo();
-  const where = inboxWhere(repo.index());
-  const [draft, setDraft] = useState<QueryDef["where"] | null>(null);
-  const restore = () => (setDraft(null), resetInbox(repo.writer), notify(t("inbox.restored")));
-  return (
-    <>
-      <div className="mb-4 space-y-2 rounded-xl border border-line bg-surface p-3">
-        <div className="flex items-start gap-2">
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium">{name ? t("inbox.whatLandsIn", { name }) : t("inbox.whatLands")}</p>
-            <p className="text-xs text-muted-foreground">{t("inbox.ruleHint")}</p>
-          </div>
-          <Button variant="ghost" onClick={restore}>
-            <RotateCcw size={14} /> {t("inbox.restoreDefault")}
-          </Button>
-          <IconButton icon={X} label={t("view.closeSettings")} onClick={onClose} />
-        </div>
-        <QueryEditor autoFocus def={{ where: draft ?? where }} onChange={(d) => setDraft(d.where ?? null)} />
-      </div>
-      {draft && JSON.stringify(draft) !== JSON.stringify(where) && (
-        <DraftBar onDiscard={() => setDraft(null)} onSave={() => (repo.change(SETTINGS_ID, (d) => setSettings(d, { inbox: draft })), setDraft(null), notify(t("view.saved")))} />
-      )}
-    </>
   );
 }

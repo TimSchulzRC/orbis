@@ -36,7 +36,7 @@ function InboxNudge({ total }: { total: number }) {
   return (
     <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 px-2 pt-1 text-sm">
       <span className="tabular-nums text-muted-foreground">{t("inbox.waiting", { count: total })}</span>
-      <a href="#/inbox" className="font-medium text-fg underline-offset-2 hover:underline">
+      <a href="#/review" className="font-medium text-fg underline-offset-2 hover:underline">
         {t("inbox.sortNow")}
       </a>
     </div>
@@ -80,7 +80,7 @@ export function Results({ def, thisId, display, empty, compact, keyPrefix = "", 
       ) : view === "gallery" ? (
         <GalleryView items={items} ctx={ctx} />
       ) : view === "triage" ? (
-        <Triage items={items} storageKey={keyPrefix} />
+        <Triage items={items} />
       ) : def.columns?.includes("progress") && !def.group ? (
         // projects with progress and next task: a table in a card
         <div className="overflow-hidden rounded-xl border border-line bg-surface">

@@ -10,8 +10,9 @@
 //
 // Top-level Yjs types of a document:
 //   meta     Y.Map   id-free scalars: kind, title, type, home, pinned (sort key | null), created,
-//                    updated, deleted …
-//                    (no inbox field: the inbox is computed, see placement.ts)
+//                    updated, deleted, kept, later …
+//                    (no inbox field: the inbox is computed, see placement.ts; kept and later
+//                    only set an entry aside, see inbox.ts)
 //   parents  Y.Map   parentId -> { sort, at }  ("Teil von"; sort is per parent, at = when added)
 //   props    Y.Map   propId -> value           (values of the type's properties)
 //   extra    Y.Map   name -> { k, v }          (free properties, simple kinds only)
@@ -241,6 +242,10 @@ export interface Item {
   op?: OpRecord;
   settings?: SettingsRecord;
   suggestion?: Suggestion;
+  /** Kept as it is, without a place (when): out of the inbox for good (inbox.ts). */
+  kept?: number;
+  /** Out of the inbox until then ("Morgen wieder", inbox.ts). */
+  later?: number;
   created: number;
   updated: number;
   createdBy?: string;
@@ -328,6 +333,8 @@ export function readItem(id: string, doc: Y.Doc): Item | null {
     doneAt: typeof meta.get("done") === "number" ? meta.get("done") : undefined,
     source: str("source"),
   };
+  if (typeof meta.get("kept") === "number") item.kept = meta.get("kept");
+  if (typeof meta.get("later") === "number") item.later = meta.get("later");
   const sug = meta.get("suggestion");
   if (sug && typeof sug === "object") item.suggestion = sug as Suggestion;
   if (item.type === META_TYPE) {
@@ -395,7 +402,7 @@ export function initItem(doc: Y.Doc, init: ItemInit, now = Date.now()) {
   for (const [p, ids] of Object.entries(init.rels ?? {})) for (const t of ids) setRel(doc, p, t, true);
 }
 
-export type MetaField = "title" | "type" | "home" | "pinned" | "deleted" | "source" | "suggestion";
+export type MetaField = "title" | "type" | "home" | "pinned" | "deleted" | "source" | "suggestion" | "kept" | "later";
 
 /** Set meta fields; null or "" clears. */
 export function setMeta(doc: Y.Doc, fields: Partial<Record<MetaField, unknown>>, now = Date.now()) {
