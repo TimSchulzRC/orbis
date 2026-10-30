@@ -151,6 +151,11 @@ try {
   expect(Math.abs(b.line - (b.t.y + b.t.height)) <= 3, `over the next block the line is below it (${b.line} vs ${Math.round(b.t.y + b.t.height)})`);
   expect(JSON.stringify(await order()) === JSON.stringify([start[1], start[0]]), "dropped there the two swap: " + JSON.stringify(await order()));
   await page.screenshot({ path: join(tmpdir(), "obtion-editor.png") });
+
+  // selecting everything and typing replaces everything, the heading's "# " too
+  await page.keyboard.press("Control+a");
+  await page.keyboard.type("Neu");
+  expect((await doc(page)) === "Neu", "select all and typing replaces the whole text: " + JSON.stringify(await doc(page)));
 } catch (e) {
   failures.push(String(e));
 }

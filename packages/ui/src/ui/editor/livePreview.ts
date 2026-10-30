@@ -235,11 +235,8 @@ const keepOutOfPrefix = EditorState.transactionFilter.of((tr) => {
     if (was === p.end && p.start > 0) return p.start - 1;
     return p.end;
   };
-  const ranges = tr.selection.ranges.map((r, i) => {
-    const head = fix(r.head, before?.ranges[i]?.head);
-    const sameLine = state.doc.lineAt(r.anchor).number === state.doc.lineAt(r.head).number;
-    return EditorSelection.range(r.empty ? head : sameLine ? fix(r.anchor) : r.anchor, head);
-  });
+  // a selection (all of the text, say) keeps its ends
+  const ranges = tr.selection.ranges.map((r, i) => (r.empty ? EditorSelection.cursor(fix(r.head, before?.ranges[i]?.head)) : r));
   return moved ? [tr, { selection: EditorSelection.create(ranges, tr.selection.mainIndex), sequential: true }] : tr;
 });
 
