@@ -13,7 +13,7 @@ import { keyBetween, keysFor, cmpKey } from "@obtion/core/sortkey";
 import { useRepo, useRoute, useSpaceId, itemHref, itemPath, navigate, spaceHref, useLocalStorage } from "../hooks";
 import { type Space, useAccounts } from "../accounts";
 import { useT } from "../i18n";
-import { Button, IconButton, Kbd, MenuItem, MoreMenu, Popover, REVEAL } from "./primitives";
+import { Button, IconButton, Kbd, MenuItem, MoreMenu, REVEAL } from "./primitives";
 import { TypeGlyph, ItemIcon } from "./item-look";
 import { cn, moveInArray } from "../lib/utils";
 import { shortcut } from "../lib/platform";

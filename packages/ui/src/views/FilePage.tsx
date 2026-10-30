@@ -3,19 +3,18 @@
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
 import { useEffect, useState } from "react";
-import { ArrowRightLeft, Download, Trash2, RotateCcw, Replace } from "lucide-react";
+import { ArrowRightLeft, Download, Trash2, Replace } from "lucide-react";
 import { type Item, setFileMeta } from "@obtion/core/model";
-import { fmtBytes, fmtDate } from "@obtion/core/i18n";
+import { fmtBytes, fmtDate, fmtDuration } from "@obtion/core/i18n";
 import { useIndex, leavePage, useDocumentTitle, useFiles, useRepo } from "../hooks";
 import { useT, titleOf } from "../i18n";
 import { useBlobUrl } from "../files";
-import { Button, MenuItem, IconButton, MoreMenu } from "../ui/primitives";
+import { MenuItem, MoreMenu } from "../ui/primitives";
 import { ItemIcon, Tag } from "../ui/item-look";
 import { Bezuege, Crumbs, TrashBanner } from "../ui/PageParts";
 import { TagInput } from "../ui/TagInput";
 import { ItemPicker } from "../ui/Picker";
 import { TitleField } from "../ui/TitleField";
-import { fmtDuration } from "../ui/Results";
 import { dateOf } from "@obtion/core/date";
 
 export function FilePage({ item }: { item: Item }) {

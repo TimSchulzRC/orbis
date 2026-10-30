@@ -2,7 +2,7 @@ import { type ItemInit, initType, newId, titleKey } from "@obtion/core/model";
 import type { Repo } from "@obtion/sync";
 import { repo as current } from "./repo";
 import { freshColor } from "@obtion/core/palette";
-import { spaceHref, openItem } from "./hooks";
+import { openItem } from "./hooks";
 import { KEYS } from "./ui/storage";
 
 /** Create an item locally and open it – in another workspace than the open one with `space`. */

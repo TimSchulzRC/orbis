@@ -13,7 +13,7 @@ import type { EditorView } from "@codemirror/view";
 import { Check, Clock, FolderInput, Layers, List, Maximize2, Pencil, RotateCcw, Shapes, StickyNote, Trash2, Undo2 } from "lucide-react";
 import { type Item, todayISO } from "@obtion/core/model";
 import { plainText } from "@obtion/core/search";
-import { useRepo, useItemHref, spaceHref, navigate, useDesktop, openItem, isTypingTarget, useDocumentTitle, useWindowKeys } from "../hooks";
+import { useRepo, useItemHref, navigate, useDesktop, openItem, isTypingTarget, useDocumentTitle, useWindowKeys } from "../hooks";
 import { replica, spaceById, useAccounts } from "../accounts";
 import { useT, titleOf } from "../i18n";
 import { recentPlaces } from "../actions";

@@ -10,7 +10,6 @@ import { typeTabs } from "@obtion/core/setup";
 import { setParams, useRoute, useDocumentTitle, useFiles, useRepo } from "../hooks";
 import { SpaceEyebrow } from "../ui/Spaces";
 import { useT } from "../i18n";
-import { files } from "../files";
 import { Button, Empty, IconButton, DraftBar } from "../ui/primitives";
 import { cn } from "../lib/utils";
 import { Results, defaultColumns, useQuery } from "../ui/Results";

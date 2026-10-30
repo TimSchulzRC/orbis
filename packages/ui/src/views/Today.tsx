@@ -3,7 +3,6 @@
 // seen. What waits in the inbox is in the tray below (Tray.tsx), on a desktop with its panel open
 // below the page; without room for that the newest entries are cards here (ShelfCards).
 // Sections with nothing in them are left out.
-import { useEffect } from "react";
 import { Sun } from "lucide-react";
 import { type Item, SETTINGS_ID, todayISO } from "@obtion/core/model";
 import { fmtDate } from "@obtion/core/i18n";

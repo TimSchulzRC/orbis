@@ -1,11 +1,10 @@
 // Properties of an item: those its type defines, free ones, and values of removed
 // properties ("Weitere Eigenschaften") – schema changes never delete values.
 import { Checkbox } from "../components/ui/checkbox";
-import { Input } from "../components/ui/input";
 import { NativeSelect } from "../components/ui/native-select";
 import { useState } from "react";
 import { X, Plus, ExternalLink, AlertTriangle, Trash2, ArrowRightLeft, CalendarDays } from "lucide-react";
-import { type FreeKind, type FreeValue, type Item, type PropDef, type TypeSchema, type Value, FREE_KINDS, STATUS_GROUPS, formatRange, optionNames, parseRange, todayISO } from "@obtion/core/model";
+import { type Item, type PropDef, type TypeSchema, type Value, STATUS_GROUPS, formatRange, optionNames, parseRange } from "@obtion/core/model";
 import { type T, fmtDate } from "@obtion/core/i18n";
 import type { Index } from "@obtion/core/graph";
 import { numberText, parseNumber } from "@obtion/core/input";
@@ -21,6 +20,7 @@ import { Button, EmptyValueButton, IconButton, MenuItem, Popover, AddButton, REV
 import { Progress, ProgressCount } from "./progress";
 import { cn } from "../lib/utils";
 import { TagInput } from "./TagInput";
+import { AddFreeProp, FreeField, freeOptions } from "./FreeProps";
 import { ItemPicker } from "./Picker";
 import { StatusMenu, setStatus } from "./Row";
 import { dateOf } from "@obtion/core/date";
@@ -256,34 +256,6 @@ function RelationField({ item, prop, autoOpen }: { item: Item; prop: PropDef; au
   );
 }
 
-// ---------- free properties ----------
-
-function FreeField({ value, onChange, name, options }: { value: FreeValue; onChange: (v: FreeValue | null) => void; name: string; options?: string[] }) {
-  const { t, lang } = useT();
-  const k = value.k;
-  if (k === "checkbox") return <Checkbox checked={value.v === true} onCheckedChange={(checked) => onChange({ k, v: checked === true })} aria-label={name} className="size-4" />;
-  if (k === "date") return <DateField value={String(value.v ?? "") || undefined} label={name} onChange={(x) => onChange(x ? { k, v: x } : null)} />;
-  if (k === "number")
-    return <InlineText value={typeof value.v === "number" ? numberText(lang, value.v) : String(value.v)} onCommit={(x) => { const n = parseNumber(lang, x); onChange(n === undefined ? null : { k, v: n }); }} label={name} className="text-sm tabular-nums" />;
-  if (k === "select")
-    return (
-      <>
-        <Input variant="bare" list={`opts-${name}`} defaultValue={String(value.v)} onBlur={(e) => onChange(e.target.value.trim() ? { k, v: e.target.value.trim() } : null)} aria-label={name} className="field w-40 rounded-md bg-transparent px-1 text-sm outline-none hover:bg-hover" />
-        <datalist id={`opts-${name}`}>{options?.map((o) => <option key={o} value={o} />)}</datalist>
-      </>
-    );
-  return <InlineText value={String(value.v ?? "")} onCommit={(x) => onChange(x.trim() ? { k, v: x.trim() } : null)} placeholder={t("props.empty")} label={name} className="text-sm" />;
-}
-
-function freeOptions(name: string): string[] {
-  const set = new Set<string>();
-  for (const i of repo.live()) {
-    const v = Object.entries(i.extra).find(([n]) => n.toLowerCase() === name.toLowerCase())?.[1];
-    if (v?.k === "select") set.add(String(v.v));
-  }
-  return [...set].sort();
-}
-
 // ---------- the property block of a page ----------
 
 /** One row of the block: label 13 muted (one line, the name as tooltip when cut), value beside it. */
@@ -331,15 +303,6 @@ export function PropertyBlock({ item, schema, noAdd, head = {} }: { item: Item; 
   const leftovers = schema ? schema.removedProperties.filter((p) => item.props[p.id] !== undefined || item.rels[p.id]?.length) : [];
   const inverse = inverseGroups(item, ix, t);
   const free = Object.entries(item.extra);
-  const [name, setName] = useState("");
-  const [kind, setKind] = useState<FreeKind>("text");
-  const addFree = () => {
-    const n = name.trim();
-    if (!n) return;
-    repo.setExtra(item.id, n, { k: kind, v: kind === "checkbox" ? true : kind === "number" ? 0 : kind === "date" ? todayISO() : "…" });
-    setName("");
-    setAdding(false);
-  };
   // an empty badge or date waits for the pointer, like "+ Eigenschaft" (unless just opened)
   const quiet = (p: PropDef) => !hasValue(item, p, ix) && !opened.has(p.id) && "opacity-0 transition-opacity group-hover/props:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100";
   const rows = shown.length || free.length || inverse.length || item.tags.length || leftovers.length || tagging;
@@ -425,22 +388,7 @@ export function PropertyBlock({ item, schema, noAdd, head = {} }: { item: Item; 
       {!noAdd && (
         <div className="col-span-2">
           {adding ? (
-            <div className="flex flex-wrap items-center gap-2 py-1">
-              <Input variant="sm" autoFocus value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => (e.key === "Enter" && addFree(), e.key === "Escape" && setAdding(false))} placeholder={t("props.name")} className="w-36" />
-              <NativeSelect value={kind} onChange={(e) => setKind(e.target.value as FreeKind)} className="rounded-md border border-line bg-bg px-1.5 py-1 text-sm" aria-label={t("props.kind")}>
-                {FREE_KINDS.map((k) => (
-                  <option key={k} value={k}>
-                    {t("kind.prop." + k)}
-                  </option>
-                ))}
-              </NativeSelect>
-              <Button variant="plain" onClick={addFree} className="rounded-md bg-ink px-2 py-1 text-xs text-ink-text">
-                {t("props.add")}
-              </Button>
-              <Button variant="plain" onClick={() => setAdding(false)} className="text-xs text-muted-foreground">
-                {t("cancel")}
-              </Button>
-            </div>
+            <AddFreeProp item={item} onDone={() => setAdding(false)} />
           ) : (
             <Popover
               trigger={(pp) => (

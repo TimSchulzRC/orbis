@@ -86,6 +86,12 @@ export function fmtRelative(lang: Lang, ts: number, now = Date.now()) {
   return new Date(ts).toLocaleDateString(locale(lang), { day: "numeric", month: "short", year: a > 86400 * 300 ? "numeric" : undefined });
 }
 
+/** A length in seconds as "m:ss". */
+export function fmtDuration(s: number) {
+  const m = Math.floor(s / 60);
+  return `${m}:${String(Math.round(s % 60)).padStart(2, "0")}`;
+}
+
 export function fmtBytes(lang: Lang, n: number) {
   const u = ["B", "KB", "MB", "GB"];
   let i = 0;

@@ -10,7 +10,7 @@ import { ChevronsUpDown, Plus, SlidersHorizontal } from "lucide-react";
 import type { Repo } from "@obtion/sync";
 import { createSpace, replica, setShown, spaceById, useAccounts } from "../accounts";
 import { ScopeContext, globalPage } from "../scope";
-import { spaceHref, useSpaceId, navigate, openItem, parseHash } from "../hooks";
+import { useSpaceId, navigate, openItem, parseHash } from "../hooks";
 import { MoveError, moveToSpace, planToSpace } from "../move";
 import { useT, tr, titleOf } from "../i18n";
 import { Button, Dialog, MenuItem, Popover } from "./primitives";

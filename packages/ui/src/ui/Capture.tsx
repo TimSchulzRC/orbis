@@ -2,7 +2,7 @@ import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
 import { useEffect, useRef, useState } from "react";
 import { ArrowRight, ChevronDown, CornerDownRight, Layers, Paperclip, X } from "lucide-react";
-import { useFiles, useRepo, useSpaceId, spaceHref, openItem } from "../hooks";
+import { useFiles, useRepo, useSpaceId, openItem } from "../hooks";
 import { shownSpaces, useAccounts } from "../accounts";
 import { useT } from "../i18n";
 import { capture, extractMentions, recentPlaces, rememberPlace } from "../actions";

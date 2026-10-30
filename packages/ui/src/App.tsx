@@ -3,7 +3,7 @@ import { BrandLogo } from "./ui/BrandLogo";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Menu, Search, Inbox, SlidersHorizontal, Sun, X } from "lucide-react";
 import { SETTINGS_ID } from "@obtion/core/model";
-import { useRepo, useRoute, useDesktop, itemHref, itemPath, spaceHref, navigate, openItem } from "./hooks";
+import { useRepo, useRoute, useDesktop, itemPath, spaceHref, navigate, openItem } from "./hooks";
 import { useT } from "./i18n";
 import { cn } from "./lib/utils";
 import { Button, IconButton, PagePlaceholder } from "./ui/primitives";

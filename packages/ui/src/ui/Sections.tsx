@@ -16,7 +16,7 @@ import { itemHref, useIndex } from "../hooks";
 import { useT, tr, titleOf } from "../i18n";
 import { Card, Button, Seg, SectionTitle, ViewMenu, SectionAction } from "./primitives";
 import { DueLabel, ItemIcon, RelTime } from "./item-look";
-import { type PageGroup, PageTable } from "./Table";
+import { type PageGroup, PageTable } from "./PageTable";
 import { shortPath } from "./Row";
 import { agentLabel, agentName } from "./AgentNotice";
 import { cmpKey } from "@obtion/core/sortkey";

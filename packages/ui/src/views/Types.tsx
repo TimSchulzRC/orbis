@@ -2,7 +2,7 @@ import { Input } from "../components/ui/input";
 import { useState } from "react";
 import { Plus, RotateCcw } from "lucide-react";
 import { restoreDefaultTypes } from "@obtion/core/setup";
-import { useIndex, useRepo, useRoute, useSpaceId, itemHref, spaceHref, openItem, useDocumentTitle } from "../hooks";
+import { useIndex, useRepo, useRoute, useSpaceId, itemHref, openItem, useDocumentTitle } from "../hooks";
 import { SpaceEyebrow } from "../ui/Spaces";
 import { useT, getLang } from "../i18n";
 import { Card, Button, Dialog } from "../ui/primitives";

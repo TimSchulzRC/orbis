@@ -12,7 +12,7 @@ import { inboxWhere } from "@obtion/core/inbox";
 import { resetInbox } from "@obtion/core/setup";
 import { plainText } from "@obtion/core/search";
 import { type Lang, type T, fmtBytes } from "@obtion/core/i18n";
-import { useRepo, itemHref, itemPath, spaceHref } from "../hooks";
+import { useRepo, itemPath, spaceHref } from "../hooks";
 import { useBlobUrl } from "../files";
 import { Textarea } from "../components/ui/textarea";
 import { replica, spaceById, useAccounts } from "../accounts";

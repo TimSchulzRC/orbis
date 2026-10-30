@@ -1,6 +1,6 @@
 // Parts every page shares (design rules § 3.1): the path line on top, the card of connections
 // ("Bezüge") and the quiet footer. Information pages and file pages use the same ones.
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { ChevronRight, Pin, RotateCcw, Star, X } from "lucide-react";
 import { type Item, META_TYPE } from "@obtion/core/model";
 import { hasPlace, isInInbox } from "@obtion/core/placement";
