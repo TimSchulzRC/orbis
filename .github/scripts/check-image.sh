@@ -28,8 +28,9 @@ done
 [[ -n ${info:-} ]] || fail "no answer from /api/info within 60 s"
 echo "/api/info: $info"
 # plain text matching: the runners need nothing beyond Docker and curl
-for want in "\"firstAccount\":true" "\"version\":\"$version\"" "\"commit\":\"$commit\""; do
-  [[ $info == *"$want"* ]] || fail "/api/info should show version $version, commit $commit and no account yet"
+# the server shows the commit shortened to seven characters
+for want in "\"firstAccount\":true" "\"version\":\"$version\"" "\"commit\":\"${commit:0:7}\""; do
+  [[ $info == *"$want"* ]] || fail "/api/info should show version $version, commit ${commit:0:7} and no account yet"
 done
 curl -fsS "$url/" | grep -qi '<div id="root"' || fail "/ does not serve the web app"
 echo "image $image ok"
