@@ -3,7 +3,9 @@ name: Release
 # Three channels of one image, ghcr.io/<owner>/obtion (the desktop app shall follow the same):
 #   dev      every push to main (ci.yml): :dev and :sha-<commit>
 #   nightly  this workflow, checked every half hour: a new one when main has commits the last one
-#            lacks and that one is at least six hours old; by hand without the wait.
+#            lacks and that one is at least six hours old; by hand without the wait. GitHub's
+#            schedule drops most of its runs for this repository, so the self-hosted runner's
+#            machine starts the check too (dispatch with auto: scripts/systemd/obtion-nightly-check.*).
 #            :nightly and :0.0.2-nightly.20261030.1, a GitHub pre-release v0.0.2-nightly.20261030.1
 #   stable   this workflow, only by hand: the commit of the latest nightly, so stable only ever
 #            ships what ran as nightly. :stable, :latest and :0.0.2, a GitHub release v0.0.2
@@ -25,6 +27,10 @@ on:
         description: "Only for stable, e.g. 0.1.0. Default: the version the latest nightly led up to."
         required: false
         type: string
+      auto:
+        description: "Like the schedule: a nightly only when due (six hours, new commits)"
+        type: boolean
+        default: false
 
 # one nightly at a time (a waiting one checks again when it starts), stable apart from it
 concurrency:
@@ -62,7 +68,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           CHANNEL: ${{ inputs.channel || 'nightly' }}
-          EVENT: ${{ github.event_name }}
+          AUTO: ${{ github.event_name == 'schedule' || inputs.auto }}
           SHA: ${{ github.sha }}
           VERSION_INPUT: ${{ inputs.version }}
 

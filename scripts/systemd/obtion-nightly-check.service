@@ -1,0 +1,9 @@
+# Starts the nightly check of the workflow Release, as its schedule should (GitHub drops most of
+# those runs for this repository). Builds only when due: at least six hours since the last
+# nightly and new commits on main. Needs gh, logged in with the workflow scope.
+[Unit]
+Description=Obtion: start the nightly check of the workflow Release
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/gh workflow run release.yml --repo TimSchulzRC/obtion --ref main -f channel=nightly -f auto=true

@@ -7,12 +7,12 @@
 #   notes    the release the notes start from (the previous one of the channel), may be empty
 #
 # nightly: the newest main ($SHA). Only when the dev image of that commit exists (ci.yml passed),
-#   main has commits the last nightly lacks and, when scheduled, the last nightly is at least six
-#   hours old. Version: the next stable one, the day and the how-manieth nightly of that day.
+#   main has commits the last nightly lacks and, when automatic (schedule or dispatch with auto),
+#   the last nightly is at least six hours old. Version: the next stable one, the day and the how-manieth nightly of that day.
 # stable: the commit of the latest nightly, so stable only ever ships what ran as nightly. Version:
 #   the one that nightly led up to, or $VERSION_INPUT (e.g. 0.1.0 for the beta).
 #
-# Needs: CHANNEL (nightly | stable), EVENT (schedule | workflow_dispatch), SHA, GITHUB_REPOSITORY,
+# Needs: CHANNEL (nightly | stable), AUTO (true: started by a timer, false: by hand), SHA, GITHUB_REPOSITORY,
 # GH_TOKEN; optional VERSION_INPUT. The dev image is looked up with docker (logged in to ghcr.io).
 set -euo pipefail
 
@@ -42,10 +42,10 @@ stable_version=${last_stable#v}
 if [[ $CHANNEL == nightly ]]; then
   sha=$SHA
   docker buildx imagetools inspect "$image:sha-${sha:0:7}" > /dev/null 2>&1 ||
-    if [[ $EVENT == schedule ]]; then skip "No dev image for ${sha:0:7} yet (CI still running or failed)"; else fail "No dev image for ${sha:0:7}: wait for CI on main"; fi
+    if [[ $AUTO == true ]]; then skip "No dev image for ${sha:0:7} yet (CI still running or failed)"; else fail "No dev image for ${sha:0:7}: wait for CI on main"; fi
 
   if [[ -n $nightly_tag ]]; then
-    if [[ $EVENT == schedule ]] && (($(date -u +%s) - $(date -u -d "$nightly_at" +%s) < GAP_HOURS * 3600)); then
+    if [[ $AUTO == true ]] && (($(date -u +%s) - $(date -u -d "$nightly_at" +%s) < GAP_HOURS * 3600)); then
       skip "$nightly_tag is less than $GAP_HOURS hours old"
     fi
     status=$(gh api "repos/$repo/compare/$nightly_tag...$sha" --jq .status)

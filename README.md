@@ -36,6 +36,15 @@ Going back to an older version can fail once a newer one has converted the data.
 
 Releases run in the workflow [Release](.github/workflows/release.yml): nightlies on their own every half hour when due, or by hand (*Run workflow*, channel `nightly`) without waiting; stable only by hand (channel `stable`, with `version` for a new middle number).
 
+GitHub's schedule drops most runs of the nightly check for this repository, so a machine that is always on (the one with the self-hosted runner) starts it every half hour as well, with the user timer in [`scripts/systemd`](scripts/systemd):
+
+```bash
+cp scripts/systemd/obtion-nightly-check.* ~/.config/systemd/user/
+systemctl --user daemon-reload && systemctl --user enable --now obtion-nightly-check.timer
+```
+
+It needs `gh`, logged in with the `workflow` scope, and user lingering (`loginctl enable-linger`) to run without a login.
+
 To update on its own, let the server run `docker compose pull && docker compose up -d` in the folder regularly, e.g. every 15 minutes (a scheduled task on a NAS, a cron job or systemd timer elsewhere); without a new image it changes nothing.
 
 ## Connecting an agent
