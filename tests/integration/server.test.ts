@@ -107,6 +107,16 @@ test("the sign-in only from the server's own page; other sites get no CORS answe
   expect(await account(bare, (await own.json()).token)).toMatchObject({ user: { email: "eve@example.org" } });
 });
 
+test("without settings only passwords; the passkey routes stay shut; the OAuth cookie is traded only from the own page", async () => {
+  const info = await get(bare, "/api/info").then((r) => r.json());
+  expect(info.login).toEqual({ password: true, emailCode: false, passkey: false, oauth: [] });
+  expect((await get(bare, "/api/auth/passkey/generate-authenticate-options")).status).toBe(404);
+  expect((await post(bare, "/api/account/claim", {}, undefined, { origin: "https://evil.example.org" })).status).toBe(403);
+  expect((await post(bare, "/api/account/claim", {}, undefined, { origin: bare })).status).toBe(401);
+  const pw = await signUp(bare, "pw@example.org");
+  expect(await account(bare, pw.token)).toMatchObject({ password: true });
+});
+
 test("the data from before accounts become a workspace of the first account; the old MCP address still opens them", async () => {
   expect(existsSync(join(legacyDir, "obtion.db"))).toBe(false);
   const ada = await signUp(legacy, "ada@example.org");

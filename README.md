@@ -16,6 +16,18 @@ Open `http://<host>:8480` and create the first account. Optional settings go int
 
 Update: `docker compose pull && docker compose up -d`
 
+## Signing in
+
+Email and password work out of the box. Without a password, set up any of these in `.env` (details in [`.env.example`](.env.example)):
+
+| Way | Needs |
+|---|---|
+| Code by email | `OBTION_SMTP_URL` (or `log`: the codes go to the server log) |
+| Passkeys | `OBTION_PUBLIC_URL` with `https://`; add one in Settings → Account |
+| OAuth | `OBTION_PUBLIC_URL` and an OpenID Connect provider (`OBTION_OIDC_*`), GitHub or Google |
+
+Forgot your password: `docker compose exec obtion bun apps/server/src/cli.ts set-password <email>`.
+
 ## Release channels
 
 Choose with `OBTION_VERSION` in `.env`:

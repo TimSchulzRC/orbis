@@ -1,7 +1,9 @@
 // Accounts and workspaces of one server, in data/accounts.db.
 //
-// Who someone is comes from Better Auth (users, sessions, passwords); always by bearer token, never
-// by cookie, so the same app can talk to several servers. What someone may see is ours: a
+// Who someone is comes from Better Auth (users, sessions, passwords, codes by email, passkeys,
+// OAuth; see login.ts); always by bearer token, never by cookie, so the same app can talk to
+// several servers. Only an OAuth sign-in ends with a cookie, which the app trades for a token once
+// (claim). What someone may see is ours: a
 // workspace has members (owner or member), each workspace keeps its data in a folder of its own
 // (workspaces/<id>/, see workspace.ts). Nobody needs a workspace of their own – joining one by an
 // invite link is enough.
@@ -9,11 +11,44 @@ import { Database } from "bun:sqlite";
 import { existsSync, mkdirSync, readdirSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { betterAuth } from "better-auth";
-import { bearer } from "better-auth/plugins";
+import { APIError } from "better-auth/api";
+import { bearer, emailOTP, genericOAuth } from "better-auth/plugins";
+import { passkey } from "@better-auth/passkey";
 import { getMigrations } from "better-auth/db/migration";
 import { newId } from "@obtion/core/model";
 import type { Member, Role, SignedIn, SignupPolicy, User, WorkspaceInfo } from "@obtion/core/api";
 import { sha256 } from "./blobs";
+import type { LoginConfig } from "./login";
+
+/** How long after signing in someone may add a passkey or delete the account without a password. */
+export const FRESH_SECONDS = 10 * 60;
+
+/**
+ * What a new account comes with, set by the page before it signs up (by code or OAuth, where the
+ * request is Better Auth's own): the invite it joins with, the app's language. A cookie, so that it
+ * also reaches the OAuth callback.
+ */
+export const SIGNUP_COOKIE = "obtion_signup";
+interface SignupContext {
+  invite?: string;
+  lang?: string;
+  /** the personal workspace's name (in-process sign-ups) */
+  personal?: string;
+}
+
+function signupContext(headers: Headers | undefined): SignupContext {
+  const raw = headers?.get("cookie")?.split(";").map((c) => c.trim()).find((c) => c.startsWith(SIGNUP_COOKIE + "="));
+  if (!raw) return {};
+  try {
+    const v = JSON.parse(decodeURIComponent(raw.slice(SIGNUP_COOKIE.length + 1))) as Record<string, unknown>;
+    const str = (x: unknown) => (typeof x === "string" && x.length < 200 ? x : undefined);
+    return { invite: str(v.invite), lang: str(v.lang), personal: str(v.personal) };
+  } catch {
+    return {};
+  }
+}
+
+const signupHeaders = (c: SignupContext) => new Headers({ cookie: `${SIGNUP_COOKIE}=${encodeURIComponent(JSON.stringify(c))}` });
 
 /** A workspace name as stored: trimmed, at most 80 characters. */
 const workspaceName = (name: string) => name.trim().slice(0, 80);
@@ -38,13 +73,15 @@ export class Accounts {
 
   constructor(
     public dataDir: string,
-    opts: { secret: string; baseURL: string; policy: SignupPolicy },
+    opts: { secret: string; baseURL: string; policy: SignupPolicy; login?: LoginConfig; personal?: (lang?: string) => string },
   ) {
     mkdirSync(join(dataDir, "workspaces"), { recursive: true });
     this.db = new Database(join(dataDir, "accounts.db"));
     this.db.exec("PRAGMA journal_mode = WAL;");
     this.policy = opts.policy;
-    this.auth = makeAuth(this.db, opts.secret, opts.baseURL);
+    this.login = opts.login ?? { password: true, oauth: [] };
+    this.personal = opts.personal ?? (() => "Personal");
+    this.auth = makeAuth(this, opts.secret, opts.baseURL);
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS workspaces (id TEXT PRIMARY KEY, name TEXT NOT NULL, created INTEGER NOT NULL, legacy INTEGER NOT NULL DEFAULT 0);
       CREATE TABLE IF NOT EXISTS members (workspace TEXT NOT NULL, user TEXT NOT NULL, role TEXT NOT NULL, joined INTEGER NOT NULL, PRIMARY KEY (workspace, user));
@@ -56,6 +93,8 @@ export class Accounts {
   }
 
   policy: SignupPolicy;
+  login: LoginConfig;
+  personal: (lang?: string) => string;
 
   /** Create Better Auth's tables (once) and turn the data of a server from before accounts into a workspace. */
   async init(legacyName: (dir: string) => string) {
@@ -115,26 +154,62 @@ export class Accounts {
     return this.policy === "invite" && !!invite && !!this.invite(invite);
   }
 
+  /** Before Better Auth creates a user (any way: password, code, OAuth): may this request? */
+  allowNewUser(headers: Headers | undefined) {
+    const c = signupContext(headers);
+    // the code sends an OAuth sign-in back to the page (?signin=failed&error=signup_closed)
+    if (!this.canSignUp(c.invite)) throw new APIError("FORBIDDEN", c.invite ? { message: "invite invalid", code: "invite_invalid" } : { message: "signup closed", code: "signup_closed" });
+  }
+
   /**
-   * Create an account and sign it in. With an invite it joins that workspace and gets none of
-   * its own; without one it gets a personal workspace. The very first account becomes the admin and
+   * After Better Auth created a user. With an invite it joins that workspace and gets none of its
+   * own; without one it gets a personal workspace. The very first account becomes the admin and
    * takes over the data from before accounts, if there are any.
    */
-  async signUp(body: { name: string; email: string; password: string; invite?: string; personal: string }): Promise<SignedIn> {
-    if (!this.canSignUp(body.invite)) throw new AccountError(body.invite ? "invite invalid" : "signup closed", 403);
-    const first = this.userCount() === 0;
-    const res = await this.auth.api.signUpEmail({ body: { name: body.name.trim() || body.email.split("@")[0]!, email: body.email.trim(), password: body.password } }).catch((e) => {
-      throw new AccountError(e?.body?.message ?? e?.message ?? "signup failed", e?.statusCode === 422 ? 409 : 400);
-    });
-    const user = { id: res.user.id, name: res.user.name, email: res.user.email };
-    if (first) {
-      this.db.query("INSERT OR IGNORE INTO admins (user) VALUES (?)").run(user.id);
+  setUpNewUser(id: string, headers: Headers | undefined) {
+    const c = signupContext(headers);
+    if (this.userCount() === 1) {
+      this.db.query("INSERT OR IGNORE INTO admins (user) VALUES (?)").run(id);
       const orphans = this.db.query("SELECT id FROM workspaces WHERE id NOT IN (SELECT workspace FROM members)").all() as { id: string }[];
-      for (const w of orphans) this.addMember(w.id, user.id, "owner");
+      for (const w of orphans) this.addMember(w.id, id, "owner");
     }
-    if (body.invite) this.join(body.invite, user.id);
-    else if (!this.workspacesOf(user.id).length) this.createWorkspace(user.id, body.personal);
-    return { token: res.token!, user };
+    if (c.invite && this.invite(c.invite)) this.join(c.invite, id);
+    else if (!this.workspacesOf(id).length) this.createWorkspace(id, c.personal ?? this.personal(c.lang));
+  }
+
+  /** Create an account with a password and sign it in (see setUpNewUser). */
+  async signUp(body: { name: string; email: string; password: string; invite?: string; personal: string }): Promise<SignedIn> {
+    if (!this.login.password) throw new AccountError("passwords off", 403);
+    if (!this.canSignUp(body.invite)) throw new AccountError(body.invite ? "invite invalid" : "signup closed", 403);
+    const res = await this.auth.api
+      .signUpEmail({ body: { name: body.name.trim() || body.email.split("@")[0]!, email: body.email.trim(), password: body.password }, headers: signupHeaders({ invite: body.invite, personal: body.personal }) })
+      .catch((e) => {
+        throw new AccountError(e?.body?.message ?? e?.message ?? "signup failed", e?.statusCode === 422 ? 409 : (e?.statusCode ?? 400));
+      });
+    return { token: res.token!, user: { id: res.user.id, name: res.user.name, email: res.user.email } };
+  }
+
+  /** The session of a bearer token: its user and when it began (for what needs a recent sign-in). */
+  async session(token: string | null | undefined) {
+    if (!token) return null;
+    const s = await this.auth.api.getSession({ headers: new Headers({ authorization: `Bearer ${token}` }) }).catch(() => null);
+    return s ? { user: { id: s.user.id, name: s.user.name, email: s.user.email } as User, created: new Date(s.session.createdAt).getTime() } : null;
+  }
+
+  /**
+   * The session an OAuth sign-in left in the browser's cookie, as a token the app keeps: the page
+   * trades it once (the cookie goes, see index.ts).
+   */
+  async claim(headers: Headers): Promise<SignedIn | null> {
+    const h = new Headers({ cookie: headers.get("cookie") ?? "" });
+    const s = await this.auth.api.getSession({ headers: h }).catch(() => null);
+    return s ? { token: s.session.token, user: { id: s.user.id, name: s.user.name, email: s.user.email } } : null;
+  }
+
+  /** Whether the user can sign in with a password. */
+  async hasPassword(user: string): Promise<boolean> {
+    const ctx = await this.auth.$context;
+    return !!(await ctx.internalAdapter.findCredentialAccount(user))?.password;
   }
 
   async signOut(token: string) {
@@ -165,9 +240,13 @@ export class Accounts {
       throw new AccountError("invalid password", 403);
   }
 
-  /** Delete only the caller's identity. Workspaces must retain an owner. */
-  async deleteAccount(user: string, password: string) {
-    await this.verifyPassword(user, password);
+  /**
+   * Delete only the caller's identity. Workspaces must retain an owner. Proof that it is them: the
+   * password, or (without one) a sign-in in the last minutes (`signedInAt`).
+   */
+  async deleteAccount(user: string, password: string | undefined, signedInAt = 0) {
+    if (password !== undefined) await this.verifyPassword(user, password);
+    else if (Date.now() - signedInAt > FRESH_SECONDS * 1000) throw new AccountError("sign in again", 403);
     this.db.transaction(() => {
       for (const w of this.workspacesOf(user)) {
         if (w.role === "owner" && this.members(w.id).filter((m) => m.role === "owner").length === 1)
@@ -176,7 +255,7 @@ export class Accounts {
       for (const table of ["members", "tokens", "admins"]) this.db.query(`DELETE FROM ${table} WHERE user = ?`).run(user);
       this.db.query('DELETE FROM invites WHERE "by" = ?').run(user);
       // Better Auth's database-backed sessions and credentials have no secondary cache here.
-      for (const table of ["session", "account"]) this.db.query(`DELETE FROM "${table}" WHERE userId = ?`).run(user);
+      for (const table of ["session", "account", "passkey"]) this.db.query(`DELETE FROM "${table}" WHERE userId = ?`).run(user);
       this.db.query('DELETE FROM "user" WHERE id = ?').run(user);
     })();
   }
@@ -276,21 +355,79 @@ export class Accounts {
   }
 }
 
-function makeAuth(db: Database, secret: string, baseURL: string) {
+function makeAuth(accounts: Accounts, secret: string, baseURL: string) {
+  const login = accounts.login;
+  const oidc = login.oauth.find((p) => p.id === "oidc");
+  const social = Object.fromEntries(login.oauth.filter((p) => p.id !== "oidc").map((p) => [p.id, { clientId: p.clientId, clientSecret: p.clientSecret }]));
   return betterAuth({
-    database: db,
+    database: accounts.db,
     secret,
     baseURL,
-    emailAndPassword: { enabled: true, minPasswordLength: 8 },
-    // an app stays signed in like a mail app; every use within a day moves the end
-    session: { expiresIn: 60 * 60 * 24 * 365, updateAge: 60 * 60 * 24 },
+    appName: "Obtion",
+    emailAndPassword: { enabled: login.password, minPasswordLength: 8 },
+    socialProviders: social,
+    // an OAuth provider vouching for an address (email_verified) may sign in to the account with it
+    account: { accountLinking: { enabled: true } },
+    // an app stays signed in like a mail app; every use within a day moves the end. Adding a
+    // passkey needs a sign-in of the last minutes (a stolen token cannot add one).
+    session: { expiresIn: 60 * 60 * 24 * 365, updateAge: 60 * 60 * 24, freshAge: FRESH_SECONDS },
     // the app's own page calls /api/auth/*; the server checks the origin itself (index.ts)
     trustedOrigins: (req) => [req?.headers.get("origin") ?? undefined].filter((o): o is string => !!o),
-    plugins: [bearer()],
+    databaseHooks: {
+      user: {
+        create: {
+          before: async (_user, ctx) => accounts.allowNewUser(ctx?.headers),
+          after: async (user, ctx) => accounts.setUpNewUser(user.id, ctx?.headers),
+        },
+      },
+    },
+    plugins: [
+      bearer(),
+      // always there, so that its table is: the routes answer only when passkeys are on (index.ts)
+      passkey({ rpID: login.passkey?.rpID ?? "localhost", rpName: "Obtion", origin: login.passkey?.origin ?? null }),
+      ...(login.sendCode
+        ? [
+            emailOTP({
+              expiresIn: 10 * 60,
+              storeOTP: "hashed",
+              sendVerificationOTP: async ({ email, otp, type }, ctx) => {
+                if (type !== "sign-in") return;
+                // a code for an address without an account only where it may become one
+                const known = !!accounts.db.query('SELECT 1 FROM "user" WHERE email = ?').get(email.toLowerCase());
+                const c = signupContext(ctx?.headers);
+                if (!known && !accounts.canSignUp(c.invite)) return;
+                await login.sendCode!(email, otp, c.lang);
+              },
+            }),
+          ]
+        : []),
+      ...(oidc ? [genericOAuth({ config: [{ providerId: "oidc", discoveryUrl: oidc.discoveryUrl!, clientId: oidc.clientId, clientSecret: oidc.clientSecret, scopes: ["openid", "email", "profile"], pkce: true }] })] : []),
+    ],
     // also outside NODE_ENV=production: a hosted server must not let anyone guess passwords
     rateLimit: { enabled: true },
     telemetry: { enabled: false },
   });
+}
+
+/**
+ * For the CLI: a new password for the account with this address (the way back in for someone who
+ * forgot theirs on a server without codes by email). Devices signed in stay signed in.
+ */
+export async function setPassword(dataDir: string, email: string, password: string) {
+  if (password.length < 8 || password.length > 128) throw new Error("The password needs 8 to 128 characters.");
+  const accounts = new Accounts(dataDir, { secret: "set-password-only-hashes-and-signs-nothing-here", baseURL: "http://localhost", policy: "off" });
+  try {
+    await accounts.init(() => "Personal");
+    const ctx = await accounts.auth.$context;
+    const user = await ctx.internalAdapter.findUserByEmail(email.trim().toLowerCase());
+    if (!user) throw new Error(`No account with the address ${email}.`);
+    const hash = await ctx.password.hash(password);
+    const credential = await ctx.internalAdapter.findCredentialAccount(user.user.id);
+    if (credential) await ctx.internalAdapter.updatePassword(user.user.id, hash);
+    else await ctx.internalAdapter.linkAccount({ userId: user.user.id, providerId: "credential", accountId: user.user.id, password: hash });
+  } finally {
+    accounts.db.close();
+  }
 }
 
 /** For the CLI and tests: the workspace folders that exist. */

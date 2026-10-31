@@ -32,10 +32,21 @@ export interface Ok {
   ok: true;
 }
 
+/** How one can sign in on a server (each set up by its admin, see .env.example). */
+export interface LoginMethods {
+  password: boolean;
+  /** a code sent by email */
+  emailCode: boolean;
+  passkey: boolean;
+  /** OAuth providers: oidc (any OpenID Connect provider), github, google */
+  oauth: { id: string; name: string }[];
+}
+
 /** GET /api/info */
 export interface ServerInfo {
   signup: SignupPolicy;
   firstAccount: boolean;
+  login: LoginMethods;
   version: string;
   commit: string;
 }
@@ -44,7 +55,16 @@ export interface ServerInfo {
 export interface AccountInfo {
   user: User;
   admin: boolean;
+  /** the account can sign in with a password */
+  password: boolean;
   workspaces: WorkspaceInfo[];
+}
+
+/** One passkey of the account (GET /api/auth/passkey/list-user-passkeys). */
+export interface PasskeyInfo {
+  id: string;
+  name?: string | null;
+  createdAt: string;
 }
 
 /** POST /api/account/signup */
@@ -56,7 +76,7 @@ export interface SignupRequest {
   lang?: string;
 }
 
-/** POST /api/account/signup and POST /api/auth/sign-in/email */
+/** POST /api/account/signup, POST /api/account/claim and POST /api/auth/sign-in/(email|email-otp) */
 export interface SignedIn {
   token: string;
   user: User;

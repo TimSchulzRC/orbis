@@ -6,7 +6,7 @@ import { Checkbox } from "../components/ui/checkbox";
 import { Input } from "../components/ui/input";
 import { NativeSelect } from "../components/ui/native-select";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import { Copy, Check, Eye, EyeOff, RotateCcw, ChevronRight, History, Shapes, Trash2, Waypoints } from "lucide-react";
+import { Copy, Check, Eye, EyeOff, KeyRound, RotateCcw, ChevronRight, History, Shapes, Trash2, Waypoints } from "lucide-react";
 import { SETTINGS_ID, setSettings } from "@obtion/core/model";
 import { ENDONYMS, LANGS, fmtBytes } from "@obtion/core/i18n";
 import { resetInbox } from "@obtion/core/setup";
@@ -18,9 +18,10 @@ import { ItemIcon, TypeGlyph } from "../ui/item-look";
 import { cn, toggled } from "../lib/utils";
 import { chooseAction, notify } from "../ui/feedback";
 import { setTheme, useTheme } from "../theme";
-import { type Space, changePassword, deleteAccount, deleteSpace, errorText, inviteLink, leaveSpace, mcpToken, members, renameSpace, replica, serverInfo, signOut, spaceById, useAccounts } from "../accounts";
+import { type Space, ApiError, activeUser, addPasskey, changePassword, deleteAccount, deleteSpace, errorText, inviteLink, leaveSpace, loginOf, mcpToken, members, passkeys, removePasskey, renameSpace, replica, serverInfo, signOut, spaceById, useAccounts } from "../accounts";
+import { SignIn } from "./Account";
 import { NewSpaceDialog } from "../ui/Spaces";
-import type { McpConnect, Member } from "@obtion/core/api";
+import type { McpConnect, Member, PasskeyInfo, ServerInfo } from "@obtion/core/api";
 import { setDeviceName } from "../browser";
 
 /** navigator.clipboard exists only over HTTPS; opened as http://<address> the old way copies. */
@@ -120,12 +121,14 @@ function Members({ space }: { space: Space }) {
   );
 }
 
-/** The account: who is signed in, on which server, signing out. */
+/** The account: who is signed in, on which server, its passkeys, signing out. */
 function AccountSection() {
   const { t } = useT();
   const { account } = useAccounts();
   const [deleting, setDeleting] = useState(false);
   const [changing, setChanging] = useState(false);
+  const [info, setInfo] = useState<ServerInfo | null>(null);
+  useEffect(() => void serverInfo().then(setInfo, () => {}), []);
   if (!account) return null;
   return (
     <section>
@@ -141,10 +144,12 @@ function AccountSection() {
         <Button variant="outline" onClick={() => void signOut()}>
           {t("account.signOut")}
         </Button>
-        <Button variant="outline" onClick={() => setChanging(true)}>{t("account.changePassword")}</Button>
+        {/* an account that signs in by code, passkey or provider has no password to change */}
+        {account.password !== false && <Button variant="outline" onClick={() => setChanging(true)}>{t("account.changePassword")}</Button>}
         <Button variant="outline" onClick={() => setDeleting(true)}>{t("account.delete")}</Button>
       </div>
       {changing && <ChangePasswordDialog onClose={() => setChanging(false)} />}
+      {loginOf(info).passkey && !account.lost && <Passkeys />}
       {deleting && <DeleteAccountDialog onClose={() => setDeleting(false)} />}
     </section>
   );
@@ -206,33 +211,115 @@ function ChangePasswordDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
+/**
+ * Confirming who is signed in, for what needs a recent sign-in (adding a passkey, deleting an
+ * account without a password): signing in again, which keeps everything on this device.
+ */
+function Reauth({ onDone, onClose }: { onDone: () => void; onClose: () => void }) {
+  const { t } = useT();
+  const { account } = useAccounts();
+  const who = account?.user.id;
+  // a passkey of another account signs that one in instead: then nothing goes on
+  const done = () => (activeUser() === who ? onDone() : onClose());
+  return (
+    <Dialog title={t("account.reauth")} onClose={onClose}>
+      <p className="text-sm text-muted-foreground">{t("account.reauthHint")}</p>
+      <SignIn email={account?.user.email} onDone={done} />
+    </Dialog>
+  );
+}
+
+/** The account's passkeys: signing in without a password, with this device or a phone. */
+function Passkeys() {
+  const { t } = useT();
+  const [list, setList] = useState<PasskeyInfo[] | null>(null);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [reauth, setReauth] = useState(false);
+  const load = () => passkeys().then(setList, () => setList([]));
+  useEffect(() => void load(), []);
+  const add = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      await addPasskey();
+      notify(t("account.passkeyAdded"));
+      await load();
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 403) setReauth(true);
+      else if (!(e instanceof Error && e.name === "NotAllowedError")) setError(t("account.passkeyFailed"));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const supported = !!window.PublicKeyCredential && window.isSecureContext;
+  return (
+    <div className="mt-3 rounded-lg border border-line p-3 text-sm">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <span className="min-w-0 flex-1">
+          <span className="block font-medium">{t("account.passkeys")}</span>
+          <span className="block text-xs text-muted-foreground">{t(supported ? "account.passkeysHint" : "account.passkeysUnsupported")}</span>
+        </span>
+        <Button variant="outline" disabled={busy || !supported} onClick={() => void add()}>
+          <KeyRound size={14} /> {t("account.addPasskey")}
+        </Button>
+      </div>
+      {list && list.length > 0 && (
+        <ul className="mt-3 divide-y divide-line border-t border-line">
+          {list.map((p) => (
+            <li key={p.id} className="flex items-center gap-2 py-2">
+              <KeyRound size={14} className="shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1 truncate">{p.name || t("account.passkey")}</span>
+              <span className="shrink-0 text-xs text-muted-foreground">{new Date(p.createdAt).toLocaleDateString()}</span>
+              <Button variant="plain" className="tap rounded-md p-1.5 text-muted-foreground hover:bg-hover" aria-label={t("account.removePasskey")} title={t("account.removePasskey")}
+                onClick={() => void removePasskey(p.id).then(load, () => setError(t("account.offline")))}>
+                <Trash2 size={14} />
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {error && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}
+      {reauth && <Reauth onClose={() => setReauth(false)} onDone={() => (setReauth(false), void add())} />}
+    </div>
+  );
+}
+
 function DeleteAccountDialog({ onClose }: { onClose: () => void }) {
   const { t } = useT();
+  const { account } = useAccounts();
+  // without a password: a recent sign-in is the proof
+  const withPassword = account?.password !== false;
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [reauth, setReauth] = useState(false);
+  const remove = async () => {
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    try { await deleteAccount(withPassword ? password : undefined); }
+    catch (e) {
+      if (!withPassword && e instanceof ApiError && e.status === 403 && e.message === "sign in again") setReauth(true);
+      else setError(errorText(e, t, "deleteAccount"));
+      setBusy(false);
+    }
+  };
+  if (reauth) return <Reauth onClose={onClose} onDone={() => (setReauth(false), void remove())} />;
   return (
     <Dialog title={t("account.delete")} onClose={() => { if (!busy) onClose(); }}>
-      <form onSubmit={async (e) => {
-        e.preventDefault();
-        if (busy) return;
-        setBusy(true);
-        setError("");
-        try { await deleteAccount(password); }
-        catch (e) {
-          setError(errorText(e, t, "deleteAccount"));
-          setBusy(false);
-        }
-      }}>
+      <form onSubmit={(e) => (e.preventDefault(), void remove())}>
         <p className="mb-4 text-sm text-muted-foreground">{t("account.deleteHint")}</p>
-        <label className="block text-sm">
-          {t("account.password")}
-          <Input type="password" autoComplete="current-password" required value={password} disabled={busy} onChange={(e) => setPassword(e.target.value)} className="mt-1 block" />
-        </label>
+        {withPassword && (
+          <label className="block text-sm">
+            {t("account.password")}
+            <Input type="password" autoComplete="current-password" required value={password} disabled={busy} onChange={(e) => setPassword(e.target.value)} className="mt-1 block" />
+          </label>
+        )}
         {error && <p role="alert" className="mt-3 text-sm text-danger">{error}</p>}
         <div className="mt-4 flex gap-2">
           <Button type="button" variant="outline" disabled={busy} onClick={onClose}>{t("cancel")}</Button>
-          <Button type="submit" variant="danger" disabled={busy || !password}>{t("account.delete")}</Button>
+          <Button type="submit" variant="danger" disabled={busy || (withPassword && !password)}>{t("account.delete")}</Button>
         </div>
       </form>
     </Dialog>
