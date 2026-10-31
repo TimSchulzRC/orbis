@@ -1,7 +1,6 @@
 // Live query blocks inside a text: ```abfrage … ``` is stored as JSON with ids and shown
 // as its results. Text-form blocks (typed by hand or by an agent) are normalised to JSON.
 import { Checkbox } from "../components/ui/checkbox";
-import { Button as ShadcnButton } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { StrictMode, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -15,10 +14,10 @@ import { repo } from "../repo";
 import { useIndex } from "../hooks";
 import { useT } from "../i18n";
 import { Results, defaultColumns, useQuery } from "./Results";
-import { viewGroups } from "./Table";
+import { viewGroups } from "./groups";
 import { type TabEdit, ViewSettings, ViewTabs, tabName, useTabChoice, useViewFields } from "./Views";
 import { QueryEditor } from "./QueryEditor";
-import { Button, SectionTitle } from "./bits";
+import { Button, SectionTitle, DraftBar } from "./primitives";
 import { sameValue } from "@obtion/core/equal";
 
 /** A block's views: its tabs, or its one look as the only tab. */
@@ -100,23 +99,24 @@ function QueryBlockView({ src, thisId, n = 0, onChange, onDelete, readOnly }: { 
     <div className="group/qb relative my-1 rounded-xl border border-transparent px-0 py-0.5 hover:border-line" contentEditable={false}>
       {/* the same head as every section of a page: title and count */}
       {def.title && (
-        <SectionTitle className="mb-1 pr-16" count={items.length || undefined}>
+        <SectionTitle className="pr-16" count={items.length || undefined}>
           {def.title}
         </SectionTitle>
       )}
       {!readOnly && (
           <span className="qb-tools absolute right-1 top-1 z-10 flex gap-0.5 rounded-md bg-bg opacity-0 transition-opacity group-hover/qb:opacity-100">
-            <ShadcnButton variant="plain" size="none" onClick={() => (editing && save(), setEditing(!editing))} className="tap rounded p-1 text-muted-foreground hover:bg-hover hover:text-fg" aria-label={editing ? t("view.save") : t("block.edit")}>
+            <Button variant="plain" onClick={() => (editing && save(), setEditing(!editing))} className="tap rounded p-1 text-muted-foreground hover:bg-hover hover:text-fg" aria-label={editing ? t("view.save") : t("block.edit")}>
               {editing ? <Check size={13} /> : <Pencil size={13} />}
-            </ShadcnButton>
-            <ShadcnButton variant="plain" size="none" onClick={onDelete} className="tap rounded p-1 text-muted-foreground hover:bg-hover hover:text-danger" aria-label={t("block.delete")}>
+            </Button>
+            <Button variant="plain" onClick={onDelete} className="tap rounded p-1 text-muted-foreground hover:bg-hover hover:text-danger" aria-label={t("block.delete")}>
               <Trash2 size={13} />
-            </ShadcnButton>
+            </Button>
           </span>
       )}
       {editing && onChange && (
         <div className="my-2 space-y-2">
           <Input
+            variant="bare"
             defaultValue={def.title ?? ""}
             onBlur={(e) => (e.target.value.trim() || undefined) !== def.title && edit({ ...stored, title: e.target.value.trim() || undefined })}
             placeholder={t("block.title")}
@@ -154,21 +154,6 @@ function QueryBlockView({ src, thisId, n = 0, onChange, onDelete, readOnly }: { 
         empty={<p className="px-0 py-1 text-sm text-muted-foreground">{def.where && "inbox" in def.where ? t("inbox.emptyShort") : t("query.empty")}</p>}
       />
       )}
-    </div>
-  );
-}
-
-function DraftBar({ onDiscard, onSave }: { onDiscard: () => void; onSave: () => void }) {
-  const { t } = useT();
-  return (
-    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--focus)] px-2.5 py-1.5 text-sm" role="status">
-      <span className="mr-auto text-muted-foreground">{t("view.draft")}</span>
-      <Button variant="outline" onClick={onDiscard}>
-        {t("view.discard")}
-      </Button>
-      <Button variant="primary" onClick={onSave}>
-        {t("view.save")}
-      </Button>
     </div>
   );
 }

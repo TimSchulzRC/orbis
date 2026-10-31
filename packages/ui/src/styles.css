@@ -44,6 +44,7 @@
   --color-danger: var(--danger-text);
   --color-warn: var(--warn-text);
   --color-link: var(--link);
+  --color-inbox: var(--t-inbox);
   --color-ok: var(--ok-text);
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;

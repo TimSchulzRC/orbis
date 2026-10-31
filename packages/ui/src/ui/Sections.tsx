@@ -1,7 +1,6 @@
 // Sections of a page, all derived from "Teil von" and the type's capabilities:
 // the main child list (e.g. tasks of a project, over all levels), same-type children
 // (sub-projects), other children, notes (children without a type) and updates.
-import { Button as ShadcnButton } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
 import { NativeSelect } from "../components/ui/native-select";
@@ -15,8 +14,9 @@ import { dueOf, dueProp, isDone, priorityProp, statusOf, statusProp } from "@obt
 import { repo } from "../repo";
 import { itemHref, useIndex } from "../hooks";
 import { useT, tr, titleOf } from "../i18n";
-import { Button, DueLabel, ItemIcon, RelTime, Seg, SectionTitle, ViewMenu } from "./bits";
-import { type PageGroup, PageTable } from "./Table";
+import { Card, Button, Seg, SectionTitle, ViewMenu, SectionAction } from "./primitives";
+import { DueLabel, ItemIcon, RelTime } from "./item-look";
+import { type PageGroup, PageTable } from "./PageTable";
 import { shortPath } from "./Row";
 import { agentLabel, agentName } from "./AgentNotice";
 import { cmpKey } from "@obtion/core/sortkey";
@@ -49,6 +49,7 @@ function AddRow({ label, onAdd, autoFocus, onDone }: { label: string; onAdd: (ti
     >
       <Plus size={17} />
       <Input
+        variant="bare"
         value={v}
         autoFocus={autoFocus}
         onChange={(e) => setV(e.target.value)}
@@ -211,14 +212,12 @@ export function BelowCard({ item, exclude, gathers, quietAdd }: { item: Item; ex
       <SectionTitle
         count={count}
         right={
-          <ShadcnButton variant="plain" size="none" onClick={() => setAdding(true)} className="tap-y flex h-7 items-center gap-1 rounded-md px-2 text-[13px] text-muted-foreground hover:bg-hover hover:text-fg">
-            <Plus size={14} /> {t("below.note")}
-          </ShadcnButton>
+          <SectionAction onClick={() => setAdding(true)}>{t("below.note")}</SectionAction>
         }
       >
         {t("below.title")}
       </SectionTitle>
-      <div className="overflow-hidden rounded-xl border border-line bg-surface">
+      <Card className="overflow-hidden">
         {adding && (
           <div className="border-b border-line px-1">
             <AddRow label={t("below.addNote")} autoFocus onAdd={addNote} onDone={() => setAdding(false)} />
@@ -243,14 +242,14 @@ export function BelowCard({ item, exclude, gathers, quietAdd }: { item: Item; ex
                 );
               })}
               {g.items.length > FEW && (
-                <ShadcnButton variant="plain" size="none" onClick={() => setMore(new Set(all ? [...more].filter((k) => k !== g.key) : [...more, g.key]))} className="tap-y block w-full border-t border-line px-3 py-2 text-left text-[13px] text-muted-foreground hover:text-fg">
+                <Button variant="plain" onClick={() => setMore(new Set(all ? [...more].filter((k) => k !== g.key) : [...more, g.key]))} className="tap-y block w-full border-t border-line px-3 py-2 text-left text-[13px] text-muted-foreground hover:text-fg">
                   {all ? t("notes.fewer") : t("notes.all", { count: g.items.length })}
-                </ShadcnButton>
+                </Button>
               )}
             </div>
           );
         })}
-      </div>
+      </Card>
     </section>
   );
 }
@@ -285,16 +284,14 @@ export function Updates({ item }: { item: Item }) {
         count={every.length || undefined}
         right={
           !writing && (
-            <ShadcnButton variant="plain" size="none" onClick={() => setWriting(true)} className="tap-y flex h-7 items-center gap-1 rounded-md px-2 text-[13px] text-muted-foreground hover:bg-hover hover:text-fg">
-              <Plus size={14} /> {t("updates.one")}
-            </ShadcnButton>
+            <SectionAction onClick={() => setWriting(true)}>{t("updates.one")}</SectionAction>
           )
         }
       >
         {t("updates.title")}
       </SectionTitle>
       {writing && (
-      <div className="mb-4 rounded-xl border border-line bg-surface p-3 focus-within:border-[var(--focus)]">
+      <Card className="mb-4 p-3 focus-within:border-focus">
         <Textarea
           autoFocus
           onBlur={() => !text.trim() && setWriting(false)}
@@ -325,7 +322,7 @@ export function Updates({ item }: { item: Item }) {
             </Button>
           </div>
         )}
-      </div>
+      </Card>
       )}
       {entries.length > 0 && (
         <ol className="relative ml-1 space-y-4 border-l border-line pl-5">
@@ -351,9 +348,9 @@ export function Updates({ item }: { item: Item }) {
         </ol>
       )}
       {every.length > 3 && (
-        <ShadcnButton variant="plain" size="none" onClick={() => setAll(!all)} className="tap-y mt-2 text-[13px] text-muted-foreground hover:text-fg">
+        <Button variant="plain" onClick={() => setAll(!all)} className="tap-y mt-2 text-[13px] text-muted-foreground hover:text-fg">
           {all ? t("updates.fewer") : t("updates.all", { count: every.length })}
-        </ShadcnButton>
+        </Button>
       )}
     </section>
   );
@@ -364,9 +361,9 @@ function UpdateStarter({ onStart }: { onStart: () => void }) {
   const { t } = useT();
   return (
     <div className="mt-6">
-      <ShadcnButton variant="plain" size="none" onClick={onStart} className="tap-y flex h-8 items-center gap-1.5 rounded-md px-1 text-[13px] text-muted-foreground hover:bg-hover hover:text-fg">
-        <Plus size={14} /> {t("updates.one")}
-      </ShadcnButton>
+      <SectionAction onClick={onStart} className="h-8 gap-1.5 px-1">
+        {t("updates.one")}
+      </SectionAction>
     </div>
   );
 }

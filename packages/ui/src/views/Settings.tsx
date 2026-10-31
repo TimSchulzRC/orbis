@@ -3,23 +3,25 @@
 // A workspace's own (#/w/<id>/settings, from its menu in the sidebar or the list here): name and
 // members, capture, examples, agents, sync, and the way to its types, activity, graph and trash.
 import { Checkbox } from "../components/ui/checkbox";
-import { Button as ShadcnButton } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { NativeSelect } from "../components/ui/native-select";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { Copy, Check, Eye, EyeOff, RotateCcw, ChevronRight, History, Shapes, Trash2, Waypoints } from "lucide-react";
 import { SETTINGS_ID, setSettings } from "@obtion/core/model";
-import { fmtBytes } from "@obtion/core/i18n";
+import { ENDONYMS, LANGS, fmtBytes } from "@obtion/core/i18n";
 import { resetInbox } from "@obtion/core/setup";
 import { listExamples, removeExamples, restoreExamples } from "@obtion/core/examples";
-import { useRepo, useSpaceId, spaceHref } from "../hooks";
+import { useRepo, useSpaceId, spaceHref, useDocumentTitle } from "../hooks";
 import { useT, setLang } from "../i18n";
-import { Button, Dialog, ItemIcon, Seg, SectionTitle, TypeGlyph, cx } from "../ui/bits";
+import { Button, Dialog, Seg, SectionTitle } from "../ui/primitives";
+import { ItemIcon, TypeGlyph } from "../ui/item-look";
+import { cn, toggled } from "../lib/utils";
 import { chooseAction, notify } from "../ui/feedback";
 import { setTheme, useTheme } from "../theme";
 import { type Space, deleteAccount, deleteSpace, errorText, inviteLink, leaveSpace, mcpToken, members, renameSpace, replica, serverInfo, signOut, spaceById, useAccounts } from "../accounts";
 import { NewSpaceDialog } from "../ui/Spaces";
 import type { McpConnect, Member } from "@obtion/core/api";
+import { setDeviceName } from "../browser";
 
 /** navigator.clipboard exists only over HTTPS; opened as http://<address> the old way copies. */
 function copyText(text: string) {
@@ -46,11 +48,11 @@ function CopyBox({ text, secret, label }: { text: string; secret?: string; label
       </pre>
       <div className="absolute right-1.5 top-1.5 flex">
         {secret && (
-          <ShadcnButton variant="plain" size="none" onClick={() => setShow(!show)} className="tap rounded-md p-1.5 text-muted-foreground hover:bg-hover" aria-label={show ? t("settings.hideToken") : t("settings.showToken")}>
+          <Button variant="plain" onClick={() => setShow(!show)} className="tap rounded-md p-1.5 text-muted-foreground hover:bg-hover" aria-label={show ? t("settings.hideToken") : t("settings.showToken")}>
             {show ? <EyeOff size={14} /> : <Eye size={14} />}
-          </ShadcnButton>
+          </Button>
         )}
-        <ShadcnButton variant="plain" size="none"
+        <Button variant="plain"
           onClick={() => {
             copyText(text);
             setCopied(true);
@@ -60,7 +62,7 @@ function CopyBox({ text, secret, label }: { text: string; secret?: string; label
           aria-label={t("settings.copy")}
         >
           {copied ? <Check size={14} /> : <Copy size={14} />}
-        </ShadcnButton>
+        </Button>
       </div>
     </div>
   );
@@ -84,7 +86,7 @@ function Members({ space }: { space: Space }) {
       <p className="mb-3 text-sm text-muted-foreground">{t("space.intro", { server: location.host })}</p>
       {owner && (
         <form className="flex flex-wrap items-center gap-2" onSubmit={(e) => (e.preventDefault(), renameSpace(space, name).catch(fail))}>
-          <Input value={name} onChange={(e) => setName(e.target.value)} aria-label={t("space.name")} className="field rounded-lg border border-line bg-surface px-3 py-1.5 text-sm" />
+          <Input value={name} onChange={(e) => setName(e.target.value)} aria-label={t("space.name")} className="field bg-surface py-1.5" />
           <Button type="submit" variant="outline" disabled={!name.trim() || name === space.name}>
             {t("space.rename")}
           </Button>
@@ -113,7 +115,7 @@ function Members({ space }: { space: Space }) {
           <CopyBox label={t("space.invite")} text={link} />
         </div>
       )}
-      {error && <p className="mt-3 text-sm text-[var(--danger-text)]">{error}</p>}
+      {error && <p className="mt-3 text-sm text-danger">{error}</p>}
     </section>
   );
 }
@@ -166,12 +168,12 @@ function DeleteAccountDialog({ onClose }: { onClose: () => void }) {
         <p className="mb-4 text-sm text-muted-foreground">{t("account.deleteHint")}</p>
         <label className="block text-sm">
           {t("account.password")}
-          <Input type="password" autoComplete="current-password" required value={password} disabled={busy} onChange={(e) => setPassword(e.target.value)} />
+          <Input type="password" autoComplete="current-password" required value={password} disabled={busy} onChange={(e) => setPassword(e.target.value)} className="mt-1 block" />
         </label>
-        {error && <p role="alert" className="mt-3 text-sm text-[var(--danger-text)]">{error}</p>}
+        {error && <p role="alert" className="mt-3 text-sm text-danger">{error}</p>}
         <div className="mt-4 flex gap-2">
           <Button type="button" variant="outline" disabled={busy} onClick={onClose}>{t("cancel")}</Button>
-          <ShadcnButton type="submit" variant="destructive" disabled={busy || !password}>{t("account.delete")}</ShadcnButton>
+          <Button type="submit" variant="danger" disabled={busy || !password}>{t("account.delete")}</Button>
         </div>
       </form>
     </Dialog>
@@ -237,10 +239,10 @@ function DeviceFilesSection() {
       <SectionTitle>{t("settings.files")}</SectionTitle>
       <div className="grid gap-2 sm:grid-cols-2">
         {(["online", "local"] as const).map((m) => (
-          <ShadcnButton variant="plain" size="none" key={m} onClick={() => setMode(m)} className={cx("rounded-xl border p-3 text-left", mode === m ? "border-[var(--focus)] bg-surface" : "border-line hover:bg-hover")} aria-pressed={mode === m}>
+          <Button variant="plain" key={m} onClick={() => setMode(m)} className={cn("rounded-xl border p-3 text-left", mode === m ? "border-focus bg-surface" : "border-line hover:bg-hover")} aria-pressed={mode === m}>
             <p className="text-sm font-medium">{t("settings.mode." + m)}</p>
             <p className="text-xs text-muted-foreground">{t("settings.mode." + m + "Hint")}</p>
-          </ShadcnButton>
+          </Button>
         ))}
       </div>
       <p className="mt-2 text-sm text-muted-foreground">
@@ -264,14 +266,15 @@ function DeviceName() {
       <label className="flex items-center gap-3 text-sm">
         <span className="text-muted-foreground">{t("settings.deviceName")}</span>
         <Input
+          variant="sm"
           value={device}
           onChange={(e) => setDevice(e.target.value)}
           onBlur={() => {
             const name = device.trim() || first;
-            localStorage.setItem("obtion.device", name);
+            setDeviceName(name);
             for (const s of spaces) replica(s.id).repo.device = name;
           }}
-          className="rounded-md border border-line bg-surface px-2 py-1"
+          className="bg-surface"
         />
       </label>
       <p className="mt-2 text-xs text-muted-foreground">{t("settings.deviceHint")}</p>
@@ -293,6 +296,7 @@ function Version() {
 /** The settings of the app on this device and the account, with its workspaces. */
 export function Settings() {
   const { t, lang } = useT();
+  useDocumentTitle(t("nav.settings"));
   const theme = useTheme();
   return (
     <div className="page-read space-y-10">
@@ -307,7 +311,7 @@ export function Settings() {
 
       <section>
         <SectionTitle>{t("settings.language")}</SectionTitle>
-        <Seg label={t("settings.language")} value={lang} onChange={setLang} options={[{ value: "de", label: "Deutsch" }, { value: "en", label: "English" }]} />
+        <Seg label={t("settings.language")} value={lang} onChange={setLang} options={LANGS.map((l) => ({ value: l, label: ENDONYMS[l] }))} />
         <p className="mt-2 text-xs text-muted-foreground">{t("settings.languageHint")}</p>
       </section>
 
@@ -334,7 +338,7 @@ export function SpaceSettingsPage() {
   // an MCP token is made on request (each is a new one, shown once)
   const [c, setC] = useState<McpConnect | null>(null);
   const [err, setErr] = useState(false);
-  useEffect(() => void (document.title = space?.name ?? t("space.settings")), [space?.name]);
+  useDocumentTitle(space?.name ?? t("space.settings"));
   if (!space) return null;
   const newToken = () => mcpToken(space).then(setC, () => setErr(true));
   const s = r.status;
@@ -375,9 +379,9 @@ export function SpaceSettingsPage() {
         <p className="mb-2 text-sm text-muted-foreground">{t("settings.captureHint")}</p>
         <div className="flex flex-wrap gap-1.5">
           {types.map((tp) => (
-            <ShadcnButton variant="plain" size="none" key={tp.id} onClick={() => toggleCapture(tp.id)} aria-pressed={capture.includes(tp.id)} className={cx("tap-y inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs", capture.includes(tp.id) ? "border-[var(--focus)] text-fg" : "border-line text-muted-foreground")}>
+            <Button variant="plain" key={tp.id} onClick={() => toggleCapture(tp.id)} aria-pressed={capture.includes(tp.id)} className={cn("tap-y inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs", capture.includes(tp.id) ? "border-focus text-fg" : "border-line text-muted-foreground")}>
               <TypeGlyph schema={tp.schema} size={12} /> {tp.schema!.name}
-            </ShadcnButton>
+            </Button>
           ))}
         </div>
         {chosen.length > 0 && (
@@ -470,14 +474,14 @@ function DeleteSpace({ space }: { space: Space }) {
       {space.role === "owner" ? (
         <>
           <p className="mb-3 text-sm text-muted-foreground">{t("space.deleteHint")}</p>
-          <Button variant="outline" className="text-[var(--danger-text)]" onClick={() => void run()}>
+          <Button variant="danger-outline" onClick={() => void run()}>
             {t("space.delete")}
           </Button>
         </>
       ) : (
         <p className="text-sm text-muted-foreground">{t("space.deleteOwner")}</p>
       )}
-      {error && <p className="mt-3 text-sm text-[var(--danger-text)]">{error}</p>}
+      {error && <p className="mt-3 text-sm text-danger">{error}</p>}
     </section>
   );
 }
@@ -490,7 +494,7 @@ function Examples() {
   const list = listExamples(ix);
   const [chosen, setChosen] = useState<Set<string> | null>(null); // while the preview is open
   if (!list.length) return null;
-  const toggle = (id: string) => setChosen((c) => new Set(c!.has(id) ? [...c!].filter((x) => x !== id) : [...c!, id]));
+  const toggle = (id: string) => setChosen((c) => toggled(c!, id));
   const remove = () => {
     const ids = removeExamples(r.writer, ix, [...chosen!]);
     setChosen(null);
@@ -513,7 +517,7 @@ function Examples() {
               const item = ix.get(e.id);
               return (
                 <li key={e.id}>
-                  <label className={cx("tap-row flex items-center gap-2 rounded-md px-2 py-1 text-sm", e.inUse ? "text-muted-foreground" : "cursor-pointer hover:bg-hover")}>
+                  <label className={cn("tap-row flex items-center gap-2 rounded-md px-2 py-1 text-sm", e.inUse ? "text-muted-foreground" : "cursor-pointer hover:bg-hover")}>
                     <Checkbox checked={chosen.has(e.id)} disabled={e.inUse} onCheckedChange={() => toggle(e.id)} className="size-4 shrink-0" />
                     {e.isType ? <TypeGlyph schema={item?.schema} size={14} /> : item && <ItemIcon item={item} size={14} />}
                     <span className="min-w-0 truncate">{e.title || t("untitled")}</span>
@@ -532,7 +536,7 @@ function Examples() {
             <Button variant="ghost" onClick={() => setChosen(null)}>
               {t("cancel")}
             </Button>
-            <Button variant="primary" className="!bg-danger !text-white" disabled={!picked} onClick={remove}>
+            <Button variant="danger" disabled={!picked} onClick={remove}>
               {t("examples.confirm", { count: picked })}
             </Button>
           </div>

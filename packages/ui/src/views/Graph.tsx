@@ -1,6 +1,5 @@
 // Graph: informations as nodes; links, "Teil von" and relations as edges, filterable.
 import { Checkbox } from "../components/ui/checkbox";
-import { Button as ShadcnButton } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { NativeSelect } from "../components/ui/native-select";
 import { useTheme } from "../theme";
@@ -9,10 +8,12 @@ import ForceGraph from "force-graph";
 import { type Item, META_TYPE } from "@obtion/core/model";
 import type { Index } from "@obtion/core/graph";
 import { isDone, statusProp } from "@obtion/core/traits";
-import { useRepo, go, itemPath } from "../hooks";
+import { useRepo, openItem, useDocumentTitle } from "../hooks";
 import { useT } from "../i18n";
-import { cx, TypeGlyph } from "../ui/bits";
+import { cn, toggled } from "../lib/utils";
+import { TypeGlyph } from "../ui/item-look";
 import { NOTE_ICON, FILES_ICON } from "../ui/icons";
+import { Button } from "../ui/primitives";
 
 type EdgeKind = "link" | "part" | "rel";
 interface GNode {
@@ -129,7 +130,7 @@ function GraphCanvas({ data, highlight }: { data: { nodes: GNode[]; links: GLink
         hover.current = n;
         el.style.cursor = n ? "pointer" : "default";
       })
-      .onNodeClick((n) => go(itemPath(n.id)))
+      .onNodeClick((n) => openItem(n.id))
       .cooldownTicks(200)
       .onEngineStop(() => {
         if (!fitted.current) {
@@ -188,6 +189,7 @@ function GraphCanvas({ data, highlight }: { data: { nodes: GNode[]; links: GLink
 export function GraphView() {
   const r = useRepo();
   const { t } = useT();
+  useDocumentTitle(t("nav.graph"));
   const ix = r.index();
   const types = ix.typesByName();
   // "" = without type, "#file" = files
@@ -211,38 +213,33 @@ export function GraphView() {
     return new Set((byTitle.length ? byTitle : r.search(q, 15)).map((n) => n.id));
   }, [q, r.version]);
   const tags = useMemo(() => ix.tags().slice(0, 80), [r.version]);
-  const toggle = <T,>(set: Set<T>, v: T, put: (s: Set<T>) => void) => {
-    const next = new Set(set);
-    next.has(v) ? next.delete(v) : next.add(v);
-    put(next);
-  };
-  const chip = (on: boolean) => cx("flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs", on ? "bg-hover text-fg" : "text-muted-foreground");
+  const chip = (on: boolean) => cn("flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs", on ? "bg-hover text-fg" : "text-muted-foreground");
   return (
     <div className="relative h-full">
       <GraphCanvas data={data} highlight={highlight} />
       <div className="pointer-events-none absolute inset-x-0 top-0 flex flex-wrap items-start gap-2 p-3">
         <div className="pointer-events-auto flex flex-wrap items-center gap-1 rounded-xl border border-line bg-surface/90 p-1 shadow-sm backdrop-blur">
           {types.map((tp) => (
-            <ShadcnButton variant="plain" size="none" key={tp.id} onClick={() => toggle(hidden, tp.id, setHidden)} className={chip(!hidden.has(tp.id))} aria-pressed={!hidden.has(tp.id)}>
+            <Button variant="plain" key={tp.id} onClick={() => setHidden(toggled(hidden, tp.id))} className={chip(!hidden.has(tp.id))} aria-pressed={!hidden.has(tp.id)}>
               <TypeGlyph schema={tp.schema} size={13} /> {tp.schema.name}
-            </ShadcnButton>
+            </Button>
           ))}
-          <ShadcnButton variant="plain" size="none" onClick={() => toggle(hidden, "", setHidden)} className={chip(!hidden.has(""))} aria-pressed={!hidden.has("")}>
+          <Button variant="plain" onClick={() => setHidden(toggled(hidden, ""))} className={chip(!hidden.has(""))} aria-pressed={!hidden.has("")}>
             <NOTE_ICON size={13} /> {t("graph.untyped")}
-          </ShadcnButton>
-          <ShadcnButton variant="plain" size="none" onClick={() => toggle(hidden, "#file", setHidden)} className={chip(!hidden.has("#file"))} aria-pressed={!hidden.has("#file")}>
+          </Button>
+          <Button variant="plain" onClick={() => setHidden(toggled(hidden, "#file"))} className={chip(!hidden.has("#file"))} aria-pressed={!hidden.has("#file")}>
             <FILES_ICON size={13} /> {t("graph.files")}
-          </ShadcnButton>
+          </Button>
         </div>
         <div className="pointer-events-auto flex flex-wrap items-center gap-1 rounded-xl border border-line bg-surface/90 p-1 shadow-sm backdrop-blur">
           {(["link", "part", "rel"] as EdgeKind[]).map((k) => (
-            <ShadcnButton variant="plain" size="none" key={k} onClick={() => toggle(kinds, k, setKinds)} className={chip(kinds.has(k))} aria-pressed={kinds.has(k)}>
+            <Button variant="plain" key={k} onClick={() => setKinds(toggled(kinds, k))} className={chip(kinds.has(k))} aria-pressed={kinds.has(k)}>
               {t("graph.edge." + k)}
-            </ShadcnButton>
+            </Button>
           ))}
         </div>
         <div className="pointer-events-auto flex flex-wrap items-center gap-2 rounded-xl border border-line bg-surface/90 px-2 py-1 shadow-sm backdrop-blur">
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("graph.highlight")} className="w-32 bg-transparent text-xs outline-none" aria-label={t("graph.highlight")} />
+          <Input variant="bare" value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("graph.highlight")} className="w-32 bg-transparent text-xs outline-none" aria-label={t("graph.highlight")} />
           <NativeSelect value={tag} onChange={(e) => setTag(e.target.value)} className="bg-transparent text-xs text-muted-foreground" aria-label={t("graph.tag")}>
             <option value="">{t("graph.allTags")}</option>
             {tags.map((x) => (

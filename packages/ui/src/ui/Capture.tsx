@@ -1,17 +1,19 @@
-import { Button as ShadcnButton } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
 import { useEffect, useRef, useState } from "react";
 import { ArrowRight, ChevronDown, CornerDownRight, Layers, Paperclip, X } from "lucide-react";
-import { useFiles, useRepo, useSpaceId, itemPath, spaceHref } from "../hooks";
+import { useFiles, useRepo, useSpaceId, openItem } from "../hooks";
 import { shownSpaces, useAccounts } from "../accounts";
 import { useT } from "../i18n";
 import { capture, extractMentions, recentPlaces, rememberPlace } from "../actions";
-import { MenuItem, Popover, TypeGlyph, cx, Dialog } from "./bits";
+import { Button, MenuItem, Popover, Dialog, IconButton } from "./primitives";
+import { TypeGlyph } from "./item-look";
+import { cn } from "../lib/utils";
 import { ItemPicker } from "./Picker";
 import { SpaceScope } from "./Spaces";
 import { notify } from "./feedback";
 import { NOTE_ICON } from "./icons";
+import { KEYS, readJSON, writeJSON } from "./storage";
 
 /**
  * Capture field: Enter saves. Preset is a note (no type); where it goes follows from the model –
@@ -25,7 +27,7 @@ export function Capture({ anywhere, ...p }: CaptureProps & { anywhere?: boolean 
   const shown = useAccounts().shown.map((s) => s.id).join();
   useEffect(() => void (anywhere && setSpace(captureSpace())), [shown]);
   if (!space) return <CaptureField {...p} />;
-  const choose = (id: string) => (setSpace(id), localStorage.setItem(LAST_SPACE, id));
+  const choose = (id: string) => (setSpace(id), writeJSON(KEYS.captureSpace, id));
   return (
     <SpaceScope id={space}>
       <CaptureField {...p} onSpace={choose} />
@@ -33,12 +35,11 @@ export function Capture({ anywhere, ...p }: CaptureProps & { anywhere?: boolean 
   );
 }
 
-const LAST_SPACE = "obtion.capture.space";
 /** Where a capture from anywhere goes: the one workspace shown, else the one used last if it is shown, else the first shown. */
 export function captureSpace(): string | undefined {
   const shown = shownSpaces();
   if (shown.length === 1) return shown[0]!.id;
-  const last = localStorage.getItem(LAST_SPACE);
+  const last = readJSON(KEYS.captureSpace, "");
   return (shown.find((s) => s.id === last) ?? shown[0])?.id;
 }
 
@@ -78,7 +79,7 @@ function CaptureField({ parent, placeholder, autoFocus, onDone, compact, onSpace
     const usedType = r.get(id)?.type ?? null; // "/name" in the text can set it too
     const what = usedType ? ix.typeName(usedType) : t("capture.note");
     const msg = where ? t("capture.notifyUnder", { what, place: ix.get(where)?.title ?? "" }) : usedType ? t("capture.notifyAs", { what }) : t("capture.notifyInbox");
-    notify(msg, undefined, { label: t("capture.open"), run: () => (location.hash = spaceHref(space, itemPath(id))) });
+    notify.action(msg, t("capture.open"), () => openItem(id, { space }));
     setText("");
     onDone?.();
   };
@@ -92,14 +93,15 @@ function CaptureField({ parent, placeholder, autoFocus, onDone, compact, onSpace
   const attach = async (list: FileList | null) => {
     for (const f of [...(list ?? [])]) {
       const res = await files.add(f, f.name, { parent });
-      if (res?.id) notify(t("capture.notifyFile", { name: f.name }), undefined, { label: t("capture.open"), run: () => (location.hash = spaceHref(space, itemPath(res.id!))) });
+      if (res?.id) notify.action(t("capture.notifyFile", { name: f.name }), t("capture.open"), () => openItem(res.id!, { space }));
     }
   };
   const ghost = "tap-y inline-flex h-7 min-w-0 items-center gap-1 rounded-md px-1.5 text-xs hover:bg-hover";
   return (
-    <div data-capture className="rounded-2xl border border-line bg-surface px-3 py-2 shadow-sm focus-within:border-[var(--focus)]">
+    <div data-capture className="rounded-2xl border border-line bg-surface px-3 py-2 shadow-sm focus-within:border-focus">
       <div className="flex items-start gap-2">
         <Textarea
+          variant="inline"
           ref={input}
           value={text}
           autoFocus={autoFocus}
@@ -112,16 +114,16 @@ function CaptureField({ parent, placeholder, autoFocus, onDone, compact, onSpace
           rows={1}
           placeholder={placeholder ?? (parent ? t("capture.placeholderHere") : t("capture.placeholder"))}
           title={t("capture.hint")}
-          className="max-h-48 min-h-7 flex-1 resize-none rounded-none border-0 bg-transparent px-1 py-0.5 text-[15px] shadow-none outline-none focus-visible:ring-0 dark:bg-transparent [field-sizing:content] placeholder:text-muted-foreground"
+          className="max-h-48 min-h-7 flex-1 resize-none bg-transparent px-1 py-0.5 text-[15px] outline-none focus-visible:ring-0 [field-sizing:content] placeholder:text-muted-foreground"
           aria-label={t("capture.title")}
         />
         <label className="mt-0.5 cursor-pointer rounded-md p-1 text-muted-foreground hover:bg-hover hover:text-fg" title={t("capture.attach")}>
           <Paperclip size={15} />
-          <Input type="file" multiple className="hidden" onChange={(e) => void attach(e.target.files)} aria-label={t("capture.attach")} />
+          <Input variant="bare" type="file" multiple className="hidden" onChange={(e) => void attach(e.target.files)} aria-label={t("capture.attach")} />
         </label>
-        <ShadcnButton variant="plain" size="none" onClick={save} disabled={!text.trim()} className="tap mt-0.5 rounded-md p-1 text-muted-foreground enabled:text-fg enabled:hover:bg-hover disabled:opacity-40" aria-label={t("capture.save")} title={`${t("capture.save")} (↵)`}>
+        <Button variant="plain" onClick={save} disabled={!text.trim()} className="tap mt-0.5 rounded-md p-1 text-muted-foreground enabled:text-fg enabled:hover:bg-hover disabled:opacity-40" aria-label={t("capture.save")} title={`${t("capture.save")} (↵)`}>
           <ArrowRight size={16} />
-        </ShadcnButton>
+        </Button>
       </div>
       {picking && (
         <ItemPicker
@@ -138,11 +140,11 @@ function CaptureField({ parent, placeholder, autoFocus, onDone, compact, onSpace
           {onSpace && spaces.length > 1 && (
             <Popover
               trigger={(p) => (
-                <ShadcnButton variant="plain" size="none" {...p} className="tap-y inline-flex h-7 shrink-0 items-center gap-1 rounded-full border border-line px-2 text-xs hover:bg-hover" aria-label={t("capture.spaceLabel", { name: spaces.find((s) => s.id === space)?.name ?? "" })}>
+                <Button variant="plain" {...p} className="tap-y inline-flex h-7 shrink-0 items-center gap-1 rounded-full border border-line px-2 text-xs hover:bg-hover" aria-label={t("capture.spaceLabel", { name: spaces.find((s) => s.id === space)?.name ?? "" })}>
                   <Layers size={12} className="text-muted-foreground" />
                   {spaces.find((s) => s.id === space)?.name}
                   <ChevronDown size={12} className="text-muted-foreground" />
-                </ShadcnButton>
+                </Button>
               )}
             >
               {(close) =>
@@ -157,11 +159,11 @@ function CaptureField({ parent, placeholder, autoFocus, onDone, compact, onSpace
           {/* the type: one chip with its symbol and an arrow; the note is preset */}
           <Popover
             trigger={(p) => (
-              <ShadcnButton variant="plain" size="none" {...p} className="tap-y inline-flex h-7 shrink-0 items-center gap-1 rounded-full border border-line px-2 text-xs hover:bg-hover" aria-label={t("capture.typeLabel", { name: typeSchema?.name ?? t("capture.note") })}>
+              <Button variant="plain" {...p} className="tap-y inline-flex h-7 shrink-0 items-center gap-1 rounded-full border border-line px-2 text-xs hover:bg-hover" aria-label={t("capture.typeLabel", { name: typeSchema?.name ?? t("capture.note") })}>
                 {typeSchema ? <TypeGlyph schema={typeSchema} size={12} /> : <NOTE_ICON size={12} style={{ color: "var(--t-note)" }} />}
                 {typeSchema?.name ?? t("capture.note")}
                 <ChevronDown size={12} className="text-muted-foreground" />
-              </ShadcnButton>
+              </Button>
             )}
           >
             {(close) => (
@@ -183,25 +185,23 @@ function CaptureField({ parent, placeholder, autoFocus, onDone, compact, onSpace
           {!parent &&
             (place ? (
               <span className="flex min-w-0 items-center">
-                <ShadcnButton variant="plain" size="none" onClick={() => setPicking(true)} className={cx(ghost, "text-fg")} title={pathOf(place)}>
+                <Button variant="plain" onClick={() => setPicking(true)} className={cn(ghost, "text-fg")} title={pathOf(place)}>
                   <CornerDownRight size={12} className="shrink-0 text-muted-foreground" />
                   <span className="truncate">{pathOf(place)}</span>
-                </ShadcnButton>
-                <ShadcnButton variant="plain" size="none" onClick={() => setPlace(null)} className="tap rounded-md p-1 text-muted-foreground hover:bg-hover hover:text-fg" aria-label={t("capture.placeRemove")} title={t("capture.placeRemove")}>
-                  <X size={12} />
-                </ShadcnButton>
+                </Button>
+                <IconButton size="sm" icon={X} iconSize={12} onClick={() => setPlace(null)} label={t("capture.placeRemove")} />
               </span>
             ) : (
-              <ShadcnButton variant="plain" size="none" onClick={() => setPicking(true)} className={cx(ghost, "text-muted-foreground hover:text-fg")}>
+              <Button variant="plain" onClick={() => setPicking(true)} className={cn(ghost, "text-muted-foreground hover:text-fg")}>
                 <CornerDownRight size={12} className="shrink-0" />
                 {t("capture.placeOther")}
-              </ShadcnButton>
+              </Button>
             ))}
           {offer && (
-            <ShadcnButton variant="plain" size="none" onClick={() => setPlace(offer)} className={cx(ghost, "text-muted-foreground hover:text-fg")}>
+            <Button variant="plain" onClick={() => setPlace(offer)} className={cn(ghost, "text-muted-foreground hover:text-fg")}>
               <CornerDownRight size={12} className="shrink-0" />
               <span className="truncate">{t("capture.placeOffer", { title: ix.get(offer)!.title })}</span>
-            </ShadcnButton>
+            </Button>
           )}
         </div>
       )}

@@ -1,13 +1,14 @@
-import { Button as ShadcnButton } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { useState } from "react";
 import { Plus, Sparkles } from "lucide-react";
 import { type Item, META_TYPE, titleKey } from "@obtion/core/model";
-import { isOverview } from "@obtion/core/placement";
+import { canPlaceIn, isOverview } from "@obtion/core/placement";
 import { useT, titleOf } from "../i18n";
 import { useIndex, useRepo } from "../hooks";
-import { Dialog, ItemIcon, cx } from "./bits";
-import type { PickReason } from "./suggest";
+import { Button, Dialog } from "./primitives";
+import { ItemIcon } from "./item-look";
+import { cn } from "../lib/utils";
+import { type PickReason, placeSuggestions } from "./suggest";
 
 /** Pick an item: suggestions first, then search as you type. Optionally create a new one. */
 export function ItemPicker({
@@ -59,18 +60,18 @@ export function ItemPicker({
           else if (e.key === "Enter") (e.preventDefault(), pick(rows[sel]));
         }}
         placeholder={t("picker.search")}
-        className="mb-2 w-full rounded-lg border border-line bg-bg px-3 py-2 text-sm outline-none focus:border-[var(--focus)]"
+        className="mb-2 focus:border-focus"
       />
       {sugg.length > 0 && <p className="px-2 pb-1 text-xs font-medium text-muted-foreground">{t("picker.suggested")}</p>}
       <div className="flex flex-col">
         {rows.map((r, i) => {
           const item = r.id ? repo.get(r.id) : undefined;
           return (
-            <ShadcnButton variant="plain" size="none"
+            <Button variant="plain"
               key={r.id ?? "create"}
               onMouseEnter={() => setSel(i)}
               onClick={() => pick(r)}
-              className={cx("flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm", i === sel && "bg-selected", i === sugg.length && sugg.length > 0 && "mt-2")}
+              className={cn("flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm", i === sel && "bg-selected", i === sugg.length && sugg.length > 0 && "mt-2")}
             >
               {item ? <ItemIcon item={item} size={15} /> : <Plus size={15} className="text-muted-foreground" />}
               <span className="min-w-0 flex-1 truncate">{item ? titleOf(item, t) : t("picker.create", { title: r.create })}</span>
@@ -81,7 +82,7 @@ export function ItemPicker({
                 </span>
               )}
               {item && !r.reason && <PathHint item={item} />}
-            </ShadcnButton>
+            </Button>
           );
         })}
         {!rows.length && <p className="px-2 py-2 text-sm text-muted-foreground">{t("picker.none")}</p>}
@@ -95,4 +96,21 @@ function PathHint({ item }: { item: Item }) {
   const path = ix.homePath(item.id);
   if (!path.length) return null;
   return <span className="max-w-[45%] shrink-0 truncate text-xs text-muted-foreground">{ix.pathText(path)}</span>;
+}
+
+/** Where to put entries (one or several, of one workspace): a place they may all go below, or a new one. */
+export function PlacePicker({ list, title, onPick, onClose }: { list: Item[]; title?: string; onPick: (place: string) => void; onClose: () => void }) {
+  const { t } = useT();
+  const repo = useRepo();
+  const ix = repo.index();
+  return (
+    <ItemPicker
+      title={title ?? (list.length > 1 ? t("triage.whereToMany", { count: list.length }) : t("triage.whereTo"))}
+      suggestions={list.length === 1 ? placeSuggestions(list[0]!, repo) : []}
+      exclude={(x) => list.some((p) => !canPlaceIn(p, x, ix))}
+      onPick={onPick}
+      onCreate={(name) => onPick(repo.create({ title: name }))}
+      onClose={onClose}
+    />
+  );
 }

@@ -2,6 +2,7 @@
 import type { Item } from "@obtion/core/model";
 import type { Index } from "@obtion/core/graph";
 import { tr } from "../i18n";
+import { plainText } from "@obtion/core/search";
 
 /** Text as HTML, safe in element content and in quoted attributes. */
 export function escapeHtml(s: string): string {
@@ -17,3 +18,6 @@ export function webHref(url: string): string {
 export function kindHint(r: Item, ix: Index): string {
   return r.kind === "datei" ? tr("kind.file") : (ix.typeName(r.type) ?? "");
 }
+
+/** The start of a file's extracted text, as plain text: enough to tell what it is. */
+export const filePreview = (text: string) => plainText(text).slice(0, 800);

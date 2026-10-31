@@ -8,18 +8,19 @@
 //
 // A suggestion (the agent's or the app's own) is not shown yet; it would be the first answer
 // among the suggestions in `Choices`.
-import { Button as ShadcnButton } from "../components/ui/button";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import type { EditorView } from "@codemirror/view";
 import { Check, Clock, FolderInput, Layers, List, Maximize2, Pencil, RotateCcw, Shapes, StickyNote, Trash2, Undo2 } from "lucide-react";
 import { type Item, todayISO } from "@obtion/core/model";
 import { plainText } from "@obtion/core/search";
-import { useRepo, useItemHref, itemPath, spaceHref, go, useDesktop } from "../hooks";
+import { useRepo, useItemHref, navigate, useDesktop, openItem, isTypingTarget, useDocumentTitle, useWindowKeys } from "../hooks";
 import { replica, spaceById, useAccounts } from "../accounts";
 import { useT, titleOf } from "../i18n";
 import { recentPlaces } from "../actions";
 import { useBlobUrl } from "../files";
-import { Button, Empty, ItemIcon, Kbd, RelTime, SectionTitle, Seg, Tag, TypeGlyph, cx, itemLook } from "../ui/bits";
+import { Button, Empty, Kbd, SectionTitle, Seg, IconButton } from "../ui/primitives";
+import { ItemIcon, RelTime, Tag, TypeGlyph, itemLook, kindLabel } from "../ui/item-look";
+import { cn } from "../lib/utils";
 import { Markdown } from "../ui/Markdown";
 import { Editor } from "../ui/Editor";
 import { TitleField } from "../ui/TitleField";
@@ -49,7 +50,7 @@ function StackListSwitch() {
     <Seg
       value="stack"
       label={t("review.view")}
-      onChange={(v) => go(v === "stack" ? "/review" : "/inbox")}
+      onChange={(v) => navigate(v === "stack" ? "/review" : "/inbox")}
       options={[
         { value: "stack", label: <span className="inline-flex items-center gap-1"><Layers size={13} /> {t("review.stack")}</span> },
         { value: "list", label: <span className="inline-flex items-center gap-1"><List size={13} /> {t("review.list")}</span> },
@@ -85,8 +86,8 @@ export function Review({ at }: { at?: string }) {
     (document.activeElement as HTMLElement | null)?.blur();
     setEditing(null);
   };
-  useEffect(() => void (closed.current || (session = { day: todayISO(), order: order.current, sorted, at: key })));
-  useEffect(() => void (document.title = t("review.title")), []);
+  useEffect(() => void (closed.current || (session = { day: todayISO(), order: order.current, sorted, at: key })), [sorted, key]);
+  useDocumentTitle(t("review.title"));
 
   const act = useTriageActions(() => entry!.space, { quiet: true });
   const record = (e: InboxEntry, what: string, undo?: Undo | null) => {
@@ -114,40 +115,36 @@ export function Review({ at }: { at?: string }) {
   };
   const close = () => {
     (closed.current = true), (session = null);
-    go("/");
+    navigate("/");
   };
 
-  useEffect(() => {
-    const on = (e: KeyboardEvent) => {
-      const el = e.target as HTMLElement;
-      // while editing the keys are the text's; Esc (unless the editor used it) ends it
-      if (editing) {
-        if (e.key === "Escape" && !e.defaultPrevented && !pick.placing && !pick.typing) stopEditing();
-        return;
-      }
-      if (pick.placing || pick.typing || el.closest("input, textarea, select, [contenteditable=true], .cm-editor, [role=dialog]") || e.metaKey || e.ctrlKey || e.altKey) return;
-      const k = e.key;
-      // Enter on a button or link is its own
-      if (k === "Enter" && el.closest("button, a")) return;
-      const first = entry && offeredTypes(entry)[0];
-      if (k === "u" || k === "z") undo();
-      else if (!entry) return;
-      else if (k === "e") pick.setPlacing([entry.item]);
-      else if (k === "c" && first && entry.item.kind === "info") typeAs([entry.item], first);
-      else if (k === "y" && entry.item.kind === "info") pick.setTyping([entry.item]);
-      else if (k === "s") later();
-      else if (k === "b") keep();
-      else if (k === "x" || k === "Delete") trash();
-      // arrows up and down scroll a long entry in its card
-      else if (k === "ArrowDown" || k === "ArrowUp") card.current?.scrollBy({ top: k === "ArrowDown" ? 80 : -80 });
-      else if (k === "j" || k === "ArrowRight") step(1);
-      else if (k === "k" || k === "ArrowLeft") step(-1);
-      else if (k === "Enter" || k === "o") location.hash = spaceHref(entry.space, itemPath(entry.item.id));
-      else return;
-      e.preventDefault();
-    };
-    window.addEventListener("keydown", on);
-    return () => window.removeEventListener("keydown", on);
+  useWindowKeys((e) => {
+    const el = e.target as HTMLElement;
+    // while editing the keys are the text's; Esc (unless the editor used it) ends it
+    if (editing) {
+      if (e.key === "Escape" && !e.defaultPrevented && !pick.placing && !pick.typing) stopEditing();
+      return;
+    }
+    if (pick.placing || pick.typing || isTypingTarget(el) || e.metaKey || e.ctrlKey || e.altKey) return;
+    const k = e.key;
+    // Enter on a button or link is its own
+    if (k === "Enter" && el.closest("button, a")) return;
+    const first = entry && offeredTypes(entry)[0];
+    if (k === "u" || k === "z") undo();
+    else if (!entry) return;
+    else if (k === "e") pick.setPlacing([entry.item]);
+    else if (k === "c" && first && entry.item.kind === "info") typeAs([entry.item], first);
+    else if (k === "y" && entry.item.kind === "info") pick.setTyping([entry.item]);
+    else if (k === "s") later();
+    else if (k === "b") keep();
+    else if (k === "x" || k === "Delete") trash();
+    // arrows up and down scroll a long entry in its card
+    else if (k === "ArrowDown" || k === "ArrowUp") card.current?.scrollBy({ top: k === "ArrowDown" ? 80 : -80 });
+    else if (k === "j" || k === "ArrowRight") step(1);
+    else if (k === "k" || k === "ArrowLeft") step(-1);
+    else if (k === "Enter" || k === "o") openItem(entry.item.id, { space: entry.space });
+    else return;
+    e.preventDefault();
   });
 
   const total = sorted.length + left.length;
@@ -210,7 +207,7 @@ function ReviewHead({ total, at, sorted, minutes }: { total: number; at: number;
   return (
     <header>
       <div className="flex items-center gap-3">
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-[color-mix(in_srgb,var(--t-inbox)_35%,transparent)] bg-[color-mix(in_srgb,var(--t-inbox)_12%,transparent)] text-[var(--t-inbox)] max-lg:hidden">
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-inbox/35 bg-inbox/12 text-inbox max-lg:hidden">
           <Layers size={18} />
         </span>
         <div className="min-w-0 flex-1">
@@ -245,7 +242,7 @@ function Steps({ total, done }: { total: number; done: number }) {
   return (
     <div className="mt-4 flex gap-1" role="progressbar" aria-valuenow={done} aria-valuemin={0} aria-valuemax={total} aria-label={label}>
       {Array.from({ length: total }, (_, n) => (
-        <span key={n} className={cx("h-1 flex-1 rounded-full", n < done ? "bg-[var(--ok)]" : n === done ? "bg-[var(--t-inbox)]" : "bg-line")} />
+        <span key={n} className={cn("h-1 flex-1 rounded-full", n < done ? "bg-[var(--ok)]" : n === done ? "bg-inbox" : "bg-line")} />
       ))}
     </div>
   );
@@ -264,9 +261,8 @@ function EntryCard({ entry, space, more, scroller, editing, onEdit, onDone }: { 
   const repo = useRepo();
   const ix = repo.index();
   const item = repo.get(entry.item.id) ?? entry.item;
-  const look = itemLook(item, ix);
   // a loose note is a note here (it is in the inbox, that goes without saying)
-  const kind = look.label === "inbox" ? t("kind.note") : ["file", "note", "overview"].includes(look.label) ? t("kind." + look.label) : look.label;
+  const kind = kindLabel(itemLook(item, ix), t, { inboxAsNote: true });
   const kids = ix.items(ix.childrenOf(item.id));
   const img = useBlobUrl(item.file?.filetype === "bild" ? (item.file.display ?? item.file.hash) : item.file?.thumb, true);
   const [rest, setRest] = useState(false);
@@ -315,9 +311,9 @@ function EntryCard({ entry, space, more, scroller, editing, onEdit, onDone }: { 
       {more > 1 && <div className="absolute inset-x-8 -bottom-4 h-6 rounded-2xl border border-line bg-surface opacity-30" aria-hidden />}
       <article
         ref={self}
-        className={cx(
+        className={cn(
           "relative flex h-[clamp(240px,calc(100dvh-460px),440px)] flex-col overflow-hidden rounded-2xl border bg-surface shadow-sm max-lg:h-[clamp(200px,calc(100dvh-440px),440px)]",
-          editing ? "border-[color-mix(in_srgb,var(--focus)_55%,transparent)] ring-4 ring-[color-mix(in_srgb,var(--focus)_12%,transparent)]" : "cursor-text border-line",
+          editing ? "border-focus/55 ring-4 ring-focus/12" : "cursor-text border-line",
         )}
         onClick={(e) => {
           const el = e.target as HTMLElement;
@@ -389,19 +385,18 @@ function EntryCard({ entry, space, more, scroller, editing, onEdit, onDone }: { 
         </div>
         {/* "Bearbeiten", while editing "Fertig" in the colour of the card's frame */}
         <div className="shrink-0 px-8 pb-4 pt-1 max-lg:px-5 max-lg:pb-3">
-          <ShadcnButton
+          <Button
             variant="plain"
-            size="none"
             onClick={() => (editing ? onDone() : onEdit(null))}
-            className={cx(
+            className={cn(
               "tap inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[13px] font-medium",
               editing
-                ? "border-[color-mix(in_srgb,var(--focus)_40%,transparent)] bg-[color-mix(in_srgb,var(--focus)_10%,transparent)] text-[var(--focus)] hover:bg-[color-mix(in_srgb,var(--focus)_16%,transparent)]"
+                ? "border-focus/40 bg-focus/10 text-focus hover:bg-focus/16"
                 : "border-transparent text-muted-foreground hover:bg-hover hover:text-fg",
             )}
           >
             {editing ? <Check size={15} /> : <Pencil size={14} />} {t(editing ? "review.editDone" : "review.edit")}
-          </ShadcnButton>
+          </Button>
         </div>
       </article>
     </div>
@@ -424,14 +419,13 @@ function Choices({ entry, onPlace, onPick, onType, onTypes, onLater, onKeep, onT
   const places = placeSuggestions(item, repo).map((x) => x.id);
   for (const id of recentPlaces(repo)) if (!places.includes(id) && id !== item.id && !item.parents[id] && !ix.wouldCycle(item.id, id)) places.push(id);
   const type = info ? offeredTypes(entry)[0] : undefined;
-  const hint = (k: string) => keys && <span className={cx("inline-flex", quiet && "invisible")}><Kbd>{k}</Kbd></span>;
+  const hint = (k: string) => keys && <span className={cn("inline-flex", quiet && "invisible")}><Kbd>{k}</Kbd></span>;
   const tile = (icon: ReactNode, label: string, key: string, onClick: () => void, opts: { primary?: boolean; danger?: boolean; disabled?: boolean } = {}) => (
-    <ShadcnButton
+    <Button
       variant="plain"
-      size="none"
       onClick={onClick}
       disabled={opts.disabled}
-      className={cx(
+      className={cn(
         "tap flex h-9 flex-[1_0_auto] items-center gap-1.5 whitespace-nowrap rounded-lg border px-2 text-[13px] font-medium disabled:opacity-40 max-lg:min-w-0",
         opts.primary ? "border-transparent bg-primary text-primary-foreground hover:bg-primary/90 max-lg:col-span-2" : "border-line bg-surface hover:bg-hover",
         opts.danger && "text-danger",
@@ -440,7 +434,7 @@ function Choices({ entry, onPlace, onPick, onType, onTypes, onLater, onKeep, onT
       {icon}
       <span className="min-w-0 flex-1 truncate px-1 text-center">{label}</span>
       {hint(key)}
-    </ShadcnButton>
+    </Button>
   );
   const chip = "tap inline-flex h-7 max-w-[220px] shrink-0 items-center gap-1.5 rounded-full border border-line bg-surface px-2.5 text-[13px] hover:bg-hover";
   return (
@@ -456,17 +450,17 @@ function Choices({ entry, onPlace, onPick, onType, onTypes, onLater, onKeep, onT
         <span className="shrink-0 text-[13px] text-muted-foreground">{t("review.suggested")}</span>
         <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto [scrollbar-width:none]">
           {type && (
-            <ShadcnButton variant="plain" size="none" onClick={() => onType(type)} className={chip}>
+            <Button variant="plain" onClick={() => onType(type)} className={chip}>
               <TypeGlyph schema={ix.types.get(type)?.schema} size={13} />
               <span className="truncate">{t("review.asType", { type: ix.typeName(type) ?? "" })}</span>
               {hint("c")}
-            </ShadcnButton>
+            </Button>
           )}
           {places.slice(0, 3).map((id) => (
-            <ShadcnButton key={id} variant="plain" size="none" onClick={() => onPlace(id)} className={chip} title={t("review.placeIn", { place: ix.get(id)?.title ?? "" })}>
+            <Button key={id} variant="plain" onClick={() => onPlace(id)} className={chip} title={t("review.placeIn", { place: ix.get(id)?.title ?? "" })}>
               <FolderInput size={13} className="shrink-0 text-muted-foreground" />
               <span className="truncate">{ix.get(id)?.title}</span>
-            </ShadcnButton>
+            </Button>
           ))}
           {!places.length && !type && <span className="text-[13px] text-muted-foreground">–</span>}
         </div>
@@ -486,7 +480,7 @@ function SortedList({ sorted, onUndo }: { sorted: Sorted[]; onUndo: (s: Sorted) 
   const { t } = useT();
   return (
     <section className="rounded-xl border border-line bg-surface p-4" aria-label={t("review.sorted")} aria-live="polite">
-      <SectionTitle count={sorted.length} className="mb-1">{t("review.sorted")}</SectionTitle>
+      <SectionTitle count={sorted.length}>{t("review.sorted")}</SectionTitle>
       {sorted.length ? (
         <ul className="flex flex-col">
           {[...sorted].reverse().map((s) => (
@@ -496,9 +490,7 @@ function SortedList({ sorted, onUndo }: { sorted: Sorted[]; onUndo: (s: Sorted) 
                 <span className="block truncate text-sm">{s.title}</span>
                 <span className="block truncate text-xs text-muted-foreground">{s.what}</span>
               </span>
-              <ShadcnButton variant="plain" size="none" onClick={() => onUndo(s)} className="tap shrink-0 rounded-md p-1 text-muted-foreground hover:bg-hover hover:text-fg" aria-label={t("review.undoNamed", { title: s.title })} title={t("triage.undo")}>
-                <RotateCcw size={14} />
-              </ShadcnButton>
+              <IconButton size="sm" icon={RotateCcw} iconSize={14} onClick={() => onUndo(s)} title={t("triage.undo")} label={t("review.undoNamed", { title: s.title })} className="shrink-0" />
             </li>
           ))}
         </ul>
@@ -515,13 +507,13 @@ function StackList({ keys, current, byKey, onPick }: { keys: string[]; current?:
   if (!keys.length) return null;
   return (
     <section className="rounded-xl border border-line bg-surface p-2">
-      <SectionTitle count={keys.length} className="mb-0 px-2 pt-1">{t("review.left")}</SectionTitle>
+      <SectionTitle count={keys.length} className="px-2 pt-1">{t("review.left")}</SectionTitle>
       <ul className="flex max-h-[50vh] flex-col overflow-y-auto">
         {keys.map((k) => {
           const e = byKey.get(k)!;
           return (
             <li key={k}>
-              <ShadcnButton variant="plain" size="none" onClick={() => onPick(k)} aria-current={k === current} className={cx("relative flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left hover:bg-hover", k === current && "bg-selected before:absolute before:inset-y-1.5 before:left-0 before:w-[3px] before:rounded-r before:bg-[var(--t-inbox)]")}>
+              <Button variant="plain" onClick={() => onPick(k)} aria-current={k === current} className={cn("relative flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left hover:bg-hover", k === current && "bg-selected before:absolute before:inset-y-1.5 before:left-0 before:w-[3px] before:rounded-r before:bg-inbox")}>
                 <ItemIcon item={e.item} size={14} ix={replica(e.space).repo.index()} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm">{titleOf(e.item, t)}</span>
@@ -529,7 +521,7 @@ function StackList({ keys, current, byKey, onPick }: { keys: string[]; current?:
                     <RelTime ts={e.item.created} />
                   </span>
                 </span>
-              </ShadcnButton>
+              </Button>
             </li>
           );
         })}
@@ -547,9 +539,9 @@ function LastSorted({ s, onUndo }: { s: Sorted; onUndo: () => void }) {
       <span className="min-w-0 flex-1 truncate">
         {s.title} <span className="text-muted-foreground">· {s.what}</span>
       </span>
-      <ShadcnButton variant="plain" size="none" onClick={onUndo} className="tap shrink-0 font-medium text-[var(--link)] hover:underline">
+      <Button variant="plain" onClick={onUndo} className="tap shrink-0 font-medium text-link hover:underline">
         {t("triage.undo")}
-      </ShadcnButton>
+      </Button>
     </div>
   );
 }

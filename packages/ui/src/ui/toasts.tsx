@@ -5,14 +5,13 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Toaster } from "../components/ui/sonner";
 import { tr } from "../i18n";
+import { PHONE } from "../lib/platform";
 
 const PLAIN = 5000; // a notice to read
 const WITH_ACTION = 7000; // one with "Rückgängig" or "Öffnen": a little longer
 
-/** A short notice; with `undo` it offers "Rückgängig", with `action` another step ("Öffnen"). */
-export function notify(text: string, undo?: () => void, action?: { label: string; run: () => void }) {
-  if (undo) return notify.undo(text, undo);
-  if (action) return notify.action(text, action.label, action.run);
+/** A short notice; `.undo` offers "Rückgängig", `.action` another step ("Öffnen"), `.error` says what failed. */
+export function notify(text: string) {
   toast(text, { duration: PLAIN });
 }
 /** "„Titel“ im Papierkorb · Rückgängig" – the same for every undo. `id`: a notice that grows instead of repeating. */
@@ -32,7 +31,7 @@ notify.error = (text: string) => {
  * back only a moment after it lets go, so a click on a notice is never lost to the move.
  */
 function useOffset(): number {
-  const phone = () => window.innerWidth < 768;
+  const phone = () => matchMedia(PHONE).matches;
   const base = () => (phone() ? 80 : 24);
   const [bottom, setBottom] = useState(base);
   useEffect(() => {

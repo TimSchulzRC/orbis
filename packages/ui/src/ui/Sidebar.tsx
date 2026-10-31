@@ -5,22 +5,25 @@
 // this device. In the tree, dragging replaces the parent you come from; with Alt held a place is
 // added. Dropping on the upper or lower edge of a row reorders. Dropped into another workspace's
 // block, an item moves there.
-import { Button as ShadcnButton } from "../components/ui/button";
 import { useEffect, useState } from "react";
-import { ChevronRight, ChevronDown, Inbox, Search, SlidersHorizontal, Link2, MoreHorizontal, Plus, Paperclip, Sun } from "lucide-react";
+import { ChevronRight, ChevronDown, Inbox, Search, SlidersHorizontal, Link2, Plus, Paperclip, Sun } from "lucide-react";
 import { type Item, META_TYPE, SETTINGS_ID, setSchemaField, setSettings } from "@obtion/core/model";
 import { sidebarChildren, sidebarRoots } from "@obtion/core/placement";
 import { keyBetween, keysFor, cmpKey } from "@obtion/core/sortkey";
-import { useRepo, useRoute, useSpaceId, itemPath, spaceHref, useLocalStorage } from "../hooks";
+import { useRepo, useRoute, useSpaceId, itemHref, itemPath, navigate, spaceHref, useLocalStorage } from "../hooks";
 import { type Space, useAccounts } from "../accounts";
 import { useT } from "../i18n";
-import { Kbd, MenuItem, Popover, TypeGlyph, ItemIcon, cx, shortcut } from "./bits";
+import { Button, IconButton, Kbd, MenuItem, MoreMenu, REVEAL } from "./primitives";
+import { TypeGlyph, ItemIcon } from "./item-look";
+import { cn, moveInArray } from "../lib/utils";
+import { shortcut } from "../lib/platform";
 import { ItemPicker } from "./Picker";
 import { SyncDot } from "./SyncDot";
 import { createAndOpen } from "../actions";
 import { NewTypeDialog } from "../views/Types";
 import { NewSpaceDialog, SpaceScope, SpaceSelector, moveTo } from "./Spaces";
 import { useInboxItems } from "./inbox";
+import { KEYS } from "./storage";
 
 /**
  * What is being dragged in the sidebar: an item (from below `from`, null: pinned; `type`: a pinned
@@ -36,7 +39,7 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
   const { shown } = useAccounts();
   const inbox = useInboxItems().length;
   const [creating, setCreating] = useState(false);
-  const navCls = (active: boolean) => cx("flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm", active ? "bg-hover font-medium text-fg" : "text-muted-foreground hover:bg-hover hover:text-fg");
+  const navCls = (active: boolean) => cn("flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm", active ? "bg-hover font-medium text-fg" : "text-muted-foreground hover:bg-hover hover:text-fg");
 
   return (
     <aside className="flex w-[256px] shrink-0 flex-col border-r border-line bg-surface-2/50 pt-safe">
@@ -46,12 +49,12 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto pb-3">
         <nav className="flex flex-col gap-px px-2" aria-label={t("nav.main")}>
-          <ShadcnButton variant="plain" size="none" onClick={onSearch} className={cx(navCls(false), "group/search")}>
+          <Button variant="plain" onClick={onSearch} className={cn(navCls(false), "group/search")}>
             <Search size={16} /> <span className="flex-1 text-left">{t("nav.search")}</span>
             <span className="opacity-0 transition-opacity group-hover/search:opacity-100">
               <Kbd>{shortcut("K", lang)}</Kbd>
             </span>
-          </ShadcnButton>
+          </Button>
           <a href="#/" className={navCls(route.path === "/")}>
             <Sun size={16} /> {t("nav.today")}
           </a>
@@ -89,18 +92,18 @@ export function SpaceTree({ space, touch }: { space: Space; touch?: boolean }) {
   const repo = useRepo();
   const { active, shown } = useAccounts();
   const here = active?.id === space.id;
-  const [open, setOpen] = useLocalStorage<boolean>(`obtion.sidebar.space.${space.id}`, true);
-  const [typesOpen, setTypesOpen] = useLocalStorage<boolean>(`obtion.sidebar.types.${space.id}`, shown.length === 1);
+  const [open, setOpen] = useLocalStorage<boolean>(KEYS.sidebarSpace(space.id), true);
+  const [typesOpen, setTypesOpen] = useLocalStorage<boolean>(KEYS.sidebarTypes(space.id), shown.length === 1);
   const [over, setOver] = useState(false);
   const ix = repo.index();
   const roots = sidebarRoots(ix);
   const ready = !!repo.get(SETTINGS_ID);
-  const go = (path: string) => (location.hash = spaceHref(space.id, path));
-  const row = cx("flex items-center gap-2 rounded-lg pr-2", touch ? "py-2 text-[15px]" : "py-1 text-sm");
+  const go = (path: string) => navigate(path, { space: space.id });
+  const row = cn("flex items-center gap-2 rounded-lg pr-2", touch ? "py-2 text-[15px]" : "py-1 text-sm");
   return (
     <section className="mt-3" aria-label={space.name}>
       <div
-        className={cx("group/space flex h-7 items-center gap-0.5 rounded-lg", touch ? "px-3" : "mx-2 px-2", over && "bg-hover ring-1 ring-[var(--focus)]")}
+        className={cn("group/space flex h-7 items-center gap-0.5 rounded-lg", touch ? "px-3" : "mx-2 px-2", over && "bg-hover ring-1 ring-focus")}
         onDragOver={(e) => {
           if (!movable(dragging) || dragging!.space === space.id) return;
           e.preventDefault();
@@ -115,28 +118,21 @@ export function SpaceTree({ space, touch }: { space: Space; touch?: boolean }) {
           if (movable(d) && d!.space !== space.id) void moveTo(d!.id, d!.space, space.id);
         }}
       >
-        <ShadcnButton variant="plain" size="none" onClick={() => setOpen(!open)} aria-expanded={open} className="-ml-1 flex min-w-0 flex-1 items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground hover:text-fg">
-          <ChevronRight size={13} className={cx("shrink-0 text-faint transition-transform", open && "rotate-90")} />
+        <Button variant="plain" onClick={() => setOpen(!open)} aria-expanded={open} className="-ml-1 flex min-w-0 flex-1 items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground hover:text-fg">
+          <ChevronRight size={13} className={cn("shrink-0 text-faint transition-transform", open && "rotate-90")} />
           <span className="truncate">{space.name}</span>
-        </ShadcnButton>
+        </Button>
         {ready && (
-          <ShadcnButton variant="plain" size="none"
-            title={t("nav.newPinned")}
-            aria-label={t("nav.newPinned")}
+          <IconButton
+            size="xs"
+            icon={Plus}
+            iconSize={14}
+            label={t("nav.newPinned")}
             onClick={() => createAndOpen({ pinned: keyBetween(roots.at(-1)?.pinned ?? null, null) }, repo, space.id)}
-            className={cx("tap rounded text-muted-foreground hover:bg-hover hover:text-fg", touch ? "p-1.5" : "p-0.5 opacity-0 focus:opacity-100 group-hover/space:opacity-100")}
-          >
-            <Plus size={14} />
-          </ShadcnButton>
+            className={touch ? "p-1.5" : "opacity-0 focus:opacity-100 group-hover/space:opacity-100"}
+          />
         )}
-        <Popover
-          align="right"
-          trigger={(p) => (
-            <ShadcnButton variant="plain" size="none" {...p} className={cx("tap rounded text-muted-foreground hover:bg-hover hover:text-fg", touch ? "p-1.5" : "p-0.5 opacity-0 focus:opacity-100 group-hover/space:opacity-100 aria-expanded:opacity-100")} aria-label={t("space.menu", { name: space.name })}>
-              <MoreHorizontal size={14} />
-            </ShadcnButton>
-          )}
-        >
+        <MoreMenu size="xs" iconSize={14} label={t("space.menu", { name: space.name })} className={touch ? "p-1.5" : "opacity-0 focus:opacity-100 group-hover/space:opacity-100 aria-expanded:opacity-100"}>
           {(close) => (
             <>
               <MenuItem onClick={() => (close(), go("/settings"))}>{t("space.settings")}</MenuItem>
@@ -144,21 +140,21 @@ export function SpaceTree({ space, touch }: { space: Space; touch?: boolean }) {
               <MenuItem onClick={() => (close(), go("/trash"))}>{t("nav.trash")}</MenuItem>
             </>
           )}
-        </Popover>
+        </MoreMenu>
       </div>
       {open && !ready && (
-        <a href={spaceHref(space.id, "/setup")} className={cx(row, "pl-[30px] text-muted-foreground hover:bg-hover hover:text-fg", !touch && "mx-2")}>
+        <a href={spaceHref(space.id, "/setup")} className={cn(row, "pl-[30px] text-muted-foreground hover:bg-hover hover:text-fg", !touch && "mx-2")}>
           {repo.status.loaded && (repo.status.synced || !repo.status.online) ? t("space.setUp") : t("app.syncing")}
         </a>
       )}
       {open && ready && (
-        <div className={cx(!touch && "px-2")}>
+        <div className={cn(!touch && "px-2")}>
           <PinnedTree touch={touch} here={here} />
           {/* a label over the types, not a row like the pinned: smaller, no hover */}
-          <ShadcnButton variant="plain" size="none" onClick={() => setTypesOpen(!typesOpen)} aria-expanded={typesOpen} className={cx("mt-2 flex w-full items-center gap-1 pl-2.5 font-medium text-muted-foreground hover:text-fg", touch ? "py-1.5 text-[13px]" : "py-1 text-xs")}>
-            <ChevronRight size={12} className={cx("shrink-0 text-faint transition-transform", typesOpen && "rotate-90")} />
+          <Button variant="plain" onClick={() => setTypesOpen(!typesOpen)} aria-expanded={typesOpen} className={cn("mt-2 flex w-full items-center gap-1 pl-2.5 font-medium text-muted-foreground hover:text-fg", touch ? "py-1.5 text-[13px]" : "py-1 text-xs")}>
+            <ChevronRight size={12} className={cn("shrink-0 text-faint transition-transform", typesOpen && "rotate-90")} />
             {t("nav.types")}
-          </ShadcnButton>
+          </Button>
           {typesOpen && <TypeNav touch={touch} here={here} />}
         </div>
       )}
@@ -176,7 +172,7 @@ function PinnedTree({ touch, here }: { touch?: boolean; here: boolean }) {
   const space = useSpaceId()!;
   const ix = repo.index();
   const route = useRoute();
-  const [open, setOpen] = useLocalStorage<Record<string, boolean>>("obtion.sidebar.tree", {});
+  const [open, setOpen] = useLocalStorage<Record<string, boolean>>(KEYS.sidebarTree, {});
   const activeId = here && route.parts[0] === "i" ? route.parts[1] : undefined;
   useEffect(() => {
     if (!activeId) return;
@@ -230,8 +226,7 @@ function TypeNav({ touch, here }: { touch?: boolean; here: boolean }) {
   const active = (id: string) => here && (id === "files" ? route.path.startsWith("/files") : route.parts[0] === "i" && route.parts[1] === id);
   // a new order: every row gets a fresh key, written only where it changed
   const move = (id: string, to: string, before: boolean) => {
-    const order = rows.filter((r) => r.id !== id);
-    order.splice(order.findIndex((r) => r.id === to) + (before ? 0 : 1), 0, rows.find((r) => r.id === id)!);
+    const order = moveInArray(rows, rows.findIndex((r) => r.id === id), rows.findIndex((r) => r.id === to) + (before ? 0 : 1));
     keysFor(order.length).forEach((k, i) => {
       const r = order[i]!;
       if (r.key === k) return;
@@ -262,16 +257,16 @@ function TypeNav({ touch, here }: { touch?: boolean; here: boolean }) {
             setDrop(null);
           }}
           aria-current={active(r.id) ? "page" : undefined}
-          className={cx("relative flex items-center gap-2 rounded-lg pl-[30px] pr-2", touch ? "py-2 text-[15px]" : "py-1 text-sm", active(r.id) ? "bg-hover font-medium text-fg" : "text-muted-foreground hover:bg-hover hover:text-fg")}
+          className={cn("relative flex items-center gap-2 rounded-lg pl-[30px] pr-2", touch ? "py-2 text-[15px]" : "py-1 text-sm", active(r.id) ? "bg-hover font-medium text-fg" : "text-muted-foreground hover:bg-hover hover:text-fg")}
         >
-          {drop?.id === r.id && <span className={cx("absolute inset-x-1 h-0.5 rounded bg-[var(--focus)]", drop.before ? "-top-px" : "-bottom-px")} />}
+          {drop?.id === r.id && <span className={cn("absolute inset-x-1 h-0.5 rounded bg-focus", drop.before ? "-top-px" : "-bottom-px")} />}
           {r.icon}
           <span className="min-w-0 flex-1 truncate">{r.label}</span>
         </a>
       ))}
-      <ShadcnButton variant="plain" size="none" onClick={() => setCreating(true)} className={cx("flex items-center gap-2 rounded-lg pl-[30px] pr-2 text-muted-foreground hover:bg-hover hover:text-fg", touch ? "py-2 text-[15px]" : "py-1 text-sm")}>
+      <Button variant="plain" onClick={() => setCreating(true)} className={cn("flex items-center gap-2 rounded-lg pl-[30px] pr-2 text-muted-foreground hover:bg-hover hover:text-fg", touch ? "py-2 text-[15px]" : "py-1 text-sm")}>
         <Plus size={touch ? 17 : 15} className="shrink-0" /> {t("types.new")}
-      </ShadcnButton>
+      </Button>
       {creating && <NewTypeDialog onClose={() => setCreating(false)} />}
     </nav>
   );
@@ -387,25 +382,25 @@ function TreeNode({
         }}
         onDragLeave={() => setDrop(null)}
         onDrop={onDrop}
-        className={cx(
+        className={cn(
           "group/row relative flex items-center gap-1 rounded-lg pr-1",
           touch ? "py-2 text-[15px]" : "py-1 text-sm",
           activeId === item.id ? "bg-hover font-medium text-fg" : "text-muted-foreground hover:bg-hover hover:text-fg",
-          drop === "inside" && "ring-2 ring-[var(--focus)]",
+          drop === "inside" && "ring-2 ring-focus",
         )}
         style={{ paddingLeft: 4 + depth * 12 }}
       >
-        {drop === "before" && <span className="absolute inset-x-1 -top-px h-0.5 rounded bg-[var(--focus)]" />}
-        {drop === "after" && <span className="absolute inset-x-1 -bottom-px h-0.5 rounded bg-[var(--focus)]" />}
-        <ShadcnButton variant="plain" size="none"
+        {drop === "before" && <span className="absolute inset-x-1 -top-px h-0.5 rounded bg-focus" />}
+        {drop === "after" && <span className="absolute inset-x-1 -bottom-px h-0.5 rounded bg-focus" />}
+        <Button variant="plain"
           tabIndex={-1}
           onClick={() => kids.length && toggle(key, depth)}
-          className={cx("flex shrink-0 items-center justify-center rounded text-muted-foreground", touch ? "tap -my-1.5 size-8" : "size-5", kids.length ? "hover:bg-surface-2" : "invisible")}
+          className={cn("flex shrink-0 items-center justify-center rounded text-muted-foreground", touch ? "tap -my-1.5 size-8" : "size-5", kids.length ? "hover:bg-surface-2" : "invisible")}
           aria-label={isOpen ? t("tree.collapse") : t("tree.expand")}
           aria-expanded={isOpen}
         >
           {isOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-        </ShadcnButton>
+        </Button>
         {isType ? <TypeGlyph schema={item.schema} size={touch ? 17 : 15} /> : <ItemIcon item={item} size={touch ? 17 : 15} />}
         <a href={spaceHref(space, itemPath(item.id))} className="min-w-0 flex-1 truncate" title={item.title} aria-current={activeId === item.id ? "page" : undefined}>
           {isType ? ix.typePlural(item.id) : distinctLabel(item.title, parent ? ix.get(parent)?.title : undefined) || t("untitled")}
@@ -417,7 +412,7 @@ function TreeNode({
         )}
         {/* on a phone there is no hover: no invisible buttons to hit by accident */}
         {!touch && !isType && (
-          <ShadcnButton variant="plain" size="none"
+          <Button variant="plain"
             onClick={() => {
               if (!isOpen) toggle(key, depth);
               createAndOpen({ parents: [item.id] }, repo, space);
@@ -428,16 +423,9 @@ function TreeNode({
             title={t("tree.newBelow")}
           >
             <Plus size={13} />
-          </ShadcnButton>
+          </Button>
         )}
-        {!touch && <Popover
-          align="right"
-          trigger={(p) => (
-            <ShadcnButton variant="plain" size="none" {...p} tabIndex={-1} className="tap rounded p-0.5 text-muted-foreground opacity-0 pointer-coarse:opacity-100 hover:bg-surface-2 hover:text-fg group-hover/row:opacity-100 focus:opacity-100" aria-label={t("more")}>
-              <MoreHorizontal size={14} />
-            </ShadcnButton>
-          )}
-        >
+        {!touch && <MoreMenu size="xs" iconSize={14} tabIndex={-1} className={cn("hover:bg-surface-2", REVEAL.row)}>
           {(close) => (
             <>
               <MenuItem onClick={() => (close(), repo.pin(item.id, !item.pinned))}>{item.pinned ? t("item.unpin") : t("item.pin")}</MenuItem>
@@ -446,7 +434,7 @@ function TreeNode({
               {parent && secondary && <MenuItem onClick={() => (close(), repo.setHome(item.id, parent))}>{t("place.makeHome")}</MenuItem>}
             </>
           )}
-        </Popover>}
+        </MoreMenu>}
       </div>
       {picking && (
         <ItemPicker

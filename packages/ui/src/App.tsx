@@ -1,12 +1,12 @@
 import { ModalSurface } from "./components/ui/dialog";
-import { Button as ShadcnButton } from "./components/ui/button";
 import { BrandLogo } from "./ui/BrandLogo";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Menu, Search, Inbox, SlidersHorizontal, Sun, X } from "lucide-react";
 import { SETTINGS_ID } from "@obtion/core/model";
-import { useRepo, useRoute, useDesktop, itemHref, itemPath, spaceHref } from "./hooks";
+import { useRepo, useRoute, useDesktop, itemPath, spaceHref, navigate, openItem } from "./hooks";
 import { useT } from "./i18n";
-import { cx, IconButton } from "./ui/bits";
+import { cn } from "./lib/utils";
+import { Button, IconButton, PagePlaceholder } from "./ui/primitives";
 import { AgentNotice } from "./ui/AgentNotice";
 import { ConfirmHost } from "./ui/feedback";
 import { AppToaster } from "./ui/toasts";
@@ -53,14 +53,7 @@ function SignedOut() {
   const { t } = useT();
   const { account } = useAccounts();
   if (!account?.lost) return null;
-  return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line bg-surface-2 px-4 py-2 text-sm" role="status">
-      <span className="flex-1">{t("account.lost", { server: location.host })}</span>
-      <ShadcnButton variant="plain" size="none" onClick={() => void signOut()} className="font-medium text-[var(--link)] hover:underline">
-        {t("account.signInAgain")}
-      </ShadcnButton>
-    </div>
-  );
+  return <StatusBanner action={{ label: t("account.signInAgain"), run: () => void signOut() }}>{t("account.lost", { server: location.host })}</StatusBanner>;
 }
 
 /** A newer app wrote data in one of the workspaces: this one only reads them until reloaded. */
@@ -68,12 +61,17 @@ function TooNew() {
   const { t } = useT();
   const { spaces } = useAccounts();
   if (!useReplicas(spaces.map((s) => s.id)).some((r) => r.readOnly)) return null;
+  return <StatusBanner action={{ label: t("format.reload"), run: () => location.reload() }}>{t("format.tooNew")}</StatusBanner>;
+}
+
+/** A line across the top about the whole app, with the one thing to do about it. */
+function StatusBanner({ children, action }: { children: React.ReactNode; action: { label: string; run: () => void } }) {
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line bg-surface-2 px-4 py-2 text-sm" role="status">
-      <span className="flex-1">{t("format.tooNew")}</span>
-      <ShadcnButton variant="plain" size="none" onClick={() => location.reload()} className="font-medium text-[var(--link)] hover:underline">
-        {t("format.reload")}
-      </ShadcnButton>
+      <span className="flex-1">{children}</span>
+      <Button variant="plain" onClick={action.run} className="font-medium text-link hover:underline">
+        {action.label}
+      </Button>
     </div>
   );
 }
@@ -107,22 +105,22 @@ function Main() {
       window.removeEventListener("keydown", on);
       window.removeEventListener("obtion:palette", showPalette);
     };
-  });
+  }, []);
 
   // nothing set up in any workspace yet (a new account): the first one's setup
   const all = useReplicas(spaces.map((s) => s.id));
   const nothing = all.length > 0 && all.every((x) => !x.get(SETTINGS_ID) && x.status.loaded && (x.status.synced || (!x.status.online && x.docs.size === 0)));
-  useEffect(() => void (nothing && globalPage(route.parts, route.space) && location.replace(spaceHref(spaces[0]!.id, "/setup"))), [nothing, route.path]);
+  useEffect(() => void (nothing && globalPage(route.parts, route.space) && navigate("/setup", { space: spaces[0]!.id, replace: true })), [nothing, route.path]);
 
   // "#/create?title=…" – links to items that don't exist yet.
   useEffect(() => {
     if (route.parts[0] !== "create") return;
     const title = route.query.get("title") ?? "";
     const existing = title ? r.resolveTitle(title) : undefined;
-    if (existing) location.replace(itemHref(existing));
+    if (existing) openItem(existing, { replace: true });
     else {
       const id = r.create({ title });
-      location.replace(`${itemHref(id)}?new=1`);
+      openItem(id, { replace: true, query: "?new=1" });
     }
   }, [route.path]);
 
@@ -135,11 +133,11 @@ function Main() {
   const page = (() => {
     if (old !== undefined) return <Redirect to={old.startsWith("/review") ? old : spaceHref(route.space ?? active?.id, old).slice(1)} />;
     // a workspace in the address this account is not in (any more): not the open one's page instead
-    if (route.space && !spaces.some((s) => s.id === route.space)) return <div className="mx-auto max-w-3xl px-6 py-16 text-center text-muted-foreground">{t("app.noSpace")}</div>;
+    if (route.space && !spaces.some((s) => s.id === route.space)) return <PagePlaceholder>{t("app.noSpace")}</PagePlaceholder>;
     if (!global || route.parts[0] === "setup") {
-      if (!r.status.loaded) return <div className="flex h-full items-center justify-center text-muted-foreground">{t("app.opening")}</div>;
+      if (!r.status.loaded) return <PagePlaceholder fill>{t("app.opening")}</PagePlaceholder>;
       if (setUp) return <Setup />;
-      if (!settings) return <div className="flex h-full items-center justify-center text-muted-foreground">{t("app.syncing")}</div>;
+      if (!settings) return <PagePlaceholder fill>{t("app.syncing")}</PagePlaceholder>;
     }
     switch (route.parts[0]) {
       case undefined:
@@ -181,12 +179,12 @@ function Main() {
 
   return (
     <div className="flex h-full">
-      <ShadcnButton variant="plain" size="none"
+      <Button variant="plain"
         onClick={() => document.querySelector("main")?.focus()}
         className="sr-only z-50 rounded-lg border border-line bg-surface text-sm shadow-lg focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:px-3 focus:py-2"
       >
         {t("nav.skip")}
-      </ShadcnButton>
+      </Button>
       {wide && <Sidebar onSearch={() => setPalette(true)} />}
 
       <div ref={column} className="flex min-w-0 flex-1 flex-col">
@@ -196,18 +194,18 @@ function Main() {
               <BrandLogo alt="" className="size-6" />
             </a>
             <SyncDot />
-            <ShadcnButton variant="plain" size="none" onClick={() => setPalette(true)} className="tap-row ml-1 flex flex-1 items-center gap-2 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm text-muted-foreground">
+            <Button variant="plain" onClick={() => setPalette(true)} className="tap-row ml-1 flex flex-1 items-center gap-2 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm text-muted-foreground">
               <Search size={15} /> {t("nav.searchPlaceholder")}
-            </ShadcnButton>
-            <ShadcnButton variant="plain" size="none" onClick={() => setMenu(true)} className="tap p-1.5 text-muted-foreground" aria-label={t("nav.menu")}>
+            </Button>
+            <Button variant="plain" onClick={() => setMenu(true)} className="tap p-1.5 text-muted-foreground" aria-label={t("nav.menu")}>
               <Menu size={20} />
-            </ShadcnButton>
+            </Button>
           </header>
         )}
         <SignedOut />
         <TooNew />
         {/* with the panel pinned below: as tall as Heute is, the panel takes the rest */}
-        <main ref={main} tabIndex={-1} className={cx("@container min-h-0 outline-none", pinned ? "flex-initial" : "flex-1", isGraph ? "overflow-hidden" : "overflow-y-auto")}>
+        <main ref={main} tabIndex={-1} className={cn("@container min-h-0 outline-none", pinned ? "flex-initial" : "flex-1", isGraph ? "overflow-hidden" : "overflow-y-auto")}>
           {/* a page of another workspace: anew on its replica (repo and files point at it) */}
           <PageBoundary key={`${global ? "" : active?.id}${route.path === "/inbox" ? "/" : route.path}`}>{page}</PageBoundary>
         </main>
@@ -316,7 +314,7 @@ function oldAddress(parts: string[]): string | undefined {
 const OLD_LISTS: Record<string, string> = { "sys:c-project": "/i/sys:project", "sys:c-task": "/i/sys:task", "sys:c-card": "/i/sys:card", "sys:c-files": "/files", "sys:c-images": "/files?kind=image", "sys:inbox": "/inbox" };
 
 function Redirect({ to }: { to: string }) {
-  useEffect(() => location.replace("#" + to), [to]);
+  useEffect(() => navigate(to, { replace: true }), [to]);
   return null;
 }
 
@@ -346,7 +344,7 @@ function MobileNav() {
   return (
     <nav className="grid border-t border-line bg-surface pb-safe" style={{ gridTemplateColumns: `repeat(${entries.length}, minmax(0, 1fr))` }} aria-label={t("nav.main")}>
       {entries.map((e) => {
-        const cls = cx("relative flex flex-col items-center gap-0.5 py-2 text-[11px]", e.active ? "text-fg" : "text-muted-foreground");
+        const cls = cn("relative flex flex-col items-center gap-0.5 py-2 text-[11px]", e.active ? "text-fg" : "text-muted-foreground");
         const inner = (
           <>
             {e.icon}

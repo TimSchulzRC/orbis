@@ -9,12 +9,11 @@ import { tr } from "../../i18n";
 import { KINDS, blockAt, deleteBlock, duplicateBlock, kindName, kindOf, moveBlock, moveBy, setKind } from "./blocks";
 import { iconButton } from "./icons";
 import { showMenu } from "./menu";
-import { MOD } from "../bits";
+import { MOD, isCoarse as coarse } from "../../lib/platform";
 
 /** ⌥ on Apple devices, Alt elsewhere (the keys that move a line). */
 const ALT = MOD === "⌘" ? "⌥" : "Alt ";
 
-const coarse = () => matchMedia("(pointer: coarse)").matches;
 
 /** The block under a height of the screen, and the place where it starts on the screen. */
 function blockAtY(view: EditorView, y: number) {

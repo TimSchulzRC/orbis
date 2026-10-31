@@ -1,20 +1,22 @@
 // Views as tabs: each tab its own kind, filter (added to the query), grouping, sorting and
 // properties. The tab bar and the panel to set a view up; a type's page and query blocks share them.
 import { Checkbox } from "../components/ui/checkbox";
-import { Button as ShadcnButton } from "../components/ui/button";
 import { NativeSelect } from "../components/ui/native-select";
 import { useState } from "react";
 import { CalendarDays, ChartGantt, ChevronLeft, ChevronRight, Copy, GripVertical, LayoutGrid, List, ListChecks, ListTree, Plus, SlidersHorizontal, SquareKanban, Table2, Trash2, X } from "lucide-react";
 import { type ViewTab, type PropDef, type ViewKind, titleKey } from "@obtion/core/model";
-import { type Cond, type Group, FIELDS, groupId, parseQuery, typesIn } from "@obtion/core/query";
+import { type Cond, type Group, groupId, parseQuery, typesIn, viewTypeIds } from "@obtion/core/query";
 import { statusProp } from "@obtion/core/traits";
 import { keyBetween } from "@obtion/core/sortkey";
-import { setParams, useIndex, useRoute } from "../hooks";
+import { setParams, useIndex, useLocalStorage, useRoute } from "../hooks";
 import { useT } from "../i18n";
-import { Button, InlineText, MenuItem, Popover, Seg, cx } from "./bits";
+import { Card, Button, MenuItem, Popover, Seg, IconButton, DraftBar } from "./primitives";
+import { InlineText } from "./fields";
+import { cn, moveInArray } from "../lib/utils";
 import { QueryEditor } from "./QueryEditor";
-import { GroupChip } from "./Table";
+import { GroupChip, fieldLabel } from "./groups";
 import type { T } from "@obtion/core/i18n";
+import { KEYS } from "./storage";
 
 /** The kinds offered for a new tab, in this order. */
 const TAB_KINDS: ViewKind[] = ["table", "board", "timeline", "calendar", "list", "gallery", "triage"];
@@ -36,11 +38,10 @@ export const tabName = (tab: Pick<ViewTab, "name" | "kind">, t: T) => tab.name |
  * `inAddress` (a page's own tabs): the address names it ("?view=<tab>"), so a shared link shows the same.
  */
 export function useTabChoice(key: string, tabs: ViewTab[], inAddress?: boolean): [ViewTab, (id: string) => void] {
-  const k = "obtion.tab." + key;
   const named = useRoute().query.get("view");
-  const [id, setId] = useState(() => localStorage.getItem(k));
+  const [id, setId] = useLocalStorage<string | null>(KEYS.tab(key), null);
   const tab = (inAddress && named ? tabs.find((x) => x.id === named) : undefined) ?? tabs.find((x) => x.id === id) ?? tabs[0]!;
-  return [tab, (x) => (localStorage.setItem(k, x), setId(x), inAddress && setParams({ view: x }))];
+  return [tab, (x) => (setId(x), inAddress && setParams({ view: x }))];
 }
 
 export interface TabEdit {
@@ -90,7 +91,7 @@ export function ViewTabs({ tabs, active, onPick, edit, right }: { tabs: ViewTab[
               open={menu === tab.id}
               onOpenChange={(o) => setMenu(o ? tab.id : null)}
               trigger={(p) => (
-                <ShadcnButton variant="plain" size="none"
+                <Button variant="plain"
                   role="tab"
                   aria-selected={on}
                   aria-haspopup={on && edit ? "menu" : undefined}
@@ -102,7 +103,7 @@ export function ViewTabs({ tabs, active, onPick, edit, right }: { tabs: ViewTab[
                   onDragOver={(e) => drag && (e.preventDefault(), setOver(tab.id))}
                   onDragLeave={() => setOver(null)}
                   onDrop={(e) => (e.preventDefault(), drop(tab.id), setDrag(null), setOver(null))}
-                  className={cx(
+                  className={cn(
                     "tap-y flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-2.5 py-2 text-sm",
                     on ? "border-[var(--text)] font-medium text-fg" : "border-transparent text-muted-foreground hover:text-fg",
                     over === tab.id && "bg-hover",
@@ -110,7 +111,7 @@ export function ViewTabs({ tabs, active, onPick, edit, right }: { tabs: ViewTab[
                 >
                   <Icon size={14} className="shrink-0" />
                   {tabName(tab, t)}
-                </ShadcnButton>
+                </Button>
               )}
             >
               {(close) => (
@@ -147,9 +148,9 @@ export function ViewTabs({ tabs, active, onPick, edit, right }: { tabs: ViewTab[
         {edit && (
           <Popover
             trigger={(p) => (
-              <ShadcnButton variant="plain" size="none" {...p} className="tap mb-1 ml-0.5 shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-hover hover:text-fg" aria-label={t("view.add")} title={t("view.add")}>
+              <Button variant="plain" {...p} className="tap mb-1 ml-0.5 shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-hover hover:text-fg" aria-label={t("view.add")} title={t("view.add")}>
                 <Plus size={15} />
-              </ShadcnButton>
+              </Button>
             )}
           >
             {(close) =>
@@ -183,7 +184,7 @@ interface ViewField {
 export function useViewFields(where: Cond | undefined, sample: { type: string | null }[] = []): ViewField[] {
   const ix = useIndex();
   const { t } = useT();
-  const typeIds = [...new Set([...typesIn(where), ...sample.slice(0, 200).map((i) => i.type ?? "")])].filter((id) => ix.types.has(id));
+  const typeIds = viewTypeIds(where, sample, ix);
   const out: ViewField[] = [];
   const seen = new Set<string>();
   const push = (f: ViewField) => !seen.has(titleKey(f.key)) && (seen.add(titleKey(f.key)), out.push(f));
@@ -207,13 +208,6 @@ export function useViewFields(where: Cond | undefined, sample: { type: string | 
 }
 
 /** The name of a column, sort or group key in the UI language. */
-function fieldLabel(key: string, fields: ViewField[], t: T): string {
-  if (key === "status" || key === "statusGroup" || key === "type" || key === "path") return t("group." + key);
-  if ((FIELDS as readonly string[]).includes(key)) return t("field." + key);
-  if (key === "tags") return t("item.tags");
-  return fields.find((f) => titleKey(f.key) === titleKey(key))?.label ?? key;
-}
-
 // ---------- the panel to set a view up ----------
 
 interface FilterDraft {
@@ -249,29 +243,19 @@ export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter
   const label = "w-28 shrink-0 text-xs text-muted-foreground";
   const kindsHere = kinds.includes(tab.kind) ? kinds : [...kinds, tab.kind];
   return (
-    <div className="mb-4 space-y-3 rounded-xl border border-line bg-surface p-3 text-sm">
+    <Card className="mb-4 space-y-3 p-3 text-sm">
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1 overflow-x-auto [scrollbar-width:none]">
           <Seg label={t("view.label")} value={tab.kind} onChange={(k) => onLook({ kind: k })} options={kindsHere.map((k) => ({ value: k, label: t("view." + k) }))} />
         </div>
-        <ShadcnButton variant="plain" size="none" onClick={onClose} className="tap rounded-md p-1 text-muted-foreground hover:bg-hover hover:text-fg" aria-label={t("view.closeSettings")}>
-          <X size={15} />
-        </ShadcnButton>
+        <IconButton size="sm" icon={X} iconSize={15} onClick={onClose} label={t("view.closeSettings")} />
       </div>
 
       {filter && <div>
         <p className="mb-1 text-xs text-muted-foreground">{t("view.filter")}</p>
         <QueryEditor def={{ where: filter.where }} onChange={(d) => filter.onChange(d.where)} />
         {filter.dirty && (
-          <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-[var(--focus)] px-2.5 py-1.5" role="status">
-            <span className="mr-auto text-muted-foreground">{t("view.draft")}</span>
-            <Button variant="outline" onClick={filter.discard}>
-              {t("view.discard")}
-            </Button>
-            <Button variant="primary" onClick={filter.save}>
-              {t("view.save")}
-            </Button>
-          </div>
+          <DraftBar onDiscard={filter.discard} onSave={filter.save} className="mt-2" />
         )}
       </div>}
 
@@ -282,7 +266,7 @@ export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter
             <option value="">{t("view.noGroup")}</option>
             {groupable.map((g) => (
               <option key={g} value={g}>
-                {fieldLabel(g, fields, t)}
+                {fieldLabel(g, t, fields)}
               </option>
             ))}
           </NativeSelect>
@@ -295,8 +279,8 @@ export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter
         </div>
       )}
       {tab.group && groups.length > 1 && tab.kind !== "triage" && tab.kind !== "calendar" && (
-        <div className={cx(row, "items-start")}>
-          <span className={cx(label, "pt-1")}>{t("view.visibleGroups")}</span>
+        <div className={cn(row, "items-start")}>
+          <span className={cn(label, "pt-1")}>{t("view.visibleGroups")}</span>
           <ul className="flex min-w-0 flex-1 flex-wrap gap-x-3 gap-y-1.5">
             {groups.map((g) => {
               const hidden = (tab.hiddenGroups ?? []).includes(groupId(g));
@@ -307,7 +291,7 @@ export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter
                       checked={!hidden}
                       onCheckedChange={(checked) => onLook({ hiddenGroups: checked === true ? (tab.hiddenGroups ?? []).filter((x) => x !== groupId(g)) : [...(tab.hiddenGroups ?? []), groupId(g)] })}
                     />
-                    <GroupChip g={g} by={tab.group!} byLabel={fieldLabel(tab.group!, fields, t)} />
+                    <GroupChip g={g} by={tab.group!} byLabel={fieldLabel(tab.group!, t, fields)} />
                   </label>
                 </li>
               );
@@ -322,7 +306,7 @@ export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter
             <option value="">{t("view.noGroup")}</option>
             {groupable.filter((g) => g !== (tab.group ?? "status")).map((g) => (
               <option key={g} value={g}>
-                {fieldLabel(g, fields, t)}
+                {fieldLabel(g, t, fields)}
               </option>
             ))}
           </NativeSelect>
@@ -356,31 +340,29 @@ export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter
                 >
                   {[...new Set([s.key, ...sortable])].map((k) => (
                     <option key={k} value={k}>
-                      {fieldLabel(k, fields, t)}
+                      {fieldLabel(k, t, fields)}
                     </option>
                   ))}
                 </NativeSelect>
-                <ShadcnButton variant="plain" size="none" onClick={() => onLook({ sort: (tab.sort ?? []).map((x, m) => (m === n ? { ...x, desc: !x.desc || undefined } : x)) })} className="tap rounded px-1 text-xs text-muted-foreground hover:bg-hover hover:text-fg">
+                <Button variant="plain" onClick={() => onLook({ sort: (tab.sort ?? []).map((x, m) => (m === n ? { ...x, desc: !x.desc || undefined } : x)) })} className="tap rounded px-1 text-xs text-muted-foreground hover:bg-hover hover:text-fg">
                   {s.desc ? t("view.desc") : t("view.asc")}
-                </ShadcnButton>
-                <ShadcnButton variant="plain" size="none" onClick={() => onLook({ sort: (tab.sort ?? []).filter((_, m) => m !== n) })} className="tap rounded p-0.5 text-muted-foreground hover:bg-hover hover:text-fg" aria-label={t("view.sortRemove")}>
-                  <X size={12} />
-                </ShadcnButton>
+                </Button>
+                <IconButton size="xs" icon={X} iconSize={12} onClick={() => onLook({ sort: (tab.sort ?? []).filter((_, m) => m !== n) })} label={t("view.sortRemove")} />
               </span>
             ))}
-            <ShadcnButton variant="plain" size="none" onClick={() => onLook({ sort: [...(tab.sort ?? []), { key: sortable.find((k) => !(tab.sort ?? []).some((s) => s.key === k)) ?? "title" }] })} className="tap inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-hover hover:text-fg">
+            <Button variant="plain" onClick={() => onLook({ sort: [...(tab.sort ?? []), { key: sortable.find((k) => !(tab.sort ?? []).some((s) => s.key === k)) ?? "title" }] })} className="tap inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-hover hover:text-fg">
               <Plus size={12} /> {(tab.sort ?? []).length ? t("view.sortMore") : t("view.sortAdd")}
-            </ShadcnButton>
+            </Button>
           </div>
         </div>
       )}
 
       {/* properties: columns of a table, lines on board cards (lists and galleries show their own) */}
       {(tab.kind === "table" || tab.kind === "board") && (
-        <div className={cx(row, "items-start")}>
-          <span className={cx(label, "pt-1")}>{tab.kind === "table" ? t("view.columns") : t("view.cardProps")}</span>
+        <div className={cn(row, "items-start")}>
+          <span className={cn(label, "pt-1")}>{tab.kind === "table" ? t("view.columns") : t("view.cardProps")}</span>
           <ul className="flex min-w-0 flex-1 flex-wrap gap-1.5">
-            {[...shown.map((k) => fields.find((f) => titleKey(f.key) === titleKey(k)) ?? { key: k, label: fieldLabel(k, fields, t), kind: "text" as const }), ...fields.filter((f) => !shown.some((k) => titleKey(k) === titleKey(f.key)))].map((f) => {
+            {[...shown.map((k) => fields.find((f) => titleKey(f.key) === titleKey(k)) ?? { key: k, label: fieldLabel(k, t, fields), kind: "text" as const }), ...fields.filter((f) => !shown.some((k) => titleKey(k) === titleKey(f.key)))].map((f) => {
               const on = shown.some((k) => titleKey(k) === titleKey(f.key));
               return (
                 <li
@@ -390,13 +372,11 @@ export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter
                   onDragOver={(e) => dragCol && on && e.preventDefault()}
                   onDrop={() => {
                     if (!dragCol || dragCol === f.key) return;
-                    const rest = shown.filter((k) => k !== dragCol);
-                    const at = rest.indexOf(f.key);
-                    onLook({ columns: [...rest.slice(0, at), dragCol, ...rest.slice(at)] });
+                    onLook({ columns: moveInArray(shown, shown.indexOf(dragCol), shown.indexOf(f.key)) });
                     setDragCol(null);
                   }}
                 >
-                  <label className={cx("inline-flex cursor-pointer items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs", on ? "border-line bg-bg text-fg" : "border-dashed border-line text-muted-foreground hover:text-fg")}>
+                  <label className={cn("inline-flex cursor-pointer items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs", on ? "border-line bg-bg text-fg" : "border-dashed border-line text-muted-foreground hover:text-fg")}>
                     {on && <GripVertical size={11} className="cursor-grab text-muted-foreground" aria-hidden />}
                     <Checkbox
                       checked={on}
@@ -411,6 +391,6 @@ export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter
           </ul>
         </div>
       )}
-    </div>
+    </Card>
   );
 }

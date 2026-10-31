@@ -8,23 +8,24 @@
 // Phone: the list; tapping opens the entry. (The inbox has its own ways: the tray's panel to look
 // in, the review to sort – views/Review.tsx.)
 import { Checkbox } from "../components/ui/checkbox";
-import { Button as ShadcnButton } from "../components/ui/button";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, FolderInput, Shapes, Sparkles, Trash2, Check, X } from "lucide-react";
 import { type Item, setMeta } from "@obtion/core/model";
 import type { Index } from "@obtion/core/graph";
-import { useIndex, useRepo, useSpaceId, useItemHref, itemPath, spaceHref, useDesktop } from "../hooks";
+import { useIndex, useRepo, useSpaceId, useItemHref, useDesktop, openItem, isTypingTarget, useWindowKeys } from "../hooks";
 import { useT, titleOf } from "../i18n";
 import { recentPlaces } from "../actions";
-import { Button, ItemIcon, Kbd, RelTime, Tag, TypeGlyph, cx } from "./bits";
+import { Card, Button, Kbd } from "./primitives";
+import { ItemIcon, RelTime, Tag, TypeGlyph, BelowList } from "./item-look";
+import { cn, toggled } from "../lib/utils";
 import { TagInput } from "./TagInput";
 import { placeSuggestions } from "./suggest";
 import { Markdown } from "./Markdown";
 import { NOTE_ICON } from "./icons";
-import { plainText } from "@obtion/core/search";
 import { DAY_MS } from "@obtion/core/date";
 import { usePickers, useTriageActions } from "./TriageActions";
 import type { T } from "@obtion/core/i18n";
+import { filePreview } from "./text";
 
 /** Age groups: this week, this month, older. */
 function ageGroup(created: number, now = Date.now()): "week" | "month" | "older" {
@@ -85,19 +86,11 @@ export function Triage({ items }: { items: Item[] }) {
     return m.length ? m : items[sel] ? [items[sel]!] : [];
   };
   const toggle = (id: string, on?: boolean) =>
-    setMarked((m) => {
-      const n = new Set(m);
-      if (on ?? !n.has(id)) n.add(id);
-      else n.delete(id);
-      return n;
-    });
+    setMarked((m) => (on === undefined || on !== m.has(id) ? toggled(m, id) : m));
   const trash = (l: Item[]) => void act.trash(l).then((ok) => ok && setMarked(new Set()));
 
-  // the handler sees this render's state; the listener stays the same
-  const onKey = useRef<(e: KeyboardEvent) => void>(null);
-  onKey.current = (e) => {
-    const el = e.target as HTMLElement;
-    if (keyOwner !== me || pick.placing || pick.typing || el.closest("input, textarea, select, [contenteditable=true], .cm-editor, [role=dialog]") || e.metaKey || e.ctrlKey || e.altKey) return;
+  useWindowKeys((e) => {
+    if (keyOwner !== me || pick.placing || pick.typing || isTypingTarget(e.target as Element) || e.metaKey || e.ctrlKey || e.altKey) return;
     const cur = items[sel];
     const k = e.key;
     if (k === "J" || (k === "ArrowDown" && e.shiftKey)) {
@@ -119,15 +112,10 @@ export function Triage({ items }: { items: Item[] }) {
     else if (k === "y" && cur) pick.setTyping(targets().filter((i) => i.kind === "info"));
     else if ((k === "x" || k === "Delete") && cur) trash(targets());
     else if (k === "u" || k === "z") act.undo();
-    else if ((k === "Enter" || k === "o") && cur) (location.hash = spaceHref(spaceOf(cur), itemPath(cur.id)));
+    else if ((k === "Enter" || k === "o") && cur) openItem(cur.id, { space: spaceOf(cur) });
     else return;
     e.preventDefault();
-  };
-  useEffect(() => {
-    const on = (e: KeyboardEvent) => onKey.current?.(e);
-    window.addEventListener("keydown", on);
-    return () => window.removeEventListener("keydown", on);
-  }, []);
+  });
   useEffect(() => {
     // after an action the entry leaves: the selection stays at its place, so the next one is selected
     if (sel >= items.length && items.length) setSel(items.length - 1);
@@ -162,11 +150,11 @@ export function Triage({ items }: { items: Item[] }) {
               data-triage={n}
               role="option"
               aria-selected={on}
-              onClick={() => (phone ? (location.hash = spaceHref(here, itemPath(i.id))) : setSel(n))}
-              className={cx(
+              onClick={() => (phone ? openItem(i.id, { space: here }) : setSel(n))}
+              className={cn(
                 "relative grid cursor-default items-center gap-x-2 px-3 hover:bg-hover",
                 phone ? "min-h-12 grid-cols-[44px_minmax(0,1fr)_auto] py-1.5" : "h-10 grid-cols-[24px_minmax(0,1fr)_auto_minmax(64px,auto)]",
-                on && "bg-selected before:absolute before:inset-y-1.5 before:left-0 before:w-[3px] before:rounded-r before:bg-[var(--focus)]",
+                on && "bg-selected before:absolute before:inset-y-1.5 before:left-0 before:w-[3px] before:rounded-r before:bg-focus",
               )}
             >
               <MarkBox on={marked.has(keyOf(i))} onToggle={() => toggle(keyOf(i))} title={titleOf(i, t)} />
@@ -201,9 +189,9 @@ export function Triage({ items }: { items: Item[] }) {
         );
       })}
       {items.length > limit && (
-        <ShadcnButton variant="plain" size="none" onClick={() => setLimit(limit + 60)} className="w-full py-3 text-sm text-muted-foreground hover:text-fg">
+        <Button variant="plain" onClick={() => setLimit(limit + 60)} className="w-full py-3 text-sm text-muted-foreground hover:text-fg">
           {t("query.more", { count: items.length - limit })}
-        </ShadcnButton>
+        </Button>
       )}
     </div>
   );
@@ -237,14 +225,14 @@ export function Triage({ items }: { items: Item[] }) {
 
   if (phone)
     return (
-      <div onPointerDownCapture={claim} className="overflow-hidden rounded-xl border border-line bg-surface">
+      <Card onPointerDownCapture={claim} className="overflow-hidden">
         {many && bar}
         {rows}
         {pick.node}
-      </div>
+      </Card>
     );
   return (
-    <div onPointerDownCapture={claim} onFocusCapture={claim} className="grid h-[calc(100dvh-170px)] min-h-[520px] grid-cols-[380px_minmax(0,1fr)] overflow-hidden rounded-xl border border-line bg-surface">
+    <Card onPointerDownCapture={claim} onFocusCapture={claim} className="grid h-[calc(100dvh-170px)] min-h-[520px] grid-cols-[380px_minmax(0,1fr)] overflow-hidden">
       <div className="flex min-h-0 min-w-0 flex-col border-r border-line">
         {bar}
         {rows}
@@ -273,7 +261,7 @@ export function Triage({ items }: { items: Item[] }) {
         />
       </div>
       {pick.node}
-    </div>
+    </Card>
   );
 }
 
@@ -314,20 +302,9 @@ function Detail({ item, onPlaced }: { item: Item; onPlaced: (p: string) => void 
           <Markdown src={item.body} />
         </div>
       ) : item.file?.text ? (
-        <p className="mt-4 max-w-[64ch] text-[15px] leading-[1.65] text-muted-foreground">{plainText(item.file.text).slice(0, 800)}</p>
+        <p className="mt-4 max-w-[64ch] text-[15px] leading-[1.65] text-muted-foreground">{filePreview(item.file.text)}</p>
       ) : null}
-      {kids.length > 0 && (
-        <div className={section}>
-          <p className={k}>{t("below.title")}</p>
-          <ul className="space-y-1 text-sm">
-            {kids.map((c) => (
-              <li key={c.id} className="flex items-center gap-2">
-                <ItemIcon item={c} size={14} /> <a href={hrefOf(c.id)} className="truncate hover:underline">{titleOf(c, t)}</a>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      <BelowList items={kids} className={section} />
       {item.tags.length > 0 && (
       <div className={section}>
         <p className={k}>{t("item.tags")}</p>
@@ -351,9 +328,9 @@ function Detail({ item, onPlaced }: { item: Item; onPlaced: (p: string) => void 
             <Button variant="outline" onClick={applySuggestion} className="h-7 shrink-0 px-2 text-[13px]">
               <Check size={13} /> {t("triage.accept")}
             </Button>
-            <ShadcnButton variant="plain" size="none" onClick={() => repo.change(item.id, (doc) => setMeta(doc, { suggestion: null }))} className="tap shrink-0 rounded p-1 text-faint hover:bg-hover hover:text-fg" aria-label={t("triage.dismiss")}>
+            <Button variant="plain" onClick={() => repo.change(item.id, (doc) => setMeta(doc, { suggestion: null }))} className="tap shrink-0 rounded p-1 text-faint hover:bg-hover hover:text-fg" aria-label={t("triage.dismiss")}>
               <X size={14} />
-            </ShadcnButton>
+            </Button>
           </div>
         </div>
       )}
@@ -362,10 +339,10 @@ function Detail({ item, onPlaced }: { item: Item; onPlaced: (p: string) => void 
           <p className={k}>{t("triage.placeIn")}</p>
           <div className="flex flex-wrap gap-1.5">
             {places.map((p) => (
-              <ShadcnButton variant="plain" size="none" key={p.id} onClick={() => onPlaced(p.id)} className="tap-y inline-flex h-[30px] items-center gap-1.5 whitespace-nowrap rounded-lg border border-line bg-surface px-2.5 text-[13px] hover:bg-hover">
+              <Button variant="plain" key={p.id} onClick={() => onPlaced(p.id)} className="tap-y inline-flex h-[30px] items-center gap-1.5 whitespace-nowrap rounded-lg border border-line bg-surface px-2.5 text-[13px] hover:bg-hover">
                 <FolderInput size={13} className="text-muted-foreground" /> {ix.get(p.id)?.title}
                 <span className="text-xs text-muted-foreground">{p.why}</span>
-              </ShadcnButton>
+              </Button>
             ))}
           </div>
         </div>

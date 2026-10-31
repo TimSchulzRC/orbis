@@ -1,6 +1,5 @@
 // The lists of the app: a type's page (its entries with views as tabs, like a database in
 // Notion) and the files. A type keeps its views; the files have one. The inbox: ui/Shelf.tsx and views/Review.tsx.
-import { Button as ShadcnButton } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { useEffect, useRef, useState } from "react";
 import { ListFilter, SlidersHorizontal, Plus, Upload } from "lucide-react";
@@ -8,14 +7,13 @@ import { type FileType, type Item, type ViewTab, setTab, setTabs, shortId, FILE_
 import { type QueryDef, andWhere, tabDef } from "@obtion/core/query";
 import { keyBetween } from "@obtion/core/sortkey";
 import { typeTabs } from "@obtion/core/setup";
-import { setParams, useRoute } from "../hooks";
+import { setParams, useRoute, useDocumentTitle, useFiles, useRepo } from "../hooks";
 import { SpaceEyebrow } from "../ui/Spaces";
-import { repo } from "../repo";
 import { useT } from "../i18n";
-import { files } from "../files";
-import { Button, cx, Empty, IconButton } from "../ui/bits";
+import { Button, Empty, IconButton, DraftBar } from "../ui/primitives";
+import { cn } from "../lib/utils";
 import { Results, defaultColumns, useQuery } from "../ui/Results";
-import { viewGroups } from "../ui/Table";
+import { viewGroups } from "../ui/groups";
 import { type TabEdit, ViewSettings, ViewTabs, tabName, useTabChoice, useViewFields } from "../ui/Views";
 import { AddFilter, QueryEditor } from "../ui/QueryEditor";
 import { notify } from "../ui/feedback";
@@ -27,6 +25,7 @@ import { sameValue } from "@obtion/core/equal";
  * columns) is saved at once; trying out a filter is a draft until "Speichern".
  */
 export function TypeList({ type }: { type: Item }) {
+  const repo = useRepo();
   const { t, lang } = useT();
   const tabs = typeTabs(type, lang);
   const [tab, pickTab] = useTabChoice(type.id, tabs, true);
@@ -45,7 +44,7 @@ export function TypeList({ type }: { type: Item }) {
     const changed = Object.entries(patch).filter(([k, v]) => !sameValue(v, tab[k as keyof ViewTab]));
     if (!changed.length) return;
     setT(tab.id, Object.fromEntries(changed.map(([k, v]) => [k, v ?? null])));
-    if (patch.kind && patch.kind !== tab.kind) notify(t("view.viewSet", { view: t("view." + patch.kind) }), () => setT(tab.id, { kind: tab.kind }));
+    if (patch.kind && patch.kind !== tab.kind) notify.undo(t("view.viewSet", { view: t("view." + patch.kind) }), () => setT(tab.id, { kind: tab.kind }));
   };
   // leaving with an unsaved filter: say that it was not kept
   const dirtyRef = useRef(false);
@@ -73,7 +72,7 @@ export function TypeList({ type }: { type: Item }) {
       const { id: _, ...whole } = tabs.find((x) => x.id === id)!;
       setT(id, null);
       if (draft?.tab === id) setDraft(null);
-      notify(t("view.removed", { name: tabName(whole, t) }), () => setT(id, whole));
+      notify.undo(t("view.removed", { name: tabName(whole, t) }), () => setT(id, whole));
     },
     move: (id, pos) => setT(id, { pos }),
     settings: () => setSettings_(true),
@@ -122,7 +121,7 @@ export function TypeList({ type }: { type: Item }) {
           <QueryEditor bare def={{ where: tabWhere }} onChange={(d) => setTabFilter(d.where)} />
         </div>
       )}
-      {dirty && <DraftBar onDiscard={() => setDraft(null)} onSave={saveDraft} />}
+      {dirty && <DraftBar className="sticky top-0 z-10 mb-3 rounded-xl bg-surface px-3 py-2" onDiscard={() => setDraft(null)} onSave={saveDraft} />}
       {!items.length && tabWhere ? (
         // empty because of the view's filter: say so, with the way out
         <Empty title={t("view.emptyFiltered")}>
@@ -137,35 +136,20 @@ export function TypeList({ type }: { type: Item }) {
   );
 }
 
-export function DraftBar({ onDiscard, onSave }: { onDiscard: () => void; onSave: () => void }) {
-  const { t } = useT();
-  return (
-    <div className="sticky top-0 z-10 mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-[var(--focus)] bg-surface px-3 py-2 text-sm" role="status">
-      <span className="mr-auto text-muted-foreground">{t("view.draft")}</span>
-      <Button variant="outline" onClick={onDiscard}>
-        {t("view.discard")}
-      </Button>
-      <Button variant="primary" onClick={onSave}>
-        {t("view.save")}
-      </Button>
-    </div>
-  );
-}
-
-
 /** The kinds of files as the address names them ("?kind=image"); German ones from before still work. */
 const KIND_PARAM: Record<FileType, string> = { bild: "image", pdf: "pdf", audio: "audio", video: "video", dokument: "document", sonstiges: "other" };
 const kindOf = (param: string | null) => (FILE_TYPES.find((k) => KIND_PARAM[k] === param || k === param) ?? null);
 
 /** "Dateien": all files, newest first; "Alle · Bilder · PDFs · Audio" (only kinds that are there), images as a gallery. */
 export function FilesPage() {
+  const files = useFiles();
   const { t } = useT();
   const kind = kindOf(useRoute().query.get("kind"));
   const setKind = (k: FileType | null) => setParams({ kind: k && KIND_PARAM[k] });
   const all = useQuery({ where: { file: true } }).items;
   const kinds = FILE_TYPES.map((k) => ({ k, n: all.filter((i) => i.file?.filetype === k).length })).filter((x) => x.n > 0);
   const def: QueryDef = { where: kind ? { and: [{ file: true }, { filetype: kind }] } : { file: true }, sort: [{ key: "created", desc: true }] };
-  useEffect(() => void (document.title = t("nav.files")), []);
+  useDocumentTitle(t("nav.files"));
   return (
     <div className="page-wide">
       <SpaceEyebrow />
@@ -174,7 +158,7 @@ export function FilesPage() {
         <span className="flex-1 text-[15px] tabular-nums text-muted-foreground">{all.length}</span>
         <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm font-medium hover:bg-hover">
           <Upload size={14} /> <span className="hidden sm:inline">{t("files.add")}</span>
-          <Input type="file" multiple className="hidden" onChange={async (e) => {
+          <Input variant="bare" type="file" multiple className="hidden" onChange={async (e) => {
             for (const f of [...(e.target.files ?? [])]) await files.add(f, f.name);
           }} />
         </label>
@@ -182,14 +166,14 @@ export function FilesPage() {
       {kinds.length > 1 && (
         <div className="-mx-4 mb-3 flex gap-1 overflow-x-auto px-4 text-sm [scrollbar-width:none] md:mx-0 md:px-0" role="group" aria-label={t("files.filter")}>
           {[{ k: null, n: all.length }, ...kinds].map(({ k, n }) => (
-            <ShadcnButton variant="plain" size="none"
+            <Button variant="plain"
               key={k ?? "all"}
               onClick={() => setKind(k)}
               aria-pressed={kind === k}
-              className={cx("shrink-0 whitespace-nowrap rounded-full border px-3 py-1", kind === k ? "border-[var(--focus)] bg-surface text-fg" : "border-line text-muted-foreground hover:bg-hover hover:text-fg")}
+              className={cn("shrink-0 whitespace-nowrap rounded-full border px-3 py-1", kind === k ? "border-focus bg-surface text-fg" : "border-line text-muted-foreground hover:bg-hover hover:text-fg")}
             >
               {k ? t("filetype.many." + k) : t("files.all")} <span className="tabular-nums text-muted-foreground">{n}</span>
-            </ShadcnButton>
+            </Button>
           ))}
         </div>
       )}
