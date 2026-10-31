@@ -19,6 +19,7 @@ import { z } from "zod";
 
 export interface Conn {
   userId: string;
+  session?: string; // the app session it was opened with: changing the password ends the others
   workspace: string;
   areas: Set<string>; // said hello for these: only then it gets (and may push) their updates
   origin: string;

@@ -144,11 +144,12 @@ async function call<R>(path: string, body?: unknown, method = body === undefined
 /** A workspace's API (/w/<id>/api/…). */
 export const spaceCall = <R>(id: string, path: string) => call<R>(`/w/${id}${path}`);
 
-/** What to tell the user when a call failed: signing in or up, a workspace action, deleting the account. */
-export function errorText(e: unknown, t: T, what: "signIn" | "space" | "deleteAccount"): string {
+/** What to tell the user when a call failed: signing in or up, a workspace action, deleting the account, changing the password. */
+export function errorText(e: unknown, t: T, what: "signIn" | "space" | "deleteAccount" | "password"): string {
   const status = e instanceof ApiError ? e.status : undefined;
   const message = e instanceof Error ? e.message : String(e);
   if (what === "signIn") return status === 401 ? t("account.wrong") : status === 429 ? t("account.tooMany") : status === 409 || status === 422 ? t("account.exists") : status === 403 ? t("account.closed") : message;
+  if (what === "password") return message === "invalid password" ? t("account.deletePassword") : status === 429 ? t("account.tooMany") : status === 400 ? t("account.passwordShort") : t("account.offline");
   if (what === "deleteAccount") return t(message === "last owner" ? "account.deleteOwner" : message === "invalid password" ? "account.deletePassword" : "account.offline");
   return message === "last owner" ? t("space.lastOwner") : message;
 }
@@ -200,6 +201,11 @@ export async function signOut() {
   save();
   navigate("/", { replace: true });
   location.reload();
+}
+
+/** Change the password. The other devices are signed out; this one stays signed in. */
+export async function changePassword(current: string, next: string) {
+  await call<Ok>("/api/account/password", { current, next });
 }
 
 /** Delete the account on this server, then remove this device's workspace copies. */

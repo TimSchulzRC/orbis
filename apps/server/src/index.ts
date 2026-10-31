@@ -154,6 +154,15 @@ async function accountApi(req: Request, path: string, url: URL): Promise<Respons
         for (const ws of w.conns) if (ws.data.userId === user.id) ws.close(4401, "account deleted");
       return json<Ok>({ ok: true });
     }
+    if (path === "/api/account/password" && req.method === "POST") {
+      const b = await body<{ current?: unknown; next?: unknown }>(req);
+      if (typeof b?.current !== "string" || typeof b.next !== "string") return fail(400, "passwords required");
+      await accounts.changePassword(user.id, token!, b.current, b.next);
+      // the other sessions are gone: their open connections go too
+      for (const w of open.values())
+        for (const ws of w.conns) if (ws.data.userId === user.id && ws.data.session !== token) ws.close(4401, "password changed");
+      return json<Ok>({ ok: true });
+    }
     if (path === "/api/account/signout" && req.method === "POST") return (await accounts.signOut(token!), json<Ok>({ ok: true }));
     if (path === "/api/workspaces" && req.method === "POST") {
       const b = await body<{ name?: string }>(req);
@@ -246,7 +255,7 @@ const server = Bun.serve<Conn>({
       if (!w) return fail(404, "no such workspace");
       const name = firstName(user);
       if (rest === "/sync") {
-        const ok = srv.upgrade(req, { data: { workspace: id, areas: new Set<string>(), origin: actorOf(name), user: name, userId: user.id }, headers: { "sec-websocket-protocol": "obtion" } });
+        const ok = srv.upgrade(req, { data: { workspace: id, areas: new Set<string>(), origin: actorOf(name), user: name, userId: user.id, session: token }, headers: { "sec-websocket-protocol": "obtion" } });
         return ok ? undefined : fail(400, "expected WebSocket");
       }
       return w.handle(req, rest, { user: name });
