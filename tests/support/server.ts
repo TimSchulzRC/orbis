@@ -19,6 +19,14 @@ export function freePort(): Promise<number> {
   });
 }
 
+/** Sets up OBTION_DATA with the examples ("setup de --examples"). Its PORT is a free one: the
+ * setup refuses to run while a server answers on it, and on a machine that runs Obtion itself
+ * (the self-hosted CI runner) one does on the default port. */
+export async function seedExamples(env: Record<string, string | undefined>) {
+  const seed = Bun.spawnSync(["bun", "apps/server/src/cli.ts", "setup", "de", "--examples"], { cwd: ROOT, env: { ...env, PORT: String(await freePort()) } });
+  if (seed.exitCode !== 0) throw new Error("seed failed: " + seed.stderr.toString());
+}
+
 /** The server as a program on a free port, answering once /api/info does. */
 export async function bootServer(env: Record<string, string>, stderr: "ignore" | "inherit" = "ignore") {
   const port = await freePort();

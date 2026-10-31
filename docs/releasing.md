@@ -4,11 +4,12 @@ How the [release channels](../README.md#release-channels) come about. One image,
 
 | Channel | Made by | Tags | GitHub release |
 |---|---|---|---|
-| Dev | [CI](../.github/workflows/ci.yml), every push to `main` after the checks | `dev`, `sha-<commit>` | none |
+| Dev | [CI](../.github/workflows/ci.yml), every push to `main` after the checks and the browser tests | `dev`, `sha-<commit>` | none |
 | Nightly | [Release](../.github/workflows/release.yml), automatically when due or by hand | `nightly`, `0.0.2-nightly.20261030.1` | pre-release `v0.0.2-nightly.20261030.1` |
 | Stable | [Release](../.github/workflows/release.yml), only by hand | `stable`, `latest`, `0.0.2` | release `v0.0.2` |
 
-Nightly and stable are built again from the same commit, only to carry their version; the base images in the `Dockerfile` are pinned to a digest so nothing else differs. What the workflow builds is decided by [`resolve-release.sh`](../.github/scripts/resolve-release.sh).
+Nightly and stable are built again from the same commit, only to carry their version; the base images in the `Dockerfile` are pinned to a digest so nothing else differs.
+Every image is started once before it is pushed and has to answer with its version ([`check-image.sh`](../.github/scripts/check-image.sh)). Dependabot proposes newer base images, Bun dependencies and actions daily, so everything stays on the latest stable release. What the workflow builds is decided by [`resolve-release.sh`](../.github/scripts/resolve-release.sh).
 
 ## Nightly
 
