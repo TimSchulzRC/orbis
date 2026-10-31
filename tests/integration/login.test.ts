@@ -157,3 +157,24 @@ test("the CLI gives an account a new password, also one that never had one", asy
   await expect(setPassword(dir, "nobody@example.org", "neues-passwort")).rejects.toThrow("No account");
   await expect(setPassword(dir, "me@example.org", "kurz")).rejects.toThrow("8 to 128");
 });
+
+test("a code proving an unproven address drops the passkeys someone else may have added; a proven account keeps its own", async () => {
+  const { accounts, withCode } = await setUp("open");
+  const addPasskey = (userId: string, id: string) =>
+    accounts.db.query("INSERT INTO passkey (id, publicKey, userId, credentialID, counter, deviceType, backedUp, createdAt) VALUES (?, 'k', ?, ?, 0, 'singleDevice', 0, ?)").run(id, userId, id, new Date().toISOString());
+  const keys = (userId: string) => (accounts.db.query("SELECT id FROM passkey WHERE userId = ?").all(userId) as { id: string }[]).map((r) => r.id);
+  try {
+    // someone signs up with the victim's address and a password, and adds a passkey
+    const squatter = await accounts.signUp({ name: "Eve", email: "victim@example.org", password: "geheim12345", personal: "P" });
+    addPasskey(squatter.user.id, "eve-key");
+    // the owner of the mailbox signs in by code: the account is theirs now, without Eve's ways in
+    const res = await withCode("victim@example.org");
+    expect(((await res!.json()) as { user: { id: string } }).user.id).toBe(squatter.user.id);
+    expect(keys(squatter.user.id)).toEqual([]);
+    expect(await accounts.hasPassword(squatter.user.id)).toBe(false);
+    // their own passkey stays through the next code
+    addPasskey(squatter.user.id, "own-key");
+    await withCode("victim@example.org");
+    expect(keys(squatter.user.id)).toEqual(["own-key"]);
+  } finally { accounts.db.close(); }
+});

@@ -251,8 +251,11 @@ export async function signInWithOAuth(provider: string, ctx: { invite?: string; 
   location.href = res.url;
 }
 
-/** The last OAuth sign-in failed: "closed" (no account here and none may be made), or "failed". */
-export let oauthFailed: "closed" | "failed" | undefined;
+/**
+ * The last OAuth sign-in failed: "closed" (no account here and none may be made), "notLinked" (an
+ * account has the address but not this provider yet: link it in the settings), or "failed".
+ */
+export let oauthFailed: "closed" | "notLinked" | "failed" | undefined;
 
 /** Back from the OAuth provider: the session it left in a cookie becomes this app's token. */
 async function finishOAuth() {
@@ -263,7 +266,11 @@ async function finishOAuth() {
   sessionStorage.removeItem(OAUTH_RETURN);
   history.replaceState(history.state, "", location.pathname + back);
   document.cookie = "obtion_signup=; path=/api/auth; max-age=0";
-  if (how !== "oauth") return void (oauthFailed = /^(signup_closed|invite_invalid)$/.test(params.get("error") ?? "") ? "closed" : "failed");
+  if (how === "linked") return;
+  if (how !== "oauth") {
+    const error = params.get("error") ?? "";
+    return void (oauthFailed = /^(signup_closed|invite_invalid)$/.test(error) ? "closed" : error === "account_not_linked" ? "notLinked" : "failed");
+  }
   try {
     const res = await call<SignedIn>("/api/account/claim", {});
     await keep(res.token);
@@ -271,6 +278,16 @@ async function finishOAuth() {
     oauthFailed = "failed";
     save();
   }
+}
+
+/** The OAuth providers the account can sign in with. */
+export const linkedProviders = () => call<{ providerId: string }[]>("/api/auth/list-accounts").then((l) => l.map((a) => a.providerId));
+
+/** Let the account sign in with an OAuth provider too: the page goes there and comes back to the settings. */
+export async function linkOAuth(provider: string) {
+  sessionStorage.setItem(OAUTH_RETURN, location.hash);
+  const res = await call<{ url: string }>("/api/auth/link-social", { provider, callbackURL: "/?signin=linked", errorCallbackURL: "/?signin=linkFailed" });
+  location.href = res.url;
 }
 
 // ---------- passkeys ----------

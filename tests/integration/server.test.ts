@@ -113,6 +113,11 @@ test("without settings only passwords; the passkey routes stay shut; the OAuth c
   expect((await get(bare, "/api/auth/passkey/generate-authenticate-options")).status).toBe(404);
   expect((await post(bare, "/api/account/claim", {}, undefined, { origin: "https://evil.example.org" })).status).toBe(403);
   expect((await post(bare, "/api/account/claim", {}, undefined, { origin: bare })).status).toBe(401);
+  // the way back from an OAuth provider comes from its site (Better Auth checks the state); nothing else does
+  const back = await fetch(`${bare}/api/auth/callback/github?code=x&state=y`, { headers: { "sec-fetch-site": "cross-site" }, redirect: "manual" });
+  expect(back.status).not.toBe(403);
+  expect((await fetch(`${bare}/api/auth/list-accounts`, { headers: { "sec-fetch-site": "cross-site" } })).status).toBe(403);
+  expect((await post(bare, "/api/auth/callback/github", {}, undefined, { origin: "https://evil.example.org" })).status).toBe(403);
   const pw = await signUp(bare, "pw@example.org");
   expect(await account(bare, pw.token)).toMatchObject({ password: true });
 });

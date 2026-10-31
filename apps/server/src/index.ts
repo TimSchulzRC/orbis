@@ -239,7 +239,9 @@ const server = Bun.serve<Conn>({
 
     // sign-in and sign-up of the app's own page (Better Auth; accounts are created through /api/account/signup)
     if (path.startsWith("/api/auth/")) {
-      if (!sameOrigin(req)) return fail(403, "forbidden");
+      // an OAuth provider sends the browser back from its own site; Better Auth checks the state
+      const callback = req.method === "GET" && path.startsWith("/api/auth/callback/");
+      if (!callback && !sameOrigin(req)) return fail(403, "forbidden");
       if (path.startsWith("/api/auth/sign-up")) return fail(404, "not found");
       if (path.startsWith("/api/auth/passkey/") && !login.passkey) return fail(404, "not found");
       return accounts.auth.handler(req);

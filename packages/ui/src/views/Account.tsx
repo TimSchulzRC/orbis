@@ -54,7 +54,7 @@ export function SignIn({ inviteCode, onDone, email: fixedEmail }: { inviteCode?:
   const [email, setEmail] = useState(fixedEmail ?? "");
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
-  const [error, setError] = useState(oauthFailed ? t(oauthFailed === "closed" ? "account.closed" : "account.oauthFailed") : "");
+  const [error, setError] = useState(oauthFailed ? t(oauthFailed === "closed" ? "account.closed" : oauthFailed === "notLinked" ? "account.notLinked" : "account.oauthFailed") : "");
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     serverInfo()

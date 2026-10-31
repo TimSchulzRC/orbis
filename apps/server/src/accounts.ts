@@ -379,6 +379,16 @@ function makeAuth(accounts: Accounts, secret: string, baseURL: string) {
           before: async (_user, ctx) => accounts.allowNewUser(ctx?.headers),
           after: async (user, ctx) => accounts.setUpNewUser(user.id, ctx?.headers),
         },
+        update: {
+          // A code by email proves the address of an account whose address nobody had proven
+          // (signed up with a password): Better Auth then drops its password and sessions, and
+          // here its passkeys, which whoever signed up with that address may have added.
+          before: async (data, ctx) => {
+            const email = (ctx?.body as { email?: unknown } | undefined)?.email;
+            if (data.emailVerified !== true || typeof email !== "string") return;
+            accounts.db.query('DELETE FROM passkey WHERE userId IN (SELECT id FROM "user" WHERE email = ? AND emailVerified = 0)').run(email.toLowerCase());
+          },
+        },
       },
     },
     plugins: [

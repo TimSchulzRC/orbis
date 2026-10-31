@@ -18,7 +18,7 @@ import { ItemIcon, TypeGlyph } from "../ui/item-look";
 import { cn, toggled } from "../lib/utils";
 import { chooseAction, notify } from "../ui/feedback";
 import { setTheme, useTheme } from "../theme";
-import { type Space, ApiError, activeUser, addPasskey, changePassword, deleteAccount, deleteSpace, errorText, inviteLink, leaveSpace, loginOf, mcpToken, members, passkeys, removePasskey, renameSpace, replica, serverInfo, signOut, spaceById, useAccounts } from "../accounts";
+import { type Space, ApiError, activeUser, addPasskey, changePassword, linkOAuth, linkedProviders, oauthFailed, deleteAccount, deleteSpace, errorText, inviteLink, leaveSpace, loginOf, mcpToken, members, passkeys, removePasskey, renameSpace, replica, serverInfo, signOut, spaceById, useAccounts } from "../accounts";
 import { SignIn } from "./Account";
 import { NewSpaceDialog } from "../ui/Spaces";
 import type { McpConnect, Member, PasskeyInfo, ServerInfo } from "@obtion/core/api";
@@ -150,6 +150,7 @@ function AccountSection() {
       </div>
       {changing && <ChangePasswordDialog onClose={() => setChanging(false)} />}
       {loginOf(info).passkey && !account.lost && <Passkeys />}
+      {loginOf(info).oauth.length > 0 && !account.lost && <Providers providers={loginOf(info).oauth} />}
       {deleting && <DeleteAccountDialog onClose={() => setDeleting(false)} />}
     </section>
   );
@@ -281,6 +282,34 @@ function Passkeys() {
       )}
       {error && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}
       {reauth && <Reauth onClose={() => setReauth(false)} onDone={() => (setReauth(false), void add())} />}
+    </div>
+  );
+}
+
+/** OAuth providers to sign in with: linked ones, and the way to link another. */
+function Providers({ providers }: { providers: { id: string; name: string }[] }) {
+  const { t } = useT();
+  const [linked, setLinked] = useState<string[] | null>(null);
+  const [error, setError] = useState(oauthFailed === "failed" ? t("account.oauthFailed") : "");
+  useEffect(() => void linkedProviders().then(setLinked, () => setLinked([])), []);
+  return (
+    <div className="mt-3 rounded-lg border border-line p-3 text-sm">
+      <span className="block font-medium">{t("account.providers")}</span>
+      <ul className="mt-2 divide-y divide-line border-t border-line">
+        {providers.map((p) => (
+          <li key={p.id} className="flex items-center gap-2 py-2">
+            <span className="min-w-0 flex-1 truncate">{p.name}</span>
+            {linked?.includes(p.id) ? (
+              <span className="text-xs text-muted-foreground">{t("account.linked")}</span>
+            ) : (
+              <Button variant="outline" disabled={!linked} onClick={() => void linkOAuth(p.id).catch(() => setError(t("account.oauthFailed")))}>
+                {t("account.link")}
+              </Button>
+            )}
+          </li>
+        ))}
+      </ul>
+      {error && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}
     </div>
   );
 }
