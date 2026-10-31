@@ -10,4 +10,4 @@ Use the shared Button, Input, Textarea, Checkbox, NativeSelect and Table compone
 
 Inline fields keep their text-like appearance when a custom class is supplied. Native file and date inputs retain browser functionality. Toasts continue to use Sonner with theme tokens.
 
-Run `bun run typecheck`, `bun test` and `bun run test:e2e` after changes. The root typecheck includes tests. There is currently no lint script.
+Run `bun run typecheck`, `bun test`, `bun run test:browser` and `bun run test:e2e` after changes. A change to how a part of the interface behaves gets a test in `tests/browser`; `tests/e2e` only checks that every page renders and the flows that need the server. The root typecheck includes tests. There is currently no lint script.

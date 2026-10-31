@@ -1,18 +1,18 @@
-// Browser smoke test: starts an empty server, one filled with the examples of the setup (the
-// server's "setup --examples", plus a file and an item in the trash) and the same data with every type deleted (the app runs
-// with zero types) on free ports, opens every route and one page per kind of item in a real
-// browser – desktop and phone – and fails on console errors, page errors, an error
-// boundary or a blank page. A fourth server is set up on the page with its examples, which are
-// removed again in the settings and brought back with "Rückgängig"; then it gets a second
-// workspace (sidebar, inbox filter, a move into it). Every server gets its first
-// account through the API; the browser holds it as if it had signed in (the sign-in page itself
-// is checked once).
+// The built app against real servers, as T3 Code's "boot the built web client": every route and
+// one page per kind of item opens without console errors, page errors, an error boundary or a
+// blank page, on desktop and phone; and the flows that need the server: signing in, the setup
+// on the page (with the examples removed and brought back), a second workspace and a move into
+// it, deleting the account. How single parts of the interface behave is tested on their own, in
+// tests/browser (bun run test:browser).
+// Servers: empty, filled with the examples ("setup --examples", plus a file and an item in the
+// trash), the same with every type deleted (the app runs with zero types), and a fresh one set
+// up on the page. Each gets its first account through the API; the browser holds it as if it
+// had signed in (the sign-in page itself is checked once). Independent parts run side by side.
 //   bun run test:e2e        (builds first; Chrome from ~/.cache/ms-playwright)
-// Not part of `bun test`: it needs a browser and takes a few minutes.
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type Page, chromium } from "playwright-core";
+import { type Page, chromium } from "playwright";
 import { ROOT, bootServer, firstAccount, mcpTool, seedExamples } from "../support/server";
 
 const failures: string[] = [];
@@ -45,7 +45,7 @@ async function startServer(seeded: boolean, noTypes = false) {
 }
 
 /** A browser context that holds the server's first account, as after signing in on the page. */
-async function signedIn(browser: import("playwright-core").Browser, server: Awaited<ReturnType<typeof startServer>>, opts: import("playwright-core").BrowserContextOptions) {
+async function signedIn(browser: import("playwright").Browser, server: Awaited<ReturnType<typeof startServer>>, opts: import("playwright").BrowserContextOptions) {
   const context = await browser.newContext({ baseURL: server.url, ...opts });
   const account = { token: server.token, user: server.me.user };
   const spaces = server.me.workspaces;
@@ -64,7 +64,7 @@ async function signedIn(browser: import("playwright-core").Browser, server: Awai
 async function settle(page: Page) {
   await page.waitForSelector("#root > *", { timeout: 10000 });
   await page.waitForFunction(() => !document.body.innerText.includes("Syncing") && !document.body.innerText.includes("Synchronisiere"), null, { timeout: 10000 }).catch(() => {});
-  await page.waitForTimeout(350);
+  await page.waitForTimeout(350); // errors that come a moment after the first render count too
 }
 
 async function check(page: Page, label: string, path: string, errors: string[], extra?: (p: Page) => Promise<void>, opts: { phone?: boolean; page?: boolean } = {}) {
@@ -109,258 +109,27 @@ const ITEMS = ["ex-work", "ex-art-de", "ex-relaunch", "ex-design", "ex-t-pages",
 
 async function run() {
   const browser = await chromium.launch({ headless: true });
-  const empty = await startServer(false);
-  const seeded = await startServer(true);
-  const typeless = await startServer(true, true);
-  const fresh = await startServer(false);
-  const variants = [
-    { name: "light", viewport: { width: 1440, height: 900 }, scheme: "light" as const },
-    { name: "dark", viewport: { width: 1440, height: 900 }, scheme: "dark" as const },
-    { name: "phone", viewport: { width: 390, height: 844 }, scheme: "light" as const, mobile: true },
-  ];
+  const [empty, seeded, typeless, fresh] = await Promise.all([startServer(false), startServer(true), startServer(true, true), startServer(false)]);
+  const desktop = { name: "desktop", viewport: { width: 1440, height: 900 } };
+  const phone = { name: "phone", viewport: { width: 390, height: 844 }, mobile: true };
   try {
-    await signInPage(browser, empty);
-    await examplesOnSetup(browser, fresh);
-    await twoWorkspaces(browser, fresh);
-    await deleteAccountOnSettings(browser, fresh);
-    for (const [serverName, server] of [["empty", empty], ["seeded", seeded], ["no types", typeless]] as const) {
-      for (const v of variants) {
-        const context = await signedIn(browser, server, { viewport: v.viewport, colorScheme: v.scheme, isMobile: !!v.mobile, hasTouch: !!v.mobile, locale: "de-DE" });
-        const page = await context.newPage();
-        const errors: string[] = [];
-        page.on("pageerror", (e) => errors.push(`page error: ${e.message}`));
-        page.on("console", (m) => {
-          if (m.type() === "error") errors.push(`console error: ${m.text()}`);
-        });
-        const label = `${serverName} ${v.name}`;
-        if (serverName === "empty" && v.name === "light") {
-          // the first visit sets the server up, here without the examples
-          await check(page, label, "/", errors, async (p) => {
-            await p.getByRole("checkbox", { name: /Mit Beispielen starten/ }).uncheck();
-            await p.getByRole("button", { name: /Einrichten|Set up/ }).click();
-            await p.waitForSelector("main", { timeout: 8000 });
-          });
-        }
-        const phone = !!v.mobile;
-        for (const r of ROUTES) await check(page, label, r, errors, undefined, { phone });
-        if (phone) await check(page, label, "/#/settings", errors, async (p) => {
-          await p.getByRole("button", { name: "Menü", exact: true }).click();
-          const menu = p.getByRole("dialog", { name: "Menü", exact: true });
-          await menu.waitFor({ state: "visible" });
-          const reachable = await menu.evaluate((el) => {
-            const box = el.getBoundingClientRect();
-            return el.contains(document.elementFromPoint(box.left + box.width / 2, box.top + 20));
-          });
-          if (!reachable) failures.push(`${label}: mobile menu is behind its backdrop`);
-          await p.keyboard.press("Escape");
-          await menu.waitFor({ state: "detached" });
-        }, { phone });
-        if (serverName === "no types") for (const id of ITEMS) await check(page, label, `/#/i/${encodeURIComponent(id)}`, errors, undefined, { phone, page: true });
-        if (serverName === "seeded") {
-          for (const id of [...ITEMS, server.file, server.trashed]) await check(page, label, `/#/i/${encodeURIComponent(id)}`, errors, undefined, { phone, page: true });
-          // Heute: the greeting, what is due, and the tray below with the way into the review
-          await check(page, label, "/", errors, async (p) => {
-            const h1 = (await p.locator("main h1").innerText()).trim();
-            if (!/^Guten (Morgen|Tag|Abend), E2E\.$/.test(h1)) failures.push(`${label}: Heute greets with "${h1}"`);
-            if (!(await p.locator("main h2", { hasText: /^Fällig$/ }).count())) failures.push(`${label}: Heute shows nothing due`);
-            const tray = p.getByRole("region", { name: "Eingang" });
-            if (!(await tray.getByRole("link", { name: /Einsortieren/ }).count())) failures.push(`${label}: the tray has no way into the review`);
-          }, { phone });
-          // the inbox is the tray's panel: every entry, newest first; one opens there to read and add
-          // to and stays in the inbox (looking in sorts nothing)
-          await check(page, label, "/#/inbox", errors, async (p) => {
-            const panel = p.locator("[data-shelf-panel]");
-            if (!(await panel.waitFor({ timeout: 3000 }).then(() => true, () => false))) return void failures.push(`${label}: "#/inbox" does not open the tray's panel`);
-            const rows = panel.locator("[data-shelf]");
-            const n = await rows.count();
-            if (!n) return;
-            await rows.first().click();
-            if (!(await panel.getByText("Bleibt im Eingang bis zum Einsortieren.").waitFor({ timeout: 3000 }).then(() => true, () => false))) return void failures.push(`${label}: an entry does not open in the panel`);
-            await panel.locator(".cm-content").click();
-            await p.keyboard.press("Control+End");
-            await p.keyboard.type(" E2E-Ergänzung");
-            await panel.getByRole("button", { name: "Eingang", exact: true }).click();
-            await panel.getByText("E2E-Ergänzung").waitFor({ timeout: 3000 }).catch(() => {});
-            if ((await panel.locator("[data-shelf]").count()) !== n) failures.push(`${label}: adding to an entry took it out of the inbox`);
-            if (!(await panel.getByText("E2E-Ergänzung").count())) failures.push(`${label}: what was added does not show in the panel's list`);
-            const pinned = (await panel.getAttribute("data-shelf-panel")) === "pinned";
-            await p.keyboard.press("Escape");
-            if (!pinned && (await panel.count())) failures.push(`${label}: Escape does not close the panel`);
-            if (pinned && !(await panel.count())) failures.push(`${label}: Escape closes the panel pinned on Heute`);
-          }, { phone });
-          // an entry's page from before the review leads into the review, at that entry
-          await check(page, label, "/#/inbox/ex-i-podcast", errors, async (p) => {
-            if (!p.url().includes("/review?at=")) failures.push(`${label}: an old inbox entry link does not lead into the review (${p.url()})`);
-            else if (!(await p.locator("main article h2").innerText()).startsWith("Podcast")) failures.push(`${label}: the review does not begin at the linked entry`);
-          }, { phone });
-          // the review: one entry at a time; "Lose behalten" moves on and lists it as done, its undo
-          // brings it back
-          await check(page, label, "/#/review", errors, async (p) => {
-            const card = p.locator("main article h2");
-            const title = (await card.innerText()).trim();
-            const cardIs = (want: boolean) => p.waitForFunction(([t, want]) => (document.querySelector("main article h2")?.textContent?.trim() === t) === want, [title, want] as const, { timeout: 3000 }).catch(() => {});
-            await p.getByRole("button", { name: /Lose behalten/ }).click();
-            await cardIs(false);
-            if ((await card.innerText().catch(() => "")).trim() === title) failures.push(`${label}: the review did not move on after "Lose behalten"`);
-            const done = phone ? p.locator("main [aria-live]").first() : p.locator("main aside section[aria-label=\"Erledigt\"]");
-            if (!(await done.getByText(title.slice(0, 15)).count())) failures.push(`${label}: "${title}" is not under "Erledigt"`);
-            await (phone ? done.getByRole("button", { name: "Rückgängig" }) : done.getByRole("button", { name: `„${title}“ rückgängig machen` })).click();
-            await cardIs(true);
-            if ((await card.innerText()).trim() !== title) failures.push(`${label}: undo in the review did not bring "${title}" back`);
-          }, { phone });
-          // editing in the review: a click on the title edits it there, the keys rest (their hints hide,
-          // "s" is a letter), "Fertig" ends it; "Bearbeiten" puts the caret at the end of the text,
-          // Esc ends it, so does a click outside the card. Both put back as they were.
-          await check(page, label, "/#/review", errors, async (p) => {
-            const article = p.locator("main article");
-            const title = (await article.locator("h2").innerText()).trim();
-            const kbd = p.locator("main kbd").filter({ visible: true });
-            await article.locator("h2").click({ position: { x: 3, y: 17 } });
-            if (!(await article.locator("textarea").count())) return void failures.push(`${label}: a click on the title does not edit it`);
-            if (await kbd.count()) failures.push(`${label}: the keys' hints stay while editing`);
-            if ((await article.locator("textarea").evaluate((e: HTMLTextAreaElement) => e.selectionStart)) > 1) failures.push(`${label}: the caret is not where the title was clicked`);
-            await p.keyboard.press("Control+End");
-            await p.keyboard.type(" Xs");
-            await p.getByRole("button", { name: "Fertig" }).click();
-            if ((await article.locator("h2").innerText()).trim() !== title + " Xs") failures.push(`${label}: the title edited in the review is "${await article.locator("h2").innerText()}"`);
-            if (!phone && !(await kbd.count())) failures.push(`${label}: the keys' hints do not come back after "Fertig"`);
-            await p.getByRole("button", { name: "Bearbeiten" }).click();
-            await article.locator(".cm-editor.cm-focused").waitFor({ timeout: 3000 }).catch(() => {});
-            if (!(await article.locator(".cm-editor.cm-focused").count())) failures.push(`${label}: "Bearbeiten" does not put the caret into the text`);
-            await p.keyboard.type(" Ys");
-            await p.waitForTimeout(300); // the completions looked and found nothing (else Esc closes them first)
-            await p.keyboard.press("Escape");
-            if (await article.locator("textarea").count()) failures.push(`${label}: Esc does not end editing`);
-            if (!(await article.getByText(/ Ys$/).count())) failures.push(`${label}: the text typed in the review is not there`);
-            await p.getByRole("button", { name: "Bearbeiten" }).click();
-            await p.locator("main h1").click();
-            if (await article.locator("textarea").count()) failures.push(`${label}: a click outside the card does not end editing`);
-            await p.getByRole("button", { name: "Bearbeiten" }).click();
-            await article.locator(".cm-editor.cm-focused").waitFor({ timeout: 3000 });
-            for (let i = 0; i < 3; i++) await p.keyboard.press("Backspace");
-            await article.locator("textarea").click();
-            await p.keyboard.press("Control+End"); // the end of the title, not of its line (it wraps on a phone)
-            for (let i = 0; i < 3; i++) await p.keyboard.press("Backspace");
-            await p.getByRole("button", { name: "Fertig" }).click();
-            if ((await article.locator("h2").innerText()).trim() !== title) failures.push(`${label}: the title is not back to "${title}"`);
-          }, { phone });
-          // the sidebar: the workspace's block (pinned informations) and "Typen" (each type's page and the files), both
-          // fold and stay folded over a reload; a type's page has its views and "Typ bearbeiten";
-          // the inbox offers what lands there and the default; old collection links lead on
-          if (!phone && v.name === "light") {
-            await check(page, label, "/#/settings", errors, async (p) => {
-              const side = p.locator("aside");
-              if (!(await side.locator("section[aria-label='Persönlich'] a[href='#/i/ex-work']").count())) failures.push(`${label}: "Arbeit" not in the workspace's block`);
-              const types = await side.locator("nav[aria-label='Typen'] a").allInnerTexts();
-              if (!["Projekte", "Tasks", "Karten", "Dateien"].every((x) => types.some((y) => y.trim() === x))) failures.push(`${label}: Typen shows ${types.join(", ")}`);
-              await side.getByRole("button", { name: "Typen" }).click();
-              await p.reload();
-              await settle(p);
-              if ((await p.locator("aside").getByRole("button", { name: "Typen" }).getAttribute("aria-expanded")) !== "false") failures.push(`${label}: folded Typen not remembered`);
-              await p.locator("aside").getByRole("button", { name: "Typen" }).click();
-            });
-            await check(page, label, "/#/i/sys%3Aproject", errors, async (p) => {
-              if ((await p.locator("main h1").innerText()).trim() !== "Projekte") failures.push(`${label}: the project type's page is not "Projekte"`);
-              if ((await p.locator("main [role=tab]").count()) < 2) failures.push(`${label}: the project type's page has no views`);
-              await p.locator("main").getByRole("button", { name: "Mehr" }).first().click();
-              const menu = await p.locator("[data-popover]").last().innerText();
-              if (!/Typ bearbeiten/.test(menu) || !/Ansichten zurücksetzen/.test(menu)) failures.push(`${label}: type page menu is "${menu.replace(/\n/g, " · ")}"`);
-              await p.keyboard.press("Escape");
-            });
-            await check(page, label, "/#/inbox", errors, async (p) => {
-              await p.locator("[data-shelf-panel]").getByRole("button", { name: "Mehr" }).click();
-              const menu = await p.locator("[data-popover]").last().innerText();
-              if (!/Was landet im Eingang\?/.test(menu)) failures.push(`${label}: inbox menu is "${menu.replace(/\n/g, " · ")}"`);
-              // the rule opens with the way back to the default
-              await p.getByText("Was landet im Eingang?").click();
-              if (!(await p.getByRole("dialog", { name: "Was landet im Eingang?" }).getByRole("button", { name: /Standard wiederherstellen/ }).count())) failures.push(`${label}: the inbox rule has no "Standard wiederherstellen"`);
-            });
-            await check(page, label, "/#/c/sys%3Ac-task", errors, async (p) => {
-              if (!p.url().includes("/i/sys%3Atask")) failures.push(`${label}: an old collection link does not lead to the type's page (${p.url()})`);
-            });
-          }
-          // the main list keeps its grouping after a reload (design rules § 8)
-          await check(page, label, "/#/i/ex-relaunch", errors, async (p) => {
-            const status = p.getByRole("button", { name: "Status", exact: true }).first();
-            if (!phone && (await status.count())) {
-              await status.click();
-              await p.getByRole("button", { name: "Status", exact: true, pressed: true }).first().waitFor({ timeout: 3000 }).catch(() => {});
-              await p.reload();
-              await settle(p);
-              if ((await p.getByRole("button", { name: "Status", exact: true }).first().getAttribute("aria-pressed")) !== "true") failures.push(`${label}: grouping by status not kept after reload`);
-              await p.getByRole("button", { name: "Unterprojekt", exact: true }).first().click();
-            }
-          });
-          // a few interactions: tick a task, open the command palette, undo in the activity
-          // (done entries leave the list; the activity check below undoes it again)
-          await check(page, label, "/#/i/ex-t-pages", errors, async (p) => {
-            const tick = p.locator('[data-id="ex-t-pages-about"] button').first();
-            if (await tick.count()) {
-              await tick.click();
-              // one place for notices (sonner), the done one offers "Rückgängig"
-              const shown = await p.locator("[data-sonner-toast]").filter({ hasText: /Rückgängig|Undo/ }).first().waitFor({ timeout: 3000 }).then(() => true, () => false);
-              if (!shown) failures.push(`${label}: no undo notice after ticking off`);
-              else if ((await p.locator("[data-sonner-toaster]").count()) !== 1) failures.push(`${label}: not exactly one toaster`);
-            }
-          });
-          if (!v.mobile)
-            await check(page, label, "/", errors, async (p) => {
-              const launcher = p.getByRole("button", { name: /Suchen/ }).first();
-              if (await launcher.count()) await launcher.focus();
-              await p.keyboard.press("Control+k");
-              const modal = p.getByRole("dialog");
-              await modal.first().waitFor({ timeout: 3000 }).catch(() => {});
-              if (await modal.count() !== 1) failures.push(`${label}: command palette must have exactly one dialog`);
-              if (!(await modal.locator("input").evaluate((el) => el === document.activeElement))) failures.push(`${label}: command palette input is not focused`);
-              await p.keyboard.type("relaunch");
-              await p.waitForFunction(() => (document.activeElement as HTMLInputElement | null)?.value === "relaunch", null, { timeout: 3000 }).catch(() => {});
-              await p.keyboard.press("Escape");
-              await modal.waitFor({ state: "detached" });
-              if (await launcher.count() && !(await launcher.evaluate((el) => el === document.activeElement))) failures.push(`${label}: command palette did not restore focus`);
-            });
-          await check(page, label, "/#/activity", errors, async (p) => {
-            const undo = p.getByRole("button", { name: /Rückgängig|Undo/ }).first();
-            if (await undo.count()) {
-              await undo.click();
-              await p.waitForTimeout(500);
-            }
-          });
-          // capturing (in the tray): a note is preset, "Einsortieren …" is offered, a page mentioned
-          // with @ is offered as the place; the notice says where it went
-          await check(page, label, "/", errors, async (p) => {
-            // the field is in the tray; on a phone it opens from the tray's "+" in a sheet, which closes after saving
-            const open = async () => {
-              if (phone) await p.getByRole("region", { name: "Eingang" }).locator("button[aria-label='Erfassen']").click();
-              const f = p.locator(phone ? "[role=dialog] textarea[aria-label='Erfassen']" : "[role=region][aria-label='Eingang'] textarea[aria-label='Erfassen']");
-              await f.click();
-              return f;
-            };
-            let field = await open();
-            let row = field.locator("xpath=ancestor::*[@data-capture][1]");
-            const typeBtn = row.getByRole("button", { name: "Typ: Notiz" });
-            if (!(await typeBtn.count())) failures.push(`${label}: capture does not preset "Notiz"`);
-            if (!(await row.getByRole("button", { name: /Einsortieren …/ }).count())) failures.push(`${label}: capture has no "Einsortieren …"`);
-            await field.fill("E2E-Notiz ohne Ort");
-            await field.press("Enter");
-            if (!(await p.locator("[data-sonner-toast]").filter({ hasText: "Notiz im Eingang" }).first().waitFor({ timeout: 3000 }).then(() => true, () => false))) failures.push(`${label}: no notice "Notiz im Eingang"`);
-            if (phone) {
-              await field.waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
-              field = await open();
-              row = field.locator("xpath=ancestor::*[@data-capture][1]");
-            }
-            await field.fill("E2E-Frage zu @Arbeit");
-            const offer = row.getByRole("button", { name: "In Arbeit einsortieren?" });
-            if (!(await offer.count())) failures.push(`${label}: no offer to place in the mentioned page`);
-            else {
-              await offer.click();
-              await field.press("Enter");
-              if (!(await p.locator("[data-sonner-toast]").filter({ hasText: "Notiz unter Arbeit" }).first().waitFor({ timeout: 3000 }).then(() => true, () => false))) failures.push(`${label}: no notice "Notiz unter Arbeit"`);
-            }
-          }, { phone });
-        }
-        await context.close();
-      }
-    }
+    await Promise.all([
+      // the empty server: signing in finds the workspace not set up; the first visit sets it up
+      (async () => {
+        await signInPage(browser, empty);
+        await pages(browser, "empty", empty, desktop);
+        await pages(browser, "empty", empty, phone);
+      })(),
+      pages(browser, "seeded", seeded, desktop),
+      pages(browser, "seeded", seeded, phone),
+      pages(browser, "no types", typeless, desktop),
+      pages(browser, "no types", typeless, phone),
+      (async () => {
+        await examplesOnSetup(browser, fresh);
+        await twoWorkspaces(browser, fresh);
+        await deleteAccountOnSettings(browser, fresh);
+      })(),
+    ]);
   } finally {
     await browser.close();
     for (const h of [empty, seeded, typeless, fresh]) {
@@ -376,8 +145,56 @@ async function run() {
   console.log(`E2E smoke: ${checks} checks passed (empty, seeded, typeless and fresh server; desktop, phone).`);
 }
 
+type Server = Awaited<ReturnType<typeof startServer>>;
+
+/** Every route and, with data, one page per kind of item, in one browser window of the variant. */
+async function pages(browser: import("playwright").Browser, serverName: string, server: Server, v: { name: string; viewport: { width: number; height: number }; mobile?: boolean }) {
+  const context = await signedIn(browser, server, { viewport: v.viewport, isMobile: !!v.mobile, hasTouch: !!v.mobile, locale: "de-DE" });
+  const page = await context.newPage();
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(`page error: ${e.message}`));
+  page.on("console", (m) => {
+    if (m.type() === "error") errors.push(`console error: ${m.text()}`);
+  });
+  const label = `${serverName} ${v.name}`;
+  const phone = !!v.mobile;
+  if (serverName === "empty" && !phone) {
+    // the first visit sets the server up, here without the examples
+    await check(page, label, "/", errors, async (p) => {
+      await p.getByRole("checkbox", { name: /Mit Beispielen starten/ }).uncheck();
+      await p.getByRole("button", { name: /Einrichten|Set up/ }).click();
+      await p.waitForSelector("main", { timeout: 8000 });
+    });
+  }
+  for (const r of ROUTES) await check(page, label, r, errors, undefined, { phone });
+  if (serverName !== "empty") for (const id of [...ITEMS, server.file, server.trashed].filter(Boolean)) await check(page, label, `/#/i/${encodeURIComponent(id)}`, errors, undefined, { phone, page: true });
+  if (phone)
+    await check(page, label, "/#/settings", errors, async (p) => {
+      await p.getByRole("button", { name: "Menü", exact: true }).click();
+      const menu = p.getByRole("dialog", { name: "Menü", exact: true });
+      await menu.waitFor({ state: "visible" });
+      const reachable = await menu.evaluate((el) => {
+        const box = el.getBoundingClientRect();
+        return el.contains(document.elementFromPoint(box.left + box.width / 2, box.top + 20));
+      });
+      if (!reachable) failures.push(`${label}: mobile menu is behind its backdrop`);
+      await p.keyboard.press("Escape");
+      await menu.waitFor({ state: "detached" });
+    }, { phone });
+  if (serverName === "seeded") {
+    // links from before: an inbox entry's page leads into the review at it, a collection to its type's page
+    await check(page, label, "/#/inbox/ex-i-podcast", errors, async (p) => {
+      if (!p.url().includes("/review?at=")) failures.push(`${label}: an old inbox entry link does not lead into the review (${p.url()})`);
+    }, { phone });
+    await check(page, label, "/#/c/sys%3Ac-task", errors, async (p) => {
+      if (!p.url().includes("/i/sys%3Atask")) failures.push(`${label}: an old collection link does not lead to the type's page (${p.url()})`);
+    });
+  }
+  await context.close();
+}
+
 /** Without an account the app asks to sign in; signing in on the page opens the workspace. */
-async function signInPage(browser: import("playwright-core").Browser, server: { url: string }) {
+async function signInPage(browser: import("playwright").Browser, server: { url: string }) {
   const context = await browser.newContext({ baseURL: server.url, viewport: { width: 1440, height: 900 }, locale: "de-DE" });
   const page = await context.newPage();
   const errors: string[] = [];
@@ -393,7 +210,7 @@ async function signInPage(browser: import("playwright-core").Browser, server: { 
 }
 
 /** Set up on the page with the examples (the default), then remove them in the settings and undo that. */
-async function examplesOnSetup(browser: import("playwright-core").Browser, server: Awaited<ReturnType<typeof startServer>>) {
+async function examplesOnSetup(browser: import("playwright").Browser, server: Server) {
   const context = await signedIn(browser, server, { viewport: { width: 1440, height: 900 }, locale: "de-DE" });
   const page = await context.newPage();
   const errors: string[] = [];
@@ -440,7 +257,7 @@ async function examplesOnSetup(browser: import("playwright-core").Browser, serve
  * inbox is one list of both and shows one when chosen (remembered over a reload, the sidebar
  * follows); a type page can be pinned; a pinned area moves into the other workspace.
  */
-async function twoWorkspaces(browser: import("playwright-core").Browser, server: Awaited<ReturnType<typeof startServer>>) {
+async function twoWorkspaces(browser: import("playwright").Browser, server: Server) {
   const personal = server.me.workspaces[0]!.id;
   await fetch(server.url + "/api/workspaces", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${server.token}` }, body: JSON.stringify({ name: "Firma" }) });
   const context = await signedIn(browser, server, { viewport: { width: 1440, height: 900 }, locale: "de-DE" });
@@ -467,7 +284,7 @@ async function twoWorkspaces(browser: import("playwright-core").Browser, server:
     await p.reload();
     await settle(p);
     await p.evaluate(() => (location.hash = "#/inbox"));
-    await panel.waitFor({ timeout: 3000 }).catch(() => {});
+    await panel.waitFor({ timeout: 3000 });
     if ((await panel.locator("[aria-pressed=true]").innerText()).replace(/\s*\d+$/, "") !== "Firma") failures.push(`${label}: the inbox filter is not remembered`);
     if (await p.locator("aside section[aria-label='Persönlich']").count()) failures.push(`${label}: the sidebar still shows the workspace left out`);
     await panel.getByRole("button", { name: /^Alle/ }).click();
@@ -489,7 +306,7 @@ async function twoWorkspaces(browser: import("playwright-core").Browser, server:
   await context.close();
 }
 
-async function deleteAccountOnSettings(browser: import("playwright-core").Browser, server: Awaited<ReturnType<typeof startServer>>) {
+async function deleteAccountOnSettings(browser: import("playwright").Browser, server: Server) {
   const context = await signedIn(browser, server, { locale: "de-DE" });
   const page = await context.newPage();
   const errors: string[] = [];

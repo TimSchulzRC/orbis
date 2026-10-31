@@ -35,9 +35,13 @@ With [Bun](https://bun.sh):
 ```bash
 bun install
 bun run dev         # server on :8480 and the web app with hot reload
-bun test
+bun test            # unit and integration tests
+bun run test:browser  # parts of the interface on their own, in Chromium
+bun run test:e2e    # the built app against real servers
 bun run typecheck
 ```
+
+The browser tests need Chromium once: `bunx playwright install chromium`.
 
 More in [`docs`](docs): [releasing](docs/releasing.md), [removing unused files](docs/removing-unused-files.md), [background dev servers](scripts/README.md).
 

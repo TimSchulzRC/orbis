@@ -4,7 +4,7 @@ How the [release channels](../README.md#release-channels) come about. One image,
 
 | Channel | Made by | Tags | GitHub release |
 |---|---|---|---|
-| Dev | [CI](../.github/workflows/ci.yml), every push to `main` after the checks and the browser tests | `dev`, `sha-<commit>` | none |
+| Dev | [CI](../.github/workflows/ci.yml), every push to `main` after the checks (tests, browser and E2E tests) | `dev`, `sha-<commit>` | none |
 | Nightly | [Release](../.github/workflows/release.yml), automatically when due or by hand | `nightly`, `0.0.2-nightly.20261030.1` | pre-release `v0.0.2-nightly.20261030.1` |
 | Stable | [Release](../.github/workflows/release.yml), only by hand | `stable`, `latest`, `0.0.2` | release `v0.0.2` |
 

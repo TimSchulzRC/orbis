@@ -21,6 +21,8 @@ jobs:
     runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
     # a hanging test fails after minutes instead of holding the runner for GitHub's six hours
     timeout-minutes: 15
+    env:
+      SELF_HOSTED: ${{ vars.RUNNER != '' }}
     steps:
       - uses: actions/checkout@v7
       # always the newest Bun release, like the Dockerfile's base image (kept current by Dependabot)
@@ -28,16 +30,23 @@ jobs:
         with:
           bun-version: latest
       - run: bun install --frozen-lockfile
-      # tests, typecheck and build don't depend on each other: in parallel they take half the time.
-      # Each one's output is printed in its own group, the step fails if any of them failed.
-      - name: Test, typecheck, build
+      # the Chromium of the installed Playwright (~/.cache/ms-playwright, kept on the self-hosted
+      # machine); GitHub's runners also need its system libraries, which the self-hosted one has
+      # (installing them would need root)
+      - run: bunx playwright install ${{ env.SELF_HOSTED != 'true' && '--with-deps' || '' }} chromium
+      # None of these depend on each other: in parallel they take as long as the longest. Browser:
+      # parts of the interface on their own in Chromium (tests/browser). E2E: the built app against
+      # real servers (tests/e2e, builds first). Each one's output is printed in its own group, the
+      # step fails if any of them failed.
+      - name: Test, typecheck, browser, e2e
         run: |
           mkdir -p "$RUNNER_TEMP/check"
           bun test > "$RUNNER_TEMP/check/test.log" 2>&1 & test=$!
           bun run typecheck > "$RUNNER_TEMP/check/typecheck.log" 2>&1 & typecheck=$!
-          bun run build > "$RUNNER_TEMP/check/build.log" 2>&1 & build=$!
+          bun run test:browser > "$RUNNER_TEMP/check/browser.log" 2>&1 & browser=$!
+          bun run test:e2e > "$RUNNER_TEMP/check/e2e.log" 2>&1 & e2e=$!
           failed=0
-          for name in test typecheck build; do
+          for name in test typecheck browser e2e; do
             if wait "${!name}"; then result=ok; else result=FAILED; failed=1; fi
             echo "::group::$name: $result"
             cat "$RUNNER_TEMP/check/$name.log"
@@ -45,32 +54,20 @@ jobs:
             [ "$result" = ok ] || echo "::error::$name failed"
           done
           exit $failed
-
-  # The browser tests (tests/e2e): every route and the editor in a real Chromium, on desktop and
-  # phone. Beside check, not in it: they take a few minutes.
-  e2e:
-    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
-    timeout-minutes: 20
-    env:
-      SELF_HOSTED: ${{ vars.RUNNER != '' }}
-    steps:
-      - uses: actions/checkout@v7
-      - uses: oven-sh/setup-bun@v2
+      # the screenshots Vitest takes of a failed browser test
+      - uses: actions/upload-artifact@v7
+        if: failure()
         with:
-          bun-version: latest
-      - run: bun install --frozen-lockfile
-      # the Chromium of the installed playwright-core (~/.cache/ms-playwright, kept on the
-      # self-hosted machine); GitHub's runners also need its system libraries, which the
-      # self-hosted one has (installing them would need root)
-      - run: bunx playwright-core install ${{ env.SELF_HOSTED != 'true' && '--with-deps' || '' }} chromium
-      - run: bun run test:e2e
+          name: browser-test-screenshots
+          path: .vitest/attachments
+          if-no-files-found: ignore
 
   # The dev channel of the image ghcr.io/<owner>/obtion: :dev is always the newest main,
   # :sha-<commit> keeps each build (release.yml builds nightly and stable only from commits that
-  # have one). Only after the checks and the browser tests passed. For pull requests the image is
-  # built and started as well, so a broken Dockerfile shows before the merge, but never pushed.
+  # have one). Only after the checks passed. For pull requests the image is built and started as
+  # well, so a broken Dockerfile shows before the merge, but never pushed.
   image:
-    needs: [check, e2e]
+    needs: check
     runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 30
     permissions:

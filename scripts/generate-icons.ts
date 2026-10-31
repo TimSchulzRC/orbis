@@ -1,6 +1,6 @@
 // Rasterize the editable SVG with the same browser used by the UI smoke tests.
 // Run: bun scripts/generate-icons.ts
-import { chromium } from "playwright-core";
+import { chromium } from "playwright";
 import { readFileSync, copyFileSync } from "node:fs";
 import { resolve } from "node:path";
 
