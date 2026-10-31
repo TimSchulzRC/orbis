@@ -7,8 +7,7 @@
 import type * as Y from "yjs";
 import { type FileMeta, type ItemInit, META_TYPE, appendUpdate, addDaysISO, fileTypeOf, initItem, initType, metaMap, setFileMeta, setMeta, todayISO } from "./model";
 import type { Index } from "./graph";
-import { SYS, type Writer } from "./setup";
-import { BLOCKED_BY } from "./traits";
+import { BLOCKED_BY, SYS, type Writer } from "./setup";
 import { keysFor } from "./sortkey";
 import { blockSource, queryFence, type QueryDef } from "./query";
 import { type Lang, translate, words } from "./i18n";

@@ -16,7 +16,6 @@ import {
   type PropKind,
   type StatusGroup,
   PROP_KINDS,
-  STATUS_GROUPS,
   removeProp,
   setCapability,
   setMeta,
@@ -326,6 +325,14 @@ function PropEditor({ item, prop }: { item: Item; prop: PropDef }) {
           </span>
         </label>
       )}
+      {(prop.kind === "relation" || prop.kind === "text") && (
+        <label className="tap-row mt-1 flex items-center gap-2 text-sm">
+          <Checkbox checked={!!prop.blocks} onCheckedChange={(checked) => set({ blocks: checked === true || null })} />
+          <span>
+            {t("type.blocks")} <span className="text-xs text-muted-foreground">– {t(prop.kind === "relation" ? "type.blocksRelationHint" : "type.blocksTextHint")}</span>
+          </span>
+        </label>
+      )}
       {prop.kind === "select" && (
         <>
           {field(t("type.options"), <OptionsEditor prop={prop} grouped={isStatus} onChange={(options) => set({ options, ...(prop.default && !options.some((o) => o.id === prop.default) ? { default: isStatus ? options[0]?.id : (null as any) } : {}) })} />)}
@@ -417,10 +424,18 @@ function PropEditor({ item, prop }: { item: Item; prop: PropDef }) {
   );
 }
 
+/** The choices of a status option: the three groups, paused within active, dropped within done. */
+const GROUP_CHOICES = ["todo", "active", "active:paused", "done", "done:dropped"];
+
 function OptionsEditor({ prop, grouped, onChange }: { prop: PropDef; grouped: boolean; onChange: (o: OptionDef[]) => void }) {
   const { t } = useT();
   const opts = prop.options ?? [];
   const upd = (i: number, patch: Partial<OptionDef>) => onChange(opts.map((o, n) => (n === i ? { ...o, ...patch } : o)));
+  // "active:paused" → group active, state paused; a plain group drops the state
+  const setGroup = (i: number, v: string) => {
+    const [group, state] = v.split(":") as [StatusGroup, OptionDef["state"]];
+    onChange(opts.map(({ state: _, ...o }, n) => (n === i ? { ...o, group, ...(state ? { state } : {}) } : opts[n]!)));
+  };
   return (
     <div className="space-y-1">
       {opts.map((o, i) => (
@@ -436,10 +451,10 @@ function OptionsEditor({ prop, grouped, onChange }: { prop: PropDef; grouped: bo
           </Popover>
           <Input variant="bare" defaultValue={o.name} onBlur={(e) => e.target.value.trim() && e.target.value !== o.name && upd(i, { name: e.target.value.trim() })} className="field min-w-0 flex-1 rounded-md bg-transparent px-1 py-0.5 text-sm outline-none hover:bg-hover" />
           {grouped && (
-            <NativeSelect value={o.group ?? "todo"} onChange={(e) => upd(i, { group: e.target.value as StatusGroup })} className="rounded-md border border-line bg-bg px-1 py-0.5 text-xs" aria-label={t("type.group")}>
-              {STATUS_GROUPS.map((g) => (
+            <NativeSelect value={(o.group ?? "todo") + (o.state ? ":" + o.state : "")} onChange={(e) => setGroup(i, e.target.value)} className="rounded-md border border-line bg-bg px-1 py-0.5 text-xs" aria-label={t("type.group")}>
+              {GROUP_CHOICES.map((g) => (
                 <option key={g} value={g}>
-                  {t("group." + g)}
+                  {t("group." + g.replace(":", "."))}
                 </option>
               ))}
             </NativeSelect>

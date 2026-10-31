@@ -12,7 +12,7 @@ import {
   parseWikiLinks,
   titleKey,
 } from "./model";
-import { blockingProps, dueOf, isDone, primaryChild, priorityProp, progressSpec, statusOf, statusProp } from "./traits";
+import { blockingProps, dueOf, isDone, primaryChild, progressSpec, statusOf, statusProp } from "./traits";
 import { isPausedOption, sameTypeName } from "./input";
 import { pluralOf } from "./plural";
 import { cmpKey } from "./sortkey";
@@ -419,14 +419,21 @@ export class Index {
   }
 
   /**
-   * What blocks an item: open entries under "Blockiert durch" and the text of "Wartet auf".
-   * Done or deleted blockers no longer count.
+   * What holds an item up: the open entries of its blocking relations ("Blockiert durch") and the
+   * text of its blocking texts ("Wartet auf"), see blockingProps. Done or deleted blockers no longer count.
    */
   blockers(item: Item): { by: Item[]; waiting?: string } {
-    const { by, waiting } = blockingProps(this.schemaOf(item));
-    const open = by ? this.items(this.relValues(item, by.id)).filter((x) => !isDone(x, this.schemaOf(x))) : [];
-    const w = waiting ? item.props[waiting.id] : undefined;
-    return { by: open, waiting: typeof w === "string" && w.trim() ? w.trim() : undefined };
+    const by: Item[] = [];
+    const waiting: string[] = [];
+    for (const p of blockingProps(this.schemaOf(item))) {
+      if (p.kind === "relation") {
+        for (const x of this.items(this.relValues(item, p.id))) if (!isDone(x, this.schemaOf(x)) && !by.includes(x)) by.push(x);
+      } else {
+        const w = item.props[p.id];
+        if (typeof w === "string" && w.trim()) waiting.push(w.trim());
+      }
+    }
+    return { by, waiting: waiting.length ? waiting.join("; ") : undefined };
   }
 
   isBlocked(item: Item): boolean {
@@ -464,18 +471,21 @@ export class Index {
   }
 
   /**
+   * The type "+" on an item's page creates (its type's main action), while that type exists. A main
+   * action on a deleted type counts as none.
+   */
+  mainChildType(item: Item | undefined): string | undefined {
+    const pc = primaryChild(this.schemaOf(item));
+    return pc && this.types.has(pc) ? pc : undefined;
+  }
+
+  /**
    * The next thing to do in a project: an open entry below it (of the type its main action
    * creates, if it has one) that is not blocked, not paused and has no open entries below
-   * itself. Order: due by today first, then in progress, then priority, then due date.
+   * itself. Order: due by today first, then in progress, then due date.
    */
   nextTask(id: string, today: string): Item | undefined {
-    const kind = primaryChild(this.schemaOf(this.byId.get(id)));
-    const prioRank = (x: Item) => {
-      const p = priorityProp(this.schemaOf(x));
-      const v = p ? x.props[p.id] : undefined;
-      const i = p?.options?.findIndex((o) => o.id === v) ?? -1;
-      return i < 0 ? 99 : i;
-    };
+    const kind = this.mainChildType(this.byId.get(id));
     const candidates = [...this.descendants(id)]
       .map((d) => this.byId.get(d)!)
       .filter((x) => {
@@ -486,7 +496,7 @@ export class Index {
     const key = (x: Item) => {
       const due = dueOf(x, this.schemaOf(x));
       const s = statusOf(x, this.schemaOf(x))!;
-      return [due && due <= today ? 0 : 1, due && due <= today ? due : "", s.group === "active" ? 0 : 1, prioRank(x), due ?? "9999", x.title.toLowerCase()] as const;
+      return [due && due <= today ? 0 : 1, due && due <= today ? due : "", s.group === "active" ? 0 : 1, due ?? "9999", x.title.toLowerCase()] as const;
     };
     return candidates.sort((a, b) => {
       const ka = key(a);

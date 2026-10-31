@@ -11,7 +11,7 @@ import { MAX_BLOB } from "./config";
 import { body, fail, json } from "./http";
 import { Backups } from "./backup";
 import { FORMAT, PERSONAL, fileTypeOf } from "@obtion/core/model";
-import { addLaterDefaultProps, migrateCollections, renameShippedLabels, upgradeAreas, upgradeHideEmptyTaskFields } from "@obtion/core/setup";
+import { addLaterDefaultProps, migrateCollections, renameShippedLabels, upgradeAreas, upgradeExplicitRoles, upgradeHideEmptyTaskFields } from "@obtion/core/setup";
 import { SETUP_ORIGIN, storeWriter } from "./importers";
 import { UndoError, redoStep, undoStep } from "./undo";
 import { type ClientMsg, type ServerMsg, type WireUpdate, fromB64, toB64 } from "@obtion/core/protocol";
@@ -45,6 +45,8 @@ function upgrade(store: Store) {
   if (lang && addLaterDefaultProps(w, lang).length) store.flush();
   if (lang && renameShippedLabels(w, lang)) store.flush();
   if (upgradeHideEmptyTaskFields(w)) store.flush();
+  // explicit roles (31.10.): what was recognised by name ("Wartet auf", "Pausiert" …) is marked in the types
+  if (upgradeExplicitRoles(w, store.index()).length) store.flush();
   // collections are gone (26.10.): their views go to the types, the inbox rule to the settings
   const moved = lang ? migrateCollections(w, store.index(), store.eachDoc(), lang) : [];
   if (moved.length) (store.flush(), console.log(`[obtion] collections migrated:\n  ${moved.join("\n  ")}`));

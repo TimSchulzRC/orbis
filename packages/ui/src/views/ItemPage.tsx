@@ -4,12 +4,12 @@
 import { Input } from "../components/ui/input";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { EditorView } from "@codemirror/view";
-import { Trash2, Plus, AlertTriangle, ImagePlus, Scissors, ListFilter, Languages, Pin, PinOff, FilePlus, FolderInput, Link2, ArrowRightLeft } from "lucide-react";
+import { Trash2, Plus, AlertTriangle, ImagePlus, Scissors, ListFilter, Pin, PinOff, FilePlus, FolderInput, Link2, ArrowRightLeft } from "lucide-react";
 import { type Item, META_TYPE, titleKey } from "@obtion/core/model";
 import { isInInbox, isOverview } from "@obtion/core/placement";
 import { wouldBeInInbox } from "@obtion/core/typeops";
 import { onlyBelow } from "@obtion/core/trash";
-import { primaryChild, hasUpdates, progressSpec, languageCode, translations, translationInit, translationPlan } from "@obtion/core/traits";
+import { hasUpdates, progressSpec } from "@obtion/core/traits";
 import { useRepo, useIndex, itemHref, openItem, leavePage, setParams, showTitle, useDocumentTitle } from "../hooks";
 import { repo } from "../repo";
 import { useT, tr, getLang, titleOf } from "../i18n";
@@ -101,8 +101,7 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
     };
   }, [item.id, isNew]);
 
-  const ct = primaryChild(schema);
-  const mainType = ct && ix.types.has(ct) ? ct : undefined;
+  const mainType = ix.mainChildType(item);
   const cycles = ix.cycleEdgesOf(item.id);
   // a page that gathers its tasks over all levels (main action or progress) gathers its notes too
   const gathers = !!mainType || !!progressSpec(schema);
@@ -142,12 +141,6 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
           <MenuItem icon={<FilePlus size={14} />} onClick={() => (close(), createAndOpen({ parents: [item.id] }))}>
             {t("item.newBelow")}
           </MenuItem>
-          {/* a language version of its own: same type and places, the other language, linked */}
-          {translationPlan(item, ix)?.missing.map((o) => (
-            <MenuItem key={o.id} icon={<Languages size={14} />} onClick={() => (close(), createAndOpen(translationInit(item, ix, o.id)!))}>
-              {t("item.newTranslation", { lang: languageCode(o.name) })}
-            </MenuItem>
-          ))}
           {others && !item.deleted && item.type !== META_TYPE && (
             <MenuItem icon={<ArrowRightLeft size={14} />} onClick={() => (close(), setMoving(true))}>
               {t("move.menu")}
@@ -193,7 +186,6 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
         schema={schema}
         head={{
           first: <TypeSwitch item={item} />,
-          last: translations(item, ix).length > 0 && <LangSwitch item={item} />,
           progress: pr && <ProgressBand done={pr.done} total={pr.total} desc={progressText(item, ix, pr.done, pr.total)} />,
         }}
       />
@@ -285,35 +277,6 @@ function PageText({ item, doc, long, isNew, onView, hasMore }: { item: Item; doc
 }
 
 // ---------- header ----------
-
-/**
- * "DE · EN": the versions of this page in other languages (a symmetric relation such as
- * "Übersetzung" between entries with a language). Nothing without a translation.
- */
-function LangSwitch({ item }: { item: Item }) {
-  const { t } = useT();
-  const ix = useIndex();
-  const versions = translations(item, ix);
-  if (!versions.length) return null;
-  return (
-    <div role="group" aria-label={t("item.languages")} className="inline-flex rounded-lg bg-surface-2 p-0.5 text-xs">
-      {versions.map((v) => {
-        const here = v.item.id === item.id;
-        return (
-          <Button variant="plain"
-            key={v.item.id}
-            onClick={() => !here && openItem(v.item.id)}
-            aria-pressed={here}
-            title={here ? v.lang : `${v.lang}: ${v.item.title}`}
-            className={cn("tap rounded-md px-2 py-0.5 font-medium tabular-nums", here ? "bg-surface text-fg shadow-sm" : "text-muted-foreground hover:text-fg")}
-          >
-            {languageCode(v.lang)}
-          </Button>
-        );
-      })}
-    </div>
-  );
-}
 
 function TypeSwitch({ item }: { item: Item }) {
   const repo = useRepo();

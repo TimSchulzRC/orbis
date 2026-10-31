@@ -22,7 +22,7 @@ The model:
 - Capabilities say what a type can do: a status with groups (todo/active/done), a due date ("Termin"), progress over descendants with a status, dated updates, a main action (which type "+" creates as a child).
 - Every type has a page: the list of its entries with views as tabs (\`update_type\` views). Mixed lists are pages with query blocks. Query syntax: ${QUERY_HELP} In bodies, \`\`\`query <text>\`\`\` blocks are live lists.
 
-Values are read tolerantly: a status as option name or group (open, active, done) in German or English, also synonyms like "in Arbeit" or "fertig"; dates as 2026-10-30, 30.10.2026, 10/30/2026, today/heute, tomorrow/morgen, a weekday or +3d; type names in singular or plural. "blocked" is not a status: use "Blockiert durch" or "Wartet auf". What can't be read is rejected with the reason – nothing is guessed.
+Values are read tolerantly: a status as option name or group (open, active, done) in German or English, also synonyms like "in Arbeit" or "fertig"; dates as 2026-10-30, 30.10.2026, 10/30/2026, today/heute, tomorrow/morgen, a weekday or +3d; type names in singular or plural. "blocked" is not a status: set a property that holds it up (blocks: true in its type, e.g. "Blockiert durch" or "Wartet auf"). What can't be read is rejected with the reason – nothing is guessed.
 
 How to work:
 - For questions: \`query\` (structured) or \`search\` (full text), then \`get\` for details. Answer from the data and cite titles.

@@ -1,6 +1,6 @@
 import { type Item, STATUS_GROUPS } from "@obtion/core/model";
 import { confirmAction, notify } from "./feedback";
-import { dueOf, firstOfGroup, isDone, primaryChild, statusOf, statusProp } from "@obtion/core/traits";
+import { dueOf, firstOfGroup, isDone, statusOf, statusProp } from "@obtion/core/traits";
 import { fmtBytes } from "@obtion/core/i18n";
 import type { Repo } from "@obtion/sync";
 import { repo as current } from "../repo";
@@ -204,7 +204,7 @@ export function RowStatus({ item, size = 17 }: { item: Item; size?: number }) {
   const ticked = useLingering(item.id);
   const done = st?.group === "done" || ticked;
   if (!st) return <ItemIcon item={item} size={size - 1} />;
-  const pc = primaryChild(schema);
+  const pc = ix.mainChildType(item);
   const viaMenu = !!pc && pc !== item.type;
   // the shape in the option's colour (as on its pill): open grey, running amber, done green …
   const opt = ticked ? (firstOfGroup(schema, "done") ?? st.option) : st.option;

@@ -62,6 +62,7 @@ export interface OptionDef {
   id: string;
   name: string;
   group?: StatusGroup; // options of the status only
+  state?: "paused" | "dropped"; // options of the status only: active but paused (nothing to do now), done but dropped
   color?: string;
 }
 
@@ -84,6 +85,7 @@ export interface PropDef {
   range?: boolean; // date: start/end
   computed?: ComputedDef;
   hideEmpty?: boolean; // display: only on pages where it has a value (else behind "+ Eigenschaft")
+  blocks?: boolean; // relation and text: holds the item up while set (a relation: while a target is open)
   removed?: boolean; // removed from the type; kept so its values still have a name
   sort: string;
 }

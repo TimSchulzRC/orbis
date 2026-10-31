@@ -1,8 +1,7 @@
 // What a type can do. Behaviour hangs on these traits – never on a type id or name.
 // Everything that reads capabilities goes through this module.
 import type * as Y from "yjs";
-import { type Capabilities, type Item, type ItemInit, type OptionDef, type PropDef, type StatusGroup, type TypeSchema, type Value, metaMap, setCapability, setProp, titleKey, upsertProp } from "./model";
-import { LANGS, translate } from "./i18n";
+import { type Capabilities, type Item, type OptionDef, type PropDef, type StatusGroup, type TypeSchema, type Value, metaMap, setCapability, setProp, upsertProp } from "./model";
 import type { Index } from "./graph";
 
 export function caps(schema?: TypeSchema): Capabilities {
@@ -106,106 +105,9 @@ export function writeProp(doc: Y.Doc, schema: TypeSchema | undefined, propId: st
   } else if (meta.has("done")) meta.delete("done");
 }
 
-/** The name a catalog key has in any language, as title keys (a property found by name in either). */
-const nameCache = new Map<string, Set<string>>();
-function namesIn(key: string): Set<string> {
-  let s = nameCache.get(key);
-  if (!s) nameCache.set(key, (s = new Set(LANGS.map((l) => titleKey(translate(l, key))))));
-  return s;
-}
-
-/** Property ids of the shipped "Blockiert durch" and "Wartet auf" (both count for "blockiert"). */
-export const BLOCKED_BY = "p_blocked";
-export const WAITING_FOR = "p_waiting";
-
-/**
- * "Blockiert durch" (relation) and "Wartet auf" (text): the shipped property ids, or a
- * property with that name in either language – so any type can have them.
- */
-export function blockingProps(schema?: TypeSchema): { by?: PropDef; waiting?: PropDef } {
-  const byNames = namesIn("setup.prop.blockedBy");
-  const waitNames = namesIn("setup.prop.waitingFor");
-  const props = schema?.properties ?? [];
-  return {
-    by: props.find((p) => p.kind === "relation" && (p.id === BLOCKED_BY || byNames.has(titleKey(p.name)))),
-    waiting: props.find((p) => p.kind === "text" && (p.id === WAITING_FOR || waitNames.has(titleKey(p.name)))),
-  };
-}
-
-/** The priority: a select property called "Priorität"/"Priority" (options ordered high → low). */
-export function priorityProp(schema?: TypeSchema): PropDef | undefined {
-  const names = namesIn("setup.prop.priority");
-  return schema?.properties.find((p) => p.kind === "select" && (p.id === "p_priority" || names.has(titleKey(p.name))));
-}
-
-/** The language of an entry: a select property called "Sprache"/"Language"; its options name the languages. */
-function languageProp(schema?: TypeSchema): PropDef | undefined {
-  const names = namesIn("setup.prop.language");
-  return schema?.properties.find((p) => p.kind === "select" && names.has(titleKey(p.name)));
-}
-
-function languageOf(item: Item, schema?: TypeSchema): string | undefined {
-  const p = languageProp(schema);
-  const v = p ? item.props[p.id] : undefined;
-  return p?.options?.find((o) => o.id === v)?.name;
-}
-
-/** "Deutsch" → "DE", "en" → "EN": what the switch shows (the full name is its tooltip). */
-export function languageCode(name: string): string {
-  const n = name.trim();
-  return (n.length <= 3 ? n : n.slice(0, 2)).toUpperCase();
-}
-
-/**
- * The versions of an entry in other languages: entries linked through a symmetric relation
- * ("Übersetzung") that have a language. The entry itself included, in a fixed order (by
- * language), so the switch looks the same on every version; empty if there are none.
- */
-export function translations(item: Item, ix: Pick<Index, "get" | "schemaOf" | "relValues">): { item: Item; lang: string }[] {
-  const schema = ix.schemaOf(item);
-  const own = languageOf(item, schema);
-  if (!own) return [];
-  const out: { item: Item; lang: string }[] = [];
-  for (const p of schema?.properties ?? []) {
-    if (p.kind !== "relation" || !p.symmetric) continue;
-    for (const id of ix.relValues(item, p.id, true)) {
-      const other = ix.get(id);
-      const lang = other && languageOf(other, ix.schemaOf(other));
-      if (other && lang && !out.some((x) => x.item.id === id)) out.push({ item: other, lang });
-    }
-  }
-  if (!out.length) return [];
-  return [{ item, lang: own }, ...out].sort((a, b) => languageCode(a.lang).localeCompare(languageCode(b.lang)) || a.item.title.localeCompare(b.item.title));
-}
-
-/**
- * A new language version can be made when the type has a language and a symmetric relation
- * (the translation). `missing`: the languages that have no version yet.
- */
-export function translationPlan(item: Item, ix: Pick<Index, "get" | "schemaOf" | "relValues">): { language: PropDef; relation: PropDef; missing: OptionDef[] } | undefined {
-  const schema = ix.schemaOf(item);
-  const language = languageProp(schema);
-  const relation = schema?.properties.find((p) => p.kind === "relation" && p.symmetric);
-  if (!language || !relation) return undefined;
-  const have = new Set([String(item.props[language.id] ?? ""), ...translations(item, ix).map((v) => String(v.item.props[language.id] ?? ""))]);
-  const missing = (language.options ?? []).filter((o) => !have.has(o.id));
-  return missing.length ? { language, relation, missing } : undefined;
-}
-
-/** The new version: same type and places, the other language, linked as translation. */
-export function translationInit(item: Item, ix: Pick<Index, "get" | "schemaOf" | "relValues" | "parentsOf" | "home">, optionId: string): ItemInit | undefined {
-  const plan = translationPlan(item, ix);
-  const option = plan?.missing.find((o) => o.id === optionId);
-  if (!plan || !option) return undefined;
-  const home = ix.home(item.id);
-  const parents = ix.parentsOf(item.id).sort((a, b) => (a === home ? -1 : b === home ? 1 : 0)); // the home stays the home
-  return {
-    type: item.type,
-    title: `${item.title} (${languageCode(option.name)})`,
-    parents,
-    props: { [plan.language.id]: option.id },
-    rels: { [plan.relation.id]: [item.id] },
-  };
+/** The properties that hold an item up while set ("Blockiert durch", "Wartet auf" …): relations and texts marked so. */
+export function blockingProps(schema?: TypeSchema): PropDef[] {
+  return schema?.properties.filter((p) => p.blocks && (p.kind === "relation" || p.kind === "text")) ?? [];
 }
 
 /** First option of a group – what "tick off" sets. */

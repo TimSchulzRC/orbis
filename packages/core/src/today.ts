@@ -3,7 +3,7 @@
 // done above them), as the focus lists count them.
 import { type Item, META_TYPE } from "./model";
 import type { Index } from "./graph";
-import { dueOf, isDone, primaryChild, statusOf } from "./traits";
+import { dueOf, isDone, statusOf } from "./traits";
 import { isInInbox } from "./placement";
 import { cmpKey } from "./sortkey";
 
@@ -27,9 +27,8 @@ export function dueBy(ix: Index, today: string): { item: Item; due: string }[] {
  */
 export function activeProjects(ix: Index): { item: Item; touched: number }[] {
   const active = ix.live.filter((i) => {
-    const schema = ix.schemaOf(i);
-    const pc = primaryChild(schema);
-    return !!pc && pc !== i.type && statusOf(i, schema)?.group === "active" && !ix.isDormant(i);
+    const pc = ix.mainChildType(i);
+    return !!pc && pc !== i.type && statusOf(i, ix.schemaOf(i))?.group === "active" && !ix.isDormant(i);
   });
   const ids = new Set(active.map((i) => i.id));
   return active

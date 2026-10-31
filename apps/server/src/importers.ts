@@ -3,6 +3,8 @@
 import { type Stats, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join, relative } from "node:path";
 import {
+  type PropDef,
+  type PropKind,
   type TypeSchema,
   type Value,
   META_TYPE,
@@ -94,10 +96,14 @@ function statusOption(schema: TypeSchema | undefined, name?: string): string | u
   return group ? p.options?.find((o) => (o.group ?? "todo") === group)?.id : undefined;
 }
 
-function priorityOption(schema: TypeSchema | undefined, name?: string): string | undefined {
-  if (!name) return undefined;
-  const p = schema?.properties.find((x) => x.id === "p_priority" || /^(priorit(ä|a)t|priority)$/i.test(x.name));
-  if (!p?.options) return undefined;
+/** The property a column of the export goes to: the shipped one, or one with its name in either language. */
+function columnProp(schema: TypeSchema | undefined, id: string, key: string, kind: PropKind): PropDef | undefined {
+  const names = (Object.keys(CATALOGS) as Lang[]).map((l) => translate(l, `setup.prop.${key}`).toLowerCase());
+  return schema?.properties.find((x) => x.kind === kind && (x.id === id || names.includes(x.name.toLowerCase())));
+}
+
+function priorityOption(p: PropDef | undefined, name?: string): string | undefined {
+  if (!name || !p?.options) return undefined;
   const k = name.toLowerCase();
   const key = { high: "high", medium: "medium", low: "low" }[k];
   const names = [k, ...(key ? (Object.keys(CATALOGS) as Lang[]).map((l) => translate(l, `setup.priority.${key}`).toLowerCase()) : [])];
@@ -397,10 +403,13 @@ export function importNotion(store: Store, file: string, opts: NotionOptions, lo
     const props: Record<string, Value> = {};
     const st = statusOption(ps, p.status);
     if (st && statusProp(ps)) props[statusProp(ps)!.id] = st;
-    const pr = priorityOption(ps, p.priority);
-    if (pr) props.p_priority = pr;
-    if ((p.start || p.end) && ps?.properties.some((x) => x.id === "p_period")) props.p_period = `${p.start ?? ""}/${p.end ?? ""}`;
-    if (p.summary && ps?.properties.some((x) => x.id === "p_summary")) props.p_summary = p.summary;
+    const prio = columnProp(ps, "p_priority", "priority", "select");
+    const pr = priorityOption(prio, p.priority);
+    if (pr) props[prio!.id] = pr;
+    const period = columnProp(ps, "p_period", "period", "date");
+    if ((p.start || p.end) && period) props[period.id] = `${p.start ?? ""}/${p.end ?? ""}`;
+    const summary = columnProp(ps, "p_summary", "summary", "text");
+    if (p.summary && summary) props[summary.id] = p.summary;
     w.change(idFor(p.id), (doc) => initItem(doc, { title: p.title, type: projectType, parents, props, source: `notion:${p.id}`, created: Date.parse(p.created) }));
     made++;
   }
@@ -413,11 +422,12 @@ export function importNotion(store: Store, file: string, opts: NotionOptions, lo
     const props: Record<string, Value> = {};
     const st = statusOption(ts, status ?? undefined);
     if (st && statusProp(ts)) props[statusProp(ts)!.id] = st;
-    const pr = priorityOption(ts, priority ?? undefined);
-    if (pr) props.p_priority = pr;
+    const prio = columnProp(ts, "p_priority", "priority", "select");
+    const pr = priorityOption(prio, priority ?? undefined);
+    if (pr) props[prio!.id] = pr;
     const dp = dueProp(ts);
     if (due && dp) props[dp.id] = due;
-    const rel = ts?.properties.find((x) => x.kind === "relation" && x.id === "p_blocked");
+    const rel = ts?.properties.find((x) => x.kind === "relation" && x.blocks);
     w.change(idFor(nid), (doc) => {
       initItem(doc, { title, type: taskType, parents, props, tags, source: `notion:${nid}`, created: Date.parse(created) });
       if (rel) for (const b of blockedBy) setRel(doc, rel.id, idFor(b), true);
