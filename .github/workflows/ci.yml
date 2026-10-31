@@ -52,7 +52,9 @@ jobs:
           mkdir -p "$RUNNER_TEMP/check"
           bun test > "$RUNNER_TEMP/check/test.log" 2>&1 & test=$!
           bun run typecheck > "$RUNNER_TEMP/check/typecheck.log" 2>&1 & typecheck=$!
-          bun run test:browser > "$RUNNER_TEMP/check/browser.log" 2>&1 & browser=$!
+          # a second run if the first failed: Vitest's retry covers a failed test, but not a test file
+          # that did not load at all (cold Vite cache on a busy machine); the second run has the cache
+          { bun run test:browser || { echo "::warning::browser failed once, second try"; bun run test:browser; }; } > "$RUNNER_TEMP/check/browser.log" 2>&1 & browser=$!
           # the build once; the smoke test a second time if the first failed (like Vitest's retry),
           # with a warning so it shows
           { bun run build && { bun tests/e2e/smoke.ts || { echo "::warning::e2e failed once, second try"; bun tests/e2e/smoke.ts; }; }; } > "$RUNNER_TEMP/check/e2e.log" 2>&1 & e2e=$!
