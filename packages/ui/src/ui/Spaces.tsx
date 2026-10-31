@@ -152,7 +152,7 @@ export function NewSpaceDialog({ onClose }: { onClose: () => void }) {
       >
         <label className="block text-sm font-medium">
           {t("space.name")}
-          <Input autoFocus required value={name} onChange={(e) => setName(e.target.value)} className="field mt-1 block bg-surface" />
+          <Input autoFocus required value={name} onChange={(e) => setName(e.target.value)} className="mt-1 block bg-surface" />
         </label>
         {error && <p className="mt-3 text-sm text-danger">{error}</p>}
         <div className="mt-5 flex justify-end gap-2">

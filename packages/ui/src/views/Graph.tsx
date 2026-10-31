@@ -239,7 +239,7 @@ export function GraphView() {
           ))}
         </div>
         <div className="pointer-events-auto flex flex-wrap items-center gap-2 rounded-xl border border-line bg-surface/90 px-2 py-1 shadow-sm backdrop-blur">
-          <Input variant="bare" value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("graph.highlight")} className="w-32 bg-transparent text-xs outline-none" aria-label={t("graph.highlight")} />
+          <Input variant="bare" value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("graph.highlight")} className="field w-32 bg-transparent text-xs outline-none" aria-label={t("graph.highlight")} />
           <NativeSelect value={tag} onChange={(e) => setTag(e.target.value)} className="bg-transparent text-xs text-muted-foreground" aria-label={t("graph.tag")}>
             <option value="">{t("graph.allTags")}</option>
             {tags.map((x) => (

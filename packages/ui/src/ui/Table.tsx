@@ -356,7 +356,7 @@ export function NewRowButton({ init, label, compact }: { init: ItemInit; label: 
         }}
         placeholder={t("table.newTitle")}
         aria-label={aria}
-        className={cn("field", compact ? "w-48" : "ml-2 mt-1 w-72")}
+        className={compact ? "w-48" : "ml-2 mt-1 w-72"}
       />
     );
   return compact ? (

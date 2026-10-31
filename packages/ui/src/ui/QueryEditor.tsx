@@ -280,7 +280,7 @@ export function QueryEditor({ def, onChange, autoFocus, context, bare }: { def: 
             spellCheck={false}
             placeholder={t("query.placeholder")}
             aria-label={t("query.label")}
-            className={cn("min-w-0 flex-1 bg-transparent font-mono text-sm outline-none placeholder:text-muted-foreground", errors.length > 0 && "text-warn")}
+            className={cn("field min-w-0 flex-1 bg-transparent font-mono text-sm outline-none placeholder:text-muted-foreground", errors.length > 0 && "text-warn")}
           />
           <span title={t("query.help")} className="cursor-help text-muted-foreground" aria-label={t("query.help")}>
             <HelpCircle size={14} />

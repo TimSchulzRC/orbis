@@ -86,7 +86,7 @@ function Members({ space }: { space: Space }) {
       <p className="mb-3 text-sm text-muted-foreground">{t("space.intro", { server: location.host })}</p>
       {owner && (
         <form className="flex flex-wrap items-center gap-2" onSubmit={(e) => (e.preventDefault(), renameSpace(space, name).catch(fail))}>
-          <Input value={name} onChange={(e) => setName(e.target.value)} aria-label={t("space.name")} className="field bg-surface py-1.5" />
+          <Input value={name} onChange={(e) => setName(e.target.value)} aria-label={t("space.name")} className="bg-surface py-1.5" />
           <Button type="submit" variant="outline" disabled={!name.trim() || name === space.name}>
             {t("space.rename")}
           </Button>

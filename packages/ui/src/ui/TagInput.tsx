@@ -38,7 +38,7 @@ export function TagInput({ onAdd, exclude = [], start, onCancel }: { onAdd: (t: 
   return (
     <span className="relative inline-block">
       <Input
-        variant="bare"
+        variant="sm"
         autoFocus
         value={v}
         onChange={(e) => (setV(e.target.value), setSel(0))}
@@ -61,7 +61,7 @@ export function TagInput({ onAdd, exclude = [], start, onCancel }: { onAdd: (t: 
         }}
         placeholder={tr("tag.placeholder")}
         aria-label={tr("tag.add")}
-        className="w-28 rounded-md border border-line bg-bg px-1.5 py-0.5 text-xs outline-none"
+        className="w-28 px-1.5 py-0.5 text-xs"
       />
       {options.length > 0 && (
         <span className="absolute left-0 top-full z-30 mt-1 flex w-52 flex-col overflow-hidden rounded-lg border border-line bg-surface p-1 shadow-lg" role="listbox">
