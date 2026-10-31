@@ -149,7 +149,7 @@ export function errorText(e: unknown, t: T, what: "signIn" | "space" | "deleteAc
   const status = e instanceof ApiError ? e.status : undefined;
   const message = e instanceof Error ? e.message : String(e);
   if (what === "signIn") return status === 401 ? t("account.wrong") : status === 429 ? t("account.tooMany") : status === 409 || status === 422 ? t("account.exists") : status === 403 ? t("account.closed") : message;
-  if (what === "password") return message === "invalid password" ? t("account.deletePassword") : status === 429 ? t("account.tooMany") : status === 400 ? t("account.passwordShort") : t("account.offline");
+  if (what === "password") return message === "invalid password" ? t("account.deletePassword") : status === 429 ? t("account.tooMany") : message === "password too long" ? t("account.passwordLong") : status === 400 ? t("account.passwordShort") : t("account.offline");
   if (what === "deleteAccount") return t(message === "last owner" ? "account.deleteOwner" : message === "invalid password" ? "account.deletePassword" : "account.offline");
   return message === "last owner" ? t("space.lastOwner") : message;
 }

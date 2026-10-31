@@ -901,6 +901,7 @@
  "account.repeatPassword": "Repeat new password",
  "account.passwordMismatch": "The two new passwords do not match.",
  "account.passwordShort": "The new password needs at least 8 characters.",
+ "account.passwordLong": "The new password can have at most 128 characters.",
  "account.passwordChanged": "Your password has been changed. Sign in again on your other devices.",
  "account.signOut": "Sign out",
  "account.signedOut": "signed out",
