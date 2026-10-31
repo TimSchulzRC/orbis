@@ -8,13 +8,13 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type Page, chromium } from "playwright-core";
-import { ROOT, bootServer, firstAccount, mcpTool } from "../support/server";
+import { bootServer, firstAccount, mcpTool, seedExamples } from "../support/server";
 
 const failures: string[] = [];
 const expect = (ok: boolean, what: string) => (ok ? console.log("ok  " + what) : (failures.push(what), console.log("FAIL " + what)));
 
 const dir = mkdtempSync(join(tmpdir(), "obtion-editor-"));
-Bun.spawnSync(["bun", "apps/server/src/cli.ts", "setup", "de", "--examples"], { cwd: ROOT, env: { ...process.env, OBTION_DATA: dir } });
+await seedExamples({ ...process.env, OBTION_DATA: dir });
 const { url, proc } = await bootServer({ OBTION_DATA: dir }, "inherit");
 const signup = await firstAccount(url);
 const me = signup.me;

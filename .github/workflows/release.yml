@@ -45,6 +45,7 @@ jobs:
     if: github.ref == 'refs/heads/main'
     # like ci.yml: the self-hosted runner when the repository variable RUNNER says so
     runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 10
     permissions:
       contents: read
       packages: read
@@ -76,15 +77,22 @@ jobs:
     needs: resolve
     if: needs.resolve.outputs.skip == 'false'
     runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 30
     permissions:
       contents: write
       packages: write
     env:
       SELF_HOSTED: ${{ vars.RUNNER != '' }}
+      LOCAL_TAG: obtion-release:${{ github.run_id }}
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.resolve.outputs.sha }}
+      # the scripts as of the workflow, not of the commit it builds (which may predate them)
+      - uses: actions/checkout@v7
+        with:
+          path: .workflow
+          sparse-checkout: .github/scripts
       # builder and cache as in ci.yml
       - uses: docker/setup-buildx-action@v4
         with:
@@ -101,7 +109,23 @@ jobs:
           labels: |
             org.opencontainers.image.version=${{ needs.resolve.outputs.version }}
             org.opencontainers.image.revision=${{ needs.resolve.outputs.sha }}
-      # the same commit dev ran, built again only to carry its version
+      # the same commit dev ran, built again only to carry its version; started first like in
+      # ci.yml, so it has to show that version before it is pushed
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          tags: ${{ env.LOCAL_TAG }}
+          build-args: |
+            OBTION_BUILD_VERSION=${{ needs.resolve.outputs.version }}
+            OBTION_BUILD_COMMIT=${{ needs.resolve.outputs.sha }}
+          cache-from: ${{ env.SELF_HOSTED != 'true' && 'type=gha' || '' }}
+          cache-to: ${{ env.SELF_HOSTED != 'true' && 'type=gha,mode=max' || '' }}
+      - name: Start the image
+        run: bash .workflow/.github/scripts/check-image.sh "$LOCAL_TAG" "$VERSION" "$SHA"
+        env:
+          VERSION: ${{ needs.resolve.outputs.version }}
+          SHA: ${{ needs.resolve.outputs.sha }}
       - uses: docker/build-push-action@v7
         with:
           context: .
@@ -116,7 +140,7 @@ jobs:
           cache-to: ${{ env.SELF_HOSTED != 'true' && 'type=gha,mode=max' || '' }}
       - name: Remove local image tags
         if: always() && env.SELF_HOSTED == 'true'
-        run: docker image rm $(tr , ' ' <<< "$TAGS") || true
+        run: docker image rm "$LOCAL_TAG" $(tr , ' ' <<< "$TAGS") || true
         env:
           TAGS: ${{ needs.resolve.outputs.tags }}
       # after the image: a release always has its image

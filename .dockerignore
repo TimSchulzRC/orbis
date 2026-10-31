@@ -9,6 +9,8 @@ seed
 **/dev-dist
 .git
 .github
+# release.yml checks the workflow's own scripts out there
+.workflow
 **/.env
 **/.env.*
 **/*.log

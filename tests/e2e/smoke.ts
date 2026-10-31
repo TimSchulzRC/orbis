@@ -13,7 +13,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type Page, chromium } from "playwright-core";
-import { ROOT, bootServer, firstAccount, mcpTool } from "../support/server";
+import { ROOT, bootServer, firstAccount, mcpTool, seedExamples } from "../support/server";
 
 const failures: string[] = [];
 let checks = 0;
@@ -22,8 +22,7 @@ async function startServer(seeded: boolean, noTypes = false) {
   const dir = mkdtempSync(join(tmpdir(), "obtion-e2e-"));
   const env = { ...process.env, OBTION_DATA: dir };
   if (seeded) {
-    const seed = Bun.spawnSync(["bun", "apps/server/src/cli.ts", "setup", "de", "--examples"], { cwd: ROOT, env });
-    if (seed.exitCode !== 0) throw new Error("seed failed: " + seed.stderr.toString());
+    await seedExamples(env);
     if (noTypes) {
       const del = Bun.spawnSync(["bun", "tests/support/no-types.ts"], { cwd: ROOT, env });
       if (!del.stdout.toString().includes("types left: 0")) throw new Error("deleting types failed: " + del.stderr.toString());

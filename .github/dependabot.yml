@@ -1,7 +1,24 @@
-# Newer base images for the Dockerfile, which pins them to a digest.
+# Always the newest stable releases: Bun and the Dockerfile's base images (pinned to a digest),
+# the npm dependencies in bun.lock and the GitHub Actions. Checked daily, so CI tests an update
+# on its own pull request before it reaches main.
 version: 2
 updates:
   - package-ecosystem: docker
     directory: /
     schedule:
-      interval: weekly
+      interval: daily
+  - package-ecosystem: bun
+    directory: /
+    schedule:
+      interval: daily
+    # minor and patch updates in one pull request; a major one gets its own
+    groups:
+      dependencies:
+        update-types: [minor, patch]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: daily
+    groups:
+      actions:
+        update-types: [minor, patch]
