@@ -134,7 +134,7 @@ export class Repo {
   status: SyncStatus = { loaded: false, online: false, synced: false, pending: 0, lastSeq: 0 };
   searchIndex = createIndex();
   events: ActivityEvent[] = [];
-  device: string;
+  readonly device: string;
 
   private db: ReplicaStorage;
   private ws: SyncSocket | null = null;

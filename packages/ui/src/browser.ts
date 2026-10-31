@@ -144,15 +144,13 @@ export function browserHost(link: SpaceLink): RepoHost {
   };
 }
 
+/** How this device is named in the history of changes and its undo: made once, kept in the browser. */
 function deviceName(): string {
   const saved = readJSON(KEYS.device, "");
   if (saved) return saved;
   const ua = navigator.userAgent;
   const name = /iPhone/.test(ua) ? "iPhone" : /iPad/.test(ua) ? "iPad" : /Android/.test(ua) ? "Android" : /Mac/.test(ua) ? "Mac" : /Windows/.test(ua) ? "Windows" : "Browser";
   const full = `${name}-${Math.random().toString(36).slice(2, 6)}`;
-  setDeviceName(full);
+  writeJSON(KEYS.device, full);
   return full;
 }
-
-/** How this device is named in the history of changes. */
-export const setDeviceName = (name: string) => writeJSON(KEYS.device, name);
