@@ -18,7 +18,7 @@ import { ItemIcon, TypeGlyph } from "../ui/item-look";
 import { cn, toggled } from "../lib/utils";
 import { chooseAction, notify } from "../ui/feedback";
 import { setTheme, useTheme } from "../theme";
-import { type Space, deleteAccount, deleteSpace, errorText, inviteLink, leaveSpace, mcpToken, members, renameSpace, replica, serverInfo, signOut, spaceById, useAccounts } from "../accounts";
+import { type Space, changePassword, deleteAccount, deleteSpace, errorText, inviteLink, leaveSpace, mcpToken, members, renameSpace, replica, serverInfo, signOut, spaceById, useAccounts } from "../accounts";
 import { NewSpaceDialog } from "../ui/Spaces";
 import type { McpConnect, Member } from "@obtion/core/api";
 import { setDeviceName } from "../browser";
@@ -125,6 +125,7 @@ function AccountSection() {
   const { t } = useT();
   const { account } = useAccounts();
   const [deleting, setDeleting] = useState(false);
+  const [changing, setChanging] = useState(false);
   if (!account) return null;
   return (
     <section>
@@ -140,10 +141,68 @@ function AccountSection() {
         <Button variant="outline" onClick={() => void signOut()}>
           {t("account.signOut")}
         </Button>
+        <Button variant="outline" onClick={() => setChanging(true)}>{t("account.changePassword")}</Button>
         <Button variant="outline" onClick={() => setDeleting(true)}>{t("account.delete")}</Button>
       </div>
+      {changing && <ChangePasswordDialog onClose={() => setChanging(false)} />}
       {deleting && <DeleteAccountDialog onClose={() => setDeleting(false)} />}
     </section>
+  );
+}
+
+function ChangePasswordDialog({ onClose }: { onClose: () => void }) {
+  const { t } = useT();
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [repeat, setRepeat] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState("");
+  if (done)
+    return (
+      <Dialog title={t("account.changePassword")} onClose={onClose}>
+        <p role="status" className="text-sm">{t("account.passwordChanged")}</p>
+        <div className="mt-4 flex gap-2">
+          <Button onClick={onClose}>{t("close")}</Button>
+        </div>
+      </Dialog>
+    );
+  return (
+    <Dialog title={t("account.changePassword")} onClose={() => { if (!busy) onClose(); }}>
+      <form onSubmit={async (e) => {
+        e.preventDefault();
+        if (busy) return;
+        if (next !== repeat) return setError(t("account.passwordMismatch"));
+        setBusy(true);
+        setError("");
+        try {
+          await changePassword(current, next);
+          setDone(true);
+        } catch (e) {
+          setError(errorText(e, t, "password"));
+        }
+        setBusy(false);
+      }}>
+        <p className="mb-4 text-sm text-muted-foreground">{t("account.changePasswordHint")}</p>
+        <label className="block text-sm">
+          {t("account.currentPassword")}
+          <Input type="password" autoComplete="current-password" required value={current} disabled={busy} onChange={(e) => setCurrent(e.target.value)} className="mt-1 block" />
+        </label>
+        <label className="mt-3 block text-sm">
+          {t("account.newPassword")}
+          <Input type="password" autoComplete="new-password" required minLength={8} value={next} disabled={busy} onChange={(e) => setNext(e.target.value)} className="mt-1 block" />
+        </label>
+        <label className="mt-3 block text-sm">
+          {t("account.repeatPassword")}
+          <Input type="password" autoComplete="new-password" required minLength={8} value={repeat} disabled={busy} onChange={(e) => setRepeat(e.target.value)} className="mt-1 block" />
+        </label>
+        {error && <p role="alert" className="mt-3 text-sm text-danger">{error}</p>}
+        <div className="mt-4 flex gap-2">
+          <Button type="button" variant="outline" disabled={busy} onClick={onClose}>{t("cancel")}</Button>
+          <Button type="submit" disabled={busy || !current || !next || !repeat}>{t("account.changePassword")}</Button>
+        </div>
+      </form>
+    </Dialog>
   );
 }
 

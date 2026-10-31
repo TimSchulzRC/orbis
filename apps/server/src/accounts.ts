@@ -142,13 +142,32 @@ export class Accounts {
     await ctx.internalAdapter.deleteSession(token);
   }
 
-  /** Delete only the caller's identity. Workspaces must retain an owner. */
-  async deleteAccount(user: string, password: string) {
+  /**
+   * Change the password of `user`, signed in with the session `keep`. Every other session (other
+   * devices, a stolen token) ends; this one stays.
+   */
+  async changePassword(user: string, keep: string, current: string, next: string) {
+    const ctx = await this.auth.$context;
+    await this.verifyPassword(user, current);
+    const { minPasswordLength, maxPasswordLength } = ctx.password.config;
+    if (next.length < minPasswordLength) throw new AccountError("password too short");
+    if (next.length > maxPasswordLength) throw new AccountError("password too long");
+    await ctx.internalAdapter.updatePassword(user, await ctx.password.hash(next));
+    this.db.query('DELETE FROM "session" WHERE userId = ? AND token != ?').run(user, keep);
+  }
+
+  /** Throws unless `password` is the current password of `user`. */
+  private async verifyPassword(user: string, password: string) {
     if (!password || password.length > 1024) throw new AccountError("invalid password", 403);
     const ctx = await this.auth.$context;
     const credential = await ctx.internalAdapter.findCredentialAccount(user);
     if (!credential?.password || !(await ctx.password.verify({ hash: credential.password, password })))
       throw new AccountError("invalid password", 403);
+  }
+
+  /** Delete only the caller's identity. Workspaces must retain an owner. */
+  async deleteAccount(user: string, password: string) {
+    await this.verifyPassword(user, password);
     this.db.transaction(() => {
       for (const w of this.workspacesOf(user)) {
         if (w.role === "owner" && this.members(w.id).filter((m) => m.role === "owner").length === 1)
