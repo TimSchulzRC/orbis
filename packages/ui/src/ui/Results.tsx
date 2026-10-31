@@ -166,7 +166,7 @@ export function CellValue({ item, name, ctx }: { item: Item; name: string; ctx: 
       <span className="text-faint">–</span>
     );
   }
-  if (hit.kind === "status" || hit.kind === "select" || hit.kind === "multiselect") {
+  if (hit.kind === "select") {
     const ids = Array.isArray(v) ? (v as string[]) : [String(v)];
     return (
       <span className="flex flex-wrap gap-1">

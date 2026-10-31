@@ -5,10 +5,10 @@ import { Table as ShadcnTable, TableHeader, TableBody, TableRow, TableHead, Tabl
 import { Input } from "../components/ui/input";
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronRight, Plus } from "lucide-react";
-import { type ViewTab, type Item, type ItemInit, type PropDef, type StatusGroup, parseRange, titleKey } from "@obtion/core/model";
+import { type ViewTab, type Item, type ItemInit, type PropDef, type StatusGroup, type TypeSchema, parseRange, titleKey } from "@obtion/core/model";
 import { type EvalCtx, type Group, type QueryDef, FIELDS, fieldOf, groupItems, pathBase, viewTypeIds } from "@obtion/core/query";
 import { fmtDate } from "@obtion/core/i18n";
-import { firstOfGroup, statusProp } from "@obtion/core/traits";
+import { firstOfGroup, isStatusProp, statusProp } from "@obtion/core/traits";
 import { repo } from "../repo";
 import { itemHref, useIndex, useNarrow, useStoredSet } from "../hooks";
 import { useT, titleOf } from "../i18n";
@@ -37,6 +37,13 @@ export interface Look {
 
 const WIDTH: Record<string, number> = { status: 150, select: 130, multiselect: 170, date: 130, range: 230, computed: 160, relation: 190, text: 220, number: 100, checkbox: 80, url: 180, item: 170, tags: 170 };
 
+/** A select is as wide as what it holds: the status, one option or several. */
+function widthKey(p: PropDef, schema: TypeSchema | undefined): string {
+  if (p.kind === "date" && p.range) return "range";
+  if (p.kind !== "select") return p.kind;
+  return p.multiple ? "multiselect" : isStatusProp(schema, p) ? "status" : "select";
+}
+
 function defaultWidth(col: string, items: Item[], ctx: EvalCtx): number {
   if (col === "title") return 300;
   if (col === "area") return 130;
@@ -45,7 +52,7 @@ function defaultWidth(col: string, items: Item[], ctx: EvalCtx): number {
   if ((FIELDS as readonly string[]).includes(col)) return 120;
   for (const i of items.slice(0, 30)) {
     const hit = fieldOf(i, col, ctx.ix);
-    if (hit?.prop) return hit.prop.kind === "date" && hit.prop.range ? WIDTH.range! : (WIDTH[hit.prop.kind] ?? 160);
+    if (hit?.prop) return WIDTH[widthKey(hit.prop, ctx.ix.schemaOf(i))] ?? 160;
     if (hit) return WIDTH[hit.kind] ?? 160;
   }
   return 160;
@@ -92,8 +99,8 @@ export function TableCell({ item, col, ctx }: { item: Item; col: string; ctx: Ev
   }
   if (!own || !p) return <CellValue item={item} name={col} ctx={ctx} />;
   switch (p.kind) {
-    case "status":
     case "select":
+      if (p.multiple) return <span className="cell-tools flex min-w-0 items-center gap-1 overflow-hidden"><PropertyField item={item} prop={p} /></span>;
       return <OptionSelect item={item} prop={p} className="flex min-h-6 w-full" />;
     case "date":
       return p.range ? (
@@ -252,7 +259,7 @@ export function GroupedTable({ items, def, ctx, look }: { items: Item[]; def: Qu
     else if (by === "path" && g.path?.length) init.parents = [g.path.at(-1)!];
     else if (g.option) {
       const p = schema?.properties.find((x) => titleKey(x.name) === titleKey(by));
-      if (p) init.props![p.id] = p.kind === "multiselect" ? [g.option.id] : g.option.id;
+      if (p) init.props![p.id] = p.multiple ? [g.option.id] : g.option.id;
     } else if (g.ref && (by === "project" || by === "area")) init.parents = [g.ref];
     else if (g.ref) {
       const p = schema?.properties.find((x) => titleKey(x.name) === titleKey(by) && x.kind === "relation");

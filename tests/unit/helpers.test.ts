@@ -67,7 +67,7 @@ test("nextPinKey sorts after everything pinned; cmpKey orders keys", () => {
 });
 
 test("optionNames and displayTitle", () => {
-  const p: PropDef = { id: "p", name: "Tags", kind: "multiselect", sort: "V", options: [{ id: "o1", name: "Eins" }, { id: "o2", name: "Zwei" }] };
+  const p: PropDef = { id: "p", name: "Tags", kind: "select", multiple: true, sort: "V", options: [{ id: "o1", name: "Eins" }, { id: "o2", name: "Zwei" }] };
   expect(optionNames(p, ["o2", "gone"])).toEqual(["Zwei", "gone"]);
   expect(optionNames(p, "o1")).toEqual(["Eins"]);
   expect(displayTitle({ title: "Notiz" })).toBe("Notiz");
@@ -76,12 +76,12 @@ test("optionNames and displayTitle", () => {
 });
 
 test("mapValue: by name with a status group fallback, or (moving) by id and only whole", () => {
-  const from: PropDef = { id: "s", name: "Status", kind: "status", sort: "V", options: [{ id: "a", name: "Review", group: "active" }, { id: "d", name: "Done", group: "done" }] };
-  const to: PropDef = { id: "s", name: "Status", kind: "status", sort: "V", options: [{ id: "x", name: "Läuft", group: "active" }, { id: "d", name: "Fertig", group: "done" }, { id: "y", name: "review", group: "todo" }] };
+  const from: PropDef = { id: "s", name: "Status", kind: "select", sort: "V", options: [{ id: "a", name: "Review", group: "active" }, { id: "d", name: "Done", group: "done" }] };
+  const to: PropDef = { id: "s", name: "Status", kind: "select", sort: "V", options: [{ id: "x", name: "Läuft", group: "active" }, { id: "d", name: "Fertig", group: "done" }, { id: "y", name: "review", group: "todo" }] };
   expect(mapValue(from, to, "a")).toBe("y"); // by name
   expect(mapValue(from, to, "d")).toBe("d"); // no name: the group
   expect(mapValue(from, to, "d", { byId: true })).toBe("d"); // the same id
-  const multi = (options: PropDef["options"]): PropDef => ({ id: "m", name: "M", kind: "multiselect", sort: "V", options });
+  const multi = (options: PropDef["options"]): PropDef => ({ id: "m", name: "M", kind: "select", multiple: true, sort: "V", options });
   const mf = multi([{ id: "1", name: "One" }, { id: "2", name: "Two" }]);
   const mt = multi([{ id: "9", name: "one" }]);
   expect(mapValue(mf, mt, ["1", "2"])).toEqual(["9"]);

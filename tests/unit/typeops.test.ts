@@ -1,7 +1,7 @@
 import { test, expect } from "bun:test";
 import { MemRepo } from "../support/helpers";
 import { runSetup, SYS, upgradeHideEmptyTaskFields } from "@obtion/core/setup";
-import { setProp, upsertProp } from "@obtion/core/model";
+import { type PropKind, setProp, upsertProp } from "@obtion/core/model";
 import { deleteType, previewTagToType, tagToType, typeUsage, wouldBeInInbox } from "@obtion/core/typeops";
 import { isInInbox } from "@obtion/core/placement";
 import { languageCode, translations, translationInit, translationPlan, visibleProps } from "@obtion/core/traits";
@@ -14,10 +14,11 @@ function books() {
     name: "Buch",
     icon: "book",
     color: "brown",
+    // stored as before 30.10.2026 ("status"): readSchema reads it as the select it is now
     capabilities: { status: "p_lese" },
     properties: [
       { id: "p_autor", name: "Autor", kind: "relation", target: "typ:Person", inverseName: "Bücher", multiple: true },
-      { id: "p_lese", name: "Status", kind: "status", options: [{ id: "o1", name: "Will lesen", group: "todo" }, { id: "o2", name: "Gelesen", group: "done" }] },
+      { id: "p_lese", name: "Status", kind: "status" as PropKind, options: [{ id: "o1", name: "Will lesen", group: "todo" }, { id: "o2", name: "Gelesen", group: "done" }] },
       { id: "p_bew", name: "Bewertung", kind: "number" },
     ],
   });
