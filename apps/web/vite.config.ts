@@ -76,7 +76,7 @@ export default defineConfig({
       // the app shows "Neue Version – neu laden" instead of silently serving the old cache
       registerType: "prompt",
       injectRegister: false,
-      includeAssets: ["icon.svg", "apple-touch-icon.png"],
+      includeAssets: ["icon-dark.svg", "icon.svg", "apple-touch-icon.png"],
       manifest: {
         name: "Obtion",
         short_name: "Obtion",
