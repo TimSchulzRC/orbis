@@ -1,12 +1,14 @@
 // Rasterize the editable SVG with the same browser used by the UI smoke tests.
+// The dark mark is the app's primary icon (PWA, home screen, Apple touch icon).
 // Run: bun scripts/generate-icons.ts
 import { chromium } from "playwright";
 import { readFileSync, copyFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const root = resolve(import.meta.dir, "..");
-const master = resolve(root, "docs/design/obtion-logo.svg");
-const svg = readFileSync(master, "utf8");
+const light = resolve(root, "docs/design/obtion-logo.svg");
+const dark = resolve(root, "docs/design/obtion-logo-dark.svg");
+const svg = readFileSync(dark, "utf8");
 const browser = await chromium.launch({ headless: true });
 try {
   for (const [name, size] of [["icon-192.png", 192], ["icon-512.png", 512], ["apple-touch-icon.png", 180]] as const) {
@@ -15,8 +17,8 @@ try {
     await page.screenshot({ path: resolve(root, "apps/web/public", name), omitBackground: true });
     await page.close();
   }
-  copyFileSync(master, resolve(root, "apps/web/public/icon.svg"));
-  copyFileSync(resolve(root, "docs/design/obtion-logo-dark.svg"), resolve(root, "apps/web/public/icon-dark.svg"));
+  copyFileSync(light, resolve(root, "apps/web/public/icon.svg"));
+  copyFileSync(dark, resolve(root, "apps/web/public/icon-dark.svg"));
 } finally {
   await browser.close();
 }
