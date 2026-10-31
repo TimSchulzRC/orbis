@@ -194,6 +194,11 @@ async function run() {
             await p.getByRole("region", { name: "Eingang" }).getByRole("button", { expanded: false }).first().click();
             const panel = p.locator("[data-shelf-panel=open]");
             if (!(await panel.waitFor({ timeout: 3000 }).then(() => true, () => false))) return void failures.push(`${label}: the tray does not open its panel`);
+            // another page and Back: the panel as it was
+            await p.evaluate(() => (location.hash = "#/search"));
+            await panel.waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
+            await p.goBack();
+            if (!(await panel.waitFor({ timeout: 3000 }).then(() => true, () => false))) failures.push(`${label}: Back to the page does not bring the open panel back`);
             await p.goBack();
             if (!(await panel.waitFor({ state: "detached", timeout: 3000 }).then(() => true, () => false))) failures.push(`${label}: Back does not close the panel`);
             if (!p.url().includes("/i/ex-relaunch")) failures.push(`${label}: Back with the panel open leaves the page (${p.url()})`);

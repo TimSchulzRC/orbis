@@ -65,11 +65,12 @@ export function dismissShelf() {
   if (onInbox()) location.replace("#/");
 }
 
-// Back and Forward: the panel as it was at that step
-addEventListener("popstate", () => {
+/** Open as the step in the history is (Back, Forward, a reload, another page); an entry chosen in it stays. */
+export function syncShelf() {
   const open = !!history.state?.shelf || onInbox();
   if (open !== shelf.open) setShelf({ open });
-});
+}
+addEventListener("popstate", syncShelf);
 
 /** Pinned open on Heute (a desktop with room below the page, App.tsx): Heute then leaves out its own sight of the entries. */
 let pinned = false;

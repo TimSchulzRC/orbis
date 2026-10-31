@@ -23,7 +23,7 @@ import { FilesPage } from "./views/Lists";
 import { Review } from "./views/Review";
 import { Today } from "./views/Today";
 import { Tray } from "./ui/Tray";
-import { closeShelf, entryKey, openShelf, setShelfPinned, useInboxItems, useShelf } from "./ui/inbox";
+import { entryKey, setShelfPinned, syncShelf, useInboxItems, useShelf } from "./ui/inbox";
 import { TypesView } from "./views/Types";
 import { GraphView } from "./views/Graph";
 import { Activity } from "./views/Activity";
@@ -88,8 +88,8 @@ function Main() {
   const [menu, setMenu] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
   useEffect(() => setMenu(false), [route.path]);
-  // another page closes the tray's panel – but "#/inbox", which is Heute with it open
-  useEffect(() => void (route.path === "/inbox" ? openShelf() : closeShelf()), [route.path]);
+  // another page closes the tray's panel – but "#/inbox" (Heute with it open) and a step it was open at
+  useEffect(syncShelf, [route.path]);
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
