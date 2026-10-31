@@ -20,6 +20,7 @@ import {
   setSchemaField,
   setSettings,
   setTabs,
+  titleKey,
   upsertProp,
 } from "./model";
 import { sameValue } from "./equal";
@@ -27,9 +28,9 @@ import { DEFAULT_INBOX_WHERE } from "./inbox";
 import type { Index } from "./graph";
 import { sidebarRoots } from "./placement";
 import { pluralOf } from "./plural";
-import { BLOCKED_BY, WAITING_FOR } from "./traits";
 import { keyBetween, keysFor } from "./sortkey";
-import { type Lang, translate, words } from "./i18n";
+import { LANGS, type Lang, translate, words } from "./i18n";
+import { statusStateOf } from "./input";
 import { type Cond, type QueryDef, andWhere, blockSource, queryFence, tabDef } from "./query";
 
 export const SYS = {
@@ -37,6 +38,10 @@ export const SYS = {
   project: "sys:project",
   task: "sys:task",
 } as const;
+
+/** Property ids of the shipped "Blockiert durch" and "Wartet auf". */
+export const BLOCKED_BY = "p_blocked";
+export const WAITING_FOR = "p_waiting";
 
 export interface Writer {
   change(id: string, fn: (doc: Y.Doc) => void): void;
@@ -83,16 +88,16 @@ export function defaultTypes(lang: Lang): Record<string, TypeSpec> {
             { id: "st_backlog", name: t("status.backlog"), group: "todo", color: "gray" },
             { id: "st_planning", name: t("status.planning"), group: "active", color: "blue" },
             { id: "st_active", name: t("status.inProgress"), group: "active", color: "amber" },
-            { id: "st_paused", name: t("status.paused"), group: "active", color: "violet" },
+            { id: "st_paused", name: t("status.paused"), group: "active", state: "paused", color: "violet" },
             { id: "st_done", name: t("status.done"), group: "done", color: "green" },
-            { id: "st_canceled", name: t("status.canceled"), group: "done", color: "red" },
+            { id: "st_canceled", name: t("status.canceled"), group: "done", state: "dropped", color: "red" },
           ],
         },
         priority,
         { id: "p_period", name: t("prop.period"), kind: "date", range: true },
         { id: "p_summary", name: t("prop.summary"), kind: "text" },
         { id: "p_progress", name: t("prop.progress"), kind: "computed", computed: { fn: "progress", of: SYS.task } },
-        { id: BLOCKED_BY, name: t("prop.blockedBy"), kind: "relation", multiple: true, target: `${typeKey}:${t("task.name")} | ${typeKey}:${t("project.name")}`, inverseName: t("prop.blocking"), hideEmpty: true },
+        { id: BLOCKED_BY, name: t("prop.blockedBy"), kind: "relation", multiple: true, target: `${typeKey}:${t("task.name")} | ${typeKey}:${t("project.name")}`, inverseName: t("prop.blocking"), hideEmpty: true, blocks: true },
       ],
     },
     [SYS.task]: {
@@ -110,16 +115,16 @@ export function defaultTypes(lang: Lang): Record<string, TypeSpec> {
           options: [
             { id: "st_todo", name: t("status.notStarted"), group: "todo", color: "gray" },
             { id: "st_active", name: t("status.inProgress"), group: "active", color: "amber" },
-            { id: "st_paused", name: t("status.paused"), group: "active", color: "violet" },
+            { id: "st_paused", name: t("status.paused"), group: "active", state: "paused", color: "violet" },
             { id: "st_done", name: t("status.done"), group: "done", color: "green" },
-            { id: "st_dropped", name: t("status.dropped"), group: "done", color: "brown" },
+            { id: "st_dropped", name: t("status.dropped"), group: "done", state: "dropped", color: "brown" },
             { id: "st_archived", name: t("status.archived"), group: "done", color: "gray" },
           ],
         },
         priority,
         { id: "p_due", name: t("prop.due"), kind: "date" },
-        { id: BLOCKED_BY, name: t("prop.blockedBy"), kind: "relation", multiple: true, target: `${typeKey}:${t("task.name")} | ${typeKey}:${t("project.name")}`, inverseName: t("prop.blocking"), hideEmpty: true },
-        { id: WAITING_FOR, name: t("prop.waitingFor"), kind: "text", hideEmpty: true },
+        { id: BLOCKED_BY, name: t("prop.blockedBy"), kind: "relation", multiple: true, target: `${typeKey}:${t("task.name")} | ${typeKey}:${t("project.name")}`, inverseName: t("prop.blocking"), hideEmpty: true, blocks: true },
+        { id: WAITING_FOR, name: t("prop.waitingFor"), kind: "text", hideEmpty: true, blocks: true },
       ],
     },
   };
@@ -215,6 +220,43 @@ export function upgradeHideEmptyTaskFields(w: Writer): boolean {
         });
       return true;
     }) ?? false
+  );
+}
+
+/**
+ * Once: what the app recognised by id or name until now is marked in the data – "Blockiert durch"
+ * and "Wartet auf" (in either language) hold an item up (`blocks`), status options for paused and
+ * dropped carry their `state`. From then on only these marks count, so renaming changes nothing.
+ */
+export function upgradeExplicitRoles(w: Writer, ix: Index): string[] {
+  return (
+    runOnce(w, "explicit-roles-1", () => {
+      const names = (key: string) => new Set(LANGS.map((l) => titleKey(translate(l, `setup.prop.${key}`))));
+      const byNames = names("blockedBy");
+      const waitNames = names("waitingFor");
+      const changed: string[] = [];
+      for (const t of ix.types.values()) {
+        const props = t.schema!.properties;
+        const by = props.find((p) => p.kind === "relation" && (p.id === BLOCKED_BY || byNames.has(titleKey(p.name))));
+        const waiting = props.find((p) => p.kind === "text" && (p.id === WAITING_FOR || waitNames.has(titleKey(p.name))));
+        const states = new Map<string, NonNullable<PropDef["options"]>>();
+        for (const p of props) {
+          if (!p.options?.some((o) => o.group)) continue; // the options of a status (also one from before it was a select)
+          const state = (o: { id: string; name: string }) =>
+            o.id === "st_paused" ? "paused" : o.id === "st_canceled" || o.id === "st_dropped" ? "dropped" : statusStateOf(o.name);
+          if (!p.options.some((o) => !o.state && state(o))) continue;
+          states.set(p.id, p.options.map((o) => (o.state || !state(o) ? o : { ...o, state: state(o) })));
+        }
+        const marks = [by, waiting].filter((p): p is PropDef => !!p && !p.blocks);
+        if (!marks.length && !states.size) continue;
+        w.change(t.id, (doc) => {
+          for (const p of marks) upsertProp(doc, p.id, { blocks: true });
+          for (const [id, options] of states) upsertProp(doc, id, { options });
+        });
+        changed.push(t.id);
+      }
+      return changed;
+    }) ?? []
   );
 }
 

@@ -95,6 +95,28 @@ test("a file has exactly one parent: a new place replaces it; MCP refuses a seco
   expect(s.index().parentsOf(n).length).toBe(3);
 });
 
+test("an agent marks what holds up and what is paused; the type shows it", () => {
+  ops.defineType(
+    {
+      name: "Schritt",
+      properties: [
+        { name: "Stand", kind: "status", options: ["Neu (todo)", "Ruht (active, paused)", "Fertig (done)", "Eingestellt (done, dropped)"] },
+        { name: "Hängt an", kind: "relation", multiple: true, blocks: true },
+      ],
+      capabilities: { status: "Stand" },
+    },
+    A,
+  );
+  const a = ops.create({ title: "Kartons", type: "Schritt" }, A);
+  const b = ops.create({ title: "Packen", type: "Schritt", properties: { "Hängt an": ["Kartons"] } }, A);
+  const ix = s.index();
+  expect(ix.isBlocked(ix.get(b.id)!)).toBe(true);
+  ops.update("Kartons", { properties: { Stand: "on hold" } }, A); // a synonym finds the paused option by its state
+  expect(ops.get(a.id).status).toBe("Ruht (active)");
+  const info = (ops.schema() as any).types.find((x: any) => x.name === "Schritt");
+  expect(info.properties.map((p: any) => p.options ?? p.blocks)).toEqual([["Neu (todo)", "Ruht (active, paused)", "Fertig (done)", "Eingestellt (done, dropped)"], true]);
+});
+
 test("define a type and its views without code, query by type name", () => {
   ops.defineType({ name: "Person", description: "Leute" }, A);
   ops.defineType(

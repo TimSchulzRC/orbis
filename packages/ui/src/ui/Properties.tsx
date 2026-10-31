@@ -9,7 +9,7 @@ import { type T, fmtDate } from "@obtion/core/i18n";
 import type { Index } from "@obtion/core/graph";
 import { numberText, parseNumber } from "@obtion/core/input";
 import { parseQuery, matches } from "@obtion/core/query";
-import { defaultOption, doneAt, hasValue, isSingle, isStatusProp, optionIds, priorityProp, statusOf, visibleProps } from "@obtion/core/traits";
+import { defaultOption, doneAt, hasValue, isSingle, isStatusProp, optionIds, statusOf, visibleProps } from "@obtion/core/traits";
 import { toFree } from "@obtion/core/typeops";
 import { repo } from "../repo";
 import { useIndex } from "../hooks";
@@ -278,10 +278,9 @@ function BlockRow({ label, title, children }: { label: React.ReactNode; title?: 
   );
 }
 
-/** What the page puts around its badges: the type in front, the languages behind, the progress under the dates. */
+/** What the page puts around its badges: the type in front, the progress under the dates. */
 interface PageHead {
   first?: React.ReactNode;
-  last?: React.ReactNode;
   progress?: React.ReactNode;
 }
 
@@ -314,7 +313,7 @@ export function PropertyBlock({ item, schema, noAdd, head = {} }: { item: Item; 
   // an empty badge or date waits for the pointer, like "+ Eigenschaft" (unless just opened)
   const quiet = (p: PropDef) => !hasValue(item, p, ix) && !opened.has(p.id) && "opacity-0 transition-opacity group-hover/props:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100";
   const rows = shown.length || free.length || inverse.length || item.tags.length || leftovers.length || tagging;
-  if (!rows && !badges.length && !dates.length && !head.first && !head.last && !head.progress && noAdd) return null;
+  if (!rows && !badges.length && !dates.length && !head.first && !head.progress && noAdd) return null;
   return (
     <div className="group/props">
       <div className="mt-4 flex flex-wrap items-center gap-1.5">
@@ -324,7 +323,6 @@ export function PropertyBlock({ item, schema, noAdd, head = {} }: { item: Item; 
             {isStatusProp(schema, p) ? <StatusBadge item={item} /> : <SelectBadge item={item} prop={p} />}
           </span>
         ))}
-        {head.last}
       </div>
       {dates.length > 0 && (
         <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
@@ -450,18 +448,17 @@ function StatusBadge({ item }: { item: Item }) {
 }
 
 /**
- * A selection as a badge that says what it is: "Prio hoch" for the priority, otherwise the
- * property's name before the value ("Phase Entwurf"). Empty: the name, dashed, to pick one.
+ * A selection as a badge that says what it is: the property's name before the value ("Phase
+ * Entwurf"). Empty: the name, dashed, to pick one.
  */
 function SelectBadge({ item, prop }: { item: Item; prop: PropDef }) {
-  const { t, lang } = useT();
-  const ix = useIndex();
+  const { t } = useT();
   const v = item.props[prop.id];
   const opt = prop.options?.find((o) => o.id === v);
-  const prio = priorityProp(ix.schemaOf(item))?.id === prop.id;
+  const ix = useIndex();
   // a select with a default is never empty
   const required = !!defaultOption(prop, ix.schemaOf(item));
-  const label = !opt ? null : prio ? t("props.prioBadge", { value: lang === "de" ? opt.name.toLocaleLowerCase("de") : opt.name }) : (
+  const label = !opt ? null : (
     <>
       <span className="opacity-70">{prop.name}</span> {opt.name}
     </>

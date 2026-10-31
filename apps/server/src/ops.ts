@@ -7,6 +7,7 @@ import {
   type FreeKind,
   type FreeValue,
   type Item,
+  type OptionDef,
   type Patch,
   type PropDef,
   type PropKind,
@@ -198,13 +199,14 @@ export class Ops {
       name: p.name,
       kind: p.kind,
       description: p.description || undefined,
-      options: p.options?.map((o) => (o.group ? `${o.name} (${o.group})` : o.name)),
+      options: p.options?.map((o) => (o.group ? `${o.name} (${o.group}${o.state ? `, ${o.state}` : ""})` : o.name)),
       multiple: p.multiple || undefined,
       default: p.default ? p.options?.find((o) => o.id === p.default)?.name : undefined,
       target: p.target || undefined,
       inverse: p.inverseName || undefined,
       symmetric: p.symmetric || undefined,
       hide_empty: p.hideEmpty || undefined,
+      blocks: p.blocks || undefined,
       range: p.range || undefined,
       computed: p.computed ? `${p.computed.fn}${p.computed.of ? ` of ${this.store.index().typeName(p.computed.of)}` : ""}` : undefined,
     };
@@ -793,11 +795,12 @@ export class Ops {
     const legacy = (k?: PropInput["kind"]): PropKind | undefined => (k === "status" || k === "multiselect" ? "select" : k);
     const toDef = (p: PropInput, cur?: PropDef): Patch<Omit<PropDef, "id">> => {
       const kind = legacy(p.kind) ?? cur?.kind;
-      const grouped = p.kind === "status" || (!!cur && statusProp(s)?.id === cur.id) || !!p.options?.some((o) => /\((todo|active|done)\)\s*$/.test(o));
+      const grouped = p.kind === "status" || (!!cur && statusProp(s)?.id === cur.id) || !!p.options?.some((o) => /\((todo|active|done)(?:,\s*(paused|dropped))?\)\s*$/.test(o));
       const options = p.options?.map((o) => {
-        const m = /^(.*?)(?:\s*\((todo|active|done)\))?$/.exec(o)!;
+        const m = /^(.*?)(?:\s*\((todo|active|done)(?:,\s*(paused|dropped))?\))?$/.exec(o)!;
         const existing = cur?.options?.find((x) => x.name === m[1]);
-        return { id: existing?.id ?? shortId("o"), name: m[1]!.trim(), group: grouped ? ((m[2] as StatusGroup | undefined) ?? existing?.group ?? "todo") : undefined, color: existing?.color ?? "gray" };
+        const state = grouped ? ((m[3] as OptionDef["state"]) ?? (m[2] ? undefined : existing?.state)) : undefined;
+        return { id: existing?.id ?? shortId("o"), name: m[1]!.trim(), group: grouped ? ((m[2] as StatusGroup | undefined) ?? existing?.group ?? "todo") : undefined, ...(state ? { state } : {}), color: existing?.color ?? "gray" };
       });
       const opts = options ?? cur?.options ?? [];
       let def: string | null | undefined;
@@ -809,7 +812,7 @@ export class Ops {
       let computed = cur?.computed;
       if (p.computed) computed = { fn: p.computed.startsWith("count") ? "count" : "progress", of: p.computed.includes(":") ? this.resolveType(p.computed.split(":")[1]!.trim()).id : undefined };
       const multiple = p.kind === "multiselect" ? true : p.kind === "status" ? null : p.multiple;
-      return { name: p.name, kind, description: p.description, options, multiple, default: def, target: p.target, inverseName: p.inverse, symmetric: p.symmetric, range: p.range, computed, hideEmpty: p.hide_empty };
+      return { name: p.name, kind, description: p.description, options, multiple, default: def, target: p.target, inverseName: p.inverse, symmetric: p.symmetric, range: p.range, computed, hideEmpty: p.hide_empty, blocks: p.blocks };
     };
     // properties given with the old kind "status" become the type's status (below, once they exist; by the name they then have)
     const asStatus = [...(input.add_properties ?? []), ...(input.change_properties ?? [])].filter((p) => p.kind === "status").map((p): string => p.name ?? ("property" in p && typeof p.property === "string" ? p.property : ""));

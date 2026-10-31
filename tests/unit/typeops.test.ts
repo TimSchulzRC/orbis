@@ -4,7 +4,7 @@ import { runSetup, SYS, upgradeHideEmptyTaskFields } from "@obtion/core/setup";
 import { type PropKind, setProp, upsertProp } from "@obtion/core/model";
 import { deleteType, previewTagToType, tagToType, typeUsage, wouldBeInInbox } from "@obtion/core/typeops";
 import { isInInbox } from "@obtion/core/placement";
-import { languageCode, translations, translationInit, translationPlan, visibleProps } from "@obtion/core/traits";
+import { visibleProps } from "@obtion/core/traits";
 
 function books() {
   const m = new MemRepo();
@@ -86,31 +86,6 @@ test("relations: inverse side via backlinks, symmetric relations stored once", (
   expect(ix2.relValues(ix2.get(de)!, "p_tr", true)).toEqual([en]);
 });
 
-test("language switch: versions through a symmetric relation, each with a language; nothing without", () => {
-  const m = new MemRepo();
-  m.addType("t_art", {
-    name: "Article",
-    properties: [
-      { id: "p_l", name: "Language", kind: "select", options: [{ id: "de", name: "Deutsch" }, { id: "en", name: "EN" }] },
-      { id: "p_tr", name: "Übersetzung", kind: "relation", symmetric: true },
-      { id: "p_src", name: "Quelle", kind: "relation" },
-    ],
-  });
-  const en = m.add({ title: "Why I'm blogging again", type: "t_art", props: { p_l: "en" } });
-  const de = m.add({ title: "Warum ich wieder blogge", type: "t_art", props: { p_l: "de" }, rels: { p_tr: [en] } });
-  const alone = m.add({ title: "Nur deutsch", type: "t_art", props: { p_l: "de" }, rels: { p_src: [en] } });
-  const ix = m.index();
-  const of = (id: string) => translations(ix.get(id)!, ix).map((v) => `${languageCode(v.lang)}:${v.item.title}`);
-  // from the other side too, in the same order on both pages
-  expect(of(en)).toEqual(["DE:Warum ich wieder blogge", "EN:Why I'm blogging again"]);
-  expect(of(de)).toEqual(of(en));
-  expect(of(alone)).toEqual([]); // a non-symmetric relation is no translation
-  // a linked version without a language does not count
-  const x = m.add({ title: "Ohne Sprache", type: "t_art", rels: { p_tr: [alone] } });
-  expect(translations(m.index().get(x)!, m.index())).toEqual([]);
-  expect(translations(m.index().get(alone)!, m.index())).toEqual([]);
-});
-
 test("delete preview: kept children without type land in the inbox, typed ones and those with another place do not", () => {
   const m = new MemRepo();
   runSetup(m.writer, "de");
@@ -163,28 +138,4 @@ test("the one-time upgrade marks only the two task fields, once – a later choi
   m.change(SYS.task, (d) => upsertProp(d, "p_waiting", { hideEmpty: null as any }));
   expect(upgradeHideEmptyTaskFields(m.writer)).toBe(false);
   expect(marked()).toEqual(["p_blocked"]);
-});
-
-test("a new language version: same type, places and home, the other language, linked as translation", () => {
-  const m = new MemRepo();
-  m.addType("t_art", {
-    name: "Artikel",
-    properties: [
-      { id: "p_l", name: "Sprache", kind: "select", options: [{ id: "de", name: "DE" }, { id: "en", name: "EN" }] },
-      { id: "p_tr", name: "Übersetzung", kind: "relation", symmetric: true },
-    ],
-  });
-  const blog = m.add({ title: "Blog" });
-  const web = m.add({ title: "Website" });
-  const de = m.add({ title: "Local-first im Alltag", type: "t_art", parents: [blog, web], props: { p_l: "de" } });
-  let ix = m.index();
-  expect(translationPlan(ix.get(de)!, ix)?.missing.map((o) => o.name)).toEqual(["EN"]);
-  const init = translationInit(ix.get(de)!, ix, "en")!;
-  expect(init).toMatchObject({ type: "t_art", parents: [blog, web], props: { p_l: "en" }, rels: { p_tr: [de] } });
-  const en = m.add(init);
-  ix = m.index();
-  expect(ix.home(en)).toBe(blog);
-  expect(translations(ix.get(de)!, ix).map((v) => v.lang)).toEqual(["DE", "EN"]);
-  expect(translationPlan(ix.get(de)!, ix)).toBeUndefined(); // nothing missing any more
-  expect(translationPlan(ix.get(en)!, ix)).toBeUndefined();
 });

@@ -25,7 +25,7 @@ export const propInput = z.object({
     .optional()
     .describe('A select is the type\'s status when capabilities.status names it; "status" and "multiselect" still work as shorthands'),
   description: z.string().optional(),
-  options: z.array(z.string()).optional().describe('for select: names; options of the status as "Name (todo|active|done)"'),
+ options: z.array(z.string()).optional().describe('for select: names; options of the status as "Name (todo|active|done)", a paused one as "Name (active, paused)", a dropped one as "Name (done, dropped)"'),
   multiple: z.boolean().optional().describe("relation: several targets; select: several options"),
   default: z.string().nullable().optional().describe("select with one value: the option new entries get; it can then not be emptied (the status always has one). null: may be empty"),
   target: z.string().optional().describe("relation target as a query, e.g. type:Person"),
@@ -34,6 +34,7 @@ export const propInput = z.object({
   range: z.boolean().optional(),
   computed: z.string().optional().describe('"progress", "progress:Type" or "count:Type"'),
   hide_empty: z.boolean().optional().describe("pages show it only when it has a value (default: every property shows, empty as –)"),
+  blocks: z.boolean().optional().describe("relation or text: the item counts as blocked while it is set (a relation: while a linked item is open)"),
 });
 export type PropInput = z.infer<typeof propInput>;
 

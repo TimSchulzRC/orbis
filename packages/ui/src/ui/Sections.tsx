@@ -6,11 +6,11 @@ import { Textarea } from "../components/ui/textarea";
 import { NativeSelect } from "../components/ui/native-select";
 import { useState } from "react";
 import { Plus, Send } from "lucide-react";
-import { type Item, type ViewDef, titleKey } from "@obtion/core/model";
+import { type Item, type ViewDef } from "@obtion/core/model";
 import type { Index } from "@obtion/core/graph";
-import { LANGS, fmtBytes, fmtDateTime, translate } from "@obtion/core/i18n";
+import { fmtBytes, fmtDateTime } from "@obtion/core/i18n";
 import { groupItems, runQuery, shownByBlocks } from "@obtion/core/query";
-import { dueOf, dueProp, isDone, priorityProp, statusOf, statusProp } from "@obtion/core/traits";
+import { dueOf, dueProp, isDone, statusOf, statusProp } from "@obtion/core/traits";
 import { repo } from "../repo";
 import { itemHref, useIndex } from "../hooks";
 import { useT, tr, titleOf } from "../i18n";
@@ -23,15 +23,11 @@ import { cmpKey } from "@obtion/core/sortkey";
 
 /**
  * What a list of entries of a type is called: the name of the type's list (a plural, "Tasks",
- * "Projekte"). Below an entry of the same type: "Unteraufgaben"
- * for the shipped task (found by name, in either language), otherwise "Unter-{plural}".
+ * "Projekte"). Below an entry of the same type: "Unter-{plural}".
  */
 function listTitle(ix: Index, typeId: string, same: boolean): string {
   const plural = ix.typePlural(typeId);
-  if (!same) return plural;
-  const name = titleKey(ix.typeName(typeId) ?? "");
-  const isTask = LANGS.some((l) => titleKey(translate(l, "setup.task.name")) === name);
-  return isTask ? tr("children.subtasks") : tr("children.subOf", { name: plural });
+  return same ? tr("children.subOf", { name: plural }) : plural;
 }
 
 /** A field to add an entry by its title. */
@@ -81,6 +77,7 @@ export function ChildList({ item, typeId }: { item: Item; typeId: string }) {
   const v: ViewDef = { showDone: false, ...(item.views.main ?? {}) };
   const setV = (patch: Partial<ViewDef>) => repo.setView(item.id, "main", { ...v, ...patch });
   const same = item.type === typeId; // sub-tasks of a task
+  const subOne = (name?: string) => t("children.subOf", { name: name ?? "" }); // "Unter-Task", "Unter-Projekt"
   const all = ix.items(ix.descendants(item.id)).filter((x) => x.type === typeId && !x.deleted);
   const doneCount = all.filter((x) => isDone(x, schema)).length;
   const shown = v.showDone ? all : all.filter((x) => !isDone(x, schema));
@@ -96,7 +93,7 @@ export function ChildList({ item, typeId }: { item: Item; typeId: string }) {
   if (!all.length)
     return same ? (
       <section className="mt-8">
-        <AddRow label={t("children.addSubtaskShort")} onAdd={(t2) => repo.create({ title: t2, type: typeId, parents: [item.id] })} />
+        <AddRow label={subOne(schema.name)} onAdd={(t2) => repo.create({ title: t2, type: typeId, parents: [item.id] })} />
       </section>
     ) : null;
   // sub-projects: children of the page's own type; each one a group
@@ -115,7 +112,6 @@ export function ChildList({ item, typeId }: { item: Item; typeId: string }) {
   }
   const cols = [
     ...(dueProp(schema) ? [{ key: "due", label: dueProp(schema)!.name }] : []),
-    ...(!same && priorityProp(schema) ? [{ key: priorityProp(schema)!.name, label: priorityProp(schema)!.name }] : []),
   ];
   return (
     <section className="mt-10 max-md:mt-8">
@@ -125,10 +121,10 @@ export function ChildList({ item, typeId }: { item: Item; typeId: string }) {
           subs.length > 0 && (
             <>
               <span className="max-md:hidden">
-                <Seg label={t("children.groupBy")} value={by} onChange={(x: string) => setV({ group: x === "status" ? "status" : "path" })} options={[{ value: "sub", label: t("children.bySub") }, { value: "status", label: t("group.status") }]} />
+                <Seg label={t("children.groupBy")} value={by} onChange={(x: string) => setV({ group: x === "status" ? "status" : "path" })} options={[{ value: "sub", label: subOne(ix.typeName(item.type)) }, { value: "status", label: t("group.status") }]} />
               </span>
               <span className="md:hidden">
-                <ViewMenu label={by === "status" ? t("group.status") : t("children.bySub")} sections={[{ value: by, options: [{ value: "sub", label: t("children.bySub") }, { value: "status", label: t("group.status") }], onChange: (x) => setV({ group: x === "status" ? "status" : "path" }) }]} />
+                <ViewMenu label={by === "status" ? t("group.status") : subOne(ix.typeName(item.type))} sections={[{ value: by, options: [{ value: "sub", label: subOne(ix.typeName(item.type)) }, { value: "status", label: t("group.status") }], onChange: (x) => setV({ group: x === "status" ? "status" : "path" }) }]} />
               </span>
             </>
           )
@@ -139,10 +135,10 @@ export function ChildList({ item, typeId }: { item: Item; typeId: string }) {
       <PageTable
         groups={groups}
         cols={cols}
-        head={same ? t("children.subtaskOne") : schema.name}
+        head={same ? subOne(schema.name) : schema.name}
         here={item.id}
         foldKey={`main:${item.id}`}
-        add={{ init: { type: typeId, parents: [item.id] }, label: same ? t("children.subtaskOne") : t("children.newOf", { name: schema.name }) }}
+        add={{ init: { type: typeId, parents: [item.id] }, label: same ? subOne(schema.name) : t("children.newOf", { name: schema.name }) }}
         done={{ count: doneCount, shown: !!v.showDone, toggle: () => setV({ showDone: !v.showDone }) }}
       />
     </section>
