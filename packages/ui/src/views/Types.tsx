@@ -2,7 +2,7 @@ import { Input } from "../components/ui/input";
 import { useState } from "react";
 import { Plus, RotateCcw } from "lucide-react";
 import { restoreDefaultTypes } from "@obtion/core/setup";
-import { useIndex, useRepo, useRoute, useSpaceId, itemHref, spaceHref } from "../hooks";
+import { useIndex, useRepo, useRoute, useSpaceId, itemHref, itemPath, spaceHref } from "../hooks";
 import { repo } from "../repo";
 import { SpaceEyebrow } from "../ui/Spaces";
 import { useT, getLang } from "../i18n";
@@ -61,7 +61,7 @@ export function NewTypeDialog({ onClose }: { onClose: () => void }) {
     if (!n) return;
     const id = createType(n, repo);
     onClose();
-    location.hash = spaceHref(space, `/i/${encodeURIComponent(id)}?edit=1`);
+    location.hash = spaceHref(space, `${itemPath(id)}?edit=1`);
   };
   return (
     <Dialog title={t("types.new")} onClose={onClose}>

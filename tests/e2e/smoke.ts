@@ -189,6 +189,20 @@ async function run() {
             if (!pinned && (await panel.count())) failures.push(`${label}: Escape does not close the panel`);
             if (pinned && !(await panel.count())) failures.push(`${label}: Escape closes the panel pinned on Heute`);
           }, { phone });
+          // the open panel is a step in the history: Back closes it and stays on the page
+          await check(page, label, "/#/i/ex-relaunch", errors, async (p) => {
+            await p.getByRole("region", { name: "Eingang" }).getByRole("button", { expanded: false }).first().click();
+            const panel = p.locator("[data-shelf-panel=open]");
+            if (!(await panel.waitFor({ timeout: 3000 }).then(() => true, () => false))) return void failures.push(`${label}: the tray does not open its panel`);
+            // another page and Back: the panel as it was
+            await p.evaluate(() => (location.hash = "#/search"));
+            await panel.waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
+            await p.goBack();
+            if (!(await panel.waitFor({ timeout: 3000 }).then(() => true, () => false))) failures.push(`${label}: Back to the page does not bring the open panel back`);
+            await p.goBack();
+            if (!(await panel.waitFor({ state: "detached", timeout: 3000 }).then(() => true, () => false))) failures.push(`${label}: Back does not close the panel`);
+            if (!p.url().includes("/i/ex-relaunch")) failures.push(`${label}: Back with the panel open leaves the page (${p.url()})`);
+          }, { phone });
           // an entry's page from before the review leads into the review, at that entry
           await check(page, label, "/#/inbox/ex-i-podcast", errors, async (p) => {
             if (!p.url().includes("/review?at=")) failures.push(`${label}: an old inbox entry link does not lead into the review (${p.url()})`);
@@ -251,7 +265,7 @@ async function run() {
           if (!phone && v.name === "light") {
             await check(page, label, "/#/settings", errors, async (p) => {
               const side = p.locator("aside");
-              if (!(await side.locator("section[aria-label='Persönlich'] a[href='#/i/ex-work']").count())) failures.push(`${label}: "Arbeit" not in the workspace's block`);
+              if (!(await side.locator("section[aria-label='Persönlich'] a[href$='/i/ex-work']").count())) failures.push(`${label}: "Arbeit" not in the workspace's block`);
               const types = await side.locator("nav[aria-label='Typen'] a").allInnerTexts();
               if (!["Projekte", "Tasks", "Karten", "Dateien"].every((x) => types.some((y) => y.trim() === x))) failures.push(`${label}: Typen shows ${types.join(", ")}`);
               await side.getByRole("button", { name: "Typen" }).click();
@@ -277,7 +291,7 @@ async function run() {
               if (!(await p.getByRole("dialog", { name: "Was landet im Eingang?" }).getByRole("button", { name: /Standard wiederherstellen/ }).count())) failures.push(`${label}: the inbox rule has no "Standard wiederherstellen"`);
             });
             await check(page, label, "/#/c/sys%3Ac-task", errors, async (p) => {
-              if (!p.url().includes("/i/sys%3Atask")) failures.push(`${label}: an old collection link does not lead to the type's page (${p.url()})`);
+              if (!p.url().includes("/i/sys:task")) failures.push(`${label}: an old collection link does not lead to the type's page (${p.url()})`);
             });
           }
           // the main list keeps its grouping after a reload (design rules § 8)
@@ -458,7 +472,7 @@ async function twoWorkspaces(browser: import("playwright-core").Browser, server:
     await p.getByRole("checkbox", { name: /Mit Beispielen starten/ }).uncheck();
     await p.getByRole("button", { name: /^Einrichten$/ }).click();
     if (!(await firma(p).getByRole("button", { name: "Typen" }).waitFor({ timeout: 8000 }).then(() => true, () => false))) failures.push(`${label}: "Firma" not set up from the sidebar`);
-    if (!(await p.locator("aside section[aria-label='Persönlich'] a[href='#/i/ex-work']").count())) failures.push(`${label}: the first workspace's block lost its pinned items`);
+    if (!(await p.locator("aside section[aria-label='Persönlich'] a[href$='/i/ex-work']").count())) failures.push(`${label}: the first workspace's block lost its pinned items`);
   });
   await check(page, label, "/#/inbox", errors, async (p) => {
     const panel = p.locator("[data-shelf-panel]");
@@ -485,7 +499,7 @@ async function twoWorkspaces(browser: import("playwright-core").Browser, server:
     const ask = p.getByRole("dialog").getByRole("button", { name: "Verschieben" });
     if (await ask.waitFor({ timeout: 3000 }).then(() => true, () => false)) await ask.click();
     if (!(await firma(p).getByText("Arbeit").waitFor({ timeout: 8000 }).then(() => true, () => false))) failures.push(`${label}: "Arbeit" did not move into "Firma"`);
-    if (await p.locator("aside section[aria-label='Persönlich'] a[href='#/i/ex-work']").count()) failures.push(`${label}: "Arbeit" is still in "Persönlich"`);
+    if (await p.locator("aside section[aria-label='Persönlich'] a[href$='/i/ex-work']").count()) failures.push(`${label}: "Arbeit" is still in "Persönlich"`);
   });
   await context.close();
 }

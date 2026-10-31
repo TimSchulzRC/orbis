@@ -6,6 +6,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { repo } from "../repo";
 import { files } from "../files";
+import { itemHref } from "../hooks";
 import { useT } from "../i18n";
 
 let open: { ids: string[]; at: number } | null = null;
@@ -59,7 +60,7 @@ function Lightbox({ ids, start }: { ids: string[]; start: number }) {
   return (
     <ModalSurface title={item.title} onClose={close}><div role="dialog" aria-modal="true" aria-label={item.title} className="fixed inset-0 z-50 flex flex-col bg-black/95 backdrop-blur-sm" onClick={close}>
       <div className="flex items-center gap-3 px-4 py-3 text-sm text-white/80 pt-safe" onClick={(e) => e.stopPropagation()}>
-        <a href={`#/i/${encodeURIComponent(item.id)}`} onClick={close} className="min-w-0 truncate font-medium text-white hover:underline">
+        <a href={itemHref(item.id)} onClick={close} className="min-w-0 truncate font-medium text-white hover:underline">
           {item.title}
         </a>
         {ids.length > 1 && <span className="tabular-nums text-white/60">{at + 1} / {ids.length}</span>}

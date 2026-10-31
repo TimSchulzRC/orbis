@@ -3,7 +3,7 @@ import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
 import { useEffect, useRef, useState } from "react";
 import { ArrowRight, ChevronDown, CornerDownRight, Layers, Paperclip, X } from "lucide-react";
-import { useFiles, useRepo, useSpaceId, spaceHref } from "../hooks";
+import { useFiles, useRepo, useSpaceId, itemPath, spaceHref } from "../hooks";
 import { shownSpaces, useAccounts } from "../accounts";
 import { useT } from "../i18n";
 import { capture, extractMentions, recentPlaces, rememberPlace } from "../actions";
@@ -78,7 +78,7 @@ function CaptureField({ parent, placeholder, autoFocus, onDone, compact, onSpace
     const usedType = r.get(id)?.type ?? null; // "/name" in the text can set it too
     const what = usedType ? ix.typeName(usedType) : t("capture.note");
     const msg = where ? t("capture.notifyUnder", { what, place: ix.get(where)?.title ?? "" }) : usedType ? t("capture.notifyAs", { what }) : t("capture.notifyInbox");
-    notify(msg, undefined, { label: t("capture.open"), run: () => (location.hash = spaceHref(space, `/i/${encodeURIComponent(id)}`)) });
+    notify(msg, undefined, { label: t("capture.open"), run: () => (location.hash = spaceHref(space, itemPath(id))) });
     setText("");
     onDone?.();
   };
@@ -92,7 +92,7 @@ function CaptureField({ parent, placeholder, autoFocus, onDone, compact, onSpace
   const attach = async (list: FileList | null) => {
     for (const f of [...(list ?? [])]) {
       const res = await files.add(f, f.name, { parent });
-      if (res?.id) notify(t("capture.notifyFile", { name: f.name }), undefined, { label: t("capture.open"), run: () => (location.hash = spaceHref(space, `/i/${encodeURIComponent(res.id!)}`)) });
+      if (res?.id) notify(t("capture.notifyFile", { name: f.name }), undefined, { label: t("capture.open"), run: () => (location.hash = spaceHref(space, itemPath(res.id!))) });
     }
   };
   const ghost = "tap-y inline-flex h-7 min-w-0 items-center gap-1 rounded-md px-1.5 text-xs hover:bg-hover";

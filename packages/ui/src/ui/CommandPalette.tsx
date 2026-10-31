@@ -6,7 +6,7 @@ import { Plus, CornerDownLeft, ChevronRight } from "lucide-react";
 import type { Item } from "@obtion/core/model";
 import { snippet } from "@obtion/core/search";
 import { statusOf } from "@obtion/core/traits";
-import { go, spaceHref } from "../hooks";
+import { go, itemPath, spaceHref } from "../hooks";
 import { useAccounts } from "../accounts";
 import { useReplicas } from "./Spaces";
 import { captureSpace } from "./Capture";
@@ -44,13 +44,13 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
       const ix = repos[n]!.index();
       const of = (label: string) => (several ? `${label} · ${s.name}` : label);
       return [
-        ...ix.typesInOrder().map((x) => [of(ix.typePlural(x.id)), spaceHref(s.id, `/i/${encodeURIComponent(x.id)}`)]),
+        ...ix.typesInOrder().map((x) => [of(ix.typePlural(x.id)), spaceHref(s.id, itemPath(x.id))]),
         [of(t("nav.files")), spaceHref(s.id, "/files")],
         [of(t("nav.types")), spaceHref(s.id, "/types")],
         [of(t("nav.activity")), spaceHref(s.id, "/activity")],
         [of(t("nav.graph")), spaceHref(s.id, "/graph")],
         [of(t("nav.trash")), spaceHref(s.id, "/trash")],
-        [several ? `${t("space.settings")} · ${s.name}` : t("space.settings"), spaceHref(s.id, "/workspace")],
+        [several ? `${t("space.settings")} · ${s.name}` : t("space.settings"), spaceHref(s.id, "/settings")],
       ];
     }),
       [t("nav.settings"), "#/settings"],
@@ -99,7 +99,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
 
   const run = (it: Entry) => {
     onClose();
-    if (it.kind === "item") location.hash = spaceHref(it.space, `/i/${encodeURIComponent(it.id)}`);
+    if (it.kind === "item") location.hash = spaceHref(it.space, itemPath(it.id));
     else if (it.kind === "create") createAndOpen({ type: it.type, title: it.title }, repo, cs);
     else if (it.kind === "nav") location.hash = it.path;
     else if (it.kind === "cmd") it.run();

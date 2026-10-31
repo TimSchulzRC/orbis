@@ -10,8 +10,8 @@ import { useMemo, useState, useSyncExternalStore } from "react";
 import { ChevronsUpDown, Plus, SlidersHorizontal } from "lucide-react";
 import type { Repo } from "@obtion/sync";
 import { createSpace, replica, setShown, spaceById, useAccounts } from "../accounts";
-import { ScopeContext } from "../scope";
-import { spaceHref, useSpaceId } from "../hooks";
+import { ScopeContext, globalPage } from "../scope";
+import { itemPath, spaceHref, useSpaceId } from "../hooks";
 import { MoveError, moveToSpace, planToSpace } from "../move";
 import { useT, tr, titleOf } from "../i18n";
 import { Button, Dialog, MenuItem, Popover, cx } from "./bits";
@@ -25,9 +25,10 @@ export function SpaceScope({ id, children }: { id: string; children: React.React
   const onClickCapture = (e: React.MouseEvent) => {
     if (active?.id === id || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     const href = (e.target as HTMLElement).closest("a")?.getAttribute("href");
-    if (!href?.startsWith("#/")) return;
+    // a page of no workspace ("#/settings", "#/review") stays one
+    if (!href?.startsWith("#/") || href.startsWith("#/w/") || globalPage(href.slice(1).split("?")[0]!.split("/").filter(Boolean))) return;
     e.preventDefault();
-    location.hash = spaceHref(id, href.slice(1).replace(/^\/w\/[^/?]+/, ""));
+    location.hash = spaceHref(id, href.slice(1));
   };
   return (
     <ScopeContext.Provider value={value}>
@@ -185,7 +186,7 @@ export async function moveTo(id: string, from: string, to: string, parent?: stri
       if (!(await confirmAction({ title: tr("move.preview.title", { title, workspace }), body: lines.map((l) => `– ${l}`).join("\n"), yes: tr("move.confirm") }))) return;
     }
     const moved = await moveToSpace(id, from, to, parent);
-    notify.action(tr("move.done", { workspace }), tr("move.open"), () => (location.hash = spaceHref(to, `/i/${encodeURIComponent(moved)}`)));
+    notify.action(tr("move.done", { workspace }), tr("move.open"), () => (location.hash = spaceHref(to, itemPath(moved))));
   } catch (e) {
     notify(e instanceof MoveError ? tr(`move.error.${e.message}`) : String((e as Error).message ?? e));
   }

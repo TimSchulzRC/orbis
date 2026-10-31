@@ -11,7 +11,7 @@ import { isInInbox, isOverview } from "@obtion/core/placement";
 import { wouldBeInInbox } from "@obtion/core/typeops";
 import { onlyBelow } from "@obtion/core/trash";
 import { primaryChild, hasUpdates, progressSpec, languageCode, translations, translationInit, translationPlan } from "@obtion/core/traits";
-import { useRepo, useIndex, itemHref, go } from "../hooks";
+import { useRepo, useIndex, itemHref, go, setParams, showTitle } from "../hooks";
 import { repo } from "../repo";
 import { useT, tr, getLang, titleOf } from "../i18n";
 import { Editor, insertFilesAtCursor } from "../ui/Editor";
@@ -37,6 +37,13 @@ export function ItemPage({ id, isNew }: { id: string; isNew: boolean }) {
   const r = useRepo();
   const { t } = useT();
   const item = r.get(id);
+  // the title after the id, a moment after typing it (browsers limit how often an address may change)
+  const title = item && item.kind !== "settings" && item.kind !== "op" ? (item.type === META_TYPE ? r.index().typePlural(id) : item.title) : undefined;
+  useEffect(() => {
+    if (title === undefined) return;
+    const wait = setTimeout(() => showTitle(title), 400);
+    return () => clearTimeout(wait);
+  }, [id, title]);
   if (!item || item.kind === "settings")
     return <div className="mx-auto max-w-3xl px-6 py-16 text-center text-muted-foreground">{r.status.synced ? t("item.missing") : t("item.loading")}</div>;
   if (item.kind === "op") return <div className="mx-auto max-w-3xl px-6 py-16 text-center text-muted-foreground">{item.title}</div>;
@@ -57,7 +64,10 @@ function isBlank(i: Item) {
   return !i.title.trim() && !i.body.trim() && !i.tags.length && !i.refs.length && !i.updates.length && !ix.childrenOf(i.id).length && !ix.backlinks(i.id).length && !Object.keys(i.extra).length;
 }
 
-function InfoView({ item, isNew }: { item: Item; isNew: boolean }) {
+function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
+  // "?new=1" is for opening it once: gone from the address, so a reload or Back later does not take it as new
+  const [isNew] = useState(created);
+  useEffect(() => void setParams({ new: null }), []);
   const r = useRepo();
   const ix = useIndex();
   const { t } = useT();

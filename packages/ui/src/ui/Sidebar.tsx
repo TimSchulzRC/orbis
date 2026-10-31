@@ -11,7 +11,7 @@ import { ChevronRight, ChevronDown, Inbox, Search, SlidersHorizontal, Link2, Mor
 import { type Item, META_TYPE, SETTINGS_ID, setSchemaField, setSettings } from "@obtion/core/model";
 import { sidebarChildren, sidebarRoots } from "@obtion/core/placement";
 import { keyBetween, keysFor, cmpKey } from "@obtion/core/sortkey";
-import { useRepo, useRoute, useSpaceId, itemHref, spaceHref, useLocalStorage } from "../hooks";
+import { useRepo, useRoute, useSpaceId, itemPath, spaceHref, useLocalStorage } from "../hooks";
 import { type Space, useAccounts } from "../accounts";
 import { useT } from "../i18n";
 import { Kbd, MenuItem, Popover, TypeGlyph, ItemIcon, cx, shortcut } from "./bits";
@@ -71,7 +71,7 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
       </div>
       {/* below: the settings (the account, its workspaces, this device) */}
       <div className="flex flex-col gap-0.5 border-t border-line p-2">
-        <a href="#/settings" className={navCls(route.path.startsWith("/settings"))}>
+        <a href="#/settings" className={navCls(route.path === "/settings" && !route.space)}>
           <SlidersHorizontal size={16} /> {t("nav.settings")}
         </a>
       </div>
@@ -139,7 +139,7 @@ export function SpaceTree({ space, touch }: { space: Space; touch?: boolean }) {
         >
           {(close) => (
             <>
-              <MenuItem onClick={() => (close(), go("/workspace"))}>{t("space.settings")}</MenuItem>
+              <MenuItem onClick={() => (close(), go("/settings"))}>{t("space.settings")}</MenuItem>
               <MenuItem onClick={() => (close(), go("/activity"))}>{t("nav.activity")}</MenuItem>
               <MenuItem onClick={() => (close(), go("/trash"))}>{t("nav.trash")}</MenuItem>
             </>
@@ -224,8 +224,8 @@ function TypeNav({ touch, here }: { touch?: boolean; here: boolean }) {
   const [drop, setDrop] = useState<{ id: string; before: boolean } | null>(null);
   const filesPos = ix.all.get(SETTINGS_ID)?.settings?.filesPos;
   const rows = [
-    ...ix.typesInOrder().map((x) => ({ id: x.id, key: x.schema.pos, label: ix.typePlural(x.id), href: itemHref(x.id), icon: <TypeGlyph schema={x.schema} size={touch ? 17 : 15} /> })),
-    { id: "files", key: filesPos, label: t("nav.files"), href: "#/files", icon: <Paperclip size={touch ? 17 : 15} className="shrink-0" /> },
+    ...ix.typesInOrder().map((x) => ({ id: x.id, key: x.schema.pos, label: ix.typePlural(x.id), href: spaceHref(space, itemPath(x.id)), icon: <TypeGlyph schema={x.schema} size={touch ? 17 : 15} /> })),
+    { id: "files", key: filesPos, label: t("nav.files"), href: spaceHref(space, "/files"), icon: <Paperclip size={touch ? 17 : 15} className="shrink-0" /> },
   ].sort((a, b) => cmpKey(a.key ?? "~", b.key ?? "~"));
   const active = (id: string) => here && (id === "files" ? route.path.startsWith("/files") : route.parts[0] === "i" && route.parts[1] === id);
   // a new order: every row gets a fresh key, written only where it changed
@@ -407,7 +407,7 @@ function TreeNode({
           {isOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
         </ShadcnButton>
         {isType ? <TypeGlyph schema={item.schema} size={touch ? 17 : 15} /> : <ItemIcon item={item} size={touch ? 17 : 15} />}
-        <a href={itemHref(item.id)} className="min-w-0 flex-1 truncate" title={item.title} aria-current={activeId === item.id ? "page" : undefined}>
+        <a href={spaceHref(space, itemPath(item.id))} className="min-w-0 flex-1 truncate" title={item.title} aria-current={activeId === item.id ? "page" : undefined}>
           {isType ? ix.typePlural(item.id) : distinctLabel(item.title, parent ? ix.get(parent)?.title : undefined) || t("untitled")}
         </a>
         {secondary && (

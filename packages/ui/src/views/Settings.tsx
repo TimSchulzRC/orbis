@@ -1,6 +1,6 @@
 // Settings in two kinds. Global (#/settings): the account, its workspaces, and what belongs to
 // this device (language, appearance, files, its name).
-// A workspace's own (#/w/<id>/workspace, from its menu in the sidebar or the list here): name and
+// A workspace's own (#/w/<id>/settings, from its menu in the sidebar or the list here): name and
 // members, capture, examples, agents, sync, and the way to its types, activity, graph and trash.
 import { Checkbox } from "../components/ui/checkbox";
 import { Button as ShadcnButton } from "../components/ui/button";
@@ -191,7 +191,7 @@ function Workspaces() {
         <ul className="divide-y divide-line rounded-xl border border-line bg-surface">
           {spaces.map((s) => (
             <li key={s.id}>
-              <a href={spaceHref(s.id, "/workspace")} className="tap-row flex items-center gap-3 px-3 py-2.5 text-sm hover:bg-hover">
+              <a href={spaceHref(s.id, "/settings")} className="tap-row flex items-center gap-3 px-3 py-2.5 text-sm hover:bg-hover">
                 <span className="min-w-0 flex-1 truncate font-medium">{s.name}</span>
                 <span className="shrink-0 text-xs text-muted-foreground">{t(`space.role.${s.role}`)}</span>
                 <ChevronRight size={15} className="shrink-0 text-faint" />
