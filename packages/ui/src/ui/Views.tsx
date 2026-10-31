@@ -9,7 +9,7 @@ import { type ViewTab, type PropDef, type ViewKind, titleKey } from "@obtion/cor
 import { type Cond, type Group, FIELDS, groupId, parseQuery, typesIn } from "@obtion/core/query";
 import { statusProp } from "@obtion/core/traits";
 import { keyBetween } from "@obtion/core/sortkey";
-import { useIndex } from "../hooks";
+import { setParams, useIndex, useRoute } from "../hooks";
 import { useT } from "../i18n";
 import { Button, InlineText, MenuItem, Popover, Seg, cx } from "./bits";
 import { QueryEditor } from "./QueryEditor";
@@ -31,12 +31,16 @@ const KIND_ICON: Record<ViewKind, React.ComponentType<{ size?: number; className
 
 export const tabName = (tab: Pick<ViewTab, "name" | "kind">, t: T) => tab.name || t("view." + tab.kind);
 
-/** The tab this device showed last for `key` (a type's page, a block); an unknown one: the first. */
-export function useTabChoice(key: string, tabs: ViewTab[]): [ViewTab, (id: string) => void] {
+/**
+ * The tab this device showed last for `key` (a type's page, a block); an unknown one: the first.
+ * `inAddress` (a page's own tabs): the address names it ("?view=<tab>"), so a shared link shows the same.
+ */
+export function useTabChoice(key: string, tabs: ViewTab[], inAddress?: boolean): [ViewTab, (id: string) => void] {
   const k = "obtion.tab." + key;
+  const named = useRoute().query.get("view");
   const [id, setId] = useState(() => localStorage.getItem(k));
-  const tab = tabs.find((x) => x.id === id) ?? tabs[0]!;
-  return [tab, (x) => (localStorage.setItem(k, x), setId(x))];
+  const tab = (inAddress && named ? tabs.find((x) => x.id === named) : undefined) ?? tabs.find((x) => x.id === id) ?? tabs[0]!;
+  return [tab, (x) => (localStorage.setItem(k, x), setId(x), inAddress && setParams({ view: x }))];
 }
 
 export interface TabEdit {

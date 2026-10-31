@@ -8,7 +8,7 @@ import { type FileType, type Item, type ViewTab, setTab, setTabs, shortId, FILE_
 import { type QueryDef, andWhere, tabDef } from "@obtion/core/query";
 import { keyBetween } from "@obtion/core/sortkey";
 import { typeTabs } from "@obtion/core/setup";
-import { useRoute } from "../hooks";
+import { setParams, useRoute } from "../hooks";
 import { SpaceEyebrow } from "../ui/Spaces";
 import { repo } from "../repo";
 import { useT } from "../i18n";
@@ -29,7 +29,7 @@ import { sameValue } from "@obtion/core/equal";
 export function TypeList({ type }: { type: Item }) {
   const { t, lang } = useT();
   const tabs = typeTabs(type, lang);
-  const [tab, pickTab] = useTabChoice(type.id, tabs);
+  const [tab, pickTab] = useTabChoice(type.id, tabs, true);
   // the first change keeps the default views: they are written along with it
   const setT = (id: string, patch: Parameters<typeof setTab>[2]) =>
     repo.change(type.id, (d) => {
@@ -153,11 +153,15 @@ export function DraftBar({ onDiscard, onSave }: { onDiscard: () => void; onSave:
 }
 
 
+/** The kinds of files as the address names them ("?kind=image"); German ones from before still work. */
+const KIND_PARAM: Record<FileType, string> = { bild: "image", pdf: "pdf", audio: "audio", video: "video", dokument: "document", sonstiges: "other" };
+const kindOf = (param: string | null) => (FILE_TYPES.find((k) => KIND_PARAM[k] === param || k === param) ?? null);
+
 /** "Dateien": all files, newest first; "Alle · Bilder · PDFs · Audio" (only kinds that are there), images as a gallery. */
 export function FilesPage() {
   const { t } = useT();
-  const route = useRoute();
-  const [kind, setKind] = useState<FileType | null>((route.query.get("kind") as FileType | null) ?? null);
+  const kind = kindOf(useRoute().query.get("kind"));
+  const setKind = (k: FileType | null) => setParams({ kind: k && KIND_PARAM[k] });
   const all = useQuery({ where: { file: true } }).items;
   const kinds = FILE_TYPES.map((k) => ({ k, n: all.filter((i) => i.file?.filetype === k).length })).filter((x) => x.n > 0);
   const def: QueryDef = { where: kind ? { and: [{ file: true }, { filetype: kind }] } : { file: true }, sort: [{ key: "created", desc: true }] };

@@ -31,7 +31,7 @@ import { COLORS, ICONS } from "@obtion/core/palette";
 import { keyBetween } from "@obtion/core/sortkey";
 import { parseQuery, printQuery, runQuery } from "@obtion/core/query";
 import { type DeleteMode, deleteType, previewTagToType, tagToType, typeUsage } from "@obtion/core/typeops";
-import { useIndex, useRoute, go } from "../hooks";
+import { useIndex, useRoute, go, setParams } from "../hooks";
 import { repo } from "../repo";
 import { useT } from "../i18n";
 import { Button, Dialog, InlineText, ItemIcon, MenuItem, Popover, SectionTitle, Seg, TypeGlyph, cx, pal, AddButton, IconButton } from "../ui/bits";
@@ -46,6 +46,7 @@ export function TypePage({ item }: { item: Item }) {
   const ix = useIndex();
   const route = useRoute();
   const [editing, setEditing] = useState(route.query.get("edit") === "1");
+  useEffect(() => void setParams({ edit: null }), []);
   const plural = ix.typePlural(item.id);
   useEffect(() => void (document.title = plural), [plural]);
   if (item.deleted)

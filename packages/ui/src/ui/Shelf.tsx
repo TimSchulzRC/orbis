@@ -13,7 +13,7 @@ import { inboxWhere } from "@obtion/core/inbox";
 import { resetInbox } from "@obtion/core/setup";
 import { plainText } from "@obtion/core/search";
 import { type Lang, type T, fmtBytes } from "@obtion/core/i18n";
-import { useRepo, itemHref, spaceHref } from "../hooks";
+import { useRepo, itemHref, itemPath, spaceHref } from "../hooks";
 import { useBlobUrl } from "../files";
 import { Textarea } from "../components/ui/textarea";
 import { replica, spaceById, useAccounts } from "../accounts";
@@ -24,7 +24,7 @@ import { TitleField } from "./TitleField";
 import { QueryEditor } from "./QueryEditor";
 import { SpaceFilter, SpaceScope } from "./Spaces";
 import { notify } from "./feedback";
-import { type InboxEntry, closeShelf, openShelf, useInboxItems, useShelf } from "./inbox";
+import { type InboxEntry, closeShelf, dismissShelf, openShelf, useInboxItems, useShelf } from "./inbox";
 import { DraftBar } from "../views/Lists";
 import { sameValue } from "@obtion/core/equal";
 
@@ -43,7 +43,7 @@ export function ShelfPanel({ desktop, pinned }: { desktop: boolean; pinned?: boo
     const on = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || e.defaultPrevented || document.querySelector("[role=dialog][data-state=open], [data-radix-popper-content-wrapper]")) return;
       if (entry) openShelf();
-      else if (!pinned) closeShelf();
+      else if (!pinned) dismissShelf();
     };
     window.addEventListener("keydown", on);
     return () => window.removeEventListener("keydown", on);
@@ -234,10 +234,10 @@ function EntryView({ entry, desktop, pinned }: { entry: InboxEntry; desktop: boo
         </ShadcnButton>
         {desktop && <span className="min-w-0 truncate text-[15px]">/ {titleOf(entry.item, t)}</span>}
         <span className="flex-1" />
-        <a href={spaceHref(entry.space, `/i/${encodeURIComponent(entry.item.id)}`)} className="tap inline-flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1 text-[13px] hover:bg-hover">
+        <a href={spaceHref(entry.space, itemPath(entry.item.id))} className="tap inline-flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1 text-[13px] hover:bg-hover">
           <Maximize2 size={14} /> {t("tray.openFull")}
         </a>
-        {pinned ? null : desktop ? <IconButton icon={X} label={t("close")} onClick={closeShelf} /> : <Button onClick={closeShelf} className="font-semibold">{t("tray.done")}</Button>}
+        {pinned ? null : desktop ? <IconButton icon={X} label={t("close")} onClick={dismissShelf} /> : <Button onClick={dismissShelf} className="font-semibold">{t("tray.done")}</Button>}
       </div>
       <EntryBody entry={entry} />
     </SpaceScope>

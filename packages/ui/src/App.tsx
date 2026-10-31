@@ -4,7 +4,7 @@ import { BrandLogo } from "./ui/BrandLogo";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Menu, Search, Inbox, SlidersHorizontal, Sun, X } from "lucide-react";
 import { SETTINGS_ID } from "@obtion/core/model";
-import { useRepo, useRoute, useDesktop, itemHref, spaceHref } from "./hooks";
+import { useRepo, useRoute, useDesktop, itemHref, itemPath, spaceHref } from "./hooks";
 import { useT } from "./i18n";
 import { cx, IconButton } from "./ui/bits";
 import { AgentNotice } from "./ui/AgentNotice";
@@ -33,7 +33,7 @@ import { ICON } from "./ui/icons";
 import { NewSpaceDialog, SpaceScope, SpaceSelector, useReplicas } from "./ui/Spaces";
 import { globalPage } from "./scope";
 import { Gate } from "./views/Account";
-import { signOut, useAccounts } from "./accounts";
+import { activeSpace, signOut, useAccounts } from "./accounts";
 
 export function App() {
   // the confirm dialog lives above everything: the sync may ask before the app has loaded
@@ -88,12 +88,8 @@ function Main() {
   const [menu, setMenu] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
   useEffect(() => setMenu(false), [route.path]);
-  // another page closes the tray's panel – but "#/inbox", which opens it over Heute
-  const lastPath = useRef(route.path);
-  useEffect(() => {
-    if (lastPath.current !== "/inbox" && route.path !== "/inbox") closeShelf();
-    lastPath.current = route.path;
-  }, [route.path]);
+  // another page closes the tray's panel – but "#/inbox", which is Heute with it open
+  useEffect(() => void (route.path === "/inbox" ? openShelf() : closeShelf()), [route.path]);
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
@@ -116,7 +112,7 @@ function Main() {
   // nothing set up in any workspace yet (a new account): the first one's setup
   const all = useReplicas(spaces.map((s) => s.id));
   const nothing = all.length > 0 && all.every((x) => !x.get(SETTINGS_ID) && x.status.loaded && (x.status.synced || (!x.status.online && x.docs.size === 0)));
-  useEffect(() => void (nothing && globalPage(route.parts) && location.replace(spaceHref(spaces[0]!.id, "/setup"))), [nothing, route.path]);
+  useEffect(() => void (nothing && globalPage(route.parts, route.space) && location.replace(spaceHref(spaces[0]!.id, "/setup"))), [nothing, route.path]);
 
   // "#/create?title=…" – links to items that don't exist yet.
   useEffect(() => {
@@ -134,27 +130,28 @@ function Main() {
   // the review, search and the settings show what is there in every workspace
   const settings = r.get(SETTINGS_ID);
   const setUp = !settings && (r.status.synced || (!r.status.online && r.docs.size === 0));
+  const global = globalPage(route.parts, route.space);
+  const old = oldAddress(route.parts);
   const page = (() => {
-    if (!globalPage(route.parts) || route.parts[0] === "setup") {
+    if (old !== undefined) return <Redirect to={old.startsWith("/review") ? old : spaceHref(route.space ?? active?.id, old).slice(1)} />;
+    // a workspace in the address this account is not in (any more): not the open one's page instead
+    if (route.space && !spaces.some((s) => s.id === route.space)) return <div className="mx-auto max-w-3xl px-6 py-16 text-center text-muted-foreground">{t("app.noSpace")}</div>;
+    if (!global || route.parts[0] === "setup") {
       if (!r.status.loaded) return <div className="flex h-full items-center justify-center text-muted-foreground">{t("app.opening")}</div>;
       if (setUp) return <Setup />;
       if (!settings) return <div className="flex h-full items-center justify-center text-muted-foreground">{t("app.syncing")}</div>;
     }
     switch (route.parts[0]) {
       case undefined:
-        return <Today />;
       case "inbox":
-        // the inbox is the tray's panel (over Heute); an entry's own page from before the review: the review, at that entry
-        return route.parts[1] ? <Redirect to={`/review?at=${encodeURIComponent(entryKey(active!.id, route.parts[1]))}`} /> : <OpenShelf />;
+        // "#/inbox": Heute, with the tray's panel open (above)
+        return <Today />;
       case "review":
         return <Review at={route.query.get("at") ?? undefined} />;
       case "search":
         return <SearchView />;
       case "files":
         return <FilesPage />;
-      case "c":
-        // links from before 26.10., when the lists were collections
-        return <Redirect to={OLD_LISTS[route.parts[1]!] ?? "/"} />;
       case "types":
         return <TypesView />;
       case "graph":
@@ -164,9 +161,7 @@ function Main() {
       case "trash":
         return <TrashView />;
       case "settings":
-        return <Settings />;
-      case "workspace":
-        return <SpaceSettingsPage />;
+        return global ? <Settings /> : <SpaceSettingsPage />;
       case "setup":
         return <Redirect to="/" />;
       case "i":
@@ -214,7 +209,7 @@ function Main() {
         {/* with the panel pinned below: as tall as Heute is, the panel takes the rest */}
         <main ref={main} tabIndex={-1} className={cx("@container min-h-0 outline-none", pinned ? "flex-initial" : "flex-1", isGraph ? "overflow-hidden" : "overflow-y-auto")}>
           {/* a page of another workspace: anew on its replica (repo and files point at it) */}
-          <PageBoundary key={`${globalPage(route.parts) ? "" : active?.id}${route.path}`}>{page}</PageBoundary>
+          <PageBoundary key={`${global ? "" : active?.id}${route.path === "/inbox" ? "/" : route.path}`}>{page}</PageBoundary>
         </main>
         {tray && <Tray desktop={wide} pinned={pinned} onCapture={() => setCaptureOpen(true)} />}
         {/* the review on a phone is a page of its own, with its own way back */}
@@ -305,13 +300,20 @@ function MobileMenu() {
   );
 }
 
-const OLD_LISTS: Record<string, string> = { "sys:c-project": "/i/sys%3Aproject", "sys:c-task": "/i/sys%3Atask", "sys:c-card": "/i/sys%3Acard", "sys:c-files": "/files", "sys:c-images": "/files?kind=bild", "sys:inbox": "/inbox" };
-
-/** "#/inbox": Heute, with the tray's panel open. */
-function OpenShelf() {
-  useEffect(() => void (openShelf(), location.replace("#/")), []);
-  return <Today />;
+/**
+ * Addresses from before and where they lead now (a path in the workspace of the address), or
+ * undefined for one of today. They can go once no saved link or bookmark uses them any more.
+ */
+function oldAddress(parts: string[]): string | undefined {
+  // the lists as collections (before 26.10.)
+  if (parts[0] === "c") return OLD_LISTS[parts[1]!] ?? "/";
+  // an inbox entry's own page (before the review): the review, at that entry
+  if (parts[0] === "inbox" && parts[1]) return `/review?at=${encodeURIComponent(entryKey(activeSpace()!.id, parts[1]))}`;
+  // a workspace's settings (before 31.10.)
+  if (parts[0] === "workspace") return "/settings";
 }
+
+const OLD_LISTS: Record<string, string> = { "sys:c-project": "/i/sys:project", "sys:c-task": "/i/sys:task", "sys:c-card": "/i/sys:card", "sys:c-files": "/files", "sys:c-images": "/files?kind=image", "sys:inbox": "/inbox" };
 
 function Redirect({ to }: { to: string }) {
   useEffect(() => location.replace("#" + to), [to]);
@@ -337,7 +339,7 @@ function MobileNav() {
     ...(ix
       ? ix.typesInOrder().slice(0, 2).map((x) => {
           const I = ICON[x.schema.icon] ?? ICON.circle!;
-          return { key: x.id, label: ix.typePlural(x.id), icon: <I size={20} />, href: spaceHref(one!.id, `/i/${encodeURIComponent(x.id)}`), active: active?.id === one!.id && route.parts[0] === "i" && route.parts[1] === x.id };
+          return { key: x.id, label: ix.typePlural(x.id), icon: <I size={20} />, href: spaceHref(one!.id, itemPath(x.id)), active: active?.id === one!.id && route.parts[0] === "i" && route.parts[1] === x.id };
         })
       : []),
   ];

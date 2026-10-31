@@ -2,12 +2,12 @@ import { type ItemInit, initType, newId, titleKey } from "@obtion/core/model";
 import type { Repo } from "@obtion/sync";
 import { repo as current } from "./repo";
 import { freshColor } from "@obtion/core/palette";
-import { spaceHref } from "./hooks";
+import { itemPath, spaceHref } from "./hooks";
 
 /** Create an item locally and open it – in another workspace than the open one with `space`. */
 export function createAndOpen(init: ItemInit, repo: Repo = current, space?: string) {
   const id = repo.create(init);
-  location.hash = spaceHref(space, `/i/${encodeURIComponent(id)}?new=1`);
+  location.hash = spaceHref(space, `${itemPath(id)}?new=1`);
   return id;
 }
 

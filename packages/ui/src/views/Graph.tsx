@@ -9,7 +9,7 @@ import ForceGraph from "force-graph";
 import { type Item, META_TYPE } from "@obtion/core/model";
 import type { Index } from "@obtion/core/graph";
 import { isDone, statusProp } from "@obtion/core/traits";
-import { useRepo, go } from "../hooks";
+import { useRepo, go, itemPath } from "../hooks";
 import { useT } from "../i18n";
 import { cx, TypeGlyph } from "../ui/bits";
 import { NOTE_ICON, FILES_ICON } from "../ui/icons";
@@ -129,7 +129,7 @@ function GraphCanvas({ data, highlight }: { data: { nodes: GNode[]; links: GLink
         hover.current = n;
         el.style.cursor = n ? "pointer" : "default";
       })
-      .onNodeClick((n) => go(`/i/${encodeURIComponent(n.id)}`))
+      .onNodeClick((n) => go(itemPath(n.id)))
       .cooldownTicks(200)
       .onEngineStop(() => {
         if (!fitted.current) {

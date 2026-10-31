@@ -4,7 +4,7 @@ import { Search as SearchIcon } from "lucide-react";
 import { type Cond, parseQuery } from "@obtion/core/query";
 import { snippet } from "@obtion/core/search";
 import type { Index } from "@obtion/core/graph";
-import { useRoute, spaceHref } from "../hooks";
+import { useRoute, itemPath, spaceHref } from "../hooks";
 import { useAccounts } from "../accounts";
 import { SpaceScope, useReplicas } from "../ui/Spaces";
 import { useT, tr, titleOf } from "../i18n";
@@ -98,7 +98,7 @@ export function SearchView() {
               ),
               ...hits.map((h) => (
               <li key={`${space.id}/${h.id}`}>
-                <a href={spaceHref(space.id, `/i/${encodeURIComponent(h.id)}`)} className="-mx-2 block rounded-lg px-2 py-1.5 hover:bg-hover">
+                <a href={spaceHref(space.id, itemPath(h.id))} className="-mx-2 block rounded-lg px-2 py-1.5 hover:bg-hover">
                   <span className="flex items-center gap-2 font-medium">
                     <ItemIcon item={h} size={15} /> {titleOf(h, t)} <InTray item={h} ix={ix} />
                   </span>

@@ -33,12 +33,43 @@ export const reviewMinutes = (count: number) => Math.max(1, Math.round(count / 3
 
 // ---------- the tray's panel ----------
 
-/** The tray's panel: closed, the list, or one entry in it (its key). One for the whole app. */
+/**
+ * The tray's panel: closed, the list, or one entry in it (its key). One for the whole app.
+ * Open, it is a step in the history, so Back closes it (on a phone else Back leaves the app);
+ * on Heute that step is "#/inbox", elsewhere the page's own address once more.
+ */
 let shelf: { open: boolean; at?: string } = { open: false };
 const listeners = new Set<() => void>();
 const setShelf = (s: typeof shelf) => ((shelf = s), listeners.forEach((f) => f()));
-export const openShelf = (at?: string) => setShelf({ open: true, at });
+const onInbox = () => location.hash.split("?")[0] === "#/inbox";
+const onToday = () => ["", "#", "#/"].includes(location.hash.split("?")[0]!);
+
+export function openShelf(at?: string) {
+  if (!shelf.open && !onInbox()) {
+    if (onToday()) {
+      location.hash = "#/inbox";
+      history.replaceState({ ...history.state, shelf: true }, "");
+    } else history.pushState({ ...history.state, shelf: true }, "");
+  }
+  setShelf({ open: true, at });
+}
+
+/** Closed as a link leads away from it: the step stays behind, Back comes to it again. */
 export const closeShelf = () => shelf.open && setShelf({ open: false });
+
+/** Closed by hand (its button, Escape, a click beside it): as Back would. */
+export function dismissShelf() {
+  if (!shelf.open) return;
+  if (history.state?.shelf) return history.back();
+  setShelf({ open: false });
+  if (onInbox()) location.replace("#/");
+}
+
+// Back and Forward: the panel as it was at that step
+addEventListener("popstate", () => {
+  const open = !!history.state?.shelf || onInbox();
+  if (open !== shelf.open) setShelf({ open });
+});
 
 /** Pinned open on Heute (a desktop with room below the page, App.tsx): Heute then leaves out its own sight of the entries. */
 let pinned = false;

@@ -13,7 +13,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, FolderInput, Shapes, Sparkles, Trash2, Check, X } from "lucide-react";
 import { type Item, setMeta } from "@obtion/core/model";
 import type { Index } from "@obtion/core/graph";
-import { useIndex, useRepo, useSpaceId, useItemHref, spaceHref, useDesktop } from "../hooks";
+import { useIndex, useRepo, useSpaceId, useItemHref, itemPath, spaceHref, useDesktop } from "../hooks";
 import { useT, titleOf } from "../i18n";
 import { recentPlaces } from "../actions";
 import { Button, ItemIcon, Kbd, RelTime, Tag, TypeGlyph, cx } from "./bits";
@@ -119,7 +119,7 @@ export function Triage({ items }: { items: Item[] }) {
     else if (k === "y" && cur) pick.setTyping(targets().filter((i) => i.kind === "info"));
     else if ((k === "x" || k === "Delete") && cur) trash(targets());
     else if (k === "u" || k === "z") act.undo();
-    else if ((k === "Enter" || k === "o") && cur) (location.hash = spaceHref(spaceOf(cur), `/i/${encodeURIComponent(cur.id)}`));
+    else if ((k === "Enter" || k === "o") && cur) (location.hash = spaceHref(spaceOf(cur), itemPath(cur.id)));
     else return;
     e.preventDefault();
   };
@@ -162,7 +162,7 @@ export function Triage({ items }: { items: Item[] }) {
               data-triage={n}
               role="option"
               aria-selected={on}
-              onClick={() => (phone ? (location.hash = spaceHref(here, `/i/${encodeURIComponent(i.id)}`)) : setSel(n))}
+              onClick={() => (phone ? (location.hash = spaceHref(here, itemPath(i.id))) : setSel(n))}
               className={cx(
                 "relative grid cursor-default items-center gap-x-2 px-3 hover:bg-hover",
                 phone ? "min-h-12 grid-cols-[44px_minmax(0,1fr)_auto] py-1.5" : "h-10 grid-cols-[24px_minmax(0,1fr)_auto_minmax(64px,auto)]",

@@ -14,7 +14,7 @@ import type { EditorView } from "@codemirror/view";
 import { Check, Clock, FolderInput, Layers, List, Maximize2, Pencil, RotateCcw, Shapes, StickyNote, Trash2, Undo2 } from "lucide-react";
 import { type Item, todayISO } from "@obtion/core/model";
 import { plainText } from "@obtion/core/search";
-import { useRepo, useItemHref, spaceHref, go, useDesktop } from "../hooks";
+import { useRepo, useItemHref, itemPath, spaceHref, go, useDesktop } from "../hooks";
 import { replica, spaceById, useAccounts } from "../accounts";
 import { useT, titleOf } from "../i18n";
 import { recentPlaces } from "../actions";
@@ -142,7 +142,7 @@ export function Review({ at }: { at?: string }) {
       else if (k === "ArrowDown" || k === "ArrowUp") card.current?.scrollBy({ top: k === "ArrowDown" ? 80 : -80 });
       else if (k === "j" || k === "ArrowRight") step(1);
       else if (k === "k" || k === "ArrowLeft") step(-1);
-      else if (k === "Enter" || k === "o") location.hash = spaceHref(entry.space, `/i/${encodeURIComponent(entry.item.id)}`);
+      else if (k === "Enter" || k === "o") location.hash = spaceHref(entry.space, itemPath(entry.item.id));
       else return;
       e.preventDefault();
     };
