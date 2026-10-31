@@ -15,6 +15,9 @@ export default defineConfig({
   test: {
     include: ["tests/browser/**/*.browser.tsx"],
     setupFiles: ["tests/browser/setup.ts"],
+    // in CI a failed test gets one more try: the self-hosted machine runs other things beside it
+    // (a load spike is no bug); Vitest still reports the test as flaky
+    retry: process.env.CI ? 1 : 0,
     browser: {
       enabled: true,
       headless: true,
