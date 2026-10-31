@@ -1,17 +1,21 @@
 // Calendar and timeline: entries at their date or range. Dragging moves the date (and in the
 // timeline the start or the end); entries without a date are listed below.
-import { Button as ShadcnButton } from "../components/ui/button";
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
-import { type Item, type PropDef, titleKey } from "@obtion/core/model";
+import { type Item, type PropDef, formatRange, parseRange, titleKey } from "@obtion/core/model";
 import { addDays, diffDays, todayISO } from "@obtion/core/date";
-import { type EvalCtx, type Group, type QueryDef, fieldOf, groupItems, typesIn } from "@obtion/core/query";
+import { type EvalCtx, type Group, type QueryDef, fieldOf, groupItems, viewTypeIds } from "@obtion/core/query";
 import { dueProp } from "@obtion/core/traits";
 import { repo } from "../repo";
-import { go, itemHref, useMediaQuery } from "../hooks";
+import { openItem, itemHref, useLocalStorage, useNarrow } from "../hooks";
 import { useT, titleOf } from "../i18n";
-import { ItemIcon, ItemLink, Seg, cx } from "./bits";
-import { type Look, GroupChip, HiddenGroups, hiddenPatch, splitHidden } from "./Table";
+import { ItemIcon, ItemLink } from "./item-look";
+import { Button, Seg, IconButton } from "./primitives";
+import { cn } from "../lib/utils";
+import { type Look } from "./Table";
+import { GroupChip, HiddenGroups, fieldLabel, hiddenPatch, splitHidden } from "./groups";
+import { KEYS } from "./storage";
+import { startPointerDrag } from "../lib/drag";
 
 // ---------- dates (ISO strings, computed in UTC so no time zone moves a day) ----------
 
@@ -32,9 +36,9 @@ interface Span {
 /** The date a view places entries by: chosen, else the first date property (a due date before others). */
 function dateKey(def: QueryDef, items: Item[], ctx: EvalCtx, chosen?: string): string | undefined {
   if (chosen) return chosen;
-  const types = [...new Set([...typesIn(def.where), ...items.slice(0, 100).map((i) => i.type ?? "")])].map((id) => ctx.ix.types.get(id)?.schema).filter(Boolean);
-  for (const s of types) {
-    const p = s!.properties.find((x) => x.kind === "date" && x.range) ?? dueProp(s) ?? s!.properties.find((x) => x.kind === "date");
+  for (const id of viewTypeIds(def.where, items, ctx.ix, 100)) {
+    const s = ctx.ix.types.get(id)!.schema;
+    const p = s.properties.find((x) => x.kind === "date" && x.range) ?? dueProp(s) ?? s.properties.find((x) => x.kind === "date");
     if (p) return p.name;
   }
   return undefined;
@@ -43,7 +47,7 @@ function dateKey(def: QueryDef, items: Item[], ctx: EvalCtx, chosen?: string): s
 function spanOf(item: Item, key: string, ctx: EvalCtx): Span | undefined {
   const hit = fieldOf(item, key, ctx.ix);
   if (!hit || hit.kind !== "date" || typeof hit.value !== "string" || !hit.value) return undefined;
-  const [a = "", b = ""] = hit.value.split("/");
+  const { start: a, end: b } = parseRange(hit.value);
   const start = isDay(a) ? a : isDay(b) ? b : undefined;
   const end = isDay(b) ? b : start;
   if (!start || !end) return undefined;
@@ -61,7 +65,7 @@ function writable(item: Item, key: string, ctx: EvalCtx): PropDef | undefined {
 function writeSpan(item: Item, key: string, span: Span, ctx: EvalCtx) {
   const p = writable(item, key, ctx);
   if (!p) return;
-  repo.setProp(item.id, p.id, p.range ? `${span.start}/${span.end}` : span.start);
+  repo.setProp(item.id, p.id, p.range ? formatRange(span.start, span.end) : span.start);
 }
 
 // ---------- calendar ----------
@@ -95,15 +99,11 @@ export function CalendarView({ items, def, ctx, look }: { items: Item[]; def: Qu
     <div className="text-sm">
       <div className="mb-2 flex items-center gap-1">
         <h3 className="mr-2 text-base font-semibold capitalize">{new Intl.DateTimeFormat(lang, { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(ms(month)))}</h3>
-        <ShadcnButton variant="plain" size="none" onClick={() => shift(-1)} className="tap rounded-md p-1 text-muted-foreground hover:bg-hover hover:text-fg" aria-label={t("cal.prev")}>
-          <ChevronLeft size={16} />
-        </ShadcnButton>
-        <ShadcnButton variant="plain" size="none" onClick={() => setMonth(today.slice(0, 7) + "-01")} className="tap rounded-md px-2 py-0.5 text-xs text-muted-foreground hover:bg-hover hover:text-fg">
+        <IconButton size="sm" icon={ChevronLeft} onClick={() => shift(-1)} label={t("cal.prev")} />
+        <Button variant="plain" onClick={() => setMonth(today.slice(0, 7) + "-01")} className="tap rounded-md px-2 py-0.5 text-xs text-muted-foreground hover:bg-hover hover:text-fg">
           {t("time.today")}
-        </ShadcnButton>
-        <ShadcnButton variant="plain" size="none" onClick={() => shift(1)} className="tap rounded-md p-1 text-muted-foreground hover:bg-hover hover:text-fg" aria-label={t("cal.next")}>
-          <ChevronRight size={16} />
-        </ShadcnButton>
+        </Button>
+        <IconButton size="sm" icon={ChevronRight} onClick={() => shift(1)} label={t("cal.next")} />
       </div>
       <div className="overflow-x-auto">
         <div className="min-w-[640px] overflow-hidden rounded-xl border border-line">
@@ -136,10 +136,10 @@ export function CalendarView({ items, def, ctx, look }: { items: Item[]; def: Qu
                     onDragOver={(e) => drag && (e.preventDefault(), setOver(d))}
                     onDragLeave={() => setOver(null)}
                     onDrop={(e) => (e.preventDefault(), drop(d), setDrag(null), setOver(null))}
-                    className={cx("border-l border-line first:border-l-0", d.slice(0, 7) !== month.slice(0, 7) && "bg-surface-2/40", over === d && "bg-hover")}
+                    className={cn("border-l border-line first:border-l-0", d.slice(0, 7) !== month.slice(0, 7) && "bg-surface-2/40", over === d && "bg-hover")}
                     style={{ gridColumn: n + 1, gridRow: `1 / span ${Math.min(lanes.length, MAX) + 2}` }}
                   >
-                    <span className={cx("m-1 inline-flex size-6 items-center justify-center rounded-full text-xs tabular-nums", d === today ? "bg-ink font-medium text-ink-text" : "text-muted-foreground")}>{+d.slice(8, 10)}</span>
+                    <span className={cn("m-1 inline-flex size-6 items-center justify-center rounded-full text-xs tabular-nums", d === today ? "bg-ink font-medium text-ink-text" : "text-muted-foreground")}>{+d.slice(8, 10)}</span>
                   </div>
                 ))}
                 {pos
@@ -152,7 +152,7 @@ export function CalendarView({ items, def, ctx, look }: { items: Item[]; def: Qu
                       onDragStart={(e) => (e.dataTransfer.setData("obtion/item", p.item.id), setDrag({ id: p.item.id, from: days[p.s]! }))}
                       onDragEnd={() => setDrag(null)}
                       title={p.item.title}
-                      className={cx(
+                      className={cn(
                         "z-[1] mx-1 my-px flex min-w-0 items-center gap-1 truncate rounded-md border px-1.5 py-0.5 text-xs",
                         p.span.start === p.span.end ? "border-line bg-surface shadow-sm hover:bg-hover" : SPAN,
                         ms(p.span.start) < ms(w) && "ml-0 rounded-l-none border-l-0",
@@ -188,9 +188,9 @@ function Undated({ items, label }: { items: Item[]; label: string }) {
   if (!items.length) return null;
   return (
     <div className="mt-3 text-sm">
-      <ShadcnButton variant="plain" size="none" onClick={() => setOpen(!open)} aria-expanded={open} className="tap-y flex items-center gap-1.5 text-muted-foreground hover:text-fg">
+      <Button variant="plain" onClick={() => setOpen(!open)} aria-expanded={open} className="tap-y flex items-center gap-1.5 text-muted-foreground hover:text-fg">
         {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />} {label}
-      </ShadcnButton>
+      </Button>
       {open && (
         <ul className="mt-1 space-y-1 pl-5">
           {items.map((i) => (
@@ -207,7 +207,7 @@ function Undated({ items, label }: { items: Item[]; label: string }) {
 // ---------- timeline ----------
 
 /** A range as a bar: a quiet tint of the focus colour. */
-const SPAN = "border-[color-mix(in_srgb,var(--focus)_40%,transparent)] bg-[color-mix(in_srgb,var(--focus)_14%,var(--surface))] hover:bg-[color-mix(in_srgb,var(--focus)_22%,var(--surface))]";
+const SPAN = "border-focus/40 bg-[color-mix(in_srgb,var(--focus)_14%,var(--surface))] hover:bg-[color-mix(in_srgb,var(--focus)_22%,var(--surface))]";
 
 type Scale = "week" | "month";
 const PX: Record<Scale, number> = { week: 28, month: 7 }; // pixels per day
@@ -220,8 +220,7 @@ export function TimelineView({ items, def, ctx, look }: { items: Item[]; def: Qu
   const { t, lang } = useT();
   const key = dateKey(def, items, ctx, look?.tab?.date);
   const today = todayISO();
-  const [scale, setScaleState] = useState<Scale>(() => (localStorage.getItem("obtion.timeline.scale") as Scale) || "week");
-  const setScale = (s: Scale) => (localStorage.setItem("obtion.timeline.scale", s), setScaleState(s));
+  const [scale, setScale] = useLocalStorage<Scale>(KEYS.timelineScale, "week");
   const px = PX[scale];
   // while dragging: the changed span of one entry, written on release
   const [live, setLive] = useState<{ id: string; span: Span } | null>(null);
@@ -241,7 +240,7 @@ export function TimelineView({ items, def, ctx, look }: { items: Item[]; def: Qu
   const width = days * px;
   const scroller = useRef<HTMLDivElement>(null);
   const [scrollX, setScrollX] = useState(0);
-  const narrow = useMediaQuery("(max-width: 640px)");
+  const narrow = useNarrow();
   useEffect(() => {
     // start with today in view, a bit from the left
     const el = scroller.current;
@@ -252,7 +251,7 @@ export function TimelineView({ items, def, ctx, look }: { items: Item[]; def: Qu
   const tab = look?.tab;
   const dated = items.filter((i) => placed.has(i.id));
   const [groups, hiddenGroups] = by ? splitHidden(groupItems(dated, by, ctx).filter((g) => g.items.length), tab) : [[{ key: "", items: dated } as Group], []];
-  const byLabel = by ? (["status", "statusGroup", "type", "path"].includes(by) ? t("group." + by) : by) : "";
+  const byLabel = by ? fieldLabel(by, t) : "";
   // the scale: month names (and week starts in the week scale)
   const ticks: { day: string; label: string; major: boolean }[] = [];
   for (let d = from; ms(d) <= ms(to); d = addDays(d, 1)) {
@@ -268,26 +267,24 @@ export function TimelineView({ items, def, ctx, look }: { items: Item[]; def: Qu
     const x0 = e.clientX;
     let span = span0;
     let moved = false;
-    const move = (ev: PointerEvent) => {
-      const d = Math.round((ev.clientX - x0) / px);
-      if (d) moved = true;
-      span =
-        mode === "move"
-          ? { start: addDays(span0.start, d), end: addDays(span0.end, d) }
-          : mode === "start"
-            ? { start: ms(addDays(span0.start, d)) > ms(span0.end) ? span0.end : addDays(span0.start, d), end: span0.end }
-            : { start: span0.start, end: ms(addDays(span0.end, d)) < ms(span0.start) ? span0.start : addDays(span0.end, d) };
-      setLive({ id: item.id, span });
-    };
-    const up = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
-      setLive(null);
-      if (!moved) return mode === "move" && go(itemHref(item.id).slice(1));
-      if (span.start !== span0.start || span.end !== span0.end) writeSpan(item, key, span, ctx);
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
+    startPointerDrag(
+      (ev) => {
+        const d = Math.round((ev.clientX - x0) / px);
+        if (d) moved = true;
+        span =
+          mode === "move"
+            ? { start: addDays(span0.start, d), end: addDays(span0.end, d) }
+            : mode === "start"
+              ? { start: ms(addDays(span0.start, d)) > ms(span0.end) ? span0.end : addDays(span0.start, d), end: span0.end }
+              : { start: span0.start, end: ms(addDays(span0.end, d)) < ms(span0.start) ? span0.start : addDays(span0.end, d) };
+        setLive({ id: item.id, span });
+      },
+      () => {
+        setLive(null);
+        if (!moved) return void (mode === "move" && openItem(item.id));
+        if (span.start !== span0.start || span.end !== span0.end) writeSpan(item, key, span, ctx);
+      },
+    );
   };
   const LEFT = narrow ? 130 : 220; // the names column; on a phone it leaves room for the bars
   const row = (i: Item) => {
@@ -307,7 +304,7 @@ export function TimelineView({ items, def, ctx, look }: { items: Item[]; def: Qu
           <div
             onPointerDown={(e) => drag(i, "move", e)}
             title={`${i.title} · ${s.start === s.end ? s.start : `${s.start} – ${s.end}`}`}
-            className={cx("absolute top-1.5 flex h-6 items-center overflow-hidden whitespace-nowrap rounded-md border px-2 text-xs touch-none", SPAN, canEdit ? "cursor-grab active:cursor-grabbing" : "cursor-pointer")}
+            className={cn("absolute top-1.5 flex h-6 items-center overflow-hidden whitespace-nowrap rounded-md border px-2 text-xs touch-none", SPAN, canEdit ? "cursor-grab active:cursor-grabbing" : "cursor-pointer")}
             style={{ left: x, width: Math.max(w, px) }}
           >
             {canEdit && <span onPointerDown={(e) => drag(i, "start", e)} className="absolute inset-y-0 left-0 w-2 cursor-ew-resize" aria-hidden />}
@@ -325,9 +322,9 @@ export function TimelineView({ items, def, ctx, look }: { items: Item[]; def: Qu
     <div className="text-sm">
       <div className="mb-2 flex items-center gap-2">
         <Seg label={t("timeline.scale")} value={scale} onChange={setScale} options={[{ value: "week", label: t("timeline.weeks") }, { value: "month", label: t("timeline.months") }]} />
-        <ShadcnButton variant="plain" size="none" onClick={() => scroller.current && (scroller.current.scrollLeft = Math.max(0, diffDays(from, today) * px - 160))} className="tap rounded-md px-2 py-0.5 text-xs text-muted-foreground hover:bg-hover hover:text-fg">
+        <Button variant="plain" onClick={() => scroller.current && (scroller.current.scrollLeft = Math.max(0, diffDays(from, today) * px - 160))} className="tap rounded-md px-2 py-0.5 text-xs text-muted-foreground hover:bg-hover hover:text-fg">
           {t("time.today")}
-        </ShadcnButton>
+        </Button>
       </div>
       <div ref={scroller} onScroll={(e) => setScrollX(e.currentTarget.scrollLeft)} className="relative overflow-x-auto rounded-xl border border-line">
         <div style={{ width: width + LEFT }} className="relative">
@@ -336,7 +333,7 @@ export function TimelineView({ items, def, ctx, look }: { items: Item[]; def: Qu
             <div className="sticky left-0 z-[2] shrink-0 border-r border-line bg-surface-2" style={{ width: LEFT }} />
             <div className="relative" style={{ width }}>
               {ticks.map((k) => (
-                <span key={k.day} className={cx("absolute top-0 h-full whitespace-nowrap border-l pl-1 pt-1.5", k.major ? "border-line font-medium text-muted-foreground" : "border-line/50")} style={{ left: diffDays(from, k.day) * px }}>
+                <span key={k.day} className={cn("absolute top-0 h-full whitespace-nowrap border-l pl-1 pt-1.5", k.major ? "border-line font-medium text-muted-foreground" : "border-line/50")} style={{ left: diffDays(from, k.day) * px }}>
                   {k.label}
                 </span>
               ))}

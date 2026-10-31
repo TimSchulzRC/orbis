@@ -8,7 +8,7 @@ import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate
 import { tr } from "../../i18n";
 import { blockAt, kindName } from "./blocks";
 import { isQueryInfo } from "@obtion/core/query";
-import { cx } from "../bits";
+import { cn } from "../../lib/utils";
 
 class BulletWidget extends WidgetType {
   constructor(readonly depth: number) {
@@ -124,7 +124,7 @@ function build(view: EditorView): { deco: DecorationSet; atomic: DecorationSet }
             if (info && isQueryInfo(state.sliceDoc(info.from, info.to).trim())) return false; // a query block draws itself
             const first = state.doc.lineAt(n.from).number;
             const last = state.doc.lineAt(n.to).number;
-            for (let i = first; i <= last; i++) deco.push(line(cx("cm-codeblock", i === first && "first", i === last && "last", (i === first || i === last) && "fence")).range(state.doc.line(i).from));
+            for (let i = first; i <= last; i++) deco.push(line(cn("cm-codeblock", i === first && "first", i === last && "last", (i === first || i === last) && "fence")).range(state.doc.line(i).from));
             return false;
           }
           case "Blockquote": {
@@ -157,7 +157,7 @@ function build(view: EditorView): { deco: DecorationSet; atomic: DecorationSet }
               const box = Decoration.replace({ widget: new CheckWidget(checked, mark.from) }).range(mark.from, end);
               deco.push(box);
               atomic.push(box);
-              deco.push(line(cx("cm-listline cm-taskline", checked && "done")).range(listLine.from));
+              deco.push(line(cn("cm-listline cm-taskline", checked && "done")).range(listLine.from));
             } else if (n.node.parent?.name === "BulletList") {
               let depth = 0;
               for (let p: typeof n.node | null = n.node.parent; p; p = p.parent) if (p.name === "BulletList" || p.name === "OrderedList") depth++;

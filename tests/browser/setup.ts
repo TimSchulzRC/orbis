@@ -9,8 +9,11 @@ localStorage.setItem("obtion.account", JSON.stringify({ token: "test", user: { i
 localStorage.setItem("obtion.spaces", JSON.stringify([{ id: "ws", name: "Persönlich", role: "owner" }]));
 localStorage.setItem("obtion.active", "ws");
 
-vi.mock("../../packages/ui/src/accounts", async (original) => {
-  const current = await import("../../packages/ui/src/repo");
-  const { noFiles } = await import("./workspace");
-  return { ...(await original<object>()), replica: () => ({ repo: current.repo, files: noFiles }) };
-});
+// accounts.ts as it is, only replica() answers with the workspace in memory. Spied, not replaced
+// by a factory: accounts.ts and hooks.ts import each other, and a factory that loads the original
+// would wait for itself.
+vi.mock("../../packages/ui/src/accounts", { spy: true });
+const accounts = await import("../../packages/ui/src/accounts");
+const current = await import("../../packages/ui/src/repo");
+const { noFiles } = await import("./workspace");
+vi.mocked(accounts.replica).mockImplementation(() => ({ repo: current.repo, files: noFiles }));

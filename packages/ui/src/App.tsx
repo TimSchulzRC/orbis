@@ -1,12 +1,12 @@
 import { ModalSurface } from "./components/ui/dialog";
-import { Button as ShadcnButton } from "./components/ui/button";
 import { BrandLogo } from "./ui/BrandLogo";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Menu, Search, Inbox, SlidersHorizontal, Sun, X } from "lucide-react";
 import { SETTINGS_ID } from "@obtion/core/model";
-import { useRepo, useRoute, useDesktop, itemHref, spaceHref } from "./hooks";
+import { useRepo, useRoute, useDesktop, itemPath, spaceHref, navigate, openItem } from "./hooks";
 import { useT } from "./i18n";
-import { cx, IconButton } from "./ui/bits";
+import { cn } from "./lib/utils";
+import { Button, IconButton, PagePlaceholder } from "./ui/primitives";
 import { AgentNotice } from "./ui/AgentNotice";
 import { ConfirmHost } from "./ui/feedback";
 import { AppToaster } from "./ui/toasts";
@@ -23,7 +23,7 @@ import { FilesPage } from "./views/Lists";
 import { Review } from "./views/Review";
 import { Today } from "./views/Today";
 import { Tray } from "./ui/Tray";
-import { closeShelf, entryKey, openShelf, setShelfPinned, useInboxItems, useShelf } from "./ui/inbox";
+import { entryKey, setShelfPinned, syncShelf, useInboxItems, useShelf } from "./ui/inbox";
 import { TypesView } from "./views/Types";
 import { GraphView } from "./views/Graph";
 import { Activity } from "./views/Activity";
@@ -33,7 +33,7 @@ import { ICON } from "./ui/icons";
 import { NewSpaceDialog, SpaceScope, SpaceSelector, useReplicas } from "./ui/Spaces";
 import { globalPage } from "./scope";
 import { Gate } from "./views/Account";
-import { signOut, useAccounts } from "./accounts";
+import { activeSpace, signOut, useAccounts } from "./accounts";
 
 export function App() {
   // the confirm dialog lives above everything: the sync may ask before the app has loaded
@@ -53,14 +53,7 @@ function SignedOut() {
   const { t } = useT();
   const { account } = useAccounts();
   if (!account?.lost) return null;
-  return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line bg-surface-2 px-4 py-2 text-sm" role="status">
-      <span className="flex-1">{t("account.lost", { server: location.host })}</span>
-      <ShadcnButton variant="plain" size="none" onClick={() => void signOut()} className="font-medium text-[var(--link)] hover:underline">
-        {t("account.signInAgain")}
-      </ShadcnButton>
-    </div>
-  );
+  return <StatusBanner action={{ label: t("account.signInAgain"), run: () => void signOut() }}>{t("account.lost", { server: location.host })}</StatusBanner>;
 }
 
 /** A newer app wrote data in one of the workspaces: this one only reads them until reloaded. */
@@ -68,12 +61,17 @@ function TooNew() {
   const { t } = useT();
   const { spaces } = useAccounts();
   if (!useReplicas(spaces.map((s) => s.id)).some((r) => r.readOnly)) return null;
+  return <StatusBanner action={{ label: t("format.reload"), run: () => location.reload() }}>{t("format.tooNew")}</StatusBanner>;
+}
+
+/** A line across the top about the whole app, with the one thing to do about it. */
+function StatusBanner({ children, action }: { children: React.ReactNode; action: { label: string; run: () => void } }) {
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line bg-surface-2 px-4 py-2 text-sm" role="status">
-      <span className="flex-1">{t("format.tooNew")}</span>
-      <ShadcnButton variant="plain" size="none" onClick={() => location.reload()} className="font-medium text-[var(--link)] hover:underline">
-        {t("format.reload")}
-      </ShadcnButton>
+      <span className="flex-1">{children}</span>
+      <Button variant="plain" onClick={action.run} className="font-medium text-link hover:underline">
+        {action.label}
+      </Button>
     </div>
   );
 }
@@ -88,12 +86,8 @@ function Main() {
   const [menu, setMenu] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
   useEffect(() => setMenu(false), [route.path]);
-  // another page closes the tray's panel – but "#/inbox", which opens it over Heute
-  const lastPath = useRef(route.path);
-  useEffect(() => {
-    if (lastPath.current !== "/inbox" && route.path !== "/inbox") closeShelf();
-    lastPath.current = route.path;
-  }, [route.path]);
+  // another page closes the tray's panel – but "#/inbox" (Heute with it open) and a step it was open at
+  useEffect(syncShelf, [route.path]);
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
@@ -111,22 +105,22 @@ function Main() {
       window.removeEventListener("keydown", on);
       window.removeEventListener("obtion:palette", showPalette);
     };
-  });
+  }, []);
 
   // nothing set up in any workspace yet (a new account): the first one's setup
   const all = useReplicas(spaces.map((s) => s.id));
   const nothing = all.length > 0 && all.every((x) => !x.get(SETTINGS_ID) && x.status.loaded && (x.status.synced || (!x.status.online && x.docs.size === 0)));
-  useEffect(() => void (nothing && globalPage(route.parts) && location.replace(spaceHref(spaces[0]!.id, "/setup"))), [nothing, route.path]);
+  useEffect(() => void (nothing && globalPage(route.parts, route.space) && navigate("/setup", { space: spaces[0]!.id, replace: true })), [nothing, route.path]);
 
   // "#/create?title=…" – links to items that don't exist yet.
   useEffect(() => {
     if (route.parts[0] !== "create") return;
     const title = route.query.get("title") ?? "";
     const existing = title ? r.resolveTitle(title) : undefined;
-    if (existing) location.replace(itemHref(existing));
+    if (existing) openItem(existing, { replace: true });
     else {
       const id = r.create({ title });
-      location.replace(`${itemHref(id)}?new=1`);
+      openItem(id, { replace: true, query: "?new=1" });
     }
   }, [route.path]);
 
@@ -134,27 +128,28 @@ function Main() {
   // the review, search and the settings show what is there in every workspace
   const settings = r.get(SETTINGS_ID);
   const setUp = !settings && (r.status.synced || (!r.status.online && r.docs.size === 0));
+  const global = globalPage(route.parts, route.space);
+  const old = oldAddress(route.parts);
   const page = (() => {
-    if (!globalPage(route.parts) || route.parts[0] === "setup") {
-      if (!r.status.loaded) return <div className="flex h-full items-center justify-center text-muted-foreground">{t("app.opening")}</div>;
+    if (old !== undefined) return <Redirect to={old.startsWith("/review") ? old : spaceHref(route.space ?? active?.id, old).slice(1)} />;
+    // a workspace in the address this account is not in (any more): not the open one's page instead
+    if (route.space && !spaces.some((s) => s.id === route.space)) return <PagePlaceholder>{t("app.noSpace")}</PagePlaceholder>;
+    if (!global || route.parts[0] === "setup") {
+      if (!r.status.loaded) return <PagePlaceholder fill>{t("app.opening")}</PagePlaceholder>;
       if (setUp) return <Setup />;
-      if (!settings) return <div className="flex h-full items-center justify-center text-muted-foreground">{t("app.syncing")}</div>;
+      if (!settings) return <PagePlaceholder fill>{t("app.syncing")}</PagePlaceholder>;
     }
     switch (route.parts[0]) {
       case undefined:
-        return <Today />;
       case "inbox":
-        // the inbox is the tray's panel (over Heute); an entry's own page from before the review: the review, at that entry
-        return route.parts[1] ? <Redirect to={`/review?at=${encodeURIComponent(entryKey(active!.id, route.parts[1]))}`} /> : <OpenShelf />;
+        // "#/inbox": Heute, with the tray's panel open (above)
+        return <Today />;
       case "review":
         return <Review at={route.query.get("at") ?? undefined} />;
       case "search":
         return <SearchView />;
       case "files":
         return <FilesPage />;
-      case "c":
-        // links from before 26.10., when the lists were collections
-        return <Redirect to={OLD_LISTS[route.parts[1]!] ?? "/"} />;
       case "types":
         return <TypesView />;
       case "graph":
@@ -164,9 +159,7 @@ function Main() {
       case "trash":
         return <TrashView />;
       case "settings":
-        return <Settings />;
-      case "workspace":
-        return <SpaceSettingsPage />;
+        return global ? <Settings /> : <SpaceSettingsPage />;
       case "setup":
         return <Redirect to="/" />;
       case "i":
@@ -186,12 +179,12 @@ function Main() {
 
   return (
     <div className="flex h-full">
-      <ShadcnButton variant="plain" size="none"
+      <Button variant="plain"
         onClick={() => document.querySelector("main")?.focus()}
         className="sr-only z-50 rounded-lg border border-line bg-surface text-sm shadow-lg focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:px-3 focus:py-2"
       >
         {t("nav.skip")}
-      </ShadcnButton>
+      </Button>
       {wide && <Sidebar onSearch={() => setPalette(true)} />}
 
       <div ref={column} className="flex min-w-0 flex-1 flex-col">
@@ -201,20 +194,20 @@ function Main() {
               <BrandLogo alt="" className="size-6" />
             </a>
             <SyncDot />
-            <ShadcnButton variant="plain" size="none" onClick={() => setPalette(true)} className="tap-row ml-1 flex flex-1 items-center gap-2 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm text-muted-foreground">
+            <Button variant="plain" onClick={() => setPalette(true)} className="tap-row ml-1 flex flex-1 items-center gap-2 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm text-muted-foreground">
               <Search size={15} /> {t("nav.searchPlaceholder")}
-            </ShadcnButton>
-            <ShadcnButton variant="plain" size="none" onClick={() => setMenu(true)} className="tap p-1.5 text-muted-foreground" aria-label={t("nav.menu")}>
+            </Button>
+            <Button variant="plain" onClick={() => setMenu(true)} className="tap p-1.5 text-muted-foreground" aria-label={t("nav.menu")}>
               <Menu size={20} />
-            </ShadcnButton>
+            </Button>
           </header>
         )}
         <SignedOut />
         <TooNew />
         {/* with the panel pinned below: as tall as Heute is, the panel takes the rest */}
-        <main ref={main} tabIndex={-1} className={cx("@container min-h-0 outline-none", pinned ? "flex-initial" : "flex-1", isGraph ? "overflow-hidden" : "overflow-y-auto")}>
+        <main ref={main} tabIndex={-1} className={cn("@container min-h-0 outline-none", pinned ? "flex-initial" : "flex-1", isGraph ? "overflow-hidden" : "overflow-y-auto")}>
           {/* a page of another workspace: anew on its replica (repo and files point at it) */}
-          <PageBoundary key={`${globalPage(route.parts) ? "" : active?.id}${route.path}`}>{page}</PageBoundary>
+          <PageBoundary key={`${global ? "" : active?.id}${route.path === "/inbox" ? "/" : route.path}`}>{page}</PageBoundary>
         </main>
         {tray && <Tray desktop={wide} pinned={pinned} onCapture={() => setCaptureOpen(true)} />}
         {/* the review on a phone is a page of its own, with its own way back */}
@@ -305,16 +298,23 @@ function MobileMenu() {
   );
 }
 
-const OLD_LISTS: Record<string, string> = { "sys:c-project": "/i/sys%3Aproject", "sys:c-task": "/i/sys%3Atask", "sys:c-card": "/i/sys%3Acard", "sys:c-files": "/files", "sys:c-images": "/files?kind=bild", "sys:inbox": "/inbox" };
-
-/** "#/inbox": Heute, with the tray's panel open. */
-function OpenShelf() {
-  useEffect(() => void (openShelf(), location.replace("#/")), []);
-  return <Today />;
+/**
+ * Addresses from before and where they lead now (a path in the workspace of the address), or
+ * undefined for one of today. They can go once no saved link or bookmark uses them any more.
+ */
+function oldAddress(parts: string[]): string | undefined {
+  // the lists as collections (before 26.10.)
+  if (parts[0] === "c") return OLD_LISTS[parts[1]!] ?? "/";
+  // an inbox entry's own page (before the review): the review, at that entry
+  if (parts[0] === "inbox" && parts[1]) return `/review?at=${encodeURIComponent(entryKey(activeSpace()!.id, parts[1]))}`;
+  // a workspace's settings (before 31.10.)
+  if (parts[0] === "workspace") return "/settings";
 }
 
+const OLD_LISTS: Record<string, string> = { "sys:c-project": "/i/sys:project", "sys:c-task": "/i/sys:task", "sys:c-card": "/i/sys:card", "sys:c-files": "/files", "sys:c-images": "/files?kind=image", "sys:inbox": "/inbox" };
+
 function Redirect({ to }: { to: string }) {
-  useEffect(() => location.replace("#" + to), [to]);
+  useEffect(() => navigate(to, { replace: true }), [to]);
   return null;
 }
 
@@ -337,14 +337,14 @@ function MobileNav() {
     ...(ix
       ? ix.typesInOrder().slice(0, 2).map((x) => {
           const I = ICON[x.schema.icon] ?? ICON.circle!;
-          return { key: x.id, label: ix.typePlural(x.id), icon: <I size={20} />, href: spaceHref(one!.id, `/i/${encodeURIComponent(x.id)}`), active: active?.id === one!.id && route.parts[0] === "i" && route.parts[1] === x.id };
+          return { key: x.id, label: ix.typePlural(x.id), icon: <I size={20} />, href: spaceHref(one!.id, itemPath(x.id)), active: active?.id === one!.id && route.parts[0] === "i" && route.parts[1] === x.id };
         })
       : []),
   ];
   return (
     <nav className="grid border-t border-line bg-surface pb-safe" style={{ gridTemplateColumns: `repeat(${entries.length}, minmax(0, 1fr))` }} aria-label={t("nav.main")}>
       {entries.map((e) => {
-        const cls = cx("relative flex flex-col items-center gap-0.5 py-2 text-[11px]", e.active ? "text-fg" : "text-muted-foreground");
+        const cls = cn("relative flex flex-col items-center gap-0.5 py-2 text-[11px]", e.active ? "text-fg" : "text-muted-foreground");
         const inner = (
           <>
             {e.icon}

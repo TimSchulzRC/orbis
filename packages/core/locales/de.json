@@ -97,6 +97,7 @@
  "app.opening": "Öffne deine Daten…",
  "app.syncing": "Gleiche mit dem Server ab…",
  "app.notFound": "Nicht gefunden",
+ "app.noSpace": "Diesen Workspace gibt es nicht, oder du bist nicht (mehr) darin.",
  "error.title": "Diese Seite konnte nicht angezeigt werden",
  "error.hint": "Deine Daten sind sicher. Neu laden hilft meistens; sonst zeigt der Text unten, was schiefging.",
  "error.reload": "Neu laden",

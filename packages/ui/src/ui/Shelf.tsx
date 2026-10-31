@@ -4,29 +4,30 @@
 // button. Above the tray on a desktop, as a sheet on a phone. What lands in the inbox: behind "…".
 // On Heute on a desktop it is part of the page (`pinned`): always open, it does not close. Without
 // room for it there, Heute shows the newest entries as cards (ShelfCards), each opens the panel.
-import { Button as ShadcnButton } from "../components/ui/button";
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, ArrowUp, Maximize2, MoreHorizontal, RotateCcw, SlidersHorizontal, X } from "lucide-react";
+import { ArrowLeft, ArrowUp, Maximize2, RotateCcw, SlidersHorizontal, X } from "lucide-react";
 import { type Item, SETTINGS_ID, setSettings } from "@obtion/core/model";
 import type { QueryDef } from "@obtion/core/query";
 import { inboxWhere } from "@obtion/core/inbox";
 import { resetInbox } from "@obtion/core/setup";
 import { plainText } from "@obtion/core/search";
 import { type Lang, type T, fmtBytes } from "@obtion/core/i18n";
-import { useRepo, itemHref, spaceHref } from "../hooks";
+import { useRepo, itemPath, spaceHref } from "../hooks";
 import { useBlobUrl } from "../files";
 import { Textarea } from "../components/ui/textarea";
 import { replica, spaceById, useAccounts } from "../accounts";
 import { useT, titleOf } from "../i18n";
-import { Button, Dialog, IconButton, ItemIcon, Kbd, MenuItem, Popover, RelTime, cx } from "./bits";
+import { Button, Dialog, IconButton, Kbd, MenuItem, MoreMenu, DraftBar } from "./primitives";
+import { ItemIcon, RelTime, BelowList } from "./item-look";
+import { cn } from "../lib/utils";
 import { Editor } from "./Editor";
 import { TitleField } from "./TitleField";
 import { QueryEditor } from "./QueryEditor";
 import { SpaceFilter, SpaceScope } from "./Spaces";
 import { notify } from "./feedback";
-import { type InboxEntry, closeShelf, openShelf, useInboxItems, useShelf } from "./inbox";
-import { DraftBar } from "../views/Lists";
+import { type InboxEntry, closeShelf, dismissShelf, openShelf, useInboxItems, useShelf } from "./inbox";
 import { sameValue } from "@obtion/core/equal";
+import { filePreview } from "./text";
 
 /** Where an entry opens in the review. */
 const reviewHref = (key: string) => `#/review?at=${encodeURIComponent(key)}`;
@@ -43,7 +44,7 @@ export function ShelfPanel({ desktop, pinned }: { desktop: boolean; pinned?: boo
     const on = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || e.defaultPrevented || document.querySelector("[role=dialog][data-state=open], [data-radix-popper-content-wrapper]")) return;
       if (entry) openShelf();
-      else if (!pinned) closeShelf();
+      else if (!pinned) dismissShelf();
     };
     window.addEventListener("keydown", on);
     return () => window.removeEventListener("keydown", on);
@@ -56,11 +57,11 @@ export function ShelfPanel({ desktop, pinned }: { desktop: boolean; pinned?: boo
       data-shelf-panel={pinned ? "pinned" : "open"}
       // a link inside leads away: the panel closes behind it
       onClickCapture={(e) => (e.target as HTMLElement).closest("a[href]") && closeShelf()}
-      className={cx(
+      className={cn(
         "flex flex-col overflow-hidden border border-line bg-surface",
         pinned
           ? "h-full rounded-2xl shadow-[0_6px_24px_-12px_rgb(0_0_0/0.25)]"
-          : cx("shadow-[0_18px_50px_-12px_rgb(0_0_0/0.45)]", desktop ? "max-h-[min(640px,calc(100dvh-160px))] rounded-2xl" : entry ? "h-full rounded-t-2xl" : "max-h-[min(70dvh,560px)] rounded-2xl"),
+          : cn("shadow-[0_18px_50px_-12px_rgb(0_0_0/0.45)]", desktop ? "max-h-[min(640px,calc(100dvh-160px))] rounded-2xl" : entry ? "h-full rounded-t-2xl" : "max-h-[min(70dvh,560px)] rounded-2xl"),
       )}
     >
       {!desktop && <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-line" aria-hidden />}
@@ -86,7 +87,7 @@ function List({ entries, desktop, pinned }: { entries: InboxEntry[]; desktop: bo
         </h2>
         {desktop && <span className="text-[13px] text-muted-foreground">· {t("tray.newestFirst")}</span>}
         <span className="flex-1" />
-        <Popover align="right" trigger={(p) => <IconButton {...p} label={t("more")} icon={MoreHorizontal} />}>
+        <MoreMenu>
           {(close) =>
             shown.map((s) => (
               <MenuItem key={s.id} icon={<SlidersHorizontal size={14} />} onClick={() => (close(), setRule(s.id))}>
@@ -94,7 +95,7 @@ function List({ entries, desktop, pinned }: { entries: InboxEntry[]; desktop: bo
               </MenuItem>
             ))
           }
-        </Popover>
+        </MoreMenu>
       </div>
       {/* several workspaces: which of them, as in the sidebar's selector */}
       <div className="shrink-0 px-5 pt-3 empty:hidden [&>div]:mb-1">
@@ -149,19 +150,18 @@ export function ShelfCards({ entries }: { entries: InboxEntry[] }) {
         </h2>
         <span className="text-[13px] text-muted-foreground">· {t("tray.newestFirst")}</span>
         <span className="flex-1" />
-        <ShadcnButton variant="plain" size="none" onClick={() => openShelf()} className="tap-y inline-flex items-center gap-1 rounded-md px-1.5 text-[13px] text-muted-foreground hover:text-fg">
+        <Button variant="plain" onClick={() => openShelf()} className="tap-y inline-flex items-center gap-1 rounded-md px-1.5 text-[13px] text-muted-foreground hover:text-fg">
           {t("tray.showAll")} <ArrowUp size={14} />
-        </ShadcnButton>
+        </Button>
       </div>
       <div className="grid grid-cols-2 gap-3 @3xl:grid-cols-4">
         {entries.slice(0, 4).map((e) => {
           const ix = replica(e.space).repo.index();
           const line = preview(e, t, lang, ix.childrenOf(e.item.id).length);
           return (
-            <ShadcnButton
+            <Button
               key={e.key}
               variant="plain"
-              size="none"
               onClick={() => openShelf(e.key)}
               aria-label={t("tray.openEntry", { title: titleOf(e.item, t) })}
               className="flex min-w-0 flex-col items-stretch gap-1 rounded-xl border border-[color-mix(in_srgb,var(--t-inbox)_35%,var(--border))] bg-surface px-4 py-3 text-left hover:bg-hover"
@@ -173,7 +173,7 @@ export function ShelfCards({ entries }: { entries: InboxEntry[] }) {
               </span>
               <span className="truncate text-[15px] font-semibold">{titleOf(e.item, t)}</span>
               <span className="truncate text-xs text-muted-foreground">{line || "\u00a0"}</span>
-            </ShadcnButton>
+            </Button>
           );
         })}
       </div>
@@ -195,15 +195,14 @@ function Row({ entry, n, on, space, onHover }: { entry: InboxEntry; n: number; o
   const ix = replica(entry.space).repo.index();
   const line = preview(entry, t, lang, ix.childrenOf(entry.item.id).length);
   return (
-    <ShadcnButton
+    <Button
       variant="plain"
-      size="none"
       data-shelf={n}
       role="option"
       aria-selected={on}
       onClick={() => openShelf(entry.key)}
       onMouseMove={onHover}
-      className={cx("flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left", on && "bg-hover")}
+      className={cn("flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left", on && "bg-hover")}
     >
       <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-line text-muted-foreground">
         <ItemIcon item={entry.item} size={16} ix={ix} />
@@ -216,7 +215,7 @@ function Row({ entry, n, on, space, onHover }: { entry: InboxEntry; n: number; o
         <RelTime ts={entry.item.created} />
         {space && <span>{space}</span>}
       </span>
-    </ShadcnButton>
+    </Button>
   );
 }
 
@@ -229,15 +228,15 @@ function EntryView({ entry, desktop, pinned }: { entry: InboxEntry; desktop: boo
   return (
     <SpaceScope id={entry.space}>
       <div className="flex shrink-0 items-center gap-1 border-b border-line py-2 pl-2 pr-2">
-        <ShadcnButton variant="plain" size="none" onClick={() => openShelf()} className="tap inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[15px] text-muted-foreground hover:bg-hover hover:text-fg">
+        <Button variant="plain" onClick={() => openShelf()} className="tap inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[15px] text-muted-foreground hover:bg-hover hover:text-fg">
           <ArrowLeft size={16} /> {t("tray.title")}
-        </ShadcnButton>
+        </Button>
         {desktop && <span className="min-w-0 truncate text-[15px]">/ {titleOf(entry.item, t)}</span>}
         <span className="flex-1" />
-        <a href={spaceHref(entry.space, `/i/${encodeURIComponent(entry.item.id)}`)} className="tap inline-flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1 text-[13px] hover:bg-hover">
+        <a href={spaceHref(entry.space, itemPath(entry.item.id))} className="tap inline-flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1 text-[13px] hover:bg-hover">
           <Maximize2 size={14} /> {t("tray.openFull")}
         </a>
-        {pinned ? null : desktop ? <IconButton icon={X} label={t("close")} onClick={closeShelf} /> : <Button onClick={closeShelf} className="font-semibold">{t("tray.done")}</Button>}
+        {pinned ? null : desktop ? <IconButton icon={X} label={t("close")} onClick={dismissShelf} /> : <Button onClick={dismissShelf} className="font-semibold">{t("tray.done")}</Button>}
       </div>
       <EntryBody entry={entry} />
     </SpaceScope>
@@ -253,8 +252,8 @@ function EntryBody({ entry }: { entry: InboxEntry }) {
   const kids = ix.items(ix.childrenOf(item.id));
   return (
     <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6 pt-4 max-lg:px-4">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-[color-mix(in_srgb,var(--t-inbox)_40%,transparent)] bg-[color-mix(in_srgb,var(--t-inbox)_10%,transparent)] px-3.5 py-2.5 text-[13px]">
-        <span className="size-2 shrink-0 rounded-full bg-[var(--t-inbox)]" aria-hidden />
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-inbox/40 bg-inbox/10 px-3.5 py-2.5 text-[13px]">
+        <span className="size-2 shrink-0 rounded-full bg-inbox" aria-hidden />
         <span className="min-w-0 flex-1 basis-48">
           <b className="font-semibold text-warn">{t("tray.staysTitle")}</b> <span className="text-muted-foreground">{t("tray.staysHint")}</span>
         </span>
@@ -281,18 +280,7 @@ function EntryBody({ entry }: { entry: InboxEntry }) {
           <Editor doc={repo.getDoc(item.id)} nodeId={item.id} minHeight="min-h-24" />
         </div>
       )}
-      {kids.length > 0 && (
-        <div className="mt-6">
-          <p className="mb-1.5 text-xs font-semibold text-muted-foreground">{t("below.title")}</p>
-          <ul className="space-y-1 text-sm">
-            {kids.map((c) => (
-              <li key={c.id} className="flex items-center gap-2">
-                <ItemIcon item={c} size={14} /> <a href={itemHref(c.id)} className="truncate hover:underline">{titleOf(c, t)}</a>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      <BelowList items={kids} className="mt-6" />
     </div>
   );
 }
@@ -315,9 +303,10 @@ function FileBody({ item }: { item: Item }) {
       {img ? (
         <img src={img} alt={item.body || item.title} className="mt-3 max-h-[40vh] w-auto rounded-lg border border-line" />
       ) : f.text ? (
-        <p className="mt-3 line-clamp-6 text-[15px] leading-[1.65] text-muted-foreground">{plainText(f.text).slice(0, 800)}</p>
+        <p className="mt-3 line-clamp-6 text-[15px] leading-[1.65] text-muted-foreground">{filePreview(f.text)}</p>
       ) : null}
       <Textarea
+      variant="inline"
         defaultValue={item.body}
         key={item.id}
         onChange={(e) => (draft.current = e.target.value)}
@@ -349,7 +338,7 @@ function InboxRule({ name, onClose }: { name?: string; onClose: () => void }) {
         </div>
         <QueryEditor autoFocus def={{ where: draft ?? where }} onChange={(d) => setDraft(d.where ?? null)} />
         {draft && !sameValue(draft, where) && (
-          <DraftBar onDiscard={() => setDraft(null)} onSave={() => (repo.change(SETTINGS_ID, (d) => setSettings(d, { inbox: draft })), setDraft(null), notify(t("view.saved")))} />
+          <DraftBar className="sticky top-0 z-10 mb-3 rounded-xl bg-surface px-3 py-2" onDiscard={() => setDraft(null)} onSave={() => (repo.change(SETTINGS_ID, (d) => setSettings(d, { inbox: draft })), setDraft(null), notify(t("view.saved")))} />
         )}
       </div>
     </Dialog>
