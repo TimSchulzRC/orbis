@@ -136,6 +136,14 @@ test("linking a provider (its address may differ) needs a sign-in of the last mi
   const stale = await link();
   expect(stale.status).toBe(403);
   expect(await stale.json()).toMatchObject({ error: "sign in again" });
+  // however the token is written (Better Auth also takes "bearer"), and without one
+  const lower = await fetch(`${bare}/api/auth/link-social`, { method: "POST", headers: { "content-type": "application/json", origin: bare, authorization: `bearer ${kim.token}` }, body: JSON.stringify({ provider: "github", callbackURL: "/" }) });
+  expect(lower.status).toBe(403);
+  // a fresh token on the side (the WebSocket way) does not vouch for the stale one Better Auth would use
+  const fresh = await signUp(bare, "kim2@example.org");
+  const mixed = await fetch(`${bare}/api/auth/link-social`, { method: "POST", headers: { "content-type": "application/json", origin: bare, authorization: `Bearer ${kim.token}`, "sec-websocket-protocol": `auth.${fresh.token}` }, body: JSON.stringify({ provider: "github", callbackURL: "/" }) });
+  expect(mixed.status).toBe(403);
+  expect((await post(bare, "/api/auth/link-social", { provider: "github", callbackURL: "/" }, undefined, { origin: bare })).status).toBe(403);
 });
 
 test("the data from before accounts become a workspace of the first account; the old MCP address still opens them", async () => {

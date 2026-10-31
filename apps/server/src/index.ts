@@ -42,7 +42,12 @@ if (freshConfig) writeFileSync(configPath, JSON.stringify(config, null, 2), { mo
 const personal = (lang?: string) => translate(LANGS.includes(lang as Lang) ? (lang as Lang) : "de", "account.personal");
 
 const login = loginConfig(process.env, PUBLIC_URL);
-const accounts = new Accounts(DATA, { secret: config.authSecret, baseURL: PUBLIC_URL || `http://${HOST}:${PORT}`, policy: SIGNUP, login, personal });
+const accounts = new Accounts(DATA, { secret: config.authSecret, baseURL: PUBLIC_URL || `http://${HOST}:${PORT}`, policy: SIGNUP, login, personal,
+  // whoever had signed up with an address someone else then proved: their open connections end too
+  onRevoke: (user) => {
+    for (const w of open.values()) for (const ws of w.conns) if (ws.data.userId === user) ws.close(4401, "signed out");
+  },
+});
 
 await accounts.init((dir) => {
   const s = new Store(dir);
@@ -245,9 +250,10 @@ const server = Bun.serve<Conn>({
       if (path.startsWith("/api/auth/sign-up")) return fail(404, "not found");
       if (path.startsWith("/api/auth/passkey/") && !login.passkey) return fail(404, "not found");
       // linking a provider (its address may differ) needs a sign-in of the last minutes, like a passkey
+      // (the session Better Auth itself takes from this request, however the token comes)
       if (path === "/api/auth/link-social") {
-        const session = await accounts.session(tokenOf(req));
-        if (session && Date.now() - session.created > FRESH_SECONDS * 1000) return fail(403, "sign in again");
+        const s = await accounts.auth.api.getSession({ headers: req.headers }).catch(() => null);
+        if (!s || Date.now() - new Date(s.session.createdAt).getTime() > FRESH_SECONDS * 1000) return fail(403, "sign in again");
       }
       return accounts.auth.handler(req);
     }

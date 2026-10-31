@@ -73,7 +73,7 @@ export class Accounts {
 
   constructor(
     public dataDir: string,
-    opts: { secret: string; baseURL: string; policy: SignupPolicy; login?: LoginConfig; personal?: (lang?: string) => string },
+    opts: { secret: string; baseURL: string; policy: SignupPolicy; login?: LoginConfig; personal?: (lang?: string) => string; onRevoke?: (user: string) => void },
   ) {
     mkdirSync(join(dataDir, "workspaces"), { recursive: true });
     this.db = new Database(join(dataDir, "accounts.db"));
@@ -81,6 +81,7 @@ export class Accounts {
     this.policy = opts.policy;
     this.login = opts.login ?? { password: true, oauth: [] };
     this.personal = opts.personal ?? (() => "Personal");
+    this.onRevoke = opts.onRevoke ?? (() => {});
     this.auth = makeAuth(this, opts.secret, opts.baseURL);
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS workspaces (id TEXT PRIMARY KEY, name TEXT NOT NULL, created INTEGER NOT NULL, legacy INTEGER NOT NULL DEFAULT 0);
@@ -95,6 +96,8 @@ export class Accounts {
   policy: SignupPolicy;
   login: LoginConfig;
   personal: (lang?: string) => string;
+  /** A user's access was taken back (their address proven by someone else): close what is open. */
+  onRevoke: (user: string) => void;
 
   /** Create Better Auth's tables (once) and turn the data of a server from before accounts into a workspace. */
   async init(legacyName: (dir: string) => string) {
@@ -384,11 +387,17 @@ function makeAuth(accounts: Accounts, secret: string, baseURL: string) {
         update: {
           // A code by email proves the address of an account whose address nobody had proven
           // (signed up with a password): Better Auth then drops its password and sessions, and
-          // here its passkeys, which whoever signed up with that address may have added.
+          // here everything else whoever signed up with that address may have made to get in:
+          // passkeys, agent tokens, invite links, open connections.
           before: async (data, ctx) => {
             const email = (ctx?.body as { email?: unknown } | undefined)?.email;
             if (data.emailVerified !== true || typeof email !== "string") return;
-            accounts.db.query('DELETE FROM passkey WHERE userId IN (SELECT id FROM "user" WHERE email = ? AND emailVerified = 0)').run(email.toLowerCase());
+            const user = accounts.db.query<{ id: string }, [string]>('SELECT id FROM "user" WHERE email = ? AND emailVerified = 0').get(email.toLowerCase());
+            if (!user) return;
+            accounts.db.query("DELETE FROM passkey WHERE userId = ?").run(user.id);
+            accounts.db.query("DELETE FROM tokens WHERE user = ?").run(user.id);
+            accounts.db.query('DELETE FROM invites WHERE "by" = ?').run(user.id);
+            accounts.onRevoke(user.id);
           },
         },
       },

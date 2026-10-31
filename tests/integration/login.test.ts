@@ -158,7 +158,7 @@ test("the CLI gives an account a new password, also one that never had one", asy
   await expect(setPassword(dir, "me@example.org", "kurz")).rejects.toThrow("8 to 128");
 });
 
-test("a code proving an unproven address drops the passkeys someone else may have added; a proven account keeps its own", async () => {
+test("a code proving an unproven address drops the passkeys, agent tokens, invite links and connections someone else may have made; a proven account keeps its own", async () => {
   const { accounts, withCode } = await setUp("open");
   const addPasskey = (userId: string, id: string) =>
     accounts.db.query("INSERT INTO passkey (id, publicKey, userId, credentialID, counter, deviceType, backedUp, createdAt) VALUES (?, 'k', ?, ?, 0, 'singleDevice', 0, ?)").run(id, userId, id, new Date().toISOString());
@@ -167,11 +167,19 @@ test("a code proving an unproven address drops the passkeys someone else may hav
     // someone signs up with the victim's address and a password, and adds a passkey
     const squatter = await accounts.signUp({ name: "Eve", email: "victim@example.org", password: "geheim12345", personal: "P" });
     addPasskey(squatter.user.id, "eve-key");
+    const space = accounts.workspacesOf(squatter.user.id)[0]!.id;
+    accounts.mcpToken(space, squatter.user.id);
+    accounts.createInvite(space, squatter.user.id);
+    const revoked: string[] = [];
+    accounts.onRevoke = (user) => void revoked.push(user);
     // the owner of the mailbox signs in by code: the account is theirs now, without Eve's ways in
     const res = await withCode("victim@example.org");
     expect(((await res!.json()) as { user: { id: string } }).user.id).toBe(squatter.user.id);
     expect(keys(squatter.user.id)).toEqual([]);
     expect(await accounts.hasPassword(squatter.user.id)).toBe(false);
+    expect(accounts.db.query("SELECT 1 FROM tokens WHERE user = ?").all(squatter.user.id)).toEqual([]);
+    expect(accounts.db.query('SELECT 1 FROM invites WHERE "by" = ?').all(squatter.user.id)).toEqual([]);
+    expect(revoked).toEqual([squatter.user.id]);
     // their own passkey stays through the next code
     addPasskey(squatter.user.id, "own-key");
     await withCode("victim@example.org");

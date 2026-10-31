@@ -90,7 +90,9 @@ export const spaceById = (id: string) => spaces.find((s) => s.id === id);
 const open = new Map<string, { repo: Repo; files: DeviceFiles }>();
 
 function link(s: Space): SpaceLink {
-  return { base: `${location.origin}/w/${s.id}`, token: account!.token, storage: storageNames(s) };
+  // read at each use: signing in again (to confirm it is them) gives the account a new token
+  const first = account!.token;
+  return { base: `${location.origin}/w/${s.id}`, get token() { return account?.token ?? first; }, storage: storageNames(s) };
 }
 
 /** The replica of a workspace, opened (and syncing) from its first use on. */
