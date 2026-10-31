@@ -1,6 +1,6 @@
 # Releasing
 
-How the channels of [Running it](../README.md#channels-and-versions) come about. One image, `ghcr.io/timschulzrc/obtion`, with a tag per channel:
+How the [release channels](../README.md#release-channels) come about. One image, `ghcr.io/timschulzrc/obtion`, with a tag per channel:
 
 | Channel | Made by | Tags | GitHub release |
 |---|---|---|---|
