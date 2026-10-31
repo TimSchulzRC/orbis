@@ -18,6 +18,7 @@ jobs:
   check:
     # The self-hosted runner (label "obtion") when the repository variable RUNNER says so, otherwise
     # GitHub's: RUNNER=obtion switches to our own hardware, deleting the variable switches back.
+    # The machine has two runners, so check and image run side by side (docs/ci.md).
     runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
     # a hanging test fails after minutes instead of holding the runner for GitHub's six hours
     timeout-minutes: 15
@@ -25,10 +26,18 @@ jobs:
       SELF_HOSTED: ${{ vars.RUNNER != '' }}
     steps:
       - uses: actions/checkout@v7
-      # always the newest Bun release, like the Dockerfile's base image (kept current by Dependabot)
+      # always the newest Bun release, like the Dockerfile's base image (kept current by Dependabot):
+      # GitHub's runners install it, the self-hosted machine has it and upgrades it in place (in
+      # half a second instead of ten; one at a time, its runners share it)
       - uses: oven-sh/setup-bun@v2
+        if: env.SELF_HOSTED != 'true'
         with:
           bun-version: latest
+      # the runner's service starts without ~/.bun/bin in its PATH: this step and the ones after get it
+      - if: env.SELF_HOSTED == 'true'
+        run: |
+          echo "$HOME/.bun/bin" >> "$GITHUB_PATH"
+          flock ~/.bun/upgrade.lock ~/.bun/bin/bun upgrade
       - run: bun install --frozen-lockfile
       # the Chromium of the installed Playwright (~/.cache/ms-playwright, kept on the self-hosted
       # machine); GitHub's runners also need its system libraries, which the self-hosted one has
@@ -44,7 +53,9 @@ jobs:
           bun test > "$RUNNER_TEMP/check/test.log" 2>&1 & test=$!
           bun run typecheck > "$RUNNER_TEMP/check/typecheck.log" 2>&1 & typecheck=$!
           bun run test:browser > "$RUNNER_TEMP/check/browser.log" 2>&1 & browser=$!
-          bun run test:e2e > "$RUNNER_TEMP/check/e2e.log" 2>&1 & e2e=$!
+          # the build once; the smoke test a second time if the first failed (like Vitest's retry),
+          # with a warning so it shows
+          { bun run build && { bun tests/e2e/smoke.ts || { echo "::warning::e2e failed once, second try"; bun tests/e2e/smoke.ts; }; }; } > "$RUNNER_TEMP/check/e2e.log" 2>&1 & e2e=$!
           failed=0
           for name in test typecheck browser e2e; do
             if wait "${!name}"; then result=ok; else result=FAILED; failed=1; fi
@@ -62,20 +73,14 @@ jobs:
           path: .vitest/attachments
           if-no-files-found: ignore
 
-  # The dev channel of the image ghcr.io/<owner>/obtion: :dev is always the newest main,
-  # :sha-<commit> keeps each build (release.yml builds nightly and stable only from commits that
-  # have one). Only after the checks passed. For pull requests the image is built and started as
-  # well, so a broken Dockerfile shows before the merge, but never pushed.
+  # The image, built for the runner's platform and started: it has to answer before anything is
+  # pushed (.github/scripts/check-image.sh). Beside check, not after it: for pull requests too, so a
+  # broken Dockerfile shows before the merge.
   image:
-    needs: check
     runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 30
-    permissions:
-      contents: read
-      packages: write
     env:
       SELF_HOSTED: ${{ vars.RUNNER != '' }}
-      PUSH: ${{ github.event_name == 'push' }}
       LOCAL_TAG: obtion-ci:${{ github.run_id }}
     steps:
       - uses: actions/checkout@v7
@@ -85,21 +90,6 @@ jobs:
       - uses: docker/setup-buildx-action@v4
         with:
           driver: ${{ env.SELF_HOSTED == 'true' && 'docker' || 'docker-container' }}
-      - uses: docker/login-action@v4
-        if: env.PUSH == 'true'
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - id: meta
-        uses: docker/metadata-action@v6
-        with:
-          images: ghcr.io/${{ github.repository }}
-          tags: |
-            type=raw,value=dev
-            type=sha
-      # first only for the runner's platform, loaded into Docker and started: the image has to
-      # answer before anything is pushed (.github/scripts/check-image.sh)
       - uses: docker/build-push-action@v7
         with:
           context: .
@@ -112,9 +102,44 @@ jobs:
           cache-to: ${{ env.SELF_HOSTED != 'true' && 'type=gha,mode=max' || '' }}
       - name: Start the image
         run: bash .github/scripts/check-image.sh "$LOCAL_TAG" dev "$GITHUB_SHA"
-      # then both platforms, mostly from the cache of the build above
+      # the docker builder keeps the image locally: drop the tag, the build cache stays
+      - name: Remove the local image tag
+        if: always() && env.SELF_HOSTED == 'true'
+        run: docker image rm "$LOCAL_TAG" || true
+
+  # The dev channel of the image ghcr.io/<owner>/obtion: :dev is always the newest main,
+  # :sha-<commit> keeps each build (release.yml builds nightly and stable only from commits that
+  # have one). Only for main, after the checks passed and the image started; both platforms,
+  # mostly from the cache of the image job.
+  publish:
+    needs: [check, image]
+    if: github.event_name == 'push'
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    env:
+      SELF_HOSTED: ${{ vars.RUNNER != '' }}
+    steps:
+      - uses: actions/checkout@v7
+      # builder and cache as in the image job
+      - uses: docker/setup-buildx-action@v4
+        with:
+          driver: ${{ env.SELF_HOSTED == 'true' && 'docker' || 'docker-container' }}
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=dev
+            type=sha
       - uses: docker/build-push-action@v7
-        if: env.PUSH == 'true'
         with:
           context: .
           platforms: linux/amd64,linux/arm64
@@ -126,8 +151,8 @@ jobs:
             OBTION_BUILD_COMMIT=${{ github.sha }}
           cache-from: ${{ env.SELF_HOSTED != 'true' && 'type=gha' || '' }}
           cache-to: ${{ env.SELF_HOSTED != 'true' && 'type=gha,mode=max' || '' }}
-      # the docker builder also keeps the built images locally: drop exactly these tags, the build
+      # the docker builder also keeps the pushed image locally: drop exactly these tags, the build
       # cache stays (other containers on the machine are none of CI's business)
       - name: Remove local image tags
         if: always() && env.SELF_HOSTED == 'true' && steps.meta.outcome == 'success'
-        run: docker image rm "$LOCAL_TAG" ${{ env.PUSH == 'true' && join(fromJSON(steps.meta.outputs.json).tags, ' ') || '' }} || true
+        run: docker image rm ${{ join(fromJSON(steps.meta.outputs.json).tags, ' ') }} || true
