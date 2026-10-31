@@ -33,8 +33,11 @@ jobs:
         if: env.SELF_HOSTED != 'true'
         with:
           bun-version: latest
+      # the runner's service starts without ~/.bun/bin in its PATH: this step and the ones after get it
       - if: env.SELF_HOSTED == 'true'
-        run: flock ~/.bun/upgrade.lock bun upgrade
+        run: |
+          echo "$HOME/.bun/bin" >> "$GITHUB_PATH"
+          flock ~/.bun/upgrade.lock ~/.bun/bin/bun upgrade
       - run: bun install --frozen-lockfile
       # the Chromium of the installed Playwright (~/.cache/ms-playwright, kept on the self-hosted
       # machine); GitHub's runners also need its system libraries, which the self-hosted one has
