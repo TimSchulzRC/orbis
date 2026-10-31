@@ -23,7 +23,7 @@ export function AuthCard({ title, intro, children }: { title: string; intro?: Re
   );
 }
 
-const input = "field mt-1 block bg-surface";
+const input = "mt-1 block bg-surface";
 
 function Field({ label, ...p }: { label: string } & React.InputHTMLAttributes<HTMLInputElement>) {
   return (

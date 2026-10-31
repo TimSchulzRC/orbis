@@ -3,6 +3,9 @@ import { twMerge } from "tailwind-merge";
 
 export function cn(...inputs: ClassValue[]) { return twMerge(clsx(inputs)); }
 
+/** How a framed field (input, textarea, select) shows focus: its border takes the accent, with a soft halo around it. */
+export const framedFocus = "focus-visible:border-focus/80 focus-visible:ring-[3px] focus-visible:ring-focus/20";
+
 /** A copy of `set` with `key` added, or taken out if it was in. */
 export function toggled<K>(set: ReadonlySet<K>, key: K): Set<K> {
   const next = new Set(set);

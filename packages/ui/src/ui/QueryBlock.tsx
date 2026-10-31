@@ -116,11 +116,11 @@ function QueryBlockView({ src, thisId, n = 0, onChange, onDelete, readOnly }: { 
       {editing && onChange && (
         <div className="my-2 space-y-2">
           <Input
-            variant="bare"
+            variant="sm"
             defaultValue={def.title ?? ""}
             onBlur={(e) => (e.target.value.trim() || undefined) !== def.title && edit({ ...stored, title: e.target.value.trim() || undefined })}
             placeholder={t("block.title")}
-            className="w-full rounded-lg border border-line bg-bg px-2 py-1.5 text-sm outline-none"
+            className="rounded-lg py-1.5"
           />
           <QueryEditor context def={{ where: baseWhere }} autoFocus={!def.where} onChange={(d) => !sameValue(d.where, baseWhere) && setDraft({ scope: "base", where: d.where })} />
           <label className="flex items-center gap-1 text-xs text-muted-foreground">
