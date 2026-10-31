@@ -2,8 +2,9 @@
 import { useSyncExternalStore } from "react";
 import { type Lang, type T, type Values, LANGS, detectLang, makeT } from "@obtion/core/i18n";
 import { type Item, displayTitle } from "@obtion/core/model";
+import { KEYS } from "./ui/storage";
 
-const KEY = "obtion.lang";
+const KEY = KEYS.lang;
 function stored(): Lang | undefined {
   const v = localStorage.getItem(KEY);
   return LANGS.find((l) => l === v);

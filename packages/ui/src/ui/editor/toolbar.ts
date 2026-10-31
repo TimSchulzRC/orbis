@@ -5,12 +5,16 @@ import { EditorSelection, Prec } from "@codemirror/state";
 import { type EditorView, ViewPlugin, type ViewUpdate, keymap } from "@codemirror/view";
 import { Bold, ChevronDown, Code, FileText, Globe, Italic, Link2, Strikethrough } from "lucide-react";
 import { repo } from "../../repo";
-import { tr } from "../../i18n";
+import { getLang, tr } from "../../i18n";
+import { shortcut } from "../../lib/platform";
 import { KINDS, kindName, kindOf, setKind, toggleMark } from "./blocks";
 import { iconButton, iconHTML } from "./icons";
 import { showMenu } from "./menu";
 import { titleKey } from "@obtion/core/model";
 import { kindHint, webHref } from "../text";
+
+/** A key hint in a tooltip: " (⌘B)", " (Strg B)". */
+const key = (k: string) => ` (${shortcut(k, getLang())})`;
 
 const isURL = (s: string) => /^(https?:\/\/|mailto:|www\.)\S+$/i.test(s.trim());
 
@@ -62,7 +66,7 @@ class Toolbar {
       b.addEventListener("click", () => toggleMark(view, m));
       return b;
     };
-    const linkBtn = iconButton(Link2, tr("editor.fmt.link") + " (⌘K)", "cm-tb wide", 16);
+    const linkBtn = iconButton(Link2, tr("editor.fmt.link") + key("K"), "cm-tb wide", 16);
     linkBtn.insertAdjacentHTML("beforeend", `<span>${tr("editor.fmt.linkShort")}</span>`);
     linkBtn.addEventListener("click", () => this.openLink());
     this.bar.append(
@@ -70,10 +74,10 @@ class Toolbar {
       sep(),
       linkBtn,
       sep(),
-      mark(Bold, tr("editor.fmt.bold") + " (⌘B)", "**"),
-      mark(Italic, tr("editor.fmt.italic") + " (⌘I)", "*"),
-      mark(Strikethrough, tr("editor.fmt.strike") + " (⌘⇧S)", "~~"),
-      mark(Code, tr("editor.fmt.code") + " (⌘E)", "`"),
+      mark(Bold, tr("editor.fmt.bold") + key("B"), "**"),
+      mark(Italic, tr("editor.fmt.italic") + key("I"), "*"),
+      mark(Strikethrough, tr("editor.fmt.strike") + key("⇧S"), "~~"),
+      mark(Code, tr("editor.fmt.code") + key("E"), "`"),
     );
     this.linkBox = document.createElement("div");
     this.linkBox.className = "cm-toolbar-link";

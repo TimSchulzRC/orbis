@@ -7,6 +7,8 @@ import en from "../locales/en.json";
 
 export type Lang = "de" | "en";
 export const LANGS: Lang[] = ["de", "en"];
+/** Each language in itself, for choosing one. */
+export const ENDONYMS: Record<Lang, string> = { de: "Deutsch", en: "English" };
 export const CATALOGS: Record<Lang, Record<string, string>> = { de, en };
 
 const cache = new Map<string, IntlMessageFormat>();
@@ -68,6 +70,11 @@ export function fmtNumber(lang: Lang, n: number) {
   return n.toLocaleString(locale(lang), { maximumFractionDigits: 6 });
 }
 
+/** A share (0–1) in whole percent: "42 %", "42%". */
+export function fmtPercent(lang: Lang, share: number) {
+  return new Intl.NumberFormat(locale(lang), { style: "percent", maximumFractionDigits: 0 }).format(share);
+}
+
 export function fmtRelative(lang: Lang, ts: number, now = Date.now()) {
   const rtf = new Intl.RelativeTimeFormat(locale(lang), { numeric: "auto" });
   const s = (ts - now) / 1000;
@@ -77,6 +84,12 @@ export function fmtRelative(lang: Lang, ts: number, now = Date.now()) {
   if (a < 86400) return rtf.format(Math.round(s / 3600), "hour");
   if (a < 86400 * 7) return rtf.format(Math.round(s / 86400), "day");
   return new Date(ts).toLocaleDateString(locale(lang), { day: "numeric", month: "short", year: a > 86400 * 300 ? "numeric" : undefined });
+}
+
+/** A length in seconds as "m:ss". */
+export function fmtDuration(s: number) {
+  const m = Math.floor(s / 60);
+  return `${m}:${String(Math.round(s % 60)).padStart(2, "0")}`;
 }
 
 export function fmtBytes(lang: Lang, n: number) {

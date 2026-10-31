@@ -2,16 +2,18 @@ import { Input } from "../components/ui/input";
 import { useState } from "react";
 import { Plus, RotateCcw } from "lucide-react";
 import { restoreDefaultTypes } from "@obtion/core/setup";
-import { useIndex, useRepo, useRoute, useSpaceId, itemHref, spaceHref } from "../hooks";
-import { repo } from "../repo";
+import { useIndex, useRepo, useRoute, useSpaceId, itemHref, openItem, useDocumentTitle } from "../hooks";
 import { SpaceEyebrow } from "../ui/Spaces";
 import { useT, getLang } from "../i18n";
-import { Button, Dialog, TypeGlyph } from "../ui/bits";
+import { Card, Button, Dialog } from "../ui/primitives";
+import { TypeGlyph } from "../ui/item-look";
 import { createType } from "../actions";
 
 /** All types. New types are data: name, then properties and capabilities in the editor. */
 export function TypesView() {
+  const repo = useRepo();
   const { t } = useT();
+  useDocumentTitle(t("nav.types"));
   const ix = useIndex();
   const route = useRoute();
   const [creating, setCreating] = useState(route.query.get("new") === "1");
@@ -28,7 +30,7 @@ export function TypesView() {
           <Plus size={14} /> {t("types.new")}
         </Button>
       </div>
-      <div className="rounded-xl border border-line bg-surface p-1">
+      <Card className="p-1">
         {types.map((tp) => (
           <a key={tp.id} href={itemHref(tp.id)} className="flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-hover">
             <TypeGlyph schema={tp.schema} />
@@ -40,7 +42,7 @@ export function TypesView() {
           </a>
         ))}
         {!types.length && <p className="px-3 py-3 text-sm text-muted-foreground">{t("types.none")}</p>}
-      </div>
+      </Card>
       <Button variant="outline" className="mt-4" onClick={() => restoreDefaultTypes(repo.writer, getLang(), repo.origin)}>
         <RotateCcw size={14} /> {t("types.restore")}
       </Button>
@@ -50,27 +52,31 @@ export function TypesView() {
   );
 }
 
-/** "Neuer Typ": a name; the type's page opens with "Typ bearbeiten". */
-export function NewTypeDialog({ onClose }: { onClose: () => void }) {
+/** "Neuer Typ": a name. Then `onCreated`, else the type's page opens with "Typ bearbeiten". */
+export function NewTypeDialog({ title, onClose, onCreated }: { title?: string; onClose: () => void; onCreated?: (id: string) => void }) {
   const { t } = useT();
   const repo = useRepo();
   const space = useSpaceId();
   const [name, setName] = useState("");
-  const create = () => {
+  const create = (e: React.FormEvent) => {
+    e.preventDefault();
     const n = name.trim();
     if (!n) return;
     const id = createType(n, repo);
     onClose();
-    location.hash = spaceHref(space, `/i/${encodeURIComponent(id)}?edit=1`);
+    if (onCreated) onCreated(id);
+    else openItem(id, { space, query: "?edit=1" });
   };
   return (
-    <Dialog title={t("types.new")} onClose={onClose}>
-      <Input autoFocus value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && create()} placeholder={t("type.name")} className="w-full rounded-lg border border-line bg-bg px-3 py-2 text-sm outline-none" />
-      <div className="mt-4 flex justify-end">
-        <Button variant="primary" onClick={create} disabled={!name.trim()}>
-          {t("types.create")}
-        </Button>
-      </div>
+    <Dialog title={title ?? t("types.new")} onClose={onClose}>
+      <form onSubmit={create}>
+        <Input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder={t("type.name")} />
+        <div className="mt-4 flex justify-end">
+          <Button type="submit" variant="primary" disabled={!name.trim()}>
+            {t("types.create")}
+          </Button>
+        </div>
+      </form>
     </Dialog>
   );
 }

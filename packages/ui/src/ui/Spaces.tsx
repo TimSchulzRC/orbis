@@ -4,17 +4,17 @@
 // workspace's replica there, and links inside open in it). Moving an item from one workspace into another asks first if
 // something changes on the way (a type copied, values that become free properties, links left behind).
 import { Checkbox } from "../components/ui/checkbox";
-import { Button as ShadcnButton } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { useMemo, useState, useSyncExternalStore } from "react";
 import { ChevronsUpDown, Plus, SlidersHorizontal } from "lucide-react";
 import type { Repo } from "@obtion/sync";
 import { createSpace, replica, setShown, spaceById, useAccounts } from "../accounts";
-import { ScopeContext } from "../scope";
-import { spaceHref, useSpaceId } from "../hooks";
+import { ScopeContext, globalPage } from "../scope";
+import { useSpaceId, navigate, openItem, parseHash } from "../hooks";
 import { MoveError, moveToSpace, planToSpace } from "../move";
 import { useT, tr, titleOf } from "../i18n";
-import { Button, Dialog, MenuItem, Popover, cx } from "./bits";
+import { Button, Dialog, MenuItem, Popover } from "./primitives";
+import { cn } from "../lib/utils";
 import { BrandLogo } from "./BrandLogo";
 import { confirmAction, notify } from "./feedback";
 
@@ -25,9 +25,10 @@ export function SpaceScope({ id, children }: { id: string; children: React.React
   const onClickCapture = (e: React.MouseEvent) => {
     if (active?.id === id || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     const href = (e.target as HTMLElement).closest("a")?.getAttribute("href");
-    if (!href?.startsWith("#/")) return;
+    // a page of no workspace ("#/settings", "#/review") stays one
+    if (!href?.startsWith("#/") || href.startsWith("#/w/") || globalPage(href.slice(1).split("?")[0]!.split("/").filter(Boolean))) return;
     e.preventDefault();
-    location.hash = spaceHref(id, href.slice(1).replace(/^\/w\/[^/?]+/, ""));
+    navigate(parseHash(href).rest, { space: id });
   };
   return (
     <ScopeContext.Provider value={value}>
@@ -58,13 +59,13 @@ export function SpaceSelector({ className, onNew }: { className?: string; onNew:
   };
   return (
     <Popover
-      triggerClass={cx("min-w-0", className)}
+      triggerClass={cn("min-w-0", className)}
       trigger={(p) => (
-        <ShadcnButton variant="plain" size="none" {...p} className="-mx-1.5 flex w-full min-w-0 items-center gap-2 rounded-lg px-1.5 py-1 text-left hover:bg-hover" aria-label={t("space.choose")}>
+        <Button variant="plain" {...p} className="-mx-1.5 flex w-full min-w-0 items-center gap-2 rounded-lg px-1.5 py-1 text-left hover:bg-hover" aria-label={t("space.choose")}>
           <BrandLogo className="size-6 shrink-0" />
           <span className="min-w-0 flex-1 truncate text-sm font-semibold">{label}</span>
           <ChevronsUpDown size={14} className="shrink-0 text-faint" />
-        </ShadcnButton>
+        </Button>
       )}
     >
       {(close) => (
@@ -84,7 +85,7 @@ export function SpaceSelector({ className, onNew }: { className?: string; onNew:
           <MenuItem icon={<Plus size={14} />} onClick={() => (close(), onNew())}>
             {t("space.new")}
           </MenuItem>
-          <MenuItem icon={<SlidersHorizontal size={14} />} onClick={() => (close(), (location.hash = "#/settings"))}>
+          <MenuItem icon={<SlidersHorizontal size={14} />} onClick={() => (close(), navigate("/settings"))}>
             {t("nav.settings")}
           </MenuItem>
         </div>
@@ -108,16 +109,16 @@ export function SpaceFilter() {
     const next = ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id];
     if (next.length) setShown(next);
   };
-  const chip = (on: boolean) => cx("shrink-0 whitespace-nowrap rounded-full border px-3 py-1", on ? "border-[var(--focus)] bg-surface text-fg" : "border-line text-muted-foreground hover:bg-hover hover:text-fg");
+  const chip = (on: boolean) => cn("shrink-0 whitespace-nowrap rounded-full border px-3 py-1", on ? "border-focus bg-surface text-fg" : "border-line text-muted-foreground hover:bg-hover hover:text-fg");
   return (
     <div className="-mx-4 mb-4 flex gap-1 overflow-x-auto px-4 text-sm [scrollbar-width:none] md:mx-0 md:px-0" role="group" aria-label={t("space.choose")}>
-      <ShadcnButton variant="plain" size="none" onClick={() => setShown(spaces.map((s) => s.id))} aria-pressed={all} className={chip(all)}>
+      <Button variant="plain" onClick={() => setShown(spaces.map((s) => s.id))} aria-pressed={all} className={chip(all)}>
         {t("inbox.all")}
-      </ShadcnButton>
+      </Button>
       {spaces.map((s) => (
-        <ShadcnButton variant="plain" size="none" key={s.id} onClick={() => pick(s.id)} aria-pressed={!all && ids.includes(s.id)} className={chip(!all && ids.includes(s.id))}>
+        <Button variant="plain" key={s.id} onClick={() => pick(s.id)} aria-pressed={!all && ids.includes(s.id)} className={chip(!all && ids.includes(s.id))}>
           {s.name}
-        </ShadcnButton>
+        </Button>
       ))}
     </div>
   );
@@ -151,9 +152,9 @@ export function NewSpaceDialog({ onClose }: { onClose: () => void }) {
       >
         <label className="block text-sm font-medium">
           {t("space.name")}
-          <Input autoFocus required value={name} onChange={(e) => setName(e.target.value)} className="field mt-1 block w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm" />
+          <Input autoFocus required value={name} onChange={(e) => setName(e.target.value)} className="mt-1 block bg-surface" />
         </label>
-        {error && <p className="mt-3 text-sm text-[var(--danger-text)]">{error}</p>}
+        {error && <p className="mt-3 text-sm text-danger">{error}</p>}
         <div className="mt-5 flex justify-end gap-2">
           <Button onClick={onClose}>{t("cancel")}</Button>
           <Button type="submit" variant="primary" disabled={!name.trim()}>
@@ -185,7 +186,7 @@ export async function moveTo(id: string, from: string, to: string, parent?: stri
       if (!(await confirmAction({ title: tr("move.preview.title", { title, workspace }), body: lines.map((l) => `– ${l}`).join("\n"), yes: tr("move.confirm") }))) return;
     }
     const moved = await moveToSpace(id, from, to, parent);
-    notify.action(tr("move.done", { workspace }), tr("move.open"), () => (location.hash = spaceHref(to, `/i/${encodeURIComponent(moved)}`)));
+    notify.action(tr("move.done", { workspace }), tr("move.open"), () => openItem(moved, { space: to }));
   } catch (e) {
     notify(e instanceof MoveError ? tr(`move.error.${e.message}`) : String((e as Error).message ?? e));
   }

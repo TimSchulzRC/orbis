@@ -1,9 +1,9 @@
-import { Button as ShadcnButton } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { useMemo, useState } from "react";
 import { useRepo } from "../hooks";
 import { normalizeTag } from "@obtion/core/model";
-import { cx, AddButton } from "./bits";
+import { cn } from "../lib/utils";
+import { Button, AddButton } from "./primitives";
 import { tr } from "../i18n";
 
 /**
@@ -38,6 +38,7 @@ export function TagInput({ onAdd, exclude = [], start, onCancel }: { onAdd: (t: 
   return (
     <span className="relative inline-block">
       <Input
+        variant="sm"
         autoFocus
         value={v}
         onChange={(e) => (setV(e.target.value), setSel(0))}
@@ -60,12 +61,12 @@ export function TagInput({ onAdd, exclude = [], start, onCancel }: { onAdd: (t: 
         }}
         placeholder={tr("tag.placeholder")}
         aria-label={tr("tag.add")}
-        className="w-28 rounded-md border border-line bg-bg px-1.5 py-0.5 text-xs outline-none"
+        className="w-28 px-1.5 py-0.5 text-xs"
       />
       {options.length > 0 && (
         <span className="absolute left-0 top-full z-30 mt-1 flex w-52 flex-col overflow-hidden rounded-lg border border-line bg-surface p-1 shadow-lg" role="listbox">
           {options.map((s, i) => (
-            <ShadcnButton variant="plain" size="none"
+            <Button variant="plain"
               key={s.tag + (s.count === null ? "+" : "")}
               role="option"
               aria-selected={i === sel}
@@ -74,11 +75,11 @@ export function TagInput({ onAdd, exclude = [], start, onCancel }: { onAdd: (t: 
                 e.preventDefault();
                 add(s.tag);
               }}
-              className={cx("flex justify-between rounded-md px-2 py-1 text-left text-xs", i === sel && "bg-selected")}
+              className={cn("flex justify-between rounded-md px-2 py-1 text-left text-xs", i === sel && "bg-selected")}
             >
               <span>{s.count === null ? <>{tr("tag.create")} <b>#{s.tag}</b></> : `#${s.tag}`}</span>
               {s.count !== null && <span className="text-muted-foreground">{s.count}</span>}
-            </ShadcnButton>
+            </Button>
           ))}
         </span>
       )}

@@ -677,6 +677,11 @@ export function typesIn(c: Cond | undefined): string[] {
   return leaves(c).flatMap((x) => ("type" in x ? [x.type] : []));
 }
 
+/** The types a view shows: those its query names and those of its first `sample` entries (existing ones only). */
+export function viewTypeIds(where: Cond | undefined, items: Pick<Item, "type">[], ix: Index, sample = 200): string[] {
+  return [...new Set([...typesIn(where), ...items.slice(0, sample).map((i) => i.type ?? "")])].filter((id) => ix.types.has(id));
+}
+
 /** The node paths are relative to: the under:/in: target of the query, else the page. */
 export function pathBase(def: QueryDef, ctx: EvalCtx): string | undefined {
   let base: string | undefined;

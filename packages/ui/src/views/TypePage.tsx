@@ -2,12 +2,11 @@
 // "…" › "Typ bearbeiten": identity, description (the agent reads it), properties and capabilities –
 // a type is an information with a schema; changing it is editing, not programming.
 import { Checkbox } from "../components/ui/checkbox";
-import { Button as ShadcnButton } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
 import { NativeSelect } from "../components/ui/native-select";
 import { useEffect, useState } from "react";
-import { MoreHorizontal, Plus, Trash2, GripVertical, ArrowUp, ArrowDown, Tag as TagIcon, X, Pencil, Pin, RotateCcw } from "lucide-react";
+import { Plus, Trash2, GripVertical, ArrowUp, ArrowDown, Tag as TagIcon, X, Pencil, Pin, RotateCcw } from "lucide-react";
 import type * as Y from "yjs";
 import {
   type Item,
@@ -31,29 +30,28 @@ import { COLORS, ICONS } from "@obtion/core/palette";
 import { keyBetween } from "@obtion/core/sortkey";
 import { parseQuery, printQuery, runQuery } from "@obtion/core/query";
 import { type DeleteMode, deleteType, previewTagToType, tagToType, typeUsage } from "@obtion/core/typeops";
-import { useIndex, useRoute, go } from "../hooks";
-import { repo } from "../repo";
+import { useIndex, useRoute, navigate, setParams, useDocumentTitle, useRepo } from "../hooks";
 import { useT } from "../i18n";
-import { Button, Dialog, InlineText, ItemIcon, MenuItem, Popover, SectionTitle, Seg, TypeGlyph, cx, pal, AddButton, IconButton } from "../ui/bits";
+import { Card, Button, Dialog, MenuItem, Popover, SectionTitle, Seg, AddButton, IconButton, MoreMenu, PagePlaceholder } from "../ui/primitives";
+import { InlineText } from "../ui/fields";
+import { ItemIcon, TypeGlyph, pal } from "../ui/item-look";
+import { cn } from "../lib/utils";
 import { ICON } from "../ui/icons";
 import { TypeList } from "./Lists";
 import { notify } from "../ui/feedback";
-import { createType } from "../actions";
 import type { T } from "@obtion/core/i18n";
+import { NewTypeDialog } from "./Types";
 
 export function TypePage({ item }: { item: Item }) {
+  const repo = useRepo();
   const { t } = useT();
   const ix = useIndex();
   const route = useRoute();
   const [editing, setEditing] = useState(route.query.get("edit") === "1");
+  useEffect(() => void setParams({ edit: null }), []);
   const plural = ix.typePlural(item.id);
-  useEffect(() => void (document.title = plural), [plural]);
-  if (item.deleted)
-    return (
-      <div className="mx-auto max-w-3xl px-6 py-16 text-center text-muted-foreground">
-        {t("type.isDeleted", { name: item.schema!.name })}
-      </div>
-    );
+  useDocumentTitle(plural);
+  if (item.deleted) return <PagePlaceholder>{t("type.isDeleted", { name: item.schema!.name })}</PagePlaceholder>;
   return (
     <div className="page-wide">
       <div className="mb-4 flex items-center gap-3">
@@ -62,7 +60,7 @@ export function TypePage({ item }: { item: Item }) {
           <h1 className="page-title truncate">{plural}</h1>
           <span className="text-[15px] tabular-nums text-muted-foreground">{ix.itemsOfType(item.id).length}</span>
         </div>
-        <Popover align="right" trigger={(p) => <IconButton {...p} label={t("more")} icon={MoreHorizontal} />}>
+        <MoreMenu>
           {(close) => (
             <>
               <MenuItem icon={<Pencil size={14} />} onClick={() => (close(), setEditing(!editing))}>
@@ -76,7 +74,7 @@ export function TypePage({ item }: { item: Item }) {
               </MenuItem>
             </>
           )}
-        </Popover>
+        </MoreMenu>
       </div>
       {editing && <TypeEditor item={item} onClose={() => setEditing(false)} />}
       <TypeList type={item} />
@@ -86,6 +84,7 @@ export function TypePage({ item }: { item: Item }) {
 
 /** "Typ bearbeiten": name, plural, symbol, description, properties, capabilities – above the list. */
 function TypeEditor({ item, onClose }: { item: Item; onClose: () => void }) {
+  const repo = useRepo();
   const { t } = useT();
   const ix = useIndex();
   const s = item.schema!;
@@ -95,13 +94,13 @@ function TypeEditor({ item, onClose }: { item: Item; onClose: () => void }) {
   const selected = s.properties.find((p) => p.id === sel);
 
   return (
-    <div className="@container mb-6 rounded-xl border border-line bg-surface p-4 md:p-5">
+    <Card className="@container mb-6 p-4 md:p-5">
       <div className="flex items-start gap-3">
         <Popover
           trigger={(p) => (
-            <ShadcnButton variant="plain" size="none" {...p} className="tap mt-1 rounded-lg p-1.5 hover:bg-hover" aria-label={t("type.icon")}>
+            <Button variant="plain" {...p} className="tap mt-1 rounded-lg p-1.5 hover:bg-hover" aria-label={t("type.icon")}>
               <TypeGlyph schema={s} size={24} />
-            </ShadcnButton>
+            </Button>
           )}
         >
           {(close) => (
@@ -110,15 +109,15 @@ function TypeEditor({ item, onClose }: { item: Item; onClose: () => void }) {
                 {ICONS.map((n) => {
                   const I = ICON[n] ?? ICON.circle!;
                   return (
-                    <ShadcnButton variant="plain" size="none" key={n} onClick={() => (change((d) => setSchemaField(d, "icon", n)), close())} className={cx("tap rounded-md p-1.5 hover:bg-hover", s.icon === n && "bg-hover")} aria-label={n}>
+                    <Button variant="plain" key={n} onClick={() => (change((d) => setSchemaField(d, "icon", n)), close())} className={cn("tap rounded-md p-1.5 hover:bg-hover", s.icon === n && "bg-hover")} aria-label={n}>
                       <I size={16} style={{ color: pal(s.color) }} />
-                    </ShadcnButton>
+                    </Button>
                   );
                 })}
               </div>
               <div className="mt-2 flex flex-wrap gap-1.5 border-t border-line pt-2">
                 {COLORS.map((c) => (
-                  <ShadcnButton variant="plain" size="none" key={c} onClick={() => change((d) => setSchemaField(d, "color", c))} className={cx("size-6 rounded-full border-2", s.color === c ? "border-fg" : "border-transparent")} style={{ background: pal(c) }} aria-label={c} />
+                  <Button variant="plain" key={c} onClick={() => change((d) => setSchemaField(d, "color", c))} className={cn("size-6 rounded-full border-2", s.color === c ? "border-fg" : "border-transparent")} style={{ background: pal(c) }} aria-label={c} />
                 ))}
               </div>
             </div>
@@ -135,14 +134,15 @@ function TypeEditor({ item, onClose }: { item: Item; onClose: () => void }) {
           <label className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
             {t("type.plural")}
             <Input
+              variant="bare"
               key={item.id + (s.plural ?? "")}
               defaultValue={ix.typePlural(item.id)}
               onBlur={(e) => e.target.value.trim() !== ix.typePlural(item.id) && change((d) => setSchemaField(d, "plural", e.target.value.trim()))}
-              className="min-w-0 flex-1 rounded-md border border-line bg-bg px-2 py-0.5 text-sm text-fg outline-none focus:border-[var(--focus)]"
+              className="min-w-0 flex-1 rounded-md border border-line bg-bg px-2 py-0.5 text-sm text-fg outline-none focus:border-focus"
             />
           </label>
         </div>
-        <Popover align="right" trigger={(p) => <IconButton {...p} label={t("more")} icon={MoreHorizontal} />}>
+        <MoreMenu>
           {(close) => (
             <>
               <MenuItem icon={<TagIcon size={14} />} onClick={() => (close(), setDialog("fromTag"))}>
@@ -156,7 +156,7 @@ function TypeEditor({ item, onClose }: { item: Item; onClose: () => void }) {
               </MenuItem>
             </>
           )}
-        </Popover>
+        </MoreMenu>
         <IconButton icon={X} label={t("view.closeSettings")} onClick={onClose} />
       </div>
 
@@ -167,30 +167,30 @@ function TypeEditor({ item, onClose }: { item: Item; onClose: () => void }) {
           defaultValue={s.description}
           onBlur={(e) => e.target.value !== s.description && change((d) => setSchemaField(d, "description", e.target.value))}
           rows={3}
-          className="mt-1 w-full resize-y rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-[var(--focus)]"
+          className="mt-1 w-full resize-y rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-focus"
         />
       </label>
 
       <div className="mt-8 grid grid-cols-[minmax(0,1fr)] gap-6 @3xl:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
         <section>
           <SectionTitle right={<AddProperty item={item} onAdded={setSel} />}>{t("type.properties")}</SectionTitle>
-          <div className="rounded-xl border border-line bg-surface p-1">
+          <Card className="p-1">
             {s.properties.map((p, i) => (
               <div key={p.id}>
-              <div className={cx("group flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-hover", p.id === sel && "bg-selected")}>
+              <div className={cn("group flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-hover", p.id === sel && "bg-selected")}>
                 <GripVertical size={14} className="text-muted-foreground" />
-                <ShadcnButton variant="plain" size="none" onClick={() => setSel(p.id)} className="tap-row flex min-w-0 flex-1 items-center gap-2 text-left">
+                <Button variant="plain" onClick={() => setSel(p.id)} className="tap-row flex min-w-0 flex-1 items-center gap-2 text-left">
                   <span className="truncate font-medium">{p.name}</span>
                   <span className="ml-auto shrink-0 text-xs text-muted-foreground">{t("kind.prop." + p.kind)}</span>
-                </ShadcnButton>
+                </Button>
                 {/* on touch screens only on the selected row: no invisible buttons to hit */}
-                <span className={cx("flex opacity-0 group-hover:opacity-100", p.id === sel ? "opacity-100" : "pointer-coarse:hidden")}>
-                  <ShadcnButton variant="plain" size="none" disabled={i === 0} onClick={() => change((d) => upsertProp(d, p.id, { sort: keyBetween(s.properties[i - 2]?.sort ?? null, s.properties[i - 1]!.sort) }))} className="tap rounded p-0.5 text-muted-foreground hover:text-fg disabled:opacity-30" aria-label={t("type.up")}>
+                <span className={cn("flex opacity-0 group-hover:opacity-100", p.id === sel ? "opacity-100" : "pointer-coarse:hidden")}>
+                  <Button variant="plain" disabled={i === 0} onClick={() => change((d) => upsertProp(d, p.id, { sort: keyBetween(s.properties[i - 2]?.sort ?? null, s.properties[i - 1]!.sort) }))} className="tap rounded p-0.5 text-muted-foreground hover:text-fg disabled:opacity-30" aria-label={t("type.up")}>
                     <ArrowUp size={12} />
-                  </ShadcnButton>
-                  <ShadcnButton variant="plain" size="none" disabled={i === s.properties.length - 1} onClick={() => change((d) => upsertProp(d, p.id, { sort: keyBetween(s.properties[i + 1]!.sort, s.properties[i + 2]?.sort ?? null) }))} className="tap rounded p-0.5 text-muted-foreground hover:text-fg disabled:opacity-30" aria-label={t("type.down")}>
+                  </Button>
+                  <Button variant="plain" disabled={i === s.properties.length - 1} onClick={() => change((d) => upsertProp(d, p.id, { sort: keyBetween(s.properties[i + 1]!.sort, s.properties[i + 2]?.sort ?? null) }))} className="tap rounded p-0.5 text-muted-foreground hover:text-fg disabled:opacity-30" aria-label={t("type.down")}>
                     <ArrowDown size={12} />
-                  </ShadcnButton>
+                  </Button>
                 </span>
               </div>
               {/* narrow: the settings open right below the chosen property, not under the capabilities */}
@@ -198,7 +198,7 @@ function TypeEditor({ item, onClose }: { item: Item; onClose: () => void }) {
               </div>
             ))}
             {!s.properties.length && <p className="px-2 py-2 text-sm text-muted-foreground">{t("type.noProps")}</p>}
-          </div>
+          </Card>
           <Capabilities item={item} />
         </section>
         <section className="hidden @3xl:block">{selected ? <PropEditor item={item} prop={selected} /> : null}</section>
@@ -207,13 +207,14 @@ function TypeEditor({ item, onClose }: { item: Item; onClose: () => void }) {
       {dialog === "delete" && <DeleteTypeDialog item={item} onClose={() => setDialog(null)} />}
       {dialog === "toTag" && <DeleteTypeDialog item={item} onClose={() => setDialog(null)} toTag />}
       {dialog === "fromTag" && <FromTagDialog item={item} onClose={() => setDialog(null)} />}
-    </div>
+    </Card>
   );
 }
 
 // ---------- properties ----------
 
 function AddProperty({ item, onAdded }: { item: Item; onAdded: (id: string) => void }) {
+  const repo = useRepo();
   const { t } = useT();
   const ix = useIndex();
   const [open, setOpen] = useState(false);
@@ -247,18 +248,18 @@ function AddProperty({ item, onAdded }: { item: Item; onAdded: (id: string) => v
       )}
     >
       <div className="w-72 space-y-2 p-2">
-        <Input autoFocus value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && !twins.length && add()} placeholder={t("props.name")} className="w-full rounded-md border border-line bg-bg px-2 py-1 text-sm outline-none" />
+        <Input variant="sm" autoFocus value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && !twins.length && add()} placeholder={t("props.name")} />
         {twins.length > 0 && (
           <div className="rounded-lg bg-surface-2 p-2 text-xs">
             <p className="mb-1 text-muted-foreground">{t("type.twins")}</p>
             {twins.map(({ tp, p }) => (
-              <ShadcnButton variant="plain" size="none" key={tp.id + p.id} onClick={() => add(p)} className="flex w-full items-center gap-1.5 rounded px-1 py-0.5 text-left hover:bg-hover">
+              <Button variant="plain" key={tp.id + p.id} onClick={() => add(p)} className="flex w-full items-center gap-1.5 rounded px-1 py-0.5 text-left hover:bg-hover">
                 <TypeGlyph schema={tp.schema} size={12} /> {tp.schema.name} › {p.name} <span className="ml-auto text-muted-foreground">{t("kind.prop." + p.kind)}</span>
-              </ShadcnButton>
+              </Button>
             ))}
           </div>
         )}
-        <NativeSelect value={kind} onChange={(e) => setKind(e.target.value as PropKind)} className="w-full rounded-md border border-line bg-bg px-1.5 py-1 text-sm" aria-label={t("props.kind")}>
+        <NativeSelect full value={kind} onChange={(e) => setKind(e.target.value as PropKind)} className="w-full rounded-md border border-line bg-bg px-1.5 py-1 text-sm" aria-label={t("props.kind")}>
           {PROP_KINDS.map((k) => (
             <option key={k} value={k}>
               {t("kind.prop." + k)}
@@ -282,6 +283,7 @@ function defaultStatusOptions(t: T): OptionDef[] {
 }
 
 function PropEditor({ item, prop }: { item: Item; prop: PropDef }) {
+  const repo = useRepo();
   const { t } = useT();
   const ix = useIndex();
   const set = (patch: Patch<Omit<PropDef, "id">>) => repo.change(item.id, (d) => upsertProp(d, prop.id, patch));
@@ -291,12 +293,12 @@ function PropEditor({ item, prop }: { item: Item; prop: PropDef }) {
       <div className="mt-1">{inner}</div>
     </div>
   );
-  const box = "w-full rounded-lg border border-line bg-bg px-2.5 py-1.5 text-sm outline-none focus:border-[var(--focus)]";
+  const box = "w-full rounded-lg border border-line bg-bg px-2.5 py-1.5 text-sm outline-none focus:border-focus";
   // no target: anything can be chosen
   const targetHits = prop.kind !== "relation" ? 0 : prop.target ? runQuery(parseQuery(prop.target, ix).def, { ix }).total : ix.live.filter((i) => i.kind === "info").length;
   const types = [...ix.types.values()];
   return (
-    <div className="rounded-xl border border-line bg-surface p-4" key={prop.id}>
+    <Card className="p-4" key={prop.id}>
       <div className="flex items-center gap-2">
         <InlineText value={prop.name} onCommit={(v) => v.trim() && set({ name: v.trim() })} className="font-semibold" label={t("props.name")} />
         <NativeSelect value={prop.kind} onChange={(e) => set({ kind: e.target.value as PropKind })} className="rounded-md border border-line bg-bg px-1.5 py-0.5 text-xs" aria-label={t("props.kind")}>
@@ -337,7 +339,7 @@ function PropEditor({ item, prop }: { item: Item; prop: PropDef }) {
           )}
           {field(
             t("type.inverse"),
-            <Input key={prop.id + "i"} defaultValue={prop.inverseName ?? ""} placeholder={t("type.inverseOf", { name: prop.name })} onBlur={(e) => set({ inverseName: e.target.value.trim() || null })} className={box} />,
+            <Input variant="bare" key={prop.id + "i"} defaultValue={prop.inverseName ?? ""} placeholder={t("type.inverseOf", { name: prop.name })} onBlur={(e) => set({ inverseName: e.target.value.trim() || null })} className={box} />,
           )}
           <label className="mt-2 flex items-center gap-2 text-sm">
             <Checkbox checked={!!prop.symmetric} onCheckedChange={(checked) => set({ symmetric: checked === true || null })} /> {t("type.symmetric")}
@@ -352,7 +354,7 @@ function PropEditor({ item, prop }: { item: Item; prop: PropDef }) {
           )}
           {field(
             t("type.ofType"),
-            <NativeSelect value={prop.computed?.of ?? ""} onChange={(e) => set({ computed: { fn: prop.computed?.fn ?? "progress", of: e.target.value || undefined } })} className={box}>
+            <NativeSelect full value={prop.computed?.of ?? ""} onChange={(e) => set({ computed: { fn: prop.computed?.fn ?? "progress", of: e.target.value || undefined } })} className={box}>
               <option value="">{t("type.anyType")}</option>
               {types.map((x) => (
                 <option key={x.id} value={x.id}>
@@ -369,7 +371,7 @@ function PropEditor({ item, prop }: { item: Item; prop: PropDef }) {
         </Button>
       </div>
       <p className="mt-1 text-right text-xs text-muted-foreground">{t("type.removeHint")}</p>
-    </div>
+    </Card>
   );
 }
 
@@ -381,16 +383,16 @@ function OptionsEditor({ prop, onChange }: { prop: PropDef; onChange: (o: Option
     <div className="space-y-1">
       {opts.map((o, i) => (
         <div key={o.id} className="flex items-center gap-1.5">
-          <Popover trigger={(p) => <ShadcnButton variant="plain" size="none" {...p} className="size-4 shrink-0 rounded-full" style={{ background: pal(o.color ?? "gray") }} aria-label={t("type.color")} />}>
+          <Popover trigger={(p) => <Button variant="plain" {...p} className="size-4 shrink-0 rounded-full" style={{ background: pal(o.color ?? "gray") }} aria-label={t("type.color")} />}>
             {(close) => (
               <div className="flex w-56 flex-wrap gap-1.5 p-1">
                 {COLORS.map((c) => (
-                  <ShadcnButton variant="plain" size="none" key={c} onClick={() => (upd(i, { color: c }), close())} className="size-5 rounded-full" style={{ background: pal(c) }} aria-label={c} />
+                  <Button variant="plain" key={c} onClick={() => (upd(i, { color: c }), close())} className="size-5 rounded-full" style={{ background: pal(c) }} aria-label={c} />
                 ))}
               </div>
             )}
           </Popover>
-          <Input defaultValue={o.name} onBlur={(e) => e.target.value.trim() && e.target.value !== o.name && upd(i, { name: e.target.value.trim() })} className="field min-w-0 flex-1 rounded-md bg-transparent px-1 py-0.5 text-sm outline-none hover:bg-hover" />
+          <Input variant="bare" defaultValue={o.name} onBlur={(e) => e.target.value.trim() && e.target.value !== o.name && upd(i, { name: e.target.value.trim() })} className="field min-w-0 flex-1 rounded-md bg-transparent px-1 py-0.5 text-sm outline-none hover:bg-hover" />
           {prop.kind === "status" && (
             <NativeSelect value={o.group ?? "todo"} onChange={(e) => upd(i, { group: e.target.value as StatusGroup })} className="rounded-md border border-line bg-bg px-1 py-0.5 text-xs" aria-label={t("type.group")}>
               {STATUS_GROUPS.map((g) => (
@@ -400,14 +402,14 @@ function OptionsEditor({ prop, onChange }: { prop: PropDef; onChange: (o: Option
               ))}
             </NativeSelect>
           )}
-          <ShadcnButton variant="plain" size="none" onClick={() => onChange(opts.filter((_, n) => n !== i))} className="text-muted-foreground hover:text-danger" aria-label={t("type.removeOption")}>
+          <Button variant="plain" onClick={() => onChange(opts.filter((_, n) => n !== i))} className="text-muted-foreground hover:text-danger" aria-label={t("type.removeOption")}>
             <X size={13} />
-          </ShadcnButton>
+          </Button>
         </div>
       ))}
-      <ShadcnButton variant="plain" size="none" onClick={() => onChange([...opts, { id: shortId("o"), name: t("type.newOption"), group: prop.kind === "status" ? "todo" : undefined, color: "gray" }])} className="flex items-center gap-0.5 text-xs text-muted-foreground hover:text-fg">
+      <Button variant="plain" onClick={() => onChange([...opts, { id: shortId("o"), name: t("type.newOption"), group: prop.kind === "status" ? "todo" : undefined, color: "gray" }])} className="flex items-center gap-0.5 text-xs text-muted-foreground hover:text-fg">
         <Plus size={12} /> {t("type.addOption")}
-      </ShadcnButton>
+      </Button>
     </div>
   );
 }
@@ -415,6 +417,7 @@ function OptionsEditor({ prop, onChange }: { prop: PropDef; onChange: (o: Option
 // ---------- capabilities ----------
 
 function Capabilities({ item }: { item: Item }) {
+  const repo = useRepo();
   const { t } = useT();
   const ix = useIndex();
   const s = item.schema!;
@@ -436,7 +439,7 @@ function Capabilities({ item }: { item: Item }) {
   return (
     <div className="mt-8">
       <SectionTitle>{t("caps.title")}</SectionTitle>
-      <div className="divide-y divide-line rounded-xl border border-line bg-surface px-3">
+      <Card className="divide-y divide-line px-3">
         {row(
           t("caps.status"),
           t("caps.statusHint"),
@@ -503,7 +506,7 @@ function Capabilities({ item }: { item: Item }) {
             />
           )}
         </div>
-      </div>
+      </Card>
     </div>
   );
 }
@@ -511,6 +514,7 @@ function Capabilities({ item }: { item: Item }) {
 // ---------- delete / convert ----------
 
 function DeleteTypeDialog({ item, onClose, toTag }: { item: Item; onClose: () => void; toTag?: boolean }) {
+  const repo = useRepo();
   const { t } = useT();
   const ix = useIndex();
   const s = item.schema!;
@@ -525,7 +529,7 @@ function DeleteTypeDialog({ item, onClose, toTag }: { item: Item; onClose: () =>
       mode === "tag" ? t("op.typeToTag", { name: s.name, tag }) : mode === "type" ? t("op.typeToType", { name: s.name, target: ix.typeName(target) }) : t("op.typeRemoved", { name: s.name });
     deleteType(repo.writer, ix, item.id, m, label, repo.origin);
     onClose();
-    go("/types");
+    navigate("/types");
   };
   return (
     <Dialog title={toTag ? t("type.toTagTitle", { name: s.name }) : t("type.deleteTitle", { name: s.name })} onClose={onClose}>
@@ -552,7 +556,7 @@ function DeleteTypeDialog({ item, onClose, toTag }: { item: Item; onClose: () =>
       )}
       {mode === "tag" && (
         <label className="mt-3 flex items-center gap-2 text-sm">
-          {t("type.tagName")} <Input value={tag} onChange={(e) => setTag(e.target.value)} className="rounded-md border border-line bg-bg px-2 py-1 text-sm" />
+          {t("type.tagName")} <Input variant="sm" value={tag} onChange={(e) => setTag(e.target.value)} />
         </label>
       )}
       {mode === "type" && (
@@ -579,6 +583,7 @@ function DeleteTypeDialog({ item, onClose, toTag }: { item: Item; onClose: () =>
 }
 
 function FromTagDialog({ item, onClose }: { item: Item; onClose: () => void }) {
+  const repo = useRepo();
   const { t } = useT();
   const ix = useIndex();
   const s = item.schema!;
@@ -590,7 +595,7 @@ function FromTagDialog({ item, onClose }: { item: Item; onClose: () => void }) {
   return (
     <Dialog title={t("type.fromTagTitle")} onClose={onClose}>
       <label className="flex items-center gap-2 text-sm">
-        # <Input value={tag} onChange={(e) => setTag(e.target.value)} className="rounded-md border border-line bg-bg px-2 py-1 text-sm" />
+        # <Input variant="sm" value={tag} onChange={(e) => setTag(e.target.value)} />
       </label>
       <p className="mt-3 text-sm">{t("type.fromTagCount", { count: p.untyped.length, name: s.name, tag: tag.trim().replace(/^#/, "") })}</p>
       {p.untyped.length > 0 && (
@@ -646,6 +651,7 @@ function FromTagDialog({ item, onClose }: { item: Item; onClose: () => void }) {
  * any query as text. Stored as query text, e.g. "typ:Person" or "#autor".
  */
 function TargetField({ target, hits, onChange }: { target?: string; hits: number; onChange: (t: string) => void }) {
+  const repo = useRepo();
   const { t, lang } = useT();
   const ix = useIndex();
   const where = target ? parseQuery(target, ix).def.where : undefined;
@@ -653,13 +659,13 @@ function TargetField({ target, hits, onChange }: { target?: string; hits: number
   const tag = where && "tag" in where ? where.tag : undefined;
   const [mode, setMode] = useState<"type" | "tag" | "query">(typeId || !target ? "type" : tag ? "tag" : "query");
   const [creating, setCreating] = useState(false);
-  const [newName, setNewName] = useState("");
   const types = ix.typesByName();
   const box = "w-full rounded-md border border-line bg-bg px-2 py-1 text-sm outline-none";
   return (
     <div className="space-y-1.5">
       <div className="flex items-center gap-2">
         <NativeSelect
+          full
           value={mode === "type" ? (typeId ?? "") : mode}
           onChange={(e) => {
             const v = e.target.value;
@@ -683,31 +689,15 @@ function TargetField({ target, hits, onChange }: { target?: string; hits: number
         </NativeSelect>
         <span className="shrink-0 text-xs text-muted-foreground">{t("type.hits", { count: hits })}</span>
       </div>
-      {mode === "tag" && <Input defaultValue={tag ?? ""} onBlur={(e) => e.target.value.trim() && onChange("#" + e.target.value.trim().replace(/^#/, "").toLowerCase())} placeholder="#autor" className={box} />}
-      {mode === "query" && <Input defaultValue={target ?? ""} onBlur={(e) => onChange(e.target.value.trim())} placeholder={t("type.targetPlaceholder")} className={cx(box, "font-mono")} />}
+      {mode === "tag" && <Input defaultValue={tag ?? ""} onBlur={(e) => e.target.value.trim() && onChange("#" + e.target.value.trim().replace(/^#/, "").toLowerCase())} placeholder="#autor" variant="sm" />}
+      {mode === "query" && <Input defaultValue={target ?? ""} onBlur={(e) => onChange(e.target.value.trim())} placeholder={t("type.targetPlaceholder")} variant="sm" className="font-mono" />}
       {/* the target type does not exist yet: make it here, without leaving the editor */}
       {creating && (
-        <Dialog title={t("type.targetNewTitle")} onClose={() => setCreating(false)}>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              const n = newName.trim();
-              if (!n) return;
-              const id = createType(n);
-              setCreating(false);
-              setNewName("");
-              setMode("type");
-              onChange(printQuery({ where: { type: id } }, lang, repo.index()));
-            }}
-          >
-            <Input autoFocus value={newName} onChange={(e) => setNewName(e.target.value)} placeholder={t("type.name")} className="w-full rounded-lg border border-line bg-bg px-3 py-2 text-sm outline-none" />
-            <div className="mt-4 flex justify-end">
-              <Button type="submit" variant="primary" disabled={!newName.trim()}>
-                {t("types.create")}
-              </Button>
-            </div>
-          </form>
-        </Dialog>
+        <NewTypeDialog
+          title={t("type.targetNewTitle")}
+          onClose={() => setCreating(false)}
+          onCreated={(id) => (setMode("type"), onChange(printQuery({ where: { type: id } }, lang, repo.index())))}
+        />
       )}
     </div>
   );

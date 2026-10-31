@@ -735,6 +735,14 @@ export function titleKey(title: string) {
 
 export { todayISO, addDaysISO } from "./date";
 
+/** A date range as stored: "2026-03-01/2026-06-30", either side may be empty. */
+export function parseRange(v: unknown): { start: string; end: string } {
+  const [start = "", end = ""] = typeof v === "string" && v ? v.split("/") : [];
+  return { start, end };
+}
+/** The stored form of a range; "" when both sides are empty. */
+export const formatRange = (start: string, end: string) => (start || end ? `${start}/${end}` : "");
+
 /** What an item is called: its title, else (a file) its file name; "" when it has neither. */
 export function displayTitle(item: Pick<Item, "title" | "file">): string {
   return item.title || item.file?.name || "";

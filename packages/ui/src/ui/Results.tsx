@@ -1,23 +1,23 @@
 // Showing query results: list, table, board, tree, gallery and triage ("sortieren").
 // Used by collections, query blocks in texts and the sections of a page.
-import { Button as ShadcnButton } from "../components/ui/button";
 import { useState } from "react";
-import { AlertTriangle, ChevronDown, ChevronRight, EyeOff } from "lucide-react";
-import { type Item, type StatusGroup, type ViewKind, todayISO } from "@obtion/core/model";
-import { type QueryDef, type EvalCtx, type Group as QGroup, FIELDS, fieldOf, groupItems, pathBase, runQuery, typesIn } from "@obtion/core/query";
+import { AlertTriangle } from "lucide-react";
+import { type Item, type ViewKind, todayISO } from "@obtion/core/model";
+import { type QueryDef, type EvalCtx, fieldOf, groupItems, pathBase, runQuery } from "@obtion/core/query";
 import { fmtDate, fmtNumber } from "@obtion/core/i18n";
-import { firstOfGroup, statusOf, statusProp } from "@obtion/core/traits";
-import { plainText } from "@obtion/core/search";
-import { repo } from "../repo";
-import { useIndex, useRepo, itemHref, go } from "../hooks";
+import { useIndex, itemHref } from "../hooks";
 import { useT, titleOf } from "../i18n";
-import { files, useBlobUrl } from "../files";
-import { ItemIcon, StatusPill, cx, Tag, ProgressCount } from "./bits";
-import { ItemRow, pathLabel, setStatus, treeOrder, Group } from "./Row";
+import { StatusPill, Tag } from "./item-look";
+import { ProgressCount } from "./progress";
+import { ItemRow, pathLabel, treeOrder, Group } from "./Row";
 import { Triage } from "./Triage";
 import { CalendarView, TimelineView } from "./TimeViews";
 import { ProjectTable } from "./ProjectTable";
-import { type Look, AreaChip, GroupedTable, GroupChip, HiddenGroups, PercentBar, hiddenPatch, splitHidden } from "./Table";
+import { BoardView } from "./Board";
+import { GalleryView } from "./Gallery";
+import { type Look, GroupedTable } from "./Table";
+import { HiddenGroups, fieldLabel, hiddenPatch, splitHidden } from "./groups";
+import { Card, Button } from "./primitives";
 
 export function useQuery(def: QueryDef, thisId?: string) {
   const ix = useIndex();
@@ -81,17 +81,17 @@ export function Results({ def, thisId, display, empty, keyPrefix = "", look }: {
         <Triage items={items} />
       ) : def.columns?.includes("progress") && !def.group ? (
         // projects with progress and next task: a table in a card
-        <div className="overflow-hidden rounded-xl border border-line bg-surface">
+        <Card className="overflow-hidden">
           <ProjectTable items={items} />
-        </div>
+        </Card>
       ) : (
         <ListView items={items} def={def} ctx={ctx} look={look} />
       )}
       {def.limit && total > res.items.length && (isInboxQuery(def) ? <InboxNudge total={total} /> : <p className="px-2 pt-1 text-xs text-muted-foreground">{t("query.more", { count: total - res.items.length })}</p>)}
       {res.items.length > items.length && (
-        <ShadcnButton variant="plain" size="none" onClick={() => setShown(shown + 200)} className="mt-2 w-full py-2 text-sm text-muted-foreground hover:text-fg">
+        <Button variant="plain" onClick={() => setShown(shown + 200)} className="mt-2 w-full py-2 text-sm text-muted-foreground hover:text-fg">
           {t("query.more", { count: res.items.length - items.length })}
-        </ShadcnButton>
+        </Button>
       )}
     </div>
   );
@@ -107,7 +107,7 @@ function ListView({ items, def, ctx, look }: { items: Item[]; def: QueryDef; ctx
   // "spalten:nächste" in a list: each entry shows its next task below the title
   const withNext = def.columns?.includes("next");
   const by = def.group ?? "";
-  const byLabel = ["status", "statusGroup", "type", "path"].includes(by) ? t("group." + by) : (FIELDS as readonly string[]).includes(by) ? t("field." + by) : by;
+  const byLabel = fieldLabel(by, t);
   return (
     <div className="-mx-2">
       {groups.map((g, gi) => (
@@ -203,150 +203,6 @@ export function CellValue({ item, name, ctx }: { item: Item; name: string; ctx: 
   return <span className="line-clamp-2">{String(v)}</span>;
 }
 
-// ---------- board ----------
-
-function BoardView({ items, def, ctx, look }: { items: Item[]; def: QueryDef; ctx: EvalCtx; look?: Look }) {
-  const { t } = useT();
-  const ix = ctx.ix;
-  const by = def.group && def.group !== "path" ? def.group : "status";
-  const tab = look?.tab;
-  // every option is a column, also an empty one – a place to drag to ("Erledigt" before anything is done)
-  const typeIds = [...new Set([...typesIn(def.where), ...items.map((i) => i.type ?? "")])].filter((id) => ix.types.has(id));
-  const [columns, hiddenCols] = splitHidden(groupItems(items, by, ctx, undefined, tab?.hideEmpty ? undefined : { types: typeIds, where: def.where }).filter((g) => !tab?.hideEmpty || g.items.length), tab);
-  const lanes = tab?.subgroup ? groupItems(items, tab.subgroup, ctx).filter((g) => g.items.length) : [{ key: "", items } as QGroup];
-  const [over, setOver] = useState<string | null>(null);
-  const [folded, setFolded] = useState<Set<string>>(new Set());
-  const repo = useRepo();
-  const drop = (id: string, g: QGroup) => {
-    const item = repo.get(id);
-    if (!item) return;
-    const schema = ix.schemaOf(item);
-    if (by === "statusGroup") {
-      const o = g.key ? firstOfGroup(schema, g.key as StatusGroup) : undefined;
-      if (o) void setStatus(item, o.id, repo);
-      return;
-    }
-    const prop = by === "status" ? statusProp(schema) : schema?.properties.find((p) => p.name.toLowerCase() === by.toLowerCase() && (p.kind === "select" || p.kind === "status"));
-    const opt = prop?.options?.find((o) => o.name === g.label);
-    if (prop && opt && prop.id === statusProp(schema)?.id) void setStatus(item, opt.id, repo);
-    else if (prop && opt) repo.setProp(id, prop.id, opt.id);
-    else if (prop && !g.key) repo.setProp(id, prop.id, null);
-  };
-  // more columns to the right: the edge fades, so it is clear the board scrolls
-  const [more, setMore] = useState(false);
-  const scroller = (el: HTMLDivElement | null) => {
-    if (!el) return;
-    const check = () => setMore(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
-    check();
-    el.onscroll = check;
-  };
-  const byLabel = by === "status" || by === "statusGroup" || by === "type" ? t("group." + by) : by;
-  const subLabel = tab?.subgroup ? (["status", "statusGroup", "type", "path"].includes(tab.subgroup) ? t("group." + tab.subgroup) : (FIELDS as readonly string[]).includes(tab.subgroup) ? t("field." + tab.subgroup) : tab.subgroup) : "";
-  return (
-    <div ref={scroller} className={cx("-mx-2 overflow-x-auto pb-2", more && "[mask-image:linear-gradient(to_right,black_88%,transparent)]")}>
-      {lanes.map((lane) => {
-        const inLane = new Set(lane.items.map((i) => i.id));
-        const isFolded = folded.has(lane.key);
-        return (
-          <section key={lane.key || "_"} className={tab?.subgroup ? "mb-4" : undefined}>
-            {tab?.subgroup && (
-              <div className="sticky left-0 flex w-fit items-center gap-2 px-2 py-1.5">
-                <ShadcnButton variant="plain" size="none" onClick={() => setFolded((f) => new Set(isFolded ? [...f].filter((k) => k !== lane.key) : [...f, lane.key]))} aria-expanded={!isFolded} aria-label={t(isFolded ? "table.unfold" : "table.fold")} className="tap -ml-1 rounded p-0.5 text-muted-foreground hover:bg-hover hover:text-fg">
-                  {isFolded ? <ChevronRight size={15} /> : <ChevronDown size={15} />}
-                </ShadcnButton>
-                <GroupChip g={lane} by={tab.subgroup} byLabel={subLabel} />
-                <span className="text-xs tabular-nums text-muted-foreground">{lane.items.length}</span>
-              </div>
-            )}
-            {!isFolded && (
-              <div className="flex gap-3 px-2">
-                {columns.map((col) => {
-                  const cards = col.items.filter((i) => inLane.has(i.id));
-                  const k = lane.key + "|" + col.key;
-                  return (
-                    <div
-                      key={col.key || "_"}
-                      onDragOver={(e) => (e.preventDefault(), setOver(k))}
-                      onDragLeave={() => setOver(null)}
-                      onDrop={(e) => {
-                        setOver(null);
-                        drop(e.dataTransfer.getData("obtion/item"), col);
-                      }}
-                      className={cx("flex w-64 shrink-0 flex-col gap-1.5 rounded-xl bg-surface-2/60 p-2", !cards.length && !tab?.subgroup && "w-44", over === k && "ring-2 ring-[var(--focus)]")}
-                    >
-                      <p className="group/head flex items-center gap-2 px-1">
-                        <GroupChip g={col} by={by} byLabel={byLabel} />
-                        <span className="text-xs tabular-nums text-muted-foreground">{cards.length}</span>
-                        {look?.onLook && (
-                          <ShadcnButton variant="plain" size="none" onClick={() => look.onLook!(hiddenPatch(tab, col, true))} className="tap ml-auto rounded p-0.5 text-muted-foreground opacity-0 hover:bg-hover hover:text-fg focus-visible:opacity-100 group-hover/head:opacity-100 pointer-coarse:opacity-100" aria-label={t("view.hideColumn")} title={t("view.hideColumn")}>
-                            <EyeOff size={13} />
-                          </ShadcnButton>
-                        )}
-                      </p>
-                      {/* an empty column says where to drag – in rows (by project …) the empty cells stay quiet */}
-                      {!cards.length && !tab?.subgroup && <p className="rounded-lg border border-dashed border-line px-2 py-3 text-center text-xs text-muted-foreground">{t("board.dropHere")}</p>}
-                      {cards.map((i) => (
-                        <BoardCard key={i.id} item={i} cols={def.columns ?? []} ctx={ctx} />
-                      ))}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </section>
-        );
-      })}
-      <HiddenGroups groups={hiddenCols} by={by} byLabel={byLabel} onShow={look?.onLook ? (g) => look.onLook!(hiddenPatch(tab, g, false)) : undefined} />
-    </div>
-  );
-}
-
-/** A card: title, and the view's properties as small lines (empty ones left out). */
-function BoardCard({ item: i, cols, ctx }: { item: Item; cols: string[]; ctx: EvalCtx }) {
-  const { t } = useT();
-  const shown = cols.filter((c) => {
-    const hit = c === "area" ? (ctx.ix.area(i.id) ? { value: 1 } : undefined) : fieldOf(i, c, ctx.ix);
-    return hit && !(hit.value === undefined || hit.value === null || hit.value === "" || (Array.isArray(hit.value) && !hit.value.length));
-  });
-  const pr = !cols.length ? ctx.ix.progressOf(i) : undefined;
-  // the whole card opens the entry; links inside it (a project, a relation) open theirs
-  return (
-    <div
-      data-id={i.id}
-      draggable
-      onDragStart={(e) => e.dataTransfer.setData("obtion/item", i.id)}
-      onClick={(e) => !(e.target as HTMLElement).closest("a,button,select,input") && go(itemHref(i.id).slice(1))}
-      className="flex cursor-pointer flex-col gap-1.5 rounded-lg border border-line bg-surface p-2.5 text-sm shadow-sm hover:shadow"
-    >
-      <a href={itemHref(i.id)} draggable={false} className="flex items-start gap-2">
-        <ItemIcon item={i} size={14} className="mt-0.5 shrink-0" />
-        <span className="min-w-0 flex-1 font-medium">{titleOf(i, t)}</span>
-      </a>
-      {shown.map((c) => (
-        <span key={c} className="flex min-w-0 text-xs text-muted-foreground">
-          {c === "area" ? <AreaChip id={ctx.ix.area(i.id)!} /> : <CardValue item={i} name={c} ctx={ctx} />}
-        </span>
-      ))}
-      {pr && pr.total ? <ProgressCount done={pr.done} total={pr.total} className="text-xs text-muted-foreground" /> : null}
-    </div>
-  );
-}
-
-function CardValue({ item, name, ctx }: { item: Item; name: string; ctx: EvalCtx }) {
-  const { t } = useT();
-  if (name === "progress") {
-    const pr = ctx.ix.progressOf(item);
-    return pr ? <PercentBar done={pr.done} total={pr.total} /> : null;
-  }
-  const hit = fieldOf(item, name, ctx.ix);
-  if (name === "subtasks") return <span>{t("card.subtasks", { count: Number(hit?.value ?? 0) })}</span>;
-  if (hit?.prop?.kind === "computed" && hit.prop.computed?.fn !== "count") {
-    const pr = ctx.ix.progress(item.id, hit.prop.computed?.of);
-    return <PercentBar done={pr.done} total={pr.total} />;
-  }
-  return <CellValue item={item} name={name} ctx={ctx} />;
-}
-
 // ---------- tree ----------
 
 function TreeView({ items }: { items: Item[] }) {
@@ -374,81 +230,4 @@ function TreeView({ items }: { items: Item[] }) {
       </div>
     );
   return <div className="-mx-2">{roots.map((r) => render(r, 0, new Set()))}</div>;
-}
-
-// ---------- gallery ----------
-
-function GalleryView({ items, ctx }: { items: Item[]; ctx: EvalCtx }) {
-  return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 @3xl:grid-cols-4">
-      {items.map((i) => (
-        <GalleryTile key={i.id} item={i} ctx={ctx} />
-      ))}
-    </div>
-  );
-}
-
-function firstImage(item: Item): string | undefined {
-  if (item.file) return item.file.thumb ?? (item.file.filetype === "bild" ? item.file.display : undefined);
-  const ix = repo.index();
-  for (const l of ix.textLinks(item)) {
-    const f = ix.get(l.to)?.file;
-    if (l.embed && f?.filetype === "bild") return f.thumb ?? f.display;
-  }
-  return undefined;
-}
-
-function GalleryTile({ item, ctx }: { item: Item; ctx: EvalCtx }) {
-  const { t } = useT();
-  const hash = firstImage(item);
-  const url = useBlobUrl(hash, true);
-  const f = item.file;
-  // nothing to show as a picture: a compact text card (title, status, progress, a line of text), no empty image area
-  if (!hash && !f) {
-    const schema = ctx.ix.schemaOf(item);
-    const st = statusOf(item, schema);
-    const pr = ctx.ix.progressOf(item);
-    const text = plainText(item.body);
-    return (
-      <a href={itemHref(item.id)} className="group flex min-w-0 flex-col gap-1.5 self-start rounded-xl border border-line bg-surface p-3 hover:bg-hover">
-        <span className="flex min-w-0 items-start gap-1.5 text-sm font-medium">
-          <ItemIcon item={item} size={14} className="mt-0.5 shrink-0" />
-          <span className="line-clamp-2">{titleOf(item, t)}</span>
-        </span>
-        {text && <span className="line-clamp-2 text-xs text-muted-foreground">{text}</span>}
-        {(st || (pr && pr.total > 0)) && (
-          <span className="flex items-center gap-2 text-xs text-muted-foreground">
-            {st && <StatusPill option={st.option} group={st.group} small />}
-            {pr && pr.total > 0 && <ProgressCount done={pr.done} total={pr.total} className="ml-auto" />}
-          </span>
-        )}
-      </a>
-    );
-  }
-  const meta = f ? [t("filetype." + f.filetype), f.pages ? t("file.pages", { count: f.pages }) : "", f.duration ? fmtDuration(f.duration) : ""].filter(Boolean).join(" · ") : "";
-  return (
-    <a href={itemHref(item.id)} className="group min-w-0">
-      <div className="flex aspect-[4/3] items-center justify-center overflow-hidden rounded-xl border border-line bg-surface-2">
-        {url ? (
-          <img src={url} alt="" className="size-full object-cover transition-transform group-hover:scale-[1.02]" />
-        ) : files.isMissing(hash) || files.isMissing(f?.hash) ? (
-          <span className="flex flex-col items-center gap-1 text-xs text-muted-foreground">
-            <ItemIcon item={item} size={24} /> {t(files.missingKey(item.created))}
-          </span>
-        ) : (
-          <ItemIcon item={item} size={28} />
-        )}
-      </div>
-      <p className="mt-1.5 flex min-w-0 items-center gap-1.5 text-xs font-medium">
-        <ItemIcon item={item} size={12} />
-        <span className="truncate">{titleOf(item, t)}</span>
-      </p>
-      {meta && <p className="truncate text-xs text-muted-foreground">{meta}</p>}
-    </a>
-  );
-}
-
-export function fmtDuration(s: number) {
-  const m = Math.floor(s / 60);
-  return `${m}:${String(Math.round(s % 60)).padStart(2, "0")}`;
 }

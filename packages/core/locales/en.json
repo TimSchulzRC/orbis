@@ -97,6 +97,7 @@
  "app.opening": "Opening your data…",
  "app.syncing": "Syncing with your server…",
  "app.notFound": "Not found",
+ "app.noSpace": "This workspace does not exist, or you are not (or no longer) in it.",
  "error.title": "This page could not be shown",
  "error.hint": "Your data is safe. Reloading usually helps; otherwise the text below shows what went wrong.",
  "error.reload": "Reload",
