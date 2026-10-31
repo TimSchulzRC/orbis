@@ -4,7 +4,7 @@ import { fmtBytes } from "@obtion/core/i18n";
 import { type Item, wikiLinkRe } from "@obtion/core/model";
 import { openLightbox } from "./Lightbox";
 import { repo } from "../repo";
-import { useFiles, useRepo } from "../hooks";
+import { itemPath, spaceHref, useFiles, useRepo, useSpaceId } from "../hooks";
 import { type DeviceFiles, files as current } from "../files";
 import type { Repo } from "@obtion/sync";
 import { getLang, tr } from "../i18n";
@@ -58,12 +58,12 @@ md.use({
         const item = id ? r.get(id) : undefined;
         const f = item?.file;
         const size = t.alias && /^\d+$/.test(t.alias) ? Number(t.alias) : undefined;
-        if (f && t.embed) return embedHTML(item!, size);
-        if (f) return `<a class="file-chip" href="#/i/${encodeURIComponent(id!)}">📎 ${escapeHtml(t.alias || item!.title)} <small>${fmtBytes(getLang(), f.size)}</small></a>`;
+        if (f && t.embed) return embedHTML(item!, size, renderingSpace);
+        if (f) return `<a class="file-chip" href="${spaceHref(renderingSpace, itemPath(id!))}">📎 ${escapeHtml(t.alias || item!.title)} <small>${fmtBytes(getLang(), f.size)}</small></a>`;
         const label = escapeHtml(t.alias || t.target);
         return id
-          ? `<a class="wikilink" href="#/i/${encodeURIComponent(id)}">${label}</a>`
-          : `<a class="wikilink missing" href="#/create?title=${encodeURIComponent(t.target)}" title="${escapeHtml(tr("link.missing"))}">${label}</a>`;
+          ? `<a class="wikilink" href="${spaceHref(renderingSpace, itemPath(id))}">${label}</a>`
+          : `<a class="wikilink missing" href="${spaceHref(renderingSpace, `/create?title=${encodeURIComponent(t.target)}`)}" title="${escapeHtml(tr("link.missing"))}">${label}</a>`;
       },
     },
   ],
@@ -72,27 +72,31 @@ md.use({
 /**
  * An embedded file, the same in read-only text and in the editor: an image with its description
  * as alt text and caption, audio and video as a player, anything else (PDF …) as a card with
- * its first page.
+ * its first page. `space`: the workspace of the text, so its links open there (in a new tab too).
  */
-export function embedHTML(item: Item, size?: number): string {
+export function embedHTML(item: Item, size?: number, space?: string): string {
+  const href = spaceHref(space, itemPath(item.id));
   const f = item.file!;
   if (f.filetype === "bild")
     return `<figure class="embed-img"><img data-hash="${f.display ?? f.hash}" data-id="${escapeHtml(item.id)}" data-created="${item.created}" alt="${escapeHtml(item.body || item.title)}"${size ? ` style="width:${size}px"` : ""}>${item.body ? `<figcaption>${escapeHtml(item.body)}</figcaption>` : ""}</figure>`;
   if (f.filetype === "audio" || f.filetype === "video") {
     const tag = f.filetype === "audio" ? "audio" : "video";
-    return `<figure class="embed-av"><${tag} controls preload="none" data-hash="${f.hash}" class="embed-media"></${tag}><figcaption><a href="#/i/${encodeURIComponent(item.id)}">${escapeHtml(item.title)}</a>${item.body ? ` · ${escapeHtml(item.body)}` : ""}</figcaption></figure>`;
+    return `<figure class="embed-av"><${tag} controls preload="none" data-hash="${f.hash}" class="embed-media"></${tag}><figcaption><a href="${href}">${escapeHtml(item.title)}</a>${item.body ? ` · ${escapeHtml(item.body)}` : ""}</figcaption></figure>`;
   }
-  return `<a class="embed-file" href="#/i/${encodeURIComponent(item.id)}">${f.thumb ? `<img data-hash="${f.thumb}" alt="">` : ""}<span><b>${escapeHtml(item.title)}</b><small>${[f.pages ? tr("file.pages", { count: f.pages }) : "", fmtBytes(getLang(), f.size)].filter(Boolean).join(" · ")}</small></span></a>`;
+  return `<a class="embed-file" href="${href}">${f.thumb ? `<img data-hash="${f.thumb}" alt="">` : ""}<span><b>${escapeHtml(item.title)}</b><small>${[f.pages ? tr("file.pages", { count: f.pages }) : "", fmtBytes(getLang(), f.size)].filter(Boolean).join(" · ")}</small></span></a>`;
 }
 
-/** The replica whose titles [[links]] resolve against while rendering (the workspace of the text). */
+/** The replica whose titles [[links]] resolve against while rendering (the workspace of the text), and its id for the links. */
 let rendering: Repo | undefined;
-function renderMarkdown(src: string, r?: Repo): string {
+let renderingSpace: string | undefined;
+function renderMarkdown(src: string, r?: Repo, space?: string): string {
   rendering = r;
+  renderingSpace = space;
   try {
     return md.parse(src, { async: false }) as string;
   } finally {
     rendering = undefined;
+    renderingSpace = undefined;
   }
 }
 
@@ -119,9 +123,10 @@ export function hydrateFiles(root: HTMLElement | null, files: DeviceFiles = curr
 
 export function Markdown({ src, className }: { src: string; className?: string }) {
   const r = useRepo();
+  const space = useSpaceId();
   const files = useFiles();
   const ref = useRef<HTMLDivElement>(null);
-  const html = useMemo(() => renderMarkdown(src, r), [src, r, r.version]);
+  const html = useMemo(() => renderMarkdown(src, r, space), [src, r, space, r.version]);
   useEffect(() => hydrateFiles(ref.current, files), [html]);
   // a click on an image opens the full view, paging through the images of this text
   const onClick = (e: React.MouseEvent) => {

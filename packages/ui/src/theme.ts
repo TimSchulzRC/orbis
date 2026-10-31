@@ -1,9 +1,10 @@
 // Light or dark, per device: "System" (default) follows the device, "Hell"/"Dunkel" stay.
 // index.html sets <html data-theme> before the first paint (no flash); this keeps it current.
 import { useSyncExternalStore } from "react";
+import { KEYS } from "./ui/storage";
 
 type ThemeChoice = "system" | "light" | "dark";
-const KEY = "obtion.theme";
+const KEY = KEYS.theme;
 /** The page background per mode: browser bar and PWA status bar take it on. */
 const BAR = { light: "#f7f6f3", dark: "#191919" } as const;
 

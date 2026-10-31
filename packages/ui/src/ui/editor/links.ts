@@ -6,7 +6,7 @@ import { syntaxTree } from "@codemirror/language";
 import { EditorSelection, type EditorState, type Range } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate, WidgetType } from "@codemirror/view";
 import { ExternalLink, Link2, Pencil, Unlink } from "lucide-react";
-import { go, itemHref } from "../../hooks";
+import { navigate, openItem } from "../../hooks";
 import { repo } from "../../repo";
 import { tr } from "../../i18n";
 import { askText, showMenu } from "./menu";
@@ -73,8 +73,8 @@ function openLink(l: Link) {
   if (l.web) return void window.open(webHref(l.target), "_blank", "noopener");
   const title = pageTitle(l.target);
   const id = repo.resolveTitle(title);
-  if (id) go(itemHref(id).slice(1));
-  else go(`/create?title=${encodeURIComponent(title)}`);
+  if (id) openItem(id);
+  else navigate(`/create?title=${encodeURIComponent(title)}`);
 }
 
 /** The link as Markdown again, with another text. */

@@ -1,20 +1,22 @@
 import { ModalSurface } from "../components/ui/dialog";
-import { Button as ShadcnButton } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { useEffect, useRef, useState } from "react";
 import { Plus, CornerDownLeft, ChevronRight } from "lucide-react";
 import type { Item } from "@obtion/core/model";
 import { snippet } from "@obtion/core/search";
 import { statusOf } from "@obtion/core/traits";
-import { go, spaceHref } from "../hooks";
+import { navigate, itemPath, spaceHref, openItem } from "../hooks";
 import { useAccounts } from "../accounts";
 import { useReplicas } from "./Spaces";
 import { captureSpace } from "./Capture";
 import { setTheme } from "../theme";
 import { useT, setLang, getLang, titleOf } from "../i18n";
-import { InTray, ItemIcon, StatusPill, TypeGlyph, cx, modName } from "./bits";
+import { InTray, ItemIcon, StatusPill, TypeGlyph } from "./item-look";
+import { cn } from "../lib/utils";
+import { modName } from "../lib/platform";
 import { shortPath } from "./Row";
 import { createAndOpen } from "../actions";
+import { Button } from "./primitives";
 
 type Entry =
   | { kind: "item"; id: string; space: string }
@@ -44,13 +46,13 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
       const ix = repos[n]!.index();
       const of = (label: string) => (several ? `${label} · ${s.name}` : label);
       return [
-        ...ix.typesInOrder().map((x) => [of(ix.typePlural(x.id)), spaceHref(s.id, `/i/${encodeURIComponent(x.id)}`)]),
+        ...ix.typesInOrder().map((x) => [of(ix.typePlural(x.id)), spaceHref(s.id, itemPath(x.id))]),
         [of(t("nav.files")), spaceHref(s.id, "/files")],
         [of(t("nav.types")), spaceHref(s.id, "/types")],
         [of(t("nav.activity")), spaceHref(s.id, "/activity")],
         [of(t("nav.graph")), spaceHref(s.id, "/graph")],
         [of(t("nav.trash")), spaceHref(s.id, "/trash")],
-        [several ? `${t("space.settings")} · ${s.name}` : t("space.settings"), spaceHref(s.id, "/workspace")],
+        [several ? `${t("space.settings")} · ${s.name}` : t("space.settings"), spaceHref(s.id, "/settings")],
       ];
     }),
       [t("nav.settings"), "#/settings"],
@@ -64,8 +66,8 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   const captureTypes = [...pinnedTypes, ...ix.typesByName().filter((x) => !pinnedTypes.includes(x.id)).map((x) => x.id)];
   // actions, found by typing their name
   const cmds: [string, () => void][] = [
-    [t("palette.cmd.sortInbox"), () => go("/review")],
-    [t("palette.cmd.newType"), () => (location.hash = spaceHref(cs, "/types?new=1"))],
+    [t("palette.cmd.sortInbox"), () => navigate("/review")],
+    [t("palette.cmd.newType"), () => navigate("/types?new=1", { space: cs })],
     [t("palette.cmd.language"), () => setLang(getLang() === "de" ? "en" : "de")],
     ...(["system", "light", "dark"] as const).map((v): [string, () => void] => [t("palette.cmd.theme", { name: t("theme." + v) }), () => setTheme(v)]),
   ];
@@ -99,7 +101,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
 
   const run = (it: Entry) => {
     onClose();
-    if (it.kind === "item") location.hash = spaceHref(it.space, `/i/${encodeURIComponent(it.id)}`);
+    if (it.kind === "item") openItem(it.id, { space: it.space });
     else if (it.kind === "create") createAndOpen({ type: it.type, title: it.title }, repo, cs);
     else if (it.kind === "nav") location.hash = it.path;
     else if (it.kind === "cmd") it.run();
@@ -109,6 +111,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
     <ModalSurface title={t("palette.label")} onClose={onClose}><div className="fixed inset-0 z-50 flex items-start justify-center bg-black/30 p-3 pt-[10vh] backdrop-blur-[2px]" onMouseDown={onClose}>
       <div className="flex max-h-[70vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-2xl" onMouseDown={(e) => e.stopPropagation()}>
         <Input
+          variant="bare"
           autoFocus
           value={q}
           onChange={(e) => (setQ(e.target.value), setSel(0))}
@@ -124,13 +127,13 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
         <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto p-1.5">
           {items.map((it, i) => {
             const active = i === sel;
-            const common = { "data-i": i, onMouseEnter: () => setSel(i), onClick: () => run(it), className: cx("flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm", active && "bg-selected"), key: i };
+            const common = { "data-i": i, onMouseEnter: () => setSel(i), onClick: () => run(it), className: cn("flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm", active && "bg-selected"), key: i };
             if (it.kind === "item") {
               const ix = repoOf(it.space).index();
               const n = ix.get(it.id)!;
               const st = statusOf(n, ix.schemaOf(n));
               return (
-                <ShadcnButton variant="plain" size="none" {...common}>
+                <Button variant="plain" {...common}>
                   <ItemIcon item={n} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate">{titleOf(n, t)}</span>
@@ -144,32 +147,32 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
                   {st && <StatusPill option={st.option} group={st.group} small />}
                   {several && <span className="max-w-28 shrink-0 truncate text-xs text-muted-foreground">{nameOf(it.space)}</span>}
                   {active && <CornerDownLeft size={14} className="text-muted-foreground" />}
-                </ShadcnButton>
+                </Button>
               );
             }
             if (it.kind === "create")
               return (
-                <ShadcnButton variant="plain" size="none" {...common}>
+                <Button variant="plain" {...common}>
                   <Plus size={16} className="text-muted-foreground" />
                   <span className="flex-1 truncate">
                     {it.type ? t("palette.newTyped", { name: ix.typeName(it.type) }) : t("palette.new")} <span className="font-medium">{t("palette.quoted", { text: it.title })}</span>
                   </span>
                   {it.type && <TypeGlyph schema={ix.types.get(it.type)?.schema} size={14} />}
                   {several && <span className="max-w-28 shrink-0 truncate text-xs text-muted-foreground">{nameOf(cs)}</span>}
-                </ShadcnButton>
+                </Button>
               );
             if (it.kind === "cmd")
               return (
-                <ShadcnButton variant="plain" size="none" {...common}>
+                <Button variant="plain" {...common}>
                   <ChevronRight size={16} className="text-muted-foreground" />
                   <span className="flex-1">{it.label}</span>
-                </ShadcnButton>
+                </Button>
               );
             return (
-              <ShadcnButton variant="plain" size="none" {...common}>
+              <Button variant="plain" {...common}>
                 <span className="w-4" />
                 <span className="flex-1 text-muted-foreground">{t("palette.goTo", { label: it.label })}</span>
-              </ShadcnButton>
+              </Button>
             );
           })}
         </div>

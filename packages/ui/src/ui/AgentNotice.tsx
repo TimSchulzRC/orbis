@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import type { ActivityEvent } from "@obtion/core/protocol";
 import { repo } from "../repo";
 import { useT } from "../i18n";
-import { notify } from "./toasts";
+import { notify } from "./feedback";
 import type { T } from "@obtion/core/i18n";
 
 function visible(id: string): HTMLElement[] {

@@ -1,5 +1,3 @@
-import { Button as ShadcnButton } from "../components/ui/button";
-import { useSyncExternalStore } from "react";
 import { type Item, STATUS_GROUPS } from "@obtion/core/model";
 import { confirmAction, notify } from "./feedback";
 import { dueOf, firstOfGroup, isDone, primaryChild, statusOf, statusProp } from "@obtion/core/traits";
@@ -8,7 +6,11 @@ import type { Repo } from "@obtion/sync";
 import { repo as current } from "../repo";
 import { useItemHref, useRepo } from "../hooks";
 import { tr, useT, titleOf } from "../i18n";
-import { DueLabel, ItemIcon, MenuItem, Popover, StatusGlyph, StatusPill, cx, pal, ProgressCount } from "./bits";
+import { DueLabel, ItemIcon, StatusGlyph, StatusPill, pal } from "./item-look";
+import { Button, MenuItem, Popover } from "./primitives";
+import { cn } from "../lib/utils";
+import { createStore } from "../lib/store";
+import { ProgressCount } from "./progress";
 import { statusShape } from "@obtion/core/input";
 
 /** Status choice as a small menu (rows of projects; the ring there does not tick off). */
@@ -72,20 +74,16 @@ export async function setStatus(item: Item, optionId: string, repo: Repo = curre
     }
   }
   repo.setProp(item.id, sp.id, optionId);
-  if (closing) notify(tr("tick.done", { title: titleOf(item), name: opt.name }), () => repo.setProp(item.id, sp.id, (before as string) ?? null));
+  if (closing) notify.undo(tr("tick.done", { title: titleOf(item), name: opt.name }), () => repo.setProp(item.id, sp.id, (before as string) ?? null));
   return true;
 }
 
 // Ticked entries stay visible, struck through, for a moment before they leave the list.
 const lingering = new Map<string, ReturnType<typeof setTimeout>>();
-const lingerListeners = new Set<() => void>();
-let lingerVersion = 0;
-const lingerEmit = () => (lingerVersion++, lingerListeners.forEach((l) => l()));
+const lingerVersion = createStore(0);
+const lingerEmit = () => lingerVersion.set(lingerVersion.get() + 1);
 function useLingering(id: string) {
-  useSyncExternalStore(
-    (l) => (lingerListeners.add(l), () => void lingerListeners.delete(l)),
-    () => lingerVersion,
-  );
+  lingerVersion.use();
   return lingering.has(id);
 }
 
@@ -166,13 +164,13 @@ export function ItemRow({
   return (
     <div
       data-id={item.id}
-      className={cx("tap-row group flex min-h-11 items-center gap-2.5 rounded-lg px-2 py-1 hover:bg-hover max-md:min-h-[52px]", !!sub && "pl-[calc(8px+var(--depth)*24px)] max-sm:pl-[calc(8px+var(--depth)*14px)]")}
+      className={cn("tap-row group flex min-h-11 items-center gap-2.5 rounded-lg px-2 py-1 hover:bg-hover max-md:min-h-[52px]", !!sub && "pl-[calc(8px+var(--depth)*24px)] max-sm:pl-[calc(8px+var(--depth)*14px)]")}
       style={sub ? ({ "--depth": sub } as React.CSSProperties) : undefined}
     >
       <RowStatus item={item} />
       <a href={hrefOf(item.id)} className="flex min-w-0 flex-1 flex-col justify-center self-stretch">
         {/* on a phone the title may take two lines: its telling part is often at the end */}
-        <span className={cx("block text-sm max-md:text-[15px] max-sm:line-clamp-2 sm:truncate", done && "text-muted-foreground line-through")}>{titleOf(item, t)}</span>
+        <span className={cn("block text-sm max-md:text-[15px] max-sm:line-clamp-2 sm:truncate", done && "text-muted-foreground line-through")}>{titleOf(item, t)}</span>
         {path && path.length > 0 && (
           <span className="block truncate text-xs text-muted-foreground" title={pathLabel(path)}>
             {shortPath(path)}
@@ -213,14 +211,14 @@ export function RowStatus({ item, size = 17 }: { item: Item; size?: number }) {
   const glyph = <span style={{ color: done ? "var(--ok)" : opt.color && opt.color !== "gray" ? pal(opt.color) : undefined }}><StatusGlyph option={opt} size={size} /></span>;
   return viaMenu ? (
     <StatusMenu item={item} trigger={(p) => (
-      <ShadcnButton variant="plain" size="none" {...p} className="tap-edge shrink-0 text-muted-foreground hover:text-fg" aria-label={t("row.status", { name: st.option.name })} title={st.option.name}>
+      <Button variant="plain" {...p} className="tap-edge shrink-0 text-muted-foreground hover:text-fg" aria-label={t("row.status", { name: st.option.name })} title={st.option.name}>
         {glyph}
-      </ShadcnButton>
+      </Button>
     )} />
   ) : (
-    <ShadcnButton variant="plain" size="none" onClick={() => tick(item, repo)} className="tap-edge shrink-0 text-muted-foreground hover:text-ok" aria-label={done ? t("row.reopen") : t("row.done")} title={done ? t("row.reopen") : t("row.done")}>
+    <Button variant="plain" onClick={() => tick(item, repo)} className="tap-edge shrink-0 text-muted-foreground hover:text-ok" aria-label={done ? t("row.reopen") : t("row.done")} title={done ? t("row.reopen") : t("row.done")}>
       {glyph}
-    </ShadcnButton>
+    </Button>
   );
 }
 

@@ -3,15 +3,16 @@
 // seen. What waits in the inbox is in the tray below (Tray.tsx), on a desktop with its panel open
 // below the page; without room for that the newest entries are cards here (ShelfCards).
 // Sections with nothing in them are left out.
-import { useEffect } from "react";
 import { Sun } from "lucide-react";
 import { type Item, SETTINGS_ID, todayISO } from "@obtion/core/model";
 import { fmtDate } from "@obtion/core/i18n";
 import { activeProjects, dueBy, recentlyChanged } from "@obtion/core/today";
-import { useDesktop, useIndex, useItemHref } from "../hooks";
+import { useDesktop, useIndex, useItemHref, useDocumentTitle } from "../hooks";
 import { useAccounts } from "../accounts";
 import { useT, titleOf } from "../i18n";
-import { Card, DueLabel, ItemIcon, RelTime, SectionTitle, cx, itemLook, pal } from "../ui/bits";
+import { Card, SectionTitle } from "../ui/primitives";
+import { DueLabel, ItemIcon, RelTime, itemLook, kindLabel, pal } from "../ui/item-look";
+import { cn } from "../lib/utils";
 import { RowStatus } from "../ui/Row";
 import { SpaceScope, useReplicas } from "../ui/Spaces";
 import { useInboxItems, useShelfPinned } from "../ui/inbox";
@@ -32,7 +33,7 @@ export function Today() {
   const inbox = entries.length;
   const pinned = useShelfPinned();
   const today = todayISO();
-  useEffect(() => void (document.title = t("nav.today")), []);
+  useDocumentTitle(t("nav.today"));
   // each workspace's part, then one list of all
   const per = shown.map((s, n) => ({ space: s.id, ix: repos[n]!.get(SETTINGS_ID) ? repos[n]!.index() : undefined }));
   const all = <T,>(f: (ix: NonNullable<(typeof per)[number]["ix"]>) => T[]): Of<T>[] => per.flatMap((p) => (p.ix ? f(p.ix).map((value) => ({ space: p.space, value })) : []));
@@ -71,7 +72,7 @@ export function Today() {
       {/* the panel not pinned below (too little room): the newest entries, a way into it */}
       {desktop && !pinned && inbox > 0 && <ShelfCards entries={entries} />}
 
-      <div className={cx("mt-9 grid items-start gap-x-8 gap-y-9", due.length > 0 && projects.length > 0 && "lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]")}>
+      <div className={cn("mt-9 grid items-start gap-x-8 gap-y-9", due.length > 0 && projects.length > 0 && "lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]")}>
         {due.length > 0 && (
           <section>
             <SectionTitle count={due.length}>{t("today.dueTitle")}</SectionTitle>
@@ -153,7 +154,7 @@ function ProjectRow({ item, touched, space }: { item: Item; touched: number; spa
   const prog = ix.progressOf(item);
   const color = pal(ix.schemaOf(item)?.color);
   return (
-    <a href={hrefOf(item.id)} className={cx(row, "hover:bg-hover")}>
+    <a href={hrefOf(item.id)} className={cn(row, "hover:bg-hover")}>
       {prog && prog.total > 0 ? <Ring share={prog.done / prog.total} color={color} /> : <span className="flex size-8 shrink-0 items-center justify-center"><ItemIcon item={item} /></span>}
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[15px] font-medium">{titleOf(item, t)}</span>
@@ -183,8 +184,7 @@ function Ring({ share, color }: { share: number; color: string }) {
 function useWhat(item: Item) {
   const { t } = useT();
   const ix = useIndex();
-  const look = itemLook(item, ix);
-  const kind = ["file", "note", "overview", "inbox"].includes(look.label) ? t("kind." + look.label) : look.label;
+  const kind = kindLabel(itemLook(item, ix), t);
   const home = ix.get(ix.home(item.id));
   return [kind, home?.title].filter(Boolean).join(" · ");
 }
@@ -209,7 +209,7 @@ function RecentRow({ item }: { item: Item }) {
   const { t } = useT();
   const hrefOf = useItemHref();
   return (
-    <a href={hrefOf(item.id)} className={cx(row, "hover:bg-hover")}>
+    <a href={hrefOf(item.id)} className={cn(row, "hover:bg-hover")}>
       <ItemIcon item={item} />
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[15px]">{titleOf(item, t)}</span>

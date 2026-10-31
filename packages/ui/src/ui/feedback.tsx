@@ -1,24 +1,22 @@
 // Quiet feedback: one short notice at the bottom ("Erledigt · Rückgängig") and a small
 // confirmation dialog for the few things that need one. Both live outside any page.
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect } from "react";
 import { useT } from "../i18n";
-import { Button, Dialog } from "./bits";
+import { Button, Dialog } from "./primitives";
+import { createStore } from "../lib/store";
 
 // short notices: sonner (see toasts.tsx); kept here so callers import one place for feedback
 export { notify } from "./toasts";
 
 type Choice<K extends string = string> = { key: K; label: string; primary?: boolean; danger?: boolean };
 type Ask = { title: string; body: string; choices: Choice[]; resolve: (v: string | null) => void };
-let ask: Ask | null = null;
-const askListeners = new Set<() => void>();
-const askSub = (l: () => void) => (askListeners.add(l), () => void askListeners.delete(l));
+const ask = createStore<Ask | null>(null);
 
 /** Ask, with several answers; resolves the chosen key, or null for "cancel". */
 export function chooseAction<K extends string>(opts: { title: string; body: string; choices: Choice<K>[] }): Promise<K | null> {
   return new Promise<K | null>((resolve) => {
-    ask?.resolve(null);
-    ask = { ...opts, resolve: resolve as (v: string | null) => void }; // answers are keys of the choices
-    askListeners.forEach((l) => l());
+    ask.get()?.resolve(null);
+    ask.set({ ...opts, resolve: resolve as (v: string | null) => void }); // answers are keys of the choices
   });
 }
 
@@ -29,13 +27,12 @@ export async function confirmAction(opts: { title: string; body: string; yes: st
 
 export function ConfirmHost() {
   const { t } = useT();
-  const a = useSyncExternalStore(askSub, () => ask);
-  useEffect(() => () => ask?.resolve(null), []);
+  const a = ask.use();
+  useEffect(() => () => ask.get()?.resolve(null), []);
   if (!a) return null;
   const done = (v: string | null) => {
     a.resolve(v);
-    ask = null;
-    askListeners.forEach((l) => l());
+    ask.set(null);
   };
   return (
     <Dialog title={a.title} onClose={() => done(null)}>
@@ -45,7 +42,7 @@ export function ConfirmHost() {
           {t("cancel")}
         </Button>
         {a.choices.map((c, i) => (
-          <Button key={c.key} variant={c.primary ? "primary" : "outline"} className={c.danger ? "!bg-danger !text-white" : undefined} autoFocus={i === a.choices.length - 1} onClick={() => done(c.key)}>
+          <Button key={c.key} variant={c.danger ? "danger" : c.primary ? "primary" : "outline"} autoFocus={i === a.choices.length - 1} onClick={() => done(c.key)}>
             {c.label}
           </Button>
         ))}

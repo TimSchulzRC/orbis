@@ -1,23 +1,22 @@
 // What can be done with entries while sorting – place, give a type, keep, later, delete – each with
 // one undo, and the pickers they need. The sort list (Triage.tsx) and the review (views/Review.tsx)
 // share them.
-import { Button as ShadcnButton } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { useRef, useState } from "react";
 import { Check, Plus } from "lucide-react";
 import { type Item, setMeta, titleKey } from "@obtion/core/model";
 import type { Values } from "@obtion/core/i18n";
 import { onlyBelow } from "@obtion/core/trash";
-import { canPlaceIn } from "@obtion/core/placement";
 import { tomorrow } from "@obtion/core/inbox";
 import { useRepo } from "../hooks";
 import { replica } from "../accounts";
 import { SpaceScope } from "./Spaces";
 import { useT, titleOf } from "../i18n";
 import { createType, rememberPlace } from "../actions";
-import { Dialog, Kbd, TypeGlyph, cx } from "./bits";
-import { ItemPicker } from "./Picker";
-import { placeSuggestions } from "./suggest";
+import { Button, Dialog, Kbd } from "./primitives";
+import { TypeGlyph } from "./item-look";
+import { cn } from "../lib/utils";
+import { PlacePicker } from "./Picker";
 import { chooseAction, notify } from "./feedback";
 
 export interface Undo {
@@ -143,22 +142,6 @@ export function usePickers(spaceOf: (i: Item) => string, place: (list: Item[], p
   return { node, placing, typing, setPlacing, setTyping };
 }
 
-function PlacePicker({ list, onPick, onClose }: { list: Item[]; onPick: (p: string) => void; onClose: () => void }) {
-  const { t } = useT();
-  const repo = useRepo();
-  const ix = repo.index();
-  return (
-    <ItemPicker
-      title={list.length > 1 ? t("triage.whereToMany", { count: list.length }) : t("triage.whereTo")}
-      suggestions={list.length === 1 ? placeSuggestions(list[0]!, repo) : []}
-      exclude={(x) => list.some((p) => !canPlaceIn(p, x, ix))}
-      onPick={onPick}
-      onCreate={(title) => onPick(repo.create({ title }))}
-      onClose={onClose}
-    />
-  );
-}
-
 /** Choose a type by keyboard: type to filter, arrows, Enter, 1–9; "Neuer Typ …" at the end. */
 function TypePicker({ current, onPick, onClose }: { current: string | null; onPick: (id: string) => void; onClose: () => void }) {
   const { t } = useT();
@@ -166,47 +149,52 @@ function TypePicker({ current, onPick, onClose }: { current: string | null; onPi
   const ix = repo.index();
   const [q, setQ] = useState("");
   const [sel, setSel] = useState(0);
+  // "Neuer Typ …" without a name: the field asks for one
+  const [naming, setNaming] = useState(false);
+  const field = useRef<HTMLInputElement>(null);
   const types = ix.typesByName().filter((x) => !q.trim() || x.schema.name.toLowerCase().includes(titleKey(q)));
   const exact = types.some((x) => x.schema.name.toLowerCase() === titleKey(q));
   const rows: { id?: string; create?: string }[] = [...types.map((x) => ({ id: x.id })), ...(q.trim() && !exact ? [{ create: q.trim() }] : [{ create: "" }])];
   const pick = (r?: (typeof rows)[number]) => {
     if (!r) return;
     if (r.id) return onPick(r.id);
-    const name = r.create?.trim() || prompt(t("types.new"))?.trim();
+    const name = r.create?.trim();
     if (name) onPick(createType(name, repo));
+    else (setNaming(true), field.current?.focus());
   };
   return (
     <Dialog title={t("triage.chooseType")} onClose={onClose}>
       <Input
+        ref={field}
         autoFocus
         value={q}
         onChange={(e) => (setQ(e.target.value), setSel(0))}
         onKeyDown={(e) => {
           if (e.key === "ArrowDown") (e.preventDefault(), setSel((s) => Math.min(rows.length - 1, s + 1)));
           else if (e.key === "ArrowUp") (e.preventDefault(), setSel((s) => Math.max(0, s - 1)));
-          else if (e.key === "Enter") (e.preventDefault(), pick(rows[sel]));
+          else if (e.key === "Enter") (e.preventDefault(), pick(naming && q.trim() ? { create: q } : rows[sel]));
           else if (!q && /^[1-9]$/.test(e.key) && rows[Number(e.key) - 1]?.id) (e.preventDefault(), pick(rows[Number(e.key) - 1]));
         }}
-        placeholder={t("triage.typeFilter")}
-        className="mb-2 w-full rounded-lg border border-line bg-bg px-3 py-2 text-sm outline-none focus:border-[var(--focus)]"
+        placeholder={naming ? t("types.new") : t("triage.typeFilter")}
+        className="mb-2 focus:border-focus"
       />
       <div role="listbox" className="flex flex-col">
         {rows.map((r, n) => {
           const x = r.id ? ix.types.get(r.id) : undefined;
           return (
-            <ShadcnButton variant="plain" size="none"
+            <Button variant="plain"
               key={r.id ?? "new"}
               role="option"
               aria-selected={n === sel}
               onMouseEnter={() => setSel(n)}
               onClick={() => pick(r)}
-              className={cx("flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm", n === sel && "bg-selected", !r.id && "mt-1 border-t border-line pt-2")}
+              className={cn("flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm", n === sel && "bg-selected", !r.id && "mt-1 border-t border-line pt-2")}
             >
               {x ? <TypeGlyph schema={x.schema} size={15} /> : <Plus size={15} className="text-muted-foreground" />}
               <span className="min-w-0 flex-1 truncate">{x ? x.schema.name : r.create ? t("triage.newTypeNamed", { name: r.create }) : t("triage.newType")}</span>
               {x && r.id === current && <Check size={14} className="text-ok" />}
               {x && n < 9 && !q && <Kbd>{n + 1}</Kbd>}
-            </ShadcnButton>
+            </Button>
           );
         })}
       </div>

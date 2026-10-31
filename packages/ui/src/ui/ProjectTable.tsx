@@ -1,15 +1,17 @@
 // Projects with their progress and next task (design rules § 2.4) – in query blocks
 // with "spalten:fortschritt,nächste" (an overview's "Aktive Projekte").
 import { Table as ShadcnTable, TableHeader, TableBody, TableRow, TableHead, TableCell } from "../components/ui/table";
-import { Button as ShadcnButton } from "../components/ui/button";
 import { useState } from "react";
 import { ChevronRight, CornerDownRight } from "lucide-react";
 import { type Item, todayISO } from "@obtion/core/model";
 import { dueOf } from "@obtion/core/traits";
-import { itemHref, useIndex, useMediaQuery } from "../hooks";
+import { itemHref, useIndex, usePhone } from "../hooks";
 import { useT, titleOf } from "../i18n";
-import { DueLabel, cx } from "./bits";
+import { DueLabel, EmptyDash } from "./item-look";
+import { PercentBar } from "./progress";
+import { cn, toggled } from "../lib/utils";
 import { RowStatus } from "./Row";
+import { Button } from "./primitives";
 
 /**
  * Active projects (design rules § 2.4): project · progress (bar and percent) · next task. Sub-
@@ -18,8 +20,8 @@ import { RowStatus } from "./Row";
  */
 export function ProjectTable({ items }: { items: Item[] }) {
   const ix = useIndex();
-  const { t, lang } = useT();
-  const phone = useMediaQuery("(max-width: 767px)");
+  const { t } = useT();
+  const phone = usePhone();
   const [open, setOpen] = useState<Set<string>>(new Set());
   const ids = new Set(items.map((i) => i.id));
   const parentOf = (i: Item) => [...ix.homePath(i.id)].reverse().find((p) => ids.has(p));
@@ -41,21 +43,13 @@ export function ProjectTable({ items }: { items: Item[] }) {
   };
   const pct = (i: Item) => {
     const pr = ix.progressOf(i);
-    if (!pr || !pr.total) return null;
-    return (
-      <span className="flex items-center gap-2">
-        <span className={cx("h-1.5 overflow-hidden rounded-full bg-surface-2 dark:bg-hover", phone ? "w-10" : "w-14")}>
-          <span className="block h-full rounded-full" style={{ width: `${(pr.done / pr.total) * 100}%`, background: "var(--ok)" }} />
-        </span>
-        <span className="text-xs tabular-nums text-muted-foreground">{new Intl.NumberFormat(lang, { style: "percent", maximumFractionDigits: 0 }).format(pr.done / pr.total)}</span>
-      </span>
-    );
+    return pr?.total ? <PercentBar done={pr.done} total={pr.total} inline barClass={phone ? "w-10" : "w-14"} /> : <EmptyDash />;
   };
   const chevron = (i: Item) =>
     kids(i.id).length ? (
-      <ShadcnButton variant="plain" size="none" onClick={() => setOpen(new Set(open.has(i.id) ? [...open].filter((x) => x !== i.id) : [...open, i.id]))} aria-expanded={open.has(i.id)} aria-label={t(open.has(i.id) ? "start.hideSub" : "start.showSub")} className="tap shrink-0 rounded p-0.5 text-faint hover:bg-hover hover:text-fg">
-        <ChevronRight size={14} className={cx("transition-transform", open.has(i.id) && "rotate-90")} />
-      </ShadcnButton>
+      <Button variant="plain" onClick={() => setOpen(toggled(open, i.id))} aria-expanded={open.has(i.id)} aria-label={t(open.has(i.id) ? "start.hideSub" : "start.showSub")} className="tap shrink-0 rounded p-0.5 text-faint hover:bg-hover hover:text-fg">
+        <ChevronRight size={14} className={cn("transition-transform", open.has(i.id) && "rotate-90")} />
+      </Button>
     ) : (
       <span className="w-[18px] shrink-0" />
     );
@@ -72,7 +66,7 @@ export function ProjectTable({ items }: { items: Item[] }) {
                 <span className="truncate text-[15px]">{titleOf(i, t)}</span>
                 <span className="truncate text-xs text-muted-foreground">{n ? t("row.next", { title: titleOf(n, t) }) : [ix.homePath(i.id).slice(-1).map((p) => ix.get(p)?.title)[0], ix.progressOf(i)?.total ? "" : t("start.noTasks")].filter(Boolean).join(" · ")}</span>
               </a>
-              {pct(i) ?? <span className="text-faint">–</span>}
+              {pct(i)}
             </div>
           );
         })}
@@ -103,7 +97,7 @@ export function ProjectTable({ items }: { items: Item[] }) {
                   </a>
                 </span>
               </TableCell>
-              <TableCell className="whitespace-nowrap px-3">{pct(i) ?? <span className="text-faint">–</span>}</TableCell>
+              <TableCell className="whitespace-nowrap px-3">{pct(i)}</TableCell>
               <TableCell className="max-w-0 px-3.5">
                 {n ? (
                   <span className="flex min-w-0 items-center gap-2">

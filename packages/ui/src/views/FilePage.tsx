@@ -3,23 +3,25 @@
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
 import { useEffect, useState } from "react";
-import { ArrowRightLeft, Download, Trash2, RotateCcw, MoreHorizontal, Replace } from "lucide-react";
+import { ArrowRightLeft, Download, Trash2, Replace } from "lucide-react";
 import { type Item, setFileMeta } from "@obtion/core/model";
-import { fmtBytes, fmtDate } from "@obtion/core/i18n";
-import { useIndex, go } from "../hooks";
-import { repo } from "../repo";
-import { useT } from "../i18n";
-import { files, useBlobUrl } from "../files";
-import { Button, ItemIcon, MenuItem, Popover, Tag, IconButton } from "../ui/bits";
-import { Bezuege, Crumbs } from "../ui/PageParts";
+import { fmtBytes, fmtDate, fmtDuration } from "@obtion/core/i18n";
+import { useIndex, leavePage, useDocumentTitle, useFiles, useRepo } from "../hooks";
+import { useT, titleOf } from "../i18n";
+import { useBlobUrl } from "../files";
+import { MenuItem, MoreMenu } from "../ui/primitives";
+import { ItemIcon, Tag } from "../ui/item-look";
+import { Bezuege, Crumbs, TrashBanner } from "../ui/PageParts";
 import { TagInput } from "../ui/TagInput";
 import { ItemPicker } from "../ui/Picker";
 import { TitleField } from "../ui/TitleField";
-import { fmtDuration } from "../ui/Results";
 import { dateOf } from "@obtion/core/date";
 
 export function FilePage({ item }: { item: Item }) {
+  const repo = useRepo();
+  const files = useFiles();
   const { t, lang } = useT();
+  useDocumentTitle(titleOf(item, t));
   const ix = useIndex();
   const f = item.file!;
   const [picking, setPicking] = useState(false);
@@ -60,7 +62,7 @@ export function FilePage({ item }: { item: Item }) {
     );
   };
   const tools = (
-    <Popover align="right" trigger={(p) => <IconButton {...p} label={t("more")} icon={MoreHorizontal} />}>
+    <MoreMenu>
       {(close) => (
         <>
           <MenuItem icon={<ArrowRightLeft size={14} />} onClick={() => (close(), setPicking(true))}>
@@ -68,26 +70,21 @@ export function FilePage({ item }: { item: Item }) {
           </MenuItem>
           <label className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm hover:bg-hover">
             <Replace size={14} className="text-muted-foreground" /> {t("file.replace")}
-            <Input type="file" className="hidden" onChange={(e) => (close(), e.target.files?.[0] && replace(e.target.files[0]))} />
+            <Input variant="bare" type="file" className="hidden" onChange={(e) => (close(), e.target.files?.[0] && replace(e.target.files[0]))} />
           </label>
           {!item.deleted && (
-            <MenuItem danger icon={<Trash2 size={14} />} onClick={() => (close(), repo.remove(item.id), history.length > 1 ? history.back() : go("/"))}>
+            <MenuItem danger icon={<Trash2 size={14} />} onClick={() => (close(), repo.remove(item.id), leavePage())}>
               {t("item.delete")}
             </MenuItem>
           )}
         </>
       )}
-    </Popover>
+    </MoreMenu>
   );
   return (
     <div className="page-read">
       {item.deleted && (
-        <div className="mb-4 flex items-center gap-3 rounded-lg bg-[color-mix(in_srgb,var(--danger)_10%,transparent)] px-3 py-2 text-sm text-danger">
-          {t("item.inTrash")}
-          <Button onClick={() => repo.restore(item.id)} className="ml-auto">
-            <RotateCcw size={14} /> {t("item.restore")}
-          </Button>
-        </div>
+        <TrashBanner onRestore={() => repo.restore(item.id)} />
       )}
       {missing && <p className="mb-3 rounded-lg border border-dashed border-line px-3 py-2 text-sm text-muted-foreground">{t(files.missingKey(item.created) === "file.uploading" ? "file.uploadingHint" : "file.missingHint")}</p>}
       <Crumbs item={item} tools={tools} onPlaces={() => setPicking(true)} onPlace={() => setPicking(true)} />
@@ -129,6 +126,7 @@ export function FilePage({ item }: { item: Item }) {
         {!isImg && f.filetype !== "pdf" && f.filetype !== "audio" && f.filetype !== "video" && <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">{f.name}</div>}
       </div>
       <Textarea
+      variant="inline"
         defaultValue={item.body}
         key={item.id}
         onBlur={(e) => e.target.value !== item.body && repo.setBody(item.id, e.target.value)}

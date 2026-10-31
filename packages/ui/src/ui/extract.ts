@@ -1,6 +1,7 @@
 import type { EditorView } from "@codemirror/view";
 import { repo } from "../repo";
 import { tr } from "../i18n";
+import { notify } from "./feedback";
 
 /** The type "extract" uses: the first pinned capture type (shipped: Karte). Survives deleting that type. */
 export function extractType(): string | null {
@@ -20,7 +21,7 @@ export function extractAsCard(view: EditorView) {
     to = line.to;
   }
   const text = view.state.sliceDoc(from, to).trim();
-  if (!text) return alert(tr("extract.empty"));
+  if (!text) return notify(tr("extract.empty"));
   const lines = text.split("\n");
   const first = lines[0]!.replace(/^[-*#>\s]+/, "").trim();
   const title = first.length > 80 ? first.slice(0, 77) + "…" : first;
