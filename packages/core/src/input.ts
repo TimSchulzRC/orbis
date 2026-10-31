@@ -148,6 +148,9 @@ export function matchOption(p: PropDef, raw: string): OptionDef {
       throw new InputError(`"${raw}" is not a status. Set a property that holds it up (blocks), e.g. "Blockiert durch" (the blocking entry) or "Wartet auf" (what it waits for); optionally also a paused status.`);
     const a = STATUS_ALIASES[w];
     if (a) {
+      // "on hold" means the option marked paused, even if another one is called "Paused"
+      const marked = a.state && options.find((x) => (x.group ?? "todo") === a.group && x.state === a.state);
+      if (marked) return marked;
       for (const n of a.names ?? []) {
         const o = byName(options, n);
         if (o && (o.group ?? "todo") === a.group) return o;

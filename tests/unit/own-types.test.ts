@@ -3,9 +3,9 @@
 import { test, expect } from "bun:test";
 import { MemRepo } from "../support/helpers";
 import { runSetup, SYS, upgradeExplicitRoles } from "@obtion/core/setup";
-import { type PropKind, SETTINGS_ID, setSettings, upsertProp } from "@obtion/core/model";
+import { type PropDef, type PropKind, SETTINGS_ID, setSettings, upsertProp } from "@obtion/core/model";
 import { deleteType } from "@obtion/core/typeops";
-import { statusShape } from "@obtion/core/input";
+import { matchOption, statusShape } from "@obtion/core/input";
 import { activeProjects } from "@obtion/core/today";
 
 /** A project and its steps under other names, without any default type. */
@@ -138,4 +138,19 @@ test("the upgrade waits for the settings and does nothing on a fresh setup", () 
   runSetup(m.writer, "en");
   m.change(SETTINGS_ID, (doc) => setSettings(doc, { upgrades: [] }));
   expect(upgradeExplicitRoles(m.writer, m.index())).toEqual([]); // everything shipped carries its marks already
+});
+
+test("a word for paused finds the option marked paused, not one only called so", () => {
+  const p: PropDef = {
+    id: "p",
+    name: "Stand",
+    kind: "select",
+    sort: "V",
+    options: [
+      { id: "a", name: "Paused", group: "active" },
+      { id: "b", name: "Resting", group: "active", state: "paused" },
+    ],
+  };
+  expect(matchOption(p, "on hold").id).toBe("b");
+  expect(matchOption(p, "Paused").id).toBe("a"); // the exact name still wins
 });
