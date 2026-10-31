@@ -18,6 +18,9 @@ export default defineConfig({
     // in CI a failed test gets one more try: the self-hosted machine runs other things beside it
     // (a load spike is no bug); Vitest still reports the test as flaky
     retry: process.env.CI ? 1 : 0,
+    // how long the first test file may take to load: with an empty Vite cache (every CI run) and
+    // other jobs on the machine, loading the interface took up to a minute, Vitest's default limit
+    env: { VITEST_BROWSER_IFRAME_TIMEOUT: process.env.VITEST_BROWSER_IFRAME_TIMEOUT ?? (process.env.CI ? "180000" : "60000") },
     browser: {
       enabled: true,
       headless: true,
