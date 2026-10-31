@@ -190,7 +190,7 @@ function Workspaces() {
       <SectionTitle>{t("settings.workspaces")}</SectionTitle>
       <p className="mb-3 text-sm text-muted-foreground">{t("settings.workspacesHint")}</p>
       {spaces.length > 0 && (
-        <ul className="divide-y divide-line rounded-xl border border-line bg-surface">
+        <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
           {spaces.map((s) => (
             <li key={s.id}>
               <a href={spaceHref(s.id, "/settings")} className="tap-row flex items-center gap-3 px-3 py-2.5 text-sm hover:bg-hover">
