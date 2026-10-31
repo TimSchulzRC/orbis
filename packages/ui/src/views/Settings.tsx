@@ -18,7 +18,7 @@ import { ItemIcon, TypeGlyph } from "../ui/item-look";
 import { cn, toggled } from "../lib/utils";
 import { chooseAction, notify } from "../ui/feedback";
 import { setTheme, useTheme } from "../theme";
-import { type Space, ApiError, activeUser, addPasskey, changePassword, linkOAuth, linkedProviders, oauthFailed, deleteAccount, deleteSpace, errorText, inviteLink, leaveSpace, loginOf, mcpToken, members, passkeys, removePasskey, renameSpace, replica, serverInfo, signOut, spaceById, useAccounts } from "../accounts";
+import { type Space, ApiError, activeUser, addPasskey, changePassword, linkFailed, linkOAuth, linkedProviders, deleteAccount, deleteSpace, errorText, inviteLink, leaveSpace, loginOf, mcpToken, members, passkeys, removePasskey, renameSpace, replica, serverInfo, signOut, spaceById, useAccounts } from "../accounts";
 import { SignIn } from "./Account";
 import { NewSpaceDialog } from "../ui/Spaces";
 import type { McpConnect, Member, PasskeyInfo, ServerInfo } from "@obtion/core/api";
@@ -290,8 +290,14 @@ function Passkeys() {
 function Providers({ providers }: { providers: { id: string; name: string }[] }) {
   const { t } = useT();
   const [linked, setLinked] = useState<string[] | null>(null);
-  const [error, setError] = useState(oauthFailed === "failed" ? t("account.oauthFailed") : "");
+  const [error, setError] = useState(linkFailed ? t(linkFailed === "taken" ? "account.linkTaken" : "account.linkFailed") : "");
+  const [reauth, setReauth] = useState<string | null>(null);
   useEffect(() => void linkedProviders().then(setLinked, () => setLinked([])), []);
+  const link = (id: string) => {
+    setError("");
+    // a sign-in of the last minutes first (403): confirm, then go on
+    void linkOAuth(id).catch((e: unknown) => (e instanceof ApiError && e.status === 403 ? setReauth(id) : setError(t("account.linkFailed"))));
+  };
   return (
     <div className="mt-3 rounded-lg border border-line p-3 text-sm">
       <span className="block font-medium">{t("account.providers")}</span>
@@ -302,7 +308,7 @@ function Providers({ providers }: { providers: { id: string; name: string }[] })
             {linked?.includes(p.id) ? (
               <span className="text-xs text-muted-foreground">{t("account.linked")}</span>
             ) : (
-              <Button variant="outline" disabled={!linked} onClick={() => void linkOAuth(p.id).catch(() => setError(t("account.oauthFailed")))}>
+              <Button variant="outline" disabled={!linked} onClick={() => link(p.id)}>
                 {t("account.link")}
               </Button>
             )}
@@ -310,6 +316,7 @@ function Providers({ providers }: { providers: { id: string; name: string }[] })
         ))}
       </ul>
       {error && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}
+      {reauth && <Reauth onClose={() => setReauth(null)} onDone={() => (setReauth(null), link(reauth))} />}
     </div>
   );
 }

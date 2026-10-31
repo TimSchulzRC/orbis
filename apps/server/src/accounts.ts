@@ -367,7 +367,9 @@ function makeAuth(accounts: Accounts, secret: string, baseURL: string) {
     emailAndPassword: { enabled: login.password, minPasswordLength: 8 },
     socialProviders: social,
     // an OAuth provider vouching for an address (email_verified) may sign in to the account with it
-    account: { accountLinking: { enabled: true } },
+    // linking in the settings is the signed-in person's own choice: the provider's address may differ
+    // (index.ts wants a fresh sign-in for it). Signing in links on its own only to a proven address.
+    account: { accountLinking: { enabled: true, allowDifferentEmails: true } },
     // an app stays signed in like a mail app; every use within a day moves the end. Adding a
     // passkey needs a sign-in of the last minutes (a stolen token cannot add one).
     session: { expiresIn: 60 * 60 * 24 * 365, updateAge: 60 * 60 * 24, freshAge: FRESH_SECONDS },

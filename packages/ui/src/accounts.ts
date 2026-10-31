@@ -256,6 +256,8 @@ export async function signInWithOAuth(provider: string, ctx: { invite?: string; 
  * account has the address but not this provider yet: link it in the settings), or "failed".
  */
 export let oauthFailed: "closed" | "notLinked" | "failed" | undefined;
+/** The last linking in the settings failed: "taken" (that provider account belongs to another account here) or "failed". */
+export let linkFailed: "taken" | "failed" | undefined;
 
 /** Back from the OAuth provider: the session it left in a cookie becomes this app's token. */
 async function finishOAuth() {
@@ -267,8 +269,9 @@ async function finishOAuth() {
   history.replaceState(history.state, "", location.pathname + back);
   document.cookie = "obtion_signup=; path=/api/auth; max-age=0";
   if (how === "linked") return;
+  const error = params.get("error") ?? "";
+  if (how === "linkFailed") return void (linkFailed = error === "account_already_linked_to_different_user" ? "taken" : "failed");
   if (how !== "oauth") {
-    const error = params.get("error") ?? "";
     return void (oauthFailed = /^(signup_closed|invite_invalid)$/.test(error) ? "closed" : error === "account_not_linked" ? "notLinked" : "failed");
   }
   try {

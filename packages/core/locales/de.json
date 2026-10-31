@@ -954,6 +954,8 @@
  "account.providers": "Anmelden über",
  "account.link": "Verknüpfen",
  "account.linked": "verknüpft",
+ "account.linkFailed": "Das Verknüpfen hat nicht geklappt.",
+ "account.linkTaken": "Dieses Konto beim Anbieter gehört schon zu einem anderen Obtion-Konto.",
  "space.menu": "Menü von {name}",
  "space.setUp": "Einrichten",
  "inbox.all": "Alle",

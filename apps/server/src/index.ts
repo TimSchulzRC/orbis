@@ -8,7 +8,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve, extname } from "node:path";
 import type { ServerWebSocket } from "bun";
 import { Store } from "./store";
-import { Accounts, AccountError, SIGNUP_COOKIE, randomToken } from "./accounts";
+import { Accounts, AccountError, FRESH_SECONDS, SIGNUP_COOKIE, randomToken } from "./accounts";
 import { loginConfig, loginMethods } from "./login";
 import type { AccountInfo, InviteCode, InviteInfo, McpConnect, Ok, ServerInfo, SignedIn, SignupPolicy, SignupRequest, User } from "@obtion/core/api";
 import { type Conn, Workspace, actorOf, parseClientMsg } from "./workspace";
@@ -244,6 +244,11 @@ const server = Bun.serve<Conn>({
       if (!callback && !sameOrigin(req)) return fail(403, "forbidden");
       if (path.startsWith("/api/auth/sign-up")) return fail(404, "not found");
       if (path.startsWith("/api/auth/passkey/") && !login.passkey) return fail(404, "not found");
+      // linking a provider (its address may differ) needs a sign-in of the last minutes, like a passkey
+      if (path === "/api/auth/link-social") {
+        const session = await accounts.session(tokenOf(req));
+        if (session && Date.now() - session.created > FRESH_SECONDS * 1000) return fail(403, "sign in again");
+      }
       return accounts.auth.handler(req);
     }
 

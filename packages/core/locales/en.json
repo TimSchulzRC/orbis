@@ -954,6 +954,8 @@
  "account.providers": "Sign in with",
  "account.link": "Link",
  "account.linked": "linked",
+ "account.linkFailed": "Linking did not work.",
+ "account.linkTaken": "This provider account already belongs to another Obtion account.",
  "space.menu": "Menu of {name}",
  "space.setUp": "Set up",
  "inbox.all": "All",
