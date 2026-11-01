@@ -10,6 +10,7 @@ import { OpError, Ops, QUERY_HELP } from "./ops";
 import { attachInput, convertInput, createInput, defineTypeInput, placeInput, suggestInput, updateInput, updateTypeInput } from "./schemas";
 import type { Store } from "./store";
 import type { Blobs } from "./blobs";
+import { MAX_ATTACH } from "./config";
 import { type Person, agentOrigin, parseOrigin } from "@obtion/core/origin";
 
 const INSTRUCTIONS = `Obtion is the user's personal system for knowledge and work: informations linked like Obsidian, projects and tasks like Notion, all in one graph. You are their interface: they tell you what happened, you record it; they ask, you answer from the data.
@@ -35,9 +36,19 @@ How to work:
 - New use cases need no code: \`define_type\` / \`update_type\` (properties, capabilities, views). Tag ↔ type conversions are previewed with \`convert\`; the user runs them in the app.
 - Answers list one line per entry: title [id] · type · status · due · path · ⚠ blocked by / waiting for; after a write it ends with · version <hash> (its base_version from now on). A writing call is all or nothing: "Nothing changed" means no part of it was applied – fix the reason and call again. Read the Hints after a write (unresolved links, duplicate titles, open items below something done …).
 - Link exactly with [[id|Label]], always for titles with # | [ ] ^. Never link an item to itself.
+- Files: \`get\` on a file shows its facts, the extracted text (PDF incl. embedded invoice XML, Word, Excel, PowerPoint, text and code files, a ZIP's entries) and, where the server offers it, a download command. Every file type is accepted. Small things: \`attach\` with base64 or a public url. A file on your disk: upload it over HTTP (below) – don't push large files through base64.
 - Never delete unless asked; deletes go to the trash. Today is in \`schema\`. Reply in the language of the user's message.`;
 
-function agentName(req: Request): string {
+/** The HTTP file API, for the instructions and the attach description. */
+function filesHelp(url: string) {
+  return `HTTP file API (token: the one this MCP connection uses, as $OBTION_TOKEN – never write the real token into answers or files):
+- Upload a new file: curl -fsS -X POST -H "Authorization: Bearer $OBTION_TOKEN" --data-binary @report.pdf "${url}?name=report.pdf&parent=<id>" → JSON with id, hash, size. parent is optional (an id or exact title).
+- Replace the content of a file (same item, old version kept): curl -fsS -X PUT -H "Authorization: Bearer $OBTION_TOKEN" --data-binary @report.pdf ${url}/<file id>
+- Download the original: curl -fsS -H "Authorization: Bearer $OBTION_TOKEN" -o report.pdf ${url}/<file id>
+Uploads and replacements show up in the activity and can be undone with undo like a tool call.`;
+}
+
+export function agentName(req: Request): string {
   const explicit = req.headers.get("x-obtion-agent");
   if (explicit) return explicit;
   const ua = req.headers.get("user-agent") ?? "";
@@ -64,10 +75,10 @@ function wrap<A>(fn: (args: A) => unknown, writes = false) {
 
 const userPrompt = (text: string) => ({ messages: [{ role: "user" as const, content: { type: "text" as const, text } }] });
 
-function buildMcpServer(store: Store, origin: string, blobs?: Blobs) {
-  const ops = new Ops(store, blobs);
+function buildMcpServer(store: Store, origin: string, blobs?: Blobs, filesUrl?: string) {
+  const ops = new Ops(store, blobs, filesUrl);
   const agent = parseOrigin(origin).name;
-  const server = new McpServer({ name: "obtion", version: "0.2.0" }, { instructions: INSTRUCTIONS });
+  const server = new McpServer({ name: "obtion", version: "0.2.0" }, { instructions: filesUrl ? `${INSTRUCTIONS}\n\n${filesHelp(filesUrl)}` : INSTRUCTIONS });
   const ro = { readOnlyHint: true };
   /** All or nothing, with hints appended to the answer. */
   const write = <A,>(fn: (a: A) => string | object) =>
@@ -91,8 +102,8 @@ function buildMcpServer(store: Store, origin: string, blobs?: Blobs) {
       return `${head}\n${ops.lines(r.items, r.base)}${more}`;
     }),
   );
-  server.registerTool("get", { title: "Get", description: "One item with its version (a hash of its content, for base_version – not the numbered text versions of `history`), properties, place, children, links, backlinks, updates and body. Files include facts and extracted text. Pass version as base_version to update when you replace the body.", inputSchema: { ref: z.string(), include_body: z.boolean().optional() }, annotations: ro }, wrap((a) => ops.get(a.ref, a.include_body ?? true)));
-  server.registerTool("search", { title: "Search", description: "Full text over titles, tags, bodies, properties and PDF text.", inputSchema: { query: z.string(), limit: z.number().int().min(1).max(50).optional() }, annotations: ro }, wrap((a) => {
+  server.registerTool("get", { title: "Get", description: "One item with its version (a hash of its content, for base_version – not the numbered text versions of `history`), properties, place, children, links, backlinks, updates and body. Files include facts (name, mime, size, hash, download URL and curl command) and extracted text. Pass version as base_version to update when you replace the body.", inputSchema: { ref: z.string(), include_body: z.boolean().optional() }, annotations: ro }, wrap((a) => ops.get(a.ref, a.include_body ?? true)));
+  server.registerTool("search", { title: "Search", description: "Full text over titles, tags, bodies, properties and the text of files (PDF, Office, text and code files, ZIP entries).", inputSchema: { query: z.string(), limit: z.number().int().min(1).max(50).optional() }, annotations: ro }, wrap((a) => {
     const hits = ops.search(a.query, a.limit);
     return hits.length ? hits.map((h) => `- ${ops.line(h.item)}${h.snippet ? ` — “${h.snippet}”` : ""}`).join("\n") : "Nothing found.";
   }));
@@ -162,8 +173,12 @@ function buildMcpServer(store: Store, origin: string, blobs?: Blobs) {
   );
   server.registerTool(
     "attach",
-    { title: "Attach file", description: "Create a file from a URL or base64, optionally below a parent and with tags.", inputSchema: attachInput.shape },
-    wrap(async (a) => `Attached:\n${ops.lines([await ops.attach(a, origin)])}`, true),
+    {
+      title: "Attach file",
+      description: `Create a file from a public URL or base64 (small files only; max ${MAX_ATTACH / 1024 / 1024} MB), optionally below a parent and with tags. Any file type. replace: put the new content into an existing file instead. ${filesUrl ? `A file on your disk goes over HTTP, not base64: curl -fsS -X POST -H "Authorization: Bearer $OBTION_TOKEN" --data-binary @file.xsd "${filesUrl}?name=file.xsd&parent=<id>" (PUT ${filesUrl}/<file id> replaces a content). $OBTION_TOKEN is the token of this MCP connection.` : ""}`.trim(),
+      inputSchema: attachInput.shape,
+    },
+    wrap((a) => ops.attach(a, origin), true),
   );
   server.registerTool(
     "delete",
@@ -254,9 +269,10 @@ Then ask what I want to change. Don't change anything before I answer.`),
   return server;
 }
 
-export async function handleMcp(store: Store, req: Request, blobs?: Blobs, person?: Person): Promise<Response> {
+/** `filesUrl`: the workspace's HTTP file API (…/w/<id>/api/files), named in answers and instructions. */
+export async function handleMcp(store: Store, req: Request, blobs?: Blobs, person?: Person, filesUrl?: string): Promise<Response> {
   store.flush();
-  const server = buildMcpServer(store, agentOrigin(agentName(req), person), blobs);
+  const server = buildMcpServer(store, agentOrigin(agentName(req), person), blobs, filesUrl);
   const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
   await server.connect(transport);
   try {

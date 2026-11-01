@@ -59,6 +59,7 @@ import { fromB64 } from "@obtion/core/protocol";
 import type { Store } from "./store";
 import { type Blobs, sha256 } from "./blobs";
 import { MAX_ATTACH } from "./config";
+import { extractMark } from "./extract";
 import type { AttachInput, CapInput, ConvertInput, CreateInput, DefineTypeInput, PlaceInput, PropInput, SuggestInput, UpdateInput, UpdateTypeInput, ViewInput } from "./schemas";
 import { originText, parseOrigin } from "@obtion/core/origin";
 import { createHash } from "node:crypto";
@@ -205,6 +206,8 @@ export class Ops {
   constructor(
     private store: Store,
     private blobs?: Blobs,
+    /** The workspace's file API (…/w/<id>/api/files), for download and upload commands in answers. */
+    private filesUrl?: string,
   ) {}
 
   get ix(): Index {
@@ -467,9 +470,25 @@ export class Ops {
     if (b.waiting) out.waiting_for = b.waiting;
     if (i.file) {
       const f = i.file;
-      out.file = { name: f.name, filetype: f.filetype, size: f.size, pages: f.pages, width: f.width, height: f.height, duration: f.duration };
+      const file: Record<string, unknown> = { name: f.name, filetype: f.filetype, mime: f.mime, size: f.size, hash: f.hash, pages: f.pages, width: f.width, height: f.height, duration: f.duration };
+      if (f.history?.length) file.versions_before = f.history.length;
+      if (this.filesUrl) {
+        const url = `${this.filesUrl}/${i.id}`;
+        Object.assign(file, {
+          download: url,
+          download_curl: `curl -fsS -H "Authorization: Bearer $OBTION_TOKEN" -o ${shq(f.name)} ${shq(url)}`,
+          replace_curl: `curl -fsS -X PUT -H "Authorization: Bearer $OBTION_TOKEN" --data-binary @${shq(f.name)} ${shq(url)}`,
+        });
+      }
+      out.file = file;
       out.used_in = ix.usedIn(i.id).map((b) => `${ix.get(b.from)?.title} (${b.kind})`);
-      if (f.text) out.text = f.text.slice(0, 20000);
+      // a text read from another content (replaced, undone) is not shown; it is read anew
+      const reading = f.extracted !== extractMark(f.hash) && f.filetype !== "bild" && f.filetype !== "audio" && f.filetype !== "video" && !!this.blobs?.has(f.hash);
+      if (reading) out.text_note = "The server is still reading this file's text; get it again in a moment.";
+      else if (f.text) {
+        out.text = f.text.slice(0, 20000);
+        if (f.text.length > 20000) out.text_note = `First 20000 of ${f.text.length} characters; download the file for the rest.`;
+      }
     }
     const refs = [...new Set([...ix.textLinks(i).map((l) => l.to), ...i.refs])].map((x) => ix.get(x)?.title).filter(Boolean);
     if (refs.length) out.refs = refs;
@@ -1246,9 +1265,11 @@ export class Ops {
     return { would_lose_type: u.items.length, values_become_free_properties: true, relations_become_refs: true, used_in_queries: u.queries.map((q) => q.title), progress_filters: u.progress.map((p) => p.name), land_in_inbox: u.inboxAfterRemove, note: `Run it in the app: type "${t.schema.name}" › … › "Turn into a tag".` };
   }
 
-  async attach(input: AttachInput, origin: string) {
+  /** The content an agent attaches: from base64 or a URL, at most MAX_ATTACH. */
+  async attachData(input: Pick<AttachInput, "url" | "base64">): Promise<Uint8Array> {
     if (!this.blobs) throw new OpError("Files are not available.");
     let data: Uint8Array;
+    if (input.base64 && input.url) throw new OpError("Give url or base64, not both.");
     if (input.base64) data = fromB64(input.base64);
     else if (input.url) {
       const u = new URL(input.url);
@@ -1256,19 +1277,66 @@ export class Ops {
       const res = await fetch(u, { signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) });
       if (!res.ok) throw new OpError(`Download failed: ${res.status}`);
       data = new Uint8Array(await res.arrayBuffer());
-    } else throw new OpError("Give url or base64.");
-    if (data.length > MAX_ATTACH) throw new OpError(`File too large (max ${MAX_ATTACH / 1024 / 1024} MB via agent).`);
+    } else throw new OpError("Give url or base64. For a local file use the HTTP upload (see the attach description).");
+    if (data.length > MAX_ATTACH) throw new OpError(`File too large (max ${MAX_ATTACH / 1024 / 1024} MB via attach). Upload it over HTTP instead (see the attach description).`);
+    return data;
+  }
+
+  /** attach: stores the content, then creates the file (or replaces the content of `replace`) as one step. */
+  async attach(input: AttachInput, origin: string): Promise<string> {
+    const data = await this.attachData(input);
     const hash = sha256(data);
-    await this.blobs.put(hash, data);
-    const parent = input.parent ? this.resolve(input.parent).id : undefined;
-    const id = newId();
-    const mime = mimeOf(input.name);
-    this.store.change(id, origin, (doc) => {
-      initItem(doc, { kind: "datei", title: input.name, parents: parent ? [parent] : [], tags: input.tags, body: input.description, createdBy: origin });
-      setFileMeta(doc, { hash, name: input.name, mime, filetype: fileTypeOf(input.name, mime), size: data.length });
+    await this.blobs!.put(hash, data);
+    return this.call(origin, () => {
+      if (input.replace) {
+        const r = this.replaceFile(input.replace, { hash, size: data.length }, origin);
+        return r.previous ? `Replaced the content:\n${this.lines([r.item])}` : `Same content as before, nothing to replace:\n${this.lines([r.item])}`;
+      }
+      return `Attached:\n${this.lines([this.addFile({ ...input, hash, size: data.length }, origin)])}`;
     });
-    this.store.flush();
-    this.blobs.schedule(id);
+  }
+
+  /** A file item for a content the server has (attach, HTTP upload). Call inside `call`. */
+  addFile(input: { name: string; hash: string; size: number; parent?: string; tags?: string[]; description?: string }, origin: string): Item {
+    const name = fileName(input.name);
+    const parent = input.parent ? this.resolve(input.parent) : undefined;
+    if (parent && parent.kind !== "info") throw new OpError(`"${parent.title}" is a file; a file can't be the place of another one. Choose an information as parent.`);
+    if (parent?.type === META_TYPE) throw new OpError(`"${parent.title}" is a type; choose an information as parent.`);
+    const id = newId();
+    const mime = mimeOf(name);
+    this.store.change(id, origin, (doc) => {
+      initItem(doc, { kind: "datei", title: name, parents: parent ? [parent.id] : [], tags: input.tags, body: input.description, createdBy: origin });
+      setFileMeta(doc, { hash: input.hash, name, mime, filetype: fileTypeOf(name, mime), size: input.size });
+    });
+    this.blobs?.schedule(id);
     return this.store.records.get(id)!;
   }
+
+  /**
+   * New content for a file, same item ("Ersetzen" in the app): the old content stays in its
+   * history, previews and text are made anew. `previous` is undefined when the content is the same.
+   * Call inside `call`.
+   */
+  replaceFile(ref: string, content: { hash: string; size: number }, origin: string): { item: Item; previous?: string } {
+    const item = this.resolve(ref);
+    const f = item.file;
+    if (item.kind !== "datei" || !f) throw new OpError(`"${item.title}" is not a file. Only files have a content to replace.`);
+    if (item.deleted) throw new OpError(`"${item.title}" is in the trash. Restore it first.`);
+    if (f.hash === content.hash) return { item };
+    this.store.change(item.id, origin, (doc) =>
+      setFileMeta(doc, { hash: content.hash, size: content.size, display: null, thumb: null, width: null, height: null, pages: null, duration: null, text: null, extracted: null, history: [...(f.history ?? []), { hash: f.hash, at: Date.now() }] }),
+    );
+    this.blobs?.schedule(item.id);
+    return { item: this.store.records.get(item.id)!, previous: f.hash };
+  }
+}
+
+/** A word for the shell, in single quotes. */
+const shq = (s: string) => `'${s.replace(/'/g, "'\\''")}'`;
+
+/** A file's name as given by an agent or a script: no folders, no control characters. */
+export function fileName(raw: string): string {
+  const name = (raw.split(/[\\/]/).pop() ?? "").replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 200);
+  if (!name || name === "." || name === "..") throw new OpError("A file name is required (with extension), e.g. name=report.pdf.");
+  return name;
 }

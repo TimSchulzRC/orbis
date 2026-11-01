@@ -105,8 +105,9 @@ export type ConvertInput = z.infer<typeof convertInput>;
 
 export const attachInput = z.object({
   name: z.string().describe("file name with extension"),
-  url: z.string().optional(),
-  base64: z.string().optional(),
+  url: z.string().optional().describe("public http(s) address the server downloads the file from"),
+  base64: z.string().optional().describe("the content, base64 – only for small files; local files go over the HTTP upload"),
+  replace: z.string().optional().describe("id or title of an existing file: put the new content into it instead of creating a file (same item, the old content stays in its history)"),
   parent: z.string().optional().describe("the one place of the file (a file has exactly one parent)"),
   tags: z.array(z.string()).optional(),
   description: z.string().optional(),
