@@ -23,7 +23,7 @@ import { FilesPage } from "./views/Lists";
 import { Today } from "./views/Today";
 import { Tray } from "./ui/Tray";
 import { entryKey, setShelfPinned, syncShelf, useInboxItems, useShelf } from "./ui/inbox";
-import { TypesView } from "./views/Types";
+import { NewTypeHost } from "./views/NewType";
 import { GraphView } from "./views/Graph";
 import { Activity } from "./views/Activity";
 import { TrashView } from "./views/Trash";
@@ -143,8 +143,9 @@ function Main() {
         return <SearchView />;
       case "files":
         return <FilesPage />;
+      // the types page of before: the types are in the sidebar
       case "types":
-        return <TypesView />;
+        return <Redirect to="/" />;
       case "graph":
         return <GraphView />;
       case "activity":
@@ -216,6 +217,7 @@ function Main() {
       )}
       {captureOpen && <CaptureSheet onClose={() => setCaptureOpen(false)} />}
       <SettingsHost />
+      <NewTypeHost />
       <AgentNotice />
       <LightboxHost />
     </div>

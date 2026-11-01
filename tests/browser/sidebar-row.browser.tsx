@@ -9,6 +9,9 @@ import { SpaceTree } from "../../packages/ui/src/ui/Sidebar";
 import type { Space } from "../../packages/ui/src/accounts";
 import { noFiles, workspace } from "./workspace";
 import { closeSettings, settingsOpen } from "../../packages/ui/src/ui/settings-open";
+import { closeNewType, newTypeOpen } from "../../packages/ui/src/views/NewType";
+import { SYS } from "@obtion/core/setup";
+import { setMeta } from "@obtion/core/model";
 
 afterEach(() => (cleanup(), (location.hash = "")));
 
@@ -26,7 +29,7 @@ async function setup() {
   );
   const link = page.getByRole("link", { name: item.title });
   const row = link.element().parentElement!;
-  return { item, link, row, href: `#/w/w1/i/${item.id}` };
+  return { repo, item, link, row, href: `#/w/w1/i/${item.id}` };
 }
 
 /** Negative `x` counts from the row's right edge. */
@@ -73,13 +76,29 @@ test("the workspace's … menu opens its settings in the settings dialog", async
   closeSettings();
 });
 
-test.each([
-  ["Typen", "types"],
-  ["Graph", "graph"],
-])("the workspace's … menu leads to: %s", async (name, path) => {
+test("the workspace's … menu leads to the graph and no longer to a types page", async () => {
   await setup();
   await page.getByRole("button", { name: "Aktionen für Test" }).click({ force: true });
-  // the menu lies in a portal at the end: the last button of that name ("Typen" also folds the types)
-  await page.getByRole("button", { name, exact: true }).last().click();
-  expect(location.hash).toBe(`#/w/w1/${path}`);
+  await expect.element(page.getByRole("button", { name: "Graph", exact: true })).toBeVisible();
+  // "Typen" is only the label that folds the types
+  expect(page.getByRole("button", { name: "Typen", exact: true }).elements()).toHaveLength(1);
+  await page.getByRole("button", { name: "Graph", exact: true }).click();
+  expect(location.hash).toBe("#/w/w1/graph");
+});
+
+test("the … next to Typen opens a new type for this workspace", async () => {
+  await setup();
+  await page.getByRole("button", { name: "Aktionen für Typen" }).click({ force: true });
+  await page.getByRole("button", { name: "Neuer Typ", exact: true }).click();
+  expect(newTypeOpen()).toBe("w1");
+  closeNewType();
+});
+
+test("the … next to Typen brings back a deleted default type", async () => {
+  const { repo } = await setup();
+  repo.change(SYS.task, (d) => setMeta(d, { deleted: true }));
+  await expect.poll(() => repo.get(SYS.task)?.deleted).toBe(true);
+  await page.getByRole("button", { name: "Aktionen für Typen" }).click({ force: true });
+  await page.getByRole("button", { name: "Standardtypen wiederherstellen", exact: true }).click();
+  await expect.poll(() => repo.get(SYS.task)?.deleted).toBe(false);
 });

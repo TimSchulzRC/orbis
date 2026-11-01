@@ -3,7 +3,7 @@
 // another workspace's block, an item moves there. Dragging a workspace's name to the nearest gap
 // reorders the blocks; the order is the account's, on every device.
 import { useEffect, useState } from "react";
-import { ArrowDown, ArrowLeft, ArrowUp, ChevronRight, ChevronDown, History, Search, Settings, Link2, Plus, Paperclip, Shapes, Sun, Trash2, Waypoints } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowUp, ChevronRight, ChevronDown, History, Search, Settings, Link2, Plus, Paperclip, RotateCcw, Sun, Trash2, Waypoints } from "lucide-react";
 import { type Item, META_TYPE, SETTINGS_ID, setSchemaField, setSettings } from "@obtion/core/model";
 import { sidebarChildren, sidebarRoots } from "@obtion/core/placement";
 import { keyBetween, keysFor, cmpKey } from "@obtion/core/sortkey";
@@ -17,6 +17,7 @@ import { shortcut } from "../lib/platform";
 import { StatusButton } from "./StatusButton";
 import { createAndOpen } from "../actions";
 import { DeleteDialog, deleteOrAsk } from "../views/ItemPage";
+import { openNewType, restoreTypes } from "../views/NewType";
 import { NewSpaceDialog, SpaceScope, SpaceSelector, moveTo } from "./Spaces";
 import { KEYS } from "./storage";
 import { notify } from "./toasts";
@@ -172,6 +173,7 @@ export function SpaceTree({ space, touch }: { space: Space; touch?: boolean }) {
   const [typesOpen, setTypesOpen] = useLocalStorage<boolean>(KEYS.sidebarTypes(space.id), shown.length === 1);
   const [over, setOver] = useState(false);
   const menu = useContextMenu();
+  const typesMenu = useContextMenu();
   const ix = repo.index();
   const roots = sidebarRoots(ix);
   const ready = !!repo.get(SETTINGS_ID);
@@ -234,7 +236,6 @@ export function SpaceTree({ space, touch }: { space: Space; touch?: boolean }) {
           {(close) => (
             <>
               <MenuItem icon={<Settings size={14} />} onClick={() => (close(), openSpaceSettings(space.id))}>{t("space.settings")}</MenuItem>
-              <MenuItem icon={<Shapes size={14} />} onClick={() => (close(), go("/types"))}>{t("nav.types")}</MenuItem>
               <MenuItem icon={<Waypoints size={14} />} onClick={() => (close(), go("/graph"))}>{t("nav.graph")}</MenuItem>
               {shown.length > 1 && (
                 <>
@@ -253,10 +254,27 @@ export function SpaceTree({ space, touch }: { space: Space; touch?: boolean }) {
         <div className={cn(!touch && "px-2")}>
           <PinnedTree touch={touch} here={here} />
           {/* a label over the types, not a row like the pinned: smaller, no hover */}
-          <Button variant="plain" onClick={() => setTypesOpen(!typesOpen)} aria-expanded={typesOpen} className={cn("mt-2 flex w-full items-center gap-1 pl-2.5 font-medium text-muted-foreground hover:text-fg", touch ? "py-1.5 text-[13px]" : "py-1 text-xs")}>
-            <ChevronRight size={12} className={cn("shrink-0 text-faint transition-transform", typesOpen && "rotate-90")} />
-            {t("nav.types")}
-          </Button>
+          <div onContextMenu={touch ? undefined : typesMenu.onContextMenu} className="group/types mt-2 flex items-center gap-0.5 pr-2">
+            <Button variant="plain" onClick={() => setTypesOpen(!typesOpen)} aria-expanded={typesOpen} className={cn("flex min-w-0 flex-1 items-center gap-1 pl-2.5 font-medium text-muted-foreground hover:text-fg", touch ? "py-1.5 text-[13px]" : "py-1 text-xs")}>
+              <ChevronRight size={12} className={cn("shrink-0 text-faint transition-transform", typesOpen && "rotate-90")} />
+              {t("nav.types")}
+            </Button>
+            <MoreMenu
+              menu={touch ? undefined : typesMenu}
+              align="left"
+              size="xs"
+              iconSize={14}
+              label={t("types.menu")}
+              className={touch ? "p-1.5" : "opacity-0 focus:opacity-100 group-hover/types:opacity-100 pointer-coarse:opacity-100"}
+            >
+              {(close) => (
+                <>
+                  <MenuItem icon={<Plus size={14} />} onClick={() => (close(), openNewType(space.id))}>{t("types.new")}</MenuItem>
+                  <MenuItem icon={<RotateCcw size={14} />} onClick={() => (close(), restoreTypes(repo))}>{t("types.restore")}</MenuItem>
+                </>
+              )}
+            </MoreMenu>
+          </div>
           {typesOpen && <TypeNav touch={touch} here={here} />}
         </div>
       )}
@@ -307,7 +325,7 @@ function PinnedTree({ touch, here }: { touch?: boolean; here: boolean }) {
   );
 }
 
-/** The page of every type of a workspace and the files, in an order of their own (synced); a new type comes last. New types are made on the types page. */
+/** The page of every type of a workspace and the files, in an order of their own (synced); a new type comes last. */
 function TypeNav({ touch, here }: { touch?: boolean; here: boolean }) {
   const { t } = useT();
   const repo = useRepo();

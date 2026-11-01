@@ -38,7 +38,7 @@ import { ICON } from "../ui/icons";
 import { TypeList } from "./Lists";
 import { notify } from "../ui/feedback";
 import type { T } from "@obtion/core/i18n";
-import { NewTypeDialog } from "./Types";
+import { NewTypeDialog } from "./NewType";
 
 export function TypePage({ item }: { item: Item }) {
   const repo = useRepo();
@@ -579,7 +579,7 @@ function DeleteTypeDialog({ item, onClose, toTag }: { item: Item; onClose: () =>
       : [{ mode: "remove" }, t("op.typeRemoved", { name: schema.name })];
     deleteType(repo.writer, ix, item.id, how, label, repo.origin);
     onClose();
-    navigate("/types");
+    navigate("/");
   };
   return (
     <Dialog title={toTag ? t("type.toTagTitle", { name: schema.name }) : t("type.deleteTitle", { name: schema.name })} onClose={onClose}>
