@@ -1,6 +1,6 @@
 // Tags of a page: their own thing, not a property. They sit in the badge row under the title,
 // after type and status; "#" opens a field right there with the list of all tags under it.
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Hash, Plus } from "lucide-react";
 import { type Item, normalizeTag } from "@obtion/core/model";
 import { repo } from "../repo";
@@ -78,6 +78,9 @@ function TagPicker({ item, onClose }: { item: Item; onClose: () => void }) {
     return list;
   }, [ix, q, item.tags.join(" ")]);
   const active = Math.min(sel, options.length - 1);
+  const list = useRef<HTMLSpanElement>(null);
+  // the list scrolls: keep the one picked with the arrow keys in view
+  useEffect(() => list.current?.children[active]?.scrollIntoView({ block: "nearest" }), [active]);
   const add = (tags: string[]) => {
     // only what was not there yet counts as added here – Backspace must not take an older one off
     const fresh = tags.filter((x) => !item.tags.includes(x));
@@ -113,7 +116,8 @@ function TagPicker({ item, onClose }: { item: Item; onClose: () => void }) {
           const text = e.clipboardData.getData("text");
           if (!SEP.test(text)) return;
           e.preventDefault();
-          add(splitTags(v + text));
+          const i = e.currentTarget;
+          add(splitTags(v.slice(0, i.selectionStart ?? v.length) + text + v.slice(i.selectionEnd ?? v.length)));
         }}
         onKeyDown={(e) => {
           if (e.key === "ArrowDown") (e.preventDefault(), setSel(Math.min(options.length - 1, active + 1)));
@@ -134,7 +138,7 @@ function TagPicker({ item, onClose }: { item: Item; onClose: () => void }) {
         className="h-full w-44 min-w-0 bg-transparent px-1 text-xs outline-none placeholder:text-faint"
       />
       {options.length > 0 && (
-        <span id="tag-picker-list" role="listbox" aria-multiselectable className="absolute left-0 top-full z-30 mt-1 flex max-h-72 w-60 flex-col overflow-y-auto rounded-lg border border-line bg-surface p-1 shadow-lg">
+        <span ref={list} id="tag-picker-list" role="listbox" aria-multiselectable className="absolute left-0 top-full z-30 mt-1 flex max-h-72 w-60 flex-col overflow-y-auto rounded-lg border border-line bg-surface p-1 shadow-lg">
           {options.map((o, i) => {
             const on = item.tags.includes(o.tag);
             return (
