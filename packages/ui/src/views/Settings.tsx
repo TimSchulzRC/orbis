@@ -1,17 +1,18 @@
-// Settings in two kinds. Global (#/settings): the account, its workspaces, and what belongs to
-// this device (language, appearance, files, its name).
+// Settings in two kinds. The app's, a dialog over the page (sidebar, menu, palette; "#/settings"
+// opens it too): what belongs to this device (language, appearance, files), the account and its workspaces.
 // A workspace's own (#/w/<id>/settings, from its menu in the sidebar or the list here): name and
 // members, capture, examples, agents, sync, and the way to its types, activity, graph and trash.
 import { Checkbox } from "../components/ui/checkbox";
 import { Input } from "../components/ui/input";
 import { NativeSelect } from "../components/ui/native-select";
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import { Copy, Check, Crown, Eye, EyeOff, KeyRound, Link2, RotateCcw, ChevronRight, Shapes, Trash2, UserMinus, UserRound, Waypoints } from "lucide-react";
+import { DialogContent, DialogHeader, DialogTitle, Dialog as DialogRoot } from "../components/ui/dialog";
+import { type ReactNode, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { Copy, Check, Crown, Eye, EyeOff, KeyRound, Link2, Plus, RotateCcw, ChevronRight, Shapes, Trash2, UserMinus, UserRound, Waypoints, X } from "lucide-react";
 import { SETTINGS_ID, setSettings } from "@obtion/core/model";
 import { ENDONYMS, LANGS, fmtBytes, fmtDate } from "@obtion/core/i18n";
 import { resetInbox } from "@obtion/core/setup";
 import { listExamples, removeExamples, restoreExamples } from "@obtion/core/examples";
-import { useRepo, useSpaceId, spaceHref, useDocumentTitle } from "../hooks";
+import { useRepo, useSpaceId, spaceHref, useDocumentTitle, navigate } from "../hooks";
 import { useT, setLang } from "../i18n";
 import { Button, Dialog, IconButton, MenuItem, MoreMenu, Popover, Seg, SectionAction, SectionTitle } from "../ui/primitives";
 import { ItemIcon, TypeGlyph } from "../ui/item-look";
@@ -21,6 +22,7 @@ import { setTheme, useTheme } from "../theme";
 import { type Space, ApiError, activeUser, addPasskey, changePassword, linkFailed, linkOAuth, linkedProviders, deleteAccount, deleteSpace, errorText, inviteLink, inviteLinks, joinUrl, leaveSpace, loginOf, mcpToken, members, passkeys, removeMember, removePasskey, renameSpace, replica, revokeInvite, serverInfo, setRole, signOut, spaceById, useAccounts } from "../accounts";
 import { SignIn } from "./Account";
 import { NewSpaceDialog } from "../ui/Spaces";
+import { closeSettings, openSettings, useSettingsOpen } from "../ui/settings-open";
 import type { InviteLink, InviteRequest, McpConnect, Member, PasskeyInfo, ServerInfo } from "@obtion/core/api";
 
 /** navigator.clipboard exists only over HTTPS; opened as http://<address> the old way copies. */
@@ -202,8 +204,8 @@ function InviteLinks({ space, version }: { space: Space; version: number }) {
   );
 }
 
-/** The account: who is signed in, on which server, its passkeys, signing out. */
-function AccountSection() {
+/** The account: who is signed in, on which server, its password, passkeys, providers; signing out, deleting it. */
+function AccountGroup() {
   const { t } = useT();
   const { account } = useAccounts();
   const [deleting, setDeleting] = useState(false);
@@ -211,29 +213,24 @@ function AccountSection() {
   const [info, setInfo] = useState<ServerInfo | null>(null);
   useEffect(() => void serverInfo().then(setInfo, () => {}), []);
   if (!account) return null;
+  const login = loginOf(info);
   return (
-    <section>
-      <SectionTitle>{t("account.title")}</SectionTitle>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-line p-3 text-sm">
-        <span className="min-w-0 flex-1">
-          <span className="block truncate font-medium">{account.user.email}</span>
-          <span className="block truncate text-xs text-muted-foreground">
-            {t("account.thisServer", { server: location.host })}
-            {account.lost && ` · ${t("account.signedOut")}`}
-          </span>
-        </span>
-        <Button variant="outline" onClick={() => void signOut()}>
-          {t("account.signOut")}
-        </Button>
-        {/* an account that signs in by code, passkey or provider has no password to change */}
-        {account.password !== false && <Button variant="outline" onClick={() => setChanging(true)}>{t("account.changePassword")}</Button>}
-        <Button variant="outline" onClick={() => setDeleting(true)}>{t("account.delete")}</Button>
-      </div>
+    <SettingsGroup title={t("account.title")}>
+      <SettingRow
+        title={account.user.email}
+        hint={t("account.thisServer", { server: location.host }) + (account.lost ? ` · ${t("account.signedOut")}` : "")}
+        control={<Button variant="outline" onClick={() => void signOut()}>{t("account.signOut")}</Button>}
+      />
+      {/* an account that signs in by code, passkey or provider has no password to change */}
+      {account.password !== false && (
+        <SettingRow title={t("account.password")} hint={t("account.changePasswordHint")} control={<Button variant="outline" onClick={() => setChanging(true)}>{t("account.changePassword")}</Button>} />
+      )}
+      {login.passkey && !account.lost && <Passkeys />}
+      {login.oauth.length > 0 && !account.lost && <Providers providers={login.oauth} />}
+      <SettingRow title={t("account.delete")} hint={t("account.deleteHint")} control={<Button variant="danger-outline" onClick={() => setDeleting(true)}>{t("account.delete")}</Button>} />
       {changing && <ChangePasswordDialog onClose={() => setChanging(false)} />}
-      {loginOf(info).passkey && !account.lost && <Passkeys />}
-      {loginOf(info).oauth.length > 0 && !account.lost && <Providers providers={loginOf(info).oauth} />}
       {deleting && <DeleteAccountDialog onClose={() => setDeleting(false)} />}
-    </section>
+    </SettingsGroup>
   );
 }
 
@@ -342,20 +339,19 @@ function Passkeys() {
   };
   const supported = !!window.PublicKeyCredential && window.isSecureContext;
   return (
-    <div className="mt-3 rounded-lg border border-line p-3 text-sm">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <span className="min-w-0 flex-1">
-          <span className="block font-medium">{t("account.passkeys")}</span>
-          <span className="block text-xs text-muted-foreground">{t(supported ? "account.passkeysHint" : "account.passkeysUnsupported")}</span>
-        </span>
+    <SettingRow
+      title={t("account.passkeys")}
+      hint={t(supported ? "account.passkeysHint" : "account.passkeysUnsupported")}
+      control={
         <Button variant="outline" disabled={busy || !supported} onClick={() => void add()}>
           <KeyRound size={14} /> {t("account.addPasskey")}
         </Button>
-      </div>
+      }
+    >
       {list && list.length > 0 && (
-        <ul className="mt-3 divide-y divide-line border-t border-line">
+        <ul className="divide-y divide-line rounded-lg border border-line text-sm">
           {list.map((p) => (
-            <li key={p.id} className="flex items-center gap-2 py-2">
+            <li key={p.id} className="flex items-center gap-2 py-1.5 pl-3 pr-1.5">
               <KeyRound size={14} className="shrink-0 text-muted-foreground" />
               <span className="min-w-0 flex-1 truncate">{p.name || t("account.passkey")}</span>
               <span className="shrink-0 text-xs text-muted-foreground">{new Date(p.createdAt).toLocaleDateString()}</span>
@@ -367,9 +363,9 @@ function Passkeys() {
           ))}
         </ul>
       )}
-      {error && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}
+      {error && <p role="alert" className="text-sm text-danger">{error}</p>}
       {reauth && <Reauth onClose={() => setReauth(false)} onDone={() => (setReauth(false), void add())} />}
-    </div>
+    </SettingRow>
   );
 }
 
@@ -386,25 +382,26 @@ function Providers({ providers }: { providers: { id: string; name: string }[] })
     void linkOAuth(id).catch((e: unknown) => (e instanceof ApiError && e.status === 403 ? setReauth(id) : setError(t("account.linkFailed"))));
   };
   return (
-    <div className="mt-3 rounded-lg border border-line p-3 text-sm">
-      <span className="block font-medium">{t("account.providers")}</span>
-      <ul className="mt-2 divide-y divide-line border-t border-line">
-        {providers.map((p) => (
-          <li key={p.id} className="flex items-center gap-2 py-2">
-            <span className="min-w-0 flex-1 truncate">{p.name}</span>
-            {linked?.includes(p.id) ? (
+    <>
+      {providers.map((p) => (
+        <SettingRow
+          key={p.id}
+          title={p.name}
+          hint={t("account.providers")}
+          control={
+            linked?.includes(p.id) ? (
               <span className="text-xs text-muted-foreground">{t("account.linked")}</span>
             ) : (
               <Button variant="outline" disabled={!linked} onClick={() => link(p.id)}>
                 {t("account.link")}
               </Button>
-            )}
-          </li>
-        ))}
-      </ul>
-      {error && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}
+            )
+          }
+        />
+      ))}
+      {error && <p role="alert" className="px-4 py-3 text-sm text-danger">{error}</p>}
       {reauth && <Reauth onClose={() => setReauth(null)} onDone={() => (setReauth(null), link(reauth))} />}
-    </div>
+    </>
   );
 }
 
@@ -450,32 +447,24 @@ function DeleteAccountDialog({ onClose }: { onClose: () => void }) {
 }
 
 /** The account's workspaces, each a way to its own settings, and a new one. */
-function Workspaces() {
+function WorkspacesGroup() {
   const { t } = useT();
   const { spaces } = useAccounts();
   const [creating, setCreating] = useState(false);
   return (
-    <section>
-      <SectionTitle>{t("settings.workspaces")}</SectionTitle>
-      <p className="mb-3 text-sm text-muted-foreground">{t("settings.workspacesHint")}</p>
-      {spaces.length > 0 && (
-        <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
-          {spaces.map((s) => (
-            <li key={s.id}>
-              <a href={spaceHref(s.id, "/settings")} className="tap-row flex items-center gap-3 px-3 py-2.5 text-sm hover:bg-hover">
-                <span className="min-w-0 flex-1 truncate font-medium">{s.name}</span>
-                <span className="shrink-0 text-xs text-muted-foreground">{t(`space.role.${s.role}`)}</span>
-                <ChevronRight size={15} className="shrink-0 text-faint" />
-              </a>
-            </li>
-          ))}
-        </ul>
-      )}
-      <Button variant="outline" className="mt-3" onClick={() => setCreating(true)}>
-        {t("space.new")}
+    <SettingsGroup title={t("settings.workspaces")} hint={t("settings.workspacesHint")}>
+      {spaces.map((s) => (
+        <a key={s.id} href={spaceHref(s.id, "/settings")} className="tap-row flex items-center gap-3 px-4 py-3 text-sm hover:bg-hover">
+          <span className="min-w-0 flex-1 truncate font-medium">{s.name}</span>
+          <span className="shrink-0 text-xs text-muted-foreground">{t(`space.role.${s.role}`)}</span>
+          <ChevronRight size={15} className="shrink-0 text-faint" />
+        </a>
+      ))}
+      <Button variant="plain" onClick={() => setCreating(true)} className="tap-row flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-muted-foreground hover:bg-hover hover:text-fg">
+        <Plus size={15} /> {t("space.new")}
       </Button>
       {creating && <NewSpaceDialog onClose={() => setCreating(false)} />}
-    </section>
+    </SettingsGroup>
   );
 }
 
@@ -495,7 +484,7 @@ function useAllFiles() {
   return list;
 }
 
-function DeviceFilesSection() {
+function DeviceFilesGroup() {
   const { t, lang } = useT();
   const all = useAllFiles();
   const mode = all[0]?.mode ?? "online";
@@ -503,23 +492,20 @@ function DeviceFilesSection() {
   const setMode = (m: "online" | "local") => {
     for (const f of all) (f.setMode(m), m === "online" && void f.dropOriginals());
   };
+  const status = [
+    t("settings.filesStatus", { local: sum("originals"), total: sum("total"), size: fmtBytes(lang, sum("bytes")) }),
+    sum("downloading") > 0 && t("settings.downloading", { count: sum("downloading") }),
+    sum("uploading") > 0 && t("settings.uploading", { count: sum("uploading") }),
+  ].filter(Boolean).join(" · ");
   return (
-    <section>
-      <SectionTitle>{t("settings.files")}</SectionTitle>
-      <div className="grid gap-2 sm:grid-cols-2">
-        {(["online", "local"] as const).map((m) => (
-          <Button variant="plain" key={m} onClick={() => setMode(m)} className={cn("rounded-xl border p-3 text-left", mode === m ? "border-focus bg-surface" : "border-line hover:bg-hover")} aria-pressed={mode === m}>
-            <p className="text-sm font-medium">{t("settings.mode." + m)}</p>
-            <p className="text-xs text-muted-foreground">{t("settings.mode." + m + "Hint")}</p>
-          </Button>
-        ))}
-      </div>
-      <p className="mt-2 text-sm text-muted-foreground">
-        {t("settings.filesStatus", { local: sum("originals"), total: sum("total"), size: fmtBytes(lang, sum("bytes")) })}
-        {sum("downloading") > 0 && ` · ${t("settings.downloading", { count: sum("downloading") })}`}
-        {sum("uploading") > 0 && ` · ${t("settings.uploading", { count: sum("uploading") })}`}
-      </p>
-    </section>
+    <SettingsGroup title={t("settings.files")}>
+      <SettingRow
+        title={t("settings.originals")}
+        hint={t("settings.mode." + mode + "Hint")}
+        control={<Seg label={t("settings.originals")} value={mode} onChange={setMode} options={(["online", "local"] as const).map((m) => ({ value: m, label: t("settings.mode." + m) }))} />}
+      />
+      <SettingRow title={t("settings.onDevice")} hint={status} />
+    </SettingsGroup>
   );
 }
 
@@ -531,42 +517,78 @@ function Version() {
     serverInfo().then(setInfo, () => {});
   }, []);
   if (!info?.version) return null;
-  return <p className="text-xs text-muted-foreground">{t("settings.version", { version: info.version + (info.commit ? ` (${info.commit})` : "") })}</p>;
+  return <p className="text-center text-xs text-muted-foreground">{t("settings.version", { version: info.version + (info.commit ? ` (${info.commit})` : "") })}</p>;
+}
+
+/** A group of settings: a small heading above a card of rows. */
+function SettingsGroup({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
+  return (
+    <section>
+      <h3 className="mb-2 px-1 text-xs font-medium text-muted-foreground">{title}</h3>
+      <div className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">{children}</div>
+      {hint && <p className="mt-2 px-1 text-xs text-muted-foreground">{hint}</p>}
+    </section>
+  );
+}
+
+/** One setting: what it is and what it does on the left, its control on the right; more below if there is. */
+function SettingRow({ title, hint, control, children }: { title: ReactNode; hint?: ReactNode; control?: ReactNode; children?: ReactNode }) {
+  return (
+    <div className="space-y-3 px-4 py-3">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <div className="min-w-0 flex-1 basis-56">
+          <p className="truncate text-sm font-medium">{title}</p>
+          {hint && <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p>}
+        </div>
+        {control && <div className="flex shrink-0 items-center gap-2">{control}</div>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+/** The settings dialog, while it is open. Lives once in the app. */
+export function SettingsHost() {
+  return useSettingsOpen() ? <SettingsDialog onClose={closeSettings} /> : null;
 }
 
 /** The settings of the app on this device and the account, with its workspaces. */
-export function Settings() {
+function SettingsDialog({ onClose }: { onClose: () => void }) {
   const { t, lang } = useT();
-  useDocumentTitle(t("nav.settings"));
   const theme = useTheme();
+  const previous = useRef<HTMLElement | null>(document.activeElement as HTMLElement);
   return (
-    <div className="page-read space-y-10">
-      <div>
-        <h1 className="page-title">{t("nav.settings")}</h1>
-        <p className="text-sm text-muted-foreground">{t("settings.intro")}</p>
-      </div>
-
-      <AccountSection />
-
-      <Workspaces />
-
-      <section>
-        <SectionTitle>{t("settings.language")}</SectionTitle>
-        <Seg label={t("settings.language")} value={lang} onChange={setLang} options={LANGS.map((l) => ({ value: l, label: ENDONYMS[l] }))} />
-        <p className="mt-2 text-xs text-muted-foreground">{t("settings.languageHint")}</p>
-      </section>
-
-      <section>
-        <SectionTitle>{t("settings.theme")}</SectionTitle>
-        <Seg label={t("settings.theme")} value={theme.choice} onChange={setTheme} options={(["system", "light", "dark"] as const).map((v) => ({ value: v, label: t("theme." + v) }))} />
-        <p className="mt-2 text-xs text-muted-foreground">{t("settings.themeHint")}</p>
-      </section>
-
-      <DeviceFilesSection />
-
-      <Version />
-    </div>
+    <DialogRoot open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent onCloseAutoFocus={(e) => { e.preventDefault(); if (previous.current?.isConnected) previous.current.focus({ preventScroll: true }); }} showCloseButton={false} aria-describedby={undefined}
+        className="flex h-[min(46rem,88vh)] flex-col gap-0 overflow-hidden rounded-2xl bg-bg p-0 sm:max-w-2xl">
+        <DialogHeader className="flex-row items-center gap-2 border-b border-line px-5 py-3 text-left">
+          <DialogTitle className="flex-1 text-base">{t("nav.settings")}</DialogTitle>
+          <IconButton onClick={onClose} label={t("close")} icon={X} />
+        </DialogHeader>
+        <div className="min-h-0 flex-1 space-y-7 overflow-y-auto px-5 py-5">
+          <SettingsGroup title={t("settings.general")}>
+            <SettingRow title={t("settings.language")} hint={t("settings.languageHint")}
+              control={<Seg label={t("settings.language")} value={lang} onChange={setLang} options={LANGS.map((l) => ({ value: l, label: ENDONYMS[l] }))} />} />
+            <SettingRow title={t("settings.theme")} hint={t("settings.themeHint")}
+              control={<Seg label={t("settings.theme")} value={theme.choice} onChange={setTheme} options={(["system", "light", "dark"] as const).map((v) => ({ value: v, label: t("theme." + v) }))} />} />
+          </SettingsGroup>
+          <DeviceFilesGroup />
+          <AccountGroup />
+          <WorkspacesGroup />
+          <Version />
+        </div>
+      </DialogContent>
+    </DialogRoot>
   );
+}
+
+/** "#/settings": Heute, with the settings open over it. */
+export function SettingsRedirect() {
+  useEffect(() => {
+    navigate("/", { replace: true });
+    openSettings();
+  }, []);
+  return null;
 }
 
 /** The settings of the workspace in the address. */

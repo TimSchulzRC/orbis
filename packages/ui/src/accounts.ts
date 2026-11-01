@@ -341,7 +341,8 @@ export const linkedProviders = () => call<{ providerId: string }[]>("/api/auth/l
 
 /** Let the account sign in with an OAuth provider too: the page goes there and comes back to the settings. */
 export async function linkOAuth(provider: string) {
-  sessionStorage.setItem(OAUTH_RETURN, location.hash);
+  // the settings are a dialog: "#/settings" opens them again
+  sessionStorage.setItem(OAUTH_RETURN, "#/settings");
   const res = await call<{ url: string }>("/api/auth/link-social", { provider, callbackURL: "/?signin=linked", errorCallbackURL: "/?signin=linkFailed" });
   location.href = res.url;
 }

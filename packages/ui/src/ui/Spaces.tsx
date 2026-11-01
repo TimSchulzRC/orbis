@@ -6,7 +6,7 @@
 import { Checkbox } from "../components/ui/checkbox";
 import { Input } from "../components/ui/input";
 import { useMemo, useState, useSyncExternalStore } from "react";
-import { ChevronsUpDown, Plus, SlidersHorizontal } from "lucide-react";
+import { ChevronsUpDown, Plus } from "lucide-react";
 import type { Repo } from "@obtion/sync";
 import { createSpace, errorText, replica, setShown, spaceById, useAccounts } from "../accounts";
 import { ScopeContext, globalPage } from "../scope";
@@ -61,8 +61,9 @@ export function SpaceSelector({ className, onNew }: { className?: string; onNew:
     <Popover
       triggerClass={cn("min-w-0", className)}
       trigger={(p) => (
-        <Button variant="plain" {...p} className="-mx-1.5 flex w-full min-w-0 items-center gap-2 rounded-lg px-1.5 py-1 text-left hover:bg-hover" aria-label={t("space.choose")}>
-          <BrandLogo className="size-6 shrink-0" />
+        // as wide and tall as a row of the navigation below; the logo centred over its icons
+        <Button variant="plain" {...p} className="flex h-8 w-full min-w-0 items-center gap-2.5 rounded-md px-2.5 text-left hover:bg-hover" aria-label={t("space.choose")}>
+          <BrandLogo className="-mx-0.5 size-5 shrink-0" />
           <span className="min-w-0 flex-1 truncate text-sm font-semibold">{label}</span>
           <ChevronsUpDown size={14} className="shrink-0 text-faint" />
         </Button>
@@ -84,9 +85,6 @@ export function SpaceSelector({ className, onNew }: { className?: string; onNew:
           <div className="my-1 border-t border-line" />
           <MenuItem icon={<Plus size={14} />} onClick={() => (close(), onNew())}>
             {t("space.new")}
-          </MenuItem>
-          <MenuItem icon={<SlidersHorizontal size={14} />} onClick={() => (close(), navigate("/settings"))}>
-            {t("nav.settings")}
           </MenuItem>
         </div>
       )}

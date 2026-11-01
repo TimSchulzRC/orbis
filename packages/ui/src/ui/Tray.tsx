@@ -13,6 +13,7 @@ import { Capture } from "./Capture";
 import { type InboxEntry, dismissShelf, openShelf, useInboxItems, useShelf } from "./inbox";
 import { ShelfPanel } from "./Shelf";
 import { Button } from "./primitives";
+import { Backdrop } from "../components/ui/dialog";
 
 const FILL = 10;
 
@@ -66,7 +67,7 @@ export function Tray({ desktop, pinned, onCapture }: { desktop: boolean; pinned?
   return (
     <>
       {/* the page behind the open panel: dimmed, a click closes */}
-      {open && !pinned && <div className="fixed inset-0 z-30 bg-black/40" onClick={dismissShelf} aria-hidden />}
+      {open && !pinned && <Backdrop className="z-30" onClick={dismissShelf} aria-hidden />}
       <div className={cn("relative z-40", pinned ? "flex min-h-[308px] flex-1 flex-col" : "shrink-0", desktop ? cn(pinned ? "px-8" : "px-6", "pb-4 pt-2") : "px-3 pb-2 pt-1")} role="region" aria-label={t("tray.title")}>
         <div className={cn("mx-auto", desktop && "max-w-[1040px]", pinned && "flex min-h-0 w-full flex-1 flex-col")}>
           {pinned ? (

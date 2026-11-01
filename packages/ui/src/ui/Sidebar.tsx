@@ -6,18 +6,18 @@
 // added. Dropping on the upper or lower edge of a row reorders. Dropped into another workspace's
 // block, an item moves there.
 import { useEffect, useState } from "react";
-import { ChevronRight, ChevronDown, History, Inbox, Search, SlidersHorizontal, Link2, Plus, Paperclip, Sun, Trash2 } from "lucide-react";
+import { ArrowLeft, ChevronRight, ChevronDown, History, Inbox, Search, Settings, Link2, Plus, Paperclip, Sun, Trash2 } from "lucide-react";
 import { type Item, META_TYPE, SETTINGS_ID, setSchemaField, setSettings } from "@obtion/core/model";
 import { sidebarChildren, sidebarRoots } from "@obtion/core/placement";
 import { keyBetween, keysFor, cmpKey } from "@obtion/core/sortkey";
-import { useRepo, useRoute, useSpaceId, itemHref, itemPath, spaceHref, useLocalStorage } from "../hooks";
+import { useRepo, useRoute, useSpaceId, itemHref, itemPath, spaceHref, useLocalStorage, leavePage } from "../hooks";
 import { type Space, useAccounts } from "../accounts";
 import { useT } from "../i18n";
 import { Button, IconButton, Kbd, MenuItem, MoreMenu, REVEAL, useContextMenu } from "./primitives";
 import { TypeGlyph, ItemIcon } from "./item-look";
 import { cn, moveInArray } from "../lib/utils";
 import { shortcut } from "../lib/platform";
-import { SyncDot } from "./SyncDot";
+import { StatusButton } from "./StatusButton";
 import { createAndOpen } from "../actions";
 import { NewTypeDialog } from "../views/Types";
 import { DeleteDialog, deleteOrAsk } from "../views/ItemPage";
@@ -25,6 +25,8 @@ import { NewSpaceDialog, SpaceScope, SpaceSelector, moveTo } from "./Spaces";
 import { useInboxItems } from "./inbox";
 import { KEYS } from "./storage";
 import { notify } from "./toasts";
+import { openSettings } from "./settings-open";
+import { Tip } from "../components/ui/tooltip";
 
 /**
  * What is being dragged in the sidebar: an item (from below `from`, null: pinned; `type`: a pinned
@@ -49,13 +51,13 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
   const { shown } = useAccounts();
   const inbox = useInboxItems().length;
   const [creating, setCreating] = useState(false);
+  const iconCls = (active: boolean) => cn("tap inline-flex size-8 shrink-0 items-center justify-center rounded-md", active ? "bg-hover text-fg" : "text-muted-foreground hover:bg-hover hover:text-fg");
   const navCls = (active: boolean) => cn("flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm", active ? "bg-hover font-medium text-fg" : "text-muted-foreground hover:bg-hover hover:text-fg");
 
   return (
     <aside className="flex w-[256px] shrink-0 flex-col border-r border-line bg-surface-2/50 pt-safe">
-      <div className="flex items-center gap-2 px-4 pb-1.5 pt-3">
+      <div className="flex items-center px-2 pb-px pt-2">
         <SpaceSelector className="flex-1" onNew={() => setCreating(true)} />
-        <SyncDot />
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto pb-3">
         <nav className="flex flex-col gap-px px-2" aria-label={t("nav.main")}>
@@ -82,17 +84,33 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
         ))}
         {creating && <NewSpaceDialog onClose={() => setCreating(false)} />}
       </div>
-      {/* below: the pages about all workspaces seen (activity, trash) and the settings */}
-      <div className="flex flex-col gap-0.5 border-t border-line p-2">
-        <a href="#/activity" className={navCls(route.parts[0] === "activity")}>
-          <History size={16} /> {t("nav.activity")}
-        </a>
-        <a href="#/trash" className={navCls(route.parts[0] === "trash")}>
-          <Trash2 size={16} /> {t("nav.trash")}
-        </a>
-        <a href="#/settings" className={navCls(route.path === "/settings" && !route.space)}>
-          <SlidersHorizontal size={16} /> {t("nav.settings")}
-        </a>
+      {/* below, as icons: the settings and the pages about all workspaces seen (activity, trash) –
+          on those pages the way back instead; at the right how sync and version stand */}
+      <div className="flex items-center gap-1 border-t border-line p-2">
+        {route.parts[0] === "activity" || route.parts[0] === "trash" ? (
+          <Button variant="plain" onClick={leavePage} className={cn(navCls(false), "min-w-0 flex-1")}>
+            <ArrowLeft size={16} /> {t("nav.back")}
+          </Button>
+        ) : (
+          <>
+            <Tip label={t("nav.settings")}>
+              <Button variant="plain" onClick={openSettings} aria-label={t("nav.settings")} className={iconCls(false)}>
+                <Settings size={17} />
+              </Button>
+            </Tip>
+            <Tip label={t("nav.activity")}>
+              <a href="#/activity" aria-label={t("nav.activity")} className={iconCls(false)}>
+                <History size={17} />
+              </a>
+            </Tip>
+            <Tip label={t("nav.trash")}>
+              <a href="#/trash" aria-label={t("nav.trash")} className={iconCls(false)}>
+                <Trash2 size={17} />
+              </a>
+            </Tip>
+          </>
+        )}
+        <StatusButton className="ml-auto" />
       </div>
     </aside>
   );

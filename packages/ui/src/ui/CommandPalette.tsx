@@ -1,4 +1,4 @@
-import { ModalSurface } from "../components/ui/dialog";
+import { Backdrop, ModalSurface } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
 import { useEffect, useRef, useState } from "react";
 import { Plus, CornerDownLeft, ChevronRight } from "lucide-react";
@@ -17,6 +17,7 @@ import { modName } from "../lib/platform";
 import { shortPath } from "./Row";
 import { createAndOpen } from "../actions";
 import { Button } from "./primitives";
+import { openSettings } from "./settings-open";
 
 type Entry =
   | { kind: "item"; id: string; space: string }
@@ -55,7 +56,6 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
     }),
       [t("nav.activity"), "#/activity"],
       [t("nav.trash"), "#/trash"],
-      [t("nav.settings"), "#/settings"],
   ];
   // something new goes where a capture from anywhere goes
   const cs = captureSpace() ?? shown[0]!.id;
@@ -67,6 +67,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   // actions, found by typing their name
   const cmds: [string, () => void][] = [
     [t("palette.cmd.sortInbox"), () => navigate("/review")],
+    [t("nav.settings"), openSettings],
     [t("palette.cmd.newType"), () => navigate("/types?new=1", { space: cs })],
     [t("palette.cmd.language"), () => setLang(getLang() === "de" ? "en" : "de")],
     ...(["system", "light", "dark"] as const).map((v): [string, () => void] => [t("palette.cmd.theme", { name: t("theme." + v) }), () => setTheme(v)]),
@@ -108,7 +109,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <ModalSurface title={t("palette.label")} onClose={onClose}><div className="fixed inset-0 z-50 flex items-start justify-center bg-black/30 p-3 pt-[10vh] backdrop-blur-[2px]" onMouseDown={onClose}>
+    <ModalSurface title={t("palette.label")} onClose={onClose}><Backdrop className="flex items-start justify-center p-3 pt-[10vh]" onMouseDown={onClose}>
       <div className="flex max-h-[70vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-2xl" onMouseDown={(e) => e.stopPropagation()}>
         <Input
           variant="bare"
@@ -180,6 +181,6 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
           <span>{t("palette.keys", { mod: modName(lang) })}</span>
         </div>
       </div>
-    </div></ModalSurface>
+    </Backdrop></ModalSurface>
   );
 }

@@ -16,6 +16,14 @@ function DialogPortal({
   return <DialogPrimitive.Portal data-slot="dialog-portal" {...props} />
 }
 
+/** The page behind anything that opens over it (dialogs, the palette, the phone menu, the tray's panel): dimmed and blurred. */
+const BACKDROP = "fixed inset-0 z-50 bg-black/40 backdrop-blur-sm"
+
+/** The backdrop as a plain element, for what opens over the page without a dialog's overlay; a click on it usually closes. */
+function Backdrop({ className, ...props }: React.ComponentProps<"div">) {
+  return <div data-slot="backdrop" className={cn(BACKDROP, className)} {...props} />
+}
+
 function DialogOverlay({
   className,
   ...props
@@ -24,7 +32,8 @@ function DialogOverlay({
     <DialogPrimitive.Overlay
       data-slot="dialog-overlay"
       className={cn(
-        "fixed inset-0 z-50 bg-black/50 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0",
+        BACKDROP,
+        "data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0",
         className
       )}
       {...props}
@@ -90,6 +99,7 @@ function DialogTitle({
 }
 
 export {
+  Backdrop,
   Dialog,
   DialogContent,
   DialogHeader,
