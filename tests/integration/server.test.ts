@@ -51,17 +51,20 @@ async function signUp(base: string, email: string, invite?: string): Promise<{ t
   return res.json();
 }
 const account = (base: string, token: string) => get(base, "/api/account", token).then((r) => r.json());
+/** A new workspace of the account, as the app creates the first one after signing up. */
+const newWorkspace = (base: string, token: string, name = "Persönlich") => post(base, "/api/workspaces", { name }, token).then((r) => r.json());
 
-test("the first account is the admin with a personal workspace; then only with an invite (default)", async () => {
+test("the first account is the admin, without a workspace until it creates one; then only with an invite (default)", async () => {
   expect(await get(plain, "/api/info").then((r) => r.json())).toMatchObject({ signup: "invite", firstAccount: true });
   const ada = await signUp(plain, "ada@example.org");
+  expect(await account(plain, ada.token)).toMatchObject({ admin: true, user: { email: "ada@example.org" }, workspaces: [] });
+  await newWorkspace(plain, ada.token);
   const me = await account(plain, ada.token);
-  expect(me).toMatchObject({ admin: true, user: { email: "ada@example.org" } });
   expect(me.workspaces).toEqual([{ id: expect.any(String), name: "Persönlich", role: "owner" }]);
   expect((await post(plain, "/api/account/signup", { email: "eve@example.org", password: "geheim12345" })).status).toBe(403);
   expect((await get(plain, "/api/account")).status).toBe(401);
 
-  // an invite link: Bob joins Ada's workspace and gets none of his own
+  // an invite link: Bob joins Ada's workspace
   const ws = me.workspaces[0].id as string;
   const { code } = await post(plain, `/api/workspaces/${ws}/invites`, {}, ada.token).then((r) => r.json());
   expect(await get(plain, `/api/invites/${code}`).then((r) => r.json())).toEqual({ workspace: "Persönlich", by: "ada", signup: true });
@@ -79,8 +82,8 @@ test("the first account is the admin with a personal workspace; then only with a
 test("a workspace is only open to its members – sync, files, activity, MCP", async () => {
   const carla = await signUp(bare, "carla@example.org"); // open signup on this server
   const dan = await signUp(bare, "dan@example.org");
-  const [cw] = (await account(bare, carla.token)).workspaces;
-  const [dw] = (await account(bare, dan.token)).workspaces;
+  const cw = await newWorkspace(bare, carla.token);
+  const dw = await newWorkspace(bare, dan.token);
   expect(cw.id).not.toBe(dw.id);
   expect((await get(bare, `/w/${cw.id}/api/activity`, carla.token)).status).toBe(200);
   expect((await get(bare, `/w/${cw.id}/api/activity`, dan.token)).status).toBe(403);
@@ -101,7 +104,7 @@ test("a workspace is only open to its members – sync, files, activity, MCP", a
 
 test("the sign-in only from the server's own page; other sites get no CORS answer", async () => {
   const eve = await signUp(bare, "eve@example.org");
-  const [w] = (await account(bare, eve.token)).workspaces;
+  const w = await newWorkspace(bare, eve.token);
   const res = await fetch(`${bare}/w/${w.id}/api/activity`, { headers: { origin: "https://app.example.org", authorization: `Bearer ${eve.token}` } });
   expect(res.headers.get("access-control-allow-origin")).toBeNull();
   expect((await post(bare, "/api/auth/sign-in/email", { email: "eve@example.org", password: "geheim12345" }, undefined, { origin: "https://evil.example.org" })).status).toBe(403);
@@ -192,7 +195,7 @@ async function connect(base: string, workspace: string, token: string) {
 
 test("sync per workspace: members get each other's changes; an app from before areas means the personal area", async () => {
   const fay = await signUp(bare, "fay@example.org");
-  const [w] = (await account(bare, fay.token)).workspaces;
+  const w = await newWorkspace(bare, fay.token);
   const { code } = await post(bare, `/api/workspaces/${w.id}/invites`, {}, fay.token).then((r) => r.json());
   const gus = await signUp(bare, "gus@example.org", code);
   const a = await connect(bare, w.id, fay.token);
@@ -220,7 +223,7 @@ test("an owner deletes a workspace for everyone, with its folder; a member canno
   const data = tempDir("obtion-server-");
   const base = await start({ OBTION_DATA: data, OBTION_SIGNUP: "open" });
   const owner = await signUp(base, "olga@example.org");
-  const [w] = (await account(base, owner.token)).workspaces;
+  const w = await newWorkspace(base, owner.token);
   const { code } = await post(base, `/api/workspaces/${w.id}/invites`, {}, owner.token).then((r) => r.json());
   const member = await signUp(base, "max@example.org", code);
   const sync = await connect(base, w.id, owner.token); // open, with a connection
@@ -243,7 +246,7 @@ test("an owner deletes a workspace for everyone, with its folder; a member canno
 
 test("account deletion requires a password and leaves last-owner workspaces intact", async () => {
   const user = await signUp(bare, "delete-owner@example.org");
-  const [workspace] = (await account(bare, user.token)).workspaces;
+  const workspace = await newWorkspace(bare, user.token);
   const remove = (body: unknown, token = user.token) => del(bare, "/api/account", token, body);
   expect((await remove({ password: "geheim12345" }, "invalid")).status).toBe(401);
   expect((await remove({})).status).toBe(400);
@@ -260,7 +263,7 @@ test("account deletion requires a password and leaves last-owner workspaces inta
 
 test("deleting a member revokes sessions, invites, MCP tokens and live sync without deleting shared data", async () => {
   const owner = await signUp(bare, "delete-shared-owner@example.org");
-  const [workspace] = (await account(bare, owner.token)).workspaces;
+  const workspace = await newWorkspace(bare, owner.token);
   const { code } = await post(bare, `/api/workspaces/${workspace.id}/invites`, {}, owner.token).then((r) => r.json());
   const member = await signUp(bare, "delete-member@example.org", code);
   const second = await post(bare, "/api/auth/sign-in/email", { email: "delete-member@example.org", password: "geheim12345" }).then((r) => r.json());

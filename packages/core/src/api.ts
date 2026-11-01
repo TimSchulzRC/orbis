@@ -73,6 +73,7 @@ export interface SignupRequest {
   email?: string;
   password?: string;
   invite?: string;
+  /** the language of the email with the code */
   lang?: string;
   /** where codes are on: the code sent to the address (the first answer is { verify: true }) */
   code?: string;

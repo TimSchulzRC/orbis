@@ -1,16 +1,17 @@
 // Before the app: signing in or creating an account on this server, joining by an invite link
-// (#/join/<code>). Then a workspace has to be open.
+// (#/join/<code>). Then a workspace has to be open: without one, the first is created here.
 import { Input } from "../components/ui/input";
 import { BrandLogo } from "../ui/BrandLogo";
 import { useEffect, useState, type ReactNode } from "react";
 import { KeyRound } from "lucide-react";
-import { ApiError, createSpace, errorText, invite, joinInvite, loginOf, oauthFailed, sendCode, serverInfo, signIn, signInWithCode, signInWithOAuth, signInWithPasskey, signUp, useAccounts } from "../accounts";
+import { ApiError, errorText, invite, joinInvite, loginOf, oauthFailed, sendCode, serverInfo, signIn, signInWithCode, signInWithOAuth, signInWithPasskey, signUp, useAccounts } from "../accounts";
 import type { InviteInfo, ServerInfo } from "@obtion/core/api";
 import { useRoute, navigate } from "../hooks";
 import { getLang, useT } from "../i18n";
+import { NewSpaceForm } from "../ui/Spaces";
 import { Button } from "../ui/primitives";
 
-/** A page before the app (signing in, joining, the first setup): logo, title, a sentence, a form. */
+/** A page before the app (signing in, joining, the first workspace): logo, title, a sentence, a form. */
 export function AuthCard({ title, intro, children }: { title: string; intro?: ReactNode; children: ReactNode }) {
   return (
     <div className="flex h-full items-center justify-center overflow-y-auto p-6">
@@ -213,18 +214,14 @@ function Join({ code }: { code: string }) {
   );
 }
 
-/** Signed in, but in no workspace (left them all, or joined none): make one. */
+/** Signed in, but in no workspace (a new account, or left them all): make one. */
 function NoSpace() {
   const { t } = useT();
-  const [name, setName] = useState(t("account.personal"));
   return (
     <AuthCard title={t("account.noSpace")} intro={t("account.noSpaceHint")}>
-      <form onSubmit={(e) => (e.preventDefault(), void createSpace(name))}>
-        <Field label={t("space.name")} required value={name} onChange={(e) => setName(e.target.value)} />
-        <Button type="submit" variant="primary" className="mt-6 w-full">
-          {t("space.create")}
-        </Button>
-      </form>
+      <div className="mt-6">
+        <NewSpaceForm name={t("account.personal")} />
+      </div>
     </AuthCard>
   );
 }

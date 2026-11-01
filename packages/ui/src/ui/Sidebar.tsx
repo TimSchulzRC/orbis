@@ -142,11 +142,8 @@ export function SpaceTree({ space, touch }: { space: Space; touch?: boolean }) {
           )}
         </MoreMenu>
       </div>
-      {open && !ready && (
-        <a href={spaceHref(space.id, "/setup")} className={cn(row, "pl-[30px] text-muted-foreground hover:bg-hover hover:text-fg", !touch && "mx-2")}>
-          {repo.status.loaded && (repo.status.synced || !repo.status.online) ? t("space.setUp") : t("app.syncing")}
-        </a>
-      )}
+      {/* set up as soon as it is in step with the server (accounts.ts) */}
+      {open && !ready && <p className={cn(row, "pl-[30px] text-muted-foreground", !touch && "mx-2")}>{t("app.syncing")}</p>}
       {open && ready && (
         <div className={cn(!touch && "px-2")}>
           <PinnedTree touch={touch} here={here} />
