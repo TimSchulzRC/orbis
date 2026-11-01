@@ -261,7 +261,7 @@ function ReviewHead({ total, at, sorted, minutes }: { total: number; at: number;
             {total > sorted && <> · {t("review.minutesLeft", { count: minutes })}</>}
           </p>
         </div>
-        <IconButton icon={X} iconSize={16} onClick={dismissShelf} label={t("review.close")} title={t("review.close")} className="shrink-0" />
+        <IconButton icon={X} iconSize={16} onClick={dismissShelf} label={t("review.close")} title={t("review.close")} className="shrink-0 self-start" />
       </div>
       {total > 0 && <Steps total={total} done={sorted} />}
     </header>
