@@ -1,3 +1,4 @@
+import { EditorSelection } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
 import { repo } from "../repo";
 import { tr } from "../i18n";
@@ -30,5 +31,7 @@ export function extractAsCard(view: EditorView) {
   let unique = title;
   for (let n = 2; ix.resolveTitle(unique); n++) unique = `${title} (${n})`;
   repo.create({ title: unique, body, type: extractType() });
-  view.dispatch({ changes: { from, to, insert: `[[${unique}]]` } });
+  const insert = `[[${unique}]]`;
+  view.dispatch({ changes: { from, to, insert }, selection: EditorSelection.cursor(from + insert.length) });
+  view.focus();
 }

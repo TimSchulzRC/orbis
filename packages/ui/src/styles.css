@@ -889,6 +889,9 @@ body.cm-dragging * {
 .cm-toolbar.linking .cm-toolbar-bar {
   display: none;
 }
+.cm-toolbar-bar [hidden] {
+  display: none;
+}
 .cm-tb {
   display: flex;
   align-items: center;

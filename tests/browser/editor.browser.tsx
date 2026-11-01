@@ -1,10 +1,11 @@
 // The Markdown editor on its own: hidden syntax, headings, the link menu, links by "/" and "@",
-// moving blocks by their grip, and the "+" and grip hiding while typing.
+// the toolbar over selected blocks, moving blocks by their grip, and the "+" and grip hiding while typing.
 import { afterEach, beforeAll, describe, expect, test } from "vitest";
 import { commands } from "vitest/browser";
 import { cleanup, render } from "vitest-browser-react";
 import type { Repo } from "@obtion/sync";
 import { Editor } from "../../packages/ui/src/ui/Editor";
+import { toolbarExtract } from "../../packages/ui/src/ui/editor/toolbar";
 import { workspace } from "./workspace";
 
 type EditorView = NonNullable<Parameters<NonNullable<Parameters<typeof Editor>[0]["onView"]>>[0]>;
@@ -18,13 +19,13 @@ beforeAll(async () => {
 afterEach(() => cleanup());
 
 /** An item with BODY, open in the editor once its text is parsed (CodeMirror parses in slices). */
-async function open() {
+async function open(extra: Parameters<typeof Editor>[0]["extra"] = []) {
   const id = repo.create({ title: "Editor-Test" });
   repo.setBody(id, BODY);
   let view: EditorView | null = null;
   await render(
     <div style={{ padding: "40px 80px", width: 900 }}>
-      <Editor doc={repo.getDoc(id)} nodeId={id} onView={(v) => (view = v)} />
+      <Editor doc={repo.getDoc(id)} nodeId={id} onView={(v) => (view = v)} extra={extra} />
     </div>,
   );
   await expect.poll(() => view && document.querySelectorAll(".cm-content .cm-line").length).toBe(BODY.split("\n").length);
@@ -141,6 +142,80 @@ describe("links", () => {
     await commands.keys("press", "Enter");
     expect(doc().endsWith("Vierter Absatz [[So funktioniert Obtion]]")).toBe(true);
     expect(lines().at(-1)!.text).toBe("Vierter Absatz So funktioniert Obtion");
+  });
+});
+
+describe("the toolbar over selected text", () => {
+  const toolbar = () => document.querySelector<HTMLElement>(".cm-toolbar.shown");
+  const button = (cls: string) => document.querySelector<HTMLElement>(".cm-toolbar.shown " + cls)!;
+  const press = (el: Element) => commands.mouse("click", rect(el).left + rect(el).width / 2, rect(el).top + rect(el).height / 2);
+  /** Drag from the start of line `a` to the end of line `b`. */
+  async function select(a: number, b: number) {
+    const s = rect(lineEls()[a]!);
+    const e = rect(lineEls()[b]!);
+    await commands.mouse("move", s.left + 1, s.top + s.height / 2);
+    await commands.mouse("down");
+    await commands.mouse("move", e.right - 2, e.top + e.height / 2, { steps: 6 });
+    await commands.mouse("up");
+    await expect.poll(toolbar, { message: "the toolbar shows over the selection" }).not.toBeNull();
+  }
+
+  test("over several blocks it shows; Turn into opens below it, the bar stays, and changes all blocks", async () => {
+    const { doc } = await open();
+    await select(4, 5);
+    expect(button(".kind").textContent).toBe("Text");
+    expect(button(".cm-tb[aria-label^='Link']").offsetParent, "no link over several blocks").toBeNull();
+    const bar = rect(toolbar()!);
+    await press(button(".kind"));
+    await expect.poll(() => document.querySelector(".cm-menu")).not.toBeNull();
+    expect(toolbar(), "the bar stays while the menu is open").not.toBeNull();
+    expect(rect(document.querySelector(".cm-menu")!).top, "the menu opens below the bar").toBeGreaterThanOrEqual(bar.bottom);
+    const row = [...document.querySelectorAll<HTMLElement>(".cm-menu-row")].find((r) => r.textContent === "Überschrift 2")!;
+    await press(row);
+    expect(doc().split("\n").slice(4)).toEqual(["## Dritter Absatz", "## Vierter Absatz"]);
+    await expect.poll(() => toolbar() && button(".kind").textContent, { message: "the selection and the bar stay" }).toBe("Überschrift 2");
+
+    await press(button(".kind"));
+    await expect.poll(() => document.querySelector(".cm-menu")).not.toBeNull();
+    await commands.keys("press", "Escape");
+    await expect.poll(() => document.querySelector(".cm-menu")).toBeNull();
+    expect(toolbar(), "Escape closes the menu, not the bar").not.toBeNull();
+  });
+
+  test("bold over several blocks marks each block's text, and takes it away again", async () => {
+    const { doc } = await open();
+    await select(3, 5);
+    await press(button(".cm-tb[aria-label^='Fett']"));
+    expect(doc().split("\n").slice(3)).toEqual(["**Zweiter mit [Beispiel](https://example.org).**", "**Dritter Absatz**", "**Vierter Absatz**"]);
+    await press(button(".cm-tb[aria-label^='Fett']"));
+    expect(doc()).toBe(BODY);
+  });
+
+  test("bold over several bold blocks takes the hidden marks around the selection away", async () => {
+    const { view, doc } = await open();
+    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: "**eins**\n**zwei**" } });
+    view.focus();
+    view.dispatch({ selection: { anchor: 2, head: 15 } });
+    await expect.poll(toolbar).not.toBeNull();
+    await press(button(".cm-tb[aria-label^='Fett']"));
+    expect(doc()).toBe("eins\nzwei");
+  });
+
+  test("on a page it extracts the selected blocks as a card", async () => {
+    const { doc } = await open([toolbarExtract.of(true)]);
+    await select(4, 5);
+    const extract = button(".extract");
+    expect(extract.textContent).toBe("Als Karte herauslösen");
+    await press(extract);
+    expect(doc().split("\n").slice(4)).toEqual(["[[Dritter Absatz]]"]);
+    const id = repo.index().resolveTitle("Dritter Absatz")!;
+    expect(repo.get(id)?.body).toBe("Dritter Absatz\nVierter Absatz");
+  });
+
+  test("without a page it offers no extracting", async () => {
+    await open();
+    await select(4, 4);
+    expect(button(".extract").offsetParent).toBeNull();
   });
 });
 

@@ -3,7 +3,7 @@
 // another kind only changes that prefix – the text stays Markdown for sync, search and agents.
 import type { ComponentType } from "react";
 import { syntaxTree } from "@codemirror/language";
-import { EditorSelection, type EditorState } from "@codemirror/state";
+import { EditorSelection, type EditorState, type Line } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
 import { CheckSquare, Heading1, Heading2, Heading3, List, ListOrdered, Quote, Type } from "lucide-react";
 import { tr } from "../../i18n";
@@ -49,6 +49,44 @@ export function setKind(view: EditorView, pos: number, kind: BlockKind) {
   const head = view.state.selection.main.head;
   const inLine = head >= line.from && head <= line.to;
   view.dispatch({ changes, selection: EditorSelection.cursor(changes.mapPos(inLine ? Math.max(head, from + old.length) : line.to, 1)), scrollIntoView: true });
+  view.focus();
+}
+
+/** The lines a selection covers; a selection that ends at the start of a line leaves that line out. */
+export function linesOf(state: EditorState, from: number, to: number) {
+  const first = state.doc.lineAt(from);
+  let last = state.doc.lineAt(to);
+  if (to > from && to === last.from && last.number > first.number) last = state.doc.line(last.number - 1);
+  const out: Line[] = [];
+  for (let n = first.number; n <= last.number; n++) out.push(state.doc.line(n));
+  return out;
+}
+
+const inFence = (state: EditorState, pos: number) => {
+  for (let n: ReturnType<typeof syntaxTree>["topNode"] | null = syntaxTree(state).resolveInner(pos, 1); n; n = n.parent) if (n.name === "FencedCode") return true;
+  return false;
+};
+
+/** The kind of the selected blocks: theirs when they all have one, else null. Lines in a fenced block do not count. */
+export function kindOfRange(state: EditorState, from: number, to: number): BlockKind | null {
+  const kinds = new Set(linesOf(state, from, to).filter((l) => !inFence(state, l.from)).map((l) => kindOf(l.text)));
+  return kinds.size === 1 ? [...kinds][0]! : null;
+}
+
+/** Turn every selected block into another kind (fenced blocks stay as they are); the selection stays on the same text. */
+export function setKindRange(view: EditorView, from: number, to: number, kind: BlockKind) {
+  const { state } = view;
+  const prefix = KINDS.find((k) => k.kind === kind)!.prefix;
+  const changes = state.changes(
+    linesOf(state, from, to)
+      .filter((l) => !inFence(state, l.from))
+      .map((l) => {
+        const m = PREFIX.exec(l.text)!;
+        const at = l.from + m[1]!.length;
+        return { from: at, to: at + (m[2] ?? "").length, insert: prefix };
+      }),
+  );
+  view.dispatch({ changes, selection: state.selection.map(changes), scrollIntoView: true });
   view.focus();
 }
 
@@ -103,6 +141,8 @@ export function deleteBlock(view: EditorView, pos: number) {
 /** Wrap the selection in a mark ("**", "*", "~~", "`"), or take it away when it is there already. */
 export function toggleMark(view: EditorView, mark: string) {
   const { state } = view;
+  const main = state.selection.main;
+  if (state.selection.ranges.length === 1 && state.doc.lineAt(main.from).number !== state.doc.lineAt(main.to).number) return toggleMarkLines(view, mark);
   const tx = state.changeByRange((r) => {
     const before = state.sliceDoc(r.from - mark.length, r.from);
     const after = state.sliceDoc(r.to, r.to + mark.length);
@@ -116,6 +156,47 @@ export function toggleMark(view: EditorView, mark: string) {
     return { changes: [{ from: r.from, insert: mark }, { from: r.to, insert: mark }], range: EditorSelection.range(r.from + mark.length, r.to + mark.length) };
   });
   view.dispatch(state.update(tx, { userEvent: "input.format" }));
+  view.focus();
+  return true;
+}
+
+/** A mark over several blocks: Markdown marks end at a line, so each block's selected text gets its own pair. */
+function toggleMarkLines(view: EditorView, mark: string) {
+  const { state } = view;
+  const { from, to } = state.selection.main;
+  const parts = linesOf(state, from, to).flatMap((l) => {
+    const start = Math.max(from, l.from + PREFIX.exec(l.text)![0].length);
+    const text = state.sliceDoc(start, Math.min(to, l.to));
+    const lead = text.length - text.trimStart().length;
+    const inner = text.trim();
+    return inner && !inFence(state, l.from) ? [{ from: start + lead, to: start + lead + inner.length, text: inner }] : [];
+  });
+  if (!parts.length) return true;
+  const L = mark.length;
+  const at = (pos: number) => {
+    if (state.sliceDoc(pos, pos + L) !== mark) return false;
+    if (L > 1) return true;
+    // "*" is no star of "**" (but one of "***")
+    let run = 1;
+    for (let i = pos - 1; state.sliceDoc(i, i + 1) === "*"; i--) run++;
+    for (let i = pos + 1; state.sliceDoc(i, i + 1) === "*"; i++) run++;
+    return run !== 2;
+  };
+  // where a part's two marks start: each just outside it (hidden while not edited) or as its own end
+  const marksOf = (p: (typeof parts)[number]): [number, number] | null => {
+    const open = at(p.from - L) ? p.from - L : at(p.from) ? p.from : -1;
+    const close = at(p.to) ? p.to : at(p.to - L) ? p.to - L : -1;
+    return open >= 0 && close >= open + L ? [open, close] : null;
+  };
+  const off = parts.every((p) => marksOf(p));
+  const changes = state.changes(
+    parts.flatMap((p): { from: number; to?: number; insert?: string }[] => {
+      const m = marksOf(p);
+      if (off) return [{ from: m![0], to: m![0] + L }, { from: m![1], to: m![1] + L }];
+      return m ? [] : [{ from: p.from, insert: mark }, { from: p.to, insert: mark }];
+    }),
+  );
+  view.dispatch({ changes, selection: EditorSelection.range(changes.mapPos(from, -1), changes.mapPos(to, 1)), userEvent: "input.format" });
   view.focus();
   return true;
 }
