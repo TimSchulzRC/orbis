@@ -77,7 +77,7 @@ export interface SignupRequest {
   code?: string;
 }
 
-/** POST /api/account/signup with codes on and no code yet: a code was sent, sign up again with it. */
+/** POST /api/account/signup with codes on and no code yet: request a code for the address, then sign up again with it. */
 export interface VerifyFirst {
   verify: true;
 }

@@ -68,7 +68,7 @@ export function onlyBelow(ix: Index, root: string): string[] {
 
 /**
  * Children that hang only here either go along ("trash", restorable with the root) or lose this
- * parent ("inbox", so untyped ones land in the inbox). Children with another parent stay.
+ * parent ("inbox", so untyped ones land in the inbox). Children with a living parent outside the cascade stay.
  */
 export function deleteItem(w: Writer, ix: Index, id: string, children: "trash" | "inbox" = "trash"): string[] {
   // types go through deleteType, which lets the user choose what becomes of the values
