@@ -147,7 +147,7 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
             </MenuItem>
           )}
           {!item.deleted && (
-            <MenuItem danger icon={<Trash2 size={14} />} onClick={() => (close(), onlyBelow(ix, item.id).length ? setDeleting(true) : removeAndLeave(item.id, false))}>
+            <MenuItem danger icon={<Trash2 size={14} />} onClick={() => (close(), deleteOrAsk(repo, item.id, () => setDeleting(true)))}>
               {t("item.delete")}
             </MenuItem>
           )}
@@ -339,18 +339,29 @@ function TitleClash({ item }: { item: Item }) {
 
 // ---------- delete ----------
 
-function removeAndLeave(id: string, withChildren: boolean) {
-  repo.remove(id, withChildren ? "trash" : "inbox");
-  leavePage();
+function removeAndLeave(r: typeof repo, id: string, withChildren: boolean, leave = true) {
+  r.remove(id, withChildren ? "trash" : "inbox");
+  if (leave) leavePage();
+}
+
+/**
+ * To the trash, from a menu: with children that only hang here, the dialog asks first.
+ * `leave`: the item is the open page, which then goes back. True when it went right away.
+ */
+export function deleteOrAsk(r: typeof repo, id: string, ask: () => void, leave = true): boolean {
+  if (onlyBelow(r.index(), id).length) return (ask(), false);
+  removeAndLeave(r, id, false, leave);
+  return true;
 }
 
 /** Children that only hang here: delete them too, or let them lose this place. */
-function DeleteDialog({ item, onClose }: { item: Item; onClose: () => void }) {
-  const ix = useIndex();
+export function DeleteDialog({ item, onClose, leave = true }: { item: Item; onClose: () => void; leave?: boolean }) {
+  const r = useRepo();
+  const ix = r.index();
   const { t } = useT();
   const only = onlyBelow(ix, item.id);
   const finish = (withChildren: boolean) => {
-    removeAndLeave(item.id, withChildren);
+    removeAndLeave(r, item.id, withChildren, leave);
     onClose();
   };
   // Kept children lose this place; whether they land in the inbox is the inbox's own query.

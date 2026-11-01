@@ -13,23 +13,33 @@ import { keyBetween, keysFor, cmpKey } from "@obtion/core/sortkey";
 import { useRepo, useRoute, useSpaceId, itemHref, itemPath, spaceHref, useLocalStorage } from "../hooks";
 import { type Space, useAccounts } from "../accounts";
 import { useT } from "../i18n";
-import { Button, IconButton, Kbd, MenuItem, MoreMenu, REVEAL } from "./primitives";
+import { Button, IconButton, Kbd, MenuItem, MoreMenu, REVEAL, useContextMenu } from "./primitives";
 import { TypeGlyph, ItemIcon } from "./item-look";
 import { cn, moveInArray } from "../lib/utils";
 import { shortcut } from "../lib/platform";
-import { ItemPicker } from "./Picker";
 import { SyncDot } from "./SyncDot";
 import { createAndOpen } from "../actions";
 import { NewTypeDialog } from "../views/Types";
+import { DeleteDialog, deleteOrAsk } from "../views/ItemPage";
 import { NewSpaceDialog, SpaceScope, SpaceSelector, moveTo } from "./Spaces";
 import { useInboxItems } from "./inbox";
 import { KEYS } from "./storage";
+import { notify } from "./toasts";
 
 /**
  * What is being dragged in the sidebar: an item (from below `from`, null: pinned; `type`: a pinned
  * type page, which only changes its place among the pinned) or a row of "Typen", and from which workspace.
  */
 let dragging: { id: string; from: string | null; space: string; type?: boolean } | null = null;
+/**
+ * Starts a drag of the sidebar's own: only the title as text. The address the browser adds for a
+ * link is dropped, or it takes the drag for a link to open elsewhere (a new tab, a split view).
+ */
+const startDrag = (e: React.DragEvent, d: NonNullable<typeof dragging>, text: string) => {
+  dragging = d;
+  e.dataTransfer.clearData();
+  e.dataTransfer.setData("text/plain", text);
+};
 /** Can it go into another workspace? Items can (a move), type pages and rows of "Typen" not. */
 const movable = (d: typeof dragging) => !!d && d.from !== "types" && !d.type;
 
@@ -235,7 +245,7 @@ function TypeNav({ touch, here }: { touch?: boolean; here: boolean }) {
           key={r.id}
           href={r.href}
           draggable={!touch}
-          onDragStart={(e) => ((dragging = { id: r.id, from: "types", space }), e.dataTransfer.setData("text/plain", r.label))}
+          onDragStart={(e) => startDrag(e, { id: r.id, from: "types", space }, r.label)}
           onDragOver={(e) => {
             if (!ours() || dragging!.id === r.id) return;
             e.preventDefault();
@@ -315,7 +325,13 @@ function TreeNode({
   // a second place of the same item: below a non-home parent, or at the top while it also has a parent
   const secondary = parent !== null ? home !== parent : !!home;
   const [drop, setDrop] = useState<"before" | "inside" | "after" | null>(null);
-  const [picking, setPicking] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const menu = useContextMenu();
+  // the open page goes back when it goes to the trash; anything else stays where it is
+  const toTrash = () => {
+    const title = item.title || t("untitled");
+    if (deleteOrAsk(repo, item.id, () => setDeleting(true), activeId === item.id)) notify.undo(t("item.trashed", { title }), () => repo.restore(item.id));
+  };
 
   const sortOf = (x: Item) => (parent ? (x.parents[parent]?.sort ?? "") : (x.pinned ?? ""));
   const onDrop = (e: React.DragEvent) => {
@@ -355,9 +371,8 @@ function TreeNode({
       <div
         draggable={!touch}
         onDragStart={(e) => {
-          dragging = { id: item.id, from: parent, space, type: isType };
+          startDrag(e, { id: item.id, from: parent, space, type: isType }, item.title);
           e.dataTransfer.effectAllowed = "copyMove";
-          e.dataTransfer.setData("text/plain", item.title);
         }}
         onDragOver={(e) => {
           const d = dragging;
@@ -375,6 +390,7 @@ function TreeNode({
         }}
         onDragLeave={() => setDrop(null)}
         onDrop={onDrop}
+        onContextMenu={touch ? undefined : menu.onContextMenu}
         className={cn(
           "group/row relative flex items-center gap-1 rounded-lg pr-1",
           touch ? "py-2 text-[15px]" : "py-1 text-sm",
@@ -395,7 +411,8 @@ function TreeNode({
           {isOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
         </Button>
         {isType ? <TypeGlyph schema={item.schema} size={touch ? 17 : 15} /> : <ItemIcon item={item} size={touch ? 17 : 15} />}
-        <a href={spaceHref(space, itemPath(item.id))} className="min-w-0 flex-1 truncate" title={item.title} aria-current={activeId === item.id ? "page" : undefined}>
+        {/* the row is dragged, not the link in it */}
+        <a href={spaceHref(space, itemPath(item.id))} draggable={false} className="min-w-0 flex-1 truncate" title={item.title} aria-current={activeId === item.id ? "page" : undefined}>
           {isType ? ix.typePlural(item.id) : distinctLabel(item.title, parent ? ix.get(parent)?.title : undefined) || t("untitled")}
         </a>
         {secondary && (
@@ -418,28 +435,18 @@ function TreeNode({
             <Plus size={13} />
           </Button>
         )}
-        {!touch && <MoreMenu size="xs" iconSize={14} tabIndex={-1} className={cn("hover:bg-surface-2", REVEAL.row)}>
+        {!touch && <MoreMenu menu={menu} size="xs" iconSize={14} tabIndex={-1} className={cn("hover:bg-surface-2", REVEAL.row)}>
           {(close) => (
             <>
               <MenuItem onClick={() => (close(), repo.pin(item.id, !item.pinned))}>{item.pinned ? t("item.unpin") : t("item.pin")}</MenuItem>
-              {!isType && <MenuItem onClick={() => (close(), setPicking(true))}>{item.kind === "datei" ? t("place.change") : t("place.add")}</MenuItem>}
-              {parent && <MenuItem onClick={() => (close(), repo.removeParent(item.id, parent))}>{t("place.removeHere")}</MenuItem>}
               {parent && secondary && <MenuItem onClick={() => (close(), repo.setHome(item.id, parent))}>{t("place.makeHome")}</MenuItem>}
+              {/* types are deleted on their page, with the preview of what becomes of the values */}
+              {!isType && <MenuItem danger onClick={() => (close(), toTrash())}>{t("item.delete")}</MenuItem>}
             </>
           )}
         </MoreMenu>}
       </div>
-      {picking && (
-        <ItemPicker
-          title={t("place.add")}
-          exclude={(x) => x.id === item.id || ix.wouldCycle(item.id, x.id) || !!item.parents[x.id]}
-          onPick={(id) => {
-            repo.addParent(item.id, id);
-            setPicking(false);
-          }}
-          onClose={() => setPicking(false)}
-        />
-      )}
+      {deleting && <DeleteDialog item={item} leave={activeId === item.id} onClose={() => setDeleting(false)} />}
       {isOpen &&
         kids.map((k, i) => <TreeNode key={k.id} item={k} parent={item.id} siblings={kids} index={i} depth={depth + 1} isOpen={opened} toggle={toggle} activeId={activeId} keep={keep} touch={touch} />)}
     </div>
