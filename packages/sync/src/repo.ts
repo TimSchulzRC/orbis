@@ -292,6 +292,19 @@ export class Repo {
     return this.curStep!.id;
   }
 
+  /**
+   * Run `fn` as a step of its own: not joined to typing just before, and typing right after
+   * starts a new one. Returns the step's id (to undo it), undefined if nothing changed.
+   */
+  ownStep(fn: () => void): string | undefined {
+    this.curStep = null;
+    fn();
+    const step = this.curStep as { id: string; typing: boolean } | null;
+    if (!step) return undefined;
+    step.typing = false;
+    return step.id;
+  }
+
   private local(docId: string, update: Uint8Array, step?: string) {
     const area = areaOf(this.docs.get(docId));
     const k = newId();

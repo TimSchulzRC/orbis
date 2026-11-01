@@ -1,5 +1,9 @@
 // One log for all workspaces, with its own workspace choice independent of the sidebar's.
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { ChevronRight } from "lucide-react";
+import type { EventText } from "@obtion/core/api";
+import { textDiff } from "@obtion/core/diff";
+import { DiffView, LineCount } from "../ui/DiffView";
 import { spaceCall, useAccounts } from "../accounts";
 import { SpaceFilter, SpaceScope, useReplicas } from "../ui/Spaces";
 import type { ActivityEvent, FieldChange } from "@obtion/core/protocol";
@@ -75,7 +79,39 @@ function describe(c: FieldChange, item: Item | undefined, ix: Index, t: T): stri
   }
 }
 
-function Entry({ e, compact, noVerb }: { e: ActivityEvent; compact?: boolean; noVerb?: boolean }) {
+/** What an entry did to a text, fetched when asked for: the lines removed and added. */
+function BodyDiff({ e, space }: { e: ActivityEvent; space: string }) {
+  const { t } = useT();
+  const [open, setOpen] = useState(false);
+  const [got, setGot] = useState<EventText | null | undefined>(undefined);
+  // an entry still growing (typing) changes its time: fetch again then
+  useEffect(() => {
+    if (!open) return;
+    let gone = false;
+    spaceCall<EventText>(space, `/api/history?event=${e.id}`).then(
+      (x) => !gone && setGot(x),
+      () => !gone && setGot(null),
+    );
+    return () => void (gone = true);
+  }, [open, e.id, e.ts]);
+  const diff = useMemo(() => (got ? textDiff(got.before, got.after) : undefined), [got]);
+  return (
+    <div>
+      <Button variant="plain" aria-expanded={open} onClick={() => setOpen(!open)} className="inline-flex items-center gap-0.5 text-xs text-muted-foreground hover:text-fg">
+        <ChevronRight size={12} className={cn("transition-transform", open && "rotate-90")} />
+        {t(open ? "activity.hideDiff" : "activity.showDiff")}
+        {diff && (
+          <span className="ml-1">
+            <LineCount diff={diff} />
+          </span>
+        )}
+      </Button>
+      {open && (got === null ? <p className="text-xs text-muted-foreground">{t("activity.diffMissing")}</p> : diff ? <DiffView diff={diff} className="mt-1 max-h-80 overflow-y-auto" /> : null)}
+    </div>
+  );
+}
+
+function Entry({ e, compact, noVerb, space }: { e: ActivityEvent; compact?: boolean; noVerb?: boolean; space?: string }) {
   const repo = useRepo();
   const itemHref = useItemHref();
   const { t } = useT();
@@ -103,6 +139,7 @@ function Entry({ e, compact, noVerb }: { e: ActivityEvent; compact?: boolean; no
         )}
       </div>
       {changes.length > 0 && <div className={cn("text-muted-foreground", compact ? "line-clamp-2 text-xs" : "text-sm")}>{changes.join(" · ")}</div>}
+      {space && !compact && e.changes.some((c) => c.field === "body" && c.diff) && <BodyDiff e={e} space={space} />}
     </>
   );
 }
@@ -132,7 +169,7 @@ function systemText(text: string, t: T): string {
 }
 
 /** A step is one user action or tool call. `space`: its workspace's name, with several. */
-function StepGroup({ events, space }: { events: ActivityEvent[]; space?: string }) {
+function StepGroup({ events, space, spaceId }: { events: ActivityEvent[]; space?: string; spaceId: string }) {
   const { t } = useT();
   const head = events[0]!;
   const actor = who(head.origin, t);
@@ -145,7 +182,7 @@ function StepGroup({ events, space }: { events: ActivityEvent[]; space?: string 
         <ul className={cn("space-y-1", events.length > 1 && "mt-0.5")}>
           {events.map((e) => (
             <li key={e.id}>
-              <Entry e={e} noVerb={!!head.undoes} />
+              <Entry e={e} noVerb={!!head.undoes} space={spaceId} />
             </li>
           ))}
         </ul>
@@ -235,7 +272,7 @@ export function Activity() {
           {groupBySteps(all).map((g) => (
             <li key={`${g[0]!.space}:${g[0]!.id}`} className="flex gap-2.5 text-[15px]">
               <SpaceScope id={g[0]!.space}>
-                <StepGroup events={g} space={nameOf(g[0]!.space)} />
+                <StepGroup events={g} space={nameOf(g[0]!.space)} spaceId={g[0]!.space} />
               </SpaceScope>
             </li>
           ))}

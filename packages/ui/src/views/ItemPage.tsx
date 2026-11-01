@@ -3,7 +3,7 @@
 import { Input } from "../components/ui/input";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { EditorView } from "@codemirror/view";
-import { Trash2, Plus, AlertTriangle, ImagePlus, ListFilter, Pin, PinOff, FilePlus, FolderInput, Link2, ArrowRightLeft } from "lucide-react";
+import { Trash2, Plus, AlertTriangle, ImagePlus, ListFilter, Pin, PinOff, FilePlus, FolderInput, Link2, ArrowRightLeft, History } from "lucide-react";
 import { type Item, META_TYPE, titleKey } from "@obtion/core/model";
 import { isInInbox, isOverview } from "@obtion/core/placement";
 import { wouldBeInInbox } from "@obtion/core/typeops";
@@ -26,6 +26,7 @@ import { pluralOf } from "@obtion/core/plural";
 import { queryBlocks, insertQueryBlock } from "../ui/QueryBlock";
 import { FilePage } from "./FilePage";
 import { TitleField } from "../ui/TitleField";
+import { HistoryDialog } from "../ui/History";
 import { TypePage } from "./TypePage";
 import { createAndOpen, rememberPlace } from "../actions";
 import { INBOX_ICON, NOTE_ICON, OVERVIEW_ICON } from "../ui/icons";
@@ -76,6 +77,7 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
   const [deleting, setDeleting] = useState(false);
   const [placing, setPlacing] = useState(false);
   const [moving, setMoving] = useState(false);
+  const [history, setHistory] = useState(false);
   const others = useAccounts().spaces.length > 1;
   const [refPicking, setRefPicking] = useState(false);
   const [placesOpen, setPlacesOpen] = useState(0);
@@ -129,6 +131,9 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
           </MenuItem>
           <MenuItem icon={<FilePlus size={14} />} onClick={() => (close(), createAndOpen({ parents: [item.id] }))}>
             {t("item.newBelow")}
+          </MenuItem>
+          <MenuItem icon={<History size={14} />} onClick={() => (close(), setHistory(true))}>
+            {t("item.history")}
           </MenuItem>
           {others && !item.deleted && item.type !== META_TYPE && (
             <MenuItem icon={<ArrowRightLeft size={14} />} onClick={() => (close(), setMoving(true))}>
@@ -209,6 +214,7 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
       )}
       {deleting && <DeleteDialog item={item} onClose={() => setDeleting(false)} />}
       {moving && <MoveDialog item={item} onClose={() => setMoving(false)} />}
+      {history && <HistoryDialog item={item} onClose={() => setHistory(false)} />}
     </div>
   );
 }

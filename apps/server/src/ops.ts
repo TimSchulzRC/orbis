@@ -60,7 +60,61 @@ import type { Store } from "./store";
 import { type Blobs, sha256 } from "./blobs";
 import { MAX_ATTACH } from "./config";
 import type { AttachInput, CapInput, ConvertInput, CreateInput, DefineTypeInput, PlaceInput, PropInput, SuggestInput, UpdateInput, UpdateTypeInput, ViewInput } from "./schemas";
-import { originText } from "@obtion/core/origin";
+import { originText, parseOrigin } from "@obtion/core/origin";
+import { textDiff, unifiedDiff } from "@obtion/core/diff";
+import type { ActivityEvent, FieldChange } from "@obtion/core/protocol";
+import type { TextVersion } from "@obtion/core/api";
+
+export interface ActivityOpts {
+  /** an ISO time, an entry id or the cursor of the last call: the entries changed after it */
+  since?: string;
+  days?: number;
+  ref?: string;
+  under?: string;
+  by?: string;
+  limit?: number;
+  /** text changes as diffs (default true) */
+  diff?: boolean;
+}
+
+/** Diff lines per entry and per answer in the activity: the rest via the history tool. */
+const DIFF_LINES = 40;
+const DIFF_BUDGET = 400;
+
+/** A value in a change, short: strings quoted, long ones cut. */
+function short(x: unknown, max = 120): string {
+  const s = typeof x === "string" ? x : JSON.stringify(x);
+  return typeof x === "string" ? `"${s.length > max ? s.slice(0, max - 1) + "…" : s}"` : s.length > max ? s.slice(0, max - 1) + "…" : s;
+}
+
+/**
+ * Who an activity filter means: "people" (in the app), "agents", "imports", "others" (anyone
+ * but the caller), or a name – a person's own edits ("Tim"), an agent ("claude-code") or an
+ * agent for a person ("claude-code for Tim"). Several with commas.
+ */
+export function byFilter(by: string, me: string): (origin: string) => boolean {
+  const mine = parseOrigin(me);
+  const sameAs = (o: string) => {
+    const a = parseOrigin(o);
+    return a.kind === mine.kind && a.name === mine.name && (a.person?.id ?? a.person?.name) === (mine.person?.id ?? mine.person?.name);
+  };
+  const tests = by
+    .split(",")
+    .map((x) => x.trim().toLowerCase())
+    .filter(Boolean)
+    .map((w): ((o: string) => boolean) => {
+      if (["people", "persons", "humans", "person", "menschen", "personen"].includes(w)) return (o) => parseOrigin(o).kind === "web";
+      if (["agents", "agent"].includes(w)) return (o) => parseOrigin(o).kind === "agent";
+      if (["imports", "import"].includes(w)) return (o) => parseOrigin(o).kind === "import";
+      if (["others", "andere"].includes(w)) return (o) => !sameAs(o);
+      return (o) => {
+        const a = parseOrigin(o);
+        return (a.kind === "web" && a.name.toLowerCase() === w) || (a.kind === "agent" && a.name.toLowerCase() === w) || originText(o).toLowerCase() === w;
+      };
+    });
+  // an entry can carry several origins ("web:…, agent:…"): it matches if one of them does
+  return (origin) => origin.split(",").some((o) => tests.some((t) => t(o.trim())));
+}
 
 export class OpError extends Error {}
 
@@ -470,19 +524,236 @@ export class Ops {
       }),
       blocked: ix.live.filter((i) => statusOf(i, ix.schemaOf(i))?.group !== "done" && ix.isBlocked(i)).map((i) => this.line(i)),
       inbox: runQuery({ where: { inbox: true } }, { ix }).total,
-      recent_activity: this.activity({ days: 3, limit: 10 }),
+      changed_by_people_last_3_days: this.peopleChanged(),
+      recent_activity: this.activityFeed({ days: 3, limit: 10 }).entries.map((e) => `${this.entryHead(e)}${e.changes.length ? ": " + this.changeTexts(e).join("; ") : ""}`),
     };
   }
 
-  activity(opts: { days?: number; ref?: string; limit?: number }) {
-    const since = Date.now() - (opts.days ?? 7) * DAY_MS;
-    const doc = opts.ref ? this.resolve(opts.ref).id : undefined;
-    return this.store.events({ since, doc, limit: opts.limit ?? 40 }).map((e) => ({
-      at: new Date(e.ts).toISOString().slice(0, 16),
-      who: originText(e.origin),
-      what: `${e.kind} "${e.title}"`,
-      changes: e.changes.map((c) => c.field).join(", ") || undefined,
-    }));
+  // ---------- activity and history ----------
+
+  /** Items people changed by hand in the app lately (what an agent should look at first), with the way to see how. */
+  private peopleChanged(): string | undefined {
+    const { entries } = this.activityFeed({ days: 3, by: "people", limit: 200 });
+    const titles = [...new Set(entries.filter((e) => e.doc).map((e) => `"${this.store.records.get(e.doc)?.title || e.title}"`))];
+    if (!titles.length) return undefined;
+    return `${titles.slice(0, 15).join(", ")}${titles.length > 15 ? ` and ${titles.length - 15} more` : ""} – see what changed with activity days=3 by="people"`;
+  }
+
+  /**
+   * Activity entries, newest first – or, with `since` (an ISO time or the cursor of the last
+   * call), the entries changed after it, oldest first, and the cursor to pass next time.
+   * `under`: an item and everything below it ("part of"), deleted items included; `by`: who.
+   */
+  activityFeed(opts: ActivityOpts, me = ""): { entries: ActivityEvent[]; cursor: string; more: boolean } {
+    const now = Date.now();
+    this.ix; // flushed: entries for edits that arrived moments ago are written
+    const docs = opts.under ? [...this.subtree(this.resolve(opts.under).id)] : opts.ref ? [this.resolve(opts.ref).id] : undefined;
+    const match = opts.by ? byFilter(opts.by, me) : () => true;
+    const after = opts.since !== undefined ? this.feedPosition(opts.since) : undefined;
+    const limit = opts.limit ?? (after ? 100 : 40);
+    const entries: ActivityEvent[] = [];
+    let more = false;
+    const PAGE = 200;
+    let pos = after;
+    let before: number | undefined;
+    const since = after ? undefined : now - (opts.days ?? 7) * DAY_MS;
+    while (!more) {
+      const page = this.store.events({ after: pos, since, before, docs, limit: PAGE });
+      for (const e of page) {
+        if (pos) pos = { ts: e.ts, id: e.id };
+        else before = e.id;
+        if (!match(e.origin)) continue;
+        if (entries.length === limit) {
+          more = true;
+          break;
+        }
+        entries.push(e);
+      }
+      if (page.length < PAGE) break;
+    }
+    // more to come: on from the last entry given; else from now (an entry changed later moves past it)
+    const last = entries.at(-1);
+    const cursor = more && after && last ? `${last.ts}-${last.id}` : `${now}-0`;
+    return { entries, cursor, more };
+  }
+
+  /** `since` as a feed position: a cursor ("<time>-<id>"), an entry id, or a date/time. */
+  private feedPosition(since: string): { ts: number; id: number } {
+    const s = since.trim();
+    const cur = /^(\d+)-(\d+)$/.exec(s);
+    if (cur) return { ts: Number(cur[1]), id: Number(cur[2]) };
+    if (/^\d+$/.test(s)) {
+      const row = this.store.db.query("SELECT ts FROM events WHERE id = ?").get(Number(s)) as { ts: number } | null;
+      if (!row) throw new OpError(`No activity entry has the id ${s}. since takes the cursor of the last call, an entry id or an ISO time.`);
+      return { ts: row.ts, id: Number(s) };
+    }
+    const t = Date.parse(s);
+    if (isNaN(t)) throw new OpError(`since "${since}" is neither a cursor nor a time. Use the cursor of the last call or an ISO time like 2026-11-01T08:00.`);
+    return { ts: t, id: 0 };
+  }
+
+  /** An item and everything below it over all parents, deleted items included (their removal is a change too). */
+  private subtree(root: string): Set<string> {
+    const kids = new Map<string, string[]>();
+    for (const r of this.store.records.values()) for (const p of Object.keys(r.parents)) kids.set(p, [...(kids.get(p) ?? []), r.id]);
+    const out = new Set<string>();
+    const stack = [root];
+    while (stack.length) {
+      const x = stack.pop()!;
+      if (out.has(x)) continue;
+      out.add(x);
+      stack.push(...(kids.get(x) ?? []));
+    }
+    return out;
+  }
+
+  /** The activity as text for agents: one block per entry, changes readable, text changes as diffs. */
+  activity(opts: ActivityOpts, me = ""): string {
+    const { entries, cursor, more } = this.activityFeed(opts, me);
+    const scope = [
+      opts.since !== undefined ? `since ${opts.since}` : `in the last ${opts.days ?? 7} day(s)`,
+      opts.under && `under "${this.resolve(opts.under).title}"`,
+      opts.ref && `of "${this.resolve(opts.ref).title}"`,
+      opts.by && `by ${opts.by}`,
+    ].filter(Boolean);
+    const head = `${entries.length}${more ? "+" : ""} change(s) ${scope.join(" · ")}${opts.since !== undefined ? " (oldest first)" : " (newest first)"}`;
+    let budget = DIFF_BUDGET;
+    const blocks = entries.map((e) => {
+      const lines = [this.entryHead(e), ...this.changeTexts(e).map((c) => "  " + c)];
+      const body = e.changes.find((c) => c.field === "body");
+      if (body?.diff && opts.diff !== false) {
+        const t = this.store.eventText(e.id);
+        if (t) {
+          const more = `history ref=${t.doc} from=${t.from ?? 0} to=${t.to}`;
+          if (budget <= 0) lines.push(`  (diff left out, the answer is long: ${more})`);
+          else {
+            const u = unifiedDiff(textDiff(t.before, t.after), { maxLines: Math.min(DIFF_LINES, budget), maxWidth: 240 });
+            budget -= u.shown;
+            lines.push(...u.text.split("\n").map((l) => "    " + l));
+            if (u.total > u.shown) lines.push(`    … ${u.total - u.shown} more line(s): ${more}`);
+          }
+        }
+      }
+      return lines.join("\n");
+    });
+    const next = more ? `More changes after these: call activity again with since="${cursor}".` : `cursor: ${cursor} – pass it as since next time to get only what changed after this call.`;
+    return [head, next, ...blocks].join("\n\n");
+  }
+
+  /** "2026-11-01 10:23 · Tim · updated "Mapping" [id] · Task (step s…)". */
+  private entryHead(e: ActivityEvent): string {
+    const item = this.store.records.get(e.doc);
+    const at = new Date(e.ts).toISOString().slice(0, 16).replace("T", " ");
+    const verb = e.undoes ? (e.redo ? "redid (undo of an undo) – " : "undid a step – ") : "";
+    const what = !e.doc ? e.title : `${verb}${e.kind} "${item ? displayTitle(item) || "(untitled)" : e.title}" [${e.doc}]${item ? ` · ${this.kindOf(item)}` : ""}`;
+    return `${at} · ${originText(e.origin)} · ${what}${e.step ? ` (step ${e.step})` : ""}`;
+  }
+
+  private kindOf(i: Item): string {
+    const ix = this.store.index();
+    if (i.type === META_TYPE) return "type";
+    if (i.kind === "datei") return "file";
+    return this.typeName(i.type) ?? (isInInbox(i, ix) ? "inbox" : isOverview(i, ix) ? "overview" : "note");
+  }
+
+  /** A type's name, also of a deleted type. */
+  private typeName(id?: string | null): string | undefined {
+    return id ? this.store.records.get(id)?.schema?.name : undefined;
+  }
+
+  /** The changes of an entry in plain words: names instead of ids, from → to. */
+  changeTexts(e: ActivityEvent): string[] {
+    const item = this.store.records.get(e.doc);
+    const schema = item?.type ? this.store.records.get(item.type)?.schema : undefined;
+    const prop = (pid: string) => schema?.properties.find((p) => p.id === pid) ?? schema?.removedProperties.find((p) => p.id === pid);
+    const title = (id: string) => `"${this.store.records.get(id)?.title ?? id}"`;
+    const list = (x: unknown) => ((x as string[] | undefined) ?? []).map(title).join(", ");
+    const plusMinus = (name: string, c: FieldChange, fmt: (x: unknown) => string = list) => {
+      const add = (c.to as unknown[] | undefined) ?? [];
+      const rem = (c.from as unknown[] | undefined) ?? [];
+      return [add.length && `${name} + ${fmt(add)}`, rem.length && `${name} − ${fmt(rem)}`].filter(Boolean).join(", ");
+    };
+    const out: string[] = [];
+    for (const c of e.changes) {
+      const f = c.field;
+      if (f.startsWith("p:")) {
+        const p = prop(f.slice(2));
+        const v = (x: unknown) => (x === undefined || x === null || x === "" ? "–" : p?.options ? optionNames(p, x as Value).join(", ") || "–" : short(x));
+        out.push(`${p?.name ?? f.slice(2)}: ${v(c.from)} → ${v(c.to)}`);
+      } else if (f.startsWith("x:")) out.push(`${f.slice(2)}: ${c.from === undefined ? "–" : short(c.from)} → ${c.to === undefined ? "–" : short(c.to)}`);
+      else if (f.startsWith("r:")) out.push(plusMinus(prop(f.slice(2))?.name ?? f.slice(2), c));
+      else if (f === "title") out.push(`title: ${c.from === undefined ? "–" : short(c.from)} → ${short(c.to ?? "")}`);
+      else if (f === "type") out.push(`type: ${this.typeName(c.from as string) ?? "–"} → ${this.typeName(c.to as string) ?? "–"}`);
+      else if (f === "home") out.push(`home: ${c.from ? title(c.from as string) : "–"} → ${c.to ? title(c.to as string) : "–"}`);
+      else if (f === "pinned") out.push(c.to ? "pinned" : "unpinned");
+      else if (f === "parents") out.push(plusMinus("part of", c));
+      else if (f === "tags") out.push(plusMinus("tags", c, (x) => (x as string[]).map((t) => "#" + t).join(" ")));
+      else if (f === "refs") out.push(plusMinus("refs", c));
+      else if (f === "body") out.push(`text: ${c.from ?? 0} → ${c.to ?? 0} characters`);
+      else if (f === "update") out.push(`update posted: ${short(c.to, 400)}`);
+      else if (f === "schema") out.push("type definition changed (properties or capabilities)");
+      else if (f === "views") out.push("views of the type's page changed");
+      else if (f === "file") out.push(`file replaced: ${short(c.from ?? "")} → ${short(c.to ?? "")}`);
+      else if (f === "suggestion") out.push(c.to ? "suggestion made" : "suggestion accepted or dismissed");
+      else if (f === "op") out.push(c.to === "undone" ? "operation undone" : "operation changed");
+      else out.push(f);
+    }
+    return out.filter(Boolean);
+  }
+
+  /** An item to show the history of: by id also when it is in the trash. */
+  private historyItem(ref: string): Item {
+    const byId = this.store.records.get(ref.trim());
+    const i = byId && (byId.kind === "info" || byId.kind === "datei") ? byId : this.resolve(ref);
+    return i;
+  }
+
+  /**
+   * The kept versions of an item's text: the list, one version's text, or a diff between two
+   * (from 0 = the empty text; to omitted = the text now).
+   */
+  history(ref: string, opts: { version?: number; from?: number; to?: number } = {}): string {
+    this.ix;
+    const item = this.historyItem(ref);
+    const name = `"${displayTitle(item) || "(untitled)"}" [${item.id}]`;
+    const versions = this.store.versions(item.id);
+    const pick = (n: number) => {
+      const v = versions[n - 1];
+      if (!v) throw new OpError(`${name} has no version ${n}; it has ${versions.length ? `versions 1 to ${versions.length}` : "no versions yet"}.`);
+      return v;
+    };
+    const textOf = (n: number) => (n === 0 ? "" : this.store.versionText(pick(n).id)!);
+    const label = (v: TextVersion) => `#${v.n} · ${new Date(v.ts).toISOString().slice(0, 16).replace("T", " ")} · ${v.base ? "earlier state (from before versions were kept)" : originText(v.origin) || "unknown"}`;
+    if (opts.version !== undefined) {
+      const v = pick(opts.version);
+      return `Version ${label(v)} · ${v.len} characters of ${name}:\n\n${textOf(v.n)}`;
+    }
+    if (opts.from !== undefined || opts.to !== undefined) {
+      const from = opts.from ?? Math.max(0, (opts.to ?? versions.length) - 1);
+      const a = textOf(from);
+      const b = opts.to === undefined ? item.body : textOf(opts.to);
+      const d = textDiff(a, b);
+      const u = unifiedDiff(d, { maxLines: 3000 });
+      const names = `${from === 0 ? "empty text" : `#${from}`} → ${opts.to === undefined ? "the text now" : `#${opts.to}`}`;
+      if (!d.hunks.length) return `${name}: ${names} – no difference.`;
+      return `${name}: ${names}, +${d.added} −${d.removed} line(s)\n${u.text}${u.total > u.shown ? `\n… ${u.total - u.shown} more line(s) left out; compare closer versions` : ""}`;
+    }
+    if (!versions.length) return `${name} has no versions yet: its text has not changed since versions are kept. Its text now: get ref=${item.id}.`;
+    const shown = versions
+      .slice(-50)
+      .reverse()
+      .map((v) => {
+        const d = textDiff(v.n > 1 ? textOf(v.n - 1) : "", textOf(v.n));
+        return `${label(v)} · ${v.len} characters · +${d.added} −${d.removed} line(s)${v.step ? ` (step ${v.step})` : ""}`;
+      });
+    const latest = textOf(versions.length);
+    const now = latest === item.body ? `The text now is version ${versions.length}.` : `The text now differs from version ${versions.length} (changes moments ago).`;
+    return [
+      `${versions.length} version(s) of the text of ${name}, newest first${versions.length > shown.length ? ` (the newest 50)` : ""}:`,
+      ...shown.map((r) => "- " + r),
+      now,
+      "version=N shows a version's text; from=N (and to=M, default the text now) shows a diff. To go back to a version, update the body with it (body_mode replace).",
+    ].join("\n");
   }
 
   toValue(p: PropDef, raw: unknown, ctx: Item | undefined): { value?: Value | null; rels?: string[] } {

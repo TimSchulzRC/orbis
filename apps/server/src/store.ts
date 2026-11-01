@@ -11,6 +11,7 @@ import type { Lang } from "@obtion/core/i18n";
 import { Index } from "@obtion/core/graph";
 import { resolveCascade } from "@obtion/core/trash";
 import type { ActivityEvent, FieldChange } from "@obtion/core/protocol";
+import type { TextVersion as Version } from "@obtion/core/api";
 import { createIndex, indexRecord, type SearchIndex } from "@obtion/core/search";
 
 const REMOTE = Symbol("remote");
@@ -34,6 +35,7 @@ type Listener = {
   record?: (r: Item) => void;
 };
 
+/** How many documents stay in memory when not in use (least recently used go first). */
 const CACHE_SIZE = 200;
 const FLUSH_DELAY_MS = 250;
 const EVENT_MERGE_WINDOW_MS = 5 * 60_000;
@@ -77,6 +79,9 @@ export class Store {
       CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT);
       CREATE TABLE IF NOT EXISTS steps (id TEXT PRIMARY KEY, actor TEXT, ts INTEGER, undoes TEXT);
       CREATE INDEX IF NOT EXISTS steps_undoes ON steps(undoes);
+      CREATE TABLE IF NOT EXISTS versions (id INTEGER PRIMARY KEY AUTOINCREMENT, doc TEXT NOT NULL, ts INTEGER NOT NULL, origin TEXT NOT NULL, step TEXT, event INTEGER, base INTEGER NOT NULL DEFAULT 0, len INTEGER NOT NULL, data BLOB NOT NULL);
+      CREATE INDEX IF NOT EXISTS versions_doc ON versions(doc, id);
+      CREATE INDEX IF NOT EXISTS versions_event ON versions(event);
     `);
     // A replica's cursor is seq + uid, so it can tell whether the server still has the row it saw.
     // Older databases get uids for their existing rows once.
@@ -98,6 +103,8 @@ export class Store {
       this.db.exec("CREATE INDEX IF NOT EXISTS updates_area ON updates(area, seq)");
     }
     if (!eventCols.has("area")) this.db.exec(`ALTER TABLE events ADD COLUMN area TEXT NOT NULL DEFAULT '${PERSONAL}'`);
+    // what an item had before versions began is "an earlier state" of unknown origin
+    if (!this.kvGet("versionsSince")) this.kvSet("versionsSince", String(Date.now()));
     this.load();
     // the server was called hub before; renaming the key would look like a new server to devices
     if (!this.kvGet("hubId")) this.kvSet("hubId", newId());
@@ -389,11 +396,6 @@ export class Store {
     this.pending.clear();
     if (!pending.length) return;
     const saveSnap = this.db.prepare("INSERT OR REPLACE INTO docstate (id, state, seq) VALUES (?, ?, ?)");
-    const saveEvent = this.db.prepare(
-      "INSERT INTO events (ts, doc, title, type, kind, origin, changes, step, area) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
-    );
-    const lastEvent = this.db.prepare("SELECT id, ts, kind, origin, changes, step FROM events WHERE doc = ? ORDER BY id DESC LIMIT 1");
-    const updateEvent = this.db.prepare("UPDATE events SET ts = ?, title = ?, changes = ? WHERE id = ?");
     const events: ActivityEvent[] = [];
     const changed: Item[] = [];
     const prevs = new Map<string, Item | undefined>();
@@ -421,27 +423,11 @@ export class Store {
         const next = this.records.get(id)!;
         indexRecord(this.searchIndex, next);
         changed.push(next);
-        if (p.quiet || next.kind === "settings") continue;
-        const { kind, changes } = diffRecords(prev, next);
-        if (kind === "updated" && changes.length === 0) continue;
-        // Blank drafts (created, then left empty) are not worth an activity entry.
-        const blank = !next.title.trim() && !next.body.trim();
-        if (blank && (kind === "created" || kind === "deleted")) continue;
         const origin = [...p.origins].join(", ");
         const ts = Date.now();
-        // Typing flushes constantly: fold consecutive edits by one author into one entry, but only
-        // within one step, so every entry can still be undone on its own.
         const step = p.step;
-        const last = lastEvent.get(id) as { id: number; ts: number; kind: string; origin: string; changes: string; step: string | null } | null;
-        const continuesLast = !!last && last.kind === "updated" && last.origin === origin && (last.step ?? undefined) === step && ts - last.ts < EVENT_MERGE_WINDOW_MS;
-        if (kind === "updated" && continuesLast) {
-          const merged = mergeChanges(JSON.parse(last.changes || "[]"), changes);
-          updateEvent.run(ts, next.title, JSON.stringify(merged), last.id);
-          events.push({ id: last.id, ts, doc: id, title: next.title, type: typeTag(next), kind, origin, changes: merged, step });
-          continue;
-        }
-        const row = saveEvent.get(ts, id, next.title, typeTag(next), kind, origin, JSON.stringify(changes), step ?? null, next.area) as { id: number };
-        events.push({ id: row.id, ts, doc: id, title: next.title, type: typeTag(next), kind, origin, changes, step });
+        const event = p.quiet || next.kind === "settings" ? undefined : this.saveEvent(id, prev, next, origin, step, ts, events);
+        if (prev && prev.body !== next.body && hasBody(next)) this.saveVersion(id, prev, next, origin, step, ts, event);
       }
     })();
     this._ix = null;
@@ -449,6 +435,98 @@ export class Store {
     for (const r of changed) for (const l of this.listeners) l.record?.(r);
     for (const e of events) for (const l of this.listeners) l.event?.(e);
   }
+
+  /**
+   * The activity entry for a change of one document, unless it is not worth one. Returns the
+   * entry's id and whether the change was folded into the entry before it.
+   */
+  private saveEvent(id: string, prev: Item | undefined, next: Item, origin: string, step: string | undefined, ts: number, out: ActivityEvent[]): { id: number; merged: boolean } | undefined {
+    const { kind, changes } = diffRecords(prev, next);
+    if (kind === "updated" && changes.length === 0) return undefined;
+    // Blank drafts (created, then left empty) are not worth an activity entry.
+    const blank = !next.title.trim() && !next.body.trim();
+    if (blank && (kind === "created" || kind === "deleted")) return undefined;
+    // Typing flushes constantly: fold consecutive edits by one author into one entry, but only
+    // within one step, so every entry can still be undone on its own.
+    const last = this.db.query("SELECT id, ts, kind, origin, changes, step FROM events WHERE doc = ? ORDER BY id DESC LIMIT 1").get(id) as
+      | { id: number; ts: number; kind: string; origin: string; changes: string; step: string | null }
+      | null;
+    const diff = changes.some((c) => c.field === "body") && hasBody(next);
+    if (kind === "updated" && last && last.kind === "updated" && last.origin === origin && (last.step ?? undefined) === step && ts - last.ts < EVENT_MERGE_WINDOW_MS) {
+      const merged = mergeChanges(JSON.parse(last.changes || "[]"), changes);
+      this.db.query("UPDATE events SET ts = ?, title = ?, changes = ? WHERE id = ?").run(ts, next.title, JSON.stringify(merged), last.id);
+      out.push({ id: last.id, ts, doc: id, title: next.title, type: typeTag(next), kind, origin, changes: markDiff(merged, diff || this.hasVersions(last.id)), step });
+      return { id: last.id, merged: true };
+    }
+    const row = this.db
+      .query("INSERT INTO events (ts, doc, title, type, kind, origin, changes, step, area) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id")
+      .get(ts, id, next.title, typeTag(next), kind, origin, JSON.stringify(changes), step ?? null, next.area) as { id: number };
+    out.push({ id: row.id, ts, doc: id, title: next.title, type: typeTag(next), kind, origin, changes: markDiff(changes, diff), step });
+    return { id: row.id, merged: false };
+  }
+
+  // ---------- versions of the body ----------
+  //
+  // Every change of an item's text keeps the whole new text (deflated) in `versions`, so any
+  // earlier version can be shown, compared and restored. Versions fold like activity entries:
+  // the same author in the same step within the merge window updates the newest version instead
+  // of adding one – typing a paragraph makes one version, not one per keystroke. The first time
+  // an item from before versions existed changes, its previous text is kept first ("base"), so
+  // its history starts with what it was. Versions are never dropped: a text edited in a
+  // hundred sessions costs a hundred compressed copies – a few MB for long, busy pages, which
+  // is small next to the update log that keeps every keystroke anyway. Backups copy the whole
+  // database (VACUUM INTO), versions included.
+
+  /** Keep the new text of a document whose body changed (see above). */
+  private saveVersion(id: string, prev: Item, next: Item, origin: string, step: string | undefined, ts: number, event?: { id: number; merged: boolean }) {
+    const last = this.db.query("SELECT id, ts, origin, step, event FROM versions WHERE doc = ? ORDER BY id DESC LIMIT 1").get(id) as
+      | { id: number; ts: number; origin: string; step: string | null; event: number | null }
+      | null;
+    const insert = this.db.query("INSERT INTO versions (doc, ts, origin, step, event, base, len, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+    if (!last && prev.body) {
+      // made after versions began: its text is the one it was created with; else an earlier state of unknown origin
+      const since = Number(this.kvGet("versionsSince") ?? 0);
+      const known = prev.created >= since;
+      insert.run(id, known ? prev.created : prev.updated, known ? (prev.createdBy ?? "") : "", null, null, known ? 0 : 1, prev.body.length, pack(prev.body));
+    }
+    const fold = last && (event ? event.merged && last.event === event.id : last.event === null && last.origin === origin && (last.step ?? undefined) === step && ts - last.ts < EVENT_MERGE_WINDOW_MS);
+    if (fold) this.db.query("UPDATE versions SET ts = ?, len = ?, data = ? WHERE id = ?").run(ts, next.body.length, pack(next.body), last.id);
+    else insert.run(id, ts, origin, step ?? null, event?.id ?? null, 0, next.body.length, pack(next.body));
+  }
+
+  private hasVersions(event: number): boolean {
+    return !!this.db.query("SELECT 1 FROM versions WHERE event = ? LIMIT 1").get(event);
+  }
+
+  /** The versions of a document's text, oldest first, numbered from 1 (the number stays: versions are never dropped). */
+  versions(doc: string): Version[] {
+    const rows = this.db.query("SELECT id, ts, origin, step, event, base, len FROM versions WHERE doc = ? ORDER BY id").all(doc) as (Omit<Version, "n" | "base" | "step" | "event"> & { base: number; step: string | null; event: number | null })[];
+    return rows.map((r, i) => ({ ...r, n: i + 1, base: !!r.base, step: r.step ?? undefined, event: r.event ?? undefined }));
+  }
+
+  /** The text of a version by its id (undefined if unknown, or of another document when `doc` is given). */
+  versionText(id: number, doc?: string): string | undefined {
+    const row = this.db.query("SELECT doc, data FROM versions WHERE id = ?").get(id) as { doc: string; data: Uint8Array } | null;
+    if (!row || (doc !== undefined && row.doc !== doc)) return undefined;
+    return unpack(row.data);
+  }
+
+  /**
+   * What an activity entry did to the text: the version before it (the empty text when there is
+   * none) and the last version it made. Undefined when the entry kept no version (older entries).
+   */
+  eventText(event: number): { doc: string; before: string; after: string; from?: number; to: number } | undefined {
+    const mine = this.db.query("SELECT id, doc FROM versions WHERE event = ? ORDER BY id").all(event) as { id: number; doc: string }[];
+    if (!mine.length) return undefined;
+    const { doc } = mine[0]!;
+    const all = this.versions(doc);
+    const first = all.findIndex((v) => v.id === mine[0]!.id);
+    const last = all.find((v) => v.id === mine.at(-1)!.id)!;
+    const before = first > 0 ? all[first - 1] : undefined;
+    return { doc, before: before ? this.versionText(before.id)! : "", after: this.versionText(last.id)!, from: before?.n, to: last.n };
+  }
+
+  // ---------- reading ----------
 
   /**
    * False if the cursor lies beyond the log or the row there has another uid. Then the server came
@@ -493,7 +571,11 @@ export class Store {
     return this.setupLang() ?? "de";
   }
 
-  events(opts: { since?: number; doc?: string; limit?: number; before?: number } = {}): ActivityEvent[] {
+  /**
+   * Activity entries. Newest first by id; with `after` (a feed position: time of an entry's last
+   * change, then its id) the ones changed after it, oldest change first. `docs`: only these.
+   */
+  events(opts: { since?: number; doc?: string; docs?: string[]; limit?: number; before?: number; after?: { ts: number; id: number } } = {}): ActivityEvent[] {
     const where: string[] = [];
     const args: (string | number)[] = [];
     const filter = (cond: string, value: string | number) => {
@@ -503,11 +585,22 @@ export class Store {
     if (opts.since) filter("ts >= ?", opts.since);
     if (opts.before) filter("id < ?", opts.before);
     if (opts.doc) filter("doc = ?", opts.doc);
-    const sql = `SELECT * FROM events ${where.length ? "WHERE " + where.join(" AND ") : ""} ORDER BY id DESC LIMIT ?`;
+    if (opts.after) {
+      where.push("(ts > ? OR (ts = ? AND id > ?))");
+      args.push(opts.after.ts, opts.after.ts, opts.after.id);
+    }
+    if (opts.docs) filter("doc IN (SELECT value FROM json_each(?))", JSON.stringify(opts.docs));
+    const order = opts.after ? "ts, id" : "id DESC";
+    const sql = `SELECT * FROM events ${where.length ? "WHERE " + where.join(" AND ") : ""} ORDER BY ${order} LIMIT ?`;
     args.push(opts.limit ?? 50);
     const found = this.db.query(sql).all(...args) as (Omit<ActivityEvent, "step" | "changes"> & { step: string | null; changes: string | null })[];
     const rows: ActivityEvent[] = found.map((r) => ({ ...r, step: r.step ?? undefined, changes: JSON.parse(r.changes || "[]") }));
     for (const e of rows) if (e.step) Object.assign(e, this.stepState(e.step));
+    const withBody = rows.filter((e) => e.changes.some((c) => c.field === "body")).map((e) => e.id);
+    if (withBody.length) {
+      const known = new Set((this.db.query("SELECT DISTINCT event FROM versions WHERE event IN (SELECT value FROM json_each(?))").all(JSON.stringify(withBody)) as { event: number }[]).map((r) => r.event));
+      for (const e of rows) if (known.has(e.id)) e.changes = markDiff(e.changes, true);
+    }
     return rows;
   }
 
@@ -538,6 +631,21 @@ export class Store {
   kvSet(key: string, value: string) {
     this.db.query("INSERT OR REPLACE INTO kv (key, value) VALUES (?, ?)").run(key, value);
   }
+}
+
+// ---------- helpers ----------
+
+/** Items whose text has versions: informations and files (not settings, not operations). */
+const hasBody = (i: Item) => i.kind === "info" || i.kind === "datei";
+
+const utf8 = new TextEncoder();
+const fromUtf8 = new TextDecoder();
+const pack = (text: string) => Bun.deflateSync(utf8.encode(text));
+const unpack = (data: Uint8Array) => fromUtf8.decode(Bun.inflateSync(data as Uint8Array<ArrayBuffer>));
+
+/** The body change of an entry, marked when its versions can show what changed (`diff`). */
+function markDiff(changes: FieldChange[], diff: boolean): FieldChange[] {
+  return diff ? changes.map((c) => (c.field === "body" ? { ...c, diff: true } : c)) : changes;
 }
 
 function equalBytes(a: Uint8Array, b: Uint8Array) {
