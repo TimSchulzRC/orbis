@@ -1,9 +1,12 @@
-// Content-addressed file store. Devices that add images offline make previews themselves; the
-// server only fills gaps.
+// Content-addressed file store (data/blobs/<sha256>). Images get a preview and a display version,
+// audio and video a duration, every other file its text (extract.ts). A file whose `extracted` mark
+// is missing or stale is read again when the workspace opens. Devices that add images offline make
+// previews themselves; the server only fills gaps.
 import { existsSync, mkdirSync, renameSync, statSync, readdirSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { type FileMeta, type Item, setFileMeta } from "@obtion/core/model";
 import type { Store } from "./store";
+import { extractMark, extractText } from "./extract";
 
 const HASH = /^[0-9a-f]{64}$/;
 const FFMPEG = Bun.which("ffmpeg");
@@ -11,8 +14,6 @@ const FFPROBE = Bun.which("ffprobe");
 const MAX_PARALLEL = 2;
 const DISPLAY_WIDTH = 1600;
 const THUMB_WIDTH = 320;
-const PDF_TEXT_MAX_PAGES = 60;
-const PDF_TEXT_MAX_CHARS = 40_000;
 
 export function sha256(data: Uint8Array | ArrayBuffer | string): string {
   return new Bun.CryptoHasher("sha256").update(data).digest("hex");
@@ -20,6 +21,7 @@ export function sha256(data: Uint8Array | ArrayBuffer | string): string {
 
 export class Blobs {
   private busy = new Set<string>();
+  private again = new Set<string>();
   private queue: string[] = [];
   private running = 0;
   onStored?: (hash: string) => void;
@@ -58,6 +60,42 @@ export class Blobs {
     this.onStored?.(hash);
     for (const r of this.store.live()) if (r.file?.hash === hash) this.schedule(r.id);
     return true;
+  }
+
+  /**
+   * Store a streamed content (HTTP upload): hashed while it is written, at most `max` bytes.
+   * "too large" when the stream is longer (nothing stays behind).
+   */
+  async putStream(body: ReadableStream<Uint8Array> | null, max: number): Promise<{ hash: string; size: number } | "too large"> {
+    const tmp = join(this.dir, `tmp-${crypto.randomUUID()}.part`);
+    const hasher = new Bun.CryptoHasher("sha256");
+    await Bun.write(tmp, "");
+    const sink = Bun.file(tmp).writer({ highWaterMark: 1024 * 1024 });
+    let size = 0;
+    try {
+      if (body)
+        for await (const chunk of body) {
+          size += chunk.length;
+          if (size > max) break;
+          hasher.update(chunk);
+          sink.write(chunk);
+        }
+      await sink.end();
+    } catch (e) {
+      await Promise.resolve(sink.end()).catch(() => {});
+      if (existsSync(tmp)) unlinkSync(tmp);
+      throw e;
+    }
+    if (size > max) {
+      unlinkSync(tmp);
+      return "too large";
+    }
+    const hash = hasher.digest("hex");
+    if (this.has(hash)) unlinkSync(tmp);
+    else renameSync(tmp, this.path(hash));
+    this.onStored?.(hash);
+    for (const r of this.store.live()) if (r.file?.hash === hash) this.schedule(r.id);
+    return { hash, size };
   }
 
   async putFile(srcPath: string): Promise<string> {
@@ -100,16 +138,16 @@ export class Blobs {
     if (!f?.hash || !this.has(f.hash)) return false;
     if (f.filetype === "bild") return (!f.display || !f.thumb || !f.width) && !/svg/.test(f.mime) && !!FFMPEG;
     if (f.filetype === "audio" || f.filetype === "video") return f.duration === undefined && !!FFPROBE;
-    if (f.filetype === "pdf") return f.pages === undefined;
-    return false;
+    return f.extracted !== extractMark(f.hash) || (f.filetype === "pdf" && f.pages === undefined);
   }
 
   stop() {
     this.queue.length = 0;
+    this.again.clear();
   }
 
   schedule(id: string) {
-    if (this.busy.has(id)) return;
+    if (this.busy.has(id)) return void this.again.add(id); // changed while being read: once more after that
     this.busy.add(id);
     this.queue.push(id);
     this.pump();
@@ -124,6 +162,7 @@ export class Blobs {
         .finally(() => {
           this.running--;
           this.busy.delete(id);
+          if (this.again.delete(id)) this.schedule(id);
           this.pump();
         });
     }
@@ -147,12 +186,15 @@ export class Blobs {
         if (media.width) Object.assign(patch, { width: media.width, height: media.height });
         if (!f.thumb) patch.thumb = await this.derive(src, THUMB_WIDTH, true);
       }
-    } else if (f.filetype === "pdf") {
-      const info = await pdfInfo(src);
-      patch.pages = info.pages;
-      if (info.text) patch.text = info.text;
+    } else {
+      // a content that can't be read is marked as read too, so it isn't tried at every start
+      const got = await extractText(src, f.name).catch((e) => (console.warn("[blobs] no text from", f.name, e?.message ?? e), undefined));
+      if (got?.pages) patch.pages = got.pages;
+      Object.assign(patch, { text: got?.text ?? null, extracted: extractMark(f.hash) });
     }
     const clean = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined));
+    // replaced while it was read: what was found belongs to the old content (the new one is scheduled)
+    if (this.store.records.get(id)?.file?.hash !== f.hash) return;
     if (Object.keys(clean).length) this.store.change(id, "system:files", (doc) => setFileMeta(doc, clean), { quiet: true });
   }
 
@@ -187,21 +229,4 @@ async function probe(path: string): Promise<{ width?: number; height?: number; d
   } catch {
     return {};
   }
-}
-
-let pdfjs: typeof import("pdfjs-dist/legacy/build/pdf.mjs") | undefined;
-async function pdfInfo(path: string): Promise<{ pages: number; text?: string }> {
-  pdfjs ??= await import("pdfjs-dist/legacy/build/pdf.mjs");
-  const data = new Uint8Array(await Bun.file(path).arrayBuffer());
-  const task = pdfjs.getDocument({ data, disableFontFace: true, verbosity: 0 });
-  const doc = await task.promise;
-  const pages = doc.numPages;
-  let text = "";
-  for (let i = 1; i <= Math.min(pages, PDF_TEXT_MAX_PAGES) && text.length < PDF_TEXT_MAX_CHARS; i++) {
-    const page = await doc.getPage(i);
-    const content = await page.getTextContent();
-    text += content.items.map((x) => ("str" in x ? x.str : "")).join(" ").replace(/\s+/g, " ") + "\n";
-  }
-  await task.destroy();
-  return { pages, text: text.trim().slice(0, PDF_TEXT_MAX_CHARS) || undefined };
 }

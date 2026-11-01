@@ -8,7 +8,8 @@ import { Accounts, AccountError, FRESH_SECONDS, SIGNUP_COOKIE, randomToken } fro
 import { loginConfig, loginMethods } from "./login";
 import type { AccountInfo, InviteCode, InviteInfo, InviteLink, McpConnect, Ok, Role, ServerInfo, SignedIn, SignupPolicy, SignupRequest } from "@obtion/core/api";
 import { type Conn, Workspace, parseClientMsg } from "./workspace";
-import { firstName, personOrigin } from "@obtion/core/origin";
+import { agentOrigin, firstName, personOrigin } from "@obtion/core/origin";
+import { agentName } from "./mcp";
 import { type Lang, LANGS, translate } from "@obtion/core/i18n";
 import { allowedHosts } from "./trust";
 import { DATA, MAX_WS_MESSAGE, PORT } from "./config";
@@ -304,10 +305,21 @@ const server = Bun.serve<Conn>({
       // a file opened by URL (img, download link) carries the token as ?t=
       const blobRead = req.method === "GET" && rest.startsWith("/api/blobs/");
       const token = tokenOf(req) ?? (blobRead ? (url.searchParams.get("t") ?? undefined) : undefined);
+      const base = PUBLIC_URL || `${url.protocol}//${req.headers.get("host")}`;
+      const filesUrl = `${base}/w/${id}/api/files`;
       if (rest === "/mcp") {
         const user = token && accounts.mcpUser(id, token);
         if (!user || !workspace(id)) return fail(401, "unauthorized");
-        return workspace(id)!.mcp(req, { id: user.id, name: firstName(user) });
+        return workspace(id)!.mcp(req, { id: user.id, name: firstName(user) }, filesUrl);
+      }
+      // the file API (only it) also takes the workspace's MCP token: agents and scripts move files with it
+      const files = rest === "/api/files" || rest.startsWith("/api/files/");
+      const agent = files && token ? accounts.mcpUser(id, token) : undefined;
+      if (agent) {
+        const w = workspace(id);
+        if (!w) return fail(404, "no such workspace");
+        const person = { id: agent.id, name: firstName(agent) };
+        return w.handle(req, rest, { user: person, origin: agentOrigin(agentName(req), person), filesUrl });
       }
       const user = await accounts.userOf(token);
       if (!user) return fail(401, "unauthorized");
@@ -319,7 +331,7 @@ const server = Bun.serve<Conn>({
         const ok = srv.upgrade(req, { data: { workspace: id, areas: new Set<string>(), origin: personOrigin(person), user: person, userId: user.id, session: token }, headers: { "sec-websocket-protocol": "obtion" } });
         return ok ? undefined : fail(400, "expected WebSocket");
       }
-      return w.handle(req, rest, { user: person });
+      return w.handle(req, rest, { user: person, filesUrl });
     }
 
     if (!WEB_APP) return new Response("This Obtion server serves sync, API and MCP only (OBTION_WEB_APP=off).", { status: 404 });

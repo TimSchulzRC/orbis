@@ -3,7 +3,7 @@ import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
 import { useEffect, useState } from "react";
 import { ArrowRightLeft, Download, Trash2, Replace } from "lucide-react";
-import { type Item, setFileMeta } from "@obtion/core/model";
+import { type FileMeta, type Item, setFileMeta } from "@obtion/core/model";
 import { fmtBytes, fmtDate, fmtDuration } from "@obtion/core/i18n";
 import { useIndex, leavePage, useDocumentTitle, useFiles, useRepo } from "../hooks";
 import { useT, titleOf } from "../i18n";
@@ -62,7 +62,7 @@ export function FilePage({ item }: { item: Item }) {
   const replace = async (upload: File) => {
     const meta = await files.prepare(upload, file.name);
     repo.change(item.id, (doc) =>
-      setFileMeta(doc, { ...meta, name: file.name, display: meta.display ?? null, thumb: meta.thumb ?? null, pages: null, text: null, duration: null, history: [...(file.history ?? []), { hash: file.hash, at: Date.now() }] }),
+      setFileMeta(doc, { ...meta, name: file.name, display: meta.display ?? null, thumb: meta.thumb ?? null, pages: null, text: null, extracted: null, duration: null, history: [...(file.history ?? []), { hash: file.hash, at: Date.now() }] }),
     );
   };
   const tools = (
@@ -126,8 +126,14 @@ export function FilePage({ item }: { item: Item }) {
         {file.filetype === "pdf" && (!local || localSrc) && <iframe title={item.title} src={localSrc ?? files.serverUrl(file.hash)} className="h-[75vh] w-full bg-white" />}
         {file.filetype === "audio" && media && <audio controls src={media} className="w-full p-4" />}
         {file.filetype === "video" && media && <video controls src={media} className="w-full" />}
-        {!isImg && file.filetype !== "pdf" && file.filetype !== "audio" && file.filetype !== "video" && <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">{file.name}</div>}
+        {!isImg && file.filetype !== "pdf" && file.filetype !== "audio" && file.filetype !== "video" && <FileText file={file} missing={missing} />}
       </div>
+      {file.filetype === "pdf" && file.text && (
+        <details className="mt-3 rounded-xl border border-line bg-surface-2">
+          <summary className="cursor-pointer px-4 py-2.5 text-[13px] text-muted-foreground">{t("file.extracted")}</summary>
+          <TextBlock text={file.text} mono={false} />
+        </details>
+      )}
       <Textarea
       variant="inline"
         defaultValue={item.body}
@@ -152,5 +158,43 @@ export function FilePage({ item }: { item: Item }) {
         />
       )}
     </div>
+  );
+}
+
+/** Formats whose text the server takes out (Office, mails); the rest is shown as it is. */
+const EXTRACTED = /\.(docx?|docm|dotx|xlsx?|xlsm|pptx?|potx|od[tsp]|msg|pdf)$/i;
+/** Prose in a proportional font; code, lists and tables (columns by tabs) in monospace. */
+const PROSE = /\.(docx?|docm|dotx|pptx?|potx|odt|odp|msg|pdf)$/i;
+
+/**
+ * The text of a file that is neither image, PDF nor media: a text or code file as it is, an
+ * Office file's text, a ZIP's list of entries – as the server read it (the file's `text`), never
+ * rendered as HTML.
+ */
+function FileText({ file: f, missing }: { file: FileMeta; missing: boolean }) {
+  const { t } = useT();
+  if (!f.text) {
+    const reading = !missing && f.extracted === undefined;
+    return <div className="flex h-40 flex-col items-center justify-center gap-1 px-4 text-center text-sm text-muted-foreground"><span className="break-all">{f.name}</span><span className="text-[13px] text-faint">{t(reading ? "file.reading" : "file.noText")}</span></div>;
+  }
+  const extracted = EXTRACTED.test(f.name);
+  return (
+    <div>
+      <div className="border-b border-line px-4 py-2 text-[13px] text-muted-foreground">{t(extracted ? "file.extracted" : "file.content")}</div>
+      <TextBlock text={f.text} mono={!PROSE.test(f.name)} />
+    </div>
+  );
+}
+
+function TextBlock({ text, mono }: { text: string; mono: boolean }) {
+  const { t } = useT();
+  const cut = text.endsWith("\n…");
+  return (
+    <>
+      <pre data-testid="file-text" className={`max-h-[70vh] overflow-auto px-4 py-3 text-[13px] leading-[1.55] whitespace-pre-wrap break-words ${mono ? "font-mono" : "font-sans"}`} tabIndex={0}>
+        {cut ? text.slice(0, -2) : text}
+      </pre>
+      {cut && <p className="border-t border-line px-4 py-2 text-[13px] text-muted-foreground">{t("file.truncated")}</p>}
+    </>
   );
 }
