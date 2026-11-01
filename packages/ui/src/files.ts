@@ -304,6 +304,12 @@ export class DeviceFiles {
     return this.local.has(hash);
   }
 
+  /** Whether the content is on this device, once the storage here is open. */
+  async isLocal(hash: string) {
+    await this.ready;
+    return this.local.has(hash);
+  }
+
   private async fetchVerified(hash: string): Promise<Blob | undefined> {
     try {
       const res = await fetch(`${this.link.base}/api/blobs/${hash}`, { headers: { "x-obtion-probe": "1", ...this.auth } });
