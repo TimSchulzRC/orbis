@@ -8,6 +8,7 @@ import { ScopeContext } from "../../packages/ui/src/scope";
 import { SpaceTree } from "../../packages/ui/src/ui/Sidebar";
 import type { Space } from "../../packages/ui/src/accounts";
 import { noFiles, workspace } from "./workspace";
+import { closeSettings, settingsOpen } from "../../packages/ui/src/ui/settings-open";
 
 afterEach(() => (cleanup(), (location.hash = "")));
 
@@ -62,4 +63,23 @@ test("the fold and … buttons do not open the page", async () => {
   }
   // the fold button did its own job: the row is folded
   expect(row.querySelector('button[aria-label="Aufklappen"]')).not.toBeNull();
+});
+
+test("the workspace's … menu opens its settings in the settings dialog", async () => {
+  await setup();
+  await page.getByRole("button", { name: "Aktionen für Test" }).click({ force: true });
+  await page.getByRole("button", { name: "Workspace-Einstellungen", exact: true }).click();
+  expect(settingsOpen()).toMatchObject({ space: "w1" });
+  closeSettings();
+});
+
+test.each([
+  ["Typen", "types"],
+  ["Graph", "graph"],
+])("the workspace's … menu leads to: %s", async (name, path) => {
+  await setup();
+  await page.getByRole("button", { name: "Aktionen für Test" }).click({ force: true });
+  // the menu lies in a portal at the end: the last button of that name ("Typen" also folds the types)
+  await page.getByRole("button", { name, exact: true }).last().click();
+  expect(location.hash).toBe(`#/w/w1/${path}`);
 });

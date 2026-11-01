@@ -69,7 +69,8 @@ export function AppToaster() {
       visibleToasts={3}
       offset={{ bottom: `calc(${bottom}px + env(safe-area-inset-bottom))` }}
       mobileOffset={{ bottom: `calc(${bottom}px + env(safe-area-inset-bottom))`, left: 16, right: 16 }}
-      toastOptions={{ classNames: { error: "[&_[data-icon]]:text-destructive" } }}
+      // an open dialog makes the page behind it unclickable (pointer-events on the body): not the notices
+      toastOptions={{ classNames: { toast: "pointer-events-auto", error: "[&_[data-icon]]:text-destructive" } }}
     />
   );
 }

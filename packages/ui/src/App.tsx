@@ -20,7 +20,6 @@ import { CaptureSheet } from "./ui/Capture";
 import { ItemPage } from "./views/ItemPage";
 import { SearchView } from "./views/Search";
 import { FilesPage } from "./views/Lists";
-import { Review } from "./views/Review";
 import { Today } from "./views/Today";
 import { Tray } from "./ui/Tray";
 import { entryKey, setShelfPinned, syncShelf, useInboxItems, useShelf } from "./ui/inbox";
@@ -28,7 +27,7 @@ import { TypesView } from "./views/Types";
 import { GraphView } from "./views/Graph";
 import { Activity } from "./views/Activity";
 import { TrashView } from "./views/Trash";
-import { SettingsHost, SettingsRedirect, SpaceSettingsPage } from "./views/Settings";
+import { SettingsHost, SettingsRedirect, SpaceSettingsRedirect } from "./views/Settings";
 import { ICON } from "./ui/icons";
 import { NewSpaceDialog, SpaceScope, SpaceSelector, useReplicas } from "./ui/Spaces";
 import { globalPage } from "./scope";
@@ -137,10 +136,9 @@ function Main() {
     switch (route.parts[0]) {
       case undefined:
       case "inbox":
-        // "#/inbox" is Today with the tray's panel open
-        return <Today />;
       case "review":
-        return <Review at={route.query.get("at") ?? undefined} />;
+        // "#/inbox": Heute, with the tray's panel open (above); "#/review": with it open to sort
+        return <Today />;
       case "search":
         return <SearchView />;
       case "files":
@@ -154,7 +152,7 @@ function Main() {
       case "trash":
         return <TrashView />;
       case "settings":
-        return global ? <SettingsRedirect /> : <SpaceSettingsPage />;
+        return global || !route.space ? <SettingsRedirect /> : <SpaceSettingsRedirect space={route.space} />;
       // old setup page; workspaces are now set up when created
       case "setup":
         return <Redirect to="/" />;
@@ -165,11 +163,10 @@ function Main() {
     }
   })();
   const isGraph = route.parts[0] === "graph";
-  // no tray on the review (the tray leads there); on desktop Today it is pinned below the page if it fits
-  const tray = !!settings && route.parts[0] !== "review" && !(route.parts[0] === "inbox" && route.parts[1]);
+  const tray = !!settings && !(route.parts[0] === "inbox" && route.parts[1]);
   const column = useRef<HTMLDivElement>(null);
   const main = useRef<HTMLElement>(null);
-  const pinned = useRoom(tray && wide && (route.parts[0] === undefined || route.parts[0] === "inbox"), column, main, route.path);
+  const pinned = useRoom(tray && wide && (route.parts[0] === undefined || route.parts[0] === "inbox" || route.parts[0] === "review"), column, main, route.path);
   useEffect(() => void setShelfPinned(pinned), [pinned]);
 
   return (
@@ -202,11 +199,10 @@ function Main() {
         {/* pinned: main is only as tall as Today, the panel takes the rest */}
         <main ref={main} tabIndex={-1} className={cn("@container min-h-0 outline-none", pinned ? "flex-initial" : "flex-1", isGraph ? "overflow-hidden" : "overflow-y-auto")}>
           {/* keyed by workspace so a switch remounts the page on the other replica */}
-          <PageBoundary key={`${global ? "" : active?.id}${route.path === "/inbox" ? "/" : route.path}`}>{page}</PageBoundary>
+          <PageBoundary key={`${global ? "" : active?.id}${route.path === "/inbox" || route.path === "/review" ? "/" : route.path}`}>{page}</PageBoundary>
         </main>
         {tray && <Tray desktop={wide} pinned={pinned} onCapture={() => setCaptureOpen(true)} />}
-        {/* the review on a phone has its own way back */}
-        {!wide && route.parts[0] !== "review" && <MobileNav />}
+        {!wide && <MobileNav />}
       </div>
 
       {palette && <CommandPalette onClose={() => setPalette(false)} />}
@@ -332,7 +328,7 @@ function MobileNav() {
   const shelf = useShelf().open;
   const entries: { key: string; label: string; icon: React.ReactNode; href: string; active?: boolean; dot?: boolean }[] = [
     { key: "today", label: t("nav.today"), icon: <Sun size={20} />, href: "#/", active: route.path === "/" && !shelf },
-    { key: "inbox", label: t("nav.inbox"), icon: <Inbox size={20} />, href: "#/inbox", active: shelf || route.path === "/review", dot: inbox > 0 },
+    { key: "inbox", label: t("nav.inbox"), icon: <Inbox size={20} />, href: "#/inbox", active: shelf, dot: inbox > 0 },
     ...(ix
       ? ix.typesInOrder().slice(0, 2).map((type) => {
           const Icon = ICON[type.schema.icon] ?? ICON.circle!;

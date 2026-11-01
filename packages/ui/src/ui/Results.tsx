@@ -9,6 +9,7 @@ import { StatusPill, Tag } from "./item-look";
 import { ProgressCount } from "./progress";
 import { ItemRow, pathLabel, treeOrder, Group } from "./Row";
 import { Triage } from "./Triage";
+import { openReview } from "./inbox";
 import { CalendarView, TimelineView } from "./TimeViews";
 import { ProjectTable } from "./ProjectTable";
 import { BoardView } from "./Board";
@@ -38,9 +39,9 @@ function InboxNudge({ total }: { total: number }) {
   return (
     <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 px-2 pt-1 text-sm">
       <span className="tabular-nums text-muted-foreground">{t("inbox.waiting", { count: total })}</span>
-      <a href="#/review" className="font-medium text-fg underline-offset-2 hover:underline">
+      <Button variant="plain" onClick={() => openReview()} className="font-medium text-fg underline-offset-2 hover:underline">
         {t("inbox.sortNow")}
-      </a>
+      </Button>
     </div>
   );
 }

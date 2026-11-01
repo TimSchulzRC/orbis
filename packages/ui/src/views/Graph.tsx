@@ -227,7 +227,7 @@ export function GraphView() {
             </Button>
           ))}
           <Button variant="plain" onClick={() => setHidden(toggled(hidden, ""))} className={chip(!hidden.has(""))} aria-pressed={!hidden.has("")}>
-            <NOTE_ICON size={13} /> {t("graph.untyped")}
+            <NOTE_ICON size={13} /> {t("kind.note")}
           </Button>
           <Button variant="plain" onClick={() => setHidden(toggled(hidden, "#file"))} className={chip(!hidden.has("#file"))} aria-pressed={!hidden.has("#file")}>
             <FILES_ICON size={13} /> {t("graph.files")}

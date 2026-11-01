@@ -23,11 +23,10 @@ import { TitleField } from "./TitleField";
 import { QueryEditor } from "./QueryEditor";
 import { SpaceFilter, SpaceScope } from "./Spaces";
 import { notify } from "./feedback";
-import { type InboxEntry, closeShelf, dismissShelf, openShelf, useInboxItems, useLaterItems, useShelf } from "./inbox";
+import { type InboxEntry, closeShelf, dismissShelf, openReview, openShelf, useInboxItems, useLaterItems, useShelf } from "./inbox";
 import { sameValue } from "@obtion/core/equal";
 import { filePreview } from "./text";
 
-const reviewHref = (key: string) => `#/review?at=${encodeURIComponent(key)}`;
 /** An open dialog or menu (a tooltip's popper does not count): Escape is theirs. */
 const OVERLAY_OPEN = "[role=dialog][data-state=open], [data-radix-popper-content-wrapper]:not(:has([role=tooltip]))";
 /** A waiting entry ("Morgen wieder") comes back into the inbox now. */
@@ -35,7 +34,9 @@ const backNow = (repo: Repo, id: string) => repo.change(id, (d) => setMeta(d, { 
 
 export function ShelfPanel({ desktop, pinned }: { desktop: boolean; pinned?: boolean }) {
   const { t } = useT();
-  const { at } = useShelf();
+  // sorting (lying over the panel pinned on Heute) its `at` is the review's
+  const { at: openAt, sort } = useShelf();
+  const at = sort ? undefined : openAt;
   const entries = useInboxItems();
   const later = useLaterItems();
   const inInbox = at ? entries.find((e) => e.key === at) : undefined;
@@ -291,9 +292,9 @@ function EntryBody({ entry, waiting }: { entry: InboxEntry; waiting: boolean }) 
             {t("tray.backNow")}
           </Button>
         ) : (
-          <a href={reviewHref(entry.key)} className="shrink-0 text-muted-foreground underline decoration-dotted underline-offset-4 hover:text-fg max-lg:basis-full max-lg:pl-5">
+          <Button variant="plain" onClick={() => openReview(entry.key)} className="shrink-0 text-muted-foreground underline decoration-dotted underline-offset-4 hover:text-fg max-lg:basis-full max-lg:pl-5">
             {t("tray.sortNow")}
-          </a>
+          </Button>
         )}
       </div>
       <p className="mt-4 flex flex-wrap items-center gap-x-2 text-[13px] text-muted-foreground">

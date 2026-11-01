@@ -18,6 +18,7 @@ import { shortPath } from "./Row";
 import { createAndOpen } from "../actions";
 import { Button } from "./primitives";
 import { openSettings } from "./settings-open";
+import { openReview } from "./inbox";
 
 /** Search hits shown for a query; reaching it also offers the full search page. */
 const MAX_HITS = 10;
@@ -63,7 +64,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   const pinnedTypes = ix.captureTypes();
   const captureTypes = [...pinnedTypes, ...ix.typesByName().filter((x) => !pinnedTypes.includes(x.id)).map((x) => x.id)];
   const cmds: [string, () => void][] = [
-    [t("palette.cmd.sortInbox"), () => navigate("/review")],
+    [t("palette.cmd.sortInbox"), () => openReview()],
     [t("nav.settings"), openSettings],
     [t("palette.cmd.newType"), () => navigate("/types?new=1", { space: captureIn })],
     [t("palette.cmd.language"), () => setLang(getLang() === "de" ? "en" : "de")],

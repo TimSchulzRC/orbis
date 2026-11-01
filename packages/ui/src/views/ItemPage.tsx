@@ -294,8 +294,8 @@ function TypeSwitch({ item }: { item: Item }) {
       {(close) => (
         <>
           <p className="px-2.5 pb-1 pt-1.5 text-xs text-muted-foreground">{t("item.giveType")}</p>
-          <MenuItem active={!item.type} icon={<NOTE_ICON size={14} />} onClick={() => (repo.setType(item.id, null), close())}>
-            {t("type.none")}
+          <MenuItem active={!item.type} icon={<NOTE_ICON size={14} style={{ color: "var(--t-note)" }} />} onClick={() => (repo.setType(item.id, null), close())}>
+            {t("kind.note")}
           </MenuItem>
           {types.map((type) => (
             <MenuItem key={type.id} active={type.id === item.type} icon={<TypeGlyph schema={type.schema} size={14} />} onClick={() => (repo.setType(item.id, type.id), close())}>

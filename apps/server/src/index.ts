@@ -190,6 +190,12 @@ async function accountApi(req: Request, path: string, url: URL): Promise<Respons
       return json<Ok>({ ok: true });
     }
     if (path === "/api/account/signout" && req.method === "POST") return (await accounts.signOut(token!), json<Ok>({ ok: true }));
+    if (path === "/api/account/workspaces" && req.method === "PUT") {
+      const b = await body<{ order?: unknown }>(req);
+      if (!Array.isArray(b?.order) || !b.order.every((id) => typeof id === "string")) return fail(400, "order required");
+      accounts.reorder(user.id, b.order as string[]);
+      return json<Ok>({ ok: true });
+    }
     if (path === "/api/workspaces" && req.method === "POST") {
       const b = await body<{ name?: string }>(req);
       if (!b?.name?.trim()) return fail(400, "name required");
