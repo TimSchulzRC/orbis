@@ -12,7 +12,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 // Booting a server can exceed bun's 5 s default on a cold cache in CI. A timeout also kills every
-// spawned server, failing all later tests, so tests get more than bootServer's 10 s.
+// spawned server, failing all later tests, so tests get more than bootServer's 20 s.
 setDefaultTimeout(30_000);
 
 const procs: ReturnType<typeof Bun.spawn>[] = [];

@@ -30,7 +30,8 @@ export async function bootServer(env: Record<string, string>, stderr: "ignore" |
   const port = await freePort();
   const proc = Bun.spawn(["bun", "apps/server/src/index.ts"], { cwd: ROOT, env: { ...process.env, PORT: String(port), HOST: "127.0.0.1", ...env }, stdout: "ignore", stderr });
   const url = `http://127.0.0.1:${port}`;
-  for (let i = 0; i < 200; i++) {
+  // generous: the self-hosted CI runner shares its machine, and under load a boot can take over 10 s
+  for (let i = 0; i < 400; i++) {
     if (await fetch(url + "/api/info").then((r) => r.ok, () => false)) return { url, proc };
     await Bun.sleep(50);
   }
