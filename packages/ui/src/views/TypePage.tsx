@@ -317,14 +317,6 @@ function PropEditor({ item, prop }: { item: Item; prop: PropDef }) {
       </div>
       <p className="mt-1 text-xs text-muted-foreground">{t("type.kindHint")}</p>
       {field(t("type.propDescription"), <Textarea key={prop.id + "d"} defaultValue={prop.description ?? ""} onBlur={(e) => set({ description: e.target.value || null })} rows={2} className={box} />)}
-      {prop.kind !== "computed" && (
-        <label className="tap-row mt-3 flex items-center gap-2 text-sm">
-          <Checkbox checked={!!prop.hideEmpty} onCheckedChange={(checked) => set({ hideEmpty: checked === true || null })} />
-          <span>
-            {t("type.hideEmpty")} <span className="text-xs text-muted-foreground">– {t("type.hideEmptyHint")}</span>
-          </span>
-        </label>
-      )}
       {(prop.kind === "relation" || prop.kind === "text") && (
         <label className="tap-row mt-1 flex items-center gap-2 text-sm">
           <Checkbox checked={!!prop.blocks} onCheckedChange={(checked) => set({ blocks: checked === true || null })} />
