@@ -265,6 +265,64 @@ describe("the toolbar over selected text", () => {
     expect(await toggle("**~~x~~** y", 2, 9, "Fett")).toBe("~~x~~ y");
   });
 
+  test("a mark put across the edge of another one nests with it, piece by piece", async () => {
+    const { view, doc } = await open();
+    const pressed = () => button(".cm-tb[aria-label^='Fett']").getAttribute("aria-pressed");
+    const bold = async (text: string, from: number, to: number) => {
+      view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text }, selection: { anchor: from, head: to } });
+      view.focus();
+      await settled();
+      await press(button(".cm-tb[aria-label^='Fett']"));
+      return doc();
+    };
+    expect(await bold("~~x~~ y", 2, 7)).toBe("~~**x**~~ **y**");
+    expect(pressed(), "all of it bold now").toBe("true");
+    expect(await bold("~~**x**~~ y", 4, 11), "bold already there merges").toBe("~~**x**~~ **y**");
+    expect(await bold("~~abc~~ y", 4, 9), "only the selected letters").toBe("~~ab**c**~~ **y**");
+    expect(await bold("a ~~x~~", 0, 5)).toBe("**a** ~~**x**~~");
+    expect(await bold("~~x~~ y", 0, 3), "from the very start of the struck span").toBe("~~**x**~~ y");
+    expect(await bold("~~x~~ y", 1, 3), "from within its marks").toBe("~~**x**~~ y");
+    expect(await bold("y ~~x~~", 4, 7), "to its very end").toBe("y ~~**x**~~");
+    expect(await bold("**one\ntwo** x", 0, 13), "a span over two lines: each line its own pair").toBe("**one**\n**two x**");
+  });
+
+  test("bold, italic, strikethrough and code show pressed while all of the selected text has them", async () => {
+    const { view, doc } = await open();
+    const pressed = () => ["Fett", "Kursiv", "Durch", "Code"].filter((l) => button(`.cm-tb[aria-label^='${l}']`).getAttribute("aria-pressed") === "true");
+    const choose = async (text: string, from: number, to: number) => {
+      view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text }, selection: { anchor: from, head: to } });
+      view.focus();
+      await settled();
+    };
+    await select(4, 4);
+    expect(pressed()).toEqual([]);
+    await press(button(".cm-tb[aria-label^='Fett']"));
+    expect(pressed(), "a click presses it").toEqual(["Fett"]);
+    await press(button(".cm-tb[aria-label^='Durch']"));
+    expect(pressed()).toEqual(["Fett", "Durch"]);
+    await press(button(".cm-tb[aria-label^='Fett']"));
+    expect(pressed(), "and releases it").toEqual(["Durch"]);
+
+    await choose("**eins** zwei", 2, 13);
+    expect(pressed(), "only part of it bold: not pressed").toEqual([]);
+    await press(button(".cm-tb[aria-label^='Fett']"));
+    expect(doc(), "a click makes all of it bold").toBe("**eins zwei**");
+    expect(pressed()).toEqual(["Fett"]);
+
+    await choose("**ein Satz in fett**", 6, 10);
+    expect(pressed(), "a word in a bold sentence is bold").toEqual(["Fett"]);
+    await choose("***x***", 3, 4);
+    expect(pressed(), "bold and italic").toEqual(["Fett", "Kursiv"]);
+    await choose("**x**", 2, 3);
+    expect(pressed(), "bold is not italic").toEqual(["Fett"]);
+    await choose("`code` und ~~weg~~", 0, 18);
+    expect(pressed(), "mixed marks: none pressed").toEqual([]);
+    await choose("**eins**\n**zwei**", 2, 15);
+    expect(pressed(), "over blocks, all bold").toEqual(["Fett"]);
+    await choose("**eins**\nzwei", 2, 13);
+    expect(pressed(), "over blocks, one not bold").toEqual([]);
+  });
+
   test("⌘B without a selection puts an empty pair, a second ⌘B takes it away", async () => {
     const { view, doc } = await open();
     await clickEnd(lineEls()[5]!);

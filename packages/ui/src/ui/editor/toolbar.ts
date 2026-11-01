@@ -8,7 +8,7 @@ import { Bold, ChevronDown, Code, FileText, Globe, Italic, Link2, Scissors, Stri
 import { repo } from "../../repo";
 import { getLang, tr } from "../../i18n";
 import { shortcut } from "../../lib/platform";
-import { KINDS, kindName, kindOfRange, setKindRange, toggleMark } from "./blocks";
+import { KINDS, kindName, kindOfRange, markActive, setKindRange, toggleMark } from "./blocks";
 import { extractAs } from "../extract";
 import { ICON } from "../icons";
 import { pal } from "../item-look";
@@ -49,6 +49,8 @@ class Toolbar {
   extractSep: HTMLSpanElement;
   linkSep: HTMLSpanElement;
   pointerDown = false;
+  /** Bold, italic, strikethrough, code: pressed while all of the selected text has the mark. */
+  marks: { button: HTMLButtonElement; mark: string }[] = [];
   /** "Turn into" or "Extract" is open below the bar: the bar stays while the menu has the focus. */
   menuOpen = false;
   linking = false;
@@ -76,7 +78,9 @@ class Toolbar {
     const sep = () => Object.assign(document.createElement("span"), { className: "cm-tb-sep" });
     const mark = (icon: typeof Bold, label: string, m: string) => {
       const b = iconButton(icon, label, "cm-tb", 16);
+      b.setAttribute("aria-pressed", "false");
       b.addEventListener("click", () => toggleMark(view, m));
+      this.marks.push({ button: b, mark: m });
       return b;
     };
     const linkBtn = (this.linkBtn = iconButton(Link2, tr("editor.fmt.link") + key("K"), "cm-tb wide", 16));
@@ -145,6 +149,7 @@ class Toolbar {
     // a link is inline: one block only
     const multi = view.state.doc.lineAt(s.from).number !== view.state.doc.lineAt(s.to).number;
     this.linkBtn.hidden = this.linkSep.hidden = multi;
+    for (const { button, mark } of this.marks) button.setAttribute("aria-pressed", String(markActive(view.state, mark)));
     this.extractBtn.hidden = this.extractSep.hidden = !view.state.facet(toolbarExtract) || !repo.index().typesInOrder().length;
     view.requestMeasure({
       read: () => {

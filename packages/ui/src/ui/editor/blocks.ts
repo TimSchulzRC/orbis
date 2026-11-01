@@ -2,7 +2,7 @@
 // as a whole). Their kind is the Markdown at the start of the line, so turning a block into
 // another kind only changes that prefix – the text stays Markdown for sync, search and agents.
 import type { ComponentType } from "react";
-import { syntaxTree } from "@codemirror/language";
+import { ensureSyntaxTree, syntaxTree } from "@codemirror/language";
 import { EditorSelection, type EditorState, type Line } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
 import { CheckSquare, Heading1, Heading2, Heading3, List, ListOrdered, Quote, Type } from "lucide-react";
@@ -138,79 +138,146 @@ export function deleteBlock(view: EditorView, pos: number) {
   view.focus();
 }
 
+/** The node a mark makes in the Markdown syntax tree. */
+const MARK_NODE: Record<string, string> = { "**": "StrongEmphasis", "*": "Emphasis", "~~": "Strikethrough", "`": "InlineCode" };
+const MARK_NODES = new Set(Object.values(MARK_NODE));
+const MARK_PARTS = new Set(["EmphasisMark", "StrikethroughMark", "CodeMark"]);
+
+type Range = { from: number; to: number };
+type MarkNode = Range & { name: string; open: Range; close: Range };
+
+/** The selected text per block (after its Markdown prefix, without spaces at the ends); fenced blocks left out. */
+function segments(state: EditorState, from: number, to: number) {
+  return linesOf(state, from, to).flatMap((l) => {
+    const start = Math.max(from, l.from + PREFIX.exec(l.text)![0].length);
+    const text = state.sliceDoc(start, Math.min(to, l.to));
+    const a = start + text.length - text.trimStart().length;
+    return text.trim() && !inFence(state, l.from) ? [{ from: a, to: a + text.trim().length, line: l }] : [];
+  });
+}
+
+/** The marked spans (bold, italic, …) touching [from, to], and the mark characters among them. */
+function marksAt(state: EditorState, from: number, to: number) {
+  const tree = ensureSyntaxTree(state, to, 200) ?? syntaxTree(state);
+  const nodes: MarkNode[] = [];
+  const parts: Range[] = [];
+  tree.iterate({
+    from,
+    to,
+    enter: (n) => {
+      if (MARK_PARTS.has(n.name)) parts.push({ from: n.from, to: n.to });
+      if (!MARK_NODES.has(n.name)) return;
+      const first = n.node.firstChild;
+      const last = n.node.lastChild;
+      if (first && last && first !== last && MARK_PARTS.has(first.name) && MARK_PARTS.has(last.name))
+        nodes.push({ name: n.name, from: n.from, to: n.to, open: { from: first.from, to: first.to }, close: { from: last.from, to: last.to } });
+    },
+  });
+  /** A letter: no space, no mark character. */
+  const letter = (p: number) => !/\s/.test(state.sliceDoc(p, p + 1)) && !parts.some((r) => p >= r.from && p < r.to);
+  return { nodes, letter };
+}
+
 /**
- * The mark characters touching a position on both sides, as runs of one character: around
- * "~~**Text**~~" the start of "Text" has "~~" and "**". Marks are often hidden while the text is
- * not edited, so they may lie inside or outside a selection; the search stays in [lo, hi].
+ * How `mark` lies on a segment: its spans there, and whether every letter in it has it (the
+ * marks are hidden while not edited, so they may lie inside or outside the selection).
  */
-function markRuns(state: EditorState, pos: number, lo: number, hi: number) {
-  const isMark = (i: number) => /[*~`]/.test(state.sliceDoc(i, i + 1));
-  let a = pos;
-  let b = pos;
-  while (a > lo && isMark(a - 1)) a--;
-  while (b < hi && isMark(b)) b++;
-  const runs: { ch: string; from: number; n: number }[] = [];
-  for (let i = a; i < b; i++) {
-    const ch = state.sliceDoc(i, i + 1);
-    const last = runs.at(-1);
-    if (last && last.ch === ch && last.from + last.n === i) last.n++;
-    else runs.push({ ch, from: i, n: 1 });
+function markOn(state: EditorState, seg: Range, mark: string) {
+  const { nodes: all, letter } = marksAt(state, seg.from, seg.to);
+  const nodes = all.filter((n) => n.name === MARK_NODE[mark] && n.to > seg.from && n.from < seg.to);
+  let letters = 0;
+  let marked = 0;
+  for (let p = seg.from; p < seg.to; p++) {
+    if (!letter(p)) continue;
+    letters++;
+    if (nodes.some((n) => p >= n.open.to && p < n.close.from)) marked++;
   }
-  return runs;
+  return { on: letters > 0 && marked === letters, nodes };
 }
 
-/** Where `mark` sits in the runs: "**" in two or more stars, "*" in one or three, "~~" in two tildes. */
-function markIn(runs: ReturnType<typeof markRuns>, mark: string) {
-  return runs.find((r) => r.ch === mark[0] && (mark === "*" ? r.n % 2 === 1 : r.n >= mark.length));
+/** Whether all of the selected text has `mark` (the toolbar shows its button pressed then). */
+export function markActive(state: EditorState, mark: string) {
+  const { from, to } = state.selection.main;
+  const segs = from < to ? segments(state, from, to) : [];
+  return segs.length > 0 && segs.every((seg) => markOn(state, seg, mark).on);
 }
 
-/** The changes that toggle `mark` on [from, to] (text within one line): its pair taken away, or put around. */
-function markChanges(state: EditorState, from: number, to: number, mark: string): { on: boolean; changes: { from: number; to?: number; insert?: string }[] } {
-  const line = state.doc.lineAt(from);
-  const open = markIn(markRuns(state, from, line.from, line.to), mark);
-  const close = markIn(markRuns(state, to, line.from, line.to), mark);
-  // two runs, the opening one before the closing one (not one run of only marks)
-  if (open && close && open.from + open.n <= close.from) return { on: true, changes: [{ from: open.from, to: open.from + mark.length }, { from: close.from, to: close.from + mark.length }] };
-  return { on: false, changes: [{ from, insert: mark }, { from: to, insert: mark }] };
+/**
+ * Where to put a mark on [a, b] so it nests with the other marks: around the whole, or – where
+ * another marked span begins or ends inside, or at its edge – around each piece between that span's marks
+ * ("~~ab**c**~~ **y**"), each piece without spaces at its ends.
+ */
+function pieces(state: EditorState, a: number, b: number, mark: string): Range[] {
+  const { nodes, letter } = marksAt(state, a, b);
+  // another span cuts the range unless it lies within it, or the range within its text
+  const crosses = (n: MarkNode) => n.to > a && n.from < b && !(n.from >= a && n.to <= b) && !(n.open.to <= a && n.close.from >= b);
+  const cuts = nodes
+    .filter((n) => n.name !== MARK_NODE[mark] && crosses(n))
+    .flatMap((n) => [n.open, n.close])
+    .filter((r) => r.to > a && r.from < b)
+    .sort((x, y) => x.from - y.from);
+  const out: Range[] = [];
+  let start = a;
+  for (const c of [...cuts, { from: b, to: b }]) {
+    let from = start;
+    let to = Math.max(start, c.from);
+    while (from < to && /\s/.test(state.sliceDoc(from, from + 1))) from++;
+    while (to > from && /\s/.test(state.sliceDoc(to - 1, to))) to--;
+    let has = false;
+    for (let p = from; p < to && !has; p++) has = letter(p);
+    if (has) out.push({ from, to });
+    start = Math.max(start, c.to);
+  }
+  return out;
 }
 
-/** Wrap the selection in a mark ("**", "*", "~~", "`"), or take it away when it is there already – also among other marks. */
+/**
+ * Wrap the selection in a mark ("**", "*", "~~", "`"), or take it away when all of it has it
+ * already – also among other marks, in any order. Over several blocks each block's text gets its
+ * own pair (Markdown marks end at a line). Where only some of it has the mark, it is put around
+ * the whole, the pieces inside merged into it.
+ */
 export function toggleMark(view: EditorView, mark: string) {
   const { state } = view;
   const main = state.selection.main;
-  if (state.selection.ranges.length === 1 && state.doc.lineAt(main.from).number !== state.doc.lineAt(main.to).number) return toggleMarkLines(view, mark);
-  const tx = state.changeByRange((r) => {
-    if (r.empty) {
-      // the cursor between an empty pair ("**|**"): ⌘B again takes the pair away
-      const L = mark.length;
-      if (state.sliceDoc(r.from - L, r.from) === mark && state.sliceDoc(r.from, r.from + L) === mark)
-        return { changes: { from: r.from - L, to: r.from + L }, range: EditorSelection.cursor(r.from - L) };
-      return { changes: { from: r.from, insert: mark + mark }, range: EditorSelection.cursor(r.from + L) };
+  const L = mark.length;
+  if (main.empty) {
+    // the cursor between an empty pair ("**|**"): ⌘B again takes the pair away
+    const empty = state.sliceDoc(main.from - L, main.from) === mark && state.sliceDoc(main.from, main.from + L) === mark;
+    view.dispatch({
+      changes: empty ? { from: main.from - L, to: main.from + L } : { from: main.from, insert: mark + mark },
+      selection: EditorSelection.cursor(empty ? main.from - L : main.from + L),
+      userEvent: "input.format",
+    });
+    view.focus();
+    return true;
+  }
+  const segs = segments(state, main.from, main.to).map((seg) => ({ seg, ...markOn(state, seg, mark) }));
+  if (!segs.length) return true;
+  const off = segs.every((s) => s.on);
+  const specs: { from: number; to?: number; insert?: string }[] = [];
+  const seen = new Set<number>();
+  const drop = (n: MarkNode) => {
+    if (seen.has(n.from)) return;
+    seen.add(n.from);
+    specs.push(n.open, n.close);
+  };
+  for (const { seg, on, nodes } of segs) {
+    if (off) nodes.forEach(drop);
+    // a block that has it stays as it is, unless its span reaches into another line (it is taken apart there)
+    if (off || (on && nodes.every((n) => n.from >= seg.line.from && n.to <= seg.line.to))) continue;
+    // the pieces already marked merge into one span, within the block's line
+    let a = seg.from;
+    let b = seg.to;
+    for (const n of nodes) {
+      a = Math.max(seg.line.from, Math.min(a, n.from));
+      b = Math.min(seg.line.to, Math.max(b, n.to));
+      drop(n);
     }
-    const set = state.changes(markChanges(state, r.from, r.to, mark).changes);
-    return { changes: set, range: EditorSelection.range(set.mapPos(r.from, 1), set.mapPos(r.to, -1)) };
-  });
-  view.dispatch(state.update(tx, { userEvent: "input.format" }));
-  view.focus();
-  return true;
-}
-
-/** A mark over several blocks: Markdown marks end at a line, so each block's selected text gets its own pair. */
-function toggleMarkLines(view: EditorView, mark: string) {
-  const { state } = view;
-  const { from, to } = state.selection.main;
-  const parts = linesOf(state, from, to).flatMap((l) => {
-    const start = Math.max(from, l.from + PREFIX.exec(l.text)![0].length);
-    const text = state.sliceDoc(start, Math.min(to, l.to));
-    const lead = text.length - text.trimStart().length;
-    const inner = text.trim();
-    return inner && !inFence(state, l.from) ? [markChanges(state, start + lead, start + lead + inner.length, mark)] : [];
-  });
-  if (!parts.length) return true;
-  // all marked: take it away everywhere; else add it where it is missing
-  const off = parts.every((p) => p.on);
-  const changes = state.changes(parts.filter((p) => p.on === off).flatMap((p) => p.changes));
-  view.dispatch({ changes, selection: EditorSelection.range(changes.mapPos(from, 1), changes.mapPos(to, -1)), userEvent: "input.format" });
+    for (const p of pieces(state, a, b, mark)) specs.push({ from: p.from, insert: mark }, { from: p.to, insert: mark });
+  }
+  const changes = state.changes(specs);
+  view.dispatch({ changes, selection: EditorSelection.range(changes.mapPos(main.from, 1), changes.mapPos(main.to, -1)), userEvent: "input.format" });
   view.focus();
   return true;
 }
