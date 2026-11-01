@@ -71,7 +71,8 @@ const ITEMS: SlashItem[] = [
   },
   { id: "image", icon: ImagePlus, section: "insert", run: (view) => chooseFiles(view, "image/*") },
   { id: "file", icon: Paperclip, section: "insert", run: (view) => chooseFiles(view, "") },
-  { id: "divider", icon: Minus, section: "insert", run: (view, pos) => insertBlock(view, pos, "---\n", 4) },
+  // "***", not "---": "---" right under a line of text turns that line into a heading (Setext)
+  { id: "divider", icon: Minus, section: "insert", run: (view, pos) => insertBlock(view, pos, "***\n", 4) },
   { id: "code", icon: Code, section: "insert", run: (view, pos) => insertBlock(view, pos, "```\n\n```", 4) },
   { id: "query", icon: ListFilter, section: "insert", run: (view) => insertQueryBlock(view) },
 ];
