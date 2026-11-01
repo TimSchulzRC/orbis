@@ -61,7 +61,8 @@ function TagPicker({ item, onClose }: { item: Item; onClose: () => void }) {
   const { t } = useT();
   const ix = useIndex();
   const [v, setV] = useState("");
-  const [sel, setSel] = useState(0);
+  // the highlighted option; none (-1) until typed or picked with the arrow keys
+  const [sel, setSel] = useState(-1);
   // added in this pass, newest last (the page keeps its tags sorted, so its last is not the newest)
   const [added, setAdded] = useState<string[]>([]);
   const q = normalizeTag(v);
@@ -72,19 +73,20 @@ function TagPicker({ item, onClose }: { item: Item; onClose: () => void }) {
     // nothing typed: the page's own first; typed: the exact match, then prefix matches; then by use
     const list = all
       .filter((x) => !q || x.tag.includes(q))
-      .sort((a, b) => on(b.tag) - on(a.tag) || Number(b.tag === q) - Number(a.tag === q) || Number(b.tag.startsWith(q)) - Number(a.tag.startsWith(q)) || b.count - a.count || a.tag.localeCompare(b.tag))
-      .slice(0, 12);
+      .sort((a, b) => on(b.tag) - on(a.tag) || Number(b.tag === q) - Number(a.tag === q) || Number(b.tag.startsWith(q)) - Number(a.tag.startsWith(q)) || b.count - a.count || a.tag.localeCompare(b.tag));
     if (q && !counts.has(q)) list.push({ tag: q, count: 0, isNew: true });
     return list;
   }, [ix, q, item.tags.join(" ")]);
   const active = Math.min(sel, options.length - 1);
   const add = (tags: string[]) => {
-    for (const x of tags) setTag(item, x, true);
-    setAdded((a) => [...a.filter((x) => !tags.includes(x)), ...tags]);
+    // only what was not there yet counts as added here – Backspace must not take an older one off
+    const fresh = tags.filter((x) => !item.tags.includes(x));
+    for (const x of fresh) setTag(item, x, true);
+    setAdded((a) => [...a.filter((x) => !fresh.includes(x)), ...fresh]);
     setV("");
-    setSel(0);
+    setSel(-1);
   };
-  const toggle = (tag: string) => (item.tags.includes(tag) ? (setTag(item, tag, false), setV(""), setSel(0)) : add([tag]));
+  const toggle = (tag: string) => (item.tags.includes(tag) ? (setTag(item, tag, false), setV(""), setSel(-1)) : add([tag]));
   return (
     <span className={cn(BOX, "relative border-line bg-surface")}>
       <Hash size={12} className="shrink-0 text-muted-foreground" aria-hidden />
@@ -99,12 +101,19 @@ function TagPicker({ item, onClose }: { item: Item; onClose: () => void }) {
         onBlur={() => setTimeout(onClose, 150)}
         onChange={(e) => {
           const x = e.target.value;
-          if (!SEP.test(x)) return void (setV(x), setSel(0));
+          if (!SEP.test(x)) return void (setV(x), setSel(x ? 0 : -1));
           // a separator typed or pasted: everything before the last one becomes tags
           const parts = x.split(SEP);
           const rest = parts.pop() ?? "";
           add(parts.flatMap(splitTags));
           setV(rest);
+        }}
+        onPaste={(e) => {
+          // pasted with separators: every part becomes a tag, the last one too
+          const text = e.clipboardData.getData("text");
+          if (!SEP.test(text)) return;
+          e.preventDefault();
+          add(splitTags(v + text));
         }}
         onKeyDown={(e) => {
           if (e.key === "ArrowDown") (e.preventDefault(), setSel(Math.min(options.length - 1, active + 1)));
@@ -112,9 +121,10 @@ function TagPicker({ item, onClose }: { item: Item; onClose: () => void }) {
           else if (e.key === "Enter") {
             e.preventDefault();
             const o = options[active];
-            // Enter adds (a tag the page has already just clears the field); a click toggles
-            if (q && o) add(item.tags.includes(o.tag) ? [] : [o.tag]);
-            else if (!q) e.currentTarget.blur();
+            // typed: Enter adds (one the page has already just clears the field); picked with
+            // the arrow keys from the list: Enter ticks or unticks it, like a click; nothing: close
+            if (o) q ? add([o.tag]) : toggle(o.tag);
+            else e.currentTarget.blur();
           } else if (e.key === "Escape") e.currentTarget.blur();
           else if (e.key === "Backspace" && !v) {
             const last = added.findLast((x) => item.tags.includes(x));
@@ -124,7 +134,7 @@ function TagPicker({ item, onClose }: { item: Item; onClose: () => void }) {
         className="h-full w-44 min-w-0 bg-transparent px-1 text-xs outline-none placeholder:text-faint"
       />
       {options.length > 0 && (
-        <span id="tag-picker-list" role="listbox" aria-multiselectable className="absolute left-0 top-full z-30 mt-1 flex w-60 flex-col overflow-hidden rounded-lg border border-line bg-surface p-1 shadow-lg">
+        <span id="tag-picker-list" role="listbox" aria-multiselectable className="absolute left-0 top-full z-30 mt-1 flex max-h-72 w-60 flex-col overflow-y-auto rounded-lg border border-line bg-surface p-1 shadow-lg">
           {options.map((o, i) => {
             const on = item.tags.includes(o.tag);
             return (
