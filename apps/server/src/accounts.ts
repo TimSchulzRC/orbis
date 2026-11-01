@@ -192,6 +192,33 @@ export class Accounts {
     return { token: res.token!, user: { id: res.user.id, name: res.user.name, email: res.user.email } };
   }
 
+  /**
+   * Signing up with a password where codes are on (POST /api/account/signup): a new account proves
+   * its address first, so nobody can take someone else's. Without `code`: the details are fine, the page
+   * now has a code sent (the rate-limited way, POST /api/auth/email-otp/send-verification-otp).
+   * With it: the account is made by the code (proven address, the same hooks), then gets the password.
+   */
+  async signUpWithCode(body: { name: string; email: string; password: string; invite?: string; personal: string; lang?: string; code?: string }): Promise<SignedIn | { verify: true }> {
+    if (!this.login.password) throw new AccountError("passwords off", 403);
+    if (!this.canSignUp(body.invite)) throw new AccountError(body.invite ? "invite invalid" : "signup closed", 403);
+    const ctx = await this.auth.$context;
+    const email = body.email.trim().toLowerCase();
+    const { minPasswordLength, maxPasswordLength } = ctx.password.config;
+    if (body.password.length < minPasswordLength) throw new AccountError("password too short");
+    if (body.password.length > maxPasswordLength) throw new AccountError("password too long");
+    if (await ctx.internalAdapter.findUserByEmail(email)) throw new AccountError("exists", 409);
+    if (!body.code) return { verify: true };
+    const res = await this.auth.api
+      .signInEmailOTP({ body: { email, otp: body.code.trim(), name: body.name.trim() || email.split("@")[0]! }, headers: signupHeaders({ invite: body.invite, personal: body.personal, lang: body.lang }) })
+      .catch((e) => {
+        throw new AccountError(e?.body?.code === "INVALID_OTP" || e?.statusCode === 400 ? "invalid code" : (e?.body?.message ?? e?.message ?? "signup failed"), e?.statusCode ?? 400);
+      });
+    // (made meanwhile by another way: it keeps its own)
+    if (!(await ctx.internalAdapter.findCredentialAccount(res.user.id)))
+      await ctx.internalAdapter.linkAccount({ userId: res.user.id, providerId: "credential", accountId: res.user.id, password: await ctx.password.hash(body.password) });
+    return { token: res.token, user: { id: res.user.id, name: res.user.name, email: res.user.email } };
+  }
+
   /** The session of a bearer token: its user and when it began (for what needs a recent sign-in). */
   async session(token: string | null | undefined) {
     if (!token) return null;
@@ -448,6 +475,20 @@ export async function setPassword(dataDir: string, email: string, password: stri
     else await ctx.internalAdapter.linkAccount({ userId: user.user.id, providerId: "credential", accountId: user.user.id, password: hash });
   } finally {
     accounts.db.close();
+  }
+}
+
+/**
+ * For the CLI: count the addresses of all accounts as proven, for a server that turns codes on
+ * after people signed up with passwords. Their first code then changes nothing (see the update
+ * hook). Only for a server whose admin knows its accounts are those people's. Returns how many.
+ */
+export function trustEmails(dataDir: string): number {
+  const db = new Database(join(dataDir, "accounts.db"));
+  try {
+    return db.query('UPDATE "user" SET emailVerified = 1 WHERE emailVerified = 0').run().changes;
+  } finally {
+    db.close();
   }
 }
 

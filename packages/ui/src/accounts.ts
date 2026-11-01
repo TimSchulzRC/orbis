@@ -6,7 +6,7 @@
 import { useSyncExternalStore } from "react";
 import { startAuthentication, startRegistration } from "@simplewebauthn/browser";
 import { Repo } from "@obtion/sync";
-import type { AccountInfo, ErrorBody, InviteCode, InviteInfo, LoginMethods, McpConnect, Member, Ok, PasskeyInfo, ServerInfo, SignedIn, User, WorkspaceInfo } from "@obtion/core/api";
+import type { AccountInfo, ErrorBody, InviteCode, InviteInfo, LoginMethods, McpConnect, Member, Ok, PasskeyInfo, ServerInfo, SignedIn, User, VerifyFirst, WorkspaceInfo } from "@obtion/core/api";
 import type { T } from "@obtion/core/i18n";
 import { browserHost, storageNames, type SpaceLink } from "./browser";
 import { DeviceFiles, setFiles } from "./files";
@@ -213,8 +213,16 @@ export async function signIn(email: string, password: string) {
 }
 
 /** Create an account – with an invite it joins that workspace instead of getting one of its own. */
-export async function signUp(b: { name: string; email: string; password: string; invite?: string; lang: string }) {
-  const res = await call<SignedIn>("/api/account/signup", b);
+/**
+ * Create an account with a password. Where codes are on, the address proves itself first: without
+ * `code` a code goes to it and the answer is "verify"; then the same again with the code.
+ */
+export async function signUp(b: { name: string; email: string; password: string; invite?: string; lang: string; code?: string }): Promise<"verify" | undefined> {
+  const res = await call<SignedIn | VerifyFirst>("/api/account/signup", b);
+  if ("verify" in res) {
+    await sendCode(b.email, { invite: b.invite, lang: b.lang });
+    return "verify";
+  }
   await keep(res.token);
 }
 

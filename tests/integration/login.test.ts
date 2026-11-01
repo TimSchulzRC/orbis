@@ -2,7 +2,7 @@
 // cookie traded for a token, deleting an account that has no password.
 import { test, expect, afterAll } from "bun:test";
 import { tempDir, removeTempDirs } from "../support/helpers";
-import { Accounts, SIGNUP_COOKIE, setPassword } from "@obtion/server/accounts";
+import { Accounts, SIGNUP_COOKIE, setPassword, trustEmails } from "@obtion/server/accounts";
 import type { SignupPolicy } from "@obtion/core/api";
 
 afterAll(removeTempDirs);
@@ -184,5 +184,39 @@ test("a code proving an unproven address drops the passkeys, agent tokens, invit
     addPasskey(squatter.user.id, "own-key");
     await withCode("victim@example.org");
     expect(keys(squatter.user.id)).toEqual(["own-key"]);
+  } finally { accounts.db.close(); }
+});
+
+test("where codes are on, an account with a password proves its address before it exists", async () => {
+  const { accounts, call, codes } = await setUp("open");
+  const me = { name: "Me", email: "me@example.org", password: "geheim12345", personal: "P" };
+  try {
+    // the details first: nothing is made yet, the page has a code sent
+    expect(await accounts.signUpWithCode(me)).toEqual({ verify: true });
+    expect(accounts.db.query('SELECT 1 FROM "user"').all()).toEqual([]);
+    expect((await call("/email-otp/send-verification-otp", { email: me.email, type: "sign-in" })).status).toBe(200);
+    await expect(accounts.signUpWithCode({ ...me, code: "000000" })).rejects.toThrow("invalid code");
+    const signed = await accounts.signUpWithCode({ ...me, code: codes.at(-1)!.code });
+    if (!("token" in signed)) throw new Error("no token");
+    expect((await accounts.session(signed.token))?.user.email).toBe(me.email);
+    expect(await accounts.hasPassword(signed.user.id)).toBe(true);
+    expect(accounts.db.query('SELECT emailVerified FROM "user" WHERE id = ?').get(signed.user.id)).toEqual({ emailVerified: 1 });
+    expect((await call("/sign-in/email", { email: me.email, password: me.password })).status).toBe(200);
+    // the address is taken now; too short a password is said before any code
+    await expect(accounts.signUpWithCode(me)).rejects.toThrow("exists");
+    await expect(accounts.signUpWithCode({ ...me, email: "other@example.org", password: "kurz" })).rejects.toThrow("password too short");
+  } finally { accounts.db.close(); }
+});
+
+test("trust-emails: accounts from before codes keep their password through their first code", async () => {
+  const { accounts, withCode } = await setUp("open");
+  const dir = accounts.dataDir;
+  try {
+    const old = await accounts.signUp({ name: "Old", email: "old@example.org", password: "geheim12345", personal: "P" });
+    expect(trustEmails(dir)).toBe(1);
+    expect(trustEmails(dir)).toBe(0);
+    expect((await withCode("old@example.org"))!.status).toBe(200);
+    expect(await accounts.hasPassword(old.user.id)).toBe(true);
+    expect((await accounts.session(old.token))?.user.id).toBe(old.user.id);
   } finally { accounts.db.close(); }
 });

@@ -81,10 +81,19 @@ export function SignIn({ inviteCode, onDone, email: fixedEmail }: { inviteCode?:
       setBusy(false);
     }
   };
+  const account = { name, email, password, invite: inviteCode, lang: getLang() };
+  // a new account with a password, where codes are on: its address proves itself with a code first
+  const signUpWithCode = withPassword && mode === "up" && login.emailCode;
+  const sendAgain = () => run("code", () => (signUpWithCode ? signUp(account) : sendCode(email, ctx)));
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (withPassword) {
-      if (await run("signIn", () => (mode === "up" ? signUp({ name, email, password, invite: inviteCode, lang: getLang() }) : signIn(email, password)))) onDone?.();
+    if (codeSent && signUpWithCode) {
+      if (await run("code", () => signUp({ ...account, code }))) onDone?.();
+    } else if (withPassword) {
+      let verify = false;
+      const ok = await run("signIn", async () => void (verify = mode === "up" ? (await signUp(account)) === "verify" : (await signIn(email, password), false)));
+      if (ok && verify) setCodeSent(true);
+      else if (ok) onDone?.();
     } else if (!codeSent) {
       if (await run("code", () => sendCode(email, ctx))) setCodeSent(true);
     } else if (await run("code", () => signInWithCode(email, code, mode === "up" ? name : undefined, ctx))) onDone?.();
@@ -120,7 +129,7 @@ export function SignIn({ inviteCode, onDone, email: fixedEmail }: { inviteCode?:
           <Button variant="plain" type="button" className="text-link hover:underline" onClick={() => (setCodeSent(false), setCode(""), setError(""))}>
             {t("account.back")}
           </Button>
-          <Button variant="plain" type="button" className="text-link hover:underline" disabled={busy} onClick={() => void run("code", () => sendCode(email, ctx))}>
+          <Button variant="plain" type="button" className="text-link hover:underline" disabled={busy} onClick={() => void sendAgain()}>
             {t("account.codeAgain")}
           </Button>
         </div>

@@ -41,7 +41,14 @@ if (freshConfig) writeFileSync(configPath, JSON.stringify(config, null, 2), { mo
 /** The name of a personal workspace, in the language of the app (German if unknown). */
 const personal = (lang?: string) => translate(LANGS.includes(lang as Lang) ? (lang as Lang) : "de", "account.personal");
 
-const login = loginConfig(process.env, PUBLIC_URL);
+const login = (() => {
+  try {
+    return loginConfig(process.env, PUBLIC_URL);
+  } catch (e) {
+    console.error(`[obtion] ${e instanceof Error ? e.message : e}`);
+    process.exit(1);
+  }
+})();
 const accounts = new Accounts(DATA, { secret: config.authSecret, baseURL: PUBLIC_URL || `http://${HOST}:${PORT}`, policy: SIGNUP, login, personal,
   // whoever had signed up with an address someone else then proved: their open connections end too
   onRevoke: (user) => {
@@ -149,9 +156,8 @@ async function accountApi(req: Request, path: string, url: URL): Promise<Respons
     const b = await body<SignupRequest>(req);
     if (!login.password) return fail(403, "passwords off");
     if (!b?.email || !b.password) return fail(400, "email and password required");
-    return accounts
-      .signUp({ name: b.name ?? "", email: b.email, password: b.password, invite: b.invite || undefined, personal: personal(b.lang) })
-      .then((r) => json(r), accountError);
+    const details = { name: b.name ?? "", email: b.email, password: b.password, invite: b.invite || undefined, personal: personal(b.lang) };
+    return (login.sendCode ? accounts.signUpWithCode({ ...details, lang: b.lang, code: b.code || undefined }) : accounts.signUp(details)).then((r) => json(r), accountError);
   }
 
   if (path.startsWith("/api/invites/")) {

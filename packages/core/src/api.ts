@@ -74,6 +74,13 @@ export interface SignupRequest {
   password?: string;
   invite?: string;
   lang?: string;
+  /** where codes are on: the code sent to the address (the first answer is { verify: true }) */
+  code?: string;
+}
+
+/** POST /api/account/signup where codes are on and no code came yet: send one, then sign up with it. */
+export interface VerifyFirst {
+  verify: true;
 }
 
 /** POST /api/account/signup, POST /api/account/claim and POST /api/auth/sign-in/(email|email-otp) */

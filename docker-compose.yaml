@@ -22,11 +22,11 @@ services:
       OBTION_WEB_APP: ${OBTION_WEB_APP:-on}
       # who may create an account: invite (with an invite link), open (anyone), off
       OBTION_SIGNUP: ${OBTION_SIGNUP:-invite}
-      # how people sign in besides a password: codes by email, passkeys, OAuth (see .env.example)
-      OBTION_PASSWORD: ${OBTION_PASSWORD:-on}
+      # how people sign in: password, code (by email), passkey; OAuth below (see .env.example)
+      OBTION_LOGIN: ${OBTION_LOGIN:-password,passkey}
+      # sending mail (for codes)
       OBTION_SMTP_URL: ${OBTION_SMTP_URL:-}
       OBTION_MAIL_FROM: ${OBTION_MAIL_FROM:-}
-      OBTION_PASSKEYS: ${OBTION_PASSKEYS:-on}
       OBTION_OIDC_ISSUER: ${OBTION_OIDC_ISSUER:-}
       OBTION_OIDC_CLIENT_ID: ${OBTION_OIDC_CLIENT_ID:-}
       OBTION_OIDC_CLIENT_SECRET: ${OBTION_OIDC_CLIENT_SECRET:-}
