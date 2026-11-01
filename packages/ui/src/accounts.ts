@@ -6,7 +6,7 @@
 import { useSyncExternalStore } from "react";
 import { startAuthentication, startRegistration } from "@simplewebauthn/browser";
 import { Repo } from "@obtion/sync";
-import type { AccountInfo, ErrorBody, InviteCode, InviteInfo, LoginMethods, McpConnect, Member, Ok, PasskeyInfo, ServerInfo, SignedIn, User, VerifyFirst, WorkspaceInfo } from "@obtion/core/api";
+import type { AccountInfo, ErrorBody, InviteCode, InviteInfo, InviteLink, InviteRequest, LoginMethods, McpConnect, Member, Ok, PasskeyInfo, Role, ServerInfo, SignedIn, User, VerifyFirst, WorkspaceInfo } from "@obtion/core/api";
 import type { T } from "@obtion/core/i18n";
 import { type FileMeta, SETTINGS_ID } from "@obtion/core/model";
 import { runSetup } from "@obtion/core/setup";
@@ -433,15 +433,30 @@ export async function renameSpace(s: Space, name: string) {
   await refresh();
 }
 
-/** An invite link: whoever opens it may join (with an account of this server). */
-export async function inviteLink(s: Space): Promise<string> {
-  const { code } = await call<InviteCode>(`/api/workspaces/${s.id}/invites`, {});
-  return `${location.origin}/#/join/${code}`;
+/** The address of an invite link: whoever opens it may join (with an account of this server). */
+export const joinUrl = (code: string) => `${location.origin}/#/join/${code}`;
+
+/** A new invite link (owners only), for one person: a member (default) or an owner. */
+export async function inviteLink(s: Space, opts: InviteRequest = {}): Promise<string> {
+  const { code } = await call<InviteCode>(`/api/workspaces/${s.id}/invites`, opts);
+  return joinUrl(code);
 }
+
+/** The invite links of a workspace that still work (owners only). */
+export const inviteLinks = (s: Space) => call<InviteLink[]>(`/api/workspaces/${s.id}/invites`);
+
+/** Take an invite link back. */
+export const revokeInvite = (s: Space, code: string) => call<Ok>(`/api/workspaces/${s.id}/invites/${code}`, undefined, "DELETE");
 
 export function members(s: Space): Promise<Member[]> {
   return call(`/api/workspaces/${s.id}/members`);
 }
+
+/** Make someone else an owner or a member (owners only). */
+export const setRole = (s: Space, user: string, role: Role) => call<Ok>(`/api/workspaces/${s.id}/members/${user}`, { role }, "PATCH");
+
+/** Remove someone from a workspace (owners only): their devices stop syncing it. */
+export const removeMember = (s: Space, user: string) => call<Ok>(`/api/workspaces/${s.id}/members/${user}`, undefined, "DELETE");
 
 export async function leaveSpace(s: Space) {
   await call<Ok>(`/api/workspaces/${s.id}/members/${account!.user.id}`, undefined, "DELETE");

@@ -6,22 +6,22 @@ import { Checkbox } from "../components/ui/checkbox";
 import { Input } from "../components/ui/input";
 import { NativeSelect } from "../components/ui/native-select";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import { Copy, Check, Eye, EyeOff, KeyRound, RotateCcw, ChevronRight, Shapes, Trash2, Waypoints } from "lucide-react";
+import { Copy, Check, Crown, Eye, EyeOff, KeyRound, Link2, RotateCcw, ChevronRight, Shapes, Trash2, UserMinus, UserRound, Waypoints } from "lucide-react";
 import { SETTINGS_ID, setSettings } from "@obtion/core/model";
-import { ENDONYMS, LANGS, fmtBytes } from "@obtion/core/i18n";
+import { ENDONYMS, LANGS, fmtBytes, fmtDate } from "@obtion/core/i18n";
 import { resetInbox } from "@obtion/core/setup";
 import { listExamples, removeExamples, restoreExamples } from "@obtion/core/examples";
 import { useRepo, useSpaceId, spaceHref, useDocumentTitle } from "../hooks";
 import { useT, setLang } from "../i18n";
-import { Button, Dialog, Seg, SectionTitle } from "../ui/primitives";
+import { Button, Dialog, IconButton, MenuItem, MoreMenu, Popover, Seg, SectionAction, SectionTitle } from "../ui/primitives";
 import { ItemIcon, TypeGlyph } from "../ui/item-look";
 import { cn, toggled } from "../lib/utils";
-import { chooseAction, notify } from "../ui/feedback";
+import { confirmAction, notify } from "../ui/feedback";
 import { setTheme, useTheme } from "../theme";
-import { type Space, ApiError, activeUser, addPasskey, changePassword, linkFailed, linkOAuth, linkedProviders, deleteAccount, deleteSpace, errorText, inviteLink, leaveSpace, loginOf, mcpToken, members, passkeys, removePasskey, renameSpace, replica, serverInfo, signOut, spaceById, useAccounts } from "../accounts";
+import { type Space, ApiError, activeUser, addPasskey, changePassword, linkFailed, linkOAuth, linkedProviders, deleteAccount, deleteSpace, errorText, inviteLink, inviteLinks, joinUrl, leaveSpace, loginOf, mcpToken, members, passkeys, removeMember, removePasskey, renameSpace, replica, revokeInvite, serverInfo, setRole, signOut, spaceById, useAccounts } from "../accounts";
 import { SignIn } from "./Account";
 import { NewSpaceDialog } from "../ui/Spaces";
-import type { McpConnect, Member, PasskeyInfo, ServerInfo } from "@obtion/core/api";
+import type { InviteLink, InviteRequest, McpConnect, Member, PasskeyInfo, ServerInfo } from "@obtion/core/api";
 
 /** navigator.clipboard exists only over HTTPS; opened as http://<address> the old way copies. */
 function copyText(text: string) {
@@ -36,9 +36,27 @@ function copyText(text: string) {
   area.remove();
 }
 
-function CopyBox({ text, secret, label }: { text: string; secret?: string; label: string }) {
+/** Copies `text`, with a check mark for a moment. */
+function CopyButton({ text }: { text: string }) {
   const { t } = useT();
   const [copied, setCopied] = useState(false);
+  return (
+    <IconButton
+      size="sm"
+      iconSize={14}
+      label={t("settings.copy")}
+      icon={copied ? Check : Copy}
+      onClick={() => {
+        copyText(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      }}
+    />
+  );
+}
+
+function CopyBox({ text, secret, label }: { text: string; secret?: string; label: string }) {
+  const { t } = useT();
   const [show, setShow] = useState(false);
   const shown = secret && !show ? text.replaceAll(secret, "•".repeat(12)) : text;
   return (
@@ -47,39 +65,38 @@ function CopyBox({ text, secret, label }: { text: string; secret?: string; label
         {shown}
       </pre>
       <div className="absolute right-1.5 top-1.5 flex">
-        {secret && (
-          <Button variant="plain" onClick={() => setShow(!show)} className="tap rounded-md p-1.5 text-muted-foreground hover:bg-hover" aria-label={show ? t("settings.hideToken") : t("settings.showToken")}>
-            {show ? <EyeOff size={14} /> : <Eye size={14} />}
-          </Button>
-        )}
-        <Button variant="plain"
-          onClick={() => {
-            copyText(text);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 1500);
-          }}
-          className="rounded-md p-1.5 text-muted-foreground hover:bg-hover"
-          aria-label={t("settings.copy")}
-        >
-          {copied ? <Check size={14} /> : <Copy size={14} />}
-        </Button>
+        {secret && <IconButton size="sm" iconSize={14} onClick={() => setShow(!show)} label={show ? t("settings.hideToken") : t("settings.showToken")} icon={show ? EyeOff : Eye} />}
+        <CopyButton text={text} />
       </div>
     </div>
   );
 }
 
-/** A workspace's name, who is in it, an invite link, leaving it. */
-function Members({ space }: { space: Space }) {
+/**
+ * A workspace's name, who is in it, leaving it. Owners also rename it, make others owners or
+ * members, remove them (each confirmed first) and manage the invite links.
+ */
+function Members({ space, onRemoved }: { space: Space; onRemoved: () => void }) {
   const { t } = useT();
   const [name, setName] = useState(space.name);
   const [list, setList] = useState<Member[]>([]);
-  const [link, setLink] = useState("");
   const [error, setError] = useState("");
-  useEffect(() => {
-    members(space).then(setList, () => {});
-  }, [space.id]);
+  const load = () => members(space).then(setList, () => {});
+  useEffect(() => void load(), [space.id]);
   const owner = space.role === "owner";
+  const me = activeUser();
   const fail = (e: unknown) => setError(errorText(e, t, "space"));
+  const who = (m: Member) => m.name || m.email;
+  const changeRole = async (m: Member) => {
+    const role = m.role === "owner" ? "member" : "owner";
+    const yes = await confirmAction({ title: t(`space.make.${role}.confirm`, { name: who(m) }), body: t(`space.make.${role}.hint`, { name: who(m) }), yes: t(`space.make.${role}`) });
+    if (yes) await setRole(space, m.id, role).then(load, fail);
+  };
+  const remove = async (m: Member) => {
+    const yes = await confirmAction({ title: t("space.removeConfirm", { name: who(m), workspace: space.name }), body: t("space.removeHint", { name: who(m) }), yes: t("space.remove"), danger: true });
+    // their invite links went with them
+    if (yes) await removeMember(space, m.id).then(() => (void load(), onRemoved()), fail);
+  };
   return (
     <section>
       <SectionTitle>{t("space.members")}</SectionTitle>
@@ -92,28 +109,93 @@ function Members({ space }: { space: Space }) {
           </Button>
         </form>
       )}
-      <ul className="mt-3 space-y-1 text-sm">
+      <ul className="mt-3 space-y-1 text-sm" aria-label={t("space.memberList")}>
         {list.map((m) => (
-          <li key={m.id} className="flex items-center gap-2">
-            <span className="min-w-0 truncate">{m.name || m.email}</span>
+          <li key={m.id} className="flex min-h-8 items-center gap-2">
+            <span className="min-w-0 truncate">{who(m)}</span>
             <span className="truncate text-muted-foreground">{m.email}</span>
             <span className="ml-auto shrink-0 text-xs text-muted-foreground">{t(`space.role.${m.role}`)}</span>
+            {owner && m.id !== me ? (
+              <MoreMenu size="sm" iconSize={14} label={t("space.memberMenu", { name: who(m) })}>
+                {(close) => (
+                  <>
+                    <MenuItem icon={m.role === "owner" ? <UserRound size={14} /> : <Crown size={14} />} onClick={() => (close(), void changeRole(m))}>
+                      {t(`space.make.${m.role === "owner" ? "member" : "owner"}`)}
+                    </MenuItem>
+                    <MenuItem danger icon={<UserMinus size={14} />} onClick={() => (close(), void remove(m))}>
+                      {t("space.remove")}
+                    </MenuItem>
+                  </>
+                )}
+              </MoreMenu>
+            ) : (
+              owner && <span className="w-[22px] shrink-0" />
+            )}
           </li>
         ))}
       </ul>
+      {!owner && <p className="mt-3 text-sm text-muted-foreground">{t("space.inviteOwners")}</p>}
       <div className="mt-4 flex flex-wrap gap-2">
-        <Button variant="outline" onClick={() => inviteLink(space).then(setLink, fail)}>
-          {t("space.invite")}
-        </Button>
         <Button variant="outline" onClick={() => leaveSpace(space).catch(fail)}>
           {t("space.leave")}
         </Button>
       </div>
-      {link && (
-        <div className="mt-3">
-          <p className="mb-1 text-sm text-muted-foreground">{t("space.inviteHint")}</p>
-          <CopyBox label={t("space.invite")} text={link} />
-        </div>
+      {error && <p className="mt-3 text-sm text-danger">{error}</p>}
+    </section>
+  );
+}
+
+/** The invite links of a workspace that still work: a new one, who made each, until when, revoking. Owners only. */
+function InviteLinks({ space, version }: { space: Space; version: number }) {
+  const { t, lang } = useT();
+  const [links, setLinks] = useState<InviteLink[]>([]);
+  const [error, setError] = useState("");
+  const load = () => inviteLinks(space).then(setLinks, (e) => setError(errorText(e, t, "space")));
+  useEffect(() => void load(), [space.id, version]);
+  const day = (ts: number) => fmtDate(lang, new Date(ts).toISOString());
+  const fail = (e: unknown) => setError(errorText(e, t, "space"));
+  const create = (opts: InviteRequest) => inviteLink(space, opts).then(load, fail);
+  const revoke = async (l: InviteLink) => {
+    const yes = await confirmAction({ title: t("space.revokeConfirm"), body: t("space.revokeHint", { role: t(`space.role.${l.role}`), created: day(l.created) }), yes: t("space.revoke"), danger: true });
+    if (yes) await revokeInvite(space, l.code).then(load, fail);
+  };
+  const newLink = (
+    <Popover align="right" trigger={(p) => <SectionAction {...p} icon={Link2}>{t("space.inviteNew")}</SectionAction>}>
+      {(close) => (
+        <>
+          <MenuItem icon={<UserRound size={14} />} onClick={() => (close(), void create({ role: "member" }))}>
+            {t("space.inviteNew.member")}
+          </MenuItem>
+          <MenuItem icon={<Crown size={14} />} onClick={() => (close(), void create({ role: "owner" }))}>
+            {t("space.inviteNew.owner")}
+          </MenuItem>
+        </>
+      )}
+    </Popover>
+  );
+  return (
+    <section>
+      <SectionTitle right={newLink}>{t("space.invites")}</SectionTitle>
+      <p className="mb-3 text-sm text-muted-foreground">{t("space.inviteHint")}</p>
+      {links.length ? (
+        <ul className="space-y-2" aria-label={t("space.invites")}>
+          {links.map((l) => (
+            <li key={l.code} className="rounded-lg border border-line bg-surface-2 py-1.5 pl-3 pr-1.5">
+              <div className="flex items-center gap-1">
+                <code className="min-w-0 flex-1 truncate font-mono text-xs">{joinUrl(l.code)}</code>
+                <CopyButton text={joinUrl(l.code)} />
+                <Button small onClick={() => void revoke(l)}>
+                  {t("space.revoke")}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {t(`space.role.${l.role}`)} · {t(l.by ? "space.inviteBy" : "space.inviteMade", { by: l.by, created: day(l.created), expires: day(l.expires) })}
+              </p>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-sm text-muted-foreground">{t("space.invitesNone")}</p>
       )}
       {error && <p className="mt-3 text-sm text-danger">{error}</p>}
     </section>
@@ -495,6 +577,7 @@ export function SpaceSettingsPage() {
   // an MCP token is made on request (each is a new one, shown once)
   const [c, setC] = useState<McpConnect | null>(null);
   const [err, setErr] = useState(false);
+  const [removed, setRemoved] = useState(0);
   useDocumentTitle(space?.name ?? t("space.settings"));
   if (!space) return null;
   const newToken = () => mcpToken(space).then(setC, () => setErr(true));
@@ -525,7 +608,9 @@ export function SpaceSettingsPage() {
         </nav>
       </div>
 
-      <Members space={space} />
+      <Members space={space} onRemoved={() => setRemoved((n) => n + 1)} />
+
+      {space.role === "owner" && <InviteLinks space={space} version={removed} />}
 
       <Examples />
 
@@ -620,8 +705,8 @@ function DeleteSpace({ space }: { space: Space }) {
   const { t } = useT();
   const [error, setError] = useState("");
   const run = async () => {
-    const yes = await chooseAction({ title: t("space.deleteConfirm", { name: space.name }), body: t("space.deleteHint"), choices: [{ key: "yes", label: t("space.delete"), danger: true }] });
-    if (yes === "yes") await deleteSpace(space).catch((e) => setError(errorText(e, t, "space")));
+    const yes = await confirmAction({ title: t("space.deleteConfirm", { name: space.name }), body: t("space.deleteHint"), yes: t("space.delete"), danger: true });
+    if (yes) await deleteSpace(space).catch((e) => setError(errorText(e, t, "space")));
   };
   return (
     <section>

@@ -128,6 +128,7 @@ async function run() {
       (async () => {
         await firstWorkspace(browser, fresh);
         await twoWorkspaces(browser, fresh);
+        await membersOnSettings(browser, fresh);
         await deleteAccountOnSettings(browser, fresh);
       })(),
     ]);
@@ -326,6 +327,84 @@ async function twoWorkspaces(browser: import("playwright").Browser, server: Serv
     if (await p.locator("aside section[aria-label='Persönlich'] a[href$='/i/ex-work']").count()) failures.push(`${label}: "Arbeit" is still in "Persönlich"`);
   });
   await context.close();
+}
+
+/**
+ * An owner manages a workspace's people in its settings: a new invite link shows in the list of
+ * open links (who made it, until when) and one is revoked; a member is made owner and member
+ * again, then removed – each confirmed first.
+ */
+async function membersOnSettings(browser: import("playwright").Browser, server: Server) {
+  const api = (path: string, init: RequestInit = {}, token = server.token) =>
+    fetch(server.url + path, { ...init, headers: { "content-type": "application/json", authorization: `Bearer ${token}` } }).then((r) => r.json());
+  const ws = (await api("/api/account")).workspaces[0].id as string;
+  const invite = async () => (await api(`/api/workspaces/${ws}/invites`, { method: "POST", body: "{}" })).code as string;
+  const { token: bea } = await api("/api/account/signup", { method: "POST", body: JSON.stringify({ name: "Bea", email: "bea@example.org", password: "geheim12345", invite: await invite() }) });
+  const old = await invite();
+  // a link Bea made while an owner: it goes when Bea is removed
+  const setBea = async (r: string) => {
+    const id = (await api(`/api/workspaces/${ws}/members`)).find((m: { name: string }) => m.name === "Bea").id;
+    await api(`/api/workspaces/${ws}/members/${id}`, { method: "PATCH", body: JSON.stringify({ role: r }) });
+  };
+  await setBea("owner");
+  const { code: beas } = await api(`/api/workspaces/${ws}/invites`, { method: "POST", body: "{}" }, bea);
+  await setBea("member");
+  const role = async (name = "Bea") => (await api(`/api/workspaces/${ws}/members`)).find((m: { name: string }) => m.name === name)?.role as string | undefined;
+  let cem = "";
+  const context = await signedIn(browser, server, { viewport: { width: 1440, height: 900 }, locale: "de-DE" });
+  const page = await context.newPage();
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(`page error: ${e.message}`));
+  page.on("console", (m) => {
+    if (m.type() === "error") errors.push(`console error: ${m.text()}`);
+  });
+  const label = "members";
+  await check(page, label, `/#/w/${ws}/settings`, errors, async (p) => {
+    const links = p.getByRole("list", { name: "Einladungslinks" }).getByRole("listitem");
+    await links.first().waitFor({ timeout: 5000 });
+    if ((await links.count()) !== 2) failures.push(`${label}: ${await links.count()} open links instead of the two made by the API`);
+    if (!(await links.filter({ hasText: old }).innerText()).includes("Mitglied · Von E2E am")) failures.push(`${label}: the link for a member does not say so: ${await links.filter({ hasText: old }).innerText()}`);
+    // a link for an owner, from the menu: whoever joins with it is one, and only one person can
+    await p.getByRole("button", { name: "Neuer Link" }).click();
+    await p.locator("[data-popover]").getByRole("button", { name: "Für einen Besitzer" }).click();
+    await links.nth(2).waitFor({ timeout: 3000 });
+    const made = await links.first().innerText();
+    if (!made.includes("Besitzer · Von E2E am")) failures.push(`${label}: the new link does not say its role and who made it: ${made}`);
+    const code = (await links.first().locator("code").innerText()).split("/join/")[1]!;
+    const signup = (email: string) => api("/api/account/signup", { method: "POST", body: JSON.stringify({ name: email.split("@")[0], email, password: "geheim12345", invite: code }) });
+    cem = (await signup("cem@example.org")).token;
+    if ((await role("cem")) !== "owner") failures.push(`${label}: who joined with the owner link is no owner`);
+    if ((await fetch(`${server.url}/api/invites/${code}`)).status !== 404) failures.push(`${label}: the single-use link still works after its first use`);
+    // revoking asks first: cancelled, the link stays; confirmed, it goes
+    await links.filter({ hasText: old }).getByRole("button", { name: "Widerrufen" }).click();
+    await p.getByRole("dialog", { name: "Link widerrufen?" }).getByRole("button", { name: "Abbrechen" }).click();
+    await p.getByRole("dialog").waitFor({ state: "detached", timeout: 3000 });
+    if ((await fetch(`${server.url}/api/invites/${old}`)).status !== 200) failures.push(`${label}: a cancelled revoke took the link back`);
+    await links.filter({ hasText: old }).getByRole("button", { name: "Widerrufen" }).click();
+    await p.getByRole("dialog", { name: "Link widerrufen?" }).getByRole("button", { name: "Widerrufen", exact: true }).click();
+    await links.filter({ hasText: old }).waitFor({ state: "detached", timeout: 3000 });
+    if ((await fetch(`${server.url}/api/invites/${old}`)).status !== 404) failures.push(`${label}: the revoked link still works`);
+
+    const beaRow = p.getByRole("list", { name: "Mitglieder" }).getByRole("listitem").filter({ hasText: "Bea" });
+    const choose = async (item: string) => {
+      await beaRow.getByRole("button", { name: "Aktionen für Bea" }).click();
+      await p.locator("[data-popover]").getByRole("button", { name: item, exact: true }).click();
+      await p.getByRole("dialog").getByRole("button", { name: item, exact: true }).click();
+    };
+    await choose("Zum Besitzer machen");
+    await beaRow.getByText("Besitzer").waitFor({ timeout: 3000 });
+    if ((await role()) !== "owner") failures.push(`${label}: Bea is no owner on the server`);
+    await choose("Zum Mitglied machen");
+    await beaRow.getByText("Mitglied", { exact: true }).waitFor({ timeout: 3000 });
+    if ((await role()) !== "member") failures.push(`${label}: Bea is no member on the server`);
+    await choose("Entfernen");
+    await beaRow.waitFor({ state: "detached", timeout: 3000 });
+    if (!(await links.filter({ hasText: beas }).waitFor({ state: "detached", timeout: 3000 }).then(() => true, () => false))) failures.push(`${label}: the removed member's link is still listed`);
+    if (await role()) failures.push(`${label}: Bea is still in the workspace on the server`);
+  });
+  await context.close();
+  // the server's only account again: deleting it later leaves the server as new
+  for (const token of [bea, cem]) if (token) await api("/api/account", { method: "DELETE", body: JSON.stringify({ password: "geheim12345" }) }, token);
 }
 
 async function deleteAccountOnSettings(browser: import("playwright").Browser, server: Server) {
