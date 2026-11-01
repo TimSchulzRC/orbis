@@ -170,14 +170,17 @@ async function pages(browser: import("playwright").Browser, serverName: string, 
   for (const r of ROUTES) await check(page, label, r, errors, undefined, { phone });
   if (serverName !== "empty") for (const id of [...ITEMS, server.file, server.trashed].filter(Boolean)) await check(page, label, `/#/i/${encodeURIComponent(id)}`, errors, undefined, { phone, page: true });
   if (phone)
-    await check(page, label, "/#/settings", errors, async (p) => {
+    await check(page, label, "/#/search", errors, async (p) => {
       await p.getByRole("button", { name: "Menü", exact: true }).click();
       const menu = p.getByRole("dialog", { name: "Menü", exact: true });
       await menu.waitFor({ state: "visible" });
-      const reachable = await menu.evaluate((el) => {
-        const box = el.getBoundingClientRect();
-        return el.contains(document.elementFromPoint(box.left + box.width / 2, box.top + 20));
-      });
+      // a moment to settle: a blurred backdrop just before makes headless Chromium (no GPU) slow
+      const reachable = await menu
+        .evaluate((el) => {
+          const box = el.getBoundingClientRect();
+          return el.contains(document.elementFromPoint(box.left + box.width / 2, box.top + 20));
+        })
+        .then((ok) => ok || p.waitForFunction(() => { const el = document.querySelector("[role=dialog][aria-label='Menü']"); if (!el) return false; const box = el.getBoundingClientRect(); return el.contains(document.elementFromPoint(box.left + box.width / 2, box.top + 20)); }, null, { timeout: 3000 }).then(() => true, () => false));
       if (!reachable) failures.push(`${label}: mobile menu is behind its backdrop`);
       await p.keyboard.press("Escape");
       await menu.waitFor({ state: "detached" });
@@ -253,7 +256,7 @@ async function firstWorkspace(browser: import("playwright").Browser, server: Ser
   // the global settings list the workspaces; the examples are a workspace's own
   await check(page, label, "/#/settings", errors, async (p) => {
     if (await p.getByRole("button", { name: "Beispiele entfernen …" }).count()) failures.push(`${label}: workspace settings in the global settings`);
-    await p.locator("main").getByRole("link", { name: /Persönlich/ }).click();
+    await p.getByRole("dialog", { name: "Einstellungen" }).getByRole("link", { name: /Persönlich/ }).click();
     if (!(await p.getByRole("heading", { name: "Persönlich" }).waitFor({ timeout: 3000 }).then(() => true, () => false))) failures.push(`${label}: the workspace's settings do not open from the list`);
   });
   await check(page, label, "/#/workspace", errors, async (p) => {
@@ -416,7 +419,7 @@ async function deleteAccountOnSettings(browser: import("playwright").Browser, se
   await settle(page);
   await check(page, "delete account", "/#/settings", errors, async (p) => {
     await p.getByRole("button", { name: "Konto endgültig löschen", exact: true }).click();
-    const dialog = p.getByRole("dialog");
+    const dialog = p.getByRole("dialog", { name: "Konto endgültig löschen" });
     await dialog.getByLabel("Passwort").fill("wrong");
     await dialog.getByRole("button", { name: "Konto endgültig löschen", exact: true }).click();
     await dialog.getByRole("alert").filter({ hasText: "Das Passwort stimmt nicht." }).waitFor();

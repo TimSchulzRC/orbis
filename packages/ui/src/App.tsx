@@ -1,4 +1,4 @@
-import { ModalSurface } from "./components/ui/dialog";
+import { Backdrop, ModalSurface } from "./components/ui/dialog";
 import { BrandLogo } from "./ui/BrandLogo";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { History, Menu, Search, Inbox, SlidersHorizontal, Sun, Trash2, X } from "lucide-react";
@@ -10,10 +10,11 @@ import { Button, IconButton, PagePlaceholder } from "./ui/primitives";
 import { AgentNotice } from "./ui/AgentNotice";
 import { ConfirmHost } from "./ui/feedback";
 import { AppToaster } from "./ui/toasts";
+import { TitleTips } from "./ui/TitleTips";
 import { LightboxHost } from "./ui/Lightbox";
 import { PageBoundary } from "./ui/ErrorBoundary";
 import { Sidebar, SpaceTree } from "./ui/Sidebar";
-import { SyncDot } from "./ui/SyncDot";
+import { StatusButton } from "./ui/StatusButton";
 import { CommandPalette } from "./ui/CommandPalette";
 import { CaptureSheet } from "./ui/Capture";
 import { ItemPage } from "./views/ItemPage";
@@ -27,12 +28,13 @@ import { TypesView } from "./views/Types";
 import { GraphView } from "./views/Graph";
 import { Activity } from "./views/Activity";
 import { TrashView } from "./views/Trash";
-import { Settings, SpaceSettingsPage } from "./views/Settings";
+import { SettingsHost, SettingsRedirect, SpaceSettingsPage } from "./views/Settings";
 import { ICON } from "./ui/icons";
 import { NewSpaceDialog, SpaceScope, SpaceSelector, useReplicas } from "./ui/Spaces";
 import { globalPage } from "./scope";
 import { Gate } from "./views/Account";
 import { activeSpace, signOut, useAccounts } from "./accounts";
+import { openSettings } from "./ui/settings-open";
 
 export function App() {
   // the confirm dialog lives above everything: the sync may ask before the app has loaded
@@ -43,6 +45,7 @@ export function App() {
       </Gate>
       <ConfirmHost />
       <AppToaster />
+      <TitleTips />
     </>
   );
 }
@@ -151,7 +154,7 @@ function Main() {
       case "trash":
         return <TrashView />;
       case "settings":
-        return global ? <Settings /> : <SpaceSettingsPage />;
+        return global ? <SettingsRedirect /> : <SpaceSettingsPage />;
       // the setup page of before (a workspace is set up as it is created)
       case "setup":
         return <Redirect to="/" />;
@@ -186,7 +189,7 @@ function Main() {
             <a href="#/" className="tap flex items-center justify-center gap-2" aria-label={t("nav.today")}>
               <BrandLogo alt="" className="size-6" />
             </a>
-            <SyncDot />
+            <StatusButton />
             <Button variant="plain" onClick={() => setPalette(true)} className="tap-row ml-1 flex flex-1 items-center gap-2 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm text-muted-foreground">
               <Search size={15} /> {t("nav.searchPlaceholder")}
             </Button>
@@ -209,14 +212,15 @@ function Main() {
 
       {palette && <CommandPalette onClose={() => setPalette(false)} />}
       {menu && (
-        <div className="fixed inset-0 z-50 bg-black/30" onClick={() => setMenu(false)}>
+        <Backdrop onClick={() => setMenu(false)}>
           <MenuSheet onClose={() => setMenu(false)}>
             <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-line" />
-            <MobileMenu />
+            <MobileMenu onSettings={() => (setMenu(false), openSettings())} />
           </MenuSheet>
-        </div>
+        </Backdrop>
       )}
       {captureOpen && <CaptureSheet onClose={() => setCaptureOpen(false)} />}
+      <SettingsHost />
       <AgentNotice />
       <LightboxHost />
     </div>
@@ -258,7 +262,7 @@ function MenuSheet({ onClose, children }: { onClose: () => void; children: React
 }
 
 /** The phone menu (a sheet from below): the selector, Heute and Eingang · the workspaces seen (as in the sidebar) · Aktivität, Papierkorb, Einstellungen. */
-function MobileMenu() {
+function MobileMenu({ onSettings }: { onSettings: () => void }) {
   const { t } = useT();
   const { shown } = useAccounts();
   const [creating, setCreating] = useState(false);
@@ -266,7 +270,7 @@ function MobileMenu() {
   const inbox = useInboxItems().length;
   return (
     <>
-      <div className="mb-2 flex px-3">
+      <div className="mb-2 flex px-0.5">
         <SpaceSelector className="flex-1" onNew={() => setCreating(true)} />
       </div>
       {creating && <NewSpaceDialog onClose={() => setCreating(false)} />}
@@ -290,9 +294,9 @@ function MobileMenu() {
       <a href="#/trash" className={row}>
         <Trash2 size={18} className="text-muted-foreground" /> {t("nav.trash")}
       </a>
-      <a href="#/settings" className={row}>
+      <Button variant="plain" onClick={onSettings} className={cn(row, "w-full text-left")}>
         <SlidersHorizontal size={18} className="text-muted-foreground" /> {t("nav.settings")}
-      </a>
+      </Button>
     </>
   );
 }

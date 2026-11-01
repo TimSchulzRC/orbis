@@ -1,28 +1,13 @@
-// A new version of the app: one notice at the bottom (sonner, id "update", never twice). While
-// the new service worker still loads it says so; once it waits, "Neu laden" activates it fully –
-// local changes first go to the server, then SKIP_WAITING, then exactly one reload when the new
-// worker has taken over. Without a waiting worker the page reloads at once.
-import { toast } from "sonner";
-import { tr, unsynced } from "@obtion/ui";
+// A new version of the app: the status button (packages/ui/src/update.ts) turns while its service
+// worker loads and offers "Aktualisieren" once it waits. That activates it fully – local changes
+// first go to the server, then SKIP_WAITING, then exactly one reload when the new worker has taken
+// over. Without a waiting worker the page reloads at once. A click on the button looks for one too.
+import { setUpdate, setUpdateCheck, unsynced } from "@obtion/ui";
 
-const ID = "update";
 let reg: ServiceWorkerRegistration | undefined;
 let reloading = false;
 
-function loading(text = tr("app.updateLoading")) {
-  toast.loading(text, { id: ID, duration: Infinity });
-}
-
-function ready() {
-  toast(tr("app.newVersion"), {
-    id: ID,
-    duration: Infinity,
-    action: {
-      label: tr("app.reload"),
-      onClick: (e) => (e.preventDefault(), void apply()),
-    },
-  });
-}
+const ready = () => setUpdate("ready", () => void apply());
 
 /** Unsent local changes: wait until the server has them (they are kept on the device anyway). */
 async function settled(ms = 5000) {
@@ -37,7 +22,7 @@ function reloadOnce() {
 }
 
 async function apply() {
-  loading(tr("app.updating"));
+  setUpdate("applying");
   await settled();
   const waiting = reg?.waiting;
   if (!waiting) return reloadOnce();
@@ -58,8 +43,12 @@ export function initUpdates() {
         if (!r) return;
         reg = r;
         if (r.waiting && navigator.serviceWorker.controller) ready();
-        // a new version found: say so while it loads (only when this page has one running)
-        r.addEventListener("updatefound", () => navigator.serviceWorker.controller && !r.waiting && loading());
+        // a new version found: the button turns while it loads (only when this page has one running)
+        r.addEventListener("updatefound", () => navigator.serviceWorker.controller && !r.waiting && setUpdate("loading"));
+        setUpdateCheck(async () => {
+          await r.update();
+          return !!(r.installing || r.waiting);
+        });
         // a page left open for long notices rollouts too
         setInterval(() => void r.update().catch(() => {}), 30 * 60_000);
         document.addEventListener("visibilitychange", () => document.visibilityState === "visible" && void r.update().catch(() => {}));

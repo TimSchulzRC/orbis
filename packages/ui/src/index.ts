@@ -4,3 +4,4 @@ import "./theme";
 export { App } from "./App";
 export { refresh, unsynced } from "./accounts";
 export { tr } from "./i18n";
+export { setUpdate, setUpdateCheck } from "./update";

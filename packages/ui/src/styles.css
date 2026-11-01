@@ -953,3 +953,44 @@ body.cm-dragging * {
   font-size: 13px;
   color: var(--muted-foreground);
 }
+
+/* The status button (sync, update): the old icon shrinks away, then the new one grows in. */
+@keyframes icon-shrink {
+  from {
+    transform: scale(1);
+    opacity: 1;
+  }
+  to {
+    transform: scale(0);
+    opacity: 0;
+  }
+}
+@keyframes icon-grow {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  70% {
+    transform: scale(1.12);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.icon-shrink,
+.icon-grow {
+  display: inline-flex;
+}
+.icon-shrink {
+  animation: icon-shrink 0.13s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+.icon-grow {
+  animation: icon-grow 0.2s cubic-bezier(0, 0, 0.2, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .icon-shrink,
+  .icon-grow {
+    animation: none;
+  }
+}
