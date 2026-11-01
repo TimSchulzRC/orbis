@@ -1,0 +1,131 @@
+// File contents on this device (files.ts): what "Alles lokal" downloads, what switching to
+// "Nur online" keeps, and that contents no file points to any more are removed. Against a
+// server faked in fetch, with the real storage of the browser.
+import { afterEach, expect, test, vi } from "vitest";
+import type { Repo } from "@obtion/sync";
+import { initItem, newId, setFileMeta } from "@obtion/core/model";
+import { DeviceFiles, sha256 } from "../../packages/ui/src/files";
+import type { SpaceLink } from "../../packages/ui/src/browser";
+import { workspace } from "./workspace";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  localStorage.removeItem("obtion.fileMode");
+});
+
+/** The server's contents; a download whose hash is in `held` waits until it is released. */
+function server() {
+  const blobs = new Map<string, Blob>();
+  const held = new Map<string, () => void>();
+  const gates = new Map<string, Promise<void>>();
+  const asked: string[] = [];
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+    const url = new URL(String(input));
+    const hash = url.pathname.split("/").pop()!;
+    if (init?.method === "PUT") return Response.json({ ok: true });
+    if (url.searchParams.has("check")) return new Response(null, { status: 204 });
+    asked.push(hash);
+    await gates.get(hash);
+    const blob = blobs.get(hash);
+    return blob ? new Response(blob) : new Response(null, { status: 204, headers: { "x-obtion-missing": "1" } });
+  });
+  return {
+    asked,
+    async add(text: string) {
+      const blob = new Blob([text]);
+      const hash = await sha256(blob);
+      blobs.set(hash, blob);
+      return { hash, size: blob.size };
+    },
+    hold(hash: string) {
+      gates.set(hash, new Promise((r) => held.set(hash, r)));
+    },
+    release(hash: string) {
+      held.get(hash)?.();
+      gates.delete(hash);
+    },
+  };
+}
+
+let n = 0;
+/** Device files of `repo`, as if online and caught up with the server; `name` reuses a store. */
+function deviceFiles(repo: Repo, name = `t${++n}-${Date.now()}`) {
+  repo.status.online = true;
+  repo.status.synced = true;
+  const link = { base: "http://server.test", token: "t", person: { id: "u-test", name: "Test" }, storage: { files: `files-${name}`, blobs: `blobs-${name}` } } as unknown as SpaceLink;
+  return { files: new DeviceFiles(repo, link), name };
+}
+
+function addFile(repo: Repo, name: string, f: { hash: string; size: number }) {
+  const id = newId();
+  repo.change(id, (doc) => {
+    initItem(doc, { kind: "datei", title: name, parents: [], createdBy: repo.origin });
+    setFileMeta(doc, { hash: f.hash, name, mime: "application/pdf", filetype: "pdf", size: f.size, pages: 1 });
+  });
+  return id;
+}
+
+test("everything local: every original comes, the count moves with each download", async () => {
+  const srv = server();
+  const repo = await workspace(false);
+  const a = await srv.add("first");
+  const b = await srv.add("second");
+  addFile(repo, "a.pdf", a);
+  addFile(repo, "b.pdf", b);
+  srv.hold(b.hash);
+  localStorage.setItem("obtion.fileMode", "local");
+  const { files } = deviceFiles(repo);
+  await expect.poll(() => files.status.originals, { timeout: 5000 }).toBe(1);
+  expect(files.status.downloading).toBe(1);
+  srv.release(b.hash);
+  await expect.poll(() => files.status.originals, { timeout: 5000 }).toBe(2);
+  expect(files.status.downloading).toBe(0);
+  expect(files.hasLocal(a.hash) && files.hasLocal(b.hash)).toBe(true);
+});
+
+test("switching to online only while downloading: the original arriving then is not kept", async () => {
+  const srv = server();
+  const repo = await workspace(false);
+  const a = await srv.add("big original");
+  addFile(repo, "a.pdf", a);
+  srv.hold(a.hash);
+  const { files } = deviceFiles(repo);
+  files.setMode("local");
+  await expect.poll(() => srv.asked.includes(a.hash), { timeout: 5000 }).toBe(true);
+  files.setMode("online");
+  await files.dropOriginals();
+  srv.release(a.hash);
+  await expect.poll(() => files.status.downloading, { timeout: 5000 }).toBe(0);
+  await new Promise((r) => setTimeout(r, 100));
+  expect(files.hasLocal(a.hash)).toBe(false);
+  expect(files.status.originals).toBe(0);
+});
+
+test("a replaced original is removed from this device in the next session", async () => {
+  const srv = server();
+  const repo = await workspace(false);
+  const old = await srv.add("version 1");
+  const next = await srv.add("version 2");
+  const id = addFile(repo, "a.pdf", old);
+  localStorage.setItem("obtion.fileMode", "local");
+  const first = deviceFiles(repo);
+  await expect.poll(() => first.files.hasLocal(old.hash), { timeout: 5000 }).toBe(true);
+  repo.change(id, (doc) => setFileMeta(doc, { hash: next.hash, size: next.size, history: [{ hash: old.hash, at: Date.now() }] }));
+  await expect.poll(() => first.files.hasLocal(next.hash), { timeout: 5000 }).toBe(true);
+  // the same storage again, as after a reload
+  const second = deviceFiles(repo, first.name).files;
+  await expect.poll(() => second.hasLocal(next.hash), { timeout: 5000 }).toBe(true);
+  await expect.poll(() => second.hasLocal(old.hash), { timeout: 5000 }).toBe(false);
+  expect(second.status.originals).toBe(1);
+});
+
+test("a content stored in this session and not yet in a file stays", async () => {
+  server();
+  const repo = await workspace(false);
+  localStorage.setItem("obtion.fileMode", "local");
+  const { files } = deviceFiles(repo);
+  // stored, uploaded, but its document is not written yet (as a PDF preview is)
+  await files.adopt("0".repeat(64), new Blob(["x"]), "x.pdf", false);
+  await new Promise((r) => setTimeout(r, 800));
+  expect(files.hasLocal("0".repeat(64))).toBe(true);
+});
