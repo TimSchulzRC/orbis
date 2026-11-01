@@ -5,6 +5,8 @@
 // place, a type, back tomorrow, the sidebar, deleted – and on a desktop beside it, below the
 // progress across the whole width, one list: what is still waiting, and below what this review
 // sorted (each with its undo). A sorted entry slides down into that part, an undone one back up.
+// The stack is a pile of notes put down as they came: the next entries lie below the card as
+// sheets, their top edges showing above it, each a little narrower.
 // What was sorted stays for the rest of the day when the panel is closed, until the review is finished.
 // A click into the entry (or "Bearbeiten") edits it in place, a typo fixed on the way; the keys rest
 // meanwhile, and "Fertig" or any choice below ends it.
@@ -45,6 +47,10 @@ type Edit = { x: number; y: number; title?: number } | null;
 
 /** The review of today on this device: kept when leaving it ("Später weiter"), not over a reload. */
 let session: { day: string; order: string[]; sorted: Sorted[]; at?: string } | null = null;
+
+/** The pile below the entry on top: sheets stepped up behind it, each a little narrower, the next one first. */
+const PILE_ORIGIN = "50% 0%";
+const SHEETS = ["translateY(-12px) scale(.95)", "translateY(-23px) scale(.9)"];
 
 /**
  * The panel, sorting: a dialog over the page, as tall as the window leaves above the tray. Esc
@@ -211,7 +217,7 @@ function Review({ at, desktop }: { at?: string; desktop: boolean }) {
   if (!desktop)
     return (
       <div
-        className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-4 pt-2"
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden px-4 pb-4 pt-2"
         onTouchStart={(e) => (touch.current = e.touches[0]!.clientX)}
         onTouchEnd={(e) => {
           const dx = (e.changedTouches[0]?.clientX ?? 0) - (touch.current ?? 0);
@@ -338,10 +344,13 @@ function EntryCard({ entry, space, more, scroller, editing, onEdit, onDone }: { 
     return () => (ro.disconnect(), el.removeEventListener("scroll", measure));
   }, []);
   return (
-    <div className="relative min-h-[180px] flex-1">
-      {/* the stack: the next entries lie below this one */}
-      {more > 0 && <div className="absolute inset-x-4 -bottom-2 h-6 rounded-2xl border border-line bg-surface opacity-60" aria-hidden />}
-      {more > 1 && <div className="absolute inset-x-8 -bottom-4 h-6 rounded-2xl border border-line bg-surface opacity-30" aria-hidden />}
+    // room above the card for the edges of the pile
+    <div className="min-h-[180px] flex-1 pt-6">
+      <div className="relative h-full">
+      {/* the pile: the next entries below this one, sheets of the same size (the farther one first, so behind) */}
+      {SHEETS.slice(0, Math.min(more, SHEETS.length))
+        .map((pose, n) => <div key={n} aria-hidden className={cn("absolute inset-0 rounded-2xl border border-line shadow-[0_4px_14px_-6px_rgb(0_0_0/0.35)]", n ? "bg-hover" : "bg-surface-2")} style={{ transform: pose, transformOrigin: PILE_ORIGIN }} />)
+        .reverse()}
       <article
         ref={self}
         className={cn(
@@ -433,6 +442,7 @@ function EntryCard({ entry, space, more, scroller, editing, onEdit, onDone }: { 
           </Button>
         </div>
       </article>
+      </div>
     </div>
   );
 }
