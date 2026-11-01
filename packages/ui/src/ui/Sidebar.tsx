@@ -10,7 +10,7 @@ import { ArrowLeft, ChevronRight, ChevronDown, History, Inbox, Search, Settings,
 import { type Item, META_TYPE, SETTINGS_ID, setSchemaField, setSettings } from "@obtion/core/model";
 import { sidebarChildren, sidebarRoots } from "@obtion/core/placement";
 import { keyBetween, keysFor, cmpKey } from "@obtion/core/sortkey";
-import { useRepo, useRoute, useSpaceId, itemHref, itemPath, spaceHref, useLocalStorage, leavePage } from "../hooks";
+import { useRepo, useRoute, useSpaceId, itemPath, spaceHref, useLocalStorage, leavePage } from "../hooks";
 import { type Space, useAccounts } from "../accounts";
 import { useT } from "../i18n";
 import { Button, IconButton, Kbd, MenuItem, MoreMenu, REVEAL, useContextMenu } from "./primitives";
@@ -22,7 +22,7 @@ import { createAndOpen } from "../actions";
 import { NewTypeDialog } from "../views/Types";
 import { DeleteDialog, deleteOrAsk } from "../views/ItemPage";
 import { NewSpaceDialog, SpaceScope, SpaceSelector, moveTo } from "./Spaces";
-import { useInboxItems } from "./inbox";
+import { openReview, useInboxItems, useShelf } from "./inbox";
 import { KEYS } from "./storage";
 import { notify } from "./toasts";
 import { openSettings } from "./settings-open";
@@ -50,6 +50,7 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
   const route = useRoute();
   const { shown } = useAccounts();
   const inbox = useInboxItems().length;
+  const shelf = useShelf();
   const [creating, setCreating] = useState(false);
   const iconCls = (active: boolean) => cn("tap inline-flex size-8 shrink-0 items-center justify-center rounded-md", active ? "bg-hover text-fg" : "text-muted-foreground hover:bg-hover hover:text-fg");
   const navCls = (active: boolean) => cn("flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm", active ? "bg-hover font-medium text-fg" : "text-muted-foreground hover:bg-hover hover:text-fg");
@@ -70,10 +71,11 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
           <a href="#/" className={navCls(route.path === "/")}>
             <Sun size={16} /> {t("nav.today")}
           </a>
-          <a href="#/review" className={navCls(route.path.startsWith("/review"))}>
-            <Inbox size={16} /> <span className="flex-1">{t("nav.inbox")}</span>
+          {/* sorting, over the page open (the tray's panel) */}
+          <Button variant="plain" onClick={() => openReview()} className={navCls(shelf.open && !!shelf.sort)}>
+            <Inbox size={16} /> <span className="flex-1 text-left">{t("nav.inbox")}</span>
             {inbox > 0 && <span className="text-xs tabular-nums text-muted-foreground">{inbox}</span>}
-          </a>
+          </Button>
         </nav>
         {/* a line above each workspace: where one ends and the next begins */}
         {shown.map((s) => (

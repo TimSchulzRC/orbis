@@ -18,6 +18,7 @@ import { shortPath } from "./Row";
 import { createAndOpen } from "../actions";
 import { Button } from "./primitives";
 import { openSettings } from "./settings-open";
+import { openReview } from "./inbox";
 
 type Entry =
   | { kind: "item"; id: string; space: string }
@@ -66,7 +67,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   const captureTypes = [...pinnedTypes, ...ix.typesByName().filter((x) => !pinnedTypes.includes(x.id)).map((x) => x.id)];
   // actions, found by typing their name
   const cmds: [string, () => void][] = [
-    [t("palette.cmd.sortInbox"), () => navigate("/review")],
+    [t("palette.cmd.sortInbox"), () => openReview()],
     [t("nav.settings"), openSettings],
     [t("palette.cmd.newType"), () => navigate("/types?new=1", { space: cs })],
     [t("palette.cmd.language"), () => setLang(getLang() === "de" ? "en" : "de")],

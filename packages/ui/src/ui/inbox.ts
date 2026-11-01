@@ -48,23 +48,38 @@ export const reviewMinutes = (count: number) => Math.max(1, Math.round(count / 3
 // ---------- the tray's panel ----------
 
 /**
- * The tray's panel: closed, the list, or one entry in it (its key). One for the whole app.
+ * The tray's panel: closed, the list, one entry in it (its key), or sorting (`sort`, the review;
+ * `at` then is the entry to begin with). One for the whole app.
  * Open, it is a step in the history, so Back closes it (on a phone else Back leaves the app);
- * on Heute that step is "#/inbox", elsewhere the page's own address once more.
+ * on Heute that step is "#/inbox" (the list) or "#/review" (sorting), elsewhere the page's own
+ * address once more. Between list and sorting it changes in place, without a step.
  */
-const shelf = createStore<{ open: boolean; at?: string }>({ open: false });
-const onInbox = () => location.hash.split("?")[0] === "#/inbox";
-const onToday = () => ["", "#", "#/"].includes(location.hash.split("?")[0]!);
+const shelf = createStore<{ open: boolean; at?: string; sort?: boolean }>({ open: false });
+const hashPath = () => location.hash.split("?")[0];
+const onInbox = () => hashPath() === "#/inbox";
+const onReview = () => hashPath() === "#/review";
+const onToday = () => ["", "#", "#/"].includes(hashPath()!);
+const reviewAt = () => new URLSearchParams(location.hash.split("?")[1] ?? "").get("at") ?? undefined;
 
-export function openShelf(at?: string) {
-  if (!shelf.get().open && !onInbox()) {
+function openPanel(sort: boolean, at?: string) {
+  const s = shelf.get();
+  if (onInbox() || onReview()) {
+    // Heute with the panel: the address says which way it is open
+    if (onInbox() === sort) location.replace(sort ? "#/review" : "#/inbox");
+  } else if (!s.open) {
     if (onToday()) {
-      location.hash = "#/inbox";
+      location.hash = sort ? "#/review" : "#/inbox";
       history.replaceState({ ...history.state, shelf: true }, "");
-    } else history.pushState({ ...history.state, shelf: true }, "");
-  }
-  shelf.set({ open: true, at });
+    } else history.pushState({ ...history.state, shelf: true, sort }, "");
+  } else if (history.state?.shelf) history.replaceState({ ...history.state, sort }, "");
+  shelf.set({ open: true, at, sort });
 }
+
+/** Opens the panel at the list, or at one entry in it. */
+export const openShelf = (at?: string) => openPanel(false, at);
+
+/** Opens the panel to sort ("Einsortieren"), at `at` if given. */
+export const openReview = (at?: string) => openPanel(true, at);
 
 /** Closed as a link leads away from it: the step stays behind, Back comes to it again. */
 export const closeShelf = () => shelf.get().open && shelf.set({ open: false });
@@ -74,13 +89,16 @@ export function dismissShelf() {
   if (!shelf.get().open) return;
   if (history.state?.shelf) return history.back();
   shelf.set({ open: false });
-  if (onInbox()) location.replace("#/");
+  if (onInbox() || onReview()) location.replace("#/");
 }
 
 /** Open as the step in the history is (Back, Forward, a reload, another page); an entry chosen in it stays. */
 export function syncShelf() {
-  const open = !!history.state?.shelf || onInbox();
-  if (open !== shelf.get().open) shelf.set({ open });
+  const open = !!history.state?.shelf || onInbox() || onReview();
+  const sort = open && (onReview() || (!onInbox() && !!history.state?.sort));
+  const s = shelf.get();
+  if (open === s.open && sort === !!s.sort) return;
+  shelf.set({ open, sort, at: open && onReview() ? reviewAt() : undefined });
 }
 addEventListener("popstate", syncShelf);
 

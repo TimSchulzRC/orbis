@@ -203,6 +203,8 @@ async function pages(browser: import("playwright").Browser, serverName: string, 
     // links from before: an inbox entry's page leads into the review at it, a collection to its type's page
     await check(page, label, "/#/inbox/ex-i-podcast", errors, async (p) => {
       if (!p.url().includes("/review?at=")) failures.push(`${label}: an old inbox entry link does not lead into the review (${p.url()})`);
+      // the review is the tray's panel, sorting, over Heute
+      else if (!(await p.locator("[data-shelf-panel=sort]").waitFor({ timeout: 3000 }).then(() => true, () => false))) failures.push(`${label}: the review does not open as the tray's panel`);
     }, { phone });
     await check(page, label, "/#/c/sys%3Ac-task", errors, async (p) => {
       if (!p.url().includes("/i/sys:task")) failures.push(`${label}: an old collection link does not lead to the type's page (${p.url()})`);
