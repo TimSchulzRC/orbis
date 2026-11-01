@@ -187,7 +187,7 @@ export class Zip {
   /** One entry's content; undefined when it can't be read (encrypted, unknown method, too large). */
   async read(e: Entry | string | undefined): Promise<Uint8Array | undefined> {
     const entry = typeof e === "string" ? this.find(e) : e;
-    if (!entry || entry.encrypted || entry.csize > PART_MAX || this.budget <= 0) return undefined;
+    if (!entry || entry.encrypted || entry.csize > PART_MAX || entry.usize > PART_MAX || this.budget <= 0) return undefined;
     const file = Bun.file(this.path);
     const local = new DataView(await file.slice(entry.offset, entry.offset + 30).arrayBuffer());
     if (local.byteLength < 30 || local.getUint32(0, true) !== 0x04034b50) return undefined;
@@ -199,7 +199,8 @@ export class Zip {
       try {
         out = new Uint8Array(inflateRawSync(data, { maxOutputLength: Math.min(PART_MAX, this.budget) }));
       } catch {
-        out = undefined; // broken, or larger than allowed
+        this.budget -= Math.min(PART_MAX, this.budget); // broken or larger than declared: what was unpacked counts
+        return undefined;
       }
     }
     if (out) this.budget -= out.length;
@@ -333,6 +334,7 @@ async function xlsxText(zip: Zip): Promise<string> {
     if (!xml) continue;
     const rows: string[] = [];
     let size = 0;
+    let next = 0; // the column of a cell without reference
     let row: string[] = [];
     let col = 0;
     let type = "";
@@ -347,16 +349,21 @@ async function xlsxText(zip: Zip): Promise<string> {
         if (t.close || t.self) {
           rows.push(row.join("\t").replace(/\t+$/, ""));
           row = [];
+          next = 0;
           if ((size += rows.at(-1)!.length + 1) > TEXT_MAX) break;
-        } else row = [];
+        } else {
+          row = [];
+          next = 0;
+        }
       } else if (t.tag === "c") {
         if (!t.close) {
           const ref = attr(t.attrs, "r");
-          col = Math.min(ref ? colIndex(ref) : row.length, MAX_COLUMN); // Excel has 16384 columns
+          col = Math.min(ref ? colIndex(ref) : next, MAX_COLUMN); // Excel has 16384 columns
           type = attr(t.attrs, "t") ?? "";
           value = undefined;
         }
         if (t.close || t.self) {
+          next = col + 1;
           const v = value === undefined ? "" : type === "s" ? (shared[Number(value)] ?? "") : type === "b" ? (value === "1" ? "TRUE" : "FALSE") : value;
           // empty cells need no place: a far column alone pads nothing
           if (v && col < MAX_COLUMN) {
