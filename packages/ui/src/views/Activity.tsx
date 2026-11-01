@@ -1,12 +1,13 @@
 // Activity: a log of every change with who made it (a person, an agent working for one, an
-// import), bulk operations like deleting a type included.
+// import), bulk operations like deleting a type included. One page for all workspaces, with its
+// own choice of them (the chips; the sidebar's choice stays as it is).
 import { useEffect, useState } from "react";
 import { spaceCall, useAccounts } from "../accounts";
-import { SpaceEyebrow } from "../ui/Spaces";
+import { SpaceFilter, SpaceScope, useReplicas } from "../ui/Spaces";
 import type { ActivityEvent, FieldChange } from "@obtion/core/protocol";
 import { type Item, META_TYPE, optionNames, type Value } from "@obtion/core/model";
 import type { Index } from "@obtion/core/graph";
-import { useRepo, useSpaceId, itemHref, useDocumentTitle } from "../hooks";
+import { useRepo, useItemHref, useDocumentTitle } from "../hooks";
 import { useT, titleOf } from "../i18n";
 import type { T } from "@obtion/core/i18n";
 import { Button, Empty, Seg } from "../ui/primitives";
@@ -73,6 +74,7 @@ function describe(c: FieldChange, item: Item | undefined, ix: Index, t: T): stri
 /** What happened to one item: verb, item, changes. */
 function Entry({ e, compact, noVerb }: { e: ActivityEvent; compact?: boolean; noVerb?: boolean }) {
   const r = useRepo();
+  const itemHref = useItemHref();
   const { t } = useT();
   const ix = r.index();
   const item = r.get(e.doc);
@@ -126,13 +128,13 @@ function systemText(text: string, t: T): string {
   return text;
 }
 
-/** Everything one step did (one user action or tool call), as one entry of the log. */
-function StepGroup({ events }: { events: ActivityEvent[] }) {
+/** Everything one step did (one user action or tool call), as one entry of the log; `space`: its workspace's name, with several. */
+function StepGroup({ events, space }: { events: ActivityEvent[]; space?: string }) {
   const { t } = useT();
   const head = events[0]!;
   const w = who(head.origin, t);
   return (
-    <li className="flex gap-2.5 text-[15px]">
+    <>
       <Avatar origin={head.origin} />
       <div className="min-w-0 flex-1">
         <span className="font-medium">{w.label}</span>
@@ -146,70 +148,101 @@ function StepGroup({ events }: { events: ActivityEvent[] }) {
         </ul>
         <div className="mt-0.5 text-xs text-muted-foreground">
           <RelTime ts={head.ts} />
+          {space && ` · ${space}`}
         </div>
       </div>
-    </li>
+    </>
   );
 }
 
-/** Consecutive events of the same step form one group. */
-function groupBySteps(events: ActivityEvent[]): ActivityEvent[][] {
-  const out: ActivityEvent[][] = [];
+/** An event with the workspace it happened in. */
+type Placed = ActivityEvent & { space: string };
+
+/** Consecutive events of the same step (in the same workspace) form one group. */
+function groupBySteps(events: Placed[]): Placed[][] {
+  const out: Placed[][] = [];
   for (const e of events) {
-    const last = out.at(-1);
-    if (e.step && last && last[0]!.step === e.step) last.push(e);
+    const last = out.at(-1)?.[0];
+    if (e.step && last && last.step === e.step && last.space === e.space) out.at(-1)!.push(e);
     else out.push([e]);
   }
   return out;
 }
 
+/** What is fetched of one workspace's log: the newest first, page by page. */
+interface Fetched {
+  events: ActivityEvent[];
+  more: boolean;
+  error: boolean;
+}
+
+/** The log of every workspace (or the ones chosen here), newest first. */
 export function Activity() {
-  const r = useRepo();
-  const space = useSpaceId()!;
   const { t } = useT();
-  const me = useAccounts().account?.user;
+  const { account, spaces } = useAccounts();
+  const me = account?.user;
   useDocumentTitle(t("nav.activity"));
-  const [events, setEvents] = useState<ActivityEvent[]>([]);
+  // its own choice of workspaces, apart from the ones seen in the sidebar; null: all
+  const [only, setOnly] = useState<string[] | null>(null);
+  const ids = spaces.map((s) => s.id).filter((id) => !only || only.includes(id));
+  const repos = useReplicas(ids);
+  const [fetched, setFetched] = useState<Record<string, Fetched>>({});
   const [filter, setFilter] = useState<"all" | "agent" | "you">("all");
-  const [more, setMore] = useState(true);
-  const [error, setError] = useState(false);
-  const load = (before?: number) =>
-    spaceCall<ActivityEvent[]>(space, `/api/activity?limit=60${before ? `&before=${before}` : ""}`)
-      .then((list) => {
-        setEvents((ev) => (before ? [...ev, ...list] : list));
-        setMore(list.length === 60);
-        setError(false);
-      })
-      .catch(() => setError(true));
+  const load = (space: string, before?: number) =>
+    spaceCall<ActivityEvent[]>(space, `/api/activity?limit=60${before ? `&before=${before}` : ""}`).then(
+      (list) => setFetched((f) => ({ ...f, [space]: { events: before ? [...(f[space]?.events ?? []), ...list] : list, more: list.length === 60, error: false } })),
+      // a page that failed is still to fetch: "more" stays and tries the same one again
+      () => setFetched((f) => ({ ...f, [space]: { events: f[space]?.events ?? [], more: !!before, error: true } })),
+    );
+  const online = repos.map((r) => r.status.online).join();
   useEffect(() => {
-    load();
-  }, [r.status.online]);
-  // fetched rows, then the live events that came since
-  const merged = [...events, ...r.events].filter((e, i, a) => a.findIndex((x) => x.id === e.id) === i).sort((a, b) => b.id - a.id);
-  const shown = merged.filter((e) => {
-    if (filter === "all") return true;
-    const w = who(e.origin, t);
-    return filter === "agent" ? w.agent : byMe(w, me);
+    for (const id of ids) void load(id);
+  }, [ids.join(), online]);
+  // per workspace the fetched rows, then the live events that came since
+  const logs = ids.map((id, n) => {
+    const f = fetched[id];
+    const events = [...(f?.events ?? []), ...repos[n]!.events].filter((e, i, a) => a.findIndex((x) => x.id === e.id) === i);
+    return { id, f, events };
   });
+  // a workspace with more to fetch is complete only down to its oldest row: older rows of the others wait
+  const cutoff = Math.max(0, ...logs.filter((l) => l.f?.more).map((l) => Math.min(...l.f!.events.map((e) => e.ts))));
+  const all: Placed[] = logs
+    .flatMap((l) => l.events.map((e) => ({ ...e, space: l.id })))
+    .filter((e) => e.ts >= cutoff)
+    .filter((e) => {
+      if (filter === "all") return true;
+      const w = who(e.origin, t);
+      return filter === "agent" ? w.agent : byMe(w, me);
+    })
+    .sort((a, b) => b.ts - a.ts || b.id - a.id);
+  const nameOf = (id: string) => (spaces.length > 1 ? spaces.find((s) => s.id === id)?.name : undefined);
+  const nothing = logs.every((l) => l.f?.error && !l.events.length);
   return (
     <div className="page-read">
-      <SpaceEyebrow />
       <h1 className="page-title">{t("nav.activity")}</h1>
       <p className="mb-5 text-sm text-muted-foreground">{t("activity.intro")}</p>
-      <div className="mb-5">
-        <Seg label={t("activity.filterLabel")} value={filter} onChange={setFilter} options={(["all", "agent", "you"] as const).map((f) => ({ value: f, label: t("activity.filter." + f) }))} />
+      {/* one row: which workspaces on the left, who on the right (on a phone below, at the left) */}
+      <div className="mb-5 flex flex-wrap items-center gap-x-4 gap-y-2">
+        <SpaceFilter className="m-0 min-w-0 px-0 md:m-0" value={only} onChange={setOnly} />
+        <div className="sm:ml-auto">
+          <Seg label={t("activity.filterLabel")} value={filter} onChange={setFilter} options={(["all", "agent", "you"] as const).map((f) => ({ value: f, label: t("activity.filter." + f) }))} />
+        </div>
       </div>
-      {error && !events.length ? (
+      {nothing ? (
         <Empty title={t("activity.offlineTitle")}>{t("activity.offline")}</Empty>
       ) : (
         <ul className="space-y-4">
-          {groupBySteps(shown).map((g) => (
-            <StepGroup key={g[0]!.id} events={g} />
+          {groupBySteps(all).map((g) => (
+            <li key={`${g[0]!.space}:${g[0]!.id}`} className="flex gap-2.5 text-[15px]">
+              <SpaceScope id={g[0]!.space}>
+                <StepGroup events={g} space={nameOf(g[0]!.space)} />
+              </SpaceScope>
+            </li>
           ))}
         </ul>
       )}
-      {more && events.length > 0 && (
-        <Button variant="plain" onClick={() => load(events.at(-1)!.id)} className="mt-6 text-sm text-muted-foreground hover:text-fg">
+      {logs.some((l) => l.f?.more) && (
+        <Button variant="plain" onClick={() => logs.forEach((l) => l.f?.more && void load(l.id, Math.min(...l.f.events.map((e) => e.id))))} className="mt-6 text-sm text-muted-foreground hover:text-fg">
           {t("activity.more")}
         </Button>
       )}

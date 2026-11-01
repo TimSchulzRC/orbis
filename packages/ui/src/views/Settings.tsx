@@ -6,7 +6,7 @@ import { Checkbox } from "../components/ui/checkbox";
 import { Input } from "../components/ui/input";
 import { NativeSelect } from "../components/ui/native-select";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import { Copy, Check, Eye, EyeOff, KeyRound, RotateCcw, ChevronRight, History, Shapes, Trash2, Waypoints } from "lucide-react";
+import { Copy, Check, Eye, EyeOff, KeyRound, RotateCcw, ChevronRight, Shapes, Trash2, Waypoints } from "lucide-react";
 import { SETTINGS_ID, setSettings } from "@obtion/core/model";
 import { ENDONYMS, LANGS, fmtBytes } from "@obtion/core/i18n";
 import { resetInbox } from "@obtion/core/setup";
@@ -510,9 +510,7 @@ export function SpaceSettingsPage() {
         <nav className="mt-4 flex flex-wrap gap-2" aria-label={t("settings.more")}>
           {([
             ["/types", t("nav.types"), Shapes],
-            ["/activity", t("nav.activity"), History],
             ["/graph", t("nav.graph"), Waypoints],
-            ["/trash", t("nav.trash"), Trash2],
           ] as const).map(([path, label, I]) => (
             <a key={path} href={spaceHref(space.id, path)} className="tap-y inline-flex h-8 items-center gap-1.5 rounded-lg border border-line bg-surface px-3 text-sm hover:bg-hover">
               <I size={15} className="text-muted-foreground" /> {label}

@@ -1,7 +1,7 @@
 import { ModalSurface } from "./components/ui/dialog";
 import { BrandLogo } from "./ui/BrandLogo";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Menu, Search, Inbox, SlidersHorizontal, Sun, X } from "lucide-react";
+import { History, Menu, Search, Inbox, SlidersHorizontal, Sun, Trash2, X } from "lucide-react";
 import { SETTINGS_ID } from "@obtion/core/model";
 import { useRepo, useRoute, useDesktop, itemPath, spaceHref, navigate, openItem } from "./hooks";
 import { useT } from "./i18n";
@@ -122,9 +122,9 @@ function Main() {
   // the review, search and the settings show what is there in every workspace
   const settings = r.get(SETTINGS_ID);
   const global = globalPage(route.parts, route.space);
-  const old = oldAddress(route.parts);
+  const old = oldAddress(route.parts, route.space);
   const page = (() => {
-    if (old !== undefined) return <Redirect to={old.startsWith("/review") ? old : spaceHref(route.space ?? active?.id, old).slice(1)} />;
+    if (old !== undefined) return <Redirect to={old.startsWith("/review") || old === "/activity" || old === "/trash" ? old : spaceHref(route.space ?? active?.id, old).slice(1)} />;
     // a workspace in the address this account is not in (any more): not the open one's page instead
     if (route.space && !spaces.some((s) => s.id === route.space)) return <PagePlaceholder>{t("app.noSpace")}</PagePlaceholder>;
     if (!global) {
@@ -257,7 +257,7 @@ function MenuSheet({ onClose, children }: { onClose: () => void; children: React
   );
 }
 
-/** The phone menu (a sheet from below): the selector, Heute and Eingang · the workspaces seen (as in the sidebar) · Einstellungen. */
+/** The phone menu (a sheet from below): the selector, Heute and Eingang · the workspaces seen (as in the sidebar) · Aktivität, Papierkorb, Einstellungen. */
 function MobileMenu() {
   const { t } = useT();
   const { shown } = useAccounts();
@@ -284,6 +284,12 @@ function MobileMenu() {
         </SpaceScope>
       ))}
       <div className="my-2 border-t border-line" />
+      <a href="#/activity" className={row}>
+        <History size={18} className="text-muted-foreground" /> {t("nav.activity")}
+      </a>
+      <a href="#/trash" className={row}>
+        <Trash2 size={18} className="text-muted-foreground" /> {t("nav.trash")}
+      </a>
       <a href="#/settings" className={row}>
         <SlidersHorizontal size={18} className="text-muted-foreground" /> {t("nav.settings")}
       </a>
@@ -295,13 +301,15 @@ function MobileMenu() {
  * Addresses from before and where they lead now (a path in the workspace of the address), or
  * undefined for one of today. They can go once no saved link or bookmark uses them any more.
  */
-function oldAddress(parts: string[]): string | undefined {
+function oldAddress(parts: string[], space?: string): string | undefined {
   // the lists as collections (before 26.10.)
   if (parts[0] === "c") return OLD_LISTS[parts[1]!] ?? "/";
   // an inbox entry's own page (before the review): the review, at that entry
   if (parts[0] === "inbox" && parts[1]) return `/review?at=${encodeURIComponent(entryKey(activeSpace()!.id, parts[1]))}`;
   // a workspace's settings (before 31.10.)
   if (parts[0] === "workspace") return "/settings";
+  // a workspace's activity or trash (before 1.11.): now one page for the workspaces seen
+  if ((parts[0] === "activity" || parts[0] === "trash") && space) return "/" + parts[0];
 }
 
 const OLD_LISTS: Record<string, string> = { "sys:c-project": "/i/sys:project", "sys:c-task": "/i/sys:task", "sys:c-card": "/i/sys:card", "sys:c-files": "/files", "sys:c-images": "/files?kind=image", "sys:inbox": "/inbox" };

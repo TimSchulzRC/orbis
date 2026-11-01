@@ -49,12 +49,12 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
         ...ix.typesInOrder().map((x) => [of(ix.typePlural(x.id)), spaceHref(s.id, itemPath(x.id))]),
         [of(t("nav.files")), spaceHref(s.id, "/files")],
         [of(t("nav.types")), spaceHref(s.id, "/types")],
-        [of(t("nav.activity")), spaceHref(s.id, "/activity")],
         [of(t("nav.graph")), spaceHref(s.id, "/graph")],
-        [of(t("nav.trash")), spaceHref(s.id, "/trash")],
         [several ? `${t("space.settings")} · ${s.name}` : t("space.settings"), spaceHref(s.id, "/settings")],
       ];
     }),
+      [t("nav.activity"), "#/activity"],
+      [t("nav.trash"), "#/trash"],
       [t("nav.settings"), "#/settings"],
   ];
   // something new goes where a capture from anywhere goes
