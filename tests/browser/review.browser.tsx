@@ -1,16 +1,16 @@
-// The review: one inbox entry at a time; sorting moves on and lists it under "Erledigt" with its
-// undo; the entry is edited right in the card.
+// The review (the tray's panel, sorting): one inbox entry at a time; sorting moves on and moves it
+// in the list beside down under "Einsortiert", with its undo back up; the entry is edited right in the card.
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { commands, page } from "vitest/browser";
 import { cleanup, render } from "vitest-browser-react";
-import { Review } from "../../packages/ui/src/views/Review";
+import { ReviewPanel } from "../../packages/ui/src/views/Review";
 import { workspace } from "./workspace";
 
 beforeEach(async () => {
   await workspace();
   await render(
     <main>
-      <Review />
+      <ReviewPanel desktop />
     </main>,
   );
 });
@@ -18,16 +18,26 @@ afterEach(() => cleanup());
 
 const card = () => page.getByRole("article").getByRole("heading", { level: 2 });
 const titleNow = () => document.querySelector("main article h2")?.textContent?.trim() ?? "";
+/** The list beside: its rows as text, in order (the heads among them). */
+const listRows = () => [...document.querySelectorAll("main aside li")].map((li) => li.textContent?.trim() ?? "");
+const sortedBelow = (title: string) => {
+  const rows = listRows();
+  const head = rows.findIndex((r) => r.startsWith("Einsortiert"));
+  const at = rows.findIndex((r) => r.startsWith(title));
+  return head >= 0 && at > head;
+};
 
 describe("sorting", () => {
-  test('"Anheften" moves on and lists the entry under "Erledigt"; its undo brings it back', async () => {
+  test('"Anheften" moves on and moves the entry down under "Einsortiert"; its undo brings it back up', async () => {
     await expect.element(card()).toBeVisible();
     const title = titleNow();
+    expect(sortedBelow(title)).toBe(false);
     await page.getByRole("button", { name: /Anheften/ }).click();
     await expect.poll(titleNow).not.toBe(title);
-    await expect.poll(() => document.querySelector("section[aria-label='Erledigt']")?.textContent ?? "").toContain(title);
+    await expect.poll(() => sortedBelow(title)).toBe(true);
     await page.getByRole("button", { name: `„${title}“ rückgängig machen` }).click();
     await expect.poll(titleNow).toBe(title);
+    await expect.poll(() => sortedBelow(title)).toBe(false);
   });
 });
 
@@ -45,6 +55,14 @@ describe("editing in the card", () => {
     await page.getByRole("button", { name: "Fertig" }).click();
     await expect.poll(titleNow).toBe(title + " Xs");
     await expect.poll(() => hints().length, { message: "and come back after it" }).toBeGreaterThan(0);
+  });
+
+  test("a click elsewhere in the panel (its head) ends editing", async () => {
+    await expect.element(card()).toBeVisible();
+    await page.getByRole("button", { name: "Bearbeiten" }).click();
+    await expect.poll(() => document.querySelector("main article textarea")).not.toBeNull();
+    await page.getByRole("heading", { level: 2, name: "Eingang" }).click();
+    await expect.poll(() => document.querySelector("main article textarea")).toBeNull();
   });
 
   test('"Bearbeiten" puts the caret into the text; Esc ends it and keeps what was typed', async () => {

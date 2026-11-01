@@ -1,5 +1,5 @@
-// Sidebar: the workspace selector (which workspaces are seen), search, Heute and the inbox (of
-// the workspaces seen), then each of them as a block of its own (as teamspaces in Notion): its
+// Sidebar: the workspace selector (which workspaces are seen), search and Heute (the inbox is the
+// tray's, below every page), then each of them as a block of its own (as teamspaces in Notion): its
 // name, the pinned items (informations with their children as a tree, also type pages), and its
 // types with the files. At the bottom: activity and trash (of the workspaces seen) and the settings. Blocks and what is open in them fold; that is remembered on
 // this device. In the tree, dragging replaces the parent you come from; with Alt held a place is
@@ -8,11 +8,11 @@
 // gap between the blocks counts; or "…" → up, down) changes the order of the blocks; it is the
 // account's, on every device, and a new one comes first.
 import { useEffect, useState } from "react";
-import { ArrowDown, ArrowLeft, ArrowUp, ChevronRight, ChevronDown, History, Inbox, Search, Settings, Link2, Plus, Paperclip, Shapes, Sun, Trash2, Waypoints } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowUp, ChevronRight, ChevronDown, History, Search, Settings, Link2, Plus, Paperclip, Shapes, Sun, Trash2, Waypoints } from "lucide-react";
 import { type Item, META_TYPE, SETTINGS_ID, setSchemaField, setSettings } from "@obtion/core/model";
 import { sidebarChildren, sidebarRoots } from "@obtion/core/placement";
 import { keyBetween, keysFor, cmpKey } from "@obtion/core/sortkey";
-import { useRepo, useRoute, useSpaceId, itemHref, itemPath, spaceHref, useLocalStorage, leavePage, navigate } from "../hooks";
+import { useRepo, useRoute, useSpaceId, itemPath, spaceHref, useLocalStorage, leavePage, navigate } from "../hooks";
 import { type Space, moveSpace, useAccounts } from "../accounts";
 import { useT } from "../i18n";
 import { Button, IconButton, Kbd, MenuItem, MoreMenu, REVEAL, useContextMenu } from "./primitives";
@@ -23,7 +23,6 @@ import { StatusButton } from "./StatusButton";
 import { createAndOpen } from "../actions";
 import { DeleteDialog, deleteOrAsk } from "../views/ItemPage";
 import { NewSpaceDialog, SpaceScope, SpaceSelector, moveTo } from "./Spaces";
-import { useInboxItems } from "./inbox";
 import { KEYS } from "./storage";
 import { notify } from "./toasts";
 import { openSettings, openSpaceSettings } from "./settings-open";
@@ -69,7 +68,6 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
   const { t, lang } = useT();
   const route = useRoute();
   const { shown } = useAccounts();
-  const inbox = useInboxItems().length;
   const [creating, setCreating] = useState(false);
   const [spaceGap, setSpaceGap] = useState<{ index: number; y: number } | null>(null);
   // a drag let go outside the sidebar (or broken off) leaves no line behind
@@ -119,10 +117,6 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
           </Button>
           <a href="#/" className={navCls(route.path === "/")}>
             <Sun size={16} /> {t("nav.today")}
-          </a>
-          <a href="#/review" className={navCls(route.path.startsWith("/review"))}>
-            <Inbox size={16} /> <span className="flex-1">{t("nav.inbox")}</span>
-            {inbox > 0 && <span className="text-xs tabular-nums text-muted-foreground">{inbox}</span>}
           </a>
         </nav>
         {/* a line above each workspace: where one ends and the next begins */}
