@@ -20,7 +20,9 @@
 //   views    Y.Map   viewId -> ViewDef
 //   schema   Y.Map   types only; capabilities and each property are nested Y.Maps
 //   tabs     Y.Map   types only: tabId -> Y.Map (ViewTab); empty means the default views
-//   file, op, settings  Y.Map  only in documents of that kind
+//   file     Y.Map   files only: hash, name, mime, filetype, size, width, height, pages, duration,
+//                    display, thumb, text, extracted, history
+//   op, settings  Y.Map  only in documents of that kind
 //   drawing, drawingFiles, drawingState  only in drawings (see drawing.ts)
 import * as Y from "yjs";
 import { cmpKey, keyBetween } from "./sortkey";
@@ -142,7 +144,8 @@ export interface FileMeta {
   duration?: number;
   display?: string; // hash of the display version (images, 1600 px WebP)
   thumb?: string; // hash of the preview (320 px)
-  text?: string; // extracted text (PDF)
+  text?: string; // extracted text (PDF, Office, text files, a ZIP's entries)
+  extracted?: string; // the server read the text of this content: "<version>:<hash prefix>"
   history?: { hash: string; at: number }[];
 }
 

@@ -11,6 +11,7 @@ import { LANGS, type Lang, acceptLang } from "@obtion/core/i18n";
 import { attachInput, convertInput, createInput, defineTypeInput, getInput, placeInput, suggestInput, updateInput, updateTypeInput } from "./schemas";
 import type { Store } from "./store";
 import type { Blobs } from "./blobs";
+import { MAX_ATTACH } from "./config";
 import { type Person, agentOrigin, parseOrigin } from "@obtion/core/origin";
 import { workspaceRules } from "@obtion/core/rules";
 
@@ -39,6 +40,7 @@ How to work:
 - New use cases need no code: \`define_type\` / \`update_type\` (properties, capabilities, views). Tag ↔ type conversions are previewed with \`convert\`; the user runs them in the app.
 - Answers list one line per entry: title [id] · type · status · due · path · ⚠ blocked by / waiting for; after a write it ends with · version <hash> (its base_version from now on). A writing call is all or nothing: "Nothing changed" means no part of it was applied – fix the reason and call again. Read the Hints after a write (unresolved links, duplicate titles, open items below something done …).
 - Link exactly with [[id|Label]], always for titles with # | [ ] ^. Never link an item to itself.
+- Files: \`get\` on a file shows its facts, the extracted text (PDF incl. embedded invoice XML, Word, Excel, PowerPoint, text and code files, a ZIP's entries) and, where the server offers it, a download command. Every file type is accepted. Small things: \`attach\` with base64 or a public url. A file on your disk: upload it over HTTP (below) – don't push large files through base64.
 - Never delete unless asked; deletes go to the trash. Today is in \`schema\`. Reply in the language of the user's message.
 
 Rules for agents:
@@ -55,7 +57,16 @@ function instructions(ops: Ops): string {
   return `${INSTRUCTIONS}\n\nRules for agents of this workspace (binding everywhere, as of now):\n${text}`;
 }
 
-function agentName(req: Request): string {
+/** The HTTP file API, for the instructions and the attach description. */
+function filesHelp(url: string) {
+  return `HTTP file API (token: the one this MCP connection uses, as $OBTION_TOKEN – never write the real token into answers or files):
+- Upload a new file: curl -fsS -X POST -H "Authorization: Bearer $OBTION_TOKEN" --data-binary @report.pdf "${url}?name=report.pdf&parent=<id>" → JSON with id, hash, size. parent is optional (an id or exact title).
+- Replace the content of a file (same item, old version kept): curl -fsS -X PUT -H "Authorization: Bearer $OBTION_TOKEN" --data-binary @report.pdf ${url}/<file id>
+- Download the original: curl -fsS -H "Authorization: Bearer $OBTION_TOKEN" -o report.pdf ${url}/<file id>
+Uploads and replacements show up in the activity and can be undone with undo like a tool call.`;
+}
+
+export function agentName(req: Request): string {
   const explicit = req.headers.get("x-obtion-agent");
   if (explicit) return explicit;
   const ua = req.headers.get("user-agent") ?? "";
@@ -85,10 +96,10 @@ const userPrompt = (text: string) => ({ messages: [{ role: "user" as const, cont
 /** The items a tool answer is about: the rules for agents that apply to them end the answer. */
 type Touched = Set<string>;
 
-function buildMcpServer(store: Store, origin: string, blobs?: Blobs, lang: Lang = "de") {
-  const ops = new Ops(store, blobs);
+function buildMcpServer(store: Store, origin: string, blobs?: Blobs, lang: Lang = "de", filesUrl?: string) {
+  const ops = new Ops(store, blobs, filesUrl);
   const agent = parseOrigin(origin).name;
-  const server = new McpServer({ name: "obtion", version: "0.2.0" }, { instructions: instructions(ops) });
+  const server = new McpServer({ name: "obtion", version: "0.2.0" }, { instructions: filesUrl ? `${instructions(ops)}\n\n${filesHelp(filesUrl)}` : instructions(ops) });
   const ro = { readOnlyHint: true };
   /** A tool about items: what it touched gets its rules for agents appended (`full`: owners shown uncut). */
   const ruled =
@@ -139,7 +150,7 @@ function buildMcpServer(store: Store, origin: string, blobs?: Blobs, lang: Lang 
     "get",
     {
       title: "Get",
-      description: `One item with its version (a hash of its content, for base_version – not the numbered text versions of \`history\`), properties, place, children, links, backlinks, updates and body. Files include facts and their extracted text. Pass version as base_version to update when you replace the body. A body (or file text) longer than ${LONG_TEXT} characters with headings comes as its outline (each heading with level, character offset and size) instead: then read the part you need with section (a heading or a path like "Status > Offene Punkte") or offset (+ max_chars), or everything with full: true. Long texts without headings come in pages; the answer says where the next page starts (… _more). outline: true adds the headings to any answer. Children come 60, updates 15 at a time (children_offset, updates_offset).`,
+      description: `One item with its version (a hash of its content, for base_version – not the numbered text versions of \`history\`), properties, place, children, links, backlinks, updates and body. Files include facts (name, mime, size, hash, download URL and curl command) and their extracted text. Pass version as base_version to update when you replace the body. A body (or file text) longer than ${LONG_TEXT} characters with headings comes as its outline (each heading with level, character offset and size) instead: then read the part you need with section (a heading or a path like "Status > Offene Punkte") or offset (+ max_chars), or everything with full: true. Long texts without headings come in pages; the answer says where the next page starts (… _more). outline: true adds the headings to any answer. Children come 60, updates 15 at a time (children_offset, updates_offset).`,
       inputSchema: getInput.shape,
       annotations: ro,
     },
@@ -158,7 +169,7 @@ function buildMcpServer(store: Store, origin: string, blobs?: Blobs, lang: Lang 
     "search",
     {
       title: "Search",
-      description: 'Full text over titles, tags, bodies, properties and file texts. Identifiers are found by their parts too ("4711" finds Beleg_4711_2026.pdf). Each hit has an excerpt around the match and, when the match is under a heading, "§ Heading > Subheading": read that part with get section.',
+      description: 'Full text over titles, tags, bodies, properties and the text of files (PDF, Office, text and code files, ZIP entries). Identifiers are found by their parts too ("4711" finds Beleg_4711_2026.pdf). Each hit has an excerpt around the match and, when the match is under a heading, "§ Heading > Subheading": read that part with get section.',
       inputSchema: { query: z.string(), limit: z.number().int().min(1).max(50).optional() },
       annotations: ro,
     },
@@ -237,8 +248,12 @@ function buildMcpServer(store: Store, origin: string, blobs?: Blobs, lang: Lang 
   );
   server.registerTool(
     "attach",
-    { title: "Attach file", description: "Create a file from a URL or base64, optionally below a parent and with tags.", inputSchema: attachInput.shape },
-    wrap(ruled(async (a, touched) => `Attached:\n${ops.lines(mark(touched, [await ops.attach(a, origin)]))}`), true),
+    {
+      title: "Attach file",
+      description: `Create a file from a public URL or base64 (small files only; max ${MAX_ATTACH / 1024 / 1024} MB), optionally below a parent and with tags. Any file type. replace: put the new content into an existing file instead. ${filesUrl ? `A file on your disk goes over HTTP, not base64: curl -fsS -X POST -H "Authorization: Bearer $OBTION_TOKEN" --data-binary @file.xsd "${filesUrl}?name=file.xsd&parent=<id>" (PUT ${filesUrl}/<file id> replaces a content). $OBTION_TOKEN is the token of this MCP connection.` : ""}`.trim(),
+      inputSchema: attachInput.shape,
+    },
+    wrap(ruled((a, touched) => ops.attach(a, origin, touched)), true),
   );
   server.registerTool(
     "delete",
@@ -332,9 +347,10 @@ Then ask what I want to change. Don't change anything before I answer.`),
   return server;
 }
 
-export async function handleMcp(store: Store, req: Request, blobs?: Blobs, person?: Person): Promise<Response> {
+/** `filesUrl`: the workspace's HTTP file API (…/w/<id>/api/files), named in answers and instructions. */
+export async function handleMcp(store: Store, req: Request, blobs?: Blobs, person?: Person, filesUrl?: string): Promise<Response> {
   store.flush();
-  const server = buildMcpServer(store, agentOrigin(agentName(req), person), blobs, acceptLang(req.headers.get("accept-language")));
+  const server = buildMcpServer(store, agentOrigin(agentName(req), person), blobs, acceptLang(req.headers.get("accept-language")), filesUrl);
   const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
   await server.connect(transport);
   try {
