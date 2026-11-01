@@ -147,6 +147,22 @@ describe("links", () => {
   });
 });
 
+test('"/Trennlinie" right under a line of text draws a line and keeps the text as it was', async () => {
+  const { doc } = await open();
+  await clickEnd(lineEls().at(-1)!);
+  await commands.keys("press", "End");
+  await commands.keys("press", "Enter");
+  await commands.keys("type", "/Trennlinie");
+  await expect.poll(selected).toContain("Trennlinie");
+  await pastInteractionDelay();
+  await commands.keys("press", "Enter");
+  await expect.poll(() => document.querySelectorAll(".cm-rule").length).toBe(1);
+  const above = lineEls().find((l) => l.innerText.includes("Vierter"))!;
+  expect(above.classList.contains("cm-h"), "the text above stays a paragraph").toBe(false);
+  expect(above.innerText).toBe("Vierter Absatz");
+  expect(doc().split("\n").slice(5, 7)).toEqual(["Vierter Absatz", "***"]);
+});
+
 describe("the toolbar over selected text", () => {
   const toolbar = () => document.querySelector<HTMLElement>(".cm-toolbar.shown");
   const button = (cls: string) => document.querySelector<HTMLElement>(".cm-toolbar.shown " + cls)!;
