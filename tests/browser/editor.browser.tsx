@@ -7,6 +7,7 @@ import type { Repo } from "@obtion/sync";
 import { Editor } from "../../packages/ui/src/ui/Editor";
 import { toolbarExtract } from "../../packages/ui/src/ui/editor/toolbar";
 import { pal } from "../../packages/ui/src/ui/item-look";
+import { createType } from "../../packages/ui/src/actions";
 import { workspace } from "./workspace";
 
 type EditorView = NonNullable<Parameters<NonNullable<Parameters<typeof Editor>[0]["onView"]>>[0]>;
@@ -223,6 +224,22 @@ describe("the toolbar over selected text", () => {
     const id = repo.index().resolveTitle("Dritter Absatz")!;
     expect(repo.get(id)?.type).toBe(project);
     expect(repo.get(id)?.body).toBe("Dritter Absatz\nVierter Absatz");
+  });
+
+  test("with many types the list scrolls inside the menu after ten", async () => {
+    for (let i = 1; i <= 12; i++) createType(`Typ ${i}`, repo);
+    await open([toolbarExtract.of(true)]);
+    await select(4, 5);
+    await press(button(".extract"));
+    await expect.poll(() => document.querySelector(".cm-menu")).not.toBeNull();
+    const menu = document.querySelector<HTMLElement>(".cm-menu")!;
+    const rows = [...menu.querySelectorAll<HTMLElement>(".cm-menu-row")];
+    expect(rows.length).toBe(repo.index().typesInOrder().length);
+    expect(menu.scrollHeight, "the list is longer than the menu").toBeGreaterThan(menu.clientHeight);
+    expect(rect(rows[9]!).bottom, "ten rows show").toBeLessThanOrEqual(rect(menu).bottom);
+    expect(rect(rows[10]!).top, "the eleventh shows in part").toBeLessThan(rect(menu).bottom);
+    expect(rect(rows[10]!).bottom).toBeGreaterThan(rect(menu).bottom);
+    expect(rect(menu).bottom).toBeLessThanOrEqual(innerHeight);
   });
 
   test("without a page it offers no extracting", async () => {

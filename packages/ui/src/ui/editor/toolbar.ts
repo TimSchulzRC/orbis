@@ -86,7 +86,8 @@ class Toolbar {
     this.extractBtn.insertAdjacentHTML("beforeend", `<span>${tr("editor.fmt.extract")}</span>${iconHTML(ChevronDown, 14)}`);
     this.extractBtn.addEventListener("click", () => {
       const entries = repo.index().typesInOrder().map((t) => ({ label: t.schema.name, icon: ICON[t.schema.icon] ?? ICON.circle, color: pal(t.schema.color), run: () => extractAs(view, t.id) }));
-      this.openMenu(this.extractBtn, tr("editor.extractAs"), entries);
+      // many types: the list scrolls after ten, it does not run off the screen
+      this.openMenu(this.extractBtn, tr("editor.extractAs"), entries, 10);
     });
     this.extractSep = sep();
     this.linkSep = sep();
@@ -164,7 +165,7 @@ class Toolbar {
     });
   }
   /** A menu below the bar; the bar stays while it is open. */
-  openMenu(btn: HTMLElement, title: string, entries: Parameters<typeof showMenu>[1][number]["entries"]) {
+  openMenu(btn: HTMLElement, title: string, entries: Parameters<typeof showMenu>[1][number]["entries"], maxRows?: number) {
     const { view } = this;
     this.menuOpen = true;
     const onClose = () => {
@@ -173,7 +174,7 @@ class Toolbar {
       if (!document.activeElement || document.activeElement === document.body) view.focus();
       this.place();
     };
-    showMenu({ left: btn.getBoundingClientRect().left, top: this.dom.getBoundingClientRect().bottom + 4 }, [{ title, entries }], onClose).focusFirst();
+    showMenu({ left: btn.getBoundingClientRect().left, top: this.dom.getBoundingClientRect().bottom + 4 }, [{ title, entries }], onClose, maxRows).focusFirst();
   }
   /** The link box for the selected text, or, with `relink`, for a new target of the selected link. */
   openLink(relink?: { text: string; target: string }) {
