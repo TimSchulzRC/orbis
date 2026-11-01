@@ -8,7 +8,7 @@ import { tr } from "../i18n";
 
 /**
  * Small "+ tag" input with keyboard-selectable suggestions from existing tags. `start`: open as
- * a field right away (e.g. "+ Eigenschaft › Tag"); `onCancel`: it closed empty.
+ * a field right away; `onCancel`: it closed empty.
  */
 export function TagInput({ onAdd, exclude = [], start, onCancel }: { onAdd: (t: string) => void; exclude?: string[]; start?: boolean; onCancel?: () => void }) {
   const repo = useRepo();

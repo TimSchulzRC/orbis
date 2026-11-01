@@ -98,7 +98,7 @@ test("delete preview: kept children without type land in the inbox, typed ones a
   expect(wouldBeInInbox(ix, [note, card, both], (i) => i, [{ ...ix.get(p)!, deleted: true }])).toBe(1);
 });
 
-test("pages show every property of a type, empty ones too – except those marked to show only when set", () => {
+test("pages show every property of a type, empty ones too – computed ones once they have something", () => {
   const m = new MemRepo();
   runSetup(m.writer, "de");
   m.addType("t_book", {
@@ -110,12 +110,8 @@ test("pages show every property of a type, empty ones too – except those marke
     ],
   });
   const b = m.add({ title: "Neues Buch", type: "t_book" });
-  const ix = m.index();
   const shown = () => visibleProps(m.index().get(b)!, m.index().schemaOf(m.index().get(b)!)!, m.index()).map((p) => p.name);
-  expect(shown()).toEqual(["Autor"]); // the core field is there although empty; ISBN only when set; nothing computed yet
-  m.change(b, (d) => setProp(d, "p_isbn", "978-3"));
-  expect(shown()).toEqual(["Autor", "ISBN"]);
-  expect(visibleProps(ix.get(b)!, ix.schemaOf(ix.get(b)!)!, ix, new Set(["p_isbn"])).map((p) => p.name)).toContain("ISBN"); // opened via "+ Eigenschaft"
+  expect(shown()).toEqual(["Autor", "ISBN"]); // empty and even an old "only when set" mark: shown; nothing computed yet
   // the shipped task: "Blockiert durch" and "Wartet auf" only when set
   const task = m.index().types.get(SYS.task)!.schema;
   expect(task.properties.filter((p) => p.hideEmpty).map((p) => p.id).sort()).toEqual(["p_blocked", "p_waiting"]);

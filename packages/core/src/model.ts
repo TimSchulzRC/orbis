@@ -84,7 +84,7 @@ export interface PropDef {
   symmetric?: boolean;
   range?: boolean; // date: start/end
   computed?: ComputedDef;
-  hideEmpty?: boolean; // display: only on pages where it has a value (else behind "+ Eigenschaft")
+  hideEmpty?: boolean; // no longer read: pages show every property; kept so older data stays valid
   blocks?: boolean; // relation and text: holds the item up while set (a relation: while a target is open)
   removed?: boolean; // removed from the type; kept so its values still have a name
   sort: string;
