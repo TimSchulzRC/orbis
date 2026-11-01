@@ -889,6 +889,9 @@ body.cm-dragging * {
 .cm-toolbar.linking .cm-toolbar-bar {
   display: none;
 }
+.cm-toolbar-bar [hidden] {
+  display: none;
+}
 .cm-tb {
   display: flex;
   align-items: center;
@@ -904,7 +907,12 @@ body.cm-dragging * {
 .cm-tb:hover {
   background: var(--hover);
 }
-.cm-tb.kind svg {
+.cm-tb[aria-pressed="true"] {
+  color: var(--focus);
+  background: color-mix(in srgb, var(--focus) 12%, transparent);
+}
+.cm-tb.kind svg,
+.cm-tb.extract svg:last-child {
   color: var(--muted-foreground);
 }
 .cm-tb-sep {

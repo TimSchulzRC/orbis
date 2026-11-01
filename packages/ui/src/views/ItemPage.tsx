@@ -4,7 +4,7 @@
 import { Input } from "../components/ui/input";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { EditorView } from "@codemirror/view";
-import { Trash2, Plus, AlertTriangle, ImagePlus, Scissors, ListFilter, Pin, PinOff, FilePlus, FolderInput, Link2, ArrowRightLeft } from "lucide-react";
+import { Trash2, Plus, AlertTriangle, ImagePlus, ListFilter, Pin, PinOff, FilePlus, FolderInput, Link2, ArrowRightLeft } from "lucide-react";
 import { type Item, META_TYPE, titleKey } from "@obtion/core/model";
 import { isInInbox, isOverview } from "@obtion/core/placement";
 import { wouldBeInInbox } from "@obtion/core/typeops";
@@ -30,7 +30,7 @@ import { TitleField } from "../ui/TitleField";
 import { TypePage } from "./TypePage";
 import { createAndOpen, rememberPlace } from "../actions";
 import { INBOX_ICON, NOTE_ICON, OVERVIEW_ICON } from "../ui/icons";
-import { extractAsCard, extractType } from "../ui/extract";
+import { toolbarExtract } from "../ui/editor/toolbar";
 import { movedItems } from "@obtion/core/transfer";
 import { useAccounts } from "../accounts";
 import { moveTo } from "../ui/Spaces";
@@ -56,11 +56,6 @@ export function ItemPage({ id, isNew }: { id: string; isNew: boolean }) {
 }
 
 const openItems = new Set<string>();
-
-function extractTypeName() {
-  const t = extractType();
-  return t ? (repo.index().typeName(t) ?? "") : "";
-}
 
 function isBlank(i: Item) {
   const ix = repo.index();
@@ -128,11 +123,6 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
           {view && (
             <MenuItem icon={<ListFilter size={14} />} onClick={() => (close(), insertQueryBlock(view))}>
               {t("item.insertQuery")}
-            </MenuItem>
-          )}
-          {view && (
-            <MenuItem icon={<Scissors size={14} />} onClick={() => (close(), extractAsCard(view))}>
-              {t("item.extract", { name: extractTypeName() })}
             </MenuItem>
           )}
           <MenuItem icon={item.pinned ? <PinOff size={14} /> : <Pin size={14} />} onClick={() => (close(), repo.pin(item.id, !item.pinned))}>
@@ -259,7 +249,7 @@ function PageText({ item, doc, long, isNew, onView, hasMore }: { item: Item; doc
           nodeId={item.id}
           autoFocus={isNew && !!item.title}
           onView={onView}
-          extra={[queryBlocks(item.id)]}
+          extra={[queryBlocks(item.id), toolbarExtract.of(true)]}
           // room to start writing only while the text is empty and nothing else follows
           minHeight={item.body.trim() || hasMore ? "min-h-6" : "min-h-[30vh]"}
           placeholder={t(schema ? "editor.placeholderTyped" : "editor.placeholder")}

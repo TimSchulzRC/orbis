@@ -1,10 +1,13 @@
 // The Markdown editor on its own: hidden syntax, headings, the link menu, links by "/" and "@",
-// moving blocks by their grip, and the "+" and grip hiding while typing.
+// the toolbar over selected blocks, moving blocks by their grip, and the "+" and grip hiding while typing.
 import { afterEach, beforeAll, describe, expect, test } from "vitest";
 import { commands } from "vitest/browser";
 import { cleanup, render } from "vitest-browser-react";
 import type { Repo } from "@obtion/sync";
 import { Editor } from "../../packages/ui/src/ui/Editor";
+import { toolbarExtract } from "../../packages/ui/src/ui/editor/toolbar";
+import { pal } from "../../packages/ui/src/ui/item-look";
+import { createType } from "../../packages/ui/src/actions";
 import { workspace } from "./workspace";
 
 type EditorView = NonNullable<Parameters<NonNullable<Parameters<typeof Editor>[0]["onView"]>>[0]>;
@@ -18,13 +21,13 @@ beforeAll(async () => {
 afterEach(() => cleanup());
 
 /** An item with BODY, open in the editor once its text is parsed (CodeMirror parses in slices). */
-async function open() {
+async function open(extra: Parameters<typeof Editor>[0]["extra"] = []) {
   const id = repo.create({ title: "Editor-Test" });
   repo.setBody(id, BODY);
   let view: EditorView | null = null;
   await render(
     <div style={{ padding: "40px 80px", width: 900 }}>
-      <Editor doc={repo.getDoc(id)} nodeId={id} onView={(v) => (view = v)} />
+      <Editor doc={repo.getDoc(id)} nodeId={id} onView={(v) => (view = v)} extra={extra} />
     </div>,
   );
   await expect.poll(() => view && document.querySelectorAll(".cm-content .cm-line").length).toBe(BODY.split("\n").length);
@@ -141,6 +144,249 @@ describe("links", () => {
     await commands.keys("press", "Enter");
     expect(doc().endsWith("Vierter Absatz [[So funktioniert Obtion]]")).toBe(true);
     expect(lines().at(-1)!.text).toBe("Vierter Absatz So funktioniert Obtion");
+  });
+});
+
+describe("the toolbar over selected text", () => {
+  const toolbar = () => document.querySelector<HTMLElement>(".cm-toolbar.shown");
+  const button = (cls: string) => document.querySelector<HTMLElement>(".cm-toolbar.shown " + cls)!;
+  /** A click in the middle of an element, once the toolbar has moved to its place (a frame after a change). */
+  const press = async (el: Element) => {
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    await commands.mouse("click", rect(el).left + rect(el).width / 2, rect(el).top + rect(el).height / 2);
+  };
+  /** The toolbar shown at its place for the selection (it moves a frame after the selection changes). */
+  const settled = async () => {
+    await expect.poll(toolbar).not.toBeNull();
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+  };
+  /** Drag from the start of line `a` to the end of line `b`. */
+  async function select(a: number, b: number) {
+    const s = rect(lineEls()[a]!);
+    const e = rect(lineEls()[b]!);
+    await commands.mouse("move", s.left + 1, s.top + s.height / 2);
+    await commands.mouse("down");
+    await commands.mouse("move", e.right - 2, e.top + e.height / 2, { steps: 6 });
+    await commands.mouse("up");
+    await expect.poll(toolbar, { message: "the toolbar shows over the selection" }).not.toBeNull();
+  }
+
+  test("over several blocks it shows; Turn into opens below it, the bar stays, and changes all blocks", async () => {
+    const { doc } = await open();
+    await select(4, 5);
+    expect(button(".kind").textContent).toBe("Text");
+    expect(button(".cm-tb[aria-label^='Link']").offsetParent, "no link over several blocks").toBeNull();
+    const bar = rect(toolbar()!);
+    await press(button(".kind"));
+    await expect.poll(() => document.querySelector(".cm-menu")).not.toBeNull();
+    expect(toolbar(), "the bar stays while the menu is open").not.toBeNull();
+    expect(rect(document.querySelector(".cm-menu")!).top, "the menu opens below the bar").toBeGreaterThanOrEqual(bar.bottom);
+    const row = [...document.querySelectorAll<HTMLElement>(".cm-menu-row")].find((r) => r.textContent === "Überschrift 2")!;
+    await press(row);
+    expect(doc().split("\n").slice(4)).toEqual(["## Dritter Absatz", "## Vierter Absatz"]);
+    await expect.poll(() => toolbar() && button(".kind").textContent, { message: "the selection and the bar stay" }).toBe("Überschrift 2");
+
+    await press(button(".kind"));
+    await expect.poll(() => document.querySelector(".cm-menu")).not.toBeNull();
+    await commands.keys("press", "Escape");
+    await expect.poll(() => document.querySelector(".cm-menu")).toBeNull();
+    expect(toolbar(), "Escape closes the menu, not the bar").not.toBeNull();
+  });
+
+  test("bold over several blocks marks each block's text, and takes it away again", async () => {
+    const { doc } = await open();
+    await select(3, 5);
+    await press(button(".cm-tb[aria-label^='Fett']"));
+    expect(doc().split("\n").slice(3)).toEqual(["**Zweiter mit [Beispiel](https://example.org).**", "**Dritter Absatz**", "**Vierter Absatz**"]);
+    await press(button(".cm-tb[aria-label^='Fett']"));
+    expect(doc()).toBe(BODY);
+  });
+
+  test("bold and strikethrough toggle on and off, also together and in any order", async () => {
+    const { view, doc } = await open();
+    const line = () => doc().split("\n")[4];
+    await select(4, 4);
+    const bold = () => press(button(".cm-tb[aria-label^='Fett']"));
+    const strike = () => press(button(".cm-tb[aria-label^='Durch']"));
+    await bold();
+    expect(line()).toBe("**Dritter Absatz**");
+    await bold();
+    expect(line(), "a second click takes bold away").toBe("Dritter Absatz");
+    await strike();
+    expect(line()).toBe("~~Dritter Absatz~~");
+    await strike();
+    expect(line(), "a second click takes strikethrough away").toBe("Dritter Absatz");
+    await bold();
+    await strike();
+    expect(line()).toBe("**~~Dritter Absatz~~**");
+    await bold();
+    expect(line(), "bold goes from under strikethrough").toBe("~~Dritter Absatz~~");
+    await bold();
+    await strike();
+    expect(line(), "strikethrough goes from under bold").toBe("**Dritter Absatz**");
+    await bold();
+    expect(line()).toBe("Dritter Absatz");
+    // italic beside bold: "*" is not one star of "**"
+    view.dispatch({ changes: { from: view.state.doc.line(5).from, to: view.state.doc.line(5).to, insert: "***Dritter Absatz***" } });
+    view.dispatch({ selection: { anchor: view.state.doc.line(5).from + 3, head: view.state.doc.line(5).to - 3 } });
+    await settled();
+    await press(button(".cm-tb[aria-label^='Kursiv']"));
+    expect(line(), "italic goes, bold stays").toBe("**Dritter Absatz**");
+    await press(button(".cm-tb[aria-label^='Kursiv']"));
+    expect(line()).toBe("***Dritter Absatz***");
+    await bold();
+    expect(line(), "bold goes, italic stays").toBe("*Dritter Absatz*");
+  });
+
+  test("over several blocks too, bold toggles under strikethrough", async () => {
+    const { view, doc } = await open();
+    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: "~~**eins**~~\n~~zwei~~" } });
+    view.focus();
+    view.dispatch({ selection: { anchor: 4, head: view.state.doc.length } });
+    await settled();
+    await press(button(".cm-tb[aria-label^='Fett']"));
+    expect(doc(), "one block without bold: bold is added there").toBe("~~**eins**~~\n**~~zwei~~**");
+    await press(button(".cm-tb[aria-label^='Fett']"));
+    expect(doc()).toBe("~~eins~~\n~~zwei~~");
+  });
+
+  test("the marks may lie partly inside the selection", async () => {
+    const { view, doc } = await open();
+    const toggle = async (text: string, from: number, to: number, label: string) => {
+      view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text }, selection: { anchor: from, head: to } });
+      view.focus();
+      await settled();
+      await press(button(`.cm-tb[aria-label^='${label}']`));
+      return doc();
+    };
+    expect(await toggle("**x**", 0, 3, "Fett")).toBe("x");
+    expect(await toggle("~~**x**~~", 0, 5, "Fett")).toBe("~~x~~");
+    expect(await toggle("~~**x**~~", 0, 5, "Durch")).toBe("**x**");
+    expect(await toggle("**~~x~~** y", 2, 9, "Fett")).toBe("~~x~~ y");
+  });
+
+  test("a mark put across the edge of another one nests with it, piece by piece", async () => {
+    const { view, doc } = await open();
+    const pressed = () => button(".cm-tb[aria-label^='Fett']").getAttribute("aria-pressed");
+    const bold = async (text: string, from: number, to: number) => {
+      view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text }, selection: { anchor: from, head: to } });
+      view.focus();
+      await settled();
+      await press(button(".cm-tb[aria-label^='Fett']"));
+      return doc();
+    };
+    expect(await bold("~~x~~ y", 2, 7)).toBe("~~**x**~~ **y**");
+    expect(pressed(), "all of it bold now").toBe("true");
+    expect(await bold("~~**x**~~ y", 4, 11), "bold already there merges").toBe("~~**x**~~ **y**");
+    expect(await bold("~~abc~~ y", 4, 9), "only the selected letters").toBe("~~ab**c**~~ **y**");
+    expect(await bold("a ~~x~~", 0, 5)).toBe("**a** ~~**x**~~");
+    expect(await bold("~~x~~ y", 0, 3), "from the very start of the struck span").toBe("~~**x**~~ y");
+    expect(await bold("~~x~~ y", 1, 3), "from within its marks").toBe("~~**x**~~ y");
+    expect(await bold("y ~~x~~", 4, 7), "to its very end").toBe("y ~~**x**~~");
+    expect(await bold("**one\ntwo** x", 0, 13), "a span over two lines: each line its own pair").toBe("**one**\n**two x**");
+  });
+
+  test("bold, italic, strikethrough and code show pressed while all of the selected text has them", async () => {
+    const { view, doc } = await open();
+    const pressed = () => ["Fett", "Kursiv", "Durch", "Code"].filter((l) => button(`.cm-tb[aria-label^='${l}']`).getAttribute("aria-pressed") === "true");
+    const choose = async (text: string, from: number, to: number) => {
+      view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text }, selection: { anchor: from, head: to } });
+      view.focus();
+      await settled();
+    };
+    await select(4, 4);
+    expect(pressed()).toEqual([]);
+    await press(button(".cm-tb[aria-label^='Fett']"));
+    expect(pressed(), "a click presses it").toEqual(["Fett"]);
+    await press(button(".cm-tb[aria-label^='Durch']"));
+    expect(pressed()).toEqual(["Fett", "Durch"]);
+    await press(button(".cm-tb[aria-label^='Fett']"));
+    expect(pressed(), "and releases it").toEqual(["Durch"]);
+
+    await choose("**eins** zwei", 2, 13);
+    expect(pressed(), "only part of it bold: not pressed").toEqual([]);
+    await press(button(".cm-tb[aria-label^='Fett']"));
+    expect(doc(), "a click makes all of it bold").toBe("**eins zwei**");
+    expect(pressed()).toEqual(["Fett"]);
+
+    await choose("**ein Satz in fett**", 6, 10);
+    expect(pressed(), "a word in a bold sentence is bold").toEqual(["Fett"]);
+    await choose("***x***", 3, 4);
+    expect(pressed(), "bold and italic").toEqual(["Fett", "Kursiv"]);
+    await choose("**x**", 2, 3);
+    expect(pressed(), "bold is not italic").toEqual(["Fett"]);
+    await choose("`code` und ~~weg~~", 0, 18);
+    expect(pressed(), "mixed marks: none pressed").toEqual([]);
+    await choose("**eins**\n**zwei**", 2, 15);
+    expect(pressed(), "over blocks, all bold").toEqual(["Fett"]);
+    await choose("**eins**\nzwei", 2, 13);
+    expect(pressed(), "over blocks, one not bold").toEqual([]);
+  });
+
+  test("⌘B without a selection puts an empty pair, a second ⌘B takes it away", async () => {
+    const { view, doc } = await open();
+    await clickEnd(lineEls()[5]!);
+    await commands.keys("press", "End");
+    await commands.keys("press", "Control+b");
+    expect(doc().endsWith("Vierter Absatz****")).toBe(true);
+    await commands.keys("press", "Control+b");
+    expect(doc().endsWith("Vierter Absatz")).toBe(true);
+    expect(view.state.selection.main.head).toBe(view.state.doc.length);
+  });
+
+  test("bold over several bold blocks takes the hidden marks around the selection away", async () => {
+    const { view, doc } = await open();
+    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: "**eins**\n**zwei**" } });
+    view.focus();
+    view.dispatch({ selection: { anchor: 2, head: 15 } });
+    await settled();
+    await press(button(".cm-tb[aria-label^='Fett']"));
+    expect(doc()).toBe("eins\nzwei");
+  });
+
+  test("on a page, Extract at the right end opens all types below the bar and extracts as the chosen one", async () => {
+    const { doc } = await open([toolbarExtract.of(true)]);
+    await select(4, 5);
+    const extract = button(".extract");
+    expect(extract.textContent).toBe("Herauslösen");
+    expect([...document.querySelectorAll(".cm-toolbar.shown .cm-tb")].filter((b) => (b as HTMLElement).offsetParent).at(-1), "the last button").toBe(extract);
+    const bar = rect(toolbar()!);
+    await press(extract);
+    await expect.poll(() => document.querySelector(".cm-menu")).not.toBeNull();
+    expect(toolbar(), "the bar stays while the menu is open").not.toBeNull();
+    expect(rect(document.querySelector(".cm-menu")!).top, "the menu opens below the bar").toBeGreaterThanOrEqual(bar.bottom);
+    const names = [...document.querySelectorAll(".cm-menu-row")].map((r) => r.textContent);
+    expect(names).toEqual(repo.index().typesInOrder().map((t) => t.schema.name));
+    const icons = [...document.querySelectorAll<HTMLElement>(".cm-menu-row .cm-menu-icon")].map((i) => getComputedStyle(i).color);
+    expect(icons, "each icon in its type's colour, as in the sidebar").toEqual(repo.index().typesInOrder().map((t) => getComputedStyle(Object.assign(document.body.appendChild(document.createElement("i")), { style: `color: ${pal(t.schema.color)}` })).color));
+    const project = repo.index().typeByName("Projekt")!;
+    await press([...document.querySelectorAll<HTMLElement>(".cm-menu-row")].find((r) => r.textContent === "Projekt")!);
+    expect(doc().split("\n").slice(4)).toEqual(["[[Dritter Absatz]]"]);
+    const id = repo.index().resolveTitle("Dritter Absatz")!;
+    expect(repo.get(id)?.type).toBe(project);
+    expect(repo.get(id)?.body).toBe("Dritter Absatz\nVierter Absatz");
+  });
+
+  test("with many types the list scrolls inside the menu after ten", async () => {
+    for (let i = 1; i <= 12; i++) createType(`Typ ${i}`, repo);
+    await open([toolbarExtract.of(true)]);
+    await select(4, 5);
+    await press(button(".extract"));
+    await expect.poll(() => document.querySelector(".cm-menu")).not.toBeNull();
+    const menu = document.querySelector<HTMLElement>(".cm-menu")!;
+    const rows = [...menu.querySelectorAll<HTMLElement>(".cm-menu-row")];
+    expect(rows.length).toBe(repo.index().typesInOrder().length);
+    expect(menu.scrollHeight, "the list is longer than the menu").toBeGreaterThan(menu.clientHeight);
+    expect(rect(rows[9]!).bottom, "ten rows show").toBeLessThanOrEqual(rect(menu).bottom);
+    expect(rect(rows[10]!).top, "the eleventh shows in part").toBeLessThan(rect(menu).bottom);
+    expect(rect(rows[10]!).bottom).toBeGreaterThan(rect(menu).bottom);
+    expect(rect(menu).bottom).toBeLessThanOrEqual(innerHeight);
+  });
+
+  test("without a page it offers no extracting", async () => {
+    await open();
+    await select(4, 4);
+    expect(button(".extract").offsetParent).toBeNull();
   });
 });
 

@@ -6,6 +6,8 @@ import { iconHTML } from "./icons";
 interface MenuEntry {
   label: string;
   icon?: ComponentType<{ size?: number }>;
+  /** The icon's colour (a type's, as in the sidebar). */
+  color?: string;
   active?: boolean;
   danger?: boolean;
   hint?: string;
@@ -14,8 +16,11 @@ interface MenuEntry {
 
 let open: { close: () => void } | null = null;
 
-/** Show the menu at a point of the screen; sections are separated by a line. */
-export function showMenu(at: { left: number; top: number }, sections: { title?: string; entries: MenuEntry[] }[], onClose?: () => void) {
+/**
+ * Show the menu at a point of the screen; sections are separated by a line. With `maxRows`, a
+ * longer list scrolls inside the menu, half of the next row showing that there is more.
+ */
+export function showMenu(at: { left: number; top: number }, sections: { title?: string; entries: MenuEntry[] }[], onClose?: () => void, maxRows?: number) {
   open?.close();
   const box = document.createElement("div");
   box.className = "cm-menu";
@@ -32,6 +37,7 @@ export function showMenu(at: { left: number; top: number }, sections: { title?: 
       b.innerHTML = (e.icon ? `<span class="cm-menu-icon">${iconHTML(e.icon, 16)}</span>` : "") + `<span class="cm-menu-label"></span>` + (e.hint ? `<span class="cm-menu-hint"></span>` : "");
       b.querySelector(".cm-menu-label")!.textContent = e.label;
       if (e.hint) b.querySelector(".cm-menu-hint")!.textContent = e.hint;
+      if (e.color) b.querySelector<HTMLElement>(".cm-menu-icon")?.style.setProperty("color", e.color);
       b.addEventListener("mousedown", (ev) => ev.preventDefault());
       b.addEventListener("click", () => (close(), e.run()));
       rows.push(b);
@@ -39,6 +45,8 @@ export function showMenu(at: { left: number; top: number }, sections: { title?: 
     }
   });
   document.body.append(box);
+  const cut = maxRows ? rows[maxRows] : undefined;
+  if (cut) box.style.maxHeight = cut.offsetTop + cut.offsetHeight / 2 + "px";
   const r = box.getBoundingClientRect();
   box.style.left = Math.max(8, Math.min(at.left, innerWidth - r.width - 8)) + "px";
   box.style.top = (at.top + r.height > innerHeight - 8 ? Math.max(8, at.top - r.height - 32) : at.top) + "px";
