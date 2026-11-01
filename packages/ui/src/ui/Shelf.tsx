@@ -127,7 +127,8 @@ function List({ entries, later, pinned }: { entries: InboxEntry[]; later: InboxE
         onKeyDown={(e) => {
           if (e.key === "ArrowDown") ((byKey.current = true), setSel((s) => Math.min(rows.length - 1, s + 1)));
           else if (e.key === "ArrowUp") ((byKey.current = true), setSel((s) => Math.max(0, s - 1)));
-          else if (e.key === "Enter" && rows[sel]) openShelf(rows[sel]!.key);
+          // Enter on a button or link inside (a row, its tools, "Morgen wieder") is its own
+          else if (e.key === "Enter" && rows[sel] && !(e.target as HTMLElement).closest("button, a")) openShelf(rows[sel]!.key);
           else return;
           e.preventDefault();
         }}

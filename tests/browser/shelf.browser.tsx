@@ -1,7 +1,7 @@
 // The tray's panel: every row has the whole page one click away (an icon, shown on hover); what
 // waits until tomorrow is folded below ("Morgen wieder") and can come back into the inbox now.
 import { afterEach, beforeEach, expect, test } from "vitest";
-import { page } from "vitest/browser";
+import { commands, page } from "vitest/browser";
 import { cleanup, render } from "vitest-browser-react";
 import type { Repo } from "@obtion/sync";
 import { setMeta } from "@obtion/core/model";
@@ -71,4 +71,15 @@ test("a button's label shows quickly, centred above it", async () => {
   const box = document.querySelector("[data-radix-popper-content-wrapper] > *")!.getBoundingClientRect();
   expect(Math.abs(box.left + box.width / 2 - (b.left + b.width / 2))).toBeLessThan(2);
   expect(box.bottom).toBeLessThanOrEqual(b.top);
+});
+
+test("with a row chosen by the arrows, Enter on a button inside is the button's, not the row's", async () => {
+  page.getByRole("listbox").element().focus();
+  await commands.keys("press", "ArrowDown");
+  await expect.element(page.getByRole("option").first()).toHaveAttribute("aria-selected", "true");
+  const toggle = page.getByRole("button", { name: /Morgen wieder · 1/ });
+  toggle.element().focus();
+  await commands.keys("press", "Enter");
+  await expect.element(toggle).toHaveAttribute("aria-expanded", "true");
+  await expect.element(page.getByText("Bleibt im Eingang bis zum Einsortieren.")).not.toBeInTheDocument();
 });
