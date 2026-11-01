@@ -64,13 +64,12 @@ function cellEnd(state: EditorState, n: number, col: number) {
 }
 
 const width = (state: EditorState, t: TableBlock) => parseRow(state.doc.line(t.first).text).cells.length;
-const outer = (state: EditorState, t: TableBlock) => parseRow(state.doc.line(t.first).text).lead;
 
 /** An empty row below line `n` (below the delimiter when that is the header); the cursor in its first cell. */
 export function addRow(view: EditorView, t: TableBlock, n: number) {
   const { state } = view;
   const at = state.doc.line(Math.max(n, t.first + 1));
-  const row = emptyRow(width(state, t), outer(state, t));
+  const row = emptyRow(width(state, t));
   const first = parseRow(row).cells[0]!;
   view.dispatch({ changes: { from: at.to, insert: "\n" + row }, selection: EditorSelection.cursor(at.to + 1 + first.from), scrollIntoView: true, userEvent: "input" });
 }

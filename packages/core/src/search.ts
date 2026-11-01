@@ -82,6 +82,22 @@ export function searchIds(idx: SearchIndex, query: string, limit = 20): string[]
   return res.slice(0, limit).map((r) => r.id as string);
 }
 
+const TABLE_DELIMITER = /^[ \t]*\|?([ \t]*:?-+:?[ \t]*\|)+([ \t]*:?-+:?[ \t]*)?$/;
+
+/** Tables as their cells ("a · b"): the header above a delimiter row and the rows below it up to a blank line. */
+function tableCells(text: string): string {
+  if (!text.includes("|")) return text;
+  const lines = text.split("\n");
+  const cells = (row: string) => row.trim().replace(/^\|/, "").replace(/(?<!\\)\|$/, "").trim().split(/\s*(?<!\\)\|\s*/).join(" · ");
+  for (let i = 1; i < lines.length; i++) {
+    if (!TABLE_DELIMITER.test(lines[i]!) || !lines[i - 1]!.includes("|")) continue;
+    lines[i - 1] = cells(lines[i - 1]!);
+    lines[i] = "";
+    for (i++; i < lines.length && lines[i]!.trim(); i++) lines[i] = cells(lines[i]!);
+  }
+  return lines.join("\n");
+}
+
 /** Without Markdown marks, on one line. */
 export function plainText(body: string): string {
   const marks = stripQueryBlocks(body)
@@ -91,9 +107,7 @@ export function plainText(body: string): string {
     .replace(/!\[\[[^\]]*\]\]/g, "") // embedded files show as files, not as their name
     .replace(/!\[[^\]\n]*\](\([^)\n]*\))?/g, "") // markdown images and stray ![…]
     .replace(/^(\s*[-*+]\s+)\[[ xX]\]\s+/gm, "$1") // task list boxes
-    .replace(/^[ \t]*\|?([ \t]*:?-+:?[ \t]*\|)+([ \t]*:?-+:?[ \t]*)?$/gm, "") // a table's delimiter row
-    .replace(/^[ \t]*\|.*$/gm, (row) => row.trim().replace(/^\|/, "").replace(/(?<!\\)\|$/, "").trim().split(/\s*(?<!\\)\|\s*/).join(" · ")); // a table's cells
-  return mapWikiLinks(marks, (l) => l.label || l.target + l.section)
+  return mapWikiLinks(tableCells(marks), (l) => l.label || l.target + l.section)
     .replace(/\\\|/g, "|")
     .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
     .replace(/^\s*(?:[-*+]|\d+\.|#{1,6}|>)\s+/gm, "")

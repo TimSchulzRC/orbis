@@ -74,10 +74,9 @@ export function alignments(delimiter: string): Align[] {
   });
 }
 
-/** An empty row of `n` cells, with pipes at its ends when the table has them. */
-export function emptyRow(n: number, outer = true): string {
-  const inner = Array.from({ length: n }, () => "").join(" | ");
-  return outer ? `| ${inner} |` : inner.length ? inner : " ";
+/** An empty row of `n` cells, with pipes at its ends (without them empty cells would not count). */
+export function emptyRow(n: number): string {
+  return `| ${Array.from({ length: n }, () => "").join(" | ")} |`;
 }
 
 /** A new table: a header with these names, the delimiter row and `rows` empty rows. */
@@ -113,11 +112,20 @@ export function insertCell(text: string, at: number, fill = ""): Change | null {
   return { from: end, to: end, insert: fill ? ` | ${fill}` : " |  |" };
 }
 
-/** Take the cell at index `col` out of one row line; null when the row has no such cell or it is its only one. */
+/**
+ * Take the cell at index `col` out of one row line; null when the row has no such cell. A row
+ * that has only this cell keeps an empty one; one left with a single cell gets pipes at its
+ * ends (without them it would be no row of a table).
+ */
 export function deleteCell(text: string, col: number): Change | null {
   const row = parseRow(text);
-  if (col >= row.cells.length || row.cells.length < 2) return null;
+  if (col >= row.cells.length) return null;
   const c = row.cells[col]!;
+  if (row.cells.length < 2) return row.pipes.length ? { from: c.from, to: c.to, insert: "" } : { from: 0, to: text.length, insert: "|  |" };
+  if (row.cells.length === 2 && !row.lead) {
+    const keep = row.cells[1 - col]!;
+    return { from: 0, to: text.length, insert: `| ${text.slice(keep.from, keep.to)} |` };
+  }
   const pipeAfter = c.end < text.length && text[c.end] === "|";
   if (pipeAfter) {
     // "| a | b | c |" without b: from after the pipe before it up to and with the pipe after it
@@ -142,6 +150,12 @@ export function sourceOffset(src: string, shown: string, k: number): number {
   let i = 0;
   let j = 0;
   while (j < k && i < src.length) {
+    // a "<br>" shows no letter
+    const br = /^<br\s*\/?>/i.exec(src.slice(i, i + 6));
+    if (br) {
+      i += br[0].length;
+      continue;
+    }
     if (src[i] === shown[j]) j++;
     i++;
   }

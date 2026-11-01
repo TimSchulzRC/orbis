@@ -66,11 +66,10 @@ describe("deleteCell", () => {
     expect(apply(row, deleteCell(row, 0))).toBe("| bb  | c |");
     expect(apply(row, deleteCell(row, 1))).toBe("| a | c |");
     expect(apply(row, deleteCell(row, 2))).toBe("| a | bb  |");
-    expect(apply("a | b", deleteCell("a | b", 0))).toBe("b");
-    expect(apply("a | b", deleteCell("a | b", 1))).toBe("a");
+    expect(apply("a | b", deleteCell("a | b", 1))).toBe("| a |");
   });
-  test("never the only cell", () => {
-    expect(deleteCell("| a |", 0)).toBeNull();
+  test("a row without that cell stays", () => {
+    expect(deleteCell("| a |", 1)).toBeNull();
   });
 });
 
@@ -94,4 +93,27 @@ describe("tables in the rest of the app", () => {
     const body = "Vorweg.\n\n| Feld | Wert |\n| :--- | ---: |\n| **Typ** | [[Seite\\|Alias]] |\n| Zeile<br>zwei | `a \\| b` |";
     expect(plainText(body)).toBe("Vorweg. Feld · Wert Typ · Alias Zeile zwei · a | b");
   });
+});
+
+describe("tables without pipes at the ends", () => {
+  test("a new row always has them, so its empty cells count", () => {
+    expect(emptyRow(2)).toBe("|  |  |");
+    expect(cells(emptyRow(2))).toEqual(["", ""]);
+  });
+  test("taking a column away leaves a row with pipes, not plain text", () => {
+    expect(apply("a | b", deleteCell("a | b", 0))).toBe("| b |");
+    expect(apply("--- | ---", deleteCell("--- | ---", 1))).toBe("| --- |");
+    expect(apply("a | b | c", deleteCell("a | b | c", 0))).toBe("b | c");
+  });
+  test("a short row loses the cell too", () => {
+    expect(apply("| one |", deleteCell("| one |", 0))).toBe("|  |");
+    expect(apply("one", deleteCell("one", 0))).toBe("|  |");
+  });
+  test("previews", () => {
+    expect(plainText("Name | Wert\n--- | ---\neins | zwei\n\nDanach a | b.")).toBe("Name · Wert eins · zwei Danach a | b.");
+  });
+});
+
+test("a click after a <br> lands after it", () => {
+  expect(sourceOffset("a<br>bar", "abar", 2)).toBe(6);
 });
