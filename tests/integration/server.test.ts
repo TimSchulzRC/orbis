@@ -59,6 +59,8 @@ async function signUp(base: string, email: string, invite?: string): Promise<{ t
 const account = (base: string, token: string) => get(base, "/api/account", token).then((r) => r.json());
 /** A new workspace of the account, as the app creates the first one after signing up. */
 const newWorkspace = (base: string, token: string, name = "Persönlich") => post(base, "/api/workspaces", { name }, token).then((r) => r.json());
+const patch = (base: string, path: string, body: unknown, token: string) =>
+  fetch(base + path, { method: "PATCH", headers: { "content-type": "application/json", authorization: `Bearer ${token}` }, body: JSON.stringify(body) });
 
 test("the first account is the admin, without a workspace until it creates one; then only with an invite (default)", async () => {
   expect(await get(plain, "/api/info").then((r) => r.json())).toMatchObject({ signup: "invite", firstAccount: true });
@@ -277,6 +279,8 @@ test("deleting a member revokes sessions, invites, MCP tokens and live sync with
   const { code } = await post(bare, `/api/workspaces/${workspace.id}/invites`, {}, owner.token).then((r) => r.json());
   const member = await signUp(bare, "delete-member@example.org", code);
   const second = await post(bare, "/api/auth/sign-in/email", { email: "delete-member@example.org", password: "geheim12345" }).then((r) => r.json());
+  // only owners invite: the member becomes one first
+  expect((await patch(bare, `/api/workspaces/${workspace.id}/members/${member.user.id}`, { role: "owner" }, owner.token)).status).toBe(200);
   const invite = await post(bare, `/api/workspaces/${workspace.id}/invites`, {}, member.token).then((r) => r.json());
   const agent = await post(bare, `/api/workspaces/${workspace.id}/mcp-token`, {}, member.token).then((r) => r.json());
   const live = await connect(bare, workspace.id, member.token);
@@ -293,3 +297,62 @@ test("deleting a member revokes sessions, invites, MCP tokens and live sync with
   expect(await get(bare, `/api/workspaces/${workspace.id}/members`, owner.token).then((r) => r.json())).toHaveLength(1);
 });
 
+
+test("owners manage members and invite links: list, revoke, roles, remove; members cannot; the last owner stays", async () => {
+  const olga = await signUp(bare, "manage-olga@example.org");
+  const w = await newWorkspace(bare, olga.token);
+  const api = `/api/workspaces/${w.id}`;
+  const first = await post(bare, `${api}/invites`, {}, olga.token).then((r) => r.json());
+  const max = await signUp(bare, "manage-max@example.org", first.code);
+  const role = (user: { user: { id: string } }, r: string, token: string) => patch(bare, `${api}/members/${user.user.id}`, { role: r }, token);
+
+  // a member neither invites nor sees the links, changes roles or removes anyone
+  expect((await post(bare, `${api}/invites`, {}, max.token)).status).toBe(403);
+  expect((await get(bare, `${api}/invites`, max.token)).status).toBe(403);
+  expect((await del(bare, `${api}/invites/${first.code}`, max.token)).status).toBe(403);
+  expect((await role(olga, "member", max.token)).status).toBe(403);
+  expect((await del(bare, `${api}/members/${olga.user.id}`, max.token)).status).toBe(403);
+
+  // the owner sees every open link (newest first, who made it, until when) and revokes one
+  const second = await post(bare, `${api}/invites`, {}, olga.token).then((r) => r.json());
+  const links = await get(bare, `${api}/invites`, olga.token).then((r) => r.json());
+  expect(links.map((l: any) => l.code)).toEqual([second.code, first.code]);
+  expect(links[0]).toEqual({ code: second.code, by: "manage-olga", created: expect.any(Number), expires: expect.any(Number) });
+  expect(Math.round((links[0].expires - links[0].created) / 86400_000)).toBe(14);
+  expect((await del(bare, `${api}/invites/${first.code}`, olga.token)).status).toBe(200);
+  expect((await del(bare, `${api}/invites/${first.code}`, olga.token)).status).toBe(404);
+  expect((await get(bare, `/api/invites/${first.code}`)).status).toBe(404);
+  const late = await signUp(bare, "manage-late@example.org");
+  expect((await post(bare, `/api/invites/${first.code}`, {}, late.token)).status).toBe(404);
+  expect((await get(bare, `${api}/invites`, olga.token).then((r) => r.json())).map((l: any) => l.code)).toEqual([second.code]);
+
+  // roles: only "owner" or "member"; a new owner may invite
+  expect((await role(max, "admin", olga.token)).status).toBe(400);
+  expect((await role(max, "owner", olga.token)).status).toBe(200);
+  expect((await account(bare, max.token)).workspaces[0].role).toBe("owner");
+  const maxLink = await post(bare, `${api}/invites`, {}, max.token).then((r) => r.json());
+  expect(maxLink.code).toEqual(expect.any(String));
+  // two owners: one may step back; then the other is the last and stays
+  expect((await role(olga, "member", max.token)).status).toBe(200);
+  expect((await role(max, "member", max.token)).status).toBe(409);
+  expect((await del(bare, `${api}/members/${max.user.id}`, max.token)).status).toBe(409);
+  expect((await role(olga, "owner", max.token)).status).toBe(200);
+
+  // removing someone: their connection ends, their agent token and their links go, the data stays
+  const agent = await post(bare, `${api}/mcp-token`, {}, max.token).then((r) => r.json());
+  const live = await connect(bare, w.id, max.token);
+  const closed = new Promise<number>((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error("the removed member's sync remained open")), 3000);
+    live.ws.onclose = (e) => (clearTimeout(timeout), resolve(e.code));
+  });
+  expect((await del(bare, `${api}/members/${max.user.id}`, olga.token)).status).toBe(200);
+  expect(await closed).toBe(4401);
+  expect((await account(bare, max.token)).workspaces).toEqual([]);
+  expect((await mcpPost(bare, `/w/${w.id}/mcp`, agent.token, "tools/list")).status).toBe(401);
+  expect((await get(bare, `/api/invites/${maxLink.code}`)).status).toBe(404);
+  expect((await get(bare, `/api/invites/${second.code}`)).status).toBe(200);
+  expect((await get(bare, `/w/${w.id}/api/activity`, max.token)).status).toBe(403);
+  expect((await del(bare, `${api}/members/${max.user.id}`, olga.token)).status).toBe(404);
+  expect((await get(bare, `${api}/members`, olga.token).then((r) => r.json())).map((m: any) => m.role)).toEqual(["owner"]);
+  expect((await role(olga, "member", olga.token)).status).toBe(409);
+});

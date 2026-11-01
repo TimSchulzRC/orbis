@@ -102,6 +102,15 @@ export interface InviteCode {
   code: string;
 }
 
+/** GET /api/workspaces/<id>/invites (owners only): a link that still works. */
+export interface InviteLink {
+  code: string;
+  /** the name of who made it ("" if their account is gone) */
+  by: string;
+  created: number;
+  expires: number;
+}
+
 /** POST /api/workspaces/<id>/mcp-token: a token for agents on the workspace, shown once, with the ready-made commands. */
 export interface McpConnect {
   mcpUrl: string;

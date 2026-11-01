@@ -16,7 +16,7 @@ import { bearer, emailOTP, genericOAuth } from "better-auth/plugins";
 import { passkey } from "@better-auth/passkey";
 import { getMigrations } from "better-auth/db/migration";
 import { newId } from "@obtion/core/model";
-import type { Member, Role, SignedIn, SignupPolicy, User, WorkspaceInfo } from "@obtion/core/api";
+import type { InviteLink, Member, Role, SignedIn, SignupPolicy, User, WorkspaceInfo } from "@obtion/core/api";
 import { sha256 } from "./blobs";
 import type { LoginConfig } from "./login";
 
@@ -63,6 +63,9 @@ export class AccountError extends Error {
 
 /** What a server folder held before accounts: it becomes the first workspace (see migrateLegacy). */
 const LEGACY_ENTRIES = ["obtion.db", "obtion.db-wal", "obtion.db-shm", "blobs", "vault", "backups", "agent"];
+
+/** How long an invite link works. */
+const INVITE_DAYS = 14;
 
 export const randomToken = () => Buffer.from(crypto.getRandomValues(new Uint8Array(24))).toString("base64url");
 
@@ -329,27 +332,59 @@ export class Accounts {
     return this.db.query('SELECT u.id, u.name, u.email, m.role FROM members m JOIN "user" u ON u.id = m.user WHERE m.workspace = ? ORDER BY m.joined').all(workspace) as Member[];
   }
 
+  private isLastOwner(workspace: string, user: string) {
+    const owners = this.members(workspace).filter((m) => m.role === "owner");
+    return owners.length === 1 && owners[0]!.id === user;
+  }
+
   /**
    * Leave a workspace, or (an owner) remove someone. The last owner cannot go: the workspace
-   * would belong to nobody.
+   * would belong to nobody. What the person made to get in goes with them: their agent tokens
+   * and the invite links they made for it. Their open connections are the caller's to close.
    */
   removeMember(workspace: string, by: string, user: string) {
     const byRole = this.role(workspace, by);
     if (!byRole || (by !== user && byRole !== "owner")) throw new AccountError("not allowed", 403);
-    const owners = this.members(workspace).filter((m) => m.role === "owner");
-    if (owners.length === 1 && owners[0]!.id === user) throw new AccountError("last owner", 409);
-    this.db.query("DELETE FROM members WHERE workspace = ? AND user = ?").run(workspace, user);
-    this.db.query("DELETE FROM tokens WHERE workspace = ? AND user = ?").run(workspace, user);
+    if (!this.role(workspace, user)) throw new AccountError("not a member", 404);
+    if (this.isLastOwner(workspace, user)) throw new AccountError("last owner", 409);
+    this.db.transaction(() => {
+      this.db.query("DELETE FROM members WHERE workspace = ? AND user = ?").run(workspace, user);
+      this.db.query("DELETE FROM tokens WHERE workspace = ? AND user = ?").run(workspace, user);
+      this.db.query('DELETE FROM invites WHERE workspace = ? AND "by" = ?').run(workspace, user);
+    })();
+  }
+
+  /** An owner makes someone an owner or a member. The last owner stays one. */
+  setRole(workspace: string, by: string, user: string, role: Role) {
+    if (this.role(workspace, by) !== "owner") throw new AccountError("only owners change roles", 403);
+    const now = this.role(workspace, user);
+    if (!now) throw new AccountError("not a member", 404);
+    if (now === role) return;
+    if (role === "member" && this.isLastOwner(workspace, user)) throw new AccountError("last owner", 409);
+    this.db.query("UPDATE members SET role = ? WHERE workspace = ? AND user = ?").run(role, workspace, user);
   }
 
   // ---------- invites ----------
 
-  /** An invite link's code: anyone with it may join for 14 days. */
+  /** An invite link's code: anyone with it may join for 14 days, until an owner revokes it. Owners only. */
   createInvite(workspace: string, by: string): string {
-    if (!this.role(workspace, by)) throw new AccountError("not a member", 403);
+    if (this.role(workspace, by) !== "owner") throw new AccountError("only owners invite", 403);
     const code = randomToken();
-    this.db.query("INSERT INTO invites (code, workspace, by, created, expires) VALUES (?, ?, ?, ?, ?)").run(code, workspace, by, Date.now(), Date.now() + 14 * 86400_000);
+    this.db.query("INSERT INTO invites (code, workspace, by, created, expires) VALUES (?, ?, ?, ?, ?)").run(code, workspace, by, Date.now(), Date.now() + INVITE_DAYS * 86400_000);
     return code;
+  }
+
+  /** The links of a workspace that still work, newest first (owners only). Expired ones go. */
+  invites(workspace: string, by: string): InviteLink[] {
+    if (this.role(workspace, by) !== "owner") throw new AccountError("only owners invite", 403);
+    this.db.query("DELETE FROM invites WHERE workspace = ? AND expires <= ?").run(workspace, Date.now());
+    return this.db.query('SELECT i.code, i.created, i.expires, coalesce(u.name, \'\') AS by FROM invites i LEFT JOIN "user" u ON u.id = i.by WHERE i.workspace = ? ORDER BY i.created DESC').all(workspace) as InviteLink[];
+  }
+
+  /** An owner takes a link back: whoever has it can no longer join with it. */
+  revokeInvite(workspace: string, by: string, code: string) {
+    if (this.role(workspace, by) !== "owner") throw new AccountError("only owners invite", 403);
+    if (!this.db.query("DELETE FROM invites WHERE workspace = ? AND code = ?").run(workspace, code).changes) throw new AccountError("invite invalid", 404);
   }
 
   invite(code: string): { workspace: string; name: string; by: string } | undefined {

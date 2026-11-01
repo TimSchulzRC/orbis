@@ -10,7 +10,7 @@ import type { ServerWebSocket } from "bun";
 import { Store } from "./store";
 import { Accounts, AccountError, FRESH_SECONDS, SIGNUP_COOKIE, randomToken } from "./accounts";
 import { loginConfig, loginMethods } from "./login";
-import type { AccountInfo, InviteCode, InviteInfo, McpConnect, Ok, ServerInfo, SignedIn, SignupPolicy, SignupRequest } from "@obtion/core/api";
+import type { AccountInfo, InviteCode, InviteInfo, InviteLink, McpConnect, Ok, Role, ServerInfo, SignedIn, SignupPolicy, SignupRequest } from "@obtion/core/api";
 import { type Conn, Workspace, parseClientMsg } from "./workspace";
 import { firstName, personOrigin } from "@obtion/core/origin";
 import { type Lang, LANGS, translate } from "@obtion/core/i18n";
@@ -216,8 +216,22 @@ async function accountApi(req: Request, path: string, url: URL): Promise<Respons
         return json<Ok>({ ok: true });
       }
       if (sub === "/members" && req.method === "GET") return json(accounts.members(id));
-      if (sub.startsWith("/members/") && req.method === "DELETE") return (accounts.removeMember(id, user.id, sub.slice("/members/".length)), json<Ok>({ ok: true }));
+      if (sub.startsWith("/members/") && req.method === "DELETE") {
+        const gone = sub.slice("/members/".length);
+        accounts.removeMember(id, user.id, gone);
+        // left or removed: their devices stop syncing it now, not at their next message
+        for (const ws of open.get(id)?.conns ?? []) if (ws.data.userId === gone) ws.close(4401, "membership ended");
+        return json<Ok>({ ok: true });
+      }
+      if (sub.startsWith("/members/") && req.method === "PATCH") {
+        const role = (await body<{ role?: unknown }>(req))?.role;
+        if (role !== "owner" && role !== "member") return fail(400, "role required");
+        accounts.setRole(id, user.id, sub.slice("/members/".length), role as Role);
+        return json<Ok>({ ok: true });
+      }
+      if (sub === "/invites" && req.method === "GET") return json<InviteLink[]>(accounts.invites(id, user.id));
       if (sub === "/invites" && req.method === "POST") return json<InviteCode>({ code: accounts.createInvite(id, user.id) });
+      if (sub.startsWith("/invites/") && req.method === "DELETE") return (accounts.revokeInvite(id, user.id, sub.slice("/invites/".length)), json<Ok>({ ok: true }));
       // MCP: a token for agents on this workspace, shown once
       if (sub === "/mcp-token" && req.method === "POST") {
         const base = PUBLIC_URL || `${url.protocol}//${req.headers.get("host")}`;
