@@ -13,7 +13,7 @@ import { keyBetween, keysFor, cmpKey } from "@obtion/core/sortkey";
 import { useRepo, useRoute, useSpaceId, itemHref, itemPath, spaceHref, useLocalStorage } from "../hooks";
 import { type Space, useAccounts } from "../accounts";
 import { useT } from "../i18n";
-import { Button, IconButton, Kbd, MenuItem, MoreMenu, REVEAL } from "./primitives";
+import { Button, IconButton, Kbd, MenuItem, MoreMenu, REVEAL, useContextMenu } from "./primitives";
 import { TypeGlyph, ItemIcon } from "./item-look";
 import { cn, moveInArray } from "../lib/utils";
 import { shortcut } from "../lib/platform";
@@ -21,9 +21,11 @@ import { ItemPicker } from "./Picker";
 import { SyncDot } from "./SyncDot";
 import { createAndOpen } from "../actions";
 import { NewTypeDialog } from "../views/Types";
+import { DeleteDialog, deleteOrAsk } from "../views/ItemPage";
 import { NewSpaceDialog, SpaceScope, SpaceSelector, moveTo } from "./Spaces";
 import { useInboxItems } from "./inbox";
 import { KEYS } from "./storage";
+import { notify } from "./toasts";
 
 /**
  * What is being dragged in the sidebar: an item (from below `from`, null: pinned; `type`: a pinned
@@ -316,6 +318,13 @@ function TreeNode({
   const secondary = parent !== null ? home !== parent : !!home;
   const [drop, setDrop] = useState<"before" | "inside" | "after" | null>(null);
   const [picking, setPicking] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const menu = useContextMenu();
+  // the open page goes back when it goes to the trash; anything else stays where it is
+  const toTrash = () => {
+    const title = item.title || t("untitled");
+    if (deleteOrAsk(repo, item.id, () => setDeleting(true), activeId === item.id)) notify.undo(t("item.trashed", { title }), () => repo.restore(item.id));
+  };
 
   const sortOf = (x: Item) => (parent ? (x.parents[parent]?.sort ?? "") : (x.pinned ?? ""));
   const onDrop = (e: React.DragEvent) => {
@@ -375,6 +384,7 @@ function TreeNode({
         }}
         onDragLeave={() => setDrop(null)}
         onDrop={onDrop}
+        onContextMenu={touch ? undefined : menu.onContextMenu}
         className={cn(
           "group/row relative flex items-center gap-1 rounded-lg pr-1",
           touch ? "py-2 text-[15px]" : "py-1 text-sm",
@@ -418,13 +428,15 @@ function TreeNode({
             <Plus size={13} />
           </Button>
         )}
-        {!touch && <MoreMenu size="xs" iconSize={14} tabIndex={-1} className={cn("hover:bg-surface-2", REVEAL.row)}>
+        {!touch && <MoreMenu menu={menu} size="xs" iconSize={14} tabIndex={-1} className={cn("hover:bg-surface-2", REVEAL.row)}>
           {(close) => (
             <>
               <MenuItem onClick={() => (close(), repo.pin(item.id, !item.pinned))}>{item.pinned ? t("item.unpin") : t("item.pin")}</MenuItem>
               {!isType && <MenuItem onClick={() => (close(), setPicking(true))}>{item.kind === "datei" ? t("place.change") : t("place.add")}</MenuItem>}
               {parent && <MenuItem onClick={() => (close(), repo.removeParent(item.id, parent))}>{t("place.removeHere")}</MenuItem>}
               {parent && secondary && <MenuItem onClick={() => (close(), repo.setHome(item.id, parent))}>{t("place.makeHome")}</MenuItem>}
+              {/* types are deleted on their page, with the preview of what becomes of the values */}
+              {!isType && <MenuItem danger onClick={() => (close(), toTrash())}>{t("item.delete")}</MenuItem>}
             </>
           )}
         </MoreMenu>}
@@ -440,6 +452,7 @@ function TreeNode({
           onClose={() => setPicking(false)}
         />
       )}
+      {deleting && <DeleteDialog item={item} leave={activeId === item.id} onClose={() => setDeleting(false)} />}
       {isOpen &&
         kids.map((k, i) => <TreeNode key={k.id} item={k} parent={item.id} siblings={kids} index={i} depth={depth + 1} isOpen={opened} toggle={toggle} activeId={activeId} keep={keep} touch={touch} />)}
     </div>

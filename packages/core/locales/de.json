@@ -178,6 +178,7 @@
  "item.restore": "Wiederherstellen",
  "item.extract": "Auswahl als {name} herauslösen",
  "item.delete": "In den Papierkorb",
+ "item.trashed": "„{title}“ im Papierkorb",
  "item.cycle": "„Teil von“ {titles} würde einen Kreis schließen und zählt nicht.",
  "item.path": "Pfad",
  "item.giveType": "Typ geben",

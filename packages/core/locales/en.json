@@ -178,6 +178,7 @@
  "item.restore": "Restore",
  "item.extract": "Extract selection as {name}",
  "item.delete": "Move to trash",
+ "item.trashed": "“{title}” moved to trash",
  "item.cycle": "\"Part of\" {titles} would close a cycle and is ignored.",
  "item.path": "Path",
  "item.giveType": "Give a type",

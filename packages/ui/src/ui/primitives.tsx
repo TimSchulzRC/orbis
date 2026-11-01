@@ -2,7 +2,7 @@ import { ToggleGroup, ToggleGroupItem } from "../components/ui/toggle-group";
 import { Button as ShadcnButton } from "../components/ui/button";
 import { Dialog as DialogRoot, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { Popover as PopoverRoot, PopoverAnchor, PopoverContent } from "../components/ui/popover";
-import { type ComponentProps, type ComponentType, type ReactNode, useRef, useState } from "react";
+import { type ComponentProps, type ComponentType, type MouseEvent, type ReactNode, useRef, useState } from "react";
 import { X, Check, ChevronDown, MoreHorizontal, Plus } from "lucide-react";
 import { useT } from "../i18n";
 import { cn } from "../lib/utils";
@@ -44,14 +44,39 @@ export const REVEAL = {
   head: "opacity-0 group-hover/head:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100",
 };
 
-/** "…": the menu of further actions of a page, a row or a group. */
-export function MoreMenu({ children, label, align = "right", size = "md", iconSize, className, ...rest }: { children: (close: () => void) => ReactNode; label?: string; align?: "left" | "right"; size?: keyof typeof ICON_SIZES; iconSize?: number; className?: string } & Omit<ComponentProps<"button">, "children" | "onClick">) {
+/**
+ * "…": the menu of further actions of a page, a row or a group. `menu` (from useContextMenu)
+ * opens the same menu with a right click, at the mouse.
+ */
+export function MoreMenu({ children, label, align = "right", size = "md", iconSize, className, menu, ...rest }: { children: (close: () => void) => ReactNode; label?: string; align?: "left" | "right"; size?: keyof typeof ICON_SIZES; iconSize?: number; className?: string; menu?: ContextMenu } & Omit<ComponentProps<"button">, "children" | "onClick">) {
   const { t } = useT();
   return (
-    <Popover align={align} trigger={(p) => <IconButton {...rest} {...p} label={label ?? t("more")} icon={MoreHorizontal} size={size} iconSize={iconSize} className={className} />}>
+    <Popover align={menu?.point ? "left" : align} open={menu?.open} onOpenChange={menu?.onOpenChange} point={menu?.point} trigger={(p) => <IconButton {...rest} {...p} label={label ?? t("more")} icon={MoreHorizontal} size={size} iconSize={iconSize} className={className} />}>
       {children}
     </Popover>
   );
+}
+
+type ContextMenu = { open: boolean; point: { x: number; y: number } | null; onOpenChange: (o: boolean) => void; onContextMenu: (e: MouseEvent) => void };
+
+/**
+ * A right click that opens a MoreMenu at the mouse: put `onContextMenu` on the row, pass the
+ * whole thing as the menu's `menu`. The "…" button keeps opening it below itself.
+ */
+export function useContextMenu(): ContextMenu {
+  const [open, setOpen] = useState(false);
+  const [point, setPoint] = useState<{ x: number; y: number } | null>(null);
+  return {
+    open,
+    point,
+    onOpenChange: (o) => (setOpen(o), o || setPoint(null)),
+    onContextMenu: (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setPoint({ x: e.clientX, y: e.clientY });
+      setOpen(true);
+    },
+  };
 }
 
 /** The quiet "+ …" entry point (a place, a ref, a property, a tag): one look everywhere. Passes all button props on, so it works as a popover trigger too. */
@@ -182,6 +207,7 @@ export function Popover({
   onOpenChange,
   align = "left",
   triggerClass,
+  point,
 }: {
   trigger: (p: { onClick: () => void; "aria-expanded": boolean }) => ReactNode;
   children: ReactNode | ((close: () => void) => ReactNode);
@@ -190,6 +216,8 @@ export function Popover({
   align?: "left" | "right";
   /** around the trigger (e.g. to let it take the free width) */
   triggerClass?: string;
+  /** open at this point (a right click) instead of below the trigger */
+  point?: { x: number; y: number } | null;
 }) {
   const [inner, setInner] = useState(false);
   const previous = useRef<HTMLElement | null>(null);
@@ -201,9 +229,16 @@ export function Popover({
   };
   return (
     <PopoverRoot open={isOpen} onOpenChange={set}>
-      <PopoverAnchor asChild><span className={cn("relative inline-flex", triggerClass)}>
-        {trigger({ onClick: () => set(!isOpen), "aria-expanded": isOpen })}
-      </span></PopoverAnchor>
+      {point ? (
+        <>
+          <PopoverAnchor virtualRef={{ current: { getBoundingClientRect: () => DOMRect.fromRect({ x: point.x, y: point.y, width: 0, height: 0 }) } }} />
+          <span className={cn("relative inline-flex", triggerClass)}>{trigger({ onClick: () => set(!isOpen), "aria-expanded": isOpen })}</span>
+        </>
+      ) : (
+        <PopoverAnchor asChild><span className={cn("relative inline-flex", triggerClass)}>
+          {trigger({ onClick: () => set(!isOpen), "aria-expanded": isOpen })}
+        </span></PopoverAnchor>
+      )}
       {/* focus goes back to where it was only if nothing took it meanwhile – a click on another
           badge's menu has, and taking it back would close that menu again */}
       <PopoverContent onCloseAutoFocus={(e) => { e.preventDefault(); const now = document.activeElement; if (previous.current?.isConnected && (!now || now === document.body)) previous.current.focus({ preventScroll: true }); }} data-popover align={align === "right" ? "end" : "start"} sideOffset={4}
