@@ -147,6 +147,8 @@ class Toolbar {
     this.extractBtn.hidden = this.extractSep.hidden = !view.state.facet(toolbarExtract) || !repo.index().typesInOrder().length;
     view.requestMeasure({
       read: () => {
+        // the selection when measured: a change may come before (extracting shortens the text)
+        const s = view.state.selection.main;
         const a = view.coordsAtPos(s.from, 1);
         const b = view.coordsAtPos(s.to, -1);
         return { a, b, dom: view.dom.getBoundingClientRect() };
