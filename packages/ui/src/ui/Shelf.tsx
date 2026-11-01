@@ -1,12 +1,14 @@
 // The tray's panel ("Eingang"): looking in, not sorting. Every entry of the workspaces seen, newest
 // first, with a line of its text, its workspace and age; one opens here to read and add to it and
 // stays in the inbox – sorting is the review's (views/Review.tsx), reached from the tray's own
-// button. Above the tray on a desktop, as a sheet on a phone. What lands in the inbox: behind "…".
+// button. Its whole page is one click away (the icon at the end of a row, on hover). Below, folded,
+// what waits until tomorrow ("Morgen wieder"): the rest of what is not sorted, one click from back.
+// Above the tray on a desktop, as a sheet on a phone. What lands in the inbox: behind "…".
 // On Heute on a desktop it is part of the page (`pinned`): always open, it does not close. Without
 // room for it there, Heute shows the newest entries as cards (ShelfCards), each opens the panel.
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, ArrowUp, Maximize2, RotateCcw, SlidersHorizontal, X } from "lucide-react";
-import { type Item, SETTINGS_ID, setSettings } from "@obtion/core/model";
+import { ArrowLeft, ArrowUp, ChevronDown, ChevronRight, Maximize2, RotateCcw, SlidersHorizontal, Undo2 } from "lucide-react";
+import { type Item, SETTINGS_ID, setMeta, setSettings } from "@obtion/core/model";
 import type { QueryDef } from "@obtion/core/query";
 import { inboxWhere } from "@obtion/core/inbox";
 import { resetInbox } from "@obtion/core/setup";
@@ -17,7 +19,7 @@ import { useBlobUrl } from "../files";
 import { Textarea } from "../components/ui/textarea";
 import { replica, spaceById, useAccounts } from "../accounts";
 import { useT, titleOf } from "../i18n";
-import { Button, Dialog, IconButton, Kbd, MenuItem, MoreMenu, DraftBar } from "./primitives";
+import { Button, Dialog, MenuItem, MoreMenu, DraftBar, Tip } from "./primitives";
 import { ItemIcon, RelTime, BelowList } from "./item-look";
 import { cn } from "../lib/utils";
 import { Editor } from "./Editor";
@@ -25,7 +27,7 @@ import { TitleField } from "./TitleField";
 import { QueryEditor } from "./QueryEditor";
 import { SpaceFilter, SpaceScope } from "./Spaces";
 import { notify } from "./feedback";
-import { type InboxEntry, closeShelf, dismissShelf, openShelf, useInboxItems, useShelf } from "./inbox";
+import { type InboxEntry, closeShelf, dismissShelf, openShelf, useInboxItems, useLaterItems, useShelf } from "./inbox";
 import { sameValue } from "@obtion/core/equal";
 import { filePreview } from "./text";
 
@@ -36,13 +38,15 @@ export function ShelfPanel({ desktop, pinned }: { desktop: boolean; pinned?: boo
   const { t } = useT();
   const { at } = useShelf();
   const entries = useInboxItems();
-  const entry = at ? entries.find((e) => e.key === at) : undefined;
+  const later = useLaterItems();
+  const inInbox = at ? entries.find((e) => e.key === at) : undefined;
+  const entry = inInbox ?? (at ? later.find((e) => e.key === at) : undefined);
   // a key from before (the entry was sorted elsewhere meanwhile): the list
   useEffect(() => void (at && !entry && openShelf()), [at, !!entry]);
   // Escape: from an entry back to the list, from the list closed – unless a dialog or menu above it takes it
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
-      if (e.key !== "Escape" || e.defaultPrevented || document.querySelector("[role=dialog][data-state=open], [data-radix-popper-content-wrapper]")) return;
+      if (e.key !== "Escape" || e.defaultPrevented || document.querySelector("[role=dialog][data-state=open], [data-radix-popper-content-wrapper]:not(:has([role=tooltip]))")) return;
       if (entry) openShelf();
       else if (!pinned) dismissShelf();
     };
@@ -65,27 +69,39 @@ export function ShelfPanel({ desktop, pinned }: { desktop: boolean; pinned?: boo
       )}
     >
       {!desktop && <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-line" aria-hidden />}
-      {entry ? <EntryView entry={entry} desktop={desktop} pinned={pinned} /> : <List entries={entries} desktop={desktop} pinned={pinned} />}
+      {entry ? <EntryView entry={entry} waiting={!inInbox} desktop={desktop} pinned={pinned} /> : <List entries={entries} later={later} pinned={pinned} />}
     </div>
   );
 }
 
-/** The list: newest first; ↑↓ choose, ↵ opens, Esc closes (pinned: it stays, and takes the focus only when clicked). */
-function List({ entries, desktop, pinned }: { entries: InboxEntry[]; desktop: boolean; pinned?: boolean }) {
+/**
+ * The list: newest first; ↑↓ choose, ↵ opens, Esc closes (pinned: it stays, and takes the focus only
+ * when clicked). Below, folded, the entries back tomorrow; unfolded the arrows go through them too.
+ */
+function List({ entries, later, pinned }: { entries: InboxEntry[]; later: InboxEntry[]; pinned?: boolean }) {
   const { t } = useT();
   const { shown } = useAccounts();
-  const [sel, setSel] = useState(0);
+  // the chosen row (-1: none): by the arrows or the pointer; the pointer leaving the list takes it away
+  const [sel, setSel] = useState(-1);
+  const [laterOpen, setLaterOpen] = useState(false);
+  const rows = laterOpen ? [...entries, ...later] : entries;
+  const row = (e: InboxEntry, n: number) => <Row key={e.key} entry={e} n={n} on={n === sel} waiting={n >= entries.length} space={spaceById(e.space)?.name} onHover={() => setSel(n)} />;
   const [rule, setRule] = useState<string | null>(null);
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => void (!pinned && box.current?.focus()), []);
-  useEffect(() => void box.current?.querySelector(`[data-shelf="${sel}"]`)?.scrollIntoView({ block: "nearest" }), [sel]);
+  // only the arrows scroll the chosen row into view: on hover a half-shown row would scroll, another
+  // come under the pointer and be chosen in turn – the list flickered
+  const byKey = useRef(false);
+  useEffect(() => {
+    if (byKey.current) box.current?.querySelector(`[data-shelf="${sel}"]`)?.scrollIntoView({ block: "nearest" });
+    byKey.current = false;
+  }, [sel]);
   return (
     <>
       <div className="flex shrink-0 items-center gap-2 border-b border-line py-2.5 pl-5 pr-2">
         <h2 className="text-[15px] font-semibold">
           {t("tray.title")} <span className="tabular-nums text-warn">{entries.length}</span>
         </h2>
-        {desktop && <span className="text-[13px] text-muted-foreground">· {t("tray.newestFirst")}</span>}
         <span className="flex-1" />
         <MoreMenu>
           {(close) =>
@@ -107,26 +123,29 @@ function List({ entries, desktop, pinned }: { entries: InboxEntry[]; desktop: bo
         role="listbox"
         aria-label={t("triage.list")}
         className="min-h-0 flex-1 overflow-y-auto p-1.5 outline-none"
+        onMouseLeave={() => setSel(-1)}
         onKeyDown={(e) => {
-          if (e.key === "ArrowDown") setSel((s) => Math.min(entries.length - 1, s + 1));
-          else if (e.key === "ArrowUp") setSel((s) => Math.max(0, s - 1));
-          else if (e.key === "Enter" && entries[sel]) openShelf(entries[sel]!.key);
+          if (e.key === "ArrowDown") ((byKey.current = true), setSel((s) => Math.min(rows.length - 1, s + 1)));
+          else if (e.key === "ArrowUp") ((byKey.current = true), setSel((s) => Math.max(0, s - 1)));
+          else if (e.key === "Enter" && rows[sel]) openShelf(rows[sel]!.key);
           else return;
           e.preventDefault();
         }}
       >
-        {entries.length ? (
-          entries.map((e, n) => <Row key={e.key} entry={e} n={n} on={n === sel} space={shown.length > 1 ? spaceById(e.space)?.name : undefined} onHover={() => setSel(n)} />)
-        ) : (
-          <p className="px-4 py-8 text-center text-[15px] text-muted-foreground">{t("inbox.empty")}</p>
-        )}
-      </div>
-      <div className="flex shrink-0 items-center gap-3 border-t border-line px-5 py-2.5 text-[13px] text-muted-foreground">
-        <span className="min-w-0 flex-1">{t("tray.lookHint")}</span>
-        {desktop && (
-          <span className="flex shrink-0 items-center gap-1 text-xs">
-            <Kbd>↑</Kbd> <Kbd>↓</Kbd> {t("tray.keys.choose")} <Kbd>↵</Kbd> {t("triage.keys.open")} {!pinned && <Kbd>Esc</Kbd>}
-          </span>
+        {entries.length ? entries.map((e, n) => row(e, n)) : <p className="px-4 py-8 text-center text-[15px] text-muted-foreground">{t("inbox.empty")}</p>}
+        {later.length > 0 && (
+          <section aria-label={t("review.later")} className="mt-1 border-t border-line pt-1">
+            <Button
+              variant="plain"
+              aria-expanded={laterOpen}
+              onClick={() => (setLaterOpen((o) => !o), setSel((s) => Math.min(s, Math.max(0, entries.length - 1))))}
+              className="flex w-full items-center gap-1.5 rounded-lg px-3 py-2 text-left text-[13px] text-muted-foreground hover:bg-hover hover:text-fg"
+            >
+              {laterOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              {t("review.later")} <span className="tabular-nums">· {later.length}</span>
+            </Button>
+            {laterOpen && later.map((e, n) => row(e, entries.length + n))}
+          </section>
         )}
       </div>
       {rule && shown.some((s) => s.id === rule) && (
@@ -148,7 +167,6 @@ export function ShelfCards({ entries }: { entries: InboxEntry[] }) {
         <h2 className="text-[15px] font-semibold leading-[22px]">
           {t("tray.title")} <span className="tabular-nums text-warn">{entries.length}</span>
         </h2>
-        <span className="text-[13px] text-muted-foreground">· {t("tray.newestFirst")}</span>
         <span className="flex-1" />
         <Button variant="plain" onClick={() => openShelf()} className="tap-y inline-flex items-center gap-1 rounded-md px-1.5 text-[13px] text-muted-foreground hover:text-fg">
           {t("tray.showAll")} <ArrowUp size={14} />
@@ -190,32 +208,55 @@ function preview(e: InboxEntry, t: T, lang: Lang, notes: number): string {
   return notes ? t("triage.notes", { count: notes }) : "";
 }
 
-function Row({ entry, n, on, space, onHover }: { entry: InboxEntry; n: number; on: boolean; space?: string; onHover: () => void }) {
+/**
+ * One entry: above its workspace (with what it is) and its age in the corner, then its title and a
+ * line of its text. Hovered or chosen by the arrows, the corner shows its buttons instead of the
+ * age: the whole page at the end, before it "back into the inbox now" for one back tomorrow.
+ */
+function Row({ entry, n, on, waiting, space, onHover }: { entry: InboxEntry; n: number; on: boolean; waiting: boolean; space?: string; onHover: () => void }) {
   const { t, lang } = useT();
-  const ix = replica(entry.space).repo.index();
+  const repo = replica(entry.space).repo;
+  const ix = repo.index();
   const line = preview(entry, t, lang, ix.childrenOf(entry.item.id).length);
   return (
-    <Button
-      variant="plain"
-      data-shelf={n}
-      role="option"
-      aria-selected={on}
-      onClick={() => openShelf(entry.key)}
-      onMouseMove={onHover}
-      className={cn("flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left", on && "bg-hover")}
-    >
-      <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-line text-muted-foreground">
-        <ItemIcon item={entry.item} size={16} ix={ix} />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-[15px]">{titleOf(entry.item, t)}</span>
+    <div data-shelf={n} role="option" aria-selected={on} onMouseMove={onHover} className={cn("group/row relative rounded-xl", on && "bg-hover")}>
+      <Button variant="plain" onClick={() => openShelf(entry.key)} className="block w-full min-w-0 rounded-xl px-3 py-2.5 text-left">
+        <span className="flex min-h-6 items-center gap-1.5 text-[13px] text-muted-foreground">
+          <ItemIcon item={entry.item} size={14} ix={ix} />
+          <span className="min-w-0 flex-1 truncate">{space}</span>
+          {/* the buttons take the corner: the age gives way (always on a touch screen, where they always show) */}
+          <span className={cn("shrink-0 text-xs pointer-coarse:invisible", on ? "invisible" : "group-hover/row:invisible")}>
+            <RelTime ts={entry.item.created} />
+          </span>
+        </span>
+        <span className="mt-0.5 block truncate text-[15px] font-medium">{titleOf(entry.item, t)}</span>
         {line && <span className="block truncate text-[13px] text-muted-foreground">{line}</span>}
+      </Button>
+      <span className={cn("absolute right-2 top-2 flex items-center gap-0.5 focus-within:opacity-100 pointer-coarse:opacity-100", on ? "opacity-100" : "opacity-0 group-hover/row:opacity-100")}>
+        {waiting && (
+          <Tip label={t("tray.backNow")}>
+            <Button variant="plain" onClick={() => repo.change(entry.item.id, (d) => setMeta(d, { later: null }))} className={iconTap} aria-label={t("tray.backNow")}>
+              <Undo2 size={15} />
+            </Button>
+          </Tip>
+        )}
+        <OpenFull entry={entry} className="p-1 hover:bg-surface" />
       </span>
-      <span className="flex shrink-0 flex-col items-end text-xs text-muted-foreground">
-        <RelTime ts={entry.item.created} />
-        {space && <span>{space}</span>}
-      </span>
-    </Button>
+    </div>
+  );
+}
+
+const iconTap = "tap shrink-0 rounded-md p-1 text-muted-foreground hover:bg-surface hover:text-fg";
+
+/** The entry's whole page: an icon only, without a frame, as in the review's card. */
+function OpenFull({ entry, className }: { entry: InboxEntry; className?: string }) {
+  const { t } = useT();
+  return (
+    <Tip label={t("tray.openFull")}>
+      <a href={spaceHref(entry.space, itemPath(entry.item.id))} className={cn("tap shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-hover hover:text-fg", className)} aria-label={t("tray.openFull")}>
+        <Maximize2 size={15} />
+      </a>
+    </Tip>
   );
 }
 
@@ -223,7 +264,7 @@ function Row({ entry, n, on, space, onHover }: { entry: InboxEntry; n: number; o
  * One entry, to read and add to: its title and text editable, the notes below it. It stays in the
  * inbox – the banner says so, with the way to sort it now in the review.
  */
-function EntryView({ entry, desktop, pinned }: { entry: InboxEntry; desktop: boolean; pinned?: boolean }) {
+function EntryView({ entry, waiting, desktop, pinned }: { entry: InboxEntry; waiting: boolean; desktop: boolean; pinned?: boolean }) {
   const { t } = useT();
   return (
     <SpaceScope id={entry.space}>
@@ -233,17 +274,15 @@ function EntryView({ entry, desktop, pinned }: { entry: InboxEntry; desktop: boo
         </Button>
         {desktop && <span className="min-w-0 truncate text-[15px]">/ {titleOf(entry.item, t)}</span>}
         <span className="flex-1" />
-        <a href={spaceHref(entry.space, itemPath(entry.item.id))} className="tap inline-flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1 text-[13px] hover:bg-hover">
-          <Maximize2 size={14} /> {t("tray.openFull")}
-        </a>
-        {pinned ? null : desktop ? <IconButton icon={X} label={t("close")} onClick={dismissShelf} /> : <Button onClick={dismissShelf} className="font-semibold">{t("tray.done")}</Button>}
+        <OpenFull entry={entry} />
+        {!pinned && !desktop && <Button onClick={dismissShelf} className="font-semibold">{t("tray.done")}</Button>}
       </div>
-      <EntryBody entry={entry} />
+      <EntryBody entry={entry} waiting={waiting} />
     </SpaceScope>
   );
 }
 
-function EntryBody({ entry }: { entry: InboxEntry }) {
+function EntryBody({ entry, waiting }: { entry: InboxEntry; waiting: boolean }) {
   const { t } = useT();
   const repo = useRepo();
   const ix = repo.index();
@@ -255,11 +294,18 @@ function EntryBody({ entry }: { entry: InboxEntry }) {
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-inbox/40 bg-inbox/10 px-3.5 py-2.5 text-[13px]">
         <span className="size-2 shrink-0 rounded-full bg-inbox" aria-hidden />
         <span className="min-w-0 flex-1 basis-48">
-          <b className="font-semibold text-warn">{t("tray.staysTitle")}</b> <span className="text-muted-foreground">{t("tray.staysHint")}</span>
+          <b className="font-semibold text-warn">{t(waiting ? "tray.laterTitle" : "tray.staysTitle")}</b> <span className="text-muted-foreground">{t(waiting ? "tray.laterHint" : "tray.staysHint")}</span>
         </span>
-        <a href={reviewHref(entry.key)} className="shrink-0 text-muted-foreground underline decoration-dotted underline-offset-4 hover:text-fg max-lg:basis-full max-lg:pl-5">
-          {t("tray.sortNow")}
-        </a>
+        {waiting ? (
+          // back into the inbox now: then it is an entry like the others (this banner turns into the one below)
+          <Button variant="plain" onClick={() => repo.change(item.id, (d) => setMeta(d, { later: null }))} className="shrink-0 text-muted-foreground underline decoration-dotted underline-offset-4 hover:text-fg max-lg:basis-full max-lg:pl-5">
+            {t("tray.backNow")}
+          </Button>
+        ) : (
+          <a href={reviewHref(entry.key)} className="shrink-0 text-muted-foreground underline decoration-dotted underline-offset-4 hover:text-fg max-lg:basis-full max-lg:pl-5">
+            {t("tray.sortNow")}
+          </a>
+        )}
       </div>
       <p className="mt-4 flex flex-wrap items-center gap-x-2 text-[13px] text-muted-foreground">
         <span className="inline-flex items-center gap-1.5 rounded-full border border-line px-2 py-0.5 text-fg">

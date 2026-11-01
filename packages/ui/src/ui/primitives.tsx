@@ -2,7 +2,8 @@ import { ToggleGroup, ToggleGroupItem } from "../components/ui/toggle-group";
 import { Button as ShadcnButton } from "../components/ui/button";
 import { Dialog as DialogRoot, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { Popover as PopoverRoot, PopoverAnchor, PopoverContent } from "../components/ui/popover";
-import { type ComponentProps, type ComponentType, type MouseEvent, type ReactNode, useRef, useState } from "react";
+import { type ComponentProps, type ComponentType, type MouseEvent, type ReactElement, type ReactNode, useRef, useState } from "react";
+import { Tooltip as TooltipPrimitive } from "radix-ui";
 import { X, Check, ChevronDown, MoreHorizontal, Plus } from "lucide-react";
 import { useT } from "../i18n";
 import { cn } from "../lib/utils";
@@ -34,6 +35,26 @@ export function IconButton({ label, icon: Icon, size = "md", iconSize = 16, clas
     <ShadcnButton variant="plain" size="none" type="button" title={label} aria-label={label} {...rest} className={cn("tap inline-flex items-center justify-center text-muted-foreground transition-colors hover:bg-hover hover:text-fg disabled:opacity-40", ICON_SIZES[size], className)}>
       <Icon size={iconSize} />
     </ShadcnButton>
+  );
+}
+
+/**
+ * A quick label over a small button: after a short moment (not the browser's slow "title"), centred
+ * above it; from one to the next right away. Not on touch screens (Radix opens it on hover and focus
+ * only). The button keeps its aria-label; give it no title, or the browser shows its own as well.
+ */
+export function Tip({ label, children }: { label: string; children: ReactElement }) {
+  return (
+    <TooltipPrimitive.Provider delayDuration={150} skipDelayDuration={400}>
+      <TooltipPrimitive.Root>
+        <TooltipPrimitive.Trigger asChild>{children}</TooltipPrimitive.Trigger>
+        <TooltipPrimitive.Portal>
+          <TooltipPrimitive.Content side="top" align="center" sideOffset={6} collisionPadding={8} className="z-50 rounded-md bg-fg px-2 py-1 text-xs font-medium text-bg shadow-md data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=delayed-open]:animate-in data-[state=delayed-open]:fade-in-0">
+            {label}
+          </TooltipPrimitive.Content>
+        </TooltipPrimitive.Portal>
+      </TooltipPrimitive.Root>
+    </TooltipPrimitive.Provider>
   );
 }
 

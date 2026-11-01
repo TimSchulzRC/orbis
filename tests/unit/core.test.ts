@@ -5,7 +5,7 @@ import { type TypeSchema, initSchema, readSchema } from "@obtion/core/model";
 import { initialProps, optionIds, statusProp } from "@obtion/core/traits";
 import { addParent, readItem, removeParent, setMeta, setProp, setSettings, initItem, META_TYPE, SETTINGS_ID, touchOnTextEdit } from "@obtion/core/model";
 import { keyBetween, keysFor } from "@obtion/core/sortkey";
-import { isInInbox, isOverview, inbox, sidebarRoots, sidebarChildren } from "@obtion/core/placement";
+import { isInInbox, isOverview, inbox, laterItems, sidebarRoots, sidebarChildren } from "@obtion/core/placement";
 import { runSetup, restoreDefaultTypes, resetInbox, SYS } from "@obtion/core/setup";
 import { parseQuery, printQuery, runQuery } from "@obtion/core/query";
 import { CATALOGS } from "@obtion/core/i18n";
@@ -184,24 +184,28 @@ describe("the inbox", () => {
 });
 
 describe("set aside", () => {
-  test("kept leaves the inbox for good, later until its time – whatever the rule says", () => {
+  test("pinned leaves the inbox, later until its time – whatever the rule says; an old kept does not", () => {
     const m = new MemRepo();
     runSetup(m.writer, "de");
-    const kept = m.add({ title: "Gedanke" });
+    const pinned = m.add({ title: "Gedanke" });
     const later = m.add({ title: "Morgen" });
     const back = m.add({ title: "Wieder da" });
-    m.change(kept, (d) => setMeta(d, { kept: 1 }));
+    const kept = m.add({ title: "Lose behalten" });
+    m.change(pinned, (d) => setMeta(d, { pinned: "a0" }));
     m.change(later, (d) => setMeta(d, { later: Date.now() + 60_000 }));
     m.change(back, (d) => setMeta(d, { later: Date.now() - 1 }));
+    m.change(kept, (d) => d.getMap("meta").set("kept", 1)); // from before 01.11.: no place, so back in the inbox
     // a rule that would take them all: set aside still wins
     m.change(SETTINGS_ID, (d) => setSettings(d, { inbox: { or: [{ without: "type" }] } }));
     const ix = m.index();
-    expect(inbox(ix).map((i) => i.title).sort()).toEqual(["Wieder da"]);
-    expect(runQuery(parseQuery("eingang", ix).def, { ix }).items.map((i) => i.title)).toEqual(["Wieder da"]);
+    expect(inbox(ix).map((i) => i.title).sort()).toEqual(["Lose behalten", "Wieder da"]);
+    expect(runQuery(parseQuery("eingang", ix).def, { ix }).items.map((i) => i.title).sort()).toEqual(["Lose behalten", "Wieder da"]);
     expect(setAside(ix.get(later)!, Date.now() + 120_000)).toBe(false);
-    // undone: back in the inbox
-    m.change(kept, (d) => setMeta(d, { kept: null }));
-    expect(isInInbox(m.index().get(kept)!, m.index())).toBe(true);
+    // "Morgen wieder" in the panel: what the rule takes and waits, not the pinned one
+    expect(laterItems(ix).map((i) => i.title)).toEqual(["Morgen"]);
+    // unpinned: back in the inbox
+    m.change(pinned, (d) => setMeta(d, { pinned: null }));
+    expect(isInInbox(m.index().get(pinned)!, m.index())).toBe(true);
   });
 
   test("tomorrow is the next local midnight", () => {
