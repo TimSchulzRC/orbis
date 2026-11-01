@@ -76,7 +76,7 @@ function CopyBox({ text, secret, label }: { text: string; secret?: string; label
  * A workspace's name, who is in it, leaving it. Owners also rename it, make others owners or
  * members, remove them (each confirmed first) and manage the invite links.
  */
-function Members({ space }: { space: Space }) {
+function Members({ space, onRemoved }: { space: Space; onRemoved: () => void }) {
   const { t } = useT();
   const [name, setName] = useState(space.name);
   const [list, setList] = useState<Member[]>([]);
@@ -94,7 +94,8 @@ function Members({ space }: { space: Space }) {
   };
   const remove = async (m: Member) => {
     const yes = await confirmAction({ title: t("space.removeConfirm", { name: who(m), workspace: space.name }), body: t("space.removeHint", { name: who(m) }), yes: t("space.remove") });
-    if (yes) await removeMember(space, m.id).then(load, fail);
+    // their invite links went with them
+    if (yes) await removeMember(space, m.id).then(() => (void load(), onRemoved()), fail);
   };
   return (
     <section>
@@ -145,12 +146,12 @@ function Members({ space }: { space: Space }) {
 }
 
 /** The invite links of a workspace that still work: a new one, who made each, until when, revoking. Owners only. */
-function InviteLinks({ space }: { space: Space }) {
+function InviteLinks({ space, version }: { space: Space; version: number }) {
   const { t, lang } = useT();
   const [links, setLinks] = useState<InviteLink[]>([]);
   const [error, setError] = useState("");
   const load = () => inviteLinks(space).then(setLinks, (e) => setError(errorText(e, t, "space")));
-  useEffect(() => void load(), [space.id]);
+  useEffect(() => void load(), [space.id, version]);
   const day = (ts: number) => fmtDate(lang, new Date(ts).toISOString());
   const fail = (e: unknown) => setError(errorText(e, t, "space"));
   return (
@@ -555,6 +556,7 @@ export function SpaceSettingsPage() {
   // an MCP token is made on request (each is a new one, shown once)
   const [c, setC] = useState<McpConnect | null>(null);
   const [err, setErr] = useState(false);
+  const [removed, setRemoved] = useState(0);
   useDocumentTitle(space?.name ?? t("space.settings"));
   if (!space) return null;
   const newToken = () => mcpToken(space).then(setC, () => setErr(true));
@@ -585,9 +587,9 @@ export function SpaceSettingsPage() {
         </nav>
       </div>
 
-      <Members space={space} />
+      <Members space={space} onRemoved={() => setRemoved((n) => n + 1)} />
 
-      {space.role === "owner" && <InviteLinks space={space} />}
+      {space.role === "owner" && <InviteLinks space={space} version={removed} />}
 
       <Examples />
 

@@ -340,6 +340,14 @@ async function membersOnSettings(browser: import("playwright").Browser, server: 
   const ws = (await api("/api/account")).workspaces[0].id as string;
   const { code: old } = await api(`/api/workspaces/${ws}/invites`, { method: "POST", body: "{}" });
   const { token: bea } = await api("/api/account/signup", { method: "POST", body: JSON.stringify({ name: "Bea", email: "bea@example.org", password: "geheim12345", invite: old }) });
+  // a link Bea made while an owner: it goes when Bea is removed
+  const setBea = async (r: string) => {
+    const id = (await api(`/api/workspaces/${ws}/members`)).find((m: { name: string }) => m.name === "Bea").id;
+    await api(`/api/workspaces/${ws}/members/${id}`, { method: "PATCH", body: JSON.stringify({ role: r }) });
+  };
+  await setBea("owner");
+  const { code: beas } = await api(`/api/workspaces/${ws}/invites`, { method: "POST", body: "{}" }, bea);
+  await setBea("member");
   const role = async () => (await api(`/api/workspaces/${ws}/members`)).find((m: { name: string }) => m.name === "Bea")?.role as string | undefined;
   const context = await signedIn(browser, server, { viewport: { width: 1440, height: 900 }, locale: "de-DE" });
   const page = await context.newPage();
@@ -352,28 +360,29 @@ async function membersOnSettings(browser: import("playwright").Browser, server: 
   await check(page, label, `/#/w/${ws}/settings`, errors, async (p) => {
     const links = p.getByRole("list", { name: "Einladungslinks" }).getByRole("listitem");
     await links.first().waitFor({ timeout: 5000 });
-    if ((await links.count()) !== 1) failures.push(`${label}: ${await links.count()} open links instead of the one made by the API`);
+    if ((await links.count()) !== 2) failures.push(`${label}: ${await links.count()} open links instead of the two made by the API`);
     await p.getByRole("button", { name: "Neuer Link" }).click();
-    await links.nth(1).waitFor({ timeout: 3000 });
+    await links.nth(2).waitFor({ timeout: 3000 });
     if (!(await links.first().innerText()).includes("Von E2E am")) failures.push(`${label}: the new link does not say who made it: ${await links.first().innerText()}`);
     await links.filter({ hasText: old }).getByRole("button", { name: "Widerrufen" }).click();
     await links.filter({ hasText: old }).waitFor({ state: "detached", timeout: 3000 });
     if ((await fetch(`${server.url}/api/invites/${old}`)).status !== 404) failures.push(`${label}: the revoked link still works`);
 
-    const bea = p.getByRole("list", { name: "Mitglieder" }).getByRole("listitem").filter({ hasText: "Bea" });
+    const beaRow = p.getByRole("list", { name: "Mitglieder" }).getByRole("listitem").filter({ hasText: "Bea" });
     const choose = async (item: string) => {
-      await bea.getByRole("button", { name: "Aktionen für Bea" }).click();
+      await beaRow.getByRole("button", { name: "Aktionen für Bea" }).click();
       await p.locator("[data-popover]").getByRole("button", { name: item, exact: true }).click();
       await p.getByRole("dialog").getByRole("button", { name: item, exact: true }).click();
     };
     await choose("Zum Besitzer machen");
-    await bea.getByText("Besitzer").waitFor({ timeout: 3000 });
+    await beaRow.getByText("Besitzer").waitFor({ timeout: 3000 });
     if ((await role()) !== "owner") failures.push(`${label}: Bea is no owner on the server`);
     await choose("Zum Mitglied machen");
-    await bea.getByText("Mitglied", { exact: true }).waitFor({ timeout: 3000 });
+    await beaRow.getByText("Mitglied", { exact: true }).waitFor({ timeout: 3000 });
     if ((await role()) !== "member") failures.push(`${label}: Bea is no member on the server`);
     await choose("Entfernen");
-    await bea.waitFor({ state: "detached", timeout: 3000 });
+    await beaRow.waitFor({ state: "detached", timeout: 3000 });
+    if (!(await links.filter({ hasText: beas }).waitFor({ state: "detached", timeout: 3000 }).then(() => true, () => false))) failures.push(`${label}: the removed member's link is still listed`);
     if (await role()) failures.push(`${label}: Bea is still in the workspace on the server`);
   });
   await context.close();
