@@ -12,5 +12,7 @@ data-*
 !.env.example
 *.local
 *.log
+# what `bun build --compile` can leave behind (apps/desktop/scripts/build.ts)
+*.bun-build
 .DS_Store
 .vitest

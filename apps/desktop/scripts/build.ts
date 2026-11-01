@@ -5,7 +5,7 @@
 //   bun scripts/build.ts                  for this machine
 //   bun scripts/build.ts mac win linux    for these platforms (each x64 and arm64; win x64 only)
 
-import { copyFileSync, mkdirSync, rmSync } from "node:fs";
+import { copyFileSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { $ } from "bun";
 
@@ -32,14 +32,17 @@ mkdirSync(join(here, "build"), { recursive: true });
 for (const to of ["build/icon.png", "dist/icon.png"])
 	copyFileSync(join(root, "apps/web/public/icon-512.png"), join(here, to));
 
-rmSync(join(here, "build/server"), { recursive: true, force: true });
+const servers = join(here, "build/server");
+rmSync(servers, { recursive: true, force: true });
+mkdirSync(servers, { recursive: true });
 for (const { os, arch } of targets) {
-	const out = join(
-		here,
-		"build/server",
-		`${os}-${arch}`,
-		os === "win" ? "obtion-server.exe" : "obtion-server",
-	);
+	const out = join(servers, `${os}-${arch}`, os === "win" ? "obtion-server.exe" : "obtion-server");
 	mkdirSync(join(out, ".."), { recursive: true });
-	await $`bun build --compile --target=bun-${OS[os]}-${arch} ${join(root, "apps/server/src/index.ts")} --outfile ${out}`;
+	// in build/server (ignored by git): compiling for its own platform, Bun can leave a copy of itself
+	// in the working directory (".<hex>-00000000.bun-build"), which then goes too
+	await $`bun build --compile --target=bun-${OS[os]}-${arch} ${join(root, "apps/server/src/index.ts")} --outfile ${out}`.cwd(
+		servers,
+	);
 }
+for (const name of readdirSync(servers))
+	if (name.endsWith(".bun-build")) rmSync(join(servers, name), { force: true });
