@@ -40,7 +40,10 @@ async function tree(under: string) {
 }
 const byTitle = async (t: string) => (await tree(rootId)).items.find((i) => i.title === t);
 const read = (p: string) => readFileSync(join(dir, p));
-const bodyOf = (p: string) => read(p).toString("utf8").replace(/^---\n[\s\S]*?\n---\n/, "");
+const bodyOf = (p: string) =>
+  read(p)
+    .toString("utf8")
+    .replace(/^---\n[\s\S]*?\n---\n/, "");
 
 let rootId = "";
 const XSD = '<?xml version="1.0"?>\n<xs:schema/>\n';
@@ -116,7 +119,7 @@ test("push: edited note with base_version, new note, new folder with README, new
   mkdirSync(join(dir, "Tools"));
   writeFileSync(join(dir, "Tools", "run.py"), "print('hallo')\n");
   writeFileSync(join(dir, "Tools", "README.md"), "# Tools\nStart: python run.py\n");
-  writeFileSync(join(dir, "Mapping", "schema.xsd"), XSD.replace("schema/", "schema version=\"2\"/"));
+  writeFileSync(join(dir, "Mapping", "schema.xsd"), XSD.replace("schema/", 'schema version="2"/'));
   writeFileSync(join(dir, ".DS_Store"), "ignored");
 
   const st = await obtion(["status"]);
@@ -128,7 +131,7 @@ test("push: edited note with base_version, new note, new folder with README, new
   const dry = await obtion(["push", "--dry-run"]);
   expect(dry.code).toBe(0);
   expect(dry.out).toContain("Dry run, nothing sent");
-  expect((await byTitle("Neu"))).toBeUndefined();
+  expect(await byTitle("Neu")).toBeUndefined();
 
   const r = await obtion(["push"]);
   expect(r.err).toBe("");
@@ -231,4 +234,71 @@ test("environment variables override the stored login; another workspace's folde
   const r = await obtion(["status"], { env: { OBTION_WORKSPACE: "anderer" } });
   expect(r.code).toBe(2);
   expect(r.err).toContain("belongs to workspace");
+});
+
+test("a folder deleted here whose text changed in Obtion is not trashed by push --delete", async () => {
+  await tool("create", { items: [{ title: "Altordner", parents: [rootId], body: "alt" }] });
+  await tool("create", { items: [{ title: "Kind", parents: ["Altordner"], body: "k" }] });
+  expect((await obtion(["pull"])).code).toBe(0);
+  rmSync(join(dir, "Altordner"), { recursive: true });
+  await tool("update", { ref: "Altordner", old_text: "alt", new_text: "alt, in der App ergänzt" });
+  const r = await obtion(["push", "--delete"]);
+  expect(r.code).toBe(1);
+  expect(r.out).toContain("skipped   Altordner/");
+  expect((await byTitle("Altordner"))!.body).toBe("alt, in der App ergänzt");
+  // its unchanged child went to the trash; the item has no children now, so pull brings it back as a note
+  expect((await obtion(["pull"])).code).toBe(0);
+  expect(bodyOf("Altordner.md")).toBe("alt, in der App ergänzt");
+});
+
+test("replacing a file checks its hash on the server (If-Match): a replacement in between is not overwritten", async () => {
+  const xsd = (await tree(rootId)).items.find((i) => i.file?.name === "schema.xsd")!;
+  const put = (body: string, hash: string) => fetch(`${base}/w/${ws}/api/files/${xsd.id}`, { method: "PUT", headers: { authorization: `Bearer ${token}`, "if-match": `"${hash}"` }, body });
+  expect((await put("<a/>", "0".repeat(64))).status).toBe(412);
+  expect((await tree(rootId)).items.find((i) => i.id === xsd.id)!.file!.hash).toBe(xsd.file!.hash);
+  expect((await put("<a/>", xsd.file!.hash)).status).toBe(200);
+  expect((await obtion(["pull"])).code).toBe(0);
+});
+
+test("README.md: new in a folder whose text was empty, and a text emptied in Obtion – conflicts keep their state", async () => {
+  await tool("create", { items: [{ title: "Leer", parents: [rootId] }] });
+  await tool("create", { items: [{ title: "Drin", parents: ["Leer"], body: "d" }] });
+  expect((await obtion(["pull"])).code).toBe(0);
+  expect(existsSync(join(dir, "Leer", "README.md"))).toBe(false);
+  writeFileSync(join(dir, "Leer", "README.md"), "meins\n");
+  await tool("update", { ref: "Leer", body: "aus der App", body_mode: "append" });
+  const r = await obtion(["push"]);
+  expect(r.code).toBe(1);
+  expect(bodyOf("Leer/README.obtion-conflict.md")).toBe("aus der App");
+  writeFileSync(join(dir, "Leer", "README.md"), "aus der App\nmeins\n");
+  rmSync(join(dir, "Leer", "README.obtion-conflict.md"));
+  expect((await obtion(["push"])).code).toBe(0);
+  expect((await byTitle("Leer"))!.body).toBe("aus der App\nmeins\n");
+
+  // emptied in Obtion while edited here: a conflict, not "removed"
+  const leer = (await byTitle("Leer"))!;
+  const v = JSON.parse(await tool("get", { ref: leer.id })).version;
+  await tool("update", { ref: leer.id, body: "", base_version: v });
+  writeFileSync(join(dir, "Leer", "README.md"), read("Leer/README.md").toString() + "noch mehr\n");
+  const pulled = await obtion(["pull"]);
+  expect(pulled.out).toContain("conflict  Leer/README.md");
+  const pushed = await obtion(["push"]);
+  expect(pushed.out).toContain("conflict  Leer/README.md");
+  expect(bodyOf("Leer/README.obtion-conflict.md")).toBe("");
+});
+
+test("a folder X/ next to the note X.md: its files go below that note, its README.md is not sent", async () => {
+  mkdirSync(join(dir, "Neu aus der App"));
+  writeFileSync(join(dir, "Neu aus der App", "anhang.txt"), "a");
+  writeFileSync(join(dir, "Neu aus der App", "README.md"), "nicht senden");
+  const r = await obtion(["push"]);
+  expect(r.out).toContain("skipped   Neu aus der App/README.md");
+  const note = (await byTitle("Neu aus der App"))!;
+  expect(note.body).toBe("hallo");
+  expect((await tree(rootId)).items.find((i) => i.file?.name === "anhang.txt")!.parents).toEqual([note.id]);
+  // a second push sends nothing twice
+  const again = await obtion(["push"]);
+  expect((await tree(rootId)).items.filter((i) => i.file?.name === "anhang.txt")).toHaveLength(1);
+  expect(again.out).toContain("skipped   Neu aus der App/README.md");
+  expect((await byTitle("Neu aus der App"))!.body).toBe("hallo");
 });

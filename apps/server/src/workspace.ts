@@ -298,6 +298,12 @@ export class Workspace {
       if (e instanceof OpError) return fail(id ? 409 : 400, e.message);
       throw e;
     }
+    // PUT with If-Match: "<hash>" replaces only while the file still has that content (the CLI's push)
+    const ifMatch = req.method === "PUT" ? req.headers.get("if-match")?.trim() : undefined;
+    const expected = ifMatch && ifMatch !== "*" ? ifMatch.replace(/^W\//, "").replace(/^"|"$/g, "") : undefined;
+    const stale = () => expected !== undefined && this.store.records.get(id)?.file?.hash !== expected;
+    const staleAnswer = () => fail(412, `the file's content changed: it is no longer ${expected}`);
+    if (stale()) return staleAnswer();
     const got = await this.blobs.putStream(req.body, MAX_BLOB);
     if (got === "too large") return fail(413, `too large (max ${MAX_BLOB / 1024 / 1024} MB)`);
     let out: Item | undefined;
@@ -305,6 +311,7 @@ export class Workspace {
     try {
       const said = ops.call(ctx.origin, () => {
         if (id) {
+          if (stale()) throw new StaleFile();
           const r = ops.replaceFile(id, got, ctx.origin);
           out = r.item;
           previous = r.previous;
@@ -318,6 +325,7 @@ export class Workspace {
       const body = { id: out!.id, name: f.name, hash: f.hash, size: f.size, mime: f.mime, url: ctx.filesUrl ? `${ctx.filesUrl}/${out!.id}` : `/api/files/${out!.id}`, step, ...(id ? { replaced: !!previous, previous } : {}) };
       return json(body, id ? 200 : 201);
     } catch (e) {
+      if (e instanceof StaleFile) return staleAnswer();
       if (e instanceof OpError) return fail(id ? 409 : 400, e.message);
       throw e;
     }
@@ -344,6 +352,9 @@ export class Workspace {
     return new Response(Bun.file(blobs.path(hash)), { headers });
   }
 }
+
+/** A replacement whose If-Match no longer holds: nothing changes. */
+class StaleFile extends Error {}
 
 function send(ws: ServerWebSocket<Conn>, msg: ServerMsg) {
   ws.send(JSON.stringify(msg));

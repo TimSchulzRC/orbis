@@ -53,7 +53,19 @@ test("a note keeps its body byte for byte behind our front matter", () => {
   expect(parseNote("---\r\nobtion_id: x\r\nobtion_version: v\r\n---\r\nA\r\n")).toEqual({ id: "x", version: "v", body: "A\r\n" });
 });
 
-const node = (id: string, title: string, parents: string[], extra: Partial<Node> = {}): Node => ({ id, kind: "info", title, type: null, version: "v", parents, home: parents[0] ?? null, created: Number(id.replace(/\D/g, "")) || 0, updated: 0, body: "", ...extra });
+const node = (id: string, title: string, parents: string[], extra: Partial<Node> = {}): Node => ({
+  id,
+  kind: "info",
+  title,
+  type: null,
+  version: "v",
+  parents,
+  home: parents[0] ?? null,
+  created: Number(id.replace(/\D/g, "")) || 0,
+  updated: 0,
+  body: "",
+  ...extra,
+});
 
 test("layout: each item once (at its home), folders for items with children, README.md for their text", () => {
   const items = [
@@ -67,7 +79,18 @@ test("layout: each item once (at its home), folders for items with children, REA
     node("a7", "Weg", ["fremd", "a2"], { home: "fremd" }),
   ];
   const out = layout({ root: "r", items }).map((d) => `${d.kind} ${d.path}`);
-  expect(out).toEqual(["folder ", "body README.md", "folder Mapping", "body Mapping/README.md", "note Mapping/Geteilt.md", "note Mapping/README (2).md", "file Mapping/x.pdf", "folder Notiz", "note Notiz/Weg.md", "note Notiz.md"]);
+  expect(out).toEqual([
+    "folder ",
+    "body README.md",
+    "folder Mapping",
+    "body Mapping/README.md",
+    "note Mapping/Geteilt.md",
+    "note Mapping/README (2).md",
+    "file Mapping/x.pdf",
+    "folder Notiz",
+    "note Notiz/Weg.md",
+    "note Notiz.md",
+  ]);
 });
 
 test("the config lives in the user's own place on each system", () => {

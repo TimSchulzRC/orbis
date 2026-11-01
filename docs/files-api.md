@@ -38,6 +38,8 @@ curl -fsS -X PUT -H "Authorization: Bearer $OBTION_TOKEN" \
   --data-binary @schema.xsd "$BASE/<file id>"
 ```
 
+With `If-Match: "<sha256>"` the content is replaced only while the file still has that hash; otherwise `412` and nothing changes (a script that read the file first doesn't overwrite someone else's replacement).
+
 Same item, same name, same place and links. The old content stays in the file's history. `200` with `{ id, name, hash, size, mime, url, step, replaced, previous }`; `replaced: false` when the content was already the same. `404` for an id that isn't a file, `409` for a file in the trash.
 
 ## Download the original

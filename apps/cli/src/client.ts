@@ -109,7 +109,13 @@ export class Client {
   async items(ids: string[]): Promise<Node[]> {
     const out: Node[] = [];
     for (let i = 0; i < ids.length; i += 100) {
-      const res = await this.fetch(`/api/items?ids=${ids.slice(i, i + 100).map(encodeURIComponent).join(",")}`, { headers: this.headers(), retry: true });
+      const res = await this.fetch(
+        `/api/items?ids=${ids
+          .slice(i, i + 100)
+          .map(encodeURIComponent)
+          .join(",")}`,
+        { headers: this.headers(), retry: true },
+      );
       if (!res.ok) throw new CliError(`Reading items failed: HTTP ${res.status} ${await res.text()}`);
       out.push(...((await res.json()) as { items: Node[] }).items);
     }
@@ -124,9 +130,10 @@ export class Client {
     return (await res.json()) as { id: string; hash: string; size: number };
   }
 
-  /** New content for an existing file (the old one stays in its history). */
-  async replace(id: string, path: string): Promise<{ id: string; hash: string; size: number }> {
-    const res = await this.fetch(`/api/files/${encodeURIComponent(id)}`, { method: "PUT", headers: this.headers(), body: Bun.file(path), retry: true });
+  /** New content for an existing file (the old one stays in its history), only while it still has `expect`. */
+  async replace(id: string, path: string, expect: string): Promise<{ id: string; hash: string; size: number } | "stale"> {
+    const res = await this.fetch(`/api/files/${encodeURIComponent(id)}`, { method: "PUT", headers: this.headers({ "if-match": `"${expect}"` }), body: Bun.file(path), retry: true });
+    if (res.status === 412) return "stale";
     if (!res.ok) throw new CliError(`Replacing ${id} failed: HTTP ${res.status} ${await res.text()}`);
     return (await res.json()) as { id: string; hash: string; size: number };
   }

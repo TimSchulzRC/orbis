@@ -25,9 +25,9 @@ const README = "README.md";
 /**
  * The folder layout of a subtree. Each item appears once: below its home if that is in the
  * subtree, else below its first parent there. Names are unique per folder (case-insensitively),
- * the older item keeps the plain name.
+ * the older item keeps the plain name. `known`: keys of the last pull (an emptied README.md stays).
  */
-export function layout(tree: Tree): Desired[] {
+export function layout(tree: Tree, known: Set<string> = new Set()): Desired[] {
   const byId = new Map(tree.items.map((n) => [n.id, n]));
   const root = byId.get(tree.root);
   if (!root) throw new CliError("The server sent no root item.");
@@ -47,7 +47,8 @@ export function layout(tree: Tree): Desired[] {
     const taken = new Set<string>();
     if (n.kind === "info") {
       taken.add(nameKey(README));
-      if (n.body) out.push({ path: at(README), key: keyOf("body", n.id), kind: "body", node: n });
+      // an emptied text keeps its README.md if it was pulled: an edit there is then a normal conflict
+      if (n.body || known.has(keyOf("body", n.id))) out.push({ path: at(README), key: keyOf("body", n.id), kind: "body", node: n });
     } else if (n.file) out.push({ path: at(uniqueName(safeFileName(n.file.name), taken, true)), key: keyOf("file", n.id), kind: "file", node: n });
     const children = (kids.get(n.id) ?? []).sort((a, b) => a.created - b.created || (a.id < b.id ? -1 : 1));
     for (const c of children) {
@@ -108,7 +109,9 @@ export function openFolder(dir?: string): { dir: string; state: State } {
 
 function checkWorkspace(state: State, client: Client) {
   if (state.workspace !== client.cfg.workspace || state.server !== client.cfg.server)
-    throw new CliError(`This folder belongs to workspace ${state.workspace} on ${state.server}, you are logged in to ${client.cfg.workspace} on ${client.cfg.server}. Log in to that one (or set OBTION_SERVER/OBTION_WORKSPACE).`);
+    throw new CliError(
+      `This folder belongs to workspace ${state.workspace} on ${state.server}, you are logged in to ${client.cfg.workspace} on ${client.cfg.server}. Log in to that one (or set OBTION_SERVER/OBTION_WORKSPACE).`,
+    );
 }
 
 export interface PullOptions {
@@ -127,7 +130,7 @@ export async function pull(client: Client, dir: string, ref: string | undefined,
   const rootNode = tree.items.find((n) => n.id === tree.root)!;
   state ??= { format: 1, server: client.cfg.server, workspace: client.cfg.workspace, root: tree.root, title: rootNode.title, entries: {} };
   const entries = state.entries;
-  const desired = layout(tree);
+  const desired = layout(tree, new Set(Object.values(state.entries).map((e) => keyOf(e.kind, e.id))));
   const wanted = new Map(desired.map((d) => [d.key, d]));
   const atPath = new Map<string, string>(Object.entries(entries).map(([p, e]) => [keyOf(e.kind, e.id), p]));
   const local = new Map<string, Local>();
@@ -191,7 +194,13 @@ export async function pull(client: Client, dir: string, ref: string | undefined,
         if (changed) writes.push({ d, note: "changed in Obtion" });
       } else if (ls === "changed") {
         if (contentChanged && opts.force) (backup(d.path), writes.push({ d, note: "your edit is in the conflict copy" }));
-        else if (contentChanged) r.line("conflict", d.path, e.theirs ? `waiting for your merge of ${conflictName(baseOf(d.path))}` : "changed here and in Obtion; yours is kept – push writes Obtion's version next to it", true);
+        else if (contentChanged)
+          r.line(
+            "conflict",
+            d.path,
+            e.theirs ? `waiting for your merge of ${conflictName(baseOf(d.path))}` : "changed here and in Obtion; yours is kept – push writes Obtion's version next to it",
+            true,
+          );
         else {
           if (isText(d.kind)) e.version = d.node.version; // only title or properties changed: your edit can still go up
           r.line("kept", d.path, "local edit, not pushed yet");
@@ -352,7 +361,7 @@ export async function status(client: Client | undefined, dir: string, state: Sta
   if (!client) return 0;
   checkWorkspace(state, client);
   const tree = await client.tree(state.root);
-  const desired = layout(tree);
+  const desired = layout(tree, new Set(Object.values(state.entries).map((e) => keyOf(e.kind, e.id))));
   const wanted = new Map(desired.map((d) => [d.key, d]));
   const remote: string[] = [];
   const known = new Set<string>();
@@ -392,227 +401,248 @@ export async function push(client: Client, dir: string, state: State, opts: Push
     if (!dry && ++ops % 50 === 0) saveState(dir, state);
   };
 
-  const copyOf = (path: string) => `${parentOf(path) ? parentOf(path) + "/" : ""}${conflictName(baseOf(path))}`;
-  /** Obtion's current text or original next to the local file, for the user to merge; remembers which version it was. */
-  const conflict = async (path: string, e: Entry, what: string) => {
-    const copy = copyOf(path);
-    if (!dry) {
-      const now = (await client.items([e.id]))[0];
-      if (now?.kind === "file") await client.download(e.id, abs(dir, copy), join(dir, STATE_DIR, "tmp", e.id), now.file!.hash);
-      else if (now) writeAtomic(abs(dir, copy), renderNote(noteMeta(now), now.body ?? ""));
-      e.theirs = now?.kind === "file" ? now.file!.hash : now?.version;
-    }
-    r.line("conflict", path, `${what} since your pull; yours is kept, Obtion's is in ${copy}. Merge it into ${baseOf(path)}, delete the copy, push again`, true);
-  };
-  /** A conflict copy still there: not merged yet. */
-  const unresolved = (path: string, e: Entry) => {
-    if (!e.theirs || !existsSync(abs(dir, copyOf(path)))) return false;
-    r.line("conflict", path, `not resolved: merge ${copyOf(path)} into it and delete the copy`, true);
-    return true;
-  };
+  // the state is written whatever happens: what went up must never go up a second time
+  try {
+    const copyOf = (path: string) => `${parentOf(path) ? parentOf(path) + "/" : ""}${conflictName(baseOf(path))}`;
+    /** Obtion's current text or original next to the local file, for the user to merge; remembers which version it was. */
+    const conflict = async (path: string, e: Entry, what: string) => {
+      const copy = copyOf(path);
+      if (!dry) {
+        const now = (await client.items([e.id]))[0];
+        if (now?.kind === "file") await client.download(e.id, abs(dir, copy), join(dir, STATE_DIR, "tmp", e.id), now.file!.hash);
+        else if (now) writeAtomic(abs(dir, copy), renderNote(noteMeta(now), now.body ?? ""));
+        e.theirs = now?.kind === "file" ? now.file!.hash : now?.version;
+      }
+      r.line("conflict", path, `${what} since your pull; yours is kept, Obtion's is in ${copy}. Merge it into ${baseOf(path)}, delete the copy, push again`, true);
+    };
+    /** A conflict copy still there: not merged yet. */
+    const unresolved = (path: string, e: Entry) => {
+      if (!e.theirs || !existsSync(abs(dir, copyOf(path)))) return false;
+      r.line("conflict", path, `not resolved: merge ${copyOf(path)} into it and delete the copy`, true);
+      return true;
+    };
 
-  /** Replace a body with base_version; a stale one keeps the local file and writes the conflict copy. */
-  const sendBody = async (path: string, e: Entry, body: string, verb = "update") => {
-    const node = nodes.get(e.id);
-    if (!node || e.gone) return r.line("skipped", path, "removed in Obtion; nothing sent", true);
-    if (unresolved(path, e)) return;
-    // merged after a conflict: based on the version in the copy; only title or properties changed in
-    // Obtion: the body you edited is still the one there
-    const base = e.theirs ?? (node.version !== e.version && sha256(node.body ?? "") === e.hash ? node.version : e.version);
-    if (dry) return r.line(verb, path);
-    try {
-      const answer = await client.tool("update", { ref: e.id, body, base_version: base });
-      const v = writtenLines(answer)[0]?.version;
-      e.version = v ?? e.version;
-      e.hash = sha256(body);
-      delete e.theirs;
-      writeAtomic(abs(dir, path), renderNote({ ...noteMeta(node), version: e.version! }, body));
-      r.line(verb, path);
-      saved();
-    } catch (err) {
-      if (!(err instanceof ToolError) || !err.stale) throw err;
-      await conflict(path, e, "changed in Obtion");
-    }
-  };
+    /** Replace a body with base_version; a stale one keeps the local file and writes the conflict copy. */
+    const sendBody = async (path: string, e: Entry, body: string, verb = "update") => {
+      const node = nodes.get(e.id);
+      if (!node || e.gone) return r.line("skipped", path, "removed in Obtion; nothing sent", true);
+      if (unresolved(path, e)) return;
+      // merged after a conflict: based on the version in the copy; only title or properties changed in
+      // Obtion: the body you edited is still the one there
+      const base = e.theirs ?? (node.version !== e.version && sha256(node.body ?? "") === e.hash ? node.version : e.version);
+      if (dry) return r.line(verb, path);
+      try {
+        const answer = await client.tool("update", { ref: e.id, body, base_version: base });
+        const v = writtenLines(answer)[0]?.version;
+        e.version = v ?? e.version;
+        e.hash = sha256(body);
+        delete e.theirs;
+        writeAtomic(abs(dir, path), renderNote({ ...noteMeta(node), version: e.version! }, body));
+        r.line(verb, path);
+        saved();
+      } catch (err) {
+        if (!(err instanceof ToolError) || !err.stale) throw err;
+        await conflict(path, e, "changed in Obtion");
+      }
+    };
 
-  // 1. edited notes and files; moves are not sent, but an edited moved note is
-  for (const [to, from] of s.moved) {
-    const e = entries[from]!;
-    r.line("moved", `${from} → ${to}`, "not moved in Obtion – pull puts it back, or move it in Obtion");
-    if (dry) continue;
-    delete entries[from];
-    entries[to] = e;
-    s.local.set(to, await localOf(dir, to, e));
-  }
-  const failed = (path: string, e: unknown) => r.line("failed", path, (e as Error).message, true);
-  for (const [path, e] of Object.entries(entries)) {
-    if (s.local.get(path) !== "changed") continue;
-    try {
-      if (isText(e.kind)) await sendBody(path, e, parseNote(readText(abs(dir, path))).body);
-      else if (e.kind === "file") {
-        const node = nodes.get(e.id);
-        if (!node || e.gone) r.line("skipped", path, "removed in Obtion; nothing sent", true);
-        else if (unresolved(path, e)) continue;
-        else if (node.file?.hash !== (e.theirs ?? e.hash)) await conflict(path, e, "replaced in Obtion");
-        else {
-          if (dry) {
-            r.line("update", path);
-            continue;
-          }
-          const p = abs(dir, path);
-          const local = await hashFile(p);
-          const got = await client.replace(e.id, p);
-          if (got.hash !== local) throw new CliError(`the server stored SHA-256 ${got.hash}, the file has ${local}`);
-          Object.assign(e, { hash: got.hash, ...stamp(p) });
-          delete e.theirs;
-          r.line("update", path);
-          saved();
-        }
-      }
-    } catch (err) {
-      failed(path, err);
-    }
-  }
-
-  // 2. new folders (parents first), new notes, a new README.md as the text of its folder's item
-  const folderId = new Map<string, string>(Object.entries(entries).filter(([, e]) => e.kind === "folder").map(([p, e]) => [p, e.id]));
-  const parentId = (path: string) => folderId.get(parentOf(path));
-  const isInfoFolder = (path: string) => {
-    const id = folderId.get(path);
-    return !!id && (nodes.get(id)?.kind ?? "info") === "info";
-  };
-  for (const d of s.addedDirs.sort((a, b) => a.split("/").length - b.split("/").length)) {
-    const files = s.added.filter((f) => f.startsWith(`${d}/`));
-    if (!files.length) continue; // empty folders stay local
-    const pid = parentId(d);
-    if (!pid) {
-      r.line("skipped", `${d}/`, "its parent folder was not created", true);
-      continue;
-    }
-    // a folder named like a note next to it ("X/" next to "X.md") goes below that note
-    const sibling = Object.entries(entries).find(([p, e]) => e.kind === "note" && parentOf(p) === parentOf(d) && nameKey(p) === nameKey(`${d}.md`));
-    if (sibling) {
-      folderId.set(d, sibling[1].id);
-      r.line("folder", `${d}/`, `below ${sibling[0]}`);
-      continue;
-    }
-    const readme = files.find((f) => f === `${d}/${README}`);
-    const body = readme ? parseNote(readText(abs(dir, readme))).body : undefined;
-    r.line("new", `${d}/`, readme ? "with README.md as its text" : undefined);
-    if (readme) s.added.splice(s.added.indexOf(readme), 1);
-    if (dry) {
-      folderId.set(d, "(new)");
-      continue;
-    }
-    try {
-      const answer = await client.tool("create", { items: [{ title: baseOf(d), parents: [pid], ...(body ? { body } : {}) }] });
-      const made = writtenLines(answer)[0];
-      if (!made) throw new CliError(`unexpected answer: ${answer.slice(0, 200)}`);
-      folderId.set(d, made.id);
-      entries[d] = { id: made.id, kind: "folder", version: made.version };
-      if (readme) {
-        entries[readme] = { id: made.id, kind: "body", version: made.version, hash: sha256(body!) };
-        writeAtomic(abs(dir, readme), renderNote({ id: made.id, version: made.version! }, body!));
-      }
-      saved();
-    } catch (err) {
-      failed(`${d}/`, err);
-    }
-  }
-  const uploads: string[] = [];
-  for (const f of s.added) {
-    const pid = parentId(f);
-    if (!pid) {
-      r.line("skipped", f, "its folder was not created", true);
-      continue;
-    }
-    if (!f.toLowerCase().endsWith(".md")) {
-      uploads.push(f);
-      continue;
-    }
-    try {
-      const text = readText(abs(dir, f));
-      const body = parseNote(text).body;
-      if (baseOf(f) === README && isInfoFolder(parentOf(f)) && !Object.values(entries).some((e) => e.kind === "body" && e.id === pid)) {
-        // the folder's item had no text yet: README.md becomes it
-        // (its text was empty at the pull; if it isn't now, that is a conflict)
-        const be: Entry = { id: pid, kind: "body", version: entries[parentOf(f)]!.version, hash: sha256("") };
-        await sendBody(f, be, body, "new");
-        if (!dry && be.hash === sha256(body)) entries[f] = be;
-        continue;
-      }
-      const title = baseOf(f).replace(/\.md$/i, "");
-      r.line("new", f);
-      if (dry || pid === "(new)") continue;
-      const answer = await client.tool("create", { items: [{ title, parents: [pid], ...(body ? { body } : {}) }] });
-      const made = writtenLines(answer)[0];
-      if (!made) throw new CliError(`unexpected answer: ${answer.slice(0, 200)}`);
-      entries[f] = { id: made.id, kind: "note", version: made.version, hash: sha256(body) };
-      writeAtomic(abs(dir, f), renderNote({ id: made.id, version: made.version! }, body));
-      saved();
-    } catch (err) {
-      failed(f, err);
-    }
-  }
-  await pool(uploads, 4, async (f) => {
-    r.line("new", f);
-    const pid = parentId(f)!;
-    if (dry || pid === "(new)") return;
-    try {
-      const p = abs(dir, f);
-      const local = await hashFile(p);
-      const got = await client.upload(p, baseOf(f), pid);
-      if (got.hash !== local) throw new CliError(`the server stored SHA-256 ${got.hash}, the file has ${local}`);
-      entries[f] = { id: got.id, kind: "file", hash: got.hash, ...stamp(p) };
-      saved();
-    } catch (err) {
-      failed(f, err);
-    }
-  });
-
-  // 3. deletions: only with --delete, only what is unchanged in Obtion, deepest first
-  const gone = Object.entries(entries)
-    .filter(([p, e]) => s.local.get(p) === "missing" && p !== "")
-    .sort((a, b) => b[0].split("/").length - a[0].split("/").length);
-  for (const [path, e] of gone) {
-    const node = nodes.get(e.id);
-    const label = e.kind === "folder" ? `${path}/` : path;
-    if (!opts.delete) {
-      r.line("deleted", label, "not sent; push --delete moves it to the trash");
-      continue;
-    }
-    if (!node) {
-      r.line("delete", label, "already gone in Obtion");
-      if (!dry) delete entries[path];
-      continue;
-    }
-    const folderGone = e.kind === "body" && s.local.get(parentOf(path)) === "missing";
-    try {
-      if (e.kind === "body" && !folderGone) {
-        // README.md deleted, folder kept: the item's text is emptied
-        await sendBody(path, e, "", "empty");
-        if (!dry && sha256("") === e.hash) delete entries[path];
-        continue;
-      }
-      if (e.kind === "body") {
-        if (!dry) delete entries[path];
-        continue; // the folder's entry deletes the item
-      }
-      const changed = e.kind === "file" ? node.file?.hash !== e.hash : e.kind === "note" ? node.version !== e.version : false;
-      if (changed) {
-        r.line("skipped", label, "changed in Obtion since your pull; not deleted", true);
-        continue;
-      }
-      r.line("trash", label);
+    // 1. edited notes and files; moves are not sent, but an edited moved note is
+    for (const [to, from] of s.moved) {
+      const e = entries[from]!;
+      r.line("moved", `${from} → ${to}`, "not moved in Obtion – pull puts it back, or move it in Obtion");
       if (dry) continue;
-      await client.tool("delete", { ref: e.id });
-      delete entries[path];
-      saved();
-    } catch (err) {
-      failed(label, err);
+      delete entries[from];
+      entries[to] = e;
+      s.local.set(to, await localOf(dir, to, e));
     }
+    const failed = (path: string, e: unknown) => r.line("failed", path, (e as Error).message, true);
+    for (const [path, e] of Object.entries(entries)) {
+      if (s.local.get(path) !== "changed") continue;
+      try {
+        if (isText(e.kind)) await sendBody(path, e, parseNote(readText(abs(dir, path))).body);
+        else if (e.kind === "file") {
+          const node = nodes.get(e.id);
+          if (!node || e.gone) r.line("skipped", path, "removed in Obtion; nothing sent", true);
+          else if (unresolved(path, e)) continue;
+          else if (node.file?.hash !== (e.theirs ?? e.hash)) await conflict(path, e, "replaced in Obtion");
+          else {
+            if (dry) {
+              r.line("update", path);
+              continue;
+            }
+            const p = abs(dir, path);
+            const local = await hashFile(p);
+            const got = await client.replace(e.id, p, e.theirs ?? e.hash!);
+            if (got === "stale") {
+              await conflict(path, e, "replaced in Obtion");
+              continue;
+            }
+            if (got.hash !== local) throw new CliError(`the server stored SHA-256 ${got.hash}, the file has ${local}`);
+            Object.assign(e, { hash: got.hash, ...stamp(p) });
+            delete e.theirs;
+            r.line("update", path);
+            saved();
+          }
+        }
+      } catch (err) {
+        failed(path, err);
+      }
+    }
+
+    // 2. new folders (parents first), new notes, a new README.md as the text of its folder's item
+    const folderId = new Map<string, string>(
+      Object.entries(entries)
+        .filter(([, e]) => e.kind === "folder")
+        .map(([p, e]) => [p, e.id]),
+    );
+    const parentId = (path: string) => folderId.get(parentOf(path));
+    const isInfoFolder = (path: string) => {
+      const id = folderId.get(path);
+      return !!id && (nodes.get(id)?.kind ?? "info") === "info";
+    };
+    for (const d of s.addedDirs.sort((a, b) => a.split("/").length - b.split("/").length)) {
+      const files = s.added.filter((f) => f.startsWith(`${d}/`));
+      if (!files.length) continue; // empty folders stay local
+      const pid = parentId(d);
+      if (!pid) {
+        r.line("skipped", `${d}/`, "its parent folder was not created", true);
+        continue;
+      }
+      // a folder named like a note next to it ("X/" next to "X.md") goes below that note
+      const sibling = Object.entries(entries).find(([p, e]) => e.kind === "note" && parentOf(p) === parentOf(d) && nameKey(p) === nameKey(`${d}.md`));
+      if (sibling) {
+        folderId.set(d, sibling[1].id);
+        if (!dry) entries[d] = { id: sibling[1].id, kind: "folder", version: sibling[1].version };
+        r.line("folder", `${d}/`, `below ${sibling[0]}`);
+        const readme = files.find((f) => f === `${d}/${README}`);
+        if (readme) {
+          r.line("skipped", readme, `${sibling[0]} is that item's text; merge it there`, true);
+          s.added.splice(s.added.indexOf(readme), 1);
+        }
+        continue;
+      }
+      const readme = files.find((f) => f === `${d}/${README}`);
+      if (readme) s.added.splice(s.added.indexOf(readme), 1);
+      try {
+        const body = readme ? parseNote(readText(abs(dir, readme))).body : undefined;
+        r.line("new", `${d}/`, readme ? "with README.md as its text" : undefined);
+        if (dry) {
+          folderId.set(d, "(new)");
+          continue;
+        }
+        const answer = await client.tool("create", { items: [{ title: baseOf(d), parents: [pid], ...(body ? { body } : {}) }] });
+        const made = writtenLines(answer)[0];
+        if (!made) throw new CliError(`unexpected answer: ${answer.slice(0, 200)}`);
+        folderId.set(d, made.id);
+        entries[d] = { id: made.id, kind: "folder", version: made.version };
+        if (readme) {
+          entries[readme] = { id: made.id, kind: "body", version: made.version, hash: sha256(body!) };
+          writeAtomic(abs(dir, readme), renderNote({ id: made.id, version: made.version! }, body!));
+        }
+        saved();
+      } catch (err) {
+        failed(`${d}/`, err);
+      }
+    }
+    const uploads: string[] = [];
+    for (const f of s.added) {
+      const pid = parentId(f);
+      if (!pid) {
+        r.line("skipped", f, "its folder was not created", true);
+        continue;
+      }
+      if (!f.toLowerCase().endsWith(".md")) {
+        uploads.push(f);
+        continue;
+      }
+      try {
+        const text = readText(abs(dir, f));
+        const body = parseNote(text).body;
+        const textAt = baseOf(f) === README ? Object.entries(entries).find(([, e]) => isText(e.kind) && e.id === pid) : undefined;
+        if (textAt) {
+          r.line("skipped", f, `${textAt[0]} is that item's text; merge it there`, true);
+          continue;
+        }
+        if (baseOf(f) === README && isInfoFolder(parentOf(f))) {
+          // the folder's item had no text yet: README.md becomes it
+          // (its text was empty at the pull; if it isn't now, that is a conflict)
+          const be: Entry = { id: pid, kind: "body", version: entries[parentOf(f)]!.version, hash: sha256("") };
+          await sendBody(f, be, body, "new");
+          if (!dry && (be.hash === sha256(body) || be.theirs)) entries[f] = be; // a conflict keeps the baseline and Obtion's version
+          continue;
+        }
+        const title = baseOf(f).replace(/\.md$/i, "");
+        r.line("new", f);
+        if (dry || pid === "(new)") continue;
+        const answer = await client.tool("create", { items: [{ title, parents: [pid], ...(body ? { body } : {}) }] });
+        const made = writtenLines(answer)[0];
+        if (!made) throw new CliError(`unexpected answer: ${answer.slice(0, 200)}`);
+        entries[f] = { id: made.id, kind: "note", version: made.version, hash: sha256(body) };
+        writeAtomic(abs(dir, f), renderNote({ id: made.id, version: made.version! }, body));
+        saved();
+      } catch (err) {
+        failed(f, err);
+      }
+    }
+    await pool(uploads, 4, async (f) => {
+      r.line("new", f);
+      const pid = parentId(f)!;
+      if (dry || pid === "(new)") return;
+      try {
+        const p = abs(dir, f);
+        const local = await hashFile(p);
+        const got = await client.upload(p, baseOf(f), pid);
+        if (got.hash !== local) throw new CliError(`the server stored SHA-256 ${got.hash}, the file has ${local}`);
+        entries[f] = { id: got.id, kind: "file", hash: got.hash, ...stamp(p) };
+        saved();
+      } catch (err) {
+        failed(f, err);
+      }
+    });
+
+    // 3. deletions: only with --delete, only what is unchanged in Obtion, deepest first
+    const gone = Object.entries(entries)
+      .filter(([p, e]) => s.local.get(p) === "missing" && p !== "")
+      .sort((a, b) => b[0].split("/").length - a[0].split("/").length);
+    for (const [path, e] of gone) {
+      const node = nodes.get(e.id);
+      const label = e.kind === "folder" ? `${path}/` : path;
+      if (!opts.delete) {
+        r.line("deleted", label, "not sent; push --delete moves it to the trash");
+        continue;
+      }
+      if (!node) {
+        r.line("delete", label, "already gone in Obtion");
+        if (!dry) delete entries[path];
+        continue;
+      }
+      const folderGone = e.kind === "body" && s.local.get(parentOf(path)) === "missing";
+      try {
+        if (e.kind === "body" && !folderGone) {
+          // README.md deleted, folder kept: the item's text is emptied
+          await sendBody(path, e, "", "empty");
+          if (!dry && sha256("") === e.hash) delete entries[path];
+          continue;
+        }
+        if (e.kind === "body") continue; // the folder's entry deletes the item
+        const changed = e.kind === "file" ? node.file?.hash !== e.hash : node.version !== e.version;
+        if (changed) {
+          r.line("skipped", label, "changed in Obtion since your pull; not deleted", true);
+          continue;
+        }
+        r.line("trash", label);
+        if (dry) continue;
+        await client.tool("delete", { ref: e.id });
+        delete entries[path];
+        if (e.kind === "folder" && entries[`${path}/${README}`]?.id === e.id) delete entries[`${path}/${README}`];
+        saved();
+      } catch (err) {
+        failed(label, err);
+      }
+    }
+  } finally {
+    if (!dry) saveState(dir, state);
   }
-  if (!dry) saveState(dir, state);
   r.summary(dry ? "Dry run, nothing sent: " : "Pushed: ");
   return r.problems ? 1 : 0;
 }
