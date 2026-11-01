@@ -6,14 +6,14 @@ import { Checkbox } from "../components/ui/checkbox";
 import { Input } from "../components/ui/input";
 import { NativeSelect } from "../components/ui/native-select";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import { Copy, Check, Crown, Eye, EyeOff, KeyRound, Link2, RotateCcw, ChevronRight, Shapes, Trash2, UserMinus, UserRound, Waypoints } from "lucide-react";
+import { Copy, Check, Crown, Eye, EyeOff, KeyRound, Link2, RotateCcw, ChevronRight, Shapes, Trash2, UserMinus, UserRound, Users, Waypoints } from "lucide-react";
 import { SETTINGS_ID, setSettings } from "@obtion/core/model";
 import { ENDONYMS, LANGS, fmtBytes, fmtDate } from "@obtion/core/i18n";
 import { resetInbox } from "@obtion/core/setup";
 import { listExamples, removeExamples, restoreExamples } from "@obtion/core/examples";
 import { useRepo, useSpaceId, spaceHref, useDocumentTitle } from "../hooks";
 import { useT, setLang } from "../i18n";
-import { Button, Dialog, IconButton, MenuItem, MoreMenu, Seg, SectionAction, SectionTitle } from "../ui/primitives";
+import { Button, Dialog, IconButton, MenuItem, MoreMenu, Popover, Seg, SectionAction, SectionTitle } from "../ui/primitives";
 import { ItemIcon, TypeGlyph } from "../ui/item-look";
 import { cn, toggled } from "../lib/utils";
 import { chooseAction, confirmAction, notify } from "../ui/feedback";
@@ -21,7 +21,7 @@ import { setTheme, useTheme } from "../theme";
 import { type Space, ApiError, activeUser, addPasskey, changePassword, linkFailed, linkOAuth, linkedProviders, deleteAccount, deleteSpace, errorText, inviteLink, inviteLinks, joinUrl, leaveSpace, loginOf, mcpToken, members, passkeys, removeMember, removePasskey, renameSpace, replica, revokeInvite, serverInfo, setRole, signOut, spaceById, useAccounts } from "../accounts";
 import { SignIn } from "./Account";
 import { NewSpaceDialog } from "../ui/Spaces";
-import type { InviteLink, McpConnect, Member, PasskeyInfo, ServerInfo } from "@obtion/core/api";
+import type { InviteLink, InviteRequest, McpConnect, Member, PasskeyInfo, ServerInfo } from "@obtion/core/api";
 
 /** navigator.clipboard exists only over HTTPS; opened as http://<address> the old way copies. */
 function copyText(text: string) {
@@ -154,9 +154,27 @@ function InviteLinks({ space, version }: { space: Space; version: number }) {
   useEffect(() => void load(), [space.id, version]);
   const day = (ts: number) => fmtDate(lang, new Date(ts).toISOString());
   const fail = (e: unknown) => setError(errorText(e, t, "space"));
+  const create = (opts: InviteRequest) => inviteLink(space, opts).then(load, fail);
+  const newLink = (
+    <Popover align="right" trigger={(p) => <SectionAction {...p} icon={Link2}>{t("space.inviteNew")}</SectionAction>}>
+      {(close) => (
+        <>
+          <MenuItem icon={<UserRound size={14} />} onClick={() => (close(), void create({ role: "member", once: true }))}>
+            {t("space.inviteNew.once")}
+          </MenuItem>
+          <MenuItem icon={<Users size={14} />} onClick={() => (close(), void create({ role: "member", once: false }))}>
+            {t("space.inviteNew.multi")}
+          </MenuItem>
+          <MenuItem icon={<Crown size={14} />} onClick={() => (close(), void create({ role: "owner", once: true }))}>
+            {t("space.inviteNew.owner")}
+          </MenuItem>
+        </>
+      )}
+    </Popover>
+  );
   return (
     <section>
-      <SectionTitle right={<SectionAction icon={Link2} onClick={() => inviteLink(space).then(load, fail)}>{t("space.inviteNew")}</SectionAction>}>{t("space.invites")}</SectionTitle>
+      <SectionTitle right={newLink}>{t("space.invites")}</SectionTitle>
       <p className="mb-3 text-sm text-muted-foreground">{t("space.inviteHint")}</p>
       {links.length ? (
         <ul className="space-y-2" aria-label={t("space.invites")}>
@@ -169,7 +187,9 @@ function InviteLinks({ space, version }: { space: Space; version: number }) {
                   {t("space.revoke")}
                 </Button>
               </div>
-              <p className="text-xs text-muted-foreground">{t(l.by ? "space.inviteBy" : "space.inviteMade", { by: l.by, created: day(l.created), expires: day(l.expires) })}</p>
+              <p className="text-xs text-muted-foreground">
+                {t(`space.role.${l.role}`)} · {t(l.once ? "space.inviteOnce" : "space.inviteMulti")} · {t(l.by ? "space.inviteBy" : "space.inviteMade", { by: l.by, created: day(l.created), expires: day(l.expires) })}
+              </p>
             </li>
           ))}
         </ul>

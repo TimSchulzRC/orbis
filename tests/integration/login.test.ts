@@ -90,8 +90,8 @@ test("a user Better Auth would create without the right is refused (OAuth, codes
   const { accounts, withCode } = await setUp("off");
   try {
     await withCode("owner@example.org");
-    expect(() => accounts.allowNewUser(new Headers())).toThrow("signup closed");
-    expect(() => accounts.allowNewUser(new Headers({ cookie: `${SIGNUP_COOKIE}=${encodeURIComponent(JSON.stringify({ invite: "nope" }))}` }))).toThrow("invite invalid");
+    expect(() => accounts.allowNewUser("guest@example.org", new Headers())).toThrow("signup closed");
+    expect(() => accounts.allowNewUser("guest@example.org", new Headers({ cookie: `${SIGNUP_COOKIE}=${encodeURIComponent(JSON.stringify({ invite: "nope" }))}` }))).toThrow("invite invalid");
   } finally { accounts.db.close(); }
 });
 

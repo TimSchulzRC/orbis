@@ -75,7 +75,7 @@ test("the first account is the admin, without a workspace until it creates one; 
   // an invite link: Bob joins Ada's workspace
   const ws = me.workspaces[0].id as string;
   const { code } = await post(plain, `/api/workspaces/${ws}/invites`, {}, ada.token).then((r) => r.json());
-  expect(await get(plain, `/api/invites/${code}`).then((r) => r.json())).toEqual({ workspace: "Persönlich", by: "ada", signup: true });
+  expect(await get(plain, `/api/invites/${code}`).then((r) => r.json())).toEqual({ workspace: "Persönlich", by: "ada", role: "member", signup: true });
   const bob = await signUp(plain, "bob@example.org", code);
   expect((await account(plain, bob.token)).workspaces).toEqual([{ id: ws, name: "Persönlich", role: "member" }]);
   expect((await account(plain, bob.token)).admin).toBe(false);
@@ -302,7 +302,7 @@ test("owners manage members and invite links: list, revoke, roles, remove; membe
   const olga = await signUp(bare, "manage-olga@example.org");
   const w = await newWorkspace(bare, olga.token);
   const api = `/api/workspaces/${w.id}`;
-  const first = await post(bare, `${api}/invites`, {}, olga.token).then((r) => r.json());
+  const first = await post(bare, `${api}/invites`, { once: false }, olga.token).then((r) => r.json());
   const max = await signUp(bare, "manage-max@example.org", first.code);
   const role = (user: { user: { id: string } }, r: string, token: string) => patch(bare, `${api}/members/${user.user.id}`, { role: r }, token);
 
@@ -317,7 +317,7 @@ test("owners manage members and invite links: list, revoke, roles, remove; membe
   const second = await post(bare, `${api}/invites`, {}, olga.token).then((r) => r.json());
   const links = await get(bare, `${api}/invites`, olga.token).then((r) => r.json());
   expect(links.map((l: any) => l.code)).toEqual([second.code, first.code]);
-  expect(links[0]).toEqual({ code: second.code, by: "manage-olga", created: expect.any(Number), expires: expect.any(Number) });
+  expect(links[0]).toEqual({ code: second.code, by: "manage-olga", created: expect.any(Number), expires: expect.any(Number), role: "member", once: true });
   expect(Math.round((links[0].expires - links[0].created) / 86400_000)).toBe(14);
   expect((await del(bare, `${api}/invites/${first.code}`, olga.token)).status).toBe(200);
   expect((await del(bare, `${api}/invites/${first.code}`, olga.token)).status).toBe(404);
@@ -355,4 +355,58 @@ test("owners manage members and invite links: list, revoke, roles, remove; membe
   expect((await del(bare, `${api}/members/${max.user.id}`, olga.token)).status).toBe(404);
   expect((await get(bare, `${api}/members`, olga.token).then((r) => r.json())).map((m: any) => m.role)).toEqual(["owner"]);
   expect((await role(olga, "member", olga.token)).status).toBe(409);
+});
+
+test("invite links give their role; single-use ones work for one person, also when two sign up at once", async () => {
+  const otto = await signUp(bare, "links-otto@example.org");
+  const w = await newWorkspace(bare, otto.token);
+  const api = `/api/workspaces/${w.id}`;
+  const link = (b: object) => post(bare, `${api}/invites`, b, otto.token).then((r) => r.json());
+  const listed = () => get(bare, `${api}/invites`, otto.token).then((r) => r.json());
+  const roleIn = async (token: string) => (await account(bare, token)).workspaces.find((x: any) => x.id === w.id)?.role;
+
+  // only "owner" or "member"; a link for owners only once
+  expect((await post(bare, `${api}/invites`, { role: "admin" }, otto.token)).status).toBe(400);
+  expect((await post(bare, `${api}/invites`, { role: "owner", once: false }, otto.token)).status).toBe(400);
+
+  // a link for an owner: the new account is one at once, and the link is used up
+  const forOwner = await link({ role: "owner" });
+  expect(await get(bare, `/api/invites/${forOwner.code}`).then((r) => r.json())).toMatchObject({ role: "owner" });
+  const pia = await signUp(bare, "links-pia@example.org", forOwner.code);
+  expect(await roleIn(pia.token)).toBe("owner");
+  expect((await get(bare, `/api/invites/${forOwner.code}`)).status).toBe(404);
+
+  // single use by default; someone already in keeps their role and does not use it up
+  const once = await link({});
+  expect((await listed()).find((l: any) => l.code === once.code)).toMatchObject({ role: "member", once: true });
+  expect((await post(bare, `/api/invites/${once.code}`, {}, pia.token)).status).toBe(200);
+  expect(await roleIn(pia.token)).toBe("owner");
+  const quinn = await signUp(bare, "links-quinn@example.org");
+  const rosa = await signUp(bare, "links-rosa@example.org");
+  expect((await post(bare, `/api/invites/${once.code}`, {}, quinn.token)).status).toBe(200);
+  expect(await roleIn(quinn.token)).toBe("member");
+  expect((await post(bare, `/api/invites/${once.code}`, {}, rosa.token)).status).toBe(404);
+  expect((await listed()).map((l: any) => l.code)).not.toContain(once.code);
+
+  // a link for several: everyone gets in, it stays
+  const many = await link({ once: false });
+  for (const t of [rosa.token, (await signUp(bare, "links-sam@example.org")).token]) expect((await post(bare, `/api/invites/${many.code}`, {}, t)).status).toBe(200);
+  expect(await roleIn(rosa.token)).toBe("member");
+  expect((await listed()).find((l: any) => l.code === many.code)).toMatchObject({ once: false });
+
+  // two people at the same moment with one single-use link: one gets in
+  const race = await link({});
+  const [a, b] = await Promise.all(["links-race-a@example.org", "links-race-b@example.org"].map((e) => signUp(bare, e, race.code).catch(() => null)));
+  const ins = await Promise.all([a, b].map((x) => (x ? roleIn(x.token) : undefined)));
+  expect(ins.filter(Boolean)).toEqual(["member"]);
+});
+
+test("where only invites let people sign up, a single-use link makes one account, also when two try at once", async () => {
+  const ada = await post(plain, "/api/auth/sign-in/email", { email: "ada@example.org", password: "geheim12345" }).then((r) => r.json());
+  const w = await newWorkspace(plain, ada.token);
+  const { code } = await post(plain, `/api/workspaces/${w.id}/invites`, {}, ada.token).then((r) => r.json());
+  const tries = ["once-a@example.org", "once-b@example.org"].map((email) => post(plain, "/api/account/signup", { name: "x", email, password: "geheim12345", invite: code }));
+  expect((await Promise.all(tries)).map((r) => r.status).sort()).toEqual([200, 403]);
+  expect((await post(plain, "/api/account/signup", { name: "x", email: "once-c@example.org", password: "geheim12345", invite: code })).status).toBe(403);
+  expect(await get(plain, `/api/workspaces/${w.id}/members`, ada.token).then((r) => r.json())).toHaveLength(2);
 });

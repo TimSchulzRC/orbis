@@ -6,7 +6,7 @@
 import { useSyncExternalStore } from "react";
 import { startAuthentication, startRegistration } from "@simplewebauthn/browser";
 import { Repo } from "@obtion/sync";
-import type { AccountInfo, ErrorBody, InviteCode, InviteInfo, InviteLink, LoginMethods, McpConnect, Member, Ok, PasskeyInfo, Role, ServerInfo, SignedIn, User, VerifyFirst, WorkspaceInfo } from "@obtion/core/api";
+import type { AccountInfo, ErrorBody, InviteCode, InviteInfo, InviteLink, InviteRequest, LoginMethods, McpConnect, Member, Ok, PasskeyInfo, Role, ServerInfo, SignedIn, User, VerifyFirst, WorkspaceInfo } from "@obtion/core/api";
 import type { T } from "@obtion/core/i18n";
 import { type FileMeta, SETTINGS_ID } from "@obtion/core/model";
 import { runSetup } from "@obtion/core/setup";
@@ -436,9 +436,9 @@ export async function renameSpace(s: Space, name: string) {
 /** The address of an invite link: whoever opens it may join (with an account of this server). */
 export const joinUrl = (code: string) => `${location.origin}/#/join/${code}`;
 
-/** A new invite link (owners only). */
-export async function inviteLink(s: Space): Promise<string> {
-  const { code } = await call<InviteCode>(`/api/workspaces/${s.id}/invites`, {});
+/** A new invite link (owners only): for a member or an owner, once (default) or as often as wanted (members only). */
+export async function inviteLink(s: Space, opts: InviteRequest = {}): Promise<string> {
+  const { code } = await call<InviteCode>(`/api/workspaces/${s.id}/invites`, opts);
   return joinUrl(code);
 }
 

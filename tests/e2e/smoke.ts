@@ -338,7 +338,7 @@ async function membersOnSettings(browser: import("playwright").Browser, server: 
   const api = (path: string, init: RequestInit = {}, token = server.token) =>
     fetch(server.url + path, { ...init, headers: { "content-type": "application/json", authorization: `Bearer ${token}` } }).then((r) => r.json());
   const ws = (await api("/api/account")).workspaces[0].id as string;
-  const { code: old } = await api(`/api/workspaces/${ws}/invites`, { method: "POST", body: "{}" });
+  const { code: old } = await api(`/api/workspaces/${ws}/invites`, { method: "POST", body: JSON.stringify({ once: false }) });
   const { token: bea } = await api("/api/account/signup", { method: "POST", body: JSON.stringify({ name: "Bea", email: "bea@example.org", password: "geheim12345", invite: old }) });
   // a link Bea made while an owner: it goes when Bea is removed
   const setBea = async (r: string) => {
@@ -348,7 +348,8 @@ async function membersOnSettings(browser: import("playwright").Browser, server: 
   await setBea("owner");
   const { code: beas } = await api(`/api/workspaces/${ws}/invites`, { method: "POST", body: "{}" }, bea);
   await setBea("member");
-  const role = async () => (await api(`/api/workspaces/${ws}/members`)).find((m: { name: string }) => m.name === "Bea")?.role as string | undefined;
+  const role = async (name = "Bea") => (await api(`/api/workspaces/${ws}/members`)).find((m: { name: string }) => m.name === name)?.role as string | undefined;
+  let cem = "";
   const context = await signedIn(browser, server, { viewport: { width: 1440, height: 900 }, locale: "de-DE" });
   const page = await context.newPage();
   const errors: string[] = [];
@@ -361,9 +362,18 @@ async function membersOnSettings(browser: import("playwright").Browser, server: 
     const links = p.getByRole("list", { name: "Einladungslinks" }).getByRole("listitem");
     await links.first().waitFor({ timeout: 5000 });
     if ((await links.count()) !== 2) failures.push(`${label}: ${await links.count()} open links instead of the two made by the API`);
+    if (!(await links.filter({ hasText: old }).innerText()).includes("Mitglied · mehrfach")) failures.push(`${label}: the link for several does not say so: ${await links.filter({ hasText: old }).innerText()}`);
+    // a link for an owner, from the menu: whoever joins with it is one, and only one person can
     await p.getByRole("button", { name: "Neuer Link" }).click();
+    await p.locator("[data-popover]").getByRole("button", { name: "Für einen Besitzer (einmalig)" }).click();
     await links.nth(2).waitFor({ timeout: 3000 });
-    if (!(await links.first().innerText()).includes("Von E2E am")) failures.push(`${label}: the new link does not say who made it: ${await links.first().innerText()}`);
+    const made = await links.first().innerText();
+    if (!made.includes("Besitzer · einmalig · Von E2E am")) failures.push(`${label}: the new link does not say its role, single use and who made it: ${made}`);
+    const code = (await links.first().locator("code").innerText()).split("/join/")[1]!;
+    const signup = (email: string) => api("/api/account/signup", { method: "POST", body: JSON.stringify({ name: email.split("@")[0], email, password: "geheim12345", invite: code }) });
+    cem = (await signup("cem@example.org")).token;
+    if ((await role("cem")) !== "owner") failures.push(`${label}: who joined with the owner link is no owner`);
+    if ((await fetch(`${server.url}/api/invites/${code}`)).status !== 404) failures.push(`${label}: the single-use link still works after its first use`);
     await links.filter({ hasText: old }).getByRole("button", { name: "Widerrufen" }).click();
     await links.filter({ hasText: old }).waitFor({ state: "detached", timeout: 3000 });
     if ((await fetch(`${server.url}/api/invites/${old}`)).status !== 404) failures.push(`${label}: the revoked link still works`);
@@ -387,7 +397,7 @@ async function membersOnSettings(browser: import("playwright").Browser, server: 
   });
   await context.close();
   // the server's only account again: deleting it later leaves the server as new
-  await api("/api/account", { method: "DELETE", body: JSON.stringify({ password: "geheim12345" }) }, bea);
+  for (const token of [bea, cem]) if (token) await api("/api/account", { method: "DELETE", body: JSON.stringify({ password: "geheim12345" }) }, token);
 }
 
 async function deleteAccountOnSettings(browser: import("playwright").Browser, server: Server) {

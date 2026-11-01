@@ -94,7 +94,15 @@ export interface SignedIn {
 export interface InviteInfo {
   workspace: string;
   by: string;
+  /** the role whoever joins with it gets */
+  role: Role;
   signup: boolean;
+}
+
+/** POST /api/workspaces/<id>/invites: the role it gives (default member) and whether it works only once (default yes; links for owners always). */
+export interface InviteRequest {
+  role?: Role;
+  once?: boolean;
 }
 
 /** POST /api/workspaces/<id>/invites */
@@ -109,6 +117,9 @@ export interface InviteLink {
   by: string;
   created: number;
   expires: number;
+  role: Role;
+  /** works for the first person only, then goes */
+  once: boolean;
 }
 
 /** POST /api/workspaces/<id>/mcp-token: a token for agents on the workspace, shown once, with the ready-made commands. */

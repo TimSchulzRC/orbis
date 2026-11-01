@@ -88,14 +88,26 @@ export class Accounts {
       CREATE TABLE IF NOT EXISTS workspaces (id TEXT PRIMARY KEY, name TEXT NOT NULL, created INTEGER NOT NULL, legacy INTEGER NOT NULL DEFAULT 0);
       CREATE TABLE IF NOT EXISTS members (workspace TEXT NOT NULL, user TEXT NOT NULL, role TEXT NOT NULL, joined INTEGER NOT NULL, PRIMARY KEY (workspace, user));
       CREATE INDEX IF NOT EXISTS members_user ON members(user);
-      CREATE TABLE IF NOT EXISTS invites (code TEXT PRIMARY KEY, workspace TEXT NOT NULL, by TEXT NOT NULL, created INTEGER NOT NULL, expires INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS invites (code TEXT PRIMARY KEY, workspace TEXT NOT NULL, by TEXT NOT NULL, created INTEGER NOT NULL, expires INTEGER NOT NULL, role TEXT NOT NULL DEFAULT 'member', once INTEGER NOT NULL DEFAULT 0);
       CREATE TABLE IF NOT EXISTS tokens (hash TEXT PRIMARY KEY, user TEXT NOT NULL, workspace TEXT NOT NULL, label TEXT, created INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS admins (user TEXT PRIMARY KEY);
     `);
+    // links from before roles on links: for members, as often as wanted (as they worked)
+    const cols = (this.db.query("PRAGMA table_info(invites)").all() as { name: string }[]).map((c) => c.name);
+    if (!cols.includes("role")) this.db.exec("ALTER TABLE invites ADD COLUMN role TEXT NOT NULL DEFAULT 'member'");
+    if (!cols.includes("once")) this.db.exec("ALTER TABLE invites ADD COLUMN once INTEGER NOT NULL DEFAULT 0");
   }
 
   policy: SignupPolicy;
   login: LoginConfig;
+  /**
+   * Single-use links a signup is making an account for right now (code → for which address, since
+   * when): until that account has joined, nobody else gets in with the same link. Turned away before
+   * Better Auth starts: it shares this connection, and a signup failing inside its transaction would
+   * roll back the other one's joining too. Stale after a minute, should that account never come.
+   */
+  private claims = new Map<string, { email: string; since: number }>();
+
   /** A user's access was taken back (their address proven by someone else): close what is open. */
   onRevoke: (user: string) => void;
 
@@ -152,16 +164,49 @@ export class Accounts {
   }
 
   /** May this request create an account? The first one always (it becomes the admin). */
-  canSignUp(invite?: string): boolean {
+  canSignUp(invite?: string, email?: string): boolean {
     if (this.userCount() === 0 || this.policy === "open") return true;
-    return this.policy === "invite" && !!invite && !!this.invite(invite);
+    return this.policy === "invite" && !!invite && !!this.invite(invite) && !this.claimedByOther(invite, email);
   }
 
   /** Before Better Auth creates a user (any way: password, code, OAuth): may this request? */
-  allowNewUser(headers: Headers | undefined) {
+  allowNewUser(email: string, headers: Headers | undefined) {
     const c = signupContext(headers);
     // the code sends an OAuth sign-in back to the page (?signin=failed&error=signup_closed)
-    if (!this.canSignUp(c.invite)) throw new APIError("FORBIDDEN", c.invite ? { message: "invite invalid", code: "invite_invalid" } : { message: "signup closed", code: "signup_closed" });
+    if (!this.canSignUp(c.invite, email)) throw new APIError("FORBIDDEN", c.invite ? { message: "invite invalid", code: "invite_invalid" } : { message: "signup closed", code: "signup_closed" });
+    // (OAuth and codes come here directly; a password signup has claimed it already)
+    if (c.invite) this.hold(c.invite, email);
+  }
+
+  /** Who is signing up with this single-use link right now (see claims). */
+  private claimant(code: string): string | undefined {
+    const c = this.claims.get(code);
+    if (c && Date.now() - c.since > 60_000) this.claims.delete(code);
+    return this.claims.get(code)?.email;
+  }
+
+  private claimedByOther(code: string, email?: string): boolean {
+    const by = this.claimant(code);
+    return !!by && by !== email?.trim().toLowerCase();
+  }
+
+  /** Hold a single-use link for this address while its account is made. False: someone else holds it. */
+  private hold(code: string, email: string): boolean {
+    if (!this.invite(code)?.once) return true;
+    if (this.claimedByOther(code, email)) return false;
+    this.claims.set(code, { email: email.trim().toLowerCase(), since: Date.now() });
+    return true;
+  }
+
+  private release(code: string | undefined, email: string) {
+    if (code && !this.claimedByOther(code, email)) this.claims.delete(code);
+  }
+
+  /** The link a new account may join with: the one given, unless it is someone else's right now (open signup: then without). */
+  private signupInvite(invite: string | undefined, email: string): string | undefined {
+    if (!invite || this.hold(invite, email)) return invite;
+    if (this.policy === "open") return undefined;
+    throw new AccountError("invite invalid", 403);
   }
 
   /**
@@ -169,23 +214,29 @@ export class Accounts {
    * has it create its first (set up there, in the app's language). The very first account becomes the admin and
    * takes over the data from before accounts, if there are any.
    */
-  setUpNewUser(id: string, headers: Headers | undefined) {
+  setUpNewUser(id: string, email: string, headers: Headers | undefined) {
     const c = signupContext(headers);
     if (this.userCount() === 1) {
       this.db.query("INSERT OR IGNORE INTO admins (user) VALUES (?)").run(id);
       const orphans = this.db.query("SELECT id FROM workspaces WHERE id NOT IN (SELECT workspace FROM members)").all() as { id: string }[];
       for (const w of orphans) this.addMember(w.id, id, "owner");
     }
-    if (c.invite && this.invite(c.invite)) this.join(c.invite, id);
+    const inv = c.invite ? this.invite(c.invite) : undefined;
+    if (c.invite && inv && (!inv.once || this.claimant(c.invite) === email.toLowerCase())) {
+      this.release(c.invite, email);
+      this.join(c.invite, id);
+    }
   }
 
   /** Create an account with a password and sign it in (see setUpNewUser). */
   async signUp(body: { name: string; email: string; password: string; invite?: string }): Promise<SignedIn> {
     if (!this.login.password) throw new AccountError("passwords off", 403);
-    if (!this.canSignUp(body.invite)) throw new AccountError(body.invite ? "invite invalid" : "signup closed", 403);
+    if (!this.canSignUp(body.invite, body.email)) throw new AccountError(body.invite ? "invite invalid" : "signup closed", 403);
+    const invite = this.signupInvite(body.invite, body.email);
     const res = await this.auth.api
-      .signUpEmail({ body: { name: body.name.trim() || body.email.split("@")[0]!, email: body.email.trim(), password: body.password }, headers: signupHeaders({ invite: body.invite }) })
+      .signUpEmail({ body: { name: body.name.trim() || body.email.split("@")[0]!, email: body.email.trim(), password: body.password }, headers: signupHeaders({ invite }) })
       .catch((e) => {
+        this.release(invite, body.email);
         throw new AccountError(e?.body?.message ?? e?.message ?? "signup failed", e?.statusCode === 422 ? 409 : (e?.statusCode ?? 400));
       });
     return { token: res.token!, user: { id: res.user.id, name: res.user.name, email: res.user.email } };
@@ -199,7 +250,7 @@ export class Accounts {
    */
   async signUpWithCode(body: { name: string; email: string; password: string; invite?: string; lang?: string; code?: string }): Promise<SignedIn | { verify: true }> {
     if (!this.login.password) throw new AccountError("passwords off", 403);
-    if (!this.canSignUp(body.invite)) throw new AccountError(body.invite ? "invite invalid" : "signup closed", 403);
+    if (!this.canSignUp(body.invite, body.email)) throw new AccountError(body.invite ? "invite invalid" : "signup closed", 403);
     const ctx = await this.auth.$context;
     const email = body.email.trim().toLowerCase();
     const { minPasswordLength, maxPasswordLength } = ctx.password.config;
@@ -207,9 +258,11 @@ export class Accounts {
     if (body.password.length > maxPasswordLength) throw new AccountError("password too long");
     if (await ctx.internalAdapter.findUserByEmail(email)) throw new AccountError("exists", 409);
     if (!body.code) return { verify: true };
+    const invite = this.signupInvite(body.invite, email);
     const res = await this.auth.api
-      .signInEmailOTP({ body: { email, otp: body.code.trim(), name: body.name.trim() || email.split("@")[0]! }, headers: signupHeaders({ invite: body.invite, lang: body.lang }) })
+      .signInEmailOTP({ body: { email, otp: body.code.trim(), name: body.name.trim() || email.split("@")[0]! }, headers: signupHeaders({ invite, lang: body.lang }) })
       .catch((e) => {
+        this.release(invite, email);
         throw new AccountError(e?.body?.code === "INVALID_OTP" || e?.statusCode === 400 ? "invalid code" : (e?.body?.message ?? e?.message ?? "signup failed"), e?.statusCode ?? 400);
       });
     // (made meanwhile by another way: it keeps its own)
@@ -366,11 +419,16 @@ export class Accounts {
 
   // ---------- invites ----------
 
-  /** An invite link's code: anyone with it may join for 14 days, until an owner revokes it. Owners only. */
-  createInvite(workspace: string, by: string): string {
+  /**
+   * An invite link's code: whoever joins with it gets `role`, for 14 days or until an owner revokes
+   * it; a single-use one (`once`) works for the first person only. Links for owners are always
+   * single-use: one lost in a chat must not hand out the workspace. Owners only.
+   */
+  createInvite(workspace: string, by: string, role: Role = "member", once = true): string {
     if (this.role(workspace, by) !== "owner") throw new AccountError("only owners invite", 403);
+    if (role === "owner" && !once) throw new AccountError("owner links are single-use", 400);
     const code = randomToken();
-    this.db.query("INSERT INTO invites (code, workspace, by, created, expires) VALUES (?, ?, ?, ?, ?)").run(code, workspace, by, Date.now(), Date.now() + INVITE_DAYS * 86400_000);
+    this.db.query("INSERT INTO invites (code, workspace, by, created, expires, role, once) VALUES (?, ?, ?, ?, ?, ?, ?)").run(code, workspace, by, Date.now(), Date.now() + INVITE_DAYS * 86400_000, role, once ? 1 : 0);
     return code;
   }
 
@@ -378,7 +436,9 @@ export class Accounts {
   invites(workspace: string, by: string): InviteLink[] {
     if (this.role(workspace, by) !== "owner") throw new AccountError("only owners invite", 403);
     this.db.query("DELETE FROM invites WHERE workspace = ? AND expires <= ?").run(workspace, Date.now());
-    return this.db.query('SELECT i.code, i.created, i.expires, coalesce(u.name, \'\') AS by FROM invites i LEFT JOIN "user" u ON u.id = i.by WHERE i.workspace = ? ORDER BY i.created DESC').all(workspace) as InviteLink[];
+    return this.db.query('SELECT i.code, i.created, i.expires, i.role, i.once, coalesce(u.name, \'\') AS by FROM invites i LEFT JOIN "user" u ON u.id = i.by WHERE i.workspace = ? ORDER BY i.created DESC')
+      .all(workspace)
+      .map((l: any) => ({ ...l, once: !!l.once })) as InviteLink[];
   }
 
   /** An owner takes a link back: whoever has it can no longer join with it. */
@@ -387,15 +447,23 @@ export class Accounts {
     if (!this.db.query("DELETE FROM invites WHERE workspace = ? AND code = ?").run(workspace, code).changes) throw new AccountError("invite invalid", 404);
   }
 
-  invite(code: string): { workspace: string; name: string; by: string } | undefined {
-    const row = this.db.query('SELECT i.workspace, w.name, u.name AS by FROM invites i JOIN workspaces w ON w.id = i.workspace LEFT JOIN "user" u ON u.id = i.by WHERE i.code = ? AND i.expires > ?').get(code, Date.now()) as { workspace: string; name: string; by: string } | null;
-    return row ?? undefined;
+  invite(code: string): { workspace: string; name: string; by: string; role: Role; once: boolean } | undefined {
+    const row = this.db.query('SELECT i.workspace, w.name, u.name AS by, i.role, i.once FROM invites i JOIN workspaces w ON w.id = i.workspace LEFT JOIN "user" u ON u.id = i.by WHERE i.code = ? AND i.expires > ?').get(code, Date.now()) as { workspace: string; name: string; by: string; role: Role; once: number } | null;
+    return row ? { ...row, once: !!row.once } : undefined;
   }
 
+  /**
+   * Join with a link, in the link's role. Someone already in keeps their role, and a single-use link
+   * stays for whom it was meant; otherwise it is used up in the same step.
+   */
   join(code: string, user: string): WorkspaceInfo {
     const inv = this.invite(code);
-    if (!inv) throw new AccountError("invite invalid", 404);
-    this.addMember(inv.workspace, user, "member");
+    if (!inv || (inv.once && this.claimant(code))) throw new AccountError("invite invalid", 404);
+    if (!this.role(inv.workspace, user))
+      this.db.transaction(() => {
+        this.addMember(inv.workspace, user, inv.role);
+        if (inv.once) this.db.query("DELETE FROM invites WHERE code = ?").run(code);
+      })();
     return this.workspacesOf(user).find((w) => w.id === inv.workspace)!;
   }
 
@@ -439,8 +507,8 @@ function makeAuth(accounts: Accounts, secret: string, baseURL: string) {
     databaseHooks: {
       user: {
         create: {
-          before: async (_user, ctx) => accounts.allowNewUser(ctx?.headers),
-          after: async (user, ctx) => accounts.setUpNewUser(user.id, ctx?.headers),
+          before: async (user, ctx) => accounts.allowNewUser(user.email, ctx?.headers),
+          after: async (user, ctx) => accounts.setUpNewUser(user.id, user.email, ctx?.headers),
         },
         update: {
           // A code by email proves the address of an account whose address nobody had proven
@@ -474,7 +542,7 @@ function makeAuth(accounts: Accounts, secret: string, baseURL: string) {
                 // a code for an address without an account only where it may become one
                 const known = !!accounts.db.query('SELECT 1 FROM "user" WHERE email = ?').get(email.toLowerCase());
                 const c = signupContext(ctx?.headers);
-                if (!known && !accounts.canSignUp(c.invite)) return;
+                if (!known && !accounts.canSignUp(c.invite, email)) return;
                 await login.sendCode!(email, otp, c.lang);
               },
             }),

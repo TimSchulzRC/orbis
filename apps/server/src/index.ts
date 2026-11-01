@@ -163,7 +163,7 @@ async function accountApi(req: Request, path: string, url: URL): Promise<Respons
     const code = path.slice("/api/invites/".length);
     const inv = accounts.invite(code);
     if (!inv) return fail(404, "invite invalid");
-    if (req.method === "GET") return json<InviteInfo>({ workspace: inv.name, by: inv.by, signup: accounts.canSignUp(code) });
+    if (req.method === "GET") return json<InviteInfo>({ workspace: inv.name, by: inv.by, role: inv.role, signup: accounts.canSignUp(code) });
   }
 
   const token = tokenOf(req);
@@ -230,7 +230,11 @@ async function accountApi(req: Request, path: string, url: URL): Promise<Respons
         return json<Ok>({ ok: true });
       }
       if (sub === "/invites" && req.method === "GET") return json<InviteLink[]>(accounts.invites(id, user.id));
-      if (sub === "/invites" && req.method === "POST") return json<InviteCode>({ code: accounts.createInvite(id, user.id) });
+      if (sub === "/invites" && req.method === "POST") {
+        const b = (await body<{ role?: unknown; once?: unknown }>(req)) ?? {};
+        if (b.role !== undefined && b.role !== "owner" && b.role !== "member") return fail(400, "role invalid");
+        return json<InviteCode>({ code: accounts.createInvite(id, user.id, (b.role as Role) ?? "member", b.once !== false) });
+      }
       if (sub.startsWith("/invites/") && req.method === "DELETE") return (accounts.revokeInvite(id, user.id, sub.slice("/invites/".length)), json<Ok>({ ok: true }));
       // MCP: a token for agents on this workspace, shown once
       if (sub === "/mcp-token" && req.method === "POST") {

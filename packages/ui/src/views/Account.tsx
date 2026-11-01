@@ -209,7 +209,7 @@ function Join({ code }: { code: string }) {
   if (inv === undefined) return null;
   if (inv === null) return <AuthCard title={t("account.inviteInvalid")} intro={t("account.inviteInvalidHint")}><a href="#/inbox" className="mt-4 block text-sm text-link hover:underline">{t("nav.inbox")}</a></AuthCard>;
   return (
-    <AuthCard title={t("account.joinTitle", { workspace: inv.workspace })} intro={t("account.joinIntro", { by: inv.by, server: location.host })}>
+    <AuthCard title={t("account.joinTitle", { workspace: inv.workspace })} intro={t(inv.role === "owner" ? "account.joinIntroOwner" : "account.joinIntro", { by: inv.by, server: location.host })}>
       {acc && !acc.lost ? (
         <>
           <p className="mt-4 text-sm">{t("account.joinAs", { email: acc.user.email })}</p>
