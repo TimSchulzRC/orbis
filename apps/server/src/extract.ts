@@ -73,10 +73,9 @@ export function decodeText(b: Uint8Array, cut = false): string | undefined {
     if (x < 9 || (x > 13 && x < 32 && x !== 27)) control++;
   }
   if (control > sample.length / 100) return undefined;
-  // a UTF-8 character cut at the end of what was read is not a reason to read it as Windows-1252
-  const whole = cut ? b.subarray(0, Math.max(0, b.length - 3)) : b;
   try {
-    return new TextDecoder("utf-8", { fatal: true }).decode(whole);
+    // streaming: a UTF-8 character cut at the end of what was read is held back, not an error
+    return new TextDecoder("utf-8", { fatal: true }).decode(b, { stream: cut });
   } catch {
     return new TextDecoder("windows-1252").decode(b);
   }
@@ -139,6 +138,9 @@ interface Entry {
 
 /** A ZIP file read from disk in pieces: the directory, then single entries. No ZIP64. */
 export class Zip {
+  /** What all entries read from this ZIP may unpack to together. */
+  private budget = PART_MAX * 2;
+
   private constructor(
     private path: string,
     public entries: Entry[],
@@ -185,19 +187,23 @@ export class Zip {
   /** One entry's content; undefined when it can't be read (encrypted, unknown method, too large). */
   async read(e: Entry | string | undefined): Promise<Uint8Array | undefined> {
     const entry = typeof e === "string" ? this.find(e) : e;
-    if (!entry || entry.encrypted || entry.usize > PART_MAX || entry.csize > PART_MAX) return undefined;
+    if (!entry || entry.encrypted || entry.csize > PART_MAX || this.budget <= 0) return undefined;
     const file = Bun.file(this.path);
     const local = new DataView(await file.slice(entry.offset, entry.offset + 30).arrayBuffer());
     if (local.byteLength < 30 || local.getUint32(0, true) !== 0x04034b50) return undefined;
     const start = entry.offset + 30 + local.getUint16(26, true) + local.getUint16(28, true);
     const data = new Uint8Array(await file.slice(start, start + entry.csize).arrayBuffer());
-    if (entry.method === 0) return data;
-    if (entry.method !== 8) return undefined;
-    try {
-      return new Uint8Array(inflateRawSync(data, { maxOutputLength: PART_MAX }));
-    } catch {
-      return undefined;
+    let out: Uint8Array | undefined;
+    if (entry.method === 0) out = data;
+    else if (entry.method === 8) {
+      try {
+        out = new Uint8Array(inflateRawSync(data, { maxOutputLength: Math.min(PART_MAX, this.budget) }));
+      } catch {
+        out = undefined; // broken, or larger than allowed
+      }
     }
+    if (out) this.budget -= out.length;
+    return out;
   }
 
   async text(e: Entry | string | undefined): Promise<string | undefined> {
@@ -241,11 +247,11 @@ function markupText(xml: string, k: { text: Set<string>; para: Set<string>; cell
       continue;
     }
     const tag = t.tag!;
-    if (k.text.has(tag)) {
-      if (!t.self) inText += t.close ? -1 : 1;
-      if (inText < 0) inText = 0;
-    } else if (t.close || t.self) {
+    if (k.text.has(tag) && !t.self) inText = Math.max(0, inText + (t.close ? -1 : 1));
+    if (out.length > TEXT_MAX) break; // more is cut anyway
+    if (t.close || t.self) {
       if (k.para.has(tag)) out += "\n";
+      else if (k.text.has(tag)) continue;
       else if (k.cell.has(tag)) out = out.replace(/\n$/, "") + "\t";
       else if (k.tab.has(tag)) out += "\t";
       else if (k.br.has(tag)) out += "\n";
@@ -265,13 +271,19 @@ const byNumber = (re: RegExp) => (a: string, b: string) => Number(re.exec(a)?.[1
 async function officeText(zip: Zip): Promise<string | undefined> {
   if (zip.find("word/document.xml")) {
     const parts = ["word/document.xml", ...zip.entries.map((e) => e.name).filter((n) => /^word\/(header|footer|footnotes|endnotes)\d*\.xml$/.test(n))];
-    const texts = await Promise.all(parts.map(async (p) => markupText((await zip.text(p)) ?? "", WORD)));
-    return texts.filter((t) => t.trim()).join("\n\n");
+    const texts: string[] = [];
+    for (const p of parts) {
+      const t = markupText((await zip.text(p)) ?? "", WORD);
+      if (t.trim()) texts.push(t);
+      if (texts.join("").length > TEXT_MAX) break;
+    }
+    return texts.join("\n\n");
   }
   if (zip.find("ppt/presentation.xml")) {
     const slides = zip.entries.map((e) => e.name).filter((n) => /^ppt\/slides\/slide\d+\.xml$/.test(n)).sort(byNumber(/slide(\d+)\.xml$/));
     const out: string[] = [];
     for (const [i, s] of slides.entries()) {
+      if (out.join("").length > TEXT_MAX) break;
       const text = markupText((await zip.text(s)) ?? "", DRAWING).trim();
       const notes = markupText((await zip.text(s.replace("slides/slide", "notesSlides/notesSlide"))) ?? "", DRAWING).trim();
       out.push(`Slide ${i + 1}\n${text}${notes ? `\n\nNotes: ${notes}` : ""}`);
@@ -320,6 +332,7 @@ async function xlsxText(zip: Zip): Promise<string> {
     const xml = sheet.path ? await zip.text(sheet.path) : undefined;
     if (!xml) continue;
     const rows: string[] = [];
+    let size = 0;
     let row: string[] = [];
     let col = 0;
     let type = "";
@@ -331,27 +344,36 @@ async function xlsxText(zip: Zip): Promise<string> {
         continue;
       }
       if (t.tag === "row") {
-        if (t.close || t.self) (rows.push(row.join("\t").replace(/\t+$/, "")), (row = []));
-        else row = [];
+        if (t.close || t.self) {
+          rows.push(row.join("\t").replace(/\t+$/, ""));
+          row = [];
+          if ((size += rows.at(-1)!.length + 1) > TEXT_MAX) break;
+        } else row = [];
       } else if (t.tag === "c") {
         if (!t.close) {
           const ref = attr(t.attrs, "r");
-          col = ref ? colIndex(ref) : row.length;
+          col = Math.min(ref ? colIndex(ref) : row.length, MAX_COLUMN); // Excel has 16384 columns
           type = attr(t.attrs, "t") ?? "";
           value = undefined;
         }
         if (t.close || t.self) {
           const v = value === undefined ? "" : type === "s" ? (shared[Number(value)] ?? "") : type === "b" ? (value === "1" ? "TRUE" : "FALSE") : value;
-          while (row.length < col) row.push("");
-          row[col] = v.replace(/[\t\n]+/g, " ");
+          // empty cells need no place: a far column alone pads nothing
+          if (v && col < MAX_COLUMN) {
+            while (row.length < col) row.push("");
+            row[col] = v.replace(/[\t\n]+/g, " ");
+          }
         }
       } else if ((t.tag === "v" || t.tag === "t") && !t.self) inV += t.close ? -1 : 1;
     }
     while (rows.length && !rows.at(-1)) rows.pop();
     out.push(`Sheet: ${sheet.name}\n${rows.join("\n")}`);
+    if (out.join("").length > TEXT_MAX) break;
   }
   return out.join("\n\n");
 }
+
+const MAX_COLUMN = 16384;
 
 function colIndex(ref: string): number {
   let n = 0;
@@ -359,6 +381,7 @@ function colIndex(ref: string): number {
     const c = ch.charCodeAt(0);
     if (c < 65 || c > 90) break;
     n = n * 26 + (c - 64);
+    if (n > MAX_COLUMN) return MAX_COLUMN;
   }
   return Math.max(0, n - 1);
 }
