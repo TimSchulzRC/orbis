@@ -81,6 +81,13 @@ test("hostile or odd files stay small: far Excel columns, a cut UTF-8 character,
     "xl/worksheets/sheet1.xml": '<worksheet><sheetData><row r="1"><c r="ZZZZZZZ1" t="inlineStr"><is><t>x</t></is></c><c r="A1"><v>1</v></c></row></sheetData></worksheet>',
   });
   expect((await text("weit.xlsx", far)).text).toBe("Sheet: S\n1");
+  // cells without a reference keep their place after an empty one
+  const loose = zip({
+    "xl/workbook.xml": '<workbook xmlns:r="r"><sheets><sheet name="S" r:id="rId1"/></sheets></workbook>',
+    "xl/_rels/workbook.xml.rels": '<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>',
+    "xl/worksheets/sheet1.xml": '<worksheet><sheetData><row><c><v>1</v></c><c/><c><v>3</v></c></row></sheetData></worksheet>',
+  });
+  expect((await text("lose.xlsx", loose)).text).toBe("Sheet: S\n1\t\t3");
   // more than what is read, in UTF-8: a character cut at the end is no reason for Windows-1252
   const umlauts = await text("lang.txt", "ä".repeat(600_000));
   expect(umlauts.text!.startsWith("ää")).toBe(true);
