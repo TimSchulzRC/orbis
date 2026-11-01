@@ -3,6 +3,7 @@
 // unique within a workspace only, so an entry is known by its key "<workspace>/<id>".
 import { type Item, SETTINGS_ID } from "@obtion/core/model";
 import { runQuery } from "@obtion/core/query";
+import { laterItems } from "@obtion/core/placement";
 import { useAccounts } from "../accounts";
 import { useReplicas } from "./Spaces";
 import { createStore } from "../lib/store";
@@ -24,6 +25,19 @@ export function useInboxItems(): InboxEntry[] {
       const r = repos[n]!;
       if (!r.get(SETTINGS_ID)) return [];
       return runQuery({ where: { inbox: true } }, { ix: r.index() }).items.map((item) => ({ key: entryKey(s.id, item.id), space: s.id, item }));
+    })
+    .sort((a, b) => b.item.created - a.item.created);
+}
+
+/** The entries set aside with "Morgen wieder" in the workspaces seen, newest first: not in the inbox until tomorrow. */
+export function useLaterItems(): InboxEntry[] {
+  const { shown } = useAccounts();
+  const repos = useReplicas(shown.map((s) => s.id));
+  return shown
+    .flatMap((s, n) => {
+      const r = repos[n]!;
+      if (!r.get(SETTINGS_ID)) return [];
+      return laterItems(r.index()).map((item) => ({ key: entryKey(s.id, item.id), space: s.id, item }));
     })
     .sort((a, b) => b.item.created - a.item.created);
 }

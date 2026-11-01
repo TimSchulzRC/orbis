@@ -1,4 +1,4 @@
-// What can be done with entries while sorting – place, give a type, keep, later, delete – each with
+// What can be done with entries while sorting – place, give a type, pin, later, delete – each with
 // one undo, and the pickers they need. The sort list (Triage.tsx) and the review (views/Review.tsx)
 // share them.
 import { Input } from "../components/ui/input";
@@ -21,7 +21,7 @@ import { chooseAction, notify } from "./feedback";
 
 export interface Undo {
   label: string;
-  steps: { space: string; id: string; type?: string | null; addedParents?: string[]; deleted?: boolean; kept?: number | null; later?: number | null }[];
+  steps: { space: string; id: string; type?: string | null; addedParents?: string[]; deleted?: boolean; pinned?: boolean; later?: number | null }[];
 }
 
 export function revert(u: Undo) {
@@ -30,7 +30,8 @@ export function revert(u: Undo) {
     if (s.deleted) repo.restore(s.id);
     if (s.type !== undefined) repo.setType(s.id, s.type);
     for (const p of s.addedParents ?? []) repo.removeParent(s.id, p);
-    if (s.kept !== undefined || s.later !== undefined) repo.change(s.id, (doc) => setMeta(doc, { kept: s.kept, later: s.later }));
+    if (s.pinned) repo.pin(s.id, false);
+    if (s.later !== undefined) repo.change(s.id, (doc) => setMeta(doc, { later: s.later }));
   }
 }
 
@@ -97,23 +98,27 @@ export function useTriageActions(spaceOf: (i: Item) => string, opts: { quiet?: b
     const where = repo.index().get(parent)?.title ?? "";
     return done({ label: ok.length > 1 ? t("triage.placedMany", { count: ok.length, title: where }) : t("triage.placedOne", { title: short(ok[0]), place: where }), steps: ok.map((i) => ({ space: spaceOf(i), id: i.id, addedParents: [parent] })) });
   };
-  // set aside (inbox.ts): kept as it is, or back tomorrow
-  const setAside = (list: Item[], field: "kept" | "later", key: string) => {
-    if (!list.length) return;
-    const value = field === "kept" ? Date.now() : tomorrow();
-    const u = done({ label: label(list, key, { title: short(list[0]) }), steps: list.map((i) => ({ space: spaceOf(i), id: i.id, [field]: i[field] ?? null })) });
-    for (const i of list) repoOf(i).change(i.id, (doc) => setMeta(doc, { [field]: value }));
+  // out of the inbox (inbox.ts): into the sidebar, or back tomorrow
+  const pin = (list: Item[]) => {
+    const fresh = list.filter((i) => !i.pinned);
+    if (!fresh.length) return;
+    const u = done({ label: label(fresh, "triage.pinned", { title: short(fresh[0]) }), steps: fresh.map((i) => ({ space: spaceOf(i), id: i.id, pinned: true })) });
+    for (const i of fresh) repoOf(i).pin(i.id, true);
     return u;
   };
-  const keep = (list: Item[]) => setAside(list, "kept", "triage.kept");
-  const later = (list: Item[]) => setAside(list, "later", "triage.later");
+  const later = (list: Item[]) => {
+    if (!list.length) return;
+    const u = done({ label: label(list, "triage.later", { title: short(list[0]) }), steps: list.map((i) => ({ space: spaceOf(i), id: i.id, later: i.later ?? null })) });
+    for (const i of list) repoOf(i).change(i.id, (doc) => setMeta(doc, { later: tomorrow() }));
+    return u;
+  };
   // "u": takes back the last one (the notice offers the same)
   const undo = () => {
     if (!last.current) return;
     revert(last.current);
     last.current = null;
   };
-  return { firstType, giveType, trash, place, keep, later, undo };
+  return { firstType, giveType, trash, place, pin, later, undo };
 }
 
 /** The pickers an action may need: where to (place) and which type – in the workspace of the entries. */

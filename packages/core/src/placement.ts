@@ -10,6 +10,7 @@ import { type Item, META_TYPE, isContent } from "./model";
 import type { Index } from "./graph";
 import { isDone } from "./traits";
 import { matches } from "./query";
+import { inboxWhere } from "./inbox";
 import { cmpKey } from "./sortkey";
 
 export function isOverview(item: Item, ix: Index): boolean {
@@ -28,6 +29,11 @@ export function isInInbox(item: Item, ix: Index): boolean {
 
 export function inbox(ix: Index): Item[] {
   return ix.live.filter((i) => isInInbox(i, ix));
+}
+
+/** Set aside with "Morgen wieder", not back yet: what the inbox rule takes, waiting until tomorrow. */
+export function laterItems(ix: Index, now = Date.now()): Item[] {
+  return ix.live.filter((i) => isContent(i) && i.type !== META_TYPE && !i.pinned && (i.later ?? 0) > now && matches(i, inboxWhere(ix), { ix, inInbox: true }));
 }
 
 /** Can `item` go below `target`: an information it is not yet below and that is not part of it (no cycle). */

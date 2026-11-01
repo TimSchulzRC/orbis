@@ -1,6 +1,6 @@
 // The review (the page "Eingang", the act "einsortieren"): the inbox one entry at a time, as a
 // stack. The entry on top, always as tall (a long one scrolls inside), so what can become of it
-// stays in place below – a place, a type, back tomorrow, kept as it is, deleted – and on a
+// stays in place below – a place, a type, back tomorrow, the sidebar, deleted – and on a
 // desktop beside it what is still waiting and what this review sorted (each with its undo).
 // What was sorted stays for the rest of the day when the page is left, until the review is finished.
 // A click into the entry (or "Bearbeiten") edits it in place, a typo fixed on the way; the keys rest
@@ -10,7 +10,7 @@
 // among the suggestions in `Choices`.
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import type { EditorView } from "@codemirror/view";
-import { Check, Clock, FolderInput, Layers, List, Maximize2, Pencil, RotateCcw, Shapes, StickyNote, Trash2, Undo2 } from "lucide-react";
+import { Check, Clock, FolderInput, Layers, List, Maximize2, Pencil, Pin, RotateCcw, Shapes, Trash2, Undo2 } from "lucide-react";
 import { type Item, todayISO } from "@obtion/core/model";
 import { plainText } from "@obtion/core/search";
 import { useRepo, useItemHref, navigate, useDesktop, openItem, isTypingTarget, useDocumentTitle, useWindowKeys } from "../hooks";
@@ -100,7 +100,7 @@ export function Review({ at }: { at?: string }) {
   const typeAs = (list: Item[], type: string) => entry && record(entry, replica(entry.space).repo.index().typeName(type) ?? "", act.giveType(list, type));
   const pick = usePickers(() => entry!.space, placeIn, typeAs);
   const later = () => entry && record(entry, t("review.done.later"), act.later([entry.item]));
-  const keep = () => entry && record(entry, t("review.done.kept"), act.keep([entry.item]));
+  const pin = () => entry && record(entry, t("review.done.pinned"), act.pin([entry.item]));
   const trash = () => entry && void act.trash([entry.item]).then((u) => record(entry, t("review.done.trashed"), u));
   const undo = (s = sorted.at(-1)) => {
     if (!s) return;
@@ -136,7 +136,7 @@ export function Review({ at }: { at?: string }) {
     else if (k === "c" && first && entry.item.kind === "info") typeAs([entry.item], first);
     else if (k === "y" && entry.item.kind === "info") pick.setTyping([entry.item]);
     else if (k === "s") later();
-    else if (k === "b") keep();
+    else if (k === "a") pin();
     else if (k === "x" || k === "Delete") trash();
     // arrows up and down scroll a long entry in its card
     else if (k === "ArrowDown" || k === "ArrowUp") card.current?.scrollBy({ top: k === "ArrowDown" ? 80 : -80 });
@@ -161,7 +161,7 @@ export function Review({ at }: { at?: string }) {
   const body = entry ? (
     <SpaceScope id={entry.space}>
       <EntryCard key={entry.key} entry={entry} space={several ? spaceById(entry.space)?.name : undefined} more={left.length - 1} scroller={card} editing={editing} onEdit={(at) => setEditing({ key, at })} onDone={stopEditing} />
-      <Choices entry={entry} onPlace={(p) => placeIn([entry.item], p)} onPick={() => (stopEditing(), pick.setPlacing([entry.item]))} onType={(type) => typeAs([entry.item], type)} onTypes={() => (stopEditing(), pick.setTyping([entry.item]))} onLater={later} onKeep={keep} onTrash={trash} onUndo={sorted.length ? () => undo() : undefined} keys={desktop} quiet={!!editing} />
+      <Choices entry={entry} onPlace={(p) => placeIn([entry.item], p)} onPick={() => (stopEditing(), pick.setPlacing([entry.item]))} onType={(type) => typeAs([entry.item], type)} onTypes={() => (stopEditing(), pick.setTyping([entry.item]))} onLater={later} onPin={pin} onTrash={trash} onUndo={sorted.length ? () => undo() : undefined} keys={desktop} quiet={!!editing} />
     </SpaceScope>
   ) : (
     <Finished count={sorted.length} onDone={close} />
@@ -405,12 +405,12 @@ function EntryCard({ entry, space, more, scroller, editing, onEdit, onDone }: { 
 
 /**
  * What can become of it. Five buttons, always the same and in the same place: put it somewhere, turn
- * it into a type (only a loose note), back tomorrow, keep it as it is, delete it. Below in one line
+ * it into a type (only a loose note), back tomorrow, pin it to the sidebar, delete it. Below in one line
  * the quick ways: the first type ("c") and places it mentions or used last; the rest is in the
  * pickers. Keys quietly in the buttons on a desktop; hidden while the entry is edited (their room
  * kept, so the buttons stay where they are).
  */
-function Choices({ entry, onPlace, onPick, onType, onTypes, onLater, onKeep, onTrash, onUndo, keys, quiet }: { entry: InboxEntry; onPlace: (p: string) => void; onPick: () => void; onType: (type: string) => void; onTypes: () => void; onLater: () => void; onKeep: () => void; onTrash: () => void; onUndo?: () => void; keys: boolean; quiet: boolean }) {
+function Choices({ entry, onPlace, onPick, onType, onTypes, onLater, onPin, onTrash, onUndo, keys, quiet }: { entry: InboxEntry; onPlace: (p: string) => void; onPick: () => void; onType: (type: string) => void; onTypes: () => void; onLater: () => void; onPin: () => void; onTrash: () => void; onUndo?: () => void; keys: boolean; quiet: boolean }) {
   const { t } = useT();
   const repo = useRepo();
   const ix = repo.index();
@@ -443,7 +443,7 @@ function Choices({ entry, onPlace, onPick, onType, onTypes, onLater, onKeep, onT
         {tile(<FolderInput size={15} />, t("review.placeAction"), "e", onPick, { primary: true })}
         {tile(<Shapes size={15} />, t("review.convertAction"), "y", onTypes, { disabled: !info })}
         {tile(<Clock size={15} />, t("review.later"), "s", onLater)}
-        {tile(<StickyNote size={15} />, t("review.keep"), "b", onKeep)}
+        {tile(<Pin size={15} />, t("review.pin"), "a", onPin)}
         {tile(<Trash2 size={15} />, t("triage.delete"), "x", onTrash, { danger: true })}
       </div>
       <div className="flex min-h-8 items-center gap-2">

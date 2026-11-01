@@ -20,10 +20,10 @@ const card = () => page.getByRole("article").getByRole("heading", { level: 2 });
 const titleNow = () => document.querySelector("main article h2")?.textContent?.trim() ?? "";
 
 describe("sorting", () => {
-  test('"Lose behalten" moves on and lists the entry under "Erledigt"; its undo brings it back', async () => {
+  test('"Anheften" moves on and lists the entry under "Erledigt"; its undo brings it back', async () => {
     await expect.element(card()).toBeVisible();
     const title = titleNow();
-    await page.getByRole("button", { name: /Lose behalten/ }).click();
+    await page.getByRole("button", { name: /Anheften/ }).click();
     await expect.poll(titleNow).not.toBe(title);
     await expect.poll(() => document.querySelector("section[aria-label='Erledigt']")?.textContent ?? "").toContain(title);
     await page.getByRole("button", { name: `„${title}“ rückgängig machen` }).click();
