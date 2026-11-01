@@ -57,7 +57,6 @@ export const createInput = z.object({
   parents: z.array(z.string()).optional(),
   pin: z.boolean().optional().describe("pin to the top of the sidebar (a place of its own)"),
   properties: values.optional(),
-  free_properties: values.optional(),
 });
 export type CreateInput = z.infer<typeof createInput>;
 
@@ -66,7 +65,7 @@ export const updateInput = z.object({
   title: z.string().optional(),
   type: z.string().nullable().optional(),
   properties: values.optional(),
-  free_properties: values.optional(),
+  free_properties_remove: z.array(z.string()).optional().describe("names of free properties to remove (values left over from a removed type or property; new ones cannot be added)"),
   tags_add: z.array(z.string()).optional(),
   tags_remove: z.array(z.string()).optional(),
   refs_add: z.array(z.string()).optional(),

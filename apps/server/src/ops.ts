@@ -4,8 +4,6 @@
 import * as Y from "yjs";
 import {
   type ViewTab,
-  type FreeKind,
-  type FreeValue,
   type Item,
   type OptionDef,
   type Patch,
@@ -15,7 +13,6 @@ import {
   type StatusGroup,
   type TypeSchema,
   type Value,
-  FREE_KINDS,
   META_TYPE,
   addParent,
   appendUpdate,
@@ -512,13 +509,6 @@ export class Ops {
     return {};
   }
 
-  private freeValue(raw: unknown, kind?: FreeKind): FreeValue | null {
-    if (raw === null || raw === "") return null;
-    const k: FreeKind = kind ?? (typeof raw === "number" ? "number" : typeof raw === "boolean" ? "checkbox" : /^\d{4}-\d{2}-\d{2}$/.test(String(raw)) ? "date" : /^https?:\/\//.test(String(raw)) ? "url" : "text");
-    if (!FREE_KINDS.includes(k)) throw new OpError(`Free properties are ${FREE_KINDS.join(", ")}.`);
-    return { k, v: k === "number" ? Number(raw) : k === "checkbox" ? !!raw : String(raw) };
-  }
-
   /** A [[link]] from an item to itself is refused – it would only ever point back here. */
   private noSelfLink(body: string, id: string, title: string) {
     const ix = this.store.index();
@@ -532,7 +522,7 @@ export class Ops {
   /** A property by name (or id); an unknown name is an error that lists the known ones. */
   private prop(schema: TypeSchema | undefined, name: string): PropDef {
     const p = schema?.properties.find((x) => titleKey(x.name) === titleKey(name) || x.id === name);
-    if (!p) throw new OpError(`Unknown property "${name}"${schema ? ` on type ${schema.name}. Properties: ${schema.properties.map((x) => x.name).join(", ") || "none"}` : " (no type)"}. For a property without type use free_properties.`);
+    if (!p) throw new OpError(`Unknown property "${name}"${schema ? ` on type ${schema.name}. Properties: ${schema.properties.map((x) => x.name).join(", ") || "none"}` : " (no type)"}. Properties belong to a type: add it to the type with update_type, or give the item a type that has it.`);
     return p;
   }
 
@@ -571,7 +561,6 @@ export class Ops {
       const pinned = input.pin ? nextPinKey(this.store.live()) : undefined;
       initItem(doc, { title, type: type?.id ?? null, body, tags: input.tags, refs, parents, pinned, props: initialProps(schema), createdBy: origin });
       this.applyProps(doc, undefined, schema, input.properties);
-      for (const [k, v] of Object.entries(input.free_properties ?? {})) setExtra(doc, k, this.freeValue(v));
     });
     this.store.flush();
     return this.store.records.get(id)!;
@@ -613,7 +602,10 @@ export class Ops {
         for (const [k, v] of Object.entries(initialProps(schema))) if (item.props[k] === undefined) setProp(doc, k, v);
       }
       this.applyProps(doc, item, schema, input.properties);
-      for (const [k, v] of Object.entries(input.free_properties ?? {})) setExtra(doc, k, this.freeValue(v));
+      for (const k of input.free_properties_remove ?? []) {
+        const name = Object.keys(item.extra).find((n) => titleKey(n) === titleKey(k));
+        if (name) setExtra(doc, name, null);
+      }
       for (const t of input.tags_add ?? []) setMember(doc, "tags", t, true);
       for (const t of input.tags_remove ?? []) setMember(doc, "tags", t, false);
       for (const r of refsAdd) setMember(doc, "refs", r, true);

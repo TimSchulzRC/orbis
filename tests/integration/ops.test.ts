@@ -9,7 +9,7 @@ import { type Ops, OpError } from "@obtion/server/ops";
 import { Mirror } from "@obtion/server/mirror";
 import { SYS } from "@obtion/core/setup";
 import { storeWriter } from "@obtion/server/importers";
-import { replaceBody, addDaysISO, todayISO, addParent } from "@obtion/core/model";
+import { replaceBody, addDaysISO, todayISO, addParent, setExtra } from "@obtion/core/model";
 import { deleteItem } from "@obtion/core/trash";
 
 afterAll(removeTempDirs);
@@ -48,6 +48,17 @@ test("errors are helpful: unknown property, option, type, ambiguous title, cycle
   const a = ops.create({ title: "A", type: "Karte" }, A);
   ops.create({ title: "B", type: "Karte", parents: [a.id] }, A);
   expect(() => ops.place(a.id, { add: ["B"] }, A)).toThrow(/cycle/);
+});
+
+test("free properties are only read and removed, never added", () => {
+  const n = ops.create({ title: "Kurs", properties: {} }, A);
+  s.change(n.id, A, (doc) => (setExtra(doc, "ECTS", { k: "number", v: 6 }), setExtra(doc, "Note", { k: "number", v: 1.7 })));
+  s.flush();
+  expect((ops.get(n.id) as any).free_properties).toEqual({ ECTS: 6, Note: 1.7 });
+  ops.update(n.id, { free_properties_remove: ["ects"] }, A);
+  expect((ops.get(n.id) as any).free_properties).toEqual({ Note: 1.7 });
+  // without a type there is nowhere to put a new property
+  expect(() => ops.update(n.id, { properties: { Farbe: "rot" } }, A)).toThrow(/Properties belong to a type/);
 });
 
 test("the agent suggests for inbox items instead of sorting them", () => {

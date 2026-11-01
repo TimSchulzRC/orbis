@@ -15,7 +15,7 @@
 //                    only set an entry aside, see inbox.ts)
 //   parents  Y.Map   parentId -> { sort, at }  ("Teil von"; sort is per parent, at = when added)
 //   props    Y.Map   propId -> value           (values of the type's properties)
-//   extra    Y.Map   name -> { k, v }          (free properties, simple kinds only)
+//   extra    Y.Map   name -> { k, v }          (free properties: left over from a removed type or property)
 //   rels     Y.Map   propId -> Y.Map<targetId, true>
 //   tags     Y.Map   tag -> true
 //   refs     Y.Map   targetId -> true          (explicit only; links in the text are derived)
@@ -54,9 +54,9 @@ export const STATUS_GROUPS: StatusGroup[] = ["todo", "active", "done"];
  */
 export type PropKind = "text" | "number" | "date" | "checkbox" | "url" | "select" | "relation" | "computed";
 export const PROP_KINDS: PropKind[] = ["text", "number", "date", "checkbox", "url", "select", "relation", "computed"];
-/** Free properties (without a type) only come in simple kinds. */
+/** Free properties: values left without a property when a type or property goes (simple kinds only).
+ *  They are kept and shown, can be removed, and are never added by hand. */
 export type FreeKind = "text" | "number" | "date" | "checkbox" | "url" | "select";
-export const FREE_KINDS: FreeKind[] = ["text", "number", "date", "checkbox", "url", "select"];
 
 export interface OptionDef {
   id: string;
