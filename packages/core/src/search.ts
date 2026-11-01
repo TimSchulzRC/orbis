@@ -93,7 +93,8 @@ function tableCells(text: string): string {
     if (!TABLE_DELIMITER.test(lines[i]!) || !lines[i - 1]!.includes("|")) continue;
     lines[i - 1] = cells(lines[i - 1]!);
     lines[i] = "";
-    for (i++; i < lines.length && lines[i]!.trim(); i++) lines[i] = cells(lines[i]!);
+    // up to a blank line or another block (a heading, a quote, a list, a fence)
+    for (i++; i < lines.length && lines[i]!.trim() && !/^\s*(#{1,6}\s|>|```|~~~|[-*+]\s|\d+[.)]\s)/.test(lines[i]!); i++) lines[i] = cells(lines[i]!);
   }
   return lines.join("\n");
 }

@@ -117,3 +117,8 @@ describe("tables without pipes at the ends", () => {
 test("a click after a <br> lands after it", () => {
   expect(sourceOffset("a<br>bar", "abar", 2)).toBe(6);
 });
+
+test("a <br> in code is text; a heading right after a table is no row of it", () => {
+  expect(sourceOffset("`<br>` x", "<br> x", 2)).toBe(3);
+  expect(plainText("a | b\n--- | ---\n1 | 2\n# Weiter a | b")).toBe("a · b 1 · 2 Weiter a | b");
+});
