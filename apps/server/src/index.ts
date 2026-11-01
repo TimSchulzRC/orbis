@@ -231,9 +231,9 @@ async function accountApi(req: Request, path: string, url: URL): Promise<Respons
       }
       if (sub === "/invites" && req.method === "GET") return json<InviteLink[]>(accounts.invites(id, user.id));
       if (sub === "/invites" && req.method === "POST") {
-        const b = (await body<{ role?: unknown; once?: unknown }>(req)) ?? {};
-        if (b.role !== undefined && b.role !== "owner" && b.role !== "member") return fail(400, "role invalid");
-        return json<InviteCode>({ code: accounts.createInvite(id, user.id, (b.role as Role) ?? "member", b.once !== false) });
+        const role = (await body<{ role?: unknown }>(req))?.role;
+        if (role !== undefined && role !== "owner" && role !== "member") return fail(400, "role invalid");
+        return json<InviteCode>({ code: accounts.createInvite(id, user.id, (role as Role) ?? "member") });
       }
       if (sub.startsWith("/invites/") && req.method === "DELETE") return (accounts.revokeInvite(id, user.id, sub.slice("/invites/".length)), json<Ok>({ ok: true }));
       // MCP: a token for agents on this workspace, shown once

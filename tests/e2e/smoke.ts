@@ -338,8 +338,9 @@ async function membersOnSettings(browser: import("playwright").Browser, server: 
   const api = (path: string, init: RequestInit = {}, token = server.token) =>
     fetch(server.url + path, { ...init, headers: { "content-type": "application/json", authorization: `Bearer ${token}` } }).then((r) => r.json());
   const ws = (await api("/api/account")).workspaces[0].id as string;
-  const { code: old } = await api(`/api/workspaces/${ws}/invites`, { method: "POST", body: JSON.stringify({ once: false }) });
-  const { token: bea } = await api("/api/account/signup", { method: "POST", body: JSON.stringify({ name: "Bea", email: "bea@example.org", password: "geheim12345", invite: old }) });
+  const invite = async () => (await api(`/api/workspaces/${ws}/invites`, { method: "POST", body: "{}" })).code as string;
+  const { token: bea } = await api("/api/account/signup", { method: "POST", body: JSON.stringify({ name: "Bea", email: "bea@example.org", password: "geheim12345", invite: await invite() }) });
+  const old = await invite();
   // a link Bea made while an owner: it goes when Bea is removed
   const setBea = async (r: string) => {
     const id = (await api(`/api/workspaces/${ws}/members`)).find((m: { name: string }) => m.name === "Bea").id;
@@ -362,19 +363,25 @@ async function membersOnSettings(browser: import("playwright").Browser, server: 
     const links = p.getByRole("list", { name: "Einladungslinks" }).getByRole("listitem");
     await links.first().waitFor({ timeout: 5000 });
     if ((await links.count()) !== 2) failures.push(`${label}: ${await links.count()} open links instead of the two made by the API`);
-    if (!(await links.filter({ hasText: old }).innerText()).includes("Mitglied · mehrfach")) failures.push(`${label}: the link for several does not say so: ${await links.filter({ hasText: old }).innerText()}`);
+    if (!(await links.filter({ hasText: old }).innerText()).includes("Mitglied · Von E2E am")) failures.push(`${label}: the link for a member does not say so: ${await links.filter({ hasText: old }).innerText()}`);
     // a link for an owner, from the menu: whoever joins with it is one, and only one person can
     await p.getByRole("button", { name: "Neuer Link" }).click();
-    await p.locator("[data-popover]").getByRole("button", { name: "Für einen Besitzer (einmalig)" }).click();
+    await p.locator("[data-popover]").getByRole("button", { name: "Für einen Besitzer" }).click();
     await links.nth(2).waitFor({ timeout: 3000 });
     const made = await links.first().innerText();
-    if (!made.includes("Besitzer · einmalig · Von E2E am")) failures.push(`${label}: the new link does not say its role, single use and who made it: ${made}`);
+    if (!made.includes("Besitzer · Von E2E am")) failures.push(`${label}: the new link does not say its role and who made it: ${made}`);
     const code = (await links.first().locator("code").innerText()).split("/join/")[1]!;
     const signup = (email: string) => api("/api/account/signup", { method: "POST", body: JSON.stringify({ name: email.split("@")[0], email, password: "geheim12345", invite: code }) });
     cem = (await signup("cem@example.org")).token;
     if ((await role("cem")) !== "owner") failures.push(`${label}: who joined with the owner link is no owner`);
     if ((await fetch(`${server.url}/api/invites/${code}`)).status !== 404) failures.push(`${label}: the single-use link still works after its first use`);
+    // revoking asks first: cancelled, the link stays; confirmed, it goes
     await links.filter({ hasText: old }).getByRole("button", { name: "Widerrufen" }).click();
+    await p.getByRole("dialog", { name: "Link widerrufen?" }).getByRole("button", { name: "Abbrechen" }).click();
+    await p.getByRole("dialog").waitFor({ state: "detached", timeout: 3000 });
+    if ((await fetch(`${server.url}/api/invites/${old}`)).status !== 200) failures.push(`${label}: a cancelled revoke took the link back`);
+    await links.filter({ hasText: old }).getByRole("button", { name: "Widerrufen" }).click();
+    await p.getByRole("dialog", { name: "Link widerrufen?" }).getByRole("button", { name: "Widerrufen", exact: true }).click();
     await links.filter({ hasText: old }).waitFor({ state: "detached", timeout: 3000 });
     if ((await fetch(`${server.url}/api/invites/${old}`)).status !== 404) failures.push(`${label}: the revoked link still works`);
 

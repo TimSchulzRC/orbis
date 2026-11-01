@@ -302,8 +302,8 @@ test("owners manage members and invite links: list, revoke, roles, remove; membe
   const olga = await signUp(bare, "manage-olga@example.org");
   const w = await newWorkspace(bare, olga.token);
   const api = `/api/workspaces/${w.id}`;
-  const first = await post(bare, `${api}/invites`, { once: false }, olga.token).then((r) => r.json());
-  const max = await signUp(bare, "manage-max@example.org", first.code);
+  const max = await signUp(bare, "manage-max@example.org", (await post(bare, `${api}/invites`, {}, olga.token).then((r) => r.json())).code);
+  const first = await post(bare, `${api}/invites`, {}, olga.token).then((r) => r.json());
   const role = (user: { user: { id: string } }, r: string, token: string) => patch(bare, `${api}/members/${user.user.id}`, { role: r }, token);
 
   // a member neither invites nor sees the links, changes roles or removes anyone
@@ -317,7 +317,7 @@ test("owners manage members and invite links: list, revoke, roles, remove; membe
   const second = await post(bare, `${api}/invites`, {}, olga.token).then((r) => r.json());
   const links = await get(bare, `${api}/invites`, olga.token).then((r) => r.json());
   expect(links.map((l: any) => l.code)).toEqual([second.code, first.code]);
-  expect(links[0]).toEqual({ code: second.code, by: "manage-olga", created: expect.any(Number), expires: expect.any(Number), role: "member", once: true });
+  expect(links[0]).toEqual({ code: second.code, by: "manage-olga", created: expect.any(Number), expires: expect.any(Number), role: "member" });
   expect(Math.round((links[0].expires - links[0].created) / 86400_000)).toBe(14);
   expect((await del(bare, `${api}/invites/${first.code}`, olga.token)).status).toBe(200);
   expect((await del(bare, `${api}/invites/${first.code}`, olga.token)).status).toBe(404);
@@ -357,7 +357,7 @@ test("owners manage members and invite links: list, revoke, roles, remove; membe
   expect((await role(olga, "member", olga.token)).status).toBe(409);
 });
 
-test("invite links give their role; single-use ones work for one person, also when two sign up at once", async () => {
+test("invite links give their role and work for one person, also when two sign up at once", async () => {
   const otto = await signUp(bare, "links-otto@example.org");
   const w = await newWorkspace(bare, otto.token);
   const api = `/api/workspaces/${w.id}`;
@@ -365,9 +365,8 @@ test("invite links give their role; single-use ones work for one person, also wh
   const listed = () => get(bare, `${api}/invites`, otto.token).then((r) => r.json());
   const roleIn = async (token: string) => (await account(bare, token)).workspaces.find((x: any) => x.id === w.id)?.role;
 
-  // only "owner" or "member"; a link for owners only once
+  // only "owner" or "member"
   expect((await post(bare, `${api}/invites`, { role: "admin" }, otto.token)).status).toBe(400);
-  expect((await post(bare, `${api}/invites`, { role: "owner", once: false }, otto.token)).status).toBe(400);
 
   // a link for an owner: the new account is one at once, and the link is used up
   const forOwner = await link({ role: "owner" });
@@ -376,9 +375,10 @@ test("invite links give their role; single-use ones work for one person, also wh
   expect(await roleIn(pia.token)).toBe("owner");
   expect((await get(bare, `/api/invites/${forOwner.code}`)).status).toBe(404);
 
-  // single use by default; someone already in keeps their role and does not use it up
+  // a link for a member (the default): someone already in keeps their role and does not use it up;
+  // the first one new gets in, nobody after
   const once = await link({});
-  expect((await listed()).find((l: any) => l.code === once.code)).toMatchObject({ role: "member", once: true });
+  expect((await listed()).find((l: any) => l.code === once.code)).toMatchObject({ role: "member" });
   expect((await post(bare, `/api/invites/${once.code}`, {}, pia.token)).status).toBe(200);
   expect(await roleIn(pia.token)).toBe("owner");
   const quinn = await signUp(bare, "links-quinn@example.org");
@@ -386,22 +386,17 @@ test("invite links give their role; single-use ones work for one person, also wh
   expect((await post(bare, `/api/invites/${once.code}`, {}, quinn.token)).status).toBe(200);
   expect(await roleIn(quinn.token)).toBe("member");
   expect((await post(bare, `/api/invites/${once.code}`, {}, rosa.token)).status).toBe(404);
+  expect(await roleIn(rosa.token)).toBeUndefined();
   expect((await listed()).map((l: any) => l.code)).not.toContain(once.code);
 
-  // a link for several: everyone gets in, it stays
-  const many = await link({ once: false });
-  for (const t of [rosa.token, (await signUp(bare, "links-sam@example.org")).token]) expect((await post(bare, `/api/invites/${many.code}`, {}, t)).status).toBe(200);
-  expect(await roleIn(rosa.token)).toBe("member");
-  expect((await listed()).find((l: any) => l.code === many.code)).toMatchObject({ once: false });
-
-  // two people at the same moment with one single-use link: one gets in
+  // two people at the same moment with one link: one gets in
   const race = await link({});
   const [a, b] = await Promise.all(["links-race-a@example.org", "links-race-b@example.org"].map((e) => signUp(bare, e, race.code).catch(() => null)));
   const ins = await Promise.all([a, b].map((x) => (x ? roleIn(x.token) : undefined)));
   expect(ins.filter(Boolean)).toEqual(["member"]);
 });
 
-test("where only invites let people sign up, a single-use link makes one account, also when two try at once", async () => {
+test("where only invites let people sign up, a link makes one account, also when two try at once", async () => {
   const ada = await post(plain, "/api/auth/sign-in/email", { email: "ada@example.org", password: "geheim12345" }).then((r) => r.json());
   const w = await newWorkspace(plain, ada.token);
   const { code } = await post(plain, `/api/workspaces/${w.id}/invites`, {}, ada.token).then((r) => r.json());

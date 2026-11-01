@@ -20,9 +20,13 @@ export function chooseAction<K extends string>(opts: { title: string; body: stri
   });
 }
 
-/** Ask once before something with consequences; resolves true for "yes". */
-export async function confirmAction(opts: { title: string; body: string; yes: string }): Promise<boolean> {
-  return (await chooseAction({ title: opts.title, body: opts.body, choices: [{ key: "yes", label: opts.yes, primary: true }] })) === "yes";
+/**
+ * Ask once before something with consequences; resolves true for "yes". The one confirmation of the
+ * app: use it rather than a dialog of one's own. `danger`: what cannot be undone (delete, remove,
+ * revoke) gets a red "yes".
+ */
+export async function confirmAction(opts: { title: string; body: string; yes: string; danger?: boolean }): Promise<boolean> {
+  return (await chooseAction({ title: opts.title, body: opts.body, choices: [{ key: "yes", label: opts.yes, primary: !opts.danger, danger: opts.danger }] })) === "yes";
 }
 
 export function ConfirmHost() {

@@ -436,7 +436,7 @@ export async function renameSpace(s: Space, name: string) {
 /** The address of an invite link: whoever opens it may join (with an account of this server). */
 export const joinUrl = (code: string) => `${location.origin}/#/join/${code}`;
 
-/** A new invite link (owners only): for a member or an owner, once (default) or as often as wanted (members only). */
+/** A new invite link (owners only), for one person: a member (default) or an owner. */
 export async function inviteLink(s: Space, opts: InviteRequest = {}): Promise<string> {
   const { code } = await call<InviteCode>(`/api/workspaces/${s.id}/invites`, opts);
   return joinUrl(code);

@@ -88,20 +88,19 @@ export class Accounts {
       CREATE TABLE IF NOT EXISTS workspaces (id TEXT PRIMARY KEY, name TEXT NOT NULL, created INTEGER NOT NULL, legacy INTEGER NOT NULL DEFAULT 0);
       CREATE TABLE IF NOT EXISTS members (workspace TEXT NOT NULL, user TEXT NOT NULL, role TEXT NOT NULL, joined INTEGER NOT NULL, PRIMARY KEY (workspace, user));
       CREATE INDEX IF NOT EXISTS members_user ON members(user);
-      CREATE TABLE IF NOT EXISTS invites (code TEXT PRIMARY KEY, workspace TEXT NOT NULL, by TEXT NOT NULL, created INTEGER NOT NULL, expires INTEGER NOT NULL, role TEXT NOT NULL DEFAULT 'member', once INTEGER NOT NULL DEFAULT 0);
+      CREATE TABLE IF NOT EXISTS invites (code TEXT PRIMARY KEY, workspace TEXT NOT NULL, by TEXT NOT NULL, created INTEGER NOT NULL, expires INTEGER NOT NULL, role TEXT NOT NULL DEFAULT 'member');
       CREATE TABLE IF NOT EXISTS tokens (hash TEXT PRIMARY KEY, user TEXT NOT NULL, workspace TEXT NOT NULL, label TEXT, created INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS admins (user TEXT PRIMARY KEY);
     `);
-    // links from before roles on links: for members, as often as wanted (as they worked)
+    // links from before roles on links are for members
     const cols = (this.db.query("PRAGMA table_info(invites)").all() as { name: string }[]).map((c) => c.name);
     if (!cols.includes("role")) this.db.exec("ALTER TABLE invites ADD COLUMN role TEXT NOT NULL DEFAULT 'member'");
-    if (!cols.includes("once")) this.db.exec("ALTER TABLE invites ADD COLUMN once INTEGER NOT NULL DEFAULT 0");
   }
 
   policy: SignupPolicy;
   login: LoginConfig;
   /**
-   * Single-use links a signup is making an account for right now (code → for which address, since
+   * Links a signup is making an account for right now (code → for which address, since
    * when): until that account has joined, nobody else gets in with the same link. Turned away before
    * Better Auth starts: it shares this connection, and a signup failing inside its transaction would
    * roll back the other one's joining too. Stale after a minute, should that account never come.
@@ -178,7 +177,7 @@ export class Accounts {
     if (c.invite) this.hold(c.invite, email);
   }
 
-  /** Who is signing up with this single-use link right now (see claims). */
+  /** Who is signing up with this link right now (see claims). */
   private claimant(code: string): string | undefined {
     const c = this.claims.get(code);
     if (c && Date.now() - c.since > 60_000) this.claims.delete(code);
@@ -190,9 +189,8 @@ export class Accounts {
     return !!by && by !== email?.trim().toLowerCase();
   }
 
-  /** Hold a single-use link for this address while its account is made. False: someone else holds it. */
+  /** Hold a link for this address while its account is made. False: someone else holds it. */
   private hold(code: string, email: string): boolean {
-    if (!this.invite(code)?.once) return true;
     if (this.claimedByOther(code, email)) return false;
     this.claims.set(code, { email: email.trim().toLowerCase(), since: Date.now() });
     return true;
@@ -222,7 +220,7 @@ export class Accounts {
       for (const w of orphans) this.addMember(w.id, id, "owner");
     }
     const inv = c.invite ? this.invite(c.invite) : undefined;
-    if (c.invite && inv && (!inv.once || this.claimant(c.invite) === email.toLowerCase())) {
+    if (c.invite && inv && this.claimant(c.invite) === email.toLowerCase()) {
       this.release(c.invite, email);
       this.join(c.invite, id);
     }
@@ -420,15 +418,13 @@ export class Accounts {
   // ---------- invites ----------
 
   /**
-   * An invite link's code: whoever joins with it gets `role`, for 14 days or until an owner revokes
-   * it; a single-use one (`once`) works for the first person only. Links for owners are always
-   * single-use: one lost in a chat must not hand out the workspace. Owners only.
+   * An invite link's code: one person may join with it, in `role`, within 14 days and until an owner
+   * revokes it. Then it is used up: a link passed on reaches nobody else. Owners only.
    */
-  createInvite(workspace: string, by: string, role: Role = "member", once = true): string {
+  createInvite(workspace: string, by: string, role: Role = "member"): string {
     if (this.role(workspace, by) !== "owner") throw new AccountError("only owners invite", 403);
-    if (role === "owner" && !once) throw new AccountError("owner links are single-use", 400);
     const code = randomToken();
-    this.db.query("INSERT INTO invites (code, workspace, by, created, expires, role, once) VALUES (?, ?, ?, ?, ?, ?, ?)").run(code, workspace, by, Date.now(), Date.now() + INVITE_DAYS * 86400_000, role, once ? 1 : 0);
+    this.db.query("INSERT INTO invites (code, workspace, by, created, expires, role) VALUES (?, ?, ?, ?, ?, ?)").run(code, workspace, by, Date.now(), Date.now() + INVITE_DAYS * 86400_000, role);
     return code;
   }
 
@@ -436,9 +432,7 @@ export class Accounts {
   invites(workspace: string, by: string): InviteLink[] {
     if (this.role(workspace, by) !== "owner") throw new AccountError("only owners invite", 403);
     this.db.query("DELETE FROM invites WHERE workspace = ? AND expires <= ?").run(workspace, Date.now());
-    return this.db.query('SELECT i.code, i.created, i.expires, i.role, i.once, coalesce(u.name, \'\') AS by FROM invites i LEFT JOIN "user" u ON u.id = i.by WHERE i.workspace = ? ORDER BY i.created DESC')
-      .all(workspace)
-      .map((l: any) => ({ ...l, once: !!l.once })) as InviteLink[];
+    return this.db.query('SELECT i.code, i.created, i.expires, i.role, coalesce(u.name, \'\') AS by FROM invites i LEFT JOIN "user" u ON u.id = i.by WHERE i.workspace = ? ORDER BY i.created DESC').all(workspace) as InviteLink[];
   }
 
   /** An owner takes a link back: whoever has it can no longer join with it. */
@@ -447,22 +441,22 @@ export class Accounts {
     if (!this.db.query("DELETE FROM invites WHERE workspace = ? AND code = ?").run(workspace, code).changes) throw new AccountError("invite invalid", 404);
   }
 
-  invite(code: string): { workspace: string; name: string; by: string; role: Role; once: boolean } | undefined {
-    const row = this.db.query('SELECT i.workspace, w.name, u.name AS by, i.role, i.once FROM invites i JOIN workspaces w ON w.id = i.workspace LEFT JOIN "user" u ON u.id = i.by WHERE i.code = ? AND i.expires > ?').get(code, Date.now()) as { workspace: string; name: string; by: string; role: Role; once: number } | null;
-    return row ? { ...row, once: !!row.once } : undefined;
+  invite(code: string): { workspace: string; name: string; by: string; role: Role } | undefined {
+    const row = this.db.query('SELECT i.workspace, w.name, u.name AS by, i.role FROM invites i JOIN workspaces w ON w.id = i.workspace LEFT JOIN "user" u ON u.id = i.by WHERE i.code = ? AND i.expires > ?').get(code, Date.now()) as { workspace: string; name: string; by: string; role: Role } | null;
+    return row ?? undefined;
   }
 
   /**
-   * Join with a link, in the link's role. Someone already in keeps their role, and a single-use link
-   * stays for whom it was meant; otherwise it is used up in the same step.
+   * Join with a link, in the link's role, and use it up in the same step. Someone already in keeps
+   * their role, and the link stays for whom it was meant.
    */
   join(code: string, user: string): WorkspaceInfo {
     const inv = this.invite(code);
-    if (!inv || (inv.once && this.claimant(code))) throw new AccountError("invite invalid", 404);
+    if (!inv || this.claimant(code)) throw new AccountError("invite invalid", 404);
     if (!this.role(inv.workspace, user))
       this.db.transaction(() => {
         this.addMember(inv.workspace, user, inv.role);
-        if (inv.once) this.db.query("DELETE FROM invites WHERE code = ?").run(code);
+        this.db.query("DELETE FROM invites WHERE code = ?").run(code);
       })();
     return this.workspacesOf(user).find((w) => w.id === inv.workspace)!;
   }
