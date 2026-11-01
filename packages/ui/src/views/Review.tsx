@@ -285,7 +285,7 @@ function Steps({ total, done }: { total: number; done: number }) {
  * The entry in full: what it is, where from and how old, the title, the text, the notes below.
  * As tall as the panel leaves, the same for every entry, so the choices below never move; a long entry scrolls inside, a fade at the
  * bottom says there is more. A click into it edits title and text right there (a file only its
- * title); a quiet "Bearbeiten" in the corner below does the same and becomes "Fertig". A click
+ * title); a quiet "Bearbeiten" in the corner below right does the same and becomes "Fertig". A click
  * outside the card ends it too.
  */
 function EntryCard({ entry, space, more, scroller, editing, onEdit, onDone }: { entry: InboxEntry; space?: string; more: number; scroller: React.RefObject<HTMLDivElement | null>; editing: { at: Edit } | null; onEdit: (at: Edit) => void; onDone: () => void }) {
@@ -416,8 +416,9 @@ function EntryCard({ entry, space, more, scroller, editing, onEdit, onDone }: { 
         </div>
         {rest && <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-surface to-transparent" aria-hidden />}
         </div>
-        {/* "Bearbeiten", while editing "Fertig" in the colour of the card's frame */}
-        <div className="shrink-0 px-8 pb-4 pt-1 max-lg:px-5 max-lg:pb-3">
+        {/* "Bearbeiten", while editing "Fertig" in the colour of the card's frame; in the corner
+            below as far from the edges as "Öffnen" above (its box: the padding less its -1.5 margins) */}
+        <div className="flex shrink-0 justify-end pb-6 pl-8 pr-6.5 pt-1 max-lg:pb-4 max-lg:pl-5 max-lg:pr-3.5">
           <Button
             variant="plain"
             onClick={() => (editing ? onDone() : onEdit(null))}
