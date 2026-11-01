@@ -76,3 +76,13 @@ describe("editing in the card", () => {
     await expect.element(page.getByRole("article").getByText(/ Ys$/)).toBeVisible();
   });
 });
+
+describe("the head", () => {
+  test("the close button sits as far from the top as from the right", async () => {
+    const close = page.getByRole("button", { name: "Schließen" });
+    await expect.element(close).toBeVisible();
+    const panel = document.querySelector("[role=dialog]")!.getBoundingClientRect();
+    const icon = close.element().querySelector("svg")!.getBoundingClientRect();
+    expect(Math.abs(icon.top - panel.top - (panel.right - icon.right))).toBeLessThanOrEqual(1);
+  });
+});
