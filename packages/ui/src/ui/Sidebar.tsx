@@ -1,16 +1,16 @@
 // Sidebar: the workspace selector (which workspaces are seen), search, Heute and the inbox (of
 // the workspaces seen), then each of them as a block of its own (as teamspaces in Notion): its
 // name, the pinned items (informations with their children as a tree, also type pages), and its
-// types with the files. Blocks and what is open in them fold; that is remembered on
+// types with the files. At the bottom: activity and trash (of the workspaces seen) and the settings. Blocks and what is open in them fold; that is remembered on
 // this device. In the tree, dragging replaces the parent you come from; with Alt held a place is
 // added. Dropping on the upper or lower edge of a row reorders. Dropped into another workspace's
 // block, an item moves there.
 import { useEffect, useState } from "react";
-import { ChevronRight, ChevronDown, Inbox, Search, SlidersHorizontal, Link2, Plus, Paperclip, Sun } from "lucide-react";
+import { ChevronRight, ChevronDown, History, Inbox, Search, SlidersHorizontal, Link2, Plus, Paperclip, Sun, Trash2 } from "lucide-react";
 import { type Item, META_TYPE, SETTINGS_ID, setSchemaField, setSettings } from "@obtion/core/model";
 import { sidebarChildren, sidebarRoots } from "@obtion/core/placement";
 import { keyBetween, keysFor, cmpKey } from "@obtion/core/sortkey";
-import { useRepo, useRoute, useSpaceId, itemHref, itemPath, navigate, spaceHref, useLocalStorage } from "../hooks";
+import { useRepo, useRoute, useSpaceId, itemHref, itemPath, spaceHref, useLocalStorage } from "../hooks";
 import { type Space, useAccounts } from "../accounts";
 import { useT } from "../i18n";
 import { Button, IconButton, Kbd, MenuItem, MoreMenu, REVEAL } from "./primitives";
@@ -72,8 +72,14 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
         ))}
         {creating && <NewSpaceDialog onClose={() => setCreating(false)} />}
       </div>
-      {/* below: the settings (the account, its workspaces, this device) */}
+      {/* below: the pages about all workspaces seen (activity, trash) and the settings */}
       <div className="flex flex-col gap-0.5 border-t border-line p-2">
+        <a href="#/activity" className={navCls(route.parts[0] === "activity")}>
+          <History size={16} /> {t("nav.activity")}
+        </a>
+        <a href="#/trash" className={navCls(route.parts[0] === "trash")}>
+          <Trash2 size={16} /> {t("nav.trash")}
+        </a>
         <a href="#/settings" className={navCls(route.path === "/settings" && !route.space)}>
           <SlidersHorizontal size={16} /> {t("nav.settings")}
         </a>
@@ -84,8 +90,8 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
 
 /**
  * One workspace in the sidebar (and the phone menu, `touch`: taller rows, no drag and drop, no
- * hover buttons): its name folds the block, its menu leads to its settings, activity and trash.
- * Dropping an item of another workspace onto the name moves it here.
+ * hover buttons): its name folds the block, "+" pins a new information. Dropping an item of
+ * another workspace onto the name moves it here.
  */
 export function SpaceTree({ space, touch }: { space: Space; touch?: boolean }) {
   const { t } = useT();
@@ -98,7 +104,6 @@ export function SpaceTree({ space, touch }: { space: Space; touch?: boolean }) {
   const ix = repo.index();
   const roots = sidebarRoots(ix);
   const ready = !!repo.get(SETTINGS_ID);
-  const go = (path: string) => navigate(path, { space: space.id });
   const row = cn("flex items-center gap-2 rounded-lg pr-2", touch ? "py-2 text-[15px]" : "py-1 text-sm");
   return (
     <section className="mt-3" aria-label={space.name}>
@@ -132,15 +137,6 @@ export function SpaceTree({ space, touch }: { space: Space; touch?: boolean }) {
             className={touch ? "p-1.5" : "opacity-0 focus:opacity-100 group-hover/space:opacity-100"}
           />
         )}
-        <MoreMenu size="xs" iconSize={14} label={t("space.menu", { name: space.name })} className={touch ? "p-1.5" : "opacity-0 focus:opacity-100 group-hover/space:opacity-100 aria-expanded:opacity-100"}>
-          {(close) => (
-            <>
-              <MenuItem onClick={() => (close(), go("/settings"))}>{t("space.settings")}</MenuItem>
-              <MenuItem onClick={() => (close(), go("/activity"))}>{t("nav.activity")}</MenuItem>
-              <MenuItem onClick={() => (close(), go("/trash"))}>{t("nav.trash")}</MenuItem>
-            </>
-          )}
-        </MoreMenu>
       </div>
       {/* set up as soon as it is in step with the server (accounts.ts) */}
       {open && !ready && <p className={cn(row, "pl-[30px] text-muted-foreground", !touch && "mx-2")}>{t("app.syncing")}</p>}
