@@ -312,7 +312,7 @@ function EntryCard({ entry, space, more, scroller, editing, onEdit, onDone }: { 
     if (!editing) return;
     const on = (e: PointerEvent) => {
       const el = e.target as Element;
-      if (!self.current?.contains(el) && !el.closest?.(".cm-menu, .cm-tooltip, [role=dialog], [data-radix-popper-content-wrapper]")) onDone();
+      if (!self.current?.contains(el) && !el.closest?.(".cm-menu, .cm-tooltip, [role=dialog]:not([data-shelf-panel]), [data-radix-popper-content-wrapper]")) onDone();
     };
     document.addEventListener("pointerdown", on, true);
     return () => document.removeEventListener("pointerdown", on, true);

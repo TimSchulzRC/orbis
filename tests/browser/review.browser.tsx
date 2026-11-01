@@ -57,6 +57,14 @@ describe("editing in the card", () => {
     await expect.poll(() => hints().length, { message: "and come back after it" }).toBeGreaterThan(0);
   });
 
+  test("a click elsewhere in the panel (its head) ends editing", async () => {
+    await expect.element(card()).toBeVisible();
+    await page.getByRole("button", { name: "Bearbeiten" }).click();
+    await expect.poll(() => document.querySelector("main article textarea")).not.toBeNull();
+    await page.getByRole("heading", { level: 2, name: "Eingang" }).click();
+    await expect.poll(() => document.querySelector("main article textarea")).toBeNull();
+  });
+
   test('"Bearbeiten" puts the caret into the text; Esc ends it and keeps what was typed', async () => {
     await expect.element(card()).toBeVisible();
     await page.getByRole("button", { name: "Bearbeiten" }).click();
