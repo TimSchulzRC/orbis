@@ -69,10 +69,14 @@ export function useContextMenu(): ContextMenu {
   return {
     open,
     point,
-    onOpenChange: (o) => (setOpen(o), o || setPoint(null)),
+    // the point stays while the menu fades out: without it the menu would jump to the "…" button
+    // for that time, over the next rows, and catch a right click meant for one of them
+    onOpenChange: (o) => (setOpen(o), o && setPoint(null)),
     onContextMenu: (e) => {
       e.preventDefault();
       e.stopPropagation();
+      // a right click in the open menu itself reaches the row through the portal: nothing to open
+      if (!e.currentTarget.contains(e.target as Node)) return;
       setPoint({ x: e.clientX, y: e.clientY });
       setOpen(true);
     },

@@ -6,16 +6,19 @@ import { cleanup, render } from "vitest-browser-react";
 import { MenuItem, MoreMenu, useContextMenu } from "../../packages/ui/src/ui/primitives";
 
 const onTrash = vi.fn();
-function Row() {
+function Row({ title = "Website-Relaunch", extra }: { title?: string; extra?: string }) {
   const menu = useContextMenu();
   return (
-    <div onContextMenu={menu.onContextMenu} style={{ display: "flex", gap: 8, padding: 40 }}>
-      <span>Website-Relaunch</span>
+    <div onContextMenu={menu.onContextMenu} style={{ display: "flex", gap: 8, width: 320, padding: "0 40px" }}>
+      <span style={{ flex: 1 }}>{title}</span>
       <MoreMenu menu={menu}>
         {(close) => (
-          <MenuItem danger onClick={() => (close(), onTrash())}>
-            In den Papierkorb
-          </MenuItem>
+          <>
+            {extra && <MenuItem onClick={close}>{extra}</MenuItem>}
+            <MenuItem danger onClick={() => (close(), onTrash())}>
+              In den Papierkorb
+            </MenuItem>
+          </>
         )}
       </MoreMenu>
     </div>
@@ -41,4 +44,21 @@ test("the … button still opens it", async () => {
   await render(<Row />);
   await page.getByRole("button", { name: "Mehr" }).click();
   await expect.element(page.getByRole("button", { name: "In den Papierkorb" })).toBeVisible();
+});
+
+test("a right click on the next row opens its menu, while the first one fades out", async () => {
+  await render(
+    <div style={{ paddingTop: 40 }}>
+      <Row title="Kleine Systeme" />
+      <Row title="Warum offline" extra="Als Hauptort" />
+    </div>,
+  );
+  // the menu opens right of the mouse; the "…" button sits right of the text
+  const first = page.getByText("Kleine Systeme");
+  const { width } = first.element().getBoundingClientRect();
+  await first.click({ button: "right", position: { x: width - 5, y: 8 } });
+  await expect.element(page.getByRole("button", { name: "In den Papierkorb" })).toBeVisible();
+  // left of that, right below: where the fading menu would sit if it went back to its "…" button
+  await page.getByText("Warum offline").click({ button: "right", position: { x: width - 45, y: 8 } });
+  await expect.element(page.getByRole("button", { name: "Als Hauptort" })).toBeVisible();
 });
