@@ -129,3 +129,31 @@ test("a content stored in this session and not yet in a file stays", async () =>
   await new Promise((r) => setTimeout(r, 800));
   expect(files.hasLocal("0".repeat(64))).toBe(true);
 });
+
+test("switching to online only while a downloaded original is being written: it is not kept", async () => {
+  const srv = server();
+  const repo = await workspace(false);
+  const a = await srv.add("big original");
+  addFile(repo, "a.pdf", a);
+  const { files } = deviceFiles(repo);
+  // hold the write of the original on this device
+  const inner = files as unknown as { ready: Promise<void>; store: { put(h: string, b: Blob): Promise<void> } };
+  await inner.ready;
+  const store = inner.store;
+  let release!: () => void;
+  const writing = new Promise<void>((r) => (release = r));
+  let started = false;
+  const put = store.put.bind(store);
+  store.put = async (h, b) => {
+    if (h === a.hash) (started = true, await writing);
+    return put(h, b);
+  };
+  files.setMode("local");
+  await expect.poll(() => started, { timeout: 5000 }).toBe(true);
+  files.setMode("online");
+  await files.dropOriginals();
+  release();
+  await expect.poll(() => files.status.downloading, { timeout: 5000 }).toBe(0);
+  await new Promise((r) => setTimeout(r, 100));
+  expect(files.hasLocal(a.hash)).toBe(false);
+});

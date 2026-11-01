@@ -453,8 +453,10 @@ export class DeviceFiles {
       this.active++;
       this.fetchVerified(h)
         .then(async (blob) => {
-          // switched to "online only" meanwhile: an original that arrives now is not kept
-          if (blob && (this.mode === "local" || keptOnline(this.repo).has(h))) await this.save(h, blob);
+          // switched to "online only" meanwhile (also while it was written): the original is not kept
+          const wanted = () => this.mode === "local" || keptOnline(this.repo).has(h);
+          if (blob && wanted()) await this.save(h, blob);
+          if (this.local.has(h) && !wanted()) await this.drop(h);
         })
         .finally(() => {
           this.active--;
