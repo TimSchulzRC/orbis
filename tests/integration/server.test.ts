@@ -1,6 +1,6 @@
 // The server as a program: accounts and workspaces (who sees what), with and without the web app,
 // the data from before accounts, and the sync per workspace. Starts real servers.
-import { test, expect, beforeAll, afterAll } from "bun:test";
+import { test, expect, beforeAll, afterAll, setDefaultTimeout } from "bun:test";
 import * as Y from "yjs";
 import { tempDir, removeTempDirs } from "../support/helpers";
 import { bootServer, del, get, mcpPost, post } from "../support/server";
@@ -10,6 +10,12 @@ import { Store } from "@obtion/server/store";
 import { Database } from "bun:sqlite";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+
+// Servers start as their own processes: on a fresh checkout (cold transpiler cache) and beside the
+// other checks in CI that takes seconds, more than bun's default of five. A test or hook that runs
+// out of time also takes all the servers with it (bun kills the processes it spawned), so every test
+// after it fails too. bootServer gives up after ten seconds; the tests get more than that.
+setDefaultTimeout(30_000);
 
 const procs: ReturnType<typeof Bun.spawn>[] = [];
 async function start(env: Record<string, string>): Promise<string> {

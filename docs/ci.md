@@ -10,6 +10,8 @@
 
 A failed browser or E2E test gets one more try; a test that passes only then shows as flaky (Vitest) or with a warning (E2E). It is no bug in the code, most likely a load spike on the machine, but worth a look if it keeps happening.
 
+Tests that start servers as their own processes (`tests/integration/server.test.ts`) get 30 seconds instead of bun's five: beside the other checks a server can take seconds to start, and a test that runs out of time takes all the file's servers with it, so the tests after it fail too.
+
 ## Runners
 
 With the repository variable `RUNNER=obtion`, all jobs run on the self-hosted machine; without it on GitHub's runners. The machine has two runners, so two jobs run at once (`check` beside `image`, or two pull requests):
