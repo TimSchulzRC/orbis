@@ -25,12 +25,12 @@ const pdfjs = dirname(
 		"pdfjs-dist/package.json",
 	),
 );
-const pdfWasm = {
+const pdfWasm: Plugin = {
 	name: "pdfjs-wasm",
-	writeBundle() {
-		mkdirSync("dist/pdfjs/wasm", { recursive: true });
+	writeBundle({ dir = "dist" }) {
+		mkdirSync(join(dir, "pdfjs/wasm"), { recursive: true });
 		for (const f of ["jbig2.wasm", "openjpeg.wasm", "qcms_bg.wasm"])
-			copyFileSync(join(pdfjs, "wasm", f), `dist/pdfjs/wasm/${f}`);
+			copyFileSync(join(pdfjs, "wasm", f), join(dir, "pdfjs/wasm", f));
 	},
 };
 
@@ -122,7 +122,11 @@ function toServer(ws = false): ProxyOptions {
 	};
 }
 
-export default defineConfig({
+/**
+ * `vite build --mode desktop`: the same app as the desktop app's pages (apps/desktop), into its
+ * folder. No service worker there: the desktop app brings its version itself.
+ */
+export default defineConfig(({ mode }) => ({
 	plugins: [
 		react(),
 		tailwindcss(),
@@ -131,6 +135,7 @@ export default defineConfig({
 		atomicWatch,
 		devIcons,
 		VitePWA({
+			disable: mode === "desktop",
 			// the app asks before switching versions instead of silently serving the old cache
 			registerType: "prompt",
 			injectRegister: false,
@@ -172,7 +177,11 @@ export default defineConfig({
 			},
 		}),
 	],
-	build: { outDir: "dist", chunkSizeWarningLimit: 2000 },
+	build: {
+		outDir: mode === "desktop" ? "../desktop/dist/renderer" : "dist",
+		emptyOutDir: mode === "desktop" || undefined,
+		chunkSizeWarningLimit: 2000,
+	},
 	server: {
 		port: 5180,
 		// 127.0.0.1, not only ::1: `tailscale serve` forwards to 127.0.0.1
@@ -187,4 +196,4 @@ export default defineConfig({
 			"/w/": toServer(true),
 		},
 	},
-});
+}));

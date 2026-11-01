@@ -8,6 +8,7 @@
 //   Outlook .msg: the readable strings in it
 //   anything else that decodes as text (UTF-8, UTF-16 with BOM, else Windows-1252): the text,
 //   HTML without its tags
+/// <reference path="./pdfjs-worker.d.ts" />
 import { inflateRawSync } from "node:zlib";
 
 /** Text kept per file, in characters (on the server, beside the content: Blobs.text). */
@@ -530,6 +531,11 @@ function colIndex(ref: string): number {
 let pdfjs: typeof import("pdfjs-dist/legacy/build/pdf.mjs") | undefined;
 async function pdfText(path: string): Promise<Extracted> {
 	pdfjs ??= await import("pdfjs-dist/legacy/build/pdf.mjs");
+	// the worker in this process, imported here: a server compiled to one program (the desktop
+	// app's) has no file pdf.js could load it from
+	(globalThis as { pdfjsWorker?: unknown }).pdfjsWorker ??= await import(
+		"pdfjs-dist/legacy/build/pdf.worker.mjs"
+	);
 	const data = new Uint8Array(await Bun.file(path).arrayBuffer());
 	const task = pdfjs.getDocument({ data, disableFontFace: true, verbosity: 0 });
 	try {

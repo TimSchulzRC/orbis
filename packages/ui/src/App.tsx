@@ -11,8 +11,8 @@ import {
 	Trash2,
 	X,
 } from "lucide-react";
-import { useEffect, useState } from "react";
-import { signOut, useAccounts } from "./accounts";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { serverName, signOut, useAccounts } from "./accounts";
 import { Backdrop, ModalSurface } from "./components/ui/dialog";
 import { DrawingHost } from "./drawing/Drawing";
 import {
@@ -37,7 +37,7 @@ import { HistoryButtons } from "./ui/HistoryButtons";
 import { ICON } from "./ui/icons";
 import { syncShelf, useInboxItems, useShelf } from "./ui/inbox";
 import { LightboxHost } from "./ui/Lightbox";
-import { Button, IconButton, PagePlaceholder } from "./ui/primitives";
+import { Button, Dialog, IconButton, PagePlaceholder } from "./ui/primitives";
 import { Sidebar, SpaceTree } from "./ui/Sidebar";
 import { NewSpaceDialog, SpaceScope, SpaceSelector, useReplicas } from "./ui/Spaces";
 import { StatusButton } from "./ui/StatusButton";
@@ -46,7 +46,7 @@ import { KEYS } from "./ui/storage";
 import { TitleTips } from "./ui/TitleTips";
 import { Tray } from "./ui/Tray";
 import { AppToaster } from "./ui/toasts";
-import { Gate } from "./views/Account";
+import { ConnectServer, Gate } from "./views/Account";
 import { Activity } from "./views/Activity";
 import { GraphView } from "./views/Graph";
 import { ItemPage } from "./views/ItemPage";
@@ -71,14 +71,34 @@ export function App() {
 	);
 }
 
+/** A server no longer takes its account's token: sign in again (the app's own: anew; a further one: there). */
 function SignedOut() {
 	const { t } = useT();
-	const { account } = useAccounts();
-	if (!account?.lost) return null;
+	const { account, remotes } = useAccounts();
+	const [again, setAgain] = useState<string | null>(null);
+	const lost = [
+		...(account?.lost ? [undefined] : []),
+		...remotes.filter((r) => r.account.lost).map((r) => r.url),
+	];
 	return (
-		<StatusBanner action={{ label: t("account.signInAgain"), run: () => void signOut() }}>
-			{t("account.lost", { server: location.host })}
-		</StatusBanner>
+		<>
+			{lost.map((server) => (
+				<StatusBanner
+					action={{
+						label: t("account.signInAgain"),
+						run: () => (server ? setAgain(server) : void signOut()),
+					}}
+					key={server ?? ""}
+				>
+					{t("account.lost", { server: serverName(server) })}
+				</StatusBanner>
+			))}
+			{again && (
+				<Dialog onClose={() => setAgain(null)} title={t("account.signInAgain")}>
+					<ConnectServer initial={again} onDone={() => setAgain(null)} />
+				</Dialog>
+			)}
+		</>
 	);
 }
 

@@ -1,0 +1,57 @@
+name: Desktop
+
+# The desktop app for macOS (Apple Silicon and Intel), Windows and Linux, each built on its own
+# system (a Mac signs the app ad hoc, which only works there). The installers are the run's
+# artifacts. Runs when the desktop app itself changes, or by hand (Run workflow) for any state:
+# macOS runners cost ten times the minutes, so not for every pull request.
+on:
+  push:
+    branches: [main]
+    paths: [apps/desktop/**, .github/workflows/desktop.yml]
+  pull_request:
+    paths: [apps/desktop/**, .github/workflows/desktop.yml]
+  workflow_dispatch:
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: macos-latest, platform: mac, arch: --x64 --arm64 }
+          - { runner: windows-latest, platform: win, arch: --x64 }
+          - { runner: ubuntu-latest, platform: linux, arch: --x64 }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: apps/desktop
+    steps:
+      - uses: actions/checkout@v7
+      # the newest Bun release, like ci.yml and the Dockerfile
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - run: bun scripts/build.ts ${{ matrix.platform }}
+      - run: bunx electron-builder --${{ matrix.platform }} ${{ matrix.arch }} --publish never
+        # the Mac's ad-hoc signature uses no secret: also for pull requests (else the app does not start on Apple Silicon)
+        env:
+          CSC_FOR_PULL_REQUEST: true
+      - uses: actions/upload-artifact@v7
+        with:
+          name: obtion-desktop-${{ matrix.platform }}
+          path: |
+            apps/desktop/release/*.dmg
+            apps/desktop/release/*.zip
+            apps/desktop/release/*.exe
+            apps/desktop/release/*.AppImage
+            apps/desktop/release/*.deb
+          if-no-files-found: error

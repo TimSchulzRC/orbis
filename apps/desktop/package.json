@@ -1,0 +1,25 @@
+{
+	"name": "@obtion/desktop",
+	"version": "0.1.0",
+	"private": true,
+	"description": "The desktop app (Electron): the web app's interface in a window of its own, with a server on this device for local workspaces",
+	"homepage": "https://github.com/TimSchulzRC/obtion",
+	"license": "AGPL-3.0-or-later",
+	"author": "Tim Schulz",
+	"type": "module",
+	"main": "dist/main.cjs",
+	"scripts": {
+		"build": "bun scripts/build.ts",
+		"dist": "bun scripts/build.ts && electron-builder --publish never",
+		"start": "node node_modules/electron/install.js && electron ."
+	},
+	"devDependencies": {
+		"@obtion/core": "workspace:*",
+		"@obtion/ui": "workspace:*",
+		"@types/bun": "^1.4.4",
+		"@types/node": "^26.6.6",
+		"electron": "^45.2.0",
+		"electron-builder": "^26.18.0"
+	},
+	"productName": "Obtion"
+}

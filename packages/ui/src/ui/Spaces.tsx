@@ -3,15 +3,26 @@
 
 import type { Repo } from "@obtion/sync";
 import { ChevronsUpDown, Plus } from "lucide-react";
-import { useId, useMemo, useState, useSyncExternalStore } from "react";
-import { createSpace, errorText, replica, setShown, spaceById, useAccounts } from "../accounts";
+import { Fragment, useId, useMemo, useState, useSyncExternalStore } from "react";
+import {
+	createSpace,
+	errorText,
+	replica,
+	serverName,
+	setShown,
+	spaceById,
+	useAccounts,
+} from "../accounts";
 import { Checkbox } from "../components/ui/checkbox";
 import { Input } from "../components/ui/input";
+import { NativeSelect } from "../components/ui/native-select";
 import { navigate, openItem, parseHash, useSpaceId } from "../hooks";
 import { titleOf, tr, useT } from "../i18n";
 import { cn } from "../lib/utils";
 import { MoveError, moveToSpace, planToSpace } from "../move";
+import { canConnect, desktop } from "../platform";
 import { globalPage, ScopeContext } from "../scope";
+import { ConnectServer } from "../views/Account";
 import { BrandLogo } from "./BrandLogo";
 import { confirmAction, notify } from "./feedback";
 import { Button, Dialog, MenuItem, Popover } from "./primitives";
@@ -47,11 +58,32 @@ export function SpaceEyebrow() {
 	return <p className="mb-0.5 text-[13px] text-muted-foreground">{spaceById(id ?? "")?.name}</p>;
 }
 
+/** The accounts on this device, each with what to call it: the app's own server's first, then the further ones. */
+export function useServers() {
+	const { t } = useT();
+	const { account, remotes } = useAccounts();
+	return [
+		{
+			server: undefined as string | undefined,
+			email: account?.user.email ?? "",
+			label: desktop ? t("server.local") : (account?.user.email ?? ""),
+			lost: !!account?.lost,
+		},
+		...remotes.map((r) => ({
+			server: r.url as string | undefined,
+			email: r.account.user.email,
+			label: t("server.accountOn", { email: r.account.user.email, server: serverName(r.url) }),
+			lost: !!r.account.lost,
+		})),
+	];
+}
+
 /** Which workspaces are seen: the label says it ("All workspaces", one name, or the names); the menu ticks them. */
 export function SpaceSelector({ className, onNew }: { className?: string; onNew: () => void }) {
 	const { t } = useT();
 	const boxId = useId();
-	const { account, spaces, shown } = useAccounts();
+	const { spaces, shown } = useAccounts();
+	const servers = useServers();
 	const ids = shown.map((s) => s.id);
 	const label =
 		shown.length === spaces.length && spaces.length > 1
@@ -80,26 +112,32 @@ export function SpaceSelector({ className, onNew }: { className?: string; onNew:
 		>
 			{(close) => (
 				<div className="w-72 p-1">
-					<p className="truncate px-2.5 pb-0.5 pt-1.5 text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">
-						{account?.user.email}
-						{account?.lost && ` · ${t("account.signedOut")}`}
-					</p>
-					{/* several at once: boxes, not a choice of one */}
-					{spaces.map((s) => (
-						<label
-							className="tap-row flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm hover:bg-hover"
-							htmlFor={`${boxId}-${s.id}`}
-							key={s.id}
-						>
-							<Checkbox
-								checked={ids.includes(s.id)}
-								className="size-4"
-								disabled={ids.length === 1 && ids.includes(s.id)}
-								id={`${boxId}-${s.id}`}
-								onCheckedChange={() => toggle(s.id)}
-							/>
-							<span className="min-w-0 flex-1 truncate">{s.name}</span>
-						</label>
+					{/* per account; several at once: boxes, not a choice of one */}
+					{servers.map((g) => (
+						<Fragment key={g.server ?? ""}>
+							<p className="truncate px-2.5 pb-0.5 pt-1.5 text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">
+								{g.label}
+								{g.lost && ` · ${t("account.signedOut")}`}
+							</p>
+							{spaces
+								.filter((s) => s.server === g.server)
+								.map((s) => (
+									<label
+										className="tap-row flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm hover:bg-hover"
+										htmlFor={`${boxId}-${s.id}`}
+										key={s.id}
+									>
+										<Checkbox
+											checked={ids.includes(s.id)}
+											className="size-4"
+											disabled={ids.length === 1 && ids.includes(s.id)}
+											id={`${boxId}-${s.id}`}
+											onCheckedChange={() => toggle(s.id)}
+										/>
+										<span className="min-w-0 flex-1 truncate">{s.name}</span>
+									</label>
+								))}
+						</Fragment>
 					))}
 					<div className="my-1 border-t border-line" />
 					<MenuItem
@@ -200,16 +238,15 @@ export function useReplicas(ids: string[]): Repo[] {
 	return repos;
 }
 
-export function NewSpaceDialog({ onClose }: { onClose: () => void }) {
-	const { t } = useT();
-	return (
-		<Dialog onClose={onClose} title={t("space.new")}>
-			<NewSpaceForm onCancel={onClose} onDone={onClose} />
-		</Dialog>
-	);
-}
+/** "Anderer Server …" in the choice of servers: one connected here first. */
+const OTHER = "+";
 
-/** The workspace is set up in the app's language. */
+/**
+ * A new workspace: its name, whether it starts with the examples (set up in the app's language)
+ * and, in the desktop app, where it goes – on this device or on a server: one connected already,
+ * or another one, connected here first with a new account or an existing one (whose workspaces
+ * come along; then the name may stay empty).
+ */
 export function NewSpaceForm({
 	name: initial = "",
 	onCancel,
@@ -222,60 +259,125 @@ export function NewSpaceForm({
 	const { t } = useT();
 	const nameId = useId();
 	const examplesId = useId();
+	const { remotes } = useAccounts();
 	const [name, setName] = useState(initial);
 	const [examples, setExamples] = useState(true);
+	const [where, setWhere] = useState<"local" | "server">("local");
+	const [server, setServer] = useState(remotes[0]?.url ?? OTHER);
 	const [error, setError] = useState("");
 	const [busy, setBusy] = useState(false);
+	const connecting = canConnect && where === "server" && server === OTHER;
+	const create = (srv?: string) => {
+		setBusy(true);
+		setError("");
+		return createSpace(name, examples, srv).then(
+			onDone,
+			(err) => (setError(errorText(err, t, "space")), setBusy(false)),
+		);
+	};
+	const submit = () => name.trim() && !busy && void create(where === "server" ? server : undefined);
 	return (
-		<form
-			onSubmit={(e) => {
-				e.preventDefault();
-				setBusy(true);
-				createSpace(name, examples).then(onDone, (err) => {
-					setError(errorText(err, t, "space"));
-					setBusy(false);
-				});
-			}}
-		>
+		<div>
 			<label className="block text-sm font-medium" htmlFor={nameId}>
-				{t("space.name")}
+				{connecting ? t("server.nameOptional") : t("space.name")}
 				<Input
 					autoFocus
 					className="mt-1 block bg-surface"
 					id={nameId}
 					onChange={(e) => setName(e.target.value)}
-					required
+					onKeyDown={(e) => !connecting && e.key === "Enter" && (e.preventDefault(), submit())}
 					value={name}
 				/>
 			</label>
-			<label
-				className="mt-4 flex cursor-pointer gap-3 rounded-xl border border-line p-3 hover:bg-hover"
-				htmlFor={examplesId}
-			>
-				<Checkbox
-					checked={examples}
-					className="mt-0.5 size-4 shrink-0"
-					id={examplesId}
-					onCheckedChange={(checked) => setExamples(checked === true)}
-				/>
-				<span>
-					<span className="block text-sm font-medium">{t("setup.examples")}</span>
-					<span className="block text-xs text-muted-foreground">{t("setup.examplesHint")}</span>
-				</span>
-			</label>
-			{error && <p className="mt-3 text-sm text-danger">{error}</p>}
-			<div className="mt-5 flex justify-end gap-2">
-				{onCancel && <Button onClick={onCancel}>{t("cancel")}</Button>}
-				<Button
-					className={onCancel ? undefined : "w-full"}
-					disabled={busy || !name.trim()}
-					type="submit"
-					variant="primary"
+			{connecting && (
+				<p className="mt-1 text-xs text-muted-foreground">{t("server.nameOptionalHint")}</p>
+			)}
+			{(!connecting || name.trim()) && (
+				<label
+					className="mt-4 flex cursor-pointer gap-3 rounded-xl border border-line p-3 hover:bg-hover"
+					htmlFor={examplesId}
 				>
-					{t("space.create")}
-				</Button>
-			</div>
-		</form>
+					<Checkbox
+						checked={examples}
+						className="mt-0.5 size-4 shrink-0"
+						id={examplesId}
+						onCheckedChange={(checked) => setExamples(checked === true)}
+					/>
+					<span>
+						<span className="block text-sm font-medium">{t("setup.examples")}</span>
+						<span className="block text-xs text-muted-foreground">{t("setup.examplesHint")}</span>
+					</span>
+				</label>
+			)}
+			{canConnect && (
+				<fieldset className="mt-4">
+					<legend className="mb-1.5 text-sm font-medium">{t("server.where")}</legend>
+					<div className="grid gap-2 sm:grid-cols-2">
+						{(["local", "server"] as const).map((w) => (
+							<Button
+								aria-pressed={where === w}
+								className={cn(
+									"flex flex-col justify-start rounded-xl border p-3 text-left",
+									where === w ? "border-focus bg-surface" : "border-line hover:bg-hover",
+								)}
+								key={w}
+								onClick={() => (setWhere(w), setError(""))}
+								variant="plain"
+							>
+								<p className="text-sm font-medium">
+									{t(w === "local" ? "server.local" : "server.remote")}
+								</p>
+								<p className="text-xs text-muted-foreground">
+									{t(w === "local" ? "server.localHint" : "server.remoteHint")}
+								</p>
+							</Button>
+						))}
+					</div>
+				</fieldset>
+			)}
+			{canConnect && where === "server" && remotes.length > 0 && (
+				<label className="mt-4 block text-sm font-medium">
+					{t("server.which")}
+					<NativeSelect
+						className="mt-1 block w-full bg-surface"
+						onChange={(e) => setServer(e.target.value)}
+						value={server}
+					>
+						{remotes.map((r) => (
+							<option key={r.url} value={r.url}>
+								{t("server.accountOn", { email: r.account.user.email, server: serverName(r.url) })}
+							</option>
+						))}
+						<option value={OTHER}>{t("server.other")}</option>
+					</NativeSelect>
+				</label>
+			)}
+			{error && <p className="mt-3 text-sm text-danger">{error}</p>}
+			{connecting ? (
+				<ConnectServer onDone={(url) => (name.trim() ? void create(url) : onDone?.())} />
+			) : (
+				<div className="mt-5 flex justify-end gap-2">
+					{onCancel && <Button onClick={onCancel}>{t("cancel")}</Button>}
+					<Button
+						className={onCancel ? undefined : "w-full"}
+						disabled={busy || !name.trim()}
+						onClick={submit}
+						variant="primary"
+					>
+						{t("space.create")}
+					</Button>
+				</div>
+			)}
+		</div>
+	);
+}
+
+export function NewSpaceDialog({ onClose }: { onClose: () => void }) {
+	const { t } = useT();
+	return (
+		<Dialog onClose={onClose} title={t("space.new")}>
+			<NewSpaceForm onCancel={onClose} onDone={onClose} />
+		</Dialog>
 	);
 }
 
