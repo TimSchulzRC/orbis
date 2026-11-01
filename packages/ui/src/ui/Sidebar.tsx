@@ -32,6 +32,15 @@ import { notify } from "./toasts";
  * type page, which only changes its place among the pinned) or a row of "Typen", and from which workspace.
  */
 let dragging: { id: string; from: string | null; space: string; type?: boolean } | null = null;
+/**
+ * Starts a drag of the sidebar's own: only the title as text. The address the browser adds for a
+ * link is dropped, or it takes the drag for a link to open elsewhere (a new tab, a split view).
+ */
+const startDrag = (e: React.DragEvent, d: NonNullable<typeof dragging>, text: string) => {
+  dragging = d;
+  e.dataTransfer.clearData();
+  e.dataTransfer.setData("text/plain", text);
+};
 /** Can it go into another workspace? Items can (a move), type pages and rows of "Typen" not. */
 const movable = (d: typeof dragging) => !!d && d.from !== "types" && !d.type;
 
@@ -237,7 +246,7 @@ function TypeNav({ touch, here }: { touch?: boolean; here: boolean }) {
           key={r.id}
           href={r.href}
           draggable={!touch}
-          onDragStart={(e) => ((dragging = { id: r.id, from: "types", space }), e.dataTransfer.setData("text/plain", r.label))}
+          onDragStart={(e) => startDrag(e, { id: r.id, from: "types", space }, r.label)}
           onDragOver={(e) => {
             if (!ours() || dragging!.id === r.id) return;
             e.preventDefault();
@@ -364,9 +373,8 @@ function TreeNode({
       <div
         draggable={!touch}
         onDragStart={(e) => {
-          dragging = { id: item.id, from: parent, space, type: isType };
+          startDrag(e, { id: item.id, from: parent, space, type: isType }, item.title);
           e.dataTransfer.effectAllowed = "copyMove";
-          e.dataTransfer.setData("text/plain", item.title);
         }}
         onDragOver={(e) => {
           const d = dragging;
@@ -405,7 +413,8 @@ function TreeNode({
           {isOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
         </Button>
         {isType ? <TypeGlyph schema={item.schema} size={touch ? 17 : 15} /> : <ItemIcon item={item} size={touch ? 17 : 15} />}
-        <a href={spaceHref(space, itemPath(item.id))} className="min-w-0 flex-1 truncate" title={item.title} aria-current={activeId === item.id ? "page" : undefined}>
+        {/* the row is dragged, not the link in it */}
+        <a href={spaceHref(space, itemPath(item.id))} draggable={false} className="min-w-0 flex-1 truncate" title={item.title} aria-current={activeId === item.id ? "page" : undefined}>
           {isType ? ix.typePlural(item.id) : distinctLabel(item.title, parent ? ix.get(parent)?.title : undefined) || t("untitled")}
         </a>
         {secondary && (
