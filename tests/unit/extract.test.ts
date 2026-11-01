@@ -72,3 +72,18 @@ test("long text is cut at TEXT_MAX", async () => {
 test("a broken Office file or ZIP gives nothing instead of failing", async () => {
   expect(await text("kaputt.docx", new Uint8Array([0x50, 0x4b, 0x03, 0x04, 1, 2, 3]))).toEqual({});
 });
+
+test("hostile or odd files stay small: far Excel columns, a cut UTF-8 character, OpenDocument paragraphs", async () => {
+  // a cell reference far beyond Excel's columns allocates nothing
+  const far = zip({
+    "xl/workbook.xml": '<workbook xmlns:r="r"><sheets><sheet name="S" r:id="rId1"/></sheets></workbook>',
+    "xl/_rels/workbook.xml.rels": '<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>',
+    "xl/worksheets/sheet1.xml": '<worksheet><sheetData><row r="1"><c r="ZZZZZZZ1" t="inlineStr"><is><t>x</t></is></c><c r="A1"><v>1</v></c></row></sheetData></worksheet>',
+  });
+  expect((await text("weit.xlsx", far)).text).toBe("Sheet: S\n1");
+  // more than what is read, in UTF-8: a character cut at the end is no reason for Windows-1252
+  const umlauts = await text("lang.txt", "ä".repeat(600_000));
+  expect(umlauts.text!.startsWith("ää")).toBe(true);
+  const odt = zip({ mimetype: "application/vnd.oasis.opendocument.text", "content.xml": '<office:document-content><office:body><office:text><text:p>Erster Absatz</text:p><text:p>Zweiter <text:span>Absatz</text:span></text:p></office:text></office:body></office:document-content>' });
+  expect((await text("brief.odt", odt)).text).toBe("Erster Absatz\nZweiter Absatz");
+});

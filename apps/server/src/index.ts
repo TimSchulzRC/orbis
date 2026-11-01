@@ -12,7 +12,7 @@ import { agentOrigin, firstName, personOrigin } from "@obtion/core/origin";
 import { agentName } from "./mcp";
 import { type Lang, LANGS, translate } from "@obtion/core/i18n";
 import { allowedHosts } from "./trust";
-import { DATA, MAX_WS_MESSAGE, PORT } from "./config";
+import { DATA, MAX_BLOB, MAX_WS_MESSAGE, PORT } from "./config";
 import { body, fail, json } from "./http";
 
 const HOST = process.env.HOST ?? "127.0.0.1";
@@ -264,6 +264,8 @@ const server = Bun.serve<Conn>({
   port: PORT,
   hostname: HOST,
   idleTimeout: 0,
+  // a file's content may be as large as MAX_BLOB (Bun's default stops at 128 MB); the routes check it themselves
+  maxRequestBodySize: MAX_BLOB,
   async fetch(req, srv) {
     const url = new URL(req.url);
     const path = url.pathname;
