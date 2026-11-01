@@ -114,7 +114,6 @@ export interface McpConnect {
 /** POST /w/<id>/api/undo */
 export interface UndoRequest {
   step: string;
-  redo?: boolean;
   device?: string;
 }
 

@@ -1,9 +1,8 @@
-// Activity: every change with who made it (a person, an agent working for one, an import). Bulk
-// operations like deleting a type are listed here and can be undone.
+// Activity: a log of every change with who made it (a person, an agent working for one, an
+// import), bulk operations like deleting a type included.
 import { useEffect, useState } from "react";
 import { spaceCall, useAccounts } from "../accounts";
 import { SpaceEyebrow } from "../ui/Spaces";
-import { Undo2, Redo2 } from "lucide-react";
 import type { ActivityEvent, FieldChange } from "@obtion/core/protocol";
 import { type Item, META_TYPE, optionNames, type Value } from "@obtion/core/model";
 import type { Index } from "@obtion/core/graph";
@@ -127,27 +126,11 @@ function systemText(text: string, t: T): string {
   return text;
 }
 
-/** Everything one step did (one user action or tool call), with one "Rückgängig" for all of it. */
-function StepGroup({ events, onChanged }: { events: ActivityEvent[]; onChanged: () => void }) {
-  const r = useRepo();
+/** Everything one step did (one user action or tool call), as one entry of the log. */
+function StepGroup({ events }: { events: ActivityEvent[] }) {
   const { t } = useT();
   const head = events[0]!;
   const w = who(head.origin, t);
-  const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState<string | null>(null);
-  const undone = events.some((e) => e.undone);
-  // a delete whose entries are back already (restored from the trash): nothing left to take back
-  const restored = !undone && events.every((e) => e.kind === "deleted") && events.every((e) => r.get(e.doc) && !r.get(e.doc)!.deleted);
-  const run = async () => {
-    setBusy(true);
-    const res = await r.undo(head.step!, undone);
-    setBusy(false);
-    if (!res.ok) setNote(t("activity.undoFailed", { error: res.error }));
-    else {
-      setNote(res.kept ? t("activity.undoKept", { count: res.kept }) : null);
-      onChanged();
-    }
-  };
   return (
     <li className="flex gap-2.5 text-[15px]">
       <Avatar origin={head.origin} />
@@ -161,18 +144,8 @@ function StepGroup({ events, onChanged }: { events: ActivityEvent[]; onChanged: 
             </li>
           ))}
         </ul>
-        <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+        <div className="mt-0.5 text-xs text-muted-foreground">
           <RelTime ts={head.ts} />
-          {head.step && !head.undoes && restored && <span>· {t("activity.restoredSince")}</span>}
-          {head.step && !head.undoes && !restored && (
-            <>
-              {undone && <span>· {t("activity.stepUndone")}</span>}
-              <Button small className="text-xs" disabled={busy || !r.status.online} onClick={run}>
-                {undone ? <Redo2 size={12} /> : <Undo2 size={12} />} {undone ? t("activity.redo") : t("activity.undo")}
-              </Button>
-            </>
-          )}
-          {note && <span className="text-muted-foreground">{note}</span>}
         </div>
       </div>
     </li>
@@ -211,7 +184,7 @@ export function Activity() {
   useEffect(() => {
     load();
   }, [r.status.online]);
-  // fetched rows know whether a step is undone; live events fill in what came since
+  // fetched rows, then the live events that came since
   const merged = [...events, ...r.events].filter((e, i, a) => a.findIndex((x) => x.id === e.id) === i).sort((a, b) => b.id - a.id);
   const shown = merged.filter((e) => {
     if (filter === "all") return true;
@@ -231,7 +204,7 @@ export function Activity() {
       ) : (
         <ul className="space-y-4">
           {groupBySteps(shown).map((g) => (
-            <StepGroup key={g[0]!.id} events={g} onChanged={() => load()} />
+            <StepGroup key={g[0]!.id} events={g} />
           ))}
         </ul>
       )}

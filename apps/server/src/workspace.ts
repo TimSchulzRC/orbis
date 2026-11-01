@@ -14,7 +14,7 @@ import { Backups } from "./backup";
 import { FORMAT, PERSONAL, fileTypeOf } from "@obtion/core/model";
 import { addLaterDefaultProps, migrateCollections, renameShippedLabels, upgradeAreas, upgradeExplicitRoles, upgradeHideEmptyTaskFields } from "@obtion/core/setup";
 import { SETUP_ORIGIN, storeWriter } from "./importers";
-import { UndoError, redoStep, undoStep } from "./undo";
+import { UndoError, undoStep } from "./undo";
 import { type ClientMsg, type ServerMsg, type WireUpdate, fromB64, toB64 } from "@obtion/core/protocol";
 import { z } from "zod";
 
@@ -191,10 +191,10 @@ export class Workspace {
 
     if (rest === "/api/undo" && req.method === "POST") {
       if (!(req.headers.get("content-type") ?? "").includes("application/json")) return fail(415, "JSON required");
-      const b = await body<{ step?: unknown; redo?: boolean; device?: unknown }>(req);
+      const b = await body<{ step?: unknown; device?: unknown }>(req);
       if (typeof b?.step !== "string") return fail(400, "step required");
       try {
-        return json((b.redo ? redoStep : undoStep)(store, b.step, personOrigin(ctx.user, typeof b.device === "string" ? b.device : undefined)));
+        return json(undoStep(store, b.step, personOrigin(ctx.user, typeof b.device === "string" ? b.device : undefined)));
       } catch (e) {
         if (e instanceof UndoError) return fail(409, e.message);
         throw e;
