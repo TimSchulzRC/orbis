@@ -86,11 +86,15 @@ export function searchIds(idx: SearchIndex, query: string, limit = 20): string[]
 export function plainText(body: string): string {
   const marks = stripQueryBlocks(body)
     .replace(/^\s*```.*$/gm, "") // code fences (the code itself stays)
+    .replace(/<br\s*\/?>/gi, " ") // line breaks (in table cells)
     .replace(/<[^>\n]+>/g, "") // html tags
     .replace(/!\[\[[^\]]*\]\]/g, "") // embedded files show as files, not as their name
     .replace(/!\[[^\]\n]*\](\([^)\n]*\))?/g, "") // markdown images and stray ![…]
-    .replace(/^(\s*[-*+]\s+)\[[ xX]\]\s+/gm, "$1"); // task list boxes
+    .replace(/^(\s*[-*+]\s+)\[[ xX]\]\s+/gm, "$1") // task list boxes
+    .replace(/^[ \t]*\|?([ \t]*:?-+:?[ \t]*\|)+([ \t]*:?-+:?[ \t]*)?$/gm, "") // a table's delimiter row
+    .replace(/^[ \t]*\|.*$/gm, (row) => row.trim().replace(/^\|/, "").replace(/(?<!\\)\|$/, "").trim().split(/\s*(?<!\\)\|\s*/).join(" · ")); // a table's cells
   return mapWikiLinks(marks, (l) => l.label || l.target + l.section)
+    .replace(/\\\|/g, "|")
     .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
     .replace(/^\s*(?:[-*+]|\d+\.|#{1,6}|>)\s+/gm, "")
     .replace(/[*_`~]{1,3}/g, "")

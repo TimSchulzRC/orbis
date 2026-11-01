@@ -762,8 +762,11 @@ export function isContent(i: Item) {
   return !i.deleted && (i.kind === "info" || i.kind === "datei");
 }
 
-/** [[Page]], [[Page#Section]], [[Page|text]], ![[file.png|320]]: groups embed mark, target, "#section", "|text". */
-const WIKILINK = /(!?)\[\[([^\]|#\n]+)(#[^\]|\n]*)?(\|[^\]\n]*)?\]\]/g;
+/**
+ * [[Page]], [[Page#Section]], [[Page|text]], ![[file.png|320]]: groups embed mark, target,
+ * "#section", "|text". In a table the "|" is escaped ("[[Page\|text]]"); the "\" belongs to no group.
+ */
+const WIKILINK = /(!?)\[\[([^\]|#\n]+?)\\?(#[^\]|\n]*?)?\\?(\|[^\]\n]*)?\]\]/g;
 
 /** A fresh copy of the wikilink pattern (its own lastIndex); `anchored` matches only at the start. */
 export function wikiLinkRe(anchored = false): RegExp {
@@ -786,7 +789,7 @@ export function mapWikiLinks(text: string, fn: (l: WikiLinkMatch) => string): st
 /** Matches `oldTitle` in any case, with or without section or label; null when nothing changes. */
 export function renameLinksIn(body: string, oldTitle: string, newTitle: string): string | null {
   if (!newTitle.trim() || !body.includes("[[")) return null;
-  const re = new RegExp(`(!?\\[\\[)${escapeRe(oldTitle)}(?=[\\]|#])`, "gi");
+  const re = new RegExp(`(!?\\[\\[)${escapeRe(oldTitle)}(?=\\\\?[\\]|#])`, "gi");
   const next = body.replace(re, (_m, open: string) => open + newTitle);
   return next === body ? null : next;
 }

@@ -22,6 +22,7 @@ import { notify } from "./feedback";
 import { autocompletion, type Completion, type CompletionContext, type CompletionResult } from "@codemirror/autocomplete";
 import { FilePlus } from "lucide-react";
 import { livePreview } from "./editor/livePreview";
+import { tables } from "./editor/tables";
 import { links } from "./editor/links";
 import { mentionCompletion, onSlashFiles, pageOption, slashCompletion, slashRender } from "./editor/slash";
 import { blockHandles } from "./editor/handles";
@@ -250,6 +251,7 @@ export function Editor({
       EditorView.lineWrapping,
       links,
       livePreview,
+      tables,
       images,
       autocompletion({ override: [linkCompletion(nodeId), slashCompletion, mentionCompletion(nodeId)], icons: false, addToOptions: [slashRender], maxRenderedOptions: 40 }),
       blockHandles,

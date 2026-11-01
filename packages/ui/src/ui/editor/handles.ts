@@ -7,6 +7,7 @@ import { tr } from "../../i18n";
 import { KINDS, blockAt, deleteBlock, duplicateBlock, kindName, kindOf, moveBlock, moveBy, setKind } from "./blocks";
 import { iconButton } from "./icons";
 import { showMenu } from "./menu";
+import { menuCell, tableAt, tableEntries } from "./tables";
 import { MOD, isCoarse as coarse } from "../../lib/platform";
 
 const ALT = MOD === "⌘" ? "⌥" : "Alt ";
@@ -28,8 +29,11 @@ function blockMenu(view: EditorView, pos: number, at: { left: number; top: numbe
   const line = view.state.doc.lineAt(pos);
   const current = kindOf(line.text);
   const fenced = blockAt(view.state, pos).to !== line.to || line.text.startsWith("```");
+  const table = tableAt(view.state, pos);
+  const cell = table && menuCell(view.state, table);
   return showMenu(at, [
     ...(fenced ? [] : [{ title: tr("editor.turnInto"), entries: KINDS.map((k) => ({ label: kindName(k.kind), icon: k.icon, active: k.kind === current, run: () => setKind(view, pos, k.kind) })) }]),
+    ...(table && cell ? [{ title: tr("editor.table.title"), entries: tableEntries(view, table, cell.n, cell.col) }] : []),
     {
       entries: [
         { label: tr("editor.duplicate"), icon: Copy, run: () => duplicateBlock(view, pos) },
@@ -136,7 +140,8 @@ export const blockHandles = ViewPlugin.fromClass(
           view.focus();
         } else {
           const button = (e.target as HTMLElement).closest("button")!.getBoundingClientRect();
-          view.dispatch({ selection: EditorSelection.cursor(view.state.doc.lineAt(block.from).to) });
+          // a table keeps its rendering: its menu acts on the cell with the cursor, or its last row
+          if (!tableAt(view.state, block.from)) view.dispatch({ selection: EditorSelection.cursor(view.state.doc.lineAt(block.from).to) });
           blockMenu(view, block.from, { left: button.left, top: button.bottom + 4 }).focusFirst();
         }
       };

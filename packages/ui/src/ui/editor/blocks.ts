@@ -1,4 +1,4 @@
-// Every line is a block, a fenced block counts as one. A block's kind is its Markdown prefix, so
+// Every line is a block; a fenced block or a table counts as one. A block's kind is its Markdown prefix, so
 // changing the kind only rewrites that prefix and the text stays Markdown for sync, search and agents.
 import type { ComponentType } from "react";
 import { ensureSyntaxTree, syntaxTree } from "@codemirror/language";
@@ -69,19 +69,25 @@ function fenceAt(state: EditorState, pos: number) {
 
 const inFence = (state: EditorState, pos: number) => !!fenceAt(state, pos);
 
-/** Null unless all selected blocks share one kind. Lines in a fenced block do not count. */
+/** Table lines are rows and have no kind of their own. */
+const inTable = (state: EditorState, pos: number) => {
+  for (let n: ReturnType<typeof syntaxTree>["topNode"] | null = syntaxTree(state).resolveInner(pos, 1); n; n = n.parent) if (n.name === "Table") return true;
+  return false;
+};
+
+/** Null unless all selected blocks share one kind. Lines in a fenced block or a table do not count. */
 export function kindOfRange(state: EditorState, from: number, to: number): BlockKind | null {
-  const kinds = new Set(linesOf(state, from, to).filter((l) => !inFence(state, l.from)).map((l) => kindOf(l.text)));
+  const kinds = new Set(linesOf(state, from, to).filter((l) => !inFence(state, l.from) && !inTable(state, l.from)).map((l) => kindOf(l.text)));
   return kinds.size === 1 ? [...kinds][0]! : null;
 }
 
-/** Fenced blocks stay as they are; the selection stays on the same text. */
+/** Fenced blocks and tables stay as they are; the selection stays on the same text. */
 export function setKindRange(view: EditorView, from: number, to: number, kind: BlockKind) {
   const { state } = view;
   const prefix = prefixOf(kind);
   const changes = state.changes(
     linesOf(state, from, to)
-      .filter((l) => !inFence(state, l.from))
+      .filter((l) => !inFence(state, l.from) && !inTable(state, l.from))
       .map((l) => {
         const match = PREFIX.exec(l.text)!;
         const at = l.from + match[1]!.length;
@@ -92,11 +98,11 @@ export function setKindRange(view: EditorView, from: number, to: number, kind: B
   view.focus();
 }
 
-/** The line at `pos`, or the whole fenced block it lies in. */
+/** The line at `pos`, or the whole fenced block or table it lies in. */
 export function blockAt(state: EditorState, pos: number): { from: number; to: number } {
   const line = state.doc.lineAt(pos);
-  const fence = fenceAt(state, line.from);
-  if (fence) return { from: state.doc.lineAt(fence.from).from, to: state.doc.lineAt(fence.to).to };
+  for (let n: ReturnType<typeof syntaxTree>["topNode"] | null = syntaxTree(state).resolveInner(line.from, 1); n; n = n.parent)
+    if (n.name === "FencedCode" || (n.name === "Table" && n.parent?.name === "Document" && line.text.trim())) return { from: state.doc.lineAt(n.from).from, to: state.doc.lineAt(n.to).to };
   return { from: line.from, to: line.to };
 }
 

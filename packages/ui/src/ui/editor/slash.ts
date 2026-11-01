@@ -1,14 +1,15 @@
-// As in Notion, "/" opens the block menu and "@" links a page right where you are.
+// As in Notion, "/" opens the block menu (also for tables) and "@" links a page right where you are.
 import type { ComponentType } from "react";
 import { type Completion, type CompletionContext, type CompletionResult, startCompletion } from "@codemirror/autocomplete";
 import { EditorSelection } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
-import { Code, FileText, ImagePlus, Lightbulb, Link2, ListFilter, Minus, Paperclip } from "lucide-react";
+import { Code, FileText, ImagePlus, Lightbulb, Link2, ListFilter, Minus, Paperclip, Table } from "lucide-react";
 import { repo } from "../../repo";
 import { tr } from "../../i18n";
 import { insertQueryBlock } from "../QueryBlock";
 import { KINDS, kindName, setKind } from "./blocks";
 import { iconHTML } from "./icons";
+import { insertTable } from "./tables";
 import { foldUmlauts, plainVowels } from "@obtion/core/text";
 import { kindHint } from "../text";
 
@@ -72,6 +73,7 @@ const ITEMS: SlashItem[] = [
   // "***", not "---": "---" right under a line of text turns that line into a heading (Setext)
   { id: "divider", icon: Minus, section: "insert", run: (view, pos) => insertBlock(view, pos, "***\n", 4) },
   { id: "code", icon: Code, section: "insert", run: (view, pos) => insertBlock(view, pos, "```\n\n```", 4) },
+  { id: "table", icon: Table, section: "insert", run: (view, pos) => insertTable(view, pos) },
   { id: "query", icon: ListFilter, section: "insert", run: (view) => insertQueryBlock(view) },
 ];
 
