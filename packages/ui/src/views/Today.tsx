@@ -15,7 +15,7 @@ import { DueLabel, ItemIcon, RelTime, itemLook, kindLabel, pal } from "../ui/ite
 import { cn } from "../lib/utils";
 import { RowStatus } from "../ui/Row";
 import { SpaceScope, useReplicas } from "../ui/Spaces";
-import { useInboxItems, useShelfPinned } from "../ui/inbox";
+import { openShelf, useInboxItems, useShelfPinned } from "../ui/inbox";
 import { ShelfCards } from "../ui/Shelf";
 import { cmpKey } from "@obtion/core/sortkey";
 
@@ -46,7 +46,8 @@ export function Today() {
   const hour = new Date().getHours();
   const part = hour < 5 ? "evening" : hour < 11 ? "morning" : hour < 18 ? "day" : "evening";
   const name = account?.user.name.trim().split(/\s+/)[0];
-  // the inbox count opens the tray's panel, amber as the tray: the sentence around it comes in two parts
+  // the inbox count, amber as the tray, opens the tray's panel – pinned open below it is there already,
+  // the count is no link then: the sentence around it comes in two parts
   const [before, after] = t("today.inbox", { count: inbox, n: "\u0000" }).split("\u0000");
   return (
     // on a desktop the open panel follows right below
@@ -60,9 +61,13 @@ export function Today() {
         {inbox ? (
           <>
             {before}
-            <a href="#/inbox" className="font-medium text-warn hover:underline">
-              {t("today.entries", { count: inbox })}
-            </a>
+            {pinned ? (
+              <span className="font-medium text-warn">{t("today.entries", { count: inbox })}</span>
+            ) : (
+              <a href="#/inbox" onClick={(e) => (e.preventDefault(), openShelf())} className="font-medium text-warn hover:underline">
+                {t("today.entries", { count: inbox })}
+              </a>
+            )}
             {after}
           </>
         ) : (
