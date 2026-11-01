@@ -6,6 +6,8 @@ import { iconHTML } from "./icons";
 interface MenuEntry {
   label: string;
   icon?: ComponentType<{ size?: number }>;
+  /** The icon's colour (a type's, as in the sidebar). */
+  color?: string;
   active?: boolean;
   danger?: boolean;
   hint?: string;
@@ -32,6 +34,7 @@ export function showMenu(at: { left: number; top: number }, sections: { title?: 
       b.innerHTML = (e.icon ? `<span class="cm-menu-icon">${iconHTML(e.icon, 16)}</span>` : "") + `<span class="cm-menu-label"></span>` + (e.hint ? `<span class="cm-menu-hint"></span>` : "");
       b.querySelector(".cm-menu-label")!.textContent = e.label;
       if (e.hint) b.querySelector(".cm-menu-hint")!.textContent = e.hint;
+      if (e.color) b.querySelector<HTMLElement>(".cm-menu-icon")?.style.setProperty("color", e.color);
       b.addEventListener("mousedown", (ev) => ev.preventDefault());
       b.addEventListener("click", () => (close(), e.run()));
       rows.push(b);

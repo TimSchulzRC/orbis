@@ -6,6 +6,7 @@ import { cleanup, render } from "vitest-browser-react";
 import type { Repo } from "@obtion/sync";
 import { Editor } from "../../packages/ui/src/ui/Editor";
 import { toolbarExtract } from "../../packages/ui/src/ui/editor/toolbar";
+import { pal } from "../../packages/ui/src/ui/item-look";
 import { workspace } from "./workspace";
 
 type EditorView = NonNullable<Parameters<NonNullable<Parameters<typeof Editor>[0]["onView"]>>[0]>;
@@ -214,6 +215,8 @@ describe("the toolbar over selected text", () => {
     expect(rect(document.querySelector(".cm-menu")!).top, "the menu opens below the bar").toBeGreaterThanOrEqual(bar.bottom);
     const names = [...document.querySelectorAll(".cm-menu-row")].map((r) => r.textContent);
     expect(names).toEqual(repo.index().typesInOrder().map((t) => t.schema.name));
+    const icons = [...document.querySelectorAll<HTMLElement>(".cm-menu-row .cm-menu-icon")].map((i) => getComputedStyle(i).color);
+    expect(icons, "each icon in its type's colour, as in the sidebar").toEqual(repo.index().typesInOrder().map((t) => getComputedStyle(Object.assign(document.body.appendChild(document.createElement("i")), { style: `color: ${pal(t.schema.color)}` })).color));
     const project = repo.index().typeByName("Projekt")!;
     await press([...document.querySelectorAll<HTMLElement>(".cm-menu-row")].find((r) => r.textContent === "Projekt")!);
     expect(doc().split("\n").slice(4)).toEqual(["[[Dritter Absatz]]"]);

@@ -11,6 +11,7 @@ import { shortcut } from "../../lib/platform";
 import { KINDS, kindName, kindOfRange, setKindRange, toggleMark } from "./blocks";
 import { extractAs } from "../extract";
 import { ICON } from "../icons";
+import { pal } from "../item-look";
 import { iconButton, iconHTML } from "./icons";
 import { showMenu } from "./menu";
 import { titleKey } from "@obtion/core/model";
@@ -84,7 +85,7 @@ class Toolbar {
     this.extractBtn = iconButton(Scissors, tr("editor.fmt.extract"), "cm-tb wide extract", 16);
     this.extractBtn.insertAdjacentHTML("beforeend", `<span>${tr("editor.fmt.extract")}</span>${iconHTML(ChevronDown, 14)}`);
     this.extractBtn.addEventListener("click", () => {
-      const entries = repo.index().typesInOrder().map((t) => ({ label: t.schema.name, icon: ICON[t.schema.icon] ?? ICON.circle, run: () => extractAs(view, t.id) }));
+      const entries = repo.index().typesInOrder().map((t) => ({ label: t.schema.name, icon: ICON[t.schema.icon] ?? ICON.circle, color: pal(t.schema.color), run: () => extractAs(view, t.id) }));
       this.openMenu(this.extractBtn, tr("editor.extractAs"), entries);
     });
     this.extractSep = sep();
