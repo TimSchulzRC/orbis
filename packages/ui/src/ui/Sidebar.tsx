@@ -1,12 +1,12 @@
-// Sidebar: the workspace selector (which workspaces are seen), search, Heute and the inbox (of
-// the workspaces seen), then each of them as a block of its own (as teamspaces in Notion): its
+// Sidebar: the workspace selector (which workspaces are seen), search and Heute (the inbox is the
+// tray's, below every page), then each of them as a block of its own (as teamspaces in Notion): its
 // name, the pinned items (informations with their children as a tree, also type pages), and its
 // types with the files. At the bottom: activity and trash (of the workspaces seen) and the settings. Blocks and what is open in them fold; that is remembered on
 // this device. In the tree, dragging replaces the parent you come from; with Alt held a place is
 // added. Dropping on the upper or lower edge of a row reorders. Dropped into another workspace's
 // block, an item moves there.
 import { useEffect, useState } from "react";
-import { ArrowLeft, ChevronRight, ChevronDown, History, Inbox, Search, Settings, Link2, Plus, Paperclip, Sun, Trash2 } from "lucide-react";
+import { ArrowLeft, ChevronRight, ChevronDown, History, Search, Settings, Link2, Plus, Paperclip, Sun, Trash2 } from "lucide-react";
 import { type Item, META_TYPE, SETTINGS_ID, setSchemaField, setSettings } from "@obtion/core/model";
 import { sidebarChildren, sidebarRoots } from "@obtion/core/placement";
 import { keyBetween, keysFor, cmpKey } from "@obtion/core/sortkey";
@@ -22,7 +22,6 @@ import { createAndOpen } from "../actions";
 import { NewTypeDialog } from "../views/Types";
 import { DeleteDialog, deleteOrAsk } from "../views/ItemPage";
 import { NewSpaceDialog, SpaceScope, SpaceSelector, moveTo } from "./Spaces";
-import { openReview, useInboxItems, useShelf } from "./inbox";
 import { KEYS } from "./storage";
 import { notify } from "./toasts";
 import { openSettings } from "./settings-open";
@@ -49,8 +48,6 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
   const { t, lang } = useT();
   const route = useRoute();
   const { shown } = useAccounts();
-  const inbox = useInboxItems().length;
-  const shelf = useShelf();
   const [creating, setCreating] = useState(false);
   const iconCls = (active: boolean) => cn("tap inline-flex size-8 shrink-0 items-center justify-center rounded-md", active ? "bg-hover text-fg" : "text-muted-foreground hover:bg-hover hover:text-fg");
   const navCls = (active: boolean) => cn("flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm", active ? "bg-hover font-medium text-fg" : "text-muted-foreground hover:bg-hover hover:text-fg");
@@ -71,11 +68,6 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
           <a href="#/" className={navCls(route.path === "/")}>
             <Sun size={16} /> {t("nav.today")}
           </a>
-          {/* sorting, over the page open (the tray's panel) */}
-          <Button variant="plain" onClick={() => openReview()} className={navCls(shelf.open && !!shelf.sort)}>
-            <Inbox size={16} /> <span className="flex-1 text-left">{t("nav.inbox")}</span>
-            {inbox > 0 && <span className="text-xs tabular-nums text-muted-foreground">{inbox}</span>}
-          </Button>
         </nav>
         {/* a line above each workspace: where one ends and the next begins */}
         {shown.map((s) => (
