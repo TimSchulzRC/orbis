@@ -138,22 +138,57 @@ export function deleteBlock(view: EditorView, pos: number) {
   view.focus();
 }
 
-/** Wrap the selection in a mark ("**", "*", "~~", "`"), or take it away when it is there already. */
+/**
+ * The mark characters touching a position on both sides, as runs of one character: around
+ * "~~**Text**~~" the start of "Text" has "~~" and "**". Marks are often hidden while the text is
+ * not edited, so they may lie inside or outside a selection; the search stays in [lo, hi].
+ */
+function markRuns(state: EditorState, pos: number, lo: number, hi: number) {
+  const isMark = (i: number) => /[*~`]/.test(state.sliceDoc(i, i + 1));
+  let a = pos;
+  let b = pos;
+  while (a > lo && isMark(a - 1)) a--;
+  while (b < hi && isMark(b)) b++;
+  const runs: { ch: string; from: number; n: number }[] = [];
+  for (let i = a; i < b; i++) {
+    const ch = state.sliceDoc(i, i + 1);
+    const last = runs.at(-1);
+    if (last && last.ch === ch && last.from + last.n === i) last.n++;
+    else runs.push({ ch, from: i, n: 1 });
+  }
+  return runs;
+}
+
+/** Where `mark` sits in the runs: "**" in two or more stars, "*" in one or three, "~~" in two tildes. */
+function markIn(runs: ReturnType<typeof markRuns>, mark: string) {
+  return runs.find((r) => r.ch === mark[0] && (mark === "*" ? r.n % 2 === 1 : r.n >= mark.length));
+}
+
+/** The changes that toggle `mark` on [from, to] (text within one line): its pair taken away, or put around. */
+function markChanges(state: EditorState, from: number, to: number, mark: string): { on: boolean; changes: { from: number; to?: number; insert?: string }[] } {
+  const line = state.doc.lineAt(from);
+  const open = markIn(markRuns(state, from, line.from, line.to), mark);
+  const close = markIn(markRuns(state, to, line.from, line.to), mark);
+  // two runs, the opening one before the closing one (not one run of only marks)
+  if (open && close && open.from + open.n <= close.from) return { on: true, changes: [{ from: open.from, to: open.from + mark.length }, { from: close.from, to: close.from + mark.length }] };
+  return { on: false, changes: [{ from, insert: mark }, { from: to, insert: mark }] };
+}
+
+/** Wrap the selection in a mark ("**", "*", "~~", "`"), or take it away when it is there already – also among other marks. */
 export function toggleMark(view: EditorView, mark: string) {
   const { state } = view;
   const main = state.selection.main;
   if (state.selection.ranges.length === 1 && state.doc.lineAt(main.from).number !== state.doc.lineAt(main.to).number) return toggleMarkLines(view, mark);
   const tx = state.changeByRange((r) => {
-    const before = state.sliceDoc(r.from - mark.length, r.from);
-    const after = state.sliceDoc(r.to, r.to + mark.length);
-    // "*" must not take one star of "**"
-    const single = mark.length === 1 && (state.sliceDoc(r.from - 2, r.from) === "**" ? state.sliceDoc(r.to, r.to + 2) !== "**" : true);
-    if (before === mark && after === mark && single)
-      return { changes: [{ from: r.from - mark.length, to: r.from }, { from: r.to, to: r.to + mark.length }], range: EditorSelection.range(r.from - mark.length, r.to - mark.length) };
-    const inner = state.sliceDoc(r.from, r.to);
-    if (inner.length > 2 * mark.length && inner.startsWith(mark) && inner.endsWith(mark))
-      return { changes: { from: r.from, to: r.to, insert: inner.slice(mark.length, -mark.length) }, range: EditorSelection.range(r.from, r.to - 2 * mark.length) };
-    return { changes: [{ from: r.from, insert: mark }, { from: r.to, insert: mark }], range: EditorSelection.range(r.from + mark.length, r.to + mark.length) };
+    if (r.empty) {
+      // the cursor between an empty pair ("**|**"): ⌘B again takes the pair away
+      const L = mark.length;
+      if (state.sliceDoc(r.from - L, r.from) === mark && state.sliceDoc(r.from, r.from + L) === mark)
+        return { changes: { from: r.from - L, to: r.from + L }, range: EditorSelection.cursor(r.from - L) };
+      return { changes: { from: r.from, insert: mark + mark }, range: EditorSelection.cursor(r.from + L) };
+    }
+    const set = state.changes(markChanges(state, r.from, r.to, mark).changes);
+    return { changes: set, range: EditorSelection.range(set.mapPos(r.from, 1), set.mapPos(r.to, -1)) };
   });
   view.dispatch(state.update(tx, { userEvent: "input.format" }));
   view.focus();
@@ -169,34 +204,13 @@ function toggleMarkLines(view: EditorView, mark: string) {
     const text = state.sliceDoc(start, Math.min(to, l.to));
     const lead = text.length - text.trimStart().length;
     const inner = text.trim();
-    return inner && !inFence(state, l.from) ? [{ from: start + lead, to: start + lead + inner.length, text: inner }] : [];
+    return inner && !inFence(state, l.from) ? [markChanges(state, start + lead, start + lead + inner.length, mark)] : [];
   });
   if (!parts.length) return true;
-  const L = mark.length;
-  const at = (pos: number) => {
-    if (state.sliceDoc(pos, pos + L) !== mark) return false;
-    if (L > 1) return true;
-    // "*" is no star of "**" (but one of "***")
-    let run = 1;
-    for (let i = pos - 1; state.sliceDoc(i, i + 1) === "*"; i--) run++;
-    for (let i = pos + 1; state.sliceDoc(i, i + 1) === "*"; i++) run++;
-    return run !== 2;
-  };
-  // where a part's two marks start: each just outside it (hidden while not edited) or as its own end
-  const marksOf = (p: (typeof parts)[number]): [number, number] | null => {
-    const open = at(p.from - L) ? p.from - L : at(p.from) ? p.from : -1;
-    const close = at(p.to) ? p.to : at(p.to - L) ? p.to - L : -1;
-    return open >= 0 && close >= open + L ? [open, close] : null;
-  };
-  const off = parts.every((p) => marksOf(p));
-  const changes = state.changes(
-    parts.flatMap((p): { from: number; to?: number; insert?: string }[] => {
-      const m = marksOf(p);
-      if (off) return [{ from: m![0], to: m![0] + L }, { from: m![1], to: m![1] + L }];
-      return m ? [] : [{ from: p.from, insert: mark }, { from: p.to, insert: mark }];
-    }),
-  );
-  view.dispatch({ changes, selection: EditorSelection.range(changes.mapPos(from, -1), changes.mapPos(to, 1)), userEvent: "input.format" });
+  // all marked: take it away everywhere; else add it where it is missing
+  const off = parts.every((p) => p.on);
+  const changes = state.changes(parts.filter((p) => p.on === off).flatMap((p) => p.changes));
+  view.dispatch({ changes, selection: EditorSelection.range(changes.mapPos(from, 1), changes.mapPos(to, -1)), userEvent: "input.format" });
   view.focus();
   return true;
 }

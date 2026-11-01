@@ -150,7 +150,16 @@ describe("links", () => {
 describe("the toolbar over selected text", () => {
   const toolbar = () => document.querySelector<HTMLElement>(".cm-toolbar.shown");
   const button = (cls: string) => document.querySelector<HTMLElement>(".cm-toolbar.shown " + cls)!;
-  const press = (el: Element) => commands.mouse("click", rect(el).left + rect(el).width / 2, rect(el).top + rect(el).height / 2);
+  /** A click in the middle of an element, once the toolbar has moved to its place (a frame after a change). */
+  const press = async (el: Element) => {
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    await commands.mouse("click", rect(el).left + rect(el).width / 2, rect(el).top + rect(el).height / 2);
+  };
+  /** The toolbar shown at its place for the selection (it moves a frame after the selection changes). */
+  const settled = async () => {
+    await expect.poll(toolbar).not.toBeNull();
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+  };
   /** Drag from the start of line `a` to the end of line `b`. */
   async function select(a: number, b: number) {
     const s = rect(lineEls()[a]!);
@@ -193,12 +202,86 @@ describe("the toolbar over selected text", () => {
     expect(doc()).toBe(BODY);
   });
 
+  test("bold and strikethrough toggle on and off, also together and in any order", async () => {
+    const { view, doc } = await open();
+    const line = () => doc().split("\n")[4];
+    await select(4, 4);
+    const bold = () => press(button(".cm-tb[aria-label^='Fett']"));
+    const strike = () => press(button(".cm-tb[aria-label^='Durch']"));
+    await bold();
+    expect(line()).toBe("**Dritter Absatz**");
+    await bold();
+    expect(line(), "a second click takes bold away").toBe("Dritter Absatz");
+    await strike();
+    expect(line()).toBe("~~Dritter Absatz~~");
+    await strike();
+    expect(line(), "a second click takes strikethrough away").toBe("Dritter Absatz");
+    await bold();
+    await strike();
+    expect(line()).toBe("**~~Dritter Absatz~~**");
+    await bold();
+    expect(line(), "bold goes from under strikethrough").toBe("~~Dritter Absatz~~");
+    await bold();
+    await strike();
+    expect(line(), "strikethrough goes from under bold").toBe("**Dritter Absatz**");
+    await bold();
+    expect(line()).toBe("Dritter Absatz");
+    // italic beside bold: "*" is not one star of "**"
+    view.dispatch({ changes: { from: view.state.doc.line(5).from, to: view.state.doc.line(5).to, insert: "***Dritter Absatz***" } });
+    view.dispatch({ selection: { anchor: view.state.doc.line(5).from + 3, head: view.state.doc.line(5).to - 3 } });
+    await settled();
+    await press(button(".cm-tb[aria-label^='Kursiv']"));
+    expect(line(), "italic goes, bold stays").toBe("**Dritter Absatz**");
+    await press(button(".cm-tb[aria-label^='Kursiv']"));
+    expect(line()).toBe("***Dritter Absatz***");
+    await bold();
+    expect(line(), "bold goes, italic stays").toBe("*Dritter Absatz*");
+  });
+
+  test("over several blocks too, bold toggles under strikethrough", async () => {
+    const { view, doc } = await open();
+    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: "~~**eins**~~\n~~zwei~~" } });
+    view.focus();
+    view.dispatch({ selection: { anchor: 4, head: view.state.doc.length } });
+    await settled();
+    await press(button(".cm-tb[aria-label^='Fett']"));
+    expect(doc(), "one block without bold: bold is added there").toBe("~~**eins**~~\n**~~zwei~~**");
+    await press(button(".cm-tb[aria-label^='Fett']"));
+    expect(doc()).toBe("~~eins~~\n~~zwei~~");
+  });
+
+  test("the marks may lie partly inside the selection", async () => {
+    const { view, doc } = await open();
+    const toggle = async (text: string, from: number, to: number, label: string) => {
+      view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text }, selection: { anchor: from, head: to } });
+      view.focus();
+      await settled();
+      await press(button(`.cm-tb[aria-label^='${label}']`));
+      return doc();
+    };
+    expect(await toggle("**x**", 0, 3, "Fett")).toBe("x");
+    expect(await toggle("~~**x**~~", 0, 5, "Fett")).toBe("~~x~~");
+    expect(await toggle("~~**x**~~", 0, 5, "Durch")).toBe("**x**");
+    expect(await toggle("**~~x~~** y", 2, 9, "Fett")).toBe("~~x~~ y");
+  });
+
+  test("⌘B without a selection puts an empty pair, a second ⌘B takes it away", async () => {
+    const { view, doc } = await open();
+    await clickEnd(lineEls()[5]!);
+    await commands.keys("press", "End");
+    await commands.keys("press", "Control+b");
+    expect(doc().endsWith("Vierter Absatz****")).toBe(true);
+    await commands.keys("press", "Control+b");
+    expect(doc().endsWith("Vierter Absatz")).toBe(true);
+    expect(view.state.selection.main.head).toBe(view.state.doc.length);
+  });
+
   test("bold over several bold blocks takes the hidden marks around the selection away", async () => {
     const { view, doc } = await open();
     view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: "**eins**\n**zwei**" } });
     view.focus();
     view.dispatch({ selection: { anchor: 2, head: 15 } });
-    await expect.poll(toolbar).not.toBeNull();
+    await settled();
     await press(button(".cm-tb[aria-label^='Fett']"));
     expect(doc()).toBe("eins\nzwei");
   });
