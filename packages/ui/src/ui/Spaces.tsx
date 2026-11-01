@@ -95,23 +95,23 @@ export function SpaceSelector({ className, onNew }: { className?: string; onNew:
 }
 
 /**
- * The workspaces seen, as chips above the inbox – the same choice as the selector in
- * the sidebar. From "Alle", a chip shows that workspace only; else chips add and take away.
+ * The workspaces seen, as chips above the inbox, activity and trash – the same choice as the
+ * selector in the sidebar. From "Alle", a chip shows that workspace only; then chips add and take
+ * away one by one (every one picked stays picked); none left is "Alle" again.
  */
-export function SpaceFilter() {
+export function SpaceFilter({ className }: { className?: string }) {
   const { t } = useT();
-  const { spaces, shown } = useAccounts();
+  const { spaces, shown, allSeen: all } = useAccounts();
   if (spaces.length < 2) return null;
   const ids = shown.map((s) => s.id);
-  const all = ids.length === spaces.length;
   const pick = (id: string) => {
-    if (all) return setShown([id]);
+    if (all) return setShown([id], true);
     const next = ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id];
-    if (next.length) setShown(next);
+    setShown(next.length ? next : spaces.map((s) => s.id), next.length > 0);
   };
   const chip = (on: boolean) => cn("shrink-0 whitespace-nowrap rounded-full border px-3 py-1", on ? "border-focus bg-surface text-fg" : "border-line text-muted-foreground hover:bg-hover hover:text-fg");
   return (
-    <div className="-mx-4 mb-4 flex gap-1 overflow-x-auto px-4 text-sm [scrollbar-width:none] md:mx-0 md:px-0" role="group" aria-label={t("space.choose")}>
+    <div className={cn("-mx-4 mb-4 flex gap-1 overflow-x-auto px-4 text-sm [scrollbar-width:none] md:mx-0 md:px-0", className)} role="group" aria-label={t("space.choose")}>
       <Button variant="plain" onClick={() => setShown(spaces.map((s) => s.id))} aria-pressed={all} className={chip(all)}>
         {t("inbox.all")}
       </Button>

@@ -70,7 +70,8 @@ export function useAccounts() {
     (l) => (listeners.add(l), () => listeners.delete(l)),
     () => version,
   );
-  return { account, spaces, active: spaces.find((s) => s.id === active), shown: shownSpaces() };
+  // allSeen: no choice made ("Alle"), as opposed to every workspace picked one by one
+  return { account, spaces, active: spaces.find((s) => s.id === active), shown: shownSpaces(), allSeen: !shown || !spaces.some((s) => shown!.includes(s.id)) };
 }
 
 /** The workspaces chosen to be seen; never none (a choice that left none shows all). */
@@ -79,9 +80,12 @@ export function shownSpaces(): Space[] {
   return list.length ? list : spaces;
 }
 
-/** Choose the workspaces to be seen. All of them is stored as "all", so a new one is seen too. */
-export function setShown(ids: string[]) {
-  shown = spaces.every((s) => ids.includes(s.id)) ? null : ids;
+/**
+ * Choose the workspaces to be seen. All of them is stored as "all", so a new one is seen too –
+ * unless `picked`: chosen one by one (the chips), they stay a choice even when it is every one.
+ */
+export function setShown(ids: string[], picked = false) {
+  shown = !picked && spaces.every((s) => ids.includes(s.id)) ? null : ids;
   save();
 }
 

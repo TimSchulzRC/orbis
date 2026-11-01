@@ -219,9 +219,12 @@ export function Activity() {
     <div className="page-read">
       <h1 className="page-title">{t("nav.activity")}</h1>
       <p className="mb-5 text-sm text-muted-foreground">{t("activity.intro")}</p>
-      <SpaceFilter />
-      <div className="mb-5">
-        <Seg label={t("activity.filterLabel")} value={filter} onChange={setFilter} options={(["all", "agent", "you"] as const).map((f) => ({ value: f, label: t("activity.filter." + f) }))} />
+      {/* one row: which workspaces on the left, who on the right (on a phone below, at the left) */}
+      <div className="mb-5 flex flex-wrap items-center gap-x-4 gap-y-2">
+        <SpaceFilter className="m-0 min-w-0 px-0 md:m-0" />
+        <div className="sm:ml-auto">
+          <Seg label={t("activity.filterLabel")} value={filter} onChange={setFilter} options={(["all", "agent", "you"] as const).map((f) => ({ value: f, label: t("activity.filter." + f) }))} />
+        </div>
       </div>
       {nothing ? (
         <Empty title={t("activity.offlineTitle")}>{t("activity.offline")}</Empty>
