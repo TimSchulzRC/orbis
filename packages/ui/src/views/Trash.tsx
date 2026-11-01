@@ -1,4 +1,5 @@
-// The trash of the workspaces seen (chosen like in the inbox), newest first.
+// The trash of every workspace (or the ones chosen here, apart from the sidebar's choice), newest first.
+import { useState } from "react";
 import { RotateCcw } from "lucide-react";
 import type { Item } from "@obtion/core/model";
 import type { Repo } from "@obtion/sync";
@@ -20,15 +21,18 @@ function trashed(r: Repo): Item[] {
 
 export function TrashView() {
   const { t } = useT();
-  const { spaces, shown } = useAccounts();
+  const { spaces } = useAccounts();
   useDocumentTitle(t("nav.trash"));
-  const repos = useReplicas(shown.map((s) => s.id));
-  const items = shown.flatMap((s, n) => trashed(repos[n]!).map((item) => ({ item, space: s }))).sort((a, b) => b.item.updated - a.item.updated);
+  // its own choice of workspaces; null: all
+  const [only, setOnly] = useState<string[] | null>(null);
+  const chosen = spaces.filter((s) => !only || only.includes(s.id));
+  const repos = useReplicas(chosen.map((s) => s.id));
+  const items = chosen.flatMap((s, n) => trashed(repos[n]!).map((item) => ({ item, space: s }))).sort((a, b) => b.item.updated - a.item.updated);
   return (
     <div className="page-read">
       <h1 className="mb-1 page-title">{t("nav.trash")}</h1>
       <p className="mb-5 text-sm text-muted-foreground">{t("trash.intro")}</p>
-      <SpaceFilter />
+      <SpaceFilter value={only} onChange={setOnly} />
       {items.length ? (
         <ul className="divide-y divide-line rounded-xl border border-line bg-surface">
           {items.map(({ item, space }) => (

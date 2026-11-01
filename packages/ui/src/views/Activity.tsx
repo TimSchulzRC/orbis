@@ -1,6 +1,6 @@
 // Activity: a log of every change with who made it (a person, an agent working for one, an
-// import), bulk operations like deleting a type included. One page for the workspaces seen,
-// chosen like in the inbox.
+// import), bulk operations like deleting a type included. One page for all workspaces, with its
+// own choice of them (the chips; the sidebar's choice stays as it is).
 import { useEffect, useState } from "react";
 import { spaceCall, useAccounts } from "../accounts";
 import { SpaceFilter, SpaceScope, useReplicas } from "../ui/Spaces";
@@ -176,13 +176,15 @@ interface Fetched {
   error: boolean;
 }
 
-/** The log of the workspaces seen, newest first. */
+/** The log of every workspace (or the ones chosen here), newest first. */
 export function Activity() {
   const { t } = useT();
-  const { account, spaces, shown } = useAccounts();
+  const { account, spaces } = useAccounts();
   const me = account?.user;
   useDocumentTitle(t("nav.activity"));
-  const ids = shown.map((s) => s.id);
+  // its own choice of workspaces, apart from the ones seen in the sidebar; null: all
+  const [only, setOnly] = useState<string[] | null>(null);
+  const ids = spaces.map((s) => s.id).filter((id) => !only || only.includes(id));
   const repos = useReplicas(ids);
   const [fetched, setFetched] = useState<Record<string, Fetched>>({});
   const [filter, setFilter] = useState<"all" | "agent" | "you">("all");
@@ -221,7 +223,7 @@ export function Activity() {
       <p className="mb-5 text-sm text-muted-foreground">{t("activity.intro")}</p>
       {/* one row: which workspaces on the left, who on the right (on a phone below, at the left) */}
       <div className="mb-5 flex flex-wrap items-center gap-x-4 gap-y-2">
-        <SpaceFilter className="m-0 min-w-0 px-0 md:m-0" />
+        <SpaceFilter className="m-0 min-w-0 px-0 md:m-0" value={only} onChange={setOnly} />
         <div className="sm:ml-auto">
           <Seg label={t("activity.filterLabel")} value={filter} onChange={setFilter} options={(["all", "agent", "you"] as const).map((f) => ({ value: f, label: t("activity.filter." + f) }))} />
         </div>

@@ -95,28 +95,31 @@ export function SpaceSelector({ className, onNew }: { className?: string; onNew:
 }
 
 /**
- * The workspaces seen, as chips above the inbox, activity and trash – the same choice as the
- * selector in the sidebar. From "Alle", a chip shows that workspace only; then chips add and take
- * away one by one (every one picked stays picked); none left is "Alle" again.
+ * Workspaces as chips. Without `onChange` they are the workspaces seen (the inbox: the same choice
+ * as the selector in the sidebar); with it a page's own choice (activity, trash: `value`, null for
+ * all). From "Alle", a chip shows that workspace only; then chips add and take away one by one
+ * (every one picked stays picked); none left is "Alle" again.
  */
-export function SpaceFilter({ className }: { className?: string }) {
+export function SpaceFilter({ className, value, onChange }: { className?: string; value?: string[] | null; onChange?: (ids: string[] | null) => void }) {
   const { t } = useT();
-  const { spaces, shown, allSeen: all } = useAccounts();
+  const { spaces, shown, allSeen } = useAccounts();
   if (spaces.length < 2) return null;
-  const ids = shown.map((s) => s.id);
+  const chosen = onChange ? (value ?? null) : allSeen ? null : shown.map((s) => s.id);
+  const choose = onChange ?? ((ids: string[] | null) => (ids ? setShown(ids, true) : setShown(spaces.map((s) => s.id))));
   const pick = (id: string) => {
-    if (all) return setShown([id], true);
-    const next = ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id];
-    setShown(next.length ? next : spaces.map((s) => s.id), next.length > 0);
+    if (!chosen) return choose([id]);
+    const next = chosen.includes(id) ? chosen.filter((x) => x !== id) : [...chosen, id];
+    choose(next.length ? next : null);
   };
+  const on = (id: string) => !!chosen?.includes(id);
   const chip = (on: boolean) => cn("shrink-0 whitespace-nowrap rounded-full border px-3 py-1", on ? "border-focus bg-surface text-fg" : "border-line text-muted-foreground hover:bg-hover hover:text-fg");
   return (
     <div className={cn("-mx-4 mb-4 flex gap-1 overflow-x-auto px-4 text-sm [scrollbar-width:none] md:mx-0 md:px-0", className)} role="group" aria-label={t("space.choose")}>
-      <Button variant="plain" onClick={() => setShown(spaces.map((s) => s.id))} aria-pressed={all} className={chip(all)}>
+      <Button variant="plain" onClick={() => choose(null)} aria-pressed={!chosen} className={chip(!chosen)}>
         {t("inbox.all")}
       </Button>
       {spaces.map((s) => (
-        <Button variant="plain" key={s.id} onClick={() => pick(s.id)} aria-pressed={!all && ids.includes(s.id)} className={chip(!all && ids.includes(s.id))}>
+        <Button variant="plain" key={s.id} onClick={() => pick(s.id)} aria-pressed={on(s.id)} className={chip(on(s.id))}>
           {s.name}
         </Button>
       ))}
