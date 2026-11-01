@@ -28,7 +28,7 @@ import { TypesView } from "./views/Types";
 import { GraphView } from "./views/Graph";
 import { Activity } from "./views/Activity";
 import { TrashView } from "./views/Trash";
-import { SettingsHost, SettingsRedirect, SpaceSettingsPage } from "./views/Settings";
+import { SettingsHost, SettingsRedirect, SpaceSettingsRedirect } from "./views/Settings";
 import { ICON } from "./ui/icons";
 import { NewSpaceDialog, SpaceScope, SpaceSelector, useReplicas } from "./ui/Spaces";
 import { globalPage } from "./scope";
@@ -154,7 +154,7 @@ function Main() {
       case "trash":
         return <TrashView />;
       case "settings":
-        return global ? <SettingsRedirect /> : <SpaceSettingsPage />;
+        return global || !route.space ? <SettingsRedirect /> : <SpaceSettingsRedirect space={route.space} />;
       // the setup page of before (a workspace is set up as it is created)
       case "setup":
         return <Redirect to="/" />;

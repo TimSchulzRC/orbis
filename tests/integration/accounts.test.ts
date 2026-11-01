@@ -41,3 +41,27 @@ test("changing the password needs the current one and ends every other session",
     expect((await accounts.auth.api.signInEmail({ body: { email: "me@example.org", password: "neues-geheim" } })).user.id).toBe(here.user.id);
   } finally { accounts.db.close(); }
 });
+
+test("a new or joined workspace comes first; each account keeps its own order", async () => {
+  const accounts = new Accounts(tempDir("obtion-account-order-"), { secret: "a-test-secret-longer-than-thirty-two-characters", baseURL: "http://localhost:8480", policy: "open" });
+  try {
+    await accounts.init(() => "Personal");
+    const me = await accounts.signUp({ email: "me@example.org", name: "Me", password: "geheim12345" });
+    const other = await accounts.signUp({ email: "other@example.org", name: "Other", password: "geheim12345" });
+    const names = (user: string) => accounts.workspacesOf(user).map((w) => w.name);
+    const a = accounts.createWorkspace(me.user.id, "A");
+    const b = accounts.createWorkspace(me.user.id, "B");
+    const c = accounts.createWorkspace(me.user.id, "C");
+    expect(names(me.user.id)).toEqual(["C", "B", "A"]);
+    accounts.reorder(me.user.id, [a.id, c.id, b.id]);
+    expect(names(me.user.id)).toEqual(["A", "C", "B"]);
+    // made by someone else and joined later: on top
+    const theirs = accounts.createWorkspace(other.user.id, "Theirs");
+    accounts.join(accounts.createInvite(theirs.id, other.user.id), me.user.id);
+    expect(names(me.user.id)).toEqual(["Theirs", "A", "C", "B"]);
+    // a list that misses one (joined since) keeps that one on top; unknown ids are ignored
+    accounts.reorder(me.user.id, [b.id, a.id, "nope", c.id]);
+    expect(names(me.user.id)).toEqual(["Theirs", "B", "A", "C"]);
+    expect(names(other.user.id)).toEqual(["Theirs"]);
+  } finally { accounts.db.close(); }
+});
