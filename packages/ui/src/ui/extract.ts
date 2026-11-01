@@ -4,16 +4,11 @@ import { repo } from "../repo";
 import { tr } from "../i18n";
 import { notify } from "./feedback";
 
-/** The type "extract" uses: the first pinned capture type (shipped: Karte). Survives deleting that type. */
-export function extractType(): string | null {
-  return repo.index().captureTypes()[0] ?? null;
-}
-
 /**
- * "Als Karte herauslösen": the selected paragraph becomes a new standalone item, and a
- * link to it takes its place. Without a selection the paragraph at the cursor is used.
+ * "Herauslösen" (toolbar): the selected text becomes a new item of `type`, and a link to it
+ * takes its place. Without a selection the paragraph at the cursor is used.
  */
-export function extractAsCard(view: EditorView) {
+export function extractAs(view: EditorView, type: string) {
   const sel = view.state.selection.main;
   let { from, to } = sel;
   if (from === to) {
@@ -30,7 +25,7 @@ export function extractAsCard(view: EditorView) {
   const ix = repo.index();
   let unique = title;
   for (let n = 2; ix.resolveTitle(unique); n++) unique = `${title} (${n})`;
-  repo.create({ title: unique, body, type: extractType() });
+  repo.create({ title: unique, body, type });
   const insert = `[[${unique}]]`;
   view.dispatch({ changes: { from, to, insert }, selection: EditorSelection.cursor(from + insert.length) });
   view.focus();

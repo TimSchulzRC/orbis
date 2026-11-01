@@ -907,7 +907,8 @@ body.cm-dragging * {
 .cm-tb:hover {
   background: var(--hover);
 }
-.cm-tb.kind svg {
+.cm-tb.kind svg,
+.cm-tb.extract svg:last-child {
   color: var(--muted-foreground);
 }
 .cm-tb-sep {

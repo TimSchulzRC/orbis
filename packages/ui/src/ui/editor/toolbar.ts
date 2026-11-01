@@ -1,6 +1,6 @@
 // Above selected text, as in Notion: turn the blocks into another kind, bold, italic,
 // strikethrough, code, a link – to a page (found by its title) or to a web address – and, on a
-// page, extract the selection as a card. The selection may span several blocks (no link then).
+// page, extract the selection as a new item of a type picked below the bar. The selection may span several blocks (no link then).
 // ⌘B, ⌘I, ⌘⇧S, ⌘E and ⌘K do the same from the keyboard.
 import { EditorSelection, Facet, Prec } from "@codemirror/state";
 import { type EditorView, ViewPlugin, type ViewUpdate, keymap } from "@codemirror/view";
@@ -9,7 +9,8 @@ import { repo } from "../../repo";
 import { getLang, tr } from "../../i18n";
 import { shortcut } from "../../lib/platform";
 import { KINDS, kindName, kindOfRange, setKindRange, toggleMark } from "./blocks";
-import { extractAsCard, extractType } from "../extract";
+import { extractAs } from "../extract";
+import { ICON } from "../icons";
 import { iconButton, iconHTML } from "./icons";
 import { showMenu } from "./menu";
 import { titleKey } from "@obtion/core/model";
@@ -18,7 +19,7 @@ import { kindHint, webHref } from "../text";
 /** A key hint in a tooltip: " (⌘B)", " (Strg B)". */
 const key = (k: string) => ` (${shortcut(k, getLang())})`;
 
-/** On for the page's own text: the toolbar offers to extract the selection as a card there. */
+/** On for the page's own text: the toolbar offers to extract the selection there. */
 export const toolbarExtract = Facet.define<boolean, boolean>({ combine: (v) => v.some(Boolean) });
 
 const isURL = (s: string) => /^(https?:\/\/|mailto:|www\.)\S+$/i.test(s.trim());
@@ -47,7 +48,7 @@ class Toolbar {
   extractSep: HTMLSpanElement;
   linkSep: HTMLSpanElement;
   pointerDown = false;
-  /** "Turn into" is open below the bar: the bar stays while the menu has the focus. */
+  /** "Turn into" or "Extract" is open below the bar: the bar stays while the menu has the focus. */
   menuOpen = false;
   linking = false;
   picked = 0;
@@ -66,18 +67,10 @@ class Toolbar {
     this.kindBtn.type = "button";
     this.kindBtn.className = "cm-tb kind";
     this.kindBtn.addEventListener("click", () => {
-      const r = this.dom.getBoundingClientRect();
       const { from, to } = view.state.selection.main;
       const current = kindOfRange(view.state, from, to);
-      this.menuOpen = true;
-      const onClose = () => {
-        this.menuOpen = false;
-        // closed by Escape: back to the text, the selection and the bar stay
-        if (!document.activeElement || document.activeElement === document.body) view.focus();
-        this.place();
-      };
       const entries = KINDS.map((k) => ({ label: kindName(k.kind), icon: k.icon, active: k.kind === current, run: () => setKindRange(view, from, to, k.kind) }));
-      showMenu({ left: r.left, top: r.bottom + 4 }, [{ title: tr("editor.turnInto"), entries }], onClose).focusFirst();
+      this.openMenu(this.kindBtn, tr("editor.turnInto"), entries);
     });
     const sep = () => Object.assign(document.createElement("span"), { className: "cm-tb-sep" });
     const mark = (icon: typeof Bold, label: string, m: string) => {
@@ -88,22 +81,25 @@ class Toolbar {
     const linkBtn = (this.linkBtn = iconButton(Link2, tr("editor.fmt.link") + key("K"), "cm-tb wide", 16));
     linkBtn.insertAdjacentHTML("beforeend", `<span>${tr("editor.fmt.linkShort")}</span>`);
     linkBtn.addEventListener("click", () => this.openLink());
-    this.extractBtn = iconButton(Scissors, "", "cm-tb wide extract", 16);
-    this.extractBtn.append(document.createElement("span"));
-    this.extractBtn.addEventListener("click", () => extractAsCard(view));
+    this.extractBtn = iconButton(Scissors, tr("editor.fmt.extract"), "cm-tb wide extract", 16);
+    this.extractBtn.insertAdjacentHTML("beforeend", `<span>${tr("editor.fmt.extract")}</span>${iconHTML(ChevronDown, 14)}`);
+    this.extractBtn.addEventListener("click", () => {
+      const entries = repo.index().typesInOrder().map((t) => ({ label: t.schema.name, icon: ICON[t.schema.icon] ?? ICON.circle, run: () => extractAs(view, t.id) }));
+      this.openMenu(this.extractBtn, tr("editor.extractAs"), entries);
+    });
     this.extractSep = sep();
     this.linkSep = sep();
     this.bar.append(
       this.kindBtn,
       sep(),
-      this.extractBtn,
-      this.extractSep,
       linkBtn,
       this.linkSep,
       mark(Bold, tr("editor.fmt.bold") + key("B"), "**"),
       mark(Italic, tr("editor.fmt.italic") + key("I"), "*"),
       mark(Strikethrough, tr("editor.fmt.strike") + key("⇧S"), "~~"),
       mark(Code, tr("editor.fmt.code") + key("E"), "`"),
+      this.extractSep,
+      this.extractBtn,
     );
     this.linkBox = document.createElement("div");
     this.linkBox.className = "cm-toolbar-link";
@@ -147,14 +143,7 @@ class Toolbar {
     // a link is inline: one block only
     const multi = view.state.doc.lineAt(s.from).number !== view.state.doc.lineAt(s.to).number;
     this.linkBtn.hidden = this.linkSep.hidden = multi;
-    const type = view.state.facet(toolbarExtract) ? extractType() : null;
-    const name = type ? (repo.index().typeName(type) ?? "") : "";
-    this.extractBtn.hidden = this.extractSep.hidden = !name;
-    if (name) {
-      this.extractBtn.title = tr("item.extract", { name });
-      this.extractBtn.setAttribute("aria-label", this.extractBtn.title);
-      this.extractBtn.lastElementChild!.textContent = tr("editor.fmt.extract", { name });
-    }
+    this.extractBtn.hidden = this.extractSep.hidden = !view.state.facet(toolbarExtract) || !repo.index().typesInOrder().length;
     view.requestMeasure({
       read: () => {
         const a = view.coordsAtPos(s.from, 1);
@@ -170,6 +159,18 @@ class Toolbar {
         this.dom.style.top = a.top - dom.top - this.dom.offsetHeight - 8 + "px";
       },
     });
+  }
+  /** A menu below the bar; the bar stays while it is open. */
+  openMenu(btn: HTMLElement, title: string, entries: Parameters<typeof showMenu>[1][number]["entries"]) {
+    const { view } = this;
+    this.menuOpen = true;
+    const onClose = () => {
+      this.menuOpen = false;
+      // closed by Escape: back to the text, the selection and the bar stay
+      if (!document.activeElement || document.activeElement === document.body) view.focus();
+      this.place();
+    };
+    showMenu({ left: btn.getBoundingClientRect().left, top: this.dom.getBoundingClientRect().bottom + 4 }, [{ title, entries }], onClose).focusFirst();
   }
   /** The link box for the selected text, or, with `relink`, for a new target of the selected link. */
   openLink(relink?: { text: string; target: string }) {

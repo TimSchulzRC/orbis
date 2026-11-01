@@ -201,14 +201,24 @@ describe("the toolbar over selected text", () => {
     expect(doc()).toBe("eins\nzwei");
   });
 
-  test("on a page it extracts the selected blocks as a card", async () => {
+  test("on a page, Extract at the right end opens all types below the bar and extracts as the chosen one", async () => {
     const { doc } = await open([toolbarExtract.of(true)]);
     await select(4, 5);
     const extract = button(".extract");
-    expect(extract.textContent).toBe("Als Karte herauslösen");
+    expect(extract.textContent).toBe("Herauslösen");
+    expect([...document.querySelectorAll(".cm-toolbar.shown .cm-tb")].filter((b) => (b as HTMLElement).offsetParent).at(-1), "the last button").toBe(extract);
+    const bar = rect(toolbar()!);
     await press(extract);
+    await expect.poll(() => document.querySelector(".cm-menu")).not.toBeNull();
+    expect(toolbar(), "the bar stays while the menu is open").not.toBeNull();
+    expect(rect(document.querySelector(".cm-menu")!).top, "the menu opens below the bar").toBeGreaterThanOrEqual(bar.bottom);
+    const names = [...document.querySelectorAll(".cm-menu-row")].map((r) => r.textContent);
+    expect(names).toEqual(repo.index().typesInOrder().map((t) => t.schema.name));
+    const project = repo.index().typeByName("Projekt")!;
+    await press([...document.querySelectorAll<HTMLElement>(".cm-menu-row")].find((r) => r.textContent === "Projekt")!);
     expect(doc().split("\n").slice(4)).toEqual(["[[Dritter Absatz]]"]);
     const id = repo.index().resolveTitle("Dritter Absatz")!;
+    expect(repo.get(id)?.type).toBe(project);
     expect(repo.get(id)?.body).toBe("Dritter Absatz\nVierter Absatz");
   });
 
