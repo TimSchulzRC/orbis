@@ -882,7 +882,7 @@
  "account.joinAs": "Du trittst als {email} bei.",
  "account.join": "Beitreten",
  "account.noSpace": "Dein Workspace",
- "account.noSpaceHint": "Hier sammelst du Notizen, Projekte und Aufgaben. Hast du einen Einladungslink bekommen? Dann öffne stattdessen ihn, um dem Workspace beizutreten.",
+ "account.noSpaceHint": "Hier sammelst du Notizen, Projekte und Aufgaben.",
  "account.personal": "Persönlich",
  "account.thisServer": "dieser Server ({server})",
  "account.delete": "Konto endgültig löschen",
