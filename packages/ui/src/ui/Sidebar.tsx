@@ -4,14 +4,16 @@
 // types with the files. At the bottom: activity and trash (of the workspaces seen) and the settings. Blocks and what is open in them fold; that is remembered on
 // this device. In the tree, dragging replaces the parent you come from; with Alt held a place is
 // added. Dropping on the upper or lower edge of a row reorders. Dropped into another workspace's
-// block, an item moves there.
+// block, an item moves there. A workspace's name dragged up or down (let go anywhere: the nearest
+// gap between the blocks counts; or "…" → up, down) changes the order of the blocks; it is the
+// account's, on every device, and a new one comes first.
 import { useEffect, useState } from "react";
-import { ArrowLeft, ChevronRight, ChevronDown, History, Search, Settings, Link2, Plus, Paperclip, Sun, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowUp, ChevronRight, ChevronDown, History, Search, Settings, Link2, Plus, Paperclip, Shapes, Sun, Trash2, Waypoints } from "lucide-react";
 import { type Item, META_TYPE, SETTINGS_ID, setSchemaField, setSettings } from "@obtion/core/model";
 import { sidebarChildren, sidebarRoots } from "@obtion/core/placement";
 import { keyBetween, keysFor, cmpKey } from "@obtion/core/sortkey";
-import { useRepo, useRoute, useSpaceId, itemPath, spaceHref, useLocalStorage, leavePage } from "../hooks";
-import { type Space, useAccounts } from "../accounts";
+import { useRepo, useRoute, useSpaceId, itemPath, spaceHref, useLocalStorage, leavePage, navigate } from "../hooks";
+import { type Space, moveSpace, useAccounts } from "../accounts";
 import { useT } from "../i18n";
 import { Button, IconButton, Kbd, MenuItem, MoreMenu, REVEAL, useContextMenu } from "./primitives";
 import { TypeGlyph, ItemIcon } from "./item-look";
@@ -19,12 +21,11 @@ import { cn, moveInArray } from "../lib/utils";
 import { shortcut } from "../lib/platform";
 import { StatusButton } from "./StatusButton";
 import { createAndOpen } from "../actions";
-import { NewTypeDialog } from "../views/Types";
 import { DeleteDialog, deleteOrAsk } from "../views/ItemPage";
 import { NewSpaceDialog, SpaceScope, SpaceSelector, moveTo } from "./Spaces";
 import { KEYS } from "./storage";
 import { notify } from "./toasts";
-import { openSettings } from "./settings-open";
+import { openSettings, openSpaceSettings } from "./settings-open";
 import { Tip } from "../components/ui/tooltip";
 
 /**
@@ -41,6 +42,25 @@ const startDrag = (e: React.DragEvent, d: NonNullable<typeof dragging>, text: st
   e.dataTransfer.clearData();
   e.dataTransfer.setData("text/plain", text);
 };
+/** The workspace whose block is being dragged to another place among the blocks. */
+let draggingSpace: string | null = null;
+/**
+ * Where the block of workspace `dragged` goes: the gap between the blocks in `area` nearest to the
+ * pointer (`index`: before that block; the number of blocks: at the end), and how far down in
+ * `area` that gap is. Above the first block is the first gap, any empty space below the last one
+ * the last. The gap just below the dragged block is none: its place is the one above it.
+ */
+function spaceGapAt(area: HTMLElement, clientY: number, dragged: string) {
+  const box = area.getBoundingClientRect();
+  const els = [...area.querySelectorAll<HTMLElement>("[data-space-block]")];
+  const blocks = els.map((b) => b.getBoundingClientRect());
+  const below = els.findIndex((b) => b.dataset.spaceBlock === dragged) + 1;
+  // on the line above each block (between two); after the last, just below it
+  const gaps = [...blocks.map((b) => b.top - 12), blocks.at(-1)!.bottom + 6];
+  let index = -1;
+  for (let i = 0; i < gaps.length; i++) if (i !== below && (index < 0 || Math.abs(gaps[i]! - clientY) < Math.abs(gaps[index]! - clientY))) index = i;
+  return { index, y: gaps[index]! - box.top + area.scrollTop };
+}
 /** Can it go into another workspace? Items can (a move), type pages and rows of "Typen" not. */
 const movable = (d: typeof dragging) => !!d && d.from !== "types" && !d.type;
 
@@ -49,6 +69,13 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
   const route = useRoute();
   const { shown } = useAccounts();
   const [creating, setCreating] = useState(false);
+  const [spaceGap, setSpaceGap] = useState<{ index: number; y: number } | null>(null);
+  // a drag let go outside the sidebar (or broken off) leaves no line behind
+  useEffect(() => {
+    const end = () => setSpaceGap(null);
+    addEventListener("dragend", end);
+    return () => removeEventListener("dragend", end);
+  }, []);
   const iconCls = (active: boolean) => cn("tap inline-flex size-8 shrink-0 items-center justify-center rounded-md", active ? "bg-hover text-fg" : "text-muted-foreground hover:bg-hover hover:text-fg");
   const navCls = (active: boolean) => cn("flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm", active ? "bg-hover font-medium text-fg" : "text-muted-foreground hover:bg-hover hover:text-fg");
 
@@ -57,7 +84,30 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
       <div className="flex items-center px-2 pb-px pt-2">
         <SpaceSelector className="flex-1" onNew={() => setCreating(true)} />
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto pb-3">
+      <div
+        className="relative min-h-0 flex-1 overflow-y-auto pb-3"
+        // a workspace's block dragged by its name: anywhere here, the nearest gap between the blocks
+        onDragOver={(e) => {
+          if (!draggingSpace) return;
+          e.preventDefault();
+          setSpaceGap(spaceGapAt(e.currentTarget, e.clientY, draggingSpace));
+        }}
+        onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget as Node | null) && setSpaceGap(null)}
+        onDrop={(e) => {
+          const id = draggingSpace;
+          if (!id) return;
+          e.preventDefault();
+          draggingSpace = null;
+          const gap = spaceGapAt(e.currentTarget, e.clientY, id);
+          setSpaceGap(null);
+          const from = shown.findIndex((s) => s.id === id);
+          // its own place (the gap just above it): nothing changes
+          if (gap.index === from) return;
+          const last = gap.index >= shown.length;
+          void moveSpace(id, shown[last ? shown.length - 1 : gap.index]!.id, !last).catch(() => notify(t("account.offline")));
+        }}
+      >
+        {spaceGap && <span className="pointer-events-none absolute inset-x-3 z-10 h-0.5 rounded bg-focus" style={{ top: spaceGap.y - 1 }} />}
         <nav className="flex flex-col gap-px px-2" aria-label={t("nav.main")}>
           <Button variant="plain" onClick={onSearch} className={cn(navCls(false), "group/search")}>
             <Search size={16} /> <span className="flex-1 text-left">{t("nav.search")}</span>
@@ -112,8 +162,10 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
 
 /**
  * One workspace in the sidebar (and the phone menu, `touch`: taller rows, no drag and drop, no
- * hover buttons): its name folds the block, "+" pins a new information. Dropping an item of
- * another workspace onto the name moves it here.
+ * hover buttons): its name folds the block, "+" pins a new information, "…" leads to the
+ * workspace's settings, types and graph and moves the block up or down. Dropping an item of
+ * another workspace onto the name moves it here; the name dragged elsewhere in the sidebar puts
+ * this block into the nearest gap between the blocks (in the account's order, on every device).
  */
 export function SpaceTree({ space, touch }: { space: Space; touch?: boolean }) {
   const { t } = useT();
@@ -123,13 +175,28 @@ export function SpaceTree({ space, touch }: { space: Space; touch?: boolean }) {
   const [open, setOpen] = useLocalStorage<boolean>(KEYS.sidebarSpace(space.id), true);
   const [typesOpen, setTypesOpen] = useLocalStorage<boolean>(KEYS.sidebarTypes(space.id), shown.length === 1);
   const [over, setOver] = useState(false);
+  const menu = useContextMenu();
   const ix = repo.index();
   const roots = sidebarRoots(ix);
   const ready = !!repo.get(SETTINGS_ID);
   const row = cn("flex items-center gap-2 rounded-lg pr-2", touch ? "py-2 text-[15px]" : "py-1 text-sm");
+  // up and down among the blocks seen (the hidden ones keep their place in the order)
+  const at = shown.findIndex((s) => s.id === space.id);
+  const reorder = (to: string | undefined, before: boolean) => to && moveSpace(space.id, to, before).catch(() => notify(t("account.offline")));
+  const go = (path: string) => navigate(path, { space: space.id });
   return (
-    <section className="mt-3" aria-label={space.name}>
+    <section className="mt-3" aria-label={space.name} data-space-block={space.id}>
       <div
+        draggable={!touch && shown.length > 1}
+        onDragStart={(e) => {
+          dragging = null;
+          draggingSpace = space.id;
+          e.dataTransfer.clearData();
+          e.dataTransfer.setData("text/plain", space.name);
+          e.dataTransfer.effectAllowed = "move";
+        }}
+        onDragEnd={() => (draggingSpace = null)}
+        onContextMenu={touch ? undefined : menu.onContextMenu}
         className={cn("group/space flex h-7 items-center gap-0.5 rounded-lg", touch ? "px-3" : "mx-2 px-2", over && "bg-hover ring-1 ring-focus")}
         onDragOver={(e) => {
           if (!movable(dragging) || dragging!.space === space.id) return;
@@ -159,6 +226,30 @@ export function SpaceTree({ space, touch }: { space: Space; touch?: boolean }) {
             className={touch ? "p-1.5" : "opacity-0 focus:opacity-100 group-hover/space:opacity-100"}
           />
         )}
+        <MoreMenu
+          menu={touch ? undefined : menu}
+          // into the page, not back over the sidebar
+          align="left"
+          size="xs"
+          iconSize={14}
+          label={t("space.menu", { name: space.name })}
+          className={touch ? "p-1.5" : "opacity-0 focus:opacity-100 group-hover/space:opacity-100 pointer-coarse:opacity-100"}
+        >
+          {(close) => (
+            <>
+              <MenuItem icon={<Settings size={14} />} onClick={() => (close(), openSpaceSettings(space.id))}>{t("space.settings")}</MenuItem>
+              <MenuItem icon={<Shapes size={14} />} onClick={() => (close(), go("/types"))}>{t("nav.types")}</MenuItem>
+              <MenuItem icon={<Waypoints size={14} />} onClick={() => (close(), go("/graph"))}>{t("nav.graph")}</MenuItem>
+              {shown.length > 1 && (
+                <>
+                  <div className="my-1 border-t border-line" />
+                  {at > 0 && <MenuItem icon={<ArrowUp size={14} />} onClick={() => (close(), reorder(shown[at - 1]?.id, true))}>{t("space.moveUp")}</MenuItem>}
+                  {at < shown.length - 1 && <MenuItem icon={<ArrowDown size={14} />} onClick={() => (close(), reorder(shown[at + 1]?.id, false))}>{t("space.moveDown")}</MenuItem>}
+                </>
+              )}
+            </>
+          )}
+        </MoreMenu>
       </div>
       {/* set up as soon as it is in step with the server (accounts.ts) */}
       {open && !ready && <p className={cn(row, "pl-[30px] text-muted-foreground", !touch && "mx-2")}>{t("app.syncing")}</p>}
@@ -224,14 +315,13 @@ function PinnedTree({ touch, here }: { touch?: boolean; here: boolean }) {
   );
 }
 
-/** The page of every type of a workspace and the files, in an order of their own (synced); a new type comes last. */
+/** The page of every type of a workspace and the files, in an order of their own (synced); a new type comes last. New types are made on the types page. */
 function TypeNav({ touch, here }: { touch?: boolean; here: boolean }) {
   const { t } = useT();
   const repo = useRepo();
   const space = useSpaceId()!;
   const ix = repo.index();
   const route = useRoute();
-  const [creating, setCreating] = useState(false);
   const [drop, setDrop] = useState<{ id: string; before: boolean } | null>(null);
   const filesPos = ix.all.get(SETTINGS_ID)?.settings?.filesPos;
   const rows = [
@@ -279,10 +369,6 @@ function TypeNav({ touch, here }: { touch?: boolean; here: boolean }) {
           <span className="min-w-0 flex-1 truncate">{r.label}</span>
         </a>
       ))}
-      <Button variant="plain" onClick={() => setCreating(true)} className={cn("flex items-center gap-2 rounded-lg pl-[30px] pr-2 text-muted-foreground hover:bg-hover hover:text-fg", touch ? "py-2 text-[15px]" : "py-1 text-sm")}>
-        <Plus size={touch ? 17 : 15} className="shrink-0" /> {t("types.new")}
-      </Button>
-      {creating && <NewTypeDialog onClose={() => setCreating(false)} />}
     </nav>
   );
 }

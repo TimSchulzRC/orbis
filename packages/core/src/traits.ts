@@ -167,9 +167,8 @@ export function hasValue(item: Item, p: PropDef, ix: Pick<Index, "relValues" | "
 
 /**
  * Which properties a page shows: every property of the type – an empty one as a quiet "–" to
- * click – except those marked "only when set" (hideEmpty) and computed ones without anything to
- * show. Those wait behind "+ Eigenschaft" (see AddField) until they have a value or are opened.
+ * click –, computed ones only once they have something to show.
  */
-export function visibleProps(item: Item, schema: TypeSchema, ix: Pick<Index, "relValues" | "progress">, opened: Set<string> = new Set()): PropDef[] {
-  return schema.properties.filter((p) => (p.kind !== "computed" && !p.hideEmpty) || opened.has(p.id) || hasValue(item, p, ix));
+export function visibleProps(item: Item, schema: TypeSchema, ix: Pick<Index, "relValues" | "progress">): PropDef[] {
+  return schema.properties.filter((p) => p.kind !== "computed" || hasValue(item, p, ix));
 }

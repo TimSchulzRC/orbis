@@ -107,7 +107,7 @@ export function Tag({ tag, onRemove, href }: { tag: string; onRemove?: () => voi
       {tag}
       {onRemove && (
         <Button variant="plain"
-          className="-mr-1 ml-0.5 rounded px-1 text-muted-foreground hover:bg-hover hover:text-fg"
+          className="-mr-1 ml-0.5 rounded px-1 text-muted-foreground opacity-0 transition-opacity hover:bg-hover hover:text-fg focus:opacity-100 group-hover/tag:opacity-100 pointer-coarse:opacity-100"
           onClick={(e) => {
             e.preventDefault();
             onRemove();
@@ -119,7 +119,7 @@ export function Tag({ tag, onRemove, href }: { tag: string; onRemove?: () => voi
       )}
     </>
   );
-  const cls = "inline-flex items-center rounded-md bg-surface-2 px-1.5 py-0.5 text-xs text-muted-foreground";
+  const cls = "group/tag inline-flex items-center rounded-md bg-surface-2 px-1.5 py-0.5 text-xs text-muted-foreground";
   return href ? (
     <a href={href} className={cn(cls, "hover:text-fg")}>
       {inner}

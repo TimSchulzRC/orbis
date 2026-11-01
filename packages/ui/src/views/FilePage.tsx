@@ -28,14 +28,10 @@ export function FilePage({ item }: { item: Item }) {
   const [picking, setPicking] = useState(false);
   const isImg = f.filetype === "bild";
   const display = useBlobUrl(isImg ? (f.display ?? f.hash) : f.filetype === "pdf" ? undefined : f.thumb, true);
-  const [orig, setOrig] = useState<string | undefined>();
   const used = ix.usedIn(item.id);
   const parents = ix.parentsOf(item.id);
   const local = files.hasLocal(f.hash);
-  useEffect(() => {
-    if (f.filetype === "audio" || f.filetype === "video") files.url(f.hash).then(setOrig);
-    else void files.check(f.hash);
-  }, [f.hash]);
+  useEffect(() => void files.check(f.hash), [f.hash]);
   // the original on this device ("alles lokal", offline): viewer and download use it instead of the server
   const [localSrc, setLocalSrc] = useState<string | undefined>();
   useEffect(() => {
@@ -48,6 +44,8 @@ export function FilePage({ item }: { item: Item }) {
       if (url) URL.revokeObjectURL(url);
     };
   }, [f.hash, local]);
+  // audio and video stream from the server (the player loads what it plays), unless the original is here
+  const media = localSrc ?? (local ? undefined : files.serverUrl(f.hash));
   const missing = files.isMissing(f.hash);
   // who added it; from before accounts the app wrote only the device: then nobody is named
   const by = item.createdBy ? who(item.createdBy, t) : undefined;
@@ -125,8 +123,8 @@ export function FilePage({ item }: { item: Item }) {
       <div className="mt-6 overflow-hidden rounded-xl border border-line bg-surface-2">
         {isImg && display && <img src={display} alt={item.body || item.title} className="mx-auto max-h-[70vh] w-auto" />}
         {f.filetype === "pdf" && (!local || localSrc) && <iframe title={item.title} src={localSrc ?? files.serverUrl(f.hash)} className="h-[75vh] w-full bg-white" />}
-        {f.filetype === "audio" && orig && <audio controls src={orig} className="w-full p-4" />}
-        {f.filetype === "video" && orig && <video controls src={orig} className="w-full" />}
+        {f.filetype === "audio" && media && <audio controls src={media} className="w-full p-4" />}
+        {f.filetype === "video" && media && <video controls src={media} className="w-full" />}
         {!isImg && f.filetype !== "pdf" && f.filetype !== "audio" && f.filetype !== "video" && <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">{f.name}</div>}
       </div>
       <Textarea

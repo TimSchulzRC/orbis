@@ -18,7 +18,7 @@ import { EmptyDash, ItemLink, StatusPill, Tag } from "./item-look";
 import { Button, EmptyValueButton, IconButton, MenuItem, Popover, AddButton, REVEAL } from "./primitives";
 import { Progress, ProgressCount } from "./progress";
 import { cn } from "../lib/utils";
-import { TagInput } from "./TagInput";
+import { PageTags } from "./Tags";
 import { FreeValueText } from "./FreeProps";
 import { ItemPicker } from "./Picker";
 import { StatusMenu, setStatus } from "./Row";
@@ -290,55 +290,50 @@ const isBadge = (p: PropDef) => isSingle(p);
  * The properties of a page under the title (design rules § 2.2). First a row of badges – the
  * type, then status and selections in the type's order –, under it the dates, under them the
  * progress. The rest follows with its name: the type's properties in their order, values left
- * without a property (shown, only removable), the other side of relations ("Blockiert diese"),
- * last the tags. "+ Eigenschaft" offers the type's empty properties and a tag.
+ * without a property (shown, only removable), the other side of relations ("Blockiert diese").
+ * Every property of the type is there from the start – a page adds none the type lacks. Tags are
+ * no property: they follow the badges (see PageTags).
  */
-export function PropertyBlock({ item, schema, noAdd, head = {} }: { item: Item; schema?: TypeSchema; noAdd?: boolean; head?: PageHead }) {
+export function PropertyBlock({ item, schema, head = {} }: { item: Item; schema?: TypeSchema; head?: PageHead }) {
   const { t } = useT();
   const ix = useIndex();
-  // empty properties opened from "+ Eigenschaft" stay while on this page
-  const [opened, setOpened] = useState<Set<string>>(new Set());
-  const [focus, setFocus] = useState<string | undefined>();
-  const [tagging, setTagging] = useState(false);
-  const visible = schema ? visibleProps(item, schema, ix, opened).filter((p) => !(p.kind === "computed" && p.computed?.fn !== "count")) : [];
+  const visible = schema ? visibleProps(item, schema, ix).filter((p) => !(p.kind === "computed" && p.computed?.fn !== "count")) : [];
   const badges = visible.filter(isBadge);
   const dates = visible.filter((p) => p.kind === "date");
   const shown = visible.filter((p) => !isBadge(p) && p.kind !== "date");
-  const empty = schema ? schema.properties.filter((p) => p.kind !== "computed" && !visible.some((x) => x.id === p.id)) : [];
   const leftovers = schema ? schema.removedProperties.filter((p) => item.props[p.id] !== undefined || item.rels[p.id]?.length) : [];
   const inverse = inverseGroups(item, ix, t);
   const free = Object.entries(item.extra);
-  // an empty badge or date waits for the pointer, like "+ Eigenschaft" (unless just opened)
-  const quiet = (p: PropDef) => !hasValue(item, p, ix) && !opened.has(p.id) && "opacity-0 transition-opacity group-hover/props:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100";
-  const rows = shown.length || free.length || inverse.length || item.tags.length || leftovers.length || tagging;
-  if (!rows && !badges.length && !dates.length && !head.first && !head.progress && noAdd) return null;
+  const rows = shown.length || free.length || inverse.length || leftovers.length;
   return (
     <div className="group/props">
       <div className="mt-4 flex flex-wrap items-center gap-1.5">
         {head.first}
         {badges.map((p) => (
-          <span key={p.id} className={cn("inline-flex", quiet(p))}>
+          <span key={p.id} className="inline-flex">
             {isStatusProp(schema, p) ? <StatusBadge item={item} /> : <SelectBadge item={item} prop={p} />}
           </span>
         ))}
+        <PageTags item={item} />
       </div>
       {dates.length > 0 && (
         <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
           {dates.map((p) => (
-            <span key={p.id} className={cn("inline-flex items-center gap-1.5", quiet(p))} title={p.description || p.name}>
+            <span key={p.id} className="inline-flex items-center gap-1.5" title={p.description || p.name}>
               <CalendarDays size={15} className="shrink-0 text-muted-foreground" aria-hidden />
               {/* the name only where the icon alone does not say which date it is */}
               {(dates.length > 1 || !hasValue(item, p, ix)) && <span className="text-muted-foreground">{p.name}</span>}
-              <PropertyField item={item} prop={p} autoFocus={focus === p.id} />
+              <PropertyField item={item} prop={p} />
             </span>
           ))}
         </div>
       )}
       {head.progress}
-      <div className={cn("-mx-1.5 grid grid-cols-[160px_minmax(0,1fr)] gap-x-1 max-md:grid-cols-[124px_minmax(0,1fr)]", rows ? "mt-4" : "mt-2")}>
+      {rows > 0 && (
+      <div className="-mx-1.5 mt-4 grid grid-cols-[160px_minmax(0,1fr)] gap-x-1 max-md:grid-cols-[124px_minmax(0,1fr)]">
       {shown.map((p) => (
         <BlockRow key={p.id} label={p.name} title={p.description || p.name}>
-          <PropertyField item={item} prop={p} autoFocus={focus === p.id} />
+          <PropertyField item={item} prop={p} />
         </BlockRow>
       ))}
       {free.map(([n, v]) => (
@@ -362,44 +357,9 @@ export function PropertyBlock({ item, schema, noAdd, head = {} }: { item: Item; 
           <IconButton size="xs" icon={X} iconSize={12} onClick={() => repo.setProp(item.id, p.id, null)} className={cn("ml-auto text-faint", REVEAL.any)} label={t("props.removeFree", { name: p.name })} />
         </BlockRow>
       ))}
-      {(item.tags.length > 0 || tagging) && (
-        <BlockRow label={t("item.tags")}>
-          {item.tags.map((tag) => (
-            <Tag key={tag} tag={tag} href={`#/search?q=${encodeURIComponent("#" + tag)}`} onRemove={() => repo.setMember(item.id, "tags", tag, false)} />
-          ))}
-          <TagInput exclude={item.tags} start={tagging} onAdd={(tag) => (repo.setMember(item.id, "tags", tag, true), setTagging(false))} onCancel={() => setTagging(false)} />
-        </BlockRow>
-      )}
-      {!noAdd && (
-        <div className="col-span-2">
-          {(empty.length > 0 || !item.tags.length) && (
-            <Popover
-              trigger={(pp) => (
-                // quiet until the pointer is over the properties (always there on touch screens)
-                <Button
-                  variant="plain"
-                  {...pp}
-                  className="tap-y flex h-[34px] w-fit items-center gap-1.5 rounded-md px-1.5 text-sm text-muted-foreground opacity-0 transition-opacity hover:bg-hover hover:text-fg focus:opacity-100 group-hover/props:opacity-100 aria-expanded:opacity-100 pointer-coarse:opacity-100"
-                >
-                  <Plus size={15} /> {t("props.addProperty")}
-                </Button>
-              )}
-            >
-              {(close) => (
-                <>
-                  {empty.map((p) => (
-                    <MenuItem key={p.id} onClick={() => (close(), setOpened(new Set([...opened, p.id])), setFocus(p.id))}>
-                      {p.name}
-                    </MenuItem>
-                  ))}
-                  {!item.tags.length && <MenuItem onClick={() => (close(), setTagging(true))}>{t("props.tag")}</MenuItem>}
-                </>
-              )}
-            </Popover>
-          )}
-        </div>
-      )}
       </div>
+      )}
+      <div className="mt-2" />
     </div>
   );
 }
