@@ -261,7 +261,11 @@ export class DeviceFiles {
         let blob = this.local.has(hash) ? await this.store.get(hash) : undefined;
         if (!blob) {
           blob = await this.fetchVerified(hash);
-          if (blob && (opts.keep || this.mode === "local")) await this.save(hash, blob);
+          if (blob && (opts.keep || this.mode === "local")) {
+            await this.save(hash, blob);
+            // switched to "online only" while it was written: not kept, as in pump()
+            if (!opts.keep && this.mode !== "local" && !keptOnline(this.repo).has(hash)) await this.drop(hash);
+          }
         }
         if (!blob) return undefined;
         // stored contents carry no type; images are recognised without one, SVGs are not

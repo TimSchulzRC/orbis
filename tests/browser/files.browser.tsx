@@ -157,3 +157,29 @@ test("switching to online only while a downloaded original is being written: it 
   await new Promise((r) => setTimeout(r, 100));
   expect(files.hasLocal(a.hash)).toBe(false);
 });
+
+test("an original opened while everything is local, switched to online only while it is written: not kept", async () => {
+  const srv = server();
+  const repo = await workspace(false);
+  const a = await srv.add("opened original");
+  addFile(repo, "a.pdf", a);
+  const { files } = deviceFiles(repo);
+  const inner = files as unknown as { ready: Promise<void>; store: { put(h: string, b: Blob): Promise<void> } };
+  await inner.ready;
+  let release!: () => void;
+  const writing = new Promise<void>((r) => (release = r));
+  let started = false;
+  const put = inner.store.put.bind(inner.store);
+  inner.store.put = async (h, b) => {
+    if (h === a.hash) (started = true, await writing);
+    return put(h, b);
+  };
+  files.mode = "local"; // as setMode, without starting downloads
+  const opened = files.url(a.hash);
+  await expect.poll(() => started, { timeout: 5000 }).toBe(true);
+  files.setMode("online");
+  await files.dropOriginals();
+  release();
+  expect(await opened).toBeTruthy();
+  expect(files.hasLocal(a.hash)).toBe(false);
+});
