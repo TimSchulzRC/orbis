@@ -21,47 +21,54 @@ export function ProjectTable({ items }: { items: Item[] }) {
   const ids = new Set(items.map((i) => i.id));
   const parentOf = (i: Item) => [...ix.homePath(i.id)].reverse().find((p) => ids.has(p));
   const tops = items.filter((i) => !parentOf(i));
-  const kids = (id: string) => items.filter((i) => parentOf(i) === id);
+  const childrenOf = (id: string) => items.filter((i) => parentOf(i) === id);
   const rows: { item: Item; depth: number }[] = [];
   const walk = (i: Item, depth: number) => {
     rows.push({ item: i, depth });
-    if (open.has(i.id)) for (const k of kids(i.id)) walk(k, depth + 1);
+    if (open.has(i.id)) for (const child of childrenOf(i.id)) walk(child, depth + 1);
   };
   tops.forEach((i) => walk(i, 0));
   const today = todayISO();
   const shownNext = new Set<string>();
   const nextOf = (i: Item) => {
-    const n = ix.nextTask(i.id, today);
-    if (!n || shownNext.has(n.id)) return undefined;
-    shownNext.add(n.id);
-    return n;
+    const next = ix.nextTask(i.id, today);
+    if (!next || shownNext.has(next.id)) return undefined;
+    shownNext.add(next.id);
+    return next;
   };
-  const pct = (i: Item) => {
-    const pr = ix.progressOf(i);
-    return pr?.total ? <PercentBar done={pr.done} total={pr.total} inline barClass={phone ? "w-10" : "w-14"} /> : <EmptyDash />;
+  const noTasksNote = (i: Item) => (ix.progressOf(i)?.total ? "" : t("start.noTasks"));
+  const progressCell = (i: Item) => {
+    const progress = ix.progressOf(i);
+    return progress?.total ? <PercentBar done={progress.done} total={progress.total} inline barClass={phone ? "w-10" : "w-14"} /> : <EmptyDash />;
   };
-  const chevron = (i: Item) =>
-    kids(i.id).length ? (
-      <Button variant="plain" onClick={() => setOpen(toggled(open, i.id))} aria-expanded={open.has(i.id)} aria-label={t(open.has(i.id) ? "start.hideSub" : "start.showSub")} className="tap shrink-0 rounded p-0.5 text-faint hover:bg-hover hover:text-fg">
-        <ChevronRight size={14} className={cn("transition-transform", open.has(i.id) && "rotate-90")} />
+  const chevron = (i: Item) => {
+    if (!childrenOf(i.id).length) return <span className="w-[18px] shrink-0" />;
+    const isOpen = open.has(i.id);
+    return (
+      <Button variant="plain" onClick={() => setOpen(toggled(open, i.id))} aria-expanded={isOpen} aria-label={t(isOpen ? "start.hideSub" : "start.showSub")} className="tap shrink-0 rounded p-0.5 text-faint hover:bg-hover hover:text-fg">
+        <ChevronRight size={14} className={cn("transition-transform", isOpen && "rotate-90")} />
       </Button>
-    ) : (
-      <span className="w-[18px] shrink-0" />
     );
+  };
+  /** Without a next task, the phone row names where the project lives instead. */
+  const phoneHint = (i: Item) => {
+    const place = ix.homePath(i.id).slice(-1).map((p) => ix.get(p)?.title)[0];
+    return [place, noTasksNote(i)].filter(Boolean).join(" · ");
+  };
   // phones show only the top projects, without unfolding
   if (phone)
     return (
       <div>
         {tops.map((i) => {
-          const n = nextOf(i);
+          const next = nextOf(i);
           return (
             <div key={i.id} className="flex min-h-[52px] items-center gap-2.5 border-t border-line px-3.5 py-1.5 first:border-t-0">
               <RowStatus item={i} size={16} />
               <a href={itemHref(i.id)} className="flex min-w-0 flex-1 flex-col">
                 <span className="truncate text-[15px]">{titleOf(i, t)}</span>
-                <span className="truncate text-xs text-muted-foreground">{n ? t("row.next", { title: titleOf(n, t) }) : [ix.homePath(i.id).slice(-1).map((p) => ix.get(p)?.title)[0], ix.progressOf(i)?.total ? "" : t("start.noTasks")].filter(Boolean).join(" · ")}</span>
+                <span className="truncate text-xs text-muted-foreground">{next ? t("row.next", { title: titleOf(next, t) }) : phoneHint(i)}</span>
               </a>
-              {pct(i)}
+              {progressCell(i)}
             </div>
           );
         })}
@@ -78,8 +85,8 @@ export function ProjectTable({ items }: { items: Item[] }) {
       </TableHeader>
       <TableBody>
         {rows.map(({ item: i, depth }) => {
-          const n = nextOf(i);
-          const nd = n ? dueOf(n, ix.schemaOf(n)) : undefined;
+          const next = nextOf(i);
+          const nextDue = next ? dueOf(next, ix.schemaOf(next)) : undefined;
           return (
             <TableRow key={i.id} data-id={i.id} className="h-10 border-t border-line hover:bg-hover">
               <TableCell className="max-w-0 px-3.5">
@@ -92,17 +99,17 @@ export function ProjectTable({ items }: { items: Item[] }) {
                   </a>
                 </span>
               </TableCell>
-              <TableCell className="whitespace-nowrap px-3">{pct(i)}</TableCell>
+              <TableCell className="whitespace-nowrap px-3">{progressCell(i)}</TableCell>
               <TableCell className="max-w-0 px-3.5">
-                {n ? (
+                {next ? (
                   <span className="flex min-w-0 items-center gap-2">
-                    <a href={itemHref(n.id)} className="min-w-0 truncate hover:underline">
-                      {titleOf(n, t)}
+                    <a href={itemHref(next.id)} className="min-w-0 truncate hover:underline">
+                      {titleOf(next, t)}
                     </a>
-                    {nd && <DueLabel due={nd} />}
+                    {nextDue && <DueLabel due={nextDue} />}
                   </span>
                 ) : (
-                  <span className="text-xs text-muted-foreground">{ix.progressOf(i)?.total ? "" : t("start.noTasks")}</span>
+                  <span className="text-xs text-muted-foreground">{noTasksNote(i)}</span>
                 )}
               </TableCell>
             </TableRow>

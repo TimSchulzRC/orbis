@@ -11,6 +11,8 @@ import { useReplicas } from "./Spaces";
 
 /** One turn of the arrows (Tailwind's animate-spin): they always make whole ones before they go. */
 const TURN = 1000;
+/** How long the arrows turn after a click on "offline" if no connection comes back. */
+const RECONNECT_WAIT = 5000;
 const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
@@ -22,10 +24,10 @@ export function StatusButton({ className }: { className?: string }) {
   const { spaces } = useAccounts();
   const update = useUpdate();
   const replicas = useReplicas(spaces.map((s) => s.id));
-  const all = replicas.map((r) => r.status);
-  const online = all.every((x) => x.online);
-  const pending = all.reduce((n, x) => n + x.pending, 0);
-  const synced = all.every((x) => x.synced);
+  const statuses = replicas.map((r) => r.status);
+  const online = statuses.every((s) => s.online);
+  const pending = statuses.reduce((n, s) => n + s.pending, 0);
+  const synced = statuses.every((s) => s.synced);
   const [busy, setBusy] = useState<"checking" | "connecting" | null>(null);
   useEffect(() => void (online && busy === "connecting" && setBusy(null)), [online]);
 
@@ -33,7 +35,7 @@ export function StatusButton({ className }: { className?: string }) {
     setBusy("connecting");
     for (const r of replicas) if (!r.status.online) r.connect();
     void refresh();
-    await pause(5000);
+    await pause(RECONNECT_WAIT);
     setBusy((b) => (b === "connecting" ? null : b));
   };
   const lookForUpdate = async () => {
@@ -44,15 +46,16 @@ export function StatusButton({ className }: { className?: string }) {
   };
 
   type Look = { key: string; icon: typeof Cloud; label: string; hint?: string; tone?: string; turn?: boolean; run?: () => void };
+  const turning = (label: string): Look => ({ key: "turn", icon: RefreshCw, label, turn: true });
   const look: Look =
-    update === "applying" ? { key: "turn", icon: RefreshCw, label: t("app.updating"), turn: true }
-    : !online ? busy === "connecting" ? { key: "turn", icon: RefreshCw, label: t("sync.reconnecting"), turn: true }
+    update === "applying" ? turning(t("app.updating"))
+    : !online ? busy === "connecting" ? turning(t("sync.reconnecting"))
       : { key: "offline", icon: CloudOff, label: pending ? t("sync.offline", { count: pending }) : t("sync.offlineNone"), hint: t("sync.clickReconnect"), tone: "text-warn", run: () => void reconnect() }
     : update === "ready" ? { key: "update", icon: CircleFadingArrowUp, label: t("app.newVersion"), hint: t("app.clickUpdate"), tone: "text-link", run: applyUpdate }
-    : update === "loading" ? { key: "turn", icon: RefreshCw, label: t("app.updateLoading"), turn: true }
-    : busy === "checking" ? { key: "turn", icon: RefreshCw, label: t("app.checking"), turn: true }
-    : pending ? { key: "turn", icon: RefreshCw, label: t("sync.pending", { count: pending }), turn: true }
-    : !synced ? { key: "turn", icon: RefreshCw, label: t("sync.catchingUp"), turn: true }
+    : update === "loading" ? turning(t("app.updateLoading"))
+    : busy === "checking" ? turning(t("app.checking"))
+    : pending ? turning(t("sync.pending", { count: pending }))
+    : !synced ? turning(t("sync.catchingUp"))
     : { key: "ok", icon: Cloud, label: t("sync.ok"), hint: t("app.clickCheck"), run: () => void lookForUpdate() };
   return (
     <Tip side="top" className="max-w-64" label={look.hint ? <><span className="block">{look.label}</span><span className="block opacity-70">{look.hint}</span></> : look.label}>

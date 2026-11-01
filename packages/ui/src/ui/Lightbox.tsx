@@ -18,8 +18,8 @@ export function openLightbox(ids: string[], at: number) {
 }
 
 export function LightboxHost() {
-  const o = open.use();
-  return o ? <Lightbox ids={o.ids} start={o.at} /> : null;
+  const shown = open.use();
+  return shown ? <Lightbox ids={shown.ids} start={shown.at} /> : null;
 }
 
 function Lightbox({ ids, start }: { ids: string[]; start: number }) {
@@ -27,29 +27,29 @@ function Lightbox({ ids, start }: { ids: string[]; start: number }) {
   const [at, setAt] = useState(start);
   const [src, setSrc] = useState<string | undefined>();
   const item = repo.get(ids[at]!);
-  const f = item?.file;
+  const file = item?.file;
   const close = () => open.set(null);
-  const step = (d: number) => setAt((a) => (a + d + ids.length) % ids.length);
+  const step = (delta: number) => setAt((a) => (a + delta + ids.length) % ids.length);
   useEffect(() => {
-    if (!f) return;
+    if (!file) return;
     let live = true;
     setSrc(undefined);
-    void files.url(f.display ?? f.hash, { keep: true }).then((u) => live && u && setSrc((s) => s ?? u));
-    if (f.display) void files.url(f.hash).then((u) => live && u && setSrc(u));
+    void files.url(file.display ?? file.hash, { keep: true }).then((url) => live && url && setSrc((s) => s ?? url));
+    if (file.display) void files.url(file.hash).then((url) => live && url && setSrc(url));
     return () => void (live = false);
-  }, [f?.hash]);
+  }, [file?.hash]);
   useEffect(() => {
-    const on = (e: KeyboardEvent) => {
+    const onKey = (e: KeyboardEvent) => {
       if (e.key === "ArrowRight") step(1);
       else if (e.key === "ArrowLeft") step(-1);
       else return;
       e.preventDefault();
       e.stopPropagation();
     };
-    window.addEventListener("keydown", on, true);
-    return () => window.removeEventListener("keydown", on, true);
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
   }, [ids.length]);
-  if (!item || !f) return null;
+  if (!item || !file) return null;
   const nav = "absolute top-1/2 -translate-y-1/2 rounded-full bg-black/40 p-2 text-white hover:bg-black/60";
   return (
     <ModalSurface title={item.title} onClose={close}><div className="fixed inset-0 z-50 flex flex-col bg-black/95 backdrop-blur-sm" onClick={close}>

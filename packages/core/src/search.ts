@@ -23,6 +23,19 @@ function tokenizeForIndex(text: string): string[] {
   return out;
 }
 
+/** Ids of the shipped status and priority options (st_*, pr_*): stored values, not words to search for. */
+const OPTION_ID = /^(st|pr)_/;
+
+function bodyText(doc: Item): string {
+  return stripQueryBlocks(doc.body) + (doc.file ? ` ${doc.file.name} ${doc.file.text ?? ""}` : "") + (doc.schema ? ` ${doc.schema.description}` : "");
+}
+
+function propsText(doc: Item): string {
+  const values = Object.values(doc.props).filter((v) => typeof v === "string" && !OPTION_ID.test(v));
+  const free = Object.entries(doc.extra).map(([k, v]) => `${k} ${v.v}`);
+  return [...values, ...free].join(" ");
+}
+
 function tokenizeForSearch(text: string): string[] {
   return [...text.matchAll(WORD)].map(([w]) => w.replace(/-/g, ""));
 }
@@ -39,9 +52,8 @@ export function createIndex() {
     },
     extractField: (doc, field) => {
       if (field === "tagText") return doc.tags.join(" ");
-      if (field === "body") return stripQueryBlocks(doc.body) + (doc.file ? ` ${doc.file.name} ${doc.file.text ?? ""}` : "") + (doc.schema ? ` ${doc.schema.description}` : "");
-      if (field === "props")
-        return [...Object.values(doc.props).filter((v) => typeof v === "string" && !/^(st|pr)_/.test(v)), ...Object.entries(doc.extra).map(([k, v]) => `${k} ${v.v}`)].join(" ");
+      if (field === "body") return bodyText(doc);
+      if (field === "props") return propsText(doc);
       return field === "title" || field === "id" ? doc[field] : "";
     },
     searchOptions: {

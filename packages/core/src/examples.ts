@@ -59,8 +59,9 @@ export function writeExamples(w: Writer, lang: Lang, files: Partial<Record<Examp
   const here = { this: true as const };
   const day = (n: number) => (n === 0 ? todayISO() : addDaysISO(n));
   const H = 3600_000;
+  const D = 24 * H;
   // spread over the last three weeks in the order below, so the history reads like real use
-  let clock = now - 21 * 24 * H;
+  let clock = now - 21 * D;
   const hoursAgo = (h: number) => now - h * H;
   const written: string[] = [];
 
@@ -76,11 +77,11 @@ export function writeExamples(w: Writer, lang: Lang, files: Partial<Record<Examp
     written.push(id);
     return id;
   }
-  const doneAt = (daysAgo: number) => (doc: Y.Doc) => metaMap(doc).set("done", now - daysAgo * 24 * H);
+  const doneAt = (daysAgo: number) => (doc: Y.Doc) => metaMap(doc).set("done", now - daysAgo * D);
 
   const type = (id: string, spec: Parameters<typeof initType>[1], plural: string) => {
     if (w.get(id)) return;
-    w.change(id, (doc) => initType(doc, { ...spec, plural }, { source: EXAMPLE, createdBy: EXAMPLE_ORIGIN, created: now - 22 * 24 * H }));
+    w.change(id, (doc) => initType(doc, { ...spec, plural }, { source: EXAMPLE, createdBy: EXAMPLE_ORIGIN, created: now - 22 * D }));
     written.push(id);
   };
   const person = "Person";
@@ -212,8 +213,8 @@ Connect an MCP client in the workspace settings to read and change your entries 
       body: L("Ziel: Livegang in vier Wochen. Design und Umsetzung sind eigene Unterprojekte.\n", "Goal: live in four weeks. Design and build are sub-projects of their own.\n"),
     },
     (doc) => {
-      appendUpdate(doc, { at: now - 9 * 24 * H, text: L("Kickoff war gut, Moodboard steht. Als Nächstes die Mockups.", "Good kickoff, the moodboard is done. Mockups next."), by: "you" });
-      appendUpdate(doc, { at: now - 2 * 24 * H, text: L("CMS-Entscheidung hängt noch, dadurch verschieben sich die Seiten.", "The CMS decision is still open, which delays the pages."), by: "agent:claude" });
+      appendUpdate(doc, { at: now - 9 * D, text: L("Kickoff war gut, Moodboard steht. Als Nächstes die Mockups.", "Good kickoff, the moodboard is done. Mockups next."), by: "you" });
+      appendUpdate(doc, { at: now - 2 * D, text: L("CMS-Entscheidung hängt noch, dadurch verschieben sich die Seiten.", "The CMS decision is still open, which delays the pages."), by: "agent:claude" });
     },
   );
   const design = put("ex-design", { type: SYS.project, title: L("Design", "Design"), parents: [relaunch], props: { p_status: "st_active", p_period: `${day(-20)}/${day(3)}` } });

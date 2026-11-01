@@ -70,13 +70,12 @@ export function Crumbs({ item, tools, onPlaces, onPlace }: { item: Item; tools: 
         <Pin size={12} className="text-faint" aria-hidden /> {t("place.pinned")}
       </span>
     );
-  } else {
-    if (item.type && ix.types.has(item.type))
-      lead = (
-        <a href={itemHref(item.type)} className={link}>
-          {ix.typePlural(item.type)}
-        </a>
-      );
+  } else if (item.type && ix.types.has(item.type)) {
+    lead = (
+      <a href={itemHref(item.type)} className={link}>
+        {ix.typePlural(item.type)}
+      </a>
+    );
   }
   return (
     <div className="page-bar flex min-h-7 items-center gap-1 text-[13px] text-muted-foreground max-md:min-h-8">
@@ -114,20 +113,19 @@ export function Bezuege({ item, typeArea, usedIn, placesOpen }: { item: Item; ty
   const ix = useIndex();
   const { t } = useT();
   const kinds: RefKind[] = [];
-  const seen = new Set<string>();
-  const from = ix
-    .backlinks(item.id)
-    .filter((b) => b.kind !== "rel" && (seen.has(b.from) ? false : (seen.add(b.from), true)))
-    .map((b) => ix.get(b.from)!)
+  const linkingIds = new Set(ix.backlinks(item.id).filter((b) => b.kind !== "rel").map((b) => b.from));
+  const from = [...linkingIds]
+    .map((id) => ix.get(id)!)
     .filter((x) => x && x.kind === "info" && !x.deleted && x.type !== META_TYPE && !(usedIn ?? []).some((u) => u.item.id === x.id));
   const where = (x: Item) => {
-    const p = ix.homePath(x.id);
-    return p.length ? <span className="truncate">{ix.get(p.at(-1)!)?.title}</span> : undefined;
+    const homePath = ix.homePath(x.id);
+    return homePath.length ? <span className="truncate">{ix.get(homePath.at(-1)!)?.title}</span> : undefined;
   };
   if (usedIn?.length) kinds.push({ key: "used", label: t("file.usedIn"), items: usedIn.map((x) => ({ item: x.item, note: x.note })) });
   if (from.length) kinds.push({ key: "linked", label: t("item.linkedFrom"), items: from.map((x) => ({ item: x, note: isInInbox(x, ix) ? undefined : where(x), tools: <PlaceHere target={x} page={item} /> })) });
-  const fromText = ix.textLinks(item).filter((l) => !l.embed).map((l) => l.to);
-  const embedded = ix.textLinks(item).filter((l) => l.embed).map((l) => l.to);
+  const textLinks = ix.textLinks(item);
+  const fromText = textLinks.filter((l) => !l.embed).map((l) => l.to);
+  const embedded = textLinks.filter((l) => l.embed).map((l) => l.to);
   const refIds = [...new Set([...fromText, ...item.refs])].filter((x) => ix.get(x) && x !== item.id);
   if (refIds.length)
     kinds.push({

@@ -41,8 +41,8 @@ function mailer(env: Record<string, string | undefined>, host: string): SendCode
   const from = env.OBTION_MAIL_FROM?.trim() || `Obtion <obtion@${host.replace(/:\d+$/, "")}>`;
   const transport = createTransport(url);
   return async (to, code, lang) => {
-    const m = lang === "en" ? MAIL.en : MAIL.de;
-    await transport.sendMail({ from, to, subject: m.subject(code), text: m.body(code, host) }).catch((e: unknown) => {
+    const mail = lang === "en" ? MAIL.en : MAIL.de;
+    await transport.sendMail({ from, to, subject: mail.subject(code), text: mail.body(code, host) }).catch((e: unknown) => {
       console.error(`[obtion] could not send the sign-in code to ${to}:`, e instanceof Error ? e.message : e);
     });
   };

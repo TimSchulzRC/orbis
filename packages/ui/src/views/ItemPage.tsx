@@ -9,7 +9,7 @@ import { isInInbox, isOverview } from "@obtion/core/placement";
 import { wouldBeInInbox } from "@obtion/core/typeops";
 import { onlyBelow } from "@obtion/core/trash";
 import { hasUpdates, progressSpec } from "@obtion/core/traits";
-import { useRepo, useIndex, itemHref, openItem, leavePage, setParams, showTitle, useDocumentTitle } from "../hooks";
+import { useRepo, useIndex, itemHref, leavePage, setParams, showTitle, useDocumentTitle } from "../hooks";
 import { repo } from "../repo";
 import { useT, tr, getLang, titleOf } from "../i18n";
 import { Editor, insertFilesAtCursor } from "../ui/Editor";
@@ -36,18 +36,19 @@ import { moveTo } from "../ui/Spaces";
 import type { Index } from "@obtion/core/graph";
 
 export function ItemPage({ id, isNew }: { id: string; isNew: boolean }) {
-  const r = useRepo();
+  const scoped = useRepo();
   const { t } = useT();
-  const item = r.get(id);
+  const item = scoped.get(id);
   // the title after the id, a moment after typing it (browsers limit how often an address may change)
-  const title = item && item.kind !== "settings" && item.kind !== "op" ? (item.type === META_TYPE ? r.index().typePlural(id) : item.title) : undefined;
+  const hasPage = item && item.kind !== "settings" && item.kind !== "op";
+  const title = !hasPage ? undefined : item.type === META_TYPE ? scoped.index().typePlural(id) : item.title;
   useEffect(() => {
     if (title === undefined) return;
     const wait = setTimeout(() => showTitle(title), 400);
     return () => clearTimeout(wait);
   }, [id, title]);
   if (!item || item.kind === "settings")
-    return <PagePlaceholder>{r.status.synced ? t("item.missing") : t("item.loading")}</PagePlaceholder>;
+    return <PagePlaceholder>{scoped.status.synced ? t("item.missing") : t("item.loading")}</PagePlaceholder>;
   if (item.kind === "op") return <PagePlaceholder>{item.title}</PagePlaceholder>;
   if (item.kind === "datei") return <FilePage key={id} item={item} />;
   if (item.type === META_TYPE) return <TypePage key={id} item={item} />;
@@ -56,9 +57,9 @@ export function ItemPage({ id, isNew }: { id: string; isNew: boolean }) {
 
 const openItems = new Set<string>();
 
-function isBlank(i: Item) {
+function isBlank(item: Item) {
   const ix = repo.index();
-  return !i.title.trim() && !i.body.trim() && !i.tags.length && !i.refs.length && !i.updates.length && !ix.childrenOf(i.id).length && !ix.backlinks(i.id).length && !Object.keys(i.extra).length;
+  return !item.title.trim() && !item.body.trim() && !item.tags.length && !item.refs.length && !item.updates.length && !ix.childrenOf(item.id).length && !ix.backlinks(item.id).length && !Object.keys(item.extra).length;
 }
 
 function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
@@ -66,11 +67,10 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
   // "?new=1" is for opening it once: gone from the address, so a reload or Back later does not take it as new
   const [isNew] = useState(created);
   useEffect(() => void setParams({ new: null }), []);
-  const r = useRepo();
   const ix = useIndex();
   const { t } = useT();
   useDocumentTitle(titleOf(item, t));
-  const doc = useMemo(() => r.getDoc(item.id), [item.id]);
+  const doc = useMemo(() => repo.getDoc(item.id), [item.id]);
   const schema = ix.schemaOf(item);
   const [view, setView] = useState<EditorView | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -89,8 +89,8 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
       openItems.delete(item.id);
       setTimeout(() => {
         if (openItems.has(item.id)) return;
-        const cur = repo.get(item.id);
-        if (cur && !cur.deleted && isBlank(cur)) repo.remove(item.id);
+        const current = repo.get(item.id);
+        if (current && !current.deleted && isBlank(current)) repo.remove(item.id);
       }, 50);
     };
   }, [item.id, isNew]);
@@ -104,7 +104,7 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
   // what "Darunter" leaves out: the main list's type, and sub-projects while they are groups of it
   const exclude = new Set<string>(mainType ? ["type:" + mainType] : []);
   if (mainType && mainType !== item.type && mainGrouping(item) === "sub") for (const c of ix.childrenOf(item.id)) if (ix.get(c)?.type === item.type) exclude.add(c);
-  const pr = progressSpec(schema) ? ix.progressOf(item) : undefined;
+  const progress = progressSpec(schema) ? ix.progressOf(item) : undefined;
 
   const tools = (
     <MoreMenu>
@@ -149,7 +149,7 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
   return (
     <div className="page-read">
       {item.deleted && (
-        <TrashBanner onRestore={() => r.restore(item.id)} />
+        <TrashBanner onRestore={() => repo.restore(item.id)} />
       )}
       {/* 1 · head: path, title with the main action, type and status, progress, properties */}
       <Crumbs item={item} tools={tools} onPlaces={() => setPlacesOpen((n) => n + 1)} onPlace={() => setPlacing(true)} />
@@ -175,7 +175,7 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
         schema={schema}
         head={{
           first: <TypeSwitch item={item} />,
-          progress: pr && <ProgressBand done={pr.done} total={pr.total} desc={progressText(item, ix, pr.done, pr.total)} />,
+          progress: progress && <ProgressBand done={progress.done} total={progress.total} desc={progressText(item, ix, progress.done, progress.total)} />,
         }}
       />
       <div className="mt-2 border-t border-line" />
@@ -221,6 +221,9 @@ function progressText(item: Item, ix: Index, done: number, total: number): strin
   return tr(of ? "progress.allLevelsOf" : "progress.allLevels", { done, total, name: name && pluralOf(name, getLang()) });
 }
 
+/** Text taller than this (about 12 lines) is cut on a page with its own list. */
+const TALL_TEXT = 12 * 25 + 8;
+
 /** Zone 2. Long text on a page with its own list is cut to 8 lines until clicked. */
 function PageText({ item, doc, long, isNew, onView, hasMore }: { item: Item; doc: ReturnType<typeof repo.getDoc>; long: boolean; isNew: boolean; onView: (v: EditorView | null) => void; hasMore: boolean }) {
   const { t } = useT();
@@ -230,11 +233,11 @@ function PageText({ item, doc, long, isNew, onView, hasMore }: { item: Item; doc
   const [tall, setTall] = useState(false);
   useEffect(() => {
     if (!long || !box.current) return;
-    const check = () => setTall((box.current?.scrollHeight ?? 0) > 12 * 25 + 8);
+    const check = () => setTall((box.current?.scrollHeight ?? 0) > TALL_TEXT);
     check();
-    const ro = new ResizeObserver(check);
-    ro.observe(box.current.firstElementChild ?? box.current);
-    return () => ro.disconnect();
+    const resize = new ResizeObserver(check);
+    resize.observe(box.current.firstElementChild ?? box.current);
+    return () => resize.disconnect();
   }, [long, item.id]);
   const cut = long && tall && !expanded;
   return (
@@ -294,9 +297,9 @@ function TypeSwitch({ item }: { item: Item }) {
           <MenuItem active={!item.type} icon={<NOTE_ICON size={14} />} onClick={() => (repo.setType(item.id, null), close())}>
             {t("type.none")}
           </MenuItem>
-          {types.map((tp) => (
-            <MenuItem key={tp.id} active={tp.id === item.type} icon={<TypeGlyph schema={tp.schema} size={14} />} onClick={() => (repo.setType(item.id, tp.id), close())}>
-              {tp.schema.name}
+          {types.map((type) => (
+            <MenuItem key={type.id} active={type.id === item.type} icon={<TypeGlyph schema={type.schema} size={14} />} onClick={() => (repo.setType(item.id, type.id), close())}>
+              {type.schema.name}
             </MenuItem>
           ))}
         </>
@@ -306,10 +309,10 @@ function TypeSwitch({ item }: { item: Item }) {
 }
 
 function TitleClash({ item }: { item: Item }) {
-  const r = useRepo();
+  const scoped = useRepo();
   const { t } = useT();
   if (!item.title.trim()) return null;
-  const other = r.live().find((x) => x.id !== item.id && titleKey(x.title) === titleKey(item.title));
+  const other = scoped.live().find((x) => x.id !== item.id && titleKey(x.title) === titleKey(item.title));
   if (!other) return null;
   return (
     <p className="mt-1 text-xs text-warn">
@@ -321,8 +324,8 @@ function TitleClash({ item }: { item: Item }) {
   );
 }
 
-function removeAndLeave(r: typeof repo, id: string, withChildren: boolean, leave = true) {
-  r.remove(id, withChildren ? "trash" : "inbox");
+function removeAndLeave(inRepo: typeof repo, id: string, withChildren: boolean, leave = true) {
+  inRepo.remove(id, withChildren ? "trash" : "inbox");
   if (leave) leavePage();
 }
 
@@ -330,20 +333,20 @@ function removeAndLeave(r: typeof repo, id: string, withChildren: boolean, leave
  * With children that only hang here, the dialog asks first. `leave`: the item is the open page,
  * which then goes back. True when it went to the trash right away.
  */
-export function deleteOrAsk(r: typeof repo, id: string, ask: () => void, leave = true): boolean {
-  if (onlyBelow(r.index(), id).length) return (ask(), false);
-  removeAndLeave(r, id, false, leave);
+export function deleteOrAsk(inRepo: typeof repo, id: string, ask: () => void, leave = true): boolean {
+  if (onlyBelow(inRepo.index(), id).length) return (ask(), false);
+  removeAndLeave(inRepo, id, false, leave);
   return true;
 }
 
 /** Children that only hang here: delete them too, or let them lose this place. */
 export function DeleteDialog({ item, onClose, leave = true }: { item: Item; onClose: () => void; leave?: boolean }) {
-  const r = useRepo();
-  const ix = r.index();
+  const scoped = useRepo();
+  const ix = scoped.index();
   const { t } = useT();
   const only = onlyBelow(ix, item.id);
   const finish = (withChildren: boolean) => {
-    removeAndLeave(r, item.id, withChildren, leave);
+    removeAndLeave(scoped, item.id, withChildren, leave);
     onClose();
   };
   // Kept children lose this place; whether they land in the inbox is the inbox's own query.

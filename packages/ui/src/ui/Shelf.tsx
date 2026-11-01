@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowUp, ChevronDown, ChevronRight, Maximize2, RotateCcw, SlidersHorizontal, Undo2 } from "lucide-react";
 import { type Item, SETTINGS_ID, setMeta, setSettings } from "@obtion/core/model";
+import type { Repo } from "@obtion/sync";
 import type { QueryDef } from "@obtion/core/query";
 import { inboxWhere } from "@obtion/core/inbox";
 import { resetInbox } from "@obtion/core/setup";
@@ -27,6 +28,10 @@ import { sameValue } from "@obtion/core/equal";
 import { filePreview } from "./text";
 
 const reviewHref = (key: string) => `#/review?at=${encodeURIComponent(key)}`;
+/** An open dialog or menu (a tooltip's popper does not count): Escape is theirs. */
+const OVERLAY_OPEN = "[role=dialog][data-state=open], [data-radix-popper-content-wrapper]:not(:has([role=tooltip]))";
+/** A waiting entry ("Morgen wieder") comes back into the inbox now. */
+const backNow = (repo: Repo, id: string) => repo.change(id, (d) => setMeta(d, { later: null }));
 
 export function ShelfPanel({ desktop, pinned }: { desktop: boolean; pinned?: boolean }) {
   const { t } = useT();
@@ -39,13 +44,13 @@ export function ShelfPanel({ desktop, pinned }: { desktop: boolean; pinned?: boo
   useEffect(() => void (at && !entry && openShelf()), [at, !!entry]);
   // Escape: from an entry back to the list, from the list closed – unless a dialog or menu above it takes it
   useEffect(() => {
-    const on = (e: KeyboardEvent) => {
-      if (e.key !== "Escape" || e.defaultPrevented || document.querySelector("[role=dialog][data-state=open], [data-radix-popper-content-wrapper]:not(:has([role=tooltip]))")) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented || document.querySelector(OVERLAY_OPEN)) return;
       if (entry) openShelf();
       else if (!pinned) dismissShelf();
     };
-    window.addEventListener("keydown", on);
-    return () => window.removeEventListener("keydown", on);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   }, [!!entry]);
   return (
     <div
@@ -193,10 +198,10 @@ export function ShelfCards({ entries }: { entries: InboxEntry[] }) {
 
 /** What an entry says in one line: its text, else what it is (a file, notes below). */
 function preview(e: InboxEntry, t: T, lang: Lang, notes: number): string {
-  const i = e.item;
-  const text = plainText(i.body || i.file?.text || "").slice(0, 200);
+  const item = e.item;
+  const text = plainText(item.body || item.file?.text || "").slice(0, 200);
   if (text) return notes ? `${text} · ${t("triage.notes", { count: notes })}` : text;
-  if (i.file) return [t("kind.file"), fmtBytes(lang, i.file.size)].join(" · ");
+  if (item.file) return [t("kind.file"), fmtBytes(lang, item.file.size)].join(" · ");
   return notes ? t("triage.notes", { count: notes }) : "";
 }
 
@@ -223,7 +228,7 @@ function Row({ entry, n, on, waiting, space, onHover }: { entry: InboxEntry; n: 
       <span className={cn("absolute right-2 top-2 flex items-center gap-0.5 focus-within:opacity-100 pointer-coarse:opacity-100", on ? "opacity-100" : "opacity-0 group-hover/row:opacity-100")}>
         {waiting && (
           <Tip label={t("tray.backNow")}>
-            <Button variant="plain" onClick={() => repo.change(entry.item.id, (d) => setMeta(d, { later: null }))} className={iconTap} aria-label={t("tray.backNow")}>
+            <Button variant="plain" onClick={() => backNow(repo, entry.item.id)} className={iconTap} aria-label={t("tray.backNow")}>
               <Undo2 size={15} />
             </Button>
           </Tip>
@@ -282,7 +287,7 @@ function EntryBody({ entry, waiting }: { entry: InboxEntry; waiting: boolean }) 
         </span>
         {waiting ? (
           // back into the inbox now: then it is an entry like the others (this banner turns into the one below)
-          <Button variant="plain" onClick={() => repo.change(item.id, (d) => setMeta(d, { later: null }))} className="shrink-0 text-muted-foreground underline decoration-dotted underline-offset-4 hover:text-fg max-lg:basis-full max-lg:pl-5">
+          <Button variant="plain" onClick={() => backNow(repo, item.id)} className="shrink-0 text-muted-foreground underline decoration-dotted underline-offset-4 hover:text-fg max-lg:basis-full max-lg:pl-5">
             {t("tray.backNow")}
           </Button>
         ) : (
@@ -319,8 +324,8 @@ function EntryBody({ entry, waiting }: { entry: InboxEntry; waiting: boolean }) 
 function FileBody({ item }: { item: Item }) {
   const { t } = useT();
   const repo = useRepo();
-  const f = item.file!;
-  const img = useBlobUrl(f.filetype === "bild" ? (f.display ?? f.hash) : f.thumb, true);
+  const file = item.file!;
+  const img = useBlobUrl(file.filetype === "bild" ? (file.display ?? file.hash) : file.thumb, true);
   // saved on leaving the field, and when the panel goes back or closes while it is being edited
   const draft = useRef<string | null>(null);
   const save = () => {
@@ -332,8 +337,8 @@ function FileBody({ item }: { item: Item }) {
     <>
       {img ? (
         <img src={img} alt={item.body || item.title} className="mt-3 max-h-[40vh] w-auto rounded-lg border border-line" />
-      ) : f.text ? (
-        <p className="mt-3 line-clamp-6 text-[15px] leading-[1.65] text-muted-foreground">{filePreview(f.text)}</p>
+      ) : file.text ? (
+        <p className="mt-3 line-clamp-6 text-[15px] leading-[1.65] text-muted-foreground">{filePreview(file.text)}</p>
       ) : null}
       <Textarea
       variant="inline"

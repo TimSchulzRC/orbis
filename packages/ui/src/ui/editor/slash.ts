@@ -23,8 +23,8 @@ type Option = Completion & { icon?: ComponentType<{ size?: number }>; hint?: str
 
 let filesHandler: (view: EditorView, files: File[]) => void = () => {};
 /** Set by Editor.tsx, which does the actual file insertion. */
-export function onSlashFiles(f: typeof filesHandler) {
-  filesHandler = f;
+export function onSlashFiles(handler: typeof filesHandler) {
+  filesHandler = handler;
 }
 
 function chooseFiles(view: EditorView, accept: string) {
@@ -78,59 +78,63 @@ const ITEMS: SlashItem[] = [
 const SECTIONS = { basic: { name: "editor.section.basic", rank: 0 }, insert: { name: "editor.section.insert", rank: 1 } };
 
 /** Umlauts match typed either way: "ueber", "über" and "uber" all find "Überschrift". */
-const hasWord = (words: string, q: string) => [foldUmlauts, plainVowels].some((f) => f(words).includes(f(q)));
+const hasWord = (words: string, query: string) => [foldUmlauts, plainVowels].some((f) => f(words).includes(f(query)));
 
 export function slashCompletion(ctx: CompletionContext): CompletionResult | null {
   if (ctx.state.readOnly) return null;
-  const m = ctx.matchBefore(/(?:^|\s)\/[\p{L}\p{N}]*$/u);
-  if (!m) return null;
-  const from = m.from + m.text.indexOf("/");
-  const q = ctx.state.sliceDoc(from + 1, ctx.pos);
+  const match = ctx.matchBefore(/(?:^|\s)\/[\p{L}\p{N}]*$/u);
+  if (!match) return null;
+  const from = match.from + match.text.indexOf("/");
+  const query = ctx.state.sliceDoc(from + 1, ctx.pos);
   const options: Option[] = [];
-  for (const it of ITEMS) {
-    const kind = KINDS.find((k) => k.kind === it.id)?.kind;
-    const label = kind ? kindName(kind) : tr("editor.slash." + it.id);
-    if (q && !hasWord(label + " " + tr("editor.slash." + it.id + ".keys"), q)) continue;
+  for (const item of ITEMS) {
+    const kind = KINDS.find((k) => k.kind === item.id)?.kind;
+    const label = kind ? kindName(kind) : tr("editor.slash." + item.id);
+    if (query && !hasWord(label + " " + tr("editor.slash." + item.id + ".keys"), query)) continue;
+    const section = SECTIONS[item.section];
     options.push({
       label,
-      icon: it.icon,
-      hint: tr("editor.slash." + it.id + ".hint"),
-      section: { name: tr(SECTIONS[it.section].name), rank: SECTIONS[it.section].rank },
-      boost: -ITEMS.indexOf(it),
+      icon: item.icon,
+      hint: tr("editor.slash." + item.id + ".hint"),
+      section: { name: tr(section.name), rank: section.rank },
+      boost: -ITEMS.indexOf(item),
       apply: (view) => {
         // remove the typed "/…" before the block changes
         view.dispatch({ changes: { from, to: ctx.pos, insert: "" } });
-        it.run(view, from);
+        item.run(view, from);
       },
     });
   }
   return { from, options, filter: false };
 }
 
-export function pageOption(o: Option): Completion {
-  return { icon: FileText, page: true, ...o } as Option;
+export function pageOption(option: Option): Completion {
+  return { icon: FileText, page: true, ...option } as Option;
 }
+
+const MENTION_HITS = 20;
+const RECENT_MENTIONS = 12;
 
 export function mentionCompletion(selfId?: string) {
   return (ctx: CompletionContext): CompletionResult | null => {
     if (ctx.state.readOnly) return null;
-    const m = ctx.matchBefore(/(?:^|[\s(])@[^@\n[\]]{0,40}$/);
-    if (!m) return null;
-    const from = m.from + m.text.indexOf("@");
-    const q = ctx.state.sliceDoc(from + 1, ctx.pos);
-    if (!q && !ctx.explicit && ctx.state.sliceDoc(from - 1, from).trim()) return null;
-    const hits = (q.trim() ? repo.search(q, 20) : [...repo.live()].sort((a, b) => b.updated - a.updated).slice(0, 12)).filter((r) => r.id !== selfId && r.title);
+    const match = ctx.matchBefore(/(?:^|[\s(])@[^@\n[\]]{0,40}$/);
+    if (!match) return null;
+    const from = match.from + match.text.indexOf("@");
+    const query = ctx.state.sliceDoc(from + 1, ctx.pos);
+    if (!query && !ctx.explicit && ctx.state.sliceDoc(from - 1, from).trim()) return null;
+    const hits = (query.trim() ? repo.search(query, MENTION_HITS) : [...repo.live()].sort((a, b) => b.updated - a.updated).slice(0, RECENT_MENTIONS)).filter((hit) => hit.id !== selfId && hit.title);
     // a space after a word that finds nothing: it was no mention
-    if (!hits.length && /\s/.test(q)) return null;
+    if (!hits.length && /\s/.test(query)) return null;
     return {
       from,
       filter: false,
-      options: hits.map((r, i) =>
+      options: hits.map((hit, i) =>
         pageOption({
-        label: r.title,
-        hint: kindHint(r, repo.index()),
+        label: hit.title,
+        hint: kindHint(hit, repo.index()),
         boost: -i,
-        apply: (view, _c, a, b) => view.dispatch({ changes: { from: a, to: b, insert: `[[${r.title}]]` }, selection: EditorSelection.cursor(a + r.title.length + 4) }),
+        apply: (view, _c, a, b) => view.dispatch({ changes: { from: a, to: b, insert: `[[${hit.title}]]` }, selection: EditorSelection.cursor(a + hit.title.length + 4) }),
         }),
       ),
     };
@@ -140,23 +144,23 @@ export function mentionCompletion(selfId?: string) {
 export const slashRender = {
   position: 20,
   render(c: Completion): Node | null {
-    const o = c as Option;
-    if (!o.icon) return null;
+    const option = c as Option;
+    if (!option.icon) return null;
     const row = document.createElement("div");
-    row.className = "cm-slash" + (o.page ? " page" : "");
+    row.className = "cm-slash" + (option.page ? " page" : "");
     const tile = document.createElement("span");
     tile.className = "cm-slash-icon";
-    tile.innerHTML = iconHTML(o.icon, o.page ? 15 : 18);
+    tile.innerHTML = iconHTML(option.icon, option.page ? 15 : 18);
     const text = document.createElement("span");
     text.className = "cm-slash-text";
     const name = document.createElement("span");
     name.className = "cm-slash-name";
-    name.textContent = o.label;
+    name.textContent = option.label;
     text.append(name);
-    if (o.hint) {
+    if (option.hint) {
       const hint = document.createElement("span");
       hint.className = "cm-slash-hint";
-      hint.textContent = o.hint;
+      hint.textContent = option.hint;
       text.append(hint);
     }
     row.append(tile, text);

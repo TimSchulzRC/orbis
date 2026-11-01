@@ -49,7 +49,7 @@ interface CaptureProps {
 }
 
 function CaptureField({ parent, placeholder, autoFocus, onDone, compact, onSpace }: CaptureProps & { onSpace?: (id: string) => void }) {
-  const r = useRepo();
+  const repo = useRepo();
   const files = useFiles();
   const space = useSpaceId();
   const { spaces } = useAccounts();
@@ -60,19 +60,19 @@ function CaptureField({ parent, placeholder, autoFocus, onDone, compact, onSpace
   const [picking, setPicking] = useState(false);
   // a workspace switch drops type and place but keeps the text
   useEffect(() => (setType(null), setPlace(null)), [space]);
-  const ix = r.index();
+  const ix = repo.index();
   const pinned = ix.captureTypes();
   const others = ix.typesByName().filter((x) => !pinned.includes(x.id));
   const input = useRef<HTMLTextAreaElement>(null);
   const save = () => {
     const where = parent ?? place ?? undefined;
-    const id = capture(text, { type, parent: where }, r);
+    const id = capture(text, { type, parent: where }, repo);
     if (!id) return;
     if (place && !parent) rememberPlace(place);
     // never carry place or type over unseen into the next capture
     setPlace(null);
     setType(null);
-    const usedType = r.get(id)?.type ?? null; // "/name" in the text can set it too
+    const usedType = repo.get(id)?.type ?? null; // "/name" in the text can set it too
     const what = usedType ? ix.typeName(usedType) : t("capture.note");
     const msg = where ? t("capture.notifyUnder", { what, place: ix.get(where)?.title ?? "" }) : usedType ? t("capture.notifyAs", { what }) : t("capture.notifyInbox");
     notify.action(msg, t("capture.open"), () => openItem(id, { space }));
@@ -81,7 +81,7 @@ function CaptureField({ parent, placeholder, autoFocus, onDone, compact, onSpace
   };
   const [focused, setFocused] = useState(!!autoFocus);
   const showRow = !compact && (focused || !!text.trim() || !!type || !!place);
-  const mentioned = text.includes("@") ? extractMentions(text.split("\n")[0]!, r).mentions.map((m) => ix.resolveTitle(m)).filter((id): id is string => !!id && ix.get(id)?.kind === "info") : [];
+  const mentioned = text.includes("@") ? extractMentions(text.split("\n")[0]!, repo).mentions.map((m) => ix.resolveTitle(m)).filter((id): id is string => !!id && ix.get(id)?.kind === "info") : [];
   const offer = !parent && mentioned.find((id) => id !== place);
   const pathOf = (id: string) => ix.pathText([...ix.homePath(id), id]);
   const typeSchema = type ? ix.types.get(type)?.schema : undefined;
@@ -92,6 +92,9 @@ function CaptureField({ parent, placeholder, autoFocus, onDone, compact, onSpace
     }
   };
   const ghost = "tap-y inline-flex h-7 min-w-0 items-center gap-1 rounded-md px-1.5 text-xs hover:bg-hover";
+  const chip = "tap-y inline-flex h-7 shrink-0 items-center gap-1 rounded-full border border-line px-2 text-xs hover:bg-hover";
+  const spaceName = spaces.find((s) => s.id === space)?.name;
+  const refocus = () => setTimeout(() => input.current?.focus());
   return (
     <div data-capture className="rounded-2xl border border-line bg-surface px-3 py-2 shadow-sm focus-within:border-focus">
       <div className="flex items-start gap-2">
@@ -124,9 +127,9 @@ function CaptureField({ parent, placeholder, autoFocus, onDone, compact, onSpace
         <ItemPicker
           title={t("capture.placeTitle")}
           filter={(x) => x.kind === "info"}
-          suggestions={[...mentioned.map((id) => ({ id, reason: "mentioned" as const })), ...recentPlaces(r).map((id) => ({ id, reason: "recent" as const }))].filter((x, i, l) => l.findIndex((y) => y.id === x.id) === i)}
-          onPick={(id) => (setPlace(id), setPicking(false), setTimeout(() => input.current?.focus()))}
-          onClose={() => (setPicking(false), setTimeout(() => input.current?.focus()))}
+          suggestions={[...mentioned.map((id) => ({ id, reason: "mentioned" as const })), ...recentPlaces(repo).map((id) => ({ id, reason: "recent" as const }))].filter((x, i, l) => l.findIndex((y) => y.id === x.id) === i)}
+          onPick={(id) => (setPlace(id), setPicking(false), refocus())}
+          onClose={() => (setPicking(false), refocus())}
         />
       )}
       {showRow && (
@@ -134,9 +137,9 @@ function CaptureField({ parent, placeholder, autoFocus, onDone, compact, onSpace
           {onSpace && spaces.length > 1 && (
             <Popover
               trigger={(p) => (
-                <Button variant="plain" {...p} className="tap-y inline-flex h-7 shrink-0 items-center gap-1 rounded-full border border-line px-2 text-xs hover:bg-hover" aria-label={t("capture.spaceLabel", { name: spaces.find((s) => s.id === space)?.name ?? "" })}>
+                <Button variant="plain" {...p} className={chip} aria-label={t("capture.spaceLabel", { name: spaceName ?? "" })}>
                   <Layers size={12} className="text-muted-foreground" />
-                  {spaces.find((s) => s.id === space)?.name}
+                  {spaceName}
                   <ChevronDown size={12} className="text-muted-foreground" />
                 </Button>
               )}
@@ -152,7 +155,7 @@ function CaptureField({ parent, placeholder, autoFocus, onDone, compact, onSpace
           )}
           <Popover
             trigger={(p) => (
-              <Button variant="plain" {...p} className="tap-y inline-flex h-7 shrink-0 items-center gap-1 rounded-full border border-line px-2 text-xs hover:bg-hover" aria-label={t("capture.typeLabel", { name: typeSchema?.name ?? t("capture.note") })}>
+              <Button variant="plain" {...p} className={chip} aria-label={t("capture.typeLabel", { name: typeSchema?.name ?? t("capture.note") })}>
                 {typeSchema ? <TypeGlyph schema={typeSchema} size={12} /> : <NOTE_ICON size={12} style={{ color: "var(--t-note)" }} />}
                 {typeSchema?.name ?? t("capture.note")}
                 <ChevronDown size={12} className="text-muted-foreground" />

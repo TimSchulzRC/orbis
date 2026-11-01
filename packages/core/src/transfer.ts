@@ -89,16 +89,6 @@ export function copyToWorkspace(src: Index, root: string, dst: { w: Writer; ix: 
     types.set(t, { id, from, to: from });
   }
 
-  const relink = (body: string) =>
-    mapWikiLinks(body, (l) => {
-      const id = l.target.trim();
-      if (!src.get(id)) return l.raw; // a title: resolves by name in the other workspace
-      const open = l.embed ? "![[" : "[[";
-      const to = ids.get(id);
-      if (to) return `${open}${to}${l.section}${l.label !== undefined ? "|" + l.label : ""}]]`;
-      return `${open}${l.label || src.get(id)!.title}${l.section}]]`;
-    });
-
   for (const r of items) {
     const map = r.type ? types.get(r.type) : undefined;
     dst.w.change(ids.get(r.id)!, (doc) => {
@@ -108,7 +98,7 @@ export function copyToWorkspace(src: Index, root: string, dst: { w: Writer; ix: 
           kind: r.kind,
           title: r.title,
           type: map?.id ?? null,
-          body: relink(r.body),
+          body: relink(r.body, src, ids),
           tags: r.tags,
           refs: r.refs.map((x) => ids.get(x)).filter((x): x is string => !!x),
           extra: r.extra,
@@ -145,10 +135,10 @@ export function copyToWorkspace(src: Index, root: string, dst: { w: Writer; ix: 
         const q = p && map ? target(p, map.to) : undefined;
         for (const t of targets) if (q && ids.has(t)) setRel(doc, q.id, ids.get(t)!, true);
       }
-      const p = statusProp(map?.from);
-      const q = p ? target(p, map!.to) : undefined;
+      const status = statusProp(map?.from);
+      const statusThere = status ? target(status, map!.to) : undefined;
       for (const u of r.updates) {
-        const opt = u.status && p && q ? mapValue(p, q, u.status, { byId: true }) : undefined;
+        const opt = u.status && status && statusThere ? mapValue(status, statusThere, u.status, { byId: true }) : undefined;
         appendUpdate(doc, { at: u.at, text: u.text, by: u.by, ...(typeof opt === "string" ? { status: opt } : {}) });
       }
     });
@@ -156,6 +146,18 @@ export function copyToWorkspace(src: Index, root: string, dst: { w: Writer; ix: 
 
   const hashes = [...new Set(items.flatMap((r) => (r.file ? [r.file.hash, r.file.display, r.file.thumb] : [])).filter((h): h is string => !!h))];
   return { ids, hashes, types: created };
+}
+
+/** [[id]] links to copied items get the new id; links to items left behind become [[Label]] links. */
+function relink(body: string, src: Index, ids: Map<string, string>): string {
+  return mapWikiLinks(body, (l) => {
+    const id = l.target.trim();
+    if (!src.get(id)) return l.raw; // a title: resolves by name in the other workspace
+    const open = l.embed ? "![[" : "[[";
+    const to = ids.get(id);
+    if (to) return `${open}${to}${l.section}${l.label !== undefined ? "|" + l.label : ""}]]`;
+    return `${open}${l.label || src.get(id)!.title}${l.section}]]`;
+  });
 }
 
 /** Same id (shipped types), else same name. */

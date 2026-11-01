@@ -15,10 +15,10 @@ class BulletWidget extends WidgetType {
     return o.depth === this.depth;
   }
   toDOM() {
-    const s = document.createElement("span");
-    s.className = "cm-bullet";
-    s.textContent = ["•", "◦", "▪"][this.depth % 3]!;
-    return s;
+    const span = document.createElement("span");
+    span.className = "cm-bullet";
+    span.textContent = ["•", "◦", "▪"][this.depth % 3]!;
+    return span;
   }
 }
 
@@ -71,11 +71,11 @@ class HintWidget extends WidgetType {
     return o.text === this.text;
   }
   toDOM() {
-    const s = document.createElement("span");
-    s.className = "cm-line-hint";
-    s.textContent = this.text;
-    s.setAttribute("aria-hidden", "true");
-    return s;
+    const span = document.createElement("span");
+    span.className = "cm-line-hint";
+    span.textContent = this.text;
+    span.setAttribute("aria-hidden", "true");
+    return span;
   }
 }
 
@@ -84,6 +84,11 @@ const hide = Decoration.replace({});
 const HEADING = /^(#{1,6}) /;
 const line = (cls: string) => Decoration.line({ class: cls });
 const INLINE: Record<string, string> = { Emphasis: "EmphasisMark", StrongEmphasis: "EmphasisMark", Strikethrough: "StrikethroughMark", InlineCode: "CodeMark" };
+/** Levels 4 to 6 look like level 3. */
+const HEADING_KINDS = ["h1", "h2", "h3"] as const;
+
+/** `pos`, or one further when a space follows it. */
+const pastSpace = (state: EditorState, pos: number) => (state.sliceDoc(pos, pos + 1) === " " ? pos + 1 : pos);
 
 /** `atomic` holds the widgets the cursor steps over as one. */
 function build(view: EditorView): { deco: DecorationSet; atomic: DecorationSet } {
@@ -106,13 +111,15 @@ function build(view: EditorView): { deco: DecorationSet; atomic: DecorationSet }
           case "ATXHeading5":
           case "ATXHeading6": {
             // the "#" show only while the cursor is at the start of the text, to change levels there (as in Obsidian)
-            const l = state.doc.lineAt(n.from);
-            const h = HEADING.exec(l.text);
-            if (!h) return false;
-            const level = h[1]!.length;
-            deco.push(line("cm-h cm-h" + level).range(l.from));
-            if (!(focus && sel.empty && sel.head >= l.from && sel.head <= l.from + h[0].length)) deco.push(hide.range(l.from, l.from + h[0].length));
-            if (l.length === h[0].length && !state.readOnly) deco.push(Decoration.widget({ widget: new HintWidget(kindName(level === 1 ? "h1" : level === 2 ? "h2" : "h3")), side: 1 }).range(l.to));
+            const headLine = state.doc.lineAt(n.from);
+            const heading = HEADING.exec(headLine.text);
+            if (!heading) return false;
+            const level = heading[1]!.length;
+            const prefixEnd = headLine.from + heading[0].length;
+            deco.push(line("cm-h cm-h" + level).range(headLine.from));
+            const cursorInPrefix = focus && sel.empty && sel.head >= headLine.from && sel.head <= prefixEnd;
+            if (!cursorInPrefix) deco.push(hide.range(headLine.from, prefixEnd));
+            if (headLine.length === heading[0].length && !state.readOnly) deco.push(Decoration.widget({ widget: new HintWidget(kindName(HEADING_KINDS[Math.min(level, 3) - 1]!)), side: 1 }).range(headLine.to));
             return false;
           }
           case "FencedCode": {
@@ -130,8 +137,7 @@ function build(view: EditorView): { deco: DecorationSet; atomic: DecorationSet }
             return;
           }
           case "QuoteMark": {
-            const end = state.sliceDoc(n.to, n.to + 1) === " " ? n.to + 1 : n.to;
-            const mark = hide.range(n.from, end);
+            const mark = hide.range(n.from, pastSpace(state, n.to));
             deco.push(mark);
             atomic.push(mark);
             return;
@@ -149,16 +155,14 @@ function build(view: EditorView): { deco: DecorationSet; atomic: DecorationSet }
             const task = n.node.getChild("Task")?.getChild("TaskMarker");
             if (task) {
               const checked = /x/i.test(state.sliceDoc(task.from, task.to));
-              const end = state.sliceDoc(task.to, task.to + 1) === " " ? task.to + 1 : task.to;
-              const box = Decoration.replace({ widget: new CheckWidget(checked, mark.from) }).range(mark.from, end);
+              const box = Decoration.replace({ widget: new CheckWidget(checked, mark.from) }).range(mark.from, pastSpace(state, task.to));
               deco.push(box);
               atomic.push(box);
               deco.push(line(cn("cm-listline cm-taskline", checked && "done")).range(listLine.from));
             } else if (n.node.parent?.name === "BulletList") {
               let depth = 0;
               for (let p: typeof n.node | null = n.node.parent; p; p = p.parent) if (p.name === "BulletList" || p.name === "OrderedList") depth++;
-              const end = state.sliceDoc(mark.to, mark.to + 1) === " " ? mark.to + 1 : mark.to;
-              const bullet = Decoration.replace({ widget: new BulletWidget(depth - 1) }).range(mark.from, end);
+              const bullet = Decoration.replace({ widget: new BulletWidget(depth - 1) }).range(mark.from, pastSpace(state, mark.to));
               deco.push(bullet);
               atomic.push(bullet);
               deco.push(line("cm-listline").range(listLine.from));
@@ -205,51 +209,51 @@ const preview = ViewPlugin.fromClass(
 const HIDDEN = /^(\s*)(#{1,6} |[-*+] \[[ xX]\] |[-*+] |> ?)/;
 
 function textStart(state: EditorState, pos: number): { line: Line; start: number; end: number } | null {
-  const l = state.doc.lineAt(pos);
-  const m = HIDDEN.exec(l.text);
-  if (!m) return null;
-  const b = blockAt(state, l.from);
-  if (b.from !== l.from || b.to !== l.to) return null; // in a code block it is text
-  return { line: l, start: l.from + m[1]!.length, end: l.from + m[0].length };
+  const docLine = state.doc.lineAt(pos);
+  const match = HIDDEN.exec(docLine.text);
+  if (!match) return null;
+  const block = blockAt(state, docLine.from);
+  if (block.from !== docLine.from || block.to !== docLine.to) return null; // in a code block it is text
+  return { line: docLine, start: docLine.from + match[1]!.length, end: docLine.from + match[0].length };
 }
 
 /** The cursor never stands in front of a hidden prefix, where typing would undo the block's kind. */
-const keepOutOfPrefix = EditorState.transactionFilter.of((tr) => {
-  if (!tr.selection) return tr;
-  const { state } = tr;
-  const before = tr.docChanged || tr.isUserEvent("select.pointer") ? null : tr.startState.selection;
+const keepOutOfPrefix = EditorState.transactionFilter.of((transaction) => {
+  if (!transaction.selection) return transaction;
+  const { state } = transaction;
+  const before = transaction.docChanged || transaction.isUserEvent("select.pointer") ? null : transaction.startState.selection;
   let moved = false;
   const fix = (pos: number, was?: number) => {
-    const p = textStart(state, pos);
-    if (!p || pos < p.start || pos >= p.end || HEADING.test(p.line.text)) return pos; // a heading's "#" show there
+    const prefix = textStart(state, pos);
+    if (!prefix || pos < prefix.start || pos >= prefix.end || HEADING.test(prefix.line.text)) return pos; // a heading's "#" show there
     moved = true;
     // stepping left from the text's start goes on to the line above instead of getting stuck
-    if (was === p.end && p.start > 0) return p.start - 1;
-    return p.end;
+    if (was === prefix.end && prefix.start > 0) return prefix.start - 1;
+    return prefix.end;
   };
   // non-empty selections keep their ends
-  const ranges = tr.selection.ranges.map((r, i) => (r.empty ? EditorSelection.cursor(fix(r.head, before?.ranges[i]?.head)) : r));
-  return moved ? [tr, { selection: EditorSelection.create(ranges, tr.selection.mainIndex), sequential: true }] : tr;
+  const ranges = transaction.selection.ranges.map((r, i) => (r.empty ? EditorSelection.cursor(fix(r.head, before?.ranges[i]?.head)) : r));
+  return moved ? [transaction, { selection: EditorSelection.create(ranges, transaction.selection.mainIndex), sequential: true }] : transaction;
 });
 
 /** Enter in front of a heading's text adds a line above it, and the heading stays one (as in Notion). */
 function newlineAbove(view: EditorView) {
-  const s = view.state.selection.main;
-  const p = s.empty ? textStart(view.state, s.head) : null;
-  if (!p || s.head !== p.end || p.line.to === p.end || !HEADING.test(p.line.text)) return false;
-  view.dispatch({ changes: { from: p.line.from, insert: "\n" }, selection: EditorSelection.cursor(s.head + 1), scrollIntoView: true, userEvent: "input" });
+  const sel = view.state.selection.main;
+  const prefix = sel.empty ? textStart(view.state, sel.head) : null;
+  if (!prefix || sel.head !== prefix.end || prefix.line.to === prefix.end || !HEADING.test(prefix.line.text)) return false;
+  view.dispatch({ changes: { from: prefix.line.from, insert: "\n" }, selection: EditorSelection.cursor(sel.head + 1), scrollIntoView: true, userEvent: "input" });
   return true;
 }
 
 /** Backspace at the start of a heading's text takes one level away; after "# " it is text. */
 function fewerLevels(view: EditorView) {
-  const s = view.state.selection.main;
-  const p = s.empty ? textStart(view.state, s.head) : null;
-  const h = p && HEADING.exec(p.line.text);
-  if (!p || !h || s.head !== p.end) return false;
-  const from = p.line.from;
-  const changes = h[1]!.length > 1 ? { from, to: from + 1 } : { from, to: p.end };
-  view.dispatch({ changes, selection: EditorSelection.cursor(p.end - (changes.to - changes.from)), userEvent: "delete" });
+  const sel = view.state.selection.main;
+  const prefix = sel.empty ? textStart(view.state, sel.head) : null;
+  const heading = prefix && HEADING.exec(prefix.line.text);
+  if (!prefix || !heading || sel.head !== prefix.end) return false;
+  const from = prefix.line.from;
+  const changes = heading[1]!.length > 1 ? { from, to: from + 1 } : { from, to: prefix.end };
+  view.dispatch({ changes, selection: EditorSelection.cursor(prefix.end - (changes.to - changes.from)), userEvent: "delete" });
   return true;
 }
 

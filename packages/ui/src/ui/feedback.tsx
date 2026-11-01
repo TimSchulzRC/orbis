@@ -28,22 +28,22 @@ export async function confirmAction(opts: { title: string; body: string; yes: st
 
 export function ConfirmHost() {
   const { t } = useT();
-  const a = ask.use();
+  const pending = ask.use();
   useEffect(() => () => ask.get()?.resolve(null), []);
-  if (!a) return null;
-  const done = (v: string | null) => {
-    a.resolve(v);
+  if (!pending) return null;
+  const done = (key: string | null) => {
+    pending.resolve(key);
     ask.set(null);
   };
   return (
-    <Dialog title={a.title} onClose={() => done(null)}>
-      <p className="whitespace-pre-line text-sm">{a.body}</p>
+    <Dialog title={pending.title} onClose={() => done(null)}>
+      <p className="whitespace-pre-line text-sm">{pending.body}</p>
       <div className="mt-4 flex flex-wrap justify-end gap-2">
         <Button variant="ghost" onClick={() => done(null)}>
           {t("cancel")}
         </Button>
-        {a.choices.map((c, i) => (
-          <Button key={c.key} variant={c.danger ? "danger" : c.primary ? "primary" : "outline"} autoFocus={i === a.choices.length - 1} onClick={() => done(c.key)}>
+        {pending.choices.map((c, i) => (
+          <Button key={c.key} variant={c.danger ? "danger" : c.primary ? "primary" : "outline"} autoFocus={i === pending.choices.length - 1} onClick={() => done(c.key)}>
             {c.label}
           </Button>
         ))}

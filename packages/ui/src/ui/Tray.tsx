@@ -11,6 +11,8 @@ import { Button } from "./primitives";
 import { Backdrop } from "../components/ui/dialog";
 
 const FILL = 10;
+/** Pixels a finger moves up on the tray to open its panel. */
+const SWIPE_UP = 40;
 
 export function Tray({ desktop, pinned, onCapture }: { desktop: boolean; pinned?: boolean; onCapture: () => void }) {
   const { t } = useT();
@@ -26,7 +28,7 @@ export function Tray({ desktop, pinned, onCapture }: { desktop: boolean; pinned?
         onClick={() => !pinned && (open ? dismissShelf() : openShelf())}
         onTouchStart={(e) => (touch.current = e.touches[0]!.clientY)}
         onTouchEnd={(e) => {
-          if (touch.current !== null && touch.current - (e.changedTouches[0]?.clientY ?? 0) > 40) (e.preventDefault(), openShelf());
+          if (touch.current !== null && touch.current - (e.changedTouches[0]?.clientY ?? 0) > SWIPE_UP) (e.preventDefault(), openShelf());
           touch.current = null;
         }}
         aria-expanded={pinned || open}

@@ -31,9 +31,15 @@ interface ParentEdge {
 const linkCache = new WeakMap<Item, { target: string; embed: boolean; size?: number }[]>();
 
 function linksOf(i: Item) {
-  let l = linkCache.get(i);
-  if (!l) linkCache.set(i, (l = parseWikiLinks(i.body)));
-  return l;
+  let links = linkCache.get(i);
+  if (!links) linkCache.set(i, (links = parseWikiLinks(i.body)));
+  return links;
+}
+
+function pushTo<V>(map: Map<string, V[]>, key: string, value: V) {
+  const list = map.get(key);
+  if (list) list.push(value);
+  else map.set(key, [value]);
 }
 
 export class Index {
@@ -132,15 +138,15 @@ export class Index {
 
   private titles() {
     if (!this._titles) {
-      const t = new Map<string, string>();
-      const f = new Map<string, string>();
+      const byTitle = new Map<string, string>();
+      const byFileName = new Map<string, string>();
       // Older first so the most recently edited wins on duplicate titles.
       for (const r of [...this.live].sort((a, b) => a.updated - b.updated)) {
-        if (r.title.trim()) t.set(titleKey(r.title), r.id);
-        if (r.file?.name) f.set(titleKey(r.file.name), r.id);
+        if (r.title.trim()) byTitle.set(titleKey(r.title), r.id);
+        if (r.file?.name) byFileName.set(titleKey(r.file.name), r.id);
       }
-      this._titles = t;
-      this._files = f;
+      this._titles = byTitle;
+      this._files = byFileName;
     }
     return this._titles;
   }
@@ -148,11 +154,11 @@ export class Index {
   /** File names resolve too, so ![[name.png]] from Obsidian keeps working after a rename. */
   resolveTitle = (title: string): string | undefined => {
     const k = titleKey(title);
-    const t = this.titles();
-    const byName = this._files!.get(k);
-    if (looksLikeFileName(title) && byName) return byName;
+    const byTitle = this.titles();
+    const file = this._files!.get(k);
+    if (looksLikeFileName(title) && file) return file;
     // [[id|Label]] links exactly, also to titles that can't be linked by name
-    return t.get(k) ?? byName ?? (this.byId.has(title.trim()) ? title.trim() : undefined);
+    return byTitle.get(k) ?? file ?? (this.byId.has(title.trim()) ? title.trim() : undefined);
   };
 
   /** True when [[links]] by this title lead to the item, so renaming it renames them too. */
@@ -188,14 +194,14 @@ export class Index {
         cycles.push(e);
         continue;
       }
-      (parents.get(e.child) ?? parents.set(e.child, []).get(e.child)!).push(e.parent);
-      (children.get(e.parent) ?? children.set(e.parent, []).get(e.parent)!).push(e.child);
+      pushTo(parents, e.child, e.parent);
+      pushTo(children, e.parent, e.child);
     }
     for (const [p, list] of children) {
       list.sort((a, b) => {
-        const sa = this.byId.get(a)!.parents[p]?.sort ?? "";
-        const sb = this.byId.get(b)!.parents[p]?.sort ?? "";
-        return cmpKey(sa, sb) || this.byId.get(a)!.title.localeCompare(this.byId.get(b)!.title);
+        const itemA = this.byId.get(a)!;
+        const itemB = this.byId.get(b)!;
+        return cmpKey(itemA.parents[p]?.sort ?? "", itemB.parents[p]?.sort ?? "") || itemA.title.localeCompare(itemB.title);
       });
     }
     this._parents = parents;
@@ -221,11 +227,11 @@ export class Index {
 
   /** Effective home: the stored one if still a parent, else the oldest remaining parent. */
   home(id: string): string | undefined {
-    const ps = this.parentsOf(id);
-    if (!ps.length) return undefined;
+    const parents = this.parentsOf(id);
+    if (!parents.length) return undefined;
     const item = this.byId.get(id)!;
-    if (item.home && ps.includes(item.home)) return item.home;
-    return [...ps].sort((a, b) => (item.parents[a]?.at ?? 0) - (item.parents[b]?.at ?? 0) || a.localeCompare(b))[0];
+    if (item.home && parents.includes(item.home)) return item.home;
+    return [...parents].sort((a, b) => (item.parents[a]?.at ?? 0) - (item.parents[b]?.at ?? 0) || a.localeCompare(b))[0];
   }
 
   /** Ancestors along the home chain, root first. */
@@ -241,18 +247,18 @@ export class Index {
 
   /** Over all parents, not just the home. */
   descendants(id: string): Set<string> {
-    let d = this._desc.get(id);
-    if (d) return d;
-    d = new Set();
+    const cached = this._desc.get(id);
+    if (cached) return cached;
+    const found = new Set<string>();
     const stack = [...this.childrenOf(id)];
     while (stack.length) {
       const x = stack.pop()!;
-      if (d.has(x) || x === id) continue;
-      d.add(x);
+      if (found.has(x) || x === id) continue;
+      found.add(x);
       stack.push(...this.childrenOf(x));
     }
-    this._desc.set(id, d);
-    return d;
+    this._desc.set(id, found);
+    return found;
   }
 
   wouldCycle(child: string, parent: string): boolean {
@@ -271,8 +277,9 @@ export class Index {
     while (queue.length) {
       const x = queue.shift()!;
       const home = this.home(x);
-      const ps = this.parentsOf(x);
-      for (const p of home ? [home, ...ps.filter((q) => q !== home)] : ps) {
+      const parents = this.parentsOf(x);
+      const homeFirst = home ? [home, ...parents.filter((q) => q !== home)] : parents;
+      for (const p of homeFirst) {
         if (seen.has(p)) continue;
         seen.add(p);
         prev.set(p, x);
@@ -310,7 +317,7 @@ export class Index {
   private backlinkIndex() {
     if (!this._backlinks) {
       const m = new Map<string, Backlink[]>();
-      const add = (to: string, b: Backlink) => (m.get(to) ?? m.set(to, []).get(to)!).push(b);
+      const add = (to: string, b: Backlink) => pushTo(m, to, b);
       for (const r of this.live) {
         const seen = new Set<string>();
         for (const l of this.textLinks(r)) {
@@ -461,18 +468,19 @@ export class Index {
    * paused and has no open entries below. Due by today comes first, then in progress, then by due date.
    */
   nextTask(id: string, today: string): Item | undefined {
-    const kind = this.mainChildType(this.byId.get(id));
+    const childType = this.mainChildType(this.byId.get(id));
     const candidates = [...this.descendants(id)]
       .map((d) => this.byId.get(d)!)
       .filter((x) => {
-        if (kind && x.type !== kind) return false;
+        if (childType && x.type !== childType) return false;
         const s = statusOf(x, this.schemaOf(x));
         return !!s && s.group !== "done" && !isPausedOption(s.option) && !this.isBlocked(x) && this.openChildren(x.id).length === 0;
       });
     const key = (x: Item) => {
       const due = dueOf(x, this.schemaOf(x));
       const s = statusOf(x, this.schemaOf(x))!;
-      return [due && due <= today ? 0 : 1, due && due <= today ? due : "", s.group === "active" ? 0 : 1, due ?? "9999", x.title.toLowerCase()] as const;
+      const dueByToday = !!due && due <= today;
+      return [dueByToday ? 0 : 1, dueByToday ? due : "", s.group === "active" ? 0 : 1, due ?? "9999", x.title.toLowerCase()] as const;
     };
     return candidates.sort((a, b) => {
       const ka = key(a);

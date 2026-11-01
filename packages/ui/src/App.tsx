@@ -77,7 +77,7 @@ function StatusBanner({ children, action }: { children: React.ReactNode; action:
 }
 
 function Main() {
-  const r = useRepo();
+  const repo = useRepo();
   const { active, spaces } = useAccounts();
   const { t } = useT();
   const route = useRoute();
@@ -111,24 +111,27 @@ function Main() {
   useEffect(() => {
     if (route.parts[0] !== "create") return;
     const title = route.query.get("title") ?? "";
-    const existing = title ? r.resolveTitle(title) : undefined;
+    const existing = title ? repo.resolveTitle(title) : undefined;
     if (existing) openItem(existing, { replace: true });
     else {
-      const id = r.create({ title });
+      const id = repo.create({ title });
       openItem(id, { replace: true, query: "?new=1" });
     }
   }, [route.path]);
 
   // workspace pages wait until it is set up; global pages show whatever every workspace has
-  const settings = r.get(SETTINGS_ID);
+  const settings = repo.get(SETTINGS_ID);
   const global = globalPage(route.parts, route.space);
   const old = oldAddress(route.parts, route.space);
   const page = (() => {
-    if (old !== undefined) return <Redirect to={old.startsWith("/review") || old === "/activity" || old === "/trash" ? old : spaceHref(route.space ?? active?.id, old).slice(1)} />;
+    if (old !== undefined) {
+      const oldIsGlobal = old.startsWith("/review") || old === "/activity" || old === "/trash";
+      return <Redirect to={oldIsGlobal ? old : spaceHref(route.space ?? active?.id, old).slice(1)} />;
+    }
     // don't fall back to the open workspace when the address names one the account isn't in
     if (route.space && !spaces.some((s) => s.id === route.space)) return <PagePlaceholder>{t("app.noSpace")}</PagePlaceholder>;
     if (!global) {
-      if (!r.status.loaded) return <PagePlaceholder fill>{t("app.opening")}</PagePlaceholder>;
+      if (!repo.status.loaded) return <PagePlaceholder fill>{t("app.opening")}</PagePlaceholder>;
       if (!settings) return <PagePlaceholder fill>{t("app.syncing")}</PagePlaceholder>;
     }
     switch (route.parts[0]) {
@@ -322,38 +325,30 @@ function MobileNav() {
   const { t } = useT();
   const { shown, active } = useAccounts();
   const one = shown.length === 1 ? shown[0]! : undefined;
-  const [r] = useReplicas(one ? [one.id] : []);
+  const [oneRepo] = useReplicas(one ? [one.id] : []);
   const route = useRoute();
-  const ix = r?.index();
+  const ix = oneRepo?.index();
   const inbox = useInboxItems().length;
   const shelf = useShelf().open;
   const entries: { key: string; label: string; icon: React.ReactNode; href: string; active?: boolean; dot?: boolean }[] = [
     { key: "today", label: t("nav.today"), icon: <Sun size={20} />, href: "#/", active: route.path === "/" && !shelf },
     { key: "inbox", label: t("nav.inbox"), icon: <Inbox size={20} />, href: "#/inbox", active: shelf || route.path === "/review", dot: inbox > 0 },
     ...(ix
-      ? ix.typesInOrder().slice(0, 2).map((x) => {
-          const I = ICON[x.schema.icon] ?? ICON.circle!;
-          return { key: x.id, label: ix.typePlural(x.id), icon: <I size={20} />, href: spaceHref(one!.id, itemPath(x.id)), active: active?.id === one!.id && route.parts[0] === "i" && route.parts[1] === x.id };
+      ? ix.typesInOrder().slice(0, 2).map((type) => {
+          const Icon = ICON[type.schema.icon] ?? ICON.circle!;
+          return { key: type.id, label: ix.typePlural(type.id), icon: <Icon size={20} />, href: spaceHref(one!.id, itemPath(type.id)), active: active?.id === one!.id && route.parts[0] === "i" && route.parts[1] === type.id };
         })
       : []),
   ];
   return (
     <nav className="grid border-t border-line bg-surface pb-safe" style={{ gridTemplateColumns: `repeat(${entries.length}, minmax(0, 1fr))` }} aria-label={t("nav.main")}>
-      {entries.map((e) => {
-        const cls = cn("relative flex flex-col items-center gap-0.5 py-2 text-[11px]", e.active ? "text-fg" : "text-muted-foreground");
-        const inner = (
-          <>
-            {e.icon}
-            <span className="max-w-full truncate px-1">{e.label}</span>
-            {e.dot && <span className="absolute right-[22%] top-1 size-1.5 rounded-full" style={{ background: "var(--t-inbox)" }} />}
-          </>
-        );
-        return (
-          <a key={e.key} href={e.href} className={cls}>
-            {inner}
-          </a>
-        );
-      })}
+      {entries.map((e) => (
+        <a key={e.key} href={e.href} className={cn("relative flex flex-col items-center gap-0.5 py-2 text-[11px]", e.active ? "text-fg" : "text-muted-foreground")}>
+          {e.icon}
+          <span className="max-w-full truncate px-1">{e.label}</span>
+          {e.dot && <span className="absolute right-[22%] top-1 size-1.5 rounded-full" style={{ background: "var(--t-inbox)" }} />}
+        </a>
+      ))}
     </nav>
   );
 }

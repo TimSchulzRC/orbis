@@ -21,6 +21,11 @@ function condLabel(c: Cond, { ix, t, lang }: Ctx): string {
   return "not" in c ? `${t("query.not")} ${condLabel(c.not, { ix, t, lang })}` : printQuery({ where: c }, lang, ix);
 }
 
+/** No condition, the only one, or several joined by `join` ("and", "or"). */
+function combine(conds: Cond[], join: (list: Cond[]) => Cond): Cond | undefined {
+  return conds.length <= 1 ? conds[0] : join(conds);
+}
+
 /** `onUnder` opens the place picker, a dialog outside the popover. */
 function CondPicker({ pick, onUnder, context }: { pick: (c: Cond) => void; onUnder: () => void; context?: boolean }) {
   const ix = useIndex();
@@ -167,13 +172,13 @@ export function QueryEditor({ def, onChange, autoFocus, context, bare }: { def: 
     if (!focused) setText(printed);
   }, [printed, focused]);
   const commit = (src = text) => {
-    const r = parseQuery(src, ix);
-    setErrors(r.errors);
+    const parsed = parseQuery(src, ix);
+    setErrors(parsed.errors);
     setOff([]);
-    onChange(r.def);
+    onChange(parsed.def);
   };
   const parts: Cond[] = def.where ? ("and" in def.where ? def.where.and : [def.where]) : [];
-  const setParts = (next: Cond[]) => onChange({ ...def, where: next.length === 0 ? undefined : next.length === 1 ? next[0] : { and: next } });
+  const setParts = (next: Cond[]) => onChange({ ...def, where: combine(next, (and) => ({ and })) });
   const add = (c: Cond) => setParts([...parts, c]);
   const replace = (n: number, c: Cond | null) => setParts(c ? parts.map((x, i) => (i === n ? c : x)) : parts.filter((_, i) => i !== n));
   const negate = (c: Cond): Cond => ("not" in c ? c.not : { not: c });
@@ -182,10 +187,10 @@ export function QueryEditor({ def, onChange, autoFocus, context, bare }: { def: 
     replace(n, null);
   };
   const switchOn = (k: number) => {
-    const o = off[k]!;
+    const entry = off[k]!;
     setOff(off.filter((_, i) => i !== k));
     const next = [...parts];
-    next.splice(Math.min(o.at, next.length), 0, o.cond);
+    next.splice(Math.min(entry.at, next.length), 0, entry.cond);
     setParts(next);
   };
   const under = (then: (c: Cond) => void) => setPicking(() => then);
@@ -206,7 +211,7 @@ export function QueryEditor({ def, onChange, autoFocus, context, bare }: { def: 
                 onOr={(x) => replace(n, { or: [...c.or, x] })}
                 onRemove={() => {
                   const rest = c.or.filter((_, i) => i !== k);
-                  replace(n, rest.length === 0 ? null : rest.length === 1 ? rest[0]! : { or: rest });
+                  replace(n, combine(rest, (or) => ({ or })) ?? null);
                 }}
               />
             </span>

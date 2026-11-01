@@ -292,9 +292,9 @@ function Reauth({ onDone, onClose }: { onDone: () => void; onClose: () => void }
   // the passkey button only for an account that has one (unknown when the list fails: offered)
   const [hasPasskey, setHasPasskey] = useState<boolean | undefined>(false);
   useEffect(() => void passkeys().then((l) => setHasPasskey(l.length > 0), () => setHasPasskey(undefined)), []);
-  const who = account?.user.id;
+  const signedIn = account?.user.id;
   // a passkey of another account signs that one in instead: then nothing goes on
-  const done = () => (activeUser() === who ? onDone() : onClose());
+  const done = () => (activeUser() === signedIn ? onDone() : onClose());
   if (!account) return null;
   return (
     <Dialog title={t("account.reauth")} onClose={onClose}>
@@ -321,8 +321,10 @@ function Passkeys() {
       notify(t("account.passkeyAdded"));
       await load();
     } catch (e) {
+      // closed by the person (NotAllowedError): nothing to say
+      const closed = e instanceof Error && e.name === "NotAllowedError";
       if (e instanceof ApiError && e.status === 403) setReauth(true);
-      else if (!(e instanceof Error && e.name === "NotAllowedError")) setError(t("account.passkeyFailed"));
+      else if (!closed) setError(t("account.passkeyFailed"));
     } finally {
       setBusy(false);
     }
@@ -594,23 +596,23 @@ export function SettingsRedirect() {
 }
 
 export function SpaceSettingsPage() {
-  const r = useRepo();
+  const repo = useRepo();
   const { t } = useT();
   const space = spaceById(useSpaceId() ?? "");
   // an MCP token is made on request (each is a new one, shown once)
-  const [c, setC] = useState<McpConnect | null>(null);
-  const [err, setErr] = useState(false);
+  const [connect, setConnect] = useState<McpConnect | null>(null);
+  const [tokenFailed, setTokenFailed] = useState(false);
   const [removed, setRemoved] = useState(0);
   useDocumentTitle(space?.name ?? t("space.settings"));
   if (!space) return null;
-  const newToken = () => mcpToken(space).then(setC, () => setErr(true));
-  const s = r.status;
-  const ix = r.index();
-  const capture = r.get(SETTINGS_ID)?.settings?.captureTypes ?? [];
+  const newToken = () => mcpToken(space).then(setConnect, () => setTokenFailed(true));
+  const sync = repo.status;
+  const ix = repo.index();
+  const capture = repo.get(SETTINGS_ID)?.settings?.captureTypes ?? [];
   const types = [...ix.types.values()].sort((a, b) => a.schema!.name.localeCompare(b.schema!.name));
-  const toggleCapture = (id: string) => r.change(SETTINGS_ID, (d) => setSettings(d, { captureTypes: capture.includes(id) ? capture.filter((x) => x !== id) : [...capture, id] }));
+  const toggleCapture = (id: string) => repo.change(SETTINGS_ID, (d) => setSettings(d, { captureTypes: capture.includes(id) ? capture.filter((x) => x !== id) : [...capture, id] }));
   // the first capture type is the one "c" files to in the inbox
-  const setFirst = (id: string) => r.change(SETTINGS_ID, (d) => setSettings(d, { captureTypes: [id, ...capture.filter((x) => x !== id)] }));
+  const setFirst = (id: string) => repo.change(SETTINGS_ID, (d) => setSettings(d, { captureTypes: [id, ...capture.filter((x) => x !== id)] }));
   const chosen = capture.filter((id) => ix.types.has(id));
 
   return (
@@ -622,9 +624,9 @@ export function SpaceSettingsPage() {
           {([
             ["/types", t("nav.types"), Shapes],
             ["/graph", t("nav.graph"), Waypoints],
-          ] as const).map(([path, label, I]) => (
+          ] as const).map(([path, label, Icon]) => (
             <a key={path} href={spaceHref(space.id, path)} className="tap-y inline-flex h-8 items-center gap-1.5 rounded-lg border border-line bg-surface px-3 text-sm hover:bg-hover">
-              <I size={15} className="text-muted-foreground" /> {label}
+              <Icon size={15} className="text-muted-foreground" /> {label}
             </a>
           ))}
         </nav>
@@ -640,9 +642,9 @@ export function SpaceSettingsPage() {
         <SectionTitle>{t("settings.capture")}</SectionTitle>
         <p className="mb-2 text-sm text-muted-foreground">{t("settings.captureHint")}</p>
         <div className="flex flex-wrap gap-1.5">
-          {types.map((tp) => (
-            <Button variant="plain" key={tp.id} onClick={() => toggleCapture(tp.id)} aria-pressed={capture.includes(tp.id)} className={cn("tap-y inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs", capture.includes(tp.id) ? "border-focus text-fg" : "border-line text-muted-foreground")}>
-              <TypeGlyph schema={tp.schema} size={12} /> {tp.schema!.name}
+          {types.map((type) => (
+            <Button variant="plain" key={type.id} onClick={() => toggleCapture(type.id)} aria-pressed={capture.includes(type.id)} className={cn("tap-y inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs", capture.includes(type.id) ? "border-focus text-fg" : "border-line text-muted-foreground")}>
+              <TypeGlyph schema={type.schema} size={12} /> {type.schema!.name}
             </Button>
           ))}
         </div>
@@ -663,24 +665,24 @@ export function SpaceSettingsPage() {
       <section>
         <SectionTitle>{t("settings.agent")}</SectionTitle>
         <p className="mb-3 text-sm text-muted-foreground">{t("settings.agentIntro")}</p>
-        {err && !c && <p className="text-sm text-muted-foreground">{t("settings.connectOffline")}</p>}
-        {!c && (
+        {tokenFailed && !connect && <p className="text-sm text-muted-foreground">{t("settings.connectOffline")}</p>}
+        {!connect && (
           <Button variant="outline" onClick={() => void newToken()}>
             {t("settings.newToken")}
           </Button>
         )}
-        {c && (
+        {connect && (
           <div className="space-y-4">
             <div>
               <div className="mb-1 text-sm font-medium">Claude Code</div>
-              <CopyBox label="Claude Code" text={c.claudeCode} secret={c.token} />
+              <CopyBox label="Claude Code" text={connect.claudeCode} secret={connect.token} />
             </div>
             <div>
               <div className="mb-1 text-sm font-medium">{t("settings.otherClients")}</div>
-              <CopyBox label="MCP JSON" text={JSON.stringify(c.json, null, 2)} secret={c.token} />
+              <CopyBox label="MCP JSON" text={JSON.stringify(connect.json, null, 2)} secret={connect.token} />
             </div>
             <p className="text-sm text-muted-foreground">
-              {t("settings.mirror")} <code className="rounded bg-surface-2 px-1 font-mono text-xs">{c.vault}</code>
+              {t("settings.mirror")} <code className="rounded bg-surface-2 px-1 font-mono text-xs">{connect.vault}</code>
             </p>
           </div>
         )}
@@ -690,11 +692,11 @@ export function SpaceSettingsPage() {
         <SectionTitle>{t("settings.sync")}</SectionTitle>
         <dl className="grid grid-cols-[10rem_1fr] gap-y-1.5 text-sm">
           <dt className="text-muted-foreground">{t("settings.server")}</dt>
-          <dd>{s.online ? t("settings.connected") : t("settings.offline")}</dd>
-          {s.pending > 0 && (
+          <dd>{sync.online ? t("settings.connected") : t("settings.offline")}</dd>
+          {sync.pending > 0 && (
             <>
               <dt className="text-muted-foreground">{t("settings.pending")}</dt>
-              <dd>{s.pending}</dd>
+              <dd>{sync.pending}</dd>
             </>
           )}
           <dt className="text-muted-foreground">{t("settings.onDevice")}</dt>
@@ -704,13 +706,13 @@ export function SpaceSettingsPage() {
           <summary className="cursor-pointer text-muted-foreground hover:text-fg">{t("settings.advanced")}</summary>
           <dl className="mt-2 grid grid-cols-[10rem_1fr] gap-y-1.5">
             <dt className="text-muted-foreground">{t("settings.position")}</dt>
-            <dd className="tabular-nums">#{s.lastSeq}</dd>
+            <dd className="tabular-nums">#{sync.lastSeq}</dd>
           </dl>
           <div className="mt-3 flex flex-wrap gap-2">
-            <Button variant="outline" onClick={() => r.resetLocal()}>
+            <Button variant="outline" onClick={() => repo.resetLocal()}>
               {t("settings.redownload")}
             </Button>
-            <Button variant="outline" onClick={() => resetInbox(r.writer)}>
+            <Button variant="outline" onClick={() => resetInbox(repo.writer)}>
               <RotateCcw size={14} /> {t("inbox.reset")}
             </Button>
           </div>
@@ -750,17 +752,17 @@ function DeleteSpace({ space }: { space: Space }) {
 
 /** Changed examples stay unless chosen. */
 function Examples() {
-  const r = useRepo();
+  const repo = useRepo();
   const { t } = useT();
-  const ix = r.index();
+  const ix = repo.index();
   const list = listExamples(ix);
   const [chosen, setChosen] = useState<Set<string> | null>(null); // while the preview is open
   if (!list.length) return null;
   const toggle = (id: string) => setChosen((c) => toggled(c!, id));
   const remove = () => {
-    const ids = removeExamples(r.writer, ix, [...chosen!]);
+    const ids = removeExamples(repo.writer, ix, [...chosen!]);
     setChosen(null);
-    notify.undo(t("examples.removed", { count: ids.filter((id) => !list.find((e) => e.id === id)?.isType).length }), () => restoreExamples(r.writer, ids));
+    notify.undo(t("examples.removed", { count: ids.filter((id) => !list.find((e) => e.id === id)?.isType).length }), () => restoreExamples(repo.writer, ids));
   };
   const entries = list.filter((e) => !e.isType).length;
   const picked = chosen ? list.filter((e) => !e.isType && chosen.has(e.id)).length : 0;

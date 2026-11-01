@@ -44,9 +44,7 @@ const login = (() => {
 })();
 const accounts = new Accounts(DATA, { secret: config.authSecret, baseURL: PUBLIC_URL || `http://${HOST}:${PORT}`, policy: SIGNUP, login,
   // someone else proved the address this user signed up with
-  onRevoke: (user) => {
-    for (const w of open.values()) for (const ws of w.conns) if (ws.data.userId === user) ws.close(4401, "signed out");
-  },
+  onRevoke: (user) => closeConnsOf(user, "signed out"),
 });
 
 await accounts.init((dir) => {
@@ -59,9 +57,17 @@ const legacyId = (accounts.db.query("SELECT id FROM workspaces WHERE legacy = 1"
 
 const open = new Map<string, Workspace>();
 function workspace(id: string): Workspace | undefined {
-  let w = open.get(id);
-  if (!w && accounts.exists(id)) open.set(id, (w = new Workspace(accounts.dir(id))));
-  return w;
+  const known = open.get(id);
+  if (known || !accounts.exists(id)) return known;
+  const opened = new Workspace(accounts.dir(id));
+  open.set(id, opened);
+  return opened;
+}
+
+/** `keep` spares connections, e.g. of the session that made the change. */
+function closeConnsOf(userId: string, reason: string, keep?: (conn: Conn) => boolean) {
+  for (const w of open.values())
+    for (const ws of w.conns) if (ws.data.userId === userId && !keep?.(ws.data)) ws.close(4401, reason);
 }
 
 const methods = loginMethods(login);
@@ -101,6 +107,14 @@ const accountError = (e: unknown) => {
   throw e;
 };
 
+const IMMUTABLE = "public, max-age=31536000, immutable";
+
+function cacheControl(path: string, isIndex: boolean): string {
+  if (path.startsWith("/assets/")) return IMMUTABLE;
+  if (isIndex || path.endsWith("sw.js")) return "no-cache";
+  return "public, max-age=3600";
+}
+
 async function serveStatic(path: string): Promise<Response> {
   const clean = path.replace(/\.\.+/g, "");
   let file = Bun.file(join(DIST, clean === "/" ? "index.html" : clean));
@@ -111,11 +125,11 @@ async function serveStatic(path: string): Promise<Response> {
     isIndex = true;
     if (!(await file.exists())) return new Response("Web app not built. Run `bun run build`.", { status: 503 });
   }
-  const immutable = clean.startsWith("/assets/");
-  return new Response(file, {
-    headers: { "cache-control": immutable ? "public, max-age=31536000, immutable" : isIndex || clean.endsWith("sw.js") ? "no-cache" : "public, max-age=3600" },
-  });
+  return new Response(file, { headers: { "cache-control": cacheControl(clean, isIndex) } });
 }
+
+const INVITES = "/api/invites/";
+const isRole = (role: unknown): role is Role => role === "owner" || role === "member";
 
 /** Returns null for paths it does not handle. */
 async function accountApi(req: Request, path: string, url: URL): Promise<Response | null> {
@@ -143,8 +157,8 @@ async function accountApi(req: Request, path: string, url: URL): Promise<Respons
     return (login.sendCode ? accounts.signUpWithCode({ ...details, lang: b.lang, code: b.code || undefined }) : accounts.signUp(details)).then((r) => json(r), accountError);
   }
 
-  if (path.startsWith("/api/invites/")) {
-    const code = path.slice("/api/invites/".length);
+  if (path.startsWith(INVITES)) {
+    const code = path.slice(INVITES.length);
     const inv = accounts.invite(code);
     if (!inv) return fail(404, "invite invalid");
     if (req.method === "GET") return json<InviteInfo>({ workspace: inv.name, by: inv.by, role: inv.role, signup: accounts.canSignUp(code) });
@@ -153,18 +167,18 @@ async function accountApi(req: Request, path: string, url: URL): Promise<Respons
   const token = tokenOf(req);
   const session = await accounts.session(token);
   const user = session?.user;
-  if (!user) return path.startsWith("/api/account") || path.startsWith("/api/workspaces") || path.startsWith("/api/invites/") ? fail(401, "unauthorized") : null;
+  if (!user) return path.startsWith("/api/account") || path.startsWith("/api/workspaces") || path.startsWith(INVITES) ? fail(401, "unauthorized") : null;
   try {
     if (path === "/api/account" && req.method === "GET") {
       return json<AccountInfo>({ user, admin: accounts.isAdmin(user.id), password: await accounts.hasPassword(user.id), workspaces: accounts.workspacesOf(user.id) });
     }
     if (path === "/api/account" && req.method === "DELETE") {
       // needs the password, or a recent sign-in for accounts without one
-      const b = await body<{ password?: unknown }>(req);
-      if (b?.password !== undefined ? typeof b.password !== "string" : await accounts.hasPassword(user.id)) return fail(400, "password required");
-      await accounts.deleteAccount(user.id, b?.password as string | undefined, session!.created);
-      for (const w of open.values())
-        for (const ws of w.conns) if (ws.data.userId === user.id) ws.close(4401, "account deleted");
+      const password = (await body<{ password?: unknown }>(req))?.password;
+      const missing = password === undefined ? await accounts.hasPassword(user.id) : typeof password !== "string";
+      if (missing) return fail(400, "password required");
+      await accounts.deleteAccount(user.id, password as string | undefined, session!.created);
+      closeConnsOf(user.id, "account deleted");
       return json<Ok>({ ok: true });
     }
     if (path === "/api/account/password" && req.method === "POST") {
@@ -172,8 +186,7 @@ async function accountApi(req: Request, path: string, url: URL): Promise<Respons
       if (typeof b?.current !== "string" || typeof b.next !== "string") return fail(400, "passwords required");
       await accounts.changePassword(user.id, token!, b.current, b.next);
       // the other sessions were revoked, so close their connections
-      for (const w of open.values())
-        for (const ws of w.conns) if (ws.data.userId === user.id && ws.data.session !== token) ws.close(4401, "password changed");
+      closeConnsOf(user.id, "password changed", (conn) => conn.session === token);
       return json<Ok>({ ok: true });
     }
     if (path === "/api/account/signout" && req.method === "POST") return (await accounts.signOut(token!), json<Ok>({ ok: true }));
@@ -182,11 +195,11 @@ async function accountApi(req: Request, path: string, url: URL): Promise<Respons
       if (!b?.name?.trim()) return fail(400, "name required");
       return json(accounts.createWorkspace(user.id, b.name));
     }
-    if (path.startsWith("/api/invites/") && req.method === "POST") return json(accounts.join(path.slice("/api/invites/".length), user.id));
-    const m = path.match(/^\/api\/workspaces\/(?<id>[\w-]+)(?<sub>\/[\w/-]*)?$/)?.groups;
-    if (m) {
-      const id = m.id!;
-      const sub = m.sub ?? "";
+    if (path.startsWith(INVITES) && req.method === "POST") return json(accounts.join(path.slice(INVITES.length), user.id));
+    const route = path.match(/^\/api\/workspaces\/(?<id>[\w-]+)(?<sub>\/[\w/-]*)?$/)?.groups;
+    if (route) {
+      const id = route.id!;
+      const sub = route.sub ?? "";
       if (!accounts.role(id, user.id)) return fail(403, "not a member");
       if (sub === "" && req.method === "DELETE") {
         if (accounts.role(id, user.id) !== "owner") return fail(403, "only owners delete");
@@ -209,27 +222,27 @@ async function accountApi(req: Request, path: string, url: URL): Promise<Respons
       }
       if (sub.startsWith("/members/") && req.method === "PATCH") {
         const role = (await body<{ role?: unknown }>(req))?.role;
-        if (role !== "owner" && role !== "member") return fail(400, "role required");
-        accounts.setRole(id, user.id, sub.slice("/members/".length), role as Role);
+        if (!isRole(role)) return fail(400, "role required");
+        accounts.setRole(id, user.id, sub.slice("/members/".length), role);
         return json<Ok>({ ok: true });
       }
       if (sub === "/invites" && req.method === "GET") return json<InviteLink[]>(accounts.invites(id, user.id));
       if (sub === "/invites" && req.method === "POST") {
         const role = (await body<{ role?: unknown }>(req))?.role;
-        if (role !== undefined && role !== "owner" && role !== "member") return fail(400, "role invalid");
-        return json<InviteCode>({ code: accounts.createInvite(id, user.id, (role as Role) ?? "member") });
+        if (role !== undefined && !isRole(role)) return fail(400, "role invalid");
+        return json<InviteCode>({ code: accounts.createInvite(id, user.id, role ?? "member") });
       }
       if (sub.startsWith("/invites/") && req.method === "DELETE") return (accounts.revokeInvite(id, user.id, sub.slice("/invites/".length)), json<Ok>({ ok: true }));
       // the token is shown only once
       if (sub === "/mcp-token" && req.method === "POST") {
         const base = PUBLIC_URL || `${url.protocol}//${req.headers.get("host")}`;
         const mcpUrl = `${base}/w/${id}/mcp`;
-        const t = accounts.mcpToken(id, user.id);
+        const mcpToken = accounts.mcpToken(id, user.id);
         return json<McpConnect>({
           mcpUrl,
-          token: t,
-          claudeCode: `claude mcp add --transport http obtion ${mcpUrl} --header "Authorization: Bearer ${t}" -s user`,
-          json: { mcpServers: { obtion: { type: "http", url: mcpUrl, headers: { Authorization: `Bearer ${t}` } } } },
+          token: mcpToken,
+          claudeCode: `claude mcp add --transport http obtion ${mcpUrl} --header "Authorization: Bearer ${mcpToken}" -s user`,
+          json: { mcpServers: { obtion: { type: "http", url: mcpUrl, headers: { Authorization: `Bearer ${mcpToken}` } } } },
           vault: join(accounts.dir(id), "vault"),
         });
       }
@@ -278,11 +291,13 @@ const server = Bun.serve<Conn>({
 
     if (path.startsWith("/api/")) return (await accountApi(req, path, url)) ?? fail(404, "not found");
 
-    const m = path.match(/^\/w\/(?<id>[\w-]{1,40})(?<rest>\/.*)$/)?.groups;
-    if (m) {
-      const id = m.id!;
-      const rest = m.rest!;
-      const token = tokenOf(req) ?? (req.method === "GET" && rest.startsWith("/api/blobs/") ? (url.searchParams.get("t") ?? undefined) : undefined);
+    const route = path.match(/^\/w\/(?<id>[\w-]{1,40})(?<rest>\/.*)$/)?.groups;
+    if (route) {
+      const id = route.id!;
+      const rest = route.rest!;
+      // a file opened by URL (img, download link) carries the token as ?t=
+      const blobRead = req.method === "GET" && rest.startsWith("/api/blobs/");
+      const token = tokenOf(req) ?? (blobRead ? (url.searchParams.get("t") ?? undefined) : undefined);
       if (rest === "/mcp") {
         const user = token && accounts.mcpUser(id, token);
         if (!user || !workspace(id)) return fail(401, "unauthorized");

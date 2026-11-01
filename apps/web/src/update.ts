@@ -6,13 +6,14 @@ let reg: ServiceWorkerRegistration | undefined;
 let reloading = false;
 const TAKEOVER_TIMEOUT_MS = 4000;
 const RECHECK_MS = 30 * 60_000;
+const SYNC_POLL_MS = 150;
 
 const ready = () => setUpdate("ready", () => void apply());
 
 // bounded wait: unsent changes stay on the device anyway
 async function waitForSync(ms = 5000) {
   const end = Date.now() + ms;
-  while (unsynced() && Date.now() < end) await new Promise((r) => setTimeout(r, 150));
+  while (unsynced() && Date.now() < end) await new Promise((r) => setTimeout(r, SYNC_POLL_MS));
 }
 
 function reloadOnce() {
@@ -39,19 +40,24 @@ export function initUpdates() {
       // we reload ourselves, once and after the outbox has drained
       onNeedReload: () => {},
       onNeedRefresh: ready,
-      onRegisteredSW: (_url, r) => {
-        if (!r) return;
-        reg = r;
-        if (r.waiting && navigator.serviceWorker.controller) ready();
+      onRegisteredSW: (_url, registration) => {
+        if (!registration) return;
+        reg = registration;
+        if (registration.waiting && navigator.serviceWorker.controller) ready();
         // without a controller this is the first install, not an update
-        r.addEventListener("updatefound", () => navigator.serviceWorker.controller && !r.waiting && setUpdate("loading"));
-        setUpdateCheck(async () => {
-          await r.update();
-          return !!(r.installing || r.waiting);
+        registration.addEventListener("updatefound", () => {
+          if (navigator.serviceWorker.controller && !registration.waiting) setUpdate("loading");
         });
+        setUpdateCheck(async () => {
+          await registration.update();
+          return !!(registration.installing || registration.waiting);
+        });
+        const recheck = () => void registration.update().catch(() => {});
         // tabs left open for days still notice rollouts
-        setInterval(() => void r.update().catch(() => {}), RECHECK_MS);
-        document.addEventListener("visibilitychange", () => document.visibilityState === "visible" && void r.update().catch(() => {}));
+        setInterval(recheck, RECHECK_MS);
+        document.addEventListener("visibilitychange", () => {
+          if (document.visibilityState === "visible") recheck();
+        });
       },
     });
   });

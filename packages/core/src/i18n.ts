@@ -17,11 +17,11 @@ export function translate(lang: Lang, key: string, values?: Values): string {
   const msg = CATALOGS[lang][key] ?? CATALOGS.en[key];
   if (msg === undefined) return key;
   if (!values && !msg.includes("{")) return msg;
-  const ck = lang + "\u0000" + key;
-  let f = cache.get(ck);
-  if (!f) cache.set(ck, (f = new IntlMessageFormat(msg, lang)));
+  const cacheKey = lang + "\u0000" + key;
+  let formatter = cache.get(cacheKey);
+  if (!formatter) cache.set(cacheKey, (formatter = new IntlMessageFormat(msg, lang)));
   try {
-    return String(f.format(values));
+    return String(formatter.format(values));
   } catch (e) {
     console.warn(`[i18n] ${lang} ${key}:`, e);
     return msg;
@@ -72,15 +72,23 @@ export function fmtPercent(lang: Lang, share: number) {
   return new Intl.NumberFormat(locale(lang), { style: "percent", maximumFractionDigits: 0 }).format(share);
 }
 
+const MINUTE_S = 60;
+const HOUR_S = 3600;
+const DAY_S = 86400;
+/** Below this many seconds a moment reads as "now". */
+const NOW_S = 45;
+/** Older than this many days: the date gets its year. */
+const SHOW_YEAR_DAYS = 300;
+
 export function fmtRelative(lang: Lang, ts: number, now = Date.now()) {
   const rtf = new Intl.RelativeTimeFormat(locale(lang), { numeric: "auto" });
-  const s = (ts - now) / 1000;
-  const a = Math.abs(s);
-  if (a < 45) return translate(lang, "time.now");
-  if (a < 3600) return rtf.format(Math.round(s / 60), "minute");
-  if (a < 86400) return rtf.format(Math.round(s / 3600), "hour");
-  if (a < 86400 * 7) return rtf.format(Math.round(s / 86400), "day");
-  return new Date(ts).toLocaleDateString(locale(lang), { day: "numeric", month: "short", year: a > 86400 * 300 ? "numeric" : undefined });
+  const secs = (ts - now) / 1000;
+  const dist = Math.abs(secs);
+  if (dist < NOW_S) return translate(lang, "time.now");
+  if (dist < HOUR_S) return rtf.format(Math.round(secs / MINUTE_S), "minute");
+  if (dist < DAY_S) return rtf.format(Math.round(secs / HOUR_S), "hour");
+  if (dist < DAY_S * 7) return rtf.format(Math.round(secs / DAY_S), "day");
+  return new Date(ts).toLocaleDateString(locale(lang), { day: "numeric", month: "short", year: dist > DAY_S * SHOW_YEAR_DAYS ? "numeric" : undefined });
 }
 
 /** Seconds as "m:ss". */
@@ -90,8 +98,8 @@ export function fmtDuration(s: number) {
 }
 
 export function fmtBytes(lang: Lang, n: number) {
-  const u = ["B", "KB", "MB", "GB"];
+  const units = ["B", "KB", "MB", "GB"];
   let i = 0;
-  while (n >= 1024 && i < u.length - 1) (n /= 1024), i++;
-  return `${n.toLocaleString(locale(lang), { maximumFractionDigits: i ? 1 : 0 })} ${u[i]}`;
+  for (; n >= 1024 && i < units.length - 1; i++) n /= 1024;
+  return `${n.toLocaleString(locale(lang), { maximumFractionDigits: i ? 1 : 0 })} ${units[i]}`;
 }

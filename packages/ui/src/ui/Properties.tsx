@@ -23,29 +23,33 @@ import { ItemPicker } from "./Picker";
 import { StatusMenu, setStatus } from "./Row";
 import { dateOf } from "@obtion/core/date";
 
+/** Longer text values get a multi-line field. */
+const MULTILINE_FROM = 60;
+const TARGET_SUGGESTIONS = 8;
+
 function displayValue(item: Item, p: PropDef): string {
-  const v = item.props[p.id];
+  const value = item.props[p.id];
   const ix = repo.index();
   if (item.rels[p.id]?.length) return item.rels[p.id]!.map((id) => ix.get(id)?.title ?? id).join(", ");
-  if (v === undefined) return "";
-  if (p.options) return optionNames(p, v).join(", ");
-  return String(v);
+  if (value === undefined) return "";
+  if (p.options) return optionNames(p, value).join(", ");
+  return String(value);
 }
 
 export function PropertyField({ item, prop, autoFocus }: { item: Item; prop: PropDef; autoFocus?: boolean }) {
   const { t, lang } = useT();
   const ix = useIndex();
-  const v = item.props[prop.id];
-  const set = (x: Value | null) => repo.setProp(item.id, prop.id, x);
+  const value = item.props[prop.id];
+  const setValue = (x: Value | null) => repo.setProp(item.id, prop.id, x);
   switch (prop.kind) {
     case "text":
-      return <InlineText value={String(v ?? "")} onCommit={(x) => set(x.trim() || null)} placeholder={t("props.empty")} label={prop.name} multiline={String(v ?? "").length > 60} autoFocus={autoFocus} className="text-sm leading-relaxed" />;
+      return <InlineText value={String(value ?? "")} onCommit={(x) => setValue(x.trim() || null)} placeholder={t("props.empty")} label={prop.name} multiline={String(value ?? "").length > MULTILINE_FROM} autoFocus={autoFocus} className="text-sm leading-relaxed" />;
     case "url":
       return (
         <span className="flex w-full items-center gap-1">
-          <InlineText value={String(v ?? "")} onCommit={(x) => set(x.trim() || null)} placeholder={t("props.empty")} label={prop.name} autoFocus={autoFocus} className="text-sm" />
-          {typeof v === "string" && /^https?:\/\//.test(v) && (
-            <a href={v} target="_blank" rel="noopener" className="text-muted-foreground hover:text-fg" aria-label={t("props.openLink")}>
+          <InlineText value={String(value ?? "")} onCommit={(x) => setValue(x.trim() || null)} placeholder={t("props.empty")} label={prop.name} autoFocus={autoFocus} className="text-sm" />
+          {typeof value === "string" && /^https?:\/\//.test(value) && (
+            <a href={value} target="_blank" rel="noopener" className="text-muted-foreground hover:text-fg" aria-label={t("props.openLink")}>
               <ExternalLink size={13} />
             </a>
           )}
@@ -54,8 +58,8 @@ export function PropertyField({ item, prop, autoFocus }: { item: Item; prop: Pro
     case "number":
       return (
         <InlineText
-          value={typeof v === "number" ? numberText(lang, v) : ""}
-          onCommit={(x) => set(parseNumber(lang, x) ?? null)}
+          value={typeof value === "number" ? numberText(lang, value) : ""}
+          onCommit={(x) => setValue(parseNumber(lang, x) ?? null)}
           placeholder={t("props.empty")}
           label={prop.name}
           autoFocus={autoFocus}
@@ -63,12 +67,12 @@ export function PropertyField({ item, prop, autoFocus }: { item: Item; prop: Pro
         />
       );
     case "date": {
-      const s = typeof v === "string" ? v : "";
-      if (!prop.range) return <DateField value={s || undefined} label={prop.name} autoFocus={autoFocus} onChange={(x) => set(x || null)} />;
-      return <RangeField value={s} name={prop.name} autoFocus={autoFocus} onChange={(x) => set(x || null)} />;
+      const text = typeof value === "string" ? value : "";
+      if (!prop.range) return <DateField value={text || undefined} label={prop.name} autoFocus={autoFocus} onChange={(x) => setValue(x || null)} />;
+      return <RangeField value={text} name={prop.name} autoFocus={autoFocus} onChange={(x) => setValue(x || null)} />;
     }
     case "checkbox":
-      return <Checkbox checked={v === true} onCheckedChange={(checked) => set(checked === true ? true : null)} aria-label={prop.name} className="size-4" />;
+      return <Checkbox checked={value === true} onCheckedChange={(checked) => setValue(checked === true ? true : null)} aria-label={prop.name} className="size-4" />;
     case "select": {
       if (prop.multiple) return <MultiField item={item} prop={prop} />;
       const schema = ix.schemaOf(item);
@@ -83,13 +87,13 @@ export function PropertyField({ item, prop, autoFocus }: { item: Item; prop: Pro
     case "relation":
       return <RelationField item={item} prop={prop} autoOpen={autoFocus} />;
     case "computed": {
-      const c = prop.computed;
-      if (c?.fn === "count") return <span className="tabular-nums text-muted-foreground">{ix.countDescendants(item.id, c.of)}</span>;
-      const p = ix.progress(item.id, c?.of);
-      return p.total ? (
+      const computed = prop.computed;
+      if (computed?.fn === "count") return <span className="tabular-nums text-muted-foreground">{ix.countDescendants(item.id, computed.of)}</span>;
+      const progress = ix.progress(item.id, computed?.of);
+      return progress.total ? (
         <span className="flex w-full max-w-64 items-center gap-2">
-          <Progress done={p.done} total={p.total} className="flex-1" />
-          <ProgressCount done={p.done} total={p.total} className="text-xs text-muted-foreground" />
+          <Progress done={progress.done} total={progress.total} className="flex-1" />
+          <ProgressCount done={progress.done} total={progress.total} className="text-xs text-muted-foreground" />
         </span>
       ) : (
         <EmptyDash />
@@ -106,10 +110,10 @@ function MultiField({ item, prop }: { item: Item; prop: PropDef }) {
   return (
     <>
       {ids.map((id) => {
-        const o = prop.options?.find((x) => x.id === id);
+        const option = prop.options?.find((x) => x.id === id);
         return (
           <span key={id} className="inline-flex items-center gap-0.5">
-            {o ? <StatusPill option={o} small /> : id}
+            {option ? <StatusPill option={option} small /> : id}
             <Button variant="plain" onClick={() => set(ids.filter((x) => x !== id))} className="text-muted-foreground hover:text-fg" aria-label={t("props.removeValue")}>
               <X size={11} />
             </Button>
@@ -140,8 +144,8 @@ function MultiField({ item, prop }: { item: Item; prop: PropDef }) {
 /** An invisible native select lies over the chip, so a click picks right there. */
 export function OptionSelect({ item, prop, className }: { item: Item; prop: PropDef; className?: string }) {
   const { t } = useT();
-  const v = item.props[prop.id];
-  const opt = prop.options?.find((o) => o.id === v);
+  const value = item.props[prop.id];
+  const opt = prop.options?.find((o) => o.id === value);
   const schema = useIndex().schemaOf(item);
   const isStatus = isStatusProp(schema, prop);
   // a select with a default is never empty
@@ -151,7 +155,7 @@ export function OptionSelect({ item, prop, className }: { item: Item; prop: Prop
       {opt ? <StatusPill option={opt} group={isStatus ? (opt.group ?? "todo") : undefined} /> : <span className="text-muted-foreground">{t("props.empty")}</span>}
       <NativeSelect
         overlay
-        value={String(v ?? "")}
+        value={String(value ?? "")}
         onChange={(e) => (isStatus && e.target.value ? void setStatus(item, e.target.value) : repo.setProp(item.id, prop.id, e.target.value || null))}
         aria-label={prop.name}
       >
@@ -219,11 +223,11 @@ function RelationField({ item, prop, autoOpen }: { item: Item; prop: PropDef; au
   return (
     <>
       {ids.map((id) => {
-        const x = ix.get(id)!;
+        const related = ix.get(id)!;
         return (
           <span key={id} className="inline-flex max-w-full items-center gap-1 rounded-md bg-surface-2 py-0.5 pl-1.5 pr-0.5 text-xs">
-            <ItemLink item={x} className="min-w-0" />
-            {!fits(x) && <span title={t("props.notTarget", { target: prop.target })} className="text-warn"><AlertTriangle size={11} /></span>}
+            <ItemLink item={related} className="min-w-0" />
+            {!fits(related) && <span title={t("props.notTarget", { target: prop.target })} className="text-warn"><AlertTriangle size={11} /></span>}
             <Button variant="plain" onClick={() => remove(id)} className="rounded px-1 text-muted-foreground hover:bg-hover hover:text-fg" aria-label={t("props.removeValue")}>
               <X size={11} />
             </Button>
@@ -238,7 +242,7 @@ function RelationField({ item, prop, autoOpen }: { item: Item; prop: PropDef; au
       {picking && (
         <ItemPicker
           title={prop.name}
-          suggestions={ix.live.filter((x) => target && x.id !== item.id && fits(x) && !ids.includes(x.id)).slice(0, 8).map((x) => ({ id: x.id, reason: "target" as const }))}
+          suggestions={ix.live.filter((x) => target && x.id !== item.id && fits(x) && !ids.includes(x.id)).slice(0, TARGET_SUGGESTIONS).map((x) => ({ id: x.id, reason: "target" as const }))}
           exclude={(x) => x.id === item.id || ids.includes(x.id)}
           onPick={(id) => {
             if (!prop.multiple) for (const old of own) repo.setRel(item.id, prop.id, old, false);
@@ -354,14 +358,14 @@ export function PropertyBlock({ item, schema, head = {} }: { item: Item; schema?
 function StatusBadge({ item }: { item: Item }) {
   const { t } = useT();
   const ix = useIndex();
-  const st = statusOf(item, ix.schemaOf(item));
-  if (!st) return null;
+  const status = statusOf(item, ix.schemaOf(item));
+  if (!status) return null;
   return (
     <StatusMenu
       item={item}
       trigger={(p) => (
-        <Button variant="plain" {...p} className="tap-y inline-flex" aria-label={t("row.status", { name: st.option.name })}>
-          <StatusPill option={st.option} group={st.group} />
+        <Button variant="plain" {...p} className="tap-y inline-flex" aria-label={t("row.status", { name: status.option.name })}>
+          <StatusPill option={status.option} group={status.group} />
         </Button>
       )}
     />
@@ -371,8 +375,8 @@ function StatusBadge({ item }: { item: Item }) {
 /** Shows the property's name before the value ("Phase Entwurf"). */
 function SelectBadge({ item, prop }: { item: Item; prop: PropDef }) {
   const { t } = useT();
-  const v = item.props[prop.id];
-  const opt = prop.options?.find((o) => o.id === v);
+  const value = item.props[prop.id];
+  const opt = prop.options?.find((o) => o.id === value);
   const ix = useIndex();
   // a select with a default is never empty
   const required = !!defaultOption(prop, ix.schemaOf(item));
@@ -399,7 +403,7 @@ function SelectBadge({ item, prop }: { item: Item; prop: PropDef }) {
         <>
           <p className="px-2.5 pb-1 pt-1.5 text-xs text-muted-foreground">{prop.name}</p>
           {prop.options?.map((o) => (
-            <MenuItem key={o.id} active={o.id === v} onClick={() => (close(), repo.setProp(item.id, prop.id, o.id))}>
+            <MenuItem key={o.id} active={o.id === value} onClick={() => (close(), repo.setProp(item.id, prop.id, o.id))}>
               <StatusPill option={o} />
             </MenuItem>
           ))}
@@ -423,12 +427,12 @@ function inverseGroups(item: Item, ix: Index, t: T): { label: string; ids: strin
     if (b.kind !== "rel") continue;
     const from = ix.get(b.from);
     if (!from) continue;
-    const p = ix.schemaOf(from)?.properties.find((x) => x.id === b.prop);
-    if (!p || p.symmetric) continue;
-    const label = p.inverseName || t("props.inverse", { prop: p.name, type: ix.typeName(from.type) ?? "" });
-    const g = groups.get(label) ?? { label, ids: [] };
-    if (!g.ids.includes(from.id)) g.ids.push(from.id);
-    groups.set(label, g);
+    const prop = ix.schemaOf(from)?.properties.find((x) => x.id === b.prop);
+    if (!prop || prop.symmetric) continue;
+    const label = prop.inverseName || t("props.inverse", { prop: prop.name, type: ix.typeName(from.type) ?? "" });
+    const group = groups.get(label) ?? { label, ids: [] };
+    if (!group.ids.includes(from.id)) group.ids.push(from.id);
+    groups.set(label, group);
   }
   return [...groups.values()];
 }

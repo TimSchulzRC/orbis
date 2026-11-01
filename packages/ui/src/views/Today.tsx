@@ -15,6 +15,17 @@ import { openShelf, useInboxItems, useShelfPinned } from "../ui/inbox";
 import { ShelfCards } from "../ui/Shelf";
 import { cmpKey } from "@obtion/core/sortkey";
 
+/** Entries each section shows at most. */
+const RECENT = 4;
+const PROJECTS = 5;
+
+/** Which greeting fits the hour: night counts as evening. */
+function dayPart(hour: number): "morning" | "day" | "evening" {
+  if (hour < 5) return "evening";
+  if (hour < 11) return "morning";
+  return hour < 18 ? "day" : "evening";
+}
+
 interface Of<T> {
   space: string;
   value: T;
@@ -31,16 +42,15 @@ export function Today() {
   const today = todayISO();
   useDocumentTitle(t("nav.today"));
   // each workspace's part, then one list of all
-  const per = shown.map((s, n) => ({ space: s.id, ix: repos[n]!.get(SETTINGS_ID) ? repos[n]!.index() : undefined }));
-  const all = <T,>(f: (ix: NonNullable<(typeof per)[number]["ix"]>) => T[]): Of<T>[] => per.flatMap((p) => (p.ix ? f(p.ix).map((value) => ({ space: p.space, value })) : []));
+  const perSpace = shown.map((s, n) => ({ space: s.id, ix: repos[n]!.get(SETTINGS_ID) ? repos[n]!.index() : undefined }));
+  const all = <T,>(list: (ix: NonNullable<(typeof perSpace)[number]["ix"]>) => T[]): Of<T>[] => perSpace.flatMap((p) => (p.ix ? list(p.ix).map((value) => ({ space: p.space, value })) : []));
   const due = all((ix) => dueBy(ix, today)).sort((a, b) => cmpKey(a.value.due, b.value.due));
   const projects = all((ix) => activeProjects(ix)).sort((a, b) => b.value.touched - a.value.touched);
-  const recent = all((ix) => recentlyChanged(ix, 4)).sort((a, b) => b.value.updated - a.value.updated).slice(0, 4);
+  const recent = all((ix) => recentlyChanged(ix, RECENT)).sort((a, b) => b.value.updated - a.value.updated).slice(0, RECENT);
   const several = shown.length > 1;
   const nameOf = (space: string) => (several ? shown.find((s) => s.id === space)?.name : undefined);
 
-  const hour = new Date().getHours();
-  const part = hour < 5 ? "evening" : hour < 11 ? "morning" : hour < 18 ? "day" : "evening";
+  const part = dayPart(new Date().getHours());
   const name = account?.user.name.trim().split(/\s+/)[0];
   // the inbox count, amber as the tray, opens the tray's panel – pinned open below it is there already,
   // the count is no link then: the sentence around it comes in two parts
@@ -90,7 +100,7 @@ export function Today() {
           <section>
             <SectionTitle count={projects.length}>{t("today.projectsTitle")}</SectionTitle>
             <Card className="overflow-hidden">
-              {projects.slice(0, 5).map(({ space, value }) => (
+              {projects.slice(0, PROJECTS).map(({ space, value }) => (
                 <SpaceScope key={`${space}/${value.item.id}`} id={space}>
                   <ProjectRow item={value.item} touched={value.touched} space={nameOf(space)} />
                 </SpaceScope>
@@ -151,31 +161,32 @@ function ProjectRow({ item, touched, space }: { item: Item; touched: number; spa
   const { t, lang } = useT();
   const hrefOf = useItemHref();
   const ix = useIndex();
-  const prog = ix.progressOf(item);
+  const progress = ix.progressOf(item);
+  const counted = progress && progress.total > 0 ? progress : undefined;
   const color = pal(ix.schemaOf(item)?.color);
   return (
     <a href={hrefOf(item.id)} className={cn(row, "hover:bg-hover")}>
-      {prog && prog.total > 0 ? <Ring share={prog.done / prog.total} color={color} /> : <span className="flex size-8 shrink-0 items-center justify-center"><ItemIcon item={item} /></span>}
+      {counted ? <Ring share={counted.done / counted.total} color={color} /> : <span className="flex size-8 shrink-0 items-center justify-center"><ItemIcon item={item} /></span>}
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[15px] font-medium">{titleOf(item, t)}</span>
         <span className="block truncate text-xs text-muted-foreground">
-          {prog && prog.total > 0 && <>{t("today.open", { count: prog.total - prog.done })} · </>}
+          {counted && <>{t("today.open", { count: counted.total - counted.done })} · </>}
           {t("today.touched")} <RelTime ts={touched} />
           {space && <> · {space}</>}
         </span>
       </span>
-      {prog && prog.total > 0 && <span className="shrink-0 text-[13px] tabular-nums text-muted-foreground">{new Intl.NumberFormat(lang, { style: "percent", maximumFractionDigits: 0 }).format(prog.done / prog.total)}</span>}
+      {counted && <span className="shrink-0 text-[13px] tabular-nums text-muted-foreground">{new Intl.NumberFormat(lang, { style: "percent", maximumFractionDigits: 0 }).format(counted.done / counted.total)}</span>}
     </a>
   );
 }
 
 function Ring({ share, color }: { share: number; color: string }) {
-  const r = 13;
-  const c = 2 * Math.PI * r;
+  const radius = 13;
+  const circumference = 2 * Math.PI * radius;
   return (
     <svg width="32" height="32" viewBox="0 0 32 32" className="shrink-0 -rotate-90" aria-hidden>
-      <circle cx="16" cy="16" r={r} fill="none" stroke="var(--border)" strokeWidth="3" />
-      <circle cx="16" cy="16" r={r} fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" strokeDasharray={`${share * c} ${c}`} />
+      <circle cx="16" cy="16" r={radius} fill="none" stroke="var(--border)" strokeWidth="3" />
+      <circle cx="16" cy="16" r={radius} fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" strokeDasharray={`${share * circumference} ${circumference}`} />
     </svg>
   );
 }

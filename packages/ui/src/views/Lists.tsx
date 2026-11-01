@@ -25,7 +25,7 @@ export function TypeList({ type }: { type: Item }) {
   const tabs = typeTabs(type, lang);
   const [tab, pickTab] = useTabChoice(type.id, tabs, true);
   // the first change keeps the default views: they are written along with it
-  const setT = (id: string, patch: Parameters<typeof setTab>[2]) =>
+  const writeTab = (id: string, patch: Parameters<typeof setTab>[2]) =>
     repo.change(type.id, (d) => {
       if (!type.schema!.views) setTabs(d, tabs);
       setTab(d, id, patch);
@@ -38,8 +38,8 @@ export function TypeList({ type }: { type: Item }) {
   const saveLook = (patch: Partial<ViewTab>) => {
     const changed = Object.entries(patch).filter(([k, v]) => !sameValue(v, tab[k as keyof ViewTab]));
     if (!changed.length) return;
-    setT(tab.id, Object.fromEntries(changed.map(([k, v]) => [k, v ?? null])));
-    if (patch.kind && patch.kind !== tab.kind) notify.undo(t("view.viewSet", { view: t("view." + patch.kind) }), () => setT(tab.id, { kind: tab.kind }));
+    writeTab(tab.id, Object.fromEntries(changed.map(([k, v]) => [k, v ?? null])));
+    if (patch.kind && patch.kind !== tab.kind) notify.undo(t("view.viewSet", { view: t("view." + patch.kind) }), () => writeTab(tab.id, { kind: tab.kind }));
   };
   // leaving with an unsaved filter: say that it was not kept
   const dirtyRef = useRef(false);
@@ -52,33 +52,33 @@ export function TypeList({ type }: { type: Item }) {
   const tabEdit: TabEdit = {
     add: (kind) => {
       const id = shortId("v");
-      setT(id, { kind, pos: keyBetween(tabs.at(-1)?.pos ?? null, null), ...(kind === "board" ? { group: "status" } : {}) });
+      writeTab(id, { kind, pos: keyBetween(tabs.at(-1)?.pos ?? null, null), ...(kind === "board" ? { group: "status" } : {}) });
       pick(id);
     },
-    rename: (id, name) => setT(id, { name: name || null }),
+    rename: (id, name) => writeTab(id, { name: name || null }),
     duplicate: (id) => {
       const n = tabs.findIndex((x) => x.id === id);
       const { id: _, pos, ...rest } = tabs[n]!;
-      const nid = shortId("v");
-      setT(nid, { ...rest, name: t("view.copyName", { name: tabName(tabs[n]!, t) }), pos: keyBetween(pos, tabs[n + 1]?.pos ?? null) });
-      pick(nid);
+      const copyId = shortId("v");
+      writeTab(copyId, { ...rest, name: t("view.copyName", { name: tabName(tabs[n]!, t) }), pos: keyBetween(pos, tabs[n + 1]?.pos ?? null) });
+      pick(copyId);
     },
     remove: (id) => {
       const { id: _, ...whole } = tabs.find((x) => x.id === id)!;
-      setT(id, null);
+      writeTab(id, null);
       if (draft?.tab === id) setDraft(null);
-      notify.undo(t("view.removed", { name: tabName(whole, t) }), () => setT(id, whole));
+      notify.undo(t("view.removed", { name: tabName(whole, t) }), () => writeTab(id, whole));
     },
-    move: (id, pos) => setT(id, { pos }),
-    settings: () => setSettings_(true),
+    move: (id, pos) => writeTab(id, { pos }),
+    settings: () => setSettingsOpen(true),
   };
   const { items, ctx } = useQuery(def);
-  const [settings, setSettings_] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const fields = useViewFields(base, items);
-  const setTabFilter = (w: QueryDef["where"]) => !sameValue(w, tabWhere) && setDraft({ tab: tab.id, where: w });
+  const setTabFilter = (where: QueryDef["where"]) => !sameValue(where, tabWhere) && setDraft({ tab: tab.id, where });
   const saveDraft = () => {
     if (!draft) return;
-    setT(draft.tab, { where: draft.where ?? null });
+    writeTab(draft.tab, { where: draft.where ?? null });
     setDraft(null);
     notify(t("view.saved"));
   };
@@ -93,21 +93,21 @@ export function TypeList({ type }: { type: Item }) {
         right={
           <>
             <AddFilter onAdd={(c) => setTabFilter(andWhere(tabWhere, c))} trigger={(p) => <IconButton {...p} icon={ListFilter} label={t("view.addFilter")} />} />
-            <IconButton icon={SlidersHorizontal} label={t("view.settings")} aria-pressed={settings} onClick={() => setSettings_(!settings)} className={settings ? "bg-hover text-fg" : undefined} />
+            <IconButton icon={SlidersHorizontal} label={t("view.settings")} aria-pressed={settingsOpen} onClick={() => setSettingsOpen(!settingsOpen)} className={settingsOpen ? "bg-hover text-fg" : undefined} />
             <Button variant="primary" onClick={() => createAndOpen({ type: type.id })} aria-label={t("view.new", { name })}>
               <Plus size={14} /> <span className="hidden sm:inline">{name}</span>
             </Button>
           </>
         }
       />
-      {settings && (
+      {settingsOpen && (
         <ViewSettings
           tab={{ ...tab, where: tabWhere }}
           fields={fields}
           columns={tab.kind === "table" ? defaultColumns(items, ctx) : undefined}
           groups={viewGroups(items, def, ctx)}
           onLook={saveLook}
-          onClose={() => setSettings_(false)}
+          onClose={() => setSettingsOpen(false)}
         />
       )}
       {/* the view's own filter: only when it has one, as chips under the tabs (like Notion) */}
@@ -141,7 +141,7 @@ export function FilesPage() {
   const kind = kindOf(useRoute().query.get("kind"));
   const setKind = (k: FileType | null) => setParams({ kind: k && KIND_PARAM[k] });
   const all = useQuery({ where: { file: true } }).items;
-  const kinds = FILE_TYPES.map((k) => ({ k, n: all.filter((i) => i.file?.filetype === k).length })).filter((x) => x.n > 0);
+  const kinds = FILE_TYPES.map((type) => ({ type, count: all.filter((i) => i.file?.filetype === type).length })).filter((x) => x.count > 0);
   const def: QueryDef = { where: kind ? { and: [{ file: true }, { filetype: kind }] } : { file: true }, sort: [{ key: "created", desc: true }] };
   useDocumentTitle(t("nav.files"));
   return (
@@ -159,14 +159,14 @@ export function FilesPage() {
       </div>
       {kinds.length > 1 && (
         <div className="-mx-4 mb-3 flex gap-1 overflow-x-auto px-4 text-sm [scrollbar-width:none] md:mx-0 md:px-0" role="group" aria-label={t("files.filter")}>
-          {[{ k: null, n: all.length }, ...kinds].map(({ k, n }) => (
+          {[{ type: null, count: all.length }, ...kinds].map(({ type, count }) => (
             <Button variant="plain"
-              key={k ?? "all"}
-              onClick={() => setKind(k)}
-              aria-pressed={kind === k}
-              className={cn("shrink-0 whitespace-nowrap rounded-full border px-3 py-1", kind === k ? "border-focus bg-surface text-fg" : "border-line text-muted-foreground hover:bg-hover hover:text-fg")}
+              key={type ?? "all"}
+              onClick={() => setKind(type)}
+              aria-pressed={kind === type}
+              className={cn("shrink-0 whitespace-nowrap rounded-full border px-3 py-1", kind === type ? "border-focus bg-surface text-fg" : "border-line text-muted-foreground hover:bg-hover hover:text-fg")}
             >
-              {k ? t("filetype.many." + k) : t("files.all")} <span className="tabular-nums text-muted-foreground">{n}</span>
+              {type ? t("filetype.many." + type) : t("files.all")} <span className="tabular-nums text-muted-foreground">{count}</span>
             </Button>
           ))}
         </div>

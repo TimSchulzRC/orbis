@@ -31,8 +31,8 @@ export function BoardView({ items, def, ctx, look }: { items: Item[]; def: Query
     if (!item) return;
     const schema = ix.schemaOf(item);
     if (by === "statusGroup") {
-      const o = g.key ? firstOfGroup(schema, g.key as StatusGroup) : undefined;
-      if (o) void setStatus(item, o.id, repo);
+      const first = g.key ? firstOfGroup(schema, g.key as StatusGroup) : undefined;
+      if (first) void setStatus(item, first.id, repo);
       return;
     }
     const prop = by === "status" ? statusProp(schema) : schema?.properties.find((p) => p.name.toLowerCase() === by.toLowerCase() && p.kind === "select");
@@ -49,6 +49,7 @@ export function BoardView({ items, def, ctx, look }: { items: Item[]; def: Query
     check();
     el.onscroll = check;
   };
+  const toggleFold = (key: string) => setFolded((f) => new Set(f.has(key) ? [...f].filter((k) => k !== key) : [...f, key]));
   const byLabel = fieldLabel(by, t);
   const subLabel = tab?.subgroup ? fieldLabel(tab.subgroup, t) : "";
   return (
@@ -60,7 +61,7 @@ export function BoardView({ items, def, ctx, look }: { items: Item[]; def: Query
           <section key={lane.key || "_"} className={tab?.subgroup ? "mb-4" : undefined}>
             {tab?.subgroup && (
               <div className="sticky left-0 flex w-fit items-center gap-2 px-2 py-1.5">
-                <Button variant="plain" onClick={() => setFolded((f) => new Set(isFolded ? [...f].filter((k) => k !== lane.key) : [...f, lane.key]))} aria-expanded={!isFolded} aria-label={t(isFolded ? "table.unfold" : "table.fold")} className="tap -ml-1 rounded p-0.5 text-muted-foreground hover:bg-hover hover:text-fg">
+                <Button variant="plain" onClick={() => toggleFold(lane.key)} aria-expanded={!isFolded} aria-label={t(isFolded ? "table.unfold" : "table.fold")} className="tap -ml-1 rounded p-0.5 text-muted-foreground hover:bg-hover hover:text-fg">
                   {isFolded ? <ChevronRight size={15} /> : <ChevronDown size={15} />}
                 </Button>
                 <GroupChip g={lane} by={tab.subgroup} byLabel={subLabel} />
@@ -112,7 +113,7 @@ function BoardCard({ item: i, cols, ctx }: { item: Item; cols: string[]; ctx: Ev
   const { t } = useT();
   const shown = cols.filter((c) => {
     const hit = c === "area" ? (ctx.ix.area(i.id) ? { value: 1 } : undefined) : fieldOf(i, c, ctx.ix);
-    return hit && !(hit.value === undefined || hit.value === null || hit.value === "" || (Array.isArray(hit.value) && !hit.value.length));
+    return hit && !isEmpty(hit.value);
   });
   const pr = !cols.length ? ctx.ix.progressOf(i) : undefined;
   return (
@@ -135,6 +136,10 @@ function BoardCard({ item: i, cols, ctx }: { item: Item; cols: string[]; ctx: Ev
       {pr && pr.total ? <ProgressCount done={pr.done} total={pr.total} className="text-xs text-muted-foreground" /> : null}
     </div>
   );
+}
+
+function isEmpty(value: unknown): boolean {
+  return value === undefined || value === null || value === "" || (Array.isArray(value) && !value.length);
 }
 
 function CardValue({ item, name, ctx }: { item: Item; name: string; ctx: EvalCtx }) {

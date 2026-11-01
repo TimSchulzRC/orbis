@@ -47,23 +47,23 @@ md.use({
       level: "inline",
       start: (src: string) => src.match(/!?\[\[/)?.index,
       tokenizer(src: string): WikiToken | undefined {
-        const m = WIKILINK_AT_START.exec(src);
-        if (!m) return undefined;
-        return { type: "wikilink", raw: m[0], embed: m[1] === "!", target: m[2]!.trim(), alias: m[4]?.slice(1) };
+        const match = WIKILINK_AT_START.exec(src);
+        if (!match) return undefined;
+        return { type: "wikilink", raw: match[0], embed: match[1] === "!", target: match[2]!.trim(), alias: match[4]?.slice(1) };
       },
       renderer(token) {
-        const t = token as WikiToken; // made by the tokenizer above
-        const r = rendering ?? repo;
-        const id = r.resolveTitle(t.target);
-        const item = id ? r.get(id) : undefined;
-        const f = item?.file;
-        const size = t.alias && /^\d+$/.test(t.alias) ? Number(t.alias) : undefined;
-        if (f && t.embed) return embedHTML(item!, size, renderingSpace);
-        if (f) return `<a class="file-chip" href="${spaceHref(renderingSpace, itemPath(id!))}">📎 ${escapeHtml(t.alias || item!.title)} <small>${fmtBytes(getLang(), f.size)}</small></a>`;
-        const label = escapeHtml(t.alias || t.target);
+        const link = token as WikiToken; // made by the tokenizer above
+        const source = rendering ?? repo;
+        const id = source.resolveTitle(link.target);
+        const item = id ? source.get(id) : undefined;
+        const file = item?.file;
+        const size = link.alias && /^\d+$/.test(link.alias) ? Number(link.alias) : undefined;
+        if (file && link.embed) return embedHTML(item!, size, renderingSpace);
+        if (file) return `<a class="file-chip" href="${spaceHref(renderingSpace, itemPath(id!))}">📎 ${escapeHtml(link.alias || item!.title)} <small>${fmtBytes(getLang(), file.size)}</small></a>`;
+        const label = escapeHtml(link.alias || link.target);
         return id
           ? `<a class="wikilink" href="${spaceHref(renderingSpace, itemPath(id))}">${label}</a>`
-          : `<a class="wikilink missing" href="${spaceHref(renderingSpace, `/create?title=${encodeURIComponent(t.target)}`)}" title="${escapeHtml(tr("link.missing"))}">${label}</a>`;
+          : `<a class="wikilink missing" href="${spaceHref(renderingSpace, `/create?title=${encodeURIComponent(link.target)}`)}" title="${escapeHtml(tr("link.missing"))}">${label}</a>`;
       },
     },
   ],
@@ -75,21 +75,22 @@ md.use({
  */
 export function embedHTML(item: Item, size?: number, space?: string): string {
   const href = spaceHref(space, itemPath(item.id));
-  const f = item.file!;
-  if (f.filetype === "bild")
-    return `<figure class="embed-img"><img data-hash="${f.display ?? f.hash}" data-id="${escapeHtml(item.id)}" data-created="${item.created}" alt="${escapeHtml(item.body || item.title)}"${size ? ` style="width:${size}px"` : ""}>${item.body ? `<figcaption>${escapeHtml(item.body)}</figcaption>` : ""}</figure>`;
-  if (f.filetype === "audio" || f.filetype === "video") {
-    const tag = f.filetype === "audio" ? "audio" : "video";
-    return `<figure class="embed-av"><${tag} controls preload="none" data-hash="${f.hash}" class="embed-media"></${tag}><figcaption><a href="${href}">${escapeHtml(item.title)}</a>${item.body ? ` · ${escapeHtml(item.body)}` : ""}</figcaption></figure>`;
+  const file = item.file!;
+  if (file.filetype === "bild")
+    return `<figure class="embed-img"><img data-hash="${file.display ?? file.hash}" data-id="${escapeHtml(item.id)}" data-created="${item.created}" alt="${escapeHtml(item.body || item.title)}"${size ? ` style="width:${size}px"` : ""}>${item.body ? `<figcaption>${escapeHtml(item.body)}</figcaption>` : ""}</figure>`;
+  if (file.filetype === "audio" || file.filetype === "video") {
+    const tag = file.filetype;
+    return `<figure class="embed-av"><${tag} controls preload="none" data-hash="${file.hash}" class="embed-media"></${tag}><figcaption><a href="${href}">${escapeHtml(item.title)}</a>${item.body ? ` · ${escapeHtml(item.body)}` : ""}</figcaption></figure>`;
   }
-  return `<a class="embed-file" href="${href}">${f.thumb ? `<img data-hash="${f.thumb}" alt="">` : ""}<span><b>${escapeHtml(item.title)}</b><small>${[f.pages ? tr("file.pages", { count: f.pages }) : "", fmtBytes(getLang(), f.size)].filter(Boolean).join(" · ")}</small></span></a>`;
+  const meta = [file.pages ? tr("file.pages", { count: file.pages }) : "", fmtBytes(getLang(), file.size)].filter(Boolean).join(" · ");
+  return `<a class="embed-file" href="${href}">${file.thumb ? `<img data-hash="${file.thumb}" alt="">` : ""}<span><b>${escapeHtml(item.title)}</b><small>${meta}</small></span></a>`;
 }
 
 /** Module state because marked's renderers get no context. Set only inside renderMarkdown. */
 let rendering: Repo | undefined;
 let renderingSpace: string | undefined;
-function renderMarkdown(src: string, r?: Repo, space?: string): string {
-  rendering = r;
+function renderMarkdown(src: string, source?: Repo, space?: string): string {
+  rendering = source;
   renderingSpace = space;
   try {
     return md.parse(src, { async: false }) as string;
@@ -108,14 +109,14 @@ export function hydrateFiles(root: HTMLElement | null, files: DeviceFiles = curr
     // without a local original, stream audio and video from the server instead of loading them whole
     if (el instanceof HTMLMediaElement) {
       void files.isLocal(hash).then(async (here) => {
-        const u = here ? await files.url(hash) : files.serverUrl(hash);
-        if (u) el.src = u;
+        const url = here ? await files.url(hash) : files.serverUrl(hash);
+        if (url) el.src = url;
       });
       return;
     }
     const keep = el.tagName === "IMG";
-    files.url(hash, { keep }).then((u) => {
-      if (u) (el as HTMLImageElement).src = u;
+    files.url(hash, { keep }).then((url) => {
+      if (url) (el as HTMLImageElement).src = url;
       else if (files.isMissing(hash) && el.tagName === "IMG") {
         // gone from the server too: a quiet note instead of a broken image
         const note = document.createElement("span");
@@ -128,11 +129,11 @@ export function hydrateFiles(root: HTMLElement | null, files: DeviceFiles = curr
 }
 
 export function Markdown({ src, className }: { src: string; className?: string }) {
-  const r = useRepo();
+  const spaceRepo = useRepo();
   const space = useSpaceId();
   const files = useFiles();
   const ref = useRef<HTMLDivElement>(null);
-  const html = useMemo(() => renderMarkdown(src, r, space), [src, r, space, r.version]);
+  const html = useMemo(() => renderMarkdown(src, spaceRepo, space), [src, spaceRepo, space, spaceRepo.version]);
   useEffect(() => hydrateFiles(ref.current, files), [html]);
   const onClick = (e: React.MouseEvent) => {
     const img = (e.target as HTMLElement).closest<HTMLImageElement>(".embed-img img");

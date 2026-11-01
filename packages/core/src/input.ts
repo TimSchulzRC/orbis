@@ -27,6 +27,15 @@ const WEEKDAYS: Record<string, number> = {
   samstag: 6, saturday: 6, sa: 6, sat: 6,
 };
 
+/** Days per unit of a relative date (+3d, +2w, +1m, +1y); months and years are approximate. */
+const UNIT_DAYS: Record<string, number> = { d: 1, w: 7, m: 30, y: 365 };
+
+/** "26" → 2026; a four-digit year stays; none means this year. */
+function fullYear(year: string | undefined, thisYear: number): number {
+  if (!year) return thisYear;
+  return year.length === 2 ? 2000 + +year : +year;
+}
+
 function iso(y: number, m: number, d: number): string | undefined {
   const s = `${String(y).padStart(4, "0")}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
   const dt = new Date(s + "T12:00:00Z");
@@ -44,13 +53,13 @@ export function parseDate(input: string, today: string): string | undefined {
   let m = /^(\d{4})-(\d{2})-(\d{2})(?:[T ][\d:.]+(?:Z|[+-]\d{2}:?\d{2})?)?$/.exec(v);
   if (m) return iso(+m[1]!, +m[2]!, +m[3]!);
   m = /^(\d{1,2})\.(\d{1,2})\.(\d{2}|\d{4})?$/.exec(v);
-  if (m) return iso(m[3] ? (m[3].length === 2 ? 2000 + +m[3] : +m[3]) : base.getFullYear(), +m[2]!, +m[1]!);
+  if (m) return iso(fullYear(m[3], base.getFullYear()), +m[2]!, +m[1]!);
   m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(v);
   if (m) return iso(+m[3]!, +m[1]!, +m[2]!);
   m = /^([+-])(\d+)([dwmy])$/.exec(v);
   if (m) {
     const n = Number(m[2]) * (m[1] === "-" ? -1 : 1);
-    return addDaysISO(m[3] === "d" ? n : m[3] === "w" ? n * 7 : m[3] === "m" ? n * 30 : n * 365, base);
+    return addDaysISO(n * UNIT_DAYS[m[3]!]!, base);
   }
   m = /^in (\d+) (tag|tagen|day|days|woche|wochen|week|weeks)$/i.exec(v);
   if (m) return addDaysISO(Number(m[1]) * (/^w/i.test(m[2]!) ? 7 : 1), base);
@@ -126,6 +135,8 @@ function byName(options: OptionDef[], word: string): OptionDef | undefined {
 /** Only a status has grouped options; group words match those too. */
 const grouped = (p: PropDef) => !!p.options?.some((o) => o.group);
 
+const groupOf = (o: OptionDef): StatusGroup => o.group ?? "todo";
+
 /** Throws InputError if unclear. */
 export function matchOption(p: PropDef, raw: string): OptionDef {
   const options = p.options ?? [];
@@ -138,17 +149,18 @@ export function matchOption(p: PropDef, raw: string): OptionDef {
     const a = STATUS_ALIASES[w];
     if (a) {
       // "on hold" means the option marked paused, even if another one is called "Paused"
-      const marked = a.state && options.find((x) => (x.group ?? "todo") === a.group && x.state === a.state);
+      const inGroup = (x: OptionDef) => groupOf(x) === a.group;
+      const marked = a.state && options.find((x) => inGroup(x) && x.state === a.state);
       if (marked) return marked;
       for (const n of a.names ?? []) {
         const o = byName(options, n);
-        if (o && (o.group ?? "todo") === a.group) return o;
+        if (o && inGroup(o)) return o;
       }
-      const o = options.find((x) => (x.group ?? "todo") === a.group && x.state === a.state) ?? options.find((x) => (x.group ?? "todo") === a.group);
+      const o = options.find((x) => inGroup(x) && x.state === a.state) ?? options.find(inGroup);
       if (o) return o;
     }
   }
-  const list = options.map((o) => (grouped(p) ? `${o.name} (${o.group ?? "todo"}${o.state ? `, ${o.state}` : ""})` : o.name)).join(", ");
+  const list = options.map((o) => (grouped(p) ? `${o.name} (${groupOf(o)}${o.state ? `, ${o.state}` : ""})` : o.name)).join(", ");
   throw new InputError(`"${raw}" is not an option of "${p.name}". Options: ${list}${grouped(p) ? "; or a group: open, active, done" : ""}.`);
 }
 
@@ -160,7 +172,7 @@ export function isPausedOption(o: OptionDef): boolean {
 export type StatusShape = "open" | "active" | "paused" | "done" | "dropped";
 /** Shape, not only colour: ring, half circle, pause, check, cross. */
 export function statusShape(o: OptionDef): StatusShape {
-  const g = o.group ?? "todo";
+  const g = groupOf(o);
   if (g === "todo") return "open";
   if (g === "active") return isPausedOption(o) ? "paused" : "active";
   return o.state === "dropped" ? "dropped" : "done";
@@ -178,7 +190,7 @@ export function statusGroupOf(raw: string): StatusGroup | undefined {
 /** Matches by name, the other language's name or a synonym. */
 export function optionMatches(p: PropDef, o: OptionDef, raw: string): boolean {
   try {
-    return matchOption(p, raw).id === o.id || (grouped(p) && !STATUS_ALIASES[foldWord(raw)]?.names && statusGroupOf(raw) === (o.group ?? "todo"));
+    return matchOption(p, raw).id === o.id || (grouped(p) && !STATUS_ALIASES[foldWord(raw)]?.names && statusGroupOf(raw) === groupOf(o));
   } catch {
     return false;
   }

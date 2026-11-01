@@ -30,6 +30,10 @@ export interface Look {
   add?: { type: string; init?: ItemInit };
 }
 
+/** Bounds for a column width dragged by its border. */
+const MIN_WIDTH = 60;
+const MAX_WIDTH = 800;
+
 const WIDTH: Record<string, number> = { status: 150, select: 130, multiselect: 170, date: 130, range: 230, computed: 160, relation: 190, text: 220, number: 100, checkbox: 80, url: 180, item: 170, tags: 170 };
 
 /** A select is as wide as what it holds: the status, one option or several. */
@@ -53,10 +57,13 @@ function defaultWidth(col: string, items: Item[], ctx: EvalCtx): number {
   return 160;
 }
 
+/** A property's value if it is text. */
+const textProp = (item: Item, id: string) => (typeof item.props[id] === "string" ? (item.props[id] as string) : undefined);
+
 function RangeCell({ item, prop }: { item: Item; prop: PropDef }) {
   const { t, lang } = useT();
-  const v = typeof item.props[prop.id] === "string" ? (item.props[prop.id] as string) : "";
-  const { start, end } = parseRange(v);
+  const value = textProp(item, prop.id) ?? "";
+  const { start, end } = parseRange(value);
   return (
     <Popover
       trigger={(p) => (
@@ -65,7 +72,7 @@ function RangeCell({ item, prop }: { item: Item; prop: PropDef }) {
         </Button>
       )}
     >
-      <RangeEditor value={v} onChange={(x) => repo.setProp(item.id, prop.id, x || null)} autoFocus={!start} className="p-2 text-sm" />
+      <RangeEditor value={value} onChange={(x) => repo.setProp(item.id, prop.id, x || null)} autoFocus={!start} className="p-2 text-sm" />
     </Popover>
   );
 }
@@ -75,40 +82,40 @@ export function TableCell({ item, col, ctx }: { item: Item; col: string; ctx: Ev
   const { t } = useT();
   const ix = ctx.ix;
   if (col === "area") {
-    const a = ix.area(item.id);
-    return a ? <AreaChip id={a} /> : <EmptyDash />;
+    const area = ix.area(item.id);
+    return area ? <AreaChip id={area} /> : <EmptyDash />;
   }
   if (col === "progress") {
-    const pr = ix.progressOf(item);
-    return pr ? <PercentBar done={pr.done} total={pr.total} /> : <EmptyDash />;
+    const progress = ix.progressOf(item);
+    return progress ? <PercentBar done={progress.done} total={progress.total} /> : <EmptyDash />;
   }
   const hit = fieldOf(item, col, ix);
-  const p = hit?.prop;
-  const own = p && !hit.inverse && ix.schemaOf(item)?.properties.some((x) => x.id === p.id);
-  if (p?.kind === "computed" && p.computed?.fn !== "count") {
-    const pr = ix.progress(item.id, p.computed?.of);
-    return <PercentBar done={pr.done} total={pr.total} />;
+  const prop = hit?.prop;
+  const own = prop && !hit.inverse && ix.schemaOf(item)?.properties.some((x) => x.id === prop.id);
+  if (prop?.kind === "computed" && prop.computed?.fn !== "count") {
+    const progress = ix.progress(item.id, prop.computed?.of);
+    return <PercentBar done={progress.done} total={progress.total} />;
   }
-  if (!own || !p) return <CellValue item={item} name={col} ctx={ctx} />;
-  switch (p.kind) {
+  if (!own || !prop) return <CellValue item={item} name={col} ctx={ctx} />;
+  switch (prop.kind) {
     case "select":
-      if (p.multiple) return <span className="cell-tools flex min-w-0 items-center gap-1 overflow-hidden"><PropertyField item={item} prop={p} /></span>;
-      return <OptionSelect item={item} prop={p} className="flex min-h-6 w-full" />;
+      if (prop.multiple) return <span className="cell-tools flex min-w-0 items-center gap-1 overflow-hidden"><PropertyField item={item} prop={prop} /></span>;
+      return <OptionSelect item={item} prop={prop} className="flex min-h-6 w-full" />;
     case "date":
-      return p.range ? (
-        <RangeCell item={item} prop={p} />
+      return prop.range ? (
+        <RangeCell item={item} prop={prop} />
       ) : (
         <span className="cell-tools block">
-          <DateField value={typeof item.props[p.id] === "string" ? (item.props[p.id] as string) : undefined} label={p.name} onChange={(x) => repo.setProp(item.id, p.id, x || null)} />
+          <DateField value={textProp(item, prop.id)} label={prop.name} onChange={(x) => repo.setProp(item.id, prop.id, x || null)} />
         </span>
       );
     case "text":
     case "url":
-      return <InlineText value={String(item.props[p.id] ?? "")} onCommit={(x) => repo.setProp(item.id, p.id, x.trim() || null)} placeholder={t("props.empty")} label={p.name} className="truncate" />;
+      return <InlineText value={String(item.props[prop.id] ?? "")} onCommit={(x) => repo.setProp(item.id, prop.id, x.trim() || null)} placeholder={t("props.empty")} label={prop.name} className="truncate" />;
     default:
       return (
         <span className="cell-tools flex min-w-0 items-center gap-1 overflow-hidden">
-          <PropertyField item={item} prop={p} />
+          <PropertyField item={item} prop={prop} />
         </span>
       );
   }
@@ -122,7 +129,9 @@ export function GroupedTable({ items, def, ctx, look }: { items: Item[]; def: Qu
   const cols = def.columns?.length ? def.columns : defaultColumns(items, ctx);
   const typeIds = viewTypeIds(def.where, items, ix);
   const by = def.group;
-  const all = by ? groupItems(items, by, ctx, pathBase(def, ctx), tab?.hideEmpty ? undefined : { types: typeIds, where: def.where }).filter((g) => !tab?.hideEmpty || g.items.length) : [{ key: "", items } as Group];
+  // empty groups show too (every type, every option) unless the view hides them
+  const allGroups = () => groupItems(items, by!, ctx, pathBase(def, ctx), tab?.hideEmpty ? undefined : { types: typeIds, where: def.where }).filter((g) => !tab?.hideEmpty || g.items.length);
+  const all = by ? allGroups() : [{ key: "", items } as Group];
   const [groups, hiddenGroups] = by ? splitHidden(all, tab) : [all, []];
   // grouped by place with everything on this level: one table without a heading
   const heads = !!by && !(by === "path" && all.length === 1 && !all[0]!.key);
@@ -155,10 +164,14 @@ export function GroupedTable({ items, def, ctx, look }: { items: Item[]; def: Qu
     const w0 = width(c);
     let w = w0;
     startPointerDrag(
-      (ev) => ((w = Math.max(60, Math.min(800, Math.round(w0 + ev.clientX - x0)))), setLive((l) => ({ ...l, [c]: w }))),
+      (ev) => ((w = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, Math.round(w0 + ev.clientX - x0)))), setLive((l) => ({ ...l, [c]: w }))),
       () => {
         if (w !== w0) look?.onLook?.({ widths: { ...(tab?.widths ?? {}), [c]: w } });
-        setTimeout(() => setLive((l) => (({ [c]: _, ...rest }) => rest)(l)), 0);
+        setTimeout(() =>
+          setLive((l) => {
+            const { [c]: _, ...rest } = l;
+            return rest;
+          }), 0);
       },
     );
   };
@@ -243,17 +256,17 @@ export function GroupedTable({ items, def, ctx, look }: { items: Item[]; def: Qu
     if (!by || !g.key) return init;
     if (by === "status" && g.option) init.props![statusProp(schema)?.id ?? ""] = g.option.id;
     else if (by === "statusGroup") {
-      const o = firstOfGroup(schema, g.key as StatusGroup);
-      if (o) init.props![statusProp(schema)!.id] = o.id;
+      const option = firstOfGroup(schema, g.key as StatusGroup);
+      if (option) init.props![statusProp(schema)!.id] = option.id;
     } else if (by === "type") init.type = g.key;
     else if (by === "path" && g.path?.length) init.parents = [g.path.at(-1)!];
     else if (g.option) {
-      const p = schema?.properties.find((x) => titleKey(x.name) === titleKey(by));
-      if (p) init.props![p.id] = p.multiple ? [g.option.id] : g.option.id;
+      const prop = schema?.properties.find((x) => titleKey(x.name) === titleKey(by));
+      if (prop) init.props![prop.id] = prop.multiple ? [g.option.id] : g.option.id;
     } else if (g.ref && (by === "project" || by === "area")) init.parents = [g.ref];
     else if (g.ref) {
-      const p = schema?.properties.find((x) => titleKey(x.name) === titleKey(by) && x.kind === "relation");
-      if (p) init.rels = { [p.id]: [g.ref] };
+      const prop = schema?.properties.find((x) => titleKey(x.name) === titleKey(by) && x.kind === "relation");
+      if (prop) init.rels = { [prop.id]: [g.ref] };
     }
     return init;
   };
@@ -315,10 +328,10 @@ function Resizer({ onPointerDown }: { onPointerDown: (e: React.PointerEvent) => 
 
 /** Number of sub-items right after row n (deeper rows until one at the same depth or above). */
 function countKids(order: { depth: number }[], n: number): number {
-  const d = order[n]!.depth;
-  let k = 0;
-  for (let m = n + 1; m < order.length && order[m]!.depth > d; m++) if (order[m]!.depth === d + 1) k++;
-  return k;
+  const depth = order[n]!.depth;
+  let count = 0;
+  for (let m = n + 1; m < order.length && order[m]!.depth > depth; m++) if (order[m]!.depth === depth + 1) count++;
+  return count;
 }
 
 /** Nothing is created before there is a title. */
@@ -331,10 +344,10 @@ export function NewRowButton({ init, label, compact }: { init: ItemInit; label: 
   const ref = useRef<HTMLInputElement>(null);
   useEffect(() => void (typing && ref.current?.focus()), [typing]);
   const create = () => {
-    const v = title.trim();
-    if (v) repo.create({ ...init, title: v });
+    const trimmed = title.trim();
+    if (trimmed) repo.create({ ...init, title: trimmed });
     setTitle("");
-    return !!v;
+    return !!trimmed;
   };
   if (typing)
     return (

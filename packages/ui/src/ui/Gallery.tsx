@@ -23,9 +23,9 @@ export function GalleryView({ items, ctx }: { items: Item[]; ctx: EvalCtx }) {
 function firstImage(item: Item): string | undefined {
   if (item.file) return item.file.thumb ?? (item.file.filetype === "bild" ? item.file.display : undefined);
   const ix = repo.index();
-  for (const l of ix.textLinks(item)) {
-    const f = ix.get(l.to)?.file;
-    if (l.embed && f?.filetype === "bild") return f.thumb ?? f.display;
+  for (const link of ix.textLinks(item)) {
+    const file = ix.get(link.to)?.file;
+    if (link.embed && file?.filetype === "bild") return file.thumb ?? file.display;
   }
   return undefined;
 }
@@ -38,8 +38,9 @@ function GalleryTile({ item, ctx }: { item: Item; ctx: EvalCtx }) {
   // no picture: a compact text card rather than an empty image area
   if (!hash && !f) {
     const schema = ctx.ix.schemaOf(item);
-    const st = statusOf(item, schema);
-    const pr = ctx.ix.progressOf(item);
+    const status = statusOf(item, schema);
+    const progress = ctx.ix.progressOf(item);
+    const hasProgress = !!progress && progress.total > 0;
     const text = plainText(item.body);
     return (
       <a href={itemHref(item.id)} className="group flex min-w-0 flex-col gap-1.5 self-start rounded-xl border border-line bg-surface p-3 hover:bg-hover">
@@ -48,10 +49,10 @@ function GalleryTile({ item, ctx }: { item: Item; ctx: EvalCtx }) {
           <span className="line-clamp-2">{titleOf(item, t)}</span>
         </span>
         {text && <span className="line-clamp-2 text-xs text-muted-foreground">{text}</span>}
-        {(st || (pr && pr.total > 0)) && (
+        {(status || hasProgress) && (
           <span className="flex items-center gap-2 text-xs text-muted-foreground">
-            {st && <StatusPill option={st.option} group={st.group} small />}
-            {pr && pr.total > 0 && <ProgressCount done={pr.done} total={pr.total} className="ml-auto" />}
+            {status && <StatusPill option={status.option} group={status.group} small />}
+            {hasProgress && <ProgressCount done={progress.done} total={progress.total} className="ml-auto" />}
           </span>
         )}
       </a>

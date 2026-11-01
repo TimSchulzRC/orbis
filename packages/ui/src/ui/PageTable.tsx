@@ -45,15 +45,16 @@ export function PageTable({
   const narrow = usePhone();
   const [folded, fold] = useStoredSet(KEYS.fold(foldKey));
   const grouped = groups.length > 1 || !!groups[0]?.ref;
-  const openCount = (items: Item[]) => items.filter((i) => statusOf(i, ix.schemaOf(i))?.group !== "done").length;
+  const isDone = (i: Item) => statusOf(i, ix.schemaOf(i))?.group === "done";
+  const openCount = (items: Item[]) => items.filter((i) => !isDone(i)).length;
   const hints = (i: Item, g: PageGroup) => {
-    const pr = ix.progressOf(i);
+    const progress = ix.progressOf(i);
     const rel = (ix.relPath(here, i.id) ?? []).filter((p) => p !== g.ref && !g.items.some((x) => x.id === p));
-    const st = statusOf(i, ix.schemaOf(i));
-    const blocked = !!st && st.group !== "done" && ix.isBlocked(i);
+    const status = statusOf(i, ix.schemaOf(i));
+    const blocked = !!status && status.group !== "done" && ix.isBlocked(i);
     return (
       <>
-        {pr && pr.total > 0 && <ProgressCount done={pr.done} total={pr.total} className="shrink-0 text-xs text-muted-foreground" />}
+        {progress && progress.total > 0 && <ProgressCount done={progress.done} total={progress.total} className="shrink-0 text-xs text-muted-foreground" />}
         {blocked && <span className="shrink-0 text-xs text-warn">{t("row.blocked")}</span>}
         {rel.length > 0 && <span className="min-w-0 truncate text-xs text-muted-foreground">{shortPath(rel)}</span>}
       </>
@@ -61,37 +62,39 @@ export function PageTable({
   };
   const value = (i: Item, key: string) => {
     if (key === "due") {
-      const d = dueOf(i, ix.schemaOf(i));
-      return d ? <DueLabel due={d} done={statusOf(i, ix.schemaOf(i))?.group === "done"} cell /> : <EmptyDash />;
+      const due = dueOf(i, ix.schemaOf(i));
+      return due ? <DueLabel due={due} done={isDone(i)} cell /> : <EmptyDash />;
     }
     const hit = fieldOf(i, key, ix);
     if (hit?.prop?.options && typeof hit.value === "string") {
-      const o = hit.prop.options.find((x) => x.id === hit.value);
-      return o ? <StatusPill option={o} small /> : <EmptyDash />;
+      const option = hit.prop.options.find((x) => x.id === hit.value);
+      return option ? <StatusPill option={option} small /> : <EmptyDash />;
     }
     return <CellValue item={i} name={key} ctx={{ ix }} />;
   };
   const groupHead = (g: PageGroup, isFolded: boolean) => {
     const ref = g.ref ? ix.get(g.ref) : undefined;
-    const st = ref ? statusOf(ref, ix.schemaOf(ref)) : undefined;
-    const pr = ref ? ix.progressOf(ref) : undefined;
+    const status = ref ? statusOf(ref, ix.schemaOf(ref)) : undefined;
+    const progress = ref ? ix.progressOf(ref) : undefined;
     return (
       <Button variant="plain" onClick={() => fold(g.key, !isFolded)} aria-expanded={!isFolded} className="flex w-full min-w-0 items-center gap-2 text-left text-[13px]">
         <ChevronRight size={13} className={cn("shrink-0 text-faint transition-transform", !isFolded && "rotate-90")} aria-hidden />
-        {st && <span className="shrink-0" style={{ color: statusColor(st.option, st.group === "done") ?? "var(--muted-foreground)" }}><StatusGlyph option={st.option} size={14} /></span>}
+        {status && <span className="shrink-0" style={{ color: statusColor(status.option, status.group === "done") ?? "var(--muted-foreground)" }}><StatusGlyph option={status.option} size={14} /></span>}
         <span className="truncate font-semibold">{g.label}</span>
-        {pr && <PercentBar done={pr.done} total={pr.total} inline barClass="w-16 max-md:w-12" />}
+        {progress && <PercentBar done={progress.done} total={progress.total} inline barClass="w-16 max-md:w-12" />}
         <span className="ml-auto shrink-0 text-xs tabular-nums text-muted-foreground md:ml-0">{t("children.openCount", { count: openCount(g.items) })}</span>
       </Button>
     );
   };
   const sub = "bg-[color-mix(in_srgb,var(--surface-2)_45%,var(--surface))]";
-  const foot = (add || (done && done.count > 0)) && (
+  const hasDone = !!done && done.count > 0;
+  const doneLabel = !done ? "" : done.shown ? t("children.doneHide") : t(narrow ? "children.doneShort" : "children.doneShow", { count: done.count });
+  const foot = (add || hasDone) && (
     <div className="flex min-h-10 items-center gap-3 border-t border-line px-3 text-[13px] text-muted-foreground">
       {add && <NewRowButton init={add.init} label={add.label} />}
-      {done && done.count > 0 && (
+      {hasDone && (
         <Button variant="plain" onClick={done.toggle} className="tap-y ml-auto whitespace-nowrap hover:text-fg">
-          {done.shown ? t("children.doneHide") : narrow ? t("children.doneShort", { count: done.count }) : t("children.doneShow", { count: done.count })}
+          {doneLabel}
         </Button>
       )}
     </div>

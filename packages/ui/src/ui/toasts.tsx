@@ -38,9 +38,10 @@ function useOffset(): number {
       const el = document.activeElement as HTMLElement | null;
       const typing = el && (el.matches("input, textarea, select, [contenteditable=true]") || el.isContentEditable) && !el.closest("[data-sonner-toaster]");
       if (!typing) return setBottom(base());
-      const r = el.getBoundingClientRect();
-      const lift = window.innerHeight - r.top + 8;
-      setBottom(r.bottom > window.innerHeight - base() - 64 && r.top < window.innerHeight ? Math.max(base(), lift) : base());
+      const field = el.getBoundingClientRect();
+      const lift = window.innerHeight - field.top + 8;
+      const inLowerPart = field.bottom > window.innerHeight - base() - 64 && field.top < window.innerHeight;
+      setBottom(inLowerPart ? Math.max(base(), lift) : base());
     };
     const away = () => {
       clearTimeout(later);

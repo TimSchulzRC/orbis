@@ -43,7 +43,8 @@ export function parseOrigin(origin: string): Actor {
     if (eq > 0) kv[p.slice(0, eq)] = p.slice(eq + 1);
   }
   let device = kv.d;
-  if (kind === "web" && !kv.u && name.includes("@")) [name, device] = [name.slice(0, name.indexOf("@")), name.slice(name.indexOf("@") + 1)];
+  const at = name.indexOf("@");
+  if (kind === "web" && !kv.u && at >= 0) [name, device] = [name.slice(0, at), name.slice(at + 1)];
   const person = kind === "web" ? { id: kv.u, name } : kv.n ? { id: kv.u, name: kv.n } : undefined;
   return { kind, name, person, device };
 }

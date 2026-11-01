@@ -8,8 +8,8 @@ const MINUTE_MS = 60000;
 
 /** Local calendar date of a moment. */
 export function todayISO(d = new Date()) {
-  const z = new Date(d.getTime() - d.getTimezoneOffset() * MINUTE_MS);
-  return z.toISOString().slice(0, 10);
+  const shifted = new Date(d.getTime() - d.getTimezoneOffset() * MINUTE_MS);
+  return shifted.toISOString().slice(0, 10);
 }
 
 /** Local calendar date of a timestamp. */

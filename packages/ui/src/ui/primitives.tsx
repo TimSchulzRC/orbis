@@ -217,27 +217,33 @@ export function Popover({
   const [inner, setInner] = useState(false);
   const previous = useRef<HTMLElement | null>(null);
   const isOpen = open ?? inner;
-  const set = (o: boolean) => {
-    if (o) previous.current = document.activeElement as HTMLElement;
-    if (open === undefined) setInner(o);
-    onOpenChange?.(o);
+  const setOpen = (next: boolean) => {
+    if (next) previous.current = document.activeElement as HTMLElement;
+    if (open === undefined) setInner(next);
+    onOpenChange?.(next);
+  };
+  const triggerNode = trigger({ onClick: () => setOpen(!isOpen), "aria-expanded": isOpen });
+  // restore focus only if nothing took it meanwhile – taking it from another badge's menu would close that menu
+  const restoreFocus = (e: Event) => {
+    e.preventDefault();
+    const now = document.activeElement;
+    if (previous.current?.isConnected && (!now || now === document.body)) previous.current.focus({ preventScroll: true });
   };
   return (
-    <PopoverRoot open={isOpen} onOpenChange={set}>
+    <PopoverRoot open={isOpen} onOpenChange={setOpen}>
       {point ? (
         <>
           <PopoverAnchor virtualRef={{ current: { getBoundingClientRect: () => DOMRect.fromRect({ x: point.x, y: point.y, width: 0, height: 0 }) } }} />
-          <span className={cn("relative inline-flex", triggerClass)}>{trigger({ onClick: () => set(!isOpen), "aria-expanded": isOpen })}</span>
+          <span className={cn("relative inline-flex", triggerClass)}>{triggerNode}</span>
         </>
       ) : (
         <PopoverAnchor asChild><span className={cn("relative inline-flex", triggerClass)}>
-          {trigger({ onClick: () => set(!isOpen), "aria-expanded": isOpen })}
+          {triggerNode}
         </span></PopoverAnchor>
       )}
-      {/* restore focus only if nothing took it meanwhile – taking it from another badge's menu would close that menu */}
-      <PopoverContent onCloseAutoFocus={(e) => { e.preventDefault(); const now = document.activeElement; if (previous.current?.isConnected && (!now || now === document.body)) previous.current.focus({ preventScroll: true }); }} data-popover align={align === "right" ? "end" : "start"} sideOffset={4}
+      <PopoverContent onCloseAutoFocus={restoreFocus} data-popover align={align === "right" ? "end" : "start"} sideOffset={4}
         className="z-50 max-h-[70vh] w-auto min-w-48 overflow-y-auto rounded-xl p-1">
-        {typeof children === "function" ? children(() => set(false)) : children}
+        {typeof children === "function" ? children(() => setOpen(false)) : children}
       </PopoverContent>
     </PopoverRoot>
   );

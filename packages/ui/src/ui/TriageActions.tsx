@@ -17,19 +17,22 @@ import { cn } from "../lib/utils";
 import { PlacePicker } from "./Picker";
 import { chooseAction, notify } from "./feedback";
 
+/** Longest title a notice quotes before it is cut off with "…". */
+const TITLE_MAX = 40;
+
 export interface Undo {
   label: string;
   steps: { space: string; id: string; type?: string | null; addedParents?: string[]; deleted?: boolean; pinned?: boolean; later?: number | null }[];
 }
 
 export function revert(u: Undo) {
-  for (const s of u.steps) {
-    const repo = replica(s.space).repo;
-    if (s.deleted) repo.restore(s.id);
-    if (s.type !== undefined) repo.setType(s.id, s.type);
-    for (const p of s.addedParents ?? []) repo.removeParent(s.id, p);
-    if (s.pinned) repo.pin(s.id, false);
-    if (s.later !== undefined) repo.change(s.id, (doc) => setMeta(doc, { later: s.later }));
+  for (const step of u.steps) {
+    const repo = replica(step.space).repo;
+    if (step.deleted) repo.restore(step.id);
+    if (step.type !== undefined) repo.setType(step.id, step.type);
+    for (const parent of step.addedParents ?? []) repo.removeParent(step.id, parent);
+    if (step.pinned) repo.pin(step.id, false);
+    if (step.later !== undefined) repo.change(step.id, (doc) => setMeta(doc, { later: step.later }));
   }
 }
 
@@ -55,9 +58,11 @@ export function useTriageActions(spaceOf: (i: Item) => string, opts: { quiet?: b
   };
   const short = (i?: Item) => {
     const name = i ? titleOf(i, t) : t("untitled");
-    return name.length > 40 ? name.slice(0, 39) + "…" : name;
+    return name.length > TITLE_MAX ? name.slice(0, TITLE_MAX - 1) + "…" : name;
   };
-  const label = (list: Item[], key: string, values: Values = {}) => (list.length > 1 ? t(key + "Many", { count: list.length, ...values }) : t(key, { ...values, title: short(list[0]), ...("title" in values ? { title: values.title } : {}) }));
+  // one entry: its short title, unless `values` brings one
+  const label = (list: Item[], key: string, values: Values = {}) =>
+    list.length > 1 ? t(key + "Many", { count: list.length, ...values }) : t(key, { title: short(list[0]), ...values });
   const giveType = (list: Item[], type: string) => {
     const infos = list.filter((i) => i.kind === "info");
     if (!infos.length) return;
@@ -154,13 +159,13 @@ function TypePicker({ current, onPick, onClose }: { current: string | null; onPi
   // "Neuer Typ …" without a name: the field asks for one
   const [naming, setNaming] = useState(false);
   const field = useRef<HTMLInputElement>(null);
-  const types = ix.typesByName().filter((x) => !q.trim() || x.schema.name.toLowerCase().includes(titleKey(q)));
-  const exact = types.some((x) => x.schema.name.toLowerCase() === titleKey(q));
-  const rows: { id?: string; create?: string }[] = [...types.map((x) => ({ id: x.id })), ...(q.trim() && !exact ? [{ create: q.trim() }] : [{ create: "" }])];
-  const pick = (r?: (typeof rows)[number]) => {
-    if (!r) return;
-    if (r.id) return onPick(r.id);
-    const name = r.create?.trim();
+  const types = ix.typesByName().filter((type) => !q.trim() || type.schema.name.toLowerCase().includes(titleKey(q)));
+  const exact = types.some((type) => type.schema.name.toLowerCase() === titleKey(q));
+  const rows: { id?: string; create?: string }[] = [...types.map((type) => ({ id: type.id })), { create: q.trim() && !exact ? q.trim() : "" }];
+  const pick = (row?: (typeof rows)[number]) => {
+    if (!row) return;
+    if (row.id) return onPick(row.id);
+    const name = row.create?.trim();
     if (name) onPick(createType(name, repo));
     else (setNaming(true), field.current?.focus());
   };
@@ -181,21 +186,21 @@ function TypePicker({ current, onPick, onClose }: { current: string | null; onPi
         className="mb-2 focus:border-focus"
       />
       <div role="listbox" className="flex flex-col">
-        {rows.map((r, n) => {
-          const x = r.id ? ix.types.get(r.id) : undefined;
+        {rows.map((row, n) => {
+          const type = row.id ? ix.types.get(row.id) : undefined;
           return (
             <Button variant="plain"
-              key={r.id ?? "new"}
+              key={row.id ?? "new"}
               role="option"
               aria-selected={n === sel}
               onMouseEnter={() => setSel(n)}
-              onClick={() => pick(r)}
-              className={cn("flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm", n === sel && "bg-selected", !r.id && "mt-1 border-t border-line pt-2")}
+              onClick={() => pick(row)}
+              className={cn("flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm", n === sel && "bg-selected", !row.id && "mt-1 border-t border-line pt-2")}
             >
-              {x ? <TypeGlyph schema={x.schema} size={15} /> : <Plus size={15} className="text-muted-foreground" />}
-              <span className="min-w-0 flex-1 truncate">{x ? x.schema.name : r.create ? t("triage.newTypeNamed", { name: r.create }) : t("triage.newType")}</span>
-              {x && r.id === current && <Check size={14} className="text-ok" />}
-              {x && n < 9 && !q && <Kbd>{n + 1}</Kbd>}
+              {type ? <TypeGlyph schema={type.schema} size={15} /> : <Plus size={15} className="text-muted-foreground" />}
+              <span className="min-w-0 flex-1 truncate">{type ? type.schema.name : row.create ? t("triage.newTypeNamed", { name: row.create }) : t("triage.newType")}</span>
+              {type && row.id === current && <Check size={14} className="text-ok" />}
+              {type && n < 9 && !q && <Kbd>{n + 1}</Kbd>}
             </Button>
           );
         })}

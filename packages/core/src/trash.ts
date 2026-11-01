@@ -21,11 +21,11 @@ export function resolveCascade(records: Map<string, Item>): void {
     const seen = new Set<string>();
     const stack = parentsOf(id);
     while (stack.length) {
-      const x = stack.pop()!;
-      if (x === root) return true;
-      if (seen.has(x)) continue;
-      seen.add(x);
-      stack.push(...parentsOf(x));
+      const parent = stack.pop()!;
+      if (parent === root) return true;
+      if (seen.has(parent)) continue;
+      seen.add(parent);
+      stack.push(...parentsOf(parent));
     }
     return false;
   };
@@ -36,15 +36,15 @@ export function resolveCascade(records: Map<string, Item>): void {
     const known = memo.get(id);
     if (known !== undefined) return known;
     memo.set(id, false); // cycle guard
-    const ps = parentsOf(id);
+    const parents = parentsOf(id);
     const root = r.deletedVia;
-    const v = records.has(root) && deleted(root) && above(root, id) && ps.length > 0 && ps.every(deleted);
-    memo.set(id, v);
-    return v;
+    const result = records.has(root) && deleted(root) && above(root, id) && parents.length > 0 && parents.every(deleted);
+    memo.set(id, result);
+    return result;
   };
   for (const r of via) {
-    const d = deleted(r.id);
-    if (d !== r.deleted) records.set(r.id, { ...r, deleted: d });
+    const isDeleted = deleted(r.id);
+    if (isDeleted !== r.deleted) records.set(r.id, { ...r, deleted: isDeleted });
   }
 }
 
@@ -94,11 +94,11 @@ export function restoreItem(w: Writer, records: Map<string, Item>, id: string): 
   w.change(id, (doc) => setMeta(doc, { deleted: null }));
   const back: string[] = [];
   for (const r of mine) {
-    const ps = knownParents(r, after);
-    const onlyDeletedParents = ps.length > 0 && ps.every((p) => after.get(p)!.deleted);
+    const parents = knownParents(r, after);
+    const onlyDeletedParents = parents.length > 0 && parents.every((p) => after.get(p)!.deleted);
     if (onlyDeletedParents) {
       // still only below deleted entries: join their cascade
-      const p = after.get(ps[0]!)!;
+      const p = after.get(parents[0]!)!;
       w.change(r.id, (doc) => setMeta(doc, { deleted: VIA + (p.deletedVia ?? p.id) }));
     } else {
       w.change(r.id, (doc) => setMeta(doc, { deleted: null }));

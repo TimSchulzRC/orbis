@@ -32,7 +32,6 @@ export function pluralOf(name: string, lang: string): string {
     if (/[aoiuy]$/i.test(n)) return n + "s"; // Video, Foto, Hobby
     if (/e$/i.test(n)) return n + "n";
     if (/(el|er|en|chen|lein)$/i.test(n)) return n;
-    if (/(s|x|z)$/i.test(n)) return n + "e";
     return n + "e";
   }
   if (/(s|x|z|ch|sh)$/i.test(n)) return n + "es";

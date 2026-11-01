@@ -6,8 +6,8 @@ import { KEYS } from "./ui/storage";
 
 const KEY = KEYS.lang;
 function stored(): Lang | undefined {
-  const v = localStorage.getItem(KEY);
-  return LANGS.find((l) => l === v);
+  const saved = localStorage.getItem(KEY);
+  return LANGS.find((l) => l === saved);
 }
 
 let lang: Lang = stored() ?? detectLang(navigator.language);
@@ -44,7 +44,7 @@ export function useT(): { t: T; lang: Lang } {
 
 const cache = new Map<Lang, T>();
 function makeTCached(l: Lang) {
-  let x = cache.get(l);
-  if (!x) cache.set(l, (x = makeT(l)));
-  return x;
+  let cached = cache.get(l);
+  if (!cached) cache.set(l, (cached = makeT(l)));
+  return cached;
 }

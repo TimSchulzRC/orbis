@@ -80,27 +80,32 @@ export class Store {
     `);
     // A replica's cursor is seq + uid, so it can tell whether the server still has the row it saw.
     // Older databases get uids for their existing rows once.
-    const cols = this.db.query("PRAGMA table_info(updates)").all() as { name: string }[];
-    if (!cols.some((c) => c.name === "uid")) {
+    const cols = this.columns("updates");
+    if (!cols.has("uid")) {
       this.db.exec("ALTER TABLE updates ADD COLUMN uid TEXT");
       this.db.exec("UPDATE updates SET uid = lower(hex(randomblob(9))) WHERE uid IS NULL");
     }
     // A step is one undo unit; rows from before steps have none.
-    if (!cols.some((c) => c.name === "step")) {
+    if (!cols.has("step")) {
       this.db.exec("ALTER TABLE updates ADD COLUMN step TEXT");
       this.db.exec("CREATE INDEX IF NOT EXISTS updates_step ON updates(step)");
     }
-    const ecols = this.db.query("PRAGMA table_info(events)").all() as { name: string }[];
-    if (!ecols.some((c) => c.name === "step")) this.db.exec("ALTER TABLE events ADD COLUMN step TEXT");
+    const eventCols = this.columns("events");
+    if (!eventCols.has("step")) this.db.exec("ALTER TABLE events ADD COLUMN step TEXT");
     // 27.10.: every log row and activity entry belongs to an area; older rows are personal.
-    if (!cols.some((c) => c.name === "area")) {
+    if (!cols.has("area")) {
       this.db.exec(`ALTER TABLE updates ADD COLUMN area TEXT NOT NULL DEFAULT '${PERSONAL}'`);
       this.db.exec("CREATE INDEX IF NOT EXISTS updates_area ON updates(area, seq)");
     }
-    if (!ecols.some((c) => c.name === "area")) this.db.exec(`ALTER TABLE events ADD COLUMN area TEXT NOT NULL DEFAULT '${PERSONAL}'`);
+    if (!eventCols.has("area")) this.db.exec(`ALTER TABLE events ADD COLUMN area TEXT NOT NULL DEFAULT '${PERSONAL}'`);
     this.load();
     // the server was called hub before; renaming the key would look like a new server to devices
     if (!this.kvGet("hubId")) this.kvSet("hubId", newId());
+  }
+
+  private columns(table: string): Set<string> {
+    const rows = this.db.query(`PRAGMA table_info(${table})`).all() as { name: string }[];
+    return new Set(rows.map((c) => c.name));
   }
 
   /** A device seeing a different id knows it met a new server. */
@@ -186,7 +191,9 @@ export class Store {
     const doc = this.loaded.get(id);
     if (doc) return Y.encodeStateAsUpdate(doc);
     const parts = this.stored(id); // rows after the snapshot exist only after a crash before a flush
-    return parts.length === 1 ? parts[0]! : parts.length ? Y.mergeUpdates(parts) : Y.encodeStateAsUpdate(new Y.Doc());
+    if (parts.length === 1) return parts[0]!;
+    if (parts.length) return Y.mergeUpdates(parts);
+    return Y.encodeStateAsUpdate(new Y.Doc());
   }
 
   private noteArea(id: string, doc: Y.Doc) {
@@ -303,7 +310,10 @@ export class Store {
       this.held = null;
       if (ok && held.length) {
         // records as before the call, so the activity sees what really changed
-        for (const [id, prev] of this.heldPrev) prev ? this.records.set(id, prev) : this.records.delete(id);
+        for (const [id, prev] of this.heldPrev) {
+          if (prev) this.records.set(id, prev);
+          else this.records.delete(id);
+        }
         for (const h of held) this.append(h.docId, h.data, h.origin, undefined, h.quiet, h.step);
         this.flush();
       } else if (!ok) this.reload([...new Set(held.map((h) => h.docId))]);
@@ -396,7 +406,12 @@ export class Store {
     // Cascaded deletes depend on their root: recompute them over all records.
     const viaBefore = new Map([...this.records.values()].filter((r) => r.deletedVia).map((r) => [r.id, r.deleted]));
     resolveCascade(this.records);
-    for (const [id, was] of viaBefore) if (!prevs.has(id) && this.records.get(id)!.deleted !== was) indexRecord(this.searchIndex, this.records.get(id)!), changed.push(this.records.get(id)!);
+    for (const [id, was] of viaBefore) {
+      const rec = this.records.get(id)!;
+      if (prevs.has(id) || rec.deleted === was) continue;
+      indexRecord(this.searchIndex, rec);
+      changed.push(rec);
+    }
     this.db.transaction(() => {
       for (const [id, p] of pending) {
         const doc = this.getDoc(id);
@@ -418,7 +433,8 @@ export class Store {
         // within one step, so every entry can still be undone on its own.
         const step = p.step;
         const last = lastEvent.get(id) as { id: number; ts: number; kind: string; origin: string; changes: string; step: string | null } | null;
-        if (kind === "updated" && last && last.kind === "updated" && last.origin === origin && (last.step ?? undefined) === step && ts - last.ts < EVENT_MERGE_WINDOW_MS) {
+        const continuesLast = !!last && last.kind === "updated" && last.origin === origin && (last.step ?? undefined) === step && ts - last.ts < EVENT_MERGE_WINDOW_MS;
+        if (kind === "updated" && continuesLast) {
           const merged = mergeChanges(JSON.parse(last.changes || "[]"), changes);
           updateEvent.run(ts, next.title, JSON.stringify(merged), last.id);
           events.push({ id: last.id, ts, doc: id, title: next.title, type: typeTag(next), kind, origin, changes: merged, step });
@@ -480,9 +496,13 @@ export class Store {
   events(opts: { since?: number; doc?: string; limit?: number; before?: number } = {}): ActivityEvent[] {
     const where: string[] = [];
     const args: (string | number)[] = [];
-    if (opts.since) (where.push("ts >= ?"), args.push(opts.since));
-    if (opts.before) (where.push("id < ?"), args.push(opts.before));
-    if (opts.doc) (where.push("doc = ?"), args.push(opts.doc));
+    const filter = (cond: string, value: string | number) => {
+      where.push(cond);
+      args.push(value);
+    };
+    if (opts.since) filter("ts >= ?", opts.since);
+    if (opts.before) filter("id < ?", opts.before);
+    if (opts.doc) filter("doc = ?", opts.doc);
     const sql = `SELECT * FROM events ${where.length ? "WHERE " + where.join(" AND ") : ""} ORDER BY id DESC LIMIT ?`;
     args.push(opts.limit ?? 50);
     const found = this.db.query(sql).all(...args) as (Omit<ActivityEvent, "step" | "changes"> & { step: string | null; changes: string | null })[];
@@ -529,8 +549,8 @@ function equalBytes(a: Uint8Array, b: Uint8Array) {
 function hasDeleteSet(update: Uint8Array) {
   // A pure-deletion update does not advance the state vector. Decode to check.
   try {
-    const d = Y.decodeUpdate(update);
-    return d.ds.clients.size > 0;
+    const decoded = Y.decodeUpdate(update);
+    return decoded.ds.clients.size > 0;
   } catch {
     return true;
   }
@@ -549,13 +569,22 @@ function mergeChanges(a: FieldChange[], b: FieldChange[]): FieldChange[] {
     else if (Array.isArray(c.to) || Array.isArray(c.from)) {
       const added = new Set([...((prev.to as string[]) ?? []), ...((c.to as string[]) ?? [])]);
       const removed = new Set([...((prev.from as string[]) ?? []), ...((c.from as string[]) ?? [])]);
-      for (const x of [...added]) if (removed.has(x)) (added.delete(x), removed.delete(x));
+      for (const x of [...added]) {
+        if (!removed.has(x)) continue;
+        added.delete(x);
+        removed.delete(x);
+      }
       prev.to = [...added];
       prev.from = [...removed];
     } else prev.to = c.to;
   }
   // Drop fields that ended where they started.
-  return out.filter((c) => c.field === "update" || c.field === "schema" || (Array.isArray(c.to) ? (c.to as unknown[]).length || ((c.from as unknown[]) ?? []).length : c.from !== c.to));
+  return out.filter((c) => c.field === "update" || c.field === "schema" || moved(c));
+}
+
+function moved(c: FieldChange): boolean {
+  if (!Array.isArray(c.to)) return c.from !== c.to;
+  return c.to.length > 0 || ((c.from as unknown[]) ?? []).length > 0;
 }
 
 function typeTag(i: Item): string {

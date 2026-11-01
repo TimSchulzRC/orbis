@@ -100,6 +100,17 @@ function columnProp(schema: TypeSchema | undefined, id: string, key: string, kin
   return schema?.properties.find((x) => x.kind === kind && (x.id === id || names.includes(x.name.toLowerCase())));
 }
 
+/** Status and priority by name, for the type's own properties. */
+function statusAndPriority(schema: TypeSchema | undefined, status?: string, priority?: string): Record<string, Value> {
+  const props: Record<string, Value> = {};
+  const statusId = statusOption(schema, status);
+  if (statusId && statusProp(schema)) props[statusProp(schema)!.id] = statusId;
+  const priorityDef = columnProp(schema, "p_priority", "priority", "select");
+  const priorityId = priorityOption(priorityDef, priority);
+  if (priorityId) props[priorityDef!.id] = priorityId;
+  return props;
+}
+
 function priorityOption(p: PropDef | undefined, name?: string): string | undefined {
   if (!name || !p?.options) return undefined;
   const k = name.toLowerCase();
@@ -223,6 +234,58 @@ function parseCreated(s?: string): number | undefined {
   return new Date(`${m[3]}-${m[2]}-${m[1]}T12:00:00`).getTime();
 }
 
+interface Note {
+  body: string;
+  tags: string[];
+  refs: string[];
+  created?: number;
+}
+
+/** Frontmatter and the vault's inline fields (Tags::, Refs::, the Home line) become note data; the rest is the body. */
+function parseNote(raw: string, rel: string, log: Log): Note {
+  let text = raw.replace(/\r\n/g, "\n");
+  const tags: string[] = [];
+  const refs: string[] = [];
+  let created: number | undefined;
+  const frontmatter = text.match(/^---\n([\s\S]*?)\n---\n?/);
+  if (frontmatter) {
+    try {
+      const yaml = (Bun.YAML.parse(frontmatter[1]!) ?? {}) as Record<string, any>;
+      const yamlTags = yaml.tags ?? yaml.Tags;
+      if (Array.isArray(yamlTags)) tags.push(...yamlTags.map(String));
+      else if (typeof yamlTags === "string") tags.push(...yamlTags.split(/[ ,]+/));
+      if (yaml.created) created = Date.parse(yaml.created) || undefined;
+    } catch (e) {
+      log(`${rel}: frontmatter not read (${(e as Error).message})`);
+    }
+    text = text.slice(frontmatter[0].length);
+  }
+  const out: string[] = [];
+  for (const line of text.split("\n")) {
+    if (/^\[\[Home 🏠\]\]/.test(line)) {
+      created = parseCreated(line) ?? created;
+      continue;
+    }
+    const tagsField = line.match(/^Tags::(.*)$/);
+    if (tagsField) {
+      tags.push(...(tagsField[1]!.match(/#[^\s#]+/g) ?? []));
+      continue;
+    }
+    const refsField = line.match(/^Refs::(.*)$/);
+    if (refsField) {
+      refs.push(...parseWikiLinks(refsField[1]!).map((l) => l.target));
+      continue;
+    }
+    if (/^`=.*`\s*$/.test(line.trim())) continue;
+    out.push(line);
+  }
+  const body = out.join("\n").replace(/^(?:[ \t]*(?:___)?[ \t]*\n)+/, "").trim();
+  return { body, tags, refs, created };
+}
+
+/** Folders below Spaces/ that name an area. */
+const SPACE_AREA: Record<string, string> = { Arbeit: "work", "Studium Informatik": "study", Personal: "personal" };
+
 interface ObsidianOptions {
   lang: Lang;
   mocParents: boolean;
@@ -249,7 +312,6 @@ export async function importObsidian(store: Store, blobs: Blobs, vault: string, 
     }
   };
   indexFiles(vault);
-  const AREA: Record<string, string> = { Arbeit: "work", "Studium Informatik": "study", Personal: "personal" };
   const pendingRefs: { id: string; refs: string[] }[] = [];
   const maps: string[] = [];
   let made = 0;
@@ -266,43 +328,9 @@ export async function importObsidian(store: Store, blobs: Blobs, vault: string, 
     if (rel === "Home 🏠.md" || (top === "Atlas" && !rel.includes("MOCs"))) continue;
     const raw = readFileSync(path, "utf8");
     const st = statSync(path);
-    let text = raw.replace(/\r\n/g, "\n");
-    let tags: string[] = [];
-    const refs: string[] = [];
-    let created: number | undefined;
-    const fm = text.match(/^---\n([\s\S]*?)\n---\n?/);
-    if (fm) {
-      try {
-        const y = (Bun.YAML.parse(fm[1]!) ?? {}) as Record<string, any>;
-        const t = y.tags ?? y.Tags;
-        if (Array.isArray(t)) tags.push(...t.map(String));
-        else if (typeof t === "string") tags.push(...t.split(/[ ,]+/));
-        if (y.created) created = Date.parse(y.created) || undefined;
-      } catch (e) {
-        log(`${rel}: frontmatter not read (${(e as Error).message})`);
-      }
-      text = text.slice(fm[0].length);
-    }
-    const out: string[] = [];
-    for (const line of text.split("\n")) {
-      if (/^\[\[Home 🏠\]\]/.test(line)) {
-        created = parseCreated(line) ?? created;
-        continue;
-      }
-      const tm = line.match(/^Tags::(.*)$/);
-      if (tm) {
-        tags.push(...(tm[1]!.match(/#[^\s#]+/g) ?? []));
-        continue;
-      }
-      const rm = line.match(/^Refs::(.*)$/);
-      if (rm) {
-        refs.push(...parseWikiLinks(rm[1]!).map((l) => l.target));
-        continue;
-      }
-      if (/^`=.*`\s*$/.test(line.trim())) continue;
-      out.push(line);
-    }
-    const body = out.join("\n").replace(/^(?:[ \t]*(?:___)?[ \t]*\n)+/, "").trim();
+    const note = parseNote(raw, rel, log);
+    const { body, refs, created } = note;
+    let tags = note.tags;
     const title = basename(path, ".md");
     if (!body && !refs.length && (!tags.length || /^Unbenannt|^Untitled|\.pdf$/i.test(title))) continue;
     let type: string | null = card;
@@ -311,7 +339,7 @@ export async function importObsidian(store: Store, blobs: Blobs, vault: string, 
     if (isMap) type = null; // its children make it an overview
     let area = isMap ? areaOfTitle(title) : undefined;
     if (top === "Spaces") {
-      area = AREA[parts[1]!];
+      area = SPACE_AREA[parts[1]!];
       tags.push(...parts.slice(2, -1).filter((p) => !["Areas", "Projects", "• MOCs"].includes(p)));
       if (area && !isMap) tags.push(areaName(area, opts.lang));
     }
@@ -338,7 +366,9 @@ export async function importObsidian(store: Store, blobs: Blobs, vault: string, 
     w.change(p.id, (doc) => {
       for (const t of p.refs) {
         const target = ix.resolveTitle(t);
-        if (target && target !== p.id) (setMember(doc, "refs", target, true), refCount++);
+        if (!target || target === p.id) continue;
+        setMember(doc, "refs", target, true);
+        refCount++;
       }
     });
   let placed = 0;
@@ -377,22 +407,17 @@ export function importNotion(store: Store, file: string, opts: NotionOptions, lo
   const projectType = ensureType(w, opts.projectType, opts.lang, store);
   const taskType = ensureType(w, opts.taskType, opts.lang, store);
   const ix = store.index();
-  const ps = ix.types.get(projectType)!.schema;
-  const ts = ix.types.get(taskType)!.schema;
+  const projectSchema = ix.types.get(projectType)!.schema;
+  const taskSchema = ix.types.get(taskType)!.schema;
   const idFor = (nid: string) => "n_" + nid;
   let made = 0;
   for (const p of data.projects) {
     if (store.records.get(idFor(p.id))) continue;
     const parents = p.area ? [ensurePinnedOverview(w, store, areaName(p.area, opts.lang))] : [];
-    const props: Record<string, Value> = {};
-    const st = statusOption(ps, p.status);
-    if (st && statusProp(ps)) props[statusProp(ps)!.id] = st;
-    const prio = columnProp(ps, "p_priority", "priority", "select");
-    const pr = priorityOption(prio, p.priority);
-    if (pr) props[prio!.id] = pr;
-    const period = columnProp(ps, "p_period", "period", "date");
+    const props = statusAndPriority(projectSchema, p.status, p.priority);
+    const period = columnProp(projectSchema, "p_period", "period", "date");
     if ((p.start || p.end) && period) props[period.id] = `${p.start ?? ""}/${p.end ?? ""}`;
-    const summary = columnProp(ps, "p_summary", "summary", "text");
+    const summary = columnProp(projectSchema, "p_summary", "summary", "text");
     if (p.summary && summary) props[summary.id] = p.summary;
     w.change(idFor(p.id), (doc) => initItem(doc, { title: p.title, type: projectType, parents, props, source: `notion:${p.id}`, created: Date.parse(p.created) }));
     made++;
@@ -403,15 +428,10 @@ export function importNotion(store: Store, file: string, opts: NotionOptions, lo
     if (store.records.get(idFor(nid))) continue;
     const proj = project ?? (parent ? taskProject.get(parent) : null);
     const parents = parent ? [idFor(parent)] : proj ? [idFor(proj)] : [];
-    const props: Record<string, Value> = {};
-    const st = statusOption(ts, status ?? undefined);
-    if (st && statusProp(ts)) props[statusProp(ts)!.id] = st;
-    const prio = columnProp(ts, "p_priority", "priority", "select");
-    const pr = priorityOption(prio, priority ?? undefined);
-    if (pr) props[prio!.id] = pr;
-    const dp = dueProp(ts);
+    const props = statusAndPriority(taskSchema, status ?? undefined, priority ?? undefined);
+    const dp = dueProp(taskSchema);
     if (due && dp) props[dp.id] = due;
-    const rel = ts?.properties.find((x) => x.kind === "relation" && x.blocks);
+    const rel = taskSchema?.properties.find((x) => x.kind === "relation" && x.blocks);
     w.change(idFor(nid), (doc) => {
       initItem(doc, { title, type: taskType, parents, props, tags, source: `notion:${nid}`, created: Date.parse(created) });
       if (rel) for (const b of blockedBy) setRel(doc, rel.id, idFor(b), true);

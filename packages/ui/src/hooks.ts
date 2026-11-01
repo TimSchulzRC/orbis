@@ -8,9 +8,9 @@ import { PHONE } from "./lib/platform";
 
 /** Re-renders on changes to the replica of this part of the page (it may be another workspace's). */
 export function useRepo() {
-  const r = useContext(ScopeContext)?.repo ?? repo;
-  useSyncExternalStore(r.subscribe, r.getVersion);
-  return r;
+  const scoped = useContext(ScopeContext)?.repo ?? repo;
+  useSyncExternalStore(scoped.subscribe, scoped.getVersion);
+  return scoped;
 }
 
 export function useIndex() {
@@ -111,8 +111,8 @@ export function showTitle(title: string) {
   const [path, qs] = location.hash.replace(/^#/, "").split("?");
   const at = /^((?:\/w\/[^/?]+)?\/i\/[^/]+)/.exec(path!)?.[1];
   if (!at) return;
-  const s = slug(title);
-  const next = at + (s ? "/" + s : "") + (qs ? "?" + qs : "");
+  const titleSlug = slug(title);
+  const next = at + (titleSlug ? "/" + titleSlug : "") + (qs ? "?" + qs : "");
   if (next !== location.hash.replace(/^#/, "")) replaceHash(next);
 }
 
@@ -133,14 +133,14 @@ export function useItemHref() {
 }
 
 export function useMediaQuery(q: string) {
-  const [m, setM] = useState(() => matchMedia(q).matches);
+  const [matches, setMatches] = useState(() => matchMedia(q).matches);
   useEffect(() => {
     const mq = matchMedia(q);
-    const on = () => setM(mq.matches);
+    const on = () => setMatches(mq.matches);
     mq.addEventListener("change", on);
     return () => mq.removeEventListener("change", on);
   }, [q]);
-  return m;
+  return matches;
 }
 
 /** The phone/desktop breakpoint where the sidebar shows (Tailwind `lg`). */
@@ -183,19 +183,25 @@ export function useFocusDraft<V>(value: V) {
     focused,
     onKeyDown: (e: ReactKeyboardEvent<HTMLElement>) => {
       const el = e.currentTarget;
-      if (e.key === "Enter") (e.preventDefault(), el.blur());
-      if (e.key === "Escape") (setDraft(value), setTimeout(() => el.blur()));
+      if (e.key === "Enter") {
+        e.preventDefault();
+        el.blur();
+      }
+      if (e.key === "Escape") {
+        setDraft(value);
+        setTimeout(() => el.blur());
+      }
     },
   };
 }
 
 export function useLocalStorage<T>(key: string, init: T): [T, (v: T) => void] {
-  const [v, setV] = useState<T>(() => readJSON(key, init));
+  const [value, setValue] = useState<T>(() => readJSON(key, init));
   return [
-    v,
-    (n: T) => {
-      setV(n);
-      writeJSON(key, n);
+    value,
+    (next: T) => {
+      setValue(next);
+      writeJSON(key, next);
     },
   ];
 }

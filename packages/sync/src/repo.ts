@@ -54,6 +54,7 @@ const SEARCH_DEBOUNCE_MS = 400;
 /** Typing into the same text continues its undo step while pauses stay shorter than this. */
 const TYPING_STEP_GAP_MS = 120_000;
 const PING_MS = 25_000;
+const FIRST_RETRY_MS = 1000;
 const MAX_RETRY_MS = 30_000;
 const PUSH_BATCH = 200;
 const MAX_EVENTS = 100;
@@ -164,11 +165,11 @@ export class Repo {
     this.host.persist?.();
     const { rows, outbox, lastSeq, lastId } = await this.db.load();
     const byDoc = new Map<string, { keys: unknown[]; updates: Uint8Array[] }>();
-    for (const v of rows) {
-      const e = byDoc.get(v.d) ?? { keys: [], updates: [] };
-      e.keys.push(v.key);
-      e.updates.push(v.u);
-      byDoc.set(v.d, e);
+    for (const row of rows) {
+      const e = byDoc.get(row.d) ?? { keys: [], updates: [] };
+      e.keys.push(row.key);
+      e.updates.push(row.u);
+      byDoc.set(row.d, e);
     }
     for (const [id, e] of byDoc) {
       const doc = this.getDoc(id);
@@ -279,10 +280,10 @@ export class Repo {
     const meta: unknown = doc.getMap("meta");
     const typing = [...tr.changed].every(([t, keys]) => t === body || (t === meta && [...keys].every((k) => k === "updated")));
     const now = Date.now();
-    const c = this.curStep;
-    const goOn = c && (this.sameTick || (typing && c.typing && c.doc === docId && now - c.at < TYPING_STEP_GAP_MS));
-    if (!goOn) this.curStep = { id: "s" + newId(), at: now, doc: docId, typing };
-    else c.at = now;
+    const prev = this.curStep;
+    const keepsTyping = typing && prev?.typing && prev.doc === docId && now - prev.at < TYPING_STEP_GAP_MS;
+    if (prev && (this.sameTick || keepsTyping)) prev.at = now;
+    else this.curStep = { id: "s" + newId(), at: now, doc: docId, typing };
     if (!this.sameTick) {
       this.sameTick = true;
       queueMicrotask(() => (this.sameTick = false));
@@ -358,7 +359,7 @@ export class Repo {
       if (this.ws === ws) this.ws = null;
       this.status.online = false;
       this.emit();
-      const delay = Math.min(MAX_RETRY_MS, 1000 * 2 ** this.retry++);
+      const delay = Math.min(MAX_RETRY_MS, FIRST_RETRY_MS * 2 ** this.retry++);
       setTimeout(() => this.connect(), delay);
     };
     ws.onerror = () => ws.close();
@@ -394,73 +395,13 @@ export class Repo {
   private async onMessage(msg: ServerMsg) {
     if (msg.t === "denied") return;
     if (msg.t === "welcome") {
-      this.serverFormat = msg.format ?? 0;
-      const known = this.serverId ?? (await this.db.serverId());
-      if (known && known !== msg.hub && this.docs.size > 0) {
-        // Usually the server was set up anew and this copy is stale (replace, recommended); rarely it
-        // was restored from a backup and misses what only this device has (upload). Only the user knows.
-        const answer = await this.host.askOtherServer();
-        // no answer: nothing is lost, ask again on the next connection
-        if (answer === null) {
-          const old = this.ws;
-          this.ws = null; // makes onmessage drop what this connection still sends
-          old?.close();
-          return;
-        }
-        const upload = answer === "upload";
-        if (!upload) {
-          await this.db.write({ serverId: msg.hub });
-          await this.resetLocal(true);
-          return;
-        }
-        await this.enqueueFullUpload();
-        // our sequence position belongs to the old server
-        this.status.lastSeq = 0;
-        this.lastId = undefined;
-        await this.db.write({ cursor: { lastSeq: 0 } });
-        this.send({ t: "hello", area: msg.area, since: 0, device: this.device });
-      }
-      this.serverId = msg.hub;
-      if (known !== msg.hub) await this.db.write({ serverId: msg.hub });
-      await this.flushOutbox();
+      await this.onWelcome(msg);
       return;
     }
     if (msg.t === "updates") {
-      if (msg.reset) {
-        // the server lost data (restored from a backup?)
-        await this.enqueueFullUpload();
-        await this.flushOutbox();
-      }
-      const rows: StoredRow[] = [];
-      for (const it of msg.items) {
-        const u = fromB64(it.u);
-        Y.applyUpdate(this.getDoc(it.d), u, REMOTE);
-        rows.push({ d: it.d, u });
-      }
-      try {
-        await this.db.write({ rows, cursor: msg.last > 0 && !this.persistFailed ? { lastSeq: msg.last, lastId: msg.lastId } : undefined });
-      } catch (e) {
-        // never advance past updates we could not store; the next connect re-fetches them
-        this.persistFailed = true;
-        console.error("could not store updates", e);
-      }
-      if (msg.last > 0 && !this.persistFailed) {
-        this.status.lastSeq = msg.last;
-        this.lastId = msg.lastId;
-      }
-      if (msg.done || !msg.initial) this.status.synced = true;
-      this.emit();
+      await this.onUpdates(msg);
     } else if (msg.t === "ack") {
-      for (const k of msg.keys) this.outbox.delete(k);
-      let cursor: { lastSeq: number; lastId?: string } | undefined;
-      if (this.status.synced && !this.persistFailed && msg.last > this.status.lastSeq) {
-        this.status.lastSeq = msg.last;
-        this.lastId = msg.lastId;
-        cursor = { lastSeq: msg.last, lastId: msg.lastId };
-      }
-      await this.db.write({ acked: msg.keys, cursor });
-      this.status.pending = this.outbox.size;
-      this.emit();
+      await this.onAck(msg);
     } else if (msg.t === "blob") {
       for (const l of this.blobListeners) l(msg.hash);
     } else if (msg.t === "event") {
@@ -469,6 +410,77 @@ export class Repo {
       for (const l of this.eventListeners) l(msg.event);
       this.emit();
     }
+  }
+
+  private async onWelcome(msg: Extract<ServerMsg, { t: "welcome" }>) {
+    this.serverFormat = msg.format ?? 0;
+    const known = this.serverId ?? (await this.db.serverId());
+    if (known && known !== msg.hub && this.docs.size > 0) {
+      // Usually the server was set up anew and this copy is stale (replace, recommended); rarely it
+      // was restored from a backup and misses what only this device has (upload). Only the user knows.
+      const answer = await this.host.askOtherServer();
+      // no answer: nothing is lost, ask again on the next connection
+      if (answer === null) {
+        const old = this.ws;
+        this.ws = null; // makes onmessage drop what this connection still sends
+        old?.close();
+        return;
+      }
+      if (answer !== "upload") {
+        await this.db.write({ serverId: msg.hub });
+        await this.resetLocal(true);
+        return;
+      }
+      await this.enqueueFullUpload();
+      // our sequence position belongs to the old server
+      this.status.lastSeq = 0;
+      this.lastId = undefined;
+      await this.db.write({ cursor: { lastSeq: 0 } });
+      this.send({ t: "hello", area: msg.area, since: 0, device: this.device });
+    }
+    this.serverId = msg.hub;
+    if (known !== msg.hub) await this.db.write({ serverId: msg.hub });
+    await this.flushOutbox();
+  }
+
+  private async onUpdates(msg: Extract<ServerMsg, { t: "updates" }>) {
+    if (msg.reset) {
+      // the server lost data (restored from a backup?)
+      await this.enqueueFullUpload();
+      await this.flushOutbox();
+    }
+    const rows: StoredRow[] = [];
+    for (const it of msg.items) {
+      const u = fromB64(it.u);
+      Y.applyUpdate(this.getDoc(it.d), u, REMOTE);
+      rows.push({ d: it.d, u });
+    }
+    try {
+      await this.db.write({ rows, cursor: msg.last > 0 && !this.persistFailed ? { lastSeq: msg.last, lastId: msg.lastId } : undefined });
+    } catch (e) {
+      // never advance past updates we could not store; the next connect re-fetches them
+      this.persistFailed = true;
+      console.error("could not store updates", e);
+    }
+    if (msg.last > 0 && !this.persistFailed) {
+      this.status.lastSeq = msg.last;
+      this.lastId = msg.lastId;
+    }
+    if (msg.done || !msg.initial) this.status.synced = true;
+    this.emit();
+  }
+
+  private async onAck(msg: Extract<ServerMsg, { t: "ack" }>) {
+    for (const k of msg.keys) this.outbox.delete(k);
+    let cursor: { lastSeq: number; lastId?: string } | undefined;
+    if (this.status.synced && !this.persistFailed && msg.last > this.status.lastSeq) {
+      this.status.lastSeq = msg.last;
+      this.lastId = msg.lastId;
+      cursor = { lastSeq: msg.last, lastId: msg.lastId };
+    }
+    await this.db.write({ acked: msg.keys, cursor });
+    this.status.pending = this.outbox.size;
+    this.emit();
   }
 
   /** Runs on the server, which holds the history. Pushes local changes first; does nothing offline. */
@@ -527,6 +539,14 @@ export class Repo {
     doc.transact(() => fn(doc));
   }
 
+  /** Also sets the item's "updated". */
+  private changeAndTouch(id: string, fn: (doc: Y.Doc) => void) {
+    this.change(id, (doc) => {
+      fn(doc);
+      touch(doc);
+    });
+  }
+
   writer: Writer = {
     change: (id, fn) => this.change(id, fn),
     get: (id) => this.records.get(id),
@@ -561,17 +581,11 @@ export class Repo {
   /** false if it would create a cycle. */
   addParent(id: string, parent: string, sort?: string): boolean {
     if (this.index().wouldCycle(id, parent)) return false;
-    this.change(id, (doc) => {
-      addParent(doc, parent, sort);
-      touch(doc);
-    });
+    this.changeAndTouch(id, (doc) => addParent(doc, parent, sort));
     return true;
   }
   removeParent(id: string, parent: string) {
-    this.change(id, (doc) => {
-      removeParent(doc, parent);
-      touch(doc);
-    });
+    this.changeAndTouch(id, (doc) => removeParent(doc, parent));
   }
   /** Replaces the parent the item was dragged from. */
   moveParent(id: string, from: string | null, to: string, sort?: string): boolean {
@@ -601,28 +615,16 @@ export class Repo {
 
   setProp(id: string, propId: string, value: Value | null) {
     const schema = this.index().schemaOf(this.records.get(id));
-    this.change(id, (doc) => {
-      writeProp(doc, schema, propId, value);
-      touch(doc);
-    });
+    this.changeAndTouch(id, (doc) => writeProp(doc, schema, propId, value));
   }
   setExtra(id: string, name: string, value: FreeValue | null) {
-    this.change(id, (doc) => {
-      setExtra(doc, name, value);
-      touch(doc);
-    });
+    this.changeAndTouch(id, (doc) => setExtra(doc, name, value));
   }
   setRel(id: string, propId: string, target: string, on: boolean) {
-    this.change(id, (doc) => {
-      setRel(doc, propId, target, on);
-      touch(doc);
-    });
+    this.changeAndTouch(id, (doc) => setRel(doc, propId, target, on));
   }
   setMember(id: string, set: "tags" | "refs", key: string, on: boolean) {
-    this.change(id, (doc) => {
-      setMember(doc, set, key, on);
-      touch(doc);
-    });
+    this.changeAndTouch(id, (doc) => setMember(doc, set, key, on));
   }
   setBody(id: string, body: string) {
     this.change(id, (doc) => replaceBody(doc, body));

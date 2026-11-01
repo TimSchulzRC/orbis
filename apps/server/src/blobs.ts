@@ -130,9 +130,9 @@ export class Blobs {
   }
 
   private async process(id: string) {
-    const r = this.store.records.get(id);
-    const f = r?.file;
-    if (!f || !this.needsWork(r!)) return;
+    const record = this.store.records.get(id);
+    const f = record?.file;
+    if (!f || !this.needsWork(record!)) return;
     const src = this.path(f.hash);
     const patch: Partial<FileMeta> = {};
     if (f.filetype === "bild") {
@@ -141,10 +141,10 @@ export class Blobs {
       if (!f.display) patch.display = await this.derive(src, DISPLAY_WIDTH);
       if (!f.thumb) patch.thumb = await this.derive(src, THUMB_WIDTH);
     } else if (f.filetype === "audio" || f.filetype === "video") {
-      const p = await probe(src);
-      patch.duration = p.duration ?? 0;
+      const media = await probe(src);
+      patch.duration = media.duration ?? 0;
       if (f.filetype === "video") {
-        if (p.width) Object.assign(patch, { width: p.width, height: p.height });
+        if (media.width) Object.assign(patch, { width: media.width, height: media.height });
         if (!f.thumb) patch.thumb = await this.derive(src, THUMB_WIDTH, true);
       }
     } else if (f.filetype === "pdf") {
@@ -160,8 +160,8 @@ export class Blobs {
     if (!FFMPEG) return undefined;
     const out = join(this.dir, `tmp-${crypto.randomUUID()}.webp`);
     const args = [FFMPEG, "-v", "error", "-y", ...(videoFrame ? ["-ss", "1"] : []), "-i", src, "-vf", `scale='min(${width},iw)':-1`, "-frames:v", "1", "-c:v", "libwebp", "-quality", "80", out];
-    const p = Bun.spawn(args, { stdout: "ignore", stderr: "pipe" });
-    const code = await p.exited;
+    const ffmpeg = Bun.spawn(args, { stdout: "ignore", stderr: "pipe" });
+    const code = await ffmpeg.exited;
     if (code !== 0 || !existsSync(out)) {
       if (existsSync(out)) unlinkSync(out);
       return undefined;
@@ -176,14 +176,14 @@ export class Blobs {
 
 async function probe(path: string): Promise<{ width?: number; height?: number; duration?: number }> {
   if (!FFPROBE) return {};
-  const p = Bun.spawn([FFPROBE, "-v", "error", "-show_entries", "stream=width,height:format=duration", "-of", "json", path], { stdout: "pipe", stderr: "ignore" });
-  const out = await new Response(p.stdout).text();
-  await p.exited;
+  const ffprobe = Bun.spawn([FFPROBE, "-v", "error", "-show_entries", "stream=width,height:format=duration", "-of", "json", path], { stdout: "pipe", stderr: "ignore" });
+  const out = await new Response(ffprobe.stdout).text();
+  await ffprobe.exited;
   try {
-    const j: { streams?: { width?: number; height?: number }[]; format?: { duration?: string } } = JSON.parse(out);
-    const s = (j.streams ?? []).find((x) => x.width) ?? {};
-    const d = Number(j.format?.duration);
-    return { width: s.width, height: s.height, duration: isNaN(d) ? undefined : Math.round(d) };
+    const info: { streams?: { width?: number; height?: number }[]; format?: { duration?: string } } = JSON.parse(out);
+    const picture = (info.streams ?? []).find((x) => x.width) ?? {};
+    const seconds = Number(info.format?.duration);
+    return { width: picture.width, height: picture.height, duration: isNaN(seconds) ? undefined : Math.round(seconds) };
   } catch {
     return {};
   }
@@ -199,8 +199,8 @@ async function pdfInfo(path: string): Promise<{ pages: number; text?: string }> 
   let text = "";
   for (let i = 1; i <= Math.min(pages, PDF_TEXT_MAX_PAGES) && text.length < PDF_TEXT_MAX_CHARS; i++) {
     const page = await doc.getPage(i);
-    const tc = await page.getTextContent();
-    text += tc.items.map((x) => ("str" in x ? x.str : "")).join(" ").replace(/\s+/g, " ") + "\n";
+    const content = await page.getTextContent();
+    text += content.items.map((x) => ("str" in x ? x.str : "")).join(" ").replace(/\s+/g, " ") + "\n";
   }
   await task.destroy();
   return { pages, text: text.trim().slice(0, PDF_TEXT_MAX_CHARS) || undefined };

@@ -204,11 +204,11 @@ export interface ViewTab {
 /** The tab a single view (a query block without tabs, an old collection) is read as. */
 export const MAIN_TAB = "main";
 export function legacyTab(view: { display?: ViewKind; sort?: { key: string; desc?: boolean }[]; group?: string; columns?: string[] }): ViewTab {
-  const t: ViewTab = { id: MAIN_TAB, pos: "V", kind: view.display ?? "list" };
-  if (view.sort?.length) t.sort = view.sort;
-  if (view.group) t.group = view.group;
-  if (view.columns?.length) t.columns = view.columns;
-  return t;
+  const tab: ViewTab = { id: MAIN_TAB, pos: "V", kind: view.display ?? "list" };
+  if (view.sort?.length) tab.sort = view.sort;
+  if (view.group) tab.group = view.group;
+  if (view.columns?.length) tab.columns = view.columns;
+  return tab;
 }
 
 export interface Item {
@@ -295,15 +295,16 @@ export function readSchema(doc: Y.Doc): TypeSchema {
     return typeof v === "string" ? v : undefined;
   };
   const caps = plain(s.get("capabilities"));
+  const statusId = isObject(caps) ? caps.status : undefined;
   const props = s.get("properties");
   const properties: PropDef[] = [];
   if (props instanceof Y.Map) {
     for (const [id, p] of props) {
       const o = plain(p);
       if (!isObject(o)) continue;
-      const d = o as Partial<PropDef>;
-      if (!d.name && !d.kind) continue;
-      properties.push(legacyKind({ ...d, id, name: d.name ?? "", kind: d.kind ?? "text", sort: d.sort ?? "V" }, isObject(caps) && caps.status === id));
+      const def = o as Partial<PropDef>;
+      if (!def.name && !def.kind) continue;
+      properties.push(legacyKind({ ...def, id, name: def.name ?? "", kind: def.kind ?? "text", sort: def.sort ?? "V" }, statusId === id));
     }
   }
   properties.sort((a, b) => cmpKey(a.sort, b.sort) || a.id.localeCompare(b.id));
@@ -335,6 +336,7 @@ export function readItem(id: string, doc: Y.Doc): Item | null {
     const v = meta.get(k);
     return typeof v === "number" ? v : undefined;
   };
+  const deletedVia = viaRoot(meta.get("deleted"));
   const item: Item = {
     id,
     kind: kind as Kind,
@@ -355,8 +357,8 @@ export function readItem(id: string, doc: Y.Doc): Item | null {
     created: Number(meta.get("created") ?? 0),
     updated: Number(meta.get("updated") ?? meta.get("created") ?? 0),
     createdBy: str("createdBy"),
-    deleted: meta.get("deleted") === true || viaRoot(meta.get("deleted")) !== undefined,
-    deletedVia: viaRoot(meta.get("deleted")),
+    deleted: meta.get("deleted") === true || deletedVia !== undefined,
+    deletedVia,
     doneAt: num("done"),
     source: str("source"),
   };
@@ -372,7 +374,14 @@ export function readItem(id: string, doc: Y.Doc): Item | null {
   if (kind === "op") item.op = doc.getMap("op").toJSON() as OpRecord;
   if (kind === "settings") {
     const s: Partial<SettingsRecord> = doc.getMap("settings").toJSON();
-    item.settings = { setupLang: s.setupLang, format: typeof s.format === "number" ? s.format : undefined, captureTypes: s.captureTypes ?? [], upgrades: s.upgrades ?? [], inbox: s.inbox ?? undefined, filesPos: s.filesPos ?? undefined };
+    item.settings = {
+      setupLang: s.setupLang,
+      format: typeof s.format === "number" ? s.format : undefined,
+      captureTypes: s.captureTypes ?? [],
+      upgrades: s.upgrades ?? [],
+      inbox: s.inbox ?? undefined,
+      filesPos: s.filesPos ?? undefined,
+    };
   }
   return item;
 }
@@ -454,6 +463,8 @@ export function touch(doc: Y.Doc, now = Date.now()) {
  * burst counts too). Remote edits don't, they bring their own time. Stamps in a separate
  * transaction so it stays out of the text's undo history. Returns a stop function.
  */
+const TOUCH_ORIGIN = "touch";
+
 export function touchOnTextEdit(doc: Y.Doc, every = 3000, clock: () => number = Date.now): () => void {
   const text = doc.getText("body");
   let last = 0;
@@ -471,10 +482,12 @@ export function touchOnTextEdit(doc: Y.Doc, every = 3000, clock: () => number = 
   text.observe(onEdit);
   return () => {
     text.unobserve(onEdit);
-    if (timer) (clearTimeout(timer), stamp());
+    if (timer) {
+      clearTimeout(timer);
+      stamp();
+    }
   };
 }
-const TOUCH_ORIGIN = "touch";
 
 /** The first parent becomes the home. */
 export function addParent(doc: Y.Doc, parentId: string, sort?: string, at = Date.now()) {
@@ -609,19 +622,22 @@ export type Patch<T> = { [K in keyof T]?: T[K] | null };
 export function upsertProp(doc: Y.Doc, propId: string, patch: Patch<Omit<PropDef, "id">>) {
   const props = ensureSubMap(schemaMap(doc), "properties");
   const found = props.get(propId);
-  const p = found instanceof Y.Map ? found : new Y.Map<unknown>();
-  if (p !== found) {
-    props.set(propId, p);
-    if (!patch.sort) {
-      const last = [...props.values()].map((x) => (x instanceof Y.Map ? x.get("sort") : undefined)).filter((x): x is string => typeof x === "string" && !!x).sort().at(-1);
-      p.set("sort", keyBetween(last ?? null, null));
-    }
+  const prop = found instanceof Y.Map ? found : new Y.Map<unknown>();
+  if (prop !== found) {
+    props.set(propId, prop);
+    if (!patch.sort) prop.set("sort", keyBetween(lastSortKey(props), null));
   }
   for (const [k, v] of Object.entries(patch)) {
     if (v === undefined) continue;
-    if (v === null || v === "") p.delete(k);
-    else p.set(k, v);
+    if (v === null || v === "") prop.delete(k);
+    else prop.set(k, v);
   }
+}
+
+/** The highest sort key among the properties, null when none has one. */
+function lastSortKey(props: Y.Map<unknown>): string | null {
+  const keys = [...props.values()].map((p) => (p instanceof Y.Map ? p.get("sort") : undefined)).filter((k): k is string => typeof k === "string" && !!k);
+  return keys.sort().at(-1) ?? null;
 }
 
 /** Keeps the values and the definition as a tombstone, so they still show by name under "Weitere Eigenschaften". */
@@ -690,8 +706,10 @@ function toMap(o: Record<string, unknown>): Y.Map<unknown> {
 
 export function setSettings(doc: Y.Doc, patch: Patch<SettingsRecord>) {
   const s = doc.getMap<unknown>("settings");
-  for (const [k, v] of Object.entries(patch)) if (v === null) s.delete(k);
-  else if (v !== undefined) s.set(k, v);
+  for (const [k, v] of Object.entries(patch)) {
+    if (v === null) s.delete(k);
+    else if (v !== undefined) s.set(k, v);
+  }
 }
 
 export function normalizeTag(t: string): string {
@@ -700,11 +718,11 @@ export function normalizeTag(t: string): string {
 
 // Time-sortable ids: 9 chars of time + 8 random chars, base36.
 export function newId(): string {
-  const t = Date.now().toString(36).padStart(9, "0");
-  const r = Array.from(crypto.getRandomValues(new Uint8Array(8)))
+  const time = Date.now().toString(36).padStart(9, "0");
+  const random = Array.from(crypto.getRandomValues(new Uint8Array(8)))
     .map((b) => (b % 36).toString(36))
     .join("");
-  return t + r;
+  return time + random;
 }
 
 export function shortId(prefix: string): string {
@@ -787,9 +805,9 @@ export function parseWikiLinks(body: string): WikiLink[] {
   const text = stripQueryBlocks(body);
   for (const m of text.matchAll(WIKILINK)) {
     const target = m[2]!.trim();
-    const extra = m[4]?.slice(1).trim();
-    const size = extra && /^\d+(x\d+)?$/.test(extra) ? Number(extra.split("x")[0]) : undefined;
-    out.push({ target, embed: m[1] === "!", size, alias: size ? undefined : extra || undefined });
+    const afterPipe = m[4]?.slice(1).trim();
+    const size = afterPipe && /^\d+(x\d+)?$/.test(afterPipe) ? Number(afterPipe.split("x")[0]) : undefined;
+    out.push({ target, embed: m[1] === "!", size, alias: size ? undefined : afterPipe || undefined });
   }
   return out;
 }
@@ -816,12 +834,13 @@ export function fileTypeOf(name: string, mime = ""): FileType {
   return "sonstiges";
 }
 
+const MIME_BY_EXT: Record<string, string> = {
+  png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", avif: "image/avif", bmp: "image/bmp", svg: "image/svg+xml", heic: "image/heic",
+  pdf: "application/pdf", mp3: "audio/mpeg", m4a: "audio/mp4", wav: "audio/wav", ogg: "audio/ogg", flac: "audio/flac", opus: "audio/opus",
+  mp4: "video/mp4", mov: "video/quicktime", webm: "video/webm", txt: "text/plain", md: "text/markdown", csv: "text/csv",
+};
+
 export function mimeOf(name: string): string {
   const ext = name.toLowerCase().split(".").pop() ?? "";
-  const m: Record<string, string> = {
-    png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", avif: "image/avif", bmp: "image/bmp", svg: "image/svg+xml", heic: "image/heic",
-    pdf: "application/pdf", mp3: "audio/mpeg", m4a: "audio/mp4", wav: "audio/wav", ogg: "audio/ogg", flac: "audio/flac", opus: "audio/opus",
-    mp4: "video/mp4", mov: "video/quicktime", webm: "video/webm", txt: "text/plain", md: "text/markdown", csv: "text/csv",
-  };
-  return m[ext] ?? "application/octet-stream";
+  return MIME_BY_EXT[ext] ?? "application/octet-stream";
 }

@@ -67,8 +67,9 @@ export function useAccounts() {
     (l) => (listeners.add(l), () => listeners.delete(l)),
     () => version,
   );
-  // allSeen: no choice made ("Alle"), as opposed to every workspace picked one by one
-  return { account, spaces, active: spaces.find((s) => s.id === active), shown: shownSpaces(), allSeen: !shown || !spaces.some((s) => shown!.includes(s.id)) };
+  // no choice made ("Alle"), as opposed to every workspace picked one by one
+  const allSeen = !shown || !spaces.some((s) => shown!.includes(s.id));
+  return { account, spaces, active: spaces.find((s) => s.id === active), shown: shownSpaces(), allSeen };
 }
 
 /** The workspaces chosen to be seen; never none (a choice that left none shows all). */
@@ -99,16 +100,16 @@ function link(s: Space): SpaceLink {
 }
 
 export function replica(id: string): { repo: Repo; files: DeviceFiles } {
-  let r = open.get(id);
-  if (!r) {
-    const l = link(spaces.find((x) => x.id === id)!);
-    const repo = new Repo(browserHost(l));
-    r = { repo, files: new DeviceFiles(repo, l) };
-    open.set(id, r);
-    setUpWhenEmpty(id, r);
+  let entry = open.get(id);
+  if (!entry) {
+    const spaceLink = link(spaces.find((s) => s.id === id)!);
+    const repo = new Repo(browserHost(spaceLink));
+    entry = { repo, files: new DeviceFiles(repo, spaceLink) };
+    open.set(id, entry);
+    setUpWhenEmpty(id, entry);
     repo.init().catch((e) => console.error("could not open local storage", e));
   }
-  return r;
+  return entry;
 }
 
 /** Workspaces created on this device and not set up yet; value: with examples. */
@@ -150,9 +151,9 @@ export function unsynced(): boolean {
 
 function activate(id: string) {
   if (!spaces.some((s) => s.id === id)) return;
-  const r = replica(id);
-  setRepo(r.repo);
-  setFiles(r.files);
+  const { repo, files } = replica(id);
+  setRepo(repo);
+  setFiles(files);
   if (active !== id) {
     active = id;
     save();
@@ -185,11 +186,27 @@ export function errorText(e: unknown, t: T, what: "signIn" | "code" | "space" | 
   const status = e instanceof ApiError ? e.status : undefined;
   const message = e instanceof Error ? e.message : String(e);
   if (status === 429) return t("account.tooMany");
-  if (what === "code") return status === 403 ? t("account.closed") : status === 400 ? t("account.codeWrong") : status ? message : t("account.offline");
-  if (what === "signIn") return status === 401 ? t("account.wrong") : status === 409 || status === 422 ? t("account.exists") : status === 403 ? t("account.closed") : message;
-  if (what === "password") return message === "invalid password" ? t("account.deletePassword") : message === "password too long" ? t("account.passwordLong") : status === 400 ? t("account.passwordShort") : t("account.offline");
-  if (what === "deleteAccount") return t(message === "last owner" ? "account.deleteOwner" : message === "invalid password" ? "account.deletePassword" : "account.offline");
-  return message === "last owner" ? t("space.lastOwner") : message;
+  switch (what) {
+    case "code":
+      if (status === 403) return t("account.closed");
+      if (status === 400) return t("account.codeWrong");
+      return status ? message : t("account.offline");
+    case "signIn":
+      if (status === 401) return t("account.wrong");
+      if (status === 409 || status === 422) return t("account.exists");
+      if (status === 403) return t("account.closed");
+      return message;
+    case "password":
+      if (message === "invalid password") return t("account.deletePassword");
+      if (message === "password too long") return t("account.passwordLong");
+      return status === 400 ? t("account.passwordShort") : t("account.offline");
+    case "deleteAccount":
+      if (message === "last owner") return t("account.deleteOwner");
+      if (message === "invalid password") return t("account.deletePassword");
+      return t("account.offline");
+    case "space":
+      return message === "last owner" ? t("space.lastOwner") : message;
+  }
 }
 
 /** Also marks the account `lost` when the server rejects the token. */
@@ -301,9 +318,13 @@ async function finishOAuth() {
   document.cookie = "obtion_signup=; path=/api/auth; max-age=0";
   if (how === "linked") return;
   const error = params.get("error") ?? "";
-  if (how === "linkFailed") return void (linkFailed = error === "account_already_linked_to_different_user" ? "taken" : "failed");
+  if (how === "linkFailed") {
+    linkFailed = error === "account_already_linked_to_different_user" ? "taken" : "failed";
+    return;
+  }
   if (how !== "oauth") {
-    return void (oauthFailed = /^(signup_closed|invite_invalid)$/.test(error) ? "closed" : error === "account_not_linked" ? "notLinked" : "failed");
+    oauthFailed = oauthFailure(error);
+    return;
   }
   try {
     const res = await call<SignedIn>("/api/account/claim", {});
@@ -312,6 +333,12 @@ async function finishOAuth() {
     oauthFailed = "failed";
     save();
   }
+}
+
+function oauthFailure(error: string): NonNullable<typeof oauthFailed> {
+  if (/^(signup_closed|invite_invalid)$/.test(error)) return "closed";
+  if (error === "account_not_linked") return "notLinked";
+  return "failed";
 }
 
 export const linkedProviders = () => call<{ providerId: string }[]>("/api/auth/list-accounts").then((l) => l.map((a) => a.providerId));
@@ -334,17 +361,26 @@ export async function addPasskey() {
 
 export const removePasskey = (id: string) => call<Ok>("/api/auth/passkey/delete-passkey", { id });
 
+/** First match wins: an iPad's agent also says "Mac", Chrome's also says "Safari". */
+const OS_NAMES: [RegExp, string][] = [[/iPhone|iPad/, "iOS"], [/Android/, "Android"], [/Mac/, "macOS"], [/Windows/, "Windows"], [/Linux/, "Linux"]];
+const BROWSER_NAMES: [RegExp, string][] = [[/Edg\//, "Edge"], [/Firefox\//, "Firefox"], [/Chrome\//, "Chrome"], [/Safari\//, "Safari"]];
+
+const nameIn = (ua: string, names: [RegExp, string][]) => names.find(([pattern]) => pattern.test(ua))?.[1] ?? "";
+
 function deviceLabel(): string {
   const ua = navigator.userAgent;
-  const os = /iPhone|iPad/.test(ua) ? "iOS" : /Android/.test(ua) ? "Android" : /Mac/.test(ua) ? "macOS" : /Windows/.test(ua) ? "Windows" : /Linux/.test(ua) ? "Linux" : "";
-  const browser = /Edg\//.test(ua) ? "Edge" : /Firefox\//.test(ua) ? "Firefox" : /Chrome\//.test(ua) ? "Chrome" : /Safari\//.test(ua) ? "Safari" : "";
-  return [browser, os].filter(Boolean).join(" · ") || "Passkey";
+  return [nameIn(ua, BROWSER_NAMES), nameIn(ua, OS_NAMES)].filter(Boolean).join(" · ") || "Passkey";
 }
 
 export async function signOut() {
   await call<Ok>("/api/account/signout", {}).catch(() => {});
   await forgetAll();
   save();
+  restart();
+}
+
+/** Back to the start page, loaded afresh. */
+function restart() {
   navigate("/", { replace: true });
   location.reload();
 }
@@ -359,8 +395,7 @@ export async function deleteAccount(password?: string) {
   await call<Ok>("/api/account", password === undefined ? {} : { password }, "DELETE");
   await forgetAll();
   save();
-  navigate("/", { replace: true });
-  location.reload();
+  restart();
 }
 
 async function forgetAll() {
@@ -425,22 +460,24 @@ export const removeMember = (s: Space, user: string) => call<Ok>(`/api/workspace
 export async function leaveSpace(s: Space) {
   await call<Ok>(`/api/workspaces/${s.id}/members/${account!.user.id}`, undefined, "DELETE");
   await forget(s);
-  spaces = spaces.filter((x) => x.id !== s.id);
-  if (active === s.id) active = spaces[0]?.id ?? null;
+  dropFromList(s);
   save();
-  navigate("/", { replace: true });
-  location.reload();
+  restart();
 }
 
 /** Owners only; deletes it for every member. */
 export async function deleteSpace(s: Space) {
   await call<Ok>(`/api/workspaces/${s.id}`, undefined, "DELETE");
-  spaces = spaces.filter((x) => x.id !== s.id);
-  if (active === s.id) active = spaces[0]?.id ?? null;
+  dropFromList(s);
   save();
   await forget(s);
-  navigate("/", { replace: true });
-  location.reload();
+  restart();
+}
+
+/** If it was the open one, the first remaining workspace opens instead. */
+function dropFromList(s: Space) {
+  spaces = spaces.filter((other) => other.id !== s.id);
+  if (active === s.id) active = spaces[0]?.id ?? null;
 }
 
 export async function joinInvite(code: string) {
@@ -462,8 +499,10 @@ function followHash() {
   const { space: named, rest } = parseHash();
   if (named) {
     if (named !== active && spaces.some((s) => s.id === named)) activate(named);
-  } else if (active && !globalPage((rest.split("?")[0] ?? "").split("/").filter(Boolean)))
-    history.replaceState(history.state, "", spaceHref(active, rest));
+    return;
+  }
+  const parts = (rest.split("?")[0] ?? "").split("/").filter(Boolean);
+  if (active && !globalPage(parts)) history.replaceState(history.state, "", spaceHref(active, rest));
 }
 addEventListener("hashchange", followHash);
 

@@ -24,6 +24,12 @@ export function useQuery(def: QueryDef, thisId?: string) {
   return { ...res, ctx };
 }
 
+/** Rows a long result shows at first, and how many more each "more" adds. */
+const FIRST_PAGE = 100;
+const NEXT_PAGE = 200;
+/** Views that always show every result. */
+const UNPAGED: string[] = ["triage", "calendar", "timeline"];
+
 const isInboxQuery = (def: QueryDef) => !!def.where && "inbox" in def.where;
 
 /** Under a shortened inbox list: how much is waiting, and a clear way to work through it. */
@@ -55,9 +61,9 @@ export function Results({ def, thisId, display, empty, keyPrefix = "", look }: {
   const res = useQuery(def, thisId);
   const { total, missingTypes, ctx } = res;
   // long results render in pages, so a collection of hundreds stays responsive
-  const [shown, setShown] = useState(100);
-  const items = res.items.slice(0, ["triage", "calendar", "timeline"].includes(display ?? def.view ?? "") ? undefined : shown);
+  const [shown, setShown] = useState(FIRST_PAGE);
   const view = display ?? def.view ?? "list";
+  const items = res.items.slice(0, UNPAGED.includes(view) ? undefined : shown);
   return (
     <div>
       <MissingTypes ids={missingTypes} />
@@ -87,7 +93,7 @@ export function Results({ def, thisId, display, empty, keyPrefix = "", look }: {
       )}
       {def.limit && total > res.items.length && (isInboxQuery(def) ? <InboxNudge total={total} /> : <p className="px-2 pt-1 text-xs text-muted-foreground">{t("query.more", { count: total - res.items.length })}</p>)}
       {res.items.length > items.length && (
-        <Button variant="plain" onClick={() => setShown(shown + 200)} className="mt-2 w-full py-2 text-sm text-muted-foreground hover:text-fg">
+        <Button variant="plain" onClick={() => setShown(shown + NEXT_PAGE)} className="mt-2 w-full py-2 text-sm text-muted-foreground hover:text-fg">
           {t("query.more", { count: res.items.length - items.length })}
         </Button>
       )}
@@ -104,10 +110,15 @@ function ListView({ items, def, ctx, look }: { items: Item[]; def: QueryDef; ctx
   const withNext = def.columns?.includes("next");
   const by = def.group ?? "";
   const byLabel = fieldLabel(by, t);
+  const headingOf = (g: (typeof groups)[number]) => {
+    if (!def.group) return undefined;
+    if (def.group === "path") return g.path?.length ? pathLabel(g.path) : t("group.thisLevel");
+    return g.label || (g.statusGroup ? t("group." + g.statusGroup) : t("group.without", { name: byLabel }));
+  };
   return (
     <div className="-mx-2">
       {groups.map((g, gi) => (
-        <Group key={g.key} first={gi === 0} heading={def.group ? (def.group === "path" ? (g.path?.length ? pathLabel(g.path) : t("group.thisLevel")) : g.label || (g.statusGroup ? t("group." + g.statusGroup) : t("group.without", { name: byLabel }))) : undefined} count={g.items.length}>
+        <Group key={g.key} first={gi === 0} heading={headingOf(g)} count={g.items.length}>
           {treeOrder(g.items).map(({ item: i, depth }) => {
             // sub-items whose parent is listed too follow it, indented. Every other entry says
             // where it lives: relative to the page, or (in global lists) its home path.
@@ -145,10 +156,11 @@ export function CellValue({ item, name, ctx }: { item: Item; name: string; ctx: 
   const hit = fieldOf(item, name, ctx.ix);
   // computed progress reads as "2/7", like in rows and on the page (the query value stays a percentage)
   if (hit?.prop?.kind === "computed" && hit.prop.computed?.fn !== "count") {
-    const pr = ctx.ix.progress(item.id, hit.prop.computed?.of);
-    return <ProgressCount done={pr.done} total={pr.total} className={pr.total ? undefined : "text-muted-foreground"} />;
+    const progress = ctx.ix.progress(item.id, hit.prop.computed?.of);
+    return <ProgressCount done={progress.done} total={progress.total} className={progress.total ? undefined : "text-muted-foreground"} />;
   }
-  if (!hit || hit.value === undefined || hit.value === null || hit.value === "" || (Array.isArray(hit.value) && !hit.value.length)) return <span className="text-faint">–</span>;
+  const empty = !hit || hit.value === undefined || hit.value === null || hit.value === "" || (Array.isArray(hit.value) && !hit.value.length);
+  if (empty) return <span className="text-faint">–</span>;
   const v = hit.value;
   if (hit.kind === "item") {
     const target = ctx.ix.get(String(v));
@@ -165,8 +177,8 @@ export function CellValue({ item, name, ctx }: { item: Item; name: string; ctx: 
     return (
       <span className="flex flex-wrap gap-1">
         {ids.map((id) => {
-          const o = hit.prop?.options?.find((x) => x.id === id);
-          return o ? <StatusPill key={id} option={o} small /> : <span key={id}>{id}</span>;
+          const option = hit.prop?.options?.find((o) => o.id === id);
+          return option ? <StatusPill key={id} option={option} small /> : <span key={id}>{id}</span>;
         })}
       </span>
     );
@@ -175,10 +187,10 @@ export function CellValue({ item, name, ctx }: { item: Item; name: string; ctx: 
     return (
       <span className="flex flex-wrap gap-x-2">
         {(v as string[]).map((id) => {
-          const x = ctx.ix.get(id);
-          return x ? (
+          const target = ctx.ix.get(id);
+          return target ? (
             <a key={id} href={itemHref(id)} className="hover:underline">
-              {x.title}
+              {target.title}
             </a>
           ) : null;
         })}

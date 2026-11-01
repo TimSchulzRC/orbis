@@ -14,6 +14,9 @@ interface MenuEntry {
 
 let open: { close: () => void } | null = null;
 
+/** Menus keep this many px away from the window's edges. */
+const EDGE = 8;
+
 /** With `maxRows` a longer list scrolls, half of the next row showing that there is more. */
 export function showMenu(at: { left: number; top: number }, sections: { title?: string; entries: MenuEntry[] }[], onClose?: () => void, maxRows?: number) {
   open?.close();
@@ -21,30 +24,32 @@ export function showMenu(at: { left: number; top: number }, sections: { title?: 
   box.className = "cm-menu";
   box.setAttribute("role", "menu");
   const rows: HTMLButtonElement[] = [];
-  sections.forEach((s, i) => {
+  sections.forEach((section, i) => {
     if (i > 0) box.append(Object.assign(document.createElement("div"), { className: "cm-menu-sep" }));
-    if (s.title) box.append(Object.assign(document.createElement("div"), { className: "cm-menu-title", textContent: s.title }));
-    for (const e of s.entries) {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.setAttribute("role", "menuitem");
-      b.className = "cm-menu-row" + (e.danger ? " danger" : "") + (e.active ? " active" : "");
-      b.innerHTML = (e.icon ? `<span class="cm-menu-icon">${iconHTML(e.icon, 16)}</span>` : "") + `<span class="cm-menu-label"></span>` + (e.hint ? `<span class="cm-menu-hint"></span>` : "");
-      b.querySelector(".cm-menu-label")!.textContent = e.label;
-      if (e.hint) b.querySelector(".cm-menu-hint")!.textContent = e.hint;
-      if (e.color) b.querySelector<HTMLElement>(".cm-menu-icon")?.style.setProperty("color", e.color);
-      b.addEventListener("mousedown", (ev) => ev.preventDefault());
-      b.addEventListener("click", () => (close(), e.run()));
-      rows.push(b);
-      box.append(b);
+    if (section.title) box.append(Object.assign(document.createElement("div"), { className: "cm-menu-title", textContent: section.title }));
+    for (const entry of section.entries) {
+      const row = document.createElement("button");
+      row.type = "button";
+      row.setAttribute("role", "menuitem");
+      row.className = "cm-menu-row" + (entry.danger ? " danger" : "") + (entry.active ? " active" : "");
+      row.innerHTML = (entry.icon ? `<span class="cm-menu-icon">${iconHTML(entry.icon, 16)}</span>` : "") + `<span class="cm-menu-label"></span>` + (entry.hint ? `<span class="cm-menu-hint"></span>` : "");
+      row.querySelector(".cm-menu-label")!.textContent = entry.label;
+      if (entry.hint) row.querySelector(".cm-menu-hint")!.textContent = entry.hint;
+      if (entry.color) row.querySelector<HTMLElement>(".cm-menu-icon")?.style.setProperty("color", entry.color);
+      row.addEventListener("mousedown", (e) => e.preventDefault());
+      row.addEventListener("click", () => (close(), entry.run()));
+      rows.push(row);
+      box.append(row);
     }
   });
   document.body.append(box);
   const cut = maxRows ? rows[maxRows] : undefined;
   if (cut) box.style.maxHeight = cut.offsetTop + cut.offsetHeight / 2 + "px";
-  const r = box.getBoundingClientRect();
-  box.style.left = Math.max(8, Math.min(at.left, innerWidth - r.width - 8)) + "px";
-  box.style.top = (at.top + r.height > innerHeight - 8 ? Math.max(8, at.top - r.height - 32) : at.top) + "px";
+  const rect = box.getBoundingClientRect();
+  box.style.left = Math.max(EDGE, Math.min(at.left, innerWidth - rect.width - EDGE)) + "px";
+  // no room below: open above instead
+  const fitsBelow = at.top + rect.height <= innerHeight - EDGE;
+  box.style.top = (fitsBelow ? at.top : Math.max(EDGE, at.top - rect.height - 32)) + "px";
   let index = -1;
   const focus = (i: number) => {
     index = (i + rows.length) % rows.length;
@@ -83,14 +88,14 @@ export function askText(at: { left: number; top: number }, value: string, label:
     input.placeholder = label;
     box.append(input);
     document.body.append(box);
-    box.style.left = Math.max(8, Math.min(at.left, innerWidth - box.offsetWidth - 8)) + "px";
+    box.style.left = Math.max(EDGE, Math.min(at.left, innerWidth - box.offsetWidth - EDGE)) + "px";
     box.style.top = at.top + "px";
-    const done = (v: string | null) => {
+    const done = (result: string | null) => {
       if (!box.isConnected) return;
       box.remove();
       document.removeEventListener("mousedown", outside, true);
       open = null;
-      resolve(v);
+      resolve(result);
     };
     const outside = (e: MouseEvent) => !box.contains(e.target as Node) && done(null);
     input.addEventListener("keydown", (e) => {

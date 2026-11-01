@@ -9,7 +9,7 @@ import { Blobs } from "./blobs";
 import { MAX_BLOB } from "./config";
 import { body, fail, json } from "./http";
 import { Backups } from "./backup";
-import { FORMAT, PERSONAL, fileTypeOf } from "@obtion/core/model";
+import { FORMAT, type Item, PERSONAL, fileTypeOf } from "@obtion/core/model";
 import { addLaterDefaultProps, migrateCollections, renameShippedLabels, upgradeAreas, upgradeExplicitRoles, upgradeHideEmptyTaskFields } from "@obtion/core/setup";
 import { SETUP_ORIGIN, storeWriter } from "./importers";
 import { UndoError, undoStep } from "./undo";
@@ -40,22 +40,31 @@ async function sniffImage(path: string): Promise<string> {
 function upgradeOldData(store: Store) {
   // properties shipped after a default type was set up: added once, nothing migrated
   const lang = store.setupLang();
-  const w = storeWriter(store, SETUP_ORIGIN);
-  if (lang && addLaterDefaultProps(w, lang).length) store.flush();
-  if (lang && renameShippedLabels(w, lang)) store.flush();
-  if (upgradeHideEmptyTaskFields(w)) store.flush();
+  const writer = storeWriter(store, SETUP_ORIGIN);
+  if (lang && addLaterDefaultProps(writer, lang).length) store.flush();
+  if (lang && renameShippedLabels(writer, lang)) store.flush();
+  if (upgradeHideEmptyTaskFields(writer)) store.flush();
   // 31.10.: roles once recognised by name ("Wartet auf", "Pausiert") become explicit in the types
-  if (upgradeExplicitRoles(w, store.index()).length) store.flush();
+  if (upgradeExplicitRoles(writer, store.index()).length) store.flush();
   // 26.10.: collections removed; their views move to the types, the inbox rule to the settings
-  const moved = lang ? migrateCollections(w, store.index(), store.eachDoc(), lang) : [];
-  if (moved.length) (store.flush(), console.log(`[obtion] collections migrated:\n  ${moved.join("\n  ")}`));
+  const moved = lang ? migrateCollections(writer, store.index(), store.eachDoc(), lang) : [];
+  if (moved.length) {
+    store.flush();
+    console.log(`[obtion] collections migrated:\n  ${moved.join("\n  ")}`);
+  }
   // 27.10.: documents from before areas belong to the personal area
-  const marked = upgradeAreas(w, store.eachDoc());
-  if (marked) (store.flush(), console.log(`[obtion] areas: ${marked} documents marked as personal`));
+  const marked = upgradeAreas(writer, store.eachDoc());
+  if (marked) {
+    store.flush();
+    console.log(`[obtion] areas: ${marked} documents marked as personal`);
+  }
 }
 
 // The workspace is the unit of rights now; inside it only the personal area syncs.
 const AREAS = new Set([PERSONAL]);
+/** Documents per message of a first sync. */
+const SYNC_BATCH = 150;
+const BLOBS = "/api/blobs/";
 
 const clientMsg: z.ZodType<ClientMsg> = z.discriminatedUnion("t", [
   z.object({ t: z.literal("hello"), area: z.string().optional(), since: z.number(), sinceId: z.string().optional(), device: z.string().optional() }),
@@ -65,8 +74,8 @@ const clientMsg: z.ZodType<ClientMsg> = z.discriminatedUnion("t", [
 
 export function parseClientMsg(raw: string): ClientMsg | null {
   try {
-    const r = clientMsg.safeParse(JSON.parse(raw));
-    return r.success ? r.data : null;
+    const parsed = clientMsg.safeParse(JSON.parse(raw));
+    return parsed.success ? parsed.data : null;
   } catch {
     return null;
   }
@@ -83,7 +92,7 @@ export class Workspace {
     this.store = new Store(dir);
     upgradeOldData(this.store);
     this.blobs = new Blobs(join(dir, "blobs"), this.store);
-    const mirror = (this.mirror = new Mirror(this.store, join(dir, "vault"), this.blobs));
+    this.mirror = new Mirror(this.store, join(dir, "vault"), this.blobs);
     this.store.on({
       update: (u, from) => {
         const item: WireUpdate = { s: u.seq, d: u.doc, u: toB64(u.data), o: u.origin };
@@ -102,7 +111,7 @@ export class Workspace {
       for (const ws of this.conns) if (ws.data.areas.size) send(ws, { t: "blob", hash });
     };
     this.blobs.scan();
-    mirror.start();
+    this.mirror.start();
     this.backups = new Backups(this.store, join(dir, "backups"));
     this.backups.start();
   }
@@ -130,11 +139,10 @@ export class Workspace {
     send(ws, { t: "welcome", hub: store.serverId, area, seq: last.seq, format: FORMAT });
     const reset = !store.knowsCursor(area, msg.since, msg.sinceId); // server restored from an older backup; replica must merge everything
     const ids = store.docsSince(area, reset ? 0 : msg.since);
-    const BATCH = 150;
     if (ids.length === 0) send(ws, { t: "updates", area, items: [], last: last.seq, lastId: last.uid || undefined, initial: true, done: true, reset });
-    for (let i = 0; i < ids.length; i += BATCH) {
-      const items = ids.slice(i, i + BATCH).map((d) => ({ d, u: toB64(store.stateOf(d)) }));
-      const done = i + BATCH >= ids.length;
+    for (let i = 0; i < ids.length; i += SYNC_BATCH) {
+      const items = ids.slice(i, i + SYNC_BATCH).map((d) => ({ d, u: toB64(store.stateOf(d)) }));
+      const done = i + SYNC_BATCH >= ids.length;
       // Only the final batch carries the real position, so an interrupted first sync is retried.
       send(ws, { t: "updates", area, items, last: done ? last.seq : 0, lastId: done ? last.uid || undefined : undefined, initial: true, done, reset: reset && i === 0 });
     }
@@ -189,7 +197,7 @@ export class Workspace {
       }
     }
 
-    if (rest.startsWith("/api/blobs/")) return this.blob(req, url, rest.slice("/api/blobs/".length));
+    if (rest.startsWith(BLOBS)) return this.blob(req, url, rest.slice(BLOBS.length));
     return fail(404, "not found");
   }
 
@@ -210,10 +218,14 @@ export class Workspace {
       return (await blobs.put(hash, data)) ? json({ ok: true }) : fail(422, "hash mismatch");
     }
     // the probe header lets the app check without a console error
-    if (!blobs.has(hash)) return req.headers.get("x-obtion-probe") ? new Response(null, { status: 204, headers: { "x-obtion-missing": "1" } }) : fail(404, "not found");
+    if (!blobs.has(hash)) {
+      if (req.headers.get("x-obtion-probe")) return new Response(null, { status: 204, headers: { "x-obtion-missing": "1" } });
+      return fail(404, "not found");
+    }
     if (url.searchParams.has("check")) return new Response(null, { status: 204 });
-    const rec = store.live().find((r) => r.file?.hash === hash) ?? [...store.records.values()].find((r) => r.file?.hash === hash);
-    const mime = rec?.file?.mime ?? (await sniffImage(blobs.path(hash))); // derived versions have no record
+    const hasThisFile = (r: Item) => r.file?.hash === hash;
+    const record = store.live().find(hasThisFile) ?? [...store.records.values()].find(hasThisFile);
+    const mime = record?.file?.mime ?? (await sniffImage(blobs.path(hash))); // derived versions have no record
     const headers: Record<string, string> = {
       "cache-control": "private, max-age=31536000, immutable",
       "x-content-type-options": "nosniff",
@@ -221,7 +233,7 @@ export class Workspace {
       "content-security-policy": mime === "application/pdf" ? "script-src 'none'" : "sandbox",
       "content-type": INLINE.test(mime) ? mime : "application/octet-stream",
     };
-    const fname = (url.searchParams.get("name") ?? rec?.file?.name ?? hash).replace(/["\\\r\n]/g, "");
+    const fname = (url.searchParams.get("name") ?? record?.file?.name ?? hash).replace(/["\\\r\n]/g, "");
     if (url.searchParams.has("download") || !INLINE.test(mime)) headers["content-disposition"] = `attachment; filename*=UTF-8''${encodeURIComponent(fname)}`;
     return new Response(Bun.file(blobs.path(hash)), { headers });
   }

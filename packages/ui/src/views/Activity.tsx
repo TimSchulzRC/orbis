@@ -13,9 +13,13 @@ import { ItemIcon, RelTime } from "../ui/item-look";
 import { cn } from "../lib/utils";
 import { byMe, who } from "../ui/actor";
 
-function propName(ix: Index, item: Item | undefined, id: string) {
-  const s = ix.schemaOf(item);
-  return s?.properties.find((p) => p.id === id) ?? s?.removedProperties.find((p) => p.id === id);
+/** Rows fetched per page of the log. */
+const PAGE = 60;
+
+/** The property `id` of the item's type, also when it was removed since. */
+function propDef(ix: Index, item: Item | undefined, id: string) {
+  const schema = ix.schemaOf(item);
+  return schema?.properties.find((p) => p.id === id) ?? schema?.removedProperties.find((p) => p.id === id);
 }
 
 function describe(c: FieldChange, item: Item | undefined, ix: Index, t: T): string {
@@ -23,19 +27,21 @@ function describe(c: FieldChange, item: Item | undefined, ix: Index, t: T): stri
   const list = (x: unknown) => ((x as string[]) ?? []).map(title).join(", ");
   const added = (c.to as string[]) ?? [];
   const removed = (c.from as string[]) ?? [];
+  // what was added, what was removed (each only if any)
+  const addedRemoved = (plus: string, minus: string) => [added.length && plus, removed.length && minus].filter(Boolean).join(", ");
   if (c.field.startsWith("p:")) {
-    const p = propName(ix, item, c.field.slice(2));
-    const v = (x: unknown) => {
+    const prop = propDef(ix, item, c.field.slice(2));
+    const show = (x: unknown) => {
       if (x === undefined || x === null || x === "") return "–";
-      if (p?.options) return optionNames(p, x as Value).join(", ");
+      if (prop?.options) return optionNames(prop, x as Value).join(", ");
       return String(x);
     };
-    return `${p?.name ?? c.field.slice(2)}: ${v(c.from)} → ${v(c.to)}`;
+    return `${prop?.name ?? c.field.slice(2)}: ${show(c.from)} → ${show(c.to)}`;
   }
   if (c.field.startsWith("x:")) return `${c.field.slice(2)}: ${c.from ?? "–"} → ${c.to ?? "–"}`;
   if (c.field.startsWith("r:")) {
-    const p = propName(ix, item, c.field.slice(2));
-    return [added.length && `${p?.name ?? "?"} +${list(added)}`, removed.length && `${p?.name ?? "?"} −${list(removed)}`].filter(Boolean).join(", ");
+    const name = propDef(ix, item, c.field.slice(2))?.name ?? "?";
+    return addedRemoved(`${name} +${list(added)}`, `${name} −${list(removed)}`);
   }
   switch (c.field) {
     case "body":
@@ -43,11 +49,11 @@ function describe(c: FieldChange, item: Item | undefined, ix: Index, t: T): stri
     case "update":
       return t("activity.update", { text: String(c.to).slice(0, 140) });
     case "tags":
-      return [added.length && t("activity.tagged", { tags: added.map((x) => "#" + x).join(" ") }), removed.length && t("activity.untagged", { tags: removed.map((x) => "#" + x).join(" ") })].filter(Boolean).join(", ");
+      return addedRemoved(t("activity.tagged", { tags: added.map((x) => "#" + x).join(" ") }), t("activity.untagged", { tags: removed.map((x) => "#" + x).join(" ") }));
     case "refs":
-      return [added.length && `${t("item.refs")} +${list(added)}`, removed.length && `${t("item.refs")} −${list(removed)}`].filter(Boolean).join(", ");
+      return addedRemoved(`${t("item.refs")} +${list(added)}`, `${t("item.refs")} −${list(removed)}`);
     case "parents":
-      return [added.length && t("activity.placed", { list: list(added) }), removed.length && t("activity.unplaced", { list: list(removed) })].filter(Boolean).join(", ");
+      return addedRemoved(t("activity.placed", { list: list(added) }), t("activity.unplaced", { list: list(removed) }));
     case "type":
       return c.to ? t("activity.typed", { name: ix.typeName(String(c.to)) ?? "?" }) : t("activity.untyped");
     case "home":
@@ -70,11 +76,11 @@ function describe(c: FieldChange, item: Item | undefined, ix: Index, t: T): stri
 }
 
 function Entry({ e, compact, noVerb }: { e: ActivityEvent; compact?: boolean; noVerb?: boolean }) {
-  const r = useRepo();
+  const repo = useRepo();
   const itemHref = useItemHref();
   const { t } = useT();
-  const ix = r.index();
-  const item = r.get(e.doc);
+  const ix = repo.index();
+  const item = repo.get(e.doc);
   const changes = e.changes.map((c) => describe(c, item, ix, t)).filter(Boolean);
   const verb = t("activity.kind." + e.kind);
   const op = item?.kind === "op" ? item : undefined;
@@ -103,10 +109,10 @@ function Entry({ e, compact, noVerb }: { e: ActivityEvent; compact?: boolean; no
 
 function Avatar({ origin }: { origin: string }) {
   const { t } = useT();
-  const w = who(origin, t);
+  const actor = who(origin, t);
   return (
-    <span className={cn("mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full", w.agent ? "text-ok" : "text-muted-foreground")} style={{ background: w.agent ? "color-mix(in srgb, var(--ok) 14%, transparent)" : "var(--surface-2)" }}>
-      <w.icon size={13} />
+    <span className={cn("mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full", actor.agent ? "text-ok" : "text-muted-foreground")} style={{ background: actor.agent ? "color-mix(in srgb, var(--ok) 14%, transparent)" : "var(--surface-2)" }}>
+      <actor.icon size={13} />
     </span>
   );
 }
@@ -119,8 +125,8 @@ const SYSTEM_TEXTS: [RegExp, string][] = [
 ];
 function systemText(text: string, t: T): string {
   for (const [re, key] of SYSTEM_TEXTS) {
-    const m = re.exec(text);
-    if (m) return t(key, { count: Number(m[1]) });
+    const match = re.exec(text);
+    if (match) return t(key, { count: Number(match[1]) });
   }
   return text;
 }
@@ -129,12 +135,12 @@ function systemText(text: string, t: T): string {
 function StepGroup({ events, space }: { events: ActivityEvent[]; space?: string }) {
   const { t } = useT();
   const head = events[0]!;
-  const w = who(head.origin, t);
+  const actor = who(head.origin, t);
   return (
     <>
       <Avatar origin={head.origin} />
       <div className="min-w-0 flex-1">
-        <span className="font-medium">{w.label}</span>
+        <span className="font-medium">{actor.label}</span>
         {head.undoes && <span className="text-muted-foreground"> {t(head.redo ? "activity.redoStep" : "activity.undoStep")}</span>}
         <ul className={cn("space-y-1", events.length > 1 && "mt-0.5")}>
           {events.map((e) => (
@@ -183,8 +189,8 @@ export function Activity() {
   const [fetched, setFetched] = useState<Record<string, Fetched>>({});
   const [filter, setFilter] = useState<"all" | "agent" | "you">("all");
   const load = (space: string, before?: number) =>
-    spaceCall<ActivityEvent[]>(space, `/api/activity?limit=60${before ? `&before=${before}` : ""}`).then(
-      (list) => setFetched((f) => ({ ...f, [space]: { events: before ? [...(f[space]?.events ?? []), ...list] : list, more: list.length === 60, error: false } })),
+    spaceCall<ActivityEvent[]>(space, `/api/activity?limit=${PAGE}${before ? `&before=${before}` : ""}`).then(
+      (list) => setFetched((f) => ({ ...f, [space]: { events: before ? [...(f[space]?.events ?? []), ...list] : list, more: list.length === PAGE, error: false } })),
       // a page that failed is still to fetch: "more" stays and tries the same one again
       () => setFetched((f) => ({ ...f, [space]: { events: f[space]?.events ?? [], more: !!before, error: true } })),
     );
@@ -194,23 +200,23 @@ export function Activity() {
   }, [ids.join(), online]);
   // per workspace the fetched rows, then the live events that came since
   const logs = ids.map((id, n) => {
-    const f = fetched[id];
-    const events = [...(f?.events ?? []), ...repos[n]!.events].filter((e, i, a) => a.findIndex((x) => x.id === e.id) === i);
-    return { id, f, events };
+    const loaded = fetched[id];
+    const events = [...(loaded?.events ?? []), ...repos[n]!.events].filter((e, i, a) => a.findIndex((x) => x.id === e.id) === i);
+    return { id, loaded, events };
   });
   // a workspace with more to fetch is complete only down to its oldest row: older rows of the others wait
-  const cutoff = Math.max(0, ...logs.filter((l) => l.f?.more).map((l) => Math.min(...l.f!.events.map((e) => e.ts))));
+  const cutoff = Math.max(0, ...logs.filter((l) => l.loaded?.more).map((l) => Math.min(...l.loaded!.events.map((e) => e.ts))));
   const all: Placed[] = logs
     .flatMap((l) => l.events.map((e) => ({ ...e, space: l.id })))
     .filter((e) => e.ts >= cutoff)
     .filter((e) => {
       if (filter === "all") return true;
-      const w = who(e.origin, t);
-      return filter === "agent" ? w.agent : byMe(w, me);
+      const actor = who(e.origin, t);
+      return filter === "agent" ? actor.agent : byMe(actor, me);
     })
     .sort((a, b) => b.ts - a.ts || b.id - a.id);
   const nameOf = (id: string) => (spaces.length > 1 ? spaces.find((s) => s.id === id)?.name : undefined);
-  const nothing = logs.every((l) => l.f?.error && !l.events.length);
+  const nothing = logs.every((l) => l.loaded?.error && !l.events.length);
   return (
     <div className="page-read">
       <h1 className="page-title">{t("nav.activity")}</h1>
@@ -235,8 +241,8 @@ export function Activity() {
           ))}
         </ul>
       )}
-      {logs.some((l) => l.f?.more) && (
-        <Button variant="plain" onClick={() => logs.forEach((l) => l.f?.more && void load(l.id, Math.min(...l.f.events.map((e) => e.id))))} className="mt-6 text-sm text-muted-foreground hover:text-fg">
+      {logs.some((l) => l.loaded?.more) && (
+        <Button variant="plain" onClick={() => logs.forEach((l) => l.loaded?.more && void load(l.id, Math.min(...l.loaded.events.map((e) => e.id))))} className="mt-6 text-sm text-muted-foreground hover:text-fg">
           {t("activity.more")}
         </Button>
       )}

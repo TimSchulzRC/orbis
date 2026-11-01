@@ -10,9 +10,9 @@ import { tr } from "../i18n";
 export function TagInput({ onAdd, exclude = [], start, onCancel }: { onAdd: (t: string) => void; exclude?: string[]; start?: boolean; onCancel?: () => void }) {
   const repo = useRepo();
   const [editing, setEditing] = useState(!!start);
-  const [v, setV] = useState("");
+  const [text, setText] = useState("");
   const [sel, setSel] = useState(0);
-  const q = normalizeTag(v);
+  const q = normalizeTag(text);
   const suggestions = useMemo(() => {
     if (!editing || !q) return [];
     const all = repo.index().tags().filter((t) => !exclude.includes(t.tag) && t.tag.includes(q));
@@ -25,7 +25,7 @@ export function TagInput({ onAdd, exclude = [], start, onCancel }: { onAdd: (t: 
   const add = (t?: string) => {
     const tag = normalizeTag(t ?? "");
     if (tag) onAdd(tag);
-    setV("");
+    setText("");
     setSel(0);
   };
   if (!editing)
@@ -37,9 +37,9 @@ export function TagInput({ onAdd, exclude = [], start, onCancel }: { onAdd: (t: 
       <Input
         variant="sm"
         autoFocus
-        value={v}
-        onChange={(e) => (setV(e.target.value), setSel(0))}
-        onBlur={() => setTimeout(() => (setEditing(false), setV(""), onCancel?.()), 150)}
+        value={text}
+        onChange={(e) => (setText(e.target.value), setSel(0))}
+        onBlur={() => setTimeout(() => (setEditing(false), setText(""), onCancel?.()), 150)}
         onKeyDown={(e) => {
           if (e.key === "ArrowDown") (e.preventDefault(), setSel((s) => Math.min(options.length - 1, s + 1)));
           else if (e.key === "ArrowUp") (e.preventDefault(), setSel((s) => Math.max(0, s - 1)));
@@ -54,7 +54,7 @@ export function TagInput({ onAdd, exclude = [], start, onCancel }: { onAdd: (t: 
             e.preventDefault();
             add(q);
           } else if (e.key === "Escape") setEditing(false);
-          else if (e.key === "Backspace" && !v) setEditing(false);
+          else if (e.key === "Backspace" && !text) setEditing(false);
         }}
         placeholder={tr("tag.placeholder")}
         aria-label={tr("tag.add")}

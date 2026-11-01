@@ -19,6 +19,11 @@ import { createAndOpen } from "../actions";
 import { Button } from "./primitives";
 import { openSettings } from "./settings-open";
 
+/** Search hits shown for a query; reaching it also offers the full search page. */
+const MAX_HITS = 10;
+/** Recently changed items shown before anything is typed. */
+const RECENT_COUNT = 8;
+
 type Entry =
   | { kind: "item"; id: string; space: string }
   | { kind: "create"; type: string | null; title: string }
@@ -46,21 +51,21 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
         [of(t("nav.files")), spaceHref(s.id, "/files")],
         [of(t("nav.types")), spaceHref(s.id, "/types")],
         [of(t("nav.graph")), spaceHref(s.id, "/graph")],
-        [several ? `${t("space.settings")} · ${s.name}` : t("space.settings"), spaceHref(s.id, "/settings")],
+        [of(t("space.settings")), spaceHref(s.id, "/settings")],
       ];
     }),
       [t("nav.activity"), "#/activity"],
       [t("nav.trash"), "#/trash"],
   ];
-  const cs = captureSpace() ?? shown[0]!.id;
-  const repo = repoOf(cs);
+  const captureIn = captureSpace() ?? shown[0]!.id;
+  const repo = repoOf(captureIn);
   const ix = repo.index();
   const pinnedTypes = ix.captureTypes();
   const captureTypes = [...pinnedTypes, ...ix.typesByName().filter((x) => !pinnedTypes.includes(x.id)).map((x) => x.id)];
   const cmds: [string, () => void][] = [
     [t("palette.cmd.sortInbox"), () => navigate("/review")],
     [t("nav.settings"), openSettings],
-    [t("palette.cmd.newType"), () => navigate("/types?new=1", { space: cs })],
+    [t("palette.cmd.newType"), () => navigate("/types?new=1", { space: captureIn })],
     [t("palette.cmd.language"), () => setLang(getLang() === "de" ? "en" : "de")],
     ...(["system", "light", "dark"] as const).map((v): [string, () => void] => [t("palette.cmd.theme", { name: t("theme." + v) }), () => setTheme(v)]),
   ];
@@ -69,21 +74,21 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
     const out: Entry[] = [];
     const query = q.trim();
     const lq = query.toLowerCase();
-    const words = (label: string) => label.toLowerCase().split(/\s+/).some((w) => w.startsWith(lq)) || label.toLowerCase().startsWith(lq);
-    const nav = navs.filter(([label]) => query && words(label!));
-    out.push(...nav.map(([label, path]) => ({ kind: "nav" as const, label: label!, path: path! })));
-    if (query) out.push(...cmds.filter(([label]) => words(label)).map(([label, run]) => ({ kind: "cmd" as const, label, run })));
+    const matches = (label: string) => label.toLowerCase().split(/\s+/).some((w) => w.startsWith(lq)) || label.toLowerCase().startsWith(lq);
+    const toNav = ([label, path]: string[]) => ({ kind: "nav" as const, label: label!, path: path! });
+    out.push(...navs.filter(([label]) => query && matches(label!)).map(toNav));
+    if (query) out.push(...cmds.filter(([label]) => matches(label)).map(([label, run]) => ({ kind: "cmd" as const, label, run })));
     // interleave the workspaces' hits, since each list is ranked by its own search
-    const per = repos.map((r, n) => (query ? r.search(query, 10) : r.live()).map((h) => ({ h, space: shown[n]!.id })));
+    const perSpace = repos.map((spaceRepo, n) => (query ? spaceRepo.search(query, MAX_HITS) : spaceRepo.live()).map((h) => ({ h, space: shown[n]!.id })));
     const hits: { h: Item; space: string }[] = query
-      ? Array.from({ length: 10 }, (_, i) => per.map((list) => list[i])).flat().filter((x) => !!x).slice(0, 10)
-      : per.flat().sort((a, b) => b.h.updated - a.h.updated).slice(0, 8);
+      ? Array.from({ length: MAX_HITS }, (_, i) => perSpace.map((list) => list[i])).flat().filter((x) => !!x).slice(0, MAX_HITS)
+      : perSpace.flat().sort((a, b) => b.h.updated - a.h.updated).slice(0, RECENT_COUNT);
     out.push(...hits.map(({ h, space }) => ({ kind: "item" as const, id: h.id, space })));
     if (query) {
-      if (hits.length >= 10) out.push({ kind: "nav", label: t("palette.allHits"), path: `#/search?q=${encodeURIComponent(query)}` });
+      if (hits.length >= MAX_HITS) out.push({ kind: "nav", label: t("palette.allHits"), path: `#/search?q=${encodeURIComponent(query)}` });
       out.push(...[null, ...captureTypes].map((type) => ({ kind: "create" as const, type, title: query })));
     }
-    if (!query) for (const [label, path] of navs) out.push({ kind: "nav", label: label!, path: path! });
+    if (!query) out.push(...navs.map(toNav));
     return out;
   })();
 
@@ -94,7 +99,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   const run = (it: Entry) => {
     onClose();
     if (it.kind === "item") openItem(it.id, { space: it.space });
-    else if (it.kind === "create") createAndOpen({ type: it.type, title: it.title }, repo, cs);
+    else if (it.kind === "create") createAndOpen({ type: it.type, title: it.title }, repo, captureIn);
     else if (it.kind === "nav") location.hash = it.path;
     else if (it.kind === "cmd") it.run();
   };
@@ -122,21 +127,22 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
             const common = { "data-i": i, onMouseEnter: () => setSel(i), onClick: () => run(it), className: cn("flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm", active && "bg-selected"), key: i };
             if (it.kind === "item") {
               const ix = repoOf(it.space).index();
-              const n = ix.get(it.id)!;
-              const st = statusOf(n, ix.schemaOf(n));
+              const item = ix.get(it.id)!;
+              const status = statusOf(item, ix.schemaOf(item));
+              const home = ix.homePath(item.id);
               return (
                 <Button variant="plain" {...common}>
-                  <ItemIcon item={n} />
+                  <ItemIcon item={item} />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate">{titleOf(n, t)}</span>
-                    {ix.homePath(n.id).length > 0 ? (
-                      <span className="block truncate text-xs text-muted-foreground">{shortPath(ix.homePath(n.id))}</span>
+                    <span className="block truncate">{titleOf(item, t)}</span>
+                    {home.length > 0 ? (
+                      <span className="block truncate text-xs text-muted-foreground">{shortPath(home)}</span>
                     ) : (
-                      q.trim() && n.body && <span className="block truncate text-xs text-muted-foreground">{snippet(n.body, q, 90)}</span>
+                      q.trim() && item.body && <span className="block truncate text-xs text-muted-foreground">{snippet(item.body, q, 90)}</span>
                     )}
                   </span>
-                  <InTray item={n} ix={ix} />
-                  {st && <StatusPill option={st.option} group={st.group} small />}
+                  <InTray item={item} ix={ix} />
+                  {status && <StatusPill option={status.option} group={status.group} small />}
                   {several && <span className="max-w-28 shrink-0 truncate text-xs text-muted-foreground">{nameOf(it.space)}</span>}
                   {active && <CornerDownLeft size={14} className="text-muted-foreground" />}
                 </Button>
@@ -150,7 +156,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
                     {it.type ? t("palette.newTyped", { name: ix.typeName(it.type) }) : t("palette.new")} <span className="font-medium">{t("palette.quoted", { text: it.title })}</span>
                   </span>
                   {it.type && <TypeGlyph schema={ix.types.get(it.type)?.schema} size={14} />}
-                  {several && <span className="max-w-28 shrink-0 truncate text-xs text-muted-foreground">{nameOf(cs)}</span>}
+                  {several && <span className="max-w-28 shrink-0 truncate text-xs text-muted-foreground">{nameOf(captureIn)}</span>}
                 </Button>
               );
             if (it.kind === "cmd")

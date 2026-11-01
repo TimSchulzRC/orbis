@@ -15,8 +15,8 @@ export function webHref(url: string): string {
 }
 
 /** The quiet hint next to a page in link and mention lists: "Datei", else its type. */
-export function kindHint(r: Item, ix: Index): string {
-  return r.kind === "datei" ? tr("kind.file") : (ix.typeName(r.type) ?? "");
+export function kindHint(item: Item, ix: Index): string {
+  return item.kind === "datei" ? tr("kind.file") : (ix.typeName(item.type) ?? "");
 }
 
 export const filePreview = (text: string) => plainText(text).slice(0, 800);

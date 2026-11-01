@@ -4,6 +4,7 @@ import * as Y from "yjs";
 import {
   type Capabilities,
   type Item,
+  type OptionDef,
   type PropDef,
   type SettingsRecord,
   type ViewTab,
@@ -62,6 +63,7 @@ export function defaultTypes(lang: Lang): Record<string, TypeSpec> {
       { id: "pr_low", name: t("priority.low"), color: "green" },
     ],
   };
+  const blockedBy: Omit<PropDef, "sort"> = { id: BLOCKED_BY, name: t("prop.blockedBy"), kind: "relation", multiple: true, target: `${typeKey}:${t("task.name")} | ${typeKey}:${t("project.name")}`, inverseName: t("prop.blocking"), hideEmpty: true, blocks: true };
   return {
     [SYS.card]: {
       name: t("card.name"),
@@ -96,7 +98,7 @@ export function defaultTypes(lang: Lang): Record<string, TypeSpec> {
         { id: "p_period", name: t("prop.period"), kind: "date", range: true },
         { id: "p_summary", name: t("prop.summary"), kind: "text" },
         { id: "p_progress", name: t("prop.progress"), kind: "computed", computed: { fn: "progress", of: SYS.task } },
-        { id: BLOCKED_BY, name: t("prop.blockedBy"), kind: "relation", multiple: true, target: `${typeKey}:${t("task.name")} | ${typeKey}:${t("project.name")}`, inverseName: t("prop.blocking"), hideEmpty: true, blocks: true },
+        blockedBy,
       ],
     },
     [SYS.task]: {
@@ -122,7 +124,7 @@ export function defaultTypes(lang: Lang): Record<string, TypeSpec> {
         },
         priority,
         { id: "p_due", name: t("prop.due"), kind: "date" },
-        { id: BLOCKED_BY, name: t("prop.blockedBy"), kind: "relation", multiple: true, target: `${typeKey}:${t("task.name")} | ${typeKey}:${t("project.name")}`, inverseName: t("prop.blocking"), hideEmpty: true, blocks: true },
+        blockedBy,
         { id: WAITING_FOR, name: t("prop.waitingFor"), kind: "text", hideEmpty: true, blocks: true },
       ],
     },
@@ -211,6 +213,13 @@ export function upgradeHideEmptyTaskFields(w: Writer): boolean {
   );
 }
 
+/** The state the app used to read from a shipped option id or a status word in the name. */
+function impliedState(o: { id: string; name: string }): OptionDef["state"] {
+  if (o.id === "st_paused") return "paused";
+  if (o.id === "st_canceled" || o.id === "st_dropped") return "dropped";
+  return statusStateOf(o.name);
+}
+
 /**
  * The app used to recognise blocking properties and paused/dropped options by id or name. This
  * writes `blocks` and `state` into the data; from then on only these marks count, so renaming
@@ -230,10 +239,8 @@ export function upgradeExplicitRoles(w: Writer, ix: Index): string[] {
         const states = new Map<string, NonNullable<PropDef["options"]>>();
         for (const p of props) {
           if (!p.options?.some((o) => o.group)) continue; // a status, also one from before it was a select
-          const state = (o: { id: string; name: string }) =>
-            o.id === "st_paused" ? "paused" : o.id === "st_canceled" || o.id === "st_dropped" ? "dropped" : statusStateOf(o.name);
-          if (!p.options.some((o) => !o.state && state(o))) continue;
-          states.set(p.id, p.options.map((o) => (o.state || !state(o) ? o : { ...o, state: state(o) })));
+          if (!p.options.some((o) => !o.state && impliedState(o))) continue;
+          states.set(p.id, p.options.map((o) => (o.state || !impliedState(o) ? o : { ...o, state: impliedState(o) })));
         }
         const marks = [by, waiting].filter((p): p is PropDef => !!p && !p.blocks);
         if (!marks.length && !states.size) continue;
@@ -291,7 +298,11 @@ export function runSetup(w: Writer, lang: Lang, origin?: string) {
   const fresh = !w.get(SYS.project);
   restoreDefaultTypes(w, lang, origin);
   // order under "Typen" and in the phone's bar
-  if (fresh) [SYS.project, SYS.task, SYS.card].forEach((id, i) => w.change(id, (d) => setSchemaField(d, "pos", keysFor(3)[i]!)));
+  if (fresh) {
+    const order = [SYS.project, SYS.task, SYS.card];
+    const pos = keysFor(order.length);
+    order.forEach((id, i) => w.change(id, (d) => setSchemaField(d, "pos", pos[i]!)));
+  }
   if (!w.get(SETTINGS_ID))
     w.change(SETTINGS_ID, (doc) => {
       initItem(doc, { kind: "settings", title: "Settings" });

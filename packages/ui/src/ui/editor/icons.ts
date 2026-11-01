@@ -24,11 +24,11 @@ export function iconHTML(icon: ComponentType<{ size?: number }>, size = 16): str
 }
 
 export function iconButton(icon: ComponentType<{ size?: number }>, label: string, className: string, size = 16): HTMLButtonElement {
-  const b = document.createElement("button");
-  b.type = "button";
-  b.className = className;
-  b.title = label;
-  b.setAttribute("aria-label", label);
-  b.innerHTML = iconHTML(icon, size);
-  return b;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = className;
+  button.title = label;
+  button.setAttribute("aria-label", label);
+  button.innerHTML = iconHTML(icon, size);
+  return button;
 }

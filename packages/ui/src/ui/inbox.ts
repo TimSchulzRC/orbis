@@ -2,6 +2,7 @@
 import { type Item, SETTINGS_ID } from "@obtion/core/model";
 import { runQuery } from "@obtion/core/query";
 import { laterItems } from "@obtion/core/placement";
+import type { Index } from "@obtion/core/graph";
 import { useAccounts } from "../accounts";
 import { useReplicas } from "./Spaces";
 import { createStore } from "../lib/store";
@@ -15,26 +16,23 @@ export interface InboxEntry {
 export const entryKey = (space: string, id: string) => `${space}/${id}`;
 
 export function useInboxItems(): InboxEntry[] {
-  const { shown } = useAccounts();
-  const repos = useReplicas(shown.map((s) => s.id));
-  return shown
-    .flatMap((s, n) => {
-      const r = repos[n]!;
-      if (!r.get(SETTINGS_ID)) return [];
-      return runQuery({ where: { inbox: true } }, { ix: r.index() }).items.map((item) => ({ key: entryKey(s.id, item.id), space: s.id, item }));
-    })
-    .sort((a, b) => b.item.created - a.item.created);
+  return useEntries((ix) => runQuery({ where: { inbox: true } }, { ix }).items);
 }
 
 /** Set aside with "Morgen wieder", out of the inbox until tomorrow. */
 export function useLaterItems(): InboxEntry[] {
+  return useEntries((ix) => laterItems(ix));
+}
+
+/** `pick`'s items across the shown workspaces, newest first. A workspace without its settings item is skipped. */
+function useEntries(pick: (ix: Index) => Item[]): InboxEntry[] {
   const { shown } = useAccounts();
   const repos = useReplicas(shown.map((s) => s.id));
   return shown
     .flatMap((s, n) => {
-      const r = repos[n]!;
-      if (!r.get(SETTINGS_ID)) return [];
-      return laterItems(r.index()).map((item) => ({ key: entryKey(s.id, item.id), space: s.id, item }));
+      const spaceRepo = repos[n]!;
+      if (!spaceRepo.get(SETTINGS_ID)) return [];
+      return pick(spaceRepo.index()).map((item) => ({ key: entryKey(s.id, item.id), space: s.id, item }));
     })
     .sort((a, b) => b.item.created - a.item.created);
 }
@@ -80,6 +78,6 @@ addEventListener("popstate", syncShelf);
 
 /** Pinned open on desktop Heute (App.tsx), which then hides its own list of entries. */
 const pinned = createStore(false);
-export const setShelfPinned = (p: boolean) => p !== pinned.get() && pinned.set(p);
+export const setShelfPinned = (value: boolean) => value !== pinned.get() && pinned.set(value);
 export const useShelfPinned = pinned.use;
 export const useShelf = shelf.use;

@@ -83,8 +83,8 @@ function idbStorage(name: string): ReplicaStorage {
     async destroy() {
       db.close();
       await new Promise((res) => {
-        const r = indexedDB.deleteDatabase(name);
-        r.onsuccess = r.onerror = r.onblocked = res;
+        const request = indexedDB.deleteDatabase(name);
+        request.onsuccess = request.onerror = request.onblocked = res;
       });
     },
   };
@@ -120,7 +120,7 @@ export function browserHost(link: SpaceLink): RepoHost {
     },
     async askOtherServer() {
       const { chooseAction } = await import("./ui/feedback");
-      const answer = await chooseAction({
+      return chooseAction({
         title: tr("sync.otherServer.title"),
         body: tr("sync.otherServer.body"),
         choices: [
@@ -128,7 +128,6 @@ export function browserHost(link: SpaceLink): RepoHost {
           { key: "replace", label: tr("sync.otherServer.replace"), primary: true },
         ],
       });
-      return answer;
     },
     async confirmDiscard(count) {
       const { chooseAction } = await import("./ui/feedback");
@@ -141,12 +140,15 @@ export function browserHost(link: SpaceLink): RepoHost {
   };
 }
 
+/** First match wins: an iPad's agent also says "Mac". */
+const DEVICE_NAMES: [RegExp, string][] = [[/iPhone/, "iPhone"], [/iPad/, "iPad"], [/Android/, "Android"], [/Mac/, "Mac"], [/Windows/, "Windows"]];
+
 /** Names this device in the origin of its changes (for later queries, never shown). */
 function deviceName(): string {
   const saved = readJSON(KEYS.device, "");
   if (saved) return saved;
   const ua = navigator.userAgent;
-  const name = /iPhone/.test(ua) ? "iPhone" : /iPad/.test(ua) ? "iPad" : /Android/.test(ua) ? "Android" : /Mac/.test(ua) ? "Mac" : /Windows/.test(ua) ? "Windows" : "Browser";
+  const name = DEVICE_NAMES.find(([pattern]) => pattern.test(ua))?.[1] ?? "Browser";
   const full = `${name}-${Math.random().toString(36).slice(2, 6)}`;
   writeJSON(KEYS.device, full);
   return full;

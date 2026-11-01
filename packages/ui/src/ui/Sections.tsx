@@ -18,6 +18,13 @@ import { type PageGroup, PageTable } from "./PageTable";
 import { shortPath } from "./Row";
 import { agentLabel, agentName } from "./AgentNotice";
 import { cmpKey } from "@obtion/core/sortkey";
+import type { T } from "@obtion/core/i18n";
+
+/** Entries per group of "Darunter" before "Alle …". */
+const FEW = 8;
+/** Updates shown at first, and at most after "Alle …". */
+const UPDATES_FIRST = 3;
+const UPDATES_MAX = 50;
 
 /** The type's plural list name ("Tasks"); below an entry of the same type "Unter-{plural}". */
 function listTitle(ix: Index, typeId: string, same: boolean): string {
@@ -26,25 +33,25 @@ function listTitle(ix: Index, typeId: string, same: boolean): string {
 }
 
 function AddRow({ label, onAdd, autoFocus, onDone }: { label: string; onAdd: (title: string) => void; autoFocus?: boolean; onDone?: () => void }) {
-  const [v, setV] = useState("");
+  const [text, setText] = useState("");
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        if (!v.trim()) return;
-        onAdd(v.trim());
-        setV("");
+        if (!text.trim()) return;
+        onAdd(text.trim());
+        setText("");
       }}
       className="field-within mt-1 flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-muted-foreground focus-within:bg-hover"
     >
       <Plus size={17} />
       <Input
         variant="bare"
-        value={v}
+        value={text}
         autoFocus={autoFocus}
-        onChange={(e) => setV(e.target.value)}
-        onBlur={() => !v.trim() && onDone?.()}
-        onKeyDown={(e) => e.key === "Escape" && (setV(""), onDone?.())}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={() => !text.trim() && onDone?.()}
+        onKeyDown={(e) => e.key === "Escape" && (setText(""), onDone?.())}
         placeholder={label}
         aria-label={label}
         className="flex-1 bg-transparent text-sm text-fg outline-none placeholder:text-faint max-md:text-[15px]"
@@ -66,13 +73,13 @@ export function ChildList({ item, typeId }: { item: Item; typeId: string }) {
   const { t } = useT();
   const ix = useIndex();
   const schema = ix.types.get(typeId)!.schema;
-  const v: ViewDef = { showDone: false, ...(item.views.main ?? {}) };
-  const setV = (patch: Partial<ViewDef>) => repo.setView(item.id, "main", { ...v, ...patch });
+  const view: ViewDef = { showDone: false, ...(item.views.main ?? {}) };
+  const setView = (patch: Partial<ViewDef>) => repo.setView(item.id, "main", { ...view, ...patch });
   const same = item.type === typeId; // sub-tasks of a task
   const subOne = (name?: string) => t("children.subOf", { name: name ?? "" }); // "Unter-Task", "Unter-Projekt"
   const all = ix.items(ix.descendants(item.id)).filter((x) => x.type === typeId && !x.deleted);
   const doneCount = all.filter((x) => isDone(x, schema)).length;
-  const shown = v.showDone ? all : all.filter((x) => !isDone(x, schema));
+  const shown = view.showDone ? all : all.filter((x) => !isDone(x, schema));
   const rank = (x: Item) => ({ active: 0, todo: 1, done: 2 })[statusOf(x, schema)?.group ?? "todo"];
   const due = (x: Item) => dueOf(x, schema) ?? "9999";
   const sorted = [...shown].sort((a, b) => rank(a) - rank(b) || cmpKey(due(a), due(b)) || a.title.localeCompare(b.title));
@@ -85,7 +92,7 @@ export function ChildList({ item, typeId }: { item: Item; typeId: string }) {
   if (!all.length)
     return same ? (
       <section className="mt-8">
-        <AddRow label={subOne(schema.name)} onAdd={(t2) => repo.create({ title: t2, type: typeId, parents: [item.id] })} />
+        <AddRow label={subOne(schema.name)} onAdd={(title) => repo.create({ title, type: typeId, parents: [item.id] })} />
       </section>
     ) : null;
   // sub-projects: children of the page's own type; each one a group
@@ -102,9 +109,11 @@ export function ChildList({ item, typeId }: { item: Item; typeId: string }) {
       ...subs.map((s) => ({ key: s.id, label: titleOf(s, t), ref: s.id, items: sorted.filter((x) => subOf(x) === s.id) })),
     ];
   }
-  const cols = [
-    ...(dueProp(schema) ? [{ key: "due", label: dueProp(schema)!.name }] : []),
-  ];
+  const dueProperty = dueProp(schema);
+  const cols = dueProperty ? [{ key: "due", label: dueProperty.name }] : [];
+  const subLabel = subOne(ix.typeName(item.type));
+  const groupOptions = [{ value: "sub", label: subLabel }, { value: "status", label: t("group.status") }];
+  const groupBy = (x: string) => setView({ group: x === "status" ? "status" : "path" });
   return (
     <section className="mt-10 max-md:mt-8">
       <SectionTitle
@@ -113,10 +122,10 @@ export function ChildList({ item, typeId }: { item: Item; typeId: string }) {
           subs.length > 0 && (
             <>
               <span className="max-md:hidden">
-                <Seg label={t("children.groupBy")} value={by} onChange={(x: string) => setV({ group: x === "status" ? "status" : "path" })} options={[{ value: "sub", label: subOne(ix.typeName(item.type)) }, { value: "status", label: t("group.status") }]} />
+                <Seg label={t("children.groupBy")} value={by} onChange={groupBy} options={groupOptions} />
               </span>
               <span className="md:hidden">
-                <ViewMenu label={by === "status" ? t("group.status") : subOne(ix.typeName(item.type))} sections={[{ value: by, options: [{ value: "sub", label: subOne(ix.typeName(item.type)) }, { value: "status", label: t("group.status") }], onChange: (x) => setV({ group: x === "status" ? "status" : "path" }) }]} />
+                <ViewMenu label={by === "status" ? t("group.status") : subLabel} sections={[{ value: by, options: groupOptions, onChange: groupBy }]} />
               </span>
             </>
           )
@@ -131,7 +140,7 @@ export function ChildList({ item, typeId }: { item: Item; typeId: string }) {
         here={item.id}
         foldKey={`main:${item.id}`}
         add={{ init: { type: typeId, parents: [item.id] }, label: same ? subOne(schema.name) : t("children.newOf", { name: schema.name }) }}
-        done={{ count: doneCount, shown: !!v.showDone, toggle: () => setV({ showDone: !v.showDone }) }}
+        done={{ count: doneCount, shown: !!view.showDone, toggle: () => setView({ showDone: !view.showDone }) }}
       />
     </section>
   );
@@ -161,13 +170,14 @@ export function BelowCard({ item, exclude, gathers, quietAdd }: { item: Item; ex
   const [adding, setAdding] = useState(false);
   const [more, setMore] = useState<Set<string>>(new Set());
   const hidden = shownByBlocks(item, ix);
+  const isNote = (x: Item) => x.kind === "info" && !ix.typeOf(x);
   const direct = ix.items(ix.childrenOf(item.id)).filter((c) => !c.deleted && !hidden.has(c.id) && !exclude.has(c.id) && !(c.type && exclude.has("type:" + c.type)));
   // without a type: overviews (they have entries below) apart from notes
-  const untyped = gathers ? notesBelow(item, ix) : direct.filter((c) => c.kind === "info" && !ix.typeOf(c));
+  const untyped = gathers ? notesBelow(item, ix) : direct.filter(isNote);
   const overviews = untyped.filter((c) => ix.childrenOf(c.id).length > 0);
   const notes = untyped.filter((c) => !overviews.includes(c));
   const files = gathers ? filesBelow(item, ix) : direct.filter((c) => c.kind === "datei");
-  const rest = direct.filter((c) => !(c.kind === "info" && !ix.typeOf(c)) && c.kind !== "datei");
+  const rest = direct.filter((c) => !isNote(c) && c.kind !== "datei");
   const byType = new Map<string, Item[]>();
   for (const c of rest) (byType.get(c.type ?? "") ?? byType.set(c.type ?? "", []).get(c.type ?? "")!).push(c);
   const groups: { key: string; label: string; items: Item[] }[] = [
@@ -184,11 +194,10 @@ export function BelowCard({ item, exclude, gathers, quietAdd }: { item: Item; ex
         <AddRow label={t("below.addNoteBelow")} onAdd={addNote} />
       </div>
     ) : null;
-  const FEW = 8;
   const right = (x: Item) =>
     x.file ? (
       <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{fmtBytes(lang, x.file.size)}</span>
-    ) : x.kind === "info" && !ix.typeOf(x) ? (
+    ) : isNote(x) ? (
       <span className="shrink-0 text-xs text-muted-foreground"><RelTime ts={x.updated} /></span>
     ) : (
       <DueLabel due={dueOf(x, ix.schemaOf(x))} />
@@ -245,7 +254,7 @@ export function Updates({ item }: { item: Item }) {
   const ix = useIndex();
   const { t, lang } = useT();
   const schema = ix.schemaOf(item);
-  const sp = statusProp(schema);
+  const statusProperty = statusProp(schema);
   const [text, setText] = useState("");
   const [status, setStatus] = useState("");
   const [writing, setWriting] = useState(false);
@@ -253,10 +262,10 @@ export function Updates({ item }: { item: Item }) {
   const every = [item, ...[...ix.descendants(item.id)].map((id) => ix.get(id)!)]
     .flatMap((x) => x.updates.map((u) => ({ u, from: x })))
     .sort((a, b) => b.u.at - a.u.at);
-  const entries = every.slice(0, all ? 50 : 3);
+  const entries = every.slice(0, all ? UPDATES_MAX : UPDATES_FIRST);
   const submit = () => {
     if (!text.trim()) return;
-    repo.addUpdate(item.id, text.trim(), status && sp ? { prop: sp.id, option: status } : undefined);
+    repo.addUpdate(item.id, text.trim(), status && statusProperty ? { prop: statusProperty.id, option: status } : undefined);
     setText("");
     setStatus("");
     setWriting(false);
@@ -292,10 +301,10 @@ export function Updates({ item }: { item: Item }) {
         />
         {text && (
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            {sp && (
+            {statusProperty && (
               <NativeSelect value={status} onChange={(e) => setStatus(e.target.value)} className="rounded-md border border-line bg-bg px-1.5 py-1 text-xs text-muted-foreground" aria-label={t("updates.status")}>
                 <option value="">{t("updates.keepStatus")}</option>
-                {sp.options?.filter((o) => o.id !== item.props[sp.id]).map((o) => (
+                {statusProperty.options?.filter((o) => o.id !== item.props[statusProperty.id]).map((o) => (
                   <option key={o.id} value={o.id}>
                     → {o.name}
                   </option>
@@ -312,7 +321,7 @@ export function Updates({ item }: { item: Item }) {
       {entries.length > 0 && (
         <ol className="relative ml-1 space-y-4 border-l border-line pl-5">
           {entries.map(({ u, from }) => {
-            const opt = sp?.options?.find((o) => o.id === u.status) ?? ix.schemaOf(from)?.properties.flatMap((p) => p.options ?? []).find((o) => o.id === u.status);
+            const newStatus = statusProperty?.options?.find((o) => o.id === u.status) ?? ix.schemaOf(from)?.properties.flatMap((p) => p.options ?? []).find((o) => o.id === u.status);
             return (
               <li key={u.id} className="relative">
                 <span className="absolute -left-[25px] top-1.5 size-2.5 rounded-full border-2 border-bg" style={{ background: u.by === "you" ? "var(--faint)" : "var(--ok)" }} />
@@ -323,8 +332,8 @@ export function Updates({ item }: { item: Item }) {
                       · <ItemIcon item={from} size={11} /> {from.title}
                     </span>
                   )}
-                  <span title={u.by}>· {u.by === "you" ? t("updates.you") : u.by.startsWith("import:") ? t("updates.import") : agentLabel(agentName(u.by) ?? u.by, t)}</span>
-                  {opt && <span>· {t("updates.statusTo", { name: opt.name })}</span>}
+                  <span title={u.by}>· {authorLabel(u.by, t)}</span>
+                  {newStatus && <span>· {t("updates.statusTo", { name: newStatus.name })}</span>}
                 </div>
                 <div className="whitespace-pre-wrap text-[15px]">{u.text}</div>
               </li>
@@ -332,13 +341,20 @@ export function Updates({ item }: { item: Item }) {
           })}
         </ol>
       )}
-      {every.length > 3 && (
+      {every.length > UPDATES_FIRST && (
         <Button variant="plain" onClick={() => setAll(!all)} className="tap-y mt-2 text-[13px] text-muted-foreground hover:text-fg">
           {all ? t("updates.fewer") : t("updates.all", { count: every.length })}
         </Button>
       )}
     </section>
   );
+}
+
+/** Who wrote an update: "Du", an import, or the agent's name. */
+function authorLabel(by: string, t: T): string {
+  if (by === "you") return t("updates.you");
+  if (by.startsWith("import:")) return t("updates.import");
+  return agentLabel(agentName(by) ?? by, t);
 }
 
 /** A type with updates but none yet: one quiet row to write the first. */

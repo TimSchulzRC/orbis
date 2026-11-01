@@ -32,9 +32,9 @@ function signupContext(headers: Headers | undefined): SignupContext {
   const raw = headers?.get("cookie")?.split(";").map((c) => c.trim()).find((c) => c.startsWith(SIGNUP_COOKIE + "="));
   if (!raw) return {};
   try {
-    const v = JSON.parse(decodeURIComponent(raw.slice(SIGNUP_COOKIE.length + 1))) as Record<string, unknown>;
+    const parsed = JSON.parse(decodeURIComponent(raw.slice(SIGNUP_COOKIE.length + 1))) as Record<string, unknown>;
     const str = (x: unknown) => (typeof x === "string" && x.length < 200 ? x : undefined);
-    return { invite: str(v.invite), lang: str(v.lang) };
+    return { invite: str(parsed.invite), lang: str(parsed.lang) };
   } catch {
     return {};
   }
@@ -58,7 +58,16 @@ export class AccountError extends Error {
 const LEGACY_ENTRIES = ["obtion.db", "obtion.db-wal", "obtion.db-shm", "blobs", "vault", "backups", "agent"];
 
 const INVITE_DAYS = 14;
+const DAY_MS = 86400_000;
 const CLAIM_TTL_MS = 60_000;
+
+const publicUser = (u: User): User => ({ id: u.id, name: u.name, email: u.email });
+
+/** Better Auth's length limits, as the signup page shows them. */
+function checkPasswordLength(password: string, config: { minPasswordLength: number; maxPasswordLength: number }) {
+  if (password.length < config.minPasswordLength) throw new AccountError("password too short");
+  if (password.length > config.maxPasswordLength) throw new AccountError("password too long");
+}
 
 export const randomToken = () => Buffer.from(crypto.getRandomValues(new Uint8Array(24))).toString("base64url");
 
@@ -132,9 +141,7 @@ export class Accounts {
 
   /** Cookies are never looked at: a request without the token cannot be one the user meant, whatever site sent it. */
   async userOf(token: string | null | undefined): Promise<User | null> {
-    if (!token) return null;
-    const s = await this.auth.api.getSession({ headers: new Headers({ authorization: `Bearer ${token}` }) }).catch(() => null);
-    return s ? { id: s.user.id, name: s.user.name, email: s.user.email } : null;
+    return (await this.session(token))?.user ?? null;
   }
 
   userCount(): number {
@@ -153,11 +160,17 @@ export class Accounts {
 
   /** Better Auth hook before it creates a user by any method. */
   allowNewUser(email: string, headers: Headers | undefined) {
-    const c = signupContext(headers);
+    const { invite } = signupContext(headers);
     // the code sends an OAuth sign-in back to the page as ?signin=failed&error=signup_closed
-    if (!this.canSignUp(c.invite, email)) throw new APIError("FORBIDDEN", c.invite ? { message: "invite invalid", code: "invite_invalid" } : { message: "signup closed", code: "signup_closed" });
+    if (!this.canSignUp(invite, email)) throw new APIError("FORBIDDEN", invite ? { message: "invite invalid", code: "invite_invalid" } : { message: "signup closed", code: "signup_closed" });
     // a password signup has claimed it already; OAuth and codes arrive here directly
-    if (c.invite) this.hold(c.invite, email);
+    if (invite) this.hold(invite, email);
+  }
+
+  /** For signups through our own routes, before Better Auth sees them. */
+  private checkPasswordSignup(invite: string | undefined, email: string) {
+    if (!this.login.password) throw new AccountError("passwords off", 403);
+    if (!this.canSignUp(invite, email)) throw new AccountError(invite ? "invite invalid" : "signup closed", 403);
   }
 
   private claimant(code: string): string | undefined {
@@ -194,22 +207,20 @@ export class Accounts {
    * workspace without members (pre-accounts data).
    */
   setUpNewUser(id: string, email: string, headers: Headers | undefined) {
-    const c = signupContext(headers);
+    const { invite } = signupContext(headers);
     if (this.userCount() === 1) {
       this.db.query("INSERT OR IGNORE INTO admins (user) VALUES (?)").run(id);
       const orphans = this.db.query("SELECT id FROM workspaces WHERE id NOT IN (SELECT workspace FROM members)").all() as { id: string }[];
       for (const w of orphans) this.addMember(w.id, id, "owner");
     }
-    const inv = c.invite ? this.invite(c.invite) : undefined;
-    if (c.invite && inv && this.claimant(c.invite) === email.toLowerCase()) {
-      this.release(c.invite, email);
-      this.join(c.invite, id);
+    if (invite && this.invite(invite) && this.claimant(invite) === email.toLowerCase()) {
+      this.release(invite, email);
+      this.join(invite, id);
     }
   }
 
   async signUp(body: { name: string; email: string; password: string; invite?: string }): Promise<SignedIn> {
-    if (!this.login.password) throw new AccountError("passwords off", 403);
-    if (!this.canSignUp(body.invite, body.email)) throw new AccountError(body.invite ? "invite invalid" : "signup closed", 403);
+    this.checkPasswordSignup(body.invite, body.email);
     const invite = this.signupInvite(body.invite, body.email);
     const res = await this.auth.api
       .signUpEmail({ body: { name: body.name.trim() || body.email.split("@")[0]!, email: body.email.trim(), password: body.password }, headers: signupHeaders({ invite }) })
@@ -217,7 +228,7 @@ export class Accounts {
         this.release(invite, body.email);
         throw new AccountError(e?.body?.message ?? e?.message ?? "signup failed", e?.statusCode === 422 ? 409 : (e?.statusCode ?? 400));
       });
-    return { token: res.token!, user: { id: res.user.id, name: res.user.name, email: res.user.email } };
+    return { token: res.token!, user: publicUser(res.user) };
   }
 
   /**
@@ -226,13 +237,10 @@ export class Accounts {
    * Auth's rate-limited route. With it the code creates the account, then it gets the password.
    */
   async signUpWithCode(body: { name: string; email: string; password: string; invite?: string; lang?: string; code?: string }): Promise<SignedIn | { verify: true }> {
-    if (!this.login.password) throw new AccountError("passwords off", 403);
-    if (!this.canSignUp(body.invite, body.email)) throw new AccountError(body.invite ? "invite invalid" : "signup closed", 403);
+    this.checkPasswordSignup(body.invite, body.email);
     const ctx = await this.auth.$context;
     const email = body.email.trim().toLowerCase();
-    const { minPasswordLength, maxPasswordLength } = ctx.password.config;
-    if (body.password.length < minPasswordLength) throw new AccountError("password too short");
-    if (body.password.length > maxPasswordLength) throw new AccountError("password too long");
+    checkPasswordLength(body.password, ctx.password.config);
     if (await ctx.internalAdapter.findUserByEmail(email)) throw new AccountError("exists", 409);
     if (!body.code) return { verify: true };
     const invite = this.signupInvite(body.invite, email);
@@ -245,21 +253,21 @@ export class Accounts {
     // a password set meanwhile by another way stays
     if (!(await ctx.internalAdapter.findCredentialAccount(res.user.id)))
       await ctx.internalAdapter.linkAccount({ userId: res.user.id, providerId: "credential", accountId: res.user.id, password: await ctx.password.hash(body.password) });
-    return { token: res.token, user: { id: res.user.id, name: res.user.name, email: res.user.email } };
+    return { token: res.token, user: publicUser(res.user) };
   }
 
   /** `created` is for actions that need a recent sign-in. */
   async session(token: string | null | undefined) {
     if (!token) return null;
     const s = await this.auth.api.getSession({ headers: new Headers({ authorization: `Bearer ${token}` }) }).catch(() => null);
-    return s ? { user: { id: s.user.id, name: s.user.name, email: s.user.email } as User, created: new Date(s.session.createdAt).getTime() } : null;
+    return s ? { user: publicUser(s.user), created: new Date(s.session.createdAt).getTime() } : null;
   }
 
   /** Trades the session an OAuth sign-in left in a cookie for a token the app keeps. */
   async claim(headers: Headers): Promise<SignedIn | null> {
-    const h = new Headers({ cookie: headers.get("cookie") ?? "" });
-    const s = await this.auth.api.getSession({ headers: h }).catch(() => null);
-    return s ? { token: s.session.token, user: { id: s.user.id, name: s.user.name, email: s.user.email } } : null;
+    const cookieOnly = new Headers({ cookie: headers.get("cookie") ?? "" });
+    const s = await this.auth.api.getSession({ headers: cookieOnly }).catch(() => null);
+    return s ? { token: s.session.token, user: publicUser(s.user) } : null;
   }
 
   async hasPassword(user: string): Promise<boolean> {
@@ -276,9 +284,7 @@ export class Accounts {
   async changePassword(user: string, keep: string, current: string, next: string) {
     const ctx = await this.auth.$context;
     await this.verifyPassword(user, current);
-    const { minPasswordLength, maxPasswordLength } = ctx.password.config;
-    if (next.length < minPasswordLength) throw new AccountError("password too short");
-    if (next.length > maxPasswordLength) throw new AccountError("password too long");
+    checkPasswordLength(next, ctx.password.config);
     await ctx.internalAdapter.updatePassword(user, await ctx.password.hash(next));
     this.db.query('DELETE FROM "session" WHERE userId = ? AND token != ?').run(user, keep);
   }
@@ -299,10 +305,7 @@ export class Accounts {
     if (password !== undefined) await this.verifyPassword(user, password);
     else if (Date.now() - signedInAt > FRESH_SECONDS * 1000) throw new AccountError("sign in again", 403);
     this.db.transaction(() => {
-      for (const w of this.workspacesOf(user)) {
-        if (w.role === "owner" && this.members(w.id).filter((m) => m.role === "owner").length === 1)
-          throw new AccountError("last owner", 409);
-      }
+      for (const w of this.workspacesOf(user)) if (this.isLastOwner(w.id, user)) throw new AccountError("last owner", 409);
       for (const table of ["members", "tokens", "admins"]) this.db.query(`DELETE FROM ${table} WHERE user = ?`).run(user);
       this.db.query('DELETE FROM invites WHERE "by" = ?').run(user);
       // Better Auth's database-backed sessions and credentials have no secondary cache here.
@@ -330,7 +333,7 @@ export class Accounts {
   }
 
   rename(workspace: string, user: string, name: string) {
-    if (this.role(workspace, user) !== "owner") throw new AccountError("only owners rename", 403);
+    this.requireOwner(workspace, user, "only owners rename");
     const clean = workspaceName(name);
     if (!clean) throw new AccountError("name required");
     this.db.query("UPDATE workspaces SET name = ? WHERE id = ?").run(clean, workspace);
@@ -338,7 +341,7 @@ export class Accounts {
 
   /** Removes the folder too; close the workspace first. */
   deleteWorkspace(workspace: string, by: string) {
-    if (this.role(workspace, by) !== "owner") throw new AccountError("only owners delete", 403);
+    this.requireOwner(workspace, by, "only owners delete");
     for (const table of ["members", "invites", "tokens"]) this.db.query(`DELETE FROM ${table} WHERE workspace = ?`).run(workspace);
     this.db.query("DELETE FROM workspaces WHERE id = ?").run(workspace);
     rmSync(this.dir(workspace), { recursive: true, force: true });
@@ -370,8 +373,12 @@ export class Accounts {
     })();
   }
 
+  private requireOwner(workspace: string, user: string, message: string) {
+    if (this.role(workspace, user) !== "owner") throw new AccountError(message, 403);
+  }
+
   setRole(workspace: string, by: string, user: string, role: Role) {
-    if (this.role(workspace, by) !== "owner") throw new AccountError("only owners change roles", 403);
+    this.requireOwner(workspace, by, "only owners change roles");
     const now = this.role(workspace, user);
     if (!now) throw new AccountError("not a member", 404);
     if (now === role) return;
@@ -381,21 +388,21 @@ export class Accounts {
 
   /** Single use, so a link passed on reaches nobody else. */
   createInvite(workspace: string, by: string, role: Role = "member"): string {
-    if (this.role(workspace, by) !== "owner") throw new AccountError("only owners invite", 403);
+    this.requireOwner(workspace, by, "only owners invite");
     const code = randomToken();
-    this.db.query("INSERT INTO invites (code, workspace, by, created, expires, role) VALUES (?, ?, ?, ?, ?, ?)").run(code, workspace, by, Date.now(), Date.now() + INVITE_DAYS * 86400_000, role);
+    this.db.query("INSERT INTO invites (code, workspace, by, created, expires, role) VALUES (?, ?, ?, ?, ?, ?)").run(code, workspace, by, Date.now(), Date.now() + INVITE_DAYS * DAY_MS, role);
     return code;
   }
 
   /** Also deletes expired links. */
   invites(workspace: string, by: string): InviteLink[] {
-    if (this.role(workspace, by) !== "owner") throw new AccountError("only owners invite", 403);
+    this.requireOwner(workspace, by, "only owners invite");
     this.db.query("DELETE FROM invites WHERE workspace = ? AND expires <= ?").run(workspace, Date.now());
     return this.db.query('SELECT i.code, i.created, i.expires, i.role, coalesce(u.name, \'\') AS by FROM invites i LEFT JOIN "user" u ON u.id = i.by WHERE i.workspace = ? ORDER BY i.created DESC').all(workspace) as InviteLink[];
   }
 
   revokeInvite(workspace: string, by: string, code: string) {
-    if (this.role(workspace, by) !== "owner") throw new AccountError("only owners invite", 403);
+    this.requireOwner(workspace, by, "only owners invite");
     if (!this.db.query("DELETE FROM invites WHERE workspace = ? AND code = ?").run(workspace, code).changes) throw new AccountError("invite invalid", 404);
   }
 
@@ -487,9 +494,9 @@ function makeAuth(accounts: Accounts, secret: string, baseURL: string) {
                 if (type !== "sign-in") return;
                 // a code for an address without an account only where it may become one
                 const known = !!accounts.db.query('SELECT 1 FROM "user" WHERE email = ?').get(email.toLowerCase());
-                const c = signupContext(ctx?.headers);
-                if (!known && !accounts.canSignUp(c.invite, email)) return;
-                await login.sendCode!(email, otp, c.lang);
+                const signup = signupContext(ctx?.headers);
+                if (!known && !accounts.canSignUp(signup.invite, email)) return;
+                await login.sendCode!(email, otp, signup.lang);
               },
             }),
           ]

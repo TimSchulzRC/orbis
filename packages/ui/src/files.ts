@@ -102,6 +102,8 @@ export async function sha256(blob: Blob): Promise<string> {
 
 const DISPLAY_WIDTH = 1600;
 const THUMB_WIDTH = 320;
+const PREVIEW_TYPE = "image/webp";
+const PREVIEW_QUALITY = 0.8;
 const MAX_DOWNLOADS = 3;
 /** A file younger than this whose content the server lacks is probably still uploading. */
 const UPLOAD_GRACE_MS = 60 * 60_000;
@@ -109,14 +111,14 @@ const UPLOAD_GRACE_MS = 60 * 60_000;
 async function scaled(file: Blob, width: number): Promise<{ blob: Blob; w: number; h: number } | undefined> {
   try {
     const bmp = await createImageBitmap(file);
-    const s = Math.min(1, width / bmp.width);
-    const w = Math.max(1, Math.round(bmp.width * s));
-    const h = Math.max(1, Math.round(bmp.height * s));
+    const factor = Math.min(1, width / bmp.width);
+    const w = Math.max(1, Math.round(bmp.width * factor));
+    const h = Math.max(1, Math.round(bmp.height * factor));
     const canvas = document.createElement("canvas");
     canvas.width = w;
     canvas.height = h;
     canvas.getContext("2d")!.drawImage(bmp, 0, 0, w, h);
-    const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/webp", 0.8));
+    const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, PREVIEW_TYPE, PREVIEW_QUALITY));
     const out = { blob: blob!, w: bmp.width, h: bmp.height };
     bmp.close();
     return blob ? out : undefined;
@@ -134,14 +136,13 @@ async function pdfPreview(blob: Blob): Promise<{ blob: Blob; pages: number } | u
     const task = pdfjs.getDocument({ data: new Uint8Array(await blob.arrayBuffer()), wasmUrl: "/pdfjs/wasm/" });
     const doc = await task.promise;
     const page = await doc.getPage(1);
-    const vp = page.getViewport({ scale: 1 });
-    const scale = THUMB_WIDTH / vp.width;
-    const v = page.getViewport({ scale });
+    const scale = THUMB_WIDTH / page.getViewport({ scale: 1 }).width;
+    const viewport = page.getViewport({ scale });
     const canvas = document.createElement("canvas");
-    canvas.width = Math.round(v.width);
-    canvas.height = Math.round(v.height);
-    await page.render({ canvas, canvasContext: canvas.getContext("2d")!, viewport: v }).promise;
-    const out = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/webp", 0.8));
+    canvas.width = Math.round(viewport.width);
+    canvas.height = Math.round(viewport.height);
+    await page.render({ canvas, canvasContext: canvas.getContext("2d")!, viewport }).promise;
+    const out = await new Promise<Blob | null>((res) => canvas.toBlob(res, PREVIEW_TYPE, PREVIEW_QUALITY));
     const pages = doc.numPages;
     await task.destroy();
     return out ? { blob: out, pages } : undefined;
@@ -244,29 +245,31 @@ export class DeviceFiles {
   async url(hash: string, opts: { keep?: boolean } = {}): Promise<string | undefined> {
     const cached = this.urls.get(hash);
     if (cached) return cached;
-    let p = this.loading.get(hash);
-    if (!p) {
-      p = (async () => {
-        await this.ready;
-        let blob = this.local.has(hash) ? await this.store.get(hash) : undefined;
-        if (!blob) {
-          blob = await this.fetchVerified(hash);
-          if (blob && (opts.keep || this.mode === "local")) {
-            await this.save(hash, blob);
-            // the mode may have switched to "online" while writing
-            if (!opts.keep && this.mode !== "local" && !keptOnline(this.repo).has(hash)) await this.drop(hash);
-          }
-        }
-        if (!blob) return undefined;
-        // stored contents carry no type; images are recognised without one, SVGs are not
-        if (!blob.type && /^\s*(<\?xml[^>]*>\s*)?<svg[\s>]/.test(await blob.slice(0, 256).text())) blob = new Blob([blob], { type: "image/svg+xml" });
-        const u = URL.createObjectURL(blob);
-        this.urls.set(hash, u);
-        return u;
-      })().finally(() => this.loading.delete(hash));
-      this.loading.set(hash, p);
+    let loading = this.loading.get(hash);
+    if (!loading) {
+      loading = this.loadUrl(hash, opts).finally(() => this.loading.delete(hash));
+      this.loading.set(hash, loading);
     }
-    return p;
+    return loading;
+  }
+
+  private async loadUrl(hash: string, opts: { keep?: boolean }): Promise<string | undefined> {
+    await this.ready;
+    let blob = this.local.has(hash) ? await this.store.get(hash) : undefined;
+    if (!blob) {
+      blob = await this.fetchVerified(hash);
+      if (blob && (opts.keep || this.mode === "local")) {
+        await this.save(hash, blob);
+        // the mode may have switched to "online" while writing
+        if (!opts.keep && this.mode !== "local" && !keptOnline(this.repo).has(hash)) await this.drop(hash);
+      }
+    }
+    if (!blob) return undefined;
+    // stored contents carry no type; images are recognised without one, SVGs are not
+    if (!blob.type && /^\s*(<\?xml[^>]*>\s*)?<svg[\s>]/.test(await blob.slice(0, 256).text())) blob = new Blob([blob], { type: "image/svg+xml" });
+    const url = URL.createObjectURL(blob);
+    this.urls.set(hash, url);
+    return url;
   }
 
   /** A plain link can't carry an auth header, so the token goes in the query. */
@@ -396,7 +399,7 @@ export class DeviceFiles {
 
   private async sync() {
     await this.ready;
-    const files = this.repo.live().filter((r) => r.kind === "datei" && r.file?.hash);
+    const files = this.liveFiles();
     if (this.repo.status.online) await this.uploadAll();
     const want: string[] = [];
     for (const f of files) {
@@ -414,6 +417,14 @@ export class DeviceFiles {
     this.updateStatus(files);
   }
 
+  private liveFiles(): Item[] {
+    return this.repo.live().filter((r) => r.kind === "datei" && r.file?.hash);
+  }
+
+  private async pendingUploads(): Promise<Set<string>> {
+    return new Set(((await this.db.getAll("uploads")) as Upload[]).map((u) => u.hash));
+  }
+
   /**
    * Once per session, after catching up with the server, so records from other devices are known
    * before anything is deleted. Spares pending uploads and contents stored this session.
@@ -421,14 +432,18 @@ export class DeviceFiles {
   private async collect() {
     const keep = new Set<string>();
     for (const r of this.repo.records.values()) for (const h of [r.file?.hash, r.file?.display, r.file?.thumb]) if (h) keep.add(h);
-    const pending = new Set(((await this.db.getAll("uploads")) as Upload[]).map((u) => u.hash));
+    const pending = await this.pendingUploads();
     for (const h of [...this.local]) if (!keep.has(h) && !pending.has(h) && !this.fresh.has(h)) await this.drop(h);
   }
 
   private updateStatus(files: Item[]) {
     let originals = 0;
     let bytes = 0;
-    for (const f of files) if (this.local.has(f.file!.hash)) (originals++, (bytes += f.file!.size));
+    for (const f of files) {
+      if (!this.local.has(f.file!.hash)) continue;
+      originals++;
+      bytes += f.file!.size;
+    }
     this.status = { mode: this.mode, originals, total: files.length, bytes, uploading: this.status.uploading, downloading: this.queue.length + this.active };
     this.emit();
   }
@@ -447,7 +462,7 @@ export class DeviceFiles {
         .finally(() => {
           this.active--;
           // per download, so the progress in the settings moves along
-          this.updateStatus(this.repo.live().filter((r) => r.kind === "datei" && r.file?.hash));
+          this.updateStatus(this.liveFiles());
           this.pump();
         });
     }
@@ -506,7 +521,7 @@ export class DeviceFiles {
 
   async dropOriginals() {
     const keep = keptOnline(this.repo);
-    const pending = new Set(((await this.db.getAll("uploads")) as Upload[]).map((u) => u.hash));
+    const pending = await this.pendingUploads();
     for (const h of [...this.local]) {
       if (keep.has(h) || pending.has(h)) continue;
       await this.drop(h);

@@ -22,15 +22,20 @@ export function dueBy(ix: Index, today: string): { item: Item; due: string }[] {
  * A project is an active-status item whose main child type differs from its own. Nested active
  * projects are left out; `touched` counts edits anywhere below.
  */
+/** The latest edit on the item or anywhere below it. */
+function lastTouched(ix: Index, item: Item): number {
+  return [...ix.descendants(item.id)].reduce((latest, id) => Math.max(latest, ix.get(id)?.updated ?? 0), item.updated);
+}
+
 export function activeProjects(ix: Index): { item: Item; touched: number }[] {
   const active = ix.live.filter((i) => {
-    const pc = ix.mainChildType(i);
-    return !!pc && pc !== i.type && statusOf(i, ix.schemaOf(i))?.group === "active" && !ix.isDormant(i);
+    const childType = ix.mainChildType(i);
+    return !!childType && childType !== i.type && statusOf(i, ix.schemaOf(i))?.group === "active" && !ix.isDormant(i);
   });
   const ids = new Set(active.map((i) => i.id));
   return active
     .filter((i) => !ix.homePath(i.id).some((p) => ids.has(p)))
-    .map((item) => ({ item, touched: [...ix.descendants(item.id)].reduce((n, d) => Math.max(n, ix.get(d)?.updated ?? 0), item.updated) }))
+    .map((item) => ({ item, touched: lastTouched(ix, item) }))
     .sort((a, b) => b.touched - a.touched);
 }
 

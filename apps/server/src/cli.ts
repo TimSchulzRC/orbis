@@ -7,7 +7,7 @@ import { Store } from "./store";
 import { setPassword, trustEmails, workspaceDirs } from "./accounts";
 import { Blobs } from "./blobs";
 import { SYS } from "@obtion/core/setup";
-import { META_TYPE } from "@obtion/core/model";
+import { type Item, META_TYPE } from "@obtion/core/model";
 import { type Lang, LANGS } from "@obtion/core/i18n";
 import { importNotion, importObsidian, setUp } from "./importers";
 import { DATA, PORT } from "./config";
@@ -101,12 +101,18 @@ const store = new Store(DIR);
 const blobs = new Blobs(join(DIR, "blobs"), store);
 const lang = (opts.lang as Lang | undefined) ?? store.lang();
 
+function statsKey(r: Item): string {
+  if (r.kind !== "info") return r.kind;
+  if (r.type === META_TYPE) return "typ";
+  return store.index().typeName(r.type) ?? (r.type ? "?" : "ohne Typ");
+}
+
 if (cmd === "stats") {
   const by = new Map<string, number>();
   for (const r of store.records.values()) {
     if (r.deleted) continue;
-    const k = r.kind !== "info" ? r.kind : r.type === META_TYPE ? "typ" : (store.index().typeName(r.type) ?? (r.type ? "?" : "ohne Typ"));
-    by.set(k, (by.get(k) ?? 0) + 1);
+    const key = statsKey(r);
+    by.set(key, (by.get(key) ?? 0) + 1);
   }
   const missing = store.live().filter((r) => r.file && [r.file.hash, r.file.display, r.file.thumb].some((h) => h && !blobs.has(h)));
   console.log(Object.fromEntries(by), { seq: store.seq, server: store.serverId, filesMissingContent: missing.length });

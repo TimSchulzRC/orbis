@@ -32,6 +32,12 @@ interface Sorted {
 /** Where the entry was clicked, for the caret (`title`: offset in the title); null from the button. */
 type Edit = { x: number; y: number; title?: number } | null;
 
+/** How far the arrow keys scroll a long entry, and how far a swipe must go to step to the next. */
+const SCROLL_STEP = 80;
+const SWIPE = 70;
+/** Above this many entries the steps are one bar. */
+const MAX_STEPS = 16;
+
 /** Kept when leaving the page ("Später weiter"), not over a reload. */
 let session: { day: string; order: string[]; sorted: Sorted[]; at?: string } | null = null;
 
@@ -61,14 +67,18 @@ export function Review({ at }: { at?: string }) {
   // what came in meanwhile joins the end of the stack
   for (const e of entries) if (!order.current.includes(e.key)) order.current.push(e.key);
   const [sorted, setSorted] = useState<Sorted[]>(() => session?.sorted ?? []);
-  const [cur, setCur] = useState<string | undefined>(at ?? session?.at);
+  const [chosen, setChosen] = useState<string | undefined>(at ?? session?.at);
   const closed = useRef(false);
   const card = useRef<HTMLDivElement>(null);
   const byKey = new Map(entries.map((e) => [e.key, e]));
   const left = order.current.filter((k) => byKey.has(k) && !sorted.some((s) => s.key === k));
   // the entry shown: the chosen one while it waits, else the next after its place
-  const pickAt = (k?: string) => (k && left.includes(k) ? k : (order.current.slice(order.current.indexOf(k ?? "") + 1).find((x) => left.includes(x)) ?? left.at(-1)));
-  const key = pickAt(cur);
+  const pickAt = (k?: string) => {
+    if (k && left.includes(k)) return k;
+    const after = order.current.slice(order.current.indexOf(k ?? "") + 1);
+    return after.find((x) => left.includes(x)) ?? left.at(-1);
+  };
+  const key = pickAt(chosen);
   const entry = key ? byKey.get(key) : undefined;
   // editing belongs to the entry shown: another one (sorted, stepped to, undone) starts unedited
   const [editing, setEditing] = useState<{ key?: string; at: Edit } | null>(null);
@@ -85,9 +95,9 @@ export function Review({ at }: { at?: string }) {
     if (!undo) return;
     const title = replica(e.space).repo.get(e.item.id)?.title ?? e.item.title; // perhaps just edited
     setSorted((s) => [...s, { key: e.key, title: titleOf({ title, file: e.item.file }, t), what, undo }]);
-    setCur(e.key);
+    setChosen(e.key);
   };
-  const placeIn = (list: Item[], p: string) => entry && record(entry, `→ ${replica(entry.space).repo.index().get(p)?.title ?? ""}`, act.place(list, p));
+  const placeIn = (list: Item[], parent: string) => entry && record(entry, `→ ${replica(entry.space).repo.index().get(parent)?.title ?? ""}`, act.place(list, parent));
   const typeAs = (list: Item[], type: string) => entry && record(entry, replica(entry.space).repo.index().typeName(type) ?? "", act.giveType(list, type));
   const pick = usePickers(() => entry!.space, placeIn, typeAs);
   const later = () => entry && record(entry, t("review.done.later"), act.later([entry.item]));
@@ -97,15 +107,16 @@ export function Review({ at }: { at?: string }) {
     if (!s) return;
     revert(s.undo);
     setSorted((list) => list.filter((x) => x !== s));
-    setCur(s.key);
+    setChosen(s.key);
   };
-  const step = (d: 1 | -1) => {
+  const step = (direction: 1 | -1) => {
     const i = key ? left.indexOf(key) : -1;
-    const next = left[i + d];
-    if (next) setCur(next);
+    const next = left[i + direction];
+    if (next) setChosen(next);
   };
   const close = () => {
-    (closed.current = true), (session = null);
+    closed.current = true;
+    session = null;
     navigate("/");
   };
 
@@ -130,7 +141,7 @@ export function Review({ at }: { at?: string }) {
     else if (k === "a") pin();
     else if (k === "x" || k === "Delete") trash();
     // arrows up and down scroll a long entry in its card
-    else if (k === "ArrowDown" || k === "ArrowUp") card.current?.scrollBy({ top: k === "ArrowDown" ? 80 : -80 });
+    else if (k === "ArrowDown" || k === "ArrowUp") card.current?.scrollBy({ top: k === "ArrowDown" ? SCROLL_STEP : -SCROLL_STEP });
     else if (k === "j" || k === "ArrowRight") step(1);
     else if (k === "k" || k === "ArrowLeft") step(-1);
     else if (k === "Enter" || k === "o") openItem(entry.item.id, { space: entry.space });
@@ -165,7 +176,7 @@ export function Review({ at }: { at?: string }) {
         onTouchStart={(e) => (touch.current = e.touches[0]!.clientX)}
         onTouchEnd={(e) => {
           const dx = (e.changedTouches[0]?.clientX ?? 0) - (touch.current ?? 0);
-          if (!editing && Math.abs(dx) > 70) step(dx < 0 ? 1 : -1);
+          if (!editing && Math.abs(dx) > SWIPE) step(dx < 0 ? 1 : -1);
           touch.current = null;
         }}
       >
@@ -182,7 +193,7 @@ export function Review({ at }: { at?: string }) {
       <div className="mt-6 grid grid-cols-[minmax(0,1fr)_300px] items-start gap-8">
         <div className="min-w-0">{body}</div>
         <aside className="flex flex-col gap-4" aria-label={t("review.title")}>
-          <StackList keys={left} current={key} byKey={byKey} onPick={setCur} />
+          <StackList keys={left} current={key} byKey={byKey} onPick={setChosen} />
           <SortedList sorted={sorted} onUndo={undo} />
         </aside>
       </div>
@@ -223,7 +234,7 @@ function ReviewHead({ total, at, sorted, minutes }: { total: number; at: number;
 function Steps({ total, done }: { total: number; done: number }) {
   const { t } = useT();
   const label = t("review.position", { at: Math.min(done + 1, total), count: total });
-  if (total > 16)
+  if (total > MAX_STEPS)
     return (
       <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-surface-2 dark:bg-hover" role="progressbar" aria-valuenow={done} aria-valuemin={0} aria-valuemax={total} aria-label={label}>
         <div className="h-full rounded-full bg-[var(--ok)]" style={{ width: `${(done / total) * 100}%` }} />
@@ -255,38 +266,38 @@ function EntryCard({ entry, space, more, scroller, editing, onEdit, onDone }: { 
   // a click outside the card ends editing (not one in what the editor opened: a menu, a picture)
   useEffect(() => {
     if (!editing) return;
-    const on = (e: PointerEvent) => {
+    const onPointerDown = (e: PointerEvent) => {
       const el = e.target as Element;
       if (!self.current?.contains(el) && !el.closest?.(".cm-menu, .cm-tooltip, [role=dialog], [data-radix-popper-content-wrapper]")) onDone();
     };
-    document.addEventListener("pointerdown", on, true);
-    return () => document.removeEventListener("pointerdown", on, true);
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => document.removeEventListener("pointerdown", onPointerDown, true);
   }, [!!editing]);
   const text = !item.file;
   // the title clicked (or a file, which has no text here): the caret where clicked, else at its end
   useEffect(() => {
     if (!editing || (text && at?.title === undefined)) return;
     const el = scroller.current?.querySelector("textarea");
-    const n = Math.min(at?.title ?? Infinity, el?.value.length ?? 0);
+    const offset = Math.min(at?.title ?? Infinity, el?.value.length ?? 0);
     el?.focus();
-    el?.setSelectionRange(n, n);
+    el?.setSelectionRange(offset, offset);
   }, [!!editing]);
   // the text clicked: the caret where it was clicked, else at its end
-  const placeCaret = (v: EditorView | null) => {
-    if (!v || at?.title !== undefined) return;
-    v.focus();
+  const placeCaret = (view: EditorView | null) => {
+    if (!view || at?.title !== undefined) return;
+    view.focus();
     // after the editor's first measure: before it, its heights are guesses
-    requestAnimationFrame(() => v.dom.isConnected && v.dispatch({ selection: { anchor: (at && v.posAtCoords(at, false)) ?? v.state.doc.length } }));
+    requestAnimationFrame(() => view.dom.isConnected && view.dispatch({ selection: { anchor: (at && view.posAtCoords(at, false)) ?? view.state.doc.length } }));
   };
   useEffect(() => {
     const el = scroller.current;
     if (!el) return;
     const measure = () => setRest(el.scrollHeight - el.scrollTop - el.clientHeight > 4);
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    for (const c of el.children) ro.observe(c);
+    const resize = new ResizeObserver(measure);
+    resize.observe(el);
+    for (const c of el.children) resize.observe(c);
     el.addEventListener("scroll", measure, { passive: true });
-    return () => (ro.disconnect(), el.removeEventListener("scroll", measure));
+    return () => (resize.disconnect(), el.removeEventListener("scroll", measure));
   }, []);
   return (
     <div className="relative">
@@ -486,15 +497,15 @@ function StackList({ keys, current, byKey, onPick }: { keys: string[]; current?:
       <SectionTitle count={keys.length} className="px-2 pt-1">{t("review.left")}</SectionTitle>
       <ul className="flex max-h-[50vh] flex-col overflow-y-auto">
         {keys.map((k) => {
-          const e = byKey.get(k)!;
+          const entry = byKey.get(k)!;
           return (
             <li key={k}>
               <Button variant="plain" onClick={() => onPick(k)} aria-current={k === current} className={cn("relative flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left hover:bg-hover", k === current && "bg-selected before:absolute before:inset-y-1.5 before:left-0 before:w-[3px] before:rounded-r before:bg-inbox")}>
-                <ItemIcon item={e.item} size={14} ix={replica(e.space).repo.index()} />
+                <ItemIcon item={entry.item} size={14} ix={replica(entry.space).repo.index()} />
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm">{titleOf(e.item, t)}</span>
+                  <span className="block truncate text-sm">{titleOf(entry.item, t)}</span>
                   <span className="block truncate text-xs text-muted-foreground">
-                    <RelTime ts={e.item.created} />
+                    <RelTime ts={entry.item.created} />
                   </span>
                 </span>
               </Button>

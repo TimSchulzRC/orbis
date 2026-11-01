@@ -6,7 +6,7 @@ import { ArrowLeft, ChevronRight, ChevronDown, History, Inbox, Search, Settings,
 import { type Item, META_TYPE, SETTINGS_ID, setSchemaField, setSettings } from "@obtion/core/model";
 import { sidebarChildren, sidebarRoots } from "@obtion/core/placement";
 import { keyBetween, keysFor, cmpKey } from "@obtion/core/sortkey";
-import { useRepo, useRoute, useSpaceId, itemHref, itemPath, spaceHref, useLocalStorage, leavePage } from "../hooks";
+import { useRepo, useRoute, useSpaceId, itemPath, spaceHref, useLocalStorage, leavePage } from "../hooks";
 import { type Space, useAccounts } from "../accounts";
 import { useT } from "../i18n";
 import { Button, IconButton, Kbd, MenuItem, MoreMenu, REVEAL, useContextMenu } from "./primitives";
@@ -40,6 +40,14 @@ const startDrag = (e: React.DragEvent, d: NonNullable<typeof dragging>, text: st
 };
 /** Can it go into another workspace? Items can (a move), type pages and rows of "Typen" not. */
 const movable = (d: typeof dragging) => !!d && d.from !== "types" && !d.type;
+/** Icons of tree rows: larger in the phone menu. */
+const rowIconSize = (touch?: boolean) => (touch ? 17 : 15);
+/** Where a row takes what is dropped on it: its upper quarter before it, its lower quarter after it, else into it. */
+function dropZone(y: number, height: number): "before" | "inside" | "after" {
+  if (y < height * 0.25) return "before";
+  if (y > height * 0.75) return "after";
+  return "inside";
+}
 
 export function Sidebar({ onSearch }: { onSearch: () => void }) {
   const { t, lang } = useT();
@@ -137,9 +145,9 @@ export function SpaceTree({ space, touch }: { space: Space; touch?: boolean }) {
         onDrop={(e) => {
           e.preventDefault();
           setOver(false);
-          const d = dragging;
+          const dragged = dragging;
           dragging = null;
-          if (movable(d) && d!.space !== space.id) void moveTo(d!.id, d!.space, space.id);
+          if (movable(dragged) && dragged!.space !== space.id) void moveTo(dragged!.id, dragged!.space, space.id);
         }}
       >
         <Button variant="plain" onClick={() => setOpen(!open)} aria-expanded={open} className="-ml-1 flex min-w-0 flex-1 items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground hover:text-fg">
@@ -202,16 +210,16 @@ function PinnedTree({ touch, here }: { touch?: boolean; here: boolean }) {
       onDragOver={(e) => dragging && dragging.from !== "types" && e.preventDefault()}
       onDrop={(e) => {
         // dropped on empty space: pinned at the end (moving away from the parent it came from)
-        const d = dragging;
-        if (!d || d.from === "types" || e.defaultPrevented) return;
+        const dragged = dragging;
+        if (!dragged || dragged.from === "types" || e.defaultPrevented) return;
         dragging = null;
-        if (d.space !== space) return void (movable(d) && moveTo(d.id, d.space, space));
-        if (d.from && !e.altKey) repo.removeParent(d.id, d.from);
-        repo.setSort(d.id, null, keyBetween(roots.at(-1)?.pinned ?? null, null));
+        if (dragged.space !== space) return void (movable(dragged) && moveTo(dragged.id, dragged.space, space));
+        if (dragged.from && !e.altKey) repo.removeParent(dragged.id, dragged.from);
+        repo.setSort(dragged.id, null, keyBetween(roots.at(-1)?.pinned ?? null, null));
       }}
     >
-      {roots.map((r, i) => (
-        <TreeNode key={r.id} item={r} parent={null} siblings={roots} index={i} depth={0} {...tree} />
+      {roots.map((root, i) => (
+        <TreeNode key={root.id} item={root} parent={null} siblings={roots} index={i} depth={0} {...tree} />
       ))}
     </div>
   );
@@ -228,52 +236,52 @@ function TypeNav({ touch, here }: { touch?: boolean; here: boolean }) {
   const [drop, setDrop] = useState<{ id: string; before: boolean } | null>(null);
   const filesPos = ix.all.get(SETTINGS_ID)?.settings?.filesPos;
   const rows = [
-    ...ix.typesInOrder().map((x) => ({ id: x.id, key: x.schema.pos, label: ix.typePlural(x.id), href: spaceHref(space, itemPath(x.id)), icon: <TypeGlyph schema={x.schema} size={touch ? 17 : 15} /> })),
-    { id: "files", key: filesPos, label: t("nav.files"), href: spaceHref(space, "/files"), icon: <Paperclip size={touch ? 17 : 15} className="shrink-0" /> },
+    ...ix.typesInOrder().map((type) => ({ id: type.id, key: type.schema.pos, label: ix.typePlural(type.id), href: spaceHref(space, itemPath(type.id)), icon: <TypeGlyph schema={type.schema} size={rowIconSize(touch)} /> })),
+    { id: "files", key: filesPos, label: t("nav.files"), href: spaceHref(space, "/files"), icon: <Paperclip size={rowIconSize(touch)} className="shrink-0" /> },
   ].sort((a, b) => cmpKey(a.key ?? "~", b.key ?? "~"));
   const active = (id: string) => here && (id === "files" ? route.path.startsWith("/files") : route.parts[0] === "i" && route.parts[1] === id);
   // a new order: every row gets a fresh key, written only where it changed
   const move = (id: string, to: string, before: boolean) => {
-    const order = moveInArray(rows, rows.findIndex((r) => r.id === id), rows.findIndex((r) => r.id === to) + (before ? 0 : 1));
-    keysFor(order.length).forEach((k, i) => {
-      const r = order[i]!;
-      if (r.key === k) return;
-      if (r.id === "files") repo.change(SETTINGS_ID, (d) => setSettings(d, { filesPos: k }));
-      else repo.change(r.id, (d) => setSchemaField(d, "pos", k));
+    const order = moveInArray(rows, rows.findIndex((row) => row.id === id), rows.findIndex((row) => row.id === to) + (before ? 0 : 1));
+    keysFor(order.length).forEach((pos, i) => {
+      const row = order[i]!;
+      if (row.key === pos) return;
+      if (row.id === "files") repo.change(SETTINGS_ID, (d) => setSettings(d, { filesPos: pos }));
+      else repo.change(row.id, (d) => setSchemaField(d, "pos", pos));
     });
   };
   const ours = () => dragging?.from === "types" && dragging.space === space;
   return (
     <nav className="flex flex-col gap-px" aria-label={t("nav.types")}>
-      {rows.map((r) => (
+      {rows.map((row) => (
         <a
-          key={r.id}
-          href={r.href}
+          key={row.id}
+          href={row.href}
           draggable={!touch}
-          onDragStart={(e) => startDrag(e, { id: r.id, from: "types", space }, r.label)}
+          onDragStart={(e) => startDrag(e, { id: row.id, from: "types", space }, row.label)}
           onDragOver={(e) => {
-            if (!ours() || dragging!.id === r.id) return;
+            if (!ours() || dragging!.id === row.id) return;
             e.preventDefault();
             const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
-            setDrop({ id: r.id, before: e.clientY < box.top + box.height / 2 });
+            setDrop({ id: row.id, before: e.clientY < box.top + box.height / 2 });
           }}
           onDragLeave={() => setDrop(null)}
           onDrop={(e) => {
             e.preventDefault();
-            if (ours() && drop) move(dragging!.id, r.id, drop.before);
+            if (ours() && drop) move(dragging!.id, row.id, drop.before);
             dragging = null;
             setDrop(null);
           }}
-          aria-current={active(r.id) ? "page" : undefined}
-          className={cn("relative flex items-center gap-2 rounded-lg pl-[30px] pr-2", touch ? "py-2 text-[15px]" : "py-1 text-sm", active(r.id) ? "bg-hover font-medium text-fg" : "text-muted-foreground hover:bg-hover hover:text-fg")}
+          aria-current={active(row.id) ? "page" : undefined}
+          className={cn("relative flex items-center gap-2 rounded-lg pl-[30px] pr-2", touch ? "py-2 text-[15px]" : "py-1 text-sm", active(row.id) ? "bg-hover font-medium text-fg" : "text-muted-foreground hover:bg-hover hover:text-fg")}
         >
-          {drop?.id === r.id && <span className={cn("absolute inset-x-1 h-0.5 rounded bg-focus", drop.before ? "-top-px" : "-bottom-px")} />}
-          {r.icon}
-          <span className="min-w-0 flex-1 truncate">{r.label}</span>
+          {drop?.id === row.id && <span className={cn("absolute inset-x-1 h-0.5 rounded bg-focus", drop.before ? "-top-px" : "-bottom-px")} />}
+          {row.icon}
+          <span className="min-w-0 flex-1 truncate">{row.label}</span>
         </a>
       ))}
       <Button variant="plain" onClick={() => setCreating(true)} className={cn("flex items-center gap-2 rounded-lg pl-[30px] pr-2 text-muted-foreground hover:bg-hover hover:text-fg", touch ? "py-2 text-[15px]" : "py-1 text-sm")}>
-        <Plus size={touch ? 17 : 15} className="shrink-0" /> {t("types.new")}
+        <Plus size={rowIconSize(touch)} className="shrink-0" /> {t("types.new")}
       </Button>
       {creating && <NewTypeDialog onClose={() => setCreating(false)} />}
     </nav>
@@ -286,10 +294,10 @@ function TypeNav({ touch, here }: { touch?: boolean; here: boolean }) {
  * full title is the tooltip) – never stumps like "… im Alltag".
  */
 function distinctLabel(title: string, parentTitle?: string): string {
-  const p = parentTitle?.trim();
-  if (!p || title.length <= p.length) return title;
-  if (title.slice(0, p.length).toLowerCase() !== p.toLowerCase()) return title;
-  const rest = title.slice(p.length);
+  const prefix = parentTitle?.trim();
+  if (!prefix || title.length <= prefix.length) return title;
+  if (title.slice(0, prefix.length).toLowerCase() !== prefix.toLowerCase()) return title;
+  const rest = title.slice(prefix.length);
   if (!/^[\s:·–-]/.test(rest)) return title; // "RelaunchX" is no repetition
   const words = rest.replace(/^[\s:·–-]+/, "");
   return words.replace(/[^\p{L}\p{N}]/gu, "").length >= 2 ? "… " + words : title;
@@ -341,33 +349,32 @@ function TreeNode({
   const sortOf = (x: Item) => (parent ? (x.parents[parent]?.sort ?? "") : (x.pinned ?? ""));
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault();
-    const d = dragging;
+    const dragged = dragging;
     dragging = null;
     setDrop(null);
-    if (!d || d.id === item.id) return;
-    if (d.space !== space) return void (movable(d) && !isType && moveTo(d.id, d.space, space, item.id));
-    if ((d.type || isType) && drop === "inside") return;
+    if (!dragged || dragged.id === item.id) return;
+    if (dragged.space !== space) return void (movable(dragged) && !isType && moveTo(dragged.id, dragged.space, space, item.id));
+    if ((dragged.type || isType) && drop === "inside") return;
     if (drop === "inside") {
-      if (e.altKey) repo.addParent(d.id, item.id);
-      else if (d.from) repo.moveParent(d.id, d.from, item.id);
-      else if (repo.addParent(d.id, item.id)) repo.pin(d.id, false); // from the top: no longer pinned
+      if (e.altKey) repo.addParent(dragged.id, item.id);
+      else if (dragged.from) repo.moveParent(dragged.id, dragged.from, item.id);
+      else if (repo.addParent(dragged.id, item.id)) repo.pin(dragged.id, false); // from the top: no longer pinned
       if (!isOpen) toggle(key, depth);
       return;
     }
     // reorder among the siblings of this row
     const before = drop === "before";
     const neighbour = siblings[before ? index - 1 : index + 1];
-    const a = before ? (neighbour ? sortOf(neighbour) : null) : sortOf(item);
-    const b = before ? sortOf(item) : neighbour ? sortOf(neighbour) : null;
-    const sort = keyBetween(a, b);
+    const neighbourSort = neighbour ? sortOf(neighbour) : null;
+    const sort = before ? keyBetween(neighbourSort, sortOf(item)) : keyBetween(sortOf(item), neighbourSort);
     if (parent) {
-      if (d.from !== parent) {
-        if (e.altKey ? !repo.addParent(d.id, parent, sort) : !repo.moveParent(d.id, d.from, parent, sort)) return;
-      } else repo.setSort(d.id, parent, sort);
+      if (dragged.from !== parent) {
+        if (e.altKey ? !repo.addParent(dragged.id, parent, sort) : !repo.moveParent(dragged.id, dragged.from, parent, sort)) return;
+      } else repo.setSort(dragged.id, parent, sort);
     } else {
       // to the top level: pinned at this position
-      if (d.from && !e.altKey) repo.removeParent(d.id, d.from);
-      repo.setSort(d.id, null, sort);
+      if (dragged.from && !e.altKey) repo.removeParent(dragged.id, dragged.from);
+      repo.setSort(dragged.id, null, sort);
     }
   };
 
@@ -380,18 +387,18 @@ function TreeNode({
           e.dataTransfer.effectAllowed = "copyMove";
         }}
         onDragOver={(e) => {
-          const d = dragging;
-          if (!d || d.id === item.id || d.from === "types") return;
-          const other = d.space !== space;
+          const dragged = dragging;
+          if (!dragged || dragged.id === item.id || dragged.from === "types") return;
+          const other = dragged.space !== space;
           // from another workspace only into this item (a move), never into a type page; a type
           // page only changes its place among the pinned
-          if (other ? !movable(d) || isType : d.type && parent !== null) return;
+          if (other ? !movable(dragged) || isType : dragged.type && parent !== null) return;
           e.preventDefault();
           e.stopPropagation();
-          const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-          const y = e.clientY - r.top;
-          const edge = y < r.height / 2 ? "before" : "after";
-          setDrop(other ? "inside" : d.type || isType ? edge : y < r.height * 0.25 ? "before" : y > r.height * 0.75 ? "after" : "inside");
+          const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
+          const y = e.clientY - box.top;
+          const edge = y < box.height / 2 ? "before" : "after";
+          setDrop(other ? "inside" : dragged.type || isType ? edge : dropZone(y, box.height));
         }}
         onDragLeave={() => setDrop(null)}
         onDrop={onDrop}
@@ -415,7 +422,7 @@ function TreeNode({
         >
           {isOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
         </Button>
-        {isType ? <TypeGlyph schema={item.schema} size={touch ? 17 : 15} /> : <ItemIcon item={item} size={touch ? 17 : 15} />}
+        {isType ? <TypeGlyph schema={item.schema} size={rowIconSize(touch)} /> : <ItemIcon item={item} size={rowIconSize(touch)} />}
         {/* the row is dragged, not the link in it; the link covers the whole row (::after), only
             the buttons lie above it */}
         <a href={spaceHref(space, itemPath(item.id))} draggable={false} className="min-w-0 flex-1 truncate after:absolute after:inset-0 after:rounded-lg" title={secondary ? `${item.title}\n${t("tree.secondary", { home: ix.get(home)?.title ?? "" })}` : item.title} aria-current={activeId === item.id ? "page" : undefined}>

@@ -60,13 +60,23 @@ function wrap<A>(fn: (args: A) => unknown, writes = false) {
   };
 }
 
+const userPrompt = (text: string) => ({ messages: [{ role: "user" as const, content: { type: "text" as const, text } }] });
+
 function buildMcpServer(store: Store, origin: string, blobs?: Blobs) {
   const ops = new Ops(store, blobs);
   const agent = parseOrigin(origin).name;
   const server = new McpServer({ name: "obtion", version: "0.2.0" }, { instructions: INSTRUCTIONS });
   const ro = { readOnlyHint: true };
   /** All or nothing, with hints appended to the answer. */
-  const write = <A,>(fn: (a: A) => string | object) => wrap((a: A) => ops.call(origin, () => { const r = fn(a); return typeof r === "string" ? r : JSON.stringify(r, null, 1); }), true);
+  const write = <A,>(fn: (a: A) => string | object) =>
+    wrap(
+      (a: A) =>
+        ops.call(origin, () => {
+          const res = fn(a);
+          return typeof res === "string" ? res : JSON.stringify(res, null, 1);
+        }),
+      true,
+    );
 
   server.registerTool("schema", { title: "Schema", description: "All types with description, properties (options, groups) and capabilities, the views of each type's page, the inbox query and today's date. Read this first.", inputSchema: {}, annotations: ro }, wrap(() => ops.schema()));
   server.registerTool(
@@ -182,9 +192,14 @@ function buildMcpServer(store: Store, origin: string, blobs?: Blobs) {
       const r = (a.redo ? redoStep : undoStep)(store, step, origin);
       const ix = store.index();
       const items = [...r.changed, ...r.trashed].map((id) => ix.get(id) ?? store.records.get(id)).filter((i): i is NonNullable<typeof i> => !!i);
-      const kept = r.kept.length ? `\nKept newer values (changed again after that step): ${[...new Set(r.kept.map((k) => `"${store.records.get(k.doc)?.title}" ${k.field.replace(/^\w+[.:]?\w*:/, "")}`))].join(", ")}` : "";
-      const trashed = r.trashed.length ? `\nTo the trash (created in that step): ${r.trashed.map((id) => `"${store.records.get(id)?.title}"`).join(", ")}` : "";
-      return `${a.redo ? "Redone" : "Undone"} step ${r.undid}${items.length ? `:\n${ops.lines(items.filter((i) => !i.deleted))}` : " – nothing to change."}${trashed}${kept}\n(step ${r.step} – ${a.redo ? "undo" : "redo"} with undo${a.redo ? "" : " redo: true"})`;
+      const titleOf = (id: string) => `"${store.records.get(id)?.title}"`;
+      const keptFields = [...new Set(r.kept.map((k) => `${titleOf(k.doc)} ${k.field.replace(/^\w+[.:]?\w*:/, "")}`))];
+      const kept = r.kept.length ? `\nKept newer values (changed again after that step): ${keptFields.join(", ")}` : "";
+      const trashed = r.trashed.length ? `\nTo the trash (created in that step): ${r.trashed.map(titleOf).join(", ")}` : "";
+      const done = `${a.redo ? "Redone" : "Undone"} step ${r.undid}`;
+      const list = items.length ? `:\n${ops.lines(items.filter((i) => !i.deleted))}` : " – nothing to change.";
+      const back = `(step ${r.step} – ${a.redo ? "undo" : "redo"} with undo${a.redo ? "" : " redo: true"})`;
+      return `${done}${list}${trashed}${kept}\n${back}`;
     }, true),
   );
   server.registerTool(
@@ -193,38 +208,22 @@ function buildMcpServer(store: Store, origin: string, blobs?: Blobs) {
     wrap((a) => ops.activity(a)),
   );
 
-  server.registerPrompt("process_inbox", { title: "Process the inbox", description: "Go through the inbox and suggest a type and a place for each item." }, () => ({
-    messages: [
-      {
-        role: "user",
-        content: {
-          type: "text",
-          text: `Go through my inbox (today is ${todayISO()}).
+  server.registerPrompt("process_inbox", { title: "Process the inbox", description: "Go through the inbox and suggest a type and a place for each item." }, () =>
+    userPrompt(`Go through my inbox (today is ${todayISO()}).
 1. Read the types and their descriptions with schema, then the inbox with query "inbox".
 2. For each item (oldest first): get it, look at what it mentions and links, and search for similar items and likely places (overviews, projects).
 3. Suggest a type and/or a place with suggest – only where it is clear. Leave unclear items alone and say why. Don't place, type or delete anything yourself; I accept suggestions in the app.
-4. End with a short list: item → suggestion, and the items you left alone.`,
-        },
-      },
-    ],
-  }));
-  server.registerPrompt("weekly_review", { title: "Weekly review", description: "Done in 7 days, overdue, blocked, projects without updates, inbox." }, () => ({
-    messages: [
-      {
-        role: "user",
-        content: {
-          type: "text",
-          text: `Run my weekly review (today is ${todayISO()}). Use these queries and summarise each part in a few lines, citing titles:
+4. End with a short list: item → suggestion, and the items you left alone.`),
+  );
+  server.registerPrompt("weekly_review", { title: "Weekly review", description: "Done in 7 days, overdue, blocked, projects without updates, inbox." }, () =>
+    userPrompt(`Run my weekly review (today is ${todayISO()}). Use these queries and summarise each part in a few lines, citing titles:
 1. Done in the last 7 days: query "done>-7d".
 2. Overdue: query "status:open due<today".
 3. Blocked: query "blocked status:open" – for each, what it waits for.
 4. Active projects without an update for 14 days: focus and get, compare the last update with today.
 5. Inbox: query "inbox" – how many, how old is the oldest.
-Then ask what I want to change. Don't change anything before I answer.`,
-        },
-      },
-    ],
-  }));
+Then ask what I want to change. Don't change anything before I answer.`),
+  );
   return server;
 }
 

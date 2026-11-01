@@ -13,14 +13,15 @@ export interface Who {
 }
 
 export function who(origin: string, t: T): Who {
-  const a = parseOrigin(origin);
-  if (a.kind === "agent") {
-    const agent = agentLabel(a.name, t);
-    return { label: a.person ? t("activity.agentFor", { agent, name: a.person.name }) : agent, icon: a.name === "chat" ? Sparkles : Bot, agent: true };
+  const parsed = parseOrigin(origin);
+  if (parsed.kind === "agent") {
+    const agent = agentLabel(parsed.name, t);
+    const label = parsed.person ? t("activity.agentFor", { agent, name: parsed.person.name }) : agent;
+    return { label, icon: parsed.name === "chat" ? Sparkles : Bot, agent: true };
   }
-  if (a.kind === "import") return { label: t("activity.import", { name: a.name }), icon: Download, agent: false };
-  if (a.kind === "system") return { label: t("activity.system"), icon: Cog, agent: false };
-  if (a.kind === "web") return { label: a.person!.name, icon: User, agent: false, person: a.person };
+  if (parsed.kind === "import") return { label: t("activity.import", { name: parsed.name }), icon: Download, agent: false };
+  if (parsed.kind === "system") return { label: t("activity.system"), icon: Cog, agent: false };
+  if (parsed.kind === "web") return { label: parsed.person!.name, icon: User, agent: false, person: parsed.person };
   return { label: origin, icon: User, agent: false };
 }
 

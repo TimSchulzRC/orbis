@@ -25,9 +25,10 @@ export function AreaChip({ id }: { id: string }) {
   const item = ix.get(id);
   if (!item) return null;
   const pinned = ix.live.filter((i) => i.pinned).sort((a, b) => cmpKey(a.pinned!, b.pinned!));
-  const c = pal(AREA_COLORS[Math.max(0, pinned.findIndex((p) => p.id === id)) % AREA_COLORS.length]);
+  const position = Math.max(0, pinned.findIndex((p) => p.id === id));
+  const color = pal(AREA_COLORS[position % AREA_COLORS.length]);
   return (
-    <a href={itemHref(id)} className="inline-flex max-w-full items-center truncate whitespace-nowrap rounded-full px-2 py-px text-xs font-medium hover:underline" style={tint(c)}>
+    <a href={itemHref(id)} className="inline-flex max-w-full items-center truncate whitespace-nowrap rounded-full px-2 py-px text-xs font-medium hover:underline" style={tint(color)}>
       {item.title}
     </a>
   );
@@ -40,11 +41,11 @@ export function GroupChip({ g, by, byLabel }: { g: Group; by: string; byLabel: s
   if (g.option) return <StatusPill option={g.option} group={by === "status" ? (g.statusGroup as StatusGroup) : undefined} />;
   if (g.ref && by === "area") return <AreaChip id={g.ref} />;
   if (g.ref) {
-    const x = ix.get(g.ref);
-    return x ? (
-      <a href={itemHref(x.id)} className="flex min-w-0 items-center gap-1.5 text-sm font-medium hover:underline">
-        <ItemIcon item={x} size={14} className="shrink-0" />
-        <span className="truncate">{titleOf(x, t)}</span>
+    const target = ix.get(g.ref);
+    return target ? (
+      <a href={itemHref(target.id)} className="flex min-w-0 items-center gap-1.5 text-sm font-medium hover:underline">
+        <ItemIcon item={target} size={14} className="shrink-0" />
+        <span className="truncate">{titleOf(target, t)}</span>
       </a>
     ) : null;
   }

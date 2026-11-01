@@ -15,6 +15,9 @@ import { titleKey } from "@obtion/core/model";
 import { kindHint, webHref } from "../text";
 
 const EXTRACT_MENU_ROWS = 10;
+const LINK_HITS = 6;
+/** The bar keeps this many px away from the window's edges and from the selection. */
+const GAP = 8;
 
 const key = (k: string) => ` (${shortcut(k, getLang())})`;
 
@@ -26,13 +29,13 @@ const isURL = (s: string) => /^(https?:\/\/|mailto:|www\.)\S+$/i.test(s.trim());
 /** Writes [[Page]] when the text equals the page title. */
 function link(view: EditorView, target: { page?: string; url?: string }, text = view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.to)) {
   const { from, to } = view.state.selection.main;
-  const insert = target.page
-    ? titleKey(text) === target.page.toLowerCase()
-      ? `[[${target.page}]]`
-      : `[[${target.page}|${text}]]`
-    : `[${text}](${webHref(target.url!)})`;
+  const insert = target.page ? pageLink(target.page, text) : `[${text}](${webHref(target.url!)})`;
   view.dispatch({ changes: { from, to, insert }, selection: EditorSelection.cursor(from + insert.length) });
   view.focus();
+}
+
+function pageLink(page: string, text: string) {
+  return titleKey(text) === page.toLowerCase() ? `[[${page}]]` : `[[${page}|${text}]]`;
 }
 
 class Toolbar {
@@ -73,12 +76,12 @@ class Toolbar {
       this.openMenu(this.kindBtn, tr("editor.turnInto"), entries);
     });
     const sep = () => Object.assign(document.createElement("span"), { className: "cm-tb-sep" });
-    const mark = (icon: typeof Bold, label: string, m: string) => {
-      const b = iconButton(icon, label, "cm-tb", 16);
-      b.setAttribute("aria-pressed", "false");
-      b.addEventListener("click", () => toggleMark(view, m));
-      this.marks.push({ button: b, mark: m });
-      return b;
+    const mark = (icon: typeof Bold, label: string, chars: string) => {
+      const button = iconButton(icon, label, "cm-tb", 16);
+      button.setAttribute("aria-pressed", "false");
+      button.addEventListener("click", () => toggleMark(view, chars));
+      this.marks.push({ button, mark: chars });
+      return button;
     };
     const linkBtn = (this.linkBtn = iconButton(Link2, tr("editor.fmt.link") + key("K"), "cm-tb wide", 16));
     linkBtn.insertAdjacentHTML("beforeend", `<span>${tr("editor.fmt.linkShort")}</span>`);
@@ -130,8 +133,9 @@ class Toolbar {
     setTimeout(() => this.place());
   };
   get wanted() {
-    const s = this.view.state.selection.main;
-    return !this.view.state.readOnly && (this.linking || this.menuOpen || (!s.empty && this.view.hasFocus && !this.pointerDown && !!this.view.state.sliceDoc(s.from, s.to).trim()));
+    const sel = this.view.state.selection.main;
+    const textSelected = !sel.empty && this.view.hasFocus && !this.pointerDown && !!this.view.state.sliceDoc(sel.from, sel.to).trim();
+    return !this.view.state.readOnly && (this.linking || this.menuOpen || textSelected);
   }
   place() {
     if (!this.wanted) {
@@ -139,29 +143,31 @@ class Toolbar {
       return;
     }
     const { view } = this;
-    const s = view.state.selection.main;
-    const k = kindOfRange(view.state, s.from, s.to);
-    this.kindBtn.innerHTML = `<span>${k ? kindName(k) : tr("editor.block.mixed")}</span>${iconHTML(ChevronDown, 14)}`;
+    const sel = view.state.selection.main;
+    const kind = kindOfRange(view.state, sel.from, sel.to);
+    this.kindBtn.innerHTML = `<span>${kind ? kindName(kind) : tr("editor.block.mixed")}</span>${iconHTML(ChevronDown, 14)}`;
     // a link is inline: one block only
-    const multi = view.state.doc.lineAt(s.from).number !== view.state.doc.lineAt(s.to).number;
+    const multi = view.state.doc.lineAt(sel.from).number !== view.state.doc.lineAt(sel.to).number;
     this.linkBtn.hidden = this.linkSep.hidden = multi;
     for (const { button, mark } of this.marks) button.setAttribute("aria-pressed", String(markActive(view.state, mark)));
     this.extractBtn.hidden = this.extractSep.hidden = !view.state.facet(toolbarExtract) || !repo.index().typesInOrder().length;
     view.requestMeasure({
       read: () => {
         // read the selection at measure time, a change may land first (extracting shortens the text)
-        const s = view.state.selection.main;
-        const a = view.coordsAtPos(s.from, 1);
-        const b = view.coordsAtPos(s.to, -1);
-        return { a, b, dom: view.dom.getBoundingClientRect() };
+        const sel = view.state.selection.main;
+        const start = view.coordsAtPos(sel.from, 1);
+        const end = view.coordsAtPos(sel.to, -1);
+        return { start, end, dom: view.dom.getBoundingClientRect() };
       },
-      write: ({ a, b, dom }) => {
-        if (!a || !b) return;
+      write: ({ start, end, dom }) => {
+        if (!start || !end) return;
         this.dom.classList.add("shown");
-        const w = this.dom.offsetWidth;
-        const left = Math.max(-dom.left + 8, Math.min((a.top === b.top ? (a.left + b.right) / 2 - w / 2 : a.left) - dom.left, innerWidth - dom.left - w - 8));
+        const width = this.dom.offsetWidth;
+        // centred over a one-line selection, else at its start
+        const preferred = start.top === end.top ? (start.left + end.right) / 2 - width / 2 : start.left;
+        const left = Math.max(-dom.left + GAP, Math.min(preferred - dom.left, innerWidth - dom.left - width - GAP));
         this.dom.style.left = left + "px";
-        this.dom.style.top = a.top - dom.top - this.dom.offsetHeight - 8 + "px";
+        this.dom.style.top = start.top - dom.top - this.dom.offsetHeight - GAP + "px";
       },
     });
   }
@@ -200,30 +206,31 @@ class Toolbar {
     this.place();
   }
   search() {
-    const q = this.input.value;
-    const s = this.view.state.selection.main;
-    const text = this.relinkText ?? this.view.state.sliceDoc(s.from, s.to);
+    const query = this.input.value;
+    const sel = this.view.state.selection.main;
+    const text = this.relinkText ?? this.view.state.sliceDoc(sel.from, sel.to);
     const ix = repo.index();
-    const found = (q.trim() ? repo.search(q, 6) : repo.search(text, 6)).filter((r) => r.title);
-    this.hits = found.map((r) => ({ title: r.title, type: kindHint(r, ix) }));
+    const found = repo.search(query.trim() ? query : text, LINK_HITS).filter((hit) => hit.title);
+    this.hits = found.map((hit) => ({ title: hit.title, type: kindHint(hit, ix) }));
     this.picked = 0;
     this.results.textContent = "";
+    const isWeb = isURL(query);
     const rows: { icon: typeof Globe; label: string; hint: string; run: () => void }[] = [];
-    if (isURL(q)) rows.push({ icon: Globe, label: q.trim(), hint: tr("editor.fmt.linkWeb"), run: () => this.choose({ url: q.trim() }) });
-    if (this.hits.length) for (const h of this.hits) rows.push({ icon: FileText, label: h.title, hint: h.type, run: () => this.choose({ page: h.title }) });
-    else if (!isURL(q)) {
+    if (isWeb) rows.push({ icon: Globe, label: query.trim(), hint: tr("editor.fmt.linkWeb"), run: () => this.choose({ url: query.trim() }) });
+    if (this.hits.length) for (const hit of this.hits) rows.push({ icon: FileText, label: hit.title, hint: hit.type, run: () => this.choose({ page: hit.title }) });
+    else if (!isWeb) {
       const hint = Object.assign(document.createElement("div"), { className: "cm-toolbar-empty", textContent: tr("editor.fmt.linkNone") });
       this.results.append(hint);
     }
-    rows.forEach((r, i) => {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "cm-menu-row" + (i === 0 ? " active" : "");
-      b.innerHTML = `<span class="cm-menu-icon">${iconHTML(r.icon, 15)}</span><span class="cm-menu-label"></span><span class="cm-menu-hint"></span>`;
-      b.querySelector(".cm-menu-label")!.textContent = r.label;
-      b.querySelector(".cm-menu-hint")!.textContent = r.hint;
-      b.addEventListener("click", r.run);
-      this.results.append(b);
+    rows.forEach((row, i) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "cm-menu-row" + (i === 0 ? " active" : "");
+      button.innerHTML = `<span class="cm-menu-icon">${iconHTML(row.icon, 15)}</span><span class="cm-menu-label"></span><span class="cm-menu-hint"></span>`;
+      button.querySelector(".cm-menu-label")!.textContent = row.label;
+      button.querySelector(".cm-menu-hint")!.textContent = row.hint;
+      button.addEventListener("click", row.run);
+      this.results.append(button);
     });
   }
   key(e: KeyboardEvent) {
@@ -233,7 +240,7 @@ class Toolbar {
       e.preventDefault();
       if (!rows.length) return;
       this.picked = (this.picked + (e.key === "ArrowDown" ? 1 : -1) + rows.length) % rows.length;
-      rows.forEach((r, i) => r.classList.toggle("active", i === this.picked));
+      rows.forEach((row, i) => row.classList.toggle("active", i === this.picked));
     } else if (e.key === "Enter") {
       e.preventDefault();
       rows[this.picked]?.click();

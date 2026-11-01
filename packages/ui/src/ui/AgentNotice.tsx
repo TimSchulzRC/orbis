@@ -10,8 +10,8 @@ import { parseOrigin } from "@obtion/core/origin";
 function visible(id: string): HTMLElement[] {
   const onPage = decodeURIComponent(location.hash.replace(/^#\/i\//, "")) === id;
   const rows = [...document.querySelectorAll<HTMLElement>(`[data-id="${CSS.escape(id)}"]`)].filter((el) => {
-    const r = el.getBoundingClientRect();
-    return r.bottom > 0 && r.top < innerHeight && r.width > 0;
+    const box = el.getBoundingClientRect();
+    return box.bottom > 0 && box.top < innerHeight && box.width > 0;
   });
   if (onPage) rows.push(...[...document.querySelectorAll<HTMLElement>("[data-page-title]")]);
   return rows;
@@ -48,7 +48,8 @@ export function AgentNotice() {
       const list = titles.current.list;
       const name = agentLabel(agent, t);
       const step = e.step;
-      notify.undo(list.length === 1 ? t("agent.changed", { agent: name, title: list[0] || t("untitled") }) : t("agent.changedMany", { agent: name, count: list.length }), () => void repo.undo(step), "agent:" + step);
+      const message = list.length === 1 ? t("agent.changed", { agent: name, title: list[0] || t("untitled") }) : t("agent.changedMany", { agent: name, count: list.length });
+      notify.undo(message, () => void repo.undo(step), "agent:" + step);
     });
     return () => void off();
   }, [t]);

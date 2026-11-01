@@ -9,19 +9,19 @@ export function TitleField({ item, autoFocus, placeholder }: { item: Item; autoF
   const { t } = useT();
   // the workspace of this part of the page (the tray's panel shows entries of several)
   const repo = useRepo();
-  const { draft: v, setDraft: setV, focused, onKeyDown } = useFocusDraft(item.title);
+  const { draft, setDraft, focused, onKeyDown } = useFocusDraft(item.title);
   const ref = useRef<HTMLTextAreaElement>(null);
   useLayoutEffect(() => {
     const el = ref.current!;
     el.style.height = "auto";
     el.style.height = el.scrollHeight + "px";
-  }, [v]);
-  const latest = useRef(v);
-  latest.current = v;
+  }, [draft]);
+  const latest = useRef(draft);
+  latest.current = draft;
   const commit = () => {
     focused.current = false;
-    const x = latest.current.replace(/\s+/g, " ").trim();
-    if (x !== (repo.get(item.id)?.title ?? "")) repo.setTitle(item.id, x);
+    const title = latest.current.replace(/\s+/g, " ").trim();
+    if (title !== (repo.get(item.id)?.title ?? "")) repo.setTitle(item.id, title);
   };
   useEffect(() => () => void (focused.current && commit()), []);
   return (
@@ -29,13 +29,13 @@ export function TitleField({ item, autoFocus, placeholder }: { item: Item; autoF
       variant="inline"
       ref={ref}
       rows={1}
-      value={v}
+      value={draft}
       autoFocus={autoFocus}
       aria-label={t("item.title")}
       placeholder={placeholder ?? t("untitled")}
       onFocus={() => (focused.current = true)}
       onBlur={commit}
-      onChange={(e) => setV(e.target.value.replace(/\n/g, " "))}
+      onChange={(e) => setDraft(e.target.value.replace(/\n/g, " "))}
       onKeyDown={onKeyDown}
       data-large
       className="field page-title block w-full resize-none overflow-hidden bg-transparent outline-none placeholder:text-faint focus-visible:ring-0"

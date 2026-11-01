@@ -15,20 +15,20 @@ const MAX_TITLE = 100;
 
 /** "/buch Der Termin" picks the type by name prefix. Without type and parent it lands in the inbox. */
 export function capture(text: string, opts: { type?: string | null; parent?: string } = {}, repo: Repo = current): string | undefined {
-  let t = text.trim();
-  if (!t) return;
+  let input = text.trim();
+  if (!input) return;
   let type = opts.type ?? null;
-  const slash = /^\/(\S+)\s+/.exec(t);
+  const slash = /^\/(\S+)\s+/.exec(input);
   if (slash) {
     const ix = repo.index();
     const want = titleKey(slash[1]!);
-    const hit = [...ix.types.values()].find((x) => titleKey(x.schema.name).startsWith(want));
+    const hit = [...ix.types.values()].find((candidate) => titleKey(candidate.schema.name).startsWith(want));
     if (hit) {
       type = hit.id;
-      t = t.slice(slash[0].length);
+      input = input.slice(slash[0].length);
     }
   }
-  const lines = t.split("\n");
+  const lines = input.split("\n");
   const { text: firstLine, mentions } = extractMentions(lines[0]!.replace(/^#+\s*/, ""), repo);
   const tooLong = firstLine.length > MAX_TITLE;
   const title = tooLong ? firstLine.slice(0, MAX_TITLE - 3) + "…" : firstLine;

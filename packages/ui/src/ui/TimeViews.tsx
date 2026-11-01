@@ -24,6 +24,10 @@ const weekday = (d: string) => new Date(ms(d)).getUTCDay(); // 0 = Sunday
 const firstDay = (lang: string) => (lang === "en" ? 0 : 1);
 const startOfWeek = (d: string, lang: string) => addDays(d, -((weekday(d) - firstDay(lang) + 7) % 7));
 const isDay = (s: unknown): s is string => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s);
+const monthStart = (day: string) => day.slice(0, 7) + "-01";
+
+/** Entries a calendar week shows one above the other before "+ n more". */
+const MAX_LANES = 3;
 
 interface Span {
   start: string;
@@ -34,9 +38,9 @@ interface Span {
 function dateKey(def: QueryDef, items: Item[], ctx: EvalCtx, chosen?: string): string | undefined {
   if (chosen) return chosen;
   for (const id of viewTypeIds(def.where, items, ctx.ix, 100)) {
-    const s = ctx.ix.types.get(id)!.schema;
-    const p = s.properties.find((x) => x.kind === "date" && x.range) ?? dueProp(s) ?? s.properties.find((x) => x.kind === "date");
-    if (p) return p.name;
+    const schema = ctx.ix.types.get(id)!.schema;
+    const prop = schema.properties.find((x) => x.kind === "date" && x.range) ?? dueProp(schema) ?? schema.properties.find((x) => x.kind === "date");
+    if (prop) return prop.name;
   }
   return undefined;
 }
@@ -44,9 +48,9 @@ function dateKey(def: QueryDef, items: Item[], ctx: EvalCtx, chosen?: string): s
 function spanOf(item: Item, key: string, ctx: EvalCtx): Span | undefined {
   const hit = fieldOf(item, key, ctx.ix);
   if (!hit || hit.kind !== "date" || typeof hit.value !== "string" || !hit.value) return undefined;
-  const { start: a, end: b } = parseRange(hit.value);
-  const start = isDay(a) ? a : isDay(b) ? b : undefined;
-  const end = isDay(b) ? b : start;
+  const range = parseRange(hit.value);
+  const start = isDay(range.start) ? range.start : isDay(range.end) ? range.end : undefined;
+  const end = isDay(range.end) ? range.end : start;
   if (!start || !end) return undefined;
   return ms(end) < ms(start) ? { start: end, end: start } : { start, end };
 }
@@ -60,16 +64,27 @@ function writable(item: Item, key: string, ctx: EvalCtx): PropDef | undefined {
 }
 
 function writeSpan(item: Item, key: string, span: Span, ctx: EvalCtx) {
-  const p = writable(item, key, ctx);
-  if (!p) return;
-  repo.setProp(item.id, p.id, p.range ? formatRange(span.start, span.end) : span.start);
+  const prop = writable(item, key, ctx);
+  if (!prop) return;
+  repo.setProp(item.id, prop.id, prop.range ? formatRange(span.start, span.end) : span.start);
+}
+
+/** A span after dragging by `days`: the whole bar, or one edge (never past the other). */
+function draggedSpan(span: Span, mode: "move" | "start" | "end", days: number): Span {
+  if (mode === "move") return { start: addDays(span.start, days), end: addDays(span.end, days) };
+  if (mode === "start") {
+    const start = addDays(span.start, days);
+    return { start: ms(start) > ms(span.end) ? span.end : start, end: span.end };
+  }
+  const end = addDays(span.end, days);
+  return { start: span.start, end: ms(end) < ms(span.start) ? span.start : end };
 }
 
 export function CalendarView({ items, def, ctx, look }: { items: Item[]; def: QueryDef; ctx: EvalCtx; look?: Look }) {
   const { t, lang } = useT();
   const key = dateKey(def, items, ctx, look?.tab?.date);
   const today = todayISO();
-  const [month, setMonth] = useState(() => today.slice(0, 7) + "-01");
+  const [month, setMonth] = useState(() => monthStart(today));
   const [drag, setDrag] = useState<{ id: string; from: string } | null>(null);
   const [over, setOver] = useState<string | null>(null);
   const placed = key ? items.map((i) => ({ item: i, span: spanOf(i, key, ctx) })).filter((x): x is { item: Item; span: Span } => !!x.span) : [];
@@ -82,19 +97,18 @@ export function CalendarView({ items, def, ctx, look }: { items: Item[]; def: Qu
   const dayNames = Array.from({ length: 7 }, (_, n) => new Intl.DateTimeFormat(lang, { weekday: "short", timeZone: "UTC" }).format(new Date(ms(addDays(first, n)))));
   const drop = (day: string) => {
     if (!drag || !key) return;
-    const p = placed.find((x) => x.item.id === drag.id);
-    if (!p) return;
-    const d = diffDays(drag.from, day);
-    if (d) writeSpan(p.item, key, { start: addDays(p.span.start, d), end: addDays(p.span.end, d) }, ctx);
+    const entry = placed.find((x) => x.item.id === drag.id);
+    if (!entry) return;
+    const days = diffDays(drag.from, day);
+    if (days) writeSpan(entry.item, key, { start: addDays(entry.span.start, days), end: addDays(entry.span.end, days) }, ctx);
   };
   if (!key) return <p className="px-2 py-1.5 text-sm text-muted-foreground">{t("view.noDate")}</p>;
-  const MAX = 3;
   return (
     <div className="text-sm">
       <div className="mb-2 flex items-center gap-1">
         <h3 className="mr-2 text-base font-semibold capitalize">{new Intl.DateTimeFormat(lang, { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(ms(month)))}</h3>
         <IconButton size="sm" icon={ChevronLeft} onClick={() => shift(-1)} label={t("cal.prev")} />
-        <Button variant="plain" onClick={() => setMonth(today.slice(0, 7) + "-01")} className="tap rounded-md px-2 py-0.5 text-xs text-muted-foreground hover:bg-hover hover:text-fg">
+        <Button variant="plain" onClick={() => setMonth(monthStart(today))} className="tap rounded-md px-2 py-0.5 text-xs text-muted-foreground hover:bg-hover hover:text-fg">
           {t("time.today")}
         </Button>
         <IconButton size="sm" icon={ChevronRight} onClick={() => shift(1)} label={t("cal.next")} />
@@ -122,8 +136,9 @@ export function CalendarView({ items, def, ctx, look }: { items: Item[]; def: Qu
               for (let n = s; n <= e; n++) lanes[lane]![n] = p.item.id;
               return { ...p, s, e, lane };
             });
+            const shownLanes = Math.min(lanes.length, MAX_LANES);
             return (
-              <div key={w} className="relative grid min-h-24 grid-cols-7 border-b border-line last:border-b-0" style={{ gridTemplateRows: `1.75rem repeat(${Math.min(lanes.length, MAX) + 1}, minmax(1.5rem, auto))` }}>
+              <div key={w} className="relative grid min-h-24 grid-cols-7 border-b border-line last:border-b-0" style={{ gridTemplateRows: `1.75rem repeat(${shownLanes + 1}, minmax(1.5rem, auto))` }}>
                 {days.map((d, n) => (
                   <div
                     key={d}
@@ -131,13 +146,13 @@ export function CalendarView({ items, def, ctx, look }: { items: Item[]; def: Qu
                     onDragLeave={() => setOver(null)}
                     onDrop={(e) => (e.preventDefault(), drop(d), setDrag(null), setOver(null))}
                     className={cn("border-l border-line first:border-l-0", d.slice(0, 7) !== month.slice(0, 7) && "bg-surface-2/40", over === d && "bg-hover")}
-                    style={{ gridColumn: n + 1, gridRow: `1 / span ${Math.min(lanes.length, MAX) + 2}` }}
+                    style={{ gridColumn: n + 1, gridRow: `1 / span ${shownLanes + 2}` }}
                   >
                     <span className={cn("m-1 inline-flex size-6 items-center justify-center rounded-full text-xs tabular-nums", d === today ? "bg-ink font-medium text-ink-text" : "text-muted-foreground")}>{+d.slice(8, 10)}</span>
                   </div>
                 ))}
                 {pos
-                  .filter((p) => p.lane < MAX)
+                  .filter((p) => p.lane < MAX_LANES)
                   .map((p) => (
                     <a
                       key={p.item.id}
@@ -159,9 +174,9 @@ export function CalendarView({ items, def, ctx, look }: { items: Item[]; def: Qu
                     </a>
                   ))}
                 {days.map((d, n) => {
-                  const more = pos.filter((p) => p.lane >= MAX && p.s <= n && p.e >= n).length;
+                  const more = pos.filter((p) => p.lane >= MAX_LANES && p.s <= n && p.e >= n).length;
                   return more ? (
-                    <span key={"m" + d} className="z-[1] mx-1.5 text-xs text-muted-foreground" style={{ gridColumn: n + 1, gridRow: MAX + 2 }}>
+                    <span key={"m" + d} className="z-[1] mx-1.5 text-xs text-muted-foreground" style={{ gridColumn: n + 1, gridRow: MAX_LANES + 2 }}>
                       {t("cal.more", { count: more })}
                     </span>
                   ) : null;
@@ -213,8 +228,8 @@ export function TimelineView({ items, def, ctx, look }: { items: Item[]; def: Qu
   const [live, setLive] = useState<{ id: string; span: Span } | null>(null);
   const placed = new Map<string, Span>();
   if (key) for (const i of items) {
-    const s = spanOf(i, key, ctx);
-    if (s) placed.set(i.id, s);
+    const span = spanOf(i, key, ctx);
+    if (span) placed.set(i.id, span);
   }
   const undated = items.filter((i) => !placed.has(i.id));
   const spans = [...placed.values()];
@@ -228,10 +243,11 @@ export function TimelineView({ items, def, ctx, look }: { items: Item[]; def: Qu
   const scroller = useRef<HTMLDivElement>(null);
   const [scrollX, setScrollX] = useState(0);
   const narrow = useNarrow();
+  // today in view, a bit from the left
+  const todayScroll = Math.max(0, diffDays(from, today) * px - 160);
   useEffect(() => {
-    // start with today in view, a bit from the left
     const el = scroller.current;
-    if (el) el.scrollLeft = Math.max(0, diffDays(from, today) * px - 160);
+    if (el) el.scrollLeft = todayScroll;
   }, [scale, key]);
   if (!key) return <p className="px-2 py-1.5 text-sm text-muted-foreground">{t("view.noDate")}</p>;
   const by = def.group;
@@ -256,14 +272,9 @@ export function TimelineView({ items, def, ctx, look }: { items: Item[]; def: Qu
     let moved = false;
     startPointerDrag(
       (ev) => {
-        const d = Math.round((ev.clientX - x0) / px);
-        if (d) moved = true;
-        span =
-          mode === "move"
-            ? { start: addDays(span0.start, d), end: addDays(span0.end, d) }
-            : mode === "start"
-              ? { start: ms(addDays(span0.start, d)) > ms(span0.end) ? span0.end : addDays(span0.start, d), end: span0.end }
-              : { start: span0.start, end: ms(addDays(span0.end, d)) < ms(span0.start) ? span0.start : addDays(span0.end, d) };
+        const days = Math.round((ev.clientX - x0) / px);
+        if (days) moved = true;
+        span = draggedSpan(span0, mode, days);
         setLive({ id: item.id, span });
       },
       () => {
@@ -275,9 +286,9 @@ export function TimelineView({ items, def, ctx, look }: { items: Item[]; def: Qu
   };
   const LEFT = narrow ? 130 : 220; // the names column; on a phone it leaves room for the bars
   const row = (i: Item) => {
-    const s = live?.id === i.id ? live.span : placed.get(i.id)!;
-    const x = diffDays(from, s.start) * px;
-    const w = (diffDays(s.start, s.end) + 1) * px;
+    const span = live?.id === i.id ? live.span : placed.get(i.id)!;
+    const left = diffDays(from, span.start) * px;
+    const barWidth = (diffDays(span.start, span.end) + 1) * px;
     const canEdit = !!writable(i, key, ctx);
     return (
       <div key={i.id} data-id={i.id} className="group/row flex h-9 items-center border-b border-line hover:bg-hover">
@@ -290,13 +301,13 @@ export function TimelineView({ items, def, ctx, look }: { items: Item[]; def: Qu
         <div className="relative h-full" style={{ width }}>
           <div
             onPointerDown={(e) => drag(i, "move", e)}
-            title={`${i.title} · ${s.start === s.end ? s.start : `${s.start} – ${s.end}`}`}
+            title={`${i.title} · ${span.start === span.end ? span.start : `${span.start} – ${span.end}`}`}
             className={cn("absolute top-1.5 flex h-6 items-center overflow-hidden whitespace-nowrap rounded-md border px-2 text-xs touch-none", SPAN, canEdit ? "cursor-grab active:cursor-grabbing" : "cursor-pointer")}
-            style={{ left: x, width: Math.max(w, px) }}
+            style={{ left, width: Math.max(barWidth, px) }}
           >
             {canEdit && <span onPointerDown={(e) => drag(i, "start", e)} className="absolute inset-y-0 left-0 w-2 cursor-ew-resize" aria-hidden />}
             {/* a long bar keeps its name in view while scrolling */}
-            <span className="truncate" style={{ paddingLeft: Math.max(0, Math.min(scrollX - x, w - 120)) }}>
+            <span className="truncate" style={{ paddingLeft: Math.max(0, Math.min(scrollX - left, barWidth - 120)) }}>
               {titleOf(i, t)}
             </span>
             {canEdit && <span onPointerDown={(e) => drag(i, "end", e)} className="absolute inset-y-0 right-0 w-2 cursor-ew-resize" aria-hidden />}
@@ -309,7 +320,7 @@ export function TimelineView({ items, def, ctx, look }: { items: Item[]; def: Qu
     <div className="text-sm">
       <div className="mb-2 flex items-center gap-2">
         <Seg label={t("timeline.scale")} value={scale} onChange={setScale} options={[{ value: "week", label: t("timeline.weeks") }, { value: "month", label: t("timeline.months") }]} />
-        <Button variant="plain" onClick={() => scroller.current && (scroller.current.scrollLeft = Math.max(0, diffDays(from, today) * px - 160))} className="tap rounded-md px-2 py-0.5 text-xs text-muted-foreground hover:bg-hover hover:text-fg">
+        <Button variant="plain" onClick={() => scroller.current && (scroller.current.scrollLeft = todayScroll)} className="tap rounded-md px-2 py-0.5 text-xs text-muted-foreground hover:bg-hover hover:text-fg">
           {t("time.today")}
         </Button>
       </div>

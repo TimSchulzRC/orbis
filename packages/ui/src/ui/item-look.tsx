@@ -55,8 +55,8 @@ export function ItemIcon({ item, size = 16, className, ix }: { item: Item; size?
 }
 
 export function TypeGlyph({ schema, size = 16, className }: { schema?: TypeSchema; size?: number; className?: string }) {
-  const I = (schema && ICON[schema.icon]) || ICON.circle!;
-  return <I size={size} style={{ color: pal(schema?.color) }} className={cn("shrink-0", className)} aria-hidden />;
+  const Icon = (schema && ICON[schema.icon]) || ICON.circle!;
+  return <Icon size={size} style={{ color: pal(schema?.color) }} className={cn("shrink-0", className)} aria-hidden />;
 }
 
 export function TypeChip({ schema, onClick }: { schema: TypeSchema; onClick?: () => void }) {
@@ -85,11 +85,11 @@ export function StatusGlyph({ option, size = 16, className }: { option: OptionDe
 
 export function StatusPill({ option, small, group, label }: { option?: OptionDef; small?: boolean; group?: StatusGroup; label?: ReactNode }) {
   if (!option) return null;
-  const c = option.color ? pal(option.color) : GROUP_COLOR[group ?? option.group ?? "todo"];
-  const isStatus = !!(group ?? option.group);
+  const statusGroup = group ?? option.group;
+  const color = option.color ? pal(option.color) : GROUP_COLOR[statusGroup ?? "todo"];
   return (
-    <Badge className={cn("inline-flex items-center gap-1.5 whitespace-nowrap rounded-full font-medium", small ? "px-1.5 py-0 text-xs" : "px-2 py-0.5 text-xs")} style={tint(c)}>
-      {isStatus ? <StatusGlyph option={{ ...option, group: group ?? option.group }} size={12} /> : <span className="size-1.5 rounded-full" style={{ background: c }} />}
+    <Badge className={cn("inline-flex items-center gap-1.5 whitespace-nowrap rounded-full font-medium", small ? "px-1.5 py-0 text-xs" : "px-2 py-0.5 text-xs")} style={tint(color)}>
+      {statusGroup ? <StatusGlyph option={{ ...option, group: statusGroup }} size={12} /> : <span className="size-1.5 rounded-full" style={{ background: color }} />}
       {label ?? option.name}
     </Badge>
   );
@@ -175,8 +175,9 @@ export function DueLabel({ due, done, cell }: { due?: string; done?: boolean; ce
   const today = todayISO();
   const overdue = !done && due < today;
   const isToday = due === today;
+  const tone = overdue ? "text-danger" : isToday ? "text-warn" : cell ? "text-fg" : "text-muted-foreground";
   return (
-    <span className={cn("whitespace-nowrap tabular-nums", !cell && "text-xs", !cell && (overdue || isToday) && "font-medium", overdue ? "text-danger" : isToday ? "text-warn" : cell ? "text-fg" : "text-muted-foreground")}>
+    <span className={cn("whitespace-nowrap tabular-nums", !cell && "text-xs", !cell && (overdue || isToday) && "font-medium", tone)}>
       {isToday ? t("time.today") : fmtShortDate(lang, due)}
     </span>
   );

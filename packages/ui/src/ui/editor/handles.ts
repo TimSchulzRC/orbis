@@ -10,13 +10,18 @@ import { showMenu } from "./menu";
 import { MOD, isCoarse as coarse } from "../../lib/platform";
 
 const ALT = MOD === "⌘" ? "⌥" : "Alt ";
+/** How far left and right of the text the pointer still shows the handles, in px. */
+const REACH_LEFT = 72;
+const REACH_RIGHT = 24;
+/** The pointer must move this far, in px, before a press on the grip becomes a drag. */
+const DRAG_THRESHOLD = 4;
 
 function blockAtY(view: EditorView, y: number) {
-  const lb = view.lineBlockAtHeight(y - view.documentTop);
-  const b = blockAt(view.state, lb.from);
-  const first = view.lineBlockAt(b.from);
-  const last = view.lineBlockAt(b.to);
-  return { ...b, top: view.documentTop + first.top, bottom: view.documentTop + last.bottom };
+  const lineBlock = view.lineBlockAtHeight(y - view.documentTop);
+  const block = blockAt(view.state, lineBlock.from);
+  const first = view.lineBlockAt(block.from);
+  const last = view.lineBlockAt(block.to);
+  return { ...block, top: view.documentTop + first.top, bottom: view.documentTop + last.bottom };
 }
 
 function blockMenu(view: EditorView, pos: number, at: { left: number; top: number }) {
@@ -67,15 +72,16 @@ export const blockHandles = ViewPlugin.fromClass(
     };
     hover(x: number, y: number) {
       const { view } = this;
-      const r = view.contentDOM.getBoundingClientRect();
-      const inside = !view.state.readOnly && !coarse() && y >= r.top && y <= r.bottom && x >= r.left - 72 && x <= r.right + 24 && !document.querySelector(".cm-menu");
+      const content = view.contentDOM.getBoundingClientRect();
+      const nearText = y >= content.top && y <= content.bottom && x >= content.left - REACH_LEFT && x <= content.right + REACH_RIGHT;
+      const inside = !view.state.readOnly && !coarse() && nearText && !document.querySelector(".cm-menu");
       if (!inside) return this.hide();
-      const b = blockAtY(view, y);
-      this.current = b;
+      const block = blockAtY(view, y);
+      this.current = block;
       const dom = view.dom.getBoundingClientRect();
       // centred on the first line of the block
-      const c = view.coordsAtPos(b.from, 1);
-      const mid = c ? (c.top + c.bottom) / 2 : b.top + 13;
+      const coords = view.coordsAtPos(block.from, 1);
+      const mid = coords ? (coords.top + coords.bottom) / 2 : block.top + 13;
       this.box.style.top = mid - 12 - dom.top + "px";
       this.box.classList.remove("instant");
       this.box.classList.add("shown");
@@ -95,25 +101,27 @@ export const blockHandles = ViewPlugin.fromClass(
     grab(e: MouseEvent) {
       e.preventDefault();
       const { view } = this;
-      const b = this.current;
-      if (!b) return;
-      const sx = e.clientX;
-      const sy = e.clientY;
+      const block = this.current;
+      if (!block) return;
+      const startX = e.clientX;
+      const startY = e.clientY;
       let target: number | null = null;
       const dom = view.dom.getBoundingClientRect();
       const move = (m: MouseEvent) => {
-        if (!this.dragging && Math.hypot(m.clientX - sx, m.clientY - sy) < 4) return;
+        if (!this.dragging && Math.hypot(m.clientX - startX, m.clientY - startY) < DRAG_THRESHOLD) return;
         this.dragging = true;
         document.body.classList.add("cm-dragging");
-        const r = view.contentDOM.getBoundingClientRect();
-        const y = Math.max(r.top + 1, Math.min(r.bottom - 1, m.clientY));
+        const content = view.contentDOM.getBoundingClientRect();
+        const y = Math.max(content.top + 1, Math.min(content.bottom - 1, m.clientY));
         const over = blockAtY(view, y);
         let before = y < (over.top + over.bottom) / 2;
         // as in Notion, the gap right below the dragged block is where it already is, so it is no
         // drop target of its own
-        if (over.from === b.from) before = true;
-        else if (before && over.from === b.to + 1) before = false;
-        target = before ? over.from : over.to >= view.state.doc.length ? view.state.doc.length : over.to + 1;
+        if (over.from === block.from) before = true;
+        else if (before && over.from === block.to + 1) before = false;
+        const { length } = view.state.doc;
+        const afterOver = over.to >= length ? length : over.to + 1;
+        target = before ? over.from : afterOver;
         this.drop.style.top = (before ? over.top : over.bottom) - dom.top - 1 + "px";
         this.drop.classList.add("shown");
       };
@@ -124,12 +132,12 @@ export const blockHandles = ViewPlugin.fromClass(
         this.drop.classList.remove("shown");
         if (this.dragging) {
           this.dragging = false;
-          if (target !== null) moveBlock(view, b, target);
+          if (target !== null) moveBlock(view, block, target);
           view.focus();
         } else {
-          const r = (e.target as HTMLElement).closest("button")!.getBoundingClientRect();
-          view.dispatch({ selection: EditorSelection.cursor(view.state.doc.lineAt(b.from).to) });
-          blockMenu(view, b.from, { left: r.left, top: r.bottom + 4 }).focusFirst();
+          const button = (e.target as HTMLElement).closest("button")!.getBoundingClientRect();
+          view.dispatch({ selection: EditorSelection.cursor(view.state.doc.lineAt(block.from).to) });
+          blockMenu(view, block.from, { left: button.left, top: button.bottom + 4 }).focusFirst();
         }
       };
       window.addEventListener("mousemove", move);

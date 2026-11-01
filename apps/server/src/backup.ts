@@ -29,18 +29,23 @@ export class Backups {
   run(day = new Date().toISOString().slice(0, 10)): string | undefined {
     mkdirSync(this.dir, { recursive: true });
     const file = join(this.dir, `obtion-${day}.db`);
-    let made: string | undefined;
-    if (!existsSync(file)) {
-      // temp name first, so a backup job never sees a half-written copy
-      const tmp = `${file}.tmp`;
-      rmSync(tmp, { force: true });
-      this.store.flush();
-      this.store.db.exec(`VACUUM INTO '${tmp.replaceAll("'", "''")}'`);
-      renameSync(tmp, file);
-      made = file;
-    }
-    const old = readdirSync(this.dir).filter((n) => BACKUP_FILE.test(n)).sort().slice(0, -this.keep);
-    for (const n of old) rmSync(join(this.dir, n));
+    const made = existsSync(file) ? undefined : this.snapshot(file);
+    this.prune();
     return made;
+  }
+
+  private snapshot(file: string): string {
+    // temp name first, so a backup job never sees a half-written copy
+    const tmp = `${file}.tmp`;
+    rmSync(tmp, { force: true });
+    this.store.flush();
+    this.store.db.exec(`VACUUM INTO '${tmp.replaceAll("'", "''")}'`);
+    renameSync(tmp, file);
+    return file;
+  }
+
+  private prune() {
+    const old = readdirSync(this.dir).filter((name) => BACKUP_FILE.test(name)).sort().slice(0, -this.keep);
+    for (const name of old) rmSync(join(this.dir, name));
   }
 }

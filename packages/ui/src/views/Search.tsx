@@ -25,11 +25,16 @@ function explain(err: string, ix: Index): string {
   return err;
 }
 
+/** Edit distance (Levenshtein): how many letters to insert, delete or change to get from `a` to `b`. */
 function distance(a: string, b: string): number {
-  const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
-  for (let j = 1; j <= b.length; j++) d[0]![j] = j;
-  for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) d[i]![j] = Math.min(d[i - 1]![j]! + 1, d[i]![j - 1]! + 1, d[i - 1]![j - 1]! + (a[i - 1] === b[j - 1] ? 0 : 1));
-  return d[a.length]![b.length]!;
+  const dist = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 1; j <= b.length; j++) dist[0]![j] = j;
+  for (let i = 1; i <= a.length; i++)
+    for (let j = 1; j <= b.length; j++) {
+      const change = a[i - 1] === b[j - 1] ? 0 : 1;
+      dist[i]![j] = Math.min(dist[i - 1]![j]! + 1, dist[i]![j - 1]! + 1, dist[i - 1]![j - 1]! + change);
+    }
+  return dist[a.length]![b.length]!;
 }
 
 function onlyText(c: Cond): boolean {
@@ -47,15 +52,15 @@ export function SearchView() {
   const repos = useReplicas(shown.map((s) => s.id));
   const route = useRoute();
   const [q, setQ] = useState(route.query.get("q") ?? "");
-  const per = shown.map((s, n) => {
+  const perSpace = shown.map((s, n) => {
     const ix = repos[n]!.index();
     return { space: s, repo: repos[n]!, ix, parsed: parseQuery(q, ix) };
   });
   // A query is anything the parser reads as more than plain words – in every language of the catalogs.
-  const understood = per.filter((p) => !!p.parsed.def.where && !p.parsed.errors.length && !onlyText(p.parsed.def.where));
+  const understood = perSpace.filter((p) => !!p.parsed.def.where && !p.parsed.errors.length && !onlyText(p.parsed.def.where));
   const isQuery = understood.length > 0;
-  const errors = isQuery ? undefined : (per.find((p) => p.parsed.errors.length) ?? per[0]);
-  const hits = per.map((p) => ({ ...p, hits: !isQuery && q.trim() ? p.repo.search(q, 60) : [] }));
+  const errors = isQuery ? undefined : (perSpace.find((p) => p.parsed.errors.length) ?? perSpace[0]);
+  const hits = perSpace.map((p) => ({ ...p, hits: !isQuery && q.trim() ? p.repo.search(q, 60) : [] }));
   const several = shown.length > 1;
   return (
     <div className="page-read">

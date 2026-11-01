@@ -20,10 +20,10 @@ function resolve(c = themeChoice()): "light" | "dark" {
 }
 
 function apply() {
-  const r = resolve();
-  document.documentElement.dataset.theme = r;
-  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", BAR[r]);
-  document.querySelector('link[rel="icon"]')?.setAttribute("href", r === "dark" ? "/icon-dark.svg" : "/icon.svg");
+  const mode = resolve();
+  document.documentElement.dataset.theme = mode;
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", BAR[mode]);
+  document.querySelector('link[rel="icon"]')?.setAttribute("href", mode === "dark" ? "/icon-dark.svg" : "/icon.svg");
   listeners.forEach((l) => l());
 }
 

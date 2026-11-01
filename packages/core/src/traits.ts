@@ -32,7 +32,8 @@ export function isSingle(p: PropDef): boolean {
 
 /** Also accepts a value stored before the select switched between single and multiple. */
 export function optionIds(v: Value | undefined | null): string[] {
-  return Array.isArray(v) ? v.map(String) : typeof v === "string" && v ? [v] : [];
+  if (Array.isArray(v)) return v.map(String);
+  return typeof v === "string" && v ? [v] : [];
 }
 
 /**
@@ -41,8 +42,9 @@ export function optionIds(v: Value | undefined | null): string[] {
  */
 export function useAsStatus(doc: Y.Doc, p: PropDef, fresh: OptionDef[] = []) {
   const options = (p.options?.length ? p.options : fresh).map((o) => ({ ...o, group: o.group ?? ("todo" as const) }));
+  const keepsDefault = p.default && options.some((o) => o.id === p.default);
   setCapability(doc, "status", p.id);
-  upsertProp(doc, p.id, { kind: "select", multiple: null as any, options, default: p.default && options.some((o) => o.id === p.default) ? p.default : (options[0]?.id ?? (null as any)) });
+  upsertProp(doc, p.id, { kind: "select", multiple: null as any, options, default: keepsDefault ? p.default : (options[0]?.id ?? (null as any)) });
 }
 
 /** The status always gets one, even without a default. */
@@ -156,7 +158,7 @@ export function initialProps(schema?: TypeSchema): Record<string, Value> {
 /** For computed properties: whether there is something to show. */
 export function hasValue(item: Item, p: PropDef, ix: Pick<Index, "relValues" | "progress">): boolean {
   if (p.kind === "relation") return ix.relValues(item, p.id, p.symmetric).length > 0;
-  if (p.kind === "computed") return p.computed?.fn === "count" ? true : ix.progress(item.id, p.computed?.of).total > 0;
+  if (p.kind === "computed") return p.computed?.fn === "count" || ix.progress(item.id, p.computed?.of).total > 0;
   const v = item.props[p.id];
   return v !== undefined && v !== null && v !== "" && !(Array.isArray(v) && !v.length);
 }

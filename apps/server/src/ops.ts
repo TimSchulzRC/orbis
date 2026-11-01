@@ -71,6 +71,30 @@ export const QUERY_HELP =
 const UNLINKABLE = /[#|[\]^]/;
 const UNLINKABLE_ALL = /[#|[\]^]/g;
 const isDoneNow = (i: Item, schema: TypeSchema | undefined) => statusOf(i, schema)?.group === "done";
+/** An option given as "Name (group)" or "Name (group, state)". */
+const OPTION_GROUP = /\((todo|active|done)(?:,\s*(paused|dropped))?\)\s*$/;
+const OPTION_PARTS = /^(.*?)(?:\s*\((todo|active|done)(?:,\s*(paused|dropped))?\))?$/;
+const DOWNLOAD_TIMEOUT_MS = 30_000;
+
+/** What an untyped item is, by its place. */
+const placeKind = (i: Item, ix: Index) => (isInInbox(i, ix) ? "inbox" : isOverview(i, ix) ? "overview" : "note");
+
+/** An option name ("Pausiert") wins over the group it belongs to. */
+function optionNamed(p: PropDef, name: string): OptionDef | undefined {
+  try {
+    return matchOption(p, name);
+  } catch (e) {
+    if (e instanceof InputError) return undefined;
+    throw e;
+  }
+}
+
+/** Joins new text to a body the way body_mode says. */
+function joinBody(current: string, text: string, mode: UpdateInput["body_mode"] = "replace"): string {
+  if (mode === "append") return (current.trimEnd() ? current.trimEnd() + "\n\n" : "") + text;
+  if (mode === "prepend") return text + (current ? "\n\n" + current : "");
+  return text;
+}
 
 /** "start/end", either side may be empty. Tries every slash, since a date itself may contain one. */
 function splitRange(s: string, today: string): string | undefined {
@@ -82,6 +106,30 @@ function splitRange(s: string, today: string): string | undefined {
     if (da !== undefined && db !== undefined && (da || db)) return `${da}/${db}`;
   }
   return undefined;
+}
+
+/** A relation value outside the property's target is kept, with a hint (like the app's ⚠). */
+function offTargetHints(ix: Index, now: Item, prev: Item | undefined, schema: TypeSchema | undefined): string[] {
+  const hints: string[] = [];
+  for (const p of schema?.properties ?? []) {
+    if (p.kind !== "relation" || !p.target || p.removed) continue;
+    const added = (now.rels[p.id] ?? []).filter((r) => !(prev?.rels[p.id] ?? []).includes(r));
+    if (!added.length) continue;
+    const where = parseQuery(p.target, ix).def.where;
+    const off = where ? added.map((r) => ix.get(r)).filter((x): x is Item => !!x && !matches(x, where, { ix, thisId: now.id })) : [];
+    if (off.length) hints.push(`"${p.name}" of "${now.title}" is meant for ${p.target}; ${off.map((x) => `"${x.title}"`).join(", ")} ${off.length > 1 ? "don't" : "doesn't"} match. Saved anyway.`);
+  }
+  return hints;
+}
+
+/** For an item just marked done: the open items still below it. */
+function openBelowHint(ix: Index, done: Item): string | undefined {
+  const open = ix.items(ix.descendants(done.id)).filter((d) => {
+    const s = statusOf(d, ix.schemaOf(d));
+    return s && s.group !== "done";
+  });
+  if (!open.length) return undefined;
+  return `"${done.title}" is marked done, but ${open.length} open item(s) are below it: ${open.slice(0, 5).map((x) => `"${x.title}"`).join(", ")}${open.length > 5 ? " …" : ""}.`;
 }
 
 export class Ops {
@@ -109,12 +157,13 @@ export class Ops {
     const key = titleKey(r);
     const exact = pool.filter((i) => titleKey(i.title) === key || titleKey(i.file?.name ?? "") === key);
     if (exact.length === 1) return exact[0]!;
-    if (exact.length > 1) throw new OpError(`Several items are titled "${r}". Use an id:\n` + exact.map((i) => `- ${this.label(i)} (id ${i.id})`).join("\n"));
+    const candidates = (items: Item[]) => items.map((i) => `- ${this.label(i)} (id ${i.id})`).join("\n");
+    if (exact.length > 1) throw new OpError(`Several items are titled "${r}". Use an id:\n` + candidates(exact));
     const contains = pool.filter((i) => titleKey(i.title).includes(key));
     if (contains.length === 1) return contains[0]!;
     const sugg = (contains.length ? contains : ix.items(searchIds(this.store.searchIndex, r, 8))).slice(0, 8);
     if (!sugg.length) throw new OpError(`Nothing matches "${r}".`);
-    throw new OpError(`${contains.length ? `"${r}" matches several items` : `No item is titled "${r}"`}. Use one of these ids:\n` + sugg.map((i) => `- ${this.label(i)} (id ${i.id})`).join("\n"));
+    throw new OpError(`${contains.length ? `"${r}" matches several items` : `No item is titled "${r}"`}. Use one of these ids:\n` + candidates(sugg));
   }
 
   /** Refuses types: they change only through update_type and are deleted only in the app. */
@@ -138,7 +187,7 @@ export class Ops {
 
   label(i: Item) {
     const ix = this.store.index();
-    const kind = i.kind === "datei" ? "file" : (ix.typeName(i.type) ?? (isInInbox(i, ix) ? "inbox" : isOverview(i, ix) ? "overview" : "note"));
+    const kind = i.kind === "datei" ? "file" : (ix.typeName(i.type) ?? placeKind(i, ix));
     return `${displayTitle(i) || "(untitled)"} [${kind}]`;
   }
 
@@ -225,7 +274,7 @@ export class Ops {
     const tn = ix.typeName(i.type);
     if (i.kind === "datei") out.file = `${i.file?.filetype} ${i.file?.name}`;
     else if (tn) out.type = tn;
-    else out.kind = isInInbox(i, ix) ? "inbox" : isOverview(i, ix) ? "overview" : "note";
+    else out.kind = placeKind(i, ix);
     if (i.pinned) out.pinned = true;
     const st = statusOf(i, ix.schemaOf(i));
     if (st) out.status = `${st.option.name} (${st.group})`;
@@ -243,7 +292,7 @@ export class Ops {
     const schema = ix.schemaOf(i);
     const parts = [`${displayTitle(i) || "(untitled)"} [${i.id}]`];
     const tn = ix.typeName(i.type);
-    parts.push(i.kind === "datei" ? `file ${i.file?.filetype ?? ""}`.trim() : (tn ?? (isInInbox(i, ix) ? "inbox" : isOverview(i, ix) ? "overview" : "note")));
+    parts.push(i.kind === "datei" ? `file ${i.file?.filetype ?? ""}`.trim() : (tn ?? placeKind(i, ix)));
     if (i.pinned) parts.push("pinned");
     const st = statusOf(i, schema);
     if (st) parts.push(`${st.option.name} (${st.group})`);
@@ -296,21 +345,10 @@ export class Ops {
         if (UNLINKABLE.test(now.title)) hints.push(`"${now.title}" contains # | [ ] or ^ and can't be linked by title; link it as [[${id}|${now.title.replace(UNLINKABLE_ALL, " ").replace(/\s+/g, " ").trim()}]].`);
       }
       const schema = ix.schemaOf(now);
-      // a relation value outside the property's target is kept, with a hint (like the app's ⚠)
-      for (const p of schema?.properties ?? []) {
-        if (p.kind !== "relation" || !p.target || p.removed) continue;
-        const added = (now.rels[p.id] ?? []).filter((r) => !(prev?.rels[p.id] ?? []).includes(r));
-        if (!added.length) continue;
-        const where = parseQuery(p.target, ix).def.where;
-        const off = where ? added.map((r) => ix.get(r)).filter((x): x is Item => !!x && !matches(x, where, { ix, thisId: id })) : [];
-        if (off.length) hints.push(`"${p.name}" of "${now.title}" is meant for ${p.target}; ${off.map((x) => `"${x.title}"`).join(", ")} ${off.length > 1 ? "don't" : "doesn't"} match. Saved anyway.`);
-      }
+      hints.push(...offTargetHints(ix, now, prev, schema));
       if (isDoneNow(now, schema) && !(prev && isDoneNow(prev, ix0.schemaOf(prev)))) {
-        const open = ix.items(ix.descendants(id)).filter((d) => {
-          const s = statusOf(d, ix.schemaOf(d));
-          return s && s.group !== "done";
-        });
-        if (open.length) hints.push(`"${now.title}" is marked done, but ${open.length} open item(s) are below it: ${open.slice(0, 5).map((x) => `"${x.title}"`).join(", ")}${open.length > 5 ? " …" : ""}.`);
+        const hint = openBelowHint(ix, now);
+        if (hint) hints.push(hint);
       }
     }
     for (const id of blockedBefore) {
@@ -459,7 +497,10 @@ export class Ops {
       case "number": {
         // plain notation first (1234.5), then German (1.234,5 / 1,5)
         const s = String(raw).trim();
-        const n = typeof raw === "number" ? raw : isNaN(Number(s)) ? parseNumber("de", s) : Number(s);
+        const plain = Number(s);
+        let n: number | undefined;
+        if (typeof raw === "number") n = raw;
+        else n = isNaN(plain) ? parseNumber("de", s) : plain;
         if (n === undefined || isNaN(n)) throw new OpError(`"${p.name}" needs a number, got "${raw}".`);
         return { value: n };
       }
@@ -495,7 +536,7 @@ export class Ops {
     const ix = this.store.index();
     for (const l of parseWikiLinks(body)) {
       const to = ix.resolveTitle(l.target);
-      if (l.target === id || titleKey(l.target) === titleKey(title) || (to === id))
+      if (l.target === id || titleKey(l.target) === titleKey(title) || to === id)
         throw new OpError(`The text of "${title}" links to itself ([[${l.target}]]). Links to the item itself are not allowed; remove the brackets or link another item.`);
     }
   }
@@ -550,7 +591,8 @@ export class Ops {
       if (input.type && item.kind !== "info") throw new OpError(`"${item.title}" is a file. Files have no type, only the file type (filetype).`);
       this.guardInbox(item, "giving it a type");
     }
-    const newType = input.type === undefined ? undefined : input.type === null || input.type === "" ? null : this.resolveType(input.type);
+    // null or "" removes the type
+    const newType = input.type === undefined ? undefined : input.type ? this.resolveType(input.type) : null;
     const schema = newType === undefined ? ix.schemaOf(item) : newType?.schema;
     if (input.title !== undefined && !input.title.trim()) throw new OpError("Title cannot be empty.");
     let body: string | undefined;
@@ -561,10 +603,7 @@ export class Ops {
       if (count === 0) throw new OpError("old_text was not found in the body.");
       if (count > 1) throw new OpError(`old_text occurs ${count} times; include more context.`);
       body = item.body.replace(input.old_text, () => input.new_text ?? "");
-    } else if (input.body !== undefined) {
-      const m = input.body_mode ?? "replace";
-      body = m === "append" ? (item.body.trimEnd() ? item.body.trimEnd() + "\n\n" : "") + input.body : m === "prepend" ? input.body + (item.body ? "\n\n" + item.body : "") : input.body;
-    }
+    } else if (input.body !== undefined) body = joinBody(item.body, input.body, input.body_mode);
     if (body !== undefined) body = normalizeBlocks(body, ix);
     if (body !== undefined || input.title !== undefined) this.noSelfLink(body ?? item.body, item.id, input.title?.trim() || item.title);
     const refsAdd = (input.refs_add ?? []).map((r) => this.resolve(r).id);
@@ -672,23 +711,18 @@ export class Ops {
         const schema = this.store.index().schemaOf(item);
         const sp = statusProp(schema);
         if (!sp) throw new OpError(`"${item.title}" has no status.`);
-        // an option name ("Pausiert") wins over the group it belongs to
-        const named = (() => {
-          try {
-            return matchOption(sp, group);
-          } catch (e) {
-            if (e instanceof InputError) return undefined;
-            throw e;
-          }
-        })();
-        const id = named?.id ?? (g ? firstOfGroup(schema, g)?.id : undefined) ?? (this.toValue(sp, group, item).value as string);
+        const id = optionNamed(sp, group)?.id ?? (g ? firstOfGroup(schema, g)?.id : undefined) ?? (this.toValue(sp, group, item).value as string);
         plan.push({ item, schema, prop: sp.id, id });
       } catch (e) {
         errors.push((e as Error).message);
       }
     }
     if (errors.length) throw new OpError(errors.join(" "));
-    for (const p of plan) this.store.change(p.item.id, origin, (doc) => (writeProp(doc, p.schema, p.prop, p.id), touch(doc)));
+    for (const p of plan)
+      this.store.change(p.item.id, origin, (doc) => {
+        writeProp(doc, p.schema, p.prop, p.id);
+        touch(doc);
+      });
     this.store.flush();
     return plan.map((p) => this.store.records.get(p.item.id)!);
   }
@@ -759,9 +793,9 @@ export class Ops {
     const legacy = (k?: PropInput["kind"]): PropKind | undefined => (k === "status" || k === "multiselect" ? "select" : k);
     const toDef = (p: PropInput, cur?: PropDef): Patch<Omit<PropDef, "id">> => {
       const kind = legacy(p.kind) ?? cur?.kind;
-      const grouped = p.kind === "status" || (!!cur && statusProp(s)?.id === cur.id) || !!p.options?.some((o) => /\((todo|active|done)(?:,\s*(paused|dropped))?\)\s*$/.test(o));
+      const grouped = p.kind === "status" || (!!cur && statusProp(s)?.id === cur.id) || !!p.options?.some((o) => OPTION_GROUP.test(o));
       const options = p.options?.map((o) => {
-        const m = /^(.*?)(?:\s*\((todo|active|done)(?:,\s*(paused|dropped))?\))?$/.exec(o)!;
+        const m = OPTION_PARTS.exec(o)!;
         const existing = cur?.options?.find((x) => x.name === m[1]);
         const state = grouped ? ((m[3] as OptionDef["state"]) ?? (m[2] ? undefined : existing?.state)) : undefined;
         return { id: existing?.id ?? shortId("o"), name: m[1]!.trim(), group: grouped ? ((m[2] as StatusGroup | undefined) ?? existing?.group ?? "todo") : undefined, ...(state ? { state } : {}), color: existing?.color ?? "gray" };
@@ -775,13 +809,18 @@ export class Ops {
       }
       let computed = cur?.computed;
       if (p.computed) computed = { fn: p.computed.startsWith("count") ? "count" : "progress", of: p.computed.includes(":") ? this.resolveType(p.computed.split(":")[1]!.trim()).id : undefined };
-      const multiple = p.kind === "multiselect" ? true : p.kind === "status" ? null : p.multiple;
+      let multiple: boolean | null | undefined = p.multiple;
+      if (p.kind === "multiselect") multiple = true;
+      else if (p.kind === "status") multiple = null;
       return { name: p.name, kind, description: p.description, options, multiple, default: def, target: p.target, inverseName: p.inverse, symmetric: p.symmetric, range: p.range, computed, hideEmpty: p.hide_empty, blocks: p.blocks };
     };
     // properties given the old kind "status" become the type's status below, once they exist
     const asStatus = [...(input.add_properties ?? []), ...(input.change_properties ?? [])].filter((p) => p.kind === "status").map((p): string => p.name ?? ("property" in p && typeof p.property === "string" ? p.property : ""));
     this.store.change(t.id, origin, (doc) => {
-      if (input.name) (setSchemaField(doc, "name", input.name), setMeta(doc, { title: input.name }));
+      if (input.name) {
+        setSchemaField(doc, "name", input.name);
+        setMeta(doc, { title: input.name });
+      }
       if (input.plural !== undefined) setSchemaField(doc, "plural", input.plural);
       if (input.views) setTabs(doc, this.toTabs(input.views, t));
       if (input.description !== undefined) setSchemaField(doc, "description", input.description);
@@ -883,7 +922,7 @@ export class Ops {
     else if (input.url) {
       const u = new URL(input.url);
       if (!["http:", "https:"].includes(u.protocol)) throw new OpError("Only http(s) URLs.");
-      const res = await fetch(u, { signal: AbortSignal.timeout(30000) });
+      const res = await fetch(u, { signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) });
       if (!res.ok) throw new OpError(`Download failed: ${res.status}`);
       data = new Uint8Array(await res.arrayBuffer());
     } else throw new OpError("Give url or base64.");
