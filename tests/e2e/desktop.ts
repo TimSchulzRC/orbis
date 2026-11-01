@@ -88,6 +88,8 @@ const visible = (page: Page | Locator, text: string | RegExp, timeout = 15000) =
 			() => true,
 			() => false,
 		);
+/** The settings dialog: what it lists, not the page behind it. */
+const settings = (page: Page) => page.getByRole("dialog", { name: "Einstellungen" });
 
 try {
 	// 1. the first start: where the first workspace goes; on this device, set up as it is created
@@ -219,7 +221,10 @@ try {
 	await dialog.getByRole("button", { name: "Workspace anlegen" }).click();
 	expect(await opened(page, "Projekte"), "second server workspace: not opened");
 	await page.evaluate(() => (location.hash = "#/settings"));
-	expect(await visible(page, "Projekte"), "settings: the second server workspace is missing");
+	expect(
+		await visible(settings(page), "Projekte"),
+		"settings: the second server workspace is missing",
+	);
 	await shot(page, "5-settings-with-server");
 
 	// the password changed on the server, from here: the server takes the new one, this device stays signed in
@@ -240,7 +245,8 @@ try {
 	await page.reload();
 	await page.evaluate(() => (location.hash = "#/settings"));
 	expect(
-		(await visible(page, "Projekte")) && !(await visible(page, "abgemeldet", 2000)),
+		(await visible(settings(page), "Projekte")) &&
+			!(await visible(settings(page), /· abgemeldet/, 2000)),
 		"password: this device was signed out",
 	);
 
@@ -265,8 +271,8 @@ try {
 	// 4. a restart: the same account on this device, the same workspaces
 	({ app, page } = await launch());
 	await page.evaluate(() => (location.hash = "#/settings"));
-	expect(await visible(page, "Persönlich"), "restart: the local workspace is missing");
-	expect(await visible(page, "Team"), "restart: the server workspace is missing");
+	expect(await visible(settings(page), "Persönlich"), "restart: the local workspace is missing");
+	expect(await visible(settings(page), "Team"), "restart: the server workspace is missing");
 	await shot(page, "7-after-restart");
 
 	// 5. signing out of the server: its workspaces and every copy of them leave this device
@@ -295,7 +301,10 @@ try {
 		page.getByRole("button", { name: "Abmelden" }).click(),
 	]);
 	await page.evaluate(() => (location.hash = "#/settings"));
-	expect(!(await visible(page, "Team", 3000)), "sign-out: the server workspace is still listed");
+	expect(
+		!(await visible(settings(page), "Team", 3000)),
+		"sign-out: the server workspace is still listed",
+	);
 	const left = await copies();
 	expect(left.length === 0, `sign-out: copies left behind: ${left.join(", ")}`);
 
@@ -334,17 +343,20 @@ try {
 		await box.getByRole("button", { name: "Anmelden" }).click();
 	};
 	await connect("tim@example.org", "anders12345");
-	expect(await visible(page, "Projekte"), "connect again: the server's workspaces are missing");
+	expect(
+		await visible(settings(page), "Projekte"),
+		"connect again: the server's workspaces are missing",
+	);
 	const projekte = (
 		await page.evaluate(() => JSON.parse(localStorage.getItem("obtion.spaces") ?? "[]"))
 	).find((w: { name: string }) => w.name === "Projekte")?.id;
 	await page.evaluate((id) => (location.hash = `#/w/${id}/`), projekte);
 	await Promise.all([page.waitForEvent("load"), connect("ada@example.org")]);
 	await page.evaluate(() => (location.hash = "#/settings"));
-	expect(await visible(page, "ada@example.org"), "switch: the new account is not shown");
-	expect(await visible(page, "Team"), "switch: the new account's workspace is missing");
+	expect(await visible(settings(page), "ada@example.org"), "switch: the new account is not shown");
+	expect(await visible(settings(page), "Team"), "switch: the new account's workspace is missing");
 	expect(
-		!(await visible(page, "Projekte", 3000)),
+		!(await visible(settings(page), "Projekte", 3000)),
 		"switch: a workspace of the account before is still listed",
 	);
 	expect(
