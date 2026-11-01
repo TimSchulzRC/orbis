@@ -3,14 +3,13 @@
 import { Checkbox } from "../components/ui/checkbox";
 import { NativeSelect } from "../components/ui/native-select";
 import { useState } from "react";
-import { X, Plus, ExternalLink, AlertTriangle, Trash2, ArrowRightLeft, CalendarDays } from "lucide-react";
+import { X, Plus, ExternalLink, AlertTriangle, CalendarDays } from "lucide-react";
 import { type Item, type PropDef, type TypeSchema, type Value, STATUS_GROUPS, formatRange, optionNames, parseRange } from "@obtion/core/model";
 import { type T, fmtDate } from "@obtion/core/i18n";
 import type { Index } from "@obtion/core/graph";
 import { numberText, parseNumber } from "@obtion/core/input";
 import { parseQuery, matches } from "@obtion/core/query";
 import { defaultOption, doneAt, hasValue, isSingle, isStatusProp, optionIds, statusOf, visibleProps } from "@obtion/core/traits";
-import { toFree } from "@obtion/core/typeops";
 import { repo } from "../repo";
 import { useIndex } from "../hooks";
 import { useT } from "../i18n";
@@ -20,7 +19,7 @@ import { Button, EmptyValueButton, IconButton, MenuItem, Popover, AddButton, REV
 import { Progress, ProgressCount } from "./progress";
 import { cn } from "../lib/utils";
 import { TagInput } from "./TagInput";
-import { AddFreeProp, FreeField, freeOptions } from "./FreeProps";
+import { FreeValueText } from "./FreeProps";
 import { ItemPicker } from "./Picker";
 import { StatusMenu, setStatus } from "./Row";
 import { dateOf } from "@obtion/core/date";
@@ -290,9 +289,9 @@ const isBadge = (p: PropDef) => isSingle(p);
 /**
  * The properties of a page under the title (design rules § 2.2). First a row of badges – the
  * type, then status and selections in the type's order –, under it the dates, under them the
- * progress. The rest follows with its name: the type's properties in their order, free ones,
- * the other side of relations ("Blockiert diese"), last the tags. "+ Eigenschaft" offers the
- * empty ones, a new free one and a tag.
+ * progress. The rest follows with its name: the type's properties in their order, values left
+ * without a property (shown, only removable), the other side of relations ("Blockiert diese"),
+ * last the tags. "+ Eigenschaft" offers the type's empty properties and a tag.
  */
 export function PropertyBlock({ item, schema, noAdd, head = {} }: { item: Item; schema?: TypeSchema; noAdd?: boolean; head?: PageHead }) {
   const { t } = useT();
@@ -300,7 +299,6 @@ export function PropertyBlock({ item, schema, noAdd, head = {} }: { item: Item; 
   // empty properties opened from "+ Eigenschaft" stay while on this page
   const [opened, setOpened] = useState<Set<string>>(new Set());
   const [focus, setFocus] = useState<string | undefined>();
-  const [adding, setAdding] = useState(false);
   const [tagging, setTagging] = useState(false);
   const visible = schema ? visibleProps(item, schema, ix, opened).filter((p) => !(p.kind === "computed" && p.computed?.fn !== "count")) : [];
   const badges = visible.filter(isBadge);
@@ -345,7 +343,7 @@ export function PropertyBlock({ item, schema, noAdd, head = {} }: { item: Item; 
       ))}
       {free.map(([n, v]) => (
         <BlockRow key={"free:" + n} label={n}>
-          <FreeField value={v} name={n} options={v.k === "select" ? freeOptions(n) : undefined} onChange={(x) => repo.setExtra(item.id, n, x)} />
+          <FreeValueText value={v} />
           <IconButton size="xs" icon={X} iconSize={12} onClick={() => repo.setExtra(item.id, n, null)} className={cn("ml-auto text-faint", REVEAL.any)} label={t("props.removeFree", { name: n })} />
         </BlockRow>
       ))}
@@ -361,26 +359,7 @@ export function PropertyBlock({ item, schema, noAdd, head = {} }: { item: Item; 
       {leftovers.map((p) => (
         <BlockRow key={"old:" + p.id} label={p.name} title={t("props.more")}>
           <span className="text-muted-foreground">{displayValue(item, p)}</span>
-          <Popover trigger={(pp) => <Button variant="plain" {...pp} className="tap rounded p-0.5 text-faint hover:bg-hover" aria-label={t("more")}><ArrowRightLeft size={12} /></Button>}>
-            {(close) => (
-              <>
-                <MenuItem
-                  onClick={() => {
-                    close();
-                    const fv = toFree(p, item.props[p.id]);
-                    if (fv) repo.setExtra(item.id, p.name, fv);
-                    for (const r of item.rels[p.id] ?? []) repo.setMember(item.id, "refs", r, true);
-                    repo.setProp(item.id, p.id, null);
-                  }}
-                >
-                  {t("props.toFree")}
-                </MenuItem>
-                <MenuItem danger icon={<Trash2 size={13} />} onClick={() => (close(), repo.setProp(item.id, p.id, null))}>
-                  {t("props.removeValue")}
-                </MenuItem>
-              </>
-            )}
-          </Popover>
+          <IconButton size="xs" icon={X} iconSize={12} onClick={() => repo.setProp(item.id, p.id, null)} className={cn("ml-auto text-faint", REVEAL.any)} label={t("props.removeFree", { name: p.name })} />
         </BlockRow>
       ))}
       {(item.tags.length > 0 || tagging) && (
@@ -393,9 +372,7 @@ export function PropertyBlock({ item, schema, noAdd, head = {} }: { item: Item; 
       )}
       {!noAdd && (
         <div className="col-span-2">
-          {adding ? (
-            <AddFreeProp item={item} onDone={() => setAdding(false)} />
-          ) : (
+          {(empty.length > 0 || !item.tags.length) && (
             <Popover
               trigger={(pp) => (
                 // quiet until the pointer is over the properties (always there on touch screens)
@@ -416,8 +393,6 @@ export function PropertyBlock({ item, schema, noAdd, head = {} }: { item: Item; 
                     </MenuItem>
                   ))}
                   {!item.tags.length && <MenuItem onClick={() => (close(), setTagging(true))}>{t("props.tag")}</MenuItem>}
-                  {(empty.length > 0 || !item.tags.length) && <div className="my-1 border-t border-line" />}
-                  <MenuItem onClick={() => (close(), setAdding(true))}>{t("props.newFree")}</MenuItem>
                 </>
               )}
             </Popover>

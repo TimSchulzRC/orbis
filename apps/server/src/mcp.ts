@@ -91,7 +91,7 @@ function buildMcpServer(store: Store, origin: string, blobs?: Blobs) {
     "create",
     {
       title: "Create",
-      description: "Create informations. type is a type name (see schema) or omitted; parents (titles/ids) place them; properties by name; free_properties are properties without a type. Without type and parent the item lands in the inbox.",
+      description: "Create informations. type is a type name (see schema) or omitted; parents (titles/ids) place them; properties by name (only those of the type). Without type and parent the item lands in the inbox.",
       inputSchema: { items: z.array(createInput).min(1) },
     },
     write((a) => `Created:\n${ops.lines(a.items.map((x) => ops.create(x, origin)))}`),
@@ -100,7 +100,7 @@ function buildMcpServer(store: Store, origin: string, blobs?: Blobs) {
     "update",
     {
       title: "Update",
-      description: "Change one item: title, type (name or null), properties by name (null clears), free_properties, tags, refs, body (old_text/new_text for precise edits, or body + body_mode replace|append|prepend). Renaming rewrites [[links]].",
+      description: "Change one item: title, type (name or null), properties by name (null clears), free_properties_remove, tags, refs, body (old_text/new_text for precise edits, or body + body_mode replace|append|prepend). Renaming rewrites [[links]].",
       inputSchema: updateInput.shape,
     },
     write((a) => {

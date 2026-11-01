@@ -257,11 +257,7 @@ Connect an MCP client in the workspace settings to read and change your entries 
   const course = put("ex-course", {
     title: L("Kurs Datenbanken", "Databases course"),
     parents: [learn],
-    extra: { ECTS: { k: "number", v: 6 }, [L("Note", "Grade")]: { k: "number", v: 1.7 } },
-    body: L(
-      "Relationale Modelle, SQL, Normalisierung, Indizes. ECTS und Note sind freie Eigenschaften: einfach auf der Seite ergänzen, ohne Typ.\n",
-      "Relational models, SQL, normalisation, indexes. ECTS and grade are free properties: add them on any page, no type needed.\n",
-    ),
+    body: L("Relationale Modelle, SQL, Normalisierung, Indizes. 6 ECTS, Note 1,7.\n", "Relational models, SQL, normalisation, indexes. 6 ECTS, grade 1.7.\n"),
   });
   const nf = L("Normalformen", "Normal forms");
   const btree = L("B-Bäume", "B-trees");
