@@ -177,6 +177,8 @@ export class DeviceFiles {
   private loading = new Map<string, Promise<string | undefined>>();
   private local = new Set<string>();
   private missing = new Set<string>(); // not on the server (yet): shown as "Datei fehlt"
+  private fresh = new Set<string>(); // stored in this session: may belong to a file not written yet
+  private collected = false;
 
   /** Ask the server whether it has a content, without downloading it. */
   async check(hash: string): Promise<void> {
@@ -242,6 +244,8 @@ export class DeviceFiles {
   setMode(m: FileMode) {
     this.mode = m;
     localStorage.setItem(MODE_KEY, m);
+    // queued originals are no longer wanted; the next sync queues the previews again
+    if (m === "online") this.queue.length = 0;
     this.scheduleSync(10);
     this.emit();
   }
@@ -320,6 +324,7 @@ export class DeviceFiles {
   private async save(hash: string, blob: Blob) {
     await this.store.put(hash, blob);
     this.local.add(hash);
+    this.fresh.add(hash);
   }
 
   /** A content from this device or the server (checked against its hash); undefined if neither has it. */
@@ -414,7 +419,23 @@ export class DeviceFiles {
     if (this.repo.status.online) for (const h of want) if (!this.queue.includes(h) && !this.missing.has(h)) this.queue.push(h);
     this.pump();
     if (this.repo.status.online) this.makePdfPreviews(files).catch(() => {});
+    if (this.repo.status.synced && !this.collected) {
+      this.collected = true;
+      await this.collect();
+    }
     this.updateStatus(files);
+  }
+
+  /**
+   * Once a session, when the replica has caught up with the server: remove contents no file
+   * points to any more (an original replaced by a new version, its previews). Contents waiting
+   * for upload or stored in this session (a file being added, a PDF preview) stay.
+   */
+  private async collect() {
+    const keep = new Set<string>();
+    for (const r of this.repo.records.values()) for (const h of [r.file?.hash, r.file?.display, r.file?.thumb]) if (h) keep.add(h);
+    const pending = new Set(((await this.db.getAll("uploads")) as Upload[]).map((u) => u.hash));
+    for (const h of [...this.local]) if (!keep.has(h) && !pending.has(h) && !this.fresh.has(h)) await this.drop(h);
   }
 
   private updateStatus(files: Item[]) {
@@ -432,11 +453,15 @@ export class DeviceFiles {
       this.active++;
       this.fetchVerified(h)
         .then(async (blob) => {
-          if (blob) await this.save(h, blob);
+          // switched to "online only" meanwhile (also while it was written): the original is not kept
+          const wanted = () => this.mode === "local" || keptOnline(this.repo).has(h);
+          if (blob && wanted()) await this.save(h, blob);
+          if (this.local.has(h) && !wanted()) await this.drop(h);
         })
         .finally(() => {
           this.active--;
-          if (!this.queue.length && !this.active) this.updateStatus(this.repo.live().filter((r) => r.kind === "datei" && r.file?.hash));
+          // after every download, so the count in the settings moves along
+          this.updateStatus(this.repo.live().filter((r) => r.kind === "datei" && r.file?.hash));
           this.pump();
         });
     }
@@ -497,8 +522,7 @@ export class DeviceFiles {
 
   /** Remove local originals (switching to online only). Previews and what images show stay. */
   async dropOriginals() {
-    const keep = shownItself(this.repo);
-    for (const r of this.repo.live()) if (r.file) for (const h of [r.file.thumb, r.file.display]) if (h) keep.add(h);
+    const keep = keptOnline(this.repo);
     const pending = new Set(((await this.db.getAll("uploads")) as Upload[]).map((u) => u.hash));
     for (const h of [...this.local]) {
       if (keep.has(h) || pending.has(h)) continue;
@@ -513,6 +537,13 @@ export class DeviceFiles {
     this.local.delete(hash);
     this.urls.delete(hash);
   }
+}
+
+/** What stays here with "online only": previews, display versions and originals shown as they are. */
+function keptOnline(repo: Repo): Set<string> {
+  const keep = shownItself(repo);
+  for (const r of repo.live()) if (r.file) for (const h of [r.file.thumb, r.file.display]) if (h) keep.add(h);
+  return keep;
 }
 
 /** Originals that are shown as they are: images without a display version (SVGs). */
