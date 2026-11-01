@@ -3,7 +3,7 @@
 import { test, expect, beforeAll, afterAll, setDefaultTimeout } from "bun:test";
 import * as Y from "yjs";
 import { tempDir, removeTempDirs } from "../support/helpers";
-import { bootServer, del, get, mcpPost, post } from "../support/server";
+import { bootServer, del, get, mcpPost, mcpTool, post } from "../support/server";
 import { FORMAT, PERSONAL, initItem } from "@obtion/core/model";
 import { type ServerMsg, toB64 } from "@obtion/core/protocol";
 import { Store } from "@obtion/server/store";
@@ -106,6 +106,10 @@ test("a workspace is only open to its members – sync, files, activity, MCP", a
   expect((await call(cw.id, token)).status).toBe(200);
   expect((await call(dw.id, token)).status).toBe(401);
   expect((await call(cw.id, carla.token)).status).toBe(401); // a session is no MCP token
+  // what the agent changes names it and the member whose token it uses
+  await mcpTool(bare, token, "create", { items: [{ title: "Vom Agenten" }] }, `/w/${cw.id}/mcp`);
+  const events = (await get(bare, `/w/${cw.id}/api/activity?limit=5`, carla.token).then((r) => r.json())) as { origin: string; title: string }[];
+  expect(events.find((e) => e.title === "Vom Agenten")!.origin).toBe(`agent:mcp;u=${carla.user.id};n=carla`);
 });
 
 test("the sign-in only from the server's own page; other sites get no CORS answer", async () => {
@@ -217,7 +221,7 @@ test("sync per workspace: members get each other's changes; an app from before a
   a.ws.send(JSON.stringify({ t: "push", area: PERSONAL, items: [{ k: "k1", d: "n1", u: toB64(Y.encodeStateAsUpdate(d)) }] }));
   expect(await a.until((m) => m.t === "ack")).toMatchObject({ area: PERSONAL, keys: ["k1"] });
   const relayed = (await b.until((m) => m.t === "updates" && m.items.some((i) => i.d === "n1"))) as Extract<ServerMsg, { t: "updates" }>;
-  expect(relayed.items.find((i) => i.d === "n1")!.o).toBe("web:fay@a");
+  expect(relayed.items.find((i) => i.d === "n1")!.o).toBe(`web:fay;u=${fay.user.id};d=a`);
 
   // another area inside the workspace: refused, the connection stays
   a.ws.send(JSON.stringify({ t: "hello", area: "team-x", since: 0, client: "a" }));

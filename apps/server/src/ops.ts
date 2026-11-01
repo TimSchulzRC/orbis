@@ -64,6 +64,7 @@ import type { Store } from "./store";
 import { type Blobs, sha256 } from "./blobs";
 import { MAX_ATTACH } from "./config";
 import type { AttachInput, CapInput, ConvertInput, CreateInput, DefineTypeInput, PlaceInput, PropInput, SuggestInput, UpdateInput, UpdateTypeInput, ViewInput } from "./schemas";
+import { originText } from "@obtion/core/origin";
 
 export class OpError extends Error {}
 
@@ -457,7 +458,7 @@ export class Ops {
     const doc = opts.ref ? this.resolve(opts.ref).id : undefined;
     return this.store.events({ since, doc, limit: opts.limit ?? 40 }).map((e) => ({
       at: new Date(e.ts).toISOString().slice(0, 16),
-      who: e.origin,
+      who: originText(e.origin),
       what: `${e.kind} "${e.title}"`,
       changes: e.changes.map((c) => c.field).join(", ") || undefined,
     }));

@@ -11,6 +11,7 @@ import type { T } from "@obtion/core/i18n";
 import { type FileMeta, SETTINGS_ID } from "@obtion/core/model";
 import { runSetup } from "@obtion/core/setup";
 import { type ExampleFile, exampleFiles, fileFacts, writeExamples } from "@obtion/core/examples";
+import { firstName } from "@obtion/core/origin";
 import { browserHost, storageNames, type SpaceLink } from "./browser";
 import { DeviceFiles, setFiles } from "./files";
 import { getLang } from "./i18n";
@@ -96,7 +97,7 @@ const open = new Map<string, { repo: Repo; files: DeviceFiles }>();
 function link(s: Space): SpaceLink {
   // read at each use: signing in again (to confirm it is them) gives the account a new token
   const first = account!.token;
-  return { base: `${location.origin}/w/${s.id}`, get token() { return account?.token ?? first; }, storage: storageNames(s) };
+  return { base: `${location.origin}/w/${s.id}`, get token() { return account?.token ?? first; }, person: { id: account!.user.id, name: firstName(account!.user) }, storage: storageNames(s) };
 }
 
 /** The replica of a workspace, opened (and syncing) from its first use on. */

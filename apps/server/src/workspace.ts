@@ -6,6 +6,7 @@ import type { ServerWebSocket } from "bun";
 import { AreaError, Store } from "./store";
 import { Mirror } from "./mirror";
 import { handleMcp } from "./mcp";
+import { type Person, personOrigin } from "@obtion/core/origin";
 import { Blobs } from "./blobs";
 import { MAX_BLOB } from "./config";
 import { body, fail, json } from "./http";
@@ -23,7 +24,7 @@ export interface Conn {
   workspace: string;
   areas: Set<string>; // said hello for these: only then it gets (and may push) their updates
   origin: string;
-  user: string;
+  user: Person;
 }
 
 /** Uploads: only kinds the app knows how to show (no HTML, scripts, executables). */
@@ -61,9 +62,6 @@ function upgrade(store: Store) {
  * the area inside it stays the personal one.
  */
 const AREAS = new Set([PERSONAL]);
-
-/** Who did something, as the activity names them: "web:Ada", from a device "web:Ada@Mac-x3f9". */
-export const actorOf = (user: string, device?: unknown) => `web:${user}${device ? "@" + String(device).slice(0, 40) : ""}`;
 
 /** What a device may send on the sync socket; anything else is dropped. */
 const clientMsg: z.ZodType<ClientMsg> = z.discriminatedUnion("t", [
@@ -136,7 +134,7 @@ export class Workspace {
   hello(ws: ServerWebSocket<Conn>, msg: Extract<ClientMsg, { t: "hello" }>) {
     const area = msg.area ?? PERSONAL; // apps from before areas: personal
     if (!AREAS.has(area)) return send(ws, { t: "denied", area });
-    if (msg.device) ws.data.origin = actorOf(ws.data.user, msg.device);
+    if (msg.device) ws.data.origin = personOrigin(ws.data.user, msg.device);
     const store = this.store;
     const last = store.last(area);
     send(ws, { t: "welcome", hub: store.serverId, area, seq: last.seq, format: FORMAT });
@@ -180,8 +178,8 @@ export class Workspace {
 
   // ---------- http: /w/<id>/<rest> ----------
 
-  /** The workspace's API for a member. `rest` is the path after /w/<id>; `ctx.user` is their first name. */
-  async handle(req: Request, rest: string, ctx: { user: string }): Promise<Response> {
+  /** The workspace's API for a member. `rest` is the path after /w/<id>; `ctx.user` is who they are. */
+  async handle(req: Request, rest: string, ctx: { user: Person }): Promise<Response> {
     const url = new URL(req.url);
     const store = this.store;
 
@@ -196,7 +194,7 @@ export class Workspace {
       const b = await body<{ step?: unknown; redo?: boolean; device?: unknown }>(req);
       if (typeof b?.step !== "string") return fail(400, "step required");
       try {
-        return json((b.redo ? redoStep : undoStep)(store, b.step, actorOf(ctx.user, b.device)));
+        return json((b.redo ? redoStep : undoStep)(store, b.step, personOrigin(ctx.user, typeof b.device === "string" ? b.device : undefined)));
       } catch (e) {
         if (e instanceof UndoError) return fail(409, e.message);
         throw e;
@@ -207,8 +205,9 @@ export class Workspace {
     return fail(404, "not found");
   }
 
-  mcp(req: Request): Promise<Response> {
-    return handleMcp(this.store, req, this.blobs);
+  /** `person`: whose MCP token it is; none for the address from before accounts. */
+  mcp(req: Request, person?: Person): Promise<Response> {
+    return handleMcp(this.store, req, this.blobs, person);
   }
 
   private async blob(req: Request, url: URL, hash: string): Promise<Response> {

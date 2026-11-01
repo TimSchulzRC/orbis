@@ -1,9 +1,9 @@
-// Activity: every change with its origin (which device, which agent, import). Bulk
+// Activity: every change with who made it (a person, an agent working for one, an import). Bulk
 // operations like deleting a type are listed here and can be undone.
 import { useEffect, useState } from "react";
-import { spaceCall } from "../accounts";
+import { spaceCall, useAccounts } from "../accounts";
 import { SpaceEyebrow } from "../ui/Spaces";
-import { Sparkles, User, Download, Bot, Cog, Undo2, Redo2 } from "lucide-react";
+import { Undo2, Redo2 } from "lucide-react";
 import type { ActivityEvent, FieldChange } from "@obtion/core/protocol";
 import { type Item, META_TYPE, optionNames, type Value } from "@obtion/core/model";
 import type { Index } from "@obtion/core/graph";
@@ -13,20 +13,7 @@ import type { T } from "@obtion/core/i18n";
 import { Button, Empty, Seg } from "../ui/primitives";
 import { ItemIcon, RelTime } from "../ui/item-look";
 import { cn } from "../lib/utils";
-import { agentLabel, agentName } from "../ui/AgentNotice";
-
-function who(origin: string, t: T) {
-  const first = origin.split(",")[0]!.trim();
-  const name = agentName(first);
-  if (name !== undefined) return { label: agentLabel(name, t), icon: name === "chat" ? Sparkles : Bot, agent: true };
-  if (first.startsWith("import:")) return { label: t("activity.import", { name: first.slice(7) }), icon: Download, agent: false };
-  if (first.startsWith("system:")) return { label: t("activity.system"), icon: Cog, agent: false };
-  if (first.startsWith("web:")) {
-    const dev = first.split("@")[1];
-    return { label: dev ? t("activity.youOn", { device: dev.split("-")[0] }) : t("activity.you"), icon: User, agent: false };
-  }
-  return { label: first, icon: User, agent: false };
-}
+import { byMe, who } from "../ui/actor";
 
 function propName(ix: Index, item: Item | undefined, id: string) {
   const s = ix.schemaOf(item);
@@ -207,6 +194,7 @@ export function Activity() {
   const r = useRepo();
   const space = useSpaceId()!;
   const { t } = useT();
+  const me = useAccounts().account?.user;
   useDocumentTitle(t("nav.activity"));
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [filter, setFilter] = useState<"all" | "agent" | "you">("all");
@@ -225,7 +213,11 @@ export function Activity() {
   }, [r.status.online]);
   // fetched rows know whether a step is undone; live events fill in what came since
   const merged = [...events, ...r.events].filter((e, i, a) => a.findIndex((x) => x.id === e.id) === i).sort((a, b) => b.id - a.id);
-  const shown = merged.filter((e) => filter === "all" || (filter === "agent" ? e.origin.includes("agent:") : e.origin.includes("web:")));
+  const shown = merged.filter((e) => {
+    if (filter === "all") return true;
+    const w = who(e.origin, t);
+    return filter === "agent" ? w.agent : byMe(w, me);
+  });
   return (
     <div className="page-read">
       <SpaceEyebrow />

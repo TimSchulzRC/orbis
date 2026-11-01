@@ -6,6 +6,7 @@ import { repo } from "../repo";
 import { useT } from "../i18n";
 import { notify } from "./feedback";
 import type { T } from "@obtion/core/i18n";
+import { parseOrigin } from "@obtion/core/origin";
 
 function visible(id: string): HTMLElement[] {
   const onPage = decodeURIComponent(location.hash.replace(/^#\/i\//, "")) === id;
@@ -17,10 +18,10 @@ function visible(id: string): HTMLElement[] {
   return rows;
 }
 
-/** The agent of a change ("agent:claude-code, …" → "claude-code"); undefined when no agent made it. */
+/** The agent of a change ("agent:claude-code;u=…" → "claude-code"); undefined when no agent made it. */
 export function agentName(origin: string): string | undefined {
-  const first = origin.split(",")[0]!.trim();
-  return first.startsWith("agent:") ? first.slice(6) : undefined;
+  const a = parseOrigin(origin);
+  return a.kind === "agent" ? a.name : undefined;
 }
 
 /** A readable name for an agent id: "claude-code", "claude" → Claude; anything else → Agent. */

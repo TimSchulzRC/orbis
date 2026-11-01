@@ -22,7 +22,6 @@ import { type Space, ApiError, activeUser, addPasskey, changePassword, linkFaile
 import { SignIn } from "./Account";
 import { NewSpaceDialog } from "../ui/Spaces";
 import type { McpConnect, Member, PasskeyInfo, ServerInfo } from "@obtion/core/api";
-import { setDeviceName } from "../browser";
 
 /** navigator.clipboard exists only over HTTPS; opened as http://<address> the old way copies. */
 function copyText(text: string) {
@@ -436,34 +435,6 @@ function DeviceFilesSection() {
   );
 }
 
-/** This device's name in the activity – for every workspace. */
-function DeviceName() {
-  const { t } = useT();
-  const { spaces } = useAccounts();
-  const first = spaces[0] ? replica(spaces[0].id).repo.device : "";
-  const [device, setDevice] = useState(first);
-  return (
-    <section>
-      <SectionTitle>{t("settings.device")}</SectionTitle>
-      <label className="flex items-center gap-3 text-sm">
-        <span className="text-muted-foreground">{t("settings.deviceName")}</span>
-        <Input
-          variant="sm"
-          value={device}
-          onChange={(e) => setDevice(e.target.value)}
-          onBlur={() => {
-            const name = device.trim() || first;
-            setDeviceName(name);
-            for (const s of spaces) replica(s.id).repo.device = name;
-          }}
-          className="bg-surface"
-        />
-      </label>
-      <p className="mt-2 text-xs text-muted-foreground">{t("settings.deviceHint")}</p>
-    </section>
-  );
-}
-
 /** Which build the server runs (dev, nightly or stable): with three instances, the one this is. Offline: nothing. */
 function Version() {
   const { t } = useT();
@@ -504,8 +475,6 @@ export function Settings() {
       </section>
 
       <DeviceFilesSection />
-
-      <DeviceName />
 
       <Version />
     </div>

@@ -3,13 +3,15 @@
 // BroadcastChannel, dialogs of the UI.
 import { openDB, type IDBPDatabase } from "idb";
 import type { OutItem, RepoHost, ReplicaStorage, SyncSocket, TabMsg } from "@obtion/sync";
+import type { Person } from "@obtion/core/origin";
 import { tr } from "./i18n";
 import { KEYS, readJSON, writeJSON } from "./ui/storage";
 
-/** Where a workspace is: its address on the server (…/w/<id>), the account's token, the names of its storage here. */
+/** Where a workspace is: its address on the server (…/w/<id>), the account (token, who), the names of its storage here. */
 export interface SpaceLink {
   base: string;
   token: string;
+  person: Person;
   storage: StorageNames;
 }
 
@@ -100,6 +102,7 @@ export function browserHost(link: SpaceLink): RepoHost {
   return {
     storage: idbStorage(link.storage.replica),
     device: deviceName(),
+    person: link.person,
     connect() {
       return new WebSocket(`${link.base.replace(/^http/, "ws")}/sync`, ["obtion", `auth.${link.token}`]) as unknown as SyncSocket;
     },
@@ -144,15 +147,13 @@ export function browserHost(link: SpaceLink): RepoHost {
   };
 }
 
+/** How this device is named in the origin of its changes (kept for later queries, never shown): made once, kept in the browser. */
 function deviceName(): string {
   const saved = readJSON(KEYS.device, "");
   if (saved) return saved;
   const ua = navigator.userAgent;
   const name = /iPhone/.test(ua) ? "iPhone" : /iPad/.test(ua) ? "iPad" : /Android/.test(ua) ? "Android" : /Mac/.test(ua) ? "Mac" : /Windows/.test(ua) ? "Windows" : "Browser";
   const full = `${name}-${Math.random().toString(36).slice(2, 6)}`;
-  setDeviceName(full);
+  writeJSON(KEYS.device, full);
   return full;
 }
-
-/** How this device is named in the history of changes. */
-export const setDeviceName = (name: string) => writeJSON(KEYS.device, name);
