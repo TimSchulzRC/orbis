@@ -141,8 +141,8 @@ async function setUp(repo: Repo, files: DeviceFiles, examples: boolean) {
       const meta = await files.prepare(new Blob([f.bytes], { type: f.mime }), f.name);
       metas[f.key] = { ...fileFacts(f, meta.hash), ...meta };
     }
-  if (repo.get(SETTINGS_ID)) return;
-  runSetup(repo.writer, lang, repo.origin);
+  // set up meanwhile by another device: the examples chosen here still come (they skip what is there)
+  if (!repo.get(SETTINGS_ID)) runSetup(repo.writer, lang, repo.origin);
   if (examples) writeExamples(repo.writer, lang, metas);
 }
 
