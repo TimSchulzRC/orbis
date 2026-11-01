@@ -42,9 +42,10 @@ const canPasskey = () => typeof window !== "undefined" && !!window.PublicKeyCred
 /**
  * Sign in or create an account on this server, in every way it offers: a passkey, an OAuth
  * provider, a code by email, a password. `inviteCode`: a new account joins that workspace.
- * `email`: confirming who is signed in already (only signing in, with this address).
+ * `email`: confirming who is signed in already (only signing in, with this address, shown by the
+ * caller; `hasPassword` and `hasPasskey` then offer just the ways this account has).
  */
-export function SignIn({ inviteCode, onDone, email: fixedEmail }: { inviteCode?: string; onDone?: () => void; email?: string }) {
+export function SignIn({ inviteCode, onDone, email: fixedEmail, hasPassword, hasPasskey }: { inviteCode?: string; onDone?: () => void; email?: string; hasPassword?: boolean; hasPasskey?: boolean }) {
   const { t } = useT();
   const [info, setInfo] = useState<ServerInfo | null>(null);
   const [mode, setMode] = useState<"in" | "up">("in");
@@ -62,11 +63,15 @@ export function SignIn({ inviteCode, onDone, email: fixedEmail }: { inviteCode?:
       .then((i) => {
         setInfo(i);
         if (!fixedEmail && (i.firstAccount || inviteCode)) setMode("up");
-        if (!loginOf(i).emailCode) setWithPassword(true);
+        // confirming an account with a password: with that, as the password manager knows it
+        if (!loginOf(i).emailCode || (fixedEmail && hasPassword && loginOf(i).password)) setWithPassword(true);
       })
       .catch(() => setError(t("account.offline")));
   }, []);
   const login = loginOf(info);
+  // confirming an account without a password: no password to ask for
+  const byPassword = login.password && !(fixedEmail && hasPassword === false);
+  const byEmail = login.emailCode || byPassword;
   const ctx = { invite: inviteCode, lang: getLang() };
   const canSignUp = !fixedEmail && !!info && (info.firstAccount || info.signup === "open" || (info.signup === "invite" && !!inviteCode));
   const run = async (what: "signIn" | "code", f: () => Promise<unknown>) => {
@@ -112,7 +117,8 @@ export function SignIn({ inviteCode, onDone, email: fixedEmail }: { inviteCode?:
       setBusy(false);
     }
   };
-  const others = (login.passkey && canPasskey() && mode === "in") || login.oauth.length > 0;
+  const withPasskey = login.passkey && canPasskey() && mode === "in" && hasPasskey !== false;
+  const others = withPasskey || login.oauth.length > 0;
   if (codeSent)
     return (
       <form onSubmit={submit} className="mt-2">
@@ -124,7 +130,7 @@ export function SignIn({ inviteCode, onDone, email: fixedEmail }: { inviteCode?:
           </p>
         )}
         <Button type="submit" variant="primary" className="mt-6 w-full" disabled={busy || !code.trim()}>
-          {mode === "up" ? t("account.signUp") : t("account.signIn")}
+          {mode === "up" ? t("account.signUp") : fixedEmail ? t("account.confirm") : t("account.signIn")}
         </Button>
         <div className="mt-3 flex justify-between text-sm">
           <Button variant="plain" type="button" className="text-link hover:underline" onClick={() => (setCodeSent(false), setCode(""), setError(""))}>
@@ -141,7 +147,7 @@ export function SignIn({ inviteCode, onDone, email: fixedEmail }: { inviteCode?:
       {info?.firstAccount && <p className="mt-3 rounded-lg border border-line bg-surface-2 p-3 text-sm text-muted-foreground">{t("account.firstHint")}</p>}
       {others && (
         <div className="mt-4 flex flex-col gap-2">
-          {login.passkey && canPasskey() && mode === "in" && (
+          {withPasskey && (
             <Button type="button" variant="outline" className="w-full" disabled={busy || !info} onClick={() => void passkey()}>
               <KeyRound size={16} /> {t("account.passkey")}
             </Button>
@@ -151,14 +157,19 @@ export function SignIn({ inviteCode, onDone, email: fixedEmail }: { inviteCode?:
               {t("account.oauth", { provider: p.name })}
             </Button>
           ))}
-          {(login.emailCode || login.password) && <p className="mt-2 text-center text-xs text-muted-foreground">{t("account.or")}</p>}
+          {byEmail && <p className="mt-2 text-center text-xs text-muted-foreground">{t(fixedEmail && withPassword ? "account.orPassword" : "account.or")}</p>}
         </div>
       )}
-      {(login.emailCode || login.password) && (
+      {byEmail && (
         <>
           {mode === "up" && <Field label={t("account.name")} value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" />}
-          <Field label={t("account.email")} type="email" required readOnly={!!fixedEmail} value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
-          {withPassword && <Field label={t("account.password")} type="password" required minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={mode === "up" ? "new-password" : "current-password"} />}
+          {fixedEmail ? (
+            // the address is given: not a field to edit, but password managers still need it as the username
+            <input type="email" name="username" autoComplete="username" value={fixedEmail} readOnly hidden />
+          ) : (
+            <Field label={t("account.email")} type="email" name="username" required value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" />
+          )}
+          {withPassword && <Field label={t("account.password")} type="password" name="password" required minLength={mode === "up" ? 8 : undefined} autoFocus={!!fixedEmail} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={mode === "up" ? "new-password" : "current-password"} />}
         </>
       )}
       {error && (
@@ -166,12 +177,12 @@ export function SignIn({ inviteCode, onDone, email: fixedEmail }: { inviteCode?:
           {error}
         </p>
       )}
-      {(login.emailCode || login.password) && (
+      {byEmail && (
         <Button type="submit" variant="primary" className="mt-6 w-full" disabled={busy || !info}>
-          {!withPassword ? t("account.sendCode") : mode === "up" ? t("account.signUp") : t("account.signIn")}
+          {!withPassword ? t("account.sendCode") : mode === "up" ? t("account.signUp") : fixedEmail ? t("account.confirm") : t("account.signIn")}
         </Button>
       )}
-      {login.emailCode && login.password && (
+      {login.emailCode && byPassword && (
         <Button variant="plain" type="button" onClick={() => (setWithPassword(!withPassword), setError(""))} className="mt-3 w-full text-center text-sm text-link hover:underline">
           {withPassword ? t("account.useCode") : t("account.usePassword")}
         </Button>
