@@ -212,19 +212,25 @@ function ChangePasswordDialog({ onClose }: { onClose: () => void }) {
 }
 
 /**
- * Confirming who is signed in, for what needs a recent sign-in (adding a passkey, deleting an
- * account without a password): signing in again, which keeps everything on this device.
+ * Confirming who is signed in, for what needs a recent sign-in (adding a passkey, linking a
+ * provider, deleting an account without a password): signing in again with a way this account
+ * already has, which keeps everything on this device. Then what asked for it goes on.
  */
 function Reauth({ onDone, onClose }: { onDone: () => void; onClose: () => void }) {
   const { t } = useT();
   const { account } = useAccounts();
+  // the passkey button only for an account that has one (unknown when the list fails: offered)
+  const [hasPasskey, setHasPasskey] = useState<boolean | undefined>(false);
+  useEffect(() => void passkeys().then((l) => setHasPasskey(l.length > 0), () => setHasPasskey(undefined)), []);
   const who = account?.user.id;
   // a passkey of another account signs that one in instead: then nothing goes on
   const done = () => (activeUser() === who ? onDone() : onClose());
+  if (!account) return null;
   return (
     <Dialog title={t("account.reauth")} onClose={onClose}>
       <p className="text-sm text-muted-foreground">{t("account.reauthHint")}</p>
-      <SignIn email={account?.user.email} onDone={done} />
+      <p className="mt-3 truncate text-sm font-medium">{account.user.email}</p>
+      <SignIn email={account.user.email} hasPassword={account.password !== false} hasPasskey={hasPasskey} onDone={done} />
     </Dialog>
   );
 }
