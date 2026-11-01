@@ -51,12 +51,34 @@ async function launch(dir = userData): Promise<{ app: ElectronApplication; page:
 		env: { ...process.env, LANGUAGE: "de", LC_ALL: "de_DE.UTF-8", LANG: "de_DE.UTF-8" },
 	});
 	const page = await app.firstWindow();
-	page.on("pageerror", (e) => errors.push(`page error: ${e.message}`));
+	page.on("pageerror", (e) => errors.push(`page error: ${e.stack ?? e.message}`));
 	page.on("console", (m) => m.type() === "error" && errors.push(`console error: ${m.text()}`));
 	await page.setViewportSize({ width: 1280, height: 820 }).catch(() => {});
 	return { app, page };
 }
 const shot = (page: Page, name: string) => page.screenshot({ path: join(shots, `${name}.png`) });
+/** A new workspace is created (its dialog gone) and open. */
+const opened = async (page: Page, name: string) => {
+	await page
+		.getByRole("dialog")
+		.waitFor({ state: "hidden", timeout: 30000 })
+		.catch(() => {});
+	return page
+		.waitForFunction(
+			(n) => {
+				const spaces: { id: string; name: string }[] = JSON.parse(
+					localStorage.getItem("obtion.spaces") ?? "[]",
+				);
+				return spaces.find((w) => w.name === n)?.id === localStorage.getItem("obtion.active");
+			},
+			name,
+			{ timeout: 30000 },
+		)
+		.then(
+			() => true,
+			() => false,
+		);
+};
 const visible = (page: Page | Locator, text: string | RegExp, timeout = 15000) =>
 	page
 		.getByText(text)
@@ -68,15 +90,15 @@ const visible = (page: Page | Locator, text: string | RegExp, timeout = 15000) =
 		);
 
 try {
-	// 1. the first start: where the first workspace goes; on this device, then set up on the page
+	// 1. the first start: where the first workspace goes; on this device, set up as it is created
 	let { app, page } = await launch();
 	expect(
 		await visible(page, "Wo soll er liegen?"),
 		"first start: no choice where the first workspace goes",
 	);
 	await shot(page, "1-first-start");
+	expect(await visible(page, "Mit Beispielen starten"), "first start: no choice of the examples");
 	await page.getByRole("button", { name: /^Workspace anlegen/ }).click();
-	await page.getByRole("button", { name: /Einrichten/ }).click();
 	expect(await visible(page, "So funktioniert Obtion"), "local workspace: not set up");
 	await shot(page, "2-local-workspace");
 
@@ -141,9 +163,7 @@ try {
 	await dialog.getByLabel("Passwort").fill("geheim12345");
 	await shot(page, "4-sign-up-on-server");
 	await dialog.getByRole("button", { name: "Konto anlegen" }).click();
-	expect(await visible(page, "Willkommen bei Obtion"), "server workspace: no setup page");
-	await page.getByRole("button", { name: /Einrichten/ }).click();
-	expect(await visible(page, "So funktioniert Obtion"), "server workspace: not set up");
+	expect(await opened(page, "Team"), "server workspace: not opened");
 
 	// it is on the server: its account and workspaces, the setup synced there
 	const signIn = await fetch(remote.url + "/api/auth/sign-in/email", {
@@ -197,7 +217,7 @@ try {
 	);
 	await dialog.getByLabel("Name", { exact: true }).fill("Projekte");
 	await dialog.getByRole("button", { name: "Workspace anlegen" }).click();
-	expect(await visible(page, "Willkommen bei Obtion"), "second server workspace: no setup page");
+	expect(await opened(page, "Projekte"), "second server workspace: not opened");
 	await page.evaluate(() => (location.hash = "#/settings"));
 	expect(await visible(page, "Projekte"), "settings: the second server workspace is missing");
 	await shot(page, "5-settings-with-server");
@@ -255,7 +275,7 @@ try {
 	)
 		.filter((w: { server?: string }) => w.server)
 		.map((w: { id: string }) => w.id);
-	expect(remoteIds.length === 20, `sign-out: ${remoteIds.length} server workspaces instead of 20`);
+	expect(remoteIds.length === 19, `sign-out: ${remoteIds.length} server workspaces instead of 19`);
 	const copies = () =>
 		page.evaluate(
 			async (ids) =>
