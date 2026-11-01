@@ -1,5 +1,5 @@
 // Who a change is from, as the app names it: a person, an agent with the person whose access it
-// uses, an import, the system. The device stays in the origin (undo per device), never shown.
+// uses, an import, the system. The device stays in the origin (for later queries), never shown.
 import { Bot, Cog, Download, Sparkles, User, type LucideIcon } from "lucide-react";
 import type { T } from "@obtion/core/i18n";
 import { firstName, parseOrigin } from "@obtion/core/origin";

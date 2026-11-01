@@ -96,7 +96,7 @@ export type TabMsg = { d: string; u: Uint8Array };
 /** What the platform gives the replica. */
 export interface RepoHost {
   storage: ReplicaStorage;
-  /** This device's name, e.g. "Mac-x3f9": undo works per device; never shown. */
+  /** This device's name, e.g. "Mac-x3f9": recorded with its changes, never shown. */
   device: string;
   /** Whose account the changes from here are made with. */
   person?: Person;

@@ -147,7 +147,7 @@ export function browserHost(link: SpaceLink): RepoHost {
   };
 }
 
-/** How this device is named in the history of changes and its undo: made once, kept in the browser. */
+/** How this device is named in the origin of its changes (kept for later queries, never shown): made once, kept in the browser. */
 function deviceName(): string {
   const saved = readJSON(KEYS.device, "");
   if (saved) return saved;

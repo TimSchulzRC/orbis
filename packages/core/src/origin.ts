@@ -4,7 +4,7 @@
 //   "agent:claude-code;u=<account id>;n=Tim" an agent working with that person's access
 //   "import:notion", "system:clock"          everything else
 // Entries from before: "web:Tim@Mac-x3f9", "web:Tim", "web:Mac-x3f9" (written by the app),
-// "agent:claude" (no person). The device is kept for undo per device, never shown.
+// "agent:claude" (no person). The device is recorded for later queries, never shown.
 
 /** An account as changes name it: its id and the name others see. */
 export interface Person {
@@ -28,7 +28,7 @@ export const firstName = (user: { name: string; email: string }) => user.name.tr
 // separators of the format; "," joins several origins of one transaction
 const clean = (s: string) => s.replace(/[;=,]/g, " ").trim();
 
-/** A person in the app; with the device it is on (undo per device). */
+/** A person in the app; with the device it is on (recorded, not shown). */
 export const personOrigin = (p: Person, device?: string) => `web:${clean(p.name)};u=${clean(p.id)}${device ? `;d=${clean(device).slice(0, 40)}` : ""}`;
 
 /** An agent; with the account whose access it uses. */
