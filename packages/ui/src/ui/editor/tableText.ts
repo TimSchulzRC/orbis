@@ -149,9 +149,25 @@ export function deleteCell(text: string, col: number): Change | null {
 export function sourceOffset(src: string, shown: string, k: number): number {
   let i = 0;
   let j = 0;
-  let code = false;
+  /** The length of the backtick run that opened the code span we are in (0: none). */
+  let code = 0;
   while (j < k && i < src.length) {
-    if (src[i] === "`") code = !code;
+    if (src[i] === "\\" && !code) {
+      // "\x" shows as "x"
+      i++;
+      if (src[i] === shown[j]) j++;
+      i++;
+      continue;
+    }
+    if (src[i] === "`") {
+      let run = 1;
+      while (src[i + run] === "`") run++;
+      if (!code || run === code) {
+        code = code ? 0 : run;
+        i += run;
+        continue;
+      }
+    }
     // a "<br>" shows no letter (one in code is text)
     const br = code ? null : /^<br\s*\/?>/i.exec(src.slice(i, i + 6));
     if (br) {

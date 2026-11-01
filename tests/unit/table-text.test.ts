@@ -120,5 +120,7 @@ test("a click after a <br> lands after it", () => {
 
 test("a <br> in code is text; a heading right after a table is no row of it", () => {
   expect(sourceOffset("`<br>` x", "<br> x", 2)).toBe(3);
+  expect(sourceOffset("``<br>`` x", "<br> x", 2)).toBe(4);
+  expect(sourceOffset("\\`a<br>b", "`ab", 3)).toBe(8);
   expect(plainText("a | b\n--- | ---\n1 | 2\n# Weiter a | b")).toBe("a · b 1 · 2 Weiter a | b");
 });
