@@ -1,8 +1,4 @@
-// "Heute", the start page: a greeting and in one sentence what the day holds, then what is due
-// (today and overdue), the projects in progress and what was changed last – of every workspace
-// seen. What waits in the inbox is in the tray below (Tray.tsx), on a desktop with its panel open
-// below the page; without room for that the newest entries are cards here (ShelfCards).
-// Sections with nothing in them are left out.
+// "Heute", the start page, across every workspace seen. Empty sections are left out.
 import { Sun } from "lucide-react";
 import { type Item, SETTINGS_ID, todayISO } from "@obtion/core/model";
 import { fmtDate } from "@obtion/core/i18n";
@@ -132,7 +128,6 @@ export function Today() {
 
 const row = "flex min-h-12 items-center gap-3 border-b border-line px-4 py-2 last:border-b-0";
 
-/** A due entry: tick it off, where it belongs, when it was due. */
 function DueRow({ item, due, space }: { item: Item; due: string; space?: string }) {
   const { t } = useT();
   const hrefOf = useItemHref();
@@ -151,7 +146,7 @@ function DueRow({ item, due, space }: { item: Item; due: string; space?: string 
   );
 }
 
-/** A project in progress: its progress as a ring (only with entries to count), what is open, when touched. */
+/** The progress ring shows only when there are entries to count. */
 function ProjectRow({ item, touched, space }: { item: Item; touched: number; space?: string }) {
   const { t, lang } = useT();
   const hrefOf = useItemHref();
@@ -185,7 +180,7 @@ function Ring({ share, color }: { share: number; color: string }) {
   );
 }
 
-/** What it is and where: "Task · Website-Relaunch". */
+/** "Task · Website-Relaunch". */
 function useWhat(item: Item) {
   const { t } = useT();
   const ix = useIndex();

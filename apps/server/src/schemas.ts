@@ -1,12 +1,9 @@
-// What agents give the tools, once: the MCP server checks it with these schemas, the operations
-// (ops.ts) take the types inferred from them.
+// Tool input schemas: the MCP server validates with them, ops.ts uses the inferred types.
 import { z } from "zod";
 import { PROP_KINDS, VIEW_KINDS } from "@obtion/core/model";
 
-/** Property values by property name. */
 const values = z.record(z.string(), z.any());
 
-/** A view (tab) of a type's page: its own filter and look in query text. */
 export const viewInput = z.object({
   name: z.string().optional(),
   view: z.enum(VIEW_KINDS).optional(),

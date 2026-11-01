@@ -1,5 +1,4 @@
-// Values without a property: what is left on an entry when its type or the property is gone.
-// They are only shown and can be removed; new ones are not added by hand.
+// Values left on an entry after its type or property is gone. They can only be shown and removed.
 import type { FreeValue } from "@obtion/core/model";
 import { fmtDate, fmtNumber } from "@obtion/core/i18n";
 import { useT } from "../i18n";

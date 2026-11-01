@@ -1,6 +1,4 @@
-// Activity: a log of every change with who made it (a person, an agent working for one, an
-// import), bulk operations like deleting a type included. One page for all workspaces, with its
-// own choice of them (the chips; the sidebar's choice stays as it is).
+// One log for all workspaces, with its own workspace choice independent of the sidebar's.
 import { useEffect, useState } from "react";
 import { spaceCall, useAccounts } from "../accounts";
 import { SpaceFilter, SpaceScope, useReplicas } from "../ui/Spaces";
@@ -71,7 +69,6 @@ function describe(c: FieldChange, item: Item | undefined, ix: Index, t: T): stri
   }
 }
 
-/** What happened to one item: verb, item, changes. */
 function Entry({ e, compact, noVerb }: { e: ActivityEvent; compact?: boolean; noVerb?: boolean }) {
   const r = useRepo();
   const itemHref = useItemHref();
@@ -128,7 +125,7 @@ function systemText(text: string, t: T): string {
   return text;
 }
 
-/** Everything one step did (one user action or tool call), as one entry of the log; `space`: its workspace's name, with several. */
+/** A step is one user action or tool call. `space`: its workspace's name, with several. */
 function StepGroup({ events, space }: { events: ActivityEvent[]; space?: string }) {
   const { t } = useT();
   const head = events[0]!;
@@ -155,7 +152,6 @@ function StepGroup({ events, space }: { events: ActivityEvent[]; space?: string 
   );
 }
 
-/** An event with the workspace it happened in. */
 type Placed = ActivityEvent & { space: string };
 
 /** Consecutive events of the same step (in the same workspace) form one group. */
@@ -169,20 +165,18 @@ function groupBySteps(events: Placed[]): Placed[][] {
   return out;
 }
 
-/** What is fetched of one workspace's log: the newest first, page by page. */
 interface Fetched {
   events: ActivityEvent[];
   more: boolean;
   error: boolean;
 }
 
-/** The log of every workspace (or the ones chosen here), newest first. */
 export function Activity() {
   const { t } = useT();
   const { account, spaces } = useAccounts();
   const me = account?.user;
   useDocumentTitle(t("nav.activity"));
-  // its own choice of workspaces, apart from the ones seen in the sidebar; null: all
+  // null: all
   const [only, setOnly] = useState<string[] | null>(null);
   const ids = spaces.map((s) => s.id).filter((id) => !only || only.includes(id));
   const repos = useReplicas(ids);

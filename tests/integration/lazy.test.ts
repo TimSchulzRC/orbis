@@ -1,5 +1,5 @@
-// The server keeps only the documents in use in memory (store.ts: getDoc, trim). A document
-// let go is loaded again from snapshot + log, and everything works on it as before.
+// The server keeps only documents in use in memory. A document let go is reloaded from snapshot + log
+// and must behave as before.
 import { test, expect, afterAll } from "bun:test";
 import { tempDir, removeTempDirs } from "../support/helpers";
 import { setupStore, stepOf, tool } from "../support/store";

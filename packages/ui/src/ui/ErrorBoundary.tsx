@@ -1,5 +1,4 @@
-// A rendering error on one page shows what went wrong and offers "Neu laden" – never a blank
-// page. The rest of the app (sidebar, agent) keeps working.
+// Wraps one page, so a rendering error never blanks the whole app.
 import { Component, type ReactNode } from "react";
 import { RotateCw } from "lucide-react";
 import { tr } from "../i18n";

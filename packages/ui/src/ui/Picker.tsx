@@ -10,7 +10,7 @@ import { ItemIcon } from "./item-look";
 import { cn } from "../lib/utils";
 import { type PickReason, placeSuggestions } from "./suggest";
 
-/** Pick an item: suggestions first, then search as you type. Optionally create a new one. */
+/** Suggestions first, then search as you type. */
 export function ItemPicker({
   title,
   onPick,
@@ -98,7 +98,7 @@ function PathHint({ item }: { item: Item }) {
   return <span className="max-w-[45%] shrink-0 truncate text-xs text-muted-foreground">{ix.pathText(path)}</span>;
 }
 
-/** Where to put entries (one or several, of one workspace): a place they may all go below, or a new one. */
+/** Offers only places all entries may go below; they must share one workspace. */
 export function PlacePicker({ list, title, onPick, onClose }: { list: Item[]; title?: string; onPick: (place: string) => void; onClose: () => void }) {
   const { t } = useT();
   const repo = useRepo();

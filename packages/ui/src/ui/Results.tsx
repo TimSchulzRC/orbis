@@ -1,5 +1,3 @@
-// Showing query results: list, table, board, tree, gallery and triage ("sortieren").
-// Used by collections, query blocks in texts and the sections of a page.
 import { useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import { type Item, type ViewKind, todayISO } from "@obtion/core/model";
@@ -97,8 +95,6 @@ export function Results({ def, thisId, display, empty, keyPrefix = "", look }: {
   );
 }
 
-// ---------- list ----------
-
 function ListView({ items, def, ctx, look }: { items: Item[]; def: QueryDef; ctx: EvalCtx; look?: Look }) {
   const { t } = useT();
   const base = pathBase(def, ctx);
@@ -126,8 +122,6 @@ function ListView({ items, def, ctx, look }: { items: Item[]; def: QueryDef; ctx
     </div>
   );
 }
-
-// ---------- table ----------
 
 export function defaultColumns(items: Item[], ctx: EvalCtx): string[] {
   const names: string[] = [];
@@ -202,8 +196,6 @@ export function CellValue({ item, name, ctx }: { item: Item; name: string; ctx: 
   // long text stays two lines in tables and boards; the full text is on the page
   return <span className="line-clamp-2">{String(v)}</span>;
 }
-
-// ---------- tree ----------
 
 function TreeView({ items }: { items: Item[] }) {
   const ix = useIndex();

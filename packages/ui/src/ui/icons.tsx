@@ -5,7 +5,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-/** Icons a type can pick (names are stored, see @obtion/core/palette). */
+/** Keys are stored in the data, so never rename them (see @obtion/core/palette). */
 export const ICON: Record<string, LucideIcon> = {
   "sticky-note": StickyNote,
   map: MapIcon,
@@ -48,8 +48,7 @@ export const ICON: Record<string, LucideIcon> = {
 };
 
 export const INBOX_ICON = Inbox;
-// a note (an information without a type): one sheet with lines – not a notebook (that read as
-// "several entries"), not the card (sticky note), not a document file (plain sheet, below)
+// a lined sheet – a notebook read as "several entries", and the plain sheet is taken by documents
 export const NOTE_ICON = FileText;
 export const OVERVIEW_ICON = MapIcon;
 export const TYPE_ICON = Shapes;

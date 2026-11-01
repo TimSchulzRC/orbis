@@ -1,13 +1,5 @@
-// Admin CLI. Run while the server is stopped (it keeps all documents in memory). Works on one
-// workspace: --workspace <id>, or the only one there is (or the data from before accounts):
-//   bun apps/server/src/cli.ts setup [de|en] [--examples]
-//   bun apps/server/src/cli.ts import-obsidian <vault> [--no-moc-parents]
-//   bun apps/server/src/cli.ts import-notion <json> [--project-type Projekt] [--task-type Task]
-//   bun apps/server/src/cli.ts gc [--force]
-//   bun apps/server/src/cli.ts stats
-// One works on the accounts, also while the server runs:
-//   bun apps/server/src/cli.ts set-password <email>   (the new password on stdin)
-//   bun apps/server/src/cli.ts trust-emails           (before turning codes on: see .env.example)
+// Admin CLI. Workspace commands need the server stopped, since it keeps all documents in memory.
+// The account commands (set-password, trust-emails) also work while it runs.
 import { existsSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
@@ -89,7 +81,6 @@ if (running && cmd !== "stats" && (cmd === "gc" || !opts.force)) {
   process.exit(1);
 }
 
-/** The folder of the workspace to work on (see the top). */
 function workspaceDir(): string {
   const id = opts.workspace;
   const dirs = workspaceDirs(DATA);
@@ -98,7 +89,8 @@ function workspaceDir(): string {
     if (!dir) (console.error(`No workspace ${id} in ${DATA}.`), process.exit(1));
     return dir;
   }
-  if (existsSync(join(DATA, "obtion.db")) || dirs.length === 0) return DATA; // before accounts: the folder itself
+  const preAccountsLayout = existsSync(join(DATA, "obtion.db")) || dirs.length === 0;
+  if (preAccountsLayout) return DATA;
   if (dirs.length === 1) return dirs[0]!;
   console.error(`Several workspaces – name one with --workspace:\n  ${dirs.map((d) => basename(d)).join("\n  ")}`);
   process.exit(1);
@@ -116,7 +108,6 @@ if (cmd === "stats") {
     const k = r.kind !== "info" ? r.kind : r.type === META_TYPE ? "typ" : (store.index().typeName(r.type) ?? (r.type ? "?" : "ohne Typ"));
     by.set(k, (by.get(k) ?? 0) + 1);
   }
-  // files whose content (or preview) the server does not have: shown as "Datei fehlt" in the app
   const missing = store.live().filter((r) => r.file && [r.file.hash, r.file.display, r.file.thumb].some((h) => h && !blobs.has(h)));
   console.log(Object.fromEntries(by), { seq: store.seq, server: store.serverId, filesMissingContent: missing.length });
   for (const r of missing.slice(0, 20)) console.log("  missing:", r.title, r.id);

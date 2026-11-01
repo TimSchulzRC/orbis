@@ -1,5 +1,4 @@
-// Properties of an item: those its type defines, free ones, and values of removed
-// properties ("Weitere Eigenschaften") – schema changes never delete values.
+// Schema changes never delete values; values of removed properties show as "Weitere Eigenschaften".
 import { Checkbox } from "../components/ui/checkbox";
 import { NativeSelect } from "../components/ui/native-select";
 import { useState } from "react";
@@ -100,7 +99,6 @@ export function PropertyField({ item, prop, autoFocus }: { item: Item; prop: Pro
   return null;
 }
 
-/** A select with several values: its options as badges, "+" adds one. */
 function MultiField({ item, prop }: { item: Item; prop: PropDef }) {
   const { t } = useT();
   const ids = optionIds(item.props[prop.id]);
@@ -139,14 +137,14 @@ function MultiField({ item, prop }: { item: Item; prop: PropDef }) {
   );
 }
 
-/** A select with one value (also the status): its chip with an invisible select over it, so a click picks right there. */
+/** An invisible native select lies over the chip, so a click picks right there. */
 export function OptionSelect({ item, prop, className }: { item: Item; prop: PropDef; className?: string }) {
   const { t } = useT();
   const v = item.props[prop.id];
   const opt = prop.options?.find((o) => o.id === v);
   const schema = useIndex().schemaOf(item);
   const isStatus = isStatusProp(schema, prop);
-  // with a default it is never empty: no "–" to pick
+  // a select with a default is never empty
   const required = !!defaultOption(prop, schema);
   return (
     <label className={cn("tap-row relative cursor-pointer items-center", className)}>
@@ -178,7 +176,6 @@ export function OptionSelect({ item, prop, className }: { item: Item; prop: Prop
   );
 }
 
-/** Start and end of a range as two date fields. */
 export function RangeEditor({ value, onChange, autoFocus, className }: { value: string; onChange: (v: string) => void; autoFocus?: boolean; className?: string }) {
   const { t } = useT();
   const { start, end } = parseRange(value);
@@ -191,12 +188,10 @@ export function RangeEditor({ value, onChange, autoFocus, className }: { value: 
   );
 }
 
-/** A start–end date: empty it is one quiet "–" like every empty field; a click shows both dates. */
 function RangeField({ value, name, autoFocus, onChange }: { value: string; name: string; autoFocus?: boolean; onChange: (v: string) => void }) {
   const { t, lang } = useT();
   const [open, setOpen] = useState(!!autoFocus);
   if (!value && !open) return <EmptyValueButton type="button" onClick={() => setOpen(true)} aria-label={t("props.set", { name })} />;
-  // set: read as one line ("1. März 2026 – 30. Juni 2027"), a click opens both dates
   if (!open) {
     const { start, end } = parseRange(value);
     const long = (d: string) => (d ? fmtDate(lang, d, { day: "numeric", month: "long", year: "numeric" }) : "…");
@@ -219,7 +214,7 @@ function RelationField({ item, prop, autoOpen }: { item: Item; prop: PropDef; au
   const own = item.rels[prop.id] ?? [];
   const remove = (id: string) => {
     if (own.includes(id)) repo.setRel(item.id, prop.id, id, false);
-    else repo.setRel(id, prop.id, item.id, false); // symmetric: stored on the other side
+    else repo.setRel(id, prop.id, item.id, false); // a symmetric relation may be stored on the other side
   };
   return (
     <>
@@ -235,7 +230,6 @@ function RelationField({ item, prop, autoOpen }: { item: Item; prop: PropDef; au
           </span>
         );
       })}
-      {/* empty: the same quiet "–" as every empty field; with values and several allowed: "+" */}
       {!ids.length ? (
         <EmptyValueButton type="button" onClick={() => setPicking(true)} aria-label={t("props.set", { name: prop.name })} />
       ) : (
@@ -263,9 +257,6 @@ function RelationField({ item, prop, autoOpen }: { item: Item; prop: PropDef; au
   );
 }
 
-// ---------- the property block of a page ----------
-
-/** One row of the block: label 13 muted (one line, the name as tooltip when cut), value beside it. */
 function BlockRow({ label, title, children }: { label: React.ReactNode; title?: string; children: React.ReactNode }) {
   return (
     <>
@@ -277,22 +268,18 @@ function BlockRow({ label, title, children }: { label: React.ReactNode; title?: 
   );
 }
 
-/** What the page puts around its badges: the type in front, the progress under the dates. */
+/** `first` goes before the badges, `progress` under the dates. */
 interface PageHead {
   first?: React.ReactNode;
   progress?: React.ReactNode;
 }
 
-/** Status and selections read by themselves as badges; dates by their icon. They need no label. */
+/** Status and selections read as badges by themselves, so they need no label. */
 const isBadge = (p: PropDef) => isSingle(p);
 
 /**
- * The properties of a page under the title (design rules § 2.2). First a row of badges – the
- * type, then status and selections in the type's order –, under it the dates, under them the
- * progress. The rest follows with its name: the type's properties in their order, values left
- * without a property (shown, only removable), the other side of relations ("Blockiert diese").
- * Every property of the type is there from the start – a page adds none the type lacks. Tags are
- * no property: they follow the badges (see PageTags).
+ * Design rules § 2.2. Every property of the type shows from the start, a page adds none the type
+ * lacks. Tags are no property and follow the badges (see PageTags).
  */
 export function PropertyBlock({ item, schema, head = {} }: { item: Item; schema?: TypeSchema; head?: PageHead }) {
   const { t } = useT();
@@ -321,7 +308,7 @@ export function PropertyBlock({ item, schema, head = {} }: { item: Item; schema?
           {dates.map((p) => (
             <span key={p.id} className="inline-flex items-center gap-1.5" title={p.description || p.name}>
               <CalendarDays size={15} className="shrink-0 text-muted-foreground" aria-hidden />
-              {/* the name only where the icon alone does not say which date it is */}
+              {/* name the date only where the icon alone does not say which one it is */}
               {(dates.length > 1 || !hasValue(item, p, ix)) && <span className="text-muted-foreground">{p.name}</span>}
               <PropertyField item={item} prop={p} />
             </span>
@@ -364,7 +351,6 @@ export function PropertyBlock({ item, schema, head = {} }: { item: Item; schema?
   );
 }
 
-/** The status as a badge; a click picks another. */
 function StatusBadge({ item }: { item: Item }) {
   const { t } = useT();
   const ix = useIndex();
@@ -382,10 +368,7 @@ function StatusBadge({ item }: { item: Item }) {
   );
 }
 
-/**
- * A selection as a badge that says what it is: the property's name before the value ("Phase
- * Entwurf"). Empty: the name, dashed, to pick one.
- */
+/** Shows the property's name before the value ("Phase Entwurf"). */
 function SelectBadge({ item, prop }: { item: Item; prop: PropDef }) {
   const { t } = useT();
   const v = item.props[prop.id];
@@ -434,7 +417,6 @@ function SelectBadge({ item, prop }: { item: Item; prop: PropDef }) {
   );
 }
 
-/** Other entries' relations pointing here, under the relation's inverse name ("Blockiert diese"). */
 function inverseGroups(item: Item, ix: Index, t: T): { label: string; ids: string[] }[] {
   const groups = new Map<string, { label: string; ids: string[] }>();
   for (const b of ix.backlinks(item.id)) {

@@ -37,7 +37,7 @@ import { activeSpace, signOut, useAccounts } from "./accounts";
 import { openSettings } from "./ui/settings-open";
 
 export function App() {
-  // the confirm dialog lives above everything: the sync may ask before the app has loaded
+  // ConfirmHost sits outside Gate: the sync may ask before the app has loaded
   return (
     <>
       <Gate>
@@ -50,7 +50,6 @@ export function App() {
   );
 }
 
-/** The server no longer takes the account's token: sign in again. */
 function SignedOut() {
   const { t } = useT();
   const { account } = useAccounts();
@@ -58,7 +57,7 @@ function SignedOut() {
   return <StatusBanner action={{ label: t("account.signInAgain"), run: () => void signOut() }}>{t("account.lost", { server: location.host })}</StatusBanner>;
 }
 
-/** A newer app wrote data in one of the workspaces: this one only reads them until reloaded. */
+/** A newer app version wrote data in a workspace; this one stays read-only until reloaded. */
 function TooNew() {
   const { t } = useT();
   const { spaces } = useAccounts();
@@ -66,7 +65,6 @@ function TooNew() {
   return <StatusBanner action={{ label: t("format.reload"), run: () => location.reload() }}>{t("format.tooNew")}</StatusBanner>;
 }
 
-/** A line across the top about the whole app, with the one thing to do about it. */
 function StatusBanner({ children, action }: { children: React.ReactNode; action: { label: string; run: () => void } }) {
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line bg-surface-2 px-4 py-2 text-sm" role="status">
@@ -88,12 +86,12 @@ function Main() {
   const [menu, setMenu] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
   useEffect(() => setMenu(false), [route.path]);
-  // another page closes the tray's panel – but "#/inbox" (Heute with it open) and a step it was open at
+  // leaving the page closes the tray's panel, except for "#/inbox" and pages it was open at
   useEffect(syncShelf, [route.path]);
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
-      // taken by a field already (⌘K on selected text links it)
+      // a field may have used it already (⌘K on selected text makes a link)
       if (e.defaultPrevented) return;
       if (mod && e.key.toLowerCase() === "k") {
         e.preventDefault();
@@ -109,7 +107,7 @@ function Main() {
     };
   }, []);
 
-  // "#/create?title=…" – links to items that don't exist yet.
+  // "#/create?title=…": links to items that don't exist yet
   useEffect(() => {
     if (route.parts[0] !== "create") return;
     const title = route.query.get("title") ?? "";
@@ -121,14 +119,13 @@ function Main() {
     }
   }, [route.path]);
 
-  // a page of a workspace waits until it is set up (accounts.ts does that); Heute, the inbox,
-  // the review, search and the settings show what is there in every workspace
+  // workspace pages wait until it is set up; global pages show whatever every workspace has
   const settings = r.get(SETTINGS_ID);
   const global = globalPage(route.parts, route.space);
   const old = oldAddress(route.parts, route.space);
   const page = (() => {
     if (old !== undefined) return <Redirect to={old.startsWith("/review") || old === "/activity" || old === "/trash" ? old : spaceHref(route.space ?? active?.id, old).slice(1)} />;
-    // a workspace in the address this account is not in (any more): not the open one's page instead
+    // don't fall back to the open workspace when the address names one the account isn't in
     if (route.space && !spaces.some((s) => s.id === route.space)) return <PagePlaceholder>{t("app.noSpace")}</PagePlaceholder>;
     if (!global) {
       if (!r.status.loaded) return <PagePlaceholder fill>{t("app.opening")}</PagePlaceholder>;
@@ -137,7 +134,7 @@ function Main() {
     switch (route.parts[0]) {
       case undefined:
       case "inbox":
-        // "#/inbox": Heute, with the tray's panel open (above)
+        // "#/inbox" is Today with the tray's panel open
         return <Today />;
       case "review":
         return <Review at={route.query.get("at") ?? undefined} />;
@@ -155,7 +152,7 @@ function Main() {
         return <TrashView />;
       case "settings":
         return global ? <SettingsRedirect /> : <SpaceSettingsPage />;
-      // the setup page of before (a workspace is set up as it is created)
+      // old setup page; workspaces are now set up when created
       case "setup":
         return <Redirect to="/" />;
       case "i":
@@ -165,8 +162,7 @@ function Main() {
     }
   })();
   const isGraph = route.parts[0] === "graph";
-  // the tray is below every page but the review (it leads there); on Heute on a desktop with its panel open, as part of the
-  // page – if it fits below it, else Heute shows the newest entries and the panel opens over the page as elsewhere
+  // no tray on the review (the tray leads there); on desktop Today it is pinned below the page if it fits
   const tray = !!settings && route.parts[0] !== "review" && !(route.parts[0] === "inbox" && route.parts[1]);
   const column = useRef<HTMLDivElement>(null);
   const main = useRef<HTMLElement>(null);
@@ -200,13 +196,13 @@ function Main() {
         )}
         <SignedOut />
         <TooNew />
-        {/* with the panel pinned below: as tall as Heute is, the panel takes the rest */}
+        {/* pinned: main is only as tall as Today, the panel takes the rest */}
         <main ref={main} tabIndex={-1} className={cn("@container min-h-0 outline-none", pinned ? "flex-initial" : "flex-1", isGraph ? "overflow-hidden" : "overflow-y-auto")}>
-          {/* a page of another workspace: anew on its replica (repo and files point at it) */}
+          {/* keyed by workspace so a switch remounts the page on the other replica */}
           <PageBoundary key={`${global ? "" : active?.id}${route.path === "/inbox" ? "/" : route.path}`}>{page}</PageBoundary>
         </main>
         {tray && <Tray desktop={wide} pinned={pinned} onCapture={() => setCaptureOpen(true)} />}
-        {/* the review on a phone is a page of its own, with its own way back */}
+        {/* the review on a phone has its own way back */}
         {!wide && route.parts[0] !== "review" && <MobileNav />}
       </div>
 
@@ -227,10 +223,13 @@ function Main() {
   );
 }
 
+const TRAY_BAR_PX = 88;
+/** Room for two entries; with less, pinning would not gain anything over the cards. */
+const MIN_PANEL_PX = 220;
+
 /**
- * Room for the tray's panel below the page (Heute, `on`): at least 220 px under it besides the bar (two entries;
- * less and the cards above take no more room than it would), measured as it
- * changes. Heute without it shows the newest entries instead (data-shelf-cards): they don't count, else it never comes back.
+ * Whether the tray's panel fits below the page. Unpinned, Today shows the newest entries instead
+ * (data-shelf-cards); they don't count, or the panel would never come back.
  */
 function useRoom(on: boolean, column: React.RefObject<HTMLDivElement | null>, main: React.RefObject<HTMLElement | null>, path: string) {
   const [room, setRoom] = useState(true);
@@ -240,7 +239,7 @@ function useRoom(on: boolean, column: React.RefObject<HTMLDivElement | null>, ma
     const measure = () => {
       const cards = page.querySelector<HTMLElement>("[data-shelf-cards]");
       const height = page.offsetHeight - (cards ? cards.offsetHeight + parseFloat(getComputedStyle(cards).marginTop) : 0);
-      setRoom(column.current!.clientHeight - height - 88 >= 220);
+      setRoom(column.current!.clientHeight - height - TRAY_BAR_PX >= MIN_PANEL_PX);
     };
     const ro = new ResizeObserver(measure);
     ro.observe(column.current);
@@ -250,7 +249,6 @@ function useRoom(on: boolean, column: React.RefObject<HTMLDivElement | null>, ma
   return on && room;
 }
 
-/** The phone menu as a sheet from below: a modal surface (focus stays in, Escape closes). */
 function MenuSheet({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
   const { t } = useT();
   return (
@@ -261,7 +259,6 @@ function MenuSheet({ onClose, children }: { onClose: () => void; children: React
   );
 }
 
-/** The phone menu (a sheet from below): the selector, Heute and Eingang · the workspaces seen (as in the sidebar) · Aktivität, Papierkorb, Einstellungen. */
 function MobileMenu({ onSettings }: { onSettings: () => void }) {
   const { t } = useT();
   const { shown } = useAccounts();
@@ -301,18 +298,15 @@ function MobileMenu({ onSettings }: { onSettings: () => void }) {
   );
 }
 
-/**
- * Addresses from before and where they lead now (a path in the workspace of the address), or
- * undefined for one of today. They can go once no saved link or bookmark uses them any more.
- */
+/** Where old addresses lead now. Remove once no saved link or bookmark uses them. */
 function oldAddress(parts: string[], space?: string): string | undefined {
-  // the lists as collections (before 26.10.)
+  // lists as collections (before 26.10.)
   if (parts[0] === "c") return OLD_LISTS[parts[1]!] ?? "/";
-  // an inbox entry's own page (before the review): the review, at that entry
+  // an inbox entry's own page (before the review)
   if (parts[0] === "inbox" && parts[1]) return `/review?at=${encodeURIComponent(entryKey(activeSpace()!.id, parts[1]))}`;
-  // a workspace's settings (before 31.10.)
+  // workspace settings (before 31.10.)
   if (parts[0] === "workspace") return "/settings";
-  // a workspace's activity or trash (before 1.11.): now one page for the workspaces seen
+  // per-workspace activity or trash (before 1.11.)
   if ((parts[0] === "activity" || parts[0] === "trash") && space) return "/" + parts[0];
 }
 
@@ -323,10 +317,7 @@ function Redirect({ to }: { to: string }) {
   return null;
 }
 
-/**
- * Bottom bar on phones: Heute, Eingang – with one workspace seen also its first two types
- * of the sidebar (Projekte, Tasks); with several they are in the menu, each in its workspace.
- */
+/** With exactly one workspace shown, its first two types join the bar; with several they stay in the menu. */
 function MobileNav() {
   const { t } = useT();
   const { shown, active } = useAccounts();

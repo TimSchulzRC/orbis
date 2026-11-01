@@ -1,6 +1,5 @@
-// Read-only Markdown mirror (data/vault): every information as Markdown with frontmatter,
-// below its home ("Teil von"); files next to it. For backup, grep, git and file-based
-// agents. Changes made there are overwritten; edit through the app or MCP.
+// Read-only Markdown mirror in data/vault, for backup, grep, git and file-based agents.
+// Changes made there get overwritten.
 import { existsSync, linkSync, copyFileSync, mkdirSync, readdirSync, rmSync, unlinkSync, writeFileSync, rmdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { type Item, META_TYPE, optionNames } from "@obtion/core/model";
@@ -52,7 +51,6 @@ export class Mirror {
     }
   }
 
-  /** Compute every file, write what changed, remove what is gone. */
   sync() {
     const ix = this.store.index();
     const lang = this.store.lang();
@@ -79,7 +77,7 @@ export class Mirror {
         want.set(unique(`${folderOf(i)}/${safe(i.file.name)}`.replace(/^\.\//, ""), i.id), { blob: i.file.hash });
         continue;
       }
-      // An item with children gets a folder of the same name for them (folder note style).
+      // children go into a folder named after this item (folder-note style)
       want.set(unique(`${folderOf(i)}/${safe(i.title)}.md`.replace(/^\.\//, ""), i.id), { content: this.render(i, ix, lang) });
     }
     want.set("README.md", { content: "# Obtion mirror\n\nGenerated from the Obtion database: every information as Markdown below its home. Read freely; changes made here are overwritten. To change data, use the app or the MCP tools.\n" });

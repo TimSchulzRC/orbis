@@ -1,8 +1,5 @@
-// A device's full replica of the server's data. Everything lives in memory and in the device's
-// storage, so the app works offline; changes go to an outbox and sync when the server is
-// reachable. No UI and no platform APIs: storage, the connection to the server and the questions
-// to the user come from the platform (RepoHost) – the browser's in @obtion/ui, later the
-// desktop and mobile apps' own.
+// A device's full offline replica of the server's data. Platform-free: storage, the server
+// connection and questions to the user come from the RepoHost.
 import * as Y from "yjs";
 import {
   FORMAT,
@@ -45,39 +42,41 @@ import { createIndex, indexRecord, searchIds } from "@obtion/core/search";
 import { type Person, personOrigin } from "@obtion/core/origin";
 
 const REMOTE = Symbol("remote");
-/** The areas this device holds. One until teams come (see PERSONAL); the cursor below is its. */
+/** One area until teams come; the single sync cursor belongs to it. */
 const AREAS = [PERSONAL];
-/** An outbox entry: a push item and its area. */
 export type OutItem = PushItem & { a?: string };
 
-/** The area of a document (documents from before areas: personal). */
 const LOAD = Symbol("load");
 const TAB = Symbol("tab");
 
-/** A stored update of one document; `key` is the storage's own (for compaction). */
+const COMPACT_AFTER_ROWS = 8;
+const SEARCH_DEBOUNCE_MS = 400;
+/** Typing into the same text continues its undo step while pauses stay shorter than this. */
+const TYPING_STEP_GAP_MS = 120_000;
+const PING_MS = 25_000;
+const MAX_RETRY_MS = 30_000;
+const PUSH_BATCH = 200;
+const MAX_EVENTS = 100;
+
+/** `key` is the storage's own, used for compaction. */
 export interface StoredRow {
   key?: unknown;
   d: string;
   u: Uint8Array;
 }
 
-/**
- * Where the replica keeps its data on the device. Every write is one transaction: it either
- * happens completely or not at all (a reload in between loses nothing).
- */
+/** Every write must be atomic, so a reload in between loses nothing. */
 export interface ReplicaStorage {
   open(): Promise<void>;
   load(): Promise<{ rows: StoredRow[]; outbox: OutItem[]; lastSeq?: number; lastId?: string }>;
-  /** Replace a document's stored updates by one merged update. */
   compact(docs: { keys: unknown[]; row: StoredRow }[]): Promise<void>;
   write(w: { rows?: StoredRow[]; outbox?: OutItem[]; acked?: string[]; cursor?: { lastSeq: number; lastId?: string }; serverId?: string }): Promise<void>;
   outbox(): Promise<OutItem[]>;
   serverId(): Promise<string | undefined>;
-  /** Delete everything stored. */
   destroy(): Promise<void>;
 }
 
-/** The connection to the server's /sync endpoint (a WebSocket). */
+/** A WebSocket to the server's /sync endpoint. */
 export interface SyncSocket {
   readonly readyState: number;
   send(data: string): void;
@@ -90,33 +89,28 @@ export interface SyncSocket {
 const CONNECTING = 0;
 const OPEN = 1;
 
-/** A window of the same app on this device that shares the storage (browser tabs). */
 export type TabMsg = { d: string; u: Uint8Array };
 
-/** What the platform gives the replica. */
 export interface RepoHost {
   storage: ReplicaStorage;
-  /** This device's name, e.g. "Mac-x3f9": recorded with its changes, never shown. */
+  /** e.g. "Mac-x3f9"; recorded with its changes, never shown. */
   device: string;
-  /** Whose account the changes from here are made with. */
   person?: Person;
-  /** Opens a connection to the server's sync endpoint. */
   connect(): SyncSocket;
-  /** Sends JSON to the server's API (e.g. "/api/undo"); null when the server cannot be reached. */
+  /** null when the server cannot be reached. */
   post(path: string, body: unknown): Promise<{ ok: boolean; statusText: string; body: unknown } | null>;
-  /** Other windows on this device, if the platform has several. */
+  /** Other windows of the app on this device that share the storage (browser tabs). */
   tabs?: { post(msg: TabMsg): void; listen(fn: (msg: TabMsg) => void): void };
-  /** Calls fn whenever it is worth trying the server again (back online, app in front). */
+  /** Calls fn when it is worth trying the server again (back online, app in front). */
   onWake?(fn: () => void): void;
-  /** Asks the platform to keep the stored data (browsers may delete it otherwise). */
+  /** Browsers may evict stored data unless asked to persist it. */
   persist?(): void;
-  /** This device knew another server: upload its copy, replace it with the server's, or no answer. */
+  /** This device knew another server. null means no answer. */
   askOtherServer(): Promise<"upload" | "replace" | null>;
-  /** Drop changes the server does not have yet? */
   confirmDiscard(count: number): Promise<boolean>;
-  /** The data are newer than this app: tell the user (once). */
+  /** The data are newer than this app; called once. */
   tooNew(): void;
-  /** Start the app anew (after the replica was replaced). */
+  /** Called after the replica was replaced. */
   reload(): void;
 }
 
@@ -124,7 +118,7 @@ export interface SyncStatus {
   loaded: boolean;
   online: boolean;
   synced: boolean; // initial catch-up done in this session
-  pending: number; // local changes not yet acknowledged by the server
+  pending: number; // local changes not yet acked
   lastSeq: number;
 }
 
@@ -160,12 +154,10 @@ export class Repo {
     this.device = host.device;
   }
 
-  /** Who made a change from here ("web:Tim;u=…;d=Mac-x3f9"): createdBy, op records, setup. */
+  /** e.g. "web:Tim;u=…;d=Mac-x3f9" */
   get origin(): string {
     return this.host.person ? personOrigin(this.host.person, this.device) : `web:${this.device}`;
   }
-
-  // ---------- lifecycle ----------
 
   async init() {
     await this.db.open();
@@ -200,9 +192,9 @@ export class Repo {
     });
   }
 
-  /** Merge many small stored updates per doc into one, keeping the device's storage small. */
+  /** Merges many small stored updates per doc into one. */
   private async compact(byDoc: Map<string, { keys: unknown[]; updates: Uint8Array[] }>) {
-    const heavy = [...byDoc].filter(([, e]) => e.keys.length > 8);
+    const heavy = [...byDoc].filter(([, e]) => e.keys.length > COMPACT_AFTER_ROWS);
     if (!heavy.length) return;
     await this.db.compact(heavy.map(([id, e]) => ({ keys: e.keys, row: { d: id, u: Y.encodeStateAsUpdate(this.docs.get(id)!) } })));
   }
@@ -223,8 +215,6 @@ export class Repo {
     for (const l of this.listeners) l();
   }
 
-  // ---------- docs ----------
-
   getDoc(id: string): Y.Doc {
     let doc = this.docs.get(id);
     if (doc) return doc;
@@ -236,7 +226,7 @@ export class Repo {
         this.touch(id);
         return;
       }
-      // Remote updates are persisted in bulk by the sync handler.
+      // remote updates are persisted in bulk by the sync handler
       if (origin !== REMOTE) this.local(id, update, this.stepFor(id, tr));
       this.touch(id);
     });
@@ -254,7 +244,7 @@ export class Repo {
         this.emit();
       });
     }
-    if (!this.searchTimer) this.searchTimer = setTimeout(() => this.reindex(), 400);
+    if (!this.searchTimer) this.searchTimer = setTimeout(() => this.reindex(), SEARCH_DEBOUNCE_MS);
   }
 
   private materialize() {
@@ -263,7 +253,7 @@ export class Repo {
       if (rec) this.records.set(id, rec);
     }
     this.dirty.clear();
-    // Cascaded deletes follow their root; items that flip need a new search entry.
+    // cascaded deletes follow their root; items that flip need a new search entry
     const before = new Map([...this.records.values()].filter((r) => r.deletedVia).map((r) => [r.id, r]));
     resolveCascade(this.records);
     for (const [id, r] of before) if (this.records.get(id) !== r) this.searchDirty.add(id);
@@ -278,10 +268,8 @@ export class Repo {
     this.searchDirty.clear();
   }
 
-  // ---------- steps ----------
-  // One user action = one step = one undo unit. Changes in the same tick belong together
-  // (a delete with its cascade, a rename with its links); typing into one text continues
-  // its step while the pauses stay under two minutes.
+  // One user action is one step, the undo unit. Changes in the same tick belong together (a
+  // delete with its cascade, a rename with its links).
   private curStep: { id: string; at: number; doc: string; typing: boolean } | null = null;
   private sameTick = false;
 
@@ -292,7 +280,7 @@ export class Repo {
     const typing = [...tr.changed].every(([t, keys]) => t === body || (t === meta && [...keys].every((k) => k === "updated")));
     const now = Date.now();
     const c = this.curStep;
-    const goOn = c && (this.sameTick || (typing && c.typing && c.doc === docId && now - c.at < 120_000));
+    const goOn = c && (this.sameTick || (typing && c.typing && c.doc === docId && now - c.at < TYPING_STEP_GAP_MS));
     if (!goOn) this.curStep = { id: "s" + newId(), at: now, doc: docId, typing };
     else c.at = now;
     if (!this.sameTick) {
@@ -314,8 +302,8 @@ export class Repo {
     this.send({ t: "push", area, items: [item] });
   }
 
-  // Everything one tick changed is stored in one transaction: quick to commit, so a reload
-  // right after a big change (the setup writes dozens of documents) loses nothing.
+  // Everything one tick changed is stored in one transaction, so a reload right after a big
+  // change (the setup writes dozens of documents) loses nothing.
   private toStore: { row: StoredRow; out: OutItem }[] = [];
   private storing: Promise<void> | null = null;
 
@@ -329,11 +317,10 @@ export class Repo {
     try {
       await this.db.write({ rows: batch.map((b) => b.row), outbox: batch.map((b) => b.out) });
     } catch (e) {
-      // Not stored locally: stop advancing lastSeq so the server resends this doc later.
+      // stop advancing lastSeq so the server resends this doc later
       this.persistFailed = true;
       console.error("persist failed", e);
     } finally {
-      // what came in meanwhile goes in the next transaction
       this.storing = this.toStore.length ? this.storeNow() : null;
     }
   }
@@ -347,8 +334,6 @@ export class Repo {
     Y.applyUpdate(this.getDoc(msg.d), msg.u, TAB);
   }
 
-  // ---------- sync ----------
-
   connect() {
     if (this.ws && (this.ws.readyState === OPEN || this.ws.readyState === CONNECTING)) return;
     const ws = this.host.connect();
@@ -359,11 +344,11 @@ export class Repo {
       this.status.online = true;
       this.status.synced = false;
       this.emit();
-      // The outbox is pushed after the server's "welcome" was checked (see onMessage).
+      // the outbox is pushed only after the server's "welcome" was checked
       for (const area of AREAS) this.send({ t: "hello", area, since: this.status.lastSeq, sinceId: this.lastId, device: this.device });
-      ping = setInterval(() => this.send({ t: "ping" }), 25000);
+      ping = setInterval(() => this.send({ t: "ping" }), PING_MS);
     };
-    // Handle messages strictly in order (the server-identity check must finish before updates apply).
+    // strictly in order: the server identity check must finish before updates apply
     ws.onmessage = (ev) => {
       const msg = JSON.parse(ev.data) as ServerMsg;
       this.inbox = this.inbox.then(() => (this.ws === ws ? this.onMessage(msg) : undefined)).catch((e) => console.error("sync message failed", e));
@@ -373,23 +358,23 @@ export class Repo {
       if (this.ws === ws) this.ws = null;
       this.status.online = false;
       this.emit();
-      const delay = Math.min(30000, 1000 * 2 ** this.retry++);
+      const delay = Math.min(MAX_RETRY_MS, 1000 * 2 ** this.retry++);
       setTimeout(() => this.connect(), delay);
     };
     ws.onerror = () => ws.close();
   }
 
-  /** Push everything in the outbox, including items other (closed) tabs left in the storage. */
+  /** Includes items that other (closed) tabs left in the storage. */
   private async flushOutbox() {
     for (const o of await this.db.outbox()) this.outbox.set(o.k, o);
     this.status.pending = this.outbox.size;
     for (const area of AREAS) {
       const items = [...this.outbox.values()].filter((o) => (o.a ?? PERSONAL) === area); // items from before areas: personal
-      for (let i = 0; i < items.length; i += 200) this.send({ t: "push", area, items: items.slice(i, i + 200) });
+      for (let i = 0; i < items.length; i += PUSH_BATCH) this.send({ t: "push", area, items: items.slice(i, i + PUSH_BATCH) });
     }
   }
 
-  /** Queue this device's full state for upload. Goes through the durable outbox, so it survives disconnects. */
+  /** Goes through the durable outbox, so it survives disconnects. */
   private async enqueueFullUpload() {
     const items: OutItem[] = [...this.docs].map(([d, doc]) => ({ k: newId(), d, u: toB64(Y.encodeStateAsUpdate(doc)), a: areaOf(doc) }));
     await this.db.write({ outbox: items });
@@ -412,14 +397,13 @@ export class Repo {
       this.serverFormat = msg.format ?? 0;
       const known = this.serverId ?? (await this.db.serverId());
       if (known && known !== msg.hub && this.docs.size > 0) {
-        // A different server: mostly it was set up anew and this device's copy is stale (replace it,
-        // the recommended answer); rarely it was restored from a backup and misses what only this
-        // device has (upload, which adds this copy to the server). Only the user knows.
+        // Usually the server was set up anew and this copy is stale (replace, recommended); rarely it
+        // was restored from a backup and misses what only this device has (upload). Only the user knows.
         const answer = await this.host.askOtherServer();
-        // no answer (closed): the safe way, nothing is lost – ask again on the next connection
+        // no answer: nothing is lost, ask again on the next connection
         if (answer === null) {
           const old = this.ws;
-          this.ws = null; // what this connection still sends is dropped (see onmessage)
+          this.ws = null; // makes onmessage drop what this connection still sends
           old?.close();
           return;
         }
@@ -430,7 +414,7 @@ export class Repo {
           return;
         }
         await this.enqueueFullUpload();
-        // Our sequence position belongs to the old server: start over against the new one.
+        // our sequence position belongs to the old server
         this.status.lastSeq = 0;
         this.lastId = undefined;
         await this.db.write({ cursor: { lastSeq: 0 } });
@@ -443,7 +427,7 @@ export class Repo {
     }
     if (msg.t === "updates") {
       if (msg.reset) {
-        // The server lost data (restored from backup?). Give it everything we have.
+        // the server lost data (restored from a backup?)
         await this.enqueueFullUpload();
         await this.flushOutbox();
       }
@@ -456,7 +440,7 @@ export class Repo {
       try {
         await this.db.write({ rows, cursor: msg.last > 0 && !this.persistFailed ? { lastSeq: msg.last, lastId: msg.lastId } : undefined });
       } catch (e) {
-        // Never advance past updates we could not store; the next connect re-fetches them.
+        // never advance past updates we could not store; the next connect re-fetches them
         this.persistFailed = true;
         console.error("could not store updates", e);
       }
@@ -480,33 +464,24 @@ export class Repo {
     } else if (msg.t === "blob") {
       for (const l of this.blobListeners) l(msg.hash);
     } else if (msg.t === "event") {
-      // Edits by the same author are folded into one event on the server, so replace by id.
-      this.events = [msg.event, ...this.events.filter((e) => e.id !== msg.event.id)].slice(0, 100);
+      // the server folds edits by the same author into one event, so replace by id
+      this.events = [msg.event, ...this.events.filter((e) => e.id !== msg.event.id)].slice(0, MAX_EVENTS);
       for (const l of this.eventListeners) l(msg.event);
       this.emit();
     }
   }
 
-  /**
-   * Take back a step (one user action or tool call) on the server: it holds the history. This
-   * device's own changes are pushed first, so they are included. Offline it does nothing.
-   */
+  /** Runs on the server, which holds the history. Pushes local changes first; does nothing offline. */
   async undo(step: string): Promise<void> {
     await this.flushOutbox();
     await this.host.post("/api/undo", { step, device: this.device } satisfies UndoRequest);
   }
 
-
-  /**
-   * The data (or the server) are newer than this app: it still reads them but does not write – a
-   * newer format might be damaged by changes it does not understand (see FORMAT). Reloading
-   * brings the new app.
-   */
+  /** Data from a newer format is read but never written: changes this app doesn't understand could damage it. */
   get readOnly(): boolean {
     return (this.records.get(SETTINGS_ID)?.settings?.format ?? 0) > FORMAT || this.serverFormat > FORMAT;
   }
 
-  /** Drop the local replica and download everything again. */
   async resetLocal(force = false) {
     if (!force && this.outbox.size && !(await this.host.confirmDiscard(this.outbox.size))) return;
     await this.db.destroy();
@@ -518,18 +493,16 @@ export class Repo {
     return () => this.blobListeners.delete(l);
   }
 
-  // ---------- queries ----------
-
   get(id?: string | null): Item | undefined {
     return id ? this.records.get(id) : undefined;
   }
 
-  /** Live informations and files (the index's list: sort a copy). */
+  /** The index's own array: sort a copy. */
   live(): readonly Item[] {
     return this.index().live;
   }
 
-  /** Structure, titles, links, aggregation – rebuilt lazily when data changed. */
+  /** Rebuilt lazily when data changed. */
   index(): Index {
     if (this.ix?.v !== this.version) this.ix = { v: this.version, index: new Index(this.records) };
     return this.ix.index;
@@ -544,9 +517,6 @@ export class Repo {
       .filter((r) => r && isContent(r));
   }
 
-  // ---------- mutations ----------
-
-  /** Run a change on one document (the generic way; everything else builds on it). */
   change(id: string, fn: (doc: Y.Doc) => void) {
     if (this.readOnly) {
       if (!this.tooNewShown) this.host.tooNew();
@@ -557,7 +527,6 @@ export class Repo {
     doc.transact(() => fn(doc));
   }
 
-  /** Writer for shared bulk operations (setup, type operations). */
   writer: Writer = {
     change: (id, fn) => this.change(id, fn),
     get: (id) => this.records.get(id),
@@ -578,7 +547,7 @@ export class Repo {
     if (ownsTitle && prev!.title !== title) this.renameLinks(prev!.title, title);
   }
 
-  /** Give an information a type (or none). New type: template values and first status apply. Files have no type. */
+  /** Applies the new type's initial values. Files have no type. */
   setType(id: string, type: string | null) {
     const item = this.records.get(id);
     if (!item || item.kind !== "info" || item.type === type) return;
@@ -589,7 +558,7 @@ export class Repo {
     });
   }
 
-  /** Add a parent. Refuses (returns false) if it would create a cycle. */
+  /** false if it would create a cycle. */
   addParent(id: string, parent: string, sort?: string): boolean {
     if (this.index().wouldCycle(id, parent)) return false;
     this.change(id, (doc) => {
@@ -604,7 +573,7 @@ export class Repo {
       touch(doc);
     });
   }
-  /** Move: replace the parent you came from (drag). */
+  /** Replaces the parent the item was dragged from. */
   moveParent(id: string, from: string | null, to: string, sort?: string): boolean {
     if (this.index().wouldCycle(id, to)) return false;
     this.change(id, (doc) => {
@@ -619,12 +588,12 @@ export class Repo {
   setHome(id: string, parent: string) {
     this.change(id, (doc) => setHome(doc, parent));
   }
-  /** Order below a parent, or (parent null) the position among pinned items. */
+  /** parent null: the position among pinned items. */
   setSort(id: string, parent: string | null, sort: string) {
     this.change(id, (doc) => (parent ? setParentSort(doc, parent, sort) : setMeta(doc, { pinned: sort })));
   }
 
-  /** Pin to the top of the sidebar (after everything pinned) or unpin. Pinned counts as a place. */
+  /** Pins after everything pinned so far. */
   pin(id: string, on: boolean) {
     const pinned = on ? nextPinKey(this.live()) : null;
     this.change(id, (doc) => setMeta(doc, { pinned }));
@@ -662,7 +631,7 @@ export class Repo {
     this.change(id, (doc) => setView(doc, viewId, def));
   }
 
-  /** Dated update, optionally with a status change (option id of the status property). */
+  /** `status.option` is an option id of the status property. */
   addUpdate(id: string, text: string, status?: { prop: string; option: string }) {
     const schema = this.index().schemaOf(this.records.get(id));
     const at = Date.now();
@@ -673,16 +642,15 @@ export class Repo {
     });
   }
 
-  /** To the trash. Children that hang only here go along, or with "inbox" lose this place. */
+  /** Children that hang only here go along, or with "inbox" lose this parent. */
   remove(id: string, children: "trash" | "inbox" = "trash") {
     deleteItem(this.writer, this.index(), id, children);
   }
-  /** Back from the trash, together with exactly what was deleted with it. */
+  /** Restores exactly what was deleted with it. */
   restore(id: string) {
     restoreItem(this.writer, this.records, id);
   }
 
-  /** Keep [[links]] pointing at a renamed item. */
   renameLinks(oldTitle: string, newTitle: string) {
     for (const r of this.live()) {
       const body = renameLinksIn(r.body, oldTitle, newTitle);

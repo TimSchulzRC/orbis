@@ -1,6 +1,5 @@
-// Agent operations (used by the MCP server). Everything is driven by data: the agent reads
-// the schema (types, their descriptions, properties, capabilities) and works through
-// names – no type is special in code. The web app edits its replica directly.
+// Operations behind the MCP tools. No type is special in code: agents read the schema and work
+// through names. The web app does not use this; it edits its replica directly.
 import * as Y from "yjs";
 import {
   type ViewTab,
@@ -65,7 +64,6 @@ import { originText } from "@obtion/core/origin";
 
 export class OpError extends Error {}
 
-/** The query syntax, for agents (the MCP instructions) and in the error for a query not understood. */
 export const QUERY_HELP =
   "type:Name #tag under:[[X]] in:[[X]] linked:[[X]] linked:under:[[X]] status:open|new|active|done (open = new or active) property:value property<value property:empty without:type|parents|children|usage pinned inbox blocked dormant (it or something above it paused or done) file filetype:image|pdf; space=AND, |=OR, -=NOT, (…); sort:field group:path|status|type limit:n. German keywords work too.";
 
@@ -74,7 +72,7 @@ const UNLINKABLE = /[#|[\]^]/;
 const UNLINKABLE_ALL = /[#|[\]^]/g;
 const isDoneNow = (i: Item, schema: TypeSchema | undefined) => statusOf(i, schema)?.group === "done";
 
-/** "start/end" for date ranges; each side any accepted date or empty. */
+/** "start/end", either side may be empty. Tries every slash, since a date itself may contain one. */
 function splitRange(s: string, today: string): string | undefined {
   for (let i = s.indexOf("/"); i >= 0; i = s.indexOf("/", i + 1)) {
     const a = s.slice(0, i).trim();
@@ -97,14 +95,11 @@ export class Ops {
     return this.store.index();
   }
 
-  /** Writer for shared operations, with this call's origin. */
   private writer(origin: string): Writer {
     return { change: (id, fn) => this.store.change(id, origin, fn), get: (id) => this.store.records.get(id) };
   }
 
-  // ---------- resolving ----------
-
-  /** An item by id, exact title or unique partial title; ambiguity returns candidates instead of guessing. */
+  /** By id, exact title or unique partial title. Ambiguity throws with candidates instead of guessing. */
   resolve(ref: string, opts: { files?: boolean } = {}): Item {
     const ix = this.ix;
     const r = ref.trim().replace(/^\[\[|\]\]$/g, "");
@@ -122,10 +117,7 @@ export class Ops {
     throw new OpError(`${contains.length ? `"${r}" matches several items` : `No item is titled "${r}"`}. Use one of these ids:\n` + sugg.map((i) => `- ${this.label(i)} (id ${i.id})`).join("\n"));
   }
 
-  /**
-   * An item to change. Types are changed with update_type only and deleted only in the app,
-   * after its preview: never through the tools for items.
-   */
+  /** Refuses types: they change only through update_type and are deleted only in the app. */
   private target(ref: string, action: string): Item {
     const item = this.resolve(ref);
     if (item.type === META_TYPE)
@@ -149,8 +141,6 @@ export class Ops {
     const kind = i.kind === "datei" ? "file" : (ix.typeName(i.type) ?? (isInInbox(i, ix) ? "inbox" : isOverview(i, ix) ? "overview" : "note"));
     return `${displayTitle(i) || "(untitled)"} [${kind}]`;
   }
-
-  // ---------- reading ----------
 
   schema() {
     const ix = this.ix;
@@ -247,10 +237,7 @@ export class Ops {
     return out;
   }
 
-  /**
-   * One line per entry, the answer format of the tools:
-   * Title [id] · Type · Status (group) · due … · Path › To › Home · ⚠ blocked by "X"
-   */
+  /** Tool answer format: Title [id] · Type · Status (group) · due … · Path › Home · ⚠ blocked by "X" */
   line(i: Item, base?: string): string {
     const ix = this.store.index();
     const schema = ix.schemaOf(i);
@@ -279,9 +266,8 @@ export class Ops {
   }
 
   /**
-   * A writing tool call: all or nothing (store.atomic), and hints about what the change means –
-   * unresolved [[links]], duplicate or unlinkable titles, done with open items below, items
-   * that are no longer blocked.
+   * All or nothing, plus hints: unresolved [[links]], duplicate or unlinkable titles, done with
+   * open items below, newly unblocked items.
    */
   call(origin: string, fn: () => string): string {
     return this.store.step(origin, (step) => {
@@ -335,7 +321,7 @@ export class Ops {
     return hints.length ? `${out}\n\nHints:\n${hints.map((h) => "- " + h).join("\n")}` : out;
   }
 
-  /** The actor's last step that can be undone; redo: the step whose undo happened last. */
+  /** With `redo`, the step whose undo happened last. */
   lastStep(actor: string, redo: boolean): string {
     if (redo) {
       const undos = this.store.db.query("SELECT s.id, s.undoes FROM steps s JOIN steps t ON t.id = s.undoes WHERE t.actor = ? AND t.undoes IS NULL ORDER BY s.ts DESC, s.rowid DESC LIMIT 50").all(actor) as { id: string; undoes: string }[];
@@ -396,7 +382,7 @@ export class Ops {
     return out;
   }
 
-  /** A query in text form (any language) or the name of a type (its list, as its first view shows it). */
+  /** `q` may also be a type name: its list as its first view shows it. */
   query(q: string, opts: { context?: string; limit?: number } = {}) {
     const ix = this.ix;
     const typeId = ix.typeByName(q.trim().replace(/^\[\[|\]\]$/g, ""));
@@ -429,12 +415,12 @@ export class Ops {
       .map((i) => ({ item: i, snippet: q.trim() ? snippet(i.body || i.file?.text || "", q) || undefined : undefined }));
   }
 
-  /** What's going on – like the focus section of the start page. (An "overview" is an information with children.) */
+  /** Mirrors the focus section of the start page. */
   focus() {
     const ix = this.ix;
     const today = todayISO();
     const in7 = relDate("+7d", today)!;
-    // like the start page: nothing from paused or finished projects in the urgent lists
+    // nothing from paused or finished projects in the urgent lists
     const withDue = ix.live.map((i) => ({ i, due: dueOf(i, ix.schemaOf(i)), st: statusOf(i, ix.schemaOf(i)) })).filter((x) => x.st?.group !== "done" && !(x.due && ix.isDormant(x.i)));
     return {
       today,
@@ -461,9 +447,6 @@ export class Ops {
     }));
   }
 
-  // ---------- values ----------
-
-  /** A value given by the agent (names, ISO dates, numbers) → stored value for the property. */
   toValue(p: PropDef, raw: unknown, ctx: Item | undefined): { value?: Value | null; rels?: string[] } {
     if (raw === null || raw === "") {
       if (p.kind === "select" && !p.multiple && p.default) throw new OpError(`"${p.name}" has a default and cannot be empty; set another option.`);
@@ -487,7 +470,6 @@ export class Ops {
         const today = todayISO();
         const whole = parseDate(s, today);
         if (whole) return { value: whole };
-        // a range "start/end" (either side may be empty)
         const range = p.range ? splitRange(s, today) : undefined;
         if (range) return { value: range };
         throw new OpError(`"${p.name}" needs ${DATE_HELP}${p.range ? ", or start/end" : ""}; got "${raw}".`);
@@ -509,7 +491,6 @@ export class Ops {
     return {};
   }
 
-  /** A [[link]] from an item to itself is refused – it would only ever point back here. */
   private noSelfLink(body: string, id: string, title: string) {
     const ix = this.store.index();
     for (const l of parseWikiLinks(body)) {
@@ -519,14 +500,12 @@ export class Ops {
     }
   }
 
-  /** A property by name (or id); an unknown name is an error that lists the known ones. */
   private prop(schema: TypeSchema | undefined, name: string): PropDef {
     const p = schema?.properties.find((x) => titleKey(x.name) === titleKey(name) || x.id === name);
     if (!p) throw new OpError(`Unknown property "${name}"${schema ? ` on type ${schema.name}. Properties: ${schema.properties.map((x) => x.name).join(", ") || "none"}` : " (no type)"}. Properties belong to a type: add it to the type with update_type, or give the item a type that has it.`);
     return p;
   }
 
-  /** Apply property values by name. */
   private applyProps(doc: Y.Doc, item: Item | undefined, schema: TypeSchema | undefined, props: Record<string, unknown> | undefined) {
     for (const [name, raw] of Object.entries(props ?? {})) {
       const p = this.prop(schema, name);
@@ -538,13 +517,11 @@ export class Ops {
     }
   }
 
-  /** Decided: in the inbox the agent only suggests a type and a place (`suggest`); the user accepts with one click. */
+  /** Product decision: in the inbox agents only suggest, the user accepts with one click. */
   private guardInbox(item: Item, what: string) {
     if (isInInbox(item, this.store.index()))
       throw new OpError(`"${item.title}" is in the inbox. Agents don't sort the inbox themselves (${what}); use suggest to propose a type and place – the user accepts with one click.`);
   }
-
-  // ---------- writing ----------
 
   create(input: CreateInput, origin: string): Item {
     const title = input.title.trim();
@@ -684,7 +661,7 @@ export class Ops {
     return this.store.records.get(item.id)!;
   }
 
-  /** Set the status of several items: a group (done, active, open …) or an option name. All or nothing. */
+  /** `group` is a status group or an option name. All or nothing. */
   setStatusGroup(refs: string[], group: string, origin: string): Item[] {
     const g = statusGroupOf(group);
     const plan: { item: Item; schema: TypeSchema | undefined; prop: string; id: string }[] = [];
@@ -734,10 +711,7 @@ export class Ops {
     return `Suggested for "${item.title}": ${[type ? this.store.index().typeName(type) : null, ...parents.map((p) => this.store.index().get(p)?.title)].filter(Boolean).join(" · ")}. The user accepts it in the inbox.`;
   }
 
-  /**
-   * To the trash. Children that hang only here go along ("trash", restorable together) or lose
-   * this place ("inbox"); if there are any, the caller has to say which.
-   */
+  /** Children that hang only here go along to the trash or lose this place; if any exist, the caller must choose. */
   remove(ref: string, children: "trash" | "inbox" | undefined, origin: string) {
     const item = this.target(ref, "delete");
     const only = onlyBelow(this.ix, item.id);
@@ -748,7 +722,7 @@ export class Ops {
     return { item, only: children === "inbox" ? 0 : only.length };
   }
 
-  /** Back from the trash, with exactly what was deleted together with it. */
+  /** Brings back exactly what was deleted together with it. */
   restore(ref: string, origin: string) {
     const item = this.store.records.get(ref) ?? [...this.store.records.values()].find((x) => x.deleted && titleKey(x.title) === titleKey(ref));
     if (!item || !item.deleted) throw new OpError(`Nothing in the trash matches "${ref}".`);
@@ -756,8 +730,6 @@ export class Ops {
     this.store.flush();
     return { item, back: back.length };
   }
-
-  // ---------- types ----------
 
   defineType(input: DefineTypeInput, origin: string) {
     if (!input.name.trim()) throw new OpError("name is required.");
@@ -769,7 +741,6 @@ export class Ops {
     return this.typeInfo(this.store.index().types.get(id)!);
   }
 
-  /** What deleting a type would affect. Deleting itself is confirmed in the app. */
   deletePreview(ref: string) {
     const t = this.resolveType(ref);
     const u = typeUsage(this.store.index(), t.id);
@@ -784,7 +755,7 @@ export class Ops {
       if (!p) throw new OpError(`Type ${s.name} has no property "${name}".`);
       return p;
     };
-    // "status" and "multiselect" are selects now (see legacyKind); agents may still name them
+    // "status" and "multiselect" are selects now; agents may still name them
     const legacy = (k?: PropInput["kind"]): PropKind | undefined => (k === "status" || k === "multiselect" ? "select" : k);
     const toDef = (p: PropInput, cur?: PropDef): Patch<Omit<PropDef, "id">> => {
       const kind = legacy(p.kind) ?? cur?.kind;
@@ -807,7 +778,7 @@ export class Ops {
       const multiple = p.kind === "multiselect" ? true : p.kind === "status" ? null : p.multiple;
       return { name: p.name, kind, description: p.description, options, multiple, default: def, target: p.target, inverseName: p.inverse, symmetric: p.symmetric, range: p.range, computed, hideEmpty: p.hide_empty, blocks: p.blocks };
     };
-    // properties given with the old kind "status" become the type's status (below, once they exist; by the name they then have)
+    // properties given the old kind "status" become the type's status below, once they exist
     const asStatus = [...(input.add_properties ?? []), ...(input.change_properties ?? [])].filter((p) => p.kind === "status").map((p): string => p.name ?? ("property" in p && typeof p.property === "string" ? p.property : ""));
     this.store.change(t.id, origin, (doc) => {
       if (input.name) (setSchemaField(doc, "name", input.name), setMeta(doc, { title: input.name }));
@@ -858,7 +829,7 @@ export class Ops {
     return this.typeInfo(this.store.index().types.get(t.id)!);
   }
 
-  /** Views as agents give them → the tabs of a type's page (a view with the same name keeps its place). */
+  /** A view with the same name keeps its id. */
   toTabs(views: ViewInput[], type: Item): Omit<ViewTab, "pos">[] {
     const ix = this.ix;
     const where: Cond = { type: type.id };
@@ -874,7 +845,7 @@ export class Ops {
     });
   }
 
-  /** A group named by an agent → how a view stores it (option id, entry id, status group). */
+  /** Returns how a view stores the group: option id, entry id or status group. */
   groupKey(by: string | undefined, name: string, where: Cond | undefined): string {
     const ix = this.ix;
     const k = titleKey(name);
@@ -892,7 +863,7 @@ export class Ops {
     return { name: t.name ?? null, hidden_groups: t.hiddenGroups, query: printQuery({ where: t.where, sort: t.sort, group: t.group, columns: t.columns, view: t.kind }, this.store.lang(), this.ix), subgroup: t.subgroup, hide_empty_groups: t.hideEmpty, date: t.date };
   }
 
-  /** Tag ↔ type: preview only. The user runs it in the app. */
+  /** Preview only; the user runs the conversion in the app. */
   convertPreview(input: ConvertInput) {
     const t = this.resolveType(input.type);
     const ix = this.ix;

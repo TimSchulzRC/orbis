@@ -1,5 +1,3 @@
-// A view as a board: a column per option (status, a select …), cards to drag between them,
-// optionally in rows by a second grouping.
 import { useState } from "react";
 import { ChevronDown, ChevronRight, EyeOff } from "lucide-react";
 import { type Item, type StatusGroup } from "@obtion/core/model";
@@ -21,7 +19,7 @@ export function BoardView({ items, def, ctx, look }: { items: Item[]; def: Query
   const ix = ctx.ix;
   const by = def.group && def.group !== "path" ? def.group : "status";
   const tab = look?.tab;
-  // every option is a column, also an empty one – a place to drag to ("Erledigt" before anything is done)
+  // empty options stay as columns so there is somewhere to drag to ("Erledigt" before anything is done)
   const typeIds = viewTypeIds(def.where, items, ix, items.length);
   const [columns, hiddenCols] = splitHidden(groupItems(items, by, ctx, undefined, tab?.hideEmpty ? undefined : { types: typeIds, where: def.where }).filter((g) => !tab?.hideEmpty || g.items.length), tab);
   const lanes = tab?.subgroup ? groupItems(items, tab.subgroup, ctx).filter((g) => g.items.length) : [{ key: "", items } as QGroup];
@@ -43,7 +41,7 @@ export function BoardView({ items, def, ctx, look }: { items: Item[]; def: Query
     else if (prop && opt) repo.setProp(id, prop.id, prop.multiple ? [opt.id] : opt.id);
     else if (prop && !g.key) repo.setProp(id, prop.id, null);
   };
-  // more columns to the right: the edge fades, so it is clear the board scrolls
+  // fade the right edge while more columns are off-screen, so it is clear the board scrolls
   const [more, setMore] = useState(false);
   const scroller = (el: HTMLDivElement | null) => {
     if (!el) return;
@@ -92,7 +90,7 @@ export function BoardView({ items, def, ctx, look }: { items: Item[]; def: Query
                           <IconButton size="xs" icon={EyeOff} iconSize={13} onClick={() => look.onLook!(hiddenPatch(tab, col, true))} label={t("view.hideColumn")} className="ml-auto opacity-0 focus-visible:opacity-100 group-hover/head:opacity-100 pointer-coarse:opacity-100" />
                         )}
                       </p>
-                      {/* an empty column says where to drag – in rows (by project …) the empty cells stay quiet */}
+                      {/* with sub-rows the empty cells stay quiet */}
                       {!cards.length && !tab?.subgroup && <p className="rounded-lg border border-dashed border-line px-2 py-3 text-center text-xs text-muted-foreground">{t("board.dropHere")}</p>}
                       {cards.map((i) => (
                         <BoardCard key={i.id} item={i} cols={def.columns ?? []} ctx={ctx} />
@@ -110,7 +108,6 @@ export function BoardView({ items, def, ctx, look }: { items: Item[]; def: Query
   );
 }
 
-/** A card: title, and the view's properties as small lines (empty ones left out). */
 function BoardCard({ item: i, cols, ctx }: { item: Item; cols: string[]; ctx: EvalCtx }) {
   const { t } = useT();
   const shown = cols.filter((c) => {
@@ -118,7 +115,6 @@ function BoardCard({ item: i, cols, ctx }: { item: Item; cols: string[]; ctx: Ev
     return hit && !(hit.value === undefined || hit.value === null || hit.value === "" || (Array.isArray(hit.value) && !hit.value.length));
   });
   const pr = !cols.length ? ctx.ix.progressOf(i) : undefined;
-  // the whole card opens the entry; links inside it (a project, a relation) open theirs
   return (
     <div
       data-id={i.id}

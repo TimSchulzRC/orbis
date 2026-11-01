@@ -1,6 +1,5 @@
-// One page for every information: path, title, type properties, text, sections from
-// "Teil von", and on the right the connections. Types change the properties and which
-// sections appear (via their capabilities), never the layout.
+// One page for every information. Types change the properties and which sections appear, never
+// the layout.
 import { Input } from "../components/ui/input";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { EditorView } from "@codemirror/view";
@@ -222,10 +221,7 @@ function progressText(item: Item, ix: Index, done: number, total: number): strin
   return tr(of ? "progress.allLevelsOf" : "progress.allLevels", { done, total, name: name && pluralOf(name, getLang()) });
 }
 
-/**
- * The text (zone 2). Long text on a page with its own list is cut to 8 lines with "Ganzen Text
- * zeigen"; a click into it opens it. Images and files come in with "/", pasting or dragging.
- */
+/** Zone 2. Long text on a page with its own list is cut to 8 lines until clicked. */
 function PageText({ item, doc, long, isNew, onView, hasMore }: { item: Item; doc: ReturnType<typeof repo.getDoc>; long: boolean; isNew: boolean; onView: (v: EditorView | null) => void; hasMore: boolean }) {
   const { t } = useT();
   const schema = useIndex().schemaOf(item);
@@ -265,8 +261,6 @@ function PageText({ item, doc, long, isNew, onView, hasMore }: { item: Item; doc
     </div>
   );
 }
-
-// ---------- header ----------
 
 function TypeSwitch({ item }: { item: Item }) {
   const repo = useRepo();
@@ -327,16 +321,14 @@ function TitleClash({ item }: { item: Item }) {
   );
 }
 
-// ---------- delete ----------
-
 function removeAndLeave(r: typeof repo, id: string, withChildren: boolean, leave = true) {
   r.remove(id, withChildren ? "trash" : "inbox");
   if (leave) leavePage();
 }
 
 /**
- * To the trash, from a menu: with children that only hang here, the dialog asks first.
- * `leave`: the item is the open page, which then goes back. True when it went right away.
+ * With children that only hang here, the dialog asks first. `leave`: the item is the open page,
+ * which then goes back. True when it went to the trash right away.
  */
 export function deleteOrAsk(r: typeof repo, id: string, ask: () => void, leave = true): boolean {
   if (onlyBelow(r.index(), id).length) return (ask(), false);

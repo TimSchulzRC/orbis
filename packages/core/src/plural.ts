@@ -1,7 +1,6 @@
-// A suggestion for the plural of a type name (name of a type's list, way back of a relation). Only a
-// suggestion: the field stays free. German needs a few rules and the usual irregular nouns.
+// Only a suggestion for the plural of a type name; the user can still edit it.
 
-// irregular plurals, matched at the end of the word so compounds work too ("Kochbuch" → "Kochbücher")
+// matched at the end of the word so compounds work too ("Kochbuch" → "Kochbücher")
 const DE_IRREGULAR: [string, string][] = [
   ["buch", "bücher"], ["haus", "häuser"], ["land", "länder"], ["wort", "wörter"], ["bild", "bilder"],
   ["kind", "kinder"], ["lied", "lieder"], ["feld", "felder"], ["geld", "gelder"], ["blatt", "blätter"],
@@ -11,7 +10,7 @@ const DE_IRREGULAR: [string, string][] = [
   ["vortrag", "vorträge"], ["antrag", "anträge"], ["vertrag", "verträge"], ["beitrag", "beiträge"], ["auftrag", "aufträge"],
   ["firma", "firmen"], ["thema", "themen"], ["museum", "museen"], ["zentrum", "zentren"], ["album", "alben"],
   ["konto", "konten"], ["person", "personen"], ["notiz", "notizen"], ["frau", "frauen"], ["kurs", "kurse"],
-  // English words in German plural like in English
+  // English loanwords keep their English plural in German
   ["task", "tasks"], ["team", "teams"], ["link", "links"], ["event", "events"], ["meeting", "meetings"],
   ["ticket", "tickets"], ["tool", "tools"], ["blog", "blogs"], ["podcast", "podcasts"], ["job", "jobs"],
   ["song", "songs"], ["app", "apps"], ["issue", "issues"], ["post", "posts"], ["workshop", "workshops"],

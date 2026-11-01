@@ -1,5 +1,4 @@
-// Projects with their progress and next task (design rules § 2.4) – in query blocks
-// with "spalten:fortschritt,nächste" (an overview's "Aktive Projekte").
+// Rendered for query blocks with "spalten:fortschritt,nächste" (design rules § 2.4).
 import { Table as ShadcnTable, TableHeader, TableBody, TableRow, TableHead, TableCell } from "../components/ui/table";
 import { useState } from "react";
 import { ChevronRight, CornerDownRight } from "lucide-react";
@@ -13,11 +12,7 @@ import { cn, toggled } from "../lib/utils";
 import { RowStatus } from "./Row";
 import { Button } from "./primitives";
 
-/**
- * Active projects (design rules § 2.4): project · progress (bar and percent) · next task. Sub-
- * projects folded below their project; the next task only in the top visible row of a tree.
- * On a phone a list with a small bar and "Nächste: …" as second line.
- */
+/** A next task shared within a tree shows only in its top visible row. */
 export function ProjectTable({ items }: { items: Item[] }) {
   const ix = useIndex();
   const { t } = useT();
@@ -53,7 +48,7 @@ export function ProjectTable({ items }: { items: Item[] }) {
     ) : (
       <span className="w-[18px] shrink-0" />
     );
-  // on a phone the top projects only (no unfolding), each with its next task
+  // phones show only the top projects, without unfolding
   if (phone)
     return (
       <div>

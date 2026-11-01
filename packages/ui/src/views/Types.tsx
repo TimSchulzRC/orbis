@@ -9,7 +9,6 @@ import { Card, Button, Dialog } from "../ui/primitives";
 import { TypeGlyph } from "../ui/item-look";
 import { createType } from "../actions";
 
-/** All types. New types are data: name, then properties and capabilities in the editor. */
 export function TypesView() {
   const repo = useRepo();
   const { t } = useT();
@@ -52,7 +51,7 @@ export function TypesView() {
   );
 }
 
-/** "Neuer Typ": a name. Then `onCreated`, else the type's page opens with "Typ bearbeiten". */
+/** Without `onCreated` the type's page opens with "Typ bearbeiten". */
 export function NewTypeDialog({ title, onClose, onCreated }: { title?: string; onClose: () => void; onCreated?: (id: string) => void }) {
   const { t } = useT();
   const repo = useRepo();

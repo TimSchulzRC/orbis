@@ -1,7 +1,5 @@
-// File contents on the server: data/blobs/<sha256>. The same content is stored once.
-// For images the server makes a preview (320 px) and a display version (1600 px WebP),
-// for audio/video it reads the duration, for PDFs the page count and the text (search).
-// Devices that add images offline make previews themselves; the server only fills gaps.
+// Content-addressed file store. Devices that add images offline make previews themselves; the
+// server only fills gaps.
 import { existsSync, mkdirSync, renameSync, statSync, readdirSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { type FileMeta, type Item, setFileMeta } from "@obtion/core/model";
@@ -10,6 +8,11 @@ import type { Store } from "./store";
 const HASH = /^[0-9a-f]{64}$/;
 const FFMPEG = Bun.which("ffmpeg");
 const FFPROBE = Bun.which("ffprobe");
+const MAX_PARALLEL = 2;
+const DISPLAY_WIDTH = 1600;
+const THUMB_WIDTH = 320;
+const PDF_TEXT_MAX_PAGES = 60;
+const PDF_TEXT_MAX_CHARS = 40_000;
 
 export function sha256(data: Uint8Array | ArrayBuffer | string): string {
   return new Bun.CryptoHasher("sha256").update(data).digest("hex");
@@ -44,7 +47,7 @@ export class Blobs {
     return statSync(this.path(hash)).size;
   }
 
-  /** Store content after checking its hash. Returns false on mismatch. */
+  /** Returns false on a hash mismatch. */
   async put(hash: string, data: Uint8Array): Promise<boolean> {
     if (!HASH.test(hash) || sha256(data) !== hash) return false;
     if (!this.has(hash)) {
@@ -64,7 +67,7 @@ export class Blobs {
     return hash;
   }
 
-  /** Every hash still referenced by a file (incl. history and derived versions). */
+  /** Includes history and derived versions. */
   referenced(): Set<string> {
     const out = new Set<string>();
     for (const r of this.store.records.values()) {
@@ -75,10 +78,7 @@ export class Blobs {
     return out;
   }
 
-  /**
-   * Contents no file (not even one in the trash or in a history) points to; removed unless
-   * `dryRun`. Run by hand only (cli.ts gc): copies in backups/ may still point to them.
-   */
+  /** Run by hand only (cli.ts gc): copies in backups/ may still point to these. */
   collect(dryRun = false): string[] {
     const keep = this.referenced();
     const unused = readdirSync(this.dir).filter((name) => HASH.test(name) && !keep.has(name));
@@ -86,12 +86,9 @@ export class Blobs {
     return unused;
   }
 
-  // ---------- derived data ----------
-
-  /** Check files whose derived data is missing (startup, after sync). */
   scan() {
     for (const r of this.store.live()) if (this.needsWork(r)) this.schedule(r.id);
-    // PDF previews a device announced but never uploaded: drop them, a device renders them again
+    // PDF previews a device announced but never uploaded: drop them so a device renders them again
     for (const r of this.store.live()) {
       const f = r.file;
       if (f?.filetype === "pdf" && f.thumb && !this.has(f.thumb)) this.store.change(r.id, "system:files", (doc) => setFileMeta(doc, { thumb: null }), { quiet: true });
@@ -107,7 +104,6 @@ export class Blobs {
     return false;
   }
 
-  /** No more processing (the workspace is deleted). */
   stop() {
     this.queue.length = 0;
   }
@@ -120,7 +116,7 @@ export class Blobs {
   }
 
   private pump() {
-    while (this.running < 2 && this.queue.length) {
+    while (this.running < MAX_PARALLEL && this.queue.length) {
       const id = this.queue.shift()!;
       this.running++;
       this.process(id)
@@ -142,14 +138,14 @@ export class Blobs {
     if (f.filetype === "bild") {
       const dim = await probe(src);
       if (dim.width) Object.assign(patch, { width: dim.width, height: dim.height });
-      if (!f.display) patch.display = await this.derive(src, 1600);
-      if (!f.thumb) patch.thumb = await this.derive(src, 320);
+      if (!f.display) patch.display = await this.derive(src, DISPLAY_WIDTH);
+      if (!f.thumb) patch.thumb = await this.derive(src, THUMB_WIDTH);
     } else if (f.filetype === "audio" || f.filetype === "video") {
       const p = await probe(src);
       patch.duration = p.duration ?? 0;
       if (f.filetype === "video") {
         if (p.width) Object.assign(patch, { width: p.width, height: p.height });
-        if (!f.thumb) patch.thumb = await this.derive(src, 320, true);
+        if (!f.thumb) patch.thumb = await this.derive(src, THUMB_WIDTH, true);
       }
     } else if (f.filetype === "pdf") {
       const info = await pdfInfo(src);
@@ -160,7 +156,6 @@ export class Blobs {
     if (Object.keys(clean).length) this.store.change(id, "system:files", (doc) => setFileMeta(doc, clean), { quiet: true });
   }
 
-  /** Scaled WebP version, stored as its own blob. */
   private async derive(src: string, width: number, videoFrame = false): Promise<string | undefined> {
     if (!FFMPEG) return undefined;
     const out = join(this.dir, `tmp-${crypto.randomUUID()}.webp`);
@@ -202,11 +197,11 @@ async function pdfInfo(path: string): Promise<{ pages: number; text?: string }> 
   const doc = await task.promise;
   const pages = doc.numPages;
   let text = "";
-  for (let i = 1; i <= Math.min(pages, 60) && text.length < 40_000; i++) {
+  for (let i = 1; i <= Math.min(pages, PDF_TEXT_MAX_PAGES) && text.length < PDF_TEXT_MAX_CHARS; i++) {
     const page = await doc.getPage(i);
     const tc = await page.getTextContent();
     text += tc.items.map((x) => ("str" in x ? x.str : "")).join(" ").replace(/\s+/g, " ") + "\n";
   }
   await task.destroy();
-  return { pages, text: text.trim().slice(0, 40_000) || undefined };
+  return { pages, text: text.trim().slice(0, PDF_TEXT_MAX_CHARS) || undefined };
 }

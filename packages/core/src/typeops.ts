@@ -1,7 +1,6 @@
-// Bulk changes on types: delete a type (into a tag, into another type, or remove it),
-// take over items from a tag. Every run is recorded as an "op" document, shown in
-// Activity and reversible. Values are never lost: what the new state cannot hold as
-// typed property ends up as a free property, relations become refs.
+// Bulk changes on types. Every run is recorded as an "op" document so it shows in Activity and
+// can be reverted. Values are never lost: what no typed property can hold becomes a free
+// property, and relations become refs.
 import * as Y from "yjs";
 import {
   type FreeValue,
@@ -32,7 +31,7 @@ export type DeleteMode = { mode: "tag"; tag: string } | { mode: "type"; target: 
 
 export interface TypeUsage {
   items: string[];
-  inboxAfterRemove: number; // items that would land in the inbox (checked against the inbox's stored query)
+  inboxAfterRemove: number;
   queries: { id: string; title: string }[]; // pages whose query blocks or views use the type
   relations: { type: string; prop: string; name: string }[]; // relation targets naming the type
   progress: { type: string; name: string }[]; // progress/computed filters on the type
@@ -65,10 +64,7 @@ export function typeUsage(ix: Index, typeId: string): TypeUsage {
   return { items, inboxAfterRemove, queries, relations, progress, childOf };
 }
 
-/**
- * How many of these items would be in the inbox after a change – evaluated against the stored
- * inbox query. `also` are further changed records, e.g. a parent that is about to be deleted.
- */
+/** Evaluated against the stored inbox rule. `also` are further changed records, e.g. a parent about to be deleted. */
 export function wouldBeInInbox(ix: Index, ids: string[], change: (i: Item) => Item, also: Item[] = []): number {
   const next = new Map(ix.all);
   for (const id of ids) next.set(id, change(ix.get(id)!));
@@ -97,10 +93,9 @@ export function toFree(p: PropDef, v: Value | undefined): FreeValue | undefined 
 }
 
 /**
- * Map a value from one property definition to another. Options go by name, an option of the
- * status falls back to its group, a select with several values keeps the options that match.
- * `byId` (moving to another workspace): the same option id first, and only whole – an option
- * without a match makes the value not fit; several values into one keep the first.
+ * Options match by name; a status option falls back to its group; a multi select keeps the options
+ * that match. `byId` (moving between workspaces) tries the option id first and is all or nothing:
+ * one unmatched option makes the value not fit; several values into a single select keep the first.
  */
 export function mapValue(from: PropDef, to: PropDef, v: Value, opts: { byId?: boolean } = {}): Value | undefined {
   if (from.kind === to.kind && !from.options) return v;
@@ -215,7 +210,7 @@ function recordOp(w: Writer, label: string, action: string, payload: OpPayload, 
   return id;
 }
 
-/** Delete a type: items become tagged, another type, or untyped. Returns the op id. */
+/** Items become tagged, another type, or untyped. Returns the op id. */
 export function deleteType(w: Writer, ix: Index, typeId: string, m: DeleteMode, label: string, origin?: string): string {
   const typeItem = ix.types.get(typeId);
   if (!typeItem) throw new Error("Unknown type");
@@ -236,7 +231,7 @@ export interface TagTakeoverPreview {
   candidates: string[]; // items with the tag
   untyped: string[];
   typedOther: string[]; // already have another type (conflict)
-  already: string[]; // already this type
+  already: string[];
 }
 
 export function previewTagToType(ix: Index, tag: string, typeId: string): TagTakeoverPreview {

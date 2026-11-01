@@ -1,12 +1,5 @@
-// "Sortieren" (design rules § 5): go through entries and decide – place, give a type, delete.
-// Works for any list or query block; the inbox is just one. An entry leaves the list as
-// soon as it no longer matches the query. The actions live in TriageActions.tsx.
-//
-// Desktop: one card, the list on the left (one line per entry, nothing grows or appears on
-// hover), the selected entry in full on the right with a fixed action bar. Several can be
-// marked (box, Space, Shift+j/k); then a bar of the same height acts on all of them.
-// Phone: the list; tapping opens the entry. (The inbox has its own ways: the tray's panel to look
-// in, the review to sort – views/Review.tsx.)
+// "Sortieren" (design rules § 5) for any list or query block. An entry leaves the list as soon as
+// it no longer matches the query.
 import { Checkbox } from "../components/ui/checkbox";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, FolderInput, Shapes, Sparkles, Trash2, Check, X } from "lucide-react";
@@ -27,7 +20,6 @@ import { usePickers, useTriageActions } from "./TriageActions";
 import type { T } from "@obtion/core/i18n";
 import { filePreview } from "./text";
 
-/** Age groups: this week, this month, older. */
 function ageGroup(created: number, now = Date.now()): "week" | "month" | "older" {
   const days = (now - created) / DAY_MS;
   return days <= 7 ? "week" : days <= 30 ? "month" : "older";

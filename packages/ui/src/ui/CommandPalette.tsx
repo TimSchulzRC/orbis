@@ -25,11 +25,6 @@ type Entry =
   | { kind: "nav"; label: string; path: string }
   | { kind: "cmd"; label: string; run: () => void };
 
-/**
- * Search and go anywhere, over the workspaces seen: their entries, their pages (named with the
- * workspace when there are several), creating something new (in the workspace a capture goes to)
- * for new entries.
- */
 export function CommandPalette({ onClose }: { onClose: () => void }) {
   const { t, lang } = useT();
   const [q, setQ] = useState("");
@@ -57,14 +52,11 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
       [t("nav.activity"), "#/activity"],
       [t("nav.trash"), "#/trash"],
   ];
-  // something new goes where a capture from anywhere goes
   const cs = captureSpace() ?? shown[0]!.id;
   const repo = repoOf(cs);
   const ix = repo.index();
   const pinnedTypes = ix.captureTypes();
-  // "Neu: …" for every type – the pinned ones first, then the others by name (own types like "Buch" too)
   const captureTypes = [...pinnedTypes, ...ix.typesByName().filter((x) => !pinnedTypes.includes(x.id)).map((x) => x.id)];
-  // actions, found by typing their name
   const cmds: [string, () => void][] = [
     [t("palette.cmd.sortInbox"), () => navigate("/review")],
     [t("nav.settings"), openSettings],
@@ -81,14 +73,13 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
     const nav = navs.filter(([label]) => query && words(label!));
     out.push(...nav.map(([label, path]) => ({ kind: "nav" as const, label: label!, path: path! })));
     if (query) out.push(...cmds.filter(([label]) => words(label)).map(([label, run]) => ({ kind: "cmd" as const, label, run })));
-    // the hits of every workspace seen, taking turns (each ranked by its own search)
+    // interleave the workspaces' hits, since each list is ranked by its own search
     const per = repos.map((r, n) => (query ? r.search(query, 10) : r.live()).map((h) => ({ h, space: shown[n]!.id })));
     const hits: { h: Item; space: string }[] = query
       ? Array.from({ length: 10 }, (_, i) => per.map((list) => list[i])).flat().filter((x) => !!x).slice(0, 10)
       : per.flat().sort((a, b) => b.h.updated - a.h.updated).slice(0, 8);
     out.push(...hits.map(({ h, space }) => ({ kind: "item" as const, id: h.id, space })));
     if (query) {
-      // after the hits: all hits on the search page, then creating something new
       if (hits.length >= 10) out.push({ kind: "nav", label: t("palette.allHits"), path: `#/search?q=${encodeURIComponent(query)}` });
       out.push(...[null, ...captureTypes].map((type) => ({ kind: "create" as const, type, title: query })));
     }

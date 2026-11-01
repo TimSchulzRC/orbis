@@ -1,7 +1,4 @@
-// Above selected text, as in Notion: turn the blocks into another kind, bold, italic,
-// strikethrough, code, a link – to a page (found by its title) or to a web address – and, on a
-// page, extract the selection as a new item of a type picked below the bar. The selection may span several blocks (no link then).
-// ⌘B, ⌘I, ⌘⇧S, ⌘E and ⌘K do the same from the keyboard.
+// Formatting toolbar above selected text, as in Notion.
 import { EditorSelection, Facet, Prec } from "@codemirror/state";
 import { type EditorView, ViewPlugin, type ViewUpdate, keymap } from "@codemirror/view";
 import { Bold, ChevronDown, Code, FileText, Globe, Italic, Link2, Scissors, Strikethrough } from "lucide-react";
@@ -17,15 +14,16 @@ import { showMenu } from "./menu";
 import { titleKey } from "@obtion/core/model";
 import { kindHint, webHref } from "../text";
 
-/** A key hint in a tooltip: " (⌘B)", " (Strg B)". */
+const EXTRACT_MENU_ROWS = 10;
+
 const key = (k: string) => ` (${shortcut(k, getLang())})`;
 
-/** On for the page's own text: the toolbar offers to extract the selection there. */
+/** Set for the page's own text, where the toolbar offers to extract the selection. */
 export const toolbarExtract = Facet.define<boolean, boolean>({ combine: (v) => v.some(Boolean) });
 
 const isURL = (s: string) => /^(https?:\/\/|mailto:|www\.)\S+$/i.test(s.trim());
 
-/** Link the selected text (or `text` in its place): [[Page|text]] (or [[Page]] when the text is the title) or [text](url). */
+/** Writes [[Page]] when the text equals the page title. */
 function link(view: EditorView, target: { page?: string; url?: string }, text = view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.to)) {
   const { from, to } = view.state.selection.main;
   const insert = target.page
@@ -49,13 +47,12 @@ class Toolbar {
   extractSep: HTMLSpanElement;
   linkSep: HTMLSpanElement;
   pointerDown = false;
-  /** Bold, italic, strikethrough, code: pressed while all of the selected text has the mark. */
   marks: { button: HTMLButtonElement; mark: string }[] = [];
-  /** "Turn into" or "Extract" is open below the bar: the bar stays while the menu has the focus. */
+  /** Keeps the bar shown while a menu below it has the focus. */
   menuOpen = false;
   linking = false;
   picked = 0;
-  /** The text of the link whose target changes (the selection is the whole link then). */
+  /** Set while relinking; the selection is then the whole link. */
   relinkText: string | null = null;
   hits: { title: string; type: string }[] = [];
   constructor(readonly view: EditorView) {
@@ -90,8 +87,7 @@ class Toolbar {
     this.extractBtn.insertAdjacentHTML("beforeend", `<span>${tr("editor.fmt.extract")}</span>${iconHTML(ChevronDown, 14)}`);
     this.extractBtn.addEventListener("click", () => {
       const entries = repo.index().typesInOrder().map((t) => ({ label: t.schema.name, icon: ICON[t.schema.icon] ?? ICON.circle, color: pal(t.schema.color), run: () => extractAs(view, t.id) }));
-      // many types: the list scrolls after ten, it does not run off the screen
-      this.openMenu(this.extractBtn, tr("editor.extractAs"), entries, 10);
+      this.openMenu(this.extractBtn, tr("editor.extractAs"), entries, EXTRACT_MENU_ROWS);
     });
     this.extractSep = sep();
     this.linkSep = sep();
@@ -153,7 +149,7 @@ class Toolbar {
     this.extractBtn.hidden = this.extractSep.hidden = !view.state.facet(toolbarExtract) || !repo.index().typesInOrder().length;
     view.requestMeasure({
       read: () => {
-        // the selection when measured: a change may come before (extracting shortens the text)
+        // read the selection at measure time, a change may land first (extracting shortens the text)
         const s = view.state.selection.main;
         const a = view.coordsAtPos(s.from, 1);
         const b = view.coordsAtPos(s.to, -1);
@@ -169,19 +165,18 @@ class Toolbar {
       },
     });
   }
-  /** A menu below the bar; the bar stays while it is open. */
   openMenu(btn: HTMLElement, title: string, entries: Parameters<typeof showMenu>[1][number]["entries"], maxRows?: number) {
     const { view } = this;
     this.menuOpen = true;
     const onClose = () => {
       this.menuOpen = false;
-      // closed by Escape: back to the text, the selection and the bar stay
+      // closed by Escape: refocus the text so the selection and the bar stay
       if (!document.activeElement || document.activeElement === document.body) view.focus();
       this.place();
     };
     showMenu({ left: btn.getBoundingClientRect().left, top: this.dom.getBoundingClientRect().bottom + 4 }, [{ title, entries }], onClose, maxRows).focusFirst();
   }
-  /** The link box for the selected text, or, with `relink`, for a new target of the selected link. */
+  /** With `relink`, picks a new target for the selected link. */
   openLink(relink?: { text: string; target: string }) {
     if (this.view.state.selection.main.empty) return;
     this.linking = true;
@@ -259,7 +254,7 @@ class Toolbar {
 
 export const formatToolbar = ViewPlugin.fromClass(Toolbar);
 
-/** ⌘K on selected text: the link box (without a selection ⌘K stays the search). */
+/** Without a selection ⌘K stays the search. */
 function linkKey(view: EditorView) {
   if (view.state.readOnly || view.state.selection.main.empty) return false;
   view.plugin(formatToolbar)?.openLink();

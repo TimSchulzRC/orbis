@@ -1,6 +1,4 @@
-// File contents on this device (files.ts): what "Alles lokal" downloads, what switching to
-// "Nur online" keeps, and that contents no file points to any more are removed. Against a
-// server faked in fetch, with the real storage of the browser.
+// Device file storage against a server faked in fetch, with the browser's real storage.
 import { afterEach, expect, test, vi } from "vitest";
 import type { Repo } from "@obtion/sync";
 import { initItem, newId, setFileMeta } from "@obtion/core/model";

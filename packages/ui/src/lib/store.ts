@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 
-/** A value outside of React (one for the whole app) that components follow: `use()` re-renders on every `set`. */
+/** An app-wide value outside React; `use()` re-renders on every `set`. */
 export function createStore<T>(initial: T) {
   let value = initial;
   const listeners = new Set<() => void>();

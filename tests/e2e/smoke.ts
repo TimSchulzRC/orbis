@@ -1,14 +1,6 @@
-// The built app against real servers, as T3 Code's "boot the built web client": every route and
-// one page per kind of item opens without console errors, page errors, an error boundary or a
-// blank page, on desktop and phone; and the flows that need the server: signing in, the first
-// workspace created on the page (with the examples, removed and brought back), a second one and a
-// move into it, deleting the account. How single parts of the interface behave is tested on their own, in
-// tests/browser (bun run test:browser).
-// Servers: empty, filled with the examples ("setup --examples", plus a file and an item in the
-// trash), the same with every type deleted (the app runs with zero types), and a fresh one whose
-// account creates its first workspace on the page. Each gets its first account through the API; the browser holds it as if it
-// had signed in (the sign-in page itself is checked once). Independent parts run side by side.
-//   bun run test:e2e        (builds first; Chrome from ~/.cache/ms-playwright)
+// The built app against real servers: every route and one page per kind opens without errors or a
+// blank page on desktop and phone, plus the flows that need a server. Accounts come from the API
+// and the browser holds them as if signed in; the sign-in page is checked once.
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

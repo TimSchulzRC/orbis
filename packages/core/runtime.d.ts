@@ -1,7 +1,6 @@
-// What the shared packages (@obtion/core, @obtion/sync) may use of their environment: only
-// what every target has – browsers, Electron, Bun, React Native (Hermes; crypto.getRandomValues
-// there needs react-native-get-random-values). No DOM, no Node, no Bun: their typecheck fails
-// on anything else (see tsconfig.json here and in packages/sync).
+// The only globals @obtion/core and @obtion/sync may use: what browsers, Electron, Bun and React
+// Native (Hermes) all have. No DOM, Node or Bun types. On Hermes, crypto.getRandomValues needs
+// react-native-get-random-values.
 
 declare var console: { log(...a: unknown[]): void; warn(...a: unknown[]): void; error(...a: unknown[]): void };
 declare function setTimeout(fn: () => void, ms?: number): number;

@@ -1,4 +1,3 @@
-// The trash of every workspace (or the ones chosen here, apart from the sidebar's choice), newest first.
 import { useState } from "react";
 import { RotateCcw } from "lucide-react";
 import type { Item } from "@obtion/core/model";
@@ -13,7 +12,7 @@ import { useT, titleOf } from "../i18n";
 import { Button, Empty } from "../ui/primitives";
 import { ItemIcon, RelTime } from "../ui/item-look";
 
-/** What a workspace's trash lists: items deleted together with a root are listed with it and come back with it. */
+/** Items deleted together with a root are listed with it and come back with it. */
 function trashed(r: Repo): Item[] {
   const withRoot = (i: Item) => !!i.deletedVia && !!r.records.get(i.deletedVia)?.deleted;
   return [...r.records.values()].filter((i) => i.deleted && !withRoot(i) && (i.kind === "info" || i.kind === "datei"));
@@ -50,7 +49,7 @@ export function TrashView() {
   );
 }
 
-/** One deleted item in its workspace's scope; `space`: the workspace's name, with several. */
+/** `space`: the workspace's name, with several. */
 function TrashRow({ item: i, space }: { item: Item; space?: string }) {
   const r = useRepo();
   const itemHref = useItemHref();

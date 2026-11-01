@@ -1,29 +1,26 @@
-// Quiet feedback: one short notice at the bottom ("Erledigt · Rückgängig") and a small
-// confirmation dialog for the few things that need one. Both live outside any page.
 import { useEffect } from "react";
 import { useT } from "../i18n";
 import { Button, Dialog } from "./primitives";
 import { createStore } from "../lib/store";
 
-// short notices: sonner (see toasts.tsx); kept here so callers import one place for feedback
+// re-exported so callers import all feedback from one place
 export { notify } from "./toasts";
 
 type Choice<K extends string = string> = { key: K; label: string; primary?: boolean; danger?: boolean };
 type Ask = { title: string; body: string; choices: Choice[]; resolve: (v: string | null) => void };
 const ask = createStore<Ask | null>(null);
 
-/** Ask, with several answers; resolves the chosen key, or null for "cancel". */
+/** Resolves the chosen key, or null when cancelled. */
 export function chooseAction<K extends string>(opts: { title: string; body: string; choices: Choice<K>[] }): Promise<K | null> {
   return new Promise<K | null>((resolve) => {
     ask.get()?.resolve(null);
-    ask.set({ ...opts, resolve: resolve as (v: string | null) => void }); // answers are keys of the choices
+    ask.set({ ...opts, resolve: resolve as (v: string | null) => void });
   });
 }
 
 /**
- * Ask once before something with consequences; resolves true for "yes". The one confirmation of the
- * app: use it rather than a dialog of one's own. `danger`: what cannot be undone (delete, remove,
- * revoke) gets a red "yes".
+ * The app's only confirmation dialog, use it instead of a custom one. Set `danger` for what cannot
+ * be undone, it makes the button red.
  */
 export async function confirmAction(opts: { title: string; body: string; yes: string; danger?: boolean }): Promise<boolean> {
   return (await chooseAction({ title: opts.title, body: opts.body, choices: [{ key: "yes", label: opts.yes, primary: !opts.danger, danger: opts.danger }] })) === "yes";

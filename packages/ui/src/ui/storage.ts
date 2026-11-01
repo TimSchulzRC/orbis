@@ -1,6 +1,5 @@
-// What this device keeps in localStorage: every key in one place. Values are JSON, except those
-// read before the app starts or by older versions (theme: index.html; lang, active space, file
-// mode: plain text).
+// Every localStorage key. Values are JSON, except those read before the app starts or by older
+// versions (theme: index.html; lang, active space, file mode: plain text).
 
 export const KEYS = {
   account: "obtion.account",

@@ -1,7 +1,4 @@
-// The text reads like a page, not like Markdown: bullets and checkboxes instead of "- " and
-// "- [ ] ", quotes with a bar, a line for "---", and no "**", "*", "~~" or "`" around text unless
-// the cursor is inside it. A heading shows its "#" only while the cursor is at the start of its
-// text. Headings, code blocks and quotes get their own line look.
+// Makes the Markdown read like a page. Inline marks stay hidden unless the cursor is inside them.
 import { syntaxTree } from "@codemirror/language";
 import { EditorSelection, EditorState, type Extension, type Line, Prec, type Range } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate, WidgetType, keymap } from "@codemirror/view";
@@ -41,7 +38,7 @@ class CheckWidget extends WidgetType {
     box.addEventListener("mousedown", (e) => {
       e.preventDefault();
       if (view.state.readOnly) return;
-      // the marker "[ ]" / "[x]": its middle character
+      // flip the middle character of "[ ]" / "[x]"
       const at = view.posAtDOM(box);
       const text = view.state.doc.sliceString(at, at + 8);
       const i = text.indexOf("[");
@@ -83,12 +80,12 @@ class HintWidget extends WidgetType {
 }
 
 const hide = Decoration.replace({});
-/** A heading's "# ", with the space that makes it one. */
+/** Only with its space is "#" a heading. */
 const HEADING = /^(#{1,6}) /;
 const line = (cls: string) => Decoration.line({ class: cls });
 const INLINE: Record<string, string> = { Emphasis: "EmphasisMark", StrongEmphasis: "EmphasisMark", Strikethrough: "StrikethroughMark", InlineCode: "CodeMark" };
 
-/** The decorations, and the widgets among them the cursor steps over as one (bullets, checkboxes). */
+/** `atomic` holds the widgets the cursor steps over as one. */
 function build(view: EditorView): { deco: DecorationSet; atomic: DecorationSet } {
   const { state } = view;
   const sel = state.selection.main;
@@ -108,8 +105,7 @@ function build(view: EditorView): { deco: DecorationSet; atomic: DecorationSet }
           case "ATXHeading4":
           case "ATXHeading5":
           case "ATXHeading6": {
-            // only "# " with its space is a heading (as in Notion); its "#" show only while the
-            // cursor stands at the start of the text, to add or take away levels there (as in Obsidian)
+            // the "#" show only while the cursor is at the start of the text, to change levels there (as in Obsidian)
             const l = state.doc.lineAt(n.from);
             const h = HEADING.exec(l.text);
             if (!h) return false;
@@ -183,7 +179,6 @@ function build(view: EditorView): { deco: DecorationSet; atomic: DecorationSet }
       },
     });
   }
-  // an empty line with the cursor: how to go on
   const cur = state.doc.lineAt(sel.head);
   if (focus && sel.empty && !cur.length && state.doc.length > 0 && !state.readOnly) deco.push(Decoration.widget({ widget: new HintWidget(tr("editor.lineHint")), side: 1 }).range(cur.from));
   return { deco: Decoration.set(deco, true), atomic: Decoration.set(atomic, true) };
@@ -206,7 +201,7 @@ const preview = ViewPlugin.fromClass(
   },
 );
 
-/** The hidden Markdown at the start of a line ("# ", "> ", "- ", "- [ ] "): where the text starts. */
+/** Line prefixes the preview hides. */
 const HIDDEN = /^(\s*)(#{1,6} |[-*+] \[[ xX]\] |[-*+] |> ?)/;
 
 function textStart(state: EditorState, pos: number): { line: Line; start: number; end: number } | null {
@@ -232,7 +227,7 @@ const keepOutOfPrefix = EditorState.transactionFilter.of((tr) => {
     if (was === p.end && p.start > 0) return p.start - 1;
     return p.end;
   };
-  // a selection (all of the text, say) keeps its ends
+  // non-empty selections keep their ends
   const ranges = tr.selection.ranges.map((r, i) => (r.empty ? EditorSelection.cursor(fix(r.head, before?.ranges[i]?.head)) : r));
   return moved ? [tr, { selection: EditorSelection.create(ranges, tr.selection.mainIndex), sequential: true }] : tr;
 });

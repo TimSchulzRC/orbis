@@ -1,6 +1,4 @@
-// The inbox of the workspaces seen, built once for every view of it: the tray and its panel, the
-// review, Heute, the sidebar and the phone's bar. Each entry is sorted in its own workspace; ids are
-// unique within a workspace only, so an entry is known by its key "<workspace>/<id>".
+// Ids are unique within a workspace only, so an inbox entry is keyed "<workspace>/<id>".
 import { type Item, SETTINGS_ID } from "@obtion/core/model";
 import { runQuery } from "@obtion/core/query";
 import { laterItems } from "@obtion/core/placement";
@@ -16,7 +14,6 @@ export interface InboxEntry {
 
 export const entryKey = (space: string, id: string) => `${space}/${id}`;
 
-/** The entries waiting in the inboxes of the workspaces seen, newest first. */
 export function useInboxItems(): InboxEntry[] {
   const { shown } = useAccounts();
   const repos = useReplicas(shown.map((s) => s.id));
@@ -29,7 +26,7 @@ export function useInboxItems(): InboxEntry[] {
     .sort((a, b) => b.item.created - a.item.created);
 }
 
-/** The entries set aside with "Morgen wieder" in the workspaces seen, newest first: not in the inbox until tomorrow. */
+/** Set aside with "Morgen wieder", out of the inbox until tomorrow. */
 export function useLaterItems(): InboxEntry[] {
   const { shown } = useAccounts();
   const repos = useReplicas(shown.map((s) => s.id));
@@ -42,15 +39,12 @@ export function useLaterItems(): InboxEntry[] {
     .sort((a, b) => b.item.created - a.item.created);
 }
 
-/** How long a review takes, roughly: some 20 seconds an entry, at least a minute. */
-export const reviewMinutes = (count: number) => Math.max(1, Math.round(count / 3));
-
-// ---------- the tray's panel ----------
+const REVIEW_SECONDS_PER_ENTRY = 20;
+export const reviewMinutes = (count: number) => Math.max(1, Math.round((count * REVIEW_SECONDS_PER_ENTRY) / 60));
 
 /**
- * The tray's panel: closed, the list, or one entry in it (its key). One for the whole app.
- * Open, it is a step in the history, so Back closes it (on a phone else Back leaves the app);
- * on Heute that step is "#/inbox", elsewhere the page's own address once more.
+ * The open panel is a history step, so Back closes it instead of leaving the app on a phone. On
+ * Heute that step is "#/inbox", elsewhere the page's own address once more.
  */
 const shelf = createStore<{ open: boolean; at?: string }>({ open: false });
 const onInbox = () => location.hash.split("?")[0] === "#/inbox";
@@ -66,10 +60,10 @@ export function openShelf(at?: string) {
   shelf.set({ open: true, at });
 }
 
-/** Closed as a link leads away from it: the step stays behind, Back comes to it again. */
+/** Keeps the history step, so Back reopens the panel. For links that lead away. */
 export const closeShelf = () => shelf.get().open && shelf.set({ open: false });
 
-/** Closed by hand (its button, Escape, a click beside it): as Back would. */
+/** Closing by hand behaves like Back. */
 export function dismissShelf() {
   if (!shelf.get().open) return;
   if (history.state?.shelf) return history.back();
@@ -77,14 +71,14 @@ export function dismissShelf() {
   if (onInbox()) location.replace("#/");
 }
 
-/** Open as the step in the history is (Back, Forward, a reload, another page); an entry chosen in it stays. */
+/** Follows the history step; the chosen entry stays. */
 export function syncShelf() {
   const open = !!history.state?.shelf || onInbox();
   if (open !== shelf.get().open) shelf.set({ open });
 }
 addEventListener("popstate", syncShelf);
 
-/** Pinned open on Heute (a desktop with room below the page, App.tsx): Heute then leaves out its own sight of the entries. */
+/** Pinned open on desktop Heute (App.tsx), which then hides its own list of entries. */
 const pinned = createStore(false);
 export const setShelfPinned = (p: boolean) => p !== pinned.get() && pinned.set(p);
 export const useShelfPinned = pinned.use;

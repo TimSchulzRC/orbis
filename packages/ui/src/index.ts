@@ -1,4 +1,4 @@
-// The React interface, shared by the web app and (later) the desktop app.
+// Shared by the web app and (later) the desktop app.
 import "./theme";
 
 export { App } from "./App";

@@ -21,7 +21,6 @@ export const noFiles = new Proxy({ subscribe: () => () => {}, getVersion: () => 
   get: (t, k) => t[k as string] ?? (async () => undefined),
 }) as unknown as DeviceFiles;
 
-/** A connection that never opens: the replica stays offline. */
 const offline = (): SyncSocket => ({ readyState: 0, send() {}, close() {}, onopen: null, onmessage: null, onclose: null, onerror: null });
 
 /** A fresh workspace, set as the one the interface works on. */

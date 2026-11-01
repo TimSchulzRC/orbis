@@ -1,4 +1,3 @@
-// Small shared helpers of core: folding, wikilinks, equality, dates, sort keys, option names.
 import { test, expect } from "bun:test";
 import { type PropDef, displayTitle, mapWikiLinks, optionNames, renameLinksIn } from "@obtion/core/model";
 import { addDays, addDaysISO, dateOf, diffDays } from "@obtion/core/date";

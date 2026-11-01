@@ -97,7 +97,6 @@ function QueryBlockView({ src, thisId, n = 0, onChange, onDelete, readOnly }: { 
   const showTabs = tabs.length > 1 || (editing && !!onChange);
   return (
     <div className="group/qb relative my-1 rounded-xl border border-transparent px-0 py-0.5 hover:border-line" contentEditable={false}>
-      {/* the same head as every section of a page: title and count */}
       {def.title && (
         <SectionTitle className="pr-16" count={items.length || undefined}>
           {def.title}
@@ -158,7 +157,7 @@ function QueryBlockView({ src, thisId, n = 0, onChange, onDelete, readOnly }: { 
   );
 }
 
-/** The React root of a block's element: a changed block keeps it (updateDOM). */
+/** Kept per element so a changed block keeps its React root in updateDOM. */
 const roots = new WeakMap<HTMLElement, Root>();
 
 class BlockWidget extends WidgetType {
@@ -228,7 +227,6 @@ function decos(state: EditorState, thisId?: string): DecorationSet {
   return b.finish();
 }
 
-// ---------- empty sections ----------
 // A heading whose section holds only query blocks that hide when empty disappears with them
 // when none of them has results ("Kürzlich erledigt" on a quiet week). It comes back as soon
 // as one of them finds something.
@@ -311,7 +309,7 @@ export function queryBlocks(thisId?: string): Extension {
   return [field, sections, watch];
 }
 
-/** Insert an empty block at the cursor (it opens in edit mode). */
+/** The new block opens in edit mode. */
 export function insertQueryBlock(view: EditorView, def: QueryDef = {}) {
   const pos = view.state.selection.main.head;
   const line = view.state.doc.lineAt(pos);

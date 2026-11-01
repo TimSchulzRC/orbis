@@ -48,9 +48,7 @@ const highlight = HighlightStyle.define([
   { tag: t.contentSeparator, color: "var(--faint)" },
 ]);
 
-// ---------- file embeds ----------
-
-/** An embedded file below its line, drawn like in read-only text (Markdown.tsx). */
+/** Must render like embeds in read-only Markdown. */
 class EmbedWidget extends WidgetType {
   constructor(readonly html: string) {
     super();
@@ -77,7 +75,7 @@ class EmbedWidget extends WidgetType {
   }
 }
 
-/** Ids of the images embedded in the text, in order (the full view pages through them). */
+/** In text order, so the full view can page through them. */
 function embeddedImages(state: EditorState): string[] {
   const out: string[] = [];
   for (const l of parseWikiLinks(state.doc.toString())) {
@@ -108,8 +106,6 @@ const images = StateField.define<DecorationSet>({
   provide: (f) => EditorView.decorations.from(f),
 });
 
-// ---------- [[ autocomplete ----------
-
 const linkCompletion = (selfId?: string) => (ctx: CompletionContext): CompletionResult | null => {
   const m = ctx.matchBefore(/\[\[[^\]\n]*$/);
   if (!m) return null;
@@ -127,15 +123,11 @@ const linkCompletion = (selfId?: string) => (ctx: CompletionContext): Completion
   return { from: m.from + 2, options, filter: false };
 };
 
-// ---------- paste and drop files ----------
-
-/** 2026-10-25-23-03-27 in local time (names of pasted images). */
 function localStamp(d = new Date()) {
   const p = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}-${p(d.getHours())}-${p(d.getMinutes())}-${p(d.getSeconds())}`;
 }
 
-/** Insert files at a position: stored on this device at once, uploaded when the server is reachable. */
 async function insertFiles(view: EditorView, list: File[], pos: number) {
   let at = pos;
   for (const f of list) {
@@ -172,7 +164,6 @@ const fileHandlers = EditorView.domEventHandlers({
   },
 });
 
-/** For the toolbar / camera button: insert chosen files at the cursor. */
 export function insertFilesAtCursor(view: EditorView, list: File[]) {
   return insertFiles(view, list, view.state.selection.main.head);
 }
@@ -187,7 +178,7 @@ function endQuote(view: EditorView) {
   return true;
 }
 
-/** Markdown shortcuts Markdown itself does not have: "[] " starts a to-do. */
+/** "[] " starts a to-do, a shortcut Markdown itself lacks. */
 const shortcuts = EditorView.inputHandler.of((view, from, to, text) => {
   if (text !== " " || view.state.readOnly) return false;
   const line = view.state.doc.lineAt(from);
@@ -197,8 +188,6 @@ const shortcuts = EditorView.inputHandler.of((view, from, to, text) => {
   view.dispatch({ changes: { from: start, to, insert: "- [ ] " } });
   return true;
 });
-
-// ---------- component ----------
 
 export function Editor({
   doc,
@@ -211,7 +200,6 @@ export function Editor({
   readOnly = false,
 }: {
   minHeight?: string;
-  /** Shown, not edited. */
   readOnly?: boolean;
   doc: Y.Doc;
   nodeId?: string;
@@ -233,11 +221,11 @@ export function Editor({
     const extensions: Extension[] = [
       yCollab(ytext, null, { undoManager }),
       formatKeymap,
-      // Enter on an empty quote line ends the quote (Markdown would keep it going)
+      // Markdown would continue the quote, an empty quote line ends it instead
       Prec.highest(keymap.of([{ key: "Enter", run: endQuote }])),
       keymap.of([
         ...yUndoManagerKeymap,
-        // ⌘⇧↑ / ⌘⇧↓ move the block (as in Notion), ⌥↑ / ⌥↓ the line
+        // ⌘⇧↑/↓ move the block as in Notion, ⌥↑/↓ (default keymap) the line
         { key: "Mod-Shift-ArrowUp", run: (v) => (moveBy(v, v.state.selection.main.head, -1), true) },
         { key: "Mod-Shift-ArrowDown", run: (v) => (moveBy(v, v.state.selection.main.head, 1), true) },
         ...defaultKeymap,

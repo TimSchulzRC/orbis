@@ -1,8 +1,6 @@
-// The server's replica: an append-only update log in SQLite, and plain-object records
-// materialised from the docs for queries, search, activity events and the markdown mirror.
-// A document itself (Y.Doc with its history) is loaded when it is used – from its snapshot
-// plus the log rows after it – and let go again when it has not been used for a while
-// (see trim()); only the records stay in memory for all documents.
+// The server's replica: an append-only update log in SQLite plus plain-object records for queries,
+// search, activity and the mirror. Only the records stay in memory for all documents; a Y.Doc is
+// loaded from its snapshot and later log rows on use, and dropped again by trim().
 import { Database } from "bun:sqlite";
 import * as Y from "yjs";
 import { mkdirSync } from "node:fs";
@@ -36,14 +34,17 @@ type Listener = {
   record?: (r: Item) => void;
 };
 
-/** How many documents stay in memory when not in use (least recently used go first). */
 const CACHE_SIZE = 200;
+const FLUSH_DELAY_MS = 250;
+const EVENT_MERGE_WINDOW_MS = 5 * 60_000;
+const MAX_CLOCK_SKEW_MS = 10 * 60_000;
+const MAX_UNDO_CHAIN = 20;
 
 export class Store {
   db: Database;
-  /** The documents in memory, least recently used first. Not all documents: see getDoc(). */
+  /** LRU order, oldest first. Not every document is here. */
   loaded = new Map<string, Y.Doc>();
-  /** The area of every document, also of the ones not in memory (sync and the area check need it). */
+  /** Also for documents not in memory, since sync's area check needs it. */
   private areas = new Map<string, string>();
   records = new Map<string, Item>();
   searchIndex: SearchIndex = createIndex();
@@ -51,7 +52,6 @@ export class Store {
   lastUid = "";
   private listeners = new Set<Listener>();
   private pending = new Map<string, { origins: Set<string>; quiet: boolean; step?: string }>();
-  /** The step changes made on the server belong to (a tool call, an undo); see step(). */
   private stepCtx: { id: string; actor: string; undoes?: string } | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private trimTimer: ReturnType<typeof setTimeout> | null = null;
@@ -78,39 +78,36 @@ export class Store {
       CREATE TABLE IF NOT EXISTS steps (id TEXT PRIMARY KEY, actor TEXT, ts INTEGER, undoes TEXT);
       CREATE INDEX IF NOT EXISTS steps_undoes ON steps(undoes);
     `);
-    // Each log row has a unique id, so a replica's cursor (seq + uid) tells whether the server
-    // still has the row it saw. Older databases get ids for their existing rows once.
+    // A replica's cursor is seq + uid, so it can tell whether the server still has the row it saw.
+    // Older databases get uids for their existing rows once.
     const cols = this.db.query("PRAGMA table_info(updates)").all() as { name: string }[];
     if (!cols.some((c) => c.name === "uid")) {
       this.db.exec("ALTER TABLE updates ADD COLUMN uid TEXT");
       this.db.exec("UPDATE updates SET uid = lower(hex(randomblob(9))) WHERE uid IS NULL");
     }
-    // One user action or tool call = one step = one undo unit (rows from before have none).
+    // A step is one undo unit; rows from before steps have none.
     if (!cols.some((c) => c.name === "step")) {
       this.db.exec("ALTER TABLE updates ADD COLUMN step TEXT");
       this.db.exec("CREATE INDEX IF NOT EXISTS updates_step ON updates(step)");
     }
     const ecols = this.db.query("PRAGMA table_info(events)").all() as { name: string }[];
     if (!ecols.some((c) => c.name === "step")) this.db.exec("ALTER TABLE events ADD COLUMN step TEXT");
-    // Every log row and activity entry belongs to one area (27.10.); rows from before are personal.
+    // 27.10.: every log row and activity entry belongs to an area; older rows are personal.
     if (!cols.some((c) => c.name === "area")) {
       this.db.exec(`ALTER TABLE updates ADD COLUMN area TEXT NOT NULL DEFAULT '${PERSONAL}'`);
       this.db.exec("CREATE INDEX IF NOT EXISTS updates_area ON updates(area, seq)");
     }
     if (!ecols.some((c) => c.name === "area")) this.db.exec(`ALTER TABLE events ADD COLUMN area TEXT NOT NULL DEFAULT '${PERSONAL}'`);
     this.load();
-    // stored as "hubId" (the server was called hub before); renaming it would look like a new server
+    // the server was called hub before; renaming the key would look like a new server to devices
     if (!this.kvGet("hubId")) this.kvSet("hubId", newId());
   }
 
-  /** Identity of this server database. A device seeing a different id knows it met a new server. */
+  /** A device seeing a different id knows it met a new server. */
   get serverId(): string {
     return this.kvGet("hubId")!;
   }
 
-  // ---------- loading ----------
-
-  /** Records, areas and search index for every document, reading one document at a time. */
   private load() {
     const last = this.db.query("SELECT seq, uid FROM updates ORDER BY seq DESC LIMIT 1").get() as { seq: number; uid: string } | null;
     this.seq = last?.seq ?? 0;
@@ -124,10 +121,7 @@ export class Store {
     for (const rec of this.records.values()) indexRecord(this.searchIndex, rec);
   }
 
-  /**
-   * Every stored document, one at a time: the ones in memory as they are, the others read for
-   * the caller and not kept. For a pass over all documents (startup, one-time upgrades).
-   */
+  /** For passes over all documents. Docs not in memory are read for the caller and not kept. */
   *eachDoc(): Generator<[string, Y.Doc]> {
     // a doc without snapshot has only log rows (a crash before its first flush)
     const ids = this.db.query("SELECT id FROM docstate UNION SELECT doc FROM updates").all() as { id: string }[];
@@ -137,14 +131,12 @@ export class Store {
     }
   }
 
-  /** What the database holds of a document: its snapshot (if any) and the log rows after it. */
   private stored(id: string): Uint8Array[] {
     const snap = this.db.query("SELECT state, seq FROM docstate WHERE id = ?").get(id) as { state: Uint8Array; seq: number } | null;
     const rows = this.db.query("SELECT data FROM updates WHERE doc = ? AND seq > ? ORDER BY seq").all(id, snap?.seq ?? 0) as { data: Uint8Array }[];
     return [...(snap ? [snap.state] : []), ...rows.map((r) => r.data)];
   }
 
-  /** A document from the database (null if unknown). */
   private read(id: string): Y.Doc | null {
     const parts = this.stored(id);
     if (!parts.length) return null;
@@ -153,11 +145,11 @@ export class Store {
     return doc;
   }
 
-  /** A document to read or change, loaded if it is not in memory (a new, empty one if unknown). */
+  /** Unknown ids get a new, empty doc. */
   getDoc(id: string): Y.Doc {
     let doc = this.loaded.get(id);
     if (doc) {
-      this.loaded.delete(id); // most recently used: to the end
+      this.loaded.delete(id); // re-insert to mark it most recently used
       this.loaded.set(id, doc);
       return doc;
     }
@@ -173,9 +165,8 @@ export class Store {
   }
 
   /**
-   * Let go of the least recently used documents beyond the cache size. Never one with changes
-   * not yet in its snapshot (pending) or inside an atomic call: loading it again from the
-   * database gives exactly the state it had.
+   * Never drops a doc with changes not yet in its snapshot or during an atomic call, so reloading
+   * it from the database gives exactly the state it had.
    */
   trim() {
     if (this.trimTimer) clearTimeout(this.trimTimer);
@@ -190,11 +181,11 @@ export class Store {
     }
   }
 
-  /** A document's full state as one update, without loading it if it is not in memory. */
+  /** Does not load the document into memory. */
   stateOf(id: string): Uint8Array {
     const doc = this.loaded.get(id);
     if (doc) return Y.encodeStateAsUpdate(doc);
-    const parts = this.stored(id); // usually just the snapshot (rows after it only after a crash before a flush)
+    const parts = this.stored(id); // rows after the snapshot exist only after a crash before a flush
     return parts.length === 1 ? parts[0]! : parts.length ? Y.mergeUpdates(parts) : Y.encodeStateAsUpdate(new Y.Doc());
   }
 
@@ -210,17 +201,12 @@ export class Store {
     return () => this.listeners.delete(l);
   }
 
-  // ---------- writing ----------
-
-  /** The area of a document (personal for documents from before areas); undefined if unknown. */
+  /** Documents from before areas are personal; undefined if unknown. */
   areaOf(docId: string): string | undefined {
     return this.areas.get(docId);
   }
 
-  /**
-   * Apply an update that came from another replica for `area`. Returns its sequence number.
-   * A document of another area is refused (AreaError): areas never mix through sync.
-   */
+  /** Returns the sequence number. Throws AreaError for a document of another area: areas never mix through sync. */
   applyRemote(docId: string, data: Uint8Array, origin: string, conn?: unknown, step?: string, area = PERSONAL): number {
     const known = this.areaOf(docId);
     if (known && known !== area) throw new AreaError(`${docId} belongs to the area ${known}, not ${area}`);
@@ -240,12 +226,12 @@ export class Store {
   }
 
   /**
-   * A device with a wrong clock: timestamps more than 10 minutes ahead are set back to now,
-   * so "geändert", sorting and the activity don't jump. The fix syncs like any change.
+   * Devices with a wrong clock: timestamps too far ahead are set back to now, so "geändert",
+   * sorting and the activity don't jump. The fix syncs like any change.
    */
   private capFuture(docId: string) {
     const doc = this.getDoc(docId);
-    const max = Date.now() + 10 * 60_000;
+    const max = Date.now() + MAX_CLOCK_SKEW_MS;
     const meta = metaMap(doc);
     const late = ["created", "updated", "done"].filter((k) => {
       const v = meta.get(k);
@@ -271,10 +257,7 @@ export class Store {
     );
   }
 
-  /**
-   * Run `fn` as one step: every change it makes on the server carries the same step id, so
-   * "Rückgängig" can take back all of it, across documents. Nested calls join the outer step.
-   */
+  /** Every change `fn` makes carries one step id, so one undo takes it all back. Nested calls join the outer step. */
   step<T>(actor: string, fn: (step: string) => T, opts: { undoes?: string } = {}): T {
     if (this.stepCtx) return fn(this.stepCtx.id);
     this.stepCtx = { id: "s" + newId(), actor, undoes: opts.undoes };
@@ -285,14 +268,14 @@ export class Store {
     }
   }
 
-  /** Make a change on the server itself (MCP tools, imports). */
+  /** For changes made on the server itself (tools, imports). */
   change(docId: string, origin: string, fn: (doc: Y.Doc) => void, opts: { quiet?: boolean } = {}): void {
     const doc = this.getDoc(docId);
     const sv = Y.encodeStateVector(doc);
     doc.transact(() => fn(doc), this.stepCtx ? { actor: origin, step: this.stepCtx.id } : origin);
     this.noteArea(docId, doc);
     const update = Y.encodeStateAsUpdate(doc, sv);
-    if (update.length <= 2) return; // nothing changed
+    if (update.length <= 2) return; // an empty Yjs update is 2 bytes
     this.append(docId, update, origin, undefined, opts.quiet, this.stepCtx?.id);
   }
 
@@ -304,9 +287,8 @@ export class Store {
   }
 
   /**
-   * All or nothing: run `fn`; its changes are visible to reads right away, but reach the log,
-   * the devices and the activity only if it returns without throwing. On an error every
-   * touched document is reloaded from the database, as if nothing had happened.
+   * All or nothing. Changes are visible to reads at once but reach the log, devices and activity
+   * only if `fn` returns. On a throw every touched document is reloaded from the database.
    */
   atomic<T>(fn: () => T): T {
     if (this.held) return fn(); // nested: part of the outer call
@@ -329,7 +311,7 @@ export class Store {
     }
   }
 
-  /** Rebuild documents from snapshot + log (drops changes that never reached the log). */
+  /** Drops changes that never reached the log. */
   private reload(ids: string[]) {
     for (const id of ids) {
       this.pending.delete(id);
@@ -375,7 +357,7 @@ export class Store {
     if (step) p.step = step;
     p.quiet = p.quiet && quiet;
     this.pending.set(docId, p);
-    if (!this.timer) this.timer = setTimeout(() => this.flush(), 250);
+    if (!this.timer) this.timer = setTimeout(() => this.flush(), FLUSH_DELAY_MS);
     return res.seq;
   }
 
@@ -432,12 +414,11 @@ export class Store {
         if (blank && (kind === "created" || kind === "deleted")) continue;
         const origin = [...p.origins].join(", ");
         const ts = Date.now();
-        // Typing produces a flush every 250 ms: fold consecutive edits by the same author
-        // within a few minutes into one activity entry instead of flooding the feed.
-        // ... but only within one step, so every entry can be undone on its own.
+        // Typing flushes constantly: fold consecutive edits by one author into one entry, but only
+        // within one step, so every entry can still be undone on its own.
         const step = p.step;
         const last = lastEvent.get(id) as { id: number; ts: number; kind: string; origin: string; changes: string; step: string | null } | null;
-        if (kind === "updated" && last && last.kind === "updated" && last.origin === origin && (last.step ?? undefined) === step && ts - last.ts < 5 * 60_000) {
+        if (kind === "updated" && last && last.kind === "updated" && last.origin === origin && (last.step ?? undefined) === step && ts - last.ts < EVENT_MERGE_WINDOW_MS) {
           const merged = mergeChanges(JSON.parse(last.changes || "[]"), changes);
           updateEvent.run(ts, next.title, JSON.stringify(merged), last.id);
           events.push({ id: last.id, ts, doc: id, title: next.title, type: typeTag(next), kind, origin, changes: merged, step });
@@ -453,12 +434,9 @@ export class Store {
     for (const e of events) for (const l of this.listeners) l.event?.(e);
   }
 
-  // ---------- reading ----------
-
   /**
-   * Does this server still hold the log row a replica last saw? Not if the position lies beyond
-   * the log, or if the row there has another id: the server came from an older backup, and maybe
-   * another device has synced since, so seq alone has grown past the cursor again.
+   * False if the cursor lies beyond the log or the row there has another uid. Then the server came
+   * from an older backup, and other devices may have synced since, so seq alone can't tell.
    */
   knowsCursor(area: string, since: number, sinceId?: string): boolean {
     if (since <= 0) return true;
@@ -468,13 +446,12 @@ export class Store {
     return row?.uid === sinceId && row.area === area;
   }
 
-  /** The newest log row of an area: the position a replica of it has after catching up. */
+  /** The position a replica of the area has after catching up. */
   last(area: string): { seq: number; uid: string } {
     const row = this.db.query("SELECT seq, uid FROM updates WHERE area = ? ORDER BY seq DESC LIMIT 1").get(area) as { seq: number; uid: string } | null;
     return row ?? { seq: 0, uid: "" };
   }
 
-  /** Docs of an area changed after `since`, as full state updates (what a reconnecting replica needs). */
   docsSince(area: string, since: number): string[] {
     if (since <= 0) return [...this.areas].filter(([, a]) => a === area).map(([id]) => id);
     const rows = this.db.query("SELECT DISTINCT doc FROM updates WHERE area = ? AND seq > ?").all(area, since) as { doc: string }[];
@@ -485,18 +462,17 @@ export class Store {
     return [...this.records.values()].filter(isContent);
   }
 
-  /** Structure, titles, links and aggregation over the current records (rebuilt after each flush). */
+  /** Rebuilt lazily after each flush. */
   index(): Index {
     if (!this._ix) this._ix = new Index(this.records);
     return this._ix;
   }
 
-  /** The language the workspace was set up in; undefined before the setup. */
+  /** Undefined before the setup. */
   setupLang(): Lang | undefined {
     return this.records.get(SETTINGS_ID)?.settings?.setupLang as Lang | undefined;
   }
 
-  /** The workspace's language: the setup's, German before it. */
   lang(): Lang {
     return this.setupLang() ?? "de";
   }
@@ -515,12 +491,12 @@ export class Store {
     return rows;
   }
 
-  /** An activity entry of its own, not about one document (an import). */
+  /** An entry not about one document, e.g. an import. */
   logEvent(title: string, origin: string) {
     this.db.query("INSERT INTO events (ts, doc, title, type, kind, origin, changes) VALUES (?, ?, ?, ?, ?, ?, ?)").run(Date.now(), "", title, "import", "created", origin, "[]");
   }
 
-  /** Is a step an undo (of which step) – or a redo, an undo of an undo? */
+  /** `redo` marks an undo of an undo. */
   stepState(step: string): { undoes?: string; redo?: boolean } {
     const q = this.db.query("SELECT undoes FROM steps WHERE id = ?");
     const row = q.get(step) as { undoes: string | null } | null;
@@ -528,9 +504,9 @@ export class Store {
     return { undoes: row?.undoes ?? undefined, redo: !!target?.undoes || undefined };
   }
 
-  /** The undo that currently takes this step back (itself not undone), if any. */
+  /** The undo that currently takes this step back, itself not undone. */
   activeUndo(step: string, depth = 0): string | undefined {
-    if (depth > 20) return undefined;
+    if (depth > MAX_UNDO_CHAIN) return undefined;
     const undos = this.db.query("SELECT id FROM steps WHERE undoes = ? ORDER BY ts").all(step) as { id: string }[];
     for (const u of undos.reverse()) if (!this.activeUndo(u.id, depth + 1)) return u.id;
     return undefined;
@@ -543,8 +519,6 @@ export class Store {
     this.db.query("INSERT OR REPLACE INTO kv (key, value) VALUES (?, ?)").run(key, value);
   }
 }
-
-// ---------- helpers ----------
 
 function equalBytes(a: Uint8Array, b: Uint8Array) {
   if (a.length !== b.length) return false;
@@ -584,11 +558,9 @@ function mergeChanges(a: FieldChange[], b: FieldChange[]): FieldChange[] {
   return out.filter((c) => c.field === "update" || c.field === "schema" || (Array.isArray(c.to) ? (c.to as unknown[]).length || ((c.from as unknown[]) ?? []).length : c.from !== c.to));
 }
 
-/** Short type tag for activity rows: the type id, "datei", "op" … */
 function typeTag(i: Item): string {
   return i.kind === "info" ? (i.type ?? "") : i.kind;
 }
-
 
 function setDiff(field: string, a: string[], b: string[], out: FieldChange[]) {
   const added = b.filter((x) => !a.includes(x));
@@ -610,7 +582,7 @@ function diffRecords(prev: Item | undefined, next: Item): { kind: ActivityEvent[
   for (const k of new Set([...Object.keys(prev.rels), ...Object.keys(next.rels)])) setDiff("r:" + k, prev.rels[k] ?? [], next.rels[k] ?? [], changes);
   if (prev.body !== next.body) changes.push({ field: "body", from: prev.body.length, to: next.body.length });
   if (next.updates.length > prev.updates.length) for (const e of next.updates.slice(prev.updates.length)) changes.push({ field: "update", to: e.text });
-  // a type: its schema, and apart from it its views (visible in the activity, so they can be taken back)
+  // views count separately from the schema so their changes show in the activity and can be undone
   if (prev.schema || next.schema) {
     const { views: va, ...sa } = prev.schema ?? ({} as NonNullable<Item["schema"]>);
     const { views: vb, ...sb } = next.schema ?? ({} as NonNullable<Item["schema"]>);

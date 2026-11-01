@@ -1,5 +1,4 @@
-// Full view of an embedded image: click opens it, arrows page through all images of the page,
-// Escape closes. Shows the display version at once and the original as soon as it is here.
+// Shows the display version at once and swaps in the original once it is on the device.
 import { ModalSurface } from "../components/ui/dialog";
 import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
@@ -12,7 +11,6 @@ import { createStore } from "../lib/store";
 
 const open = createStore<{ ids: string[]; at: number } | null>(null);
 
-/** Open the full view on `ids[at]` (image files); the others are reachable with the arrows. */
 export function openLightbox(ids: string[], at: number) {
   const list = ids.filter((id, i) => ids.indexOf(id) === i && repo.get(id)?.file?.filetype === "bild");
   if (!list.length) return;

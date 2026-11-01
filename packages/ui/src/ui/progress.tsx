@@ -11,7 +11,6 @@ export function Progress({ done, total, className }: { done: number; total: numb
   );
 }
 
-/** Progress as "done/total" – the same everywhere (row, board, table, page); "–" without entries. */
 export function ProgressCount({ done, total, className }: { done: number; total: number; className?: string }) {
   return (
     <span className={cn("tabular-nums", className)} title={total ? tr("progress.title", { done, total }) : undefined}>
@@ -20,10 +19,7 @@ export function ProgressCount({ done, total, className }: { done: number; total:
   );
 }
 
-/**
- * Progress as "60 %" with a bar – in the app language. In a table column the share comes first and
- * the bar takes the rest; `inline` (a row, a group head) puts a short bar of `barClass` first.
- */
+/** `inline` (rows, group heads) puts a short bar of `barClass` first, else the share leads and the bar fills the rest. */
 export function PercentBar({ done, total, inline, barClass }: { done: number; total: number; inline?: boolean; barClass?: string }) {
   const { t, lang } = useT();
   if (!total) return inline ? null : <EmptyDash />;
@@ -46,10 +42,7 @@ export function PercentBar({ done, total, inline, barClass }: { done: number; to
   );
 }
 
-/**
- * Progress of a page (design rules § 2.3): bar 8 high, the share in percent 15/600 and what it
- * counts in muted ("2 von 9 Tasks erledigt, alle Ebenen"). Not shown without entries.
- */
+/** Design rules § 2.3. */
 export function ProgressBand({ done, total, desc }: { done: number; total: number; desc: string }) {
   const { lang } = useT();
   if (!total) return null;

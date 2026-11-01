@@ -1,12 +1,10 @@
-// A small menu in the editor's own DOM (the block menu, "Turn into" of the toolbar): rows with
-// an icon, arrow keys and Enter, closed by Escape or a click elsewhere.
+// Menus for the editor's own DOM, which is not React.
 import type { ComponentType } from "react";
 import { iconHTML } from "./icons";
 
 interface MenuEntry {
   label: string;
   icon?: ComponentType<{ size?: number }>;
-  /** The icon's colour (a type's, as in the sidebar). */
   color?: string;
   active?: boolean;
   danger?: boolean;
@@ -16,10 +14,7 @@ interface MenuEntry {
 
 let open: { close: () => void } | null = null;
 
-/**
- * Show the menu at a point of the screen; sections are separated by a line. With `maxRows`, a
- * longer list scrolls inside the menu, half of the next row showing that there is more.
- */
+/** With `maxRows` a longer list scrolls, half of the next row showing that there is more. */
 export function showMenu(at: { left: number; top: number }, sections: { title?: string; entries: MenuEntry[] }[], onClose?: () => void, maxRows?: number) {
   open?.close();
   const box = document.createElement("div");
@@ -75,7 +70,7 @@ export function showMenu(at: { left: number; top: number }, sections: { title?: 
   return { close, focusFirst: () => focus(0) };
 }
 
-/** A one-line field at a point of the screen; Enter gives its text, Escape or a click elsewhere null. */
+/** Resolves the text on Enter, null on Escape or a click elsewhere. */
 export function askText(at: { left: number; top: number }, value: string, label: string): Promise<string | null> {
   open?.close();
   return new Promise((resolve) => {

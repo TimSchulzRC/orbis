@@ -1,9 +1,5 @@
-// Examples for a first setup ("Mit Beispielen starten"): a small made-up world that shows how
-// Obtion works – places and pinning, projects with tasks and progress, cards with links, own types,
-// a query page, the inbox with something to sort in, an image and a PDF. Everything is in the
-// language of the setup and marked with meta.source = "example", so "Beispiele entfernen" in the
-// settings finds exactly these again. Fixed ids (ex-*): running it twice adds nothing.
-// Used by the setup page (client), `cli.ts setup --examples` and `bun run seed:demo` alike.
+// Example data for "Mit Beispielen starten". Everything carries meta.source = "example" so
+// "Beispiele entfernen" finds exactly these again; fixed ids (ex-*) make a second run a no-op.
 import type * as Y from "yjs";
 import { type FileMeta, type ItemInit, META_TYPE, appendUpdate, addDaysISO, fileTypeOf, initItem, initType, metaMap, setFileMeta, setMeta, todayISO } from "./model";
 import type { Index } from "./graph";
@@ -17,7 +13,7 @@ export const EXAMPLE_ORIGIN = "system:examples";
 
 export const EX_TYPES = { book: "ex-type-book", person: "ex-type-person", article: "ex-type-article" } as const;
 
-/** A file of the examples: made here, stored by the caller (server: blobs, device: its file store). */
+/** Made here, stored by the caller (server: blobs, device: its file store). */
 export interface ExampleFile {
   key: "diagram" | "sheet";
   name: string;
@@ -27,14 +23,12 @@ export interface ExampleFile {
   text?: string;
 }
 
-/** Store the files, then write the examples. `put` returns the file facts (hash, size, …). */
 export async function addExamples(w: Writer, lang: Lang, put: (f: ExampleFile) => Promise<FileMeta>, now = Date.now()) {
   const metas: Partial<Record<ExampleFile["key"], FileMeta>> = {};
   for (const f of exampleFiles(lang)) metas[f.key] = await put(f);
   return writeExamples(w, lang, metas, now);
 }
 
-/** The facts every caller fills the same way. */
 export function fileFacts(f: ExampleFile, hash: string): FileMeta {
   return { hash, name: f.name, mime: f.mime, filetype: fileTypeOf(f.name, f.mime), size: f.bytes.length, ...(f.pages ? { pages: f.pages } : {}), ...(f.text ? { text: f.text } : {}) };
 }
@@ -57,7 +51,6 @@ export function exampleFiles(lang: Lang): ExampleFile[] {
   ];
 }
 
-/** Write the examples (the files' facts come from `exampleFiles` + the caller's store). */
 export function writeExamples(w: Writer, lang: Lang, files: Partial<Record<ExampleFile["key"], FileMeta>>, now = Date.now()): string[] {
   const L = (de: string, en: string) => (lang === "de" ? de : en);
   const t = (k: string) => translate(lang, `setup.${k}`);
@@ -66,9 +59,9 @@ export function writeExamples(w: Writer, lang: Lang, files: Partial<Record<Examp
   const here = { this: true as const };
   const day = (n: number) => (n === 0 ? todayISO() : addDaysISO(n));
   const H = 3600_000;
-  // created over the last three weeks, in the order below: the history reads like real use
+  // spread over the last three weeks in the order below, so the history reads like real use
   let clock = now - 21 * 24 * H;
-  const hoursAgo = (h: number) => now - h * H; // the inbox: from the last day
+  const hoursAgo = (h: number) => now - h * H;
   const written: string[] = [];
 
   function put(id: string, init: ItemInit, extra?: (doc: Y.Doc) => void) {
@@ -76,7 +69,7 @@ export function writeExamples(w: Writer, lang: Lang, files: Partial<Record<Examp
     clock += 12 * H;
     const created = init.created ?? Math.min(clock, now - 30 * H);
     w.change(id, (doc) => {
-      // updated stays created until the user changes it: that is how "Beispiele entfernen" tells edited ones
+      // updated stays equal to created until the user edits it; "Beispiele entfernen" relies on that
       initItem(doc, { source: EXAMPLE, createdBy: EXAMPLE_ORIGIN, ...init, created });
       extra?.(doc);
     });
@@ -85,7 +78,6 @@ export function writeExamples(w: Writer, lang: Lang, files: Partial<Record<Examp
   }
   const doneAt = (daysAgo: number) => (doc: Y.Doc) => metaMap(doc).set("done", now - daysAgo * 24 * H);
 
-  // ---------- own types: Person, Buch, Artikel ----------
   const type = (id: string, spec: Parameters<typeof initType>[1], plural: string) => {
     if (w.get(id)) return;
     w.change(id, (doc) => initType(doc, { ...spec, plural }, { source: EXAMPLE, createdBy: EXAMPLE_ORIGIN, created: now - 22 * 24 * H }));
@@ -137,7 +129,6 @@ export function writeExamples(w: Writer, lang: Lang, files: Partial<Record<Examp
     L("Artikel", "Articles"),
   );
 
-  // ---------- pinned: the welcome note first, then the three areas and the query page ----------
   const [k0, k1, k2, k3, k4] = keysFor(5);
   const relaunchTitle = L("Website-Relaunch", "Website relaunch");
   const weekTitle = L("Diese Woche fällig", "Due this week");
@@ -195,7 +186,6 @@ Connect an MCP client in the workspace settings to read and change your entries 
     ),
   });
 
-  // ---------- Arbeit ----------
   const work = put("ex-work", {
     title: L("Arbeit", "Work"),
     pinned: k1,
@@ -212,7 +202,6 @@ Connect an MCP client in the workspace settings to read and change your entries 
       "A small design studio, made up. Contact: Mara Lind.\n\n",
     ) + block({ title: L("Offene Tasks", "Open tasks"), where: { and: [{ type: SYS.task }, { under: here }, { status: "open" }] }, sort: [{ key: "due" }] }),
   });
-  // two places: the home is "Arbeit", the client is the second one
   const relaunch = put(
     "ex-relaunch",
     {
@@ -252,7 +241,6 @@ Connect an MCP client in the workspace settings to read and change your entries 
     props: { p_status: "st_paused", p_priority: "pr_low", p_summary: L("Monatlicher Newsletter – pausiert bis nach dem Relaunch.", "A monthly newsletter – paused until after the relaunch.") },
   });
 
-  // ---------- Lernen ----------
   const learn = put("ex-learn", { title: L("Lernen", "Learning"), pinned: k2, body: L("Kurse, Mitschriften, Karteikarten.\n", "Courses, notes, flash cards.\n") });
   const course = put("ex-course", {
     title: L("Kurs Datenbanken", "Databases course"),
@@ -293,7 +281,6 @@ Connect an MCP client in the workspace settings to read and change your entries 
   if (diagram) put("ex-f-diagram", { kind: "datei", title: diagram.name, parents: [course] }, (doc) => setFileMeta(doc, { ...diagram, width: 640, height: 220 }));
   if (sheet) put("ex-f-sheet", { kind: "datei", title: sheet.name, parents: [course] }, (doc) => setFileMeta(doc, sheet));
 
-  // ---------- Persönlich: books (own type with a relation to people) and a blog in two languages ----------
   const personal = put("ex-personal", {
     title: L("Persönlich", "Personal"),
     pinned: k3,
@@ -325,7 +312,6 @@ Connect an MCP client in the workspace settings to read and change your entries 
     body: "Notes belong on my own device first. Then they never get lost, not even on a train without signal.\n",
   });
 
-  // ---------- a page with a query block ----------
   put("ex-week", {
     title: weekTitle,
     pinned: k4,
@@ -334,7 +320,6 @@ Connect an MCP client in the workspace settings to read and change your entries 
       block({ title: weekTitle, where: { and: [{ status: "open" }, { prop: "due", op: "<=", value: "+7d" }] }, sort: [{ key: "due" }], group: "path" }),
   });
 
-  // ---------- inbox: no type, no place ----------
   put("ex-i-references", {
     created: hoursAgo(20),
     title: L("Idee: Referenzen als Fallstudien zeigen", "Idea: show references as case studies"),
@@ -342,7 +327,6 @@ Connect an MCP client in the workspace settings to read and change your entries 
   });
   put("ex-i-podcast", { created: hoursAgo(9), title: L("Podcast-Tipp: Folge über Wissensmanagement", "Podcast tip: an episode on knowledge management") });
   put("ex-i-bike", { created: hoursAgo(4), title: L("Fahrrad zur Inspektion bringen", "Take the bike in for a service") });
-  // a keyword with notes below it, not pinned: one bundle in the inbox
   const trip = put("ex-i-trip", { created: hoursAgo(26), title: L("Urlaub im Herbst", "Autumn holiday"), body: L("Sammelpunkt, bis daraus ein Projekt wird.\n", "A place to collect until it becomes a project.\n") });
   put("ex-i-trip-1", { created: hoursAgo(25), title: L("Zugverbindungen vergleichen", "Compare train connections"), parents: [trip] });
   put("ex-i-trip-2", { created: hoursAgo(2), title: L("Ferienwohnung mit Balkon suchen", "Find a flat with a balcony"), parents: [trip] });
@@ -350,20 +334,17 @@ Connect an MCP client in the workspace settings to read and change your entries 
   return written;
 }
 
-// ---------- removing them again ----------
-
 export interface ExampleEntry {
   id: string;
   title: string;
   type: string | null;
   isType: boolean;
-  /** Edited since the setup, or used by the user's own entries: kept unless chosen. */
+  /** Edited since the setup or used by the user's own entries; kept unless chosen. */
   changed: boolean;
-  /** A type with entries that are not examples: stays in any case. */
+  /** A type with non-example entries; never removed. */
   inUse: boolean;
 }
 
-/** The examples still there, for the preview of "Beispiele entfernen". */
 export function listExamples(ix: Index): ExampleEntry[] {
   const isEx = (id: string) => ix.get(id)?.source === EXAMPLE;
   const out: ExampleEntry[] = [];
@@ -375,13 +356,13 @@ export function listExamples(ix: Index): ExampleEntry[] {
     const inUse = isType && ix.live.some((i) => i.type === r.id && i.source !== EXAMPLE);
     out.push({ id: r.id, title: r.title, type: r.type, isType, changed: r.updated !== r.created || used, inUse });
   }
-  // the types last: they go only when nothing of them is left
+  // types last: they go only when none of their entries is left
   return out.sort((a, b) => Number(a.isType) - Number(b.isType));
 }
 
 /**
- * To the trash: exactly these ids (each marked itself, so each comes back alone). A type goes
- * only if no living entry of it is left. Returns what was removed, for "Rückgängig".
+ * Each id is trashed by itself (no cascade), so each comes back alone. A type goes only if no
+ * living entry of it is left. Returns what was removed, for "Rückgängig".
  */
 export function removeExamples(w: Writer, ix: Index, ids: string[]): string[] {
   const chosen = new Set(ids.filter((id) => ix.get(id)?.source === EXAMPLE));
@@ -404,8 +385,6 @@ export function restoreExamples(w: Writer, ids: string[]) {
   for (const id of ids) w.change(id, (doc) => setMeta(doc, { deleted: null }));
 }
 
-// ---------- the two files, made here ----------
-
 function erDiagram(lang: Lang): string {
   const L = (de: string, en: string) => (lang === "de" ? de : en);
   const box = (x: number, title: string, rows: string[], fill: string) =>
@@ -427,7 +406,7 @@ ${box(456, L("Kurs", "Course"), [L("Kursnr.", "Course no."), L("Titel", "Title")
 `;
 }
 
-/** A one-page PDF with plain text (Helvetica, WinAnsi), built by hand: no library needed. */
+/** Hand-built one-page PDF (Helvetica, WinAnsi), so no PDF library is needed. */
 function tinyPdf(lines: string[]): Uint8Array<ArrayBuffer> {
   const WIN: Record<string, number> = { "–": 0x96, "„": 0x84, "“": 0x93, "”": 0x94, "’": 0x92 };
   const enc = (s: string) =>

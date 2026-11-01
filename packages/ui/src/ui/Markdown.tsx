@@ -12,7 +12,7 @@ import { escapeHtml } from "./text";
 
 const WIKILINK_AT_START = wikiLinkRe(true);
 
-/** A [[link]] or ![[embed]] (`alias`: the text after |, for files a width). */
+/** `alias` is the text after |, a width for files. */
 interface WikiToken extends Tokens.Generic {
   type: "wikilink";
   raw: string;
@@ -70,9 +70,8 @@ md.use({
 });
 
 /**
- * An embedded file, the same in read-only text and in the editor: an image with its description
- * as alt text and caption, audio and video as a player, anything else (PDF …) as a card with
- * its first page. `space`: the workspace of the text, so its links open there (in a new tab too).
+ * Shared by read-only text and the editor. `space` is the text's workspace, so links open there
+ * (in a new tab too).
  */
 export function embedHTML(item: Item, size?: number, space?: string): string {
   const href = spaceHref(space, itemPath(item.id));
@@ -86,7 +85,7 @@ export function embedHTML(item: Item, size?: number, space?: string): string {
   return `<a class="embed-file" href="${href}">${f.thumb ? `<img data-hash="${f.thumb}" alt="">` : ""}<span><b>${escapeHtml(item.title)}</b><small>${[f.pages ? tr("file.pages", { count: f.pages }) : "", fmtBytes(getLang(), f.size)].filter(Boolean).join(" · ")}</small></span></a>`;
 }
 
-/** The replica whose titles [[links]] resolve against while rendering (the workspace of the text), and its id for the links. */
+/** Module state because marked's renderers get no context. Set only inside renderMarkdown. */
 let rendering: Repo | undefined;
 let renderingSpace: string | undefined;
 function renderMarkdown(src: string, r?: Repo, space?: string): string {
@@ -100,14 +99,13 @@ function renderMarkdown(src: string, r?: Repo, space?: string): string {
   }
 }
 
-/** Fill in file contents (from this device or the server) after rendering. */
 export function hydrateFiles(root: HTMLElement | null, files: DeviceFiles = current) {
   if (!root) return;
   root.querySelectorAll<HTMLElement>("[data-hash]").forEach((el) => {
     const hash = el.dataset.hash!;
     if (el.dataset.done) return;
     el.dataset.done = "1";
-    // audio and video stream from the server when the original is not here: never loaded whole
+    // without a local original, stream audio and video from the server instead of loading them whole
     if (el instanceof HTMLMediaElement) {
       void files.isLocal(hash).then(async (here) => {
         const u = here ? await files.url(hash) : files.serverUrl(hash);
@@ -119,7 +117,7 @@ export function hydrateFiles(root: HTMLElement | null, files: DeviceFiles = curr
     files.url(hash, { keep }).then((u) => {
       if (u) (el as HTMLImageElement).src = u;
       else if (files.isMissing(hash) && el.tagName === "IMG") {
-        // not on the server: a quiet note instead of a broken image
+        // gone from the server too: a quiet note instead of a broken image
         const note = document.createElement("span");
         note.className = "embed-missing";
         note.textContent = tr(files.missingKey(Number(el.dataset.created) || 0));
@@ -136,7 +134,6 @@ export function Markdown({ src, className }: { src: string; className?: string }
   const ref = useRef<HTMLDivElement>(null);
   const html = useMemo(() => renderMarkdown(src, r, space), [src, r, space, r.version]);
   useEffect(() => hydrateFiles(ref.current, files), [html]);
-  // a click on an image opens the full view, paging through the images of this text
   const onClick = (e: React.MouseEvent) => {
     const img = (e.target as HTMLElement).closest<HTMLImageElement>(".embed-img img");
     if (!img || !ref.current) return;

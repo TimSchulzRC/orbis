@@ -1,5 +1,3 @@
-// A view as a gallery: a tile per entry with its picture (a file, the first image in its text),
-// a compact text card where there is none.
 import type { Item } from "@obtion/core/model";
 import type { EvalCtx } from "@obtion/core/query";
 import { fmtDuration } from "@obtion/core/i18n";
@@ -37,7 +35,7 @@ function GalleryTile({ item, ctx }: { item: Item; ctx: EvalCtx }) {
   const hash = firstImage(item);
   const url = useBlobUrl(hash, true);
   const f = item.file;
-  // nothing to show as a picture: a compact text card (title, status, progress, a line of text), no empty image area
+  // no picture: a compact text card rather than an empty image area
   if (!hash && !f) {
     const schema = ctx.ix.schemaOf(item);
     const st = statusOf(item, schema);

@@ -1,13 +1,6 @@
-// The review (the page "Eingang", the act "einsortieren"): the inbox one entry at a time, as a
-// stack. The entry on top, always as tall (a long one scrolls inside), so what can become of it
-// stays in place below – a place, a type, back tomorrow, the sidebar, deleted – and on a
-// desktop beside it what is still waiting and what this review sorted (each with its undo).
-// What was sorted stays for the rest of the day when the page is left, until the review is finished.
-// A click into the entry (or "Bearbeiten") edits it in place, a typo fixed on the way; the keys rest
-// meanwhile, and "Fertig" or any choice below ends it.
-//
-// A suggestion (the agent's or the app's own) is not shown yet; it would be the first answer
-// among the suggestions in `Choices`.
+// The review: the inbox one entry at a time, as a stack. The card keeps a fixed height so the
+// choices below never move. What was sorted is kept for the rest of the day when the page is left.
+// Suggestions (the agent's or the app's own) are not shown yet; they would go first in `Choices`.
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import type { EditorView } from "@codemirror/view";
 import { Check, Clock, FolderInput, Layers, List, Maximize2, Pencil, Pin, RotateCcw, Shapes, Trash2, Undo2 } from "lucide-react";
@@ -29,7 +22,6 @@ import { placeSuggestions } from "../ui/suggest";
 import { type InboxEntry, reviewMinutes, useInboxItems } from "../ui/inbox";
 import { type Undo, captureTypes, revert, usePickers, useTriageActions } from "../ui/TriageActions";
 
-/** One sorted entry: where it went, and the way back. */
 interface Sorted {
   key: string;
   title: string;
@@ -37,13 +29,12 @@ interface Sorted {
   undo: Undo;
 }
 
-/** Editing the entry shown: where it was clicked (the caret goes there; `title`: its place in the title), none from the button. */
+/** Where the entry was clicked, for the caret (`title`: offset in the title); null from the button. */
 type Edit = { x: number; y: number; title?: number } | null;
 
-/** The review of today on this device: kept when leaving it ("Später weiter"), not over a reload. */
+/** Kept when leaving the page ("Später weiter"), not over a reload. */
 let session: { day: string; order: string[]; sorted: Sorted[]; at?: string } | null = null;
 
-/** Where the review and the list switch to each other. */
 function StackListSwitch() {
   const { t } = useT();
   return (
@@ -59,7 +50,7 @@ function StackListSwitch() {
   );
 }
 
-/** `at`: the entry to begin with ("<workspace>/<id>", from the list or an old link). */
+/** `at`: "<workspace>/<id>" to begin with. */
 export function Review({ at }: { at?: string }) {
   const { t } = useT();
   const desktop = useDesktop();
@@ -200,7 +191,6 @@ export function Review({ at }: { at?: string }) {
   );
 }
 
-/** The head: what it is, how far ("2 von 6"), the switch to the list. */
 function ReviewHead({ total, at, sorted, minutes }: { total: number; at: number; sorted: number; minutes: number }) {
   const { t } = useT();
   const desktop = useDesktop();
@@ -229,7 +219,7 @@ function ReviewHead({ total, at, sorted, minutes }: { total: number; at: number;
   );
 }
 
-/** Progress as steps (one per entry, a bar when there are many): sorted green, the current amber. */
+/** One step per entry, a bar when there are many. */
 function Steps({ total, done }: { total: number; done: number }) {
   const { t } = useT();
   const label = t("review.position", { at: Math.min(done + 1, total), count: total });
@@ -248,13 +238,7 @@ function Steps({ total, done }: { total: number; done: number }) {
   );
 }
 
-/**
- * The entry in full: what it is, where from and how old, the title, the text, the notes below.
- * Always as tall, so the choices below never move; a long entry scrolls inside, a fade at the
- * bottom says there is more. A click into it edits title and text right there (a file only its
- * title); a quiet "Bearbeiten" in the corner below does the same and becomes "Fertig". A click
- * outside the card ends it too.
- */
+/** Always as tall, so the choices below never move; a long entry scrolls inside. */
 function EntryCard({ entry, space, more, scroller, editing, onEdit, onDone }: { entry: InboxEntry; space?: string; more: number; scroller: React.RefObject<HTMLDivElement | null>; editing: { at: Edit } | null; onEdit: (at: Edit) => void; onDone: () => void }) {
   const { t } = useT();
   const hrefOf = useItemHref();
@@ -403,13 +387,7 @@ function EntryCard({ entry, space, more, scroller, editing, onEdit, onDone }: { 
   );
 }
 
-/**
- * What can become of it. Five buttons, always the same and in the same place: put it somewhere, turn
- * it into a type (only a loose note), back tomorrow, pin it to the sidebar, delete it. Below in one line
- * the quick ways: the first type ("c") and places it mentions or used last; the rest is in the
- * pickers. Keys quietly in the buttons on a desktop; hidden while the entry is edited (their room
- * kept, so the buttons stay where they are).
- */
+/** The buttons never move; key hints hide while editing but keep their room. */
 function Choices({ entry, onPlace, onPick, onType, onTypes, onLater, onPin, onTrash, onUndo, keys, quiet }: { entry: InboxEntry; onPlace: (p: string) => void; onPick: () => void; onType: (type: string) => void; onTypes: () => void; onLater: () => void; onPin: () => void; onTrash: () => void; onUndo?: () => void; keys: boolean; quiet: boolean }) {
   const { t } = useT();
   const repo = useRepo();
@@ -475,7 +453,6 @@ function Choices({ entry, onPlace, onPick, onType, onTypes, onLater, onPin, onTr
 /** The types offered to turn an entry into: its workspace's first ones, not the one it has ("c" takes the first). */
 const offeredTypes = (e: InboxEntry) => captureTypes(e.space).filter((x) => x !== e.item.type).slice(0, 3);
 
-/** "Erledigt": what this review sorted, the last one on top, each with its undo. */
 function SortedList({ sorted, onUndo }: { sorted: Sorted[]; onUndo: (s: Sorted) => void }) {
   const { t } = useT();
   return (
@@ -501,7 +478,6 @@ function SortedList({ sorted, onUndo }: { sorted: Sorted[]; onUndo: (s: Sorted) 
   );
 }
 
-/** "Noch im Stapel": what is still waiting, the current one marked; a click goes there. */
 function StackList({ keys, current, byKey, onPick }: { keys: string[]; current?: string; byKey: Map<string, InboxEntry>; onPick: (k: string) => void }) {
   const { t } = useT();
   if (!keys.length) return null;
@@ -530,7 +506,6 @@ function StackList({ keys, current, byKey, onPick }: { keys: string[]; current?:
   );
 }
 
-/** The phone's "Erledigt": the last one sorted in one line, with its undo. */
 function LastSorted({ s, onUndo }: { s: Sorted; onUndo: () => void }) {
   const { t } = useT();
   return (
@@ -546,7 +521,6 @@ function LastSorted({ s, onUndo }: { s: Sorted; onUndo: () => void }) {
   );
 }
 
-/** Nothing left: done, and the way back to the day. */
 function Finished({ count, onDone }: { count: number; onDone: () => void }) {
   const { t } = useT();
   return (

@@ -1,6 +1,5 @@
-// Data on the server and in every browser must stay readable by every later version. These are
-// data of format 1 as they were written then (the setup with its examples, frozen on 27.10.2026):
-// never regenerate the fixture – add one per new format instead.
+// Stored data must stay readable by every later version. The fixture is format 1 as written then:
+// never regenerate it, add one per new format instead.
 import { test, expect } from "bun:test";
 import * as Y from "yjs";
 import { FORMAT, PERSONAL, SETTINGS_ID, type Item, readItem } from "@obtion/core/model";

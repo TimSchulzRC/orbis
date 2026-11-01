@@ -1,5 +1,5 @@
-// Bringing data in: from an Obsidian vault and from the Notion export. Sources are only read. Re-running is safe: the same source
-// gives the same item (source key or deterministic id), no duplicates.
+// Sources are only read. Re-running is safe: the same source gives the same item (source key or
+// deterministic id).
 import { type Stats, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join, relative } from "node:path";
 import {
@@ -30,7 +30,7 @@ import { dueProp, statusProp } from "@obtion/core/traits";
 import type { Store } from "./store";
 import { type Blobs, sha256 } from "./blobs";
 
-/** Who the setup and the upgrades of shipped types act as. */
+/** Also the origin of upgrades to shipped types. */
 export const SETUP_ORIGIN = "system:setup";
 
 export function storeWriter(store: Store, origin: string, quiet = true): Writer {
@@ -40,7 +40,7 @@ export function storeWriter(store: Store, origin: string, quiet = true): Writer 
   };
 }
 
-/** First setup on the server, optionally with the examples: the same code the setup page runs. */
+/** Same code the setup page runs. */
 export async function setUp(store: Store, blobs: Blobs, lang: Lang, opts: { examples?: boolean; quiet?: boolean } = {}) {
   runSetup(storeWriter(store, SETUP_ORIGIN, opts.quiet), lang, SETUP_ORIGIN);
   if (opts.examples)
@@ -54,9 +54,7 @@ export async function setUp(store: Store, blobs: Blobs, lang: Lang, opts: { exam
 
 export type Log = (msg: string) => void;
 
-// ---------- shared mapping ----------
-
-/** Old status names (English, from Notion) → setup keys, so they match options in any language. */
+/** Old English status names from Notion → setup keys, to match options in any language. */
 const STATUS_KEYS: Record<string, string> = {
   backlog: "backlog",
   planning: "planning",
@@ -82,7 +80,7 @@ const STATUS_GROUP: Record<string, "todo" | "active" | "done"> = {
   archived: "done",
 };
 
-/** Find the status option for a name: same name, the same status in another language, else by group. */
+/** Match by name, then the same status in another language, then by group. */
 function statusOption(schema: TypeSchema | undefined, name?: string): string | undefined {
   const p = statusProp(schema);
   if (!p || !name) return undefined;
@@ -96,7 +94,7 @@ function statusOption(schema: TypeSchema | undefined, name?: string): string | u
   return group ? p.options?.find((o) => (o.group ?? "todo") === group)?.id : undefined;
 }
 
-/** The property a column of the export goes to: the shipped one, or one with its name in either language. */
+/** The shipped property, or one with its name in any language. */
 function columnProp(schema: TypeSchema | undefined, id: string, key: string, kind: PropKind): PropDef | undefined {
   const names = (Object.keys(CATALOGS) as Lang[]).map((l) => translate(l, `setup.prop.${key}`).toLowerCase());
   return schema?.properties.find((x) => x.kind === kind && (x.id === id || names.includes(x.name.toLowerCase())));
@@ -118,7 +116,7 @@ const AREA_NAME: Record<string, Record<Lang, string>> = {
   business: { de: "Gewerbe", en: "Business" },
 };
 
-/** "Work (MOC)", "Studium (MOC)" … → the area they stand for. */
+/** "Work (MOC)" → "work" */
 function areaOfTitle(title: string): string | undefined {
   const k = titleKey(title.replace(/\s*\(MOC\)\s*$/i, ""));
   return AREA_KEY[k];
@@ -129,7 +127,7 @@ function areaName(area: string, lang: Lang): string {
   return k ? AREA_NAME[k]![lang] : area;
 }
 
-/** The type with this id or name; a missing default type is created from the shipped definition. */
+/** `ref` is an id or name. A missing default type is created from the shipped definition. */
 function ensureType(w: Writer, ref: string, lang: Lang, store: Store): string {
   const ix = store.index();
   if (ix.types.has(ref)) return ref;
@@ -147,7 +145,6 @@ function ensureType(w: Writer, ref: string, lang: Lang, store: Store): string {
     store.flush();
     return ref;
   }
-  // a new, empty type with that name
   const id = newId();
   w.change(id, (doc) => {
     initItem(doc, { type: META_TYPE, title: ref });
@@ -157,12 +154,11 @@ function ensureType(w: Writer, ref: string, lang: Lang, store: Store): string {
   return id;
 }
 
-/** The next pinned position (after everything pinned so far). */
 function nextPin(store: Store): string {
   return nextPinKey(store.live());
 }
 
-/** A pinned information without a type (an overview once it has children) with this title; created if missing. */
+/** Untyped and pinned, so it shows as an overview once it has children. Created if missing. */
 function ensurePinnedOverview(w: Writer, store: Store, title: string): string {
   const ix = store.index();
   const hit = ix.live.find((i) => i.kind === "info" && titleKey(i.title) === titleKey(title) && ix.parentsOf(i.id).length === 0 && (i.pinned || !i.type));
@@ -177,7 +173,6 @@ function ensurePinnedOverview(w: Writer, store: Store, title: string): string {
   return id;
 }
 
-/** Top-level MOCs (no parent) are pinned. */
 function pinTopLevel(w: Writer, store: Store, ids: string[]): number {
   const ix = store.index();
   let n = 0;
@@ -191,16 +186,13 @@ function pinTopLevel(w: Writer, store: Store, ids: string[]): number {
   return n;
 }
 
-// ---------- files ----------
-
-/** When a file on disk was made: its birth time where the system keeps one, else when it last changed. */
+// birth time where the file system keeps one, else mtime
 const createdAt = (st: Stats) => Math.min(st.birthtimeMs || st.mtimeMs, st.mtimeMs);
 
-/** A file from disk as a file item; same content gives the same id. */
 async function importFile(w: Writer, store: Store, blobs: Blobs, path: string, opts: { created?: number; source?: string } = {}): Promise<string> {
   const hash = await blobs.putFile(path);
   const name = basename(path);
-  // same content under the same name = same item; the same content under another name stays linkable by that name
+  // same content and name = same item; a copy under another name stays linkable by that name
   const id = "f_" + hash.slice(0, 20) + Bun.hash(name).toString(36).slice(0, 6);
   if (store.records.get(id)) return id;
   const st = statSync(path);
@@ -211,8 +203,6 @@ async function importFile(w: Writer, store: Store, blobs: Blobs, path: string, o
   });
   return id;
 }
-
-// ---------- Obsidian ----------
 
 const SKIP_DIRS = new Set([".obsidian", ".trash", ".git", "Calendar", "Extras", "Excalidraw", "textgenerator", ".stfolder"]);
 
@@ -239,9 +229,8 @@ interface ObsidianOptions {
 }
 
 /**
- * Encounters (raw notes) → no type, no parent: the inbox. Cards → Karte. MOCs → information
- * without type (below the area's pinned overview; top-level ones pinned). Folders → tags. [[Links]], #tags, Refs:: → links, tags,
- * explicit refs. Attachments → files; ![[…]] keeps working.
+ * Encounters go to the inbox, cards become Karte, MOCs untyped items below the area's pinned
+ * overview (top-level ones pinned). Folders become tags, Refs:: explicit refs.
  */
 export async function importObsidian(store: Store, blobs: Blobs, vault: string, opts: ObsidianOptions, log: Log) {
   const origin = "import:obsidian";
@@ -319,7 +308,7 @@ export async function importObsidian(store: Store, blobs: Blobs, vault: string, 
     let type: string | null = card;
     if (top === "Encounters" || top === "Readwise") type = null;
     const isMap = rel.includes("• MOCs") || tags.some((t) => /^#?map$/i.test(t));
-    if (isMap) type = null; // a MOC is an information without type; its children make it an overview
+    if (isMap) type = null; // its children make it an overview
     let area = isMap ? areaOfTitle(title) : undefined;
     if (top === "Spaces") {
       area = AREA[parts[1]!];
@@ -330,7 +319,6 @@ export async function importObsidian(store: Store, blobs: Blobs, vault: string, 
     if (top === "Readwise") tags.push("readwise", parts[1] ?? "");
     tags = [...new Set(tags.map(normalizeTag).filter((t) => t && t !== "map" && !/^[0-9a-f]{6}$/i.test(t)))];
     const parents = isMap && area ? [ensurePinnedOverview(w, store, areaName(area, opts.lang))] : [];
-    // attachments the note uses
     for (const l of parseWikiLinks(body)) {
       const src = attachments.get(basename(l.target));
       if (src) await importFile(w, store, blobs, src, { source: `obsidian-file:${basename(l.target)}` });
@@ -370,22 +358,18 @@ export async function importObsidian(store: Store, blobs: Blobs, vault: string, 
   log(`Obsidian: ${made} notes (${skipped} already there), ${refCount} Refs:: resolved, ${placed} cards placed below MOCs, ${pinned} top-level MOCs pinned.`);
 }
 
-// ---------- Notion ----------
-
 interface NotionOptions {
   lang: Lang;
   projectType: string; // id or name; created if missing
   taskType: string;
 }
 
-/** The export file: projects as objects, tasks as rows. */
 interface NotionExport {
   projects: { id: string; title: string; area?: string; status?: string; priority?: string; start?: string; end?: string; summary?: string; created: string }[];
-  /** id, title, status, priority, due, tags, project, parent, blocked by, created */
-  tasks: [string, string, string | null, string | null, string | null, string[], string | null, string | null, string[], string][];
+  tasks: [id: string, title: string, status: string | null, priority: string | null, due: string | null, tags: string[], project: string | null, parent: string | null, blockedBy: string[], created: string][];
 }
 
-/** Projects → project type below the area's pinned overview; tasks and sub-items → task type below project / parent task. */
+/** Projects go below the area's pinned overview, tasks below their project or parent task. */
 export function importNotion(store: Store, file: string, opts: NotionOptions, log: Log) {
   const origin = "import:notion";
   const w = storeWriter(store, origin);

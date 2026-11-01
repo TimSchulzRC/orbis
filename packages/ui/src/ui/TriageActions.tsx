@@ -1,6 +1,4 @@
-// What can be done with entries while sorting – place, give a type, pin, later, delete – each with
-// one undo, and the pickers they need. The sort list (Triage.tsx) and the review (views/Review.tsx)
-// share them.
+// Sorting actions shared by the sort list and the review, each with one undo.
 import { Input } from "../components/ui/input";
 import { useRef, useState } from "react";
 import { Check, Plus } from "lucide-react";
@@ -41,9 +39,9 @@ export function captureTypes(space: string): string[] {
 }
 
 /**
- * Each action returns its undo (or nothing when nothing happened). Entries may come from several
- * workspaces (`spaceOf`); a place and a type belong to one, so those act on entries of one
- * workspace only (the pickers see to that). `quiet`: no notice – the caller shows what was done.
+ * Each action returns its undo (or nothing when nothing happened). A place and a type belong to one
+ * workspace, so those act on entries of one workspace only (the pickers enforce it). `quiet`: no
+ * notice, the caller shows what was done.
  */
 export function useTriageActions(spaceOf: (i: Item) => string, opts: { quiet?: boolean } = {}) {
   const { t } = useT();
@@ -98,7 +96,7 @@ export function useTriageActions(spaceOf: (i: Item) => string, opts: { quiet?: b
     const where = repo.index().get(parent)?.title ?? "";
     return done({ label: ok.length > 1 ? t("triage.placedMany", { count: ok.length, title: where }) : t("triage.placedOne", { title: short(ok[0]), place: where }), steps: ok.map((i) => ({ space: spaceOf(i), id: i.id, addedParents: [parent] })) });
   };
-  // out of the inbox (inbox.ts): into the sidebar, or back tomorrow
+  // out of the inbox: into the sidebar, or back tomorrow
   const pin = (list: Item[]) => {
     const fresh = list.filter((i) => !i.pinned);
     if (!fresh.length) return;
@@ -121,7 +119,6 @@ export function useTriageActions(spaceOf: (i: Item) => string, opts: { quiet?: b
   return { firstType, giveType, trash, place, pin, later, undo };
 }
 
-/** The pickers an action may need: where to (place) and which type – in the workspace of the entries. */
 export function usePickers(spaceOf: (i: Item) => string, place: (list: Item[], p: string) => void, giveType: (list: Item[], t: string) => void, after?: () => void) {
   const { t } = useT();
   const [placing, setPlacingRaw] = useState<Item[] | null>(null);

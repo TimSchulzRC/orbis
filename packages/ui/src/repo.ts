@@ -1,5 +1,4 @@
-// The replica every component reads and writes: the workspace open in the app. Switching the
-// workspace (accounts.ts) points `repo` at another replica and renders the app anew.
+// The open workspace's replica. Switching workspaces repoints it and re-renders the app.
 import type { Repo } from "@obtion/sync";
 
 export let repo: Repo;

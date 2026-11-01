@@ -1,6 +1,4 @@
-// Rasterize the editable SVG with the same browser used by the UI smoke tests.
 // The dark mark is the app's primary icon (PWA, home screen, Apple touch icon).
-// Run: bun scripts/generate-icons.ts
 import { chromium } from "playwright";
 import { readFileSync, copyFileSync } from "node:fs";
 import { resolve } from "node:path";

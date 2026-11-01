@@ -1,10 +1,5 @@
-// The tray ("Eingang") below every page: how much waits in the inbox (a fill in amber), a field
-// to put something down, and the way into the review with how long it takes. Two ways in: the
-// tray itself opens its panel to look in (Shelf.tsx; on a phone also a swipe up), the button
-// starts the review to sort. The sheets sticking out are the newest entries, part of the tray.
-// On a phone it sits above the tab bar; the field opens from its "+" in a sheet. On Heute on a
-// desktop with room below the page the panel is pinned open above it, part of the page: the rest
-// of the height below Heute (App.tsx).
+// The inbox tray below every page. The tray opens its panel to look in; its button starts the
+// review to sort. On Heute on a desktop with room, the panel is pinned open as part of the page.
 import { type CSSProperties, useRef } from "react";
 import { Check, ChevronDown, ChevronUp, Layers, Plus } from "lucide-react";
 import { useT } from "../i18n";
@@ -66,7 +61,6 @@ export function Tray({ desktop, pinned, onCapture }: { desktop: boolean; pinned?
   );
   return (
     <>
-      {/* the page behind the open panel: dimmed, a click closes */}
       {open && !pinned && <Backdrop className="z-30" onClick={dismissShelf} aria-hidden />}
       <div className={cn("relative z-40", pinned ? "flex min-h-[308px] flex-1 flex-col" : "shrink-0", desktop ? cn(pinned ? "px-8" : "px-6", "pb-4 pt-2") : "px-3 pb-2 pt-1")} role="region" aria-label={t("tray.title")}>
         <div className={cn("mx-auto", desktop && "max-w-[1040px]", pinned && "flex min-h-0 w-full flex-1 flex-col")}>
@@ -111,18 +105,14 @@ const POSES: { left: [number, number]; rest: [string, string]; fan: [string, str
   { left: [30, 20], rest: ["-2deg", "0 -2px"], fan: ["8deg", "0 -6px"] },
 ];
 
-/**
- * The newest entries as sheets sticking out of a well in the tray, the newest in front, a dot on
- * it. Part of the tray's button: a click on a sheet opens the panel like one on the tray.
- */
+/** Part of the tray's button: a click on a sheet opens the panel like one on the tray. */
 function Sheets({ entries, desktop }: { entries: InboxEntry[]; desktop: boolean }) {
   const poses = POSES.slice(POSES.length - entries.length);
   return (
     <span aria-hidden className={cn("absolute inset-y-0 left-0 z-10 block [--well:color-mix(in_srgb,var(--card)_93%,black)] dark:[--well:color-mix(in_srgb,var(--card)_65%,black)]", desktop ? "w-[120px]" : "w-[84px]")}>
       <span className="absolute inset-0 rounded-[11px] border border-line bg-[var(--well)] shadow-[inset_0_3px_8px_rgb(0_0_0/0.12)] dark:shadow-[inset_0_3px_8px_rgb(0_0_0/0.7)]" aria-hidden />
       <span className="absolute -top-px left-0.5 h-[3px] w-[calc(100%-4px)] rounded-b-[3px] bg-[linear-gradient(90deg,transparent,color-mix(in_srgb,var(--t-inbox)_60%,transparent),transparent)]" aria-hidden />
-      {/* the sheets end inside the well (long enough that lifted their lower edge stays hidden), above
-          they may stick out; cut off by overflow, as a clip-path would let a
+      {/* the sheets may stick out above the well; cut off by overflow, as a clip-path would let a
           fanned sheet make the page scroll */}
       <span className="pointer-events-none absolute -inset-x-[300px] -top-[300px] bottom-1 overflow-clip">
       <span className="absolute inset-y-0 left-[300px] right-[300px]">
@@ -156,7 +146,7 @@ function Sheets({ entries, desktop }: { entries: InboxEntry[]; desktop: boolean 
 
 const vars = (v: Record<string, string>) => Object.fromEntries(Object.entries(v).map(([k, x]) => [`--${k}`, x])) as CSSProperties;
 
-/** How full the tray is: one of ten marks per entry, amber. */
+/** One of ten marks per entry. */
 function Fill({ count }: { count: number }) {
   return (
     <span className="flex gap-[3px]" aria-hidden>

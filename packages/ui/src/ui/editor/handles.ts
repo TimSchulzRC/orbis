@@ -1,6 +1,4 @@
-// Left of the block under the pointer, as in Notion: "+" adds a block below and opens the "/"
-// menu, "⠿" drags the block somewhere else or, clicked, opens its menu (turn into, duplicate,
-// move, delete). Not on touch screens and not in read-only text.
+// Block handles beside the pointer, as in Notion. Not on touch screens and not in read-only text.
 import { startCompletion } from "@codemirror/autocomplete";
 import { EditorSelection } from "@codemirror/state";
 import { type EditorView, ViewPlugin } from "@codemirror/view";
@@ -11,11 +9,8 @@ import { iconButton } from "./icons";
 import { showMenu } from "./menu";
 import { MOD, isCoarse as coarse } from "../../lib/platform";
 
-/** ⌥ on Apple devices, Alt elsewhere (the keys that move a line). */
 const ALT = MOD === "⌘" ? "⌥" : "Alt ";
 
-
-/** The block under a height of the screen, and the place where it starts on the screen. */
 function blockAtY(view: EditorView, y: number) {
   const lb = view.lineBlockAtHeight(y - view.documentTop);
   const b = blockAt(view.state, lb.from);
@@ -24,7 +19,6 @@ function blockAtY(view: EditorView, y: number) {
   return { ...b, top: view.documentTop + first.top, bottom: view.documentTop + last.bottom };
 }
 
-/** The menu of a block, at a point of the screen. */
 function blockMenu(view: EditorView, pos: number, at: { left: number; top: number }) {
   const line = view.state.doc.lineAt(pos);
   const current = kindOf(line.text);
@@ -115,8 +109,8 @@ export const blockHandles = ViewPlugin.fromClass(
         const y = Math.max(r.top + 1, Math.min(r.bottom - 1, m.clientY));
         const over = blockAtY(view, y);
         let before = y < (over.top + over.bottom) / 2;
-        // as in Notion, the gap right below the block is no place of its own (it is where the
-        // block is already): over the block that is the line above it, over the next one below that
+        // as in Notion, the gap right below the dragged block is where it already is, so it is no
+        // drop target of its own
         if (over.from === b.from) before = true;
         else if (before && over.from === b.to + 1) before = false;
         target = before ? over.from : over.to >= view.state.doc.length ? view.state.doc.length : over.to + 1;
@@ -141,11 +135,11 @@ export const blockHandles = ViewPlugin.fromClass(
       window.addEventListener("mousemove", move);
       window.addEventListener("mouseup", up);
     }
-    /** Any key in the text (typing, arrows) hides the handles until the pointer moves again, as the mouse pointer hides. */
+    /** Any key hides the handles until the pointer moves again, like the mouse pointer hides. */
     keydown = () => {
       if (this.dragging) return;
       cancelAnimationFrame(this.frame);
-      this.box.classList.add("instant"); // gone at once, without fading
+      this.box.classList.add("instant"); // skip the fade
       this.hide();
     };
     destroy() {

@@ -1,7 +1,5 @@
-// Links read as links, as in Notion: no [[ ]] or [ ](…) around them, wherever the cursor is.
-// A link is one piece of the text: a click opens it, the cursor steps over it, and its menu
-// (right click) changes its text or its target, or takes the link away and keeps the text.
-// Embedded files (![[…]]) show only below their line.
+// As in Notion, links hide their [[ ]] or [ ](…) wherever the cursor is and act as one piece of
+// text. Embedded files (![[…]]) show only below their line.
 import { syntaxTree } from "@codemirror/language";
 import { EditorSelection, type EditorState, type Range } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate, WidgetType } from "@codemirror/view";
@@ -14,20 +12,17 @@ import { formatToolbar } from "./toolbar";
 import { wikiLinkRe } from "@obtion/core/model";
 import { webHref } from "../text";
 
-
 interface Link {
   from: number;
   to: number;
-  /** What the reader sees. */
   text: string;
-  /** A page's title (with "#Section"), or a web address. */
+  /** A page title, optionally with "#Section", or a web address. */
   target: string;
   web: boolean;
-  /** An embedded file: shown below the line, nothing of it in the line. */
+  /** Embedded files show below the line, nothing of them in the line. */
   embed?: boolean;
 }
 
-/** The links of the lines between `from` and `to`. */
 function linksIn(state: EditorState, from: number, to: number): Link[] {
   const out: Link[] = [];
   for (let pos = from; pos <= to; ) {
@@ -60,7 +55,6 @@ function linksIn(state: EditorState, from: number, to: number): Link[] {
   return out.filter((l) => !l.web || !out.some((o) => !o.web && o.from <= l.from && o.to >= l.to)).sort((a, b) => a.from - b.from);
 }
 
-/** The link at `pos` (its start or its end). */
 function linkAt(state: EditorState, pos: number) {
   const line = state.doc.lineAt(pos);
   const all = linksIn(state, line.from, line.to);
@@ -77,8 +71,7 @@ function openLink(l: Link) {
   else navigate(`/create?title=${encodeURIComponent(title)}`);
 }
 
-/** The link as Markdown again, with another text. */
-function write(l: Link, text: string) {
+function markdownWithText(l: Link, text: string) {
   if (l.web) return `[${text.replace(/[[\]\n]/g, "")}](${l.target})`;
   const clean = text.replace(/[|\]\n]/g, "").trim();
   return !clean || clean === l.target ? `[[${l.target}]]` : `[[${l.target}|${clean}]]`;
@@ -105,7 +98,7 @@ function linkMenu(view: EditorView, el: HTMLElement, at: { left: number; top: nu
                 run: async () => {
                   const text = await askText(below(), l.text, tr("editor.link.text"));
                   const now = linkAt(view.state, l.from);
-                  if (text !== null && now?.from === l.from && now.to === l.to) view.dispatch({ changes: { from: l.from, to: l.to, insert: write(l, text) } });
+                  if (text !== null && now?.from === l.from && now.to === l.to) view.dispatch({ changes: { from: l.from, to: l.to, insert: markdownWithText(l, text) } });
                   view.focus();
                 },
               },

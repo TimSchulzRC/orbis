@@ -1,7 +1,5 @@
-// One query, two ways in: conditions as chips to click (each opens a short menu: switch off,
-// negate, "oder …", remove; "+ Bedingung" adds one), and the same query as text for those who
-// like typing (folded away by default).
-// Typing understands every language; it is shown in the UI language. Stored is JSON.
+// One query, two ways in: clickable condition chips, and the same query as text (folded by default).
+// The text form parses every language and is shown in the UI language. Storage is JSON.
 import { Input } from "../components/ui/input";
 import { useEffect, useState } from "react";
 import { X, Plus, ChevronLeft, HelpCircle } from "lucide-react";
@@ -23,10 +21,7 @@ function condLabel(c: Cond, { ix, t, lang }: Ctx): string {
   return "not" in c ? `${t("query.not")} ${condLabel(c.not, { ix, t, lang })}` : printQuery({ where: c }, lang, ix);
 }
 
-/**
- * The short menu of conditions to pick from: type, place, status, due, tag, inbox, files.
- * `onUnder` opens the place picker (a dialog, outside the popover).
- */
+/** `onUnder` opens the place picker, a dialog outside the popover. */
 function CondPicker({ pick, onUnder, context }: { pick: (c: Cond) => void; onUnder: () => void; context?: boolean }) {
   const ix = useIndex();
   const { t } = useT();
@@ -98,10 +93,7 @@ function CondPicker({ pick, onUnder, context }: { pick: (c: Cond) => void; onUnd
   );
 }
 
-/**
- * One condition as a chip. A click opens its menu: switch off (top level only), negate, add an
- * alternative ("oder …"), remove.
- */
+/** Switching off is offered at the top level only. */
 function Chip({ cond, ctx, off, onToggle, onNegate, onOr, onRemove, onUnder, context, quickRemove }: { cond: Cond; ctx: Ctx; off?: boolean; onToggle?: () => void; onNegate?: () => void; onOr?: (c: Cond) => void; onRemove: () => void; onUnder: (then: (c: Cond) => void) => void; context?: boolean; quickRemove?: boolean }) {
   const { t } = ctx;
   const [mode, setMode] = useState<"menu" | "or">("menu");
@@ -140,7 +132,6 @@ function Chip({ cond, ctx, off, onToggle, onNegate, onOr, onRemove, onUnder, con
   );
 }
 
-/** "+ Filter": the short menu of conditions (and the place picker), as its own button. */
 export function AddFilter({ onAdd, trigger, context }: { onAdd: (c: Cond) => void; trigger: (p: { onClick: () => void; "aria-expanded": boolean }) => React.ReactNode; context?: boolean }) {
   const { t } = useT();
   const [picking, setPicking] = useState(false);

@@ -1,5 +1,4 @@
-// A file behaves like an information whose content is the file itself: title, description,
-// tags, refs, "Teil von", and "Verwendet in" instead of a folder.
+// A file behaves like an information whose content is the file itself.
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
 import { useEffect, useState } from "react";
@@ -119,7 +118,6 @@ export function FilePage({ item }: { item: Item }) {
       </div>
       <div className="mt-5 border-t border-line" />
 
-      {/* the file itself, as wide as the column, and its description */}
       <div className="mt-6 overflow-hidden rounded-xl border border-line bg-surface-2">
         {isImg && display && <img src={display} alt={item.body || item.title} className="mx-auto max-h-[70vh] w-auto" />}
         {f.filetype === "pdf" && (!local || localSrc) && <iframe title={item.title} src={localSrc ?? files.serverUrl(f.hash)} className="h-[75vh] w-full bg-white" />}

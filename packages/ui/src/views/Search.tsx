@@ -39,11 +39,7 @@ function onlyText(c: Cond): boolean {
   return false;
 }
 
-/**
- * Full-text search over the workspaces seen, each with its hits under its name when there are
- * several; input that reads as a query (typ:, #tag, unter: …) runs as one in each workspace that
- * understands it (types and places are a workspace's own).
- */
+/** Input that parses as a query runs as one in each workspace that understands it (types and places are per workspace). */
 export function SearchView() {
   const { t } = useT();
   useDocumentTitle(t("nav.search"));

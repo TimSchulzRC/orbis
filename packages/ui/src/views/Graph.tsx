@@ -1,4 +1,3 @@
-// Graph: informations as nodes; links, "Teil von" and relations as edges, filterable.
 import { Checkbox } from "../components/ui/checkbox";
 import { Input } from "../components/ui/input";
 import { NativeSelect } from "../components/ui/native-select";

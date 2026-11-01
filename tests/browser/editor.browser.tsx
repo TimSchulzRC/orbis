@@ -1,5 +1,3 @@
-// The Markdown editor on its own: hidden syntax, headings, the link menu, links by "/" and "@",
-// the toolbar over selected blocks, moving blocks by their grip, and the "+" and grip hiding while typing.
 import { afterEach, beforeAll, describe, expect, test } from "vitest";
 import { commands } from "vitest/browser";
 import { cleanup, render } from "vitest-browser-react";

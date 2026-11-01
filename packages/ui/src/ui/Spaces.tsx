@@ -1,8 +1,5 @@
-// Workspaces side by side: the sidebar and the inbox show the workspaces chosen in the
-// selector (several at once; on this device, the account stays as it is). Each part of a page
-// that belongs to one workspace sits in its SpaceScope (useRepo and useFiles read that
-// workspace's replica there, and links inside open in it). Moving an item from one workspace into another asks first if
-// something changes on the way (a type copied, values that become free properties, links left behind).
+// Several workspaces side by side. The selector choice is per device; each part of a page that
+// belongs to one workspace sits in its SpaceScope, where useRepo and useFiles read that replica.
 import { Checkbox } from "../components/ui/checkbox";
 import { Input } from "../components/ui/input";
 import { useMemo, useState, useSyncExternalStore } from "react";
@@ -39,7 +36,7 @@ export function SpaceScope({ id, children }: { id: string; children: React.React
   );
 }
 
-/** Above the title of a page of one workspace: which one it is, once there are several. */
+/** Shown only once there are several workspaces. */
 export function SpaceEyebrow() {
   const { spaces } = useAccounts();
   const id = useSpaceId();
@@ -93,10 +90,9 @@ export function SpaceSelector({ className, onNew }: { className?: string; onNew:
 }
 
 /**
- * Workspaces as chips. Without `onChange` they are the workspaces seen (the inbox: the same choice
- * as the selector in the sidebar); with it a page's own choice (activity, trash: `value`, null for
- * all). From "Alle", a chip shows that workspace only; then chips add and take away one by one
- * (every one picked stays picked); none left is "Alle" again.
+ * Without `onChange` the chips edit the sidebar selector's choice; with it a page's own choice
+ * (`value`, null for all). From "Alle", a chip shows that workspace only; then chips toggle one by
+ * one, and none left is "Alle" again.
  */
 export function SpaceFilter({ className, value, onChange }: { className?: string; value?: string[] | null; onChange?: (ids: string[] | null) => void }) {
   const { t } = useT();
@@ -148,7 +144,7 @@ export function NewSpaceDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
-/** A new workspace: its name and whether it starts with the examples; set up in the app's language. */
+/** The workspace is set up in the app's language. */
 export function NewSpaceForm({ name: initial = "", onCancel, onDone }: { name?: string; onCancel?: () => void; onDone?: () => void }) {
   const { t } = useT();
   const [name, setName] = useState(initial);
@@ -185,10 +181,7 @@ export function NewSpaceForm({ name: initial = "", onCancel, onDone }: { name?: 
   );
 }
 
-/**
- * Move `id` from workspace `from` into `to` (below `parent` there). If something changes on the
- * way it says what and asks; then tells how it went, with a way to the moved item.
- */
+/** Asks first if something changes on the way (a type copied, values that become free properties, links left behind). */
 export async function moveTo(id: string, from: string, to: string, parent?: string) {
   const workspace = spaceById(to)?.name ?? "";
   try {

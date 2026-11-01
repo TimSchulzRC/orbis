@@ -1,5 +1,4 @@
-// The main list of a page as one table in a card (design rules § 2.4): groups with their
-// progress, rows with status, title and hints, values on the right; on a phone a list.
+// A page's main list as one table in a card, a plain list on phones (design rules § 2.4).
 import { Table as ShadcnTable, TableHeader, TableBody, TableRow, TableHead, TableCell } from "../components/ui/table";
 import { ChevronRight, CornerDownRight } from "lucide-react";
 import type { Item, ItemInit } from "@obtion/core/model";
@@ -16,7 +15,7 @@ import { RowStatus, shortPath, treeOrder } from "./Row";
 import { KEYS } from "./storage";
 import { NewRowButton } from "./Table";
 
-/** A group of a page's list: "Direkt in Relaunch", a sub-project (`ref`, with its status and progress), a status … */
+/** `ref` is set when the group stands for an entry, such as a sub-project. */
 export interface PageGroup {
   key: string;
   label: React.ReactNode;
@@ -24,13 +23,6 @@ export interface PageGroup {
   items: Item[]; // in order; sub-items follow their parent
 }
 
-/**
- * The main list of a page as one table in a card: one head row, a row per group (chevron, status
- * of the entry it stands for, name, small bar with percent, "n offen"), rows 40 high with the
- * status shape, the title and small hints (sub-tasks "1/2", where it sits below, "blockiert"),
- * values on the right. Sub-items are indented below their parent. The foot adds an entry and
- * shows the done ones. On a phone the same groups as a list.
- */
 export function PageTable({
   groups,
   cols,
@@ -42,8 +34,8 @@ export function PageTable({
 }: {
   groups: PageGroup[];
   cols: { key: string; label: string }[];
-  head: string; // name of the first column ("Task", "Unteraufgabe")
-  here: string; // the page: locations are shown relative to it
+  head: string;
+  here: string; // id of the page, locations are shown relative to it
   foldKey: string;
   add?: { init: ItemInit; label: string };
   done?: { count: number; shown: boolean; toggle: () => void };

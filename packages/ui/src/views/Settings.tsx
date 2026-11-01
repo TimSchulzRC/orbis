@@ -1,7 +1,4 @@
-// Settings in two kinds. The app's, a dialog over the page (sidebar, menu, palette; "#/settings"
-// opens it too): what belongs to this device (language, appearance, files), the account and its workspaces.
-// A workspace's own (#/w/<id>/settings, from its menu in the sidebar or the list here): name and
-// members, capture, examples, agents, sync, and the way to its types, activity, graph and trash.
+// The app's settings (a dialog over the page) and a workspace's own (#/w/<id>/settings).
 import { Checkbox } from "../components/ui/checkbox";
 import { Input } from "../components/ui/input";
 import { NativeSelect } from "../components/ui/native-select";
@@ -38,7 +35,6 @@ function copyText(text: string) {
   area.remove();
 }
 
-/** Copies `text`, with a check mark for a moment. */
 function CopyButton({ text }: { text: string }) {
   const { t } = useT();
   const [copied, setCopied] = useState(false);
@@ -74,10 +70,6 @@ function CopyBox({ text, secret, label }: { text: string; secret?: string; label
   );
 }
 
-/**
- * A workspace's name, who is in it, leaving it. Owners also rename it, make others owners or
- * members, remove them (each confirmed first) and manage the invite links.
- */
 function Members({ space, onRemoved }: { space: Space; onRemoved: () => void }) {
   const { t } = useT();
   const [name, setName] = useState(space.name);
@@ -147,7 +139,7 @@ function Members({ space, onRemoved }: { space: Space; onRemoved: () => void }) 
   );
 }
 
-/** The invite links of a workspace that still work: a new one, who made each, until when, revoking. Owners only. */
+/** Owners only. */
 function InviteLinks({ space, version }: { space: Space; version: number }) {
   const { t, lang } = useT();
   const [links, setLinks] = useState<InviteLink[]>([]);
@@ -204,7 +196,6 @@ function InviteLinks({ space, version }: { space: Space; version: number }) {
   );
 }
 
-/** The account: who is signed in, on which server, its password, passkeys, providers; signing out, deleting it. */
 function AccountGroup() {
   const { t } = useT();
   const { account } = useAccounts();
@@ -291,9 +282,9 @@ function ChangePasswordDialog({ onClose }: { onClose: () => void }) {
 }
 
 /**
- * Confirming who is signed in, for what needs a recent sign-in (adding a passkey, linking a
- * provider, deleting an account without a password): signing in again with a way this account
- * already has, which keeps everything on this device. Then what asked for it goes on.
+ * For actions that need a recent sign-in (adding a passkey, linking a provider, deleting an account
+ * without a password). Signs in again with a way this account already has, keeping everything on
+ * this device.
  */
 function Reauth({ onDone, onClose }: { onDone: () => void; onClose: () => void }) {
   const { t } = useT();
@@ -314,7 +305,6 @@ function Reauth({ onDone, onClose }: { onDone: () => void; onClose: () => void }
   );
 }
 
-/** The account's passkeys: signing in without a password, with this device or a phone. */
 function Passkeys() {
   const { t } = useT();
   const [list, setList] = useState<PasskeyInfo[] | null>(null);
@@ -369,7 +359,6 @@ function Passkeys() {
   );
 }
 
-/** OAuth providers to sign in with: linked ones, and the way to link another. */
 function Providers({ providers }: { providers: { id: string; name: string }[] }) {
   const { t } = useT();
   const [linked, setLinked] = useState<string[] | null>(null);
@@ -446,7 +435,6 @@ function DeleteAccountDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
-/** The account's workspaces, each a way to its own settings, and a new one. */
 function WorkspacesGroup() {
   const { t } = useT();
   const { spaces } = useAccounts();
@@ -468,7 +456,7 @@ function WorkspacesGroup() {
   );
 }
 
-/** The file contents of every workspace on this device: one choice for all, re-rendering when any changes. */
+/** One mode for all workspaces, re-rendering when any changes. */
 function useAllFiles() {
   const { spaces } = useAccounts();
   const ids = spaces.map((s) => s.id).join();
@@ -510,7 +498,6 @@ function DeviceFilesGroup() {
   );
 }
 
-/** How many originals are on this device: a slim bar under the mode it follows from, with the count and size. */
 function DeviceFilesMeter({ local, total, status }: { local: number; total: number; status: string }) {
   const { t } = useT();
   const share = total ? local / total : 0;
@@ -527,7 +514,7 @@ function DeviceFilesMeter({ local, total, status }: { local: number; total: numb
   );
 }
 
-/** Which build the server runs (dev, nightly or stable): with three instances, the one this is. Offline: nothing. */
+/** Dev, nightly or stable: with three instances, which one this is. */
 function Version() {
   const { t } = useT();
   const [info, setInfo] = useState<{ version: string; commit: string }>();
@@ -538,7 +525,6 @@ function Version() {
   return <p className="text-center text-xs text-muted-foreground">{t("settings.version", { version: info.version + (info.commit ? ` (${info.commit})` : "") })}</p>;
 }
 
-/** A group of settings: a small heading above a card of rows. */
 function SettingsGroup({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
   return (
     <section>
@@ -549,7 +535,6 @@ function SettingsGroup({ title, hint, children }: { title: string; hint?: string
   );
 }
 
-/** One setting: what it is and what it does on the left, its control on the right; more below if there is. */
 function SettingRow({ title, hint, control, children }: { title: ReactNode; hint?: ReactNode; control?: ReactNode; children?: ReactNode }) {
   return (
     <div className="space-y-3 px-4 py-3">
@@ -565,12 +550,11 @@ function SettingRow({ title, hint, control, children }: { title: ReactNode; hint
   );
 }
 
-/** The settings dialog, while it is open. Lives once in the app. */
+/** Mounted once in the app. */
 export function SettingsHost() {
   return useSettingsOpen() ? <SettingsDialog onClose={closeSettings} /> : null;
 }
 
-/** The settings of the app on this device and the account, with its workspaces. */
 function SettingsDialog({ onClose }: { onClose: () => void }) {
   const { t, lang } = useT();
   const theme = useTheme();
@@ -609,7 +593,6 @@ export function SettingsRedirect() {
   return null;
 }
 
-/** The settings of the workspace in the address. */
 export function SpaceSettingsPage() {
   const r = useRepo();
   const { t } = useT();
@@ -635,7 +618,6 @@ export function SpaceSettingsPage() {
       <div>
         <p className="mb-0.5 text-[13px] text-muted-foreground">{t("space.settings")}</p>
         <h1 className="page-title">{space.name}</h1>
-        {/* the workspace's other pages: one click from here */}
         <nav className="mt-4 flex flex-wrap gap-2" aria-label={t("settings.more")}>
           {([
             ["/types", t("nav.types"), Shapes],
@@ -740,7 +722,7 @@ export function SpaceSettingsPage() {
   );
 }
 
-/** Deleting the workspace for good, on the server for everyone: owners only. */
+/** For everyone, on the server. Owners only. */
 function DeleteSpace({ space }: { space: Space }) {
   const { t } = useT();
   const [error, setError] = useState("");
@@ -766,7 +748,7 @@ function DeleteSpace({ space }: { space: Space }) {
   );
 }
 
-/** "Beispiele entfernen": the examples of the setup to the trash, with a preview; changed ones stay unless chosen. */
+/** Changed examples stay unless chosen. */
 function Examples() {
   const r = useRepo();
   const { t } = useT();

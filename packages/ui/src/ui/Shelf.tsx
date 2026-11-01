@@ -1,11 +1,6 @@
-// The tray's panel ("Eingang"): looking in, not sorting. Every entry of the workspaces seen, newest
-// first, with a line of its text, its workspace and age; one opens here to read and add to it and
-// stays in the inbox – sorting is the review's (views/Review.tsx), reached from the tray's own
-// button. Its whole page is one click away (the icon at the end of a row, on hover). Below, folded,
-// what waits until tomorrow ("Morgen wieder"): the rest of what is not sorted, one click from back.
-// Above the tray on a desktop, as a sheet on a phone. What lands in the inbox: behind "…".
-// On Heute on a desktop it is part of the page (`pinned`): always open, it does not close. Without
-// room for it there, Heute shows the newest entries as cards (ShelfCards), each opens the panel.
+// The tray's inbox panel ("Eingang") is for reading, not sorting: an opened entry stays in the
+// inbox, and sorting happens in the review. On Heute on a desktop it is `pinned` into the page and
+// never closes.
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowUp, ChevronDown, ChevronRight, Maximize2, RotateCcw, SlidersHorizontal, Undo2 } from "lucide-react";
 import { type Item, SETTINGS_ID, setMeta, setSettings } from "@obtion/core/model";
@@ -31,7 +26,6 @@ import { type InboxEntry, closeShelf, dismissShelf, openShelf, useInboxItems, us
 import { sameValue } from "@obtion/core/equal";
 import { filePreview } from "./text";
 
-/** Where an entry opens in the review. */
 const reviewHref = (key: string) => `#/review?at=${encodeURIComponent(key)}`;
 
 export function ShelfPanel({ desktop, pinned }: { desktop: boolean; pinned?: boolean }) {
@@ -74,10 +68,7 @@ export function ShelfPanel({ desktop, pinned }: { desktop: boolean; pinned?: boo
   );
 }
 
-/**
- * The list: newest first; ↑↓ choose, ↵ opens, Esc closes (pinned: it stays, and takes the focus only
- * when clicked). Below, folded, the entries back tomorrow; unfolded the arrows go through them too.
- */
+/** Pinned, Esc does not close it and it takes the focus only when clicked. */
 function List({ entries, later, pinned }: { entries: InboxEntry[]; later: InboxEntry[]; pinned?: boolean }) {
   const { t } = useT();
   const { shown } = useAccounts();
@@ -209,11 +200,7 @@ function preview(e: InboxEntry, t: T, lang: Lang, notes: number): string {
   return notes ? t("triage.notes", { count: notes }) : "";
 }
 
-/**
- * One entry: above its workspace (with what it is) and its age in the corner, then its title and a
- * line of its text. Hovered or chosen by the arrows, the corner shows its buttons instead of the
- * age: the whole page at the end, before it "back into the inbox now" for one back tomorrow.
- */
+/** Hovered or chosen by the arrows, the corner shows the row's buttons instead of the age. */
 function Row({ entry, n, on, waiting, space, onHover }: { entry: InboxEntry; n: number; on: boolean; waiting: boolean; space?: string; onHover: () => void }) {
   const { t, lang } = useT();
   const repo = replica(entry.space).repo;
@@ -261,10 +248,6 @@ function OpenFull({ entry, className }: { entry: InboxEntry; className?: string 
   );
 }
 
-/**
- * One entry, to read and add to: its title and text editable, the notes below it. It stays in the
- * inbox – the banner says so, with the way to sort it now in the review.
- */
 function EntryView({ entry, waiting, desktop, pinned }: { entry: InboxEntry; waiting: boolean; desktop: boolean; pinned?: boolean }) {
   const { t } = useT();
   return (

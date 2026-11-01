@@ -1,11 +1,11 @@
-// Query engine: stored as JSON with ids, typed and shown as text in any UI language.
+// Queries are stored as JSON with ids and typed and shown as text in any UI language:
 //
 //   typ:Task status:offen unter:[[Relaunch]] fällig<=+7d sort:fällig gruppe:pfad
 //   (typ:Person | #people) #autor
 //   typ:Projekt in:diese -status:erledigt ansicht:board gruppe:status
 //
-// Space = AND, | = OR, - = NOT, parentheses group. Properties are found by name across all
-// types and free properties. The same code runs on devices, the server and for agents.
+// Space = AND, | = OR, - = NOT, parentheses group. Properties match by name across all types and
+// free properties.
 import { type ViewTab, type FileType, type Item, type OptionDef, type PropDef, type ViewKind, FILE_TYPES, META_TYPE, QUERY_FENCE, STATUS_GROUPS, VIEW_KINDS, optionNames, titleKey } from "./model";
 import { dateOf, todayISO } from "./date";
 import { foldUmlauts as fold } from "./text";
@@ -15,8 +15,7 @@ import { type Lang, LANGS, words } from "./i18n";
 import { dateEnd, dateStart, doneAt, dueOf, statusOf, statusProp } from "./traits";
 import { optionMatches, parseDate, parseNumber, statusGroupOf } from "./input";
 
-/** Is this word the name of a status option of some type? Then it means that option, not a group. */
-function byOptionName(ix: Index, word: string): boolean {
+function isStatusOptionName(ix: Index, word: string): boolean {
   const k = titleKey(word);
   for (const t of ix.types.values()) if (statusProp(t.schema)?.options?.some((o) => titleKey(o.name) === k)) return true;
   return false;
@@ -39,10 +38,10 @@ export type Cond =
   | { under: Ref }
   | { in: Ref }
   | { linked: Ref }
-  | { linkedUnder: Ref } // verknüpft:unter:[[X]] – connected to X or to a descendant of X
+  | { linkedUnder: Ref } // verknüpft:unter:[[X]] – connected to X or a descendant of X
   | { prop: string; op: Op; value?: FieldValue }
   | { status: StatusKey }
-  | { inbox: true } // whatever the inbox rule matches, without what is set aside (inbox.ts)
+  | { inbox: true } // what the inbox rule matches, minus what is set aside
   | { pinned: true }
   | { blocked: true } // an open entry under "Blockiert durch" or "Wartet auf" is set
   | { dormant: true } // it or something above it is paused or done
@@ -63,16 +62,14 @@ export interface QueryDef {
   title?: string;
   hideEmpty?: boolean;
   collapsed?: boolean; // starts closed (start page cards)
-  /** query blocks with more than one view: the views as tabs (the fields above mirror the first) */
+  /** query blocks with several views; the fields above mirror the first tab */
   tabs?: ViewTab[];
 }
 
-// Built-in fields, stored neutral.
+// Built-in fields, stored language-neutral.
 export const FIELDS = ["title", "created", "updated", "due", "done", "next", "area", "project", "subtasks", "progress"] as const;
 const GROUPS = ["path", "status", "statusGroup", "type"] as const;
 const STATUS_KEYS: StatusKey[] = ["open", "new", "active", "done"];
-
-// ---------- keywords ----------
 
 type KwTable = Map<string, string>; // word -> neutral key
 let kwCache: Record<string, KwTable> | null = null;
@@ -103,8 +100,6 @@ function tables(): Record<string, KwTable> {
 
 const kw = (cat: keyof typeof KW_KEYS, word: string) => tables()[cat]!.get(fold(word));
 const say = (lang: Lang, cat: string, key: string) => words(lang, `q.${cat}.${key}`)[0] ?? key;
-
-// ---------- parsing ----------
 
 export interface ParseResult {
   def: QueryDef;
@@ -235,7 +230,7 @@ export function parseQuery(src: string, ix: Index): ParseResult {
         if (s) return { status: s };
         // a synonym of a whole group ("in Arbeit", "fertig") is the group; option names stay names
         const g = statusGroupOf(value);
-        if (g && !byOptionName(ix, value)) return { status: g === "todo" ? "new" : g };
+        if (g && !isStatusOptionName(ix, value)) return { status: g === "todo" ? "new" : g };
         return { prop: "status", op: ":", value };
       }
       case "without": {
@@ -280,11 +275,9 @@ export function parseQuery(src: string, ix: Index): ParseResult {
         return null;
       }
       case "collapsed":
-        // zu:ja – the block starts closed (a card on the start page: "Kürzlich erledigt")
         if (kw("value", value) === "yes") def.collapsed = true;
         return null;
     }
-    // property (by name) or built-in field
     const prop = kw("field", keyRaw) ?? keyRaw;
     if (kw("value", value) === "empty") return { prop, op: "empty" };
     if (value.startsWith("[[") || kw("value", value) === "this") {
@@ -341,8 +334,6 @@ export function parseQuery(src: string, ix: Index): ParseResult {
   if (where) def.where = where;
   return { def, errors };
 }
-
-// ---------- printing ----------
 
 export function printQuery(def: QueryDef, lang: Lang, ix: Index): string {
   const parts: string[] = [];
@@ -405,8 +396,6 @@ function printCond(c: Cond, lang: Lang, ix: Index, top = false): string {
   return `${name}${c.op}${vs}`;
 }
 
-// ---------- evaluation ----------
-
 export interface EvalCtx {
   ix: Index;
   thisId?: string;
@@ -421,7 +410,7 @@ export interface FieldHit {
   inverse?: true; // read from the other side of a relation (not editable here)
 }
 
-/** The value of a field (built-in, type property or free property) on an item, by name. */
+/** Looks up a built-in field, type property or free property by name. */
 export function fieldOf(item: Item, name: string, ix: Index): FieldHit | undefined {
   switch (name) {
     case "title":
@@ -451,7 +440,7 @@ export function fieldOf(item: Item, name: string, ix: Index): FieldHit | undefin
       return p ? { kind: "item", value: p } : undefined;
     }
     case "progress": {
-      // done share of what lies below (with a status), as a percentage
+      // share of done descendants that have a status
       const pr = ix.progressOf(item);
       return pr && pr.total ? { kind: "number", value: percent(pr) } : undefined;
     }
@@ -656,7 +645,6 @@ export function matches(item: Item, c: Cond, ctx: EvalCtx): boolean {
   return matchField(item, c, ctx);
 }
 
-/** The single conditions of a query, below its and, or and not. */
 function leaves(c: Cond | undefined, out: Cond[] = []): Cond[] {
   if (!c) return out;
   if ("and" in c) c.and.forEach((x) => leaves(x, out));
@@ -675,7 +663,7 @@ export function typesIn(c: Cond | undefined): string[] {
   return leaves(c).flatMap((x) => ("type" in x ? [x.type] : []));
 }
 
-/** The types a view shows: those its query names and those of its first `sample` entries (existing ones only). */
+/** Types the query names plus those of the first `sample` items, existing ones only. */
 export function viewTypeIds(where: Cond | undefined, items: Pick<Item, "type">[], ix: Index, sample = 200): string[] {
   return [...new Set([...typesIn(where), ...items.slice(0, sample).map((i) => i.type ?? "")])].filter((id) => ix.types.has(id));
 }
@@ -711,6 +699,7 @@ export function runQuery(def: QueryDef, ctx: EvalCtx): QueryResult {
 }
 
 const GROUP_RANK: Record<string, number> = { active: 0, todo: 1, done: 3 };
+const NO_STATUS_RANK = 2; // between not started and done
 
 function sortItems(items: Item[], sort: QueryDef["sort"], ix: Index): Item[] {
   const keyed = items.map((i) => ({ i, k: sortKeys(i, sort, ix) }));
@@ -732,9 +721,8 @@ function sortItems(items: Item[], sort: QueryDef["sort"], ix: Index): Item[] {
 
 function sortKeys(item: Item, sort: QueryDef["sort"], ix: Index): { v: string | number | undefined }[] {
   if (!sort?.length) {
-    // Default: active before not started before done, then due date, then title.
     const s = statusOf(item, ix.schemaOf(item));
-    return [{ v: s ? GROUP_RANK[s.group] : 2 }, { v: dueOf(item, ix.schemaOf(item)) }, { v: item.title.toLowerCase() }];
+    return [{ v: s ? GROUP_RANK[s.group] : NO_STATUS_RANK }, { v: dueOf(item, ix.schemaOf(item)) }, { v: item.title.toLowerCase() }];
   }
   return sort.map((s) => {
     if (s.key === "created") return { v: item.created };
@@ -764,17 +752,15 @@ export interface Group {
 
 const FLOW: Record<string, number> = { todo: 0, active: 1, done: 2 };
 
-/** How a group is remembered (hidden groups): the option or entry it stands for, so a rename keeps it. */
+/** Hidden groups are stored by option or entry id, so a rename keeps them hidden. */
 export function groupId(g: Group): string {
   return g.option?.id ?? g.ref ?? g.key;
 }
 
 /**
- * Group results. Path groups use the way below `base`; sub-items (whose parent is in the list)
- * stay with that parent. Status groups follow the flow (open, active, done; within a group the
- * order of the options); entries without a value come last. With `empty`, every option of the
- * grouped property (in these types) is a group, also without entries – unless the query's
- * status condition rules it out.
+ * Path groups are relative to `base`; sub-items stay with a listed parent. Status groups follow the
+ * flow todo, active, done, then option order. Items without a value come last. With `empty`, every
+ * option of the grouped property is a group even without items, unless the query's status rules it out.
  */
 export function groupItems(items: Item[], by: string | undefined, ctx: EvalCtx, base?: string, empty?: { types: string[]; where?: Cond }): Group[] {
   if (!by) return [{ key: "", items }];
@@ -821,7 +807,7 @@ export function groupItems(items: Item[], by: string | undefined, ctx: EvalCtx, 
       } else add(String(hit.value), { label: String(hit.value) }, i);
     }
   }
-  // every option a group of its own, also an empty one (a place to drag to, "+ Neu" in it)
+  // empty option groups give a drop target and a "+ Neu" button
   if (empty?.types.length && by !== "path" && by !== "type") {
     const schemas = empty.types.map((id) => ix.types.get(id)?.schema).filter(Boolean);
     if (by === "statusGroup") {
@@ -844,9 +830,8 @@ export function groupItems(items: Item[], by: string | undefined, ctx: EvalCtx, 
 }
 
 /**
- * The status groups a query lets through (status:offen → todo and active), read from its
- * top-level conditions; undefined when it does not say. Empty option groups outside of it are
- * not shown – "Erledigt · 0" under "offene Tasks" says nothing.
+ * Status groups the query's top-level conditions allow; undefined when it has none. Hides empty
+ * groups like "Erledigt · 0" under "offene Tasks".
  */
 function statusGroupsAllowed(where: Cond | undefined): Set<string> | undefined {
   let out: Set<string> | undefined;
@@ -858,9 +843,7 @@ function statusGroupsAllowed(where: Cond | undefined): Set<string> | undefined {
   return out;
 }
 
-// ---------- helpers ----------
-
-/** Parse a stored block: JSON (normal) or text form (typed by hand or by an agent). */
+/** Stored blocks are JSON; text form comes from typing by hand or from agents. */
 export function readBlock(src: string, ix: Index): { def: QueryDef; errors: string[]; wasText: boolean } {
   const s = src.trim();
   if (s.startsWith("{")) {
@@ -878,17 +861,15 @@ export function blockSource(def: QueryDef): string {
   return JSON.stringify(def);
 }
 
-/** A query block as it stands in the text. */
 export function queryFence(src: string): string {
   return "```abfrage\n" + src + "\n```";
 }
 
-/** Is this the info word of a query block's fence (```abfrage, ```query)? */
+/** The fence info string of a query block (```abfrage, ```query). */
 export function isQueryInfo(info: string): boolean {
   return info === "abfrage" || info === "query";
 }
 
-/** All ```abfrage blocks in a body, with their positions. */
 export function findBlocks(body: string): { from: number; to: number; src: string }[] {
   const out: { from: number; to: number; src: string }[] = [];
   for (const m of body.matchAll(QUERY_FENCE)) out.push({ from: m.index!, to: m.index! + m[0].length, src: ((m[1] ?? "") + "\n" + (m[2] ?? "")).trim() });
@@ -898,7 +879,7 @@ export function findBlocks(body: string): { from: number; to: number; src: strin
   return out.sort((a, b) => a.from - b.from);
 }
 
-/** Replace text-form blocks with JSON (what agents and fast typists write → what is stored). */
+/** Text-form blocks (from agents and fast typists) become the stored JSON. */
 export function normalizeBlocks(body: string, ix: Index): string {
   const blocks = findBlocks(body);
   if (!blocks.length) return body;
@@ -912,7 +893,7 @@ export function normalizeBlocks(body: string, ix: Index): string {
   return out + body.slice(pos);
 }
 
-/** Show blocks in text form (for agents and the Markdown mirror). */
+/** For agents and the Markdown mirror. */
 export function blocksAsText(body: string, lang: Lang, ix: Index): string {
   const blocks = findBlocks(body);
   if (!blocks.length) return body;
@@ -926,7 +907,7 @@ export function blocksAsText(body: string, lang: Lang, ix: Index): string {
   return out + body.slice(pos);
 }
 
-/** What a query block in the text already shows (blocks with in:diese or unter:diese), so the page lists it once. */
+/** Items already shown by in:diese or unter:diese blocks, so the page lists them once. */
 export function shownByBlocks(item: Item, ix: Index): Set<string> {
   const out = new Set<string>();
   const usesIn = (c: Cond | undefined): boolean =>
@@ -939,13 +920,12 @@ export function shownByBlocks(item: Item, ix: Index): Set<string> {
   return out;
 }
 
-/** Both conditions (flat: an AND stays one list, so it reads as one line of chips). */
+/** Keeps AND flat so it reads as one line of chips. */
 export function andWhere(a: Cond | undefined, b: Cond | undefined): Cond | undefined {
   if (!a || !b) return a ?? b;
   return { and: [...("and" in a ? a.and : [a]), ...("and" in b ? b.and : [b])] };
 }
 
-/** What a view shows: the base query AND the tab's filter, with the tab's look. */
 export function tabDef(base: Cond | undefined, tab: ViewTab): QueryDef {
   return { where: andWhere(base, tab.where), sort: tab.sort, group: tab.group, columns: tab.columns, view: tab.kind };
 }

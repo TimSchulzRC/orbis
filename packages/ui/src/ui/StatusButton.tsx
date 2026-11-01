@@ -14,10 +14,8 @@ const TURN = 1000;
 const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
- * One round icon for how the app stands: the sync of all workspaces on this device (offline as
- * soon as one is) and a new version. Hovering says what it means; a click does what helps –
- * offline: connect again; a new version: update; otherwise: look for a new version. While
- * something loads the arrows turn (whole turns, at least one). Changing, the old icon shrinks away and the new one grows in.
+ * Sync of all workspaces on this device (offline as soon as one is) and a new version. A click
+ * reconnects, updates, or checks for a new version.
  */
 export function StatusButton({ className }: { className?: string }) {
   const { t } = useT();
@@ -29,7 +27,6 @@ export function StatusButton({ className }: { className?: string }) {
   const pending = all.reduce((n, x) => n + x.pending, 0);
   const synced = all.every((x) => x.synced);
   const [busy, setBusy] = useState<"checking" | "connecting" | null>(null);
-  // connected again: done connecting
   useEffect(() => void (online && busy === "connecting" && setBusy(null)), [online]);
 
   const reconnect = async () => {
@@ -70,7 +67,7 @@ export function StatusButton({ className }: { className?: string }) {
 type IconLook = { key: string; icon: typeof Cloud; turn?: boolean };
 const still = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-/** The icon of the status button: a new one waits until the old one has shrunk away (.icon-shrink), then grows in (.icon-grow). */
+/** A new icon waits until the old one has shrunk away (.icon-shrink), then grows in (.icon-grow). */
 function SwapIcon({ look }: { look: IconLook }) {
   const [shown, setShown] = useState(look);
   const [leaving, setLeaving] = useState(false);

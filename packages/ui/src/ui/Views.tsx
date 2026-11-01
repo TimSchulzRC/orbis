@@ -1,5 +1,4 @@
-// Views as tabs: each tab its own kind, filter (added to the query), grouping, sorting and
-// properties. The tab bar and the panel to set a view up; a type's page and query blocks share them.
+// View tabs, shared by a type's page and query blocks. A tab's filter is added to the query.
 import { Checkbox } from "../components/ui/checkbox";
 import { NativeSelect } from "../components/ui/native-select";
 import { useState } from "react";
@@ -18,7 +17,6 @@ import { GroupChip, fieldLabel } from "./groups";
 import type { T } from "@obtion/core/i18n";
 import { KEYS } from "./storage";
 
-/** The kinds offered for a new tab, in this order. */
 const TAB_KINDS: ViewKind[] = ["table", "board", "timeline", "calendar", "list", "gallery", "triage"];
 const KIND_ICON: Record<ViewKind, React.ComponentType<{ size?: number; className?: string }>> = {
   table: Table2,
@@ -33,10 +31,7 @@ const KIND_ICON: Record<ViewKind, React.ComponentType<{ size?: number; className
 
 export const tabName = (tab: Pick<ViewTab, "name" | "kind">, t: T) => tab.name || t("view." + tab.kind);
 
-/**
- * The tab this device showed last for `key` (a type's page, a block); an unknown one: the first.
- * `inAddress` (a page's own tabs): the address names it ("?view=<tab>"), so a shared link shows the same.
- */
+/** Remembered per device. `inAddress`: also in "?view=<tab>", so a shared link shows the same tab. */
 export function useTabChoice(key: string, tabs: ViewTab[], inAddress?: boolean): [ViewTab, (id: string) => void] {
   const named = useRoute().query.get("view");
   const [id, setId] = useLocalStorage<string | null>(KEYS.tab(key), null);
@@ -53,10 +48,7 @@ export interface TabEdit {
   settings: () => void;
 }
 
-/**
- * The tab bar: a click picks a view, a click on the shown one opens its menu (rename, set up,
- * duplicate, move, delete), "+" adds one. Tabs can be dragged into another order.
- */
+/** A click on the shown tab opens its menu. */
 export function ViewTabs({ tabs, active, onPick, edit, right }: { tabs: ViewTab[]; active: string; onPick: (id: string) => void; edit?: TabEdit; right?: React.ReactNode }) {
   const { t } = useT();
   const [menu, setMenu] = useState<string | null>(null);
@@ -171,8 +163,6 @@ export function ViewTabs({ tabs, active, onPick, edit, right }: { tabs: ViewTab[
   );
 }
 
-// ---------- what a view can show and group by ----------
-
 interface ViewField {
   key: string; // stored in columns / sort / group: a built-in field or the property's name
   label: string;
@@ -207,9 +197,6 @@ export function useViewFields(where: Cond | undefined, sample: { type: string | 
   return out;
 }
 
-/** The name of a column, sort or group key in the UI language. */
-// ---------- the panel to set a view up ----------
-
 interface FilterDraft {
   where: Cond | undefined;
   onChange: (where: Cond | undefined) => void;
@@ -218,10 +205,7 @@ interface FilterDraft {
   discard: () => void;
 }
 
-/**
- * How a view looks (kind, grouping, sorting, properties, date) – saved at once – and its own
- * filter, which stays a draft until "Speichern".
- */
+/** The look is saved at once; the filter stays a draft until "Speichern". */
 export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter, onClose, kinds = TAB_KINDS }: { tab: ViewTab; fields: ViewField[]; columns?: string[]; groups?: Group[]; onLook: (patch: Partial<ViewTab>) => void; filter?: FilterDraft; onClose: () => void; kinds?: ViewKind[] }) {
   const { t } = useT();
   const ix = useIndex();

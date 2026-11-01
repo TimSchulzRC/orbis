@@ -1,6 +1,3 @@
-// The table of a view, like Notion: grouped (each group with its chip, count, fold, "…" and
-// "+"), cells edited in place, progress as "60 %" with a bar, sub-items indented below their
-// parent and folded until opened. Columns keep their width and order per view.
 import { Table as ShadcnTable, TableHeader, TableBody, TableRow, TableHead, TableCell as ShadcnTableCell } from "../components/ui/table";
 import { Input } from "../components/ui/input";
 import { useEffect, useRef, useState } from "react";
@@ -33,8 +30,6 @@ export interface Look {
   add?: { type: string; init?: ItemInit };
 }
 
-// ---------- column widths ----------
-
 const WIDTH: Record<string, number> = { status: 150, select: 130, multiselect: 170, date: 130, range: 230, computed: 160, relation: 190, text: 220, number: 100, checkbox: 80, url: 180, item: 170, tags: 170 };
 
 /** A select is as wide as what it holds: the status, one option or several. */
@@ -58,9 +53,6 @@ function defaultWidth(col: string, items: Item[], ctx: EvalCtx): number {
   return 160;
 }
 
-// ---------- cells ----------
-
-/** A start–end date: shown as one line; a click opens both dates. */
 function RangeCell({ item, prop }: { item: Item; prop: PropDef }) {
   const { t, lang } = useT();
   const v = typeof item.props[prop.id] === "string" ? (item.props[prop.id] as string) : "";
@@ -78,7 +70,7 @@ function RangeCell({ item, prop }: { item: Item; prop: PropDef }) {
   );
 }
 
-/** One cell: the value, edited in place where it is a property of the entry's type. */
+/** Editable in place only where `col` is a property of the entry's type. */
 export function TableCell({ item, col, ctx }: { item: Item; col: string; ctx: EvalCtx }) {
   const { t } = useT();
   const ix = ctx.ix;
@@ -121,8 +113,6 @@ export function TableCell({ item, col, ctx }: { item: Item; col: string; ctx: Ev
       );
   }
 }
-
-// ---------- the table ----------
 
 export function GroupedTable({ items, def, ctx, look }: { items: Item[]; def: QueryDef; ctx: EvalCtx; look?: Look }) {
   const { t } = useT();
@@ -331,10 +321,7 @@ function countKids(order: { depth: number }[], n: number): number {
   return k;
 }
 
-/**
- * "+ Task" at the end of a group (and in its head): typing a title and Enter creates the entry
- * with the group's value – nothing is created before there is a title.
- */
+/** Nothing is created before there is a title. */
 export function NewRowButton({ init, label, compact }: { init: ItemInit; label: string; compact?: boolean }) {
   const { t } = useT();
   const ix = useIndex();

@@ -1,14 +1,12 @@
-// All short notices go through sonner (the shadcn <Toaster>): one at the bottom centre (on a phone
-// above the bottom bar), at most three at a time, on the app's surface; errors only get a red icon.
-// `notify` keeps one look everywhere: a sentence, and "Rückgängig" or one other step.
+// `notify` keeps one look for every notice: a sentence, and "Rückgängig" or one other step.
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Toaster } from "../components/ui/sonner";
 import { tr } from "../i18n";
 import { PHONE } from "../lib/platform";
 
-const PLAIN = 5000; // a notice to read
-const WITH_ACTION = 7000; // one with "Rückgängig" or "Öffnen": a little longer
+const PLAIN = 5000;
+const WITH_ACTION = 7000; // a notice with "Rückgängig" or "Öffnen" stays longer
 
 /** A short notice; `.undo` offers "Rückgängig", `.action` another step ("Öffnen"), `.error` says what failed. */
 export function notify(text: string) {
@@ -26,9 +24,8 @@ notify.error = (text: string) => {
 };
 
 /**
- * Where the notices sit: bottom centre; on a phone above the bottom bar. They never cover the field
- * someone types in: while a field in the lower part has the focus they move above it – and come
- * back only a moment after it lets go, so a click on a notice is never lost to the move.
+ * Notices never cover a focused field in the lower part: they move above it, and come back only a
+ * moment after it loses focus, so a click on a notice is never lost to the move.
  */
 function useOffset(): number {
   const phone = () => matchMedia(PHONE).matches;

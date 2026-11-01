@@ -11,10 +11,8 @@ import { Database } from "bun:sqlite";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-// Servers start as their own processes: on a fresh checkout (cold transpiler cache) and beside the
-// other checks in CI that takes seconds, more than bun's default of five. A test or hook that runs
-// out of time also takes all the servers with it (bun kills the processes it spawned), so every test
-// after it fails too. bootServer gives up after ten seconds; the tests get more than that.
+// Booting a server can exceed bun's 5 s default on a cold cache in CI. A timeout also kills every
+// spawned server, failing all later tests, so tests get more than bootServer's 10 s.
 setDefaultTimeout(30_000);
 
 const procs: ReturnType<typeof Bun.spawn>[] = [];
@@ -296,7 +294,6 @@ test("deleting a member revokes sessions, invites, MCP tokens and live sync with
   expect((await get(bare, `/w/${workspace.id}/api/activity`, owner.token)).status).toBe(200);
   expect(await get(bare, `/api/workspaces/${workspace.id}/members`, owner.token).then((r) => r.json())).toHaveLength(1);
 });
-
 
 test("owners manage members and invite links: list, revoke, roles, remove; members cannot; the last owner stays", async () => {
   const olga = await signUp(bare, "manage-olga@example.org");

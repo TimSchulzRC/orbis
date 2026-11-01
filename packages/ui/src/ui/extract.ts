@@ -5,8 +5,8 @@ import { tr } from "../i18n";
 import { notify } from "./feedback";
 
 /**
- * "Herauslösen" (toolbar): the selected text becomes a new item of `type`, and a link to it
- * takes its place. Without a selection the paragraph at the cursor is used.
+ * The selected text becomes a new item of `type` and a link to it takes its place. Without a
+ * selection the paragraph at the cursor is used.
  */
 export function extractAs(view: EditorView, type: string) {
   const sel = view.state.selection.main;

@@ -1,5 +1,4 @@
-// Tags of a page: their own thing, not a property. They sit in the badge row under the title,
-// after type and status; "#" opens a field right there with the list of all tags under it.
+// Tags are their own thing, not a property.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Hash, Plus } from "lucide-react";
 import { type Item, normalizeTag } from "@obtion/core/model";
@@ -17,10 +16,7 @@ const splitTags = (s: string) => s.split(SEP).map(normalizeTag).filter(Boolean);
 const BOX = "inline-flex h-6 items-center rounded-md border px-1 text-xs";
 const setTag = (item: Item, tag: string, on: boolean) => repo.setMember(item.id, "tags", tag, on);
 
-/**
- * The page's tags as chips, then "+" to add more (quiet while there are some). Opened, the "+"
- * turns into the "#" in front of the field – same box, same height, so the row does not move.
- */
+/** Opened, the "+" turns into the "#" in front of the field in the same box, so the row does not move. */
 export function PageTags({ item }: { item: Item }) {
   const { t } = useT();
   const [open, setOpen] = useState(false);
@@ -52,10 +48,8 @@ export function PageTags({ item }: { item: Item }) {
 }
 
 /**
- * A field behind "#" with every tag under it to tick. Typing filters; Enter, space or comma adds
- * what was typed and the field stays for the next one; pasting "a, b c" adds all three; Backspace
- * on empty takes off the tag added last here; Esc or leaving closes. A click in the list toggles a tag and
- * keeps the list open, so several go in one pass.
+ * Enter, space or comma adds what was typed and keeps the field open; Backspace on empty removes
+ * the tag added last here. A click in the list toggles a tag and keeps the list open.
  */
 function TagPicker({ item, onClose }: { item: Item; onClose: () => void }) {
   const { t } = useT();

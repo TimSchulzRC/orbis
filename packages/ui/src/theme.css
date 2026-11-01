@@ -1,13 +1,12 @@
-/* Obtion theme: edit semantic tokens here for light and dark mode. */
 :root {
   --background: #f7f6f3;
   --card: #ffffff;
   --secondary: #f0eee9;
   --accent: #ebe8e1;
-  --selected: #f0eee9; /* a selected row: muted text keeps 4.5:1 here (on hover it would not) */
+  --selected: #f0eee9; /* muted text keeps 4.5:1 here (not on hover) */
   --border: #e3e0d8;
   --foreground: #1f1f1f;
-  /* grey text tones are neutral; faint (3.2:1) only for symbols and lines – small text uses muted */
+  /* faint (3.2:1) is only for symbols and lines; small text uses muted */
   --muted-foreground: #6b6b6b;
   --faint: #8a8a8a;
   --primary: #1f1f1f;
@@ -31,7 +30,7 @@
   --pal-olive: #6b7a1f;
   --pal-gray: #706258;
   --danger: #d1453b;
-  /* text tones: ≥ 4.5:1 on every surface incl. hover (the decorative tones above are for icons and fills) */
+  /* text tones: ≥ 4.5:1 on every surface incl. hover; the tones above are for icons and fills */
   --warn-text: #945b08;
   --danger-text: #bc362d;
   --link: #2c5fd4;

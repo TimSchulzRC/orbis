@@ -17,16 +17,13 @@ import { GroupChip, HiddenGroups, fieldLabel, hiddenPatch, splitHidden } from ".
 import { KEYS } from "./storage";
 import { startPointerDrag } from "../lib/drag";
 
-// ---------- dates (ISO strings, computed in UTC so no time zone moves a day) ----------
-
+// Dates are ISO strings, computed in UTC so no time zone moves a day.
 const ms = (iso: string) => Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10));
 const iso = (t: number) => new Date(t).toISOString().slice(0, 10);
 const weekday = (d: string) => new Date(ms(d)).getUTCDay(); // 0 = Sunday
 const firstDay = (lang: string) => (lang === "en" ? 0 : 1);
 const startOfWeek = (d: string, lang: string) => addDays(d, -((weekday(d) - firstDay(lang) + 7) % 7));
 const isDay = (s: unknown): s is string => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s);
-
-// ---------- which date, read and written ----------
 
 interface Span {
   start: string;
@@ -68,9 +65,6 @@ function writeSpan(item: Item, key: string, span: Span, ctx: EvalCtx) {
   repo.setProp(item.id, p.id, p.range ? formatRange(span.start, span.end) : span.start);
 }
 
-// ---------- calendar ----------
-
-/** A month: entries on their day, ranges as bars across the days; drag an entry to another day. */
 export function CalendarView({ items, def, ctx, look }: { items: Item[]; def: QueryDef; ctx: EvalCtx; look?: Look }) {
   const { t, lang } = useT();
   const key = dateKey(def, items, ctx, look?.tab?.date);
@@ -182,7 +176,6 @@ export function CalendarView({ items, def, ctx, look }: { items: Item[]; def: Qu
   );
 }
 
-/** Entries without a date: below the view, folded. */
 function Undated({ items, label }: { items: Item[]; label: string }) {
   const [open, setOpen] = useState(false);
   if (!items.length) return null;
@@ -204,18 +197,12 @@ function Undated({ items, label }: { items: Item[]; label: string }) {
   );
 }
 
-// ---------- timeline ----------
-
-/** A range as a bar: a quiet tint of the focus colour. */
 const SPAN = "border-focus/40 bg-[color-mix(in_srgb,var(--focus)_14%,var(--surface))] hover:bg-[color-mix(in_srgb,var(--focus)_22%,var(--surface))]";
 
 type Scale = "week" | "month";
 const PX: Record<Scale, number> = { week: 28, month: 7 }; // pixels per day
 
-/**
- * Bars over weeks or months: from start to end; dragging the bar moves both, its edges change
- * start or end. Groupable like the table; entries without a range are listed below.
- */
+/** Dragging a bar moves start and end; dragging its edges changes one of them. */
 export function TimelineView({ items, def, ctx, look }: { items: Item[]; def: QueryDef; ctx: EvalCtx; look?: Look }) {
   const { t, lang } = useT();
   const key = dateKey(def, items, ctx, look?.tab?.date);
@@ -328,7 +315,6 @@ export function TimelineView({ items, def, ctx, look }: { items: Item[]; def: Qu
       </div>
       <div ref={scroller} onScroll={(e) => setScrollX(e.currentTarget.scrollLeft)} className="relative overflow-x-auto rounded-xl border border-line">
         <div style={{ width: width + LEFT }} className="relative">
-          {/* scale */}
           <div className="sticky top-0 z-[3] flex h-8 border-b border-line bg-surface-2/60 text-xs text-muted-foreground">
             <div className="sticky left-0 z-[2] shrink-0 border-r border-line bg-surface-2" style={{ width: LEFT }} />
             <div className="relative" style={{ width }}>
@@ -339,7 +325,6 @@ export function TimelineView({ items, def, ctx, look }: { items: Item[]; def: Qu
               ))}
             </div>
           </div>
-          {/* today */}
           <div className="pointer-events-none absolute bottom-0 top-0 z-[1] w-px bg-[var(--danger)] opacity-60" style={{ left: LEFT + diffDays(from, today) * px + px / 2 }} aria-hidden />
           {groups.map((g) => (
             <div key={g.key || "_"}>

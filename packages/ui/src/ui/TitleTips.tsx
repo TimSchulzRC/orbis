@@ -1,7 +1,6 @@
-// The browser draws `title` tooltips itself, in the system's colours (light on a dark page). Here
-// they look like the app's: hovering an element with a title takes the title off for that time
-// (so the browser shows nothing) and shows it in a small popover of its own, below the element or
-// above when there is no room. Leaving puts the title back. Mouse only; touch has no hover.
+// Native `title` tooltips use the system's colours (light on a dark page). While hovered, the title
+// attribute is removed so the browser shows nothing, and shown in the app's own popover instead.
+// Mouse only; touch has no hover.
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 

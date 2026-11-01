@@ -1,5 +1,4 @@
-// "/" opens the block menu as in Notion: kinds of text, a link to a page, images and files,
-// a divider, code and query blocks – filtered while typing. "@" links a page right where you are.
+// As in Notion, "/" opens the block menu and "@" links a page right where you are.
 import type { ComponentType } from "react";
 import { type Completion, type CompletionContext, type CompletionResult, startCompletion } from "@codemirror/autocomplete";
 import { EditorSelection } from "@codemirror/state";
@@ -13,7 +12,6 @@ import { iconHTML } from "./icons";
 import { foldUmlauts, plainVowels } from "@obtion/core/text";
 import { kindHint } from "../text";
 
-/** A menu entry with an icon, a description and more words it is found by. */
 interface SlashItem {
   id: string;
   icon: ComponentType<{ size?: number }>;
@@ -24,7 +22,7 @@ interface SlashItem {
 type Option = Completion & { icon?: ComponentType<{ size?: number }>; hint?: string; page?: boolean };
 
 let filesHandler: (view: EditorView, files: File[]) => void = () => {};
-/** The editor tells how chosen files are inserted (Editor.tsx). */
+/** Set by Editor.tsx, which does the actual file insertion. */
 export function onSlashFiles(f: typeof filesHandler) {
   filesHandler = f;
 }
@@ -38,7 +36,7 @@ function chooseFiles(view: EditorView, accept: string) {
   input.click();
 }
 
-/** Put a block of its own on the line (the line itself if it is empty, else one below). */
+/** Uses the line itself if it is empty, else a new line below. */
 function insertBlock(view: EditorView, pos: number, text: string, cursor: number) {
   const line = view.state.doc.lineAt(pos);
   const at = line.length ? line.to : line.from;
@@ -79,10 +77,9 @@ const ITEMS: SlashItem[] = [
 
 const SECTIONS = { basic: { name: "editor.section.basic", rank: 0 }, insert: { name: "editor.section.insert", rank: 1 } };
 
-/** Does `words` contain `q`, umlauts typed either way ("ueber", "über" and "uber" all find "Überschrift")? */
+/** Umlauts match typed either way: "ueber", "über" and "uber" all find "Überschrift". */
 const hasWord = (words: string, q: string) => [foldUmlauts, plainVowels].some((f) => f(words).includes(f(q)));
 
-/** "/" at the start of a line or after a space. */
 export function slashCompletion(ctx: CompletionContext): CompletionResult | null {
   if (ctx.state.readOnly) return null;
   const m = ctx.matchBefore(/(?:^|\s)\/[\p{L}\p{N}]*$/u);
@@ -101,7 +98,7 @@ export function slashCompletion(ctx: CompletionContext): CompletionResult | null
       section: { name: tr(SECTIONS[it.section].name), rank: SECTIONS[it.section].rank },
       boost: -ITEMS.indexOf(it),
       apply: (view) => {
-        // the typed "/…" goes, then the block changes
+        // remove the typed "/…" before the block changes
         view.dispatch({ changes: { from, to: ctx.pos, insert: "" } });
         it.run(view, from);
       },
@@ -110,12 +107,10 @@ export function slashCompletion(ctx: CompletionContext): CompletionResult | null
   return { from, options, filter: false };
 }
 
-/** A page among the options (links and mentions): drawn with a page icon and its type. */
 export function pageOption(o: Option): Completion {
   return { icon: FileText, page: true, ...o } as Option;
 }
 
-/** "@" and a few letters of a title: a link to that page. */
 export function mentionCompletion(selfId?: string) {
   return (ctx: CompletionContext): CompletionResult | null => {
     if (ctx.state.readOnly) return null;
@@ -142,7 +137,6 @@ export function mentionCompletion(selfId?: string) {
   };
 }
 
-/** Each entry with its icon and a line on what it does (pages: their type). */
 export const slashRender = {
   position: 20,
   render(c: Completion): Node | null {

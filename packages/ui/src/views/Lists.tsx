@@ -1,5 +1,3 @@
-// The lists of the app: a type's page (its entries with views as tabs, like a database in
-// Notion) and the files. A type keeps its views; the files have one. The inbox: ui/Shelf.tsx and views/Review.tsx.
 import { Input } from "../components/ui/input";
 import { useEffect, useRef, useState } from "react";
 import { ListFilter, SlidersHorizontal, Plus, Upload } from "lucide-react";
@@ -20,10 +18,7 @@ import { notify } from "../ui/feedback";
 import { createAndOpen } from "../actions";
 import { sameValue } from "@obtion/core/equal";
 
-/**
- * The entries of a type with its views as tabs. How a view looks (kind, grouping, sorting,
- * columns) is saved at once; trying out a filter is a draft until "Speichern".
- */
+/** A view's look is saved at once; a filter is a draft until "Speichern". */
 export function TypeList({ type }: { type: Item }) {
   const repo = useRepo();
   const { t, lang } = useT();
@@ -136,11 +131,10 @@ export function TypeList({ type }: { type: Item }) {
   );
 }
 
-/** The kinds of files as the address names them ("?kind=image"); German ones from before still work. */
+/** "?kind=image"; the older German names still work. */
 const KIND_PARAM: Record<FileType, string> = { bild: "image", pdf: "pdf", audio: "audio", video: "video", dokument: "document", sonstiges: "other" };
 const kindOf = (param: string | null) => (FILE_TYPES.find((k) => KIND_PARAM[k] === param || k === param) ?? null);
 
-/** "Dateien": all files, newest first; "Alle · Bilder · PDFs · Audio" (only kinds that are there), images as a gallery. */
 export function FilesPage() {
   const files = useFiles();
   const { t } = useT();

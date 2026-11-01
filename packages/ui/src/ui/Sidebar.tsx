@@ -1,10 +1,6 @@
-// Sidebar: the workspace selector (which workspaces are seen), search, Heute and the inbox (of
-// the workspaces seen), then each of them as a block of its own (as teamspaces in Notion): its
-// name, the pinned items (informations with their children as a tree, also type pages), and its
-// types with the files. At the bottom: activity and trash (of the workspaces seen) and the settings. Blocks and what is open in them fold; that is remembered on
-// this device. In the tree, dragging replaces the parent you come from; with Alt held a place is
-// added. Dropping on the upper or lower edge of a row reorders. Dropped into another workspace's
-// block, an item moves there.
+// Fold state is remembered per device. In the tree, dragging replaces the parent you come from;
+// with Alt held a place is added. Dropping on a row's upper or lower edge reorders. Dropped into
+// another workspace's block, an item moves there.
 import { useEffect, useState } from "react";
 import { ArrowLeft, ChevronRight, ChevronDown, History, Inbox, Search, Settings, Link2, Plus, Paperclip, Sun, Trash2 } from "lucide-react";
 import { type Item, META_TYPE, SETTINGS_ID, setSchemaField, setSettings } from "@obtion/core/model";
@@ -34,8 +30,8 @@ import { Tip } from "../components/ui/tooltip";
  */
 let dragging: { id: string; from: string | null; space: string; type?: boolean } | null = null;
 /**
- * Starts a drag of the sidebar's own: only the title as text. The address the browser adds for a
- * link is dropped, or it takes the drag for a link to open elsewhere (a new tab, a split view).
+ * Carries only the title as text. The URL the browser adds for a link is dropped, or the drag
+ * would be taken as a link to open elsewhere (a new tab, a split view).
  */
 const startDrag = (e: React.DragEvent, d: NonNullable<typeof dragging>, text: string) => {
   dragging = d;
@@ -75,7 +71,6 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
             {inbox > 0 && <span className="text-xs tabular-nums text-muted-foreground">{inbox}</span>}
           </a>
         </nav>
-        {/* a line above each workspace: where one ends and the next begins */}
         {shown.map((s) => (
           <SpaceScope key={s.id} id={s.id}>
             <div className="mx-4 mt-3 border-t border-line" />
@@ -116,11 +111,7 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
   );
 }
 
-/**
- * One workspace in the sidebar (and the phone menu, `touch`: taller rows, no drag and drop, no
- * hover buttons): its name folds the block, "+" pins a new information. Dropping an item of
- * another workspace onto the name moves it here.
- */
+/** `touch` (phone menu): taller rows, no drag and drop, no hover buttons. */
 export function SpaceTree({ space, touch }: { space: Space; touch?: boolean }) {
   const { t } = useT();
   const repo = useRepo();
@@ -166,7 +157,7 @@ export function SpaceTree({ space, touch }: { space: Space; touch?: boolean }) {
           />
         )}
       </div>
-      {/* set up as soon as it is in step with the server (accounts.ts) */}
+      {/* set up as soon as it is in step with the server */}
       {open && !ready && <p className={cn(row, "pl-[30px] text-muted-foreground", !touch && "mx-2")}>{t("app.syncing")}</p>}
       {open && ready && (
         <div className={cn(!touch && "px-2")}>
@@ -183,11 +174,7 @@ export function SpaceTree({ space, touch }: { space: Space; touch?: boolean }) {
   );
 }
 
-/**
- * The pinned informations of a workspace with their children as a tree. What is open stays open
- * (on this device); the way to the open page unfolds by itself, nothing closes by itself. Done
- * entries are left out, except the open page. `here`: the workspace is the open one.
- */
+/** The path to the open page unfolds by itself; nothing closes by itself. `here`: the open workspace. */
 function PinnedTree({ touch, here }: { touch?: boolean; here: boolean }) {
   const repo = useRepo();
   const space = useSpaceId()!;

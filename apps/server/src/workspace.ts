@@ -1,6 +1,4 @@
-// One workspace on the server: its own folder (workspaces/<id>/) with the database, the file
-// contents, the Markdown mirror, the daily backups – what the whole server was before accounts. Opened when it is first used; everything below sees only it, so
-// workspaces cannot reach each other's data.
+// Everything below a Workspace sees only its own folder, so workspaces cannot reach each other's data.
 import { join } from "node:path";
 import type { ServerWebSocket } from "bun";
 import { AreaError, Store } from "./store";
@@ -20,15 +18,15 @@ import { z } from "zod";
 
 export interface Conn {
   userId: string;
-  session?: string; // the app session it was opened with: changing the password ends the others
+  session?: string; // a password change closes connections of the other sessions
   workspace: string;
-  areas: Set<string>; // said hello for these: only then it gets (and may push) their updates
+  areas: Set<string>; // only areas it said hello for are sent and accepted
   origin: string;
   user: Person;
 }
 
-/** Uploads: only kinds the app knows how to show (no HTML, scripts, executables). */
-const UPLOAD_OK = (name: string) => fileTypeOf(name) !== "sonstiges" || /\.(zip|json|xml|ics|vcf)$/i.test(name);
+// only kinds the app can show: no HTML, scripts or executables
+const uploadAllowed = (name: string) => fileTypeOf(name) !== "sonstiges" || /\.(zip|json|xml|ics|vcf)$/i.test(name);
 const INLINE = /^(image\/(png|jpeg|gif|webp|avif|bmp|svg\+xml)|application\/pdf|audio\/|video\/|text\/plain)/;
 
 async function sniffImage(path: string): Promise<string> {
@@ -39,38 +37,32 @@ async function sniffImage(path: string): Promise<string> {
   return "application/octet-stream";
 }
 
-/** One-time upgrades of older data, as the server ran them at start before workspaces. */
-function upgrade(store: Store) {
-  // Properties shipped after a default type was set up ("Wartet auf"): added once, nothing migrated.
+function upgradeOldData(store: Store) {
+  // properties shipped after a default type was set up: added once, nothing migrated
   const lang = store.setupLang();
   const w = storeWriter(store, SETUP_ORIGIN);
   if (lang && addLaterDefaultProps(w, lang).length) store.flush();
   if (lang && renameShippedLabels(w, lang)) store.flush();
   if (upgradeHideEmptyTaskFields(w)) store.flush();
-  // explicit roles (31.10.): what was recognised by name ("Wartet auf", "Pausiert" …) is marked in the types
+  // 31.10.: roles once recognised by name ("Wartet auf", "Pausiert") become explicit in the types
   if (upgradeExplicitRoles(w, store.index()).length) store.flush();
-  // collections are gone (26.10.): their views go to the types, the inbox rule to the settings
+  // 26.10.: collections removed; their views move to the types, the inbox rule to the settings
   const moved = lang ? migrateCollections(w, store.index(), store.eachDoc(), lang) : [];
   if (moved.length) (store.flush(), console.log(`[obtion] collections migrated:\n  ${moved.join("\n  ")}`));
-  // areas (27.10.): every document from before belongs to the personal area
+  // 27.10.: documents from before areas belong to the personal area
   const marked = upgradeAreas(w, store.eachDoc());
   if (marked) (store.flush(), console.log(`[obtion] areas: ${marked} documents marked as personal`));
 }
 
-/**
- * The areas a device may sync inside a workspace. One: the workspace is the unit of rights now,
- * the area inside it stays the personal one.
- */
+// The workspace is the unit of rights now; inside it only the personal area syncs.
 const AREAS = new Set([PERSONAL]);
 
-/** What a device may send on the sync socket; anything else is dropped. */
 const clientMsg: z.ZodType<ClientMsg> = z.discriminatedUnion("t", [
   z.object({ t: z.literal("hello"), area: z.string().optional(), since: z.number(), sinceId: z.string().optional(), device: z.string().optional() }),
   z.object({ t: z.literal("push"), area: z.string().optional(), items: z.array(z.object({ k: z.string(), d: z.string(), u: z.string(), s: z.string().optional() })) }),
   z.object({ t: z.literal("ping") }),
 ]);
 
-/** A message from a device, or null when it is not one (not JSON, wrong shape). */
 export function parseClientMsg(raw: string): ClientMsg | null {
   try {
     const r = clientMsg.safeParse(JSON.parse(raw));
@@ -89,7 +81,7 @@ export class Workspace {
 
   constructor(dir: string) {
     this.store = new Store(dir);
-    upgrade(this.store);
+    upgradeOldData(this.store);
     this.blobs = new Blobs(join(dir, "blobs"), this.store);
     const mirror = (this.mirror = new Mirror(this.store, join(dir, "vault"), this.blobs));
     this.store.on({
@@ -121,7 +113,7 @@ export class Workspace {
     this.store.flush();
   }
 
-  /** Closed for good (deleted): connections end, nothing writes into its folder any more. */
+  /** For a deleted workspace: nothing may write into its folder afterwards. */
   shut() {
     for (const ws of this.conns) ws.close(4404, "workspace deleted");
     this.close();
@@ -129,10 +121,8 @@ export class Workspace {
     this.store.db.close();
   }
 
-  // ---------- sync ----------
-
   hello(ws: ServerWebSocket<Conn>, msg: Extract<ClientMsg, { t: "hello" }>) {
-    const area = msg.area ?? PERSONAL; // apps from before areas: personal
+    const area = msg.area ?? PERSONAL; // clients from before areas send none
     if (!AREAS.has(area)) return send(ws, { t: "denied", area });
     if (msg.device) ws.data.origin = personOrigin(ws.data.user, msg.device);
     const store = this.store;
@@ -155,8 +145,8 @@ export class Workspace {
     if (msg.t === "hello") this.hello(ws, msg);
     else if (msg.t === "ping") send(ws, { t: "pong" });
     else if (msg.t === "push") {
-      // only after the welcome: the client has to know which server it writes to (server-id check);
-      // no ack, so its outbox keeps the changes and sends them again after the next hello
+      // before the welcome the client has not checked the server id. No ack, so its outbox
+      // resends after the next hello.
       const area = msg.area ?? PERSONAL;
       if (!ws.data.areas.has(area)) return;
       const keys: string[] = [];
@@ -176,9 +166,7 @@ export class Workspace {
     }
   }
 
-  // ---------- http: /w/<id>/<rest> ----------
-
-  /** The workspace's API for a member. `rest` is the path after /w/<id>; `ctx.user` is who they are. */
+  /** `rest` is the path after /w/<id>. */
   async handle(req: Request, rest: string, ctx: { user: Person }): Promise<Response> {
     const url = new URL(req.url);
     const store = this.store;
@@ -205,7 +193,7 @@ export class Workspace {
     return fail(404, "not found");
   }
 
-  /** `person`: whose MCP token it is; none for the address from before accounts. */
+  /** No person for the pre-accounts /mcp address. */
   mcp(req: Request, person?: Person): Promise<Response> {
     return handleMcp(this.store, req, this.blobs, person);
   }
@@ -215,21 +203,21 @@ export class Workspace {
     if (!Blobs.valid(hash)) return fail(400, "bad hash");
     if (req.method === "PUT") {
       const name = url.searchParams.get("name") ?? "";
-      if (!UPLOAD_OK(name) && !url.searchParams.has("derived")) return fail(415, "file type not allowed");
+      if (!uploadAllowed(name) && !url.searchParams.has("derived")) return fail(415, "file type not allowed");
       if (Number(req.headers.get("content-length") ?? 0) > MAX_BLOB) return fail(413, "too large");
       const data = new Uint8Array(await req.arrayBuffer());
       if (data.length > MAX_BLOB) return fail(413, "too large");
       return (await blobs.put(hash, data)) ? json({ ok: true }) : fail(422, "hash mismatch");
     }
-    // the app asks politely (no error in the console) and shows "Datei fehlt"
+    // the probe header lets the app check without a console error
     if (!blobs.has(hash)) return req.headers.get("x-obtion-probe") ? new Response(null, { status: 204, headers: { "x-obtion-missing": "1" } }) : fail(404, "not found");
     if (url.searchParams.has("check")) return new Response(null, { status: 204 });
     const rec = store.live().find((r) => r.file?.hash === hash) ?? [...store.records.values()].find((r) => r.file?.hash === hash);
-    const mime = rec?.file?.mime ?? (await sniffImage(blobs.path(hash))); // derived versions: WebP (or PNG/JPEG from a device)
+    const mime = rec?.file?.mime ?? (await sniffImage(blobs.path(hash))); // derived versions have no record
     const headers: Record<string, string> = {
       "cache-control": "private, max-age=31536000, immutable",
       "x-content-type-options": "nosniff",
-      // Never let a file run as part of the app (SVG, HTML-like content).
+      // never let a file run as part of the app (SVG, HTML-like content)
       "content-security-policy": mime === "application/pdf" ? "script-src 'none'" : "sandbox",
       "content-type": INLINE.test(mime) ? mime : "application/octet-stream",
     };

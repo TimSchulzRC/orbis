@@ -1,6 +1,4 @@
-// Structural equality for stored values (JSON-like data from Yjs and query definitions).
-
-/** Same data, whatever the order of object keys; arrays in order. */
+/** Structural equality for JSON-like data. Ignores key order and undefined-valued keys. */
 export function sameValue(a: unknown, b: unknown): boolean {
   if (a === b) return true;
   if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false;

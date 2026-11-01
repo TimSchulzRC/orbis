@@ -11,7 +11,6 @@ import { getLang, useT } from "../i18n";
 import { NewSpaceForm } from "../ui/Spaces";
 import { Button } from "../ui/primitives";
 
-/** A page before the app (signing in, joining, the first workspace): logo, title, a sentence, a form. */
 export function AuthCard({ title, intro, children }: { title: string; intro?: ReactNode; children: ReactNode }) {
   return (
     <div className="flex h-full items-center justify-center overflow-y-auto p-6">
@@ -40,10 +39,8 @@ function Field({ label, ...p }: { label: string } & React.InputHTMLAttributes<HT
 const canPasskey = () => typeof window !== "undefined" && !!window.PublicKeyCredential && window.isSecureContext;
 
 /**
- * Sign in or create an account on this server, in every way it offers: a passkey, an OAuth
- * provider, a code by email, a password. `inviteCode`: a new account joins that workspace.
- * `email`: confirming who is signed in already (only signing in, with this address, shown by the
- * caller; `hasPassword` and `hasPasskey` then offer just the ways this account has).
+ * `inviteCode`: a new account joins that workspace. `email`: re-confirming who is signed in (sign-in
+ * only; `hasPassword` and `hasPasskey` then limit the offered ways to the ones this account has).
  */
 export function SignIn({ inviteCode, onDone, email: fixedEmail, hasPassword, hasPasskey }: { inviteCode?: string; onDone?: () => void; email?: string; hasPassword?: boolean; hasPasskey?: boolean }) {
   const { t } = useT();
@@ -196,7 +193,6 @@ export function SignIn({ inviteCode, onDone, email: fixedEmail, hasPassword, has
   );
 }
 
-/** Joining a workspace by its invite link: with the account signed in here, or a new one. */
 function Join({ code }: { code: string }) {
   const { t } = useT();
   const [inv, setInv] = useState<InviteInfo | null | undefined>();
@@ -237,7 +233,6 @@ function NoSpace() {
   );
 }
 
-/** What has to happen before the app shows a workspace; `children` once one is open. */
 export function Gate({ children }: { children: ReactNode }) {
   const { t } = useT();
   const route = useRoute();

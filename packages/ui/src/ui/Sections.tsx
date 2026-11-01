@@ -1,6 +1,4 @@
-// Sections of a page, all derived from "Teil von" and the type's capabilities:
-// the main child list (e.g. tasks of a project, over all levels), same-type children
-// (sub-projects), other children, notes (children without a type) and updates.
+// Sections of a page, all derived from "Teil von" and the type's capabilities.
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
 import { NativeSelect } from "../components/ui/native-select";
@@ -21,16 +19,12 @@ import { shortPath } from "./Row";
 import { agentLabel, agentName } from "./AgentNotice";
 import { cmpKey } from "@obtion/core/sortkey";
 
-/**
- * What a list of entries of a type is called: the name of the type's list (a plural, "Tasks",
- * "Projekte"). Below an entry of the same type: "Unter-{plural}".
- */
+/** The type's plural list name ("Tasks"); below an entry of the same type "Unter-{plural}". */
 function listTitle(ix: Index, typeId: string, same: boolean): string {
   const plural = ix.typePlural(typeId);
   return same ? tr("children.subOf", { name: plural }) : plural;
 }
 
-/** A field to add an entry by its title. */
 function AddRow({ label, onAdd, autoFocus, onDone }: { label: string; onAdd: (title: string) => void; autoFocus?: boolean; onDone?: () => void }) {
   const [v, setV] = useState("");
   return (
@@ -59,16 +53,14 @@ function AddRow({ label, onAdd, autoFocus, onDone }: { label: string; onAdd: (ti
   );
 }
 
-/** How the main list of a page is grouped: by sub-project (default) or by status. */
 export function mainGrouping(item: Item): "sub" | "status" {
   return item.views.main?.group === "status" ? "status" : "sub";
 }
 
 /**
- * The page's main list (design rules § 2.4, § 3.2): descendants of the type its main action
- * creates, over all levels, as one table. Grouped by sub-project – "Direkt in …" first, then a
- * group per sub-project with its status and progress, also with nothing open – or by status.
- * Done ones only after "n erledigte einblenden". The grouping is saved with the page.
+ * The page's main list (design rules § 2.4, § 3.2): descendants of the main action's type, over
+ * all levels. Grouped by sub-project ("Direkt in …" first; groups show even with nothing open) or
+ * by status.
  */
 export function ChildList({ item, typeId }: { item: Item; typeId: string }) {
   const { t } = useT();
@@ -160,10 +152,8 @@ function notesBelow(item: Item, ix: Index): Item[] {
 }
 
 /**
- * "Darunter" (design rules § 3.1, zone 4): what lies below the page and is not shown above – one
- * card with groups "Notizen", "Dateien" and one per type. A page that gathers (a project) shows
- * notes and files of all levels, each with where it sits as a second line. Nothing below: no
- * section, only "+ Notiz darunter" on pages without a list of their own.
+ * "Darunter" (design rules § 3.1, zone 4): what lies below the page and is not shown above. A page
+ * that gathers (a project) shows notes and files of all levels.
  */
 export function BelowCard({ item, exclude, gathers, quietAdd }: { item: Item; exclude: Set<string>; gathers: boolean; quietAdd: boolean }) {
   const { t, lang } = useT();
@@ -263,7 +253,6 @@ export function Updates({ item }: { item: Item }) {
   const every = [item, ...[...ix.descendants(item.id)].map((id) => ix.get(id)!)]
     .flatMap((x) => x.updates.map((u) => ({ u, from: x })))
     .sort((a, b) => b.u.at - a.u.at);
-  // the newest three; the rest one click away
   const entries = every.slice(0, all ? 50 : 3);
   const submit = () => {
     if (!text.trim()) return;

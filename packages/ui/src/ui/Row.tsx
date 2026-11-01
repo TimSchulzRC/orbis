@@ -87,10 +87,7 @@ function useLingering(id: string) {
   return lingering.has(id);
 }
 
-/**
- * The ring in a list: ticks a task off (or reopens it). Entries with open entries below ask
- * first. The write waits a moment so the row can be seen struck through.
- */
+/** The write waits a moment so the row can be seen struck through. */
 export function tick(item: Item, repo: Repo = current) {
   const ix = repo.index();
   const schema = ix.schemaOf(item);
@@ -111,10 +108,6 @@ export function tick(item: Item, repo: Repo = current) {
   lingerEmit();
 }
 
-/**
- * A group in a list (by path, status, type …): a quiet heading with its count, then the rows.
- * The same in query blocks, task lists and note lists.
- */
 export function Group({ heading, count, first, children }: { heading?: React.ReactNode; count?: number; first?: boolean; children: React.ReactNode }) {
   return (
     <div className={first ? undefined : "mt-2"}>
@@ -191,9 +184,8 @@ export function ItemRow({
 }
 
 /**
- * The status shape at the start of a row: a click ticks a task off (and back); containers
- * (their "+" creates another type, e.g. a project's tasks) open the status menu instead.
- * Without a status: the entry's icon.
+ * A click ticks a task off (and back). Containers (their "+" creates another type, e.g. a
+ * project's tasks) open the status menu instead. Without a status it shows the entry's icon.
  */
 export function RowStatus({ item, size = 17 }: { item: Item; size?: number }) {
   const { t } = useT();

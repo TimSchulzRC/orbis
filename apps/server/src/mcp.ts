@@ -1,6 +1,5 @@
-// MCP endpoint (Streamable HTTP, stateless). Every agent – Claude Code, Claude Desktop,
-// and other MCP clients – works through these tools. They know no type by name: the agent reads
-// `schema` first and follows the types' descriptions and capabilities.
+// MCP endpoint (Streamable HTTP, stateless). Tools know no type by name: agents read `schema`
+// first and follow the types' descriptions and capabilities.
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { z } from "zod";
@@ -48,7 +47,6 @@ function agentName(req: Request): string {
 const json = (x: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(x, null, 1) }] });
 const text = (s: string) => ({ content: [{ type: "text" as const, text: s }] });
 
-/** `writes`: the tool changes data – an error then says that nothing was changed. */
 function wrap<A>(fn: (args: A) => unknown, writes = false) {
   return async (args: A) => {
     try {
@@ -67,7 +65,7 @@ function buildMcpServer(store: Store, origin: string, blobs?: Blobs) {
   const agent = parseOrigin(origin).name;
   const server = new McpServer({ name: "obtion", version: "0.2.0" }, { instructions: INSTRUCTIONS });
   const ro = { readOnlyHint: true };
-  /** A writing tool: all or nothing, with hints appended to the answer. */
+  /** All or nothing, with hints appended to the answer. */
   const write = <A,>(fn: (a: A) => string | object) => wrap((a: A) => ops.call(origin, () => { const r = fn(a); return typeof r === "string" ? r : JSON.stringify(r, null, 1); }), true);
 
   server.registerTool("schema", { title: "Schema", description: "All types with description, properties (options, groups) and capabilities, the views of each type's page, the inbox query and today's date. Read this first.", inputSchema: {}, annotations: ro }, wrap(() => ops.schema()));

@@ -1,5 +1,4 @@
-// Who a change is from, as the app names it: a person, an agent with the person whose access it
-// uses, an import, the system. The device stays in the origin (for later queries), never shown.
+// The device stays in the origin for later queries but is never shown.
 import { Bot, Cog, Download, Sparkles, User, type LucideIcon } from "lucide-react";
 import type { T } from "@obtion/core/i18n";
 import { firstName, parseOrigin } from "@obtion/core/origin";
@@ -9,7 +8,7 @@ export interface Who {
   label: string;
   icon: LucideIcon;
   agent: boolean;
-  /** the person who made it in the app (not through an agent) */
+  /** Set only when the person changed it directly, not through an agent. */
   person?: { id?: string; name: string };
 }
 
@@ -25,7 +24,7 @@ export function who(origin: string, t: T): Who {
   return { label: origin, icon: User, agent: false };
 }
 
-/** Made by this account in the app. Entries from before carry no account id: then the name decides. */
+/** Older entries carry no account id, so the name decides for them. */
 export function byMe(w: Who, me: { id: string; name: string; email: string } | undefined): boolean {
   if (!w.person || !me) return false;
   return w.person.id ? w.person.id === me.id : w.person.name === firstName(me);

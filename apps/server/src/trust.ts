@@ -1,5 +1,4 @@
-/** "10.0.0.1" as a number; undefined if it is no IPv4 address. */
-function v4(ip: string): number | undefined {
+function ipv4ToNumber(ip: string): number | undefined {
   const parts = ip.split(".");
   if (parts.length !== 4) return undefined;
   let n = 0;
@@ -10,16 +9,12 @@ function v4(ip: string): number | undefined {
   return n;
 }
 
-// Which host names the server answers to (guard against DNS rebinding: a web page under the
-// attacker's domain whose DNS later points at this server). Such an attack needs a name the
-// attacker controls in public DNS, so everything else is safe to answer, whatever the port:
-//   - IP addresses (LAN, tailnet, loopback);
-//   - names without a dot (nas, localhost) and private suffixes (.local, .lan, .home.arpa,
-//     .internal, MagicDNS's .ts.net) – none of them can be set up by an outsider;
-//   - public names only when named: OBTION_PUBLIC_URL, OBTION_ALLOWED_HOSTS.
+// Host check against DNS rebinding. The attack needs a name the attacker controls in public DNS,
+// so IP addresses, dotless names and private suffixes (incl. MagicDNS .ts.net) are safe on any
+// port. Public names must be listed (OBTION_PUBLIC_URL, OBTION_ALLOWED_HOSTS).
 const PRIVATE_SUFFIX = /\.(local|lan|home\.arpa|internal|ts\.net)$/;
 
-/** A test for the Host header: private names and addresses always, public ones from the list (host or host:port). */
+/** `named` entries may be host or host:port. */
 export function allowedHosts(named: string[]): (host: string | null) => boolean {
   const list = new Set(named.map((h) => h.trim().toLowerCase()).filter(Boolean));
   return (host) => {
@@ -28,7 +23,7 @@ export function allowedHosts(named: string[]): (host: string | null) => boolean 
     if (list.has(h)) return true;
     const name = h.startsWith("[") ? h.slice(1, h.indexOf("]")) : h.replace(/:\d+$/, "");
     if (list.has(name)) return true;
-    if (name.includes(":") || v4(name) !== undefined) return true; // IPv6 or IPv4 address
+    if (name.includes(":") || ipv4ToNumber(name) !== undefined) return true;
     return !name.includes(".") || PRIVATE_SUFFIX.test(name);
   };
 }

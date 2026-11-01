@@ -1,6 +1,4 @@
-// A type's page: the list of its entries with views as tabs (like a database in Notion). Behind
-// "…" › "Typ bearbeiten": identity, description (the agent reads it), properties and capabilities –
-// a type is an information with a schema; changing it is editing, not programming.
+// A type is an information with a schema; changing it is editing, not programming.
 import { Checkbox } from "../components/ui/checkbox";
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
@@ -82,7 +80,6 @@ export function TypePage({ item }: { item: Item }) {
   );
 }
 
-/** "Typ bearbeiten": name, plural, symbol, description, properties, capabilities – above the list. */
 function TypeEditor({ item, onClose }: { item: Item; onClose: () => void }) {
   const repo = useRepo();
   const { t } = useT();
@@ -210,8 +207,6 @@ function TypeEditor({ item, onClose }: { item: Item; onClose: () => void }) {
     </Card>
   );
 }
-
-// ---------- properties ----------
 
 function AddProperty({ item, onAdded }: { item: Item; onAdded: (id: string) => void }) {
   const repo = useRepo();
@@ -463,8 +458,6 @@ function OptionsEditor({ prop, grouped, onChange }: { prop: PropDef; grouped: bo
   );
 }
 
-// ---------- capabilities ----------
-
 function Capabilities({ item }: { item: Item }) {
   const repo = useRepo();
   const { t } = useT();
@@ -559,8 +552,6 @@ function Capabilities({ item }: { item: Item }) {
     </div>
   );
 }
-
-// ---------- delete / convert ----------
 
 function DeleteTypeDialog({ item, onClose, toTag }: { item: Item; onClose: () => void; toTag?: boolean }) {
   const repo = useRepo();
@@ -695,10 +686,7 @@ function FromTagDialog({ item, onClose }: { item: Item; onClose: () => void }) {
   );
 }
 
-/**
- * What a relation may point to: a type (the usual case), a tag, or – for those who want it –
- * any query as text. Stored as query text, e.g. "typ:Person" or "#autor".
- */
+/** A type, a tag or any query; stored as query text, e.g. "typ:Person" or "#autor". */
 function TargetField({ target, hits, onChange }: { target?: string; hits: number; onChange: (t: string) => void }) {
   const repo = useRepo();
   const { t, lang } = useT();

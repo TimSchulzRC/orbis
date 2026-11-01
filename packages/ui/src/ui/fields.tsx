@@ -10,7 +10,7 @@ import { cn } from "../lib/utils";
 import { isCoarse } from "../lib/platform";
 import { Button } from "./primitives";
 
-/** Inline-editable text that commits on blur/Enter. */
+/** Commits on blur or Enter. */
 export function InlineText({
   value,
   onCommit,
@@ -28,7 +28,7 @@ export function InlineText({
   multiline?: boolean;
   autoFocus?: boolean;
   label?: string;
-  /** a heading-sized field: keeps its size on phones */
+  /** Heading-sized, keeps its size on phones. */
   large?: boolean;
 }) {
   const { draft, setDraft, focused, onKeyDown } = useFocusDraft(value);
@@ -52,9 +52,8 @@ export function InlineText({
 }
 
 /**
- * Date input that only commits complete, plausible dates, in the app language (not the
- * browser's): typed as 30.10.2026, 10/30/2026, morgen, Freitag … (read like the agent's input),
- * or picked from the calendar.
+ * Commits only complete, plausible dates. Parses in the app language, not the browser's
+ * (30.10.2026, 10/30/2026, morgen, Freitag …), the same way as the agent's input.
  */
 export function DateField({ value, onChange, label, className, autoFocus }: { value?: string; onChange: (v: string) => void; label: string; className?: string; autoFocus?: boolean }) {
   const { t, lang } = useT();
@@ -92,7 +91,7 @@ export function DateField({ value, onChange, label, className, autoFocus }: { va
         aria-invalid={bad || undefined}
         placeholder={editing ? t("date.placeholder") : "–"}
         onFocus={() => ((focused.current = true), setEditing(true))}
-        // on a touch screen an empty date opens the date picker right away (typing a date there is awkward)
+        // typing a date on a touch screen is awkward, so an empty one opens the picker
         onClick={() => !value && isCoarse() && picker.current?.showPicker?.()}
         onChange={(e) => setText(e.target.value)}
         onBlur={commit}

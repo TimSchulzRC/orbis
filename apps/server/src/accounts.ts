@@ -1,12 +1,6 @@
-// Accounts and workspaces of one server, in data/accounts.db.
-//
-// Who someone is comes from Better Auth (users, sessions, passwords, codes by email, passkeys,
-// OAuth; see login.ts); always by bearer token, never by cookie, so the same app can talk to
-// several servers. Only an OAuth sign-in ends with a cookie, which the app trades for a token once
-// (claim). What someone may see is ours: a
-// workspace has members (owner or member), each workspace keeps its data in a folder of its own
-// (workspaces/<id>/, see workspace.ts). Nobody needs a workspace of their own – joining one by an
-// invite link is enough.
+// Identity comes from Better Auth, always by bearer token and never by cookie, so one app can talk
+// to several servers. Only an OAuth sign-in ends with a cookie, which the app trades for a token
+// once (claim). Workspace membership and roles are ours.
 import { Database } from "bun:sqlite";
 import { existsSync, mkdirSync, readdirSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -20,18 +14,17 @@ import type { InviteLink, Member, Role, SignedIn, SignupPolicy, User, WorkspaceI
 import { sha256 } from "./blobs";
 import type { LoginConfig } from "./login";
 
-/** How long after signing in someone may add a passkey or delete the account without a password. */
+/** How long after signing in a passkey may be added or the account deleted without a password. */
 export const FRESH_SECONDS = 10 * 60;
 
 /**
- * What a new account comes with, set by the page before it signs up (by code or OAuth, where the
- * request is Better Auth's own): the invite it joins with, the app's language. A cookie, so that it
- * also reaches the OAuth callback.
+ * Set by the page before a code or OAuth signup, where the request is Better Auth's own. A cookie,
+ * so it also reaches the OAuth callback.
  */
 export const SIGNUP_COOKIE = "obtion_signup";
 interface SignupContext {
   invite?: string;
-  /** the language of the email with the code */
+  /** language of the code email */
   lang?: string;
 }
 
@@ -49,8 +42,8 @@ function signupContext(headers: Headers | undefined): SignupContext {
 
 const signupHeaders = (c: SignupContext) => new Headers({ cookie: `${SIGNUP_COOKIE}=${encodeURIComponent(JSON.stringify(c))}` });
 
-/** A workspace name as stored: trimmed, at most 80 characters. */
-const workspaceName = (name: string) => name.trim().slice(0, 80);
+const MAX_WORKSPACE_NAME = 80;
+const workspaceName = (name: string) => name.trim().slice(0, MAX_WORKSPACE_NAME);
 
 export class AccountError extends Error {
   constructor(
@@ -61,11 +54,11 @@ export class AccountError extends Error {
   }
 }
 
-/** What a server folder held before accounts: it becomes the first workspace (see migrateLegacy). */
+/** What a data folder held before accounts. */
 const LEGACY_ENTRIES = ["obtion.db", "obtion.db-wal", "obtion.db-shm", "blobs", "vault", "backups", "agent"];
 
-/** How long an invite link works. */
 const INVITE_DAYS = 14;
+const CLAIM_TTL_MS = 60_000;
 
 export const randomToken = () => Buffer.from(crypto.getRandomValues(new Uint8Array(24))).toString("base64url");
 
@@ -92,7 +85,7 @@ export class Accounts {
       CREATE TABLE IF NOT EXISTS tokens (hash TEXT PRIMARY KEY, user TEXT NOT NULL, workspace TEXT NOT NULL, label TEXT, created INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS admins (user TEXT PRIMARY KEY);
     `);
-    // links from before roles on links are for members
+    // invites from before roles are for members
     const cols = (this.db.query("PRAGMA table_info(invites)").all() as { name: string }[]).map((c) => c.name);
     if (!cols.includes("role")) this.db.exec("ALTER TABLE invites ADD COLUMN role TEXT NOT NULL DEFAULT 'member'");
   }
@@ -100,17 +93,15 @@ export class Accounts {
   policy: SignupPolicy;
   login: LoginConfig;
   /**
-   * Links a signup is making an account for right now (code → for which address, since
-   * when): until that account has joined, nobody else gets in with the same link. Turned away before
-   * Better Auth starts: it shares this connection, and a signup failing inside its transaction would
-   * roll back the other one's joining too. Stale after a minute, should that account never come.
+   * Invite codes a signup is using right now. Until that account has joined, nobody else gets in
+   * with the link. Checked before Better Auth starts: it shares this connection, and a signup failing
+   * inside its transaction would roll back the other one's join too.
    */
   private claims = new Map<string, { email: string; since: number }>();
 
-  /** A user's access was taken back (their address proven by someone else): close what is open. */
+  /** Someone else proved the user's address: close what is open. */
   onRevoke: (user: string) => void;
 
-  /** Create Better Auth's tables (once) and turn the data of a server from before accounts into a workspace. */
   async init(legacyName: (dir: string) => string) {
     const { runMigrations } = await getMigrations(this.auth.options);
     await runMigrations();
@@ -118,9 +109,8 @@ export class Accounts {
   }
 
   /**
-   * A server from before accounts kept its data right in the data folder. It moves (renames, on the
-   * same disk) into workspaces/<id>/ and becomes a workspace without members: the first account
-   * gets it. Its store keeps its id, so devices recognise it and keep their copy.
+   * Pre-accounts data becomes a workspace without members; the first account gets it. The store
+   * keeps its id, so devices recognise it and keep their copy.
    */
   private migrateLegacy(legacyName: (dir: string) => string) {
     if (!existsSync(join(this.dataDir, "obtion.db"))) return;
@@ -132,7 +122,6 @@ export class Accounts {
     console.log(`[obtion] the data from before accounts are now the workspace ${id} (workspaces/${id})`);
   }
 
-  /** The folder of a workspace's data. */
   dir(id: string) {
     return join(this.dataDir, "workspaces", id);
   }
@@ -141,12 +130,7 @@ export class Accounts {
     return /^[\w-]{1,40}$/.test(id) && !!this.db.query("SELECT 1 FROM workspaces WHERE id = ?").get(id) && existsSync(this.dir(id));
   }
 
-  // ---------- who is calling ----------
-
-  /**
-   * The user of a bearer token (an app session), or null. Cookies are never looked at: a request
-   * without the token cannot be one the user meant, whatever site sent it.
-   */
+  /** Cookies are never looked at: a request without the token cannot be one the user meant, whatever site sent it. */
   async userOf(token: string | null | undefined): Promise<User | null> {
     if (!token) return null;
     const s = await this.auth.api.getSession({ headers: new Headers({ authorization: `Bearer ${token}` }) }).catch(() => null);
@@ -157,30 +141,28 @@ export class Accounts {
     return (this.db.query('SELECT count(*) AS n FROM "user"').get() as { n: number }).n;
   }
 
-  /** The first account is marked as the admin; no right depends on it (yet). */
+  /** The first account is the admin; no right depends on it yet. */
   isAdmin(user: string): boolean {
     return !!this.db.query("SELECT 1 FROM admins WHERE user = ?").get(user);
   }
 
-  /** May this request create an account? The first one always (it becomes the admin). */
   canSignUp(invite?: string, email?: string): boolean {
     if (this.userCount() === 0 || this.policy === "open") return true;
     return this.policy === "invite" && !!invite && !!this.invite(invite) && !this.claimedByOther(invite, email);
   }
 
-  /** Before Better Auth creates a user (any way: password, code, OAuth): may this request? */
+  /** Better Auth hook before it creates a user by any method. */
   allowNewUser(email: string, headers: Headers | undefined) {
     const c = signupContext(headers);
-    // the code sends an OAuth sign-in back to the page (?signin=failed&error=signup_closed)
+    // the code sends an OAuth sign-in back to the page as ?signin=failed&error=signup_closed
     if (!this.canSignUp(c.invite, email)) throw new APIError("FORBIDDEN", c.invite ? { message: "invite invalid", code: "invite_invalid" } : { message: "signup closed", code: "signup_closed" });
-    // (OAuth and codes come here directly; a password signup has claimed it already)
+    // a password signup has claimed it already; OAuth and codes arrive here directly
     if (c.invite) this.hold(c.invite, email);
   }
 
-  /** Who is signing up with this link right now (see claims). */
   private claimant(code: string): string | undefined {
     const c = this.claims.get(code);
-    if (c && Date.now() - c.since > 60_000) this.claims.delete(code);
+    if (c && Date.now() - c.since > CLAIM_TTL_MS) this.claims.delete(code);
     return this.claims.get(code)?.email;
   }
 
@@ -189,7 +171,7 @@ export class Accounts {
     return !!by && by !== email?.trim().toLowerCase();
   }
 
-  /** Hold a link for this address while its account is made. False: someone else holds it. */
+  /** False if someone else holds it. */
   private hold(code: string, email: string): boolean {
     if (this.claimedByOther(code, email)) return false;
     this.claims.set(code, { email: email.trim().toLowerCase(), since: Date.now() });
@@ -200,7 +182,7 @@ export class Accounts {
     if (code && !this.claimedByOther(code, email)) this.claims.delete(code);
   }
 
-  /** The link a new account may join with: the one given, unless it is someone else's right now (open signup: then without). */
+  /** Drops a link someone else holds when signup is open; otherwise throws. */
   private signupInvite(invite: string | undefined, email: string): string | undefined {
     if (!invite || this.hold(invite, email)) return invite;
     if (this.policy === "open") return undefined;
@@ -208,9 +190,8 @@ export class Accounts {
   }
 
   /**
-   * After Better Auth created a user. With an invite it joins that workspace; without one the app
-   * has it create its first (set up there, in the app's language). The very first account becomes the admin and
-   * takes over the data from before accounts, if there are any.
+   * Better Auth hook after it created a user. The very first account becomes admin and owns any
+   * workspace without members (pre-accounts data).
    */
   setUpNewUser(id: string, email: string, headers: Headers | undefined) {
     const c = signupContext(headers);
@@ -226,7 +207,6 @@ export class Accounts {
     }
   }
 
-  /** Create an account with a password and sign it in (see setUpNewUser). */
   async signUp(body: { name: string; email: string; password: string; invite?: string }): Promise<SignedIn> {
     if (!this.login.password) throw new AccountError("passwords off", 403);
     if (!this.canSignUp(body.invite, body.email)) throw new AccountError(body.invite ? "invite invalid" : "signup closed", 403);
@@ -241,10 +221,9 @@ export class Accounts {
   }
 
   /**
-   * Signing up with a password where codes are on (POST /api/account/signup): a new account proves
-   * its address first, so nobody can take someone else's. Without `code`: the details are fine, the page
-   * now has a code sent (the rate-limited way, POST /api/auth/email-otp/send-verification-otp).
-   * With it: the account is made by the code (proven address, the same hooks), then gets the password.
+   * Password signup where codes are on: the account proves its address first, so nobody can take
+   * someone else's. Without `code` this only validates; the page then requests a code through Better
+   * Auth's rate-limited route. With it the code creates the account, then it gets the password.
    */
   async signUpWithCode(body: { name: string; email: string; password: string; invite?: string; lang?: string; code?: string }): Promise<SignedIn | { verify: true }> {
     if (!this.login.password) throw new AccountError("passwords off", 403);
@@ -263,30 +242,26 @@ export class Accounts {
         this.release(invite, email);
         throw new AccountError(e?.body?.code === "INVALID_OTP" || e?.statusCode === 400 ? "invalid code" : (e?.body?.message ?? e?.message ?? "signup failed"), e?.statusCode ?? 400);
       });
-    // (made meanwhile by another way: it keeps its own)
+    // a password set meanwhile by another way stays
     if (!(await ctx.internalAdapter.findCredentialAccount(res.user.id)))
       await ctx.internalAdapter.linkAccount({ userId: res.user.id, providerId: "credential", accountId: res.user.id, password: await ctx.password.hash(body.password) });
     return { token: res.token, user: { id: res.user.id, name: res.user.name, email: res.user.email } };
   }
 
-  /** The session of a bearer token: its user and when it began (for what needs a recent sign-in). */
+  /** `created` is for actions that need a recent sign-in. */
   async session(token: string | null | undefined) {
     if (!token) return null;
     const s = await this.auth.api.getSession({ headers: new Headers({ authorization: `Bearer ${token}` }) }).catch(() => null);
     return s ? { user: { id: s.user.id, name: s.user.name, email: s.user.email } as User, created: new Date(s.session.createdAt).getTime() } : null;
   }
 
-  /**
-   * The session an OAuth sign-in left in the browser's cookie, as a token the app keeps: the page
-   * trades it once (the cookie goes, see index.ts).
-   */
+  /** Trades the session an OAuth sign-in left in a cookie for a token the app keeps. */
   async claim(headers: Headers): Promise<SignedIn | null> {
     const h = new Headers({ cookie: headers.get("cookie") ?? "" });
     const s = await this.auth.api.getSession({ headers: h }).catch(() => null);
     return s ? { token: s.session.token, user: { id: s.user.id, name: s.user.name, email: s.user.email } } : null;
   }
 
-  /** Whether the user can sign in with a password. */
   async hasPassword(user: string): Promise<boolean> {
     const ctx = await this.auth.$context;
     return !!(await ctx.internalAdapter.findCredentialAccount(user))?.password;
@@ -297,10 +272,7 @@ export class Accounts {
     await ctx.internalAdapter.deleteSession(token);
   }
 
-  /**
-   * Change the password of `user`, signed in with the session `keep`. Every other session (other
-   * devices, a stolen token) ends; this one stays.
-   */
+  /** Ends every other session (other devices, a stolen token); `keep` stays. */
   async changePassword(user: string, keep: string, current: string, next: string) {
     const ctx = await this.auth.$context;
     await this.verifyPassword(user, current);
@@ -311,7 +283,6 @@ export class Accounts {
     this.db.query('DELETE FROM "session" WHERE userId = ? AND token != ?').run(user, keep);
   }
 
-  /** Throws unless `password` is the current password of `user`. */
   private async verifyPassword(user: string, password: string) {
     if (!password || password.length > 1024) throw new AccountError("invalid password", 403);
     const ctx = await this.auth.$context;
@@ -321,8 +292,8 @@ export class Accounts {
   }
 
   /**
-   * Delete only the caller's identity. Workspaces must retain an owner. Proof that it is them: the
-   * password, or (without one) a sign-in in the last minutes (`signedInAt`).
+   * Proof is the password, or for accounts without one a recent sign-in. Workspaces must keep an
+   * owner and are not deleted.
    */
   async deleteAccount(user: string, password: string | undefined, signedInAt = 0) {
     if (password !== undefined) await this.verifyPassword(user, password);
@@ -339,8 +310,6 @@ export class Accounts {
       this.db.query('DELETE FROM "user" WHERE id = ?').run(user);
     })();
   }
-
-  // ---------- workspaces ----------
 
   workspacesOf(user: string): WorkspaceInfo[] {
     const rows = this.db.query("SELECT w.id, w.name, w.legacy, m.role FROM members m JOIN workspaces w ON w.id = m.workspace WHERE m.user = ? ORDER BY m.joined").all(user) as { id: string; name: string; legacy: number; role: Role }[];
@@ -367,7 +336,7 @@ export class Accounts {
     this.db.query("UPDATE workspaces SET name = ? WHERE id = ?").run(clean, workspace);
   }
 
-  /** An owner deletes a workspace: for everyone, with its folder (data, files, backups). Close it first. */
+  /** Removes the folder too; close the workspace first. */
   deleteWorkspace(workspace: string, by: string) {
     if (this.role(workspace, by) !== "owner") throw new AccountError("only owners delete", 403);
     for (const table of ["members", "invites", "tokens"]) this.db.query(`DELETE FROM ${table} WHERE workspace = ?`).run(workspace);
@@ -388,11 +357,7 @@ export class Accounts {
     return owners.length === 1 && owners[0]!.id === user;
   }
 
-  /**
-   * Leave a workspace, or (an owner) remove someone. The last owner cannot go: the workspace
-   * would belong to nobody. What the person made to get in goes with them: their agent tokens
-   * and the invite links they made for it. Their open connections are the caller's to close.
-   */
+  /** Their agent tokens and invite links go with them. Closing their connections is up to the caller. */
   removeMember(workspace: string, by: string, user: string) {
     const byRole = this.role(workspace, by);
     if (!byRole || (by !== user && byRole !== "owner")) throw new AccountError("not allowed", 403);
@@ -405,7 +370,6 @@ export class Accounts {
     })();
   }
 
-  /** An owner makes someone an owner or a member. The last owner stays one. */
   setRole(workspace: string, by: string, user: string, role: Role) {
     if (this.role(workspace, by) !== "owner") throw new AccountError("only owners change roles", 403);
     const now = this.role(workspace, user);
@@ -415,12 +379,7 @@ export class Accounts {
     this.db.query("UPDATE members SET role = ? WHERE workspace = ? AND user = ?").run(role, workspace, user);
   }
 
-  // ---------- invites ----------
-
-  /**
-   * An invite link's code: one person may join with it, in `role`, within 14 days and until an owner
-   * revokes it. Then it is used up: a link passed on reaches nobody else. Owners only.
-   */
+  /** Single use, so a link passed on reaches nobody else. */
   createInvite(workspace: string, by: string, role: Role = "member"): string {
     if (this.role(workspace, by) !== "owner") throw new AccountError("only owners invite", 403);
     const code = randomToken();
@@ -428,14 +387,13 @@ export class Accounts {
     return code;
   }
 
-  /** The links of a workspace that still work, newest first (owners only). Expired ones go. */
+  /** Also deletes expired links. */
   invites(workspace: string, by: string): InviteLink[] {
     if (this.role(workspace, by) !== "owner") throw new AccountError("only owners invite", 403);
     this.db.query("DELETE FROM invites WHERE workspace = ? AND expires <= ?").run(workspace, Date.now());
     return this.db.query('SELECT i.code, i.created, i.expires, i.role, coalesce(u.name, \'\') AS by FROM invites i LEFT JOIN "user" u ON u.id = i.by WHERE i.workspace = ? ORDER BY i.created DESC').all(workspace) as InviteLink[];
   }
 
-  /** An owner takes a link back: whoever has it can no longer join with it. */
   revokeInvite(workspace: string, by: string, code: string) {
     if (this.role(workspace, by) !== "owner") throw new AccountError("only owners invite", 403);
     if (!this.db.query("DELETE FROM invites WHERE workspace = ? AND code = ?").run(workspace, code).changes) throw new AccountError("invite invalid", 404);
@@ -446,10 +404,7 @@ export class Accounts {
     return row ?? undefined;
   }
 
-  /**
-   * Join with a link, in the link's role, and use it up in the same step. Someone already in keeps
-   * their role, and the link stays for whom it was meant.
-   */
+  /** Someone already in keeps their role, and the link stays for whom it was meant. */
   join(code: string, user: string): WorkspaceInfo {
     const inv = this.invite(code);
     if (!inv || this.claimant(code)) throw new AccountError("invite invalid", 404);
@@ -461,9 +416,7 @@ export class Accounts {
     return this.workspacesOf(user).find((w) => w.id === inv.workspace)!;
   }
 
-  // ---------- MCP tokens ----------
-
-  /** A token for agents (Claude Code, Claude Desktop) on one workspace, as this user. Shown once. */
+  /** Only the hash is stored, so the token can be shown once. */
   mcpToken(workspace: string, user: string): string {
     if (!this.role(workspace, user)) throw new AccountError("not a member", 403);
     const token = "obt_" + randomToken();
@@ -471,7 +424,7 @@ export class Accounts {
     return token;
   }
 
-  /** The user an MCP token stands for on this workspace (and is still a member), or undefined. */
+  /** Undefined once the user is no longer a member. */
   mcpUser(workspace: string, token: string): User | undefined {
     const row = this.db.query('SELECT u.id, u.name, u.email FROM tokens t JOIN "user" u ON u.id = t.user JOIN members m ON m.workspace = t.workspace AND m.user = t.user WHERE t.hash = ? AND t.workspace = ?').get(sha256(token), workspace) as User | null;
     return row ?? undefined;
@@ -489,12 +442,12 @@ function makeAuth(accounts: Accounts, secret: string, baseURL: string) {
     appName: "Obtion",
     emailAndPassword: { enabled: login.password, minPasswordLength: 8 },
     socialProviders: social,
-    // an OAuth provider vouching for an address (email_verified) may sign in to the account with it
-    // linking in the settings is the signed-in person's own choice: the provider's address may differ
-    // (index.ts wants a fresh sign-in for it). Signing in links on its own only to a proven address.
+    // Signing in links on its own only to an address the provider vouches for (email_verified).
+    // Linking in the settings is the user's own choice, so the address may differ; index.ts wants a
+    // fresh sign-in for it.
     account: { accountLinking: { enabled: true, allowDifferentEmails: true } },
-    // an app stays signed in like a mail app; every use within a day moves the end. Adding a
-    // passkey needs a sign-in of the last minutes (a stolen token cannot add one).
+    // apps stay signed in like a mail app; any use within a day extends it. freshAge keeps a stolen
+    // token from adding a passkey.
     session: { expiresIn: 60 * 60 * 24 * 365, updateAge: 60 * 60 * 24, freshAge: FRESH_SECONDS },
     // the app's own page calls /api/auth/*; the server checks the origin itself (index.ts)
     trustedOrigins: (req) => [req?.headers.get("origin") ?? undefined].filter((o): o is string => !!o),
@@ -505,10 +458,9 @@ function makeAuth(accounts: Accounts, secret: string, baseURL: string) {
           after: async (user, ctx) => accounts.setUpNewUser(user.id, user.email, ctx?.headers),
         },
         update: {
-          // A code by email proves the address of an account whose address nobody had proven
-          // (signed up with a password): Better Auth then drops its password and sessions, and
-          // here everything else whoever signed up with that address may have made to get in:
-          // passkeys, agent tokens, invite links, open connections.
+          // A code proves the address of a password account nobody had verified. Better Auth drops
+          // its password and sessions; here goes everything else whoever signed up with that
+          // address may have made to get in.
           before: async (data, ctx) => {
             const email = (ctx?.body as { email?: unknown } | undefined)?.email;
             if (data.emailVerified !== true || typeof email !== "string") return;
@@ -524,7 +476,7 @@ function makeAuth(accounts: Accounts, secret: string, baseURL: string) {
     },
     plugins: [
       bearer(),
-      // always there, so that its table is: the routes answer only when passkeys are on (index.ts)
+      // always registered so its table exists; index.ts hides the routes when passkeys are off
       passkey({ rpID: login.passkey?.rpID ?? "localhost", rpName: "Obtion", origin: login.passkey?.origin ?? null }),
       ...(login.sendCode
         ? [
@@ -550,10 +502,7 @@ function makeAuth(accounts: Accounts, secret: string, baseURL: string) {
   });
 }
 
-/**
- * For the CLI: a new password for the account with this address (the way back in for someone who
- * forgot theirs on a server without codes by email). Devices signed in stay signed in.
- */
+/** The way back in on a server without email codes. Signed-in devices stay signed in. */
 export async function setPassword(dataDir: string, email: string, password: string) {
   if (password.length < 8 || password.length > 128) throw new Error("The password needs 8 to 128 characters.");
   const accounts = new Accounts(dataDir, { secret: "set-password-only-hashes-and-signs-nothing-here", baseURL: "http://localhost", policy: "off" });
@@ -572,9 +521,8 @@ export async function setPassword(dataDir: string, email: string, password: stri
 }
 
 /**
- * For the CLI: count the addresses of all accounts as proven, for a server that turns codes on
- * after people signed up with passwords. Their first code then changes nothing (see the update
- * hook). Only for a server whose admin knows its accounts are those people's. Returns how many.
+ * For turning codes on after people signed up with passwords: their first code then revokes nothing
+ * (see the user update hook). Only safe if the admin knows the accounts are those people's.
  */
 export function trustEmails(dataDir: string): number {
   const db = new Database(join(dataDir, "accounts.db"));
@@ -585,7 +533,6 @@ export function trustEmails(dataDir: string): number {
   }
 }
 
-/** For the CLI and tests: the workspace folders that exist. */
 export function workspaceDirs(dataDir: string): string[] {
   const root = join(dataDir, "workspaces");
   return existsSync(root) ? readdirSync(root).map((n) => join(root, n)) : [];
