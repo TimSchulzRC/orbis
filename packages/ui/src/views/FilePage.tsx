@@ -16,6 +16,7 @@ import { TagInput } from "../ui/TagInput";
 import { ItemPicker } from "../ui/Picker";
 import { TitleField } from "../ui/TitleField";
 import { dateOf } from "@obtion/core/date";
+import { who } from "../ui/actor";
 
 export function FilePage({ item }: { item: Item }) {
   const repo = useRepo();
@@ -48,10 +49,13 @@ export function FilePage({ item }: { item: Item }) {
     };
   }, [f.hash, local]);
   const missing = files.isMissing(f.hash);
+  // who added it; from before accounts the app wrote only the device: then nobody is named
+  const by = item.createdBy ? who(item.createdBy, t) : undefined;
+  const addedBy = by && (by.agent || by.person?.id) ? by.label : "";
   const facts: [string, React.ReactNode][] = [
     [t("file.type"), `${t("filetype." + f.filetype)} · ${(f.name.split(".").pop() ?? "").toUpperCase()}`],
     [t("file.size"), [f.width && f.height ? `${f.width} × ${f.height}` : "", f.pages ? t("file.pages", { count: f.pages }) : "", f.duration ? fmtDuration(f.duration) : "", fmtBytes(lang, f.size)].filter(Boolean).join(" · ")],
-    [t("file.added"), `${fmtDate(lang, dateOf(item.created))}${item.createdBy?.includes("@") ? " · " + item.createdBy.split("@")[1]!.split("-")[0] : ""}`],
+    [t("file.added"), `${fmtDate(lang, dateOf(item.created))}${addedBy ? " · " + addedBy : ""}`],
     [t("file.here"), local ? t("file.local") : t("file.online")],
   ];
   /** "Ersetzen": new content, same document; the old version stays in the history. */

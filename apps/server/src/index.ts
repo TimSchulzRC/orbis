@@ -10,8 +10,9 @@ import type { ServerWebSocket } from "bun";
 import { Store } from "./store";
 import { Accounts, AccountError, FRESH_SECONDS, SIGNUP_COOKIE, randomToken } from "./accounts";
 import { loginConfig, loginMethods } from "./login";
-import type { AccountInfo, InviteCode, InviteInfo, McpConnect, Ok, ServerInfo, SignedIn, SignupPolicy, SignupRequest, User } from "@obtion/core/api";
-import { type Conn, Workspace, actorOf, parseClientMsg } from "./workspace";
+import type { AccountInfo, InviteCode, InviteInfo, McpConnect, Ok, ServerInfo, SignedIn, SignupPolicy, SignupRequest } from "@obtion/core/api";
+import { type Conn, Workspace, parseClientMsg } from "./workspace";
+import { firstName, personOrigin } from "@obtion/core/origin";
 import { type Lang, LANGS, translate } from "@obtion/core/i18n";
 import { allowedHosts } from "./trust";
 import { DATA, MAX_WS_MESSAGE, PORT } from "./config";
@@ -115,8 +116,6 @@ const accountError = (e: unknown) => {
   throw e;
 };
 
-/** How a user shows up in a workspace (activity, devices): their first name. */
-const firstName = (user: User) => user.name.split(/\s+/)[0] || user.email.split("@")[0]!;
 
 async function serveStatic(path: string): Promise<Response> {
   const clean = path.replace(/\.\.+/g, "");
@@ -285,19 +284,19 @@ const server = Bun.serve<Conn>({
       if (rest === "/mcp") {
         const user = token && accounts.mcpUser(id, token);
         if (!user || !workspace(id)) return fail(401, "unauthorized");
-        return workspace(id)!.mcp(req);
+        return workspace(id)!.mcp(req, { id: user.id, name: firstName(user) });
       }
       const user = await accounts.userOf(token);
       if (!user) return fail(401, "unauthorized");
       if (!accounts.role(id, user.id)) return fail(403, "not a member");
       const w = workspace(id);
       if (!w) return fail(404, "no such workspace");
-      const name = firstName(user);
+      const person = { id: user.id, name: firstName(user) };
       if (rest === "/sync") {
-        const ok = srv.upgrade(req, { data: { workspace: id, areas: new Set<string>(), origin: actorOf(name), user: name, userId: user.id, session: token }, headers: { "sec-websocket-protocol": "obtion" } });
+        const ok = srv.upgrade(req, { data: { workspace: id, areas: new Set<string>(), origin: personOrigin(person), user: person, userId: user.id, session: token }, headers: { "sec-websocket-protocol": "obtion" } });
         return ok ? undefined : fail(400, "expected WebSocket");
       }
-      return w.handle(req, rest, { user: name });
+      return w.handle(req, rest, { user: person });
     }
 
     if (!WEB_APP) return new Response("This Obtion server serves sync, API and MCP only (OBTION_WEB_APP=off).", { status: 404 });

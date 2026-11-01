@@ -3,13 +3,15 @@
 // BroadcastChannel, dialogs of the UI.
 import { openDB, type IDBPDatabase } from "idb";
 import type { OutItem, RepoHost, ReplicaStorage, SyncSocket, TabMsg } from "@obtion/sync";
+import type { Person } from "@obtion/core/origin";
 import { tr } from "./i18n";
 import { KEYS, readJSON, writeJSON } from "./ui/storage";
 
-/** Where a workspace is: its address on the server (…/w/<id>), the account's token, the names of its storage here. */
+/** Where a workspace is: its address on the server (…/w/<id>), the account (token, who), the names of its storage here. */
 export interface SpaceLink {
   base: string;
   token: string;
+  person: Person;
   storage: StorageNames;
 }
 
@@ -100,6 +102,7 @@ export function browserHost(link: SpaceLink): RepoHost {
   return {
     storage: idbStorage(link.storage.replica),
     device: deviceName(),
+    person: link.person,
     connect() {
       return new WebSocket(`${link.base.replace(/^http/, "ws")}/sync`, ["obtion", `auth.${link.token}`]) as unknown as SyncSocket;
     },

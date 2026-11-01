@@ -42,6 +42,7 @@ import { nextPinKey } from "@obtion/core/sortkey";
 import { type ActivityEvent, type ClientMsg, type PushItem, type ServerMsg, fromB64, toB64 } from "@obtion/core/protocol";
 import type { ErrorBody, UndoRequest, UndoResult } from "@obtion/core/api";
 import { createIndex, indexRecord, searchIds } from "@obtion/core/search";
+import { type Person, personOrigin } from "@obtion/core/origin";
 
 const REMOTE = Symbol("remote");
 /** The areas this device holds. One until teams come (see PERSONAL); the cursor below is its. */
@@ -95,8 +96,10 @@ export type TabMsg = { d: string; u: Uint8Array };
 /** What the platform gives the replica. */
 export interface RepoHost {
   storage: ReplicaStorage;
-  /** This device's name, e.g. "Mac-x3f9" (activity, origin of changes). */
+  /** This device's name, e.g. "Mac-x3f9": undo works per device; never shown. */
   device: string;
+  /** Whose account the changes from here are made with. */
+  person?: Person;
   /** Opens a connection to the server's sync endpoint. */
   connect(): SyncSocket;
   /** Sends JSON to the server's API (e.g. "/api/undo"); null when the server cannot be reached. */
@@ -157,9 +160,9 @@ export class Repo {
     this.device = host.device;
   }
 
-  /** Who made a change from here ("web:Mac-x3f9"): createdBy, op records, setup. */
+  /** Who made a change from here ("web:Tim;u=…;d=Mac-x3f9"): createdBy, op records, setup. */
   get origin(): string {
-    return `web:${this.device}`;
+    return this.host.person ? personOrigin(this.host.person, this.device) : `web:${this.device}`;
   }
 
   // ---------- lifecycle ----------

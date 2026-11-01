@@ -11,6 +11,7 @@ import { OpError, Ops, QUERY_HELP } from "./ops";
 import { attachInput, convertInput, createInput, defineTypeInput, placeInput, suggestInput, updateInput, updateTypeInput } from "./schemas";
 import type { Store } from "./store";
 import type { Blobs } from "./blobs";
+import { type Person, agentOrigin, parseOrigin } from "@obtion/core/origin";
 
 const INSTRUCTIONS = `Obtion is the user's personal system for knowledge and work: informations linked like Obsidian, projects and tasks like Notion, all in one graph. You are their interface: they tell you what happened, you record it; they ask, you answer from the data.
 
@@ -61,9 +62,9 @@ function wrap<A>(fn: (args: A) => unknown, writes = false) {
   };
 }
 
-function buildMcpServer(store: Store, agent: string, blobs?: Blobs) {
+function buildMcpServer(store: Store, origin: string, blobs?: Blobs) {
   const ops = new Ops(store, blobs);
-  const origin = `agent:${agent}`;
+  const agent = parseOrigin(origin).name;
   const server = new McpServer({ name: "obtion", version: "0.2.0" }, { instructions: INSTRUCTIONS });
   const ro = { readOnlyHint: true };
   /** A writing tool: all or nothing, with hints appended to the answer. */
@@ -190,7 +191,7 @@ function buildMcpServer(store: Store, agent: string, blobs?: Blobs) {
   );
   server.registerTool(
     "activity",
-    { title: "Activity", description: "What changed recently and who changed it (device, agent, import).", inputSchema: { days: z.number().optional(), ref: z.string().optional(), limit: z.number().int().max(200).optional() }, annotations: ro },
+    { title: "Activity", description: "What changed recently and who changed it (a person, an agent working for one, an import).", inputSchema: { days: z.number().optional(), ref: z.string().optional(), limit: z.number().int().max(200).optional() }, annotations: ro },
     wrap((a) => ops.activity(a)),
   );
 
@@ -229,9 +230,9 @@ Then ask what I want to change. Don't change anything before I answer.`,
   return server;
 }
 
-export async function handleMcp(store: Store, req: Request, blobs?: Blobs): Promise<Response> {
+export async function handleMcp(store: Store, req: Request, blobs?: Blobs, person?: Person): Promise<Response> {
   store.flush();
-  const server = buildMcpServer(store, agentName(req), blobs);
+  const server = buildMcpServer(store, agentOrigin(agentName(req), person), blobs);
   const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
   await server.connect(transport);
   try {
