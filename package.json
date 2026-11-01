@@ -5,6 +5,7 @@
   "license": "AGPL-3.0-or-later",
   "workspaces": ["packages/*", "apps/*"],
   "devDependencies": {
+    "@obtion/cli": "workspace:*",
     "@obtion/core": "workspace:*",
     "@obtion/server": "workspace:*",
     "@obtion/sync": "workspace:*",
@@ -32,7 +33,9 @@
     "build": "bun run --cwd apps/web build",
     "dev:build": "bun run --cwd apps/web dev:build",
     "start": "bun apps/server/src/index.ts",
-    "typecheck": "tsc --noEmit -p packages/core && tsc --noEmit -p packages/sync && tsc --noEmit -p packages/ui && tsc --noEmit -p apps/server && tsc --noEmit -p apps/web && tsc --noEmit -p .",
+    "obtion": "bun apps/cli/src/index.ts",
+    "build:cli": "bun apps/cli/build.ts",
+    "typecheck": "tsc --noEmit -p packages/core && tsc --noEmit -p packages/sync && tsc --noEmit -p packages/ui && tsc --noEmit -p apps/server && tsc --noEmit -p apps/web && tsc --noEmit -p apps/cli && tsc --noEmit -p .",
     "test": "bun test",
     "test:unit": "bun test tests/unit",
     "test:integration": "bun test tests/integration",

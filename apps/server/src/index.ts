@@ -314,8 +314,9 @@ const server = Bun.serve<Conn>({
         if (!user || !workspace(id)) return fail(401, "unauthorized");
         return workspace(id)!.mcp(req, { id: user.id, name: firstName(user) }, filesUrl);
       }
-      // the file API (only it) also takes the workspace's MCP token: agents and scripts move files with it
-      const files = rest === "/api/files" || rest.startsWith("/api/files/");
+      // the file API and the item list (only they) also take the workspace's MCP token: agents,
+      // scripts and the `obtion` CLI move files and read a subtree with it
+      const files = rest === "/api/files" || rest.startsWith("/api/files/") || rest === "/api/items";
       const agent = files && token ? accounts.mcpUser(id, token) : undefined;
       if (agent) {
         const w = workspace(id);

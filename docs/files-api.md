@@ -55,3 +55,11 @@ The server reads the text of every file it can (PDF incl. embedded Factur-X/ZUGF
 ## Serving in the browser
 
 Only images, PDF, audio, video and plain text are shown inline, always with `X-Content-Type-Options: nosniff` and a sandbox CSP. Everything else, HTML and SVG downloads through this API included, is sent as `application/octet-stream` with `attachment`.
+
+## List a subtree
+
+```sh
+curl -fsS -H "Authorization: Bearer $OBTION_TOKEN" "https://<server>/w/<workspace id>/api/items?under=<id or exact title>"
+```
+
+The item and everything below it (over all parents) as JSON: `{ root, items: [...] }`. `?ids=a,b,c` returns just these items as `{ items }`. Each item: `id`, `kind` (`info` or `file`), `title`, `type`, `version` (the `base_version` for MCP `update`), `parents`, `home`, `created`, `updated`, `body` (informations, exactly as stored), `file` (`name`, `hash`, `size`, `mime`), `properties` by name, `updates`. Types and items in the trash are left out. The same tokens work as for files. The [CLI](cli.md) reads a folder's state with it.

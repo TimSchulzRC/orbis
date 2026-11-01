@@ -574,6 +574,10 @@ export function replaceBody(doc: Y.Doc, next: string) {
     endPrev--;
     endNext--;
   }
+  // never cut a surrogate pair (an emoji): Yjs would store the halves as U+FFFD
+  const code = (i: number) => prev.charCodeAt(i);
+  if (start > 0 && code(start - 1) >= 0xd800 && code(start - 1) <= 0xdbff) start--;
+  if (endPrev < prev.length && code(endPrev) >= 0xdc00 && code(endPrev) <= 0xdfff) (endPrev++, endNext++);
   if (endPrev > start) text.delete(start, endPrev - start);
   if (endNext > start) text.insert(start, next.slice(start, endNext));
 }

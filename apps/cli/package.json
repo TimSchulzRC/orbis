@@ -1,0 +1,14 @@
+{
+  "name": "@obtion/cli",
+  "description": "obtion: a subtree of Obtion as a local folder (pull, status, push) and imports of folders and Git repositories",
+  "type": "module",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "bin": { "obtion": "./src/index.ts" },
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.4"
+  }
+}

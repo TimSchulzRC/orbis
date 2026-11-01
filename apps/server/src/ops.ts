@@ -513,6 +513,39 @@ export class Ops {
     return out;
   }
 
+  /** An item and everything below it (all parents), for the `obtion` CLI. No types, nothing in the trash. */
+  tree(ref: string) {
+    const root = this.resolve(ref);
+    return { root: root.id, items: this.nodes([root.id, ...this.store.index().descendants(root.id)]) };
+  }
+
+  /** Items by id as `tree` lists them; unknown ids and items in the trash are left out. */
+  nodes(ids: string[]) {
+    const ix = this.ix;
+    return ids
+      .map((id) => ix.get(id))
+      .filter((i): i is Item => !!i && !i.deleted && i.type !== META_TYPE)
+      .map((i) => {
+        const props = this.propValues(i);
+        return {
+          id: i.id,
+          kind: i.kind === "datei" ? ("file" as const) : ("info" as const),
+          title: i.title,
+          type: ix.typeName(i.type) ?? null,
+          version: versionOf(i),
+          parents: ix.parentsOf(i.id),
+          home: ix.home(i.id) ?? null,
+          source: i.source,
+          created: i.created,
+          updated: i.updated,
+          body: i.kind === "datei" ? undefined : i.body,
+          file: i.file ? { name: i.file.name, hash: i.file.hash, size: i.file.size, mime: i.file.mime } : undefined,
+          properties: Object.keys(props).length ? props : undefined,
+          updates: i.updates.length ? i.updates.map((u) => ({ at: u.at, text: u.text })) : undefined,
+        };
+      });
+  }
+
   /** `q` may also be a type name: its list as its first view shows it. */
   query(q: string, opts: { context?: string; limit?: number } = {}) {
     const ix = this.ix;

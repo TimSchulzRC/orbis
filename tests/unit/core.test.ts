@@ -3,7 +3,7 @@ import * as Y from "yjs";
 import { MemRepo } from "../support/helpers";
 import { type TypeSchema, initSchema, readSchema } from "@obtion/core/model";
 import { initialProps, optionIds, statusProp } from "@obtion/core/traits";
-import { addParent, readItem, removeParent, setMeta, setProp, setSettings, initItem, META_TYPE, SETTINGS_ID, touchOnTextEdit } from "@obtion/core/model";
+import { addParent, readItem, removeParent, setMeta, setProp, setSettings, initItem, META_TYPE, SETTINGS_ID, touchOnTextEdit, replaceBody } from "@obtion/core/model";
 import { keyBetween, keysFor } from "@obtion/core/sortkey";
 import { isInInbox, isOverview, inbox, laterItems, sidebarRoots, sidebarChildren } from "@obtion/core/placement";
 import { runSetup, restoreDefaultTypes, resetInbox, SYS } from "@obtion/core/setup";
@@ -392,4 +392,15 @@ describe("link targets", () => {
     expect(ix.linkTarget(ix.get(odd)!), "a # can't be in a link by name").toBe(odd);
     for (const id of [a, b]) expect(ix.resolveTitle(ix.linkTarget(ix.get(id)!))).toBe(id);
   });
+});
+
+test("replaceBody never cuts an emoji in half (Yjs would store U+FFFD)", () => {
+  for (const [a, b] of [["a😀", "a😁"], ["😀", "😁😀"], ["x😀y", "x😀😀y"], ["😀😁", "😁"], ["ab", "a😀b"], ["a\r\nb 😀", "a\nb 😀"]] as const) {
+    const doc = new Y.Doc();
+    doc.getText("body").insert(0, a);
+    doc.transact(() => replaceBody(doc, b));
+    const copy = new Y.Doc();
+    Y.applyUpdate(copy, Y.encodeStateAsUpdate(doc));
+    expect(copy.getText("body").toString()).toBe(b);
+  }
 });

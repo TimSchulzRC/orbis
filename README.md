@@ -58,7 +58,7 @@ bun run typecheck
 
 The browser tests need Chromium once: `bunx playwright install chromium`.
 
-More in [`docs`](docs): [CI](docs/ci.md), [file API](docs/files-api.md), [releasing](docs/releasing.md), [removing unused files](docs/removing-unused-files.md), [background dev servers](scripts/README.md).
+More in [`docs`](docs): [CI](docs/ci.md), [file API](docs/files-api.md), [CLI: a part as a local folder](docs/cli.md), [releasing](docs/releasing.md), [removing unused files](docs/removing-unused-files.md), [background dev servers](scripts/README.md).
 
 ## License
 

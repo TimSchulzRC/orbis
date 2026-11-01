@@ -238,6 +238,20 @@ export class Workspace {
       }
     }
 
+    // GET /api/items?under=<id or title>: the item and everything below it; ?ids=a,b: just these
+    if (rest === "/api/items" && req.method === "GET") {
+      const under = url.searchParams.get("under");
+      const ids = url.searchParams.get("ids");
+      if (!under && ids === null) return fail(400, "under (an item id or exact title) or ids required");
+      try {
+        const ops = new Ops(store, this.blobs, ctx.filesUrl);
+        return json(under ? ops.tree(under) : { items: ops.nodes(ids!.split(",").filter(Boolean)) });
+      } catch (e) {
+        if (e instanceof OpError) return fail(404, e.message);
+        throw e;
+      }
+    }
+
     if (rest.startsWith(BLOBS)) return this.blob(req, url, rest.slice(BLOBS.length));
     if (rest === "/api/files" || rest.startsWith("/api/files/")) return this.files(req, url, rest.slice("/api/files".length), { origin: ctx.origin ?? personOrigin(ctx.user, req.headers.get("x-obtion-device") ?? undefined), filesUrl: ctx.filesUrl });
     return fail(404, "not found");
