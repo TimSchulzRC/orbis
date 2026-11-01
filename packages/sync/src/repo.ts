@@ -40,7 +40,7 @@ import { deleteItem, resolveCascade, restoreItem } from "@obtion/core/trash";
 import type { Writer } from "@obtion/core/setup";
 import { nextPinKey } from "@obtion/core/sortkey";
 import { type ActivityEvent, type ClientMsg, type PushItem, type ServerMsg, fromB64, toB64 } from "@obtion/core/protocol";
-import type { ErrorBody, UndoRequest, UndoResult } from "@obtion/core/api";
+import type { UndoRequest } from "@obtion/core/api";
 import { createIndex, indexRecord, searchIds } from "@obtion/core/search";
 import { type Person, personOrigin } from "@obtion/core/origin";
 
@@ -488,17 +488,14 @@ export class Repo {
   }
 
   /**
-   * Take back a step (one user action or tool call) on the server, or redo it. Needs the server:
-   * it holds the history. This device's own changes are pushed first, so they are included.
+   * Take back a step (one user action or tool call) on the server: it holds the history. This
+   * device's own changes are pushed first, so they are included. Offline it does nothing.
    */
-  async undo(step: string, redo = false): Promise<{ ok: true; changed: number; kept: number } | { ok: false; error: string }> {
+  async undo(step: string): Promise<void> {
     await this.flushOutbox();
-    const res = await this.host.post("/api/undo", { step, redo, device: this.device } satisfies UndoRequest);
-    if (!res) return { ok: false, error: "offline" };
-    if (!res.ok) return { ok: false, error: (res.body as Partial<ErrorBody> | null)?.error ?? res.statusText };
-    const body = res.body as UndoResult;
-    return { ok: true, changed: body.changed.length + body.trashed.length, kept: body.kept.length };
+    await this.host.post("/api/undo", { step, device: this.device } satisfies UndoRequest);
   }
+
 
   /**
    * The data (or the server) are newer than this app: it still reads them but does not write – a

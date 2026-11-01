@@ -38,7 +38,7 @@ test("one agent step with several changes is taken back as a whole, across items
   expect(byTitle("Nordlicht · Frankreich").props.p_status).toBe("st_planning");
   expect(byTitle("Nordlicht · Frankreich").updates).toEqual([]);
   expect(s.index().resolveTitle("Review")).toBeUndefined();
-  expect(s.stepState(step).undone).toBe(true);
+  expect(s.activeUndo(step)).toBe(r.step);
   expect(() => undoStep(s, step, "web:tim@laptop")).toThrow(UndoError);
   // Wiederholen: everything is back, and the activity calls it a redo ("hat wiederholt")
   const again = redoStep(s, step, "web:tim@laptop");
@@ -46,7 +46,7 @@ test("one agent step with several changes is taken back as a whole, across items
   expect(byTitle("Mapping").props.p_status).toBe("st_done");
   expect(byTitle("Nordlicht · Frankreich").updates.length).toBe(1);
   expect(s.index().resolveTitle("Review")).toBeDefined();
-  expect(s.stepState(step).undone).toBe(false);
+  expect(s.activeUndo(step)).toBeUndefined();
 });
 
 test("fields changed again later keep their newer value", () => {
@@ -88,7 +88,6 @@ test("a step pushed by a device (delete with cascade over two documents) can be 
   undoStep(s, step, "web:tim@laptop");
   expect(s.index().get(p)).toBeDefined();
   expect(s.index().get(t)).toBeDefined();
-  expect(s.events({ limit: 10 }).find((e) => e.step === step)!.undone).toBe(true);
   expect(s.events({ limit: 1 })[0]!.undoes).toBe(step);
 });
 

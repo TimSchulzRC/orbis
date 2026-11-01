@@ -61,8 +61,6 @@ export interface ActivityEvent {
   step?: string;
   /** This step undoes another step. */
   undoes?: string;
-  /** This step is undone right now. */
-  undone?: boolean;
   /** This step undoes an undo: it is a redo. */
   redo?: boolean;
 }

@@ -781,7 +781,7 @@ export class Ops {
   deletePreview(ref: string) {
     const t = this.resolveType(ref);
     const u = typeUsage(this.store.index(), t.id);
-    return { type: t.schema.name, entries: u.items.length, would_land_in_inbox: u.inboxAfterRemove, used_in_queries: u.queries.map((q) => q.title), relations: u.relations.map((r) => r.name), progress: u.progress.map((p) => p.name), main_action_of: u.childOf.map((c) => c.name), note: "Deleting is confirmed in the app (type page › … › Delete type): into a tag, into another type, or remove. Values stay as free properties; it can be undone from Activity." };
+    return { type: t.schema.name, entries: u.items.length, would_land_in_inbox: u.inboxAfterRemove, used_in_queries: u.queries.map((q) => q.title), relations: u.relations.map((r) => r.name), progress: u.progress.map((p) => p.name), main_action_of: u.childOf.map((c) => c.name), note: "Deleting is confirmed in the app (type page › … › Delete type): into a tag, into another type, or remove. Values stay as free properties." };
   }
 
   updateType(ref: string, input: UpdateTypeInput, origin: string) {

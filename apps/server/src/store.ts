@@ -520,12 +520,12 @@ export class Store {
     this.db.query("INSERT INTO events (ts, doc, title, type, kind, origin, changes) VALUES (?, ?, ?, ?, ?, ?, ?)").run(Date.now(), "", title, "import", "created", origin, "[]");
   }
 
-  /** Is a step an undo (of which step) – or a redo, an undo of an undo – and is it undone right now? */
-  stepState(step: string): { undoes?: string; undone?: boolean; redo?: boolean } {
+  /** Is a step an undo (of which step) – or a redo, an undo of an undo? */
+  stepState(step: string): { undoes?: string; redo?: boolean } {
     const q = this.db.query("SELECT undoes FROM steps WHERE id = ?");
     const row = q.get(step) as { undoes: string | null } | null;
     const target = row?.undoes ? (q.get(row.undoes) as { undoes: string | null } | null) : null;
-    return { undoes: row?.undoes ?? undefined, undone: !!this.activeUndo(step), redo: !!target?.undoes || undefined };
+    return { undoes: row?.undoes ?? undefined, redo: !!target?.undoes || undefined };
   }
 
   /** The undo that currently takes this step back (itself not undone), if any. */
