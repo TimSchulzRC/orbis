@@ -7,7 +7,7 @@ import { SpaceFilter, SpaceScope, useReplicas } from "../ui/Spaces";
 import type { ActivityEvent, FieldChange } from "@obtion/core/protocol";
 import { type Item, META_TYPE, optionNames, type Value } from "@obtion/core/model";
 import type { Index } from "@obtion/core/graph";
-import { useRepo, itemHref, useDocumentTitle } from "../hooks";
+import { useRepo, useItemHref, useDocumentTitle } from "../hooks";
 import { useT, titleOf } from "../i18n";
 import type { T } from "@obtion/core/i18n";
 import { Button, Empty, Seg } from "../ui/primitives";
@@ -74,6 +74,7 @@ function describe(c: FieldChange, item: Item | undefined, ix: Index, t: T): stri
 /** What happened to one item: verb, item, changes. */
 function Entry({ e, compact, noVerb }: { e: ActivityEvent; compact?: boolean; noVerb?: boolean }) {
   const r = useRepo();
+  const itemHref = useItemHref();
   const { t } = useT();
   const ix = r.index();
   const item = r.get(e.doc);
@@ -188,7 +189,8 @@ export function Activity() {
   const load = (space: string, before?: number) =>
     spaceCall<ActivityEvent[]>(space, `/api/activity?limit=60${before ? `&before=${before}` : ""}`).then(
       (list) => setFetched((f) => ({ ...f, [space]: { events: before ? [...(f[space]?.events ?? []), ...list] : list, more: list.length === 60, error: false } })),
-      () => setFetched((f) => ({ ...f, [space]: { events: f[space]?.events ?? [], more: false, error: true } })),
+      // a page that failed is still to fetch: "more" stays and tries the same one again
+      () => setFetched((f) => ({ ...f, [space]: { events: f[space]?.events ?? [], more: !!before, error: true } })),
     );
   const online = repos.map((r) => r.status.online).join();
   useEffect(() => {

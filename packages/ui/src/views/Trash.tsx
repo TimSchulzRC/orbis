@@ -5,7 +5,7 @@ import type { Repo } from "@obtion/sync";
 import { cascadeCount } from "@obtion/core/trash";
 import { isInInbox } from "@obtion/core/placement";
 import { notify } from "../ui/feedback";
-import { itemHref, useRepo, useDocumentTitle } from "../hooks";
+import { useItemHref, useRepo, useDocumentTitle } from "../hooks";
 import { useAccounts } from "../accounts";
 import { SpaceFilter, SpaceScope, useReplicas } from "../ui/Spaces";
 import { useT, titleOf } from "../i18n";
@@ -49,6 +49,7 @@ export function TrashView() {
 /** One deleted item in its workspace's scope; `space`: the workspace's name, with several. */
 function TrashRow({ item: i, space }: { item: Item; space?: string }) {
   const r = useRepo();
+  const itemHref = useItemHref();
   const { t } = useT();
   // where it was: its home and the homes above (so two "R&S" in the trash can be told apart)
   const path: string[] = [];
