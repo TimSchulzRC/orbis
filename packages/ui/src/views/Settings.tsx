@@ -503,9 +503,27 @@ function DeviceFilesGroup() {
         title={t("settings.originals")}
         hint={t("settings.mode." + mode + "Hint")}
         control={<Seg label={t("settings.originals")} value={mode} onChange={setMode} options={(["online", "local"] as const).map((m) => ({ value: m, label: t("settings.mode." + m) }))} />}
-      />
-      <SettingRow title={t("settings.onDevice")} hint={status} />
+      >
+        <DeviceFilesMeter local={sum("originals")} total={sum("total")} status={status} />
+      </SettingRow>
     </SettingsGroup>
+  );
+}
+
+/** How many originals are on this device: a slim bar under the mode it follows from, with the count and size. */
+function DeviceFilesMeter({ local, total, status }: { local: number; total: number; status: string }) {
+  const { t } = useT();
+  const share = total ? local / total : 0;
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-baseline justify-between gap-3 text-xs">
+        <span className="text-muted-foreground">{t("settings.onDevice")}</span>
+        <span className="tabular-nums text-muted-foreground">{status}</span>
+      </div>
+      <div className="h-1 overflow-hidden rounded-full bg-surface-2 dark:bg-hover" role="progressbar" aria-valuenow={Math.round(share * 100)} aria-valuemin={0} aria-valuemax={100} aria-label={t("settings.onDevice")}>
+        <div className="h-full rounded-full bg-foreground/60 transition-[width]" style={{ width: `${share * 100}%` }} />
+      </div>
+    </div>
   );
 }
 
