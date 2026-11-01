@@ -686,8 +686,8 @@ function mergeChanges(a: FieldChange[], b: FieldChange[]): FieldChange[] {
       prev.from = [...removed];
     } else prev.to = c.to;
   }
-  // Drop fields that ended where they started.
-  return out.filter((c) => c.field === "update" || c.field === "schema" || moved(c));
+  // Drop fields that ended where they started. The body only has lengths here, and equal lengths can be another text.
+  return out.filter((c) => c.field === "update" || c.field === "schema" || c.field === "body" || moved(c));
 }
 
 function moved(c: FieldChange): boolean {

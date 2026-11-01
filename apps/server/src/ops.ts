@@ -547,7 +547,7 @@ export class Ops {
   activityFeed(opts: ActivityOpts, me = ""): { entries: ActivityEvent[]; cursor: string; more: boolean } {
     const now = Date.now();
     this.ix; // flushed: entries for edits that arrived moments ago are written
-    const docs = opts.under ? [...this.subtree(this.resolve(opts.under).id)] : opts.ref ? [this.resolve(opts.ref).id] : undefined;
+    const docs = opts.under ? [...this.subtree(this.anyItem(opts.under).id)] : opts.ref ? [this.anyItem(opts.ref).id] : undefined;
     const match = opts.by ? byFilter(opts.by, me) : () => true;
     const after = opts.since !== undefined ? this.feedPosition(opts.since) : undefined;
     const limit = opts.limit ?? (after ? 100 : 40);
@@ -612,8 +612,8 @@ export class Ops {
     const { entries, cursor, more } = this.activityFeed(opts, me);
     const scope = [
       opts.since !== undefined ? `since ${opts.since}` : `in the last ${opts.days ?? 7} day(s)`,
-      opts.under && `under "${this.resolve(opts.under).title}"`,
-      opts.ref && `of "${this.resolve(opts.ref).title}"`,
+      opts.under && `under "${this.anyItem(opts.under).title}"`,
+      opts.ref && `of "${this.anyItem(opts.ref).title}"`,
       opts.by && `by ${opts.by}`,
     ].filter(Boolean);
     const head = `${entries.length}${more ? "+" : ""} change(s) ${scope.join(" · ")}${opts.since !== undefined ? " (oldest first)" : " (newest first)"}`;
@@ -636,7 +636,12 @@ export class Ops {
       }
       return lines.join("\n");
     });
-    const next = more ? `More changes after these: call activity again with since="${cursor}".` : `cursor: ${cursor} – pass it as since next time to get only what changed after this call.`;
+    const windowStart = new Date(Date.now() - (opts.days ?? 7) * DAY_MS).toISOString();
+    const next = !more
+      ? `cursor: ${cursor} – pass it as since next time to get only what changed after this call.`
+      : opts.since !== undefined
+        ? `More changes after these: call activity again with since="${cursor}".`
+        : `More, older changes than these: raise limit, or go through all of them oldest first with since="${windowStart}". For your next session: cursor ${cursor}.`;
     return [head, next, ...blocks].join("\n\n");
   }
 
@@ -701,11 +706,10 @@ export class Ops {
     return out.filter(Boolean);
   }
 
-  /** An item to show the history of: by id also when it is in the trash. */
-  private historyItem(ref: string): Item {
-    const byId = this.store.records.get(ref.trim());
-    const i = byId && (byId.kind === "info" || byId.kind === "datei") ? byId : this.resolve(ref);
-    return i;
+  /** An item by id also when it is in the trash (its history and activity stay readable); else as resolve(). */
+  private anyItem(ref: string): Item {
+    const byId = this.store.records.get(ref.trim().replace(/^\[\[|\]\]$/g, ""));
+    return byId && (byId.kind === "info" || byId.kind === "datei") ? byId : this.resolve(ref);
   }
 
   /**
@@ -714,7 +718,7 @@ export class Ops {
    */
   history(ref: string, opts: { version?: number; from?: number; to?: number } = {}): string {
     this.ix;
-    const item = this.historyItem(ref);
+    const item = this.anyItem(ref);
     const name = `"${displayTitle(item) || "(untitled)"}" [${item.id}]`;
     const versions = this.store.versions(item.id);
     const pick = (n: number) => {

@@ -252,3 +252,29 @@ test("what an activity entry changed: the versions before and after it", async (
   const created = s.events({ doc: id, limit: 5 }).find((e) => e.kind === "created")!;
   expect(s.eventText(created.id)).toBeUndefined();
 });
+
+test("edits that keep the length still show their diff when folded into one entry", async () => {
+  await tool("create", { items: [{ title: "Tier", body: "cat\n" }] });
+  const id = idOf("Tier");
+  typing(TIM, id, ["bat\n", "bar\n"]);
+  const ev = s.events({ doc: id, limit: 1 })[0]!;
+  expect(ev.changes.find((c) => c.field === "body")).toMatchObject({ diff: true });
+  expect((await tool("activity", { days: 1, ref: id })).text).toContain("-cat\n    +bar");
+});
+
+test("activity without since says how to get the older entries a limit cut off", async () => {
+  await tool("create", { items: Array.from({ length: 4 }, (_, i) => ({ title: `Eintrag ${i}` })) });
+  const out = (await tool("activity", { days: 1, limit: 2 })).text;
+  expect(out).toMatch(/More, older changes than these: raise limit, or go through all of them oldest first with since="\d{4}-/);
+});
+
+test("a deleted item's activity and subtree stay readable by id", async () => {
+  await tool("create", { items: [{ title: "Altprojekt", type: "Projekt" }] });
+  await tool("create", { items: [{ title: "Unterpunkt", parents: ["Altprojekt"] }] });
+  const id = idOf("Altprojekt");
+  await tool("delete", { ref: "Altprojekt", children: "trash" });
+  const out = await tool("activity", { days: 1, under: id });
+  expect(out.error).toBe(false);
+  expect(out.text).toContain('created "Unterpunkt"');
+  expect(out.text).toContain('deleted "Altprojekt"');
+});
