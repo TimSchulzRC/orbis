@@ -19,6 +19,7 @@ import { setRepo } from "./repo";
 import { globalPage } from "./scope";
 import { KEYS } from "./ui/storage";
 import { navigate, parseHash, spaceHref } from "./hooks";
+import { moveInArray } from "./lib/utils";
 
 export interface Account {
   token: string;
@@ -427,6 +428,26 @@ export async function createSpace(name: string, examples: boolean) {
   if (shown) shown = [...shown, w.id];
   await refresh();
   navigate("/", { space: w.id });
+}
+
+/**
+ * Put workspace `id` before (or after) `to` in the account's order of workspaces. Shown at once;
+ * the server keeps it for every device. Offline or refused: back to the order before, and the error.
+ */
+export async function moveSpace(id: string, to: string, before: boolean) {
+  const from = spaces.findIndex((s) => s.id === id);
+  const at = spaces.findIndex((s) => s.id === to);
+  if (from < 0 || at < 0 || id === to) return;
+  const previous = spaces;
+  spaces = moveInArray(spaces, from, at + (before ? 0 : 1));
+  save();
+  try {
+    await call<Ok>("/api/account/workspaces", { order: spaces.map((s) => s.id) }, "PUT");
+  } catch (e) {
+    spaces = previous;
+    save();
+    throw e;
+  }
 }
 
 export async function renameSpace(s: Space, name: string) {

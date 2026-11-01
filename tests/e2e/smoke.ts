@@ -256,8 +256,13 @@ async function firstWorkspace(browser: import("playwright").Browser, server: Ser
   // the global settings list the workspaces; the examples are a workspace's own
   await check(page, label, "/#/settings", errors, async (p) => {
     if (await p.getByRole("button", { name: "Beispiele entfernen …" }).count()) failures.push(`${label}: workspace settings in the global settings`);
-    await p.getByRole("dialog", { name: "Einstellungen" }).getByRole("link", { name: /Persönlich/ }).click();
-    if (!(await p.getByRole("heading", { name: "Persönlich" }).waitFor({ timeout: 3000 }).then(() => true, () => false))) failures.push(`${label}: the workspace's settings do not open from the list`);
+    // a workspace's settings open in the same dialog, with the way back
+    await p.getByRole("dialog", { name: "Einstellungen" }).getByRole("button", { name: /Persönlich/ }).click();
+    const own = p.getByRole("dialog", { name: "Workspace-Einstellungen · Persönlich" });
+    if (!(await own.waitFor({ timeout: 3000 }).then(() => true, () => false))) failures.push(`${label}: the workspace's settings do not open from the list`);
+    else if (!(await own.getByRole("button", { name: "Beispiele entfernen …" }).count())) failures.push(`${label}: the workspace's settings miss its examples`);
+    await own.getByRole("button", { name: "Einstellungen" }).click();
+    if (!(await p.getByRole("dialog", { name: "Einstellungen" }).waitFor({ timeout: 3000 }).then(() => true, () => false))) failures.push(`${label}: no way back from a workspace's settings`);
   });
   await check(page, label, "/#/workspace", errors, async (p) => {
     await p.getByRole("button", { name: "Beispiele entfernen …" }).click();
@@ -278,7 +283,9 @@ async function firstWorkspace(browser: import("playwright").Browser, server: Ser
 /**
  * A second workspace next to the first: created from the sidebar, without the examples; the
  * inbox is one list of both and shows one when chosen (remembered over a reload, the sidebar
- * follows); a type page can be pinned; a pinned area moves into the other workspace.
+ * follows); a type page can be pinned; a pinned area moves into the other workspace; the new
+ * workspace comes first, and the blocks change places from their menu and by dragging (also into
+ * the empty space below them).
  */
 async function twoWorkspaces(browser: import("playwright").Browser, server: Server) {
   const personal = server.me.workspaces[0]!.id;
@@ -305,7 +312,7 @@ async function twoWorkspaces(browser: import("playwright").Browser, server: Serv
   await check(page, label, "/#/inbox", errors, async (p) => {
     const panel = p.locator("[data-shelf-panel]");
     const chips = panel.locator("[role=group] button");
-    if ((await chips.allInnerTexts()).map((x) => x.replace(/\s*\d+$/, "")).join(",") !== "Alle,Persönlich,Firma") failures.push(`${label}: inbox filter is ${(await chips.allInnerTexts()).join(", ")}`);
+    if ((await chips.allInnerTexts()).map((x) => x.replace(/\s*\d+$/, "")).join(",") !== "Alle,Firma,Persönlich") failures.push(`${label}: inbox filter is ${(await chips.allInnerTexts()).join(", ")}`);
     await chips.filter({ hasText: "Firma" }).click();
     await p.reload();
     await settle(p);
@@ -329,6 +336,29 @@ async function twoWorkspaces(browser: import("playwright").Browser, server: Serv
     if (!(await firma(p).getByText("Arbeit").waitFor({ timeout: 8000 }).then(() => true, () => false))) failures.push(`${label}: "Arbeit" did not move into "Firma"`);
     if (await p.locator("aside section[aria-label='Persönlich'] a[href$='/i/ex-work']").count()) failures.push(`${label}: "Arbeit" is still in "Persönlich"`);
   });
+  // the blocks in the sidebar change places: from the "…" menu, then by dragging a name; the server keeps the order
+  await check(page, label, `/#/w/${personal}/`, errors, async (p) => {
+    const blocks = () => p.locator("aside section[aria-label]").evaluateAll((s) => s.map((x) => x.getAttribute("aria-label")).join(","));
+    const order = async () => ((await (await fetch(server.url + "/api/account", { headers: { authorization: `Bearer ${server.token}` } })).json()).workspaces as { name: string }[]).map((w) => w.name).join(",");
+    if ((await blocks()) !== "Firma,Persönlich") failures.push(`${label}: the new workspace is not on top: ${await blocks()}`);
+    await firma(p).getByRole("button", { name: "Aktionen für Firma" }).click();
+    await p.locator("[data-popover]").getByRole("button", { name: "Nach unten" }).click();
+    await p.waitForFunction(() => [...document.querySelectorAll("aside section[aria-label]")].map((x) => x.getAttribute("aria-label")).join() === "Persönlich,Firma", undefined, { timeout: 3000 }).catch(() => {});
+    if ((await blocks()) !== "Persönlich,Firma") failures.push(`${label}: "Nach unten" did not move "Firma" down: ${await blocks()}`);
+    if ((await order()) !== "Persönlich,Firma") failures.push(`${label}: the server did not keep the order: ${await order()}`);
+    await firma(p).locator("[draggable=true]").first().dragTo(p.locator("aside section[aria-label='Persönlich'] a[href$='/i/ex-welcome']"), { targetPosition: { x: 10, y: 2 } });
+    await p.waitForFunction(() => [...document.querySelectorAll("aside section[aria-label]")].map((x) => x.getAttribute("aria-label")).join() === "Firma,Persönlich", undefined, { timeout: 3000 }).catch(() => {});
+    if ((await blocks()) !== "Firma,Persönlich") failures.push(`${label}: dragging "Firma" above did not move it: ${await blocks()}`);
+    await p.reload();
+    await settle(p);
+    if ((await blocks()) !== "Firma,Persönlich") failures.push(`${label}: the order is lost after a reload: ${await blocks()}`);
+    // let go anywhere: the top block dragged into the empty space at the bottom goes last
+    const area = p.locator("aside div.overflow-y-auto").first();
+    const h = (await area.boundingBox())!.height;
+    await firma(p).locator("[draggable=true]").first().dragTo(area, { targetPosition: { x: 100, y: h - 10 } });
+    await p.waitForFunction(() => [...document.querySelectorAll("aside section[aria-label]")].map((x) => x.getAttribute("aria-label")).join() === "Persönlich,Firma", undefined, { timeout: 3000 }).catch(() => {});
+    if ((await blocks()) !== "Persönlich,Firma") failures.push(`${label}: dragged into the empty space below, "Firma" did not go last: ${await blocks()}`);
+  });
   await context.close();
 }
 
@@ -340,7 +370,8 @@ async function twoWorkspaces(browser: import("playwright").Browser, server: Serv
 async function membersOnSettings(browser: import("playwright").Browser, server: Server) {
   const api = (path: string, init: RequestInit = {}, token = server.token) =>
     fetch(server.url + path, { ...init, headers: { "content-type": "application/json", authorization: `Bearer ${token}` } }).then((r) => r.json());
-  const ws = (await api("/api/account")).workspaces[0].id as string;
+  // the first workspace, not "Firma" from before
+  const ws = ((await api("/api/account")).workspaces as { id: string; name: string }[]).find((w) => w.name === "Persönlich")!.id;
   const invite = async () => (await api(`/api/workspaces/${ws}/invites`, { method: "POST", body: "{}" })).code as string;
   const { token: bea } = await api("/api/account/signup", { method: "POST", body: JSON.stringify({ name: "Bea", email: "bea@example.org", password: "geheim12345", invite: await invite() }) });
   const old = await invite();
@@ -381,7 +412,7 @@ async function membersOnSettings(browser: import("playwright").Browser, server: 
     // revoking asks first: cancelled, the link stays; confirmed, it goes
     await links.filter({ hasText: old }).getByRole("button", { name: "Widerrufen" }).click();
     await p.getByRole("dialog", { name: "Link widerrufen?" }).getByRole("button", { name: "Abbrechen" }).click();
-    await p.getByRole("dialog").waitFor({ state: "detached", timeout: 3000 });
+    await p.getByRole("dialog", { name: "Link widerrufen?" }).waitFor({ state: "detached", timeout: 3000 });
     if ((await fetch(`${server.url}/api/invites/${old}`)).status !== 200) failures.push(`${label}: a cancelled revoke took the link back`);
     await links.filter({ hasText: old }).getByRole("button", { name: "Widerrufen" }).click();
     await p.getByRole("dialog", { name: "Link widerrufen?" }).getByRole("button", { name: "Widerrufen", exact: true }).click();

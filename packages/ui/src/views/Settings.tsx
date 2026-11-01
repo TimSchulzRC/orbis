@@ -1,28 +1,29 @@
-// Settings in two kinds. The app's, a dialog over the page (sidebar, menu, palette; "#/settings"
-// opens it too): what belongs to this device (language, appearance, files), the account and its workspaces.
-// A workspace's own (#/w/<id>/settings, from its menu in the sidebar or the list here): name and
-// members, capture, examples, agents, sync, and the way to its types, activity, graph and trash.
+// Settings in two kinds, both in one dialog over the page. The app's (sidebar, menu, palette;
+// "#/settings" opens it too): what belongs to this device (language, appearance, files), the account
+// and its workspaces. A workspace's own (from its menu in the sidebar, the list in the app's, or
+// "#/w/<id>/settings"): name, members, invite links, examples, capture, agents, sync. Both in the
+// same look: groups with a small heading, one row per setting with its control at the right.
 import { Checkbox } from "../components/ui/checkbox";
 import { Input } from "../components/ui/input";
 import { NativeSelect } from "../components/ui/native-select";
 import { DialogContent, DialogHeader, DialogTitle, Dialog as DialogRoot } from "../components/ui/dialog";
 import { type ReactNode, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { Copy, Check, Crown, Eye, EyeOff, KeyRound, Link2, Plus, RotateCcw, ChevronRight, Shapes, Trash2, UserMinus, UserRound, Waypoints, X } from "lucide-react";
+import { ArrowLeft, Copy, Check, Crown, Eye, EyeOff, KeyRound, Link2, Plus, RotateCcw, ChevronRight, Trash2, UserMinus, UserRound, X } from "lucide-react";
 import { SETTINGS_ID, setSettings } from "@obtion/core/model";
 import { ENDONYMS, LANGS, fmtBytes, fmtDate } from "@obtion/core/i18n";
 import { resetInbox } from "@obtion/core/setup";
 import { listExamples, removeExamples, restoreExamples } from "@obtion/core/examples";
-import { useRepo, useSpaceId, spaceHref, useDocumentTitle, navigate } from "../hooks";
+import { useRepo, navigate } from "../hooks";
 import { useT, setLang } from "../i18n";
-import { Button, Dialog, IconButton, MenuItem, MoreMenu, Popover, Seg, SectionAction, SectionTitle } from "../ui/primitives";
+import { Button, Dialog, IconButton, MenuItem, MoreMenu, Popover, Seg, SectionAction } from "../ui/primitives";
 import { ItemIcon, TypeGlyph } from "../ui/item-look";
 import { cn, toggled } from "../lib/utils";
 import { confirmAction, notify } from "../ui/feedback";
 import { setTheme, useTheme } from "../theme";
 import { type Space, ApiError, activeUser, addPasskey, changePassword, linkFailed, linkOAuth, linkedProviders, deleteAccount, deleteSpace, errorText, inviteLink, inviteLinks, joinUrl, leaveSpace, loginOf, mcpToken, members, passkeys, removeMember, removePasskey, renameSpace, replica, revokeInvite, serverInfo, setRole, signOut, spaceById, useAccounts } from "../accounts";
 import { SignIn } from "./Account";
-import { NewSpaceDialog } from "../ui/Spaces";
-import { closeSettings, openSettings, useSettingsOpen } from "../ui/settings-open";
+import { NewSpaceDialog, SpaceScope } from "../ui/Spaces";
+import { closeSettings, openSettings, openSpaceSettings, useSettingsOpen } from "../ui/settings-open";
 import type { InviteLink, InviteRequest, McpConnect, Member, PasskeyInfo, ServerInfo } from "@obtion/core/api";
 
 /** navigator.clipboard exists only over HTTPS; opened as http://<address> the old way copies. */
@@ -74,13 +75,49 @@ function CopyBox({ text, secret, label }: { text: string; secret?: string; label
   );
 }
 
-/**
- * A workspace's name, who is in it, leaving it. Owners also rename it, make others owners or
- * members, remove them (each confirmed first) and manage the invite links.
- */
-function Members({ space, onRemoved }: { space: Space; onRemoved: () => void }) {
+/** The workspace itself: its name (owners rename it), leaving it, deleting it for everyone (owners only). */
+function SpaceGroup({ space }: { space: Space }) {
   const { t } = useT();
   const [name, setName] = useState(space.name);
+  const [error, setError] = useState("");
+  const owner = space.role === "owner";
+  const fail = (e: unknown) => setError(errorText(e, t, "space"));
+  const remove = async () => {
+    const yes = await confirmAction({ title: t("space.deleteConfirm", { name: space.name }), body: t("space.deleteHint"), yes: t("space.delete"), danger: true });
+    if (yes) await deleteSpace(space).catch(fail);
+  };
+  return (
+    <SettingsGroup title={t("space.general")}>
+      <SettingRow
+        title={t("space.name")}
+        hint={t("space.intro", { server: location.host })}
+        control={
+          owner ? (
+            <form className="flex items-center gap-2" onSubmit={(e) => (e.preventDefault(), void renameSpace(space, name).catch(fail))}>
+              <Input value={name} onChange={(e) => setName(e.target.value)} aria-label={t("space.name")} className="h-8 w-44 bg-bg py-1" />
+              <Button type="submit" variant="outline" disabled={!name.trim() || name === space.name}>
+                {t("space.rename")}
+              </Button>
+            </form>
+          ) : (
+            <span className="text-sm">{space.name}</span>
+          )
+        }
+      />
+      <SettingRow title={t("space.leave")} hint={t("space.leaveHint")} control={<Button variant="outline" onClick={() => void leaveSpace(space).catch(fail)}>{t("space.leave")}</Button>} />
+      <SettingRow
+        title={t("space.delete")}
+        hint={t(owner ? "space.deleteHint" : "space.deleteOwner")}
+        control={owner && <Button variant="danger-outline" onClick={() => void remove()}>{t("space.delete")}</Button>}
+      />
+      {error && <p role="alert" className="px-4 py-3 text-sm text-danger">{error}</p>}
+    </SettingsGroup>
+  );
+}
+
+/** Who is in a workspace, one row each. Owners make others owners or members and remove them (each confirmed first). */
+function MembersGroup({ space, onRemoved }: { space: Space; onRemoved: () => void }) {
+  const { t } = useT();
   const [list, setList] = useState<Member[]>([]);
   const [error, setError] = useState("");
   const load = () => members(space).then(setList, () => {});
@@ -100,23 +137,15 @@ function Members({ space, onRemoved }: { space: Space; onRemoved: () => void }) 
     if (yes) await removeMember(space, m.id).then(() => (void load(), onRemoved()), fail);
   };
   return (
-    <section>
-      <SectionTitle>{t("space.members")}</SectionTitle>
-      <p className="mb-3 text-sm text-muted-foreground">{t("space.intro", { server: location.host })}</p>
-      {owner && (
-        <form className="flex flex-wrap items-center gap-2" onSubmit={(e) => (e.preventDefault(), renameSpace(space, name).catch(fail))}>
-          <Input value={name} onChange={(e) => setName(e.target.value)} aria-label={t("space.name")} className="bg-surface py-1.5" />
-          <Button type="submit" variant="outline" disabled={!name.trim() || name === space.name}>
-            {t("space.rename")}
-          </Button>
-        </form>
-      )}
-      <ul className="mt-3 space-y-1 text-sm" aria-label={t("space.memberList")}>
+    <SettingsGroup title={t("space.memberList")} hint={owner ? undefined : t("space.inviteOwners")}>
+      <ul className="divide-y divide-line" aria-label={t("space.memberList")}>
         {list.map((m) => (
-          <li key={m.id} className="flex min-h-8 items-center gap-2">
-            <span className="min-w-0 truncate">{who(m)}</span>
-            <span className="truncate text-muted-foreground">{m.email}</span>
-            <span className="ml-auto shrink-0 text-xs text-muted-foreground">{t(`space.role.${m.role}`)}</span>
+          <li key={m.id} className="flex min-h-14 items-center gap-3 px-4 py-2.5">
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium">{who(m)}</p>
+              {m.name && <p className="truncate text-xs text-muted-foreground">{m.email}</p>}
+            </div>
+            <span className="shrink-0 text-xs text-muted-foreground">{t(`space.role.${m.role}`)}</span>
             {owner && m.id !== me ? (
               <MoreMenu size="sm" iconSize={14} label={t("space.memberMenu", { name: who(m) })}>
                 {(close) => (
@@ -131,24 +160,18 @@ function Members({ space, onRemoved }: { space: Space; onRemoved: () => void }) 
                 )}
               </MoreMenu>
             ) : (
-              owner && <span className="w-[22px] shrink-0" />
+              owner && <span className="w-7 shrink-0" />
             )}
           </li>
         ))}
       </ul>
-      {!owner && <p className="mt-3 text-sm text-muted-foreground">{t("space.inviteOwners")}</p>}
-      <div className="mt-4 flex flex-wrap gap-2">
-        <Button variant="outline" onClick={() => leaveSpace(space).catch(fail)}>
-          {t("space.leave")}
-        </Button>
-      </div>
-      {error && <p className="mt-3 text-sm text-danger">{error}</p>}
-    </section>
+      {error && <p role="alert" className="px-4 py-3 text-sm text-danger">{error}</p>}
+    </SettingsGroup>
   );
 }
 
 /** The invite links of a workspace that still work: a new one, who made each, until when, revoking. Owners only. */
-function InviteLinks({ space, version }: { space: Space; version: number }) {
+function InviteLinksGroup({ space, version }: { space: Space; version: number }) {
   const { t, lang } = useT();
   const [links, setLinks] = useState<InviteLink[]>([]);
   const [error, setError] = useState("");
@@ -176,31 +199,29 @@ function InviteLinks({ space, version }: { space: Space; version: number }) {
     </Popover>
   );
   return (
-    <section>
-      <SectionTitle right={newLink}>{t("space.invites")}</SectionTitle>
-      <p className="mb-3 text-sm text-muted-foreground">{t("space.inviteHint")}</p>
+    <SettingsGroup title={t("space.invites")} hint={t("space.inviteHint")} action={newLink}>
       {links.length ? (
-        <ul className="space-y-2" aria-label={t("space.invites")}>
+        <ul className="divide-y divide-line" aria-label={t("space.invites")}>
           {links.map((l) => (
-            <li key={l.code} className="rounded-lg border border-line bg-surface-2 py-1.5 pl-3 pr-1.5">
-              <div className="flex items-center gap-1">
-                <code className="min-w-0 flex-1 truncate font-mono text-xs">{joinUrl(l.code)}</code>
-                <CopyButton text={joinUrl(l.code)} />
-                <Button small onClick={() => void revoke(l)}>
-                  {t("space.revoke")}
-                </Button>
+            <li key={l.code} className="flex items-center gap-2 py-2.5 pl-4 pr-2">
+              <div className="min-w-0 flex-1">
+                <code className="block truncate font-mono text-xs">{joinUrl(l.code)}</code>
+                <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                  {t(`space.role.${l.role}`)} · {t(l.by ? "space.inviteBy" : "space.inviteMade", { by: l.by, created: day(l.created), expires: day(l.expires) })}
+                </p>
               </div>
-              <p className="text-xs text-muted-foreground">
-                {t(`space.role.${l.role}`)} · {t(l.by ? "space.inviteBy" : "space.inviteMade", { by: l.by, created: day(l.created), expires: day(l.expires) })}
-              </p>
+              <CopyButton text={joinUrl(l.code)} />
+              <Button small onClick={() => void revoke(l)}>
+                {t("space.revoke")}
+              </Button>
             </li>
           ))}
         </ul>
       ) : (
-        <p className="text-sm text-muted-foreground">{t("space.invitesNone")}</p>
+        <p className="px-4 py-3 text-sm text-muted-foreground">{t("space.invitesNone")}</p>
       )}
-      {error && <p className="mt-3 text-sm text-danger">{error}</p>}
-    </section>
+      {error && <p role="alert" className="px-4 py-3 text-sm text-danger">{error}</p>}
+    </SettingsGroup>
   );
 }
 
@@ -454,11 +475,11 @@ function WorkspacesGroup() {
   return (
     <SettingsGroup title={t("settings.workspaces")} hint={t("settings.workspacesHint")}>
       {spaces.map((s) => (
-        <a key={s.id} href={spaceHref(s.id, "/settings")} className="tap-row flex items-center gap-3 px-4 py-3 text-sm hover:bg-hover">
+        <Button variant="plain" key={s.id} onClick={() => openSpaceSettings(s.id)} className="tap-row flex w-full items-center gap-3 px-4 py-3 text-left text-sm hover:bg-hover">
           <span className="min-w-0 flex-1 truncate font-medium">{s.name}</span>
           <span className="shrink-0 text-xs text-muted-foreground">{t(`space.role.${s.role}`)}</span>
           <ChevronRight size={15} className="shrink-0 text-faint" />
-        </a>
+        </Button>
       ))}
       <Button variant="plain" onClick={() => setCreating(true)} className="tap-row flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-muted-foreground hover:bg-hover hover:text-fg">
         <Plus size={15} /> {t("space.new")}
@@ -538,11 +559,14 @@ function Version() {
   return <p className="text-center text-xs text-muted-foreground">{t("settings.version", { version: info.version + (info.commit ? ` (${info.commit})` : "") })}</p>;
 }
 
-/** A group of settings: a small heading above a card of rows. */
-function SettingsGroup({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
+/** A group of settings: a small heading (with one action at the right, if there is) above a card of rows. */
+function SettingsGroup({ title, hint, action, children }: { title: string; hint?: string; action?: ReactNode; children: ReactNode }) {
   return (
     <section>
-      <h3 className="mb-2 px-1 text-xs font-medium text-muted-foreground">{title}</h3>
+      <div className="mb-2 flex min-h-7 items-end gap-2 px-1">
+        <h3 className="flex-1 pb-0.5 text-xs font-medium text-muted-foreground">{title}</h3>
+        {action}
+      </div>
       <div className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">{children}</div>
       {hint && <p className="mt-2 px-1 text-xs text-muted-foreground">{hint}</p>}
     </section>
@@ -567,36 +591,60 @@ function SettingRow({ title, hint, control, children }: { title: ReactNode; hint
 
 /** The settings dialog, while it is open. Lives once in the app. */
 export function SettingsHost() {
-  return useSettingsOpen() ? <SettingsDialog onClose={closeSettings} /> : null;
+  const open = useSettingsOpen();
+  return open ? <SettingsDialog space={open.space} onClose={closeSettings} /> : null;
 }
 
-/** The settings of the app on this device and the account, with its workspaces. */
-function SettingsDialog({ onClose }: { onClose: () => void }) {
-  const { t, lang } = useT();
-  const theme = useTheme();
+/**
+ * The settings of the app on this device and the account, with its workspaces; or, with `space`,
+ * that workspace's, with the way back to the app's. A workspace that is gone (left, deleted): the app's.
+ */
+function SettingsDialog({ space: id, onClose }: { space: string | null; onClose: () => void }) {
+  const { t } = useT();
+  useAccounts(); // a workspace renamed or gone shows at once
+  const space = id ? spaceById(id) : undefined;
   const previous = useRef<HTMLElement | null>(document.activeElement as HTMLElement);
   return (
     <DialogRoot open onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent onCloseAutoFocus={(e) => { e.preventDefault(); if (previous.current?.isConnected) previous.current.focus({ preventScroll: true }); }} showCloseButton={false} aria-describedby={undefined}
         className="flex h-[min(46rem,88vh)] flex-col gap-0 overflow-hidden rounded-2xl bg-bg p-0 sm:max-w-2xl">
         <DialogHeader className="flex-row items-center gap-2 border-b border-line px-5 py-3 text-left">
-          <DialogTitle className="flex-1 text-base">{t("nav.settings")}</DialogTitle>
+          {space && <IconButton onClick={openSettings} label={t("nav.settings")} icon={ArrowLeft} className="-ml-2" />}
+          <DialogTitle className="min-w-0 flex-1 truncate text-base">{space ? `${t("space.settings")} · ${space.name}` : t("nav.settings")}</DialogTitle>
           <IconButton onClick={onClose} label={t("close")} icon={X} />
         </DialogHeader>
-        <div className="min-h-0 flex-1 space-y-7 overflow-y-auto px-5 py-5">
-          <SettingsGroup title={t("settings.general")}>
-            <SettingRow title={t("settings.language")} hint={t("settings.languageHint")}
-              control={<Seg label={t("settings.language")} value={lang} onChange={setLang} options={LANGS.map((l) => ({ value: l, label: ENDONYMS[l] }))} />} />
-            <SettingRow title={t("settings.theme")} hint={t("settings.themeHint")}
-              control={<Seg label={t("settings.theme")} value={theme.choice} onChange={setTheme} options={(["system", "light", "dark"] as const).map((v) => ({ value: v, label: t("theme." + v) }))} />} />
-          </SettingsGroup>
-          <DeviceFilesGroup />
-          <AccountGroup />
-          <WorkspacesGroup />
-          <Version />
+        {/* a new key for each view: it starts at the top */}
+        <div key={space?.id ?? ""} className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
+          {space ? (
+            <SpaceScope id={space.id}>
+              <SpaceSettings space={space} />
+            </SpaceScope>
+          ) : (
+            <AppSettings />
+          )}
         </div>
       </DialogContent>
     </DialogRoot>
+  );
+}
+
+/** The app's settings: this device, the account, its workspaces. */
+function AppSettings() {
+  const { t, lang } = useT();
+  const theme = useTheme();
+  return (
+    <div className="space-y-7">
+      <SettingsGroup title={t("settings.general")}>
+        <SettingRow title={t("settings.language")} hint={t("settings.languageHint")}
+          control={<Seg label={t("settings.language")} value={lang} onChange={setLang} options={LANGS.map((l) => ({ value: l, label: ENDONYMS[l] }))} />} />
+        <SettingRow title={t("settings.theme")} hint={t("settings.themeHint")}
+          control={<Seg label={t("settings.theme")} value={theme.choice} onChange={setTheme} options={(["system", "light", "dark"] as const).map((v) => ({ value: v, label: t("theme." + v) }))} />} />
+      </SettingsGroup>
+      <DeviceFilesGroup />
+      <AccountGroup />
+      <WorkspacesGroup />
+      <Version />
+    </div>
   );
 }
 
@@ -609,17 +657,23 @@ export function SettingsRedirect() {
   return null;
 }
 
-/** The settings of the workspace in the address. */
-export function SpaceSettingsPage() {
+/** "#/w/<id>/settings": that workspace, with its settings open over it. */
+export function SpaceSettingsRedirect({ space }: { space: string }) {
+  useEffect(() => {
+    navigate("/", { space, replace: true });
+    openSpaceSettings(space);
+  }, [space]);
+  return null;
+}
+
+/** The settings of one workspace (in its SpaceScope). */
+function SpaceSettings({ space }: { space: Space }) {
   const r = useRepo();
   const { t } = useT();
-  const space = spaceById(useSpaceId() ?? "");
   // an MCP token is made on request (each is a new one, shown once)
   const [c, setC] = useState<McpConnect | null>(null);
   const [err, setErr] = useState(false);
   const [removed, setRemoved] = useState(0);
-  useDocumentTitle(space?.name ?? t("space.settings"));
-  if (!space) return null;
   const newToken = () => mcpToken(space).then(setC, () => setErr(true));
   const s = r.status;
   const ix = r.index();
@@ -631,100 +685,70 @@ export function SpaceSettingsPage() {
   const chosen = capture.filter((id) => ix.types.has(id));
 
   return (
-    <div className="page-read space-y-10">
-      <div>
-        <p className="mb-0.5 text-[13px] text-muted-foreground">{t("space.settings")}</p>
-        <h1 className="page-title">{space.name}</h1>
-        {/* the workspace's other pages: one click from here */}
-        <nav className="mt-4 flex flex-wrap gap-2" aria-label={t("settings.more")}>
-          {([
-            ["/types", t("nav.types"), Shapes],
-            ["/graph", t("nav.graph"), Waypoints],
-          ] as const).map(([path, label, I]) => (
-            <a key={path} href={spaceHref(space.id, path)} className="tap-y inline-flex h-8 items-center gap-1.5 rounded-lg border border-line bg-surface px-3 text-sm hover:bg-hover">
-              <I size={15} className="text-muted-foreground" /> {label}
-            </a>
-          ))}
-        </nav>
-      </div>
+    <div className="space-y-7">
+      <SpaceGroup space={space} />
+      <MembersGroup space={space} onRemoved={() => setRemoved((n) => n + 1)} />
+      {space.role === "owner" && <InviteLinksGroup space={space} version={removed} />}
+      <ExamplesGroup />
 
-      <Members space={space} onRemoved={() => setRemoved((n) => n + 1)} />
-
-      {space.role === "owner" && <InviteLinks space={space} version={removed} />}
-
-      <Examples />
-
-      <section>
-        <SectionTitle>{t("settings.capture")}</SectionTitle>
-        <p className="mb-2 text-sm text-muted-foreground">{t("settings.captureHint")}</p>
-        <div className="flex flex-wrap gap-1.5">
-          {types.map((tp) => (
-            <Button variant="plain" key={tp.id} onClick={() => toggleCapture(tp.id)} aria-pressed={capture.includes(tp.id)} className={cn("tap-y inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs", capture.includes(tp.id) ? "border-focus text-fg" : "border-line text-muted-foreground")}>
-              <TypeGlyph schema={tp.schema} size={12} /> {tp.schema!.name}
-            </Button>
-          ))}
-        </div>
-        {chosen.length > 0 && (
-          <label className="mt-3 flex items-center gap-2 text-sm">
-            <span className="text-muted-foreground">{t("settings.captureFirst")}</span>
-            <NativeSelect value={chosen[0]} onChange={(e) => setFirst(e.target.value)} className="tap-row rounded-md border border-line bg-surface px-2 py-1">
-              {chosen.map((id) => (
-                <option key={id} value={id}>
-                  {ix.types.get(id)!.schema!.name}
-                </option>
-              ))}
-            </NativeSelect>
-          </label>
-        )}
-      </section>
-
-      <section>
-        <SectionTitle>{t("settings.agent")}</SectionTitle>
-        <p className="mb-3 text-sm text-muted-foreground">{t("settings.agentIntro")}</p>
-        {err && !c && <p className="text-sm text-muted-foreground">{t("settings.connectOffline")}</p>}
-        {!c && (
-          <Button variant="outline" onClick={() => void newToken()}>
-            {t("settings.newToken")}
-          </Button>
-        )}
-        {c && (
-          <div className="space-y-4">
-            <div>
-              <div className="mb-1 text-sm font-medium">Claude Code</div>
-              <CopyBox label="Claude Code" text={c.claudeCode} secret={c.token} />
-            </div>
-            <div>
-              <div className="mb-1 text-sm font-medium">{t("settings.otherClients")}</div>
-              <CopyBox label="MCP JSON" text={JSON.stringify(c.json, null, 2)} secret={c.token} />
-            </div>
-            <p className="text-sm text-muted-foreground">
-              {t("settings.mirror")} <code className="rounded bg-surface-2 px-1 font-mono text-xs">{c.vault}</code>
-            </p>
+      <SettingsGroup title={t("settings.capture")}>
+        <SettingRow title={t("settings.captureTypes")} hint={t("settings.captureHint")}>
+          <div className="flex flex-wrap gap-1.5">
+            {types.map((tp) => (
+              <Button variant="plain" key={tp.id} onClick={() => toggleCapture(tp.id)} aria-pressed={capture.includes(tp.id)} className={cn("tap-y inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs", capture.includes(tp.id) ? "border-focus text-fg" : "border-line text-muted-foreground")}>
+                <TypeGlyph schema={tp.schema} size={12} /> {tp.schema!.name}
+              </Button>
+            ))}
           </div>
+        </SettingRow>
+        {chosen.length > 0 && (
+          <SettingRow
+            title={t("settings.captureDefault")}
+            hint={t("settings.captureDefaultHint")}
+            control={
+              <NativeSelect value={chosen[0]} onChange={(e) => setFirst(e.target.value)} aria-label={t("settings.captureDefault")} className="tap-row rounded-md border border-line bg-bg px-2 py-1 text-sm">
+                {chosen.map((id) => (
+                  <option key={id} value={id}>
+                    {ix.types.get(id)!.schema!.name}
+                  </option>
+                ))}
+              </NativeSelect>
+            }
+          />
         )}
-      </section>
+      </SettingsGroup>
 
-      <section>
-        <SectionTitle>{t("settings.sync")}</SectionTitle>
-        <dl className="grid grid-cols-[10rem_1fr] gap-y-1.5 text-sm">
-          <dt className="text-muted-foreground">{t("settings.server")}</dt>
-          <dd>{s.online ? t("settings.connected") : t("settings.offline")}</dd>
-          {s.pending > 0 && (
-            <>
-              <dt className="text-muted-foreground">{t("settings.pending")}</dt>
-              <dd>{s.pending}</dd>
-            </>
+      <SettingsGroup title={t("settings.agent")}>
+        <SettingRow
+          title={t("settings.mcpToken")}
+          hint={t("settings.agentIntro")}
+          control={!c && <Button variant="outline" onClick={() => void newToken()}>{t("settings.newToken")}</Button>}
+        >
+          {err && !c && <p className="text-sm text-muted-foreground">{t("settings.connectOffline")}</p>}
+          {c && (
+            <div className="space-y-4">
+              <div>
+                <div className="mb-1 text-sm font-medium">Claude Code</div>
+                <CopyBox label="Claude Code" text={c.claudeCode} secret={c.token} />
+              </div>
+              <div>
+                <div className="mb-1 text-sm font-medium">{t("settings.otherClients")}</div>
+                <CopyBox label="MCP JSON" text={JSON.stringify(c.json, null, 2)} secret={c.token} />
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {t("settings.mirror")} <code className="rounded bg-surface-2 px-1 font-mono text-xs">{c.vault}</code>
+              </p>
+            </div>
           )}
-          <dt className="text-muted-foreground">{t("settings.onDevice")}</dt>
-          <dd>{t("settings.counts", { items: ix.live.filter((i) => i.kind === "info").length, files: ix.live.filter((i) => i.kind === "datei").length, types: ix.types.size })}</dd>
-        </dl>
-        <details className="mt-4 text-sm">
-          <summary className="cursor-pointer text-muted-foreground hover:text-fg">{t("settings.advanced")}</summary>
-          <dl className="mt-2 grid grid-cols-[10rem_1fr] gap-y-1.5">
-            <dt className="text-muted-foreground">{t("settings.position")}</dt>
-            <dd className="tabular-nums">#{s.lastSeq}</dd>
-          </dl>
-          <div className="mt-3 flex flex-wrap gap-2">
+        </SettingRow>
+      </SettingsGroup>
+
+      <SettingsGroup title={t("settings.sync")}>
+        <SettingRow title={t("settings.server")} control={<span className="text-sm text-muted-foreground">{s.online ? t("settings.connected") : t("settings.offline")}</span>} />
+        {s.pending > 0 && <SettingRow title={t("settings.pending")} control={<span className="text-sm tabular-nums text-muted-foreground">{s.pending}</span>} />}
+        <SettingRow title={t("settings.onDevice")} hint={t("settings.counts", { items: ix.live.filter((i) => i.kind === "info").length, files: ix.live.filter((i) => i.kind === "datei").length, types: ix.types.size })} />
+        <SettingRow title={t("settings.advanced")} hint={`${t("settings.position")} #${s.lastSeq}`}>
+          <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={() => r.resetLocal()}>
               {t("settings.redownload")}
             </Button>
@@ -732,42 +756,14 @@ export function SpaceSettingsPage() {
               <RotateCcw size={14} /> {t("inbox.reset")}
             </Button>
           </div>
-        </details>
-      </section>
-
-      <DeleteSpace space={space} />
+        </SettingRow>
+      </SettingsGroup>
     </div>
   );
 }
 
-/** Deleting the workspace for good, on the server for everyone: owners only. */
-function DeleteSpace({ space }: { space: Space }) {
-  const { t } = useT();
-  const [error, setError] = useState("");
-  const run = async () => {
-    const yes = await confirmAction({ title: t("space.deleteConfirm", { name: space.name }), body: t("space.deleteHint"), yes: t("space.delete"), danger: true });
-    if (yes) await deleteSpace(space).catch((e) => setError(errorText(e, t, "space")));
-  };
-  return (
-    <section>
-      <SectionTitle>{t("space.delete")}</SectionTitle>
-      {space.role === "owner" ? (
-        <>
-          <p className="mb-3 text-sm text-muted-foreground">{t("space.deleteHint")}</p>
-          <Button variant="danger-outline" onClick={() => void run()}>
-            {t("space.delete")}
-          </Button>
-        </>
-      ) : (
-        <p className="text-sm text-muted-foreground">{t("space.deleteOwner")}</p>
-      )}
-      {error && <p className="mt-3 text-sm text-danger">{error}</p>}
-    </section>
-  );
-}
-
 /** "Beispiele entfernen": the examples of the setup to the trash, with a preview; changed ones stay unless chosen. */
-function Examples() {
+function ExamplesGroup() {
   const r = useRepo();
   const { t } = useT();
   const ix = r.index();
@@ -783,12 +779,12 @@ function Examples() {
   const entries = list.filter((e) => !e.isType).length;
   const picked = chosen ? list.filter((e) => !e.isType && chosen.has(e.id)).length : 0;
   return (
-    <section>
-      <SectionTitle>{t("examples.title")}</SectionTitle>
-      <p className="mb-3 text-sm text-muted-foreground">{t("examples.intro", { count: entries })}</p>
-      <Button variant="outline" onClick={() => setChosen(new Set(list.filter((e) => !e.changed && !e.inUse).map((e) => e.id)))}>
-        {t("examples.remove")}
-      </Button>
+    <SettingsGroup title={t("examples.title")}>
+      <SettingRow
+        title={t("examples.fromSetup")}
+        hint={t("examples.intro", { count: entries })}
+        control={<Button variant="outline" onClick={() => setChosen(new Set(list.filter((e) => !e.changed && !e.inUse).map((e) => e.id)))}>{t("examples.remove")}</Button>}
+      />
       {chosen && (
         <Dialog title={t("examples.dialogTitle")} onClose={() => setChosen(null)} wide>
           <p className="text-sm text-muted-foreground">{t("examples.preview")}</p>
@@ -822,6 +818,6 @@ function Examples() {
           </div>
         </Dialog>
       )}
-    </section>
+    </SettingsGroup>
   );
 }

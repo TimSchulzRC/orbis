@@ -95,6 +95,9 @@ export class Accounts {
     // links from before roles on links are for members
     const cols = (this.db.query("PRAGMA table_info(invites)").all() as { name: string }[]).map((c) => c.name);
     if (!cols.includes("role")) this.db.exec("ALTER TABLE invites ADD COLUMN role TEXT NOT NULL DEFAULT 'member'");
+    // each member's own order of their workspaces (smallest first); before it, the order was by joining
+    const memberCols = (this.db.query("PRAGMA table_info(members)").all() as { name: string }[]).map((c) => c.name);
+    if (!memberCols.includes("pos")) this.db.exec("ALTER TABLE members ADD COLUMN pos INTEGER NOT NULL DEFAULT 0; UPDATE members SET pos = joined;");
   }
 
   policy: SignupPolicy;
@@ -343,7 +346,7 @@ export class Accounts {
   // ---------- workspaces ----------
 
   workspacesOf(user: string): WorkspaceInfo[] {
-    const rows = this.db.query("SELECT w.id, w.name, w.legacy, m.role FROM members m JOIN workspaces w ON w.id = m.workspace WHERE m.user = ? ORDER BY m.joined").all(user) as { id: string; name: string; legacy: number; role: Role }[];
+    const rows = this.db.query("SELECT w.id, w.name, w.legacy, m.role FROM members m JOIN workspaces w ON w.id = m.workspace WHERE m.user = ? ORDER BY m.pos, m.joined DESC").all(user) as { id: string; name: string; legacy: number; role: Role }[];
     return rows.map((r) => ({ id: r.id, name: r.name, role: r.role, ...(r.legacy ? { legacy: true } : {}) }));
   }
 
@@ -375,8 +378,22 @@ export class Accounts {
     rmSync(this.dir(workspace), { recursive: true, force: true });
   }
 
+  /**
+   * The user's own order of their workspaces: `ids` in this order. Ones the list leaves out (joined
+   * since the list was made) stay on top, as new ones are.
+   */
+  reorder(user: string, ids: string[]) {
+    const current = this.workspacesOf(user).map((w) => w.id);
+    const order = [...current.filter((id) => !ids.includes(id)), ...ids.filter((id) => current.includes(id))];
+    const set = this.db.query("UPDATE members SET pos = ? WHERE workspace = ? AND user = ?");
+    this.db.transaction(() => order.forEach((id, i) => set.run(i, id, user)))();
+  }
+
+  /** A new member; the workspace comes first in their order. */
   private addMember(workspace: string, user: string, role: Role) {
-    this.db.query("INSERT OR IGNORE INTO members (workspace, user, role, joined) VALUES (?, ?, ?, ?)").run(workspace, user, role, Date.now());
+    this.db
+      .query("INSERT OR IGNORE INTO members (workspace, user, role, joined, pos) VALUES (?, ?, ?, ?, (SELECT COALESCE(MIN(pos), 1) - 1 FROM members WHERE user = ?))")
+      .run(workspace, user, role, Date.now(), user);
   }
 
   members(workspace: string): Member[] {
