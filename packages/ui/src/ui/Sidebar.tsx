@@ -404,19 +404,20 @@ function TreeNode({
         <Button variant="plain"
           tabIndex={-1}
           onClick={() => kids.length && toggle(key, depth)}
-          className={cn("flex shrink-0 items-center justify-center rounded text-muted-foreground", touch ? "tap -my-1.5 size-8" : "size-5", kids.length ? "hover:bg-surface-2" : "invisible")}
+          className={cn("relative z-10 flex shrink-0 items-center justify-center rounded text-muted-foreground", touch ? "tap -my-1.5 size-8" : "size-5", kids.length ? "hover:bg-surface-2" : "invisible")}
           aria-label={isOpen ? t("tree.collapse") : t("tree.expand")}
           aria-expanded={isOpen}
         >
           {isOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
         </Button>
         {isType ? <TypeGlyph schema={item.schema} size={touch ? 17 : 15} /> : <ItemIcon item={item} size={touch ? 17 : 15} />}
-        {/* the row is dragged, not the link in it */}
-        <a href={spaceHref(space, itemPath(item.id))} draggable={false} className="min-w-0 flex-1 truncate" title={item.title} aria-current={activeId === item.id ? "page" : undefined}>
+        {/* the row is dragged, not the link in it; the link covers the whole row (::after), only
+            the buttons lie above it */}
+        <a href={spaceHref(space, itemPath(item.id))} draggable={false} className="min-w-0 flex-1 truncate after:absolute after:inset-0 after:rounded-lg" title={secondary ? `${item.title}\n${t("tree.secondary", { home: ix.get(home)?.title ?? "" })}` : item.title} aria-current={activeId === item.id ? "page" : undefined}>
           {isType ? ix.typePlural(item.id) : distinctLabel(item.title, parent ? ix.get(parent)?.title : undefined) || t("untitled")}
         </a>
         {secondary && (
-          <span title={t("tree.secondary", { home: ix.get(home)?.title ?? "" })} className="text-muted-foreground">
+          <span className="pointer-events-none text-muted-foreground">
             <Link2 size={12} />
           </span>
         )}
@@ -428,14 +429,14 @@ function TreeNode({
               createAndOpen({ parents: [item.id] }, repo, space);
             }}
             tabIndex={-1}
-            className="rounded p-0.5 text-muted-foreground opacity-0 hover:bg-surface-2 hover:text-fg group-hover/row:opacity-100 focus:opacity-100"
+            className="relative z-10 rounded p-0.5 text-muted-foreground opacity-0 hover:bg-surface-2 hover:text-fg group-hover/row:opacity-100 focus:opacity-100"
             aria-label={t("tree.newBelow")}
             title={t("tree.newBelow")}
           >
             <Plus size={13} />
           </Button>
         )}
-        {!touch && <MoreMenu menu={menu} size="xs" iconSize={14} tabIndex={-1} className={cn("hover:bg-surface-2", REVEAL.row)}>
+        {!touch && <MoreMenu menu={menu} size="xs" iconSize={14} tabIndex={-1} className={cn("relative z-10 hover:bg-surface-2", REVEAL.row)}>
           {(close) => (
             <>
               <MenuItem onClick={() => (close(), repo.pin(item.id, !item.pinned))}>{item.pinned ? t("item.unpin") : t("item.pin")}</MenuItem>
