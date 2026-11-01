@@ -4,6 +4,7 @@ import { rpc as storeRpc, setupStore, tool as storeTool } from "../support/store
 import type { Store } from "@obtion/server/store";
 import { storeWriter } from "@obtion/server/importers";
 import { deleteType } from "@obtion/core/typeops";
+import { versionOf } from "@obtion/server/ops";
 
 afterAll(removeTempDirs);
 
@@ -38,7 +39,7 @@ test("answers have one line per entry with id, type, status, due, path and block
   await tool("create", { items: [{ title: "Zertifikat", type: "Task", parents: ["Website"] }] });
   const r = await tool("create", { items: [{ title: "Deploy", type: "Task", parents: ["Website"], properties: { Fällig: "30.10.2026", "Blockiert durch": ["Zertifikat"] } }] });
   const id = s.index().resolveTitle("Deploy")!;
-  expect(r.text.split("\n").slice(0, 2)).toEqual(["Created:", `- Deploy [${id}] · Task · Nicht begonnen (todo) · due 2026-10-30 · Arbeit › Website · ⚠ blocked by "Zertifikat"`]);
+  expect(r.text.split("\n").slice(0, 2)).toEqual(["Created:", `- Deploy [${id}] · Task · Nicht begonnen (todo) · due 2026-10-30 · Arbeit › Website · ⚠ blocked by "Zertifikat" · version ${versionOf(s.records.get(id)!)}`]);
   expect(r.text).toMatch(/\(step s\w+ – undo it with the undo tool\)$/);
   const q = await tool("query", { query: "typ:Task blockiert" });
   expect(q.text.split("\n")).toEqual([expect.stringMatching(/^1 item\(s\) · typ:Task blockiert/), expect.stringMatching(/^- Deploy \[/)]);
@@ -77,7 +78,7 @@ test("a link to the item itself is refused", async () => {
   expect(r.text).toMatch(/^Nothing changed\. .*links to itself/);
   await tool("create", { items: [{ title: "Andere" }] });
   const id = s.index().resolveTitle("Andere")!;
-  expect((await tool("update", { ref: "Andere", body: `Siehe [[${id}|mich]]` })).text).toMatch(/links to itself/);
+  expect((await tool("update", { ref: "Andere", body: `Siehe [[${id}|mich]]`, body_mode: "append" })).text).toMatch(/links to itself/);
   expect((await tool("update", { ref: "Andere", refs_add: ["Andere"] })).text).toMatch(/cannot refer to itself/);
   expect((await tool("create", { items: [{ title: "T", type: "Task", properties: { "Blockiert durch": ["T"] } }] })).error).toBe(true);
 });

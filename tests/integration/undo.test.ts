@@ -93,7 +93,7 @@ test("a step pushed by a device (delete with cascade over two documents) can be 
 
 test("undoing a creation sends the new item to the trash; text typed later stays there", () => {
   const step = stepOf(ops.call(AG, () => (ops.create({ title: "Idee" }, AG), "ok")));
-  ops.call("web:x", () => (ops.update("Idee", { body: "Mehr Text" }, "web:x"), "ok"));
+  ops.call("web:x", () => (ops.update("Idee", { body: "Mehr Text", body_mode: "append" }, "web:x"), "ok"));
   undoStep(s, step, "web:x");
   const it = [...s.records.values()].find((r) => r.title === "Idee")!;
   expect(it.deleted).toBe(true);

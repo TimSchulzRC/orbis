@@ -6,6 +6,7 @@ import { setupStore, stepOf, tool } from "../support/store";
 import * as Y from "yjs";
 import { AreaError, Store } from "@obtion/server/store";
 import { undoStep } from "@obtion/server/undo";
+import { versionOf } from "@obtion/server/ops";
 import { PERSONAL as P, readItem } from "@obtion/core/model";
 
 afterAll(removeTempDirs);
@@ -118,7 +119,8 @@ test("undo works on documents that are no longer in memory", () => {
 test("MCP tools change documents that are not in memory", async () => {
   const { s, ids } = seeded(6);
   expect(s.loaded.has(ids[0]!)).toBe(false);
-  expect((await tool(s, "update", { ref: ids[0], title: "Umbenannt", body: "Neuer Text" })).error).toBe(false);
+  const base_version = versionOf(s.records.get(ids[0]!)!);
+  expect((await tool(s, "update", { ref: ids[0], title: "Umbenannt", body: "Neuer Text", base_version })).error).toBe(false);
   expect(s.records.get(ids[0]!)).toMatchObject({ title: "Umbenannt", body: "Neuer Text" });
   expect(s.events({ doc: ids[0] })[0]).toMatchObject({ kind: "updated", origin: expect.stringContaining("agent") });
 });

@@ -111,8 +111,12 @@ test("a workspace is only open to its members – sync, files, activity, MCP", a
   const events = (await get(bare, `/w/${cw.id}/api/activity?limit=5`, carla.token).then((r) => r.json())) as { origin: string; title: string; doc: string }[];
   expect(events.find((e) => e.title === "Vom Agenten")!.origin).toBe(`agent:mcp;u=${carla.user.id};n=carla`);
   // the versions of a text: for members only, the list, one version, what an entry changed
-  await mcpTool(bare, token, "update", { ref: "Vom Agenten", body: "Erste Fassung" }, `/w/${cw.id}/mcp`);
-  await mcpTool(bare, token, "update", { ref: "Vom Agenten", body: "Zweite Fassung" }, `/w/${cw.id}/mcp`);
+  const replace = async (body: string) => {
+    const base_version = JSON.parse(await mcpTool(bare, token, "get", { ref: "Vom Agenten" }, `/w/${cw.id}/mcp`)).version;
+    await mcpTool(bare, token, "update", { ref: "Vom Agenten", body, base_version }, `/w/${cw.id}/mcp`);
+  };
+  await replace("Erste Fassung");
+  await replace("Zweite Fassung");
   const doc = events.find((e) => e.title === "Vom Agenten")!.doc;
   expect((await get(bare, `/w/${cw.id}/api/history?doc=${doc}`, dan.token)).status).toBe(403);
   const { versions } = await get(bare, `/w/${cw.id}/api/history?doc=${doc}`, carla.token).then((r) => r.json());
