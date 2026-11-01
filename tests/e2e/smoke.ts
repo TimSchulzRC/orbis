@@ -1,12 +1,12 @@
 // The built app against real servers, as T3 Code's "boot the built web client": every route and
 // one page per kind of item opens without console errors, page errors, an error boundary or a
-// blank page, on desktop and phone; and the flows that need the server: signing in, the setup
-// on the page (with the examples removed and brought back), a second workspace and a move into
-// it, deleting the account. How single parts of the interface behave is tested on their own, in
+// blank page, on desktop and phone; and the flows that need the server: signing in, the first
+// workspace created on the page (with the examples, removed and brought back), a second one and a
+// move into it, deleting the account. How single parts of the interface behave is tested on their own, in
 // tests/browser (bun run test:browser).
 // Servers: empty, filled with the examples ("setup --examples", plus a file and an item in the
-// trash), the same with every type deleted (the app runs with zero types), and a fresh one set
-// up on the page. Each gets its first account through the API; the browser holds it as if it
+// trash), the same with every type deleted (the app runs with zero types), and a fresh one whose
+// account creates its first workspace on the page. Each gets its first account through the API; the browser holds it as if it
 // had signed in (the sign-in page itself is checked once). Independent parts run side by side.
 //   bun run test:e2e        (builds first; Chrome from ~/.cache/ms-playwright)
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -18,7 +18,7 @@ import { ROOT, bootServer, firstAccount, mcpTool, seedExamples } from "../suppor
 const failures: string[] = [];
 let checks = 0;
 
-async function startServer(seeded: boolean, noTypes = false) {
+async function startServer(seeded: boolean, noTypes = false, workspace = true) {
   const dir = mkdtempSync(join(tmpdir(), "obtion-e2e-"));
   const env = { ...process.env, OBTION_DATA: dir };
   if (seeded) {
@@ -29,8 +29,9 @@ async function startServer(seeded: boolean, noTypes = false) {
     }
   }
   const { url, proc } = await bootServer({ OBTION_DATA: dir });
-  // the first account (the admin): with the seeded data it gets them, otherwise a personal workspace
-  const { token: session, me } = await firstAccount(url);
+  // the first account (the admin): with the seeded data it gets them, otherwise a workspace made
+  // through the API (the app sets it up) – or none, to create it on the page
+  const { token: session, me } = await firstAccount(url, workspace);
   const server = { dir, url, proc, file: "", trashed: "", token: session, me };
   if (seeded && !noTypes) {
     const token = JSON.parse(readFileSync(join(dir, "config.json"), "utf8")).token as string;
@@ -54,7 +55,7 @@ async function signedIn(browser: import("playwright").Browser, server: Awaited<R
       if (localStorage.getItem("obtion.account")) return;
       localStorage.setItem("obtion.account", JSON.stringify(account));
       localStorage.setItem("obtion.spaces", JSON.stringify(spaces));
-      localStorage.setItem("obtion.active", spaces[0]!.id);
+      if (spaces[0]) localStorage.setItem("obtion.active", spaces[0].id);
     },
     { account, spaces },
   );
@@ -109,12 +110,12 @@ const ITEMS = ["ex-work", "ex-art-de", "ex-relaunch", "ex-design", "ex-t-pages",
 
 async function run() {
   const browser = await chromium.launch({ headless: true });
-  const [empty, seeded, typeless, fresh] = await Promise.all([startServer(false), startServer(true), startServer(true, true), startServer(false)]);
+  const [empty, seeded, typeless, fresh] = await Promise.all([startServer(false), startServer(true), startServer(true, true), startServer(false, false, false)]);
   const desktop = { name: "desktop", viewport: { width: 1440, height: 900 } };
   const phone = { name: "phone", viewport: { width: 390, height: 844 }, mobile: true };
   try {
     await Promise.all([
-      // the empty server: signing in finds the workspace not set up; the first visit sets it up
+      // the empty server: signing in finds the workspace not set up; the app sets it up
       (async () => {
         await signInPage(browser, empty);
         await pages(browser, "empty", empty, desktop);
@@ -125,7 +126,7 @@ async function run() {
       pages(browser, "no types", typeless, desktop),
       pages(browser, "no types", typeless, phone),
       (async () => {
-        await examplesOnSetup(browser, fresh);
+        await firstWorkspace(browser, fresh);
         await twoWorkspaces(browser, fresh);
         await deleteAccountOnSettings(browser, fresh);
       })(),
@@ -159,11 +160,10 @@ async function pages(browser: import("playwright").Browser, serverName: string, 
   const label = `${serverName} ${v.name}`;
   const phone = !!v.mobile;
   if (serverName === "empty" && !phone) {
-    // the first visit sets the server up, here without the examples
+    // the app has set the workspace up (made through the API: without the examples)
     await check(page, label, "/", errors, async (p) => {
-      await p.getByRole("checkbox", { name: /Mit Beispielen starten/ }).uncheck();
-      await p.getByRole("button", { name: /Einrichten|Set up/ }).click();
-      await p.waitForSelector("main", { timeout: 8000 });
+      await p.locator("aside section[aria-label='Persönlich']").getByRole("button", { name: "Typen" }).waitFor({ timeout: 8000 });
+      if (await p.locator("aside a[href$='/i/ex-welcome']").count()) failures.push(`${label}: the examples came along`);
     });
   }
   for (const r of ROUTES) await check(page, label, r, errors, undefined, { phone });
@@ -217,14 +217,17 @@ async function signInPage(browser: import("playwright").Browser, server: { url: 
     await p.getByLabel("E-Mail").fill("e2e@example.org");
     await p.getByLabel("Passwort").fill("geheim12345");
     await p.getByRole("button", { name: "Anmelden" }).click();
-    // the account's workspace is not set up yet: its setup page
-    if (!(await p.getByRole("button", { name: /Einrichten/ }).waitFor({ timeout: 8000 }).then(() => true, () => false))) failures.push("sign-in: the workspace did not open after signing in");
+    // the account's workspace was not set up yet: the app does it, without asking
+    if (!(await p.locator("aside section[aria-label='Persönlich']").getByRole("button", { name: "Typen" }).waitFor({ timeout: 8000 }).then(() => true, () => false))) failures.push("sign-in: the workspace was not set up after signing in");
   });
   await context.close();
 }
 
-/** Set up on the page with the examples (the default), then remove them in the settings and undo that. */
-async function examplesOnSetup(browser: import("playwright").Browser, server: Server) {
+/**
+ * An account without a workspace creates its first on the page, with the examples (the default),
+ * then removes them in the settings and undoes that.
+ */
+async function firstWorkspace(browser: import("playwright").Browser, server: Server) {
   const context = await signedIn(browser, server, { viewport: { width: 1440, height: 900 }, locale: "de-DE" });
   const page = await context.newPage();
   const errors: string[] = [];
@@ -235,10 +238,12 @@ async function examplesOnSetup(browser: import("playwright").Browser, server: Se
   const label = "fresh light";
   const welcome = (p: Page) => p.locator("aside section[aria-label='Persönlich']").getByText("So funktioniert Obtion");
   await check(page, label, "/", errors, async (p) => {
+    if ((await p.getByLabel("Name").inputValue()) !== "Persönlich") failures.push(`${label}: the first workspace's name is not preset`);
     if (!(await p.getByRole("checkbox", { name: /Mit Beispielen starten/ }).isChecked())) failures.push(`${label}: "Mit Beispielen starten" is not preset`);
-    await p.getByRole("button", { name: /Einrichten/ }).click();
-    if (!(await welcome(p).waitFor({ timeout: 8000 }).then(() => true, () => false))) failures.push(`${label}: no welcome note after the setup`);
+    await p.getByRole("button", { name: "Workspace anlegen" }).click();
+    if (!(await welcome(p).waitFor({ timeout: 8000 }).then(() => true, () => false))) failures.push(`${label}: no welcome note after creating the workspace`);
   });
+  server.me = (await fetch(server.url + "/api/account", { headers: { authorization: `Bearer ${server.token}` } }).then((r) => r.json())) as typeof server.me;
   // the image is embedded in the lecture note (made on this device, then uploaded)
   await check(page, label, "/#/i/ex-n-lecture", errors, async (p) => {
     const shown = await p.waitForFunction(() => [...document.querySelectorAll("main img")].some((i) => (i as HTMLImageElement).naturalWidth >= 600), null, { timeout: 5000 }).then(() => true, () => false);
@@ -267,13 +272,12 @@ async function examplesOnSetup(browser: import("playwright").Browser, server: Se
 }
 
 /**
- * A second workspace next to the first: it shows in the sidebar and is set up from there; the
+ * A second workspace next to the first: created from the sidebar, without the examples; the
  * inbox is one list of both and shows one when chosen (remembered over a reload, the sidebar
  * follows); a type page can be pinned; a pinned area moves into the other workspace.
  */
 async function twoWorkspaces(browser: import("playwright").Browser, server: Server) {
   const personal = server.me.workspaces[0]!.id;
-  await fetch(server.url + "/api/workspaces", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${server.token}` }, body: JSON.stringify({ name: "Firma" }) });
   const context = await signedIn(browser, server, { viewport: { width: 1440, height: 900 }, locale: "de-DE" });
   const page = await context.newPage();
   const errors: string[] = [];
@@ -284,10 +288,14 @@ async function twoWorkspaces(browser: import("playwright").Browser, server: Serv
   const label = "two workspaces";
   const firma = (p: Page) => p.locator("aside section[aria-label='Firma']");
   await check(page, label, `/#/w/${personal}/`, errors, async (p) => {
-    await firma(p).getByText("Einrichten").click();
-    await p.getByRole("checkbox", { name: /Mit Beispielen starten/ }).uncheck();
-    await p.getByRole("button", { name: /^Einrichten$/ }).click();
-    if (!(await firma(p).getByRole("button", { name: "Typen" }).waitFor({ timeout: 8000 }).then(() => true, () => false))) failures.push(`${label}: "Firma" not set up from the sidebar`);
+    await p.getByRole("button", { name: "Workspaces auswählen" }).click();
+    await p.getByText("Neuer Workspace").click();
+    const dialog = p.getByRole("dialog");
+    await dialog.getByLabel("Name").fill("Firma");
+    await dialog.getByRole("checkbox", { name: /Mit Beispielen starten/ }).uncheck();
+    await dialog.getByRole("button", { name: "Workspace anlegen" }).click();
+    if (!(await firma(p).getByRole("button", { name: "Typen" }).waitFor({ timeout: 8000 }).then(() => true, () => false))) failures.push(`${label}: "Firma" not created and set up from the sidebar`);
+    if (await firma(p).locator("a[href$='/i/ex-welcome']").count()) failures.push(`${label}: "Firma" got the examples`);
     if (!(await p.locator("aside section[aria-label='Persönlich'] a[href$='/i/ex-work']").count())) failures.push(`${label}: the first workspace's block lost its pinned items`);
   });
   await check(page, label, "/#/inbox", errors, async (p) => {

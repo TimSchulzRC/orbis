@@ -8,7 +8,7 @@ import { Input } from "../components/ui/input";
 import { useMemo, useState, useSyncExternalStore } from "react";
 import { ChevronsUpDown, Plus, SlidersHorizontal } from "lucide-react";
 import type { Repo } from "@obtion/sync";
-import { createSpace, replica, setShown, spaceById, useAccounts } from "../accounts";
+import { createSpace, errorText, replica, setShown, spaceById, useAccounts } from "../accounts";
 import { ScopeContext, globalPage } from "../scope";
 import { useSpaceId, navigate, openItem, parseHash } from "../hooks";
 import { MoveError, moveToSpace, planToSpace } from "../move";
@@ -140,29 +140,47 @@ export function useReplicas(ids: string[]): Repo[] {
 
 export function NewSpaceDialog({ onClose }: { onClose: () => void }) {
   const { t } = useT();
-  const [name, setName] = useState("");
-  const [error, setError] = useState("");
   return (
     <Dialog title={t("space.new")} onClose={onClose}>
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          createSpace(name).then(onClose, (err) => setError((err as Error).message));
-        }}
-      >
-        <label className="block text-sm font-medium">
-          {t("space.name")}
-          <Input autoFocus required value={name} onChange={(e) => setName(e.target.value)} className="mt-1 block bg-surface" />
-        </label>
-        {error && <p className="mt-3 text-sm text-danger">{error}</p>}
-        <div className="mt-5 flex justify-end gap-2">
-          <Button onClick={onClose}>{t("cancel")}</Button>
-          <Button type="submit" variant="primary" disabled={!name.trim()}>
-            {t("space.create")}
-          </Button>
-        </div>
-      </form>
+      <NewSpaceForm onCancel={onClose} onDone={onClose} />
     </Dialog>
+  );
+}
+
+/** A new workspace: its name and whether it starts with the examples; set up in the app's language. */
+export function NewSpaceForm({ name: initial = "", onCancel, onDone }: { name?: string; onCancel?: () => void; onDone?: () => void }) {
+  const { t } = useT();
+  const [name, setName] = useState(initial);
+  const [examples, setExamples] = useState(true);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        setBusy(true);
+        createSpace(name, examples).then(onDone, (err) => (setError(errorText(err, t, "space")), setBusy(false)));
+      }}
+    >
+      <label className="block text-sm font-medium">
+        {t("space.name")}
+        <Input autoFocus required value={name} onChange={(e) => setName(e.target.value)} className="mt-1 block bg-surface" />
+      </label>
+      <label className="mt-4 flex cursor-pointer gap-3 rounded-xl border border-line p-3 hover:bg-hover">
+        <Checkbox checked={examples} onCheckedChange={(checked) => setExamples(checked === true)} className="mt-0.5 size-4 shrink-0" />
+        <span>
+          <span className="block text-sm font-medium">{t("setup.examples")}</span>
+          <span className="block text-xs text-muted-foreground">{t("setup.examplesHint")}</span>
+        </span>
+      </label>
+      {error && <p className="mt-3 text-sm text-danger">{error}</p>}
+      <div className="mt-5 flex justify-end gap-2">
+        {onCancel && <Button onClick={onCancel}>{t("cancel")}</Button>}
+        <Button type="submit" variant="primary" disabled={busy || !name.trim()} className={onCancel ? undefined : "w-full"}>
+          {t("space.create")}
+        </Button>
+      </div>
+    </form>
   );
 }
 

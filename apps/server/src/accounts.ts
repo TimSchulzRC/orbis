@@ -31,9 +31,8 @@ export const FRESH_SECONDS = 10 * 60;
 export const SIGNUP_COOKIE = "obtion_signup";
 interface SignupContext {
   invite?: string;
+  /** the language of the email with the code */
   lang?: string;
-  /** the personal workspace's name (in-process sign-ups) */
-  personal?: string;
 }
 
 function signupContext(headers: Headers | undefined): SignupContext {
@@ -42,7 +41,7 @@ function signupContext(headers: Headers | undefined): SignupContext {
   try {
     const v = JSON.parse(decodeURIComponent(raw.slice(SIGNUP_COOKIE.length + 1))) as Record<string, unknown>;
     const str = (x: unknown) => (typeof x === "string" && x.length < 200 ? x : undefined);
-    return { invite: str(v.invite), lang: str(v.lang), personal: str(v.personal) };
+    return { invite: str(v.invite), lang: str(v.lang) };
   } catch {
     return {};
   }
@@ -73,14 +72,13 @@ export class Accounts {
 
   constructor(
     public dataDir: string,
-    opts: { secret: string; baseURL: string; policy: SignupPolicy; login?: LoginConfig; personal?: (lang?: string) => string; onRevoke?: (user: string) => void },
+    opts: { secret: string; baseURL: string; policy: SignupPolicy; login?: LoginConfig; onRevoke?: (user: string) => void },
   ) {
     mkdirSync(join(dataDir, "workspaces"), { recursive: true });
     this.db = new Database(join(dataDir, "accounts.db"));
     this.db.exec("PRAGMA journal_mode = WAL;");
     this.policy = opts.policy;
     this.login = opts.login ?? { password: true, oauth: [] };
-    this.personal = opts.personal ?? (() => "Personal");
     this.onRevoke = opts.onRevoke ?? (() => {});
     this.auth = makeAuth(this, opts.secret, opts.baseURL);
     this.db.exec(`
@@ -95,7 +93,6 @@ export class Accounts {
 
   policy: SignupPolicy;
   login: LoginConfig;
-  personal: (lang?: string) => string;
   /** A user's access was taken back (their address proven by someone else): close what is open. */
   onRevoke: (user: string) => void;
 
@@ -165,8 +162,8 @@ export class Accounts {
   }
 
   /**
-   * After Better Auth created a user. With an invite it joins that workspace and gets none of its
-   * own; without one it gets a personal workspace. The very first account becomes the admin and
+   * After Better Auth created a user. With an invite it joins that workspace; without one the app
+   * has it create its first (set up there, in the app's language). The very first account becomes the admin and
    * takes over the data from before accounts, if there are any.
    */
   setUpNewUser(id: string, headers: Headers | undefined) {
@@ -177,15 +174,14 @@ export class Accounts {
       for (const w of orphans) this.addMember(w.id, id, "owner");
     }
     if (c.invite && this.invite(c.invite)) this.join(c.invite, id);
-    else if (!this.workspacesOf(id).length) this.createWorkspace(id, c.personal ?? this.personal(c.lang));
   }
 
   /** Create an account with a password and sign it in (see setUpNewUser). */
-  async signUp(body: { name: string; email: string; password: string; invite?: string; personal: string }): Promise<SignedIn> {
+  async signUp(body: { name: string; email: string; password: string; invite?: string }): Promise<SignedIn> {
     if (!this.login.password) throw new AccountError("passwords off", 403);
     if (!this.canSignUp(body.invite)) throw new AccountError(body.invite ? "invite invalid" : "signup closed", 403);
     const res = await this.auth.api
-      .signUpEmail({ body: { name: body.name.trim() || body.email.split("@")[0]!, email: body.email.trim(), password: body.password }, headers: signupHeaders({ invite: body.invite, personal: body.personal }) })
+      .signUpEmail({ body: { name: body.name.trim() || body.email.split("@")[0]!, email: body.email.trim(), password: body.password }, headers: signupHeaders({ invite: body.invite }) })
       .catch((e) => {
         throw new AccountError(e?.body?.message ?? e?.message ?? "signup failed", e?.statusCode === 422 ? 409 : (e?.statusCode ?? 400));
       });
@@ -198,7 +194,7 @@ export class Accounts {
    * now has a code sent (the rate-limited way, POST /api/auth/email-otp/send-verification-otp).
    * With it: the account is made by the code (proven address, the same hooks), then gets the password.
    */
-  async signUpWithCode(body: { name: string; email: string; password: string; invite?: string; personal: string; lang?: string; code?: string }): Promise<SignedIn | { verify: true }> {
+  async signUpWithCode(body: { name: string; email: string; password: string; invite?: string; lang?: string; code?: string }): Promise<SignedIn | { verify: true }> {
     if (!this.login.password) throw new AccountError("passwords off", 403);
     if (!this.canSignUp(body.invite)) throw new AccountError(body.invite ? "invite invalid" : "signup closed", 403);
     const ctx = await this.auth.$context;
@@ -209,7 +205,7 @@ export class Accounts {
     if (await ctx.internalAdapter.findUserByEmail(email)) throw new AccountError("exists", 409);
     if (!body.code) return { verify: true };
     const res = await this.auth.api
-      .signInEmailOTP({ body: { email, otp: body.code.trim(), name: body.name.trim() || email.split("@")[0]! }, headers: signupHeaders({ invite: body.invite, personal: body.personal, lang: body.lang }) })
+      .signInEmailOTP({ body: { email, otp: body.code.trim(), name: body.name.trim() || email.split("@")[0]! }, headers: signupHeaders({ invite: body.invite, lang: body.lang }) })
       .catch((e) => {
         throw new AccountError(e?.body?.code === "INVALID_OTP" || e?.statusCode === 400 ? "invalid code" : (e?.body?.message ?? e?.message ?? "signup failed"), e?.statusCode ?? 400);
       });

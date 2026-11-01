@@ -16,7 +16,6 @@ import { Sidebar, SpaceTree } from "./ui/Sidebar";
 import { SyncDot } from "./ui/SyncDot";
 import { CommandPalette } from "./ui/CommandPalette";
 import { CaptureSheet } from "./ui/Capture";
-import { Setup } from "./views/Setup";
 import { ItemPage } from "./views/ItemPage";
 import { SearchView } from "./views/Search";
 import { FilesPage } from "./views/Lists";
@@ -107,11 +106,6 @@ function Main() {
     };
   }, []);
 
-  // nothing set up in any workspace yet (a new account): the first one's setup
-  const all = useReplicas(spaces.map((s) => s.id));
-  const nothing = all.length > 0 && all.every((x) => !x.get(SETTINGS_ID) && x.status.loaded && (x.status.synced || (!x.status.online && x.docs.size === 0)));
-  useEffect(() => void (nothing && globalPage(route.parts, route.space) && navigate("/setup", { space: spaces[0]!.id, replace: true })), [nothing, route.path]);
-
   // "#/create?title=…" – links to items that don't exist yet.
   useEffect(() => {
     if (route.parts[0] !== "create") return;
@@ -124,19 +118,17 @@ function Main() {
     }
   }, [route.path]);
 
-  // a page of a workspace waits for it and is its setup until it is set up; Heute, the inbox,
+  // a page of a workspace waits until it is set up (accounts.ts does that); Heute, the inbox,
   // the review, search and the settings show what is there in every workspace
   const settings = r.get(SETTINGS_ID);
-  const setUp = !settings && (r.status.synced || (!r.status.online && r.docs.size === 0));
   const global = globalPage(route.parts, route.space);
   const old = oldAddress(route.parts);
   const page = (() => {
     if (old !== undefined) return <Redirect to={old.startsWith("/review") ? old : spaceHref(route.space ?? active?.id, old).slice(1)} />;
     // a workspace in the address this account is not in (any more): not the open one's page instead
     if (route.space && !spaces.some((s) => s.id === route.space)) return <PagePlaceholder>{t("app.noSpace")}</PagePlaceholder>;
-    if (!global || route.parts[0] === "setup") {
+    if (!global) {
       if (!r.status.loaded) return <PagePlaceholder fill>{t("app.opening")}</PagePlaceholder>;
-      if (setUp) return <Setup />;
       if (!settings) return <PagePlaceholder fill>{t("app.syncing")}</PagePlaceholder>;
     }
     switch (route.parts[0]) {
@@ -160,6 +152,7 @@ function Main() {
         return <TrashView />;
       case "settings":
         return global ? <Settings /> : <SpaceSettingsPage />;
+      // the setup page of before (a workspace is set up as it is created)
       case "setup":
         return <Redirect to="/" />;
       case "i":

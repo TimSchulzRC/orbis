@@ -8,8 +8,12 @@ import { startAuthentication, startRegistration } from "@simplewebauthn/browser"
 import { Repo } from "@obtion/sync";
 import type { AccountInfo, ErrorBody, InviteCode, InviteInfo, LoginMethods, McpConnect, Member, Ok, PasskeyInfo, ServerInfo, SignedIn, User, VerifyFirst, WorkspaceInfo } from "@obtion/core/api";
 import type { T } from "@obtion/core/i18n";
+import { type FileMeta, SETTINGS_ID } from "@obtion/core/model";
+import { runSetup } from "@obtion/core/setup";
+import { type ExampleFile, exampleFiles, fileFacts, writeExamples } from "@obtion/core/examples";
 import { browserHost, storageNames, type SpaceLink } from "./browser";
 import { DeviceFiles, setFiles } from "./files";
+import { getLang } from "./i18n";
 import { setRepo } from "./repo";
 import { globalPage } from "./scope";
 import { KEYS } from "./ui/storage";
@@ -103,9 +107,43 @@ export function replica(id: string): { repo: Repo; files: DeviceFiles } {
     const repo = new Repo(browserHost(l));
     r = { repo, files: new DeviceFiles(repo, l) };
     open.set(id, r);
+    setUpWhenEmpty(id, r);
     repo.init().catch((e) => console.error("could not open local storage", e));
   }
   return r;
+}
+
+/** Workspaces created on this device and not set up yet: with the examples or without. */
+const created = new Map<string, boolean>();
+
+/**
+ * A workspace without settings is set up in the app's language: one created here as soon as its
+ * storage is open (with the examples if chosen), any other (made by the server or an agent) once
+ * it is in step with the server and still has none.
+ */
+function setUpWhenEmpty(id: string, { repo, files }: { repo: Repo; files: DeviceFiles }) {
+  const off = repo.subscribe(() => {
+    if (repo.get(SETTINGS_ID)) return void off();
+    const examples = created.get(id);
+    if (!repo.status.loaded || (examples === undefined && !repo.status.synced)) return;
+    off();
+    created.delete(id);
+    void setUp(repo, files, examples ?? false);
+  });
+}
+
+async function setUp(repo: Repo, files: DeviceFiles, examples: boolean) {
+  const lang = getLang();
+  // the files first (stored here, uploaded later), then everything in one go
+  const metas: Partial<Record<ExampleFile["key"], FileMeta>> = {};
+  if (examples)
+    for (const f of exampleFiles(lang)) {
+      const meta = await files.prepare(new Blob([f.bytes], { type: f.mime }), f.name);
+      metas[f.key] = { ...fileFacts(f, meta.hash), ...meta };
+    }
+  // set up meanwhile by another device: the examples chosen here still come (they skip what is there)
+  if (!repo.get(SETTINGS_ID)) runSetup(repo.writer, lang, repo.origin);
+  if (examples) writeExamples(repo.writer, lang, metas);
 }
 
 /** Changes on this device a reachable server does not have yet (in any open workspace). */
@@ -201,7 +239,7 @@ export const loginOf = (info: ServerInfo | null): LoginMethods => info?.login ??
 
 /**
  * What an account created by a code or OAuth comes with (the server reads it when it creates the
- * user): the invite it joins with, the app's language for its personal workspace.
+ * user): the invite it joins with, the app's language for the email with the code.
  */
 function signupContext(invite: string | undefined, lang: string) {
   document.cookie = `obtion_signup=${encodeURIComponent(JSON.stringify({ invite, lang }))}; path=/api/auth; max-age=1800; samesite=lax`;
@@ -212,9 +250,9 @@ export async function signIn(email: string, password: string) {
   await keep(res.token);
 }
 
-/** Create an account – with an invite it joins that workspace instead of getting one of its own. */
 /**
- * Create an account with a password. Where codes are on, the address proves itself first: without
+ * Create an account with a password – with an invite it joins that workspace; without one it
+ * creates its first after this. Where codes are on, the address proves itself first: without
  * `code` a code goes to it and the answer is "verify"; then the same again with the code.
  */
 export async function signUp(b: { name: string; email: string; password: string; invite?: string; lang: string; code?: string }): Promise<"verify" | undefined> {
@@ -376,11 +414,13 @@ async function forget(s: Space) {
 
 // ---------- workspaces ----------
 
-export async function createSpace(name: string) {
+/** Create a workspace, set up in the app's language – with the examples or without – and open it. */
+export async function createSpace(name: string, examples: boolean) {
   const w = await call<WorkspaceInfo>("/api/workspaces", { name });
+  created.set(w.id, examples);
   if (shown) shown = [...shown, w.id];
   await refresh();
-  navigate("/setup", { space: w.id });
+  navigate("/", { space: w.id });
 }
 
 export async function renameSpace(s: Space, name: string) {
