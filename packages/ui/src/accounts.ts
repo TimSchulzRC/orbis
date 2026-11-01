@@ -4,8 +4,9 @@
 // this device: the account with its token, the last known workspaces (so the app opens offline)
 // and which one is open.
 import { useSyncExternalStore } from "react";
+import { startAuthentication, startRegistration } from "@simplewebauthn/browser";
 import { Repo } from "@obtion/sync";
-import type { AccountInfo, ErrorBody, InviteCode, InviteInfo, McpConnect, Member, Ok, ServerInfo, SignedIn, User, WorkspaceInfo } from "@obtion/core/api";
+import type { AccountInfo, ErrorBody, InviteCode, InviteInfo, LoginMethods, McpConnect, Member, Ok, PasskeyInfo, ServerInfo, SignedIn, User, VerifyFirst, WorkspaceInfo } from "@obtion/core/api";
 import type { T } from "@obtion/core/i18n";
 import { browserHost, storageNames, type SpaceLink } from "./browser";
 import { DeviceFiles, setFiles } from "./files";
@@ -18,6 +19,8 @@ export interface Account {
   token: string;
   user: User;
   admin?: boolean;
+  /** the account can sign in with a password */
+  password?: boolean;
   /** the server no longer accepts the token: sign in again */
   lost?: boolean;
 }
@@ -77,6 +80,8 @@ export function setShown(ids: string[]) {
   save();
 }
 
+/** The id of the account signed in now. */
+export const activeUser = () => account?.user.id;
 export const activeSpace = () => spaces.find((s) => s.id === active);
 export const spaceById = (id: string) => spaces.find((s) => s.id === id);
 
@@ -85,7 +90,9 @@ export const spaceById = (id: string) => spaces.find((s) => s.id === id);
 const open = new Map<string, { repo: Repo; files: DeviceFiles }>();
 
 function link(s: Space): SpaceLink {
-  return { base: `${location.origin}/w/${s.id}`, token: account!.token, storage: storageNames(s) };
+  // read at each use: signing in again (to confirm it is them) gives the account a new token
+  const first = account!.token;
+  return { base: `${location.origin}/w/${s.id}`, get token() { return account?.token ?? first; }, storage: storageNames(s) };
 }
 
 /** The replica of a workspace, opened (and syncing) from its first use on. */
@@ -145,11 +152,13 @@ async function call<R>(path: string, body?: unknown, method = body === undefined
 export const spaceCall = <R>(id: string, path: string) => call<R>(`/w/${id}${path}`);
 
 /** What to tell the user when a call failed: signing in or up, a workspace action, deleting the account, changing the password. */
-export function errorText(e: unknown, t: T, what: "signIn" | "space" | "deleteAccount" | "password"): string {
+export function errorText(e: unknown, t: T, what: "signIn" | "code" | "space" | "deleteAccount" | "password"): string {
   const status = e instanceof ApiError ? e.status : undefined;
   const message = e instanceof Error ? e.message : String(e);
-  if (what === "signIn") return status === 401 ? t("account.wrong") : status === 429 ? t("account.tooMany") : status === 409 || status === 422 ? t("account.exists") : status === 403 ? t("account.closed") : message;
-  if (what === "password") return message === "invalid password" ? t("account.deletePassword") : status === 429 ? t("account.tooMany") : message === "password too long" ? t("account.passwordLong") : status === 400 ? t("account.passwordShort") : t("account.offline");
+  if (status === 429) return t("account.tooMany");
+  if (what === "code") return status === 403 ? t("account.closed") : status === 400 ? t("account.codeWrong") : status ? message : t("account.offline");
+  if (what === "signIn") return status === 401 ? t("account.wrong") : status === 409 || status === 422 ? t("account.exists") : status === 403 ? t("account.closed") : message;
+  if (what === "password") return message === "invalid password" ? t("account.deletePassword") : message === "password too long" ? t("account.passwordLong") : status === 400 ? t("account.passwordShort") : t("account.offline");
   if (what === "deleteAccount") return t(message === "last owner" ? "account.deleteOwner" : message === "invalid password" ? "account.deletePassword" : "account.offline");
   return message === "last owner" ? t("space.lastOwner") : message;
 }
@@ -160,7 +169,7 @@ export async function refresh() {
   let gone: Space[] = [];
   try {
     const me = await call<AccountInfo>("/api/account");
-    Object.assign(account, { user: me.user, admin: me.admin, lost: false });
+    Object.assign(account, { user: me.user, admin: me.admin, password: me.password, lost: false });
     const known = new Map(spaces.map((s) => [s.id, s]));
     // gone on the server (deleted, or this account removed): the copy here goes too
     gone = spaces.filter((s) => !me.workspaces.some((w) => w.id === s.id));
@@ -175,12 +184,27 @@ export async function refresh() {
   for (const s of gone) await forget(s);
 }
 
-/** Keep the account signed in with `token` (another one signed in before leaves first). */
+/**
+ * Keep the account signed in with `token`. Another one signed in before leaves first; the same one
+ * signed in again (to confirm it is them) keeps its workspaces and ends the session before.
+ */
 async function keep(token: string) {
   const me = await call<AccountInfo>("/api/account", undefined, "GET", token);
   if (account && account.user.id !== me.user.id) await forgetAll();
+  else if (account && account.token !== token && !account.lost) await call<Ok>("/api/account/signout", {}).catch(() => {});
   account = { token, user: me.user };
   await refresh();
+}
+
+/** The ways to sign in a server offers (an older server: only the password). */
+export const loginOf = (info: ServerInfo | null): LoginMethods => info?.login ?? { password: true, emailCode: false, passkey: false, oauth: [] };
+
+/**
+ * What an account created by a code or OAuth comes with (the server reads it when it creates the
+ * user): the invite it joins with, the app's language for its personal workspace.
+ */
+function signupContext(invite: string | undefined, lang: string) {
+  document.cookie = `obtion_signup=${encodeURIComponent(JSON.stringify({ invite, lang }))}; path=/api/auth; max-age=1800; samesite=lax`;
 }
 
 export async function signIn(email: string, password: string) {
@@ -189,9 +213,115 @@ export async function signIn(email: string, password: string) {
 }
 
 /** Create an account – with an invite it joins that workspace instead of getting one of its own. */
-export async function signUp(b: { name: string; email: string; password: string; invite?: string; lang: string }) {
-  const res = await call<SignedIn>("/api/account/signup", b);
+/**
+ * Create an account with a password. Where codes are on, the address proves itself first: without
+ * `code` a code goes to it and the answer is "verify"; then the same again with the code.
+ */
+export async function signUp(b: { name: string; email: string; password: string; invite?: string; lang: string; code?: string }): Promise<"verify" | undefined> {
+  const res = await call<SignedIn | VerifyFirst>("/api/account/signup", b);
+  if ("verify" in res) {
+    await sendCode(b.email, { invite: b.invite, lang: b.lang });
+    return "verify";
+  }
   await keep(res.token);
+}
+
+/** Send a sign-in code to `email` (an address without an account gets one where it may sign up). */
+export async function sendCode(email: string, ctx: { invite?: string; lang: string }) {
+  signupContext(ctx.invite, ctx.lang);
+  await call<Ok>("/api/auth/email-otp/send-verification-otp", { email, type: "sign-in" });
+}
+
+/** Sign in with the code from the email; a new address becomes an account named `name`. */
+export async function signInWithCode(email: string, otp: string, name: string | undefined, ctx: { invite?: string; lang: string }) {
+  signupContext(ctx.invite, ctx.lang);
+  const res = await call<SignedIn>("/api/auth/sign-in/email-otp", { email, otp: otp.trim(), ...(name?.trim() ? { name: name.trim() } : {}) });
+  await keep(res.token);
+}
+
+/** Sign in with a passkey of this device (or a phone nearby). */
+export async function signInWithPasskey() {
+  const optionsJSON = await call<Parameters<typeof startAuthentication>[0]["optionsJSON"]>("/api/auth/passkey/generate-authenticate-options");
+  const response = await startAuthentication({ optionsJSON });
+  const res = await call<{ session: { token: string } }>("/api/auth/passkey/verify-authentication", { response });
+  await keep(res.session.token);
+}
+
+const OAUTH_RETURN = "obtion.oauthReturn";
+
+/**
+ * Sign in (or up) with an OAuth provider: the page goes there and comes back to "/?signin=oauth",
+ * where finishOAuth takes over.
+ */
+export async function signInWithOAuth(provider: string, ctx: { invite?: string; lang: string }) {
+  signupContext(ctx.invite, ctx.lang);
+  sessionStorage.setItem(OAUTH_RETURN, location.hash);
+  const urls = { callbackURL: "/?signin=oauth", errorCallbackURL: "/?signin=failed" };
+  const res = await call<{ url: string }>("/api/auth/sign-in/social", { provider, ...urls });
+  location.href = res.url;
+}
+
+/**
+ * The last OAuth sign-in failed: "closed" (no account here and none may be made), "notLinked" (an
+ * account has the address but not this provider yet: link it in the settings), or "failed".
+ */
+export let oauthFailed: "closed" | "notLinked" | "failed" | undefined;
+/** The last linking in the settings failed: "taken" (that provider account belongs to another account here) or "failed". */
+export let linkFailed: "taken" | "failed" | undefined;
+
+/** Back from the OAuth provider: the session it left in a cookie becomes this app's token. */
+async function finishOAuth() {
+  const params = new URLSearchParams(location.search);
+  const how = params.get("signin");
+  if (!how) return;
+  const back = sessionStorage.getItem(OAUTH_RETURN) ?? location.hash;
+  sessionStorage.removeItem(OAUTH_RETURN);
+  history.replaceState(history.state, "", location.pathname + back);
+  document.cookie = "obtion_signup=; path=/api/auth; max-age=0";
+  if (how === "linked") return;
+  const error = params.get("error") ?? "";
+  if (how === "linkFailed") return void (linkFailed = error === "account_already_linked_to_different_user" ? "taken" : "failed");
+  if (how !== "oauth") {
+    return void (oauthFailed = /^(signup_closed|invite_invalid)$/.test(error) ? "closed" : error === "account_not_linked" ? "notLinked" : "failed");
+  }
+  try {
+    const res = await call<SignedIn>("/api/account/claim", {});
+    await keep(res.token);
+  } catch {
+    oauthFailed = "failed";
+    save();
+  }
+}
+
+/** The OAuth providers the account can sign in with. */
+export const linkedProviders = () => call<{ providerId: string }[]>("/api/auth/list-accounts").then((l) => l.map((a) => a.providerId));
+
+/** Let the account sign in with an OAuth provider too: the page goes there and comes back to the settings. */
+export async function linkOAuth(provider: string) {
+  sessionStorage.setItem(OAUTH_RETURN, location.hash);
+  const res = await call<{ url: string }>("/api/auth/link-social", { provider, callbackURL: "/?signin=linked", errorCallbackURL: "/?signin=linkFailed" });
+  location.href = res.url;
+}
+
+// ---------- passkeys ----------
+
+export const passkeys = () => call<PasskeyInfo[]>("/api/auth/passkey/list-user-passkeys");
+
+/** Add a passkey of this device to the account. Needs a sign-in of the last minutes (403: confirm first). */
+export async function addPasskey() {
+  const optionsJSON = await call<Parameters<typeof startRegistration>[0]["optionsJSON"]>("/api/auth/passkey/generate-register-options");
+  const response = await startRegistration({ optionsJSON });
+  await call<Ok>("/api/auth/passkey/verify-registration", { response, name: deviceLabel() });
+}
+
+export const removePasskey = (id: string) => call<Ok>("/api/auth/passkey/delete-passkey", { id });
+
+/** A passkey's name: the device it was made on, as far as the browser tells. */
+function deviceLabel(): string {
+  const ua = navigator.userAgent;
+  const os = /iPhone|iPad/.test(ua) ? "iOS" : /Android/.test(ua) ? "Android" : /Mac/.test(ua) ? "macOS" : /Windows/.test(ua) ? "Windows" : /Linux/.test(ua) ? "Linux" : "";
+  const browser = /Edg\//.test(ua) ? "Edge" : /Firefox\//.test(ua) ? "Firefox" : /Chrome\//.test(ua) ? "Chrome" : /Safari\//.test(ua) ? "Safari" : "";
+  return [browser, os].filter(Boolean).join(" · ") || "Passkey";
 }
 
 /** Sign out: the workspaces leave this device, with their local copies. */
@@ -208,9 +338,12 @@ export async function changePassword(current: string, next: string) {
   await call<Ok>("/api/account/password", { current, next });
 }
 
-/** Delete the account on this server, then remove this device's workspace copies. */
-export async function deleteAccount(password: string) {
-  await call<Ok>("/api/account", { password }, "DELETE");
+/**
+ * Delete the account on this server, then remove this device's workspace copies. Proof: the
+ * password, or without one a sign-in of the last minutes (403 "sign in again": confirm first).
+ */
+export async function deleteAccount(password?: string) {
+  await call<Ok>("/api/account", password === undefined ? {} : { password }, "DELETE");
   await forgetAll();
   save();
   navigate("/", { replace: true });
@@ -311,6 +444,8 @@ function followHash() {
     history.replaceState(history.state, "", spaceHref(active, rest));
 }
 addEventListener("hashchange", followHash);
+
+await finishOAuth();
 
 // the workspace open at the last start (or named by the address); the others open when they are first shown
 if (activeSpace()) activate(active!);

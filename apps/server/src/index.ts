@@ -8,8 +8,9 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve, extname } from "node:path";
 import type { ServerWebSocket } from "bun";
 import { Store } from "./store";
-import { Accounts, AccountError, randomToken } from "./accounts";
-import type { AccountInfo, InviteCode, InviteInfo, McpConnect, Ok, ServerInfo, SignupPolicy, SignupRequest, User } from "@obtion/core/api";
+import { Accounts, AccountError, FRESH_SECONDS, SIGNUP_COOKIE, randomToken } from "./accounts";
+import { loginConfig, loginMethods } from "./login";
+import type { AccountInfo, InviteCode, InviteInfo, McpConnect, Ok, ServerInfo, SignedIn, SignupPolicy, SignupRequest, User } from "@obtion/core/api";
 import { type Conn, Workspace, actorOf, parseClientMsg } from "./workspace";
 import { type Lang, LANGS, translate } from "@obtion/core/i18n";
 import { allowedHosts } from "./trust";
@@ -37,10 +38,23 @@ const freshConfig = !config.authSecret || !existsSync(configPath);
 config.authSecret ??= randomToken() + randomToken();
 if (freshConfig) writeFileSync(configPath, JSON.stringify(config, null, 2), { mode: 0o600 });
 
-const accounts = new Accounts(DATA, { secret: config.authSecret, baseURL: PUBLIC_URL || `http://${HOST}:${PORT}`, policy: SIGNUP });
-
 /** The name of a personal workspace, in the language of the app (German if unknown). */
 const personal = (lang?: string) => translate(LANGS.includes(lang as Lang) ? (lang as Lang) : "de", "account.personal");
+
+const login = (() => {
+  try {
+    return loginConfig(process.env, PUBLIC_URL);
+  } catch (e) {
+    console.error(`[obtion] ${e instanceof Error ? e.message : e}`);
+    process.exit(1);
+  }
+})();
+const accounts = new Accounts(DATA, { secret: config.authSecret, baseURL: PUBLIC_URL || `http://${HOST}:${PORT}`, policy: SIGNUP, login, personal,
+  // whoever had signed up with an address someone else then proved: their open connections end too
+  onRevoke: (user) => {
+    for (const w of open.values()) for (const ws of w.conns) if (ws.data.userId === user) ws.close(4401, "signed out");
+  },
+});
 
 await accounts.init((dir) => {
   const s = new Store(dir);
@@ -58,7 +72,9 @@ function workspace(id: string): Workspace | undefined {
   return w;
 }
 
-console.log(`[obtion] ${VERSION}${COMMIT ? ` (${COMMIT})` : ""}, ${accounts.userCount()} accounts, signup ${SIGNUP}, data in ${DATA}`);
+const methods = loginMethods(login);
+const methodNames = [methods.password && "password", methods.emailCode && "email code", methods.passkey && "passkey", ...methods.oauth.map((p) => p.id)].filter(Boolean).join(", ");
+console.log(`[obtion] ${VERSION}${COMMIT ? ` (${COMMIT})` : ""}, ${accounts.userCount()} accounts, signup ${SIGNUP}, sign-in by ${methodNames}, data in ${DATA}`);
 
 // ---------- http ----------
 
@@ -121,15 +137,27 @@ async function serveStatic(path: string): Promise<Response> {
 /** The account API: who am I, my workspaces, invites, tokens. `null`: not this path. */
 async function accountApi(req: Request, path: string, url: URL): Promise<Response | null> {
   if (path === "/api/info") {
-    return json<ServerInfo>({ signup: SIGNUP, firstAccount: accounts.userCount() === 0, version: VERSION, commit: COMMIT });
+    return json<ServerInfo>({ signup: SIGNUP, firstAccount: accounts.userCount() === 0, login: methods, version: VERSION, commit: COMMIT });
+  }
+
+  // after an OAuth sign-in: the session in the cookie becomes the app's token, the cookie goes
+  if (path === "/api/account/claim" && req.method === "POST") {
+    const signedIn = await accounts.claim(req.headers);
+    if (!signedIn) return fail(401, "unauthorized");
+    const res = json<SignedIn>(signedIn);
+    const ctx = await accounts.auth.$context;
+    for (const c of [ctx.authCookies.sessionToken, ctx.authCookies.sessionData, ctx.authCookies.dontRememberToken])
+      res.headers.append("set-cookie", `${c.name}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax${c.name.startsWith("__Secure-") ? "; Secure" : ""}`);
+    res.headers.append("set-cookie", `${SIGNUP_COOKIE}=; Path=/api/auth; Max-Age=0; SameSite=Lax`);
+    return res;
   }
 
   if (path === "/api/account/signup" && req.method === "POST") {
     const b = await body<SignupRequest>(req);
+    if (!login.password) return fail(403, "passwords off");
     if (!b?.email || !b.password) return fail(400, "email and password required");
-    return accounts
-      .signUp({ name: b.name ?? "", email: b.email, password: b.password, invite: b.invite || undefined, personal: personal(b.lang) })
-      .then((r) => json(r), accountError);
+    const details = { name: b.name ?? "", email: b.email, password: b.password, invite: b.invite || undefined, personal: personal(b.lang) };
+    return (login.sendCode ? accounts.signUpWithCode({ ...details, lang: b.lang, code: b.code || undefined }) : accounts.signUp(details)).then((r) => json(r), accountError);
   }
 
   if (path.startsWith("/api/invites/")) {
@@ -140,16 +168,18 @@ async function accountApi(req: Request, path: string, url: URL): Promise<Respons
   }
 
   const token = tokenOf(req);
-  const user = await accounts.userOf(token);
+  const session = await accounts.session(token);
+  const user = session?.user;
   if (!user) return path.startsWith("/api/account") || path.startsWith("/api/workspaces") || path.startsWith("/api/invites/") ? fail(401, "unauthorized") : null;
   try {
     if (path === "/api/account" && req.method === "GET") {
-      return json<AccountInfo>({ user, admin: accounts.isAdmin(user.id), workspaces: accounts.workspacesOf(user.id) });
+      return json<AccountInfo>({ user, admin: accounts.isAdmin(user.id), password: await accounts.hasPassword(user.id), workspaces: accounts.workspacesOf(user.id) });
     }
     if (path === "/api/account" && req.method === "DELETE") {
+      // the password; an account without one: a sign-in of the last minutes
       const b = await body<{ password?: unknown }>(req);
-      if (typeof b?.password !== "string") return fail(400, "password required");
-      await accounts.deleteAccount(user.id, b.password);
+      if (b?.password !== undefined ? typeof b.password !== "string" : await accounts.hasPassword(user.id)) return fail(400, "password required");
+      await accounts.deleteAccount(user.id, b?.password as string | undefined, session!.created);
       for (const w of open.values())
         for (const ws of w.conns) if (ws.data.userId === user.id) ws.close(4401, "account deleted");
       return json<Ok>({ ok: true });
@@ -220,8 +250,17 @@ const server = Bun.serve<Conn>({
 
     // sign-in and sign-up of the app's own page (Better Auth; accounts are created through /api/account/signup)
     if (path.startsWith("/api/auth/")) {
-      if (!sameOrigin(req)) return fail(403, "forbidden");
+      // an OAuth provider sends the browser back from its own site; Better Auth checks the state
+      const callback = req.method === "GET" && path.startsWith("/api/auth/callback/");
+      if (!callback && !sameOrigin(req)) return fail(403, "forbidden");
       if (path.startsWith("/api/auth/sign-up")) return fail(404, "not found");
+      if (path.startsWith("/api/auth/passkey/") && !login.passkey) return fail(404, "not found");
+      // linking a provider (its address may differ) needs a sign-in of the last minutes, like a passkey
+      // (the session Better Auth itself takes from this request, however the token comes)
+      if (path === "/api/auth/link-social") {
+        const s = await accounts.auth.api.getSession({ headers: req.headers }).catch(() => null);
+        if (!s || Date.now() - new Date(s.session.createdAt).getTime() > FRESH_SECONDS * 1000) return fail(403, "sign in again");
+      }
       return accounts.auth.handler(req);
     }
 

@@ -7,6 +7,7 @@ import { bootServer, del, get, mcpPost, post } from "../support/server";
 import { FORMAT, PERSONAL, initItem } from "@obtion/core/model";
 import { type ServerMsg, toB64 } from "@obtion/core/protocol";
 import { Store } from "@obtion/server/store";
+import { Database } from "bun:sqlite";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -21,6 +22,7 @@ let plain = "";
 let bare = "";
 let legacy = "";
 let legacyDir = "";
+let bareDir = "";
 beforeAll(async () => {
   // a built web app of its own: the test does not depend on `bun run build`
   const dist = tempDir("obtion-dist-");
@@ -31,9 +33,10 @@ beforeAll(async () => {
   s.create({ title: "Von früher" }, "test", { id: "old-1" });
   s.flush();
   s.db.close();
+  bareDir = tempDir("obtion-server-");
   [plain, bare, legacy] = await Promise.all([
     start({ OBTION_DATA: tempDir("obtion-server-"), OBTION_WEB_DIST: dist }),
-    start({ OBTION_DATA: tempDir("obtion-server-"), OBTION_WEB_APP: "off", OBTION_SIGNUP: "open" }),
+    start({ OBTION_DATA: bareDir, OBTION_WEB_APP: "off", OBTION_SIGNUP: "open" }),
     start({ OBTION_DATA: legacyDir }),
   ]);
 });
@@ -105,6 +108,42 @@ test("the sign-in only from the server's own page; other sites get no CORS answe
   const own = await post(bare, "/api/auth/sign-in/email", { email: "eve@example.org", password: "geheim12345" }, undefined, { origin: bare });
   expect(own.status).toBe(200);
   expect(await account(bare, (await own.json()).token)).toMatchObject({ user: { email: "eve@example.org" } });
+});
+
+test("without settings only passwords; the passkey routes stay shut; the OAuth cookie is traded only from the own page", async () => {
+  const info = await get(bare, "/api/info").then((r) => r.json());
+  expect(info.login).toEqual({ password: true, emailCode: false, passkey: false, oauth: [] });
+  expect((await get(bare, "/api/auth/passkey/generate-authenticate-options")).status).toBe(404);
+  expect((await post(bare, "/api/account/claim", {}, undefined, { origin: "https://evil.example.org" })).status).toBe(403);
+  expect((await post(bare, "/api/account/claim", {}, undefined, { origin: bare })).status).toBe(401);
+  // the way back from an OAuth provider comes from its site (Better Auth checks the state); nothing else does
+  const back = await fetch(`${bare}/api/auth/callback/github?code=x&state=y`, { headers: { "sec-fetch-site": "cross-site" }, redirect: "manual" });
+  expect(back.status).not.toBe(403);
+  expect((await fetch(`${bare}/api/auth/list-accounts`, { headers: { "sec-fetch-site": "cross-site" } })).status).toBe(403);
+  expect((await post(bare, "/api/auth/callback/github", {}, undefined, { origin: "https://evil.example.org" })).status).toBe(403);
+  const pw = await signUp(bare, "pw@example.org");
+  expect(await account(bare, pw.token)).toMatchObject({ password: true });
+});
+
+test("linking a provider (its address may differ) needs a sign-in of the last minutes", async () => {
+  const kim = await signUp(bare, "kim@example.org");
+  const link = () => post(bare, "/api/auth/link-social", { provider: "github", callbackURL: "/" }, kim.token, { origin: bare });
+  // fresh: on to Better Auth (no GitHub on this server)
+  expect((await link()).status).not.toBe(403);
+  const db = new Database(join(bareDir, "accounts.db"));
+  db.query("UPDATE session SET createdAt = ? WHERE userId = ?").run(new Date(Date.now() - 11 * 60_000).toISOString(), kim.user.id);
+  db.close();
+  const stale = await link();
+  expect(stale.status).toBe(403);
+  expect(await stale.json()).toMatchObject({ error: "sign in again" });
+  // however the token is written (Better Auth also takes "bearer"), and without one
+  const lower = await fetch(`${bare}/api/auth/link-social`, { method: "POST", headers: { "content-type": "application/json", origin: bare, authorization: `bearer ${kim.token}` }, body: JSON.stringify({ provider: "github", callbackURL: "/" }) });
+  expect(lower.status).toBe(403);
+  // a fresh token on the side (the WebSocket way) does not vouch for the stale one Better Auth would use
+  const fresh = await signUp(bare, "kim2@example.org");
+  const mixed = await fetch(`${bare}/api/auth/link-social`, { method: "POST", headers: { "content-type": "application/json", origin: bare, authorization: `Bearer ${kim.token}`, "sec-websocket-protocol": `auth.${fresh.token}` }, body: JSON.stringify({ provider: "github", callbackURL: "/" }) });
+  expect(mixed.status).toBe(403);
+  expect((await post(bare, "/api/auth/link-social", { provider: "github", callbackURL: "/" }, undefined, { origin: bare })).status).toBe(403);
 });
 
 test("the data from before accounts become a workspace of the first account; the old MCP address still opens them", async () => {

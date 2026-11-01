@@ -3,7 +3,8 @@
 import { Input } from "../components/ui/input";
 import { BrandLogo } from "../ui/BrandLogo";
 import { useEffect, useState, type ReactNode } from "react";
-import { createSpace, errorText, invite, joinInvite, serverInfo, signIn, signUp, useAccounts } from "../accounts";
+import { KeyRound } from "lucide-react";
+import { ApiError, createSpace, errorText, invite, joinInvite, loginOf, oauthFailed, sendCode, serverInfo, signIn, signInWithCode, signInWithOAuth, signInWithPasskey, signUp, useAccounts } from "../accounts";
 import type { InviteInfo, ServerInfo } from "@obtion/core/api";
 import { useRoute, navigate } from "../hooks";
 import { getLang, useT } from "../i18n";
@@ -34,55 +35,148 @@ function Field({ label, ...p }: { label: string } & React.InputHTMLAttributes<HT
   );
 }
 
-/** Sign in or create an account on this server. `inviteCode`: creating one joins that workspace. */
-function SignIn({ inviteCode, onDone }: { inviteCode?: string; onDone?: () => void }) {
+/** Passkeys work only where the browser has them (and in a secure context: HTTPS or localhost). */
+const canPasskey = () => typeof window !== "undefined" && !!window.PublicKeyCredential && window.isSecureContext;
+
+/**
+ * Sign in or create an account on this server, in every way it offers: a passkey, an OAuth
+ * provider, a code by email, a password. `inviteCode`: a new account joins that workspace.
+ * `email`: confirming who is signed in already (only signing in, with this address).
+ */
+export function SignIn({ inviteCode, onDone, email: fixedEmail }: { inviteCode?: string; onDone?: () => void; email?: string }) {
   const { t } = useT();
   const [info, setInfo] = useState<ServerInfo | null>(null);
   const [mode, setMode] = useState<"in" | "up">("in");
+  // by code (when the server sends them) or by password
+  const [withPassword, setWithPassword] = useState(false);
+  const [codeSent, setCodeSent] = useState(false);
   const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(fixedEmail ?? "");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const [code, setCode] = useState("");
+  const [error, setError] = useState(oauthFailed ? t(oauthFailed === "closed" ? "account.closed" : oauthFailed === "notLinked" ? "account.notLinked" : "account.oauthFailed") : "");
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     serverInfo()
       .then((i) => {
         setInfo(i);
-        if (i.firstAccount || inviteCode) setMode("up");
+        if (!fixedEmail && (i.firstAccount || inviteCode)) setMode("up");
+        if (!loginOf(i).emailCode) setWithPassword(true);
       })
       .catch(() => setError(t("account.offline")));
   }, []);
-  const canSignUp = !!info && (info.firstAccount || info.signup === "open" || (info.signup === "invite" && !!inviteCode));
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const login = loginOf(info);
+  const ctx = { invite: inviteCode, lang: getLang() };
+  const canSignUp = !fixedEmail && !!info && (info.firstAccount || info.signup === "open" || (info.signup === "invite" && !!inviteCode));
+  const run = async (what: "signIn" | "code", f: () => Promise<unknown>) => {
     setBusy(true);
     setError("");
     try {
-      if (mode === "up") await signUp({ name, email, password, invite: inviteCode, lang: getLang() });
-      else await signIn(email, password);
-      onDone?.();
+      await f();
+      return true;
     } catch (err) {
-      setError(errorText(err, t, "signIn"));
+      setError(errorText(err, t, what));
+      return false;
     } finally {
       setBusy(false);
     }
   };
+  const account = { name, email, password, invite: inviteCode, lang: getLang() };
+  // a new account with a password, where codes are on: its address proves itself with a code first
+  const signUpWithCode = withPassword && mode === "up" && login.emailCode;
+  const sendAgain = () => run("code", () => (signUpWithCode ? signUp(account) : sendCode(email, ctx)));
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (codeSent && signUpWithCode) {
+      if (await run("code", () => signUp({ ...account, code }))) onDone?.();
+    } else if (withPassword) {
+      let verify = false;
+      const ok = await run("signIn", async () => void (verify = mode === "up" ? (await signUp(account)) === "verify" : (await signIn(email, password), false)));
+      if (ok && verify) setCodeSent(true);
+      else if (ok) onDone?.();
+    } else if (!codeSent) {
+      if (await run("code", () => sendCode(email, ctx))) setCodeSent(true);
+    } else if (await run("code", () => signInWithCode(email, code, mode === "up" ? name : undefined, ctx))) onDone?.();
+  };
+  const passkey = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      await signInWithPasskey();
+      onDone?.();
+    } catch (err) {
+      // closed by the person (NotAllowedError): nothing to say
+      if (!(err instanceof Error && err.name === "NotAllowedError")) setError(err instanceof ApiError && err.status === 429 ? t("account.tooMany") : t("account.passkeyFailed"));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const others = (login.passkey && canPasskey() && mode === "in") || login.oauth.length > 0;
+  if (codeSent)
+    return (
+      <form onSubmit={submit} className="mt-2">
+        <p className="mt-4 text-sm">{t("account.codeSent", { email })}</p>
+        <Field label={t("account.code")} required autoFocus inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value)} />
+        {error && (
+          <p className="mt-3 text-sm text-danger" role="alert">
+            {error}
+          </p>
+        )}
+        <Button type="submit" variant="primary" className="mt-6 w-full" disabled={busy || !code.trim()}>
+          {mode === "up" ? t("account.signUp") : t("account.signIn")}
+        </Button>
+        <div className="mt-3 flex justify-between text-sm">
+          <Button variant="plain" type="button" className="text-link hover:underline" onClick={() => (setCodeSent(false), setCode(""), setError(""))}>
+            {t("account.back")}
+          </Button>
+          <Button variant="plain" type="button" className="text-link hover:underline" disabled={busy} onClick={() => void sendAgain()}>
+            {t("account.codeAgain")}
+          </Button>
+        </div>
+      </form>
+    );
   return (
     <form onSubmit={submit} className="mt-2">
       {info?.firstAccount && <p className="mt-3 rounded-lg border border-line bg-surface-2 p-3 text-sm text-muted-foreground">{t("account.firstHint")}</p>}
-      {mode === "up" && <Field label={t("account.name")} value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" />}
-      <Field label={t("account.email")} type="email" required value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
-      <Field label={t("account.password")} type="password" required minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={mode === "up" ? "new-password" : "current-password"} />
+      {others && (
+        <div className="mt-4 flex flex-col gap-2">
+          {login.passkey && canPasskey() && mode === "in" && (
+            <Button type="button" variant="outline" className="w-full" disabled={busy || !info} onClick={() => void passkey()}>
+              <KeyRound size={16} /> {t("account.passkey")}
+            </Button>
+          )}
+          {login.oauth.map((p) => (
+            <Button key={p.id} type="button" variant="outline" className="w-full" disabled={busy || !info} onClick={() => void run("signIn", () => signInWithOAuth(p.id, ctx))}>
+              {t("account.oauth", { provider: p.name })}
+            </Button>
+          ))}
+          {(login.emailCode || login.password) && <p className="mt-2 text-center text-xs text-muted-foreground">{t("account.or")}</p>}
+        </div>
+      )}
+      {(login.emailCode || login.password) && (
+        <>
+          {mode === "up" && <Field label={t("account.name")} value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" />}
+          <Field label={t("account.email")} type="email" required readOnly={!!fixedEmail} value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
+          {withPassword && <Field label={t("account.password")} type="password" required minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={mode === "up" ? "new-password" : "current-password"} />}
+        </>
+      )}
       {error && (
         <p className="mt-3 text-sm text-danger" role="alert">
           {error}
         </p>
       )}
-      <Button type="submit" variant="primary" className="mt-6 w-full" disabled={busy || !info}>
-        {mode === "up" ? t("account.signUp") : t("account.signIn")}
-      </Button>
+      {(login.emailCode || login.password) && (
+        <Button type="submit" variant="primary" className="mt-6 w-full" disabled={busy || !info}>
+          {!withPassword ? t("account.sendCode") : mode === "up" ? t("account.signUp") : t("account.signIn")}
+        </Button>
+      )}
+      {login.emailCode && login.password && (
+        <Button variant="plain" type="button" onClick={() => (setWithPassword(!withPassword), setError(""))} className="mt-3 w-full text-center text-sm text-link hover:underline">
+          {withPassword ? t("account.useCode") : t("account.usePassword")}
+        </Button>
+      )}
       {canSignUp && !info?.firstAccount && (
-        <Button variant="plain" type="button" onClick={() => setMode(mode === "up" ? "in" : "up")} className="mt-3 w-full text-center text-sm text-link hover:underline">
+        <Button variant="plain" type="button" onClick={() => (setMode(mode === "up" ? "in" : "up"), setError(""))} className="mt-3 w-full text-center text-sm text-link hover:underline">
           {mode === "up" ? t("account.haveAccount") : t("account.create")}
         </Button>
       )}
