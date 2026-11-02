@@ -8,7 +8,7 @@ import { inbox } from "@obtion/core/placement";
 import { touch } from "@obtion/core/model";
 import { Store } from "@obtion/server/store";
 import { Blobs, sha256 } from "@obtion/server/blobs";
-import { setUp } from "@obtion/server/importers";
+import { setUp } from "@obtion/server/setup";
 import type { Lang } from "@obtion/core/i18n";
 
 afterAll(removeTempDirs);

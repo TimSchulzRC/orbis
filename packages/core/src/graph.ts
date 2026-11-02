@@ -151,7 +151,7 @@ export class Index {
     return this._titles;
   }
 
-  /** File names resolve too, so ![[name.png]] from Obsidian keeps working after a rename. */
+  /** File names resolve too, so ![[name.png]] keeps working after a rename. */
   resolveTitle = (title: string): string | undefined => {
     const k = titleKey(title);
     const byTitle = this.titles();

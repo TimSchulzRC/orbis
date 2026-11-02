@@ -167,8 +167,7 @@ export interface OpRecord {
 export const PERSONAL = "personal";
 
 /**
- * A newer app upgrades older data once; an older app that meets newer data still reads it but asks
- * for an update before it writes.
+ * An older app that meets newer data still reads it but asks for an update before it writes.
  */
 export const FORMAT = 1;
 
@@ -176,7 +175,6 @@ export interface SettingsRecord {
   setupLang?: string;
   format?: number; // unset means 0 (data from before format versions)
   captureTypes: string[]; // pinned types in the capture type picker
-  upgrades?: string[]; // applied one-time upgrades; each runs once even if the user later undoes its effect
   inbox?: Cond; // what lands in the inbox; unset: the default
   filesPos?: string; // where "Dateien" stands among the types in the sidebar
 }
@@ -378,7 +376,6 @@ export function readItem(id: string, doc: Y.Doc): Item | null {
       setupLang: s.setupLang,
       format: typeof s.format === "number" ? s.format : undefined,
       captureTypes: s.captureTypes ?? [],
-      upgrades: s.upgrades ?? [],
       inbox: s.inbox ?? undefined,
       filesPos: s.filesPos ?? undefined,
     };

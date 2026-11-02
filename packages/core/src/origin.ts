@@ -49,7 +49,7 @@ export function parseOrigin(origin: string): Actor {
   return { kind, name, person, device };
 }
 
-/** The origin in plain English for agents and logs: "Tim", "claude-code for Tim", "import:notion". */
+/** The origin in plain English for agents and logs: "Tim", "claude-code for Tim", "import:obsidian". */
 export function originText(origin: string): string {
   const a = parseOrigin(origin);
   if (a.kind === "web") return a.person!.name;

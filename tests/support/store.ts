@@ -2,7 +2,7 @@ import { Store } from "@obtion/server/store";
 import { Ops } from "@obtion/server/ops";
 import { handleMcp } from "@obtion/server/mcp";
 import { runSetup } from "@obtion/core/setup";
-import { storeWriter } from "@obtion/server/importers";
+import { storeWriter } from "@obtion/server/setup";
 import { tempDir } from "./helpers";
 import { MCP_ACCEPT, rpcBody, toolText } from "./server";
 

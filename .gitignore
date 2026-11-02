@@ -13,6 +13,4 @@ data-*
 *.local
 *.log
 .DS_Store
-# exports from Notion and other sources (personal data, read by the importers)
-seed
 .vitest

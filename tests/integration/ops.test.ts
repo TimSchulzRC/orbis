@@ -8,7 +8,7 @@ import type { Store } from "@obtion/server/store";
 import { type Ops, OpError } from "@obtion/server/ops";
 import { Mirror } from "@obtion/server/mirror";
 import { SYS } from "@obtion/core/setup";
-import { storeWriter } from "@obtion/server/importers";
+import { storeWriter } from "@obtion/server/setup";
 import { replaceBody, addDaysISO, todayISO, addParent, setExtra } from "@obtion/core/model";
 import { deleteItem } from "@obtion/core/trash";
 

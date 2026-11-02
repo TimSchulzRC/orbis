@@ -10,8 +10,6 @@ import { MAX_BLOB } from "./config";
 import { body, fail, json } from "./http";
 import { Backups } from "./backup";
 import { FORMAT, type Item, PERSONAL, fileTypeOf } from "@obtion/core/model";
-import { addLaterDefaultProps, migrateCollections, renameShippedLabels, upgradeAreas, upgradeExplicitRoles, upgradeHideEmptyTaskFields } from "@obtion/core/setup";
-import { SETUP_ORIGIN, storeWriter } from "./importers";
 import { UndoError, undoStep } from "./undo";
 import { type ClientMsg, type ServerMsg, type WireUpdate, fromB64, toB64 } from "@obtion/core/protocol";
 import { z } from "zod";
@@ -35,29 +33,6 @@ async function sniffImage(path: string): Promise<string> {
   if (head[0] === 0xff && head[1] === 0xd8) return "image/jpeg";
   if (String.fromCharCode(...head.slice(8, 12)) === "WEBP") return "image/webp";
   return "application/octet-stream";
-}
-
-function upgradeOldData(store: Store) {
-  // properties shipped after a default type was set up: added once, nothing migrated
-  const lang = store.setupLang();
-  const writer = storeWriter(store, SETUP_ORIGIN);
-  if (lang && addLaterDefaultProps(writer, lang).length) store.flush();
-  if (lang && renameShippedLabels(writer, lang)) store.flush();
-  if (upgradeHideEmptyTaskFields(writer)) store.flush();
-  // 31.10.: roles once recognised by name ("Wartet auf", "Pausiert") become explicit in the types
-  if (upgradeExplicitRoles(writer, store.index()).length) store.flush();
-  // 26.10.: collections removed; their views move to the types, the inbox rule to the settings
-  const moved = lang ? migrateCollections(writer, store.index(), store.eachDoc(), lang) : [];
-  if (moved.length) {
-    store.flush();
-    console.log(`[obtion] collections migrated:\n  ${moved.join("\n  ")}`);
-  }
-  // 27.10.: documents from before areas belong to the personal area
-  const marked = upgradeAreas(writer, store.eachDoc());
-  if (marked) {
-    store.flush();
-    console.log(`[obtion] areas: ${marked} documents marked as personal`);
-  }
 }
 
 // The workspace is the unit of rights now; inside it only the personal area syncs.
@@ -90,7 +65,6 @@ export class Workspace {
 
   constructor(dir: string) {
     this.store = new Store(dir);
-    upgradeOldData(this.store);
     this.blobs = new Blobs(join(dir, "blobs"), this.store);
     this.mirror = new Mirror(this.store, join(dir, "vault"), this.blobs);
     this.store.on({

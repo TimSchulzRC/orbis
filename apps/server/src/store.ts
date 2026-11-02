@@ -511,11 +511,6 @@ export class Store {
     return rows;
   }
 
-  /** An entry not about one document, e.g. an import. */
-  logEvent(title: string, origin: string) {
-    this.db.query("INSERT INTO events (ts, doc, title, type, kind, origin, changes) VALUES (?, ?, ?, ?, ?, ?, ?)").run(Date.now(), "", title, "import", "created", origin, "[]");
-  }
-
   /** `redo` marks an undo of an undo. */
   stepState(step: string): { undoes?: string; redo?: boolean } {
     const q = this.db.query("SELECT undoes FROM steps WHERE id = ?");

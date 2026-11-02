@@ -99,7 +99,7 @@ function Entry({ e, compact, noVerb }: { e: ActivityEvent; compact?: boolean; no
             {titleOf(item, t)}
           </a>
         ) : (
-          <span className="font-medium">{systemText(e.title, t)}</span>
+          <span className="font-medium">{e.title}</span>
         )}
       </div>
       {changes.length > 0 && <div className={cn("text-muted-foreground", compact ? "line-clamp-2 text-xs" : "text-sm")}>{changes.join(" · ")}</div>}
@@ -115,20 +115,6 @@ function Avatar({ origin }: { origin: string }) {
       <actor.icon size={13} />
     </span>
   );
-}
-
-/** Server messages are stored in English (data); shown in the app's language when we know them. */
-const SYSTEM_TEXTS: [RegExp, string][] = [
-  [/^Imported (\d+) notes from Obsidian$/, "activity.sys.obsidian"],
-  [/^Imported (\d+) projects and tasks from Notion$/, "activity.sys.notion"],
-  [/^Migrated (\d+) items to the new model$/, "activity.sys.migrated"],
-];
-function systemText(text: string, t: T): string {
-  for (const [re, key] of SYSTEM_TEXTS) {
-    const match = re.exec(text);
-    if (match) return t(key, { count: Number(match[1]) });
-  }
-  return text;
 }
 
 /** A step is one user action or tool call. `space`: its workspace's name, with several. */
