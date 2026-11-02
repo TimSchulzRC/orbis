@@ -320,3 +320,20 @@ test("a deleted README.md with its folder kept empties the folder's text (push -
   await obtion(["pull"]);
   expect(existsSync(join(dir, "Tools", "README.md"))).toBe(false);
 });
+
+test("emptying a deleted README.md that got new text in Obtion is a conflict, and the deletion stays pending", async () => {
+  await tool("create", { items: [{ title: "Hülle", parents: [rootId], body: "x" }] });
+  await tool("create", { items: [{ title: "Inhalt", parents: ["Hülle"], body: "i" }] });
+  await obtion(["pull"]);
+  const id = (await byTitle("Hülle"))!.id;
+  await tool("update", { ref: id, body: "", base_version: JSON.parse(await tool("get", { ref: id })).version });
+  await obtion(["pull"]);
+  expect(bodyOf("Hülle/README.md")).toBe("");
+  await tool("update", { ref: id, body: "neu in der App", body_mode: "append" });
+  rmSync(join(dir, "Hülle", "README.md"));
+  const r = await obtion(["push", "--delete"]);
+  expect(r.out).toContain("conflict  Hülle/README.md");
+  expect((await byTitle("Hülle"))!.body).toBe("neu in der App");
+  await obtion(["pull"]);
+  expect(existsSync(join(dir, "Hülle", "README.md"))).toBe(false);
+});

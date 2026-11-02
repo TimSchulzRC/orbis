@@ -423,15 +423,15 @@ export async function push(client: Client, dir: string, state: State, opts: Push
     };
 
     /** Replace a body with base_version; a stale one keeps the local file and writes the conflict copy. */
-    /** `write`: put the file back with the new version (not when the README.md was deleted). */
-    const sendBody = async (path: string, e: Entry, body: string, verb = "update", write = true) => {
+    /** `write`: put the file back with the new version (not when the README.md was deleted). True when it went up. */
+    const sendBody = async (path: string, e: Entry, body: string, verb = "update", write = true): Promise<boolean> => {
       const node = nodes.get(e.id);
-      if (!node || e.gone) return r.line("skipped", path, "removed in Obtion; nothing sent", true);
-      if (unresolved(path, e)) return;
+      if (!node || e.gone) return (r.line("skipped", path, "removed in Obtion; nothing sent", true), false);
+      if (unresolved(path, e)) return false;
       // merged after a conflict: based on the version in the copy; only title or properties changed in
       // Obtion: the body you edited is still the one there
       const base = e.theirs ?? (node.version !== e.version && sha256(node.body ?? "") === e.hash ? node.version : e.version);
-      if (dry) return r.line(verb, path);
+      if (dry) return (r.line(verb, path), false);
       try {
         const answer = await client.tool("update", { ref: e.id, body, base_version: base });
         const v = writtenLines(answer)[0]?.version;
@@ -441,9 +441,11 @@ export async function push(client: Client, dir: string, state: State, opts: Push
         if (write) writeAtomic(abs(dir, path), renderNote({ ...noteMeta(node), version: e.version! }, body));
         r.line(verb, path);
         saved();
+        return true;
       } catch (err) {
         if (!(err instanceof ToolError) || !err.stale) throw err;
         await conflict(path, e, "changed in Obtion");
+        return false;
       }
     };
 
@@ -628,8 +630,7 @@ export async function push(client: Client, dir: string, state: State, opts: Push
       try {
         if (e.kind === "body" && !folderGone) {
           // README.md deleted, folder kept: the item's text is emptied
-          await sendBody(path, e, "", "empty", false);
-          if (!dry && sha256("") === e.hash) delete entries[path];
+          if (await sendBody(path, e, "", "empty", false)) delete entries[path];
           continue;
         }
         if (e.kind === "body") continue; // the folder's entry deletes the item
