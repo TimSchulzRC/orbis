@@ -6,8 +6,9 @@ import { z } from "zod";
 import { todayISO } from "@obtion/core/model";
 import { InputError } from "@obtion/core/input";
 import { UndoError, redoStep, undoStep } from "./undo";
-import { OpError, Ops, QUERY_HELP } from "./ops";
-import { attachInput, convertInput, createInput, defineTypeInput, placeInput, suggestInput, updateInput, updateTypeInput } from "./schemas";
+import { LONG_TEXT, OpError, Ops, QUERY_HELP } from "./ops";
+import { LANGS, type Lang, acceptLang } from "@obtion/core/i18n";
+import { attachInput, convertInput, createInput, defineTypeInput, getInput, placeInput, suggestInput, updateInput, updateTypeInput } from "./schemas";
 import type { Store } from "./store";
 import type { Blobs } from "./blobs";
 import { type Person, agentOrigin, parseOrigin } from "@obtion/core/origin";
@@ -27,6 +28,8 @@ Values are read tolerantly: a status as option name or group (open, active, done
 How to work:
 - At the start of a session: call \`activity\` with since = the cursor you got at the end of your last session (keep it in your notes), or an ISO time, and under = the project you work on. It shows what changed since then – especially what people changed by hand in the app (by: "people") – with property changes and text diffs. Use \`history\` for a whole text diff or an older version. Note the new cursor for next time.
 - For questions: \`query\` (structured) or \`search\` (full text), then \`get\` for details. Answer from the data and cite titles.
+- Long texts: \`get\` returns a body (or file text) over ${LONG_TEXT} characters as its outline (headings with offset and size). Read only the part you need with \`section\` ("Heading" or "Heading > Subheading") or \`offset\`/\`max_chars\`; follow "… _more" for the next page; \`full: true\` only when you need all of it. A search hit names its section ("§ …"): get that section.
+- A new workspace without types: \`schema\` says not_set_up – call \`setup\` once (in the user's language), then read \`schema\` again.
 - When the user reports progress ("X: mapping done, review on Friday"): find the item, post \`add_update\` on the item whose type has updates (optionally with a status), tick off or change statuses with \`update\` (properties: {"Status": "…"}), create follow-ups with \`create\` using the type from the item's main action and parents=[the item], with the due date property if the type has one.
 - New things: \`create\` with a type if one fits (read its description), otherwise without type (it lands in the inbox, which is fine). Use [[Title]] links to existing items (search first to reuse exact titles).
 - The inbox: you do not sort it yourself. Use \`suggest\` to propose a type and place for inbox items; the user accepts with one click.
@@ -64,7 +67,7 @@ function wrap<A>(fn: (args: A) => unknown, writes = false) {
 
 const userPrompt = (text: string) => ({ messages: [{ role: "user" as const, content: { type: "text" as const, text } }] });
 
-function buildMcpServer(store: Store, origin: string, blobs?: Blobs) {
+function buildMcpServer(store: Store, origin: string, blobs?: Blobs, lang: Lang = "de") {
   const ops = new Ops(store, blobs);
   const agent = parseOrigin(origin).name;
   const server = new McpServer({ name: "obtion", version: "0.2.0" }, { instructions: INSTRUCTIONS });
@@ -82,6 +85,15 @@ function buildMcpServer(store: Store, origin: string, blobs?: Blobs) {
 
   server.registerTool("schema", { title: "Schema", description: "All types with description, properties (options, groups) and capabilities, the views of each type's page, the inbox query and today's date. Read this first.", inputSchema: {}, annotations: ro }, wrap(() => ops.schema()));
   server.registerTool(
+    "setup",
+    {
+      title: "Set up the workspace",
+      description: "Only for a workspace that is not set up yet (schema says not_set_up): creates the default types (project, task, card) and the settings, as the app does. Refused once it is set up. language: de or en (default: the language of the request, else de).",
+      inputSchema: { language: z.enum(LANGS as [Lang, ...Lang[]]).optional() },
+    },
+    write((a) => ops.setup(a.language ?? lang, origin)),
+  );
+  server.registerTool(
     "query",
     { title: "Query", description: "Run a query in text form (English or German keywords) or name a type (its list, as its first view shows it). context = the page the query is about (for under:this).", inputSchema: { query: z.string(), context: z.string().optional(), limit: z.number().int().min(1).max(500).optional() }, annotations: ro },
     wrap((a) => {
@@ -91,11 +103,32 @@ function buildMcpServer(store: Store, origin: string, blobs?: Blobs) {
       return `${head}\n${ops.lines(r.items, r.base)}${more}`;
     }),
   );
-  server.registerTool("get", { title: "Get", description: "One item with its version (a hash of its content, for base_version – not the numbered text versions of `history`), properties, place, children, links, backlinks, updates and body. Files include facts and extracted text. Pass version as base_version to update when you replace the body.", inputSchema: { ref: z.string(), include_body: z.boolean().optional() }, annotations: ro }, wrap((a) => ops.get(a.ref, a.include_body ?? true)));
-  server.registerTool("search", { title: "Search", description: "Full text over titles, tags, bodies, properties and PDF text.", inputSchema: { query: z.string(), limit: z.number().int().min(1).max(50).optional() }, annotations: ro }, wrap((a) => {
-    const hits = ops.search(a.query, a.limit);
-    return hits.length ? hits.map((h) => `- ${ops.line(h.item)}${h.snippet ? ` — “${h.snippet}”` : ""}`).join("\n") : "Nothing found.";
-  }));
+  server.registerTool(
+    "get",
+    {
+      title: "Get",
+      description: `One item with its version (a hash of its content, for base_version – not the numbered text versions of \`history\`), properties, place, children, links, backlinks, updates and body. Files include facts and their extracted text. Pass version as base_version to update when you replace the body. A body (or file text) longer than ${LONG_TEXT} characters with headings comes as its outline (each heading with level, character offset and size) instead: then read the part you need with section (a heading or a path like "Status > Offene Punkte") or offset (+ max_chars), or everything with full: true. Long texts without headings come in pages; the answer says where the next page starts (… _more). outline: true adds the headings to any answer. Children come 60, updates 15 at a time (children_offset, updates_offset).`,
+      inputSchema: getInput.shape,
+      annotations: ro,
+    },
+    wrap((a) => {
+      const { ref, ...opts } = a;
+      return ops.get(ref, opts);
+    }),
+  );
+  server.registerTool(
+    "search",
+    {
+      title: "Search",
+      description: 'Full text over titles, tags, bodies, properties and file texts. Identifiers are found by their parts too ("4711" finds Beleg_4711_2026.pdf). Each hit has an excerpt around the match and, when the match is under a heading, "§ Heading > Subheading": read that part with get section.',
+      inputSchema: { query: z.string(), limit: z.number().int().min(1).max(50).optional() },
+      annotations: ro,
+    },
+    wrap((a) => {
+      const hits = ops.search(a.query, a.limit);
+      return hits.length ? hits.map((h) => `- ${ops.line(h.item)}${h.heading ? ` · § ${h.heading}` : ""}${h.snippet ? ` — “${h.snippet}”` : ""}`).join("\n") : "Nothing found.";
+    }),
+  );
   server.registerTool("focus", { title: "Focus", description: "What's going on: overdue and upcoming (by each type's due date), active items with progress, inbox size, recent activity.", inputSchema: {}, annotations: ro }, wrap(() => ops.focus()));
   server.registerTool(
     "create",
@@ -256,7 +289,7 @@ Then ask what I want to change. Don't change anything before I answer.`),
 
 export async function handleMcp(store: Store, req: Request, blobs?: Blobs, person?: Person): Promise<Response> {
   store.flush();
-  const server = buildMcpServer(store, agentOrigin(agentName(req), person), blobs);
+  const server = buildMcpServer(store, agentOrigin(agentName(req), person), blobs, acceptLang(req.headers.get("accept-language")));
   const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
   await server.connect(transport);
   try {

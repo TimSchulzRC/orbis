@@ -7,6 +7,7 @@ import { useIndex } from "../hooks";
 import { useT } from "../i18n";
 import { Tag } from "./item-look";
 import { Button } from "./primitives";
+import { openPalette } from "./palette-open";
 import { cn } from "../lib/utils";
 
 const SEP = /[\s,;]+/;
@@ -23,7 +24,7 @@ export function PageTags({ item }: { item: Item }) {
   return (
     <>
       {item.tags.map((tag) => (
-        <Tag key={tag} tag={tag} href={`#/search?q=${encodeURIComponent("#" + tag)}`} onRemove={() => setTag(item, tag, false)} />
+        <Tag key={tag} tag={tag} onOpen={() => openPalette("#" + tag)} onRemove={() => setTag(item, tag, false)} />
       ))}
       {open ? (
         <TagPicker item={item} onClose={() => setOpen(false)} />

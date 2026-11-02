@@ -95,33 +95,34 @@ export function StatusPill({ option, small, group, label }: { option?: OptionDef
   );
 }
 
-export function Tag({ tag, onRemove, href }: { tag: string; onRemove?: () => void; href?: string }) {
+/** A tag; `onOpen` makes its name a button (the page's tags open the palette with "#tag"). */
+export function Tag({ tag, onRemove, onOpen }: { tag: string; onRemove?: () => void; onOpen?: () => void }) {
   const { t } = useT();
-  const inner = (
+  const name = (
     <>
       <span className="text-muted-foreground">#</span>
       {tag}
+    </>
+  );
+  return (
+    <span className="group/tag inline-flex items-center rounded-md bg-surface-2 px-1.5 py-0.5 text-xs text-muted-foreground">
+      {onOpen ? (
+        <Button variant="plain" onClick={onOpen} className="hover:text-fg">
+          {name}
+        </Button>
+      ) : (
+        name
+      )}
       {onRemove && (
         <Button variant="plain"
           className="-mr-1 ml-0.5 rounded px-1 text-muted-foreground opacity-0 transition-opacity hover:bg-hover hover:text-fg focus:opacity-100 group-hover/tag:opacity-100 pointer-coarse:opacity-100"
-          onClick={(e) => {
-            e.preventDefault();
-            onRemove();
-          }}
+          onClick={onRemove}
           aria-label={t("tag.remove", { tag })}
         >
           ×
         </Button>
       )}
-    </>
-  );
-  const cls = "group/tag inline-flex items-center rounded-md bg-surface-2 px-1.5 py-0.5 text-xs text-muted-foreground";
-  return href ? (
-    <a href={href} className={cn(cls, "hover:text-fg")}>
-      {inner}
-    </a>
-  ) : (
-    <span className={cls}>{inner}</span>
+    </span>
   );
 }
 

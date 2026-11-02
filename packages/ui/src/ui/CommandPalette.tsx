@@ -21,8 +21,8 @@ import { openSettings } from "./settings-open";
 import { openNewType } from "./type-edit";
 import { openReview } from "./inbox";
 
-/** Search hits shown for a query; reaching it also offers the full search page. */
-const MAX_HITS = 10;
+/** Search hits shown for a query. The palette is the only search, so it lists more than fit at once. */
+const MAX_HITS = 30;
 /** Recently changed items shown before anything is typed. */
 const RECENT_COUNT = 8;
 
@@ -32,9 +32,9 @@ type Entry =
   | { kind: "nav"; label: string; path: string }
   | { kind: "cmd"; label: string; run: () => void };
 
-export function CommandPalette({ onClose }: { onClose: () => void }) {
+export function CommandPalette({ query: initial = "", onClose }: { query?: string; onClose: () => void }) {
   const { t, lang } = useT();
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(initial);
   const [sel, setSel] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
   const { shown } = useAccounts();
@@ -85,11 +85,8 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
       ? Array.from({ length: MAX_HITS }, (_, i) => perSpace.map((list) => list[i])).flat().filter((x) => !!x).slice(0, MAX_HITS)
       : perSpace.flat().sort((a, b) => b.h.updated - a.h.updated).slice(0, RECENT_COUNT);
     out.push(...hits.map(({ h, space }) => ({ kind: "item" as const, id: h.id, space })));
-    if (query) {
-      if (hits.length >= MAX_HITS) out.push({ kind: "nav", label: t("palette.allHits"), path: `#/search?q=${encodeURIComponent(query)}` });
-      out.push(...[null, ...captureTypes].map((type) => ({ kind: "create" as const, type, title: query })));
-    }
-    if (!query) out.push(...navs.map(toNav));
+    if (query) out.push(...[null, ...captureTypes].map((type) => ({ kind: "create" as const, type, title: query })));
+    else out.push(...navs.map(toNav));
     return out;
   })();
 

@@ -25,3 +25,10 @@ test("Esc closes it", async () => {
   await commands.keys("press", "Escape");
   expect(onClose).toHaveBeenCalled();
 });
+
+test("opened with a query (a tag, an old search link), it shows its hits right away", async () => {
+  cleanup();
+  await render(<CommandPalette query="relaunch" onClose={onClose} />);
+  await expect.element(page.getByRole("dialog").getByRole("textbox")).toHaveValue("relaunch");
+  await expect.element(page.getByRole("dialog").getByText(/Relaunch/).first()).toBeVisible();
+});

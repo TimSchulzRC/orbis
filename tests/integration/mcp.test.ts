@@ -1,5 +1,6 @@
 import { test, expect, beforeEach, afterAll } from "bun:test";
-import { removeTempDirs } from "../support/helpers";
+import { removeTempDirs, tempDir } from "../support/helpers";
+import { Store as ServerStore } from "@obtion/server/store";
 import { rpc as storeRpc, setupStore, tool as storeTool } from "../support/store";
 import type { Store } from "@obtion/server/store";
 import { storeWriter } from "@obtion/server/setup";
@@ -110,4 +111,164 @@ test("with zero types the agent still reads, creates, queries and gets told how 
   const bad = await tool("create", { items: [{ title: "X", type: "Projekt" }] });
   expect(bad.error).toBe(true);
   expect(bad.text).toMatch(/define_type|No type/i);
+  expect(JSON.parse(schema.text).no_types).toMatch(/define_type/);
+});
+
+/** A long status report with neutral sample content: sections with subsections, \r\n line ends like imported files. */
+function report() {
+  const filler = (word: string, n: number) => Array.from({ length: n }, (_, k) => `- ${word} ${k}: Abstimmung mit dem Fachbereich, Mapping geprüft, Test läuft.`).join("\r\n");
+  return [
+    "Kurzer Vorspann.",
+    "# Status",
+    filler("Punkt", 60),
+    "## Offene Punkte",
+    filler("Offen", 50),
+    "Der Job DEMO_EXPORT_PDF_MAIL_DUPLICATES bricht bei Beleg_4711_2026-01-15.pdf ab.",
+    "### Details",
+    filler("Detail", 20),
+    "## Erledigt",
+    filler("Fertig", 40),
+    "# Anhang",
+    filler("Anlage", 40),
+  ].join("\r\n");
+}
+
+test("get: a long body comes as its outline; section, offset pages and full read its parts", async () => {
+  const body = report();
+  expect(body.length).toBeGreaterThan(12000);
+  await tool("create", { items: [{ title: "Statusbericht", body }] });
+  const got = JSON.parse((await tool("get", { ref: "Statusbericht" })).text);
+  expect(got.body).toBeUndefined();
+  expect(got.body_length).toBe(body.length);
+  expect(got.body_note).toMatch(/outline.*section.*offset.*full: true/);
+  expect(got.outline).toHaveLength(5);
+  expect(got.outline[1]).toMatch(/^## Offene Punkte · at \d+ · \d+ chars$/);
+
+  // a section by path, with its subsections, and where it is
+  const sec = JSON.parse((await tool("get", { ref: "Statusbericht", section: "status > offene punkte" })).text);
+  expect(sec.section).toMatch(/^Status > Offene Punkte · level 2 · at \d+ · \d+ of \d+ chars$/);
+  expect(sec.body.startsWith("## Offene Punkte")).toBe(true);
+  expect(sec.body).toContain("### Details");
+  expect(sec.body).not.toContain("## Erledigt");
+  expect(sec.outline).toBeUndefined();
+  // a heading alone works when it is unique; an unknown one lists the headings
+  expect(JSON.parse((await tool("get", { ref: "Statusbericht", section: "Details" })).text).body).toMatch(/^### Details/);
+  const none = await tool("get", { ref: "Statusbericht", section: "Gibt es nicht" });
+  expect(none.error).toBe(true);
+  expect(none.text).toContain("- Status > Offene Punkte (at ");
+
+  // pages: offsets count from the start of the body, the hint names the next one, together they are the body
+  let text = "";
+  let offset: number | undefined = 0;
+  let pages = 0;
+  while (offset !== undefined) {
+    const p = JSON.parse((await tool("get", { ref: "Statusbericht", offset, max_chars: 5000 })).text);
+    text += p.body;
+    pages++;
+    const next = p.body_more ? Number(/offset: (\d+)/.exec(p.body_more)![1]) : undefined;
+    if (next !== undefined) expect(p.body_range).toBe(`characters ${offset}–${next} of ${body.length}`);
+    offset = next;
+  }
+  expect(pages).toBeGreaterThan(2);
+  expect(text).toBe(body);
+  // a page inside a section stays inside it
+  const at = Number(/at (\d+)/.exec(got.outline[3])![1]);
+  const inSec = JSON.parse((await tool("get", { ref: "Statusbericht", section: "Erledigt", max_chars: 1000 })).text);
+  expect(inSec.body_range).toMatch(new RegExp(`^characters ${at}–\\d+ of the section \\(${at}–\\d+\\)$`));
+  expect(inSec.body_more).toMatch(/section "Erledigt" and offset: \d+/);
+  expect((await tool("get", { ref: "Statusbericht", section: "Erledigt", offset: 0 })).text).toMatch(/outside the section/);
+  expect((await tool("get", { ref: "Statusbericht", offset: body.length + 10 })).text).toMatch(/past the end/);
+  // all of it, and the outline next to a short answer
+  expect(JSON.parse((await tool("get", { ref: "Statusbericht", full: true })).text).body).toBe(body);
+  const short = JSON.parse((await tool("get", { ref: "Statusbericht", section: "Anhang", outline: true })).text);
+  expect(short.outline).toHaveLength(5);
+  // a short body comes whole as before; include_body false leaves it out
+  await tool("create", { items: [{ title: "Kurz", body: "# Eins\nText" }] });
+  expect(JSON.parse((await tool("get", { ref: "Kurz" })).text)).toMatchObject({ body: "# Eins\nText" });
+  expect(JSON.parse((await tool("get", { ref: "Kurz", include_body: false })).text).body).toBeUndefined();
+});
+
+test("get: a long body without headings comes in pages; a long file text too", async () => {
+  const body = "Ein Satz ohne Überschrift. ".repeat(1000);
+  await tool("create", { items: [{ title: "Fließtext", body }] });
+  const got = JSON.parse((await tool("get", { ref: "Fließtext" })).text);
+  expect(got.body.length).toBe(12000);
+  expect(got.body_more).toBe("More from offset 12000: get with offset: 12000.");
+  // a file keeps its extracted text in its meta: the same paging applies to it
+  const { setFileMeta } = await import("@obtion/core/model");
+  const id = s.create({ kind: "datei", title: "Handbuch.txt" }, "test");
+  s.change(id, "test", (d) => setFileMeta(d, { name: "Handbuch.txt", text: "Seite eins. ".repeat(3000) }));
+  s.flush();
+  const f = JSON.parse((await tool("get", { ref: id })).text);
+  expect(f.text.length).toBe(12000);
+  expect(f.text_more).toMatch(/offset: 12000/);
+  const p2 = JSON.parse((await tool("get", { ref: id, offset: 30000 })).text);
+  expect(p2.text).toBe("Seite eins. ".repeat(3000).slice(30000));
+  expect(p2.text_more).toBeUndefined();
+});
+
+test("get: children and updates come in pages", async () => {
+  await tool("create", { items: [{ title: "Großprojekt", type: "Projekt" }] });
+  await tool("create", { items: Array.from({ length: 70 }, (_, n) => ({ title: `Aufgabe ${n}`, type: "Task", parents: ["Großprojekt"] })) });
+  for (let n = 0; n < 20; n++) await tool("add_update", { ref: "Großprojekt", text: `Stand ${n}` });
+  const first = JSON.parse((await tool("get", { ref: "Großprojekt" })).text);
+  expect(first.children).toHaveLength(60);
+  expect(first.children_range).toBe("1–60 of 70 – more with children_offset: 60");
+  expect(first.updates.map((u: { text: string }) => u.text).at(-1)).toBe("Stand 19");
+  expect(first.updates).toHaveLength(15);
+  expect(first.updates_range).toBe("1–15 newest of 20 – older ones with updates_offset: 15");
+  const next = JSON.parse((await tool("get", { ref: "Großprojekt", children_offset: 60, updates_offset: 15 })).text);
+  expect(next.children).toHaveLength(10);
+  expect(next.children_range).toBe("61–70 of 70");
+  expect(next.updates.map((u: { text: string }) => u.text)).toEqual(["Stand 0", "Stand 1", "Stand 2", "Stand 3", "Stand 4"]);
+  expect(next.updates_range).toBe("16–20 newest of 20");
+});
+
+test("search: identifiers by their parts, the excerpt at the hit with underscores, and its section", async () => {
+  await tool("create", { items: [{ title: "Statusbericht", body: report() }, { title: "Lieferschein_Muster_4711_2026-01-15.pdf" }] });
+  const r = await tool("search", { query: "DEMO_EXPORT_PDF_MAIL_DUPLICATES" });
+  expect(r.text).toMatch(/^- Statusbericht \[\w+\] · \w+ · § Status > Offene Punkte — “…[^”]*DEMO_EXPORT_PDF_MAIL_DUPLICATES[^”]*”$/);
+  const parts = (await tool("search", { query: "4711" })).text.split("\n");
+  expect(parts).toHaveLength(2);
+  expect(parts.join("\n")).toContain("Beleg_4711_2026-01-15.pdf");
+  expect((await tool("search", { query: "Muster" })).text).toContain("Lieferschein_Muster_4711_2026-01-15.pdf");
+});
+
+test("schema names every view as its tab shows it; that name finds an unnamed view again", async () => {
+  const schema = JSON.parse((await tool("schema", {})).text);
+  const views = schema.types.flatMap((t: { views: { name: string | null }[] }) => t.views);
+  expect(views.length).toBeGreaterThan(3);
+  expect(views.every((v: { name: string | null }) => typeof v.name === "string" && v.name)).toBe(true);
+  const project = schema.types.find((t: { name: string }) => t.name === "Projekt");
+  expect(project.views.map((v: { name: string }) => v.name)).toContain("Kalender");
+  // giving the views back as schema shows them keeps the unnamed calendar unnamed, with its id
+  const calendar = s.index().types.get("sys:project")!;
+  const before = calendar.schema.views?.length ? calendar.schema.views : (await import("@obtion/core/setup")).typeTabs(calendar, "de");
+  const views2 = project.views.map((v: { name: string; query: string }) => ({ name: v.name, query: v.query }));
+  expect((await tool("update_type", { type: "Projekt", views: views2 })).error).toBe(false);
+  const after = s.index().types.get("sys:project")!.schema.views!;
+  expect(after.map((t) => t.id)).toEqual(before.map((t) => t.id));
+  expect(after.find((t) => t.kind === "calendar")!.name).toBeUndefined();
+});
+
+test("a workspace no app has set up: schema says so, setup creates the default types once", async () => {
+  const bare = new ServerStore(tempDir("obtion-mcp-bare-"));
+  const call = (name: string, args: unknown) => storeTool(bare, name, args);
+  const schema = JSON.parse((await call("schema", {})).text);
+  expect(schema.types).toEqual([]);
+  expect(schema.not_set_up).toMatch(/Call setup/);
+  expect((await call("create", { items: [{ title: "X", type: "Projekt" }] })).error).toBe(true);
+  const r = await call("setup", { language: "en" });
+  expect(r.error).toBe(false);
+  expect(r.text).toMatch(/^Set up in English\. Types: Project \(Projects\), Task \(Tasks\), Card \(Cards\)/);
+  const now = JSON.parse((await call("schema", {})).text);
+  expect(now.not_set_up).toBeUndefined();
+  expect(now.ui_language).toBe("en");
+  expect(now.types.map((t: { name: string }) => t.name)).toEqual(["Project", "Task", "Card"]);
+  expect((await call("create", { items: [{ title: "Website", type: "Project" }] })).error).toBe(false);
+  // never twice: the app (or another agent) finds the settings and leaves it
+  const again = await call("setup", {});
+  expect(again.error).toBe(true);
+  expect(again.text).toMatch(/^Nothing changed\. This workspace is set up already \(language en\)/);
+  expect(bare.index().types.size).toBe(3);
 });

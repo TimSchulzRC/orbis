@@ -42,6 +42,19 @@ export const capInput = z.object({
 });
 export type CapInput = z.infer<typeof capInput>;
 
+export const getInput = z.object({
+  ref: z.string(),
+  include_body: z.boolean().optional().describe("false: no body and no file text, only the facts"),
+  section: z.string().optional().describe('one section of the body (a file: of its text) with its subsections: a heading, case-insensitive, or a path like "Status > Offene Punkte"'),
+  offset: z.number().int().min(0).optional().describe("read the body (or file text) from this character, counted from the start of the whole text (as the outline gives it)"),
+  max_chars: z.number().int().min(200).max(100000).optional().describe("characters per page (default 12000)"),
+  outline: z.boolean().optional().describe("add the headings (level, offset, size) to whatever else is returned"),
+  full: z.boolean().optional().describe("the whole body (or section), however long"),
+  children_offset: z.number().int().min(0).optional().describe("children come 60 at a time: skip this many"),
+  updates_offset: z.number().int().min(0).optional().describe("the 15 newest updates come first: skip this many newest ones"),
+});
+export type GetOptions = Omit<z.infer<typeof getInput>, "ref">;
+
 export const createInput = z.object({
   title: z.string(),
   type: z.string().optional(),

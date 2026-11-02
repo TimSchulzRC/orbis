@@ -18,7 +18,6 @@ import { StatusButton } from "./ui/StatusButton";
 import { CommandPalette } from "./ui/CommandPalette";
 import { CaptureSheet } from "./ui/Capture";
 import { ItemPage } from "./views/ItemPage";
-import { SearchView } from "./views/Search";
 import { FilesPage } from "./views/Lists";
 import { Today } from "./views/Today";
 import { Tray } from "./ui/Tray";
@@ -81,7 +80,7 @@ function Main() {
   const { t } = useT();
   const route = useRoute();
   const wide = useDesktop();
-  const [palette, setPalette] = useState(false);
+  const [palette, setPalette] = useState<string | null>(null); // the query it opens with; null: closed
   const [menu, setMenu] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
   useEffect(() => setMenu(false), [route.path]);
@@ -94,10 +93,10 @@ function Main() {
       if (e.defaultPrevented) return;
       if (mod && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        setPalette((p) => !p);
+        setPalette((p) => (p === null ? "" : null));
       }
     };
-    const showPalette = () => setPalette(true);
+    const showPalette = (e: Event) => setPalette((e as CustomEvent<string | undefined>).detail ?? "");
     window.addEventListener("keydown", on);
     window.addEventListener("obtion:palette", showPalette);
     return () => {
@@ -134,8 +133,6 @@ function Main() {
       case "review":
         // "#/inbox": Heute, with the tray's panel open (above); "#/review": with it open to sort
         return <Today />;
-      case "search":
-        return <SearchView />;
       case "files":
         return <FilesPage />;
       case "graph":
@@ -167,7 +164,7 @@ function Main() {
       >
         {t("nav.skip")}
       </Button>
-      {wide && <Sidebar onSearch={() => setPalette(true)} />}
+      {wide && <Sidebar onSearch={() => setPalette("")} />}
 
       <div ref={column} className="flex min-w-0 flex-1 flex-col">
         {!wide && (
@@ -176,7 +173,7 @@ function Main() {
               <BrandLogo alt="" className="size-6" />
             </a>
             <StatusButton />
-            <Button variant="plain" onClick={() => setPalette(true)} className="tap-row ml-1 flex flex-1 items-center gap-2 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm text-muted-foreground">
+            <Button variant="plain" onClick={() => setPalette("")} className="tap-row ml-1 flex flex-1 items-center gap-2 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm text-muted-foreground">
               <Search size={15} /> {t("nav.searchPlaceholder")}
             </Button>
             <Button variant="plain" onClick={() => setMenu(true)} className="tap p-1.5 text-muted-foreground" aria-label={t("nav.menu")}>
@@ -195,7 +192,7 @@ function Main() {
         {!wide && <MobileNav />}
       </div>
 
-      {palette && <CommandPalette onClose={() => setPalette(false)} />}
+      {palette !== null && <CommandPalette query={palette} onClose={() => setPalette(null)} />}
       {menu && (
         <Backdrop onClick={() => setMenu(false)}>
           <MenuSheet onClose={() => setMenu(false)}>
