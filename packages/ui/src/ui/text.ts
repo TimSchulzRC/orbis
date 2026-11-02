@@ -19,4 +19,15 @@ export function kindHint(item: Item, ix: Index): string {
   return item.kind === "datei" ? tr("kind.file") : (ix.typeName(item.type) ?? "");
 }
 
+/** Where a page in link and mention lists is sorted in ("Arbeit › Relaunch"), empty if nowhere yet. */
+export function placeHint(item: Item, ix: Index): string {
+  return ix.pathText(ix.homePath(item.id));
+}
+
+/** The inside of a [[link]] to the page: its title, or "id|title" when the title is not exact. */
+export function linkInner(item: Item, ix: Index): string {
+  const target = ix.linkTarget(item);
+  return target === item.id ? `${item.id}|${item.title.replace(/[\]|\n]/g, "").trim()}` : target;
+}
+
 export const filePreview = (text: string) => plainText(text).slice(0, 800);

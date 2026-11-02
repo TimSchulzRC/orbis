@@ -10,7 +10,7 @@ import { insertQueryBlock } from "../QueryBlock";
 import { KINDS, kindName, setKind } from "./blocks";
 import { iconHTML } from "./icons";
 import { foldUmlauts, plainVowels } from "@obtion/core/text";
-import { kindHint } from "../text";
+import { kindHint, linkInner, placeHint } from "../text";
 
 interface SlashItem {
   id: string;
@@ -19,7 +19,7 @@ interface SlashItem {
   run: (view: EditorView, pos: number) => void;
 }
 
-type Option = Completion & { icon?: ComponentType<{ size?: number }>; hint?: string; page?: boolean };
+type Option = Completion & { icon?: ComponentType<{ size?: number }>; hint?: string; page?: boolean; /** A page's path, on a line below. */ place?: string };
 
 let filesHandler: (view: EditorView, files: File[]) => void = () => {};
 /** Set by Editor.tsx, which does the actual file insertion. */
@@ -129,14 +129,17 @@ export function mentionCompletion(selfId?: string) {
     return {
       from,
       filter: false,
-      options: hits.map((hit, i) =>
-        pageOption({
-        label: hit.title,
-        hint: kindHint(hit, repo.index()),
-        boost: -i,
-        apply: (view, _c, a, b) => view.dispatch({ changes: { from: a, to: b, insert: `[[${hit.title}]]` }, selection: EditorSelection.cursor(a + hit.title.length + 4) }),
-        }),
-      ),
+      options: hits.map((hit, i) => {
+        const ix = repo.index();
+        const insert = `[[${linkInner(hit, ix)}]]`;
+        return pageOption({
+          label: hit.title,
+          hint: kindHint(hit, ix),
+          place: placeHint(hit, ix),
+          boost: -i,
+          apply: (view, _c, a, b) => view.dispatch({ changes: { from: a, to: b, insert }, selection: EditorSelection.cursor(a + insert.length) }),
+        });
+      }),
     };
   };
 }
@@ -162,6 +165,17 @@ export const slashRender = {
       hint.className = "cm-slash-hint";
       hint.textContent = option.hint;
       text.append(hint);
+    }
+    if (option.place) {
+      // the path goes below the name and the type: two entries with one title differ there
+      const place = document.createElement("span");
+      place.className = "cm-slash-place";
+      place.textContent = option.place;
+      const lines = document.createElement("span");
+      lines.className = "cm-slash-lines";
+      lines.append(text, place);
+      row.append(tile, lines);
+      return row;
     }
     row.append(tile, text);
     return row;

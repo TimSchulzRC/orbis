@@ -37,7 +37,9 @@ function linksIn(state: EditorState, from: number, to: number): Link[] {
         const bar = rest.indexOf("|");
         const target = title + (bar >= 0 ? rest.slice(0, bar) : rest);
         const id = open === "![[" ? repo.resolveTitle(title.trim()) : undefined;
-        out.push({ from: start, to: start + all.length, text: bar >= 0 ? rest.slice(bar + 1) : target, target, web: false, embed: !!(id && repo.get(id)?.file) });
+        // [[id]] without a text reads as the page's title
+        const text = bar >= 0 ? rest.slice(bar + 1) : (repo.get(title.trim())?.title ?? target);
+        out.push({ from: start, to: start + all.length, text, target, web: false, embed: !!(id && repo.get(id)?.file) });
       }
     }
     pos = line.to + 1;
@@ -111,7 +113,8 @@ function linkMenu(view: EditorView, el: HTMLElement, at: { left: number; top: nu
                 run: () => {
                   view.dispatch({ selection: EditorSelection.range(link.from, link.to) });
                   view.focus();
-                  view.plugin(formatToolbar)?.openLink({ text: link.text, target: link.web ? link.target : pageTitle(link.target) });
+                  const page = link.web ? undefined : pageTitle(link.target);
+                  view.plugin(formatToolbar)?.openLink({ text: link.text, target: page === undefined ? link.target : (repo.get(page)?.title ?? page) });
                 },
               },
               {

@@ -375,3 +375,21 @@ describe("selects", () => {
     expect(optionIds(undefined)).toEqual([]);
   });
 });
+
+describe("link targets", () => {
+  test("a link is written by title only when the title leads to that entry alone", () => {
+    const m = new MemRepo();
+    const work = m.add({ title: "Arbeit" });
+    const home = m.add({ title: "Privat" });
+    const a = m.add({ title: "Notizen", parents: [work] });
+    const b = m.add({ title: "notizen ", parents: [home] });
+    const single = m.add({ title: "Einzeln" });
+    const odd = m.add({ title: "C# Tipps" });
+    const ix = m.index();
+    expect(ix.linkTarget(ix.get(single)!)).toBe("Einzeln");
+    expect(ix.linkTarget(ix.get(a)!), "two entries with one title: by id").toBe(a);
+    expect(ix.linkTarget(ix.get(b)!)).toBe(b);
+    expect(ix.linkTarget(ix.get(odd)!), "a # can't be in a link by name").toBe(odd);
+    for (const id of [a, b]) expect(ix.resolveTitle(ix.linkTarget(ix.get(id)!))).toBe(id);
+  });
+});
