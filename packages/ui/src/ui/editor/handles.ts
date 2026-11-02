@@ -83,9 +83,14 @@ export const blockHandles = ViewPlugin.fromClass(
       const block = blockAtY(view, y);
       this.current = block;
       const dom = view.dom.getBoundingClientRect();
-      // centred on the first line of the block
+      // centred on the first line of the block. A block drawn as a whole (a query, a table) is
+      // taller than a line: its handles go to its top, beside its heading or first row
       const coords = view.coordsAtPos(block.from, 1);
-      const mid = coords ? (coords.top + coords.bottom) / 2 : block.top + 13;
+      let mid = coords ? (coords.top + coords.bottom) / 2 : block.top + 13;
+      if (coords && coords.bottom - coords.top > view.defaultLineHeight * 1.5) {
+        const anchor = [...view.contentDOM.querySelectorAll("[data-handle-anchor]")].map((x) => x.getBoundingClientRect()).find((r) => r.top >= coords.top - 1 && r.top < coords.bottom);
+        mid = anchor ? anchor.top + Math.min(anchor.height, 36) / 2 : coords.top + view.defaultLineHeight / 2;
+      }
       this.box.style.top = mid - 12 - dom.top + "px";
       this.box.classList.remove("instant");
       this.box.classList.add("shown");

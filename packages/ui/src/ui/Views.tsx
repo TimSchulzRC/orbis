@@ -206,7 +206,7 @@ interface FilterDraft {
 }
 
 /** The look is saved at once; the filter stays a draft until "Speichern". */
-export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter, onClose, kinds = TAB_KINDS }: { tab: ViewTab; fields: ViewField[]; columns?: string[]; groups?: Group[]; onLook: (patch: Partial<ViewTab>) => void; filter?: FilterDraft; onClose: () => void; kinds?: ViewKind[] }) {
+export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter, onClose, kinds = TAB_KINDS, flat }: { tab: ViewTab; fields: ViewField[]; columns?: string[]; groups?: Group[]; onLook: (patch: Partial<ViewTab>) => void; filter?: FilterDraft; onClose: () => void; kinds?: ViewKind[]; /** inside a card (a query block): no card of its own and no close button */ flat?: boolean }) {
   const { t } = useT();
   const ix = useIndex();
   const hasStatus = [...ix.types.values()].some((x) => statusProp(x.schema));
@@ -231,14 +231,15 @@ export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter
   const patchSort = (n: number, patch: (s: (typeof sorts)[number]) => Partial<(typeof sorts)[number]>) => onLook({ sort: sorts.map((x, m) => (m === n ? { ...x, ...patch(x) } : x)) });
   const isShown = (key: string) => shown.some((k) => titleKey(k) === titleKey(key));
   // the shown ones first, in their order, then the others
+  const Box = flat ? "div" : Card;
   const columnFields = [...shown.map((k) => fields.find((f) => titleKey(f.key) === titleKey(k)) ?? { key: k, label: fieldLabel(k, t, fields), kind: "text" as const }), ...fields.filter((f) => !isShown(f.key))];
   return (
-    <Card className="mb-4 space-y-3 p-3 text-sm">
+    <Box className={cn("mb-4 space-y-3 p-3 text-sm", flat && "rounded-lg bg-surface-2/50")}>
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1 overflow-x-auto [scrollbar-width:none]">
           <Seg label={t("view.label")} value={tab.kind} onChange={(k) => onLook({ kind: k })} options={kindsHere.map((k) => ({ value: k, label: t("view." + k) }))} />
         </div>
-        <IconButton size="sm" icon={X} iconSize={15} onClick={onClose} label={t("view.closeSettings")} />
+        {!flat && <IconButton size="sm" icon={X} iconSize={15} onClick={onClose} label={t("view.closeSettings")} />}
       </div>
 
       {filter && <div>
@@ -381,6 +382,6 @@ export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter
           </ul>
         </div>
       )}
-    </Card>
+    </Box>
   );
 }
