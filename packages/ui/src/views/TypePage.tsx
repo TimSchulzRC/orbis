@@ -1,9 +1,10 @@
 // A type is an information with a schema; changing it is editing, not programming.
 import { Checkbox } from "../components/ui/checkbox";
+import { DialogContent, DialogHeader, DialogTitle, Dialog as DialogRoot } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
 import { NativeSelect } from "../components/ui/native-select";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Plus, Trash2, GripVertical, ArrowUp, ArrowDown, Tag as TagIcon, X, Pencil, Pin, RotateCcw } from "lucide-react";
 import type * as Y from "yjs";
 import {
@@ -28,7 +29,7 @@ import { isStatusProp, statusProp, useAsStatus } from "@obtion/core/traits";
 import { keyBetween } from "@obtion/core/sortkey";
 import { parseQuery, printQuery, runQuery } from "@obtion/core/query";
 import { type DeleteMode, deleteType, previewTagToType, tagToType, typeUsage } from "@obtion/core/typeops";
-import { useIndex, useRoute, navigate, setParams, useDocumentTitle, useRepo } from "../hooks";
+import { useIndex, navigate, useDocumentTitle, useRepo } from "../hooks";
 import { useT } from "../i18n";
 import { Card, Button, Dialog, MenuItem, Popover, SectionTitle, Seg, AddButton, IconButton, MoreMenu, PagePlaceholder } from "../ui/primitives";
 import { InlineText } from "../ui/fields";
@@ -39,14 +40,13 @@ import { TypeList } from "./Lists";
 import { notify } from "../ui/feedback";
 import type { T } from "@obtion/core/i18n";
 import { NewTypeDialog } from "./Types";
+import { closeTypeEditor, editType, useTypeEditing } from "../ui/type-edit";
 
 export function TypePage({ item }: { item: Item }) {
   const repo = useRepo();
   const { t } = useT();
   const ix = useIndex();
-  const route = useRoute();
-  const [editing, setEditing] = useState(route.query.get("edit") === "1");
-  useEffect(() => void setParams({ edit: null }), []);
+  const editing = useTypeEditing() === item.id;
   const plural = ix.typePlural(item.id);
   useDocumentTitle(plural);
   if (item.deleted) return <PagePlaceholder>{t("type.isDeleted", { name: item.schema!.name })}</PagePlaceholder>;
@@ -61,7 +61,7 @@ export function TypePage({ item }: { item: Item }) {
         <MoreMenu>
           {(close) => (
             <>
-              <MenuItem icon={<Pencil size={14} />} onClick={() => (close(), setEditing(!editing))}>
+              <MenuItem icon={<Pencil size={14} />} onClick={() => (close(), editType(item.id))}>
                 {t("type.edit")}
               </MenuItem>
               <MenuItem icon={<Pin size={14} />} onClick={() => (close(), repo.pin(item.id, !item.pinned))}>
@@ -74,12 +74,13 @@ export function TypePage({ item }: { item: Item }) {
           )}
         </MoreMenu>
       </div>
-      {editing && <TypeEditor item={item} onClose={() => setEditing(false)} />}
+      {editing && <TypeEditor item={item} onClose={closeTypeEditor} />}
       <TypeList type={item} />
     </div>
   );
 }
 
+/** "Typ bearbeiten", as a dialog over the list. */
 function TypeEditor({ item, onClose }: { item: Item; onClose: () => void }) {
   const repo = useRepo();
   const { t } = useT();
@@ -92,10 +93,13 @@ function TypeEditor({ item, onClose }: { item: Item; onClose: () => void }) {
   // a sort key between the neighbours one step up or down
   const sortUp = (i: number) => keyBetween(schema.properties[i - 2]?.sort ?? null, schema.properties[i - 1]!.sort);
   const sortDown = (i: number) => keyBetween(schema.properties[i + 1]!.sort, schema.properties[i + 2]?.sort ?? null);
+  const previous = useRef<HTMLElement | null>(document.activeElement as HTMLElement);
 
   return (
-    <Card className="@container mb-6 p-4 md:p-5">
-      <div className="flex items-start gap-3">
+    <DialogRoot open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent onCloseAutoFocus={(e) => { e.preventDefault(); if (previous.current?.isConnected) previous.current.focus({ preventScroll: true }); }} showCloseButton={false} aria-describedby={undefined}
+        className="flex h-[min(52rem,90vh)] flex-col gap-0 overflow-hidden rounded-2xl bg-bg p-0 sm:max-w-4xl">
+      <DialogHeader className="flex-row items-start gap-3 border-b border-line px-5 py-3 text-left">
         <Popover
           trigger={(p) => (
             <Button variant="plain" {...p} className="tap mt-1 rounded-lg p-1.5 hover:bg-hover" aria-label={t("type.icon")}>
@@ -124,6 +128,7 @@ function TypeEditor({ item, onClose }: { item: Item; onClose: () => void }) {
           )}
         </Popover>
         <div className="min-w-0 flex-1">
+          <DialogTitle className="sr-only">{t("type.edit")}</DialogTitle>
           <InlineText
             value={schema.name}
             label={t("type.name")}
@@ -157,10 +162,11 @@ function TypeEditor({ item, onClose }: { item: Item; onClose: () => void }) {
             </>
           )}
         </MoreMenu>
-        <IconButton icon={X} label={t("view.closeSettings")} onClick={onClose} />
-      </div>
+        <IconButton icon={X} label={t("close")} onClick={onClose} />
+      </DialogHeader>
 
-      <label className="mt-5 block">
+      <div className="@container min-h-0 flex-1 overflow-y-auto px-5 py-5">
+      <label className="block">
         <span className="text-xs font-medium text-muted-foreground">{t("type.description")}</span>
         <Textarea
           key={item.id}
@@ -204,10 +210,12 @@ function TypeEditor({ item, onClose }: { item: Item; onClose: () => void }) {
         <section className="hidden @3xl:block">{selected ? <PropEditor item={item} prop={selected} /> : null}</section>
       </div>
 
+      </div>
       {dialog === "delete" && <DeleteTypeDialog item={item} onClose={() => setDialog(null)} />}
       {dialog === "toTag" && <DeleteTypeDialog item={item} onClose={() => setDialog(null)} toTag />}
       {dialog === "fromTag" && <FromTagDialog item={item} onClose={() => setDialog(null)} />}
-    </Card>
+      </DialogContent>
+    </DialogRoot>
   );
 }
 
@@ -579,7 +587,7 @@ function DeleteTypeDialog({ item, onClose, toTag }: { item: Item; onClose: () =>
       : [{ mode: "remove" }, t("op.typeRemoved", { name: schema.name })];
     deleteType(repo.writer, ix, item.id, how, label, repo.origin);
     onClose();
-    navigate("/types");
+    navigate("/");
   };
   return (
     <Dialog title={toTag ? t("type.toTagTitle", { name: schema.name }) : t("type.deleteTitle", { name: schema.name })} onClose={onClose}>

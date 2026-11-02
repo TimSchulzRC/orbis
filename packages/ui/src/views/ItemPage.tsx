@@ -1,7 +1,7 @@
 // One page for every information. Types change the properties and which sections appear, never
 // the layout.
 import { Input } from "../components/ui/input";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { EditorView } from "@codemirror/view";
 import { Trash2, Plus, AlertTriangle, ImagePlus, ListFilter, Pin, PinOff, FilePlus, FolderInput, Link2, ArrowRightLeft } from "lucide-react";
 import { type Item, META_TYPE, titleKey } from "@obtion/core/model";
@@ -39,11 +39,18 @@ export function ItemPage({ id, isNew }: { id: string; isNew: boolean }) {
   const scoped = useRepo();
   const { t } = useT();
   const item = scoped.get(id);
-  // the title after the id, a moment after typing it (browsers limit how often an address may change)
+  // the title after the id: at once when the page opens, while typing a moment later
+  // (browsers limit how often an address may change)
   const hasPage = item && item.kind !== "settings" && item.kind !== "op";
   const title = !hasPage ? undefined : item.type === META_TYPE ? scoped.index().typePlural(id) : item.title;
-  useEffect(() => {
+  const shown = useRef<string | undefined>(undefined);
+  useLayoutEffect(() => {
     if (title === undefined) return;
+    if (shown.current !== id) {
+      shown.current = id;
+      showTitle(title);
+      return;
+    }
     const wait = setTimeout(() => showTitle(title), 400);
     return () => clearTimeout(wait);
   }, [id, title]);

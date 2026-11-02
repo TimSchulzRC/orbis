@@ -5,7 +5,7 @@ import { Plus, CornerDownLeft, ChevronRight } from "lucide-react";
 import type { Item } from "@obtion/core/model";
 import { snippet } from "@obtion/core/search";
 import { statusOf } from "@obtion/core/traits";
-import { navigate, itemPath, spaceHref, openItem } from "../hooks";
+import { itemPath, spaceHref, openItem } from "../hooks";
 import { useAccounts } from "../accounts";
 import { useReplicas } from "./Spaces";
 import { captureSpace } from "./Capture";
@@ -18,6 +18,7 @@ import { shortPath } from "./Row";
 import { createAndOpen } from "../actions";
 import { Button } from "./primitives";
 import { openSettings } from "./settings-open";
+import { openNewType } from "./type-edit";
 import { openReview } from "./inbox";
 
 /** Search hits shown for a query; reaching it also offers the full search page. */
@@ -50,7 +51,6 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
       return [
         ...ix.typesInOrder().map((x) => [of(ix.typePlural(x.id)), spaceHref(s.id, itemPath(x.id))]),
         [of(t("nav.files")), spaceHref(s.id, "/files")],
-        [of(t("nav.types")), spaceHref(s.id, "/types")],
         [of(t("nav.graph")), spaceHref(s.id, "/graph")],
         [of(t("space.settings")), spaceHref(s.id, "/settings")],
       ];
@@ -66,7 +66,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   const cmds: [string, () => void][] = [
     [t("palette.cmd.sortInbox"), () => openReview()],
     [t("nav.settings"), openSettings],
-    [t("palette.cmd.newType"), () => navigate("/types?new=1", { space: captureIn })],
+    [t("palette.cmd.newType"), () => openNewType(captureIn)],
     [t("palette.cmd.language"), () => setLang(getLang() === "de" ? "en" : "de")],
     ...(["system", "light", "dark"] as const).map((v): [string, () => void] => [t("palette.cmd.theme", { name: t("theme." + v) }), () => setTheme(v)]),
   ];

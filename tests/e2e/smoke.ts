@@ -155,7 +155,7 @@ async function pages(browser: import("playwright").Browser, serverName: string, 
   if (serverName === "empty" && !phone) {
     // the app has set the workspace up (made through the API: without the examples)
     await check(page, label, "/", errors, async (p) => {
-      await p.locator("aside section[aria-label='Persönlich']").getByRole("button", { name: "Typen" }).waitFor({ timeout: 8000 });
+      await p.locator("aside section[aria-label='Persönlich']").getByRole("button", { name: "Typen", exact: true }).waitFor({ timeout: 8000 });
       if (await p.locator("aside a[href$='/i/ex-welcome']").count()) failures.push(`${label}: the examples came along`);
     });
   }
@@ -216,7 +216,7 @@ async function signInPage(browser: import("playwright").Browser, server: { url: 
     await p.getByLabel("Passwort").fill("geheim12345");
     await p.getByRole("button", { name: "Anmelden" }).click();
     // the account's workspace was not set up yet: the app does it, without asking
-    if (!(await p.locator("aside section[aria-label='Persönlich']").getByRole("button", { name: "Typen" }).waitFor({ timeout: 8000 }).then(() => true, () => false))) failures.push("sign-in: the workspace was not set up after signing in");
+    if (!(await p.locator("aside section[aria-label='Persönlich']").getByRole("button", { name: "Typen", exact: true }).waitFor({ timeout: 8000 }).then(() => true, () => false))) failures.push("sign-in: the workspace was not set up after signing in");
   });
   await context.close();
 }
@@ -299,7 +299,7 @@ async function twoWorkspaces(browser: import("playwright").Browser, server: Serv
     await dialog.getByLabel("Name").fill("Firma");
     await dialog.getByRole("checkbox", { name: /Mit Beispielen starten/ }).uncheck();
     await dialog.getByRole("button", { name: "Workspace anlegen" }).click();
-    if (!(await firma(p).getByRole("button", { name: "Typen" }).waitFor({ timeout: 8000 }).then(() => true, () => false))) failures.push(`${label}: "Firma" not created and set up from the sidebar`);
+    if (!(await firma(p).getByRole("button", { name: "Typen", exact: true }).waitFor({ timeout: 8000 }).then(() => true, () => false))) failures.push(`${label}: "Firma" not created and set up from the sidebar`);
     if (await firma(p).locator("a[href$='/i/ex-welcome']").count()) failures.push(`${label}: "Firma" got the examples`);
     if (!(await p.locator("aside section[aria-label='Persönlich'] a[href$='/i/ex-work']").count())) failures.push(`${label}: the first workspace's block lost its pinned items`);
   });
