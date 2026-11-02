@@ -423,7 +423,8 @@ export async function push(client: Client, dir: string, state: State, opts: Push
     };
 
     /** Replace a body with base_version; a stale one keeps the local file and writes the conflict copy. */
-    const sendBody = async (path: string, e: Entry, body: string, verb = "update") => {
+    /** `write`: put the file back with the new version (not when the README.md was deleted). */
+    const sendBody = async (path: string, e: Entry, body: string, verb = "update", write = true) => {
       const node = nodes.get(e.id);
       if (!node || e.gone) return r.line("skipped", path, "removed in Obtion; nothing sent", true);
       if (unresolved(path, e)) return;
@@ -437,7 +438,7 @@ export async function push(client: Client, dir: string, state: State, opts: Push
         e.version = v ?? e.version;
         e.hash = sha256(body);
         delete e.theirs;
-        writeAtomic(abs(dir, path), renderNote({ ...noteMeta(node), version: e.version! }, body));
+        if (write) writeAtomic(abs(dir, path), renderNote({ ...noteMeta(node), version: e.version! }, body));
         r.line(verb, path);
         saved();
       } catch (err) {
@@ -617,7 +618,7 @@ export async function push(client: Client, dir: string, state: State, opts: Push
         continue;
       }
       // the same item still has a path here (the folder X/ of the note X.md): only this path is dropped
-      const kept = Object.entries(entries).find(([p, x]) => p !== path && x.id === e.id && s.local.get(p) !== "missing");
+      const kept = Object.entries(entries).find(([p, x]) => p !== path && x.id === e.id && isText(x.kind) && s.local.get(p) !== "missing");
       if (kept) {
         r.line("deleted", label, `only here; the item stays, it is still ${kept[0]}`);
         if (!dry) delete entries[path];
@@ -627,7 +628,7 @@ export async function push(client: Client, dir: string, state: State, opts: Push
       try {
         if (e.kind === "body" && !folderGone) {
           // README.md deleted, folder kept: the item's text is emptied
-          await sendBody(path, e, "", "empty");
+          await sendBody(path, e, "", "empty", false);
           if (!dry && sha256("") === e.hash) delete entries[path];
           continue;
         }

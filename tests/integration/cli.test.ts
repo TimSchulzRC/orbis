@@ -309,3 +309,14 @@ test("a folder X/ next to the note X.md: its files go below that note, its READM
   expect((await byTitle("Neu aus der App"))!.body).toBe("hallo");
   expect((await tree(rootId)).items.some((i) => i.file?.name === "anhang.txt")).toBe(false);
 });
+
+test("a deleted README.md with its folder kept empties the folder's text (push --delete)", async () => {
+  expect(bodyOf("Tools/README.md")).toBe("# Tools\nStart: python run.py\n");
+  rmSync(join(dir, "Tools", "README.md"));
+  const r = await obtion(["push", "--delete"]);
+  expect(r.out).toContain("empty     Tools/README.md"); // (the Leer conflict of an earlier test is still open)
+  expect((await byTitle("Tools"))!.body).toBe("");
+  expect(existsSync(join(dir, "Tools", "README.md"))).toBe(false);
+  await obtion(["pull"]);
+  expect(existsSync(join(dir, "Tools", "README.md"))).toBe(false);
+});
