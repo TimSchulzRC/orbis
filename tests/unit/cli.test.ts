@@ -110,3 +110,64 @@ test("ignore patterns: folders, base names, paths", () => {
   expect(ig.matches("src/__pycache__", false)).toBe(false);
   expect(ig.matches("tool.py", false)).toBe(false);
 });
+
+import { rewriteLinks, suffixes } from "@obtion/cli/links";
+
+test("imported Markdown: relative links and mentions of tracked files become [[id|label]], nothing else changes", () => {
+  const t = {
+    byPath: new Map([
+      ["kunden/A", "fA"],
+      ["kunden/A/README.md", "fA"],
+      ["kunden/A/STATUS_2026-10-30.md", "nS"],
+      ["kunden/A/sources/schema v2.xsd", "fX"],
+      ["kunden/A/bild.png", "fB"],
+      ["tools/run.py", "fR"],
+      ["README.md", "nR"],
+    ]),
+    byName: new Map([
+      ["STATUS_2026-10-30.md", "nS"],
+      ["run.py", "fR"],
+    ]),
+  };
+  const body = [
+    'Siehe [Status](STATUS_2026-10-30.md#6-offen) und [Schema](<sources/schema v2.xsd>), ![Bild](bild.png "Titel").',
+    "Alt: STATUS_2026-10-30.md §6, Werkzeug `tools/run.py`, Ordner [A](../A/), `run.py` und run.py.",
+    "Bleibt: https://example.org/x/run.py, mail@example.org, [[Schon verlinkt]], [extern](https://x.org/a.md), [fehlt](gibt-es-nicht.md), `nicht/da.xsd`, v1.2.3.",
+    "```",
+    "run.py in Code bleibt",
+    "```",
+    "[ref]: STATUS_2026-10-30.md",
+    "| Datei | run.py |",
+    "Datei | run.py",
+    "    run.py eingerückt",
+    "Selbst: [hier](README.md)\r\n",
+  ].join("\n");
+  const r = rewriteLinks(body, "kunden/A/README.md", "fA", t);
+  expect(r.text.split("\n")).toEqual([
+    "Siehe [[nS#6-offen|Status]] und [[fX|Schema]], ![[fB|Bild]].",
+    "Alt: [[nS|STATUS_2026-10-30.md]] §6, Werkzeug [[fR|tools/run.py]], Ordner [A](../A/), [[fR|run.py]] und [[fR|run.py]].",
+    "Bleibt: https://example.org/x/run.py, mail@example.org, [[Schon verlinkt]], [extern](https://x.org/a.md), [fehlt](gibt-es-nicht.md), `nicht/da.xsd`, v1.2.3.",
+    "```",
+    "run.py in Code bleibt",
+    "```",
+    "[ref]: STATUS_2026-10-30.md",
+    "| Datei | run.py |",
+    "Datei | run.py",
+    "    run.py eingerückt",
+    "Selbst: [hier](README.md)\r",
+    "",
+  ]);
+  expect(r.unresolved).toEqual(["gibt-es-nicht.md", "nicht/da.xsd"]);
+  expect(r.rewrites[0]).toEqual({ from: "[Status](STATUS_2026-10-30.md#6-offen)", to: "[[nS#6-offen|Status]]" });
+  expect(r.rewrites).toHaveLength(7);
+});
+
+test("a path tail that ends exactly one tracked path resolves (written relative to another folder)", () => {
+  const byPath = new Map([
+    ["docs/bic/a.pdf", "A"],
+    ["docs/x/b.pdf", "B"],
+    ["other/x/b.pdf", "C"],
+  ]);
+  const r = rewriteLinks("Siehe `bic/a.pdf` und `x/b.pdf`.", "notes/n.md", undefined, { byPath, byName: new Map(), bySuffix: suffixes(byPath) });
+  expect(r.text).toBe("Siehe [[A|bic/a.pdf]] und `x/b.pdf`.");
+});

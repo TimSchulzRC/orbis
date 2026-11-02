@@ -33,7 +33,7 @@ function bodyText(doc: Item): string {
 function propsText(doc: Item): string {
   const values = Object.values(doc.props).filter((v) => typeof v === "string" && !OPTION_ID.test(v));
   const free = Object.entries(doc.extra).map(([k, v]) => `${k} ${v.v}`);
-  return [...values, ...free].join(" ");
+  return [...values, ...free, doc.source ?? ""].join(" ");
 }
 
 function tokenizeForSearch(text: string): string[] {
@@ -44,6 +44,10 @@ export function createIndex() {
   return new MiniSearch<Item>({
     fields: ["title", "tagText", "body", "props"],
     storeFields: ["id"],
+    // Clean up discarded documents in one pass: MiniSearch's batched vacuum walks its term tree
+    // across pauses, and an add in a pause changes the tree under it (TypeError, the server died
+    // during a large import). One pass over a few thousand items takes milliseconds.
+    autoVacuum: { batchSize: Number.MAX_SAFE_INTEGER, batchWait: 0, minDirtCount: 20, minDirtFactor: 0.1 },
     tokenize: tokenizeForIndex,
     processTerm: (term) => {
       const a = foldTerm(term);

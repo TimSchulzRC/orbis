@@ -144,8 +144,12 @@ function buildMcpServer(store: Store, origin: string, blobs?: Blobs, filesUrl?: 
   );
   server.registerTool(
     "add_update",
-    { title: "Add update", description: "Dated progress note on an item whose type has updates, optionally changing its status at the same time.", inputSchema: { ref: z.string(), text: z.string(), status: z.string().optional() } },
-    write((a) => `Update posted:\n${ops.written([ops.addUpdate(a.ref, a.text, a.status, agent, origin)])}`),
+    {
+      title: "Add update",
+      description: "Dated progress note on an item whose type has updates, optionally changing its status at the same time.",
+      inputSchema: { ref: z.string(), text: z.string(), status: z.string().optional(), at: z.string().optional().describe("when it happened (ISO date or date-time, not in the future): only for imported history; default now") },
+    },
+    write((a) => `Update posted:\n${ops.written([ops.addUpdate(a.ref, a.text, a.status, agent, origin, a.at)])}`),
   );
   server.registerTool(
     "suggest",

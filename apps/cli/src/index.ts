@@ -7,6 +7,7 @@ import { Client, ToolError } from "./client";
 import { CliError, normalizeServer, requireConfig, saveConfig } from "./config";
 import { findRoot, loadState } from "./local";
 import { openFolder, pull, push, status } from "./sync";
+import { importRepo, readConfig } from "./import";
 
 export const VERSION = "0.1.0";
 
@@ -17,10 +18,13 @@ const USAGE = `obtion ${VERSION} – a part of Obtion as a local folder
   obtion pull [<folder>]                   bring a pulled folder up to date
   obtion status [<folder>] [--local]       local changes and changes in Obtion since the last pull
   obtion push [<folder>] [--delete]        send edited and new notes and files
+  obtion import <folder> --into <id or title> [--config mapping.json] [--report file.md]
+                                           a folder or Git repository, with history and a completeness report
 
   --dry-run   pull and push: only show what would happen
   --force     pull: replace local edits (kept as *.obtion-conflict.* copies)
   --delete    push: move items deleted here to the trash
+  --no-history, --no-bundle, --tmp <dir>   import: leave out the Git history or the bundle; scratch space
 
 Environment: OBTION_SERVER, OBTION_WORKSPACE, OBTION_TOKEN override the login; OBTION_CONFIG names
 the config file. Exit code 1: conflicts or failures (listed), 2: wrong use or an error.`;
@@ -44,6 +48,12 @@ export async function main(argv: string[]): Promise<number> {
       force: { type: "boolean" },
       delete: { type: "boolean" },
       local: { type: "boolean" },
+      into: { type: "string" },
+      config: { type: "string" },
+      report: { type: "string" },
+      tmp: { type: "string" },
+      "no-history": { type: "boolean" },
+      "no-bundle": { type: "boolean" },
       quiet: { type: "boolean", short: "q" },
       help: { type: "boolean", short: "h" },
       version: { type: "boolean" },
@@ -80,6 +90,18 @@ export async function main(argv: string[]): Promise<number> {
     case "push": {
       const { dir, state } = openFolder(rest[0]);
       return push(new Client(requireConfig()), dir, state, { dryRun: o["dry-run"], delete: o.delete });
+    }
+    case "import": {
+      if (!rest[0] || !o.into) throw new CliError("usage: obtion import <folder> --into <id or title> [--config mapping.json] [--dry-run]");
+      return importRepo(new Client(requireConfig()), rest[0], o.into, {
+        config: o.config ? readConfig(o.config) : undefined,
+        dryRun: o["dry-run"],
+        report: o.report,
+        tmp: o.tmp,
+        history: !o["no-history"],
+        bundle: !o["no-bundle"],
+        quiet: o.quiet,
+      });
     }
     default:
       throw new CliError(`Unknown command "${cmd}".\n\n${USAGE}`);
