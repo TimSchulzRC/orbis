@@ -301,4 +301,11 @@ test("a folder X/ next to the note X.md: its files go below that note, its READM
   expect((await tree(rootId)).items.filter((i) => i.file?.name === "anhang.txt")).toHaveLength(1);
   expect(again.out).toContain("skipped   Neu aus der App/README.md");
   expect((await byTitle("Neu aus der App"))!.body).toBe("hallo");
+
+  // the folder goes again: its file is trashed, the note X.md stays
+  rmSync(join(dir, "Neu aus der App"), { recursive: true });
+  const del = await obtion(["push", "--delete"]);
+  expect(del.out).toContain("deleted   Neu aus der App/  (only here; the item stays");
+  expect((await byTitle("Neu aus der App"))!.body).toBe("hallo");
+  expect((await tree(rootId)).items.some((i) => i.file?.name === "anhang.txt")).toBe(false);
 });

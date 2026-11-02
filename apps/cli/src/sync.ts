@@ -616,6 +616,13 @@ export async function push(client: Client, dir: string, state: State, opts: Push
         if (!dry) delete entries[path];
         continue;
       }
+      // the same item still has a path here (the folder X/ of the note X.md): only this path is dropped
+      const kept = Object.entries(entries).find(([p, x]) => p !== path && x.id === e.id && s.local.get(p) !== "missing");
+      if (kept) {
+        r.line("deleted", label, `only here; the item stays, it is still ${kept[0]}`);
+        if (!dry) delete entries[path];
+        continue;
+      }
       const folderGone = e.kind === "body" && s.local.get(parentOf(path)) === "missing";
       try {
         if (e.kind === "body" && !folderGone) {
