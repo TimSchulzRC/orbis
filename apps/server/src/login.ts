@@ -83,9 +83,9 @@ export function loginConfig(env: Record<string, string | undefined>, publicUrl: 
     passkey: ways.has("passkey") && secure ? { rpID: pub!.hostname, origin: pub!.origin } : undefined,
     oauth: pub ? oauth : [],
   };
-  // passkeys are added to an account: someone has to be able to make one first
-  if (!config.password && !config.sendCode && !config.oauth.length)
-    throw new Error("OBTION_LOGIN needs password or code (or an OAuth provider): otherwise nobody can create an account");
+  // a passkey can create an account too (with an address), but only where the browser offers passkeys
+  if (!config.password && !config.sendCode && !config.passkey && !config.oauth.length)
+    throw new Error("OBTION_LOGIN needs password, code or passkey (passkeys need OBTION_PUBLIC_URL with https), or an OAuth provider: otherwise nobody can create an account");
   return config;
 }
 

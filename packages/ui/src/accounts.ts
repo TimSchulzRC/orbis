@@ -3,7 +3,7 @@
 import { useSyncExternalStore } from "react";
 import { startAuthentication, startRegistration } from "@simplewebauthn/browser";
 import { Repo } from "@obtion/sync";
-import type { AccountInfo, ErrorBody, InviteCode, InviteInfo, InviteLink, InviteRequest, LoginMethods, McpConnect, Member, Ok, PasskeyInfo, Role, ServerInfo, SignedIn, User, VerifyFirst, WorkspaceInfo } from "@obtion/core/api";
+import type { AccountInfo, ErrorBody, InviteCode, InviteInfo, InviteLink, InviteRequest, LoginMethods, McpConnect, Member, Ok, PasskeyInfo, PasskeySignupStart, Role, ServerInfo, SignedIn, User, VerifyFirst, WorkspaceInfo } from "@obtion/core/api";
 import type { T } from "@obtion/core/i18n";
 import { type FileMeta, SETTINGS_ID } from "@obtion/core/model";
 import { runSetup } from "@obtion/core/setup";
@@ -239,7 +239,7 @@ async function keep(token: string) {
 /** Older servers send no `login`: password only. */
 export const loginOf = (info: ServerInfo | null): LoginMethods => info?.login ?? { password: true, emailCode: false, passkey: false, oauth: [] };
 
-/** The server reads this cookie when a code or OAuth sign-in creates the user. */
+/** The server reads this cookie when a code, OAuth or passkey sign-up creates the user. */
 function signupContext(invite: string | undefined, lang: string) {
   document.cookie = `obtion_signup=${encodeURIComponent(JSON.stringify({ invite, lang }))}; path=/api/auth; max-age=1800; samesite=lax`;
 }
@@ -279,6 +279,20 @@ export async function signInWithPasskey() {
   const optionsJSON = await call<Parameters<typeof startAuthentication>[0]["optionsJSON"]>("/api/auth/passkey/generate-authenticate-options");
   const response = await startAuthentication({ optionsJSON });
   const res = await call<{ session: { token: string } }>("/api/auth/passkey/verify-authentication", { response });
+  await keep(res.session.token);
+}
+
+/**
+ * A new account with a passkey instead of a password, where codes are off: the server checks name
+ * and address, then the passkey made here creates the account and signs it in. Not with the token
+ * of an account signed in before: that would add the passkey to it.
+ */
+export async function signUpWithPasskey(b: { name: string; email: string; invite?: string; lang: string }) {
+  const { context } = await call<PasskeySignupStart>("/api/account/signup", { ...b, passkey: true }, "POST", "");
+  signupContext(b.invite, b.lang);
+  const optionsJSON = await call<Parameters<typeof startRegistration>[0]["optionsJSON"]>(`/api/auth/passkey/generate-register-options?context=${encodeURIComponent(context)}`, undefined, "GET", "");
+  const response = await startRegistration({ optionsJSON });
+  const res = await call<{ session: { token: string } }>("/api/auth/passkey/verify-registration", { response, name: deviceLabel(), createSession: true }, "POST", "");
   await keep(res.session.token);
 }
 

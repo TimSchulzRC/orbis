@@ -1,9 +1,10 @@
-// Signing in without a password: codes by email, the sign-up rules for every way in, the OAuth
-// cookie traded for a token, deleting an account that has no password.
+// Signing in without a password: codes by email, accounts made by a passkey, the sign-up rules for
+// every way in, the OAuth cookie traded for a token, deleting an account that has no password.
 import { test, expect, afterAll } from "bun:test";
 import { tempDir, removeTempDirs } from "../support/helpers";
 import { Accounts, SIGNUP_COOKIE, setPassword, trustEmails } from "@obtion/server/accounts";
 import type { SignupPolicy } from "@obtion/core/api";
+import { authenticate, register, type SoftPasskey } from "../support/webauthn";
 
 afterAll(removeTempDirs);
 
@@ -11,13 +12,20 @@ const SECRET = "a-test-secret-longer-than-thirty-two-characters";
 // Better Auth limits requests per address (in memory, across instances): every test its own
 let address = 0;
 
-async function setUp(policy: SignupPolicy, opts: { password?: boolean } = {}) {
+const ORIGIN = "http://localhost:8480";
+
+async function setUp(policy: SignupPolicy, opts: { password?: boolean; codes?: boolean; passkey?: boolean } = {}) {
   const codes: { to: string; code: string; lang?: string }[] = [];
   const accounts = new Accounts(tempDir("obtion-login-"), {
     secret: SECRET,
-    baseURL: "http://localhost:8480",
+    baseURL: ORIGIN,
     policy,
-    login: { password: opts.password ?? true, oauth: [], sendCode: async (to, code, lang) => void codes.push({ to, code, lang }) },
+    login: {
+      password: opts.password ?? true,
+      oauth: [],
+      ...(opts.codes === false ? {} : { sendCode: async (to: string, code: string, lang: string | undefined) => void codes.push({ to, code, lang }) }),
+      ...(opts.passkey ? { passkey: { rpID: "localhost", origin: ORIGIN } } : {}),
+    },
   });
   await accounts.init(() => "Personal");
   const ip = `10.0.0.${++address}`;
@@ -38,7 +46,40 @@ async function setUp(policy: SignupPolicy, opts: { password?: boolean } = {}) {
     if (!sent) return undefined;
     return call("/sign-in/email-otp", { email, otp: sent.code, name }, ctx);
   }
-  return { accounts, codes, call, withCode };
+  /**
+   * Registers a passkey as the page does: with a sign-up `context`, or with a `token` to add one to
+   * that account. The challenge cookie goes from the first request to the second.
+   */
+  async function passkeyRegister(how: { context?: string; token?: string; invite?: string }) {
+    const headers: Record<string, string> = { "x-forwarded-for": ip, origin: ORIGIN };
+    if (how.token) headers.authorization = `Bearer ${how.token}`;
+    const cookies = how.invite ? [`${SIGNUP_COOKIE}=${encodeURIComponent(JSON.stringify({ invite: how.invite }))}`] : [];
+    if (cookies.length) headers.cookie = cookies.join("; ");
+    const optionsRes = await accounts.auth.handler(new Request(`${ORIGIN}/api/auth/passkey/generate-register-options${how.context ? `?context=${how.context}` : ""}`, { headers }));
+    if (!optionsRes.ok) return { status: optionsRes.status };
+    const [response, key] = await register((await optionsRes.json()) as Parameters<typeof register>[0], ORIGIN);
+    cookies.push(...optionsRes.headers.getSetCookie().map((c) => c.split(";")[0]!));
+    const res = await accounts.auth.handler(
+      new Request(`${ORIGIN}/api/auth/passkey/verify-registration`, {
+        method: "POST",
+        headers: { ...headers, cookie: cookies.join("; "), "content-type": "application/json" },
+        body: JSON.stringify({ response, name: "Test", createSession: !how.token }),
+      }),
+    );
+    const body = (await res.json().catch(() => ({}))) as { session?: { token: string }; user?: { id: string; email: string; name: string } };
+    return { status: res.status, key, token: body.session?.token, user: body.user };
+  }
+  /** Signs in with the passkey; the session's token. */
+  async function passkeySignIn(key: SoftPasskey) {
+    const headers = { "x-forwarded-for": ip, origin: ORIGIN };
+    const optionsRes = await accounts.auth.handler(new Request(`${ORIGIN}/api/auth/passkey/generate-authenticate-options`, { headers }));
+    const response = await authenticate((await optionsRes.json()) as Parameters<typeof authenticate>[0], ORIGIN, key);
+    const cookie = optionsRes.headers.getSetCookie().map((c) => c.split(";")[0]!).join("; ");
+    const res = await accounts.auth.handler(new Request(`${ORIGIN}/api/auth/passkey/verify-authentication`, { method: "POST", headers: { ...headers, cookie, "content-type": "application/json" }, body: JSON.stringify({ response }) }));
+    expect(res.status).toBe(200);
+    return ((await res.json()) as { session: { token: string } }).session.token;
+  }
+  return { accounts, codes, call, withCode, passkeyRegister, passkeySignIn };
 }
 
 test("the first account signs up with a code (the email in its language) and becomes admin, without a workspace until it creates one", async () => {
@@ -214,4 +255,62 @@ test("trust-emails: accounts from before codes keep their password through their
     expect(await accounts.hasPassword(old.user.id)).toBe(true);
     expect((await accounts.session(old.token))?.user.id).toBe(old.user.id);
   } finally { accounts.db.close(); }
+});
+
+test("a passkey creates the first account (name and address checked before) and signs it in again, without a password", async () => {
+  const { accounts, passkeyRegister, passkeySignIn } = await setUp("off", { codes: false, password: false, passkey: true });
+  try {
+    await expect(accounts.startPasskeySignup({ name: "Me", email: "kein-mail" })).rejects.toThrow("invalid email");
+    const { context } = await accounts.startPasskeySignup({ name: " Me ", email: "Me@Example.org" });
+    // nothing exists before the passkey
+    expect(accounts.userCount()).toBe(0);
+    const made = await passkeyRegister({ context });
+    expect(made.status).toBe(200);
+    expect(made.user).toMatchObject({ email: "me@example.org", name: "Me" });
+    expect((await accounts.session(made.token))?.user.id).toBe(made.user!.id);
+    expect(accounts.isAdmin(made.user!.id)).toBe(true);
+    expect(await accounts.hasPassword(made.user!.id)).toBe(false);
+    // the context is used up
+    expect((await passkeyRegister({ context })).status).toBe(401);
+    const again = await passkeySignIn(made.key!);
+    expect((await accounts.session(again))?.user.id).toBe(made.user!.id);
+  } finally { accounts.db.close(); }
+});
+
+test("a passkey sign-up follows the sign-up rules: not for a stranger or a taken address, the invite joins its workspace", async () => {
+  const { accounts, passkeyRegister } = await setUp("invite", { codes: false, passkey: true });
+  try {
+    const owner = await accounts.signUp({ name: "Owner", email: "owner@example.org", password: "geheim12345" });
+    const space = accounts.createWorkspace(owner.user.id, "Persönlich");
+    await expect(accounts.startPasskeySignup({ name: "Stranger", email: "stranger@example.org" })).rejects.toThrow("signup closed");
+    await expect(accounts.startPasskeySignup({ name: "Owner", email: "owner@example.org", invite: accounts.createInvite(space.id, owner.user.id) })).rejects.toThrow("exists");
+    // without a context (and without a session) a passkey makes nothing
+    expect((await passkeyRegister({})).status).toBe(401);
+    const invite = accounts.createInvite(space.id, owner.user.id);
+    const { context } = await accounts.startPasskeySignup({ name: "Guest", email: "guest@example.org", invite });
+    const guest = await passkeyRegister({ context, invite });
+    expect(guest.status).toBe(200);
+    expect(accounts.workspacesOf(guest.user!.id).map((w) => w.id)).toEqual([space.id]);
+    expect(accounts.isAdmin(guest.user!.id)).toBe(false);
+    // the address became an account between the form and the passkey
+    const late = await accounts.startPasskeySignup({ name: "Late", email: "late@example.org", invite: accounts.createInvite(space.id, owner.user.id) });
+    await accounts.signUp({ name: "Late", email: "late@example.org", password: "geheim12345", invite: accounts.createInvite(space.id, owner.user.id) });
+    expect((await passkeyRegister({ context: late.context })).status).toBe(422);
+    expect(accounts.userCount()).toBe(3);
+  } finally { accounts.db.close(); }
+});
+
+test("where codes are on, or passkeys off, a passkey does not create accounts; a signed-in account still adds one to itself", async () => {
+  const withCodes = await setUp("open", { passkey: true });
+  try {
+    await expect(withCodes.accounts.startPasskeySignup({ name: "Me", email: "me@example.org" })).rejects.toThrow("verify by code");
+    const { token, user } = (await (await withCodes.withCode("me@example.org"))!.json()) as { token: string; user: { id: string } };
+    const added = await withCodes.passkeyRegister({ token });
+    expect(added.status).toBe(200);
+    expect(withCodes.accounts.db.query("SELECT userId FROM passkey").all()).toEqual([{ userId: user.id }]);
+  } finally { withCodes.accounts.db.close(); }
+  const off = await setUp("open", { codes: false });
+  try {
+    await expect(off.accounts.startPasskeySignup({ name: "Me", email: "me@example.org" })).rejects.toThrow("passkeys off");
+  } finally { off.accounts.db.close(); }
 });

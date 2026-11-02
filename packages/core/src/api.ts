@@ -75,6 +75,16 @@ export interface SignupRequest {
   lang?: string;
   /** when email codes are on: the code sent to the address (the first answer is { verify: true }) */
   code?: string;
+  /** a passkey instead of a password (where codes are off): the answer is a PasskeySignupStart */
+  passkey?: boolean;
+}
+
+/**
+ * POST /api/account/signup with passkey: pass `context` to /api/auth/passkey/generate-register-options;
+ * the passkey then creates the account (verify-registration with createSession).
+ */
+export interface PasskeySignupStart {
+  context: string;
 }
 
 /** POST /api/account/signup with codes on and no code yet: request a code for the address, then sign up again with it. */
