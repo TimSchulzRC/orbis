@@ -1,9 +1,7 @@
 // `notify` keeps one look for every notice: a sentence, and "Rückgängig" or one other step.
-import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Toaster } from "../components/ui/sonner";
 import { tr } from "../i18n";
-import { PHONE } from "../lib/platform";
 
 const PLAIN = 5000;
 const WITH_ACTION = 7000; // a notice with "Rückgängig" or "Öffnen" stays longer
@@ -23,52 +21,14 @@ notify.error = (text: string) => {
   toast.error(text, { duration: WITH_ACTION });
 };
 
-/**
- * Notices never cover a focused field in the lower part: they move above it, and come back only a
- * moment after it loses focus, so a click on a notice is never lost to the move.
- */
-function useOffset(): number {
-  const phone = () => matchMedia(PHONE).matches;
-  const base = () => (phone() ? 80 : 24);
-  const [bottom, setBottom] = useState(base);
-  useEffect(() => {
-    let later: ReturnType<typeof setTimeout> | undefined;
-    const check = () => {
-      clearTimeout(later);
-      const el = document.activeElement as HTMLElement | null;
-      const typing = el && (el.matches("input, textarea, select, [contenteditable=true]") || el.isContentEditable) && !el.closest("[data-sonner-toaster]");
-      if (!typing) return setBottom(base());
-      const field = el.getBoundingClientRect();
-      const lift = window.innerHeight - field.top + 8;
-      const inLowerPart = field.bottom > window.innerHeight - base() - 64 && field.top < window.innerHeight;
-      setBottom(inLowerPart ? Math.max(base(), lift) : base());
-    };
-    const away = () => {
-      clearTimeout(later);
-      later = setTimeout(check, 600);
-    };
-    check();
-    document.addEventListener("focusin", check);
-    document.addEventListener("focusout", away);
-    window.addEventListener("resize", check);
-    return () => {
-      clearTimeout(later);
-      document.removeEventListener("focusin", check);
-      document.removeEventListener("focusout", away);
-      window.removeEventListener("resize", check);
-    };
-  }, []);
-  return bottom;
-}
-
+/** Sonner as it comes: top right, a close button, several stacked (spread out on hover), swiped away to the side. */
 export function AppToaster() {
-  const bottom = useOffset();
   return (
     <Toaster
-      position="bottom-center"
-      visibleToasts={3}
-      offset={{ bottom: `calc(${bottom}px + env(safe-area-inset-bottom))` }}
-      mobileOffset={{ bottom: `calc(${bottom}px + env(safe-area-inset-bottom))`, left: 16, right: 16 }}
+      position="top-right"
+      closeButton
+      offset={{ top: "calc(16px + env(safe-area-inset-top))", right: 16 }}
+      mobileOffset={{ top: "calc(16px + env(safe-area-inset-top))", left: 16, right: 16 }}
       // an open dialog makes the page behind it unclickable (pointer-events on the body): not the notices
       toastOptions={{ classNames: { toast: "pointer-events-auto", error: "[&_[data-icon]]:text-destructive" } }}
     />
