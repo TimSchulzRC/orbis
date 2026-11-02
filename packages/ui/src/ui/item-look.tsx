@@ -1,5 +1,5 @@
 import { Badge } from "../components/ui/badge";
-import type { ReactNode } from "react";
+import type { MouseEvent, ReactNode } from "react";
 import { CircleCheck, CirclePause, CircleX } from "lucide-react";
 import { type Item, type OptionDef, type StatusGroup, type TypeSchema, META_TYPE, todayISO } from "@obtion/core/model";
 import { type T, fmtRelative, fmtShortDate } from "@obtion/core/i18n";
@@ -95,7 +95,7 @@ export function StatusPill({ option, small, group, label }: { option?: OptionDef
   );
 }
 
-export function Tag({ tag, onRemove, href }: { tag: string; onRemove?: () => void; href?: string }) {
+export function Tag({ tag, onRemove, href, onClick }: { tag: string; onRemove?: () => void; href?: string; onClick?: (e: MouseEvent) => void }) {
   const { t } = useT();
   const inner = (
     <>
@@ -117,7 +117,7 @@ export function Tag({ tag, onRemove, href }: { tag: string; onRemove?: () => voi
   );
   const cls = "group/tag inline-flex items-center rounded-md bg-surface-2 px-1.5 py-0.5 text-xs text-muted-foreground";
   return href ? (
-    <a href={href} className={cn(cls, "hover:text-fg")}>
+    <a href={href} onClick={onClick} className={cn(cls, "hover:text-fg")}>
       {inner}
     </a>
   ) : (

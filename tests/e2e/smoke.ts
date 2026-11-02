@@ -95,7 +95,7 @@ async function check(page: Page, label: string, path: string, errors: string[], 
   for (const e of errors) failures.push(`${label} ${path}: ${e}`);
 }
 
-const ROUTES = ["/", "/#/inbox", "/#/review", "/#/search", "/#/search?q=relaunch", "/#/graph", "/#/activity", "/#/trash", "/#/settings", "/#/nope", "/#/i/sys%3Aproject", "/#/i/sys%3Atask", "/#/i/sys%3Acard", "/#/i/ex-type-book", "/#/files", "/#/files?kind=bild"];
+const ROUTES = ["/", "/#/inbox", "/#/review", "/#/graph", "/#/activity", "/#/trash", "/#/settings", "/#/nope", "/#/i/sys%3Aproject", "/#/i/sys%3Atask", "/#/i/sys%3Acard", "/#/i/ex-type-book", "/#/files", "/#/files?kind=bild"];
 // one page per kind: overview, article with translation, project, sub-project, task, card, note,
 // inbox item, inbox bundle, course, book, image, PDF, query page, welcome note
 const ITEMS = ["ex-work", "ex-art-de", "ex-relaunch", "ex-design", "ex-t-pages", "ex-k-nf", "ex-n-lecture", "ex-i-podcast", "ex-i-trip", "ex-course", "ex-b-moor", "ex-f-diagram", "ex-f-sheet", "ex-week", "ex-welcome"];
@@ -162,7 +162,7 @@ async function pages(browser: import("playwright").Browser, serverName: string, 
   for (const r of ROUTES) await check(page, label, r, errors, undefined, { phone });
   if (serverName !== "empty") for (const id of [...ITEMS, server.file, server.trashed].filter(Boolean)) await check(page, label, `/#/i/${encodeURIComponent(id)}`, errors, undefined, { phone, page: true });
   if (phone)
-    await check(page, label, "/#/search", errors, async (p) => {
+    await check(page, label, "/#/files", errors, async (p) => {
       await p.getByRole("button", { name: "Menü", exact: true }).click();
       const menu = p.getByRole("dialog", { name: "Menü", exact: true });
       await menu.waitFor({ state: "visible" });
@@ -177,6 +177,15 @@ async function pages(browser: import("playwright").Browser, serverName: string, 
       await p.keyboard.press("Escape");
       await menu.waitFor({ state: "detached" });
     }, { phone });
+  // a search link from before the palette was the only search: opens it with the query, over Heute
+  await check(page, label, "/#/search?q=relaunch", errors, async (p) => {
+    const field = p.getByRole("dialog").getByRole("textbox");
+    if (!(await field.waitFor({ timeout: 3000 }).then(() => true, () => false))) return void failures.push(`${label}: an old search link does not open the palette`);
+    if ((await field.inputValue()) !== "relaunch") failures.push(`${label}: the palette does not take the old link's query`);
+    if (p.url().includes("/search")) failures.push(`${label}: the old search address stays (${p.url()})`);
+    await p.keyboard.press("Escape");
+    await field.waitFor({ state: "detached" });
+  }, { phone });
   if (serverName === "seeded") {
     // the open panel is a step in the history: Back closes it and stays on the page
     await check(page, label, "/#/i/ex-relaunch", errors, async (p) => {
@@ -184,7 +193,7 @@ async function pages(browser: import("playwright").Browser, serverName: string, 
       const panel = p.locator("[data-shelf-panel=open]");
       if (!(await panel.waitFor({ timeout: 3000 }).then(() => true, () => false))) return void failures.push(`${label}: the tray does not open its panel`);
       // another page and Back: the panel as it was
-      await p.evaluate(() => (location.hash = "#/search"));
+      await p.evaluate(() => (location.hash = "#/activity"));
       await panel.waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
       await p.goBack();
       if (!(await panel.waitFor({ timeout: 3000 }).then(() => true, () => false))) failures.push(`${label}: Back to the page does not bring the open panel back`);

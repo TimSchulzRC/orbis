@@ -36,6 +36,21 @@ export function words(lang: Lang, key: string): string[] {
   return (CATALOGS[lang][key] ?? "").split(",").map((w) => w.trim()).filter(Boolean);
 }
 
+/**
+ * The language an HTTP client prefers (Accept-Language, by weight) among ours; `fallback` when it
+ * names none of them.
+ */
+export function acceptLang(header: string | null | undefined, fallback: Lang = "de"): Lang {
+  let best: { lang: Lang; q: number } | undefined;
+  for (const part of (header ?? "").split(",")) {
+    const [tag = "", ...params] = part.trim().toLowerCase().split(";");
+    const lang = LANGS.find((l) => tag === l || tag.startsWith(l + "-"));
+    const q = Number(params.map((x) => x.trim()).find((x) => x.startsWith("q="))?.slice(2) ?? 1);
+    if (lang && q > 0 && (!best || q > best.q)) best = { lang, q };
+  }
+  return best?.lang ?? fallback;
+}
+
 /** `pref` is a device language such as "de-AT". */
 export function detectLang(pref?: string | null): Lang {
   const l = (pref ?? "en").toLowerCase();

@@ -128,6 +128,30 @@ test("a workspace is only open to its members – sync, files, activity, MCP", a
   expect(await get(bare, `/w/${cw.id}/api/history?event=${latest.id}`, carla.token).then((r) => r.json())).toEqual({ doc, before: "Erste Fassung", after: "Zweite Fassung", from: 1, to: 2 });
 });
 
+test("a workspace made through the API gets the default types with setup (else the agent's setup tool); never twice", async () => {
+  const eve = await signUp(bare, "agnes@example.org");
+  const agentToken = async (ws: string) => (await post(bare, `/api/workspaces/${ws}/mcp-token`, {}, eve.token).then((r) => r.json())).token as string;
+  const schema = async (ws: string) => JSON.parse(await mcpTool(bare, await agentToken(ws), "schema", {}, `/w/${ws}/mcp`));
+  // setup: true – in the language the client asks for
+  const en = await post(bare, "/api/workspaces", { name: "Agentenprojekt", setup: true }, eve.token, { "accept-language": "en-US,en;q=0.9,de;q=0.5" }).then((r) => r.json());
+  expect(en).toMatchObject({ name: "Agentenprojekt", role: "owner", setup: "en" });
+  expect((await schema(en.id)).types.map((t: { name: string }) => t.name)).toEqual(["Project", "Task", "Card"]);
+  // a language named outright; without any: German
+  const de = await post(bare, "/api/workspaces", { name: "Projekt DE", setup: "de" }, eve.token, { "accept-language": "en" }).then((r) => r.json());
+  expect((await schema(de.id)).types.map((t: { name: string }) => t.name)).toEqual(["Projekt", "Task", "Karte"]);
+  expect((await post(bare, "/api/workspaces", { name: "Ohne", setup: true }, eve.token).then((r) => r.json())).setup).toBe("de");
+  expect((await post(bare, "/api/workspaces", { name: "Falsch", setup: "fr" }, eve.token)).status).toBe(400);
+  // as the app creates them (no setup): nothing is set up on the server, the agent can do it once
+  const plainWs = await newWorkspace(bare, eve.token, "Wie die App");
+  expect(plainWs.setup).toBeUndefined();
+  const token = await agentToken(plainWs.id);
+  const before = JSON.parse(await mcpTool(bare, token, "schema", {}, `/w/${plainWs.id}/mcp`));
+  expect(before).toMatchObject({ types: [], not_set_up: expect.stringContaining("setup") });
+  expect(await mcpTool(bare, token, "setup", { language: "de" }, `/w/${plainWs.id}/mcp`)).toMatch(/^Set up in German/);
+  expect(await mcpTool(bare, token, "setup", {}, `/w/${plainWs.id}/mcp`)).toMatch(/set up already/);
+  expect(await mcpTool(bare, await agentToken(en.id), "setup", {}, `/w/${en.id}/mcp`)).toMatch(/set up already \(language en\)/);
+});
+
 test("the sign-in only from the server's own page; other sites get no CORS answer", async () => {
   const eve = await signUp(bare, "eve@example.org");
   const w = await newWorkspace(bare, eve.token);

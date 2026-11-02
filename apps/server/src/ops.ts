@@ -12,6 +12,7 @@ import {
   type TypeSchema,
   type Value,
   META_TYPE,
+  SETTINGS_ID,
   addParent,
   appendUpdate,
   fileTypeOf,
@@ -47,18 +48,20 @@ import { inboxWhere } from "@obtion/core/inbox";
 import { isInInbox, isOverview } from "@obtion/core/placement";
 import { caps, doneAt, dueOf, dueProp, firstOfGroup, hasUpdates, initialProps, statusOf, statusProp, template, useAsStatus, writeProp } from "@obtion/core/traits";
 import { previewTagToType, typeUsage } from "@obtion/core/typeops";
-import { searchIds, snippet } from "@obtion/core/search";
+import { excerpt, searchHits, searchIds } from "@obtion/core/search";
+import { type Heading, findSection, outline, page } from "@obtion/core/outline";
 import { keyBetween, nextPinKey } from "@obtion/core/sortkey";
 import { DAY_MS, dateOf } from "@obtion/core/date";
 import { freshColor } from "@obtion/core/palette";
 import { DATE_HELP, InputError, matchOption, parseDate, parseNumber, statusGroupOf } from "@obtion/core/input";
-import { type Writer, typeTabs } from "@obtion/core/setup";
+import { type Writer, runSetup, typeTabs } from "@obtion/core/setup";
+import { type Lang, translate } from "@obtion/core/i18n";
 import { deleteItem, onlyBelow, restoreItem } from "@obtion/core/trash";
 import { fromB64 } from "@obtion/core/protocol";
 import type { Store } from "./store";
 import { type Blobs, sha256 } from "./blobs";
 import { MAX_ATTACH } from "./config";
-import type { AttachInput, CapInput, ConvertInput, CreateInput, DefineTypeInput, PlaceInput, PropInput, SuggestInput, UpdateInput, UpdateTypeInput, ViewInput } from "./schemas";
+import type { AttachInput, CapInput, ConvertInput, CreateInput, DefineTypeInput, GetOptions, PlaceInput, PropInput, SuggestInput, UpdateInput, UpdateTypeInput, ViewInput } from "./schemas";
 import { originText, parseOrigin } from "@obtion/core/origin";
 import { createHash } from "node:crypto";
 import { textDiff, unifiedDiff } from "@obtion/core/diff";
@@ -136,6 +139,13 @@ export const QUERY_HELP =
   "type:Name #tag under:[[X]] in:[[X]] linked:[[X]] linked:under:[[X]] status:open|new|active|done (open = new or active) property:value property<value property:empty without:type|parents|children|usage pinned inbox blocked dormant (it or something above it paused or done) file filetype:image|pdf; space=AND, |=OR, -=NOT, (…); sort:field group:path|status|type limit:n. German keywords work too.";
 
 /** Characters that end or split a [[link]] target: such titles can't be linked by title. */
+/** Longer bodies and file texts come as their outline unless a part is asked for. */
+export const LONG_TEXT = 12000;
+/** The characters of a page when max_chars is not given. */
+const PAGE = 12000;
+/** Children and updates in one answer; the rest with children_offset / updates_offset. */
+const CHILDREN = 60;
+const UPDATES = 15;
 const UNLINKABLE = /[#|[\]^]/;
 const UNLINKABLE_ALL = /[#|[\]^]/g;
 const isDoneNow = (i: Item, schema: TypeSchema | undefined) => statusOf(i, schema)?.group === "done";
@@ -261,10 +271,17 @@ export class Ops {
 
   schema() {
     const ix = this.ix;
+    const types = ix.typesInOrder().map((t) => this.typeInfo(t));
+    const setUp = !!this.store.records.get(SETTINGS_ID);
     return {
       ui_language: this.store.lang(),
       today: todayISO(),
-      types: [...ix.types.values()].map((t) => this.typeInfo(t)),
+      ...(!setUp
+        ? { not_set_up: `This workspace is not set up yet${types.length ? "" : ", so it has no types"}. Call setup (language de or en) to create the default types (project, task, card) and the settings – the same the app does when it opens the workspace. Or ask the user to open it in the app once.` }
+        : !types.length
+          ? { no_types: "This workspace has no types (they were deleted). Define them with define_type, or ask the user to restore the default types in the app (Settings)." }
+          : {}),
+      types,
       inbox: { query: printQuery({ where: inboxWhere(ix) }, this.store.lang(), ix) },
       notes: [
         "Items without a type, without a parent and not pinned are in the inbox (its query, see inbox.query, decides).",
@@ -274,6 +291,18 @@ export class Ops {
         "Property values are given by property name; options by name; relations by title or id.",
       ],
     };
+  }
+
+  /**
+   * The first setup of a workspace no app has set up yet: the default types in `lang` and the
+   * settings, as the app writes them. Refused once the settings exist, so it never runs after the
+   * app's (which waits until it is in step with the server and then sees them).
+   */
+  setup(lang: Lang, origin: string) {
+    if (this.store.records.get(SETTINGS_ID)) throw new OpError(`This workspace is set up already (language ${this.store.lang()}). Its types are in schema; change them with define_type / update_type.`);
+    runSetup(this.writer(origin), lang, origin);
+    const ix = this.ix;
+    return `Set up in ${lang === "de" ? "German" : "English"}. Types: ${ix.typesInOrder().map((t) => `${t.schema.name} (${ix.typePlural(t.id)})`).join(", ")}. Read schema for their properties and capabilities.`;
   }
 
   typeInfo(t: TypeItem) {
@@ -446,7 +475,7 @@ export class Ops {
     return hit.id;
   }
 
-  get(ref: string, includeBody = true) {
+  get(ref: string, opts: GetOptions = {}) {
     const i = this.resolve(ref);
     const ix = this.store.index();
     const out: Record<string, unknown> = { ...this.brief(i), version: versionOf(i) };
@@ -468,7 +497,7 @@ export class Ops {
       const f = i.file;
       out.file = { name: f.name, filetype: f.filetype, size: f.size, pages: f.pages, width: f.width, height: f.height, duration: f.duration };
       out.used_in = ix.usedIn(i.id).map((b) => `${ix.get(b.from)?.title} (${b.kind})`);
-      if (f.text) out.text = f.text.slice(0, 20000);
+      if (f.text && opts.include_body !== false) this.readText(out, "text", f.text, opts);
     }
     const refs = [...new Set([...ix.textLinks(i).map((l) => l.to), ...i.refs])].map((x) => ix.get(x)?.title).filter(Boolean);
     if (refs.length) out.refs = refs;
@@ -482,15 +511,71 @@ export class Ops {
         return `${p?.inverseName || p?.name}: ${from.title}`;
       });
     const kids = ix.childrenOf(i.id).map((c) => ix.get(c)!);
-    if (kids.length) out.children = kids.slice(0, 60).map((c) => this.brief(c, i.id));
+    if (kids.length) {
+      const from = Math.min(opts.children_offset ?? 0, kids.length);
+      out.children = kids.slice(from, from + CHILDREN).map((c) => this.brief(c, i.id));
+      if (from > 0 || from + CHILDREN < kids.length) out.children_range = `${from + 1}–${Math.min(from + CHILDREN, kids.length)} of ${kids.length}${from + CHILDREN < kids.length ? ` – more with children_offset: ${from + CHILDREN}` : ""}`;
+    }
     const desc = [...ix.descendants(i.id)].length;
     if (desc > kids.length) out.descendants_total = desc;
-    if (i.updates.length) out.updates = i.updates.slice(-15).map((u) => ({ at: new Date(u.at).toISOString().slice(0, 16), by: u.by, text: u.text }));
-    if (includeBody && i.body) out.body = blocksAsText(i.body, this.store.lang(), ix);
+    if (i.updates.length) {
+      // newest last, as posted; updates_offset skips the newest ones
+      const skip = Math.min(opts.updates_offset ?? 0, i.updates.length);
+      const end = i.updates.length - skip;
+      const start = Math.max(0, end - UPDATES);
+      out.updates = i.updates.slice(start, end).map((u) => ({ at: new Date(u.at).toISOString().slice(0, 16), by: u.by, text: u.text }));
+      if (skip > 0 || start > 0) out.updates_range = `${i.updates.length - end + 1}–${i.updates.length - start} newest of ${i.updates.length}${start > 0 ? ` – older ones with updates_offset: ${skip + UPDATES}` : ""}`;
+    }
+    // a file's long content is its text, an information's its body
+    if (opts.include_body !== false && i.body) {
+      const body = blocksAsText(i.body, this.store.lang(), ix);
+      if (i.file) out.body = body;
+      else this.readText(out, "body", body, opts);
+    } else if (!i.file && (opts.section || opts.offset !== undefined) && opts.include_body !== false) throw new OpError(`"${i.title}" has no body.`);
     if (i.suggestion) out.suggestion = i.suggestion;
     out.created = dateOf(i.created);
     out.updated = new Date(i.updated).toISOString().slice(0, 16);
     return out;
+  }
+
+  /**
+   * A body or a file text into `out` under `key`: whole when short; long (over LONG_TEXT
+   * characters, with headings) as its outline unless a part is asked for; a section, a page
+   * (offset/max_chars, offsets always counted from the start of the whole text) or all of it.
+   */
+  private readText(out: Record<string, unknown>, key: "body" | "text", text: string, opts: GetOptions) {
+    const heads = outline(text);
+    const fmt = (h: Heading) => `${"#".repeat(h.level)} ${h.text} · at ${h.offset} · ${h.size} chars`;
+    let start = 0;
+    let end = text.length;
+    if (opts.section) {
+      const f = findSection(heads, opts.section);
+      if (!("heading" in f)) {
+        const list = (f.candidates.length ? f.candidates : heads).slice(0, 40).map((h) => `- ${h.path} (at ${h.offset})`).join("\n");
+        if (!heads.length) throw new OpError(`The ${key} has no headings; read it with offset/max_chars.`);
+        throw new OpError(f.candidates.length ? `Several sections match "${opts.section}". Name one by its path:\n${list}` : `No heading matches "${opts.section}". Headings:\n${list}${heads.length > 40 ? "\n…" : ""}`);
+      }
+      const h = f.heading;
+      [start, end] = [h.offset, h.offset + h.size];
+      out.section = `${h.path} · level ${h.level} · at ${h.offset} · ${h.size} of ${text.length} chars`;
+    }
+    const paged = opts.offset !== undefined || opts.max_chars !== undefined;
+    if (!opts.section && !paged && !opts.full && text.length > LONG_TEXT && heads.length >= 2) {
+      out[`${key}_length`] = text.length;
+      out.outline = heads.map(fmt);
+      out[`${key}_note`] = `The ${key} has ${text.length} characters, so here is its outline instead. Read a part with section (a heading or a path like "A > B"), a page with offset (+ max_chars), or all of it with full: true.`;
+      return;
+    }
+    if (opts.outline) out.outline = heads.map(fmt);
+    if (opts.full) return void (out[key] = text.slice(start, end));
+    const from = opts.offset ?? start;
+    if (from < start || from >= end) throw new OpError(opts.section ? `offset ${from} is outside the section "${opts.section}" (${start}–${end}).` : `offset ${from} is past the end of the ${key} (${text.length} characters).`);
+    const pg = page(text.slice(0, end), from, opts.max_chars ?? PAGE);
+    out[key] = pg.text;
+    if (pg.from > start || pg.next !== undefined) {
+      out[`${key}_range`] = `characters ${pg.from}–${pg.to} of ${opts.section ? `the section (${start}–${end})` : text.length}`;
+      if (pg.next !== undefined) out[`${key}_more`] = `More from offset ${pg.next}: get with ${opts.section ? `section "${opts.section}" and ` : ""}offset: ${pg.next}.`;
+    }
   }
 
   /** `q` may also be a type name: its list as its first view shows it. */
@@ -518,12 +603,15 @@ export class Ops {
 
   search(q: string, limit = 15) {
     const ix = this.ix;
-    const ids = q.trim() ? searchIds(this.store.searchIndex, q, 100) : ix.live.sort((a, b) => b.updated - a.updated).map((i) => i.id);
-    return ids
-      .map((id) => ix.get(id))
-      .filter((i): i is Item => !!i && i.type !== META_TYPE)
+    const hits = q.trim() ? searchHits(this.store.searchIndex, q, 100) : ix.live.sort((a, b) => b.updated - a.updated).map((i) => ({ id: i.id, terms: [] as string[] }));
+    return hits
+      .map((h) => ({ i: ix.get(h.id), terms: h.terms }))
+      .filter((h): h is { i: Item; terms: string[] } => !!h.i && h.i.type !== META_TYPE)
       .slice(0, limit)
-      .map((i) => ({ item: i, snippet: q.trim() ? snippet(i.body || i.file?.text || "", q) || undefined : undefined }));
+      .map(({ i, terms }) => {
+        const e = q.trim() ? excerpt(i.body || i.file?.text || "", q, 160, terms) : undefined;
+        return { item: i, snippet: e?.text || undefined, heading: e?.heading };
+      });
   }
 
   /** Mirrors the focus section of the start page. */
@@ -1200,9 +1288,11 @@ export class Ops {
       const p = v.query ? parseQuery(v.query, ix) : { def: {} as QueryDef, errors: [] };
       if (p.errors.length) throw new OpError(`View "${v.name ?? n + 1}": query not understood: ${p.errors.join(", ")}.`);
       const kind = v.view ?? p.def.view ?? "table";
-      const same = current.find((t) => (t.name ?? "") === (v.name ?? "") && (v.name || t.kind === kind));
+      // an unnamed tab is named by its kind in schema: that name finds it again and keeps it unnamed
+      const same = current.find((t) => (t.name ?? "") === (v.name ?? "") && (v.name || t.kind === kind)) ?? (v.name ? current.find((t) => !t.name && t.kind === kind && this.tabLabel(t) === v.name) : undefined);
+      const name = same && !same.name && v.name === this.tabLabel(same) ? undefined : v.name || undefined;
       const hiddenGroups = v.hidden_groups?.length ? v.hidden_groups.map((name) => this.groupKey(p.def.group, name, where)) : undefined;
-      return { id: same?.id ?? shortId("v"), name: v.name || undefined, kind, where: p.def.where, sort: p.def.sort, group: p.def.group, columns: p.def.columns, subgroup: v.subgroup, hideEmpty: v.hide_empty_groups || undefined, hiddenGroups, date: v.date };
+      return { id: same?.id ?? shortId("v"), name, kind, where: p.def.where, sort: p.def.sort, group: p.def.group, columns: p.def.columns, subgroup: v.subgroup, hideEmpty: v.hide_empty_groups || undefined, hiddenGroups, date: v.date };
     });
   }
 
@@ -1220,8 +1310,13 @@ export class Ops {
     return ix.resolveTitle(name) ?? name;
   }
 
+  /** A view's name as its tab shows it: its own, else the name of its kind ("Kalender"). */
+  tabLabel(t: Pick<ViewTab, "name" | "kind">): string {
+    return t.name || translate(this.store.lang(), `view.${t.kind}`);
+  }
+
   viewInfo(t: ViewTab) {
-    return { name: t.name ?? null, hidden_groups: t.hiddenGroups, query: printQuery({ where: t.where, sort: t.sort, group: t.group, columns: t.columns, view: t.kind }, this.store.lang(), this.ix), subgroup: t.subgroup, hide_empty_groups: t.hideEmpty, date: t.date };
+    return { name: this.tabLabel(t), hidden_groups: t.hiddenGroups, query: printQuery({ where: t.where, sort: t.sort, group: t.group, columns: t.columns, view: t.kind }, this.store.lang(), this.ix), subgroup: t.subgroup, hide_empty_groups: t.hideEmpty, date: t.date };
   }
 
   /** Preview only; the user runs the conversion in the app. */

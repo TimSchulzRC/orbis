@@ -9,7 +9,8 @@ import { loginConfig, loginMethods } from "./login";
 import type { AccountInfo, InviteCode, InviteInfo, InviteLink, McpConnect, Ok, Role, ServerInfo, SignedIn, SignupPolicy, SignupRequest } from "@obtion/core/api";
 import { type Conn, Workspace, parseClientMsg } from "./workspace";
 import { firstName, personOrigin } from "@obtion/core/origin";
-import { type Lang, LANGS, translate } from "@obtion/core/i18n";
+import { type Lang, LANGS, acceptLang, translate } from "@obtion/core/i18n";
+import { setUp } from "./importers";
 import { allowedHosts } from "./trust";
 import { DATA, MAX_WS_MESSAGE, PORT } from "./config";
 import { body, fail, json } from "./http";
@@ -197,9 +198,17 @@ async function accountApi(req: Request, path: string, url: URL): Promise<Respons
       return json<Ok>({ ok: true });
     }
     if (path === "/api/workspaces" && req.method === "POST") {
-      const b = await body<{ name?: string }>(req);
+      const b = await body<{ name?: string; setup?: unknown }>(req);
       if (!b?.name?.trim()) return fail(400, "name required");
-      return json(accounts.createWorkspace(user.id, b.name));
+      // setup: set it up here (the default types) for clients without the app – the app sends none and sets it up itself
+      const setup = b.setup;
+      if (setup !== undefined && typeof setup !== "boolean" && !LANGS.includes(setup as Lang)) return fail(400, `setup must be true, false or one of ${LANGS.join(", ")}`);
+      const info = accounts.createWorkspace(user.id, b.name);
+      if (!setup) return json(info);
+      const lang = setup === true ? acceptLang(req.headers.get("accept-language")) : (setup as Lang);
+      const w = workspace(info.id)!;
+      await setUp(w.store, w.blobs, lang);
+      return json({ ...info, setup: lang });
     }
     if (path.startsWith(INVITES) && req.method === "POST") return json(accounts.join(path.slice(INVITES.length), user.id));
     const route = path.match(/^\/api\/workspaces\/(?<id>[\w-]+)(?<sub>\/[\w/-]*)?$/)?.groups;
