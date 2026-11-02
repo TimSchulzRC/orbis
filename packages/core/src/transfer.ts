@@ -155,7 +155,8 @@ function relink(body: string, src: Index, ids: Map<string, string>): string {
     if (!src.get(id)) return l.raw; // a title: resolves by name in the other workspace
     const open = l.embed ? "![[" : "[[";
     const to = ids.get(id);
-    if (to) return `${open}${to}${l.section}${l.label !== undefined ? "|" + l.label : ""}]]`;
+    // in a table the "|" stays escaped
+    if (to) return `${open}${to}${l.section}${l.label !== undefined ? (l.raw.includes("\\|") ? "\\|" : "|") + l.label : ""}]]`;
     return `${open}${l.label || src.get(id)!.title}${l.section}]]`;
   });
 }

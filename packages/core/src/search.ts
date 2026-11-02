@@ -82,15 +82,34 @@ export function searchIds(idx: SearchIndex, query: string, limit = 20): string[]
   return res.slice(0, limit).map((r) => r.id as string);
 }
 
+const TABLE_DELIMITER = /^[ \t]*\|?([ \t]*:?-+:?[ \t]*\|)+([ \t]*:?-+:?[ \t]*)?$/;
+
+/** Tables as their cells ("a · b"): the header above a delimiter row and the rows below it up to a blank line. */
+function tableCells(text: string): string {
+  if (!text.includes("|")) return text;
+  const lines = text.split("\n");
+  const cells = (row: string) => row.trim().replace(/^\|/, "").replace(/(?<!\\)\|$/, "").trim().split(/\s*(?<!\\)\|\s*/).join(" · ");
+  for (let i = 1; i < lines.length; i++) {
+    if (!TABLE_DELIMITER.test(lines[i]!) || !lines[i - 1]!.includes("|")) continue;
+    lines[i - 1] = cells(lines[i - 1]!);
+    lines[i] = "";
+    // up to a blank line or another block (a heading, a quote, a list, a fence)
+    for (i++; i < lines.length && lines[i]!.trim() && !/^\s*(#{1,6}\s|>|```|~~~|[-*+]\s|\d+[.)]\s)/.test(lines[i]!); i++) lines[i] = cells(lines[i]!);
+  }
+  return lines.join("\n");
+}
+
 /** Without Markdown marks, on one line. */
 export function plainText(body: string): string {
   const marks = stripQueryBlocks(body)
     .replace(/^\s*```.*$/gm, "") // code fences (the code itself stays)
+    .replace(/<br\s*\/?>/gi, " ") // line breaks (in table cells)
     .replace(/<[^>\n]+>/g, "") // html tags
     .replace(/!\[\[[^\]]*\]\]/g, "") // embedded files show as files, not as their name
     .replace(/!\[[^\]\n]*\](\([^)\n]*\))?/g, "") // markdown images and stray ![…]
-    .replace(/^(\s*[-*+]\s+)\[[ xX]\]\s+/gm, "$1"); // task list boxes
-  return mapWikiLinks(marks, (l) => l.label || l.target + l.section)
+    .replace(/^(\s*[-*+]\s+)\[[ xX]\]\s+/gm, "$1") // task list boxes
+  return mapWikiLinks(tableCells(marks), (l) => l.label || l.target + l.section)
+    .replace(/\\\|/g, "|")
     .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
     .replace(/^\s*(?:[-*+]|\d+\.|#{1,6}|>)\s+/gm, "")
     .replace(/[*_`~]{1,3}/g, "")

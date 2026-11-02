@@ -2,7 +2,7 @@
 import type { ComponentType } from "react";
 import { iconHTML } from "./icons";
 
-interface MenuEntry {
+export interface MenuEntry {
   label: string;
   icon?: ComponentType<{ size?: number }>;
   color?: string;

@@ -209,14 +209,40 @@ body {
   max-width: 100%;
   border-radius: 6px;
 }
+/* A table: wider than the text it scrolls sideways in its own box; long cells wrap at words. */
+.md-table {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
 .md table {
   border-collapse: collapse;
   font-size: 0.92em;
+  line-height: 1.5;
+  /* not what the editor's lines have (they break anywhere): a column is as wide as its longest word */
+  white-space: normal;
+  word-break: normal;
 }
 .md th,
 .md td {
   border: 1px solid var(--border);
-  padding: 0.25em 0.6em;
+  padding: 0.3em 0.6em;
+  vertical-align: top;
+  text-align: left;
+  min-width: 4.5em;
+  max-width: 32em;
+  /* break inside a word only when it is longer than the column could be (not to make columns narrow) */
+  overflow-wrap: break-word;
+}
+.md th {
+  font-weight: 600;
+  background: color-mix(in srgb, var(--muted-foreground) 8%, transparent);
+}
+.md :is(th, td)[align="center"] {
+  text-align: center;
+}
+.md :is(th, td)[align="right"] {
+  text-align: right;
 }
 .md hr {
   border-color: var(--border);
@@ -518,6 +544,24 @@ time,
 .cm-queryblock {
   max-width: 100%;
   min-width: 0;
+}
+
+/* A table in the editor: drawn like in read-only text; a click into it shows its Markdown. */
+.cm-table {
+  max-width: 100%;
+  min-width: 0;
+  padding: 4px 0 6px;
+  line-height: 1.5;
+  cursor: text;
+}
+.cm-table a {
+  cursor: pointer;
+}
+/* its Markdown while editing: the same width for every letter, so the columns read as columns */
+.cm-line.cm-tablesrc {
+  font-family: var(--font-mono);
+  font-size: 0.84em;
+  line-height: 1.6;
 }
 
 /* read-only text (the start page) */

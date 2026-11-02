@@ -24,8 +24,9 @@ interface WikiToken extends Tokens.Generic {
 const md = new Marked({ gfm: true, breaks: true });
 md.use({
   renderer: {
-    // Never render raw HTML from notes or agent output.
-    html: (t) => escapeHtml(t.text),
+    // Never render raw HTML from notes or agent output; only a line break (in a table cell, where
+    // a row is one line of Markdown, "<br>" is the way to break one).
+    html: (t) => (/^<br\s*\/?>$/i.test(t.text.trim()) ? "<br>" : escapeHtml(t.text)),
     link(t) {
       const text = this.parser.parseInline(t.tokens);
       const internal = t.href.startsWith("#");
@@ -89,11 +90,12 @@ export function embedHTML(item: Item, size?: number, space?: string): string {
 /** Module state because marked's renderers get no context. Set only inside renderMarkdown. */
 let rendering: Repo | undefined;
 let renderingSpace: string | undefined;
-function renderMarkdown(src: string, source?: Repo, space?: string): string {
+/** Tables get a wrapper that scrolls sideways when they are wider than the text. */
+export function renderMarkdown(src: string, source?: Repo, space?: string): string {
   rendering = source;
   renderingSpace = space;
   try {
-    return md.parse(src, { async: false }) as string;
+    return (md.parse(src, { async: false }) as string).replace(/<table>/g, '<div class="md-table"><table>').replace(/<\/table>/g, "</table></div>");
   } finally {
     rendering = undefined;
     renderingSpace = undefined;
