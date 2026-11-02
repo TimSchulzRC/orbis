@@ -54,6 +54,7 @@ export const createInput = z.object({
   parents: z.array(z.string()).optional(),
   pin: z.boolean().optional().describe("pin to the top of the sidebar (a place of its own)"),
   properties: values.optional(),
+  source: z.string().max(1000).optional().describe('where the item came from, set once by importers, e.g. "repo:eInvoice/04_Projects/A/STATUS.md"; get shows it, search finds it'),
 });
 export type CreateInput = z.infer<typeof createInput>;
 

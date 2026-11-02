@@ -454,6 +454,7 @@ export class Ops {
     const i = this.resolve(ref);
     const ix = this.store.index();
     const out: Record<string, unknown> = { ...this.brief(i), version: versionOf(i) };
+    if (i.source) out.source = i.source;
     delete out.path;
     const parents = ix.parentsOf(i.id);
     if (parents.length) out.part_of = parents.map((p) => `${ix.get(p)?.title}${p === ix.home(i.id) && parents.length > 1 ? " (home)" : ""}`);
@@ -924,7 +925,7 @@ export class Ops {
     this.noSelfLink(body, id, title);
     this.store.change(id, origin, (doc) => {
       const pinned = input.pin ? nextPinKey(this.store.live()) : undefined;
-      initItem(doc, { title, type: type?.id ?? null, body, tags: input.tags, refs, parents, pinned, props: initialProps(schema), createdBy: origin });
+      initItem(doc, { title, type: type?.id ?? null, body, tags: input.tags, refs, parents, pinned, props: initialProps(schema), createdBy: origin, source: input.source?.trim() || undefined });
       this.applyProps(doc, undefined, schema, input.properties);
     });
     this.store.flush();
@@ -1059,8 +1060,12 @@ export class Ops {
     return { now, part_of: after.parentsOf(item.id).map((p) => after.get(p)?.title ?? p), in_inbox: isInInbox(now, after) };
   }
 
-  addUpdate(ref: string, text: string, status: string | undefined, by: string, origin: string) {
+  /** `when`: the time it happened (imported history), ISO; not in the future. Default now. */
+  addUpdate(ref: string, text: string, status: string | undefined, by: string, origin: string, when?: string) {
     if (!text.trim()) throw new OpError("The update text is empty.");
+    const at = when === undefined ? Date.now() : Date.parse(when);
+    if (Number.isNaN(at)) throw new OpError(`"${when}" is not a date: give an ISO date or date-time, e.g. 2026-10-30T14:12:00+01:00.`);
+    if (at > Date.now() + 60_000) throw new OpError(`"${when}" is in the future; updates record what happened.`);
     const item = this.target(ref, "add_update");
     const schema = this.store.index().schemaOf(item);
     if (!hasUpdates(schema)) {
@@ -1073,7 +1078,6 @@ export class Ops {
       if (!sp) throw new OpError(`"${item.title}" has no status.`);
       opt = this.toValue(sp, status, item).value as string;
     }
-    const at = Date.now();
     this.store.change(item.id, origin, (doc) => {
       appendUpdate(doc, { at, text: text.trim(), by, status: opt });
       if (opt && sp) writeProp(doc, schema, sp.id, opt, at);
@@ -1330,7 +1334,7 @@ export class Ops {
   }
 
   /** A file item for a content the server has (attach, HTTP upload). Call inside `call`. */
-  addFile(input: { name: string; hash: string; size: number; parent?: string; tags?: string[]; description?: string }, origin: string): Item {
+  addFile(input: { name: string; hash: string; size: number; parent?: string; tags?: string[]; description?: string; source?: string }, origin: string): Item {
     const name = fileName(input.name);
     const parent = input.parent ? this.resolve(input.parent) : undefined;
     if (parent && parent.kind !== "info") throw new OpError(`"${parent.title}" is a file; a file can't be the place of another one. Choose an information as parent.`);
@@ -1338,7 +1342,7 @@ export class Ops {
     const id = newId();
     const mime = mimeOf(name);
     this.store.change(id, origin, (doc) => {
-      initItem(doc, { kind: "datei", title: name, parents: parent ? [parent.id] : [], tags: input.tags, body: input.description, createdBy: origin });
+      initItem(doc, { kind: "datei", title: name, parents: parent ? [parent.id] : [], tags: input.tags, body: input.description, createdBy: origin, source: input.source?.trim() || undefined });
       setFileMeta(doc, { hash: input.hash, name, mime, filetype: fileTypeOf(name, mime), size: input.size });
     });
     this.blobs?.schedule(id);

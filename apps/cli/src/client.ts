@@ -49,6 +49,7 @@ export class ToolError extends Error {
 export function writtenLines(text: string): { id: string; version?: string }[] {
   const out: { id: string; version?: string }[] = [];
   for (const line of text.split("\n")) {
+    if (line === "Hints:") break; // hints quote titles and ids too
     const m = /^- .*? \[([0-9a-z]{17})\] · /.exec(line);
     if (m) out.push({ id: m[1]!, version: / · version ([0-9a-f]{12})$/.exec(line)?.[1] });
   }
@@ -123,8 +124,8 @@ export class Client {
   }
 
   /** A new file from disk (streamed), below `parent`. */
-  async upload(path: string, name: string, parent: string): Promise<{ id: string; hash: string; size: number }> {
-    const q = new URLSearchParams({ name, parent });
+  async upload(path: string, name: string, parent: string, source?: string): Promise<{ id: string; hash: string; size: number }> {
+    const q = new URLSearchParams({ name, parent, ...(source ? { source } : {}) });
     const res = await this.fetch(`/api/files?${q}`, { method: "POST", headers: this.headers(), body: Bun.file(path) });
     if (res.status !== 201) throw new CliError(`Upload of ${name} failed: HTTP ${res.status} ${await res.text()}`);
     return (await res.json()) as { id: string; hash: string; size: number };

@@ -264,7 +264,7 @@ export class Workspace {
 
   /**
    * The file API for scripts and agents (members, by app session or MCP token):
-   *   POST /api/files?name=<name>[&parent=<id or title>]   body: the content → 201 { id, name, hash, size, mime, url, step }
+   *   POST /api/files?name=<name>[&parent=<id or title>][&source=<import key>]   body: the content → 201 { id, name, hash, size, mime, url, step }
    *   PUT  /api/files/<item id>                           body: the new content (same item, old one kept in its history)
    *   GET  /api/files/<item id>                           the original, as a download with its name
    * Uploads and replacements are one step each (activity, undo), written as `origin`.
@@ -317,7 +317,7 @@ export class Workspace {
           previous = r.previous;
           return previous ? "replaced" : "same content";
         }
-        out = ops.addFile({ name, hash: got.hash, size: got.size, parent }, ctx.origin);
+        out = ops.addFile({ name, hash: got.hash, size: got.size, parent, source: url.searchParams.get("source") ?? undefined }, ctx.origin);
         return "created";
       });
       const f = out!.file!;

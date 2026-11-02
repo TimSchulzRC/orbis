@@ -1,6 +1,6 @@
 # CLI: a part of Obtion as a local folder
 
-`obtion` mirrors an item and everything below it into a folder on your disk. You or an agent work there with ordinary tools (an editor, Python, PowerShell, Eclipse, the SEEBURGER BIS designer), and `obtion push` sends the changes back. It talks to a running server over MCP and the [file API](files-api.md), so it works from any machine that reaches the server.
+`obtion` mirrors an item and everything below it into a folder on your disk. You or an agent work there with ordinary tools (an editor, Python, PowerShell, Eclipse, the SEEBURGER BIS designer), and `obtion push` sends the changes back. It talks to a running server over MCP and the [file API](files-api.md), so it works from any machine that reaches the server. `obtion import` brings a whole folder or Git repository in: [import.md](import.md).
 
 ## Install
 
