@@ -8,7 +8,8 @@ import { Capture } from "./Capture";
 import { type InboxEntry, dismissShelf, openReview, openShelf, useInboxItems, useShelf } from "./inbox";
 import { ShelfPanel } from "./Shelf";
 import { ReviewPanel } from "../views/Review";
-import { Button, Tip } from "./primitives";
+import { Button } from "./primitives";
+import { Tip } from "../components/ui/tooltip";
 import { Backdrop } from "../components/ui/dialog";
 
 const FILL = 10;
