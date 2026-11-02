@@ -84,3 +84,14 @@ test("files bring their contents' hashes; status updates keep their status where
   expect(nf.file).toMatchObject({ hash: "a".repeat(64), name: "skizze.png" });
   expect(b.index().get(moved.ids.get(p)!)!.updates).toMatchObject([{ at: 5, text: "läuft", status: "st_active" }]);
 });
+
+test("a move keeps the rules for agents", () => {
+  const a = workspace();
+  const b = workspace();
+  const raum = a.add({ title: "Projektraum", pinned: "a", rules: "Erst fragen." });
+  a.add({ title: "Darunter", parents: [raum], rules: "Nur lesen." });
+  const moved = copyToWorkspace(a.index(), raum, { w: b.writer, ix: b.index() }, {}, "web:test");
+  const bix = b.index();
+  expect(bix.get(moved.ids.get(raum)!)!.rules).toBe("Erst fragen.");
+  expect([...moved.ids.values()].map((id) => bix.get(id)!.rules).sort()).toEqual(["Erst fragen.", "Nur lesen."]);
+});

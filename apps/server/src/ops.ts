@@ -34,6 +34,7 @@ import {
   setMeta,
   setProp,
   setRel,
+  setRules,
   setSchemaField,
   setTabs,
   shortId,
@@ -64,6 +65,7 @@ import { MAX_ATTACH } from "./config";
 import type { AttachInput, CapInput, ConvertInput, CreateInput, DefineTypeInput, GetOptions, PlaceInput, PropInput, SuggestInput, UpdateInput, UpdateTypeInput, ViewInput } from "./schemas";
 import { originText, parseOrigin } from "@obtion/core/origin";
 import { createHash } from "node:crypto";
+import { type AgentRule, ruleOwners, rulesForAll, workspaceRules } from "@obtion/core/rules";
 import { textDiff, unifiedDiff } from "@obtion/core/diff";
 import type { ActivityEvent, FieldChange } from "@obtion/core/protocol";
 import type { TextVersion } from "@obtion/core/api";
@@ -148,6 +150,9 @@ const CHILDREN = 60;
 const UPDATES = 15;
 const UNLINKABLE = /[#|[\]^]/;
 const UNLINKABLE_ALL = /[#|[\]^]/g;
+/** A rule for agents longer than this is cut in tool answers, with where to read it in full. */
+export const RULE_CAP = 3000;
+
 const isDoneNow = (i: Item, schema: TypeSchema | undefined) => statusOf(i, schema)?.group === "done";
 /** An option given as "Name (group)" or "Name (group, state)". */
 const OPTION_GROUP = /\((todo|active|done)(?:,\s*(paused|dropped))?\)\s*$/;
@@ -172,6 +177,12 @@ function joinBody(current: string, text: string, mode: UpdateInput["body_mode"] 
   if (mode === "append") return (current.trimEnd() ? current.trimEnd() + "\n\n" : "") + text;
   if (mode === "prepend") return text + (current ? "\n\n" + current : "");
   return text;
+}
+
+/** First non-empty line, for overviews of long texts. */
+function firstLine(text: string): string {
+  const l = text.split("\n").map((x) => x.trim()).find(Boolean) ?? "";
+  return l.length > 160 ? l.slice(0, 159) + "…" : l;
 }
 
 /** "start/end", either side may be empty. Tries every slash, since a date itself may contain one. */
@@ -283,6 +294,11 @@ export class Ops {
           : {}),
       types,
       inbox: { query: printQuery({ where: inboxWhere(ix) }, this.store.lang(), ix) },
+      rules_for_agents: {
+        workspace: workspaceRules(ix)?.text,
+        owners: ruleOwners(ix).map((i) => ({ id: i.id, title: displayTitle(i), path: ix.pathText(ix.homePath(i.id)) || undefined, first_line: firstLine(i.rules) })),
+        note: "Binding. They apply to the owner and everything below it (all parents). Answers that touch items end with the ones that apply; get an owner for its full text.",
+      },
       notes: [
         "Items without a type, without a parent and not pinned are in the inbox (its query, see inbox.query, decides).",
         "Every type has its page: a list of its entries with views as tabs (see views; change them with update_type).",
@@ -414,6 +430,30 @@ export class Ops {
   /** The answer of a writing tool: one line per entry, with its version (base_version for the next update). */
   written(items: Item[]): string {
     return items.map((i) => `- ${this.line(i)} · version ${versionOf(i)}`).join("\n");
+  }
+
+  /** Where a rule comes from: the workspace, or the owner's path and title with its id. */
+  ruleSource(r: AgentRule): string {
+    if (!r.owner) return "Workspace";
+    const ix = this.store.index();
+    const o = ix.get(r.owner) ?? this.store.records.get(r.owner);
+    return `${[...ix.homePath(r.owner).map((p) => ix.get(p)?.title ?? p), o ? displayTitle(o) || "(untitled)" : r.owner].join(" › ")} [${r.owner}]`;
+  }
+
+  /**
+   * The rules for agents that apply to these items, each once, as the block that ends a tool
+   * answer; "" when none apply. Long ones are cut with a pointer, except the owners in `full`.
+   */
+  rulesBlock(ids: Iterable<string>, full: Iterable<string> = []): string {
+    const rules = rulesForAll(this.store.index(), ids);
+    if (!rules.length) return "";
+    const whole = new Set(full);
+    const body = rules.map((r) => {
+      const cut = r.text.length > RULE_CAP && !(r.owner && whole.has(r.owner));
+      const text = cut ? `${r.text.slice(0, RULE_CAP).trimEnd()}\n… (shortened – read it in full with ${r.owner ? `get "${r.owner}"` : "schema"})` : r.text;
+      return `### ${this.ruleSource(r)}\n${text}`;
+    });
+    return `Rules for agents (binding for these items; the user may change them any time, the current text wins over anything remembered):\n${body.join("\n\n")}`;
   }
 
   /**
@@ -615,21 +655,23 @@ export class Ops {
   }
 
   /** Mirrors the focus section of the start page. */
-  focus() {
+  focus(touched?: Set<string>) {
     const ix = this.ix;
+    const line = (i: Item) => (touched?.add(i.id), this.line(i));
     const today = todayISO();
     const in7 = relDate("+7d", today)!;
     // nothing from paused or finished projects in the urgent lists
     const withDue = ix.live.map((i) => ({ i, due: dueOf(i, ix.schemaOf(i)), st: statusOf(i, ix.schemaOf(i)) })).filter((x) => x.st?.group !== "done" && !(x.due && ix.isDormant(x.i)));
     return {
       today,
-      overdue: withDue.filter((x) => x.due && x.due < today).map((x) => this.line(x.i)),
-      due_next_7_days: withDue.filter((x) => x.due && x.due >= today && x.due <= in7).map((x) => this.line(x.i)),
+      overdue: withDue.filter((x) => x.due && x.due < today).map((x) => line(x.i)),
+      due_next_7_days: withDue.filter((x) => x.due && x.due >= today && x.due <= in7).map((x) => line(x.i)),
       active: ix.live.filter((i) => statusOf(i, ix.schemaOf(i))?.group === "active" && !dueProp(ix.schemaOf(i)) && !ix.isDormant(i)).map((i) => {
         const next = ix.nextTask(i.id, today);
-        return this.line(i) + (next ? ` · next: “${next.title}”` : "") + (i.updates.length ? ` · last update: “${i.updates.at(-1)!.text}”` : "");
+        if (next) touched?.add(next.id);
+        return line(i) + (next ? ` · next: “${next.title}”` : "") + (i.updates.length ? ` · last update: “${i.updates.at(-1)!.text}”` : "");
       }),
-      blocked: ix.live.filter((i) => statusOf(i, ix.schemaOf(i))?.group !== "done" && ix.isBlocked(i)).map((i) => this.line(i)),
+      blocked: ix.live.filter((i) => statusOf(i, ix.schemaOf(i))?.group !== "done" && ix.isBlocked(i)).map((i) => line(i)),
       inbox: runQuery({ where: { inbox: true } }, { ix }).total,
       changed_by_people_last_3_days: this.peopleChanged(),
       recent_activity: this.activityFeed({ days: 3, limit: 10 }).entries.map((e) => `${this.entryHead(e)}${e.changes.length ? ": " + this.changeTexts(e).join("; ") : ""}`),
@@ -757,7 +799,7 @@ export class Ops {
     const item = this.store.records.get(e.doc);
     const at = new Date(e.ts).toISOString().slice(0, 16).replace("T", " ");
     const verb = e.undoes ? (e.redo ? "redid (undo of an undo) – " : "undid a step – ") : "";
-    const what = !e.doc ? e.title : `${verb}${e.kind} "${item ? displayTitle(item) || "(untitled)" : e.title}" [${e.doc}]${item ? ` · ${this.kindOf(item)}` : ""}`;
+    const what = !e.doc ? e.title : e.doc === SETTINGS_ID ? `${verb}${e.kind} the workspace settings` : `${verb}${e.kind} "${item ? displayTitle(item) || "(untitled)" : e.title}" [${e.doc}]${item ? ` · ${this.kindOf(item)}` : ""}`;
     return `${at} · ${originText(e.origin)} · ${what}${e.step ? ` (step ${e.step})` : ""}`;
   }
 
@@ -802,6 +844,7 @@ export class Ops {
       else if (f === "tags") out.push(plusMinus("tags", c, (x) => (x as string[]).map((t) => "#" + t).join(" ")));
       else if (f === "refs") out.push(plusMinus("refs", c));
       else if (f === "body") out.push(`text: ${c.from ?? 0} → ${c.to ?? 0} characters`);
+      else if (f === "rules") out.push("agent_rules changed");
       else if (f === "update") out.push(`update posted: ${short(c.to, 400)}`);
       else if (f === "schema") out.push("type definition changed (properties or capabilities)");
       else if (f === "views") out.push("views of the type's page changed");
@@ -959,7 +1002,7 @@ export class Ops {
     this.noSelfLink(body, id, title);
     this.store.change(id, origin, (doc) => {
       const pinned = input.pin ? nextPinKey(this.store.live()) : undefined;
-      initItem(doc, { title, type: type?.id ?? null, body, tags: input.tags, refs, parents, pinned, props: initialProps(schema), createdBy: origin });
+      initItem(doc, { title, type: type?.id ?? null, body, rules: input.agent_rules, tags: input.tags, refs, parents, pinned, props: initialProps(schema), createdBy: origin });
       this.applyProps(doc, undefined, schema, input.properties);
     });
     this.store.flush();
@@ -1010,6 +1053,7 @@ export class Ops {
       for (const r of refsAdd) setMember(doc, "refs", r, true);
       for (const r of refsRem) setMember(doc, "refs", r, false);
       if (body !== undefined) replaceBody(doc, body);
+      if (input.agent_rules !== undefined) setRules(doc, input.agent_rules);
       touch(doc);
     });
     if (ownsTitle && input.title && input.title.trim() !== oldTitle) this.renameLinks(oldTitle, input.title.trim(), origin);
@@ -1145,12 +1189,14 @@ export class Ops {
     return plan.map((p) => this.store.records.get(p.item.id)!);
   }
 
-  suggest(ref: string, input: SuggestInput, by: string, origin: string) {
+  suggest(ref: string, input: SuggestInput, by: string, origin: string, touched?: Set<string>) {
     const item = this.target(ref, "suggest");
+    touched?.add(item.id);
     if (input.type && item.kind !== "info") throw new OpError(`"${item.title}" is a file. Files have no type; suggest a place instead.`);
     if (item.kind === "datei" && (input.parents?.length ?? 0) > 1) throw new OpError(`"${item.title}" is a file, and a file has exactly one parent. Suggest one place.`);
     const type = input.type ? this.resolveType(input.type).id : undefined;
     const parents = (input.parents ?? []).map((p) => this.resolve(p).id);
+    for (const p of parents) touched?.add(p); // what applies there applies once it is accepted
     const schema = type ? this.store.index().types.get(type)?.schema : this.store.index().schemaOf(item);
     const props: Record<string, Value> = {};
     for (const [name, raw] of Object.entries(input.properties ?? {})) {

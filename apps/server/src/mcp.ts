@@ -12,6 +12,7 @@ import { attachInput, convertInput, createInput, defineTypeInput, getInput, plac
 import type { Store } from "./store";
 import type { Blobs } from "./blobs";
 import { type Person, agentOrigin, parseOrigin } from "@obtion/core/origin";
+import { workspaceRules } from "@obtion/core/rules";
 
 const INSTRUCTIONS = `Obtion is the user's personal system for knowledge and work: informations linked like Obsidian, projects and tasks like Notion, all in one graph. You are their interface: they tell you what happened, you record it; they ask, you answer from the data.
 
@@ -38,7 +39,21 @@ How to work:
 - New use cases need no code: \`define_type\` / \`update_type\` (properties, capabilities, views). Tag ↔ type conversions are previewed with \`convert\`; the user runs them in the app.
 - Answers list one line per entry: title [id] · type · status · due · path · ⚠ blocked by / waiting for; after a write it ends with · version <hash> (its base_version from now on). A writing call is all or nothing: "Nothing changed" means no part of it was applied – fix the reason and call again. Read the Hints after a write (unresolved links, duplicate titles, open items below something done …).
 - Link exactly with [[id|Label]], always for titles with # | [ ] ^. Never link an item to itself.
-- Never delete unless asked; deletes go to the trash. Today is in \`schema\`. Reply in the language of the user's message.`;
+- Never delete unless asked; deletes go to the trash. Today is in \`schema\`. Reply in the language of the user's message.
+
+Rules for agents:
+- The workspace and any item can carry rules for agents (Markdown). They are binding: an item's rules apply to it and to everything below it (over all its parents), the workspace's apply everywhere. Answers about items end with a "Rules for agents" block with the ones that apply; \`schema\` lists every item that has rules.
+- Read the rules that apply before you act outside Obtion – in other systems, by e-mail or any message to people – and follow them. When a rule asks you to ask first, ask.
+- The user may change them in the app at any time. The current text always wins over anything you remember from earlier sessions or other places.
+- Change rules (update/create with agent_rules) only when the user asks you to.`;
+
+/** The instructions, with the workspace's rules for agents as they are now (the server is built per request). */
+function instructions(ops: Ops): string {
+  const ws = workspaceRules(ops.ix);
+  if (!ws) return INSTRUCTIONS;
+  const text = ws.text.length > 8000 ? `${ws.text.slice(0, 8000).trimEnd()}\n… (shortened – read it in full with schema)` : ws.text;
+  return `${INSTRUCTIONS}\n\nRules for agents of this workspace (binding everywhere, as of now):\n${text}`;
+}
 
 function agentName(req: Request): string {
   const explicit = req.headers.get("x-obtion-agent");
@@ -67,21 +82,37 @@ function wrap<A>(fn: (args: A) => unknown, writes = false) {
 
 const userPrompt = (text: string) => ({ messages: [{ role: "user" as const, content: { type: "text" as const, text } }] });
 
+/** The items a tool answer is about: the rules for agents that apply to them end the answer. */
+type Touched = Set<string>;
+
 function buildMcpServer(store: Store, origin: string, blobs?: Blobs, lang: Lang = "de") {
   const ops = new Ops(store, blobs);
   const agent = parseOrigin(origin).name;
-  const server = new McpServer({ name: "obtion", version: "0.2.0" }, { instructions: INSTRUCTIONS });
+  const server = new McpServer({ name: "obtion", version: "0.2.0" }, { instructions: instructions(ops) });
   const ro = { readOnlyHint: true };
-  /** All or nothing, with hints appended to the answer. */
-  const write = <A,>(fn: (a: A) => string | object) =>
+  /** A tool about items: what it touched gets its rules for agents appended (`full`: owners shown uncut). */
+  const ruled =
+    <A,>(fn: (a: A, touched: Touched, full: Touched) => unknown) =>
+    async (a: A) => {
+      const touched: Touched = new Set();
+      const full: Touched = new Set();
+      const res = await fn(a, touched, full);
+      const block = ops.rulesBlock(touched, full);
+      return block ? `${typeof res === "string" ? res : JSON.stringify(res, null, 1)}\n\n${block}` : res;
+    };
+  /** All or nothing, with hints and the rules for agents appended to the answer. */
+  const write = <A,>(fn: (a: A, touched: Touched) => string | object) =>
     wrap(
-      (a: A) =>
+      ruled((a: A, touched) =>
         ops.call(origin, () => {
-          const res = fn(a);
-          return typeof res === "string" ? res : JSON.stringify(res, null, 1);
+          const r = fn(a, touched);
+          return typeof r === "string" ? r : JSON.stringify(r, null, 1);
         }),
+      ),
       true,
     );
+  /** Mark items as touched and pass them on. */
+  const mark = <T extends { id: string }>(touched: Touched, items: T[]): T[] => (items.forEach((i) => touched.add(i.id)), items);
 
   server.registerTool("schema", { title: "Schema", description: "All types with description, properties (options, groups) and capabilities, the views of each type's page, the inbox query and today's date. Read this first.", inputSchema: {}, annotations: ro }, wrap(() => ops.schema()));
   server.registerTool(
@@ -96,12 +127,13 @@ function buildMcpServer(store: Store, origin: string, blobs?: Blobs, lang: Lang 
   server.registerTool(
     "query",
     { title: "Query", description: "Run a query in text form (English or German keywords) or name a type (its list, as its first view shows it). context = the page the query is about (for under:this).", inputSchema: { query: z.string(), context: z.string().optional(), limit: z.number().int().min(1).max(500).optional() }, annotations: ro },
-    wrap((a) => {
+    wrap(ruled((a, touched) => {
       const r = ops.query(a.query, a);
+      mark(touched, r.items);
       const head = `${r.total} item(s)${r.list ? ` in "${r.list}"` : ""} · ${r.query}${r.missing_types ? ` · ⚠ deleted type(s): ${r.missing_types.join(", ")}` : ""}`;
       const more = r.total > r.items.length ? `\n… ${r.total - r.items.length} more (use limit)` : "";
       return `${head}\n${ops.lines(r.items, r.base)}${more}`;
-    }),
+    })),
   );
   server.registerTool(
     "get",
@@ -111,10 +143,16 @@ function buildMcpServer(store: Store, origin: string, blobs?: Blobs, lang: Lang 
       inputSchema: getInput.shape,
       annotations: ro,
     },
-    wrap((a) => {
-      const { ref, ...opts } = a;
-      return ops.get(ref, opts);
-    }),
+    wrap(
+      ruled((a, touched, full) => {
+        const { ref, ...opts } = a;
+        const out = ops.get(ref, opts);
+        touched.add(out.id as string);
+        full.add(out.id as string);
+        for (const c of (out.children as { id: string }[] | undefined) ?? []) touched.add(c.id); // listed children bring their own
+        return out;
+      }),
+    ),
   );
   server.registerTool(
     "search",
@@ -124,12 +162,15 @@ function buildMcpServer(store: Store, origin: string, blobs?: Blobs, lang: Lang 
       inputSchema: { query: z.string(), limit: z.number().int().min(1).max(50).optional() },
       annotations: ro,
     },
-    wrap((a) => {
-      const hits = ops.search(a.query, a.limit);
-      return hits.length ? hits.map((h) => `- ${ops.line(h.item)}${h.heading ? ` · § ${h.heading}` : ""}${h.snippet ? ` — “${h.snippet}”` : ""}`).join("\n") : "Nothing found.";
-    }),
+    wrap(
+      ruled((a, touched) => {
+        const hits = ops.search(a.query, a.limit);
+        hits.forEach((h) => touched.add(h.item.id));
+        return hits.length ? hits.map((h) => `- ${ops.line(h.item)}${h.heading ? ` · § ${h.heading}` : ""}${h.snippet ? ` — “${h.snippet}”` : ""}`).join("\n") : "Nothing found.";
+      }),
+    ),
   );
-  server.registerTool("focus", { title: "Focus", description: "What's going on: overdue and upcoming (by each type's due date), active items with progress, inbox size, recent activity.", inputSchema: {}, annotations: ro }, wrap(() => ops.focus()));
+  server.registerTool("focus", { title: "Focus", description: "What's going on: overdue and upcoming (by each type's due date), active items with progress, inbox size, recent activity.", inputSchema: {}, annotations: ro }, wrap(ruled((_a, touched) => ops.focus(touched))));
   server.registerTool(
     "create",
     {
@@ -137,7 +178,7 @@ function buildMcpServer(store: Store, origin: string, blobs?: Blobs, lang: Lang 
       description: "Create informations. type is a type name (see schema) or omitted; parents (titles/ids) place them; properties by name (only those of the type). Without type and parent the item lands in the inbox.",
       inputSchema: { items: z.array(createInput).min(1) },
     },
-    write((a) => `Created:\n${ops.written(a.items.map((x) => ops.create(x, origin)))}`),
+    write((a, touched) => `Created:\n${ops.written(mark(touched, a.items.map((x) => ops.create(x, origin))))}`),
   );
   server.registerTool(
     "update",
@@ -146,33 +187,34 @@ function buildMcpServer(store: Store, origin: string, blobs?: Blobs, lang: Lang 
       description: "Change one item: title, type (name or null), properties by name (null clears), free_properties_remove, tags, refs, body. Body: prefer old_text/new_text or body_mode append|prepend; replacing the whole body (body without body_mode, or replace) needs base_version from get, and a stale one is rejected with what changed since. Renaming rewrites [[links]]. The answer shows the new version.",
       inputSchema: updateInput.shape,
     },
-    write((a) => {
+    write((a, touched) => {
       const { ref, ...rest } = a;
-      return `Updated:\n${ops.written([ops.update(ref, rest, origin)])}`;
+      return `Updated:\n${ops.written(mark(touched, [ops.update(ref, rest, origin)]))}`;
     }),
   );
   server.registerTool(
     "set_status",
     { title: "Set status", description: "Set the status of several items at once: a status group (done, active, open) or an option name, in German or English. All or nothing.", inputSchema: { refs: z.array(z.string()).min(1), status: z.string() } },
-    write((a) => `Status set:\n${ops.written(ops.setStatusGroup(a.refs, a.status, origin))}`),
+    write((a, touched) => `Status set:\n${ops.written(mark(touched, ops.setStatusGroup(a.refs, a.status, origin)))}`),
   );
   server.registerTool(
     "place",
     { title: "Place", description: '"Part of": add or remove parents, set the home, pin to or unpin from the top of the sidebar (pinned counts as a place). Prevents cycles. A file has exactly one parent: to move it, add the new one and remove the old one.', inputSchema: placeInput.shape },
-    write((a) => {
+    write((a, touched) => {
       const r = ops.place(a.ref, a, origin);
+      touched.add(r.now.id);
       return `Placed:\n${ops.lines([r.now])}${r.part_of.length > 1 ? `\nPart of: ${r.part_of.join(", ")}` : ""}${r.in_inbox ? "\nIt is in the inbox now (no type, no place)." : ""}`;
     }),
   );
   server.registerTool(
     "add_update",
     { title: "Add update", description: "Dated progress note on an item whose type has updates, optionally changing its status at the same time.", inputSchema: { ref: z.string(), text: z.string(), status: z.string().optional() } },
-    write((a) => `Update posted:\n${ops.written([ops.addUpdate(a.ref, a.text, a.status, agent, origin)])}`),
+    write((a, touched) => `Update posted:\n${ops.written(mark(touched, [ops.addUpdate(a.ref, a.text, a.status, agent, origin)]))}`),
   );
   server.registerTool(
     "suggest",
     { title: "Suggest", description: "Propose a type, places and property values for an inbox item. Nothing changes until the user accepts it in the app.", inputSchema: suggestInput.shape },
-    write((a) => ops.suggest(a.ref, a, agent, origin)),
+    write((a, touched) => ops.suggest(a.ref, a, agent, origin, touched)),
   );
   server.registerTool(
     "define_type",
@@ -196,7 +238,7 @@ function buildMcpServer(store: Store, origin: string, blobs?: Blobs, lang: Lang 
   server.registerTool(
     "attach",
     { title: "Attach file", description: "Create a file from a URL or base64, optionally below a parent and with tags.", inputSchema: attachInput.shape },
-    wrap(async (a) => `Attached:\n${ops.lines([await ops.attach(a, origin)])}`, true),
+    wrap(ruled(async (a, touched) => `Attached:\n${ops.lines(mark(touched, [await ops.attach(a, origin)]))}`), true),
   );
   server.registerTool(
     "delete",
@@ -206,13 +248,15 @@ function buildMcpServer(store: Store, origin: string, blobs?: Blobs, lang: Lang 
       inputSchema: { ref: z.string(), children: z.enum(["trash", "inbox"]).optional() },
       annotations: { destructiveHint: true },
     },
-    write((a) => {
+    write((a, touched) => {
       const r = ops.remove(a.ref, a.children, origin);
+      touched.add(r.item.id);
       return `Moved "${r.item.title}" to the trash${r.only ? ` with ${r.only} item(s) below it` : ""}.`;
     }),
   );
-  server.registerTool("restore", { title: "Restore", description: "Restore an item from the trash by id or title, together with what was deleted with it.", inputSchema: { ref: z.string() } }, write((a) => {
+  server.registerTool("restore", { title: "Restore", description: "Restore an item from the trash by id or title, together with what was deleted with it.", inputSchema: { ref: z.string() } }, write((a, touched) => {
     const r = ops.restore(a.ref, origin);
+    touched.add(r.item.id);
     return `Restored "${r.item.title}"${r.back ? ` with ${r.back} item(s) below it` : ""}.`;
   }));
   server.registerTool(

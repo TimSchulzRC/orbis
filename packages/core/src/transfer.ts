@@ -99,6 +99,7 @@ export function copyToWorkspace(src: Index, root: string, dst: { w: Writer; ix: 
           title: r.title,
           type: map?.id ?? null,
           body: relink(r.body, src, ids),
+          rules: r.rules,
           tags: r.tags,
           refs: r.refs.map((x) => ids.get(x)).filter((x): x is string => !!x),
           extra: r.extra,

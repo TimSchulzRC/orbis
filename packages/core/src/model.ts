@@ -13,6 +13,8 @@
 //   tags     Y.Map   tag -> true
 //   refs     Y.Map   targetId -> true          (explicit only; links in the text are derived)
 //   body     Y.Text  Markdown with [[links]] and ```abfrage blocks
+//   rules    Y.Text  "Regeln für Agenten": Markdown, binding for agents on this item and all below it
+//                    (see rules.ts); in the settings doc: the rules of the whole workspace
 //   updates  Y.Array { id, at, text, by, status? }
 //   views    Y.Map   viewId -> ViewDef
 //   schema   Y.Map   types only; capabilities and each property are nested Y.Maps
@@ -224,6 +226,8 @@ export interface Item {
   tags: string[];
   refs: string[];
   body: string;
+  /** "Regeln für Agenten" (see rules.ts); "" when there are none. */
+  rules: string;
   updates: UpdateEntry[];
   views: Record<string, ViewDef>;
   schema?: TypeSchema;
@@ -350,6 +354,7 @@ export function readItem(id: string, doc: Y.Doc): Item | null {
     tags: [...doc.getMap("tags").keys()].sort(),
     refs: [...doc.getMap("refs").keys()],
     body: doc.getText("body").toString(),
+    rules: doc.getText("rules").toString(),
     updates: doc.getArray<UpdateEntry>("updates").toArray().slice(),
     views: doc.getMap<ViewDef>("views").toJSON() as Record<string, ViewDef>,
     created: Number(meta.get("created") ?? 0),
@@ -404,6 +409,7 @@ export interface ItemInit {
   title?: string;
   type?: string | null;
   body?: string;
+  rules?: string;
   tags?: string[];
   refs?: string[];
   parents?: string[]; // first one becomes the home
@@ -429,6 +435,7 @@ export function initItem(doc: Y.Doc, init: ItemInit, now = Date.now()) {
   meta.set("created", init.created ?? now);
   meta.set("updated", init.updated ?? init.created ?? now);
   if (init.body) doc.getText("body").insert(0, init.body);
+  if (init.rules?.trim()) doc.getText("rules").insert(0, init.rules);
   for (const t of init.tags ?? []) setMember(doc, "tags", t, true);
   for (const r of init.refs ?? []) setMember(doc, "refs", r, true);
   (init.parents ?? []).forEach((p, i) => addParent(doc, p, undefined, (init.created ?? now) + i));
@@ -555,9 +562,23 @@ export function setMember(doc: Y.Doc, set: "tags" | "refs", key: string, on: boo
   else m.delete(k);
 }
 
+/** The texts of a document (Y.Text): the body and the rules for agents. */
+export const DOC_TEXTS = ["body", "rules"] as const;
+export type DocText = (typeof DOC_TEXTS)[number];
+
 /** Replace body text with minimal edits (common prefix/suffix), so concurrent edits elsewhere merge. */
 export function replaceBody(doc: Y.Doc, next: string) {
-  const text = doc.getText("body");
+  replaceText(doc, "body", next);
+}
+
+/** "Regeln für Agenten": only blank lines or spaces count as none. */
+export function setRules(doc: Y.Doc, next: string | null) {
+  replaceText(doc, "rules", next?.trim() ? next : "");
+}
+
+/** Replace one text of the document with minimal edits (see replaceBody). */
+export function replaceText(doc: Y.Doc, name: DocText, next: string) {
+  const text = doc.getText(name);
   const prev = text.toString();
   if (prev === next) return;
   let start = 0;

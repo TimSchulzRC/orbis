@@ -3,7 +3,7 @@
 import { Input } from "../components/ui/input";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { EditorView } from "@codemirror/view";
-import { Trash2, Plus, AlertTriangle, ImagePlus, ListFilter, Pin, PinOff, FilePlus, FolderInput, Link2, ArrowRightLeft, History } from "lucide-react";
+import { Trash2, Plus, AlertTriangle, ImagePlus, ListFilter, Pin, PinOff, FilePlus, FolderInput, Link2, ArrowRightLeft, History, Bot } from "lucide-react";
 import { type Item, META_TYPE, titleKey } from "@obtion/core/model";
 import { isInInbox, isOverview } from "@obtion/core/placement";
 import { wouldBeInInbox } from "@obtion/core/typeops";
@@ -35,6 +35,7 @@ import { movedItems } from "@obtion/core/transfer";
 import { useAccounts } from "../accounts";
 import { moveTo } from "../ui/Spaces";
 import type { Index } from "@obtion/core/graph";
+import { AgentRulesDialog } from "../ui/AgentRules";
 
 export function ItemPage({ id, isNew }: { id: string; isNew: boolean }) {
   const scoped = useRepo();
@@ -67,7 +68,7 @@ const openItems = new Set<string>();
 
 function isBlank(item: Item) {
   const ix = repo.index();
-  return !item.title.trim() && !item.body.trim() && !item.tags.length && !item.refs.length && !item.updates.length && !ix.childrenOf(item.id).length && !ix.backlinks(item.id).length && !Object.keys(item.extra).length;
+  return !item.title.trim() && !item.body.trim() && !item.rules.trim() && !item.tags.length && !item.refs.length && !item.updates.length && !ix.childrenOf(item.id).length && !ix.backlinks(item.id).length && !Object.keys(item.extra).length;
 }
 
 function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
@@ -88,6 +89,7 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
   const others = useAccounts().spaces.length > 1;
   const [refPicking, setRefPicking] = useState(false);
   const [placesOpen, setPlacesOpen] = useState(0);
+  const [rulesOpen, setRulesOpen] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
   // An item created with "New …" and left empty is discarded, not left as "Untitled".
@@ -142,6 +144,11 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
           <MenuItem icon={<History size={14} />} onClick={() => (close(), setHistory(true))}>
             {t("item.history")}
           </MenuItem>
+          {!item.deleted && (
+            <MenuItem icon={<Bot size={14} />} active={!!item.rules.trim()} onClick={() => (close(), setRulesOpen(true))}>
+              {t("rules.menu")}
+            </MenuItem>
+          )}
           {others && !item.deleted && item.type !== META_TYPE && (
             <MenuItem icon={<ArrowRightLeft size={14} />} onClick={() => (close(), setMoving(true))}>
               {t("move.menu")}
@@ -220,6 +227,7 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
         />
       )}
       {deleting && <DeleteDialog item={item} onClose={() => setDeleting(false)} />}
+      {rulesOpen && <AgentRulesDialog item={item} onClose={() => setRulesOpen(false)} />}
       {moving && <MoveDialog item={item} onClose={() => setMoving(false)} />}
       {history && <HistoryDialog item={item} onClose={() => setHistory(false)} />}
     </div>

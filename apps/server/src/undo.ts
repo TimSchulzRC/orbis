@@ -4,7 +4,7 @@
 import * as Y from "yjs";
 import type { Store } from "./store";
 import { sameValue } from "@obtion/core/equal";
-import { type UpdateEntry, DOC_MAPS, metaMap, replaceBody, touch } from "@obtion/core/model";
+import { type UpdateEntry, DOC_MAPS, DOC_TEXTS, type DocText, metaMap, replaceText, touch } from "@obtion/core/model";
 import type { UndoResult } from "@obtion/core/api";
 
 export class UndoError extends Error {}
@@ -23,8 +23,10 @@ function fields(doc: Y.Doc): Fields {
   for (const [k, v] of metaMap(doc).entries()) if (k !== "updated") put("meta:" + k, v);
   for (const name of DOC_MAPS) if (!NESTED.has(name)) for (const [k, v] of doc.getMap<unknown>(name).entries()) put(`${name}:${k}`, v);
   for (const [prop, set] of doc.getMap<unknown>("rels").entries()) if (set instanceof Y.Map) for (const t of set.keys()) put(`rels:${prop}:${t}`, true);
-  const body = doc.getText("body").toString();
-  if (body) out.set("body", body);
+  for (const name of DOC_TEXTS) {
+    const text = doc.getText(name).toString();
+    if (text) out.set(name, text);
+  }
   for (const u of doc.getArray<UpdateEntry>("updates").toArray()) put("updates:" + u.id, u);
   for (const [k, v] of doc.getMap<unknown>("schema").entries()) {
     if (k === "properties" && v instanceof Y.Map) for (const [pid, p] of v.entries()) put("schema.prop:" + pid, p);
@@ -45,7 +47,7 @@ function toY(v: unknown): unknown {
 
 /** undefined removes the field. */
 function writeField(doc: Y.Doc, key: string, value: unknown) {
-  if (key === "body") return replaceBody(doc, (value as string) ?? "");
+  if ((DOC_TEXTS as readonly string[]).includes(key)) return replaceText(doc, key as DocText, (value as string) ?? "");
   const [area, ...rest] = key.split(":");
   const k = rest.join(":");
   if (area === "rels") {

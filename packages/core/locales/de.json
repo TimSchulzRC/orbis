@@ -1082,5 +1082,14 @@
  "history.removed": "entfernt:",
  "activity.showDiff": "Änderung zeigen",
  "activity.hideDiff": "Änderung ausblenden",
- "activity.diffMissing": "Diese Änderung ist nicht mehr abrufbar."
+ "activity.diffMissing": "Diese Änderung ist nicht mehr abrufbar.",
+ "rules.title": "Regeln für Agenten",
+ "rules.menu": "Regeln für Agenten …",
+ "rules.placeholder": "Was Agents hier beachten müssen, zum Beispiel: Produktivsysteme nie ändern. Keine Nachrichten ohne Rückfrage senden. Markdown geht.",
+ "rules.hint": "Gelten hier und für alles darunter. Agents bekommen sie über MCP mit jeder Antwort zu diesen Einträgen.",
+ "rules.alsoInherited": "Außerdem gelten Regeln von",
+ "rules.workspace": "diesem Workspace",
+ "rules.workspaceHint": "Gelten überall in diesem Workspace. Agents bekommen sie beim Verbinden und mit jeder Antwort zu Einträgen. Regeln für einzelne Bereiche: auf deren Seite unter … › Regeln für Agenten.",
+ "activity.rules": "Regeln für Agenten geändert",
+ "activity.workspaceSettings": "Workspace-Einstellungen"
 }

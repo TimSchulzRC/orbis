@@ -50,6 +50,8 @@ function describe(c: FieldChange, item: Item | undefined, ix: Index, t: T): stri
   switch (c.field) {
     case "body":
       return t("activity.editedText");
+    case "rules":
+      return t("activity.rules");
     case "update":
       return t("activity.update", { text: String(c.to).slice(0, 140) });
     case "tags":
@@ -127,6 +129,8 @@ function Entry({ e, compact, noVerb, space }: { e: ActivityEvent; compact?: bool
         {!op && !noVerb && <span className="text-muted-foreground">{e.doc ? verb : ""}</span>}{" "}
         {op ? (
           <span className="font-medium">{op.title}</span>
+        ) : item?.kind === "settings" ? (
+          <span className="font-medium">{t("activity.workspaceSettings")}</span>
         ) : e.doc && item && (item.kind === "info" || item.kind === "datei") ? (
           <a href={itemHref(item.id)} className="inline-flex items-center gap-1 font-medium hover:underline">
             <ItemIcon item={item} size={13} />
