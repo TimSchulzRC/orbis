@@ -177,15 +177,6 @@ async function pages(browser: import("playwright").Browser, serverName: string, 
       await p.keyboard.press("Escape");
       await menu.waitFor({ state: "detached" });
     }, { phone });
-  // a search link from before the palette was the only search: opens it with the query, over Heute
-  await check(page, label, "/#/search?q=relaunch", errors, async (p) => {
-    const field = p.getByRole("dialog").getByRole("textbox");
-    if (!(await field.waitFor({ timeout: 3000 }).then(() => true, () => false))) return void failures.push(`${label}: an old search link does not open the palette`);
-    if ((await field.inputValue()) !== "relaunch") failures.push(`${label}: the palette does not take the old link's query`);
-    if (p.url().includes("/search")) failures.push(`${label}: the old search address stays (${p.url()})`);
-    await p.keyboard.press("Escape");
-    await field.waitFor({ state: "detached" });
-  }, { phone });
   if (serverName === "seeded") {
     // the open panel is a step in the history: Back closes it and stays on the page
     await check(page, label, "/#/i/ex-relaunch", errors, async (p) => {

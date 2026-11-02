@@ -24,7 +24,7 @@ export function PageTags({ item }: { item: Item }) {
   return (
     <>
       {item.tags.map((tag) => (
-        <Tag key={tag} tag={tag} href={`#/search?q=${encodeURIComponent("#" + tag)}`} onClick={(e) => (e.preventDefault(), openPalette("#" + tag))} onRemove={() => setTag(item, tag, false)} />
+        <Tag key={tag} tag={tag} onOpen={() => openPalette("#" + tag)} onRemove={() => setTag(item, tag, false)} />
       ))}
       {open ? (
         <TagPicker item={item} onClose={() => setOpen(false)} />

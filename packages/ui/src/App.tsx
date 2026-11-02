@@ -105,13 +105,6 @@ function Main() {
     };
   }, []);
 
-  // "#/search?q=…" from before the palette was the only search: opens it over Heute
-  useEffect(() => {
-    if (route.parts[0] !== "search") return;
-    setPalette(route.query.get("q") ?? "");
-    navigate("/", { replace: true });
-  }, [route.path]);
-
   // "#/create?title=…": links to items that don't exist yet
   useEffect(() => {
     if (route.parts[0] !== "create") return;
@@ -139,8 +132,6 @@ function Main() {
       case "inbox":
       case "review":
         // "#/inbox": Heute, with the tray's panel open (above); "#/review": with it open to sort
-        return <Today />;
-      case "search":
         return <Today />;
       case "files":
         return <FilesPage />;
