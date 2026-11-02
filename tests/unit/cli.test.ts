@@ -130,7 +130,7 @@ test("imported Markdown: relative links and mentions of tracked files become [[i
     ]),
   };
   const body = [
-    "Siehe [Status](STATUS_2026-10-30.md#6-offen) und [Schema](<sources/schema v2.xsd>), ![Bild](bild.png \"Titel\").",
+    'Siehe [Status](STATUS_2026-10-30.md#6-offen) und [Schema](<sources/schema v2.xsd>), ![Bild](bild.png "Titel").',
     "Alt: STATUS_2026-10-30.md §6, Werkzeug `tools/run.py`, Ordner [A](../A/), `run.py` und run.py.",
     "Bleibt: https://example.org/x/run.py, mail@example.org, [[Schon verlinkt]], [extern](https://x.org/a.md), [fehlt](gibt-es-nicht.md), `nicht/da.xsd`, v1.2.3.",
     "```",
@@ -138,6 +138,8 @@ test("imported Markdown: relative links and mentions of tracked files become [[i
     "```",
     "[ref]: STATUS_2026-10-30.md",
     "| Datei | run.py |",
+    "Datei | run.py",
+    "    run.py eingerückt",
     "Selbst: [hier](README.md)\r\n",
   ].join("\n");
   const r = rewriteLinks(body, "kunden/A/README.md", "fA", t);
@@ -150,6 +152,8 @@ test("imported Markdown: relative links and mentions of tracked files become [[i
     "```",
     "[ref]: STATUS_2026-10-30.md",
     "| Datei | run.py |",
+    "Datei | run.py",
+    "    run.py eingerückt",
     "Selbst: [hier](README.md)\r",
     "",
   ]);
@@ -159,7 +163,11 @@ test("imported Markdown: relative links and mentions of tracked files become [[i
 });
 
 test("a path tail that ends exactly one tracked path resolves (written relative to another folder)", () => {
-  const byPath = new Map([["docs/bic/a.pdf", "A"], ["docs/x/b.pdf", "B"], ["other/x/b.pdf", "C"]]);
+  const byPath = new Map([
+    ["docs/bic/a.pdf", "A"],
+    ["docs/x/b.pdf", "B"],
+    ["other/x/b.pdf", "C"],
+  ]);
   const r = rewriteLinks("Siehe `bic/a.pdf` und `x/b.pdf`.", "notes/n.md", undefined, { byPath, byName: new Map(), bySuffix: suffixes(byPath) });
   expect(r.text).toBe("Siehe [[A|bic/a.pdf]] und `x/b.pdf`.");
 });

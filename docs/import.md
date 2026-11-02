@@ -23,7 +23,7 @@ Every item keeps its original path as **`source`**: `repo:<name>/<path>`, for ex
 
 ## Links
 
-Relative Markdown links (`[Status](STATUS_2026-10-30.md#6)`, images too) and mentions of tracked files (`` `sources/schema.xsd` ``, `STATUS_2026-10-30.md` in plain text) become `[[id|label]]` links; the label is the original text, an anchor stays (`[[id#6|Status]]`). A mention resolves as a path relative to the note, from the repository root, as a unique file name, or as a unique tail of a path (`bic/manual.pdf`). Nothing else in the text changes. Left alone: code blocks, URLs, existing `[[links]]`, table rows (the `|` of a link would split the cell), reference definitions, and links of a note to itself. Every rewrite is in the report (original → new), so each text can be turned back; links that resolve to nothing are listed too. `"rewrite_links": false` keeps every text byte for byte.
+Relative Markdown links (`[Status](STATUS_2026-10-30.md#6)`, images too) and mentions of tracked files (`` `sources/schema.xsd` ``, `STATUS_2026-10-30.md` in plain text) become `[[id|label]]` links; the label is the original text, an anchor stays (`[[id#6|Status]]`). A mention resolves as a path relative to the note, from the repository root, as a unique file name, or as a unique tail of a path (`bic/manual.pdf`). Nothing else in the text changes. Left alone: code blocks (fenced or indented), URLs, lines with a `|` (table rows: the `|` of a link would split the cell; existing `[[id|label]]` links), reference definitions, and links of a note to itself. Every rewrite is in the report (original → new), so each text can be turned back; links that resolve to nothing are listed too. `"rewrite_links": false` keeps every text byte for byte.
 
 ## The mapping config
 
@@ -55,6 +55,8 @@ A rule applies to a folder or file whose repo path matches `path` (a glob) and w
 - `parent`: another place instead of the repo's folder: an item id or exact title (made below the root if there is none), or `path:<repo folder>`.
 - `properties`: set when the item is made; later runs never touch them.
 
+For a file only `parent` and `pin` apply: a file's title is its name, and files have no type.
+
 ## History
 
 - A note **`Git-Verlauf`** at the root: every commit of the chosen refs (newest first) with date, author, the message unchanged in a code block, and the changed paths; on top the list of refs.
@@ -70,18 +72,19 @@ Written locally (`--report`, default `obtion-import-<name>-<date>.md`) and as th
 - one row per tracked file: path, item id, status, SHA-256 of the original, SHA-256 in Obtion, and the check: for files the server's hash against the original's, for Markdown the text on the server compared byte for byte with what was meant to be written ("Text Byte für Byte gleich" when no link was rewritten);
 - history, bundle and LFS archive; rewritten and unresolved links; items whose path the repository no longer has.
 
-Statuses: `imported` (new), `updated` (changed in the repo, written), `unchanged`, `conflict` (changed in Obtion, not overwritten), `ignored`, `failed`. Old LFS versions that aren't on the machine are listed as `unavailable`; they are history, not tracked files. **Exit code 1 when any file is `failed` or `conflict`**, 0 when everything is there.
+Statuses: `imported` (new), `updated` (changed in the repo, written), `unchanged`, `conflict` (changed in Obtion, not overwritten), `ignored`, `failed`. Old LFS versions that aren't on the machine are listed as `unavailable`: they would be lost with the repository, so they count as problems too (as does a repository with LFS on a machine without git-lfs). **Exit code 1 when anything is `failed`, `conflict` or `unavailable`**, 0 when everything is there.
 
 ## Re-runs during a transition period
 
 Keep working in the repository for a while and import again whenever you like. A re-run:
 
-- finds every item by its `source` and never makes a second one;
+- finds every item by its `source` and never makes a second one, also items below a place outside the root (a rule's `parent`) or moved out of it in Obtion;
 - uploads new files, replaces changed ones (only if nobody replaced the file in Obtion since: `If-Match`), writes changed texts (only if the text in Obtion is still the one the last import wrote);
 - reports an item edited in Obtion as `conflict` and leaves it alone. Merge by hand, in Obtion or in the repository;
 - adds updates for new commits only, rewrites `Git-Verlauf`, replaces the bundle when the refs changed;
 - never deletes: files removed from the repository stay in Obtion and are listed in the report;
-- never moves: a folder you placed elsewhere in Obtion stays there.
+- never moves: a folder you placed elsewhere in Obtion stays there;
+- leaves the report note of the same day alone if someone edited it in Obtion (the local report is written anyway).
 
 What the last import wrote is kept on the server as the file `obtion-import-<name>.json` below the root, so a re-run works from any machine. Don't delete it during the transition period; without it, a text that differs from the repository counts as a conflict.
 

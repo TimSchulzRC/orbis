@@ -358,12 +358,28 @@ export async function importRepo(client: Client, folderArg: string, into: string
   const STATE = `${key("")}#state`;
   let state: ImportState = { format: 1, name, items: {} };
   const stateNode = bySource.get(STATE);
-  if (stateNode && !dry) {
+  if (stateNode) {
     const t = join(opts.tmp ?? tmpdir(), `obtion-import-state-${process.pid}.json`);
     await client.download(stateNode.id, t, `${t}.part`);
     state = JSON.parse(readFileSync(t, "utf8"));
     rmSync(t, { force: true });
   }
+  // items of this import outside the root: placed below a mapped parent, or moved away in Obtion
+  const adopt = (n: Node) => {
+    if (!n.source?.startsWith(key("")) || bySource.has(n.source)) return;
+    bySource.set(n.source, n);
+    nodes.set(n.id, n);
+  };
+  const elsewhere = Object.entries(state.items)
+    .filter(([src, x]) => !bySource.has(src) && !nodes.has(x.id))
+    .map(([, x]) => x.id);
+  if (elsewhere.length) for (const n of await client.items(elsewhere)) adopt(n);
+  for (const ref of new Set(rules.map((r) => r.parent).filter((p): p is string => !!p && !p.startsWith("path:"))))
+    try {
+      for (const n of (await client.tree(ref)).items) adopt(n);
+    } catch {
+      // not there yet: made below the root
+    }
 
   // types: exist, and which have updates
   const schema = JSON.parse(await client.tool("schema", {})) as { types: { name: string; capabilities: { updates?: string } }[] };
@@ -408,10 +424,14 @@ export async function importRepo(client: Client, folderArg: string, into: string
         });
         counts.created += batch.length;
       } catch (e) {
-        if (batch.length === 1) {
-          failedCreate.add(batch[0]!.p.source);
-          console.error(`  failed: ${batch[0]!.p.source}: ${(e as Error).message.split("\n")[0]}`);
-        } else for (const b of batch) await createItems([b]);
+        // only a call the server refused as a whole is retried one by one; anything else (a lost
+        // answer) may have been written: those items count as failed, the next run finds them by source
+        if (batch.length > 1 && e instanceof ToolError) for (const b of batch) await createItems([b]);
+        else
+          for (const b of batch) {
+            failedCreate.add(b.p.source);
+            console.error(`  failed: ${b.p.source}: ${(e as Error).message.split("\n")[0]}`);
+          }
       }
     }
   };
@@ -470,16 +490,31 @@ export async function importRepo(client: Client, folderArg: string, into: string
   };
   const byDepth = (kind: Planned["kind"]) => [...plan.values()].filter((p) => p.kind === kind).sort((a, b) => a.path.split("/").length - b.path.split("/").length);
   const folders = byDepth("folder");
-  const depths = [...new Set(folders.map((f) => f.path.split("/").length))];
   say(`Folders: ${folders.length} …`);
-  for (const d of depths) {
+  // in rounds: a folder whose parent (its repo folder, or a "path:" of its rule) exists goes next
+  const needs = (f: Planned) => (f.rule?.parent ? (f.rule.parent.startsWith("path:") ? f.rule.parent.slice(5).replace(/\/+$/, "") : undefined) : f.parentPath);
+  let open = folders.filter((x) => !bySource.has(x.source));
+  while (open.length) {
+    const ready = open.filter((f) => {
+      const n = needs(f);
+      return n === undefined || n === "" || !!pathId(n) || failedCreate.has(key(n));
+    });
+    if (!ready.length) {
+      for (const f of open) {
+        failedCreate.add(f.source);
+        console.error(`  failed: ${f.source}: its parent ${needs(f)} is never made (a cycle, or a path that isn't a folder)`);
+      }
+      break;
+    }
     const todo: { p: Planned; input: Record<string, unknown> }[] = [];
-    for (const f of folders.filter((x) => x.path.split("/").length === d && !bySource.has(x.source))) {
-      const input = await inputFor(f);
+    for (const f of ready) {
+      const n = needs(f);
+      const input = n && failedCreate.has(key(n)) ? undefined : await inputFor(f);
       if (input) todo.push({ p: f, input });
       else failedCreate.add(f.source);
     }
     await createItems(todo);
+    open = open.filter((f) => !ready.includes(f));
   }
   const notes = byDepth("note");
   say(`Notes: ${notes.length} …`);
@@ -518,6 +553,7 @@ export async function importRepo(client: Client, folderArg: string, into: string
           ids.set(f.source, got.id);
           state.items[f.source] = { id: got.id, hash: got.hash };
           counts.uploaded++;
+          if (f.rule?.pin) await client.tool("place", { ref: got.id, pin: true });
         }
         row.status = "imported";
       } else {
@@ -704,7 +740,11 @@ export async function importRepo(client: Client, folderArg: string, into: string
     }
 
     // old versions of LFS files: their content is not in the bundle
-    if ((cfg.lfs ?? true) && Bun.spawnSync(["git", "lfs", "version"], { stdout: "pipe", stderr: "pipe" }).exitCode === 0) {
+    const hasLfs = Bun.spawnSync(["git", "lfs", "version"], { stdout: "pipe", stderr: "pipe" }).exitCode === 0;
+    const usesLfs = tracked.some((t) => posix.basename(t.path) === ".gitattributes" && existsSync(join(folder, t.path)) && /filter=lfs/.test(readFileSync(join(folder, t.path), "utf8")));
+    if ((cfg.lfs ?? true) && usesLfs && !hasLfs)
+      generated.push({ source: `${key("")}#lfs`, title: "Git-LFS-Archiv", status: "failed", note: "the repository uses Git LFS, but git-lfs isn't installed: older LFS versions can't be archived" });
+    if ((cfg.lfs ?? true) && hasLfs) {
       const all = run(folder, ["lfs", "ls-files", "--all", "--long"], true); // every ref: an object of a tool ref costs nothing to keep
       const have = new Set([...plan.values()].map((p) => p.hash).filter(Boolean));
       const old = new Map<string, string>();
@@ -801,9 +841,12 @@ export async function importRepo(client: Client, folderArg: string, into: string
 
   // 6. proof: everything as it is on the server now
   if (!dry) await saveState();
-  const after = dry ? tree : (await client.tree(rootId)).items;
+  const below = dry ? tree : (await client.tree(rootId)).items;
+  const outside = dry ? [] : await client.items([...new Set([...plan.values()].map((p) => ids.get(p.source)).filter((id): id is string => !!id && !below.some((n) => n.id === id)))]);
+  const after = [...below, ...outside];
   const now = new Map<string, Node>();
   for (const n of after) if (n.source && !now.has(n.source)) now.set(n.source, n);
+  if (!dry) for (const [src, n] of now) state.items[src] = { ...state.items[src], id: n.id };
   for (const pl of [...plan.values(), ...(rootText ? [{ ...rootText, source: key("") }] : [])]) {
     const row = rows.get(pl.kind === "folder" ? (pl.textPath ?? "") : pl.path);
     if (!row || dry) continue;
@@ -835,7 +878,8 @@ export async function importRepo(client: Client, folderArg: string, into: string
   // 7. the report
   const list = [...rows.values()].sort((a, b) => (a.path < b.path ? -1 : 1));
   const by = (s: Status) => list.filter((r) => r.status === s).length;
-  const problems = by("failed") + by("conflict") + generated.filter((g) => g.status === "failed" || g.status === "conflict").length;
+  // an old LFS version that isn't archived is lost when the repository goes: that is a problem too
+  const problems = by("failed") + by("conflict") + generated.filter((g) => g.status === "failed" || g.status === "conflict" || g.status === "unavailable").length;
   const extRows = new Map<string, { n: number; bytes: number; s: Record<string, number> }>();
   for (const r of list) {
     const e = extRows.get(ext(r.path)) ?? { n: 0, bytes: 0, s: {} };
@@ -851,9 +895,12 @@ export async function importRepo(client: Client, folderArg: string, into: string
   const report = [
     `# Importbericht ${name} ${today}`,
     "",
-    problems ? `**Unvollständig: ${problems} Problem(e)**, siehe Status failed und conflict.` : "**Vollständig:** jede Datei ist da, jeder Hash und jeder Text stimmt.",
+    problems ? `**Unvollständig: ${problems} Problem(e)**, siehe Status failed, conflict und unavailable.` : "**Vollständig:** jede Datei ist da, jeder Hash und jeder Text stimmt.",
     ...(generated.some((g) => g.status === "unavailable")
-      ? ["", `Nicht auf diesem Rechner: ${generated.filter((g) => g.status === "unavailable").length} ältere LFS-Fassung(en) aus dem Verlauf (siehe unten); keine davon ist eine aktuelle Datei.`]
+      ? [
+          "",
+          `Nicht auf diesem Rechner: ${generated.filter((g) => g.status === "unavailable").length} ältere LFS-Fassung(en) aus dem Verlauf (siehe unten). Vor dem Stilllegen: git lfs fetch --all im Repository, dann erneut importieren.`,
+        ]
       : []),
     "",
     `- Quelle: \`${folder}\`${git ? ` (Git, HEAD \`${head}\`, ${commits.length} Commits${dirty ? `, ${dirty} geänderte Datei(en) im Arbeitsverzeichnis: deren Stand ist importiert` : ""})` : " (Ordner)"}`,
@@ -905,8 +952,14 @@ export async function importRepo(client: Client, folderArg: string, into: string
     const src = `${key("")}#report:${today}`;
     const node = bySource.get(src);
     try {
-      if (node) await client.tool("update", { ref: node.id, body: report, base_version: node.version });
-      else await client.tool("create", { items: [{ title: `Importbericht ${name} ${today}`, parents: [rootId], source: src, body: report }] });
+      if (node) {
+        const r = await writeText(src, node.id, report, undefined);
+        if (r.status === "conflict") console.error(`The report note "Importbericht ${name} ${today}" was edited in Obtion; it is left as it is (the report is in ${reportPath}).`);
+      } else {
+        const made = writtenLines(await client.tool("create", { items: [{ title: `Importbericht ${name} ${today}`, parents: [rootId], source: src, body: report }] }))[0];
+        if (made) state.items[src] = { id: made.id, hash: sha256(report) };
+      }
+      await saveState();
     } catch (e) {
       console.error(`The report note could not be written: ${(e as Error).message.split("\n")[0]}`);
     }

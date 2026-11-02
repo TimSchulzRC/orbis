@@ -37,7 +37,7 @@ async function items(under: string): Promise<Item[]> {
   expect(res.status).toBe(200);
   return ((await res.json()) as { items: Item[] }).items;
 }
-const bySource = async (path: string) => (await items("Altes Repo")).find((i) => i.source === `repo:ablage/${path}`);
+const bySource = async (path: string) => [...(await items("Altes Repo")), ...(await items("Werkzeugkiste"))].find((i) => i.source === `repo:ablage/${path}`);
 
 async function obtion(args: string[]) {
   const p = Bun.spawn([process.execPath, join(ROOT, "apps/cli/src/index.ts"), ...args], {
@@ -113,7 +113,20 @@ beforeAll(async () => {
   put("kunden/Austria_Beispiel/latin1.md", new Uint8Array([0x47, 0x72, 0xf6, 0xdf, 0x65, 0x0a])); // "Größe" in Latin-1
   put("_tools/run.py", "print('hallo')\n");
   commit("Beispiel und Werkzeuge");
-  writeFileSync(join(work, "mapping.json"), JSON.stringify({ rules_file: "CLAUDE.md", rules: [{ path: "kunden/Germany_*", match: "^Germany_(.+)$", title: "{1}", type: "Projekt" }] }));
+  // a place outside the import's root, named by a rule
+  await tool("create", { items: [{ title: "Werkzeugkiste", pin: true }] });
+  writeFileSync(
+    join(work, "mapping.json"),
+    JSON.stringify({
+      rules_file: "CLAUDE.md",
+      rules: [
+        { path: "kunden/Germany_*", match: "^Germany_(.+)$", title: "{1}", type: "Projekt" },
+        { path: "_tools", parent: "Werkzeugkiste" },
+        { path: "leer", parent: "path:kunden/Germany_ACME" }, // a deeper folder as parent
+        { path: "kunden/Germany_ACME/sources/schema.xsd", pin: true },
+      ],
+    }),
+  );
 });
 afterAll(async () => {
   proc?.kill();
@@ -171,7 +184,13 @@ test("import: every tracked file arrives, the report proves it", async () => {
   expect((await bySource("kunden/Austria_Beispiel/latin1.md"))!.kind).toBe("file");
   // places: the folder tree
   expect(schema.parents).toEqual([(await bySource("kunden/Germany_ACME/sources"))!.id]);
-  expect((await bySource("leer"))!.parents).toEqual([root.id]);
+  expect((await bySource("leer"))!.parents).toEqual([acme.id]);
+  // outside the root: below the mapped place, found and checked all the same
+  const kiste = (await items("Werkzeugkiste")).find((i) => i.title === "Werkzeugkiste")!;
+  const tools = (await items("Werkzeugkiste")).find((i) => i.source === "repo:ablage/_tools")!;
+  expect(tools.parents).toEqual([kiste.id]);
+  expect(report).toMatch(/\| _tools\/run\.py \| \w+ \| imported \|/);
+  expect(JSON.parse(await tool("get", { ref: schema.id })).pinned).toBe(true);
   // the source is what agents see and search
   expect(await tool("get", { ref: status.id })).toContain('"source": "repo:ablage/kunden/Germany_ACME/STATUS_2026-10-30.md"');
   expect(await tool("search", { query: "Germany_ACME STATUS_2026-10-30" })).toContain(status.id);
@@ -195,11 +214,11 @@ test("import: every tracked file arrives, the report proves it", async () => {
 });
 
 test("a second run changes nothing", async () => {
-  const before = await items("Altes Repo");
+  const before = [...(await items("Altes Repo")), ...(await items("Werkzeugkiste"))];
   const r = await obtion(["import", repo, "--into", "Altes Repo", "--config", "mapping.json", "--report", "bericht2.md"]);
   expect(r.code).toBe(0);
   expect(r.out).toMatch(/: 0 new, 0 updated, \d+ unchanged, 0 conflict/);
-  const after = await items("Altes Repo");
+  const after = [...(await items("Altes Repo")), ...(await items("Werkzeugkiste"))];
   expect(after.length).toBe(before.length);
   const content = (xs: Item[]) =>
     xs
@@ -236,7 +255,7 @@ test("repo changes go in; an edit in Obtion is never overwritten (conflict, exit
   expect((await bySource("kunden/Germany_ACME/scan.PDF"))!.file!.hash).toBe(sha("%PDF-1.7 Scan\n"));
   expect(await bySource("kunden/Germany_ACME/fehlt.PDF")).toBeUndefined();
   expect(rep).toMatch(/\| kunden\/Germany_ACME\/fehlt\.PDF \|  \| failed \|.*Git LFS pointer/);
-  expect(rep).toContain("**Unvollständig: 2 Problem(e)**");
+  expect(rep).toContain("**Unvollständig: 3 Problem(e)**"); // the conflict, the pointer without content, and that content missing as an LFS version
   expect(rep).toMatch(/\| kunden\/Austria_Beispiel\/README\.md \| \w+ \| conflict \|/);
   expect(rep).toMatch(/\| kunden\/Germany_ACME\/sources\/schema\.xsd \| \w+ \| updated \|/);
   // the same items, no duplicates

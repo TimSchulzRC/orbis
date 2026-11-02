@@ -92,7 +92,8 @@ export function rewriteLinks(body: string, from: string, selfId: string | undefi
       return line;
     }
     if (/^\s{0,3}\[[^\]]+\]:\s/.test(line)) return line; // a reference definition
-    if (/^\s*\|/.test(line)) return line; // a table row: the | of [[id|label]] would split its cell
+    // a table row (with or without a leading |): the | of [[id|label]] would split its cell; indented code
+    if (line.includes("|") || /^( {4}|\t)/.test(line)) return line;
     return line.replace(INLINE, (m, wiki, ticks, code, bang, label, target, _title, html, url, word) => {
       if (wiki || html || url) return m;
       if (ticks) {
