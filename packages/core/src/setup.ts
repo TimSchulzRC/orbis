@@ -1,37 +1,21 @@
-// Default types and settings, plus one-time data upgrades. After setup the default types are
-// ordinary data; their fixed ids (sys:*) only serve "restore default types" and imports.
-import * as Y from "yjs";
+// Default types and settings. After setup the default types are ordinary data; their fixed ids
+// (sys:*) only serve "restore default types".
+import type * as Y from "yjs";
 import {
   type Capabilities,
   type Item,
-  type OptionDef,
   type PropDef,
-  type SettingsRecord,
   type ViewTab,
   FORMAT,
-  PERSONAL,
   SETTINGS_ID,
   initItem,
   initType,
-  metaMap,
-  newId,
-  readTabs,
   setMeta,
   setSchemaField,
   setSettings,
-  setTabs,
-  titleKey,
-  upsertProp,
 } from "./model";
-import { sameValue } from "./equal";
-import { DEFAULT_INBOX_WHERE } from "./inbox";
-import type { Index } from "./graph";
-import { sidebarRoots } from "./placement";
-import { pluralOf } from "./plural";
-import { keyBetween, keysFor } from "./sortkey";
-import { LANGS, type Lang, translate, words } from "./i18n";
-import { statusStateOf } from "./input";
-import { type Cond, type QueryDef, andWhere, blockSource, queryFence, tabDef } from "./query";
+import { keysFor } from "./sortkey";
+import { type Lang, translate, words } from "./i18n";
 
 export const SYS = {
   card: "sys:card",
@@ -135,51 +119,6 @@ function createType(w: Writer, id: string, spec: TypeSpec, origin?: string) {
   w.change(id, (doc) => initType(doc, spec, { createdBy: origin }));
 }
 
-/**
- * Marked in the settings so it never runs again, even if the user later undoes its effect.
- * undefined if it ran before or there are no settings yet.
- */
-function runOnce<T>(w: Writer, key: string, fn: (settings: SettingsRecord) => T): T | undefined {
-  const settings = w.get(SETTINGS_ID)?.settings;
-  if (!settings || settings.upgrades?.includes(key)) return undefined;
-  const out = fn(settings);
-  w.change(SETTINGS_ID, (doc) => setSettings(doc, { upgrades: [...(settings.upgrades ?? []), key] }));
-  return out;
-}
-
-/** Properties shipped after a default type. Not re-added if the user removed them. */
-const LATER_PROPS = [WAITING_FOR, BLOCKED_BY];
-export function addLaterDefaultProps(w: Writer, lang: Lang): string[] {
-  const changed: string[] = [];
-  for (const [id, spec] of Object.entries(defaultTypes(lang))) {
-    const cur = w.get(id);
-    if (!cur?.schema || cur.deleted) continue;
-    const known = new Set([...cur.schema.properties, ...cur.schema.removedProperties].map((p) => p.id));
-    const missing = spec.properties.filter((p) => LATER_PROPS.includes(p.id) && !known.has(p.id));
-    if (!missing.length) continue;
-    w.change(id, (doc) => {
-      for (const p of missing) upsertProp(doc, p.id, p);
-    });
-    changed.push(id);
-  }
-  return changed;
-}
-
-/** Shipped labels renamed later. Only changed while they still carry the old wording, so a user's own name stays. */
-const RENAMED: { type: string; prop: string; field: "inverseName"; was: Record<Lang, string>; key: string }[] = [
-  { type: SYS.task, prop: BLOCKED_BY, field: "inverseName", was: { de: "Blockiert", en: "Blocking" }, key: "setup.prop.blocking" },
-];
-export function renameShippedLabels(w: Writer, lang: Lang): number {
-  let n = 0;
-  for (const r of RENAMED) {
-    const p = w.get(r.type)?.schema?.properties.find((x) => x.id === r.prop);
-    if (!p || p[r.field] !== r.was[lang]) continue;
-    w.change(r.type, (doc) => upsertProp(doc, r.prop, { [r.field]: translate(lang, r.key) }));
-    n++;
-  }
-  return n;
-}
-
 /** Creates missing default types and undeletes deleted ones. */
 export function restoreDefaultTypes(w: Writer, lang: Lang, origin?: string): string[] {
   const specs = defaultTypes(lang);
@@ -198,62 +137,6 @@ export function restoreDefaultTypes(w: Writer, lang: Lang, origin?: string): str
 }
 
 const DEFAULT_CAPTURE_TYPES = [SYS.card, SYS.task, SYS.project];
-
-/** Pages show every property since this version; hide these two on the shipped task while empty. */
-export function upgradeHideEmptyTaskFields(w: Writer): boolean {
-  return (
-    runOnce(w, "task-hide-empty-1", () => {
-      const task = w.get(SYS.task);
-      if (task?.schema)
-        w.change(SYS.task, (doc) => {
-          for (const id of [BLOCKED_BY, WAITING_FOR]) if (task.schema!.properties.some((p) => p.id === id)) upsertProp(doc, id, { hideEmpty: true });
-        });
-      return true;
-    }) ?? false
-  );
-}
-
-/** The state the app used to read from a shipped option id or a status word in the name. */
-function impliedState(o: { id: string; name: string }): OptionDef["state"] {
-  if (o.id === "st_paused") return "paused";
-  if (o.id === "st_canceled" || o.id === "st_dropped") return "dropped";
-  return statusStateOf(o.name);
-}
-
-/**
- * The app used to recognise blocking properties and paused/dropped options by id or name. This
- * writes `blocks` and `state` into the data; from then on only these marks count, so renaming
- * changes nothing.
- */
-export function upgradeExplicitRoles(w: Writer, ix: Index): string[] {
-  return (
-    runOnce(w, "explicit-roles-1", () => {
-      const names = (key: string) => new Set(LANGS.map((l) => titleKey(translate(l, `setup.prop.${key}`))));
-      const byNames = names("blockedBy");
-      const waitNames = names("waitingFor");
-      const changed: string[] = [];
-      for (const t of ix.types.values()) {
-        const props = t.schema!.properties;
-        const by = props.find((p) => p.kind === "relation" && (p.id === BLOCKED_BY || byNames.has(titleKey(p.name))));
-        const waiting = props.find((p) => p.kind === "text" && (p.id === WAITING_FOR || waitNames.has(titleKey(p.name))));
-        const states = new Map<string, NonNullable<PropDef["options"]>>();
-        for (const p of props) {
-          if (!p.options?.some((o) => o.group)) continue; // a status, also one from before it was a select
-          if (!p.options.some((o) => !o.state && impliedState(o))) continue;
-          states.set(p.id, p.options.map((o) => (o.state || !impliedState(o) ? o : { ...o, state: impliedState(o) })));
-        }
-        const marks = [by, waiting].filter((p): p is PropDef => !!p && !p.blocks);
-        if (!marks.length && !states.size) continue;
-        w.change(t.id, (doc) => {
-          for (const p of marks) upsertProp(doc, p.id, { blocks: true });
-          for (const [id, options] of states) upsertProp(doc, id, { options });
-        });
-        changed.push(t.id);
-      }
-      return changed;
-    }) ?? []
-  );
-}
 
 /**
  * Names and columns are in the setup language, like the type names. A view named like its kind
@@ -308,73 +191,4 @@ export function runSetup(w: Writer, lang: Lang, origin?: string) {
       initItem(doc, { kind: "settings", title: "Settings" });
       setSettings(doc, { setupLang: lang, format: FORMAT, captureTypes: DEFAULT_CAPTURE_TYPES });
     });
-}
-
-/** Once (27.10.): documents from before areas get the personal area. Returns how many were marked. */
-export function upgradeAreas(w: Writer, docs: Iterable<[string, Y.Doc]>): number {
-  return (
-    runOnce(w, "areas-1", (settings) => {
-      const ids: string[] = []; // one document at a time: the server reads them from its database
-      for (const [id, d] of docs) if (metaMap(d).has("kind") && !metaMap(d).has("area")) ids.push(id);
-      for (const id of ids) w.change(id, (d) => metaMap(d).set("area", PERSONAL));
-      w.change(SETTINGS_ID, (d) => setSettings(d, { format: Math.max(settings.format ?? 0, FORMAT) }));
-      return ids.length;
-    }) ?? 0
-  );
-}
-
-/** Collections shipped for the default types until 26.10. */
-const SHIPPED_FOR: Record<string, string> = { "sys:c-project": SYS.project, "sys:c-task": SYS.task, "sys:c-card": SYS.card };
-
-/**
- * Once (26.10.): collections are gone. A type's collection gives its views and filter to the type;
- * file collections are dropped; any other becomes a pinned-if-it-was page with a query block. The
- * old documents stay but are no longer read. Returns log lines.
- */
-export function migrateCollections(w: Writer, ix: Index, docs: Iterable<[string, Y.Doc]>, lang: Lang): string[] {
-  return runOnce(w, "no-collections-1", () => collectionsToViews(w, ix, docs, lang)) ?? [];
-}
-
-function collectionsToViews(w: Writer, ix: Index, docs: Iterable<[string, Y.Doc]>, lang: Lang): string[] {
-  const log: string[] = [];
-  const typesWithViews = new Set<string>(); // the first collection wins
-  let lastPin = sidebarRoots(ix).at(-1)?.pinned ?? null;
-  for (const [id, doc] of docs) {
-    const meta = metaMap(doc);
-    if (meta.get("kind") !== "sammlung" || meta.get("deleted")) continue;
-    const raw = meta.get("name");
-    const name = typeof raw === "string" ? raw : "";
-    const where = doc.getMap("query").get("where") as Cond | undefined;
-    const tabs = readTabs(doc);
-    const type = SHIPPED_FOR[id] ?? (where && "type" in where ? where.type : undefined);
-    const pos = (doc.getMap("pin").get("sidebar") as string | undefined) || undefined;
-    if (meta.get("system") === "eingang") {
-      const own = where && !sameValue(where, DEFAULT_INBOX_WHERE);
-      if (own) w.change(SETTINGS_ID, (d) => setSettings(d, { inbox: where }));
-      log.push(`${name}: ${own ? "its own rule to the settings" : "the default rule"}`);
-    } else if (type && ix.types.get(type) && !ix.types.get(type)!.schema.views && !typesWithViews.has(type)) {
-      typesWithViews.add(type);
-      // what the collection filtered beyond the type stays in every view
-      const parts = where && "and" in where ? where.and : where ? [where] : [];
-      const rest = parts.filter((c) => !sameValue(c, { type }));
-      const extra: Cond | undefined = rest.length > 1 ? { and: rest } : rest[0];
-      const schema = ix.types.get(type)!.schema;
-      w.change(type, (d) => {
-        setTabs(d, tabs.map(({ pos: _, ...tab }) => ({ ...tab, where: andWhere(extra, tab.where) })));
-        if (name && name !== pluralOf(schema.name, lang)) setSchemaField(d, "plural", name);
-        if (pos && !schema.pos) setSchemaField(d, "pos", pos); // under "Typen" in the order the collections had
-      });
-      log.push(`${name}: views to the type ${schema.name}`);
-    } else if (id === "sys:c-files" || id === "sys:c-images" || (where && ("file" in where || "filetype" in where))) {
-      if (id === "sys:c-files" && pos) w.change(SETTINGS_ID, (d) => setSettings(d, { filesPos: pos }));
-      log.push(`${name}: dropped (files have their own page)`);
-    } else {
-      const page = newId();
-      const pin = pos ? (lastPin = keyBetween(lastPin, null)) : undefined;
-      const def: QueryDef = tabs.length > 1 ? { where, tabs } : tabDef(where, tabs[0]!);
-      w.change(page, (d) => initItem(d, { title: name, pinned: pin, body: queryFence(blockSource(def)) }));
-      log.push(`${name}: now the page ${page} with a query block${pin ? ", pinned" : ""}`);
-    }
-  }
-  return log;
 }

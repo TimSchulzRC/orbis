@@ -2,7 +2,7 @@
 // For the browser smoke test: the app has to run with zero types. Never point it at data/.
 import { resolve } from "node:path";
 import { Store } from "@obtion/server/store";
-import { storeWriter } from "@obtion/server/importers";
+import { storeWriter } from "@obtion/server/setup";
 import { deleteType } from "@obtion/core/typeops";
 
 const dir = process.env.OBTION_DATA;

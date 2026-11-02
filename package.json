@@ -39,8 +39,6 @@
     "test:browser": "vitest run",
     "test:e2e": "bun run build && bun tests/e2e/smoke.ts",
     "setup": "bun apps/server/src/cli.ts setup",
-    "stats": "bun apps/server/src/cli.ts stats",
-    "import:obsidian": "bun apps/server/src/cli.ts import-obsidian",
-    "import:notion": "bun apps/server/src/cli.ts import-notion"
+    "stats": "bun apps/server/src/cli.ts stats"
   }
 }

@@ -1,7 +1,7 @@
 import { test, expect } from "bun:test";
 import { MemRepo } from "../support/helpers";
-import { runSetup, SYS, upgradeHideEmptyTaskFields } from "@obtion/core/setup";
-import { type PropKind, setProp, upsertProp } from "@obtion/core/model";
+import { runSetup, SYS } from "@obtion/core/setup";
+import { type PropKind, setProp } from "@obtion/core/model";
 import { deleteType, previewTagToType, tagToType, typeUsage, wouldBeInInbox } from "@obtion/core/typeops";
 import { isInInbox } from "@obtion/core/placement";
 import { visibleProps } from "@obtion/core/traits";
@@ -117,21 +117,3 @@ test("pages show every property of a type, empty ones too – computed ones once
   expect(task.properties.filter((p) => p.hideEmpty).map((p) => p.id).sort()).toEqual(["p_blocked", "p_waiting"]);
 });
 
-test("the one-time upgrade marks only the two task fields, once – a later choice of the user stays", () => {
-  const m = new MemRepo();
-  runSetup(m.writer, "de");
-  // a server set up before: no marks yet
-  m.change(SYS.task, (d) => {
-    upsertProp(d, "p_blocked", { hideEmpty: null as any });
-    upsertProp(d, "p_waiting", { hideEmpty: null as any });
-  });
-  const marked = () => m.index().types.get(SYS.task)!.schema.properties.filter((p) => p.hideEmpty).map((p) => p.id).sort();
-  expect(marked()).toEqual([]);
-  expect(upgradeHideEmptyTaskFields(m.writer)).toBe(true);
-  expect(marked()).toEqual(["p_blocked", "p_waiting"]);
-  expect(m.index().types.get(SYS.project)!.schema.properties.filter((p) => p.hideEmpty).map((p) => p.id)).toEqual(["p_blocked"]); // shipped that way
-  // the user turns one off: the upgrade does not come back
-  m.change(SYS.task, (d) => upsertProp(d, "p_waiting", { hideEmpty: null as any }));
-  expect(upgradeHideEmptyTaskFields(m.writer)).toBe(false);
-  expect(marked()).toEqual(["p_blocked"]);
-});

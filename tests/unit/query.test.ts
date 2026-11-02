@@ -1,8 +1,8 @@
 import { test, expect, describe } from "bun:test";
 import { MemRepo } from "../support/helpers";
-import { runSetup, SYS, addLaterDefaultProps, renameShippedLabels } from "@obtion/core/setup";
+import { runSetup, SYS } from "@obtion/core/setup";
 import { parseQuery, printQuery, runQuery, groupItems, normalizeBlocks, findBlocks, readBlock, blocksAsText, shownByBlocks, tabDef } from "@obtion/core/query";
-import { addDaysISO, removeProp, setMember } from "@obtion/core/model";
+import { addDaysISO, setMember } from "@obtion/core/model";
 
 function world() {
   const m = new MemRepo();
@@ -160,34 +160,6 @@ test("blockiert: an open blocker or a waiting-for text; ohne:offene-kinder", () 
   // printed back in either language
   const ix = m.index();
   expect(printQuery(parseQuery("blockiert ohne:offene-kinder", ix).def, "en", ix)).toBe("blocked without:open-children");
-});
-
-test("Wartet auf is added to existing default types once; nothing else changes", () => {
-  const m = new MemRepo();
-  runSetup(m.writer, "de");
-  // an existing setup from before: the task type without "Wartet auf"
-  m.change(SYS.task, (doc) => (doc.getMap<any>("schema").get("properties") as any).delete("p_waiting"));
-  expect(m.get(SYS.task)!.schema!.properties.some((p) => p.id === "p_waiting")).toBe(false);
-  expect(addLaterDefaultProps(m.writer, "de")).toEqual([SYS.task]);
-  const props = m.get(SYS.task)!.schema!.properties;
-  expect(props.at(-1)!).toMatchObject({ id: "p_waiting", name: "Wartet auf", kind: "text" });
-  expect(addLaterDefaultProps(m.writer, "de")).toEqual([]);
-  // removed by the user: stays removed
-  m.change(SYS.task, (doc) => removeProp(doc, "p_waiting"));
-  expect(addLaterDefaultProps(m.writer, "de")).toEqual([]);
-});
-
-test("the inverse of Blockiert durch is renamed only while it carries the old shipped name", () => {
-  const m = new MemRepo();
-  runSetup(m.writer, "de");
-  const inv = () => m.get(SYS.task)!.schema!.properties.find((p) => p.id === "p_blocked")!.inverseName;
-  expect(inv()).toBe("Blockiert diese");
-  m.change(SYS.task, (d) => ((d.getMap<any>("schema").get("properties") as any).get("p_blocked") as any).set("inverseName", "Blockiert"));
-  expect(renameShippedLabels(m.writer, "de")).toBe(1);
-  expect(inv()).toBe("Blockiert diese");
-  m.change(SYS.task, (d) => ((d.getMap<any>("schema").get("properties") as any).get("p_blocked") as any).set("inverseName", "Hält auf"));
-  expect(renameShippedLabels(m.writer, "de")).toBe(0);
-  expect(inv()).toBe("Hält auf");
 });
 
 test("files under a project: below it, or used in an entry below it (embedded, linked, ref)", () => {
