@@ -266,12 +266,13 @@ function buildMcpServer(store: Store, origin: string, blobs?: Blobs, lang: Lang 
       description: "Take back one step (one tool call or one user action) with everything it did, across items. Fields changed again later keep their newer value; items the step created go to the trash. Without step: your own last step. redo: true brings an undone step back.",
       inputSchema: { step: z.string().optional(), redo: z.boolean().optional() },
     },
-    wrap((a) => {
+    wrap(ruled((a, touched) => {
       const step = a.step ?? ops.lastStep(origin, !!a.redo);
       const r = (a.redo ? redoStep : undoStep)(store, step, origin);
       const ix = store.index();
-      const items = [...r.changed, ...r.trashed].map((id) => ix.get(id) ?? store.records.get(id)).filter((i): i is NonNullable<typeof i> => !!i);
+      const items = mark(touched, [...r.changed, ...r.trashed].map((id) => ix.get(id) ?? store.records.get(id)).filter((i): i is NonNullable<typeof i> => !!i));
       const titleOf = (id: string) => `"${store.records.get(id)?.title}"`;
+      for (const k of r.kept) touched.add(k.doc);
       const keptFields = [...new Set(r.kept.map((k) => `${titleOf(k.doc)} ${k.field.replace(/^\w+[.:]?\w*:/, "")}`))];
       const kept = r.kept.length ? `\nKept newer values (changed again after that step): ${keptFields.join(", ")}` : "";
       const trashed = r.trashed.length ? `\nTo the trash (created in that step): ${r.trashed.map(titleOf).join(", ")}` : "";
@@ -279,7 +280,7 @@ function buildMcpServer(store: Store, origin: string, blobs?: Blobs, lang: Lang 
       const list = items.length ? `:\n${ops.lines(items.filter((i) => !i.deleted))}` : " – nothing to change.";
       const back = `(step ${r.step} – ${a.redo ? "undo" : "redo"} with undo${a.redo ? "" : " redo: true"})`;
       return `${done}${list}${trashed}${kept}\n${back}`;
-    }, true),
+    }), true),
   );
   server.registerTool(
     "activity",
@@ -298,7 +299,7 @@ function buildMcpServer(store: Store, origin: string, blobs?: Blobs, lang: Lang 
       },
       annotations: ro,
     },
-    wrap((a) => ops.activity(a, origin)),
+    wrap(ruled((a, touched) => ops.activity(a, origin, touched))),
   );
   server.registerTool(
     "history",
@@ -309,7 +310,7 @@ function buildMcpServer(store: Store, origin: string, blobs?: Blobs, lang: Lang 
       inputSchema: { ref: z.string(), version: z.number().int().min(1).optional(), from: z.number().int().min(0).optional(), to: z.number().int().min(1).optional() },
       annotations: ro,
     },
-    wrap((a) => ops.history(a.ref, a)),
+    wrap(ruled((a, touched) => ops.history(a.ref, a, touched))),
   );
 
   server.registerPrompt("process_inbox", { title: "Process the inbox", description: "Go through the inbox and suggest a type and a place for each item." }, () =>

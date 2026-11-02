@@ -95,6 +95,17 @@ test("tool answers end with the rules that apply, each rule once per answer", as
   expect((await tool("get", { ref: "Draußen" })).text).not.toContain("Rules for agents");
 });
 
+test("activity, history, undo and focus's recent changes bring the rules of the items they name", async () => {
+  const { task } = tree();
+  const u = await tool("update", { ref: task.id, body: "Erster Text", base_version: (await tool("get", { ref: task.id })).text.match(/"version": "(\w+)"/)?.[1] });
+  expect(u.error).toBe(false);
+  for (const [name, args] of [["activity", { days: 1 }], ["history", { ref: task.id }], ["focus", {}], ["undo", { step: stepOf(u.text) }]] as const)
+    expect((await tool(name, args)).text, name).toContain("Regel Kunde");
+  // an activity about an item without changes in the time asked for names its rules too
+  const quiet = ops.create({ title: "Ruhig", parents: [task.id] }, A);
+  expect((await tool("activity", { ref: quiet.id, since: new Date(Date.now() + 60_000).toISOString().slice(0, 16) })).text).toContain("Regel Kunde");
+});
+
 test("suggest brings the rules of the places it proposes", async () => {
   tree();
   ops.create({ title: "Notiz im Eingang" }, A);

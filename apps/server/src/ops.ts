@@ -674,16 +674,17 @@ export class Ops {
       }),
       blocked: ix.live.filter((i) => statusOf(i, ix.schemaOf(i))?.group !== "done" && ix.isBlocked(i)).map((i) => line(i)),
       inbox: runQuery({ where: { inbox: true } }, { ix }).total,
-      changed_by_people_last_3_days: this.peopleChanged(),
-      recent_activity: this.activityFeed({ days: 3, limit: 10 }).entries.map((e) => `${this.entryHead(e)}${e.changes.length ? ": " + this.changeTexts(e).join("; ") : ""}`),
+      changed_by_people_last_3_days: this.peopleChanged(touched),
+      recent_activity: this.activityFeed({ days: 3, limit: 10 }).entries.map((e) => (e.doc && touched?.add(e.doc), `${this.entryHead(e)}${e.changes.length ? ": " + this.changeTexts(e).join("; ") : ""}`)),
     };
   }
 
   // ---------- activity and history ----------
 
   /** Items people changed by hand in the app lately (what an agent should look at first), with the way to see how. */
-  private peopleChanged(): string | undefined {
+  private peopleChanged(touched?: Set<string>): string | undefined {
     const { entries } = this.activityFeed({ days: 3, by: "people", limit: 200 });
+    for (const e of entries) if (e.doc) touched?.add(e.doc);
     const titles = [...new Set(entries.filter((e) => e.doc).map((e) => `"${this.store.records.get(e.doc)?.title || e.title}"`))];
     if (!titles.length) return undefined;
     return `${titles.slice(0, 15).join(", ")}${titles.length > 15 ? ` and ${titles.length - 15} more` : ""} – see what changed with activity days=3 by="people"`;
@@ -758,12 +759,13 @@ export class Ops {
   }
 
   /** The activity as text for agents: one block per entry, changes readable, text changes as diffs. */
-  activity(opts: ActivityOpts, me = ""): string {
+  activity(opts: ActivityOpts, me = "", touched?: Set<string>): string {
     const { entries, cursor, more } = this.activityFeed(opts, me);
+    for (const e of entries) if (e.doc) touched?.add(e.doc);
     const scope = [
       opts.since !== undefined ? `since ${opts.since}` : `in the last ${opts.days ?? 7} day(s)`,
-      opts.under && `under "${this.anyItem(opts.under).title}"`,
-      opts.ref && `of "${this.anyItem(opts.ref).title}"`,
+      opts.under && `under "${this.scopeItem(opts.under, touched).title}"`,
+      opts.ref && `of "${this.scopeItem(opts.ref, touched).title}"`,
       opts.by && `by ${opts.by}`,
     ].filter(Boolean);
     const head = `${entries.length}${more ? "+" : ""} change(s) ${scope.join(" · ")}${opts.since !== undefined ? " (oldest first)" : " (newest first)"}`;
@@ -858,6 +860,13 @@ export class Ops {
   }
 
   /** An item by id also when it is in the trash (its history and activity stay readable); else as resolve(). */
+  /** An item an answer is about, marked for its rules. */
+  private scopeItem(ref: string, touched?: Set<string>): Item {
+    const i = this.anyItem(ref);
+    touched?.add(i.id);
+    return i;
+  }
+
   private anyItem(ref: string): Item {
     const byId = this.store.records.get(ref.trim().replace(/^\[\[|\]\]$/g, ""));
     return byId && (byId.kind === "info" || byId.kind === "datei") ? byId : this.resolve(ref);
@@ -867,9 +876,10 @@ export class Ops {
    * The kept versions of an item's text: the list, one version's text, or a diff between two
    * (from 0 = the empty text; to omitted = the text now).
    */
-  history(ref: string, opts: { version?: number; from?: number; to?: number } = {}): string {
+  history(ref: string, opts: { version?: number; from?: number; to?: number } = {}, touched?: Set<string>): string {
     this.ix;
     const item = this.anyItem(ref);
+    touched?.add(item.id);
     const name = `"${displayTitle(item) || "(untitled)"}" [${item.id}]`;
     const versions = this.store.versions(item.id);
     const pick = (n: number) => {
