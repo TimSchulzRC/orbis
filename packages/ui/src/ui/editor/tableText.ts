@@ -146,14 +146,17 @@ export function deleteCell(text: string, col: number): Change | null {
  * Markdown has ("**", "`", "[[", the address of a link …). Good enough to put the cursor where
  * a click was.
  */
+/** What a "\" escapes in CommonMark: ASCII punctuation. */
+const ESCAPABLE = /^[!-/:-@[-`{-~]$/;
+
 export function sourceOffset(src: string, shown: string, k: number): number {
   let i = 0;
   let j = 0;
   /** The length of the backtick run that opened the code span we are in (0: none). */
   let code = 0;
   while (j < k && i < src.length) {
-    if (src[i] === "\\" && !code) {
-      // "\x" shows as "x"
+    if (src[i] === "\\" && !code && ESCAPABLE.test(src[i + 1] ?? "")) {
+      // "\|" shows as "|"; a "\" before anything else stays a letter
       i++;
       if (src[i] === shown[j]) j++;
       i++;
@@ -167,6 +170,9 @@ export function sourceOffset(src: string, shown: string, k: number): number {
         i += run;
         continue;
       }
+      // a shorter or longer run inside the code is text, as a whole
+      for (const end = i + run; i < end && j < k; i++) if (src[i] === shown[j]) j++;
+      continue;
     }
     // a "<br>" shows no letter (one in code is text)
     const br = code ? null : /^<br\s*\/?>/i.exec(src.slice(i, i + 6));

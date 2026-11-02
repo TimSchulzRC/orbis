@@ -124,3 +124,8 @@ test("a <br> in code is text; a heading right after a table is no row of it", ()
   expect(sourceOffset("\\`a<br>b", "`ab", 3)).toBe(8);
   expect(plainText("a | b\n--- | ---\n1 | 2\n# Weiter a | b")).toBe("a · b 1 · 2 Weiter a | b");
 });
+
+test("a \\ before a letter stays a letter; a single ` in `` code is text", () => {
+  expect(sourceOffset("C:\\Daten x", "C:\\Daten x", 8)).toBe(8);
+  expect(sourceOffset("``a`b`` x", "a`b x", 3)).toBe(5);
+});
