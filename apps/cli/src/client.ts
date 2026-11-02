@@ -101,7 +101,7 @@ export class Client {
   async tree(under: string): Promise<Tree> {
     const res = await this.fetch(`/api/items?under=${encodeURIComponent(under)}`, { headers: this.headers(), retry: true });
     if (res.status === 404) throw new CliError(`${await res.text()}`);
-    if (!res.ok) throw new CliError(`Listing "${under}" failed: HTTP ${res.status} ${await res.text()}. Is the server older than this CLI?`);
+    if (!res.ok) throw new CliError(`Listing "${under}" failed: HTTP ${res.status} ${await res.text()}.`);
     return (await res.json()) as Tree;
   }
 
