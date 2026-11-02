@@ -25,6 +25,7 @@ The model:
 Values are read tolerantly: a status as option name or group (open, active, done) in German or English, also synonyms like "in Arbeit" or "fertig"; dates as 2026-10-30, 30.10.2026, 10/30/2026, today/heute, tomorrow/morgen, a weekday or +3d; type names in singular or plural. "blocked" is not a status: set a property that holds it up (blocks: true in its type, e.g. "Blockiert durch" or "Wartet auf"). What can't be read is rejected with the reason – nothing is guessed.
 
 How to work:
+- At the start of a session: call \`activity\` with since = the cursor you got at the end of your last session (keep it in your notes), or an ISO time, and under = the project you work on. It shows what changed since then – especially what people changed by hand in the app (by: "people") – with property changes and text diffs. Use \`history\` for a whole text diff or an older version. Note the new cursor for next time.
 - For questions: \`query\` (structured) or \`search\` (full text), then \`get\` for details. Answer from the data and cite titles.
 - When the user reports progress ("X: mapping done, review on Friday"): find the item, post \`add_update\` on the item whose type has updates (optionally with a status), tick off or change statuses with \`update\` (properties: {"Status": "…"}), create follow-ups with \`create\` using the type from the item's main action and parents=[the item], with the due date property if the type has one.
 - New things: \`create\` with a type if one fits (read its description), otherwise without type (it lands in the inbox, which is fine). Use [[Title]] links to existing items (search first to reuse exact titles).
@@ -204,8 +205,33 @@ function buildMcpServer(store: Store, origin: string, blobs?: Blobs) {
   );
   server.registerTool(
     "activity",
-    { title: "Activity", description: "What changed recently and who changed it (a person, an agent working for one, an import).", inputSchema: { days: z.number().optional(), ref: z.string().optional(), limit: z.number().int().max(200).optional() }, annotations: ro },
-    wrap((a) => ops.activity(a)),
+    {
+      title: "Activity",
+      description:
+        'What changed and who changed it (a person in the app, an agent working for one, an import): property changes with names and from → to, posted updates, and text changes as diffs (long ones cut – the history tool shows all). With since (the cursor from your last call, an entry id or an ISO time) you get only what changed after it, oldest first, and a new cursor. under = an item and everything below it ("part of"); ref = just one item; by = "people", "agents", "others" (anyone but you), or a name ("Tim", "claude-code"); several with commas.',
+      inputSchema: {
+        since: z.string().optional().describe("the cursor from your last activity call, an entry id, or an ISO time (2026-11-01T08:00)"),
+        days: z.number().optional().describe("without since: how many days back (default 7)"),
+        under: z.string().optional().describe("an item (title or id): it and everything below it"),
+        ref: z.string().optional().describe("only this item"),
+        by: z.string().optional().describe('"people", "agents", "others", "imports" or a name; several with commas'),
+        limit: z.number().int().min(1).max(200).optional(),
+        diff: z.boolean().optional().describe("text changes as diffs (default true)"),
+      },
+      annotations: ro,
+    },
+    wrap((a) => ops.activity(a, origin)),
+  );
+  server.registerTool(
+    "history",
+    {
+      title: "History",
+      description:
+        "The kept versions of an item's text (every editing session is one version, with time and who). Without more: the list. version = one version's full text. from (0 = empty) and to (default: the text now) = a unified diff between two versions. To go back to a version, update the body with its text.",
+      inputSchema: { ref: z.string(), version: z.number().int().min(1).optional(), from: z.number().int().min(0).optional(), to: z.number().int().min(1).optional() },
+      annotations: ro,
+    },
+    wrap((a) => ops.history(a.ref, a)),
   );
 
   server.registerPrompt("process_inbox", { title: "Process the inbox", description: "Go through the inbox and suggest a type and a place for each item." }, () =>

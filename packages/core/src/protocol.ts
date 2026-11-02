@@ -42,6 +42,8 @@ export interface FieldChange {
   field: string;
   from?: unknown;
   to?: unknown;
+  /** a body change whose text versions are kept: GET /api/history?event=<id> shows the diff */
+  diff?: boolean;
 }
 
 export interface ActivityEvent {

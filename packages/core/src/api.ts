@@ -138,3 +138,40 @@ export interface UndoResult {
   trashed: string[]; // documents the step had created
   kept: { doc: string; field: string }[]; // changed again later: newer value kept
 }
+
+/** One kept version of an item's text (GET /w/<id>/api/history?doc=<doc>). */
+export interface TextVersion {
+  id: number;
+  /** its number among the item's versions, from 1 (oldest) */
+  n: number;
+  ts: number;
+  /** who made it ("" for the text an item had before versions were kept) */
+  origin: string;
+  step?: string;
+  /** the activity entry it belongs to */
+  event?: number;
+  /** the text the item had before versions were kept: time and author are not known exactly */
+  base: boolean;
+  /** its length in characters */
+  len: number;
+}
+
+/** GET /w/<id>/api/history?doc=<doc> */
+export interface HistoryList {
+  versions: TextVersion[];
+}
+
+/** GET /w/<id>/api/history?version=<id> */
+export interface VersionText {
+  text: string;
+}
+
+/** GET /w/<id>/api/history?event=<id>: what an activity entry did to the text. */
+export interface EventText {
+  doc: string;
+  before: string;
+  after: string;
+  /** the numbers of the versions compared (no `from`: the text was empty before) */
+  from?: number;
+  to: number;
+}

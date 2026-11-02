@@ -108,8 +108,20 @@ test("a workspace is only open to its members – sync, files, activity, MCP", a
   expect((await call(cw.id, carla.token)).status).toBe(401); // a session is no MCP token
   // what the agent changes names it and the member whose token it uses
   await mcpTool(bare, token, "create", { items: [{ title: "Vom Agenten" }] }, `/w/${cw.id}/mcp`);
-  const events = (await get(bare, `/w/${cw.id}/api/activity?limit=5`, carla.token).then((r) => r.json())) as { origin: string; title: string }[];
+  const events = (await get(bare, `/w/${cw.id}/api/activity?limit=5`, carla.token).then((r) => r.json())) as { origin: string; title: string; doc: string }[];
   expect(events.find((e) => e.title === "Vom Agenten")!.origin).toBe(`agent:mcp;u=${carla.user.id};n=carla`);
+  // the versions of a text: for members only, the list, one version, what an entry changed
+  await mcpTool(bare, token, "update", { ref: "Vom Agenten", body: "Erste Fassung" }, `/w/${cw.id}/mcp`);
+  await mcpTool(bare, token, "update", { ref: "Vom Agenten", body: "Zweite Fassung" }, `/w/${cw.id}/mcp`);
+  const doc = events.find((e) => e.title === "Vom Agenten")!.doc;
+  expect((await get(bare, `/w/${cw.id}/api/history?doc=${doc}`, dan.token)).status).toBe(403);
+  const { versions } = await get(bare, `/w/${cw.id}/api/history?doc=${doc}`, carla.token).then((r) => r.json());
+  expect(versions.map((v: { n: number; len: number }) => [v.n, v.len])).toEqual([[1, 13], [2, 14]]);
+  expect(await get(bare, `/w/${cw.id}/api/history?doc=${doc}&version=${versions[0].id}`, carla.token).then((r) => r.json())).toEqual({ text: "Erste Fassung" });
+  expect((await get(bare, `/w/${cw.id}/api/history?doc=other&version=${versions[0].id}`, carla.token)).status).toBe(404);
+  const latest = (await get(bare, `/w/${cw.id}/api/activity?doc=${doc}&limit=1`, carla.token).then((r) => r.json()))[0];
+  expect(latest.changes.find((c: { field: string }) => c.field === "body")).toMatchObject({ diff: true });
+  expect(await get(bare, `/w/${cw.id}/api/history?event=${latest.id}`, carla.token).then((r) => r.json())).toEqual({ doc, before: "Erste Fassung", after: "Zweite Fassung", from: 1, to: 2 });
 });
 
 test("the sign-in only from the server's own page; other sites get no CORS answer", async () => {
