@@ -10,7 +10,7 @@ import type { AccountInfo, InviteCode, InviteInfo, InviteLink, McpConnect, Ok, R
 import { type Conn, Workspace, parseClientMsg } from "./workspace";
 import { firstName, personOrigin } from "@obtion/core/origin";
 import { type Lang, LANGS, acceptLang, translate } from "@obtion/core/i18n";
-import { setUp } from "./importers";
+import { setUp } from "./setup";
 import { allowedHosts } from "./trust";
 import { DATA, MAX_WS_MESSAGE, PORT } from "./config";
 import { body, fail, json } from "./http";

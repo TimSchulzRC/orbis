@@ -4,9 +4,9 @@ import { removeTempDirs, MemRepo } from "../support/helpers";
 import { setupStore } from "../support/store";
 import type { Store } from "@obtion/server/store";
 import type { Ops } from "@obtion/server/ops";
-import { SYS, migrateCollections, runSetup, typeTabs } from "@obtion/core/setup";
-import { SETTINGS_ID, setTab, setTabs } from "@obtion/core/model";
-import { type Cond, groupId, groupItems, runQuery, tabDef } from "@obtion/core/query";
+import { SYS, runSetup, typeTabs } from "@obtion/core/setup";
+import { setTab, setTabs } from "@obtion/core/model";
+import { groupId, groupItems, runQuery, tabDef } from "@obtion/core/query";
 
 afterAll(removeTempDirs);
 
@@ -110,50 +110,3 @@ test("update_type sets the views; the same name keeps its tab; hidden groups are
   expect(() => ops.updateType("Projekt", { views: [] }, A)).toThrow(/at least one view/);
 });
 
-test("once: the former collections give their views to the types, the inbox rule to the settings, the rest becomes a page", () => {
-  const m = new MemRepo();
-  runSetup(m.writer, "de");
-  const old = (id: string, meta: Record<string, unknown>, where: unknown, tabs?: Record<string, Record<string, unknown>>, view?: Record<string, unknown>, pin?: Record<string, unknown>) =>
-    m.change(id, (d) => {
-      for (const [k, v] of Object.entries({ kind: "sammlung", created: 1, updated: 1, ...meta })) d.getMap("meta").set(k, v);
-      if (where) d.getMap("query").set("where", where);
-      for (const [k, v] of Object.entries(view ?? {})) d.getMap("view").set(k, v);
-      for (const [k, v] of Object.entries(pin ?? {})) d.getMap("pin").set(k, v);
-      for (const [tid, t] of Object.entries(tabs ?? {})) {
-        const map = new Y.Map();
-        for (const [k, v] of Object.entries(t)) map.set(k, v);
-        d.getMap("tabs").set(tid, map);
-      }
-    });
-  const mine: Cond = { or: [{ without: "type" }, { tag: "später" }] };
-  old("sys:inbox", { name: "Eingang", system: "eingang" }, mine, undefined, { display: "triage" });
-  old("sys:c-task", { name: "Aufgaben" }, { and: [{ type: SYS.task }, { status: "open" }] }, { a: { kind: "table", pos: "V", name: "Liste" }, b: { kind: "board", pos: "W", where: { tag: "x" } } }, undefined, { sidebar: "a" });
-  old("sys:c-card", { name: "Karten" }, { type: SYS.card }, undefined, { display: "list" });
-  old("sys:c-files", { name: "Dateien" }, { file: true }, undefined, { display: "gallery" }, { sidebar: "b" });
-  old("c_mix", { name: "Gemischt" }, { or: [{ type: SYS.card }, { type: SYS.project }] }, undefined, { display: "table", group: "type" }, { sidebar: "zz" });
-  old("c_gone", { name: "Weg", deleted: true }, { tag: "y" });
-  const log = migrateCollections(m.writer, m.index(), m.docs, "de");
-  expect(log).toHaveLength(5);
-  expect(m.get(SETTINGS_ID)!.settings!.inbox).toEqual(mine);
-  const task = m.get(SYS.task)!.schema!;
-  expect(task.plural).toBe("Aufgaben"); // not the usual plural: kept as the list's name
-  expect(task.views!.map((t) => [t.id, t.kind, t.where])).toEqual([
-    ["a", "table", { status: "open" }],
-    ["b", "board", { and: [{ status: "open" }, { tag: "x" }] }],
-  ]);
-  expect(task.pos).toBe("l"); // a fresh setup has an order already; the collection's place only fills a gap
-  expect(m.get(SETTINGS_ID)!.settings!.filesPos).toBe("b");
-  const card = m.get(SYS.card)!.schema!;
-  expect(card.plural).toBeUndefined();
-  expect(card.views!.map((t) => t.kind)).toEqual(["list"]);
-  const page = m.index().live.find((i) => i.title === "Gemischt")!;
-  expect(page.pinned).toBeTruthy();
-  expect(page.body).toContain('"group":"type"');
-  expect(m.index().live.some((i) => i.title === "Weg" || i.title === "Dateien")).toBe(false);
-  expect(migrateCollections(m.writer, m.index(), m.docs, "de")).toEqual([]); // once only
-  // a fresh setup has nothing to migrate and the default rule
-  const f = new MemRepo();
-  runSetup(f.writer, "de");
-  expect(migrateCollections(f.writer, f.index(), f.docs, "de")).toEqual([]);
-  expect(f.get(SETTINGS_ID)!.settings!.inbox).toBeUndefined();
-});

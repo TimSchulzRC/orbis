@@ -3,7 +3,7 @@ import { removeTempDirs, tempDir } from "../support/helpers";
 import { Store as ServerStore } from "@obtion/server/store";
 import { rpc as storeRpc, setupStore, tool as storeTool } from "../support/store";
 import type { Store } from "@obtion/server/store";
-import { storeWriter } from "@obtion/server/importers";
+import { storeWriter } from "@obtion/server/setup";
 import { deleteType } from "@obtion/core/typeops";
 import { versionOf } from "@obtion/server/ops";
 

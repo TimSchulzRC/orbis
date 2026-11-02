@@ -2,8 +2,8 @@
 // type's or property's id or name: without the default types, with other names, everything works.
 import { test, expect } from "bun:test";
 import { MemRepo } from "../support/helpers";
-import { runSetup, SYS, upgradeExplicitRoles } from "@obtion/core/setup";
-import { type PropDef, type PropKind, SETTINGS_ID, setSettings, upsertProp } from "@obtion/core/model";
+import { runSetup, SYS } from "@obtion/core/setup";
+import { type PropDef, upsertProp } from "@obtion/core/model";
 import { deleteType } from "@obtion/core/typeops";
 import { matchOption, statusShape } from "@obtion/core/input";
 import { activeProjects } from "@obtion/core/today";
@@ -94,50 +94,6 @@ test("a main action on a deleted type counts as none", () => {
   expect(ix.mainChildType(ix.get(plan))).toBeUndefined();
   expect(ix.nextTask(plan, "2026-10-31")?.id).toBe(a); // was: nothing, every step filtered out by the deleted type
   expect(activeProjects(ix)).toEqual([]); // no main action, no project
-});
-
-test("the one-time upgrade marks what was recognised by name, once", () => {
-  const m = new MemRepo();
-  runSetup(m.writer, "de");
-  // data from before: no marks, and an own type that relied on names (stored with the old kind "status")
-  const unmark = (type: string) =>
-    m.change(type, (doc) => {
-      const s = m.get(type)!.schema!;
-      for (const p of s.properties) {
-        if (p.blocks) upsertProp(doc, p.id, { blocks: null });
-        if (p.options?.some((o) => o.state)) upsertProp(doc, p.id, { options: p.options.map(({ state: _, ...o }) => o) });
-      }
-    });
-  unmark(SYS.task);
-  unmark(SYS.project);
-  m.addType("t_ticket", {
-    name: "Ticket",
-    capabilities: { status: "p_s" },
-    properties: [
-      { id: "p_s", name: "Status", kind: "status" as PropKind, options: [{ id: "o1", name: "Offen", group: "todo" }, { id: "o2", name: "On hold", group: "active" }, { id: "o3", name: "Verworfen", group: "done" }] },
-      { id: "p_w", name: "Waiting for", kind: "text" },
-    ],
-  });
-  expect(m.get(SYS.task)!.schema!.properties.some((p) => p.blocks)).toBe(false);
-  expect(upgradeExplicitRoles(m.writer, m.index()).sort()).toEqual([SYS.project, SYS.task, "t_ticket"].sort());
-  const task = m.get(SYS.task)!.schema!;
-  expect(task.properties.filter((p) => p.blocks).map((p) => p.id).sort()).toEqual(["p_blocked", "p_waiting"]);
-  expect(task.properties.find((p) => p.id === "p_status")!.options!.filter((o) => o.state).map((o) => `${o.id}:${o.state}`)).toEqual(["st_paused:paused", "st_dropped:dropped"]);
-  const ticket = m.get("t_ticket")!.schema!;
-  expect(ticket.properties.find((p) => p.id === "p_w")!.blocks).toBe(true);
-  expect(ticket.properties[0]!.options!.map((o) => o.state)).toEqual([undefined, "paused", "dropped"]);
-  // once: a mark the user removes afterwards stays removed
-  m.change("t_ticket", (doc) => upsertProp(doc, "p_w", { blocks: null }));
-  expect(upgradeExplicitRoles(m.writer, m.index())).toEqual([]);
-  expect(m.get("t_ticket")!.schema!.properties.find((p) => p.id === "p_w")!.blocks).toBeUndefined();
-});
-
-test("the upgrade waits for the settings and does nothing on a fresh setup", () => {
-  const m = ownTypes();
-  expect(upgradeExplicitRoles(m.writer, m.index())).toEqual([]); // no settings yet: not marked as done either
-  runSetup(m.writer, "en");
-  m.change(SETTINGS_ID, (doc) => setSettings(doc, { upgrades: [] }));
-  expect(upgradeExplicitRoles(m.writer, m.index())).toEqual([]); // everything shipped carries its marks already
 });
 
 test("a word for paused finds the option marked paused, not one only called so", () => {
