@@ -31,8 +31,9 @@ How to work:
 - New things: \`create\` with a type if one fits (read its description), otherwise without type (it lands in the inbox, which is fine). Use [[Title]] links to existing items (search first to reuse exact titles).
 - The inbox: you do not sort it yourself. Use \`suggest\` to propose a type and place for inbox items; the user accepts with one click.
 - Precise edits: \`update\` with old_text/new_text; property values by property name; options by name.
+- Others edit at the same time (the user in the app, other agents). Change bodies in place: old_text/new_text, or body with body_mode "append"/"prepend" – these keep what others wrote. Replacing a whole body needs base_version: the version \`get\` shows (writes answer with the new one). If the item changed since, nothing changes and the answer shows who changed what – get it again, merge, retry. Titles, properties, tags: the last write wins unless you pass base_version.
 - New use cases need no code: \`define_type\` / \`update_type\` (properties, capabilities, views). Tag ↔ type conversions are previewed with \`convert\`; the user runs them in the app.
-- Answers list one line per entry: title [id] · type · status · due · path · ⚠ blocked by / waiting for. A writing call is all or nothing: "Nothing changed" means no part of it was applied – fix the reason and call again. Read the Hints after a write (unresolved links, duplicate titles, open items below something done …).
+- Answers list one line per entry: title [id] · type · status · due · path · ⚠ blocked by / waiting for; after a write it ends with · version <hash> (its base_version from now on). A writing call is all or nothing: "Nothing changed" means no part of it was applied – fix the reason and call again. Read the Hints after a write (unresolved links, duplicate titles, open items below something done …).
 - Link exactly with [[id|Label]], always for titles with # | [ ] ^. Never link an item to itself.
 - Never delete unless asked; deletes go to the trash. Today is in \`schema\`. Reply in the language of the user's message.`;
 
@@ -90,7 +91,7 @@ function buildMcpServer(store: Store, origin: string, blobs?: Blobs) {
       return `${head}\n${ops.lines(r.items, r.base)}${more}`;
     }),
   );
-  server.registerTool("get", { title: "Get", description: "One item with its properties, place, children, links, backlinks, updates and body. Files include facts and extracted text.", inputSchema: { ref: z.string(), include_body: z.boolean().optional() }, annotations: ro }, wrap((a) => ops.get(a.ref, a.include_body ?? true)));
+  server.registerTool("get", { title: "Get", description: "One item with its version (a hash of its content, for base_version – not the numbered text versions of `history`), properties, place, children, links, backlinks, updates and body. Files include facts and extracted text. Pass version as base_version to update when you replace the body.", inputSchema: { ref: z.string(), include_body: z.boolean().optional() }, annotations: ro }, wrap((a) => ops.get(a.ref, a.include_body ?? true)));
   server.registerTool("search", { title: "Search", description: "Full text over titles, tags, bodies, properties and PDF text.", inputSchema: { query: z.string(), limit: z.number().int().min(1).max(50).optional() }, annotations: ro }, wrap((a) => {
     const hits = ops.search(a.query, a.limit);
     return hits.length ? hits.map((h) => `- ${ops.line(h.item)}${h.snippet ? ` — “${h.snippet}”` : ""}`).join("\n") : "Nothing found.";
@@ -103,24 +104,24 @@ function buildMcpServer(store: Store, origin: string, blobs?: Blobs) {
       description: "Create informations. type is a type name (see schema) or omitted; parents (titles/ids) place them; properties by name (only those of the type). Without type and parent the item lands in the inbox.",
       inputSchema: { items: z.array(createInput).min(1) },
     },
-    write((a) => `Created:\n${ops.lines(a.items.map((x) => ops.create(x, origin)))}`),
+    write((a) => `Created:\n${ops.written(a.items.map((x) => ops.create(x, origin)))}`),
   );
   server.registerTool(
     "update",
     {
       title: "Update",
-      description: "Change one item: title, type (name or null), properties by name (null clears), free_properties_remove, tags, refs, body (old_text/new_text for precise edits, or body + body_mode replace|append|prepend). Renaming rewrites [[links]].",
+      description: "Change one item: title, type (name or null), properties by name (null clears), free_properties_remove, tags, refs, body. Body: prefer old_text/new_text or body_mode append|prepend; replacing the whole body (body without body_mode, or replace) needs base_version from get, and a stale one is rejected with what changed since. Renaming rewrites [[links]]. The answer shows the new version.",
       inputSchema: updateInput.shape,
     },
     write((a) => {
       const { ref, ...rest } = a;
-      return `Updated:\n${ops.lines([ops.update(ref, rest, origin)])}`;
+      return `Updated:\n${ops.written([ops.update(ref, rest, origin)])}`;
     }),
   );
   server.registerTool(
     "set_status",
     { title: "Set status", description: "Set the status of several items at once: a status group (done, active, open) or an option name, in German or English. All or nothing.", inputSchema: { refs: z.array(z.string()).min(1), status: z.string() } },
-    write((a) => `Status set:\n${ops.lines(ops.setStatusGroup(a.refs, a.status, origin))}`),
+    write((a) => `Status set:\n${ops.written(ops.setStatusGroup(a.refs, a.status, origin))}`),
   );
   server.registerTool(
     "place",
@@ -133,7 +134,7 @@ function buildMcpServer(store: Store, origin: string, blobs?: Blobs) {
   server.registerTool(
     "add_update",
     { title: "Add update", description: "Dated progress note on an item whose type has updates, optionally changing its status at the same time.", inputSchema: { ref: z.string(), text: z.string(), status: z.string().optional() } },
-    write((a) => `Update posted:\n${ops.lines([ops.addUpdate(a.ref, a.text, a.status, agent, origin)])}`),
+    write((a) => `Update posted:\n${ops.written([ops.addUpdate(a.ref, a.text, a.status, agent, origin)])}`),
   );
   server.registerTool(
     "suggest",

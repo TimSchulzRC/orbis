@@ -61,6 +61,7 @@ import { type Blobs, sha256 } from "./blobs";
 import { MAX_ATTACH } from "./config";
 import type { AttachInput, CapInput, ConvertInput, CreateInput, DefineTypeInput, PlaceInput, PropInput, SuggestInput, UpdateInput, UpdateTypeInput, ViewInput } from "./schemas";
 import { originText, parseOrigin } from "@obtion/core/origin";
+import { createHash } from "node:crypto";
 import { textDiff, unifiedDiff } from "@obtion/core/diff";
 import type { ActivityEvent, FieldChange } from "@obtion/core/protocol";
 import type { TextVersion } from "@obtion/core/api";
@@ -117,6 +118,20 @@ export function byFilter(by: string, me: string): (origin: string) => boolean {
 }
 
 export class OpError extends Error {}
+
+/** Objects with sorted keys, so the same content always serializes the same way. */
+const canonical = (x: unknown): unknown =>
+  Array.isArray(x) ? x.map(canonical) : x && typeof x === "object" ? Object.fromEntries(Object.keys(x).sort().map((k) => [k, canonical((x as Record<string, unknown>)[k])])) : x;
+
+/**
+ * Version of what `update` can overwrite: title, type, body, properties, relations, tags, refs.
+ * Places, pins, dated updates and timestamps are left out, so moving an item does not make a read
+ * copy stale. `update` takes it as base_version.
+ */
+export function versionOf(i: Item): string {
+  const content = canonical([i.title, i.type, i.body, i.props, i.rels, i.extra, i.tags, i.refs]);
+  return createHash("sha256").update(JSON.stringify(content)).digest("hex").slice(0, 12);
+}
 
 export const QUERY_HELP =
   "type:Name #tag under:[[X]] in:[[X]] linked:[[X]] linked:under:[[X]] status:open|new|active|done (open = new or active) property:value property<value property:empty without:type|parents|children|usage pinned inbox blocked dormant (it or something above it paused or done) file filetype:image|pdf; space=AND, |=OR, -=NOT, (…); sort:field group:path|status|type limit:n. German keywords work too.";
@@ -368,6 +383,11 @@ export class Ops {
     return items.map((i) => "- " + this.line(i, base)).join("\n");
   }
 
+  /** The answer of a writing tool: one line per entry, with its version (base_version for the next update). */
+  written(items: Item[]): string {
+    return items.map((i) => `- ${this.line(i)} · version ${versionOf(i)}`).join("\n");
+  }
+
   /**
    * All or nothing, plus hints: unresolved [[links]], duplicate or unlinkable titles, done with
    * open items below, newly unblocked items.
@@ -430,7 +450,7 @@ export class Ops {
   get(ref: string, includeBody = true) {
     const i = this.resolve(ref);
     const ix = this.store.index();
-    const out: Record<string, unknown> = { ...this.brief(i) };
+    const out: Record<string, unknown> = { ...this.brief(i), version: versionOf(i) };
     delete out.path;
     const parents = ix.parentsOf(i.id);
     if (parents.length) out.part_of = parents.map((p) => `${ix.get(p)?.title}${p === ix.home(i.id) && parents.length > 1 ? " (home)" : ""}`);
@@ -870,6 +890,7 @@ export class Ops {
     const newType = input.type === undefined ? undefined : input.type ? this.resolveType(input.type) : null;
     const schema = newType === undefined ? ix.schemaOf(item) : newType?.schema;
     if (input.title !== undefined && !input.title.trim()) throw new OpError("Title cannot be empty.");
+    this.checkVersion(item, input);
     let body: string | undefined;
     if (input.old_text !== undefined && input.body !== undefined) throw new OpError("Use either old_text/new_text or body.");
     if (input.old_text !== undefined) {
@@ -907,6 +928,41 @@ export class Ops {
     if (ownsTitle && input.title && input.title.trim() !== oldTitle) this.renameLinks(oldTitle, input.title.trim(), origin);
     this.store.flush();
     return this.store.records.get(item.id)!;
+  }
+
+  /**
+   * Protection against lost updates: replacing the whole body needs the version the agent read
+   * (base_version). Given with any other change, base_version is checked as well. A stale one is
+   * rejected with who changed the item, when, and – for a body – the lines that differ.
+   */
+  private checkVersion(item: Item, input: UpdateInput) {
+    const base = input.base_version?.trim();
+    const replaces = input.body !== undefined && (input.body_mode ?? "replace") === "replace";
+    if (!base) {
+      if (replaces)
+        throw new OpError(
+          `Replacing the whole body of "${item.title}" needs base_version, so no one else's edit is lost. Read the item first (get shows its version) and pass it as base_version, or change only a part: old_text/new_text, or body with body_mode "append" or "prepend".`,
+        );
+      return;
+    }
+    const now = versionOf(item);
+    if (base === now) return;
+    const ix = this.store.index();
+    const parts = [`"${item.title}" [${item.id}] changed since you read it (base_version ${base}, now ${now}).`];
+    const events = this.store.events({ doc: item.id, limit: 3 });
+    if (events.length) parts.push(`Last changes:\n${events.map((e) => `- ${new Date(e.ts).toISOString().slice(0, 16)} by ${originText(e.origin)}${e.changes.length ? `: ${this.changeTexts(e).join(", ")}` : ` (${e.kind})`}`).join("\n")}`);
+    if (replaces) {
+      const lines = (s: string) => s.split("\n").map((l) => l.trim()).filter(Boolean);
+      const current = lines(blocksAsText(item.body, this.store.lang(), ix));
+      const yours = lines(input.body!);
+      const excerpt = (xs: string[]) => xs.slice(0, 6).map((l) => `  ${l.length > 160 ? l.slice(0, 159) + "…" : l}`).join("\n") + (xs.length > 6 ? `\n  … ${xs.length - 6} more line(s)` : "");
+      const lost = current.filter((l) => !yours.includes(l));
+      const added = yours.filter((l) => !current.includes(l));
+      if (lost.length) parts.push(`Only in the current body (your replace would drop it):\n${excerpt(lost)}`);
+      if (added.length) parts.push(`Only in your body:\n${excerpt(added)}`);
+    }
+    parts.push(`Get it again, merge your change into what is there now, and pass the new version as base_version – or change only your part with old_text/new_text or body_mode "append".`);
+    throw new OpError(parts.join("\n"));
   }
 
   renameLinks(oldTitle: string, newTitle: string, origin: string) {

@@ -67,10 +67,11 @@ export const updateInput = z.object({
   tags_remove: z.array(z.string()).optional(),
   refs_add: z.array(z.string()).optional(),
   refs_remove: z.array(z.string()).optional(),
-  body: z.string().optional(),
+  body: z.string().optional().describe("with body_mode: replace (the default) needs base_version"),
   body_mode: z.enum(["replace", "append", "prepend"]).optional(),
-  old_text: z.string().optional(),
+  old_text: z.string().optional().describe("exact text in the body to change (must occur once); safe without base_version"),
   new_text: z.string().optional(),
+  base_version: z.string().optional().describe("the version from get or from the last write's answer. Required to replace the whole body; checked with any change when given. Stale: nothing changes, the answer says what changed since"),
 });
 export type UpdateInput = Omit<z.infer<typeof updateInput>, "ref">;
 
