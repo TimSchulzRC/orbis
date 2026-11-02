@@ -128,12 +128,13 @@ const canonical = (x: unknown): unknown =>
   Array.isArray(x) ? x.map(canonical) : x && typeof x === "object" ? Object.fromEntries(Object.keys(x).sort().map((k) => [k, canonical((x as Record<string, unknown>)[k])])) : x;
 
 /**
- * Version of what `update` can overwrite: title, type, body, properties, relations, tags, refs.
+ * Version of what `update` can overwrite: title, type, body, rules for agents, properties, relations,
+ * tags, refs.
  * Places, pins, dated updates and timestamps are left out, so moving an item does not make a read
  * copy stale. `update` takes it as base_version.
  */
 export function versionOf(i: Item): string {
-  const content = canonical([i.title, i.type, i.body, i.props, i.rels, i.extra, i.tags, i.refs]);
+  const content = canonical([i.title, i.type, i.body, i.rules, i.props, i.rels, i.extra, i.tags, i.refs]);
   return createHash("sha256").update(JSON.stringify(content)).digest("hex").slice(0, 12);
 }
 
