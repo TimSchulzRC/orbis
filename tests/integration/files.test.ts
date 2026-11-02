@@ -219,7 +219,7 @@ test("attach: any type, one step with undo; base64 limits point to the HTTP uplo
   expect(attach.description).toContain(`--data-binary @file.xsd "${files()}?name=file.xsd`);
 });
 
-test("files from before are read once when the workspace opens", async () => {
+test("a file whose text was not read yet (e.g. the server stopped) is read when the workspace opens", async () => {
   const dir = tempDir("obtion-backfill-");
   const s = new Store(dir);
   runSetup(storeWriter(s, "system:setup"), "de");
@@ -236,7 +236,7 @@ test("files from before are read once when the workspace opens", async () => {
   try {
     for (let i = 0; i < 100 && !w.store.records.get("alt-1")!.file!.text; i++) await Bun.sleep(50);
     expect(w.store.records.get("alt-1")!.file!.text).toBe(content);
-    expect(w.store.records.get("alt-1")!.file!.extracted).toStartWith("1:");
+    expect(w.store.records.get("alt-1")!.file!.extracted).toBe(sha256(content).slice(0, 16));
     expect(w.blobs.needsWork(w.store.records.get("alt-1")!)).toBe(false);
   } finally {
     w.shut();
