@@ -145,13 +145,11 @@ export interface TextVersion {
   /** its number among the item's versions, from 1 (oldest) */
   n: number;
   ts: number;
-  /** who made it ("" for the text an item had before versions were kept) */
+  /** who made it */
   origin: string;
   step?: string;
   /** the activity entry it belongs to */
   event?: number;
-  /** the text the item had before versions were kept: time and author are not known exactly */
-  base: boolean;
   /** its length in characters */
   len: number;
 }

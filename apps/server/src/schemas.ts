@@ -17,10 +17,7 @@ export type ViewInput = z.infer<typeof viewInput>;
 
 export const propInput = z.object({
   name: z.string().optional(),
-  kind: z
-    .enum([...PROP_KINDS, "status", "multiselect"])
-    .optional()
-    .describe('A select is the type\'s status when capabilities.status names it; "status" and "multiselect" still work as shorthands'),
+  kind: z.enum(PROP_KINDS).optional().describe("A select is the type's status when capabilities.status names it"),
   description: z.string().optional(),
   options: z.array(z.string()).optional().describe('for select: names; options of the status as "Name (todo|active|done)", a paused one as "Name (active, paused)", a dropped one as "Name (done, dropped)"'),
   multiple: z.boolean().optional().describe("relation: several targets; select: several options"),

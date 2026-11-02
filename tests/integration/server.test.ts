@@ -219,7 +219,7 @@ async function connect(base: string, workspace: string, token: string) {
   return { ws, msgs, until };
 }
 
-test("sync per workspace: members get each other's changes; an app from before areas means the personal area", async () => {
+test("sync per workspace: members get each other's changes", async () => {
   const fay = await signUp(bare, "fay@example.org");
   const w = await newWorkspace(bare, fay.token);
   const { code } = await post(bare, `/api/workspaces/${w.id}/invites`, {}, fay.token).then((r) => r.json());
@@ -227,7 +227,7 @@ test("sync per workspace: members get each other's changes; an app from before a
   const a = await connect(bare, w.id, fay.token);
   const b = await connect(bare, w.id, gus.token);
   a.ws.send(JSON.stringify({ t: "hello", area: PERSONAL, since: 0, client: "a", device: "a" }));
-  b.ws.send(JSON.stringify({ t: "hello", since: 0, client: "b" })); // no area: from before
+  b.ws.send(JSON.stringify({ t: "hello", area: PERSONAL, since: 0, client: "b" }));
   expect(await a.until((m) => m.t === "welcome")).toMatchObject({ area: PERSONAL, format: FORMAT });
   expect(await b.until((m) => m.t === "welcome")).toMatchObject({ area: PERSONAL });
   await b.until((m) => m.t === "updates" && !!m.done);

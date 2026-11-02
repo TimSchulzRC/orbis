@@ -19,7 +19,7 @@ const TEXTS = ["Ziel\nRechnungen senden\n", "Ziel\nRechnungen senden und empfang
 
 /** The server's history API for one item with three versions (by an agent, then by Tim). */
 function fakeServer(doc: string) {
-  const versions: TextVersion[] = TEXTS.map((t, i) => ({ id: 10 + i, n: i + 1, ts: Date.now() - (3 - i) * 60_000, origin: i ? "web:Tim;u=u1" : "agent:claude-code;u=u1;n=Tim", base: false, len: t.length }));
+  const versions: TextVersion[] = TEXTS.map((t, i) => ({ id: 10 + i, n: i + 1, ts: Date.now() - (3 - i) * 60_000, origin: i ? "web:Tim;u=u1" : "agent:claude-code;u=u1;n=Tim", len: t.length }));
   return vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
     const url = new URL(String(input), location.href);
     if (url.pathname !== "/w/w1/api/history" || url.searchParams.get("doc") !== doc) return new Response("{}", { status: 404 });

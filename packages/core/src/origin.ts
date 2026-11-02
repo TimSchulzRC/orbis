@@ -3,8 +3,7 @@
 //   "web:Tim;u=<account id>;d=Mac-x3f9"     a person in the app, on a device
 //   "agent:claude-code;u=<account id>;n=Tim" an agent working with that person's access
 //   "import:notion", "system:clock"          everything else
-// Entries from before: "web:Tim@Mac-x3f9", "web:Tim", "web:Mac-x3f9" (written by the app),
-// "agent:claude" (no person). The device is recorded for later queries, never shown.
+// An agent without a person is "agent:claude". The device is recorded for later queries, never shown.
 
 export interface Person {
   id: string;
@@ -16,7 +15,7 @@ export interface Actor {
   kind: string;
   /** web: the person's name; agent: the agent id ("claude-code"); import: the source */
   name: string;
-  /** the account behind it; id is missing in entries from before */
+  /** the account behind it */
   person?: { id?: string; name: string };
   device?: string;
 }
@@ -36,15 +35,13 @@ export function parseOrigin(origin: string): Actor {
   const [head = "", ...parts] = origin.split(",")[0]!.trim().split(";");
   const colon = head.indexOf(":");
   const kind = colon < 0 ? "" : head.slice(0, colon);
-  let name = colon < 0 ? head : head.slice(colon + 1);
+  const name = colon < 0 ? head : head.slice(colon + 1);
   const kv: Record<string, string> = {};
   for (const p of parts) {
     const eq = p.indexOf("=");
     if (eq > 0) kv[p.slice(0, eq)] = p.slice(eq + 1);
   }
-  let device = kv.d;
-  const at = name.indexOf("@");
-  if (kind === "web" && !kv.u && at >= 0) [name, device] = [name.slice(0, at), name.slice(at + 1)];
+  const device = kv.d;
   const person = kind === "web" ? { id: kv.u, name } : kv.n ? { id: kv.u, name: kv.n } : undefined;
   return { kind, name, person, device };
 }

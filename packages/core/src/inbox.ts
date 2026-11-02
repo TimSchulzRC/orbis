@@ -1,7 +1,6 @@
 // Inbox membership is always checked against this rule (settings.inbox or the default), never
 // against one rebuilt elsewhere. Pinned and "later" are the entry's own state and win over any
-// rule, so "Anheften" and "Morgen wieder" work whatever the user's rule says. An old "kept"
-// flag from before 01.11. is ignored.
+// rule, so "Anheften" and "Morgen wieder" work whatever the user's rule says.
 import { type Item, SETTINGS_ID } from "./model";
 import type { Index } from "./graph";
 import type { Cond } from "./query";

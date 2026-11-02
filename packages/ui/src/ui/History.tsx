@@ -80,7 +80,7 @@ export function HistoryDialog({ item, onClose }: { item: Item; onClose: () => vo
         <div className="flex gap-4 max-md:flex-col">
           <ol aria-label={t("history.versions")} className="flex shrink-0 flex-col gap-0.5 md:max-h-[60vh] md:w-52 md:overflow-y-auto max-md:max-h-48 max-md:overflow-y-auto">
             {[...versions].reverse().map((v) => {
-              const w = v.base ? undefined : who(v.origin, t);
+              const w = who(v.origin, t);
               const delta = v.len - (versions[v.n - 2]?.len ?? 0);
               return (
                 <li key={v.id}>
@@ -95,7 +95,7 @@ export function HistoryDialog({ item, onClose }: { item: Item; onClose: () => vo
                       {v.n === versions.length && item.body === texts[v.id] && <span className="font-normal text-muted-foreground"> · {t("history.current")}</span>}
                     </span>
                     <span className="block text-xs text-muted-foreground" title={fmtDateTime(lang, v.ts)}>
-                      {v.base ? t("history.base") : <RelTime ts={v.ts} />}
+                      <RelTime ts={v.ts} />
                       {w && ` · ${v.origin ? w.label : t("history.unknown")}`}
                       {` · ${delta >= 0 ? "+" : "−"}${t("history.chars", { count: Math.abs(delta) })}`}
                     </span>
@@ -109,7 +109,7 @@ export function HistoryDialog({ item, onClose }: { item: Item; onClose: () => vo
               <div className="mb-3 flex flex-wrap items-center gap-2">
                 <div className="mr-auto text-sm">
                   <span className="font-medium">{t("history.version", { n: shown.n })}</span>
-                  <span className="text-muted-foreground"> · {shown.base ? t("history.baseLong", { date: fmtDateTime(lang, shown.ts) }) : fmtDateTime(lang, shown.ts)}</span>
+                  <span className="text-muted-foreground"> · {fmtDateTime(lang, shown.ts)}</span>
                   {diff && diff.hunks.length > 0 && (
                     <span className="text-muted-foreground">
                       {" · "}

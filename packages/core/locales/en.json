@@ -1080,8 +1080,6 @@
  "history.empty": "No earlier versions yet. From the next change to the text on, Obtion keeps every version.",
  "history.version": "Version {n}",
  "history.current": "current",
- "history.base": "Earlier state",
- "history.baseLong": "state before the history began, last changed {date}",
  "history.unknown": "unknown",
  "history.chars": "{count, plural, one {# character} other {# characters}}",
  "history.compare": "Compare with",

@@ -184,22 +184,20 @@ describe("the inbox", () => {
 });
 
 describe("set aside", () => {
-  test("pinned leaves the inbox, later until its time – whatever the rule says; an old kept does not", () => {
+  test("pinned leaves the inbox, later until its time – whatever the rule says", () => {
     const m = new MemRepo();
     runSetup(m.writer, "de");
     const pinned = m.add({ title: "Gedanke" });
     const later = m.add({ title: "Morgen" });
     const back = m.add({ title: "Wieder da" });
-    const kept = m.add({ title: "Lose behalten" });
     m.change(pinned, (d) => setMeta(d, { pinned: "a0" }));
     m.change(later, (d) => setMeta(d, { later: Date.now() + 60_000 }));
     m.change(back, (d) => setMeta(d, { later: Date.now() - 1 }));
-    m.change(kept, (d) => d.getMap("meta").set("kept", 1)); // from before 01.11.: no place, so back in the inbox
     // a rule that would take them all: set aside still wins
     m.change(SETTINGS_ID, (d) => setSettings(d, { inbox: { or: [{ without: "type" }] } }));
     const ix = m.index();
-    expect(inbox(ix).map((i) => i.title).sort()).toEqual(["Lose behalten", "Wieder da"]);
-    expect(runQuery(parseQuery("eingang", ix).def, { ix }).items.map((i) => i.title).sort()).toEqual(["Lose behalten", "Wieder da"]);
+    expect(inbox(ix).map((i) => i.title).sort()).toEqual(["Wieder da"]);
+    expect(runQuery(parseQuery("eingang", ix).def, { ix }).items.map((i) => i.title).sort()).toEqual(["Wieder da"]);
     expect(setAside(ix.get(later)!, Date.now() + 120_000)).toBe(false);
     // "Morgen wieder" in the panel: what the rule takes and waits, not the pinned one
     expect(laterItems(ix).map((i) => i.title)).toEqual(["Morgen"]);

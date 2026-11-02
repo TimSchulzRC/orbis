@@ -25,12 +25,12 @@ export interface PushItem {
 }
 
 export type ClientMsg =
-  | { t: "hello"; area?: string; since: number; sinceId?: string; device?: string }
-  | { t: "push"; area?: string; items: PushItem[] }
+  | { t: "hello"; area: string; since: number; sinceId?: string; device?: string }
+  | { t: "push"; area: string; items: PushItem[] }
   | { t: "ping" };
 
 export type ServerMsg =
-  | { t: "welcome"; hub: string; area: string; seq: number; format?: number } // hub: the server id (old name, kept on the wire); no format: a server from before format versions
+  | { t: "welcome"; hub: string; area: string; seq: number; format: number } // hub: the server id
   | { t: "denied"; area: string } // an area this device may not sync
   | { t: "updates"; area: string; items: WireUpdate[]; last: number; lastId?: string; initial?: boolean; done?: boolean; reset?: boolean }
   | { t: "ack"; area: string; keys: string[]; last: number; lastId?: string }

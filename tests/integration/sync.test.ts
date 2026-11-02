@@ -1,8 +1,6 @@
 import { test, expect, afterAll } from "bun:test";
 import { docUpdate, tempDir, removeTempDirs } from "../support/helpers";
-import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { Database } from "bun:sqlite";
 import * as Y from "yjs";
 import { Store } from "@obtion/server/store";
 import { PERSONAL as P, initItem } from "@obtion/core/model";
@@ -44,18 +42,11 @@ test("a server restored from an older backup is detected even after another devi
   expect(restored.knowsCursor(P, 0)).toBe(true);
 });
 
-test("log rows keep their ids across restarts; databases from before cursor ids get ids once", () => {
+test("log rows keep their ids across restarts", () => {
   const dir = tmp();
-  mkdirSync(dir, { recursive: true });
-  const old = new Database(join(dir, "obtion.db"));
-  old.exec("CREATE TABLE updates (seq INTEGER PRIMARY KEY AUTOINCREMENT, doc TEXT NOT NULL, data BLOB NOT NULL, origin TEXT NOT NULL, ts INTEGER NOT NULL)");
-  old.query("INSERT INTO updates (doc, data, origin, ts) VALUES (?, ?, ?, ?)").run("a", docUpdate({ id: "a", title: "A" }), "web:x", Date.now());
-  old.close();
-
   const s = new Store(dir);
+  s.applyRemote("a", docUpdate({ id: "a", title: "A" }), "web:x");
   expect(s.seq).toBe(1);
-  expect(s.lastUid).toMatch(/^[0-9a-f]{18}$/);
-  expect(s.records.get("a")?.title).toBe("A");
   s.applyRemote("b", docUpdate({ id: "b", title: "B" }), "web:x");
   const ids = (s.db.query("SELECT uid FROM updates ORDER BY seq").all() as { uid: string }[]).map((r) => r.uid);
   expect(new Set(ids).size).toBe(2);

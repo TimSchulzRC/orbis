@@ -95,7 +95,7 @@ async function check(page: Page, label: string, path: string, errors: string[], 
   for (const e of errors) failures.push(`${label} ${path}: ${e}`);
 }
 
-const ROUTES = ["/", "/#/inbox", "/#/review", "/#/search", "/#/search?q=relaunch", "/#/types", "/#/graph", "/#/activity", "/#/trash", "/#/settings", "/#/workspace", "/#/nope", "/#/i/sys%3Aproject", "/#/i/sys%3Atask", "/#/i/sys%3Acard", "/#/i/ex-type-book", "/#/files", "/#/files?kind=bild", "/#/c/sys%3Ac-project"];
+const ROUTES = ["/", "/#/inbox", "/#/review", "/#/search", "/#/search?q=relaunch", "/#/graph", "/#/activity", "/#/trash", "/#/settings", "/#/nope", "/#/i/sys%3Aproject", "/#/i/sys%3Atask", "/#/i/sys%3Acard", "/#/i/ex-type-book", "/#/files", "/#/files?kind=bild"];
 // one page per kind: overview, article with translation, project, sub-project, task, card, note,
 // inbox item, inbox bundle, course, book, image, PDF, query page, welcome note
 const ITEMS = ["ex-work", "ex-art-de", "ex-relaunch", "ex-design", "ex-t-pages", "ex-k-nf", "ex-n-lecture", "ex-i-podcast", "ex-i-trip", "ex-course", "ex-b-moor", "ex-f-diagram", "ex-f-sheet", "ex-week", "ex-welcome"];
@@ -192,15 +192,6 @@ async function pages(browser: import("playwright").Browser, serverName: string, 
       if (!(await panel.waitFor({ state: "detached", timeout: 3000 }).then(() => true, () => false))) failures.push(`${label}: Back does not close the panel`);
       if (!p.url().includes("/i/ex-relaunch")) failures.push(`${label}: Back with the panel open leaves the page (${p.url()})`);
     }, { phone });
-    // links from before: an inbox entry's page leads into the review at it, a collection to its type's page
-    await check(page, label, "/#/inbox/ex-i-podcast", errors, async (p) => {
-      if (!p.url().includes("/review?at=")) failures.push(`${label}: an old inbox entry link does not lead into the review (${p.url()})`);
-      // the review is the tray's panel, sorting, over Heute
-      else if (!(await p.locator("[data-shelf-panel=sort]").waitFor({ timeout: 3000 }).then(() => true, () => false))) failures.push(`${label}: the review does not open as the tray's panel`);
-    }, { phone });
-    await check(page, label, "/#/c/sys%3Ac-task", errors, async (p) => {
-      if (!p.url().includes("/i/sys:task")) failures.push(`${label}: an old collection link does not lead to the type's page (${p.url()})`);
-    });
   }
   await context.close();
 }
@@ -258,7 +249,8 @@ async function firstWorkspace(browser: import("playwright").Browser, server: Ser
     await own.getByRole("button", { name: "Einstellungen" }).click();
     if (!(await p.getByRole("dialog", { name: "Einstellungen" }).waitFor({ timeout: 3000 }).then(() => true, () => false))) failures.push(`${label}: no way back from a workspace's settings`);
   });
-  await check(page, label, "/#/workspace", errors, async (p) => {
+  await check(page, label, "/", errors, async (p) => {
+    await p.evaluate(() => (location.hash = `#/w/${localStorage.getItem("obtion.active")}/settings`));
     await p.getByRole("button", { name: "Beispiele entfernen …" }).click();
     const dialog = p.getByRole("dialog");
     // nothing was changed yet: every example is chosen
