@@ -145,7 +145,7 @@ export interface FileMeta {
   display?: string; // hash of the display version (images, 1600 px WebP)
   thumb?: string; // hash of the preview (320 px)
   text?: string; // extracted text (PDF, Office, text files, a ZIP's entries)
-  extracted?: string; // the server read the text of this content: "<version>:<hash prefix>"
+  extracted?: string; // the server read the text of this content: its hash prefix
   history?: { hash: string; at: number }[];
 }
 
