@@ -7,6 +7,7 @@ import type { Store } from "@obtion/server/store";
 import { type Ops, versionOf } from "@obtion/server/ops";
 import * as Y from "yjs";
 import { replaceBody, touch } from "@obtion/core/model";
+import { personOrigin } from "@obtion/core/origin";
 
 afterAll(removeTempDirs);
 
@@ -54,7 +55,7 @@ test("an edit in the app makes the agent's copy stale and the answer names who c
   Y.applyUpdate(replica, s.stateOf(id));
   const sv = Y.encodeStateVector(replica);
   replica.transact(() => (replaceBody(replica, "Erste Zeile.\n\nZweite Zeile.\n\nNachtrag aus dem Browser"), touch(replica)));
-  s.applyRemote(id, Y.encodeStateAsUpdate(replica, sv), "web:tim@laptop");
+  s.applyRemote(id, Y.encodeStateAsUpdate(replica, sv), personOrigin({ id: "u-tim", name: "tim" }, "laptop"));
   const r = await tool("update", { ref: id, body: "Ganz neu.", base_version: read });
   expect(r.error).toBe(true);
   expect(r.text).toMatch(/Last changes:\n- \d{4}-\d\d-\d\dT\d\d:\d\d by tim: text: /);
