@@ -72,7 +72,7 @@ Written locally (`--report`, default `obtion-import-<name>-<date>.md`) and as th
 - one row per tracked file: path, item id, status, SHA-256 of the original, SHA-256 in Obtion, and the check: for files the server's hash against the original's, for Markdown the text on the server compared byte for byte with what was meant to be written ("Text Byte für Byte gleich" when no link was rewritten);
 - history, bundle and LFS archive; rewritten and unresolved links; items whose path the repository no longer has.
 
-Statuses: `imported` (new), `updated` (changed in the repo, written), `unchanged`, `conflict` (changed in Obtion, not overwritten), `ignored`, `failed`. Old LFS versions that aren't on the machine are listed as `unavailable`: they would be lost with the repository, so they count as problems too (as does a repository with LFS on a machine without git-lfs). **Exit code 1 when anything is `failed`, `conflict` or `unavailable`**, 0 when everything is there.
+Statuses: `imported` (new), `updated` (changed in the repo, written), `unchanged`, `conflict` (changed in Obtion, not overwritten), `ignored`, `failed`. Old LFS versions that aren't on the machine are listed as `unavailable`: they would be lost with the repository, so they count as problems too (as does a repository that uses or once used LFS, on a machine without git-lfs), and so does a folder that could not be made (e.g. a cycle of `path:` parents). **Exit code 1 when anything is `failed`, `conflict` or `unavailable`**, 0 when everything is there.
 
 ## Re-runs during a transition period
 

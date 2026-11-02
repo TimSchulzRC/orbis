@@ -261,3 +261,25 @@ test("repo changes go in; an edit in Obtion is never overwritten (conflict, exit
   // the same items, no duplicates
   expect((await items("Altes Repo")).filter((i) => i.source === "repo:ablage/kunden/Germany_ACME/STATUS_2026-10-30.md")).toHaveLength(1);
 });
+
+test("folders that can't be made (a cycle of path: parents) make the report incomplete", async () => {
+  const other = join(tempDir("obtion-import-cycle-"), "zyklus");
+  mkdirSync(join(other, "a"), { recursive: true });
+  mkdirSync(join(other, "z"), { recursive: true });
+  writeFileSync(join(other, "a", ".gitkeep"), "");
+  writeFileSync(join(other, "z", ".gitkeep"), "");
+  writeFileSync(
+    join(work, "zyklus.json"),
+    JSON.stringify({
+      rules: [
+        { path: "a", parent: "path:z" },
+        { path: "z", parent: "path:a" },
+      ],
+    }),
+  );
+  const r = await obtion(["import", other, "--into", "Zyklus", "--config", "zyklus.json", "--report", "zyklus.md"]);
+  expect(r.code).toBe(1);
+  const rep = readFileSync(join(work, "zyklus.md"), "utf8");
+  expect(rep).toContain("**Unvollständig: 2 Problem(e)**");
+  expect(rep).toContain("## Ordner nicht angelegt (2)");
+});

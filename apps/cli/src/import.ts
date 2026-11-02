@@ -741,7 +741,10 @@ export async function importRepo(client: Client, folderArg: string, into: string
 
     // old versions of LFS files: their content is not in the bundle
     const hasLfs = Bun.spawnSync(["git", "lfs", "version"], { stdout: "pipe", stderr: "pipe" }).exitCode === 0;
-    const usesLfs = tracked.some((t) => posix.basename(t.path) === ".gitattributes" && existsSync(join(folder, t.path)) && /filter=lfs/.test(readFileSync(join(folder, t.path), "utf8")));
+    // LFS now (a .gitattributes with filter=lfs) or at any time in the history
+    const usesLfs =
+      tracked.some((t) => posix.basename(t.path) === ".gitattributes" && existsSync(join(folder, t.path)) && /filter=lfs/.test(readFileSync(join(folder, t.path), "utf8"))) ||
+      run(folder, ["log", ...refArgs, "-S", "filter=lfs", "--format=%H", "-1", "--", ":(glob)**/.gitattributes"], true).trim() !== "";
     if ((cfg.lfs ?? true) && usesLfs && !hasLfs)
       generated.push({ source: `${key("")}#lfs`, title: "Git-LFS-Archiv", status: "failed", note: "the repository uses Git LFS, but git-lfs isn't installed: older LFS versions can't be archived" });
     if ((cfg.lfs ?? true) && hasLfs) {
@@ -878,8 +881,10 @@ export async function importRepo(client: Client, folderArg: string, into: string
   // 7. the report
   const list = [...rows.values()].sort((a, b) => (a.path < b.path ? -1 : 1));
   const by = (s: Status) => list.filter((r) => r.status === s).length;
+  // folders without a README.md have no row: one that isn't on the server is a problem of its own
+  const lostFolders = dry ? [] : folders.filter((f) => !f.textPath && !now.has(f.source));
   // an old LFS version that isn't archived is lost when the repository goes: that is a problem too
-  const problems = by("failed") + by("conflict") + generated.filter((g) => g.status === "failed" || g.status === "conflict" || g.status === "unavailable").length;
+  const problems = by("failed") + by("conflict") + lostFolders.length + generated.filter((g) => g.status === "failed" || g.status === "conflict" || g.status === "unavailable").length;
   const extRows = new Map<string, { n: number; bytes: number; s: Record<string, number> }>();
   for (const r of list) {
     const e = extRows.get(ext(r.path)) ?? { n: 0, bytes: 0, s: {} };
@@ -925,6 +930,7 @@ export async function importRepo(client: Client, folderArg: string, into: string
     "",
     ...(generated.length ? generated.map((g) => `- ${g.title}: ${g.status}${g.note ? ` (${g.note})` : ""}`) : ["- (keine)"]),
     "",
+    ...(lostFolders.length ? [`## Ordner nicht angelegt (${lostFolders.length})`, "", ...lostFolders.map((f) => `- \`${f.path}/\``), ""] : []),
     `## Umgeschriebene Links (${allRewrites.length})`,
     "",
     "Original → im Text jetzt; damit lässt sich jeder Text zurückverwandeln.",
@@ -965,6 +971,7 @@ export async function importRepo(client: Client, folderArg: string, into: string
     }
   }
   for (const r of list.filter((x) => x.status === "failed" || x.status === "conflict")) console.log(`  ${r.status.padEnd(9)} ${r.path}  (${r.note ?? r.check ?? ""})`);
+  for (const f of lostFolders) console.log(`  failed    ${f.path}/  (folder not created)`);
   for (const g of generated.filter((x) => x.status === "failed" || x.status === "conflict" || x.status === "unavailable")) console.log(`  ${g.status.padEnd(9)} ${g.title}  (${g.note ?? ""})`);
   console.log(
     `${dry ? "Dry run, nothing written: " : ""}${list.length} files: ${by("imported")} new, ${by("updated")} updated, ${by("unchanged")} unchanged, ${by("conflict")} conflict, ${by("ignored")} ignored, ${by("failed")} failed; ${allRewrites.length} links rewritten, ${unresolved.length} unresolved; ${secs} s.${dry ? "" : ` Report: ${reportPath}`}`,
