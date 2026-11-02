@@ -14,6 +14,7 @@ COPY packages/sync/package.json packages/sync/
 COPY packages/ui/package.json packages/ui/
 COPY apps/server/package.json apps/server/
 COPY apps/web/package.json apps/web/
+COPY apps/cli/package.json apps/cli/
 RUN bun install --frozen-lockfile
 COPY . .
 RUN bun run build
@@ -27,6 +28,7 @@ COPY packages/sync/package.json packages/sync/
 COPY packages/ui/package.json packages/ui/
 COPY apps/server/package.json apps/server/
 COPY apps/web/package.json apps/web/
+COPY apps/cli/package.json apps/cli/
 # COPY keeps the modes of the checkout; cloned with a strict umask the server's user could not
 # read its own code ("Module not found"). The dependencies get it here, cached with the install;
 # after the code only the code, so a commit doesn't rewrite all of node_modules.
