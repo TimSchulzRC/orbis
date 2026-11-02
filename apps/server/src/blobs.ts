@@ -1,7 +1,7 @@
 // Content-addressed file store (data/blobs/<sha256>). Images get a preview and a display version,
-// audio and video a duration, every other file its text (extract.ts). A file whose `extracted` mark
-// is missing or stale is read again when the workspace opens. Devices that add images offline make
-// previews themselves; the server only fills gaps.
+// audio and video a duration, every other file its text (extract.ts). A file whose content wasn't
+// read yet (`extracted` missing or for another content, e.g. after a restart) is read when the
+// workspace opens. Devices that add images offline make previews themselves; the server fills gaps.
 import { existsSync, mkdirSync, renameSync, statSync, readdirSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { type FileMeta, type Item, setFileMeta } from "@obtion/core/model";
@@ -138,7 +138,7 @@ export class Blobs {
     if (!f?.hash || !this.has(f.hash)) return false;
     if (f.filetype === "bild") return (!f.display || !f.thumb || !f.width) && !/svg/.test(f.mime) && !!FFMPEG;
     if (f.filetype === "audio" || f.filetype === "video") return f.duration === undefined && !!FFPROBE;
-    return f.extracted !== extractMark(f.hash) || (f.filetype === "pdf" && f.pages === undefined);
+    return f.extracted !== extractMark(f.hash);
   }
 
   stop() {

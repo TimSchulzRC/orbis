@@ -10,8 +10,6 @@
 //   HTML without its tags
 import { inflateRawSync } from "node:zlib";
 
-/** Raise when the extraction changes: every file is read again once. */
-export const EXTRACT_VERSION = 1;
 /** Stored text, in characters (it syncs to every device with the file's facts). */
 export const TEXT_MAX = 100_000;
 /** What is read of a text file. */
@@ -28,8 +26,8 @@ export interface Extracted {
   pages?: number;
 }
 
-/** The mark stored in a file's facts once its content was read (version and content). */
-export const extractMark = (hash: string) => `${EXTRACT_VERSION}:${hash.slice(0, 16)}`;
+/** The mark stored in a file's facts once this content was read. */
+export const extractMark = (hash: string) => hash.slice(0, 16);
 
 const cap = (s: string) => {
   const t = s.replace(/\r\n?/g, "\n").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
