@@ -13,7 +13,7 @@ import { useRepo, useIndex, itemHref, leavePage, setParams, showTitle, useDocume
 import { repo } from "../repo";
 import { useT, tr, getLang, titleOf } from "../i18n";
 import { Editor, insertFilesAtCursor } from "../ui/Editor";
-import { Button, Dialog, MenuItem, Popover, MoreMenu, PagePlaceholder } from "../ui/primitives";
+import { Button, Dialog, MenuItem, Popover, MoreMenu, PagePlaceholder, Tip } from "../ui/primitives";
 import { ItemIcon, TypeChip, TypeGlyph } from "../ui/item-look";
 import { ProgressBand } from "../ui/progress";
 import { cn } from "../lib/utils";
@@ -144,11 +144,6 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
           <MenuItem icon={<History size={14} />} onClick={() => (close(), setHistory(true))}>
             {t("item.history")}
           </MenuItem>
-          {!item.deleted && (
-            <MenuItem icon={<Bot size={14} />} active={!!item.rules.trim()} onClick={() => (close(), setRulesOpen(true))}>
-              {t("rules.menu")}
-            </MenuItem>
-          )}
           {others && !item.deleted && item.type !== META_TYPE && (
             <MenuItem icon={<ArrowRightLeft size={14} />} onClick={() => (close(), setMoving(true))}>
               {t("move.menu")}
@@ -194,6 +189,13 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
         schema={schema}
         head={{
           first: <TypeSwitch item={item} />,
+          end: !item.deleted && (
+            <Tip label={t("rules.title")}>
+              <Button variant="plain" onClick={() => setRulesOpen(true)} aria-label={t("rules.title")} className={cn("tap inline-flex items-center justify-center rounded-lg p-1.5 transition-colors hover:bg-hover hover:text-fg", item.rules.trim() ? "text-fg" : "text-muted-foreground")}>
+                <Bot size={16} />
+              </Button>
+            </Tip>
+          ),
           progress: progress && <ProgressBand done={progress.done} total={progress.total} desc={progressText(item, ix, progress.done, progress.total)} />,
         }}
       />

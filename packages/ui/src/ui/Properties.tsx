@@ -272,9 +272,10 @@ function BlockRow({ label, title, children }: { label: React.ReactNode; title?: 
   );
 }
 
-/** `first` goes before the badges, `progress` under the dates. */
+/** `first` goes before the badges, `end` at the right edge after the tags, `progress` under the dates. */
 interface PageHead {
   first?: React.ReactNode;
+  end?: React.ReactNode;
   progress?: React.ReactNode;
 }
 
@@ -306,6 +307,7 @@ export function PropertyBlock({ item, schema, head = {} }: { item: Item; schema?
           </span>
         ))}
         <PageTags item={item} />
+        {head.end && <span className="ml-auto inline-flex">{head.end}</span>}
       </div>
       {dates.length > 0 && (
         <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">

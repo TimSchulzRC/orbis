@@ -1,5 +1,5 @@
-// "Regeln für Agenten" on an item: only agents act on them, so the page shows nothing; the page menu
-// opens them in a dialog, saved when the field is left (one step), with what applies from above.
+// "Regeln für Agenten" on an item: only agents act on them, so the page shows just an icon after the
+// tags that opens them in a dialog, saved when the field is left (one step), with what applies from above.
 import { afterEach, expect, test } from "vitest";
 import { commands, page } from "vitest/browser";
 import { cleanup, render } from "vitest-browser-react";
@@ -8,7 +8,7 @@ import { workspace } from "./workspace";
 
 afterEach(() => cleanup());
 
-test("not on the page; the page menu opens them, inherited ones link to their owners", async () => {
+test("not on the page; the icon after the tags opens them, inherited ones link to their owners", async () => {
   const repo = await workspace(false);
   const root = repo.create({ title: "Beratung", pinned: "a", rules: "Nie in Produktion schreiben." });
   const kunde = repo.create({ title: "Kunde Nord", parents: [root] });
@@ -18,9 +18,11 @@ test("not on the page; the page menu opens them, inherited ones link to their ow
   await expect.element(page.getByText("Kunde Nord").first()).toBeVisible();
   expect(page.getByText("Regeln für Agenten").query()).toBeNull();
 
-  // the page menu opens the dialog, the focus in the field
+  // the icon opens the dialog, the focus in the field; the page menu no longer has them
   await page.getByRole("button", { name: "Mehr" }).first().click();
-  await page.getByRole("button", { name: "Regeln für Agenten …" }).click();
+  expect(page.getByRole("button", { name: "Regeln für Agenten" }).elements()).toHaveLength(1);
+  await commands.keys("press", "Escape");
+  await page.getByRole("button", { name: "Regeln für Agenten" }).click();
   const dialog = page.getByRole("dialog", { name: "Regeln für Agenten" });
   const field = dialog.getByRole("textbox", { name: "Regeln für Agenten" });
   await expect.element(field).toHaveFocus();
