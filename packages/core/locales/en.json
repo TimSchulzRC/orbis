@@ -1086,5 +1086,13 @@
  "history.removed": "removed:",
  "activity.showDiff": "Show change",
  "activity.hideDiff": "Hide change",
- "activity.diffMissing": "This change can no longer be fetched."
+ "activity.diffMissing": "This change can no longer be fetched.",
+ "rules.title": "Rules for agents",
+ "rules.placeholder": "What agents must keep to here, for example: Never change production systems. Don't send messages without asking. Markdown works.",
+ "rules.hint": "Apply here and to everything below. Agents get them over MCP with every answer about these items.",
+ "rules.alsoInherited": "Rules also apply from",
+ "rules.workspace": "this workspace",
+ "rules.workspaceHint": "Apply everywhere in this workspace. Agents get them when they connect and with every answer about items. Rules for one area: on its page with the agent icon right of the tags.",
+ "activity.rules": "changed the rules for agents",
+ "activity.workspaceSettings": "workspace settings"
 }

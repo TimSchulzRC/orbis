@@ -401,7 +401,8 @@ export class Store {
         const origin = [...p.origins].join(", ");
         const ts = Date.now();
         const step = p.step;
-        const event = p.quiet || next.kind === "settings" ? undefined : this.saveEvent(id, prev, next, origin, step, ts, events);
+        // the settings doc shows only with its rules for agents (the workspace's)
+        const event = p.quiet || (next.kind === "settings" && (!prev || prev.rules === next.rules)) ? undefined : this.saveEvent(id, prev, next, origin, step, ts, events);
         if (prev && prev.body !== next.body && hasBody(next)) this.saveVersion(id, prev, next, origin, step, ts, event);
       }
     })();
@@ -683,6 +684,7 @@ function diffRecords(prev: Item | undefined, next: Item): { kind: ActivityEvent[
     if (!sameValue(prev.extra[k], next.extra[k])) changes.push({ field: "x:" + k, from: prev.extra[k]?.v, to: next.extra[k]?.v });
   for (const k of new Set([...Object.keys(prev.rels), ...Object.keys(next.rels)])) setDiff("r:" + k, prev.rels[k] ?? [], next.rels[k] ?? [], changes);
   if (prev.body !== next.body) changes.push({ field: "body", from: prev.body.length, to: next.body.length });
+  if (prev.rules !== next.rules) changes.push({ field: "rules", from: prev.rules.length, to: next.rules.length });
   if (next.updates.length > prev.updates.length) for (const e of next.updates.slice(prev.updates.length)) changes.push({ field: "update", to: e.text });
   // views count separately from the schema so their changes show in the activity and can be undone
   if (prev.schema || next.schema) {

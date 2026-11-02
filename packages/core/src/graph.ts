@@ -262,6 +262,26 @@ export class Index {
     return out;
   }
 
+  /**
+   * All ancestors over all parents, each once, from the top down: every ancestor comes after
+   * those above it, the home's line before the other parents.
+   */
+  ancestors(id: string): string[] {
+    const out: string[] = [];
+    const seen = new Set([id]);
+    const visit = (x: string) => {
+      const home = this.home(x);
+      for (const p of home ? [home, ...this.parentsOf(x).filter((q) => q !== home)] : this.parentsOf(x)) {
+        if (seen.has(p)) continue;
+        seen.add(p);
+        visit(p);
+        out.push(p);
+      }
+    };
+    visit(id);
+    return out;
+  }
+
   /** Over all parents, not just the home. */
   descendants(id: string): Set<string> {
     const cached = this._desc.get(id);

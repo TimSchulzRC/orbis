@@ -28,6 +28,7 @@ import {
   setParentSort,
   setProp,
   setRel,
+  setRules,
   setView,
   touch,
 } from "@obtion/core/model";
@@ -641,6 +642,13 @@ export class Repo {
   }
   setBody(id: string, body: string) {
     this.change(id, (doc) => replaceBody(doc, body));
+  }
+  /** "Regeln für Agenten" of an item, or of the workspace (the settings doc). */
+  setRules(id: string, rules: string) {
+    this.change(id, (doc) => {
+      setRules(doc, rules);
+      touch(doc);
+    });
   }
   setView(id: string, viewId: string, def: ViewDef | null) {
     this.change(id, (doc) => setView(doc, viewId, def));

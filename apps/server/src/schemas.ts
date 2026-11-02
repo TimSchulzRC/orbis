@@ -64,6 +64,7 @@ export const createInput = z.object({
   parents: z.array(z.string()).optional(),
   pin: z.boolean().optional().describe("pin to the top of the sidebar (a place of its own)"),
   properties: values.optional(),
+  agent_rules: z.string().optional().describe("rules for agents (Markdown), binding for this item and everything below it; only when the user asks"),
 });
 export type CreateInput = z.infer<typeof createInput>;
 
@@ -82,6 +83,7 @@ export const updateInput = z.object({
   old_text: z.string().optional().describe("exact text in the body to change (must occur once); safe without base_version"),
   new_text: z.string().optional(),
   base_version: z.string().optional().describe("the version from get or from the last write's answer. Required to replace the whole body; checked with any change when given. Stale: nothing changes, the answer says what changed since"),
+  agent_rules: z.string().nullable().optional().describe("replace the item's rules for agents (Markdown; null or \"\" clears); only when the user asks"),
 });
 export type UpdateInput = Omit<z.infer<typeof updateInput>, "ref">;
 

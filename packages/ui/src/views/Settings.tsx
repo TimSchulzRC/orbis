@@ -3,6 +3,7 @@ import { Checkbox } from "../components/ui/checkbox";
 import { Input } from "../components/ui/input";
 import { NativeSelect } from "../components/ui/native-select";
 import { DialogContent, DialogHeader, DialogTitle, Dialog as DialogRoot } from "../components/ui/dialog";
+import { RulesField, WORKSPACE_RULES } from "../ui/AgentRules";
 import { type ReactNode, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { ArrowLeft, Copy, Check, Crown, Eye, EyeOff, KeyRound, Link2, Plus, RotateCcw, ChevronRight, Trash2, UserMinus, UserRound, X } from "lucide-react";
 import { SETTINGS_ID, setSettings } from "@obtion/core/model";
@@ -731,6 +732,11 @@ function SpaceSettings({ space }: { space: Space }) {
             </div>
           )}
         </SettingRow>
+        <div id={WORKSPACE_RULES}>
+          <SettingRow title={t("rules.title")} hint={t("rules.workspaceHint")}>
+            <RulesField id={SETTINGS_ID} value={repo.get(SETTINGS_ID)?.rules ?? ""} label={t("rules.title")} placeholder={t("rules.placeholder")} />
+          </SettingRow>
+        </div>
       </SettingsGroup>
 
       <SettingsGroup title={t("settings.sync")}>

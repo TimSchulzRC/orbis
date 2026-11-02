@@ -3,6 +3,7 @@
 import { existsSync, linkSync, copyFileSync, mkdirSync, readdirSync, rmSync, unlinkSync, writeFileSync, rmdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { type Item, META_TYPE, optionNames } from "@obtion/core/model";
+import { workspaceRules } from "@obtion/core/rules";
 import type { Index } from "@obtion/core/graph";
 import { blocksAsText } from "@obtion/core/query";
 import { isInInbox } from "@obtion/core/placement";
@@ -89,7 +90,13 @@ export class Mirror {
       // children go into a folder named after this item (folder-note style)
       want.set(pathOf(i, `${safe(i.title)}.md`), { content: this.render(i, ix, lang) });
     }
-    want.set("README.md", { content: README });
+    const ws = workspaceRules(ix);
+    const rulesHead = translate(lang, "rules.title");
+    want.set("README.md", {
+      content:
+        README +
+        `\n## ${rulesHead}\n\nBinding for agents. A page's "${rulesHead}" section applies to it and everything below it.${ws ? ` These apply to the whole workspace:\n\n${ws.text.trimEnd()}\n` : "\n"}`,
+    });
 
     for (const [rel, w] of want) {
       const sig = w.content ?? "blob:" + w.blob;
@@ -152,6 +159,7 @@ export class Mirror {
       return out;
     }
     out += blocksAsText(i.body, lang, ix).trimEnd() + "\n";
+    if (i.rules.trim()) out += `\n## ${translate(lang, "rules.title")}\n\n${i.rules.trimEnd()}\n`;
     const kids = ix.childrenOf(i.id).map((c) => ix.get(c)!);
     if (kids.length) out += `\n## ${translate(lang, "below.title")}\n\n` + kids.map((k) => `- [[${k.title}]]${ix.typeName(k.type) ? ` (${ix.typeName(k.type)})` : ""}`).join("\n") + "\n";
     if (i.updates.length) out += "\n## Updates\n\n" + i.updates.map((e) => `- ${new Date(e.at).toISOString().slice(0, 16).replace("T", " ")} (${e.by}): ${e.text}`).join("\n") + "\n";
