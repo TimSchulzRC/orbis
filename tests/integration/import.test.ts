@@ -255,7 +255,9 @@ test("repo changes go in; an edit in Obtion is never overwritten (conflict, exit
   expect((await bySource("kunden/Germany_ACME/scan.PDF"))!.file!.hash).toBe(sha("%PDF-1.7 Scan\n"));
   expect(await bySource("kunden/Germany_ACME/fehlt.PDF")).toBeUndefined();
   expect(rep).toMatch(/\| kunden\/Germany_ACME\/fehlt\.PDF \|  \| failed \|.*Git LFS pointer/);
-  expect(rep).toContain("**Unvollständig: 3 Problem(e)**"); // the conflict, the pointer without content, and that content missing as an LFS version
+  // the conflict, the pointer without content, and (where git-lfs is installed) that content missing as an LFS version
+  const lfs = Bun.spawnSync(["git", "lfs", "version"], { stdout: "ignore", stderr: "ignore" }).exitCode === 0;
+  expect(rep).toContain(`**Unvollständig: ${lfs ? 3 : 2} Problem(e)**`);
   expect(rep).toMatch(/\| kunden\/Austria_Beispiel\/README\.md \| \w+ \| conflict \|/);
   expect(rep).toMatch(/\| kunden\/Germany_ACME\/sources\/schema\.xsd \| \w+ \| updated \|/);
   // the same items, no duplicates

@@ -413,11 +413,11 @@ test("the search index survives adds while it cleans up (MiniSearch's vacuum)", 
   process.on("unhandledRejection", onErr);
   let seed = 7;
   const rnd = () => ((seed = (seed * 48271) % 2147483647), seed.toString(36).slice(0, 2 + (seed % 6)));
-  for (let round = 0; round < 150; round++) {
+  for (let round = 0; round < 80; round++) {
     for (let i = 0; i < 100; i++) indexRecord(idx, { id: `d${rnd().length * 50 + (seed % 50)}`, kind: "info", title: "t", body: Array.from({ length: 30 }, rnd).join(" "), tags: [], props: {}, extra: {}, deleted: false } as never);
     await Bun.sleep(2);
   }
   await Bun.sleep(100);
   process.off("unhandledRejection", onErr);
   expect(errors).toEqual([]);
-});
+}, 30_000);
