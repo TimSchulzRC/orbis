@@ -8,7 +8,7 @@ import { dirname, join } from "node:path";
 import type { Plugin, ProxyOptions } from "vite";
 import type { ClientRequest } from "node:http";
 
-/** pdf.js (used by @obtion/ui) decodes JBIG2 and JPEG 2000 images with WebAssembly it loads from a folder. */
+// pdf.js loads its JBIG2/JPEG 2000 decoders as WebAssembly from a folder at runtime.
 const pdfjs = dirname(createRequire(createRequire(import.meta.url).resolve("@obtion/ui")).resolve("pdfjs-dist/package.json"));
 const pdfWasm = {
   name: "pdfjs-wasm",
@@ -19,10 +19,9 @@ const pdfWasm = {
 };
 
 /**
- * `bun run dev:build` (vite build --watch, for a server in development): a page loaded during a rebuild never
- * gets an index.html whose assets are not written yet or already gone. The old hashed assets stay;
- * the new index.html is written under another name and takes over in one rename once everything
- * is on disk. Assets of the build before the previous one go then.
+ * For `vite build --watch`: a page loaded mid-rebuild must never get an index.html whose assets are
+ * missing. index.html is renamed into place once all assets are written, and assets are only removed
+ * two builds later.
  */
 let lastBuild: Set<string> | null = null;
 const atomicWatch: Plugin = {
@@ -45,14 +44,11 @@ const atomicWatch: Plugin = {
 };
 
 const server = `http://127.0.0.1:${process.env.PORT ?? 8480}`;
-/** The dev server's own public address, if it is reached through `tailscale serve` (e.g. https://<host>.<tailnet>.ts.net:8472). */
+/** Set when the dev server is reached through `tailscale serve`. */
 const devPublic = process.env.OBTION_DEV_PUBLIC_URL ? new URL(process.env.OBTION_DEV_PUBLIC_URL) : undefined;
 
-/**
- * Requests to the server go out as the server's own: Host and Origin are the server's address. The server
- * only answers to the hosts it serves under (DNS rebinding guard) and checks Origin against Host
- * (CSRF, cross-site WebSocket); the dev server may run on any port or tailnet name.
- */
+// Rewrite Host and Origin to the server's address: it rejects unknown hosts (DNS rebinding) and
+// Origin != Host (CSRF), and the dev server may run on any port or tailnet name.
 function toServer(ws = false): ProxyOptions {
   return {
     target: server,
@@ -73,7 +69,7 @@ export default defineConfig({
     pdfWasm,
     atomicWatch,
     VitePWA({
-      // the app shows "Neue Version – neu laden" instead of silently serving the old cache
+      // the app asks before switching versions instead of silently serving the old cache
       registerType: "prompt",
       injectRegister: false,
       includeAssets: ["icon-dark.svg", "icon.svg", "apple-touch-icon.png"],
@@ -105,14 +101,12 @@ export default defineConfig({
     port: 5180,
     // 127.0.0.1, not only ::1: `tailscale serve` forwards to 127.0.0.1
     host: "127.0.0.1",
-    // the tailnet name (https://<host>.<tailnet>.ts.net:<port> via `tailscale serve`)
     allowedHosts: [".ts.net", ...(devPublic ? [devPublic.hostname] : [])],
     // behind `tailscale serve` (HTTPS): the browser reaches HMR over wss on the public port
     hmr: devPublic ? { protocol: "wss", host: devPublic.hostname, clientPort: Number(devPublic.port || 443) } : undefined,
     proxy: {
       "/api": toServer(),
       "/mcp": toServer(),
-      // a workspace's sync, files and activity
       "/w/": toServer(true),
     },
   },

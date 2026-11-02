@@ -1,5 +1,3 @@
-// Groups of a view: the chip each starts with, hiding and showing them, and how a field or a
-// grouping is named.
 import { useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import type { T } from "@obtion/core/i18n";
@@ -12,7 +10,7 @@ import { ItemIcon, StatusPill, pal, tint } from "./item-look";
 import { Button } from "./primitives";
 import { pathLabel } from "./Row";
 
-/** How a field or a grouping is named: built-in ones in the app language, else as `fields` (the view's) name it. */
+/** Built-in keys in the app language, others as the view's `fields` name them. */
 export function fieldLabel(key: string, t: T, fields: { key: string; label: string }[] = []): string {
   if (key === "status" || key === "statusGroup" || key === "type" || key === "path") return t("group." + key);
   if ((FIELDS as readonly string[]).includes(key)) return t("field." + key);
@@ -20,22 +18,22 @@ export function fieldLabel(key: string, t: T, fields: { key: string; label: stri
   return fields.find((f) => titleKey(f.key) === titleKey(key))?.label ?? key;
 }
 
-/** "Bereich": the top place as a chip, coloured by its place in the sidebar. */
+/** AreaChip colours follow the area's position in the sidebar. */
 const AREA_COLORS = ["blue", "green", "violet", "amber", "teal", "pink", "indigo", "brown", "olive", "red"];
 export function AreaChip({ id }: { id: string }) {
   const ix = useIndex();
   const item = ix.get(id);
   if (!item) return null;
   const pinned = ix.live.filter((i) => i.pinned).sort((a, b) => cmpKey(a.pinned!, b.pinned!));
-  const c = pal(AREA_COLORS[Math.max(0, pinned.findIndex((p) => p.id === id)) % AREA_COLORS.length]);
+  const position = Math.max(0, pinned.findIndex((p) => p.id === id));
+  const color = pal(AREA_COLORS[position % AREA_COLORS.length]);
   return (
-    <a href={itemHref(id)} className="inline-flex max-w-full items-center truncate whitespace-nowrap rounded-full px-2 py-px text-xs font-medium hover:underline" style={tint(c)}>
+    <a href={itemHref(id)} className="inline-flex max-w-full items-center truncate whitespace-nowrap rounded-full px-2 py-px text-xs font-medium hover:underline" style={tint(color)}>
       {item.title}
     </a>
   );
 }
 
-/** The chip a group starts with: its status or option in colour, the entry it stands for, or "Ohne …". */
 export function GroupChip({ g, by, byLabel }: { g: Group; by: string; byLabel: string }) {
   const { t } = useT();
   const ix = useIndex();
@@ -43,11 +41,11 @@ export function GroupChip({ g, by, byLabel }: { g: Group; by: string; byLabel: s
   if (g.option) return <StatusPill option={g.option} group={by === "status" ? (g.statusGroup as StatusGroup) : undefined} />;
   if (g.ref && by === "area") return <AreaChip id={g.ref} />;
   if (g.ref) {
-    const x = ix.get(g.ref);
-    return x ? (
-      <a href={itemHref(x.id)} className="flex min-w-0 items-center gap-1.5 text-sm font-medium hover:underline">
-        <ItemIcon item={x} size={14} className="shrink-0" />
-        <span className="truncate">{titleOf(x, t)}</span>
+    const target = ix.get(g.ref);
+    return target ? (
+      <a href={itemHref(target.id)} className="flex min-w-0 items-center gap-1.5 text-sm font-medium hover:underline">
+        <ItemIcon item={target} size={14} className="shrink-0" />
+        <span className="truncate">{titleOf(target, t)}</span>
       </a>
     ) : null;
   }
@@ -56,25 +54,22 @@ export function GroupChip({ g, by, byLabel }: { g: Group; by: string; byLabel: s
   return <span className="truncate text-sm font-medium">{g.label || g.key}</span>;
 }
 
-/** Every group a view can have (with the empty options), for choosing which to show. */
+/** Includes empty options, for choosing which groups to show. */
 export function viewGroups(items: Item[], def: QueryDef, ctx: EvalCtx): Group[] {
   if (!def.group) return [];
   return groupItems(items, def.group, ctx, pathBase(def, ctx), { types: viewTypeIds(def.where, items, ctx.ix), where: def.where });
 }
 
-/** Split a view's groups into the shown ones and the ones hidden by hand. */
 export function splitHidden(groups: Group[], tab?: ViewTab): [Group[], Group[]] {
   const hidden = new Set(tab?.hiddenGroups ?? []);
   return [groups.filter((g) => !hidden.has(groupId(g))), groups.filter((g) => hidden.has(groupId(g)))];
 }
 
-/** Hide a group in a view, or show it again. */
 export function hiddenPatch(tab: ViewTab | undefined, g: Group, hide: boolean): Partial<ViewTab> {
   const ids = (tab?.hiddenGroups ?? []).filter((x) => x !== groupId(g));
   return { hiddenGroups: hide ? [...ids, groupId(g)] : ids };
 }
 
-/** Below the last group: "3 ausgeblendete Gruppen" – a click shows them, each can come back. */
 export function HiddenGroups({ groups, by, byLabel, onShow }: { groups: Group[]; by: string; byLabel: string; onShow?: (g: Group) => void }) {
   const { t } = useT();
   const [open, setOpen] = useState(false);

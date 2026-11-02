@@ -1,5 +1,4 @@
-// A file behaves like an information whose content is the file itself: title, description,
-// tags, refs, "Teil von", and "Verwendet in" instead of a folder.
+// A file behaves like an information whose content is the file itself.
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
 import { useEffect, useState } from "react";
@@ -24,43 +23,46 @@ export function FilePage({ item }: { item: Item }) {
   const { t, lang } = useT();
   useDocumentTitle(titleOf(item, t));
   const ix = useIndex();
-  const f = item.file!;
+  const file = item.file!;
   const [picking, setPicking] = useState(false);
-  const isImg = f.filetype === "bild";
-  const display = useBlobUrl(isImg ? (f.display ?? f.hash) : f.filetype === "pdf" ? undefined : f.thumb, true);
+  const isImg = file.filetype === "bild";
+  const display = useBlobUrl(isImg ? (file.display ?? file.hash) : file.filetype === "pdf" ? undefined : file.thumb, true);
   const used = ix.usedIn(item.id);
   const parents = ix.parentsOf(item.id);
-  const local = files.hasLocal(f.hash);
-  useEffect(() => void files.check(f.hash), [f.hash]);
+  const local = files.hasLocal(file.hash);
+  useEffect(() => void files.check(file.hash), [file.hash]);
   // the original on this device ("alles lokal", offline): viewer and download use it instead of the server
   const [localSrc, setLocalSrc] = useState<string | undefined>();
   useEffect(() => {
     let url: string | undefined;
     let gone = false;
-    if (local) void files.localUrl(f.hash, f.mime).then((u) => (gone ? u && URL.revokeObjectURL(u) : setLocalSrc((url = u))));
+    if (local) void files.localUrl(file.hash, file.mime).then((u) => (gone ? u && URL.revokeObjectURL(u) : setLocalSrc((url = u))));
     else setLocalSrc(undefined);
     return () => {
       gone = true;
       if (url) URL.revokeObjectURL(url);
     };
-  }, [f.hash, local]);
+  }, [file.hash, local]);
   // audio and video stream from the server (the player loads what it plays), unless the original is here
-  const media = localSrc ?? (local ? undefined : files.serverUrl(f.hash));
-  const missing = files.isMissing(f.hash);
+  const media = localSrc ?? (local ? undefined : files.serverUrl(file.hash));
+  const missing = files.isMissing(file.hash);
   // who added it; from before accounts the app wrote only the device: then nobody is named
   const by = item.createdBy ? who(item.createdBy, t) : undefined;
   const addedBy = by && (by.agent || by.person?.id) ? by.label : "";
+  const extension = (file.name.split(".").pop() ?? "").toUpperCase();
+  const dimensions = file.width && file.height ? `${file.width} × ${file.height}` : "";
+  const size = [dimensions, file.pages ? t("file.pages", { count: file.pages }) : "", file.duration ? fmtDuration(file.duration) : "", fmtBytes(lang, file.size)].filter(Boolean).join(" · ");
   const facts: [string, React.ReactNode][] = [
-    [t("file.type"), `${t("filetype." + f.filetype)} · ${(f.name.split(".").pop() ?? "").toUpperCase()}`],
-    [t("file.size"), [f.width && f.height ? `${f.width} × ${f.height}` : "", f.pages ? t("file.pages", { count: f.pages }) : "", f.duration ? fmtDuration(f.duration) : "", fmtBytes(lang, f.size)].filter(Boolean).join(" · ")],
+    [t("file.type"), `${t("filetype." + file.filetype)} · ${extension}`],
+    [t("file.size"), size],
     [t("file.added"), `${fmtDate(lang, dateOf(item.created))}${addedBy ? " · " + addedBy : ""}`],
     [t("file.here"), local ? t("file.local") : t("file.online")],
   ];
   /** "Ersetzen": new content, same document; the old version stays in the history. */
-  const replace = async (file: File) => {
-    const meta = await files.prepare(file, f.name);
+  const replace = async (upload: File) => {
+    const meta = await files.prepare(upload, file.name);
     repo.change(item.id, (doc) =>
-      setFileMeta(doc, { ...meta, name: f.name, display: meta.display ?? null, thumb: meta.thumb ?? null, pages: null, text: null, duration: null, history: [...(f.history ?? []), { hash: f.hash, at: Date.now() }] }),
+      setFileMeta(doc, { ...meta, name: file.name, display: meta.display ?? null, thumb: meta.thumb ?? null, pages: null, text: null, duration: null, history: [...(file.history ?? []), { hash: file.hash, at: Date.now() }] }),
     );
   };
   const tools = (
@@ -92,9 +94,9 @@ export function FilePage({ item }: { item: Item }) {
       <Crumbs item={item} tools={tools} onPlaces={() => setPicking(true)} onPlace={() => setPicking(true)} />
       <div className="mt-1.5 flex items-start gap-4">
         <div className="min-w-0 flex-1">
-          <TitleField item={item} autoFocus={false} placeholder={f.name} />
+          <TitleField item={item} autoFocus={false} placeholder={file.name} />
         </div>
-        <a href={localSrc ?? files.serverUrl(f.hash, f.name, true)} download={localSrc ? f.name : undefined} className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-line bg-surface px-3 text-sm font-medium text-fg hover:bg-hover">
+        <a href={localSrc ?? files.serverUrl(file.hash, file.name, true)} download={localSrc ? file.name : undefined} className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-line bg-surface px-3 text-sm font-medium text-fg hover:bg-hover">
           <Download size={15} /> <span className="max-md:hidden">{t("file.download")}</span>
         </a>
       </div>
@@ -103,10 +105,10 @@ export function FilePage({ item }: { item: Item }) {
       </p>
       {/* facts as the property block (no "+ Eigenschaft") */}
       <div className="mt-[18px] grid grid-cols-[148px_minmax(0,1fr)] gap-x-3 max-md:grid-cols-[124px_minmax(0,1fr)]">
-        {[[t("file.name"), f.name] as [string, React.ReactNode], ...facts.slice(1)].map(([k, v]) => (
-          <div key={k} className="contents">
-            <div className="flex min-h-8 items-center truncate text-[13px] text-muted-foreground pointer-coarse:min-h-11">{k}</div>
-            <div className="flex min-h-8 min-w-0 items-center break-all text-sm tabular-nums pointer-coarse:min-h-11">{v}</div>
+        {[[t("file.name"), file.name] as [string, React.ReactNode], ...facts.slice(1)].map(([label, value]) => (
+          <div key={label} className="contents">
+            <div className="flex min-h-8 items-center truncate text-[13px] text-muted-foreground pointer-coarse:min-h-11">{label}</div>
+            <div className="flex min-h-8 min-w-0 items-center break-all text-sm tabular-nums pointer-coarse:min-h-11">{value}</div>
           </div>
         ))}
         <div className="flex min-h-8 items-center text-[13px] text-muted-foreground pointer-coarse:min-h-11">{t("item.tags")}</div>
@@ -119,13 +121,12 @@ export function FilePage({ item }: { item: Item }) {
       </div>
       <div className="mt-5 border-t border-line" />
 
-      {/* the file itself, as wide as the column, and its description */}
       <div className="mt-6 overflow-hidden rounded-xl border border-line bg-surface-2">
         {isImg && display && <img src={display} alt={item.body || item.title} className="mx-auto max-h-[70vh] w-auto" />}
-        {f.filetype === "pdf" && (!local || localSrc) && <iframe title={item.title} src={localSrc ?? files.serverUrl(f.hash)} className="h-[75vh] w-full bg-white" />}
-        {f.filetype === "audio" && media && <audio controls src={media} className="w-full p-4" />}
-        {f.filetype === "video" && media && <video controls src={media} className="w-full" />}
-        {!isImg && f.filetype !== "pdf" && f.filetype !== "audio" && f.filetype !== "video" && <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">{f.name}</div>}
+        {file.filetype === "pdf" && (!local || localSrc) && <iframe title={item.title} src={localSrc ?? files.serverUrl(file.hash)} className="h-[75vh] w-full bg-white" />}
+        {file.filetype === "audio" && media && <audio controls src={media} className="w-full p-4" />}
+        {file.filetype === "video" && media && <video controls src={media} className="w-full" />}
+        {!isImg && file.filetype !== "pdf" && file.filetype !== "audio" && file.filetype !== "video" && <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">{file.name}</div>}
       </div>
       <Textarea
       variant="inline"

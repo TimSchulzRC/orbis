@@ -1,14 +1,8 @@
-// Moving items to another workspace. Workspaces share
-// nothing, so a move is a copy: the item and everything that hangs only below it (what the trash
-// would take along) are written into the other workspace with new ids, then the originals go to
-// the trash (deleteItem, so "Wiederherstellen" brings them back). What points outside the moved
-// items cannot come along: parents, refs and relations to items left behind are dropped, [[id|…]]
-// links to them become [[Label]] links (by title, as typed links are).
-//
-// Types are matched, not merged: the same type id (the shipped types) or a type of the same name
-// takes the values property by property (same id, else same name and kind; options by id, else by
-// name). A type the other workspace does not have is copied there. Values without a place become
-// free properties, as when a property is removed.
+// Workspaces share nothing, so moving to another workspace copies the item and what hangs only
+// below it with new ids; the originals go to the trash so "Wiederherstellen" brings them back.
+// Parents, refs and relations to items left behind are dropped; [[id|…]] links to them become
+// [[Label]] links. Types are matched by id or name, not merged; a missing type is copied. Values
+// without a matching property become free properties.
 import { type Item, type PropDef, type TypeSchema, META_TYPE, addParent, appendUpdate, initItem, initType, mapWikiLinks, newId, setExtra, setFileMeta, setHome, setMeta, setProp, setRel, titleKey } from "./model";
 import type { Index } from "./graph";
 import type { Writer } from "./setup";
@@ -21,28 +15,27 @@ export interface Moved {
   ids: Map<string, string>;
   /** file contents (originals, display versions, previews) the other workspace needs */
   hashes: string[];
-  /** types created in the other workspace (it had none of that name) */
+  /** types created in the other workspace */
   types: string[];
 }
 
-/** The items a move of `root` takes along: the root and what hangs only below it (no types). */
+/** The root and what hangs only below it, without types. */
 export function movedItems(ix: Index, root: string): Item[] {
   return [root, ...onlyBelow(ix, root)].map((id) => ix.get(id)).filter((r): r is Item => !!r && r.type !== META_TYPE);
 }
 
-/** What a move would change on the way, to show before it happens. Empty lists, 0: it goes over as it is. */
+/** Shown before a move. Empty lists and 0 mean it goes over unchanged. */
 export interface MovePlan {
   items: number;
   files: number;
-  /** types the other workspace gets a copy of (it has none of that name) */
   copiedTypes: string[];
-  /** properties whose values become free properties there (no fitting property or option) */
+  /** no fitting property or option there, so values become free properties */
   freeProps: string[];
   /** links, refs and relations to items that stay behind */
   droppedLinks: number;
 }
 
-/** The plan of `copyToWorkspace` for `root` into a workspace with the index `dst`, without writing. */
+/** Dry run of copyToWorkspace. */
 export function planMove(src: Index, root: string, dst: Index): MovePlan {
   const items = movedItems(src, root);
   const inside = new Set(items.map((r) => r.id));
@@ -69,9 +62,8 @@ export function planMove(src: Index, root: string, dst: Index): MovePlan {
 }
 
 /**
- * Copy `root` with what hangs only below it from `src` into another workspace. The root lands
- * below `place.parent`, pinned (`place.pinned` sort key) or – with neither – in the inbox.
- * The caller then trashes the originals and brings the file contents over (`hashes`).
+ * The root lands below `place.parent`, pinned, or with neither in the inbox. The caller then
+ * trashes the originals and copies the file contents (`hashes`).
  */
 export function copyToWorkspace(src: Index, root: string, dst: { w: Writer; ix: Index }, place: { parent?: string; pinned?: string }, by: string): Moved {
   const items = movedItems(src, root);
@@ -97,16 +89,6 @@ export function copyToWorkspace(src: Index, root: string, dst: { w: Writer; ix: 
     types.set(t, { id, from, to: from });
   }
 
-  const relink = (body: string) =>
-    mapWikiLinks(body, (l) => {
-      const id = l.target.trim();
-      if (!src.get(id)) return l.raw; // a title: resolves by name in the other workspace
-      const open = l.embed ? "![[" : "[[";
-      const to = ids.get(id);
-      if (to) return `${open}${to}${l.section}${l.label !== undefined ? "|" + l.label : ""}]]`;
-      return `${open}${l.label || src.get(id)!.title}${l.section}]]`;
-    });
-
   for (const r of items) {
     const map = r.type ? types.get(r.type) : undefined;
     dst.w.change(ids.get(r.id)!, (doc) => {
@@ -116,7 +98,7 @@ export function copyToWorkspace(src: Index, root: string, dst: { w: Writer; ix: 
           kind: r.kind,
           title: r.title,
           type: map?.id ?? null,
-          body: relink(r.body),
+          body: relink(r.body, src, ids),
           tags: r.tags,
           refs: r.refs.map((x) => ids.get(x)).filter((x): x is string => !!x),
           extra: r.extra,
@@ -138,7 +120,6 @@ export function copyToWorkspace(src: Index, root: string, dst: { w: Writer; ix: 
         const { history: _h, ...file } = r.file;
         setFileMeta(doc, file);
       }
-      // values of the type's properties, relations among the moved items
       for (const [pid, v] of Object.entries(r.props)) {
         const p = propOf(map?.from, pid);
         const q = p && map ? target(p, map.to) : undefined;
@@ -154,10 +135,10 @@ export function copyToWorkspace(src: Index, root: string, dst: { w: Writer; ix: 
         const q = p && map ? target(p, map.to) : undefined;
         for (const t of targets) if (q && ids.has(t)) setRel(doc, q.id, ids.get(t)!, true);
       }
-      const p = statusProp(map?.from);
-      const q = p ? target(p, map!.to) : undefined;
+      const status = statusProp(map?.from);
+      const statusThere = status ? target(status, map!.to) : undefined;
       for (const u of r.updates) {
-        const opt = u.status && p && q ? mapValue(p, q, u.status, { byId: true }) : undefined;
+        const opt = u.status && status && statusThere ? mapValue(status, statusThere, u.status, { byId: true }) : undefined;
         appendUpdate(doc, { at: u.at, text: u.text, by: u.by, ...(typeof opt === "string" ? { status: opt } : {}) });
       }
     });
@@ -167,17 +148,28 @@ export function copyToWorkspace(src: Index, root: string, dst: { w: Writer; ix: 
   return { ids, hashes, types: created };
 }
 
-/** The type of the other workspace that takes items of type `id`: the same id (the shipped types), else the same name. */
+/** [[id]] links to copied items get the new id; links to items left behind become [[Label]] links. */
+function relink(body: string, src: Index, ids: Map<string, string>): string {
+  return mapWikiLinks(body, (l) => {
+    const id = l.target.trim();
+    if (!src.get(id)) return l.raw; // a title: resolves by name in the other workspace
+    const open = l.embed ? "![[" : "[[";
+    const to = ids.get(id);
+    if (to) return `${open}${to}${l.section}${l.label !== undefined ? "|" + l.label : ""}]]`;
+    return `${open}${l.label || src.get(id)!.title}${l.section}]]`;
+  });
+}
+
+/** Same id (shipped types), else same name. */
 function sameType(id: string, from: TypeSchema, dst: Index): string | undefined {
   return dst.types.has(id) ? id : dst.typeByName(from.name);
 }
 
-/** A property of the type by id, also a removed one (its values are still there). */
+/** Includes removed properties, whose values are still stored. */
 function propOf(s: TypeSchema | undefined, id: string): PropDef | undefined {
   return s?.properties.find((x) => x.id === id) ?? s?.removedProperties.find((x) => x.id === id);
 }
 
-/** The property of the other type that takes a value: same id and kind, else same name and kind. */
 function target(p: PropDef, to: TypeSchema): PropDef | undefined {
   if (p.kind === "computed") return undefined;
   return to.properties.find((q) => q.id === p.id && q.kind === p.kind) ?? to.properties.find((q) => titleKey(q.name) === titleKey(p.name) && q.kind === p.kind);

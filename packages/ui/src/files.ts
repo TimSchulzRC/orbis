@@ -1,11 +1,7 @@
-// File contents on this device.
-//
-// File documents (metadata) sync like everything else. Contents are addressed by SHA-256:
-// - Previews and display versions of images are kept on every device, so embedded
-//   images always show, also offline.
-// - Originals: per device either "online" (loaded when opened, kept only briefly) or
-//   "local" (all originals stored here, new ones fetched as soon as their document arrives).
-// - Added offline: the document exists at once, the content waits in an upload outbox.
+// File contents on this device, addressed by SHA-256 (the metadata syncs as documents).
+// Previews and display versions are kept on every device so images show offline. Originals are
+// either "online" (fetched when opened) or "local" (all kept here). Files added offline wait in an
+// upload outbox.
 import { openDB, type IDBPDatabase } from "idb";
 import { useContext, useEffect, useState, useSyncExternalStore } from "react";
 import { type FileMeta, type Item, fileTypeOf, initItem, mimeOf, newId, setFileMeta } from "@obtion/core/model";
@@ -22,8 +18,6 @@ interface Upload {
   name: string;
   derived?: boolean;
 }
-
-// ---------- storage: OPFS when available, else IndexedDB ----------
 
 interface BlobStore {
   has(hash: string): Promise<boolean>;
@@ -99,27 +93,32 @@ function idbStore(db: IDBPDatabase): BlobStore {
 
 export async function sha256(blob: Blob): Promise<string> {
   const data = await blob.arrayBuffer();
-  // crypto.subtle exists only over HTTPS (and on localhost); opened as http://<address> a
-  // JavaScript implementation hashes instead, loaded only then
+  // crypto.subtle exists only in secure contexts; over plain http://<address> use a JS fallback
   const buf = crypto.subtle
     ? await crypto.subtle.digest("SHA-256", data)
     : (await import("@noble/hashes/sha2.js")).sha256(new Uint8Array(data));
   return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-// ---------- image versions made on the device ----------
+const DISPLAY_WIDTH = 1600;
+const THUMB_WIDTH = 320;
+const PREVIEW_TYPE = "image/webp";
+const PREVIEW_QUALITY = 0.8;
+const MAX_DOWNLOADS = 3;
+/** A file younger than this whose content the server lacks is probably still uploading. */
+const UPLOAD_GRACE_MS = 60 * 60_000;
 
 async function scaled(file: Blob, width: number): Promise<{ blob: Blob; w: number; h: number } | undefined> {
   try {
     const bmp = await createImageBitmap(file);
-    const s = Math.min(1, width / bmp.width);
-    const w = Math.max(1, Math.round(bmp.width * s));
-    const h = Math.max(1, Math.round(bmp.height * s));
+    const factor = Math.min(1, width / bmp.width);
+    const w = Math.max(1, Math.round(bmp.width * factor));
+    const h = Math.max(1, Math.round(bmp.height * factor));
     const canvas = document.createElement("canvas");
     canvas.width = w;
     canvas.height = h;
     canvas.getContext("2d")!.drawImage(bmp, 0, 0, w, h);
-    const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/webp", 0.8));
+    const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, PREVIEW_TYPE, PREVIEW_QUALITY));
     const out = { blob: blob!, w: bmp.width, h: bmp.height };
     bmp.close();
     return blob ? out : undefined;
@@ -128,24 +127,22 @@ async function scaled(file: Blob, width: number): Promise<{ blob: Blob; w: numbe
   }
 }
 
-/** First page of a PDF as a preview (rendered here, uploaded as derived version). */
 async function pdfPreview(blob: Blob): Promise<{ blob: Blob; pages: number } | undefined> {
   try {
     const pdfjs = await import("pdfjs-dist");
     const worker = (await import("pdfjs-dist/build/pdf.worker.min.mjs?url")).default;
     pdfjs.GlobalWorkerOptions.workerSrc = worker;
-    // decoders for JBIG2/JPEG 2000 images in PDFs (copied to /pdfjs/wasm/ by the build)
+    // JBIG2/JPEG 2000 decoders, copied to /pdfjs/wasm/ by the build
     const task = pdfjs.getDocument({ data: new Uint8Array(await blob.arrayBuffer()), wasmUrl: "/pdfjs/wasm/" });
     const doc = await task.promise;
     const page = await doc.getPage(1);
-    const vp = page.getViewport({ scale: 1 });
-    const scale = 320 / vp.width;
-    const v = page.getViewport({ scale });
+    const scale = THUMB_WIDTH / page.getViewport({ scale: 1 }).width;
+    const viewport = page.getViewport({ scale });
     const canvas = document.createElement("canvas");
-    canvas.width = Math.round(v.width);
-    canvas.height = Math.round(v.height);
-    await page.render({ canvas, canvasContext: canvas.getContext("2d")!, viewport: v }).promise;
-    const out = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/webp", 0.8));
+    canvas.width = Math.round(viewport.width);
+    canvas.height = Math.round(viewport.height);
+    await page.render({ canvas, canvasContext: canvas.getContext("2d")!, viewport }).promise;
+    const out = await new Promise<Blob | null>((res) => canvas.toBlob(res, PREVIEW_TYPE, PREVIEW_QUALITY));
     const pages = doc.numPages;
     await task.destroy();
     return out ? { blob: out, pages } : undefined;
@@ -154,8 +151,6 @@ async function pdfPreview(blob: Blob): Promise<{ blob: Blob; pages: number } | u
     return undefined;
   }
 }
-
-// ---------- the device file store ----------
 
 interface FileStatus {
   mode: FileMode;
@@ -166,7 +161,6 @@ interface FileStatus {
   downloading: number;
 }
 
-/** The file contents of one workspace on this device. */
 export class DeviceFiles {
   mode: FileMode = (localStorage.getItem(MODE_KEY) as FileMode) || "online";
   status: FileStatus = { mode: this.mode, originals: 0, total: 0, bytes: 0, uploading: 0, downloading: 0 };
@@ -176,11 +170,11 @@ export class DeviceFiles {
   private urls = new Map<string, string>();
   private loading = new Map<string, Promise<string | undefined>>();
   private local = new Set<string>();
-  private missing = new Set<string>(); // not on the server (yet): shown as "Datei fehlt"
-  private fresh = new Set<string>(); // stored in this session: may belong to a file not written yet
+  private missing = new Set<string>(); // not on the server (yet)
+  private fresh = new Set<string>(); // stored this session: may belong to a file not written yet, so collect() spares it
   private collected = false;
 
-  /** Ask the server whether it has a content, without downloading it. */
+  /** Asks the server without downloading. */
   async check(hash: string): Promise<void> {
     if (this.local.has(hash) || this.missing.has(hash)) return;
     const res = await fetch(`${this.link.base}/api/blobs/${hash}?check=1`, { headers: { "x-obtion-probe": "1", ...this.auth } }).catch(() => null);
@@ -190,7 +184,6 @@ export class DeviceFiles {
     }
   }
 
-  /** The server does not have this content (and this device neither). */
   isMissing(hash?: string): boolean {
     return !!hash && this.missing.has(hash) && !this.local.has(hash);
   }
@@ -224,7 +217,6 @@ export class DeviceFiles {
     for (const b of await this.store.list()) this.local.add(b.hash);
     this.repo.subscribe(() => this.scheduleSync());
     this.repo.onBlob((hash) => {
-      // arrived on the server: "wird hochgeladen" gives way to the file
       if (this.missing.delete(hash)) this.emit();
       this.scheduleSync(50);
     });
@@ -244,42 +236,43 @@ export class DeviceFiles {
   setMode(m: FileMode) {
     this.mode = m;
     localStorage.setItem(MODE_KEY, m);
-    // queued originals are no longer wanted; the next sync queues the previews again
+    // drops queued originals too; the next sync queues the previews again
     if (m === "online") this.queue.length = 0;
     this.scheduleSync(10);
     this.emit();
   }
 
-  /** Object URL for a content hash: from this device, else from the server. */
   async url(hash: string, opts: { keep?: boolean } = {}): Promise<string | undefined> {
     const cached = this.urls.get(hash);
     if (cached) return cached;
-    let p = this.loading.get(hash);
-    if (!p) {
-      p = (async () => {
-        await this.ready;
-        let blob = this.local.has(hash) ? await this.store.get(hash) : undefined;
-        if (!blob) {
-          blob = await this.fetchVerified(hash);
-          if (blob && (opts.keep || this.mode === "local")) {
-            await this.save(hash, blob);
-            // switched to "online only" while it was written: not kept, as in pump()
-            if (!opts.keep && this.mode !== "local" && !keptOnline(this.repo).has(hash)) await this.drop(hash);
-          }
-        }
-        if (!blob) return undefined;
-        // stored contents carry no type; images are recognised without one, SVGs are not
-        if (!blob.type && /^\s*(<\?xml[^>]*>\s*)?<svg[\s>]/.test(await blob.slice(0, 256).text())) blob = new Blob([blob], { type: "image/svg+xml" });
-        const u = URL.createObjectURL(blob);
-        this.urls.set(hash, u);
-        return u;
-      })().finally(() => this.loading.delete(hash));
-      this.loading.set(hash, p);
+    let loading = this.loading.get(hash);
+    if (!loading) {
+      loading = this.loadUrl(hash, opts).finally(() => this.loading.delete(hash));
+      this.loading.set(hash, loading);
     }
-    return p;
+    return loading;
   }
 
-  /** Direct server URL (for downloads and the PDF viewer while online); a link carries no header, so the token goes along. */
+  private async loadUrl(hash: string, opts: { keep?: boolean }): Promise<string | undefined> {
+    await this.ready;
+    let blob = this.local.has(hash) ? await this.store.get(hash) : undefined;
+    if (!blob) {
+      blob = await this.fetchVerified(hash);
+      if (blob && (opts.keep || this.mode === "local")) {
+        await this.save(hash, blob);
+        // the mode may have switched to "online" while writing
+        if (!opts.keep && this.mode !== "local" && !keptOnline(this.repo).has(hash)) await this.drop(hash);
+      }
+    }
+    if (!blob) return undefined;
+    // stored contents carry no type; images are recognised without one, SVGs are not
+    if (!blob.type && /^\s*(<\?xml[^>]*>\s*)?<svg[\s>]/.test(await blob.slice(0, 256).text())) blob = new Blob([blob], { type: "image/svg+xml" });
+    const url = URL.createObjectURL(blob);
+    this.urls.set(hash, url);
+    return url;
+  }
+
+  /** A plain link can't carry an auth header, so the token goes in the query. */
   serverUrl(hash: string, name?: string, download = false) {
     const q = new URLSearchParams();
     if (name) q.set("name", name);
@@ -288,7 +281,7 @@ export class DeviceFiles {
     return `${this.link.base}/api/blobs/${hash}?${q}`;
   }
 
-  /** Object URL of the original on this device, with its type (the PDF viewer needs it); undefined if not here. */
+  /** Sets the type explicitly because the PDF viewer needs it and stored blobs have none. */
   async localUrl(hash: string, mime: string): Promise<string | undefined> {
     await this.ready;
     if (!this.local.has(hash)) return undefined;
@@ -296,19 +289,14 @@ export class DeviceFiles {
     return blob ? URL.createObjectURL(new Blob([blob], { type: mime || blob.type })) : undefined;
   }
 
-  /**
-   * What to say when the server lacks a file's content: a young file is most likely still being
-   * uploaded by the device that added it ("wird hochgeladen"), an older one is missing.
-   */
   missingKey(created: number): "file.uploading" | "file.missing" {
-    return Date.now() - created < 3600_000 ? "file.uploading" : "file.missing";
+    return Date.now() - created < UPLOAD_GRACE_MS ? "file.uploading" : "file.missing";
   }
 
   hasLocal(hash: string) {
     return this.local.has(hash);
   }
 
-  /** Whether the content is on this device, once the storage here is open. */
   async isLocal(hash: string) {
     await this.ready;
     return this.local.has(hash);
@@ -337,13 +325,12 @@ export class DeviceFiles {
     this.fresh.add(hash);
   }
 
-  /** A content from this device or the server (checked against its hash); undefined if neither has it. */
   async content(hash: string): Promise<Blob | undefined> {
     await this.ready;
     return (this.local.has(hash) ? await this.store.get(hash) : undefined) ?? (await this.fetchVerified(hash));
   }
 
-  /** A content brought from another workspace (a move): kept here and uploaded like a new file. */
+  /** For moves between workspaces: kept here and uploaded like a new file. */
   async adopt(hash: string, blob: Blob, name: string, derived: boolean) {
     await this.ready;
     await this.save(hash, blob);
@@ -351,9 +338,6 @@ export class DeviceFiles {
     this.scheduleSync(10);
   }
 
-  // ---------- adding files ----------
-
-  /** Add a file: stored here at once, uploaded when the server is reachable. Returns the file item id. */
   async add(file: File | Blob, name: string, opts: { parent?: string } = {}): Promise<{ id: string; name: string }> {
     await this.ready;
     const hash = await sha256(file);
@@ -373,7 +357,6 @@ export class DeviceFiles {
     return { id, name: unique };
   }
 
-  /** Store content (and image versions) here and queue the upload; returns the file facts. */
   async prepare(file: File | Blob, name: string, hash?: string): Promise<FileMeta> {
     await this.ready;
     hash ??= await sha256(file);
@@ -382,8 +365,8 @@ export class DeviceFiles {
     await this.save(hash, file);
     await this.enqueueUpload({ hash, name });
     if (meta.filetype === "bild" && !/svg/.test(mime)) {
-      const display = await scaled(file, 1600);
-      const thumb = await scaled(file, 320);
+      const display = await scaled(file, DISPLAY_WIDTH);
+      const thumb = await scaled(file, THUMB_WIDTH);
       if (display) {
         meta.width = display.w;
         meta.height = display.h;
@@ -406,8 +389,6 @@ export class DeviceFiles {
     await this.db.put("uploads", u);
   }
 
-  // ---------- sync loop ----------
-
   scheduleSync(ms = 1500) {
     if (this.syncTimer) return;
     this.syncTimer = setTimeout(() => {
@@ -418,7 +399,7 @@ export class DeviceFiles {
 
   private async sync() {
     await this.ready;
-    const files = this.repo.live().filter((r) => r.kind === "datei" && r.file?.hash);
+    const files = this.liveFiles();
     if (this.repo.status.online) await this.uploadAll();
     const want: string[] = [];
     for (const f of files) {
@@ -436,42 +417,52 @@ export class DeviceFiles {
     this.updateStatus(files);
   }
 
+  private liveFiles(): Item[] {
+    return this.repo.live().filter((r) => r.kind === "datei" && r.file?.hash);
+  }
+
+  private async pendingUploads(): Promise<Set<string>> {
+    return new Set(((await this.db.getAll("uploads")) as Upload[]).map((u) => u.hash));
+  }
+
   /**
-   * Once a session, when the replica has caught up with the server: remove contents no file
-   * points to any more (an original replaced by a new version, its previews). Contents waiting
-   * for upload or stored in this session (a file being added, a PDF preview) stay.
+   * Once per session, after catching up with the server, so records from other devices are known
+   * before anything is deleted. Spares pending uploads and contents stored this session.
    */
   private async collect() {
     const keep = new Set<string>();
     for (const r of this.repo.records.values()) for (const h of [r.file?.hash, r.file?.display, r.file?.thumb]) if (h) keep.add(h);
-    const pending = new Set(((await this.db.getAll("uploads")) as Upload[]).map((u) => u.hash));
+    const pending = await this.pendingUploads();
     for (const h of [...this.local]) if (!keep.has(h) && !pending.has(h) && !this.fresh.has(h)) await this.drop(h);
   }
 
   private updateStatus(files: Item[]) {
     let originals = 0;
     let bytes = 0;
-    for (const f of files) if (this.local.has(f.file!.hash)) (originals++, (bytes += f.file!.size));
+    for (const f of files) {
+      if (!this.local.has(f.file!.hash)) continue;
+      originals++;
+      bytes += f.file!.size;
+    }
     this.status = { mode: this.mode, originals, total: files.length, bytes, uploading: this.status.uploading, downloading: this.queue.length + this.active };
     this.emit();
   }
 
-  /** Up to three downloads at a time, each checked against its hash. */
   private pump() {
-    while (this.active < 3 && this.queue.length) {
+    while (this.active < MAX_DOWNLOADS && this.queue.length) {
       const h = this.queue.shift()!;
       this.active++;
       this.fetchVerified(h)
         .then(async (blob) => {
-          // switched to "online only" meanwhile (also while it was written): the original is not kept
+          // the mode may switch to "online" during the fetch or the write
           const wanted = () => this.mode === "local" || keptOnline(this.repo).has(h);
           if (blob && wanted()) await this.save(h, blob);
           if (this.local.has(h) && !wanted()) await this.drop(h);
         })
         .finally(() => {
           this.active--;
-          // after every download, so the count in the settings moves along
-          this.updateStatus(this.repo.live().filter((r) => r.kind === "datei" && r.file?.hash));
+          // per download, so the progress in the settings moves along
+          this.updateStatus(this.liveFiles());
           this.pump();
         });
     }
@@ -493,11 +484,11 @@ export class DeviceFiles {
         if (u.derived) q.set("derived", "1");
         const res = await fetch(`${this.link.base}/api/blobs/${u.hash}?${q}`, { method: "PUT", body: blob, headers: this.auth }).catch(() => null);
         if (!res) break; // offline again
-        if (res.ok || res.status === 415 || res.status === 422 || res.status === 413) {
+        const rejectedForGood = res.status === 413 || res.status === 415 || res.status === 422;
+        if (res.ok || rejectedForGood) {
           await this.db.delete("uploads", u.hash);
           this.status.uploading--;
-          // "Online only": the original does not need to stay here once the server has it –
-          // unless it is what an image shows (an SVG has no display version of its own)
+          // SVGs have no display version, so their original must stay
           if (res.ok && !u.derived && this.mode === "online" && !shownItself(this.repo).has(u.hash)) await this.drop(u.hash);
         }
       }
@@ -507,7 +498,6 @@ export class DeviceFiles {
   }
 
   private pdfDone = new Set<string>();
-  /** PDFs without a preview: render page one here and share it as the preview. */
   private async makePdfPreviews(files: Item[]) {
     for (const f of files) {
       const m = f.file!;
@@ -517,8 +507,7 @@ export class DeviceFiles {
       if (!url) continue;
       const prev = await pdfPreview(await (await fetch(url)).blob());
       if (!prev) continue;
-      // Shared only once the server has it: a device that goes away before uploading must not
-      // leave other devices pointing at a preview that never arrives.
+      // Upload before referencing it, so other devices never point at a preview that never arrives.
       const thumb = await sha256(prev.blob);
       await this.save(thumb, prev.blob);
       const res = await fetch(`${this.link.base}/api/blobs/${thumb}?name=preview.webp&derived=1`, { method: "PUT", body: prev.blob, headers: this.auth }).catch(() => null);
@@ -530,10 +519,9 @@ export class DeviceFiles {
     }
   }
 
-  /** Remove local originals (switching to online only). Previews and what images show stay. */
   async dropOriginals() {
     const keep = keptOnline(this.repo);
-    const pending = new Set(((await this.db.getAll("uploads")) as Upload[]).map((u) => u.hash));
+    const pending = await this.pendingUploads();
     for (const h of [...this.local]) {
       if (keep.has(h) || pending.has(h)) continue;
       await this.drop(h);
@@ -541,7 +529,7 @@ export class DeviceFiles {
     this.scheduleSync(10);
   }
 
-  /** Delete a content here; an object URL made from it no longer works, so it is forgotten. */
+  /** Also forgets the object URL, which stops working once the content is gone. */
   private async drop(hash: string) {
     await this.store.delete(hash);
     this.local.delete(hash);
@@ -549,25 +537,22 @@ export class DeviceFiles {
   }
 }
 
-/** What stays here with "online only": previews, display versions and originals shown as they are. */
 function keptOnline(repo: Repo): Set<string> {
   const keep = shownItself(repo);
   for (const r of repo.live()) if (r.file) for (const h of [r.file.thumb, r.file.display]) if (h) keep.add(h);
   return keep;
 }
 
-/** Originals that are shown as they are: images without a display version (SVGs). */
+/** Images without a display version (SVGs) show their original. */
 function shownItself(repo: Repo): Set<string> {
   return new Set(repo.live().flatMap((r) => (r.file?.filetype === "bild" && !r.file.display ? [r.file.hash] : [])));
 }
 
-/** The files of the workspace open in the app (see accounts.ts, like `repo`). */
 export let files: DeviceFiles;
 export function setFiles(f: DeviceFiles) {
   files = f;
 }
 
-/** Object URL for a content hash (preview, display version or original). */
 export function useBlobUrl(hash?: string, keep = false): string | undefined {
   const f = useContext(ScopeContext)?.files ?? files;
   const [url, setUrl] = useState<string | undefined>();

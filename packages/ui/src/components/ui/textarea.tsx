@@ -1,7 +1,7 @@
 import * as React from "react"
 import { cn, framedFocus } from "../../lib/utils"
 
-/** `inline`: no frame, text that is edited in place (a title, a description). */
+/** `inline`: unframed, for text edited in place (a title, a description). */
 function Textarea({ className, variant = "default", ...props }: React.ComponentProps<"textarea"> & { variant?: "default" | "inline" }) {
   return (
     <textarea

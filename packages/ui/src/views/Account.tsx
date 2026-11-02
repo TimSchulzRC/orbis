@@ -11,7 +11,6 @@ import { getLang, useT } from "../i18n";
 import { NewSpaceForm } from "../ui/Spaces";
 import { Button } from "../ui/primitives";
 
-/** A page before the app (signing in, joining, the first workspace): logo, title, a sentence, a form. */
 export function AuthCard({ title, intro, children }: { title: string; intro?: ReactNode; children: ReactNode }) {
   return (
     <div className="flex h-full items-center justify-center overflow-y-auto p-6">
@@ -36,14 +35,15 @@ function Field({ label, ...p }: { label: string } & React.InputHTMLAttributes<HT
   );
 }
 
+/** What to say when signing in with a provider failed and came back here. */
+const oauthErrorKey = (failed: string) => (failed === "closed" ? "account.closed" : failed === "notLinked" ? "account.notLinked" : "account.oauthFailed");
+
 /** Passkeys work only where the browser has them (and in a secure context: HTTPS or localhost). */
 const canPasskey = () => typeof window !== "undefined" && !!window.PublicKeyCredential && window.isSecureContext;
 
 /**
- * Sign in or create an account on this server, in every way it offers: a passkey, an OAuth
- * provider, a code by email, a password. `inviteCode`: a new account joins that workspace.
- * `email`: confirming who is signed in already (only signing in, with this address, shown by the
- * caller; `hasPassword` and `hasPasskey` then offer just the ways this account has).
+ * `inviteCode`: a new account joins that workspace. `email`: re-confirming who is signed in (sign-in
+ * only; `hasPassword` and `hasPasskey` then limit the offered ways to the ones this account has).
  */
 export function SignIn({ inviteCode, onDone, email: fixedEmail, hasPassword, hasPasskey }: { inviteCode?: string; onDone?: () => void; email?: string; hasPassword?: boolean; hasPasskey?: boolean }) {
   const { t } = useT();
@@ -56,15 +56,15 @@ export function SignIn({ inviteCode, onDone, email: fixedEmail, hasPassword, has
   const [email, setEmail] = useState(fixedEmail ?? "");
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
-  const [error, setError] = useState(oauthFailed ? t(oauthFailed === "closed" ? "account.closed" : oauthFailed === "notLinked" ? "account.notLinked" : "account.oauthFailed") : "");
+  const [error, setError] = useState(oauthFailed ? t(oauthErrorKey(oauthFailed)) : "");
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     serverInfo()
-      .then((i) => {
-        setInfo(i);
-        if (!fixedEmail && (i.firstAccount || inviteCode)) setMode("up");
+      .then((server) => {
+        setInfo(server);
+        if (!fixedEmail && (server.firstAccount || inviteCode)) setMode("up");
         // confirming an account with a password: with that, as the password manager knows it
-        if (!loginOf(i).emailCode || (fixedEmail && hasPassword && loginOf(i).password)) setWithPassword(true);
+        if (!loginOf(server).emailCode || (fixedEmail && hasPassword && loginOf(server).password)) setWithPassword(true);
       })
       .catch(() => setError(t("account.offline")));
   }, []);
@@ -74,11 +74,11 @@ export function SignIn({ inviteCode, onDone, email: fixedEmail, hasPassword, has
   const byEmail = login.emailCode || byPassword;
   const ctx = { invite: inviteCode, lang: getLang() };
   const canSignUp = !fixedEmail && !!info && (info.firstAccount || info.signup === "open" || (info.signup === "invite" && !!inviteCode));
-  const run = async (what: "signIn" | "code", f: () => Promise<unknown>) => {
+  const run = async (what: "signIn" | "code", action: () => Promise<unknown>) => {
     setBusy(true);
     setError("");
     try {
-      await f();
+      await action();
       return true;
     } catch (err) {
       setError(errorText(err, t, what));
@@ -97,7 +97,10 @@ export function SignIn({ inviteCode, onDone, email: fixedEmail, hasPassword, has
       if (await run("code", () => signUp({ ...account, code }))) onDone?.();
     } else if (withPassword) {
       let verify = false;
-      const ok = await run("signIn", async () => void (verify = mode === "up" ? (await signUp(account)) === "verify" : (await signIn(email, password), false)));
+      const ok = await run("signIn", async () => {
+        if (mode === "up") verify = (await signUp(account)) === "verify";
+        else await signIn(email, password);
+      });
       if (ok && verify) setCodeSent(true);
       else if (ok) onDone?.();
     } else if (!codeSent) {
@@ -112,13 +115,15 @@ export function SignIn({ inviteCode, onDone, email: fixedEmail, hasPassword, has
       onDone?.();
     } catch (err) {
       // closed by the person (NotAllowedError): nothing to say
-      if (!(err instanceof Error && err.name === "NotAllowedError")) setError(err instanceof ApiError && err.status === 429 ? t("account.tooMany") : t("account.passkeyFailed"));
+      const closed = err instanceof Error && err.name === "NotAllowedError";
+      if (!closed) setError(err instanceof ApiError && err.status === 429 ? t("account.tooMany") : t("account.passkeyFailed"));
     } finally {
       setBusy(false);
     }
   };
   const withPasskey = login.passkey && canPasskey() && mode === "in" && hasPasskey !== false;
   const others = withPasskey || login.oauth.length > 0;
+  const signInLabel = mode === "up" ? t("account.signUp") : fixedEmail ? t("account.confirm") : t("account.signIn");
   if (codeSent)
     return (
       <form onSubmit={submit} className="mt-2">
@@ -130,7 +135,7 @@ export function SignIn({ inviteCode, onDone, email: fixedEmail, hasPassword, has
           </p>
         )}
         <Button type="submit" variant="primary" className="mt-6 w-full" disabled={busy || !code.trim()}>
-          {mode === "up" ? t("account.signUp") : fixedEmail ? t("account.confirm") : t("account.signIn")}
+          {signInLabel}
         </Button>
         <div className="mt-3 flex justify-between text-sm">
           <Button variant="plain" type="button" className="text-link hover:underline" onClick={() => (setCodeSent(false), setCode(""), setError(""))}>
@@ -179,7 +184,7 @@ export function SignIn({ inviteCode, onDone, email: fixedEmail, hasPassword, has
       )}
       {byEmail && (
         <Button type="submit" variant="primary" className="mt-6 w-full" disabled={busy || !info}>
-          {!withPassword ? t("account.sendCode") : mode === "up" ? t("account.signUp") : fixedEmail ? t("account.confirm") : t("account.signIn")}
+          {withPassword ? signInLabel : t("account.sendCode")}
         </Button>
       )}
       {login.emailCode && byPassword && (
@@ -196,23 +201,22 @@ export function SignIn({ inviteCode, onDone, email: fixedEmail, hasPassword, has
   );
 }
 
-/** Joining a workspace by its invite link: with the account signed in here, or a new one. */
 function Join({ code }: { code: string }) {
   const { t } = useT();
-  const [inv, setInv] = useState<InviteInfo | null | undefined>();
+  const [invitation, setInvitation] = useState<InviteInfo | null | undefined>();
   const [error, setError] = useState("");
-  const { account: acc } = useAccounts();
+  const { account } = useAccounts();
   useEffect(() => {
-    invite(code).then(setInv, () => setInv(null));
+    invite(code).then(setInvitation, () => setInvitation(null));
   }, [code]);
   const done = () => navigate("/", { replace: true });
-  if (inv === undefined) return null;
-  if (inv === null) return <AuthCard title={t("account.inviteInvalid")} intro={t("account.inviteInvalidHint")}><a href="#/inbox" className="mt-4 block text-sm text-link hover:underline">{t("nav.inbox")}</a></AuthCard>;
+  if (invitation === undefined) return null;
+  if (invitation === null) return <AuthCard title={t("account.inviteInvalid")} intro={t("account.inviteInvalidHint")}><a href="#/inbox" className="mt-4 block text-sm text-link hover:underline">{t("nav.inbox")}</a></AuthCard>;
   return (
-    <AuthCard title={t("account.joinTitle", { workspace: inv.workspace })} intro={t(inv.role === "owner" ? "account.joinIntroOwner" : "account.joinIntro", { by: inv.by, server: location.host })}>
-      {acc && !acc.lost ? (
+    <AuthCard title={t("account.joinTitle", { workspace: invitation.workspace })} intro={t(invitation.role === "owner" ? "account.joinIntroOwner" : "account.joinIntro", { by: invitation.by, server: location.host })}>
+      {account && !account.lost ? (
         <>
-          <p className="mt-4 text-sm">{t("account.joinAs", { email: acc.user.email })}</p>
+          <p className="mt-4 text-sm">{t("account.joinAs", { email: account.user.email })}</p>
           {error && <p className="mt-3 text-sm text-danger">{error}</p>}
           <Button variant="primary" className="mt-6 w-full" onClick={() => joinInvite(code).then(done, (e) => setError(errorText(e, t, "space")))}>
             {t("account.join")}
@@ -237,7 +241,6 @@ function NoSpace() {
   );
 }
 
-/** What has to happen before the app shows a workspace; `children` once one is open. */
 export function Gate({ children }: { children: ReactNode }) {
   const { t } = useT();
   const route = useRoute();

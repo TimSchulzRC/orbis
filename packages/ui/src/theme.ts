@@ -1,11 +1,10 @@
-// Light or dark, per device: "System" (default) follows the device, "Hell"/"Dunkel" stay.
-// index.html sets <html data-theme> before the first paint (no flash); this keeps it current.
+// index.html sets <html data-theme> before the first paint to avoid a flash; this keeps it current.
 import { useSyncExternalStore } from "react";
 import { KEYS } from "./ui/storage";
 
 type ThemeChoice = "system" | "light" | "dark";
 const KEY = KEYS.theme;
-/** The page background per mode: browser bar and PWA status bar take it on. */
+/** Page background per mode, for the browser bar and PWA status bar. */
 const BAR = { light: "#f7f6f3", dark: "#191919" } as const;
 
 const media = matchMedia("(prefers-color-scheme: dark)");
@@ -21,10 +20,10 @@ function resolve(c = themeChoice()): "light" | "dark" {
 }
 
 function apply() {
-  const r = resolve();
-  document.documentElement.dataset.theme = r;
-  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", BAR[r]);
-  document.querySelector('link[rel="icon"]')?.setAttribute("href", r === "dark" ? "/icon-dark.svg" : "/icon.svg");
+  const mode = resolve();
+  document.documentElement.dataset.theme = mode;
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", BAR[mode]);
+  document.querySelector('link[rel="icon"]')?.setAttribute("href", mode === "dark" ? "/icon-dark.svg" : "/icon.svg");
   listeners.forEach((l) => l());
 }
 
@@ -39,7 +38,7 @@ window.addEventListener("storage", (e) => e.key === KEY && apply()); // another 
 apply();
 
 const subscribe = (l: () => void) => (listeners.add(l), () => void listeners.delete(l));
-/** The choice and what it shows now (for canvas drawings that read colours once). */
+/** `resolved` is for canvas drawings that read colours once. */
 export function useTheme(): { choice: ThemeChoice; resolved: "light" | "dark" } {
   const choice = useSyncExternalStore(subscribe, themeChoice);
   const resolved = useSyncExternalStore(subscribe, () => resolve());

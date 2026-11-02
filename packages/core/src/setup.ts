@@ -1,10 +1,10 @@
-// First setup: the default types (Karte, Projekt, Task) in the chosen language,
-// the settings and the pinned entries. After that they are ordinary data: renamable,
-// changeable, deletable. Their fixed ids (sys:*) only serve "restore default types" and imports.
+// Default types and settings, plus one-time data upgrades. After setup the default types are
+// ordinary data; their fixed ids (sys:*) only serve "restore default types" and imports.
 import * as Y from "yjs";
 import {
   type Capabilities,
   type Item,
+  type OptionDef,
   type PropDef,
   type SettingsRecord,
   type ViewTab,
@@ -63,6 +63,7 @@ export function defaultTypes(lang: Lang): Record<string, TypeSpec> {
       { id: "pr_low", name: t("priority.low"), color: "green" },
     ],
   };
+  const blockedBy: Omit<PropDef, "sort"> = { id: BLOCKED_BY, name: t("prop.blockedBy"), kind: "relation", multiple: true, target: `${typeKey}:${t("task.name")} | ${typeKey}:${t("project.name")}`, inverseName: t("prop.blocking"), hideEmpty: true, blocks: true };
   return {
     [SYS.card]: {
       name: t("card.name"),
@@ -97,7 +98,7 @@ export function defaultTypes(lang: Lang): Record<string, TypeSpec> {
         { id: "p_period", name: t("prop.period"), kind: "date", range: true },
         { id: "p_summary", name: t("prop.summary"), kind: "text" },
         { id: "p_progress", name: t("prop.progress"), kind: "computed", computed: { fn: "progress", of: SYS.task } },
-        { id: BLOCKED_BY, name: t("prop.blockedBy"), kind: "relation", multiple: true, target: `${typeKey}:${t("task.name")} | ${typeKey}:${t("project.name")}`, inverseName: t("prop.blocking"), hideEmpty: true, blocks: true },
+        blockedBy,
       ],
     },
     [SYS.task]: {
@@ -123,7 +124,7 @@ export function defaultTypes(lang: Lang): Record<string, TypeSpec> {
         },
         priority,
         { id: "p_due", name: t("prop.due"), kind: "date" },
-        { id: BLOCKED_BY, name: t("prop.blockedBy"), kind: "relation", multiple: true, target: `${typeKey}:${t("task.name")} | ${typeKey}:${t("project.name")}`, inverseName: t("prop.blocking"), hideEmpty: true, blocks: true },
+        blockedBy,
         { id: WAITING_FOR, name: t("prop.waitingFor"), kind: "text", hideEmpty: true, blocks: true },
       ],
     },
@@ -135,9 +136,8 @@ function createType(w: Writer, id: string, spec: TypeSpec, origin?: string) {
 }
 
 /**
- * A one-time data upgrade: runs `fn` unless the settings say it ran (`key`), then marks it, so
- * it never runs again – even if the user later undoes its effect. undefined: it ran before (or
- * there are no settings yet).
+ * Marked in the settings so it never runs again, even if the user later undoes its effect.
+ * undefined if it ran before or there are no settings yet.
  */
 function runOnce<T>(w: Writer, key: string, fn: (settings: SettingsRecord) => T): T | undefined {
   const settings = w.get(SETTINGS_ID)?.settings;
@@ -147,10 +147,7 @@ function runOnce<T>(w: Writer, key: string, fn: (settings: SettingsRecord) => T)
   return out;
 }
 
-/**
- * Properties shipped later than a default type: added to existing default types once, unless
- * the type already has (or had and removed) them. Nothing else is touched.
- */
+/** Properties shipped after a default type. Not re-added if the user removed them. */
 const LATER_PROPS = [WAITING_FOR, BLOCKED_BY];
 export function addLaterDefaultProps(w: Writer, lang: Lang): string[] {
   const changed: string[] = [];
@@ -161,17 +158,14 @@ export function addLaterDefaultProps(w: Writer, lang: Lang): string[] {
     const missing = spec.properties.filter((p) => LATER_PROPS.includes(p.id) && !known.has(p.id));
     if (!missing.length) continue;
     w.change(id, (doc) => {
-      for (const p of missing) upsertProp(doc, p.id, p); // appended after the existing ones
+      for (const p of missing) upsertProp(doc, p.id, p);
     });
     changed.push(id);
   }
   return changed;
 }
 
-/**
- * Shipped labels renamed later: changed on existing default types only while they still carry
- * the old shipped wording (a name the user chose stays).
- */
+/** Shipped labels renamed later. Only changed while they still carry the old wording, so a user's own name stays. */
 const RENAMED: { type: string; prop: string; field: "inverseName"; was: Record<Lang, string>; key: string }[] = [
   { type: SYS.task, prop: BLOCKED_BY, field: "inverseName", was: { de: "Blockiert", en: "Blocking" }, key: "setup.prop.blocking" },
 ];
@@ -186,7 +180,7 @@ export function renameShippedLabels(w: Writer, lang: Lang): number {
   return n;
 }
 
-/** Create the default types that are missing, undelete deleted ones. Returns what changed. */
+/** Creates missing default types and undeletes deleted ones. */
 export function restoreDefaultTypes(w: Writer, lang: Lang, origin?: string): string[] {
   const specs = defaultTypes(lang);
   const changed: string[] = [];
@@ -205,11 +199,7 @@ export function restoreDefaultTypes(w: Writer, lang: Lang, origin?: string): str
 
 const DEFAULT_CAPTURE_TYPES = [SYS.card, SYS.task, SYS.project];
 
-/**
- * Once: the shipped task shows "Blockiert durch" and "Wartet auf" only when set (pages show every
- * property of a type since this version). Marked in the settings, so it never runs again – if the
- * user turns the option off afterwards, it stays off.
- */
+/** Pages show every property since this version; hide these two on the shipped task while empty. */
 export function upgradeHideEmptyTaskFields(w: Writer): boolean {
   return (
     runOnce(w, "task-hide-empty-1", () => {
@@ -223,10 +213,17 @@ export function upgradeHideEmptyTaskFields(w: Writer): boolean {
   );
 }
 
+/** The state the app used to read from a shipped option id or a status word in the name. */
+function impliedState(o: { id: string; name: string }): OptionDef["state"] {
+  if (o.id === "st_paused") return "paused";
+  if (o.id === "st_canceled" || o.id === "st_dropped") return "dropped";
+  return statusStateOf(o.name);
+}
+
 /**
- * Once: what the app recognised by id or name until now is marked in the data – "Blockiert durch"
- * and "Wartet auf" (in either language) hold an item up (`blocks`), status options for paused and
- * dropped carry their `state`. From then on only these marks count, so renaming changes nothing.
+ * The app used to recognise blocking properties and paused/dropped options by id or name. This
+ * writes `blocks` and `state` into the data; from then on only these marks count, so renaming
+ * changes nothing.
  */
 export function upgradeExplicitRoles(w: Writer, ix: Index): string[] {
   return (
@@ -241,11 +238,9 @@ export function upgradeExplicitRoles(w: Writer, ix: Index): string[] {
         const waiting = props.find((p) => p.kind === "text" && (p.id === WAITING_FOR || waitNames.has(titleKey(p.name))));
         const states = new Map<string, NonNullable<PropDef["options"]>>();
         for (const p of props) {
-          if (!p.options?.some((o) => o.group)) continue; // the options of a status (also one from before it was a select)
-          const state = (o: { id: string; name: string }) =>
-            o.id === "st_paused" ? "paused" : o.id === "st_canceled" || o.id === "st_dropped" ? "dropped" : statusStateOf(o.name);
-          if (!p.options.some((o) => !o.state && state(o))) continue;
-          states.set(p.id, p.options.map((o) => (o.state || !state(o) ? o : { ...o, state: state(o) })));
+          if (!p.options?.some((o) => o.group)) continue; // a status, also one from before it was a select
+          if (!p.options.some((o) => !o.state && impliedState(o))) continue;
+          states.set(p.id, p.options.map((o) => (o.state || !impliedState(o) ? o : { ...o, state: impliedState(o) })));
         }
         const marks = [by, waiting].filter((p): p is PropDef => !!p && !p.blocks);
         if (!marks.length && !states.size) continue;
@@ -261,10 +256,8 @@ export function upgradeExplicitRoles(w: Writer, ix: Index): string[] {
 }
 
 /**
- * The views of "Projekte" and "Tasks", like a project board in Notion: what is going on grouped
- * by status, a timeline, a board, everything, a calendar; tasks by project, by progress and by
- * priority. Names and columns in the setup language (like the type names); a view named like its
- * kind keeps no name, so it follows the UI language.
+ * Names and columns are in the setup language, like the type names. A view named like its kind
+ * has no name, so it follows the UI language.
  */
 function defaultViews(lang: Lang): { project: Omit<ViewTab, "pos">[]; task: Omit<ViewTab, "pos">[] } {
   const p = (k: string) => translate(lang, `setup.prop.${k}`);
@@ -272,7 +265,6 @@ function defaultViews(lang: Lang): { project: Omit<ViewTab, "pos">[]; task: Omit
   const projectCols = [p("status"), "area", p("period"), p("priority"), p("progress"), p("blockedBy")];
   return {
     project: [
-      // "Aktiv": what is planned, running or paused – Backlog and the finished ones hidden, one click brings them back
       { id: "v_active", name: v("active"), kind: "table", group: "status", hideEmpty: true, hiddenGroups: ["st_backlog", "st_done", "st_canceled"], columns: projectCols },
       { id: "v_timeline", kind: "timeline", group: "statusGroup", date: p("period") },
       { id: "v_board", kind: "board", group: "status", columns: [p("period"), p("status")] },
@@ -288,26 +280,29 @@ function defaultViews(lang: Lang): { project: Omit<ViewTab, "pos">[]; task: Omit
   };
 }
 
-/** The views of a type's page: the stored ones, else the defaults ("Alle" as a table). */
 export function typeTabs(type: Item, lang: Lang): ViewTab[] {
   if (type.schema?.views?.length) return type.schema.views;
   const views = defaultViews(lang);
   const list: Omit<ViewTab, "pos">[] = type.id === SYS.project ? views.project : type.id === SYS.task ? views.task : [{ id: "v_all", name: translate(lang, "setup.view.all"), kind: "table" }];
-  const pos = keysFor(list.length); // as setTabs writes them
+  const pos = keysFor(list.length); // same keys setTabs writes
   return list.map((tab, i) => ({ ...tab, pos: pos[i]! }));
 }
 
-/** "Standard wiederherstellen" of the inbox: back to the rule from the code. */
+/** "Standard wiederherstellen" of the inbox. */
 export function resetInbox(w: Writer) {
   w.change(SETTINGS_ID, (doc) => setSettings(doc, { inbox: null }));
 }
 
-/** First setup in the chosen language. Safe to run twice (fixed ids merge). */
+/** Safe to run twice (fixed ids merge). */
 export function runSetup(w: Writer, lang: Lang, origin?: string) {
   const fresh = !w.get(SYS.project);
   restoreDefaultTypes(w, lang, origin);
-  // the order under "Typen" (and in the phone's bar): Projekte, Tasks, Karten
-  if (fresh) [SYS.project, SYS.task, SYS.card].forEach((id, i) => w.change(id, (d) => setSchemaField(d, "pos", keysFor(3)[i]!)));
+  // order under "Typen" and in the phone's bar
+  if (fresh) {
+    const order = [SYS.project, SYS.task, SYS.card];
+    const pos = keysFor(order.length);
+    order.forEach((id, i) => w.change(id, (d) => setSchemaField(d, "pos", pos[i]!)));
+  }
   if (!w.get(SETTINGS_ID))
     w.change(SETTINGS_ID, (doc) => {
       initItem(doc, { kind: "settings", title: "Settings" });
@@ -315,10 +310,7 @@ export function runSetup(w: Writer, lang: Lang, origin?: string) {
     });
 }
 
-/**
- * Once (27.10.): areas. Every document from before gets the personal area written into it, and
- * the data the format version 1. Returns how many documents were marked.
- */
+/** Once (27.10.): documents from before areas get the personal area. Returns how many were marked. */
 export function upgradeAreas(w: Writer, docs: Iterable<[string, Y.Doc]>): number {
   return (
     runOnce(w, "areas-1", (settings) => {
@@ -331,15 +323,13 @@ export function upgradeAreas(w: Writer, docs: Iterable<[string, Y.Doc]>): number
   );
 }
 
-/** The collections shipped for the default types (until 26.10.). */
+/** Collections shipped for the default types until 26.10. */
 const SHIPPED_FOR: Record<string, string> = { "sys:c-project": SYS.project, "sys:c-task": SYS.task, "sys:c-card": SYS.card };
 
 /**
- * Once (26.10.): collections are gone. The inbox's rule goes to the settings; a type's collection
- * gives its views (and its name, if not the usual plural) to the type – what it filtered beyond
- * the type stays as each view's filter; the files' collections go (files have their own page);
- * any other collection becomes a page with a query block with the same views, pinned if it was.
- * The old documents stay as they are and are no longer read. Returns what happened, for the log.
+ * Once (26.10.): collections are gone. A type's collection gives its views and filter to the type;
+ * file collections are dropped; any other becomes a pinned-if-it-was page with a query block. The
+ * old documents stay but are no longer read. Returns log lines.
  */
 export function migrateCollections(w: Writer, ix: Index, docs: Iterable<[string, Y.Doc]>, lang: Lang): string[] {
   return runOnce(w, "no-collections-1", () => collectionsToViews(w, ix, docs, lang)) ?? [];
@@ -347,7 +337,7 @@ export function migrateCollections(w: Writer, ix: Index, docs: Iterable<[string,
 
 function collectionsToViews(w: Writer, ix: Index, docs: Iterable<[string, Y.Doc]>, lang: Lang): string[] {
   const log: string[] = [];
-  const given = new Set<string>(); // types that got their views (the first collection wins)
+  const typesWithViews = new Set<string>(); // the first collection wins
   let lastPin = sidebarRoots(ix).at(-1)?.pinned ?? null;
   for (const [id, doc] of docs) {
     const meta = metaMap(doc);
@@ -357,13 +347,13 @@ function collectionsToViews(w: Writer, ix: Index, docs: Iterable<[string, Y.Doc]
     const where = doc.getMap("query").get("where") as Cond | undefined;
     const tabs = readTabs(doc);
     const type = SHIPPED_FOR[id] ?? (where && "type" in where ? where.type : undefined);
-    const pos = (doc.getMap("pin").get("sidebar") as string | undefined) || undefined; // its place in the sidebar
+    const pos = (doc.getMap("pin").get("sidebar") as string | undefined) || undefined;
     if (meta.get("system") === "eingang") {
       const own = where && !sameValue(where, DEFAULT_INBOX_WHERE);
       if (own) w.change(SETTINGS_ID, (d) => setSettings(d, { inbox: where }));
       log.push(`${name}: ${own ? "its own rule to the settings" : "the default rule"}`);
-    } else if (type && ix.types.get(type) && !ix.types.get(type)!.schema.views && !given.has(type)) {
-      given.add(type);
+    } else if (type && ix.types.get(type) && !ix.types.get(type)!.schema.views && !typesWithViews.has(type)) {
+      typesWithViews.add(type);
       // what the collection filtered beyond the type stays in every view
       const parts = where && "and" in where ? where.and : where ? [where] : [];
       const rest = parts.filter((c) => !sameValue(c, { type }));

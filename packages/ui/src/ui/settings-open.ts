@@ -1,7 +1,5 @@
-// The settings open as a dialog over the page that is open (from the sidebar, the menu, the
-// palette); "#/settings" leads there too. In the dialog, the app's settings or one workspace's
-// (`space`; from its menu in the sidebar, the list in the app's, "#/w/<id>/settings"). Another
-// address closes it (a link inside, Back).
+// Settings open as a dialog over the current page, either the app's or one workspace's (`space`);
+// "#/settings" opens them too, and any other address closes them (e.g. Back).
 import { useSyncExternalStore } from "react";
 
 let open: { at: string; space: string | null } | null = null; // `at`: the address it was opened on

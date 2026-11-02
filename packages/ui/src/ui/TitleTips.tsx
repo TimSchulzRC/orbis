@@ -1,7 +1,6 @@
-// The browser draws `title` tooltips itself, in the system's colours (light on a dark page). Here
-// they look like the app's: hovering an element with a title takes the title off for that time
-// (so the browser shows nothing) and shows it in a small popover of its own, below the element or
-// above when there is no room. Leaving puts the title back. Mouse only; touch has no hover.
+// Native `title` tooltips use the system's colours (light on a dark page). While hovered, the title
+// attribute is removed so the browser shows nothing, and shown in the app's own popover instead.
+// Mouse only; touch has no hover.
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -10,6 +9,8 @@ export const TIP_CLASS = "rounded-md border border-line bg-popover px-2 py-1 tex
 
 const DELAY = 500;
 const GAP = 6;
+/** Space kept free between the tooltip and the window's edges. */
+const EDGE = 4;
 
 export function TitleTips() {
   const [tip, setTip] = useState<{ text: string; rect: DOMRect } | null>(null);
@@ -66,10 +67,10 @@ export function TitleTips() {
   useLayoutEffect(() => {
     if (!tip || !box.current) return setPos(null);
     const { width, height } = box.current.getBoundingClientRect();
-    const r = tip.rect;
-    const below = r.bottom + GAP + height <= innerHeight - 4;
-    const left = Math.min(Math.max(4, r.left + r.width / 2 - width / 2), innerWidth - width - 4);
-    setPos({ left, top: below ? r.bottom + GAP : Math.max(4, r.top - GAP - height) });
+    const anchor = tip.rect;
+    const below = anchor.bottom + GAP + height <= innerHeight - EDGE;
+    const left = Math.min(Math.max(EDGE, anchor.left + anchor.width / 2 - width / 2), innerWidth - width - EDGE);
+    setPos({ left, top: below ? anchor.bottom + GAP : Math.max(EDGE, anchor.top - GAP - height) });
   }, [tip]);
 
   if (!tip) return null;

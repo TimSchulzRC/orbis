@@ -48,9 +48,7 @@ const highlight = HighlightStyle.define([
   { tag: t.contentSeparator, color: "var(--faint)" },
 ]);
 
-// ---------- file embeds ----------
-
-/** An embedded file below its line, drawn like in read-only text (Markdown.tsx). */
+/** Must render like embeds in read-only Markdown. */
 class EmbedWidget extends WidgetType {
   constructor(readonly html: string) {
     super();
@@ -77,29 +75,29 @@ class EmbedWidget extends WidgetType {
   }
 }
 
-/** Ids of the images embedded in the text, in order (the full view pages through them). */
+/** In text order, so the full view can page through them. */
 function embeddedImages(state: EditorState): string[] {
   const out: string[] = [];
-  for (const l of parseWikiLinks(state.doc.toString())) {
-    const id = l.embed ? repo.resolveTitle(l.target) : undefined;
+  for (const link of parseWikiLinks(state.doc.toString())) {
+    const id = link.embed ? repo.resolveTitle(link.target) : undefined;
     if (id && repo.get(id)?.file?.filetype === "bild") out.push(id);
   }
   return out;
 }
 
 function imageDecos(state: EditorState): DecorationSet {
-  const b = new RangeSetBuilder<Decoration>();
+  const builder = new RangeSetBuilder<Decoration>();
   const text = state.doc;
   for (let i = 1; i <= text.lines; i++) {
     const line = text.line(i);
     if (!line.text.includes("![[")) continue;
-    for (const l of parseWikiLinks(line.text)) {
-      const id = l.embed ? repo.resolveTitle(l.target) : undefined;
+    for (const link of parseWikiLinks(line.text)) {
+      const id = link.embed ? repo.resolveTitle(link.target) : undefined;
       const item = id ? repo.get(id) : undefined;
-      if (item?.file && !item.deleted) b.add(line.to, line.to, Decoration.widget({ widget: new EmbedWidget(embedHTML(item, l.size)), block: true, side: 1 }));
+      if (item?.file && !item.deleted) builder.add(line.to, line.to, Decoration.widget({ widget: new EmbedWidget(embedHTML(item, link.size)), block: true, side: 1 }));
     }
   }
-  return b.finish();
+  return builder.finish();
 }
 
 const images = StateField.define<DecorationSet>({
@@ -108,38 +106,41 @@ const images = StateField.define<DecorationSet>({
   provide: (f) => EditorView.decorations.from(f),
 });
 
-// ---------- [[ autocomplete ----------
+const LINK_HITS = 40;
 
 const linkCompletion = (selfId?: string) => (ctx: CompletionContext): CompletionResult | null => {
-  const m = ctx.matchBefore(/\[\[[^\]\n]*$/);
-  if (!m) return null;
-  const q = m.text.slice(2);
-  const after = ctx.state.sliceDoc(ctx.pos, ctx.pos + 2);
-  const hits = (q.trim() ? repo.search(q, 40) : [...repo.live()].sort((a, b) => b.updated - a.updated).slice(0, 40)).filter((r) => r.id !== selfId);
-  const options: Completion[] = hits.map((r) => pageOption({
-    label: r.title,
-    hint: kindHint(r, repo.index()),
-    apply: r.title + (after === "]]" ? "" : "]]"),
-    boost: r.title.toLowerCase().startsWith(q.toLowerCase()) ? 10 : 0,
+  const match = ctx.matchBefore(/\[\[[^\]\n]*$/);
+  if (!match) return null;
+  const query = match.text.slice(2);
+  const close = ctx.state.sliceDoc(ctx.pos, ctx.pos + 2) === "]]" ? "" : "]]";
+  const hits = (query.trim() ? repo.search(query, LINK_HITS) : [...repo.live()].sort((a, b) => b.updated - a.updated).slice(0, LINK_HITS)).filter((hit) => hit.id !== selfId);
+  const options: Completion[] = hits.map((hit) => pageOption({
+    label: hit.title,
+    hint: kindHint(hit, repo.index()),
+    apply: hit.title + close,
+    boost: hit.title.toLowerCase().startsWith(query.toLowerCase()) ? 10 : 0,
   }));
-  if (q.trim() && !hits.some((h) => h.title.toLowerCase() === titleKey(q)))
-    options.push(pageOption({ label: q.trim(), hint: tr("editor.newLink"), apply: q.trim() + (after === "]]" ? "" : "]]"), boost: -10, icon: FilePlus }));
-  return { from: m.from + 2, options, filter: false };
+  if (query.trim() && !hits.some((h) => h.title.toLowerCase() === titleKey(query)))
+    options.push(pageOption({ label: query.trim(), hint: tr("editor.newLink"), apply: query.trim() + close, boost: -10, icon: FilePlus }));
+  return { from: match.from + 2, options, filter: false };
 };
 
-// ---------- paste and drop files ----------
-
-/** 2026-10-25-23-03-27 in local time (names of pasted images). */
 function localStamp(d = new Date()) {
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}-${p(d.getHours())}-${p(d.getMinutes())}-${p(d.getSeconds())}`;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}-${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`;
 }
 
-/** Insert files at a position: stored on this device at once, uploaded when the server is reachable. */
+/** Pasted screenshots all arrive as "image.png", so they get a dated name instead. */
+function uploadName(f: File): string {
+  if (f.name && f.name !== "image.png") return f.name;
+  const ext = (f.type.split("/")[1] || "png").replace("jpeg", "jpg");
+  return `${tr("editor.pastedImage")} ${localStamp()}.${ext}`;
+}
+
 async function insertFiles(view: EditorView, list: File[], pos: number) {
   let at = pos;
   for (const f of list) {
-    const name = f.name && f.name !== "image.png" ? f.name : `${tr("editor.pastedImage")} ${localStamp()}.${(f.type.split("/")[1] || "png").replace("jpeg", "jpg")}`;
+    const name = uploadName(f);
     try {
       const res = await files.add(f, name, { parent: undefined });
       const isImg = f.type.startsWith("image/") || /\.(png|jpe?g|gif|webp|avif|svg)$/i.test(res.name);
@@ -172,7 +173,6 @@ const fileHandlers = EditorView.domEventHandlers({
   },
 });
 
-/** For the toolbar / camera button: insert chosen files at the cursor. */
 export function insertFilesAtCursor(view: EditorView, list: File[]) {
   return insertFiles(view, list, view.state.selection.main.head);
 }
@@ -180,14 +180,15 @@ onSlashFiles(insertFilesAtCursor);
 
 function endQuote(view: EditorView) {
   const { state } = view;
-  const s = state.selection.main;
-  const line = state.doc.lineAt(s.head);
-  if (!s.empty || !/^\s*>\s*$/.test(line.text) || s.head !== line.to) return false;
+  const sel = state.selection.main;
+  const line = state.doc.lineAt(sel.head);
+  const atEndOfEmptyQuote = sel.empty && /^\s*>\s*$/.test(line.text) && sel.head === line.to;
+  if (!atEndOfEmptyQuote) return false;
   view.dispatch({ changes: { from: line.from, to: line.to, insert: "" } });
   return true;
 }
 
-/** Markdown shortcuts Markdown itself does not have: "[] " starts a to-do. */
+/** "[] " starts a to-do, a shortcut Markdown itself lacks. */
 const shortcuts = EditorView.inputHandler.of((view, from, to, text) => {
   if (text !== " " || view.state.readOnly) return false;
   const line = view.state.doc.lineAt(from);
@@ -198,7 +199,7 @@ const shortcuts = EditorView.inputHandler.of((view, from, to, text) => {
   return true;
 });
 
-// ---------- component ----------
+const editableState = (readOnly: boolean) => [EditorView.editable.of(!readOnly), EditorState.readOnly.of(readOnly)];
 
 export function Editor({
   doc,
@@ -211,7 +212,6 @@ export function Editor({
   readOnly = false,
 }: {
   minHeight?: string;
-  /** Shown, not edited. */
   readOnly?: boolean;
   doc: Y.Doc;
   nodeId?: string;
@@ -224,7 +224,7 @@ export function Editor({
   const viewRef = useRef<EditorView | null>(null);
   const editable = useRef(new Compartment());
   useEffect(() => {
-    viewRef.current?.dispatch({ effects: editable.current.reconfigure([EditorView.editable.of(!readOnly), EditorState.readOnly.of(readOnly)]) });
+    viewRef.current?.dispatch({ effects: editable.current.reconfigure(editableState(readOnly)) });
   }, [readOnly]);
   useEffect(() => {
     const ytext = doc.getText("body");
@@ -233,11 +233,11 @@ export function Editor({
     const extensions: Extension[] = [
       yCollab(ytext, null, { undoManager }),
       formatKeymap,
-      // Enter on an empty quote line ends the quote (Markdown would keep it going)
+      // Markdown would continue the quote, an empty quote line ends it instead
       Prec.highest(keymap.of([{ key: "Enter", run: endQuote }])),
       keymap.of([
         ...yUndoManagerKeymap,
-        // ⌘⇧↑ / ⌘⇧↓ move the block (as in Notion), ⌥↑ / ⌥↓ the line
+        // ⌘⇧↑/↓ move the block as in Notion, ⌥↑/↓ (default keymap) the line
         { key: "Mod-Shift-ArrowUp", run: (v) => (moveBy(v, v.state.selection.main.head, -1), true) },
         { key: "Mod-Shift-ArrowDown", run: (v) => (moveBy(v, v.state.selection.main.head, 1), true) },
         ...defaultKeymap,
@@ -258,7 +258,7 @@ export function Editor({
       fileHandlers,
       placeholderExt(placeholder ?? tr("editor.placeholder")),
       EditorView.contentAttributes.of({ spellcheck: "true", autocapitalize: "sentences", "aria-label": tr("editor.label") }),
-      editable.current.of([EditorView.editable.of(!readOnly), EditorState.readOnly.of(readOnly)]),
+      editable.current.of(editableState(readOnly)),
       ...extra,
     ];
     const view = new EditorView({ state: EditorState.create({ doc: ytext.toString(), extensions }), parent: host.current! });

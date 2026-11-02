@@ -1,6 +1,5 @@
-// Read-only Markdown mirror (data/vault): every information as Markdown with frontmatter,
-// below its home ("Teil von"); files next to it. For backup, grep, git and file-based
-// agents. Changes made there are overwritten; edit through the app or MCP.
+// Read-only Markdown mirror in data/vault, for backup, grep, git and file-based agents.
+// Changes made there get overwritten.
 import { existsSync, linkSync, copyFileSync, mkdirSync, readdirSync, rmSync, unlinkSync, writeFileSync, rmdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { type Item, META_TYPE, optionNames } from "@obtion/core/model";
@@ -10,6 +9,10 @@ import { isInInbox } from "@obtion/core/placement";
 import { type Lang, translate } from "@obtion/core/i18n";
 import type { Store } from "./store";
 import type { Blobs } from "./blobs";
+
+/** Records change in bursts (typing, imports): the first change starts the timer, and one write covers everything until it fires. */
+const SYNC_DELAY_MS = 1500;
+const README = "# Obtion mirror\n\nGenerated from the Obtion database: every information as Markdown below its home. Read freely; changes made here are overwritten. To change data, use the app or the MCP tools.\n";
 
 export class Mirror {
   private files = new Map<string, string>(); // relative path -> content signature
@@ -35,7 +38,11 @@ export class Mirror {
   private stopped = false;
 
   private schedule() {
-    if (!this.timer && !this.stopped) this.timer = setTimeout(() => ((this.timer = null), this.safeSync()), 1500);
+    if (this.timer || this.stopped) return;
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      this.safeSync();
+    }, SYNC_DELAY_MS);
   }
 
   stop() {
@@ -52,7 +59,6 @@ export class Mirror {
     }
   }
 
-  /** Compute every file, write what changed, remove what is gone. */
   sync() {
     const ix = this.store.index();
     const lang = this.store.lang();
@@ -74,15 +80,16 @@ export class Mirror {
       if (tn) return safe(tn);
       return lang === "de" ? "Ohne Ort" : "No place";
     };
+    const pathOf = (i: Item, name: string) => unique(`${folderOf(i)}/${name}`.replace(/^\.\//, ""), i.id);
     for (const i of ix.live) {
       if (i.kind === "datei" && i.file) {
-        want.set(unique(`${folderOf(i)}/${safe(i.file.name)}`.replace(/^\.\//, ""), i.id), { blob: i.file.hash });
+        want.set(pathOf(i, safe(i.file.name)), { blob: i.file.hash });
         continue;
       }
-      // An item with children gets a folder of the same name for them (folder note style).
-      want.set(unique(`${folderOf(i)}/${safe(i.title)}.md`.replace(/^\.\//, ""), i.id), { content: this.render(i, ix, lang) });
+      // children go into a folder named after this item (folder-note style)
+      want.set(pathOf(i, `${safe(i.title)}.md`), { content: this.render(i, ix, lang) });
     }
-    want.set("README.md", { content: "# Obtion mirror\n\nGenerated from the Obtion database: every information as Markdown below its home. Read freely; changes made here are overwritten. To change data, use the app or the MCP tools.\n" });
+    want.set("README.md", { content: README });
 
     for (const [rel, w] of want) {
       const sig = w.content ?? "blob:" + w.blob;
@@ -90,14 +97,7 @@ export class Mirror {
       const abs = join(this.root, rel);
       mkdirSync(dirname(abs), { recursive: true });
       if (w.content !== undefined) writeFileSync(abs, w.content);
-      else if (this.blobs?.has(w.blob!)) {
-        if (existsSync(abs)) unlinkSync(abs);
-        try {
-          linkSync(this.blobs.path(w.blob!), abs);
-        } catch {
-          copyFileSync(this.blobs.path(w.blob!), abs);
-        }
-      } else continue; // content not on the server yet
+      else if (!this.linkBlob(w.blob!, abs)) continue; // content not on the server yet
       this.files.set(rel, sig);
     }
     for (const rel of [...this.files.keys()]) {
@@ -107,6 +107,18 @@ export class Mirror {
       this.files.delete(rel);
       pruneEmpty(dirname(abs), this.root);
     }
+  }
+
+  /** False if the content is not on the server. */
+  private linkBlob(hash: string, abs: string): boolean {
+    if (!this.blobs?.has(hash)) return false;
+    if (existsSync(abs)) unlinkSync(abs);
+    try {
+      linkSync(this.blobs.path(hash), abs);
+    } catch {
+      copyFileSync(this.blobs.path(hash), abs);
+    }
+    return true;
   }
 
   render(i: Item, ix: Index, lang: Lang): string {
@@ -134,14 +146,7 @@ export class Mirror {
     if (i.refs.length) fm.refs = i.refs.map((r) => `[[${ix.get(r)?.title ?? r}]]`);
     fm.created = new Date(i.created).toISOString();
     fm.updated = new Date(i.updated).toISOString();
-    let out = "---\n";
-    for (const [k, v] of Object.entries(fm)) {
-      if (v === undefined) continue;
-      const key = /^[\w-]+$/.test(k) ? k : JSON.stringify(k);
-      if (Array.isArray(v)) out += `${key}:\n${v.map((x) => `  - ${yaml(String(x))}`).join("\n")}\n`;
-      else out += `${key}: ${yaml(String(v))}\n`;
-    }
-    out += "---\n\n";
+    let out = frontmatter(fm);
     if (i.schema && i.type === META_TYPE) {
       out += `${i.schema.description}\n\n## Properties\n\n` + i.schema.properties.map((p) => `- ${p.name} (${p.kind})${p.options ? ": " + p.options.map((o) => o.name).join(", ") : ""}`).join("\n") + "\n";
       return out;
@@ -152,6 +157,17 @@ export class Mirror {
     if (i.updates.length) out += "\n## Updates\n\n" + i.updates.map((e) => `- ${new Date(e.at).toISOString().slice(0, 16).replace("T", " ")} (${e.by}): ${e.text}`).join("\n") + "\n";
     return out;
   }
+}
+
+function frontmatter(fields: Record<string, unknown>): string {
+  let out = "---\n";
+  for (const [k, v] of Object.entries(fields)) {
+    if (v === undefined) continue;
+    const key = /^[\w-]+$/.test(k) ? k : JSON.stringify(k);
+    if (Array.isArray(v)) out += `${key}:\n${v.map((x) => `  - ${yaml(String(x))}`).join("\n")}\n`;
+    else out += `${key}: ${yaml(String(v))}\n`;
+  }
+  return out + "---\n\n";
 }
 
 function safe(title: string) {

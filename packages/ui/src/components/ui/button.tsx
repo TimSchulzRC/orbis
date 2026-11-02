@@ -10,7 +10,7 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        /** no look of its own: the caller styles it */
+        /** unstyled: the caller styles it */
         plain: "",
         default: [box, "bg-primary text-primary-foreground hover:bg-primary/90"],
         destructive: [box, "bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:bg-destructive/60 dark:focus-visible:ring-destructive/40"],

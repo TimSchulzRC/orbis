@@ -2,17 +2,15 @@ import MiniSearch from "minisearch";
 import { type Item, isContent, mapWikiLinks, stripQueryBlocks } from "./model";
 import { foldUmlauts, plainVowels } from "./text";
 
-// Same search on server (agents) and devices (offline), so both agree.
+// Shared by server (agents) and devices (offline) so both find the same.
 //
-// Spellings: terms are folded (lower case, ä→ae, ö→oe, ü→ue, ß→ss) when indexing and when
-// searching, and indexed once more with plain vowels (ö→o), so "Juergen" finds "Jürgen" and
-// "Grossenordnung" finds "Größenordnung". Hyphenated words are indexed as their parts and
-// joined ("e-rechnung" → e, rechnung, erechnung); a hyphenated query searches the joined
-// form, so "e-marketing" finds "Relaunch". Single letters are never prefixes ("C++").
+// Terms are folded (ä→ae, ß→ss) when indexing and searching, and also indexed with plain vowels
+// (ö→o), so "Juergen" finds "Jürgen" and "Grossenordnung" finds "Größenordnung". Hyphenated words
+// are indexed as their parts and joined ("e-rechnung" → e, rechnung, erechnung); a hyphenated
+// query searches the joined form.
 
 const WORD = /[\p{L}\p{N}_]+(?:-[\p{L}\p{N}_]+)*/gu;
 
-/** Lower case, umlauts as two letters: the form every query term takes. */
 const foldTerm = foldUmlauts;
 
 function tokenizeForIndex(text: string): string[] {
@@ -23,6 +21,19 @@ function tokenizeForIndex(text: string): string[] {
     if (parts.length > 1) out.push(parts.join(""));
   }
   return out;
+}
+
+/** Ids of the shipped status and priority options (st_*, pr_*): stored values, not words to search for. */
+const OPTION_ID = /^(st|pr)_/;
+
+function bodyText(doc: Item): string {
+  return stripQueryBlocks(doc.body) + (doc.file ? ` ${doc.file.name} ${doc.file.text ?? ""}` : "") + (doc.schema ? ` ${doc.schema.description}` : "");
+}
+
+function propsText(doc: Item): string {
+  const values = Object.values(doc.props).filter((v) => typeof v === "string" && !OPTION_ID.test(v));
+  const free = Object.entries(doc.extra).map(([k, v]) => `${k} ${v.v}`);
+  return [...values, ...free].join(" ");
 }
 
 function tokenizeForSearch(text: string): string[] {
@@ -41,9 +52,8 @@ export function createIndex() {
     },
     extractField: (doc, field) => {
       if (field === "tagText") return doc.tags.join(" ");
-      if (field === "body") return stripQueryBlocks(doc.body) + (doc.file ? ` ${doc.file.name} ${doc.file.text ?? ""}` : "") + (doc.schema ? ` ${doc.schema.description}` : "");
-      if (field === "props")
-        return [...Object.values(doc.props).filter((v) => typeof v === "string" && !/^(st|pr)_/.test(v)), ...Object.entries(doc.extra).map(([k, v]) => `${k} ${v.v}`)].join(" ");
+      if (field === "body") return bodyText(doc);
+      if (field === "props") return propsText(doc);
       return field === "title" || field === "id" ? doc[field] : "";
     },
     searchOptions: {
@@ -72,7 +82,7 @@ export function searchIds(idx: SearchIndex, query: string, limit = 20): string[]
   return res.slice(0, limit).map((r) => r.id as string);
 }
 
-/** A text without Markdown marks, on one line: for excerpts and previews. */
+/** Without Markdown marks, on one line. */
 export function plainText(body: string): string {
   const marks = stripQueryBlocks(body)
     .replace(/^\s*```.*$/gm, "") // code fences (the code itself stays)
@@ -88,18 +98,25 @@ export function plainText(body: string): string {
     .trim();
 }
 
-/** A short excerpt of `body` around the first matching term. */
-export function snippet(body: string, query: string, len = 160): string {
-  const flat = plainText(body);
-  const terms = tokenizeForSearch(query).map(foldTerm).filter((t) => t.length > 1);
-  // fold the text the same way, remembering where each folded letter came from
+const SNIPPET_LEAD = 50;
+
+/** Folds like foldTerm; `from[i]` is the index in `text` that folded letter i came from. */
+function foldWithOffsets(text: string): { folded: string; from: number[] } {
   let folded = "";
   const from: number[] = [];
-  for (let i = 0; i < flat.length; i++) {
-    const f = foldTerm(flat[i]!);
+  for (let i = 0; i < text.length; i++) {
+    const f = foldTerm(text[i]!);
     folded += f;
     for (let k = 0; k < f.length; k++) from.push(i);
   }
+  return { folded, from };
+}
+
+/** An excerpt of `body` around the first matching term. */
+export function snippet(body: string, query: string, len = 160): string {
+  const flat = plainText(body);
+  const terms = tokenizeForSearch(query).map(foldTerm).filter((t) => t.length > 1);
+  const { folded, from } = foldWithOffsets(flat);
   let pos = -1;
   for (const t of terms) {
     const at = folded.indexOf(t);
@@ -109,6 +126,6 @@ export function snippet(body: string, query: string, len = 160): string {
     }
   }
   if (pos < 0) return flat.slice(0, len) + (flat.length > len ? "…" : "");
-  const start = Math.max(0, pos - 50);
+  const start = Math.max(0, pos - SNIPPET_LEAD);
   return (start > 0 ? "…" : "") + flat.slice(start, start + len) + (start + len < flat.length ? "…" : "");
 }

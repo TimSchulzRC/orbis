@@ -1,6 +1,5 @@
-// Derived indexes over all items: titles, "Teil von" (with cycle resolution), descendants,
-// paths, links, backlinks, relation inverses, file usage, progress. The same code runs on
-// devices, the server and for agents, so everyone sees the same structure.
+// Derived indexes over all items. Devices, server and agents run the same code, so everyone sees
+// the same structure (including how cycles resolve).
 import {
   type Item,
   type TypeItem,
@@ -32,15 +31,21 @@ interface ParentEdge {
 const linkCache = new WeakMap<Item, { target: string; embed: boolean; size?: number }[]>();
 
 function linksOf(i: Item) {
-  let l = linkCache.get(i);
-  if (!l) linkCache.set(i, (l = parseWikiLinks(i.body)));
-  return l;
+  let links = linkCache.get(i);
+  if (!links) linkCache.set(i, (links = parseWikiLinks(i.body)));
+  return links;
+}
+
+function pushTo<V>(map: Map<string, V[]>, key: string, value: V) {
+  const list = map.get(key);
+  if (list) list.push(value);
+  else map.set(key, [value]);
 }
 
 export class Index {
-  /** All records, including deleted ones (needed for "Typ gelöscht", trash, restore). */
+  /** Includes deleted records (for "Typ gelöscht", trash, restore). */
   readonly all: Map<string, Item>;
-  /** Live informations and files (types included). */
+  /** Live informations and files, types included. */
   readonly live: Item[];
   readonly byId = new Map<string, Item>();
   readonly types = new Map<string, TypeItem>();
@@ -68,7 +73,7 @@ export class Index {
     return id ? this.byId.get(id) : undefined;
   }
 
-  /** The live items of these ids, in order; gone ones are left out. */
+  /** In order; ids of gone items are skipped. */
   items(ids: Iterable<string>): Item[] {
     const out: Item[] = [];
     for (const id of ids) {
@@ -78,18 +83,16 @@ export class Index {
     return out;
   }
 
-  /** Titles of these ids as a path ("Arbeit › Relaunch"). */
+  /** "Arbeit › Relaunch" */
   pathText(ids: string[]): string {
     return ids.map((id) => this.get(id)?.title ?? "").join(" › ");
   }
-
-  // ---------- types ----------
 
   schemaOf(item: Item | undefined): TypeSchema | undefined {
     return item?.type ? this.types.get(item.type)?.schema : undefined;
   }
 
-  /** Type id if it points to a live type; a deleted type counts as no type. */
+  /** A deleted type counts as no type. */
   typeOf(item: Item): string | null {
     return item.type && this.types.has(item.type) ? item.type : null;
   }
@@ -100,29 +103,27 @@ export class Index {
     return this.all.get(id)?.schema?.name;
   }
 
-  /** The name of a type's list: its plural ("Bücher"), a guess in the setup language while unset. */
+  /** The stored plural ("Bücher"), else a guess in the setup language. */
   typePlural(id: string): string {
     const s = this.types.get(id)?.schema;
     if (!s) return "";
     return s.plural || pluralOf(s.name, this.all.get(SETTINGS_ID)?.settings?.setupLang ?? "de");
   }
 
-  /** The types in their order (sidebar, phone bar): by their key, those without at the end. */
+  /** Sidebar order; types without a pos come last. */
   typesInOrder(): TypeItem[] {
     return [...this.types.values()].sort((a, b) => cmpKey(a.schema.pos ?? "~", b.schema.pos ?? "~") || a.created - b.created);
   }
 
-  /** The types by name (pickers, menus). */
   typesByName(): TypeItem[] {
     return [...this.types.values()].sort((a, b) => a.schema.name.localeCompare(b.schema.name));
   }
 
-  /** The types pinned in the capture type picker (settings), those that still exist. */
   captureTypes(): string[] {
     return (this.all.get(SETTINGS_ID)?.settings?.captureTypes ?? []).filter((id) => this.types.has(id));
   }
 
-  /** A type by name; singular and plural both work (Task/Tasks, Projekt/Projekte). */
+  /** Singular and plural both match (Task/Tasks, Projekt/Projekte). */
   typeByName(name: string): string | undefined {
     const k = titleKey(name);
     for (const t of this.types.values()) if (titleKey(t.schema.name) === k || titleKey(t.title) === k) return t.id;
@@ -130,58 +131,53 @@ export class Index {
     return undefined;
   }
 
-  /** A type id if it names a live type; else undefined (a filter on a deleted type is ignored). */
+  /** A filter on a deleted type is ignored. */
   private liveType(of?: string): string | undefined {
     return of && this.types.has(of) ? of : undefined;
   }
 
-  // ---------- titles ----------
-
   private titles() {
     if (!this._titles) {
-      const t = new Map<string, string>();
-      const f = new Map<string, string>();
+      const byTitle = new Map<string, string>();
+      const byFileName = new Map<string, string>();
       // Older first so the most recently edited wins on duplicate titles.
       for (const r of [...this.live].sort((a, b) => a.updated - b.updated)) {
-        if (r.title.trim()) t.set(titleKey(r.title), r.id);
-        if (r.file?.name) f.set(titleKey(r.file.name), r.id);
+        if (r.title.trim()) byTitle.set(titleKey(r.title), r.id);
+        if (r.file?.name) byFileName.set(titleKey(r.file.name), r.id);
       }
-      this._titles = t;
-      this._files = f;
+      this._titles = byTitle;
+      this._files = byFileName;
     }
     return this._titles;
   }
 
-  /** [[Title]] → id. File names resolve too, so ![[name.png]] from Obsidian keeps working after a rename. */
+  /** File names resolve too, so ![[name.png]] from Obsidian keeps working after a rename. */
   resolveTitle = (title: string): string | undefined => {
     const k = titleKey(title);
-    const t = this.titles();
-    const byName = this._files!.get(k);
-    if (looksLikeFileName(title) && byName) return byName;
+    const byTitle = this.titles();
+    const file = this._files!.get(k);
+    if (looksLikeFileName(title) && file) return file;
     // [[id|Label]] links exactly, also to titles that can't be linked by name
-    return t.get(k) ?? byName ?? (this.byId.has(title.trim()) ? title.trim() : undefined);
+    return byTitle.get(k) ?? file ?? (this.byId.has(title.trim()) ? title.trim() : undefined);
   };
 
-  /** Do [[links]] by the item's title lead to it? Then renaming it renames them too. */
+  /** True when [[links]] by this title lead to the item, so renaming it renames them too. */
   ownsTitle(item: Item): boolean {
     return item.title.trim() !== "" && this.resolveTitle(item.title) === item.id;
   }
-
-  // ---------- "Teil von" ----------
 
   private structure() {
     if (this._parents) return;
     const edges: ParentEdge[] = [];
     for (const r of this.live)
       for (const [p, link] of Object.entries(r.parents)) if (p !== r.id && this.byId.has(p)) edges.push({ child: r.id, parent: p, at: link.at ?? 0 });
-    // Add edges oldest first; an edge that would close a cycle is skipped. So offline-made
-    // cycles resolve deterministically: the edge added last does not count.
+    // Oldest first, skipping edges that would close a cycle, so cycles made offline resolve the same
+    // way everywhere: the newest edge loses.
     edges.sort((a, b) => a.at - b.at || a.child.localeCompare(b.child) || a.parent.localeCompare(b.parent));
     const parents = new Map<string, string[]>();
     const children = new Map<string, string[]>();
     const cycles: ParentEdge[] = [];
-    const reaches = (from: string, to: string) => {
-      // is `to` an ancestor-or-self of `from`? walk up from `from`
+    const hasAncestorOrSelf = (from: string, to: string) => {
       const seen = new Set<string>();
       const stack = [from];
       while (stack.length) {
@@ -194,19 +190,18 @@ export class Index {
       return false;
     };
     for (const e of edges) {
-      // child under parent closes a cycle if child is an ancestor-or-self of parent
-      if (reaches(e.parent, e.child)) {
+      if (hasAncestorOrSelf(e.parent, e.child)) {
         cycles.push(e);
         continue;
       }
-      (parents.get(e.child) ?? parents.set(e.child, []).get(e.child)!).push(e.parent);
-      (children.get(e.parent) ?? children.set(e.parent, []).get(e.parent)!).push(e.child);
+      pushTo(parents, e.child, e.parent);
+      pushTo(children, e.parent, e.child);
     }
     for (const [p, list] of children) {
       list.sort((a, b) => {
-        const sa = this.byId.get(a)!.parents[p]?.sort ?? "";
-        const sb = this.byId.get(b)!.parents[p]?.sort ?? "";
-        return cmpKey(sa, sb) || this.byId.get(a)!.title.localeCompare(this.byId.get(b)!.title);
+        const itemA = this.byId.get(a)!;
+        const itemB = this.byId.get(b)!;
+        return cmpKey(itemA.parents[p]?.sort ?? "", itemB.parents[p]?.sort ?? "") || itemA.title.localeCompare(itemB.title);
       });
     }
     this._parents = parents;
@@ -232,11 +227,11 @@ export class Index {
 
   /** Effective home: the stored one if still a parent, else the oldest remaining parent. */
   home(id: string): string | undefined {
-    const ps = this.parentsOf(id);
-    if (!ps.length) return undefined;
+    const parents = this.parentsOf(id);
+    if (!parents.length) return undefined;
     const item = this.byId.get(id)!;
-    if (item.home && ps.includes(item.home)) return item.home;
-    return [...ps].sort((a, b) => (item.parents[a]?.at ?? 0) - (item.parents[b]?.at ?? 0) || a.localeCompare(b))[0];
+    if (item.home && parents.includes(item.home)) return item.home;
+    return [...parents].sort((a, b) => (item.parents[a]?.at ?? 0) - (item.parents[b]?.at ?? 0) || a.localeCompare(b))[0];
   }
 
   /** Ancestors along the home chain, root first. */
@@ -250,23 +245,22 @@ export class Index {
     return out;
   }
 
-  /** All descendants over all parents, each once. */
+  /** Over all parents, not just the home. */
   descendants(id: string): Set<string> {
-    let d = this._desc.get(id);
-    if (d) return d;
-    d = new Set();
+    const cached = this._desc.get(id);
+    if (cached) return cached;
+    const found = new Set<string>();
     const stack = [...this.childrenOf(id)];
     while (stack.length) {
       const x = stack.pop()!;
-      if (d.has(x) || x === id) continue;
-      d.add(x);
+      if (found.has(x) || x === id) continue;
+      found.add(x);
       stack.push(...this.childrenOf(x));
     }
-    this._desc.set(id, d);
-    return d;
+    this._desc.set(id, found);
+    return found;
   }
 
-  /** Would putting `child` under `parent` create a cycle? */
   wouldCycle(child: string, parent: string): boolean {
     return child === parent || this.descendants(child).has(parent);
   }
@@ -283,8 +277,9 @@ export class Index {
     while (queue.length) {
       const x = queue.shift()!;
       const home = this.home(x);
-      const ps = this.parentsOf(x);
-      for (const p of home ? [home, ...ps.filter((q) => q !== home)] : ps) {
+      const parents = this.parentsOf(x);
+      const homeFirst = home ? [home, ...parents.filter((q) => q !== home)] : parents;
+      for (const p of homeFirst) {
         if (seen.has(p)) continue;
         seen.add(p);
         prev.set(p, x);
@@ -299,9 +294,6 @@ export class Index {
     return undefined;
   }
 
-  // ---------- links ----------
-
-  /** Links in the text, resolved. */
   textLinks(item: Item): { to: string; embed: boolean; size?: number }[] {
     const out: { to: string; embed: boolean; size?: number }[] = [];
     for (const l of linksOf(item)) {
@@ -311,12 +303,11 @@ export class Index {
     return out;
   }
 
-  /** What an item mentions: the entries linked in its text (not embedded) and its refs. */
+  /** Entries linked (not embedded) in the text, plus refs. */
   mentions(item: Item): string[] {
     return [...this.textLinks(item).filter((l) => !l.embed).map((l) => l.to), ...item.refs];
   }
 
-  /** Unresolved [[links]] (titles that don't exist yet). */
   missingLinks(item: Item): string[] {
     return linksOf(item)
       .filter((l) => !this.resolveTitle(l.target))
@@ -326,7 +317,7 @@ export class Index {
   private backlinkIndex() {
     if (!this._backlinks) {
       const m = new Map<string, Backlink[]>();
-      const add = (to: string, b: Backlink) => (m.get(to) ?? m.set(to, []).get(to)!).push(b);
+      const add = (to: string, b: Backlink) => pushTo(m, to, b);
       for (const r of this.live) {
         const seen = new Set<string>();
         for (const l of this.textLinks(r)) {
@@ -355,12 +346,12 @@ export class Index {
     return [...new Set([...own, ...back])];
   }
 
-  /** "Bereich": the top place an entry lives in – the first pinned entry on its home path (Arbeit, Persönlich …). */
+  /** "Bereich": the first pinned entry on the home path (Arbeit, Persönlich …). */
   area(id: string): string | undefined {
     return this.homePath(id).find((p) => this.byId.get(p)?.pinned);
   }
 
-  /** The project of an entry: the nearest ancestor on its home path that has a status and another type (a sub-task's project, not its parent task). */
+  /** The nearest ancestor with a status and a different type, so a sub-task gets its project, not its parent task. */
   project(id: string): string | undefined {
     const item = this.byId.get(id);
     const path = this.homePath(id);
@@ -371,7 +362,7 @@ export class Index {
     return undefined;
   }
 
-  /** Where a file is used: embedded or linked in the text, or referenced. */
+  /** Embedded, linked or referenced from an information; relations don't count. */
   usedIn(fileId: string): Backlink[] {
     return this.backlinks(fileId).filter((b) => b.kind !== "rel" && this.byId.get(b.from)?.kind === "info");
   }
@@ -390,12 +381,9 @@ export class Index {
     return out;
   }
 
-  // ---------- aggregation ----------
-
   /**
-   * Progress: done descendants among descendants that have a status. The type filter is
-   * optional; a filter on a type that no longer exists is ignored, so progress survives
-   * deleting or renaming a type.
+   * Counts only descendants with a status. A filter on a deleted type is ignored, so progress
+   * survives deleting a type.
    */
   progress(id: string, of?: string): { done: number; total: number } {
     const filter = this.liveType(of);
@@ -412,15 +400,14 @@ export class Index {
     return { done, total };
   }
 
-  /** Progress as the item's type defines it, if the type has the capability. */
   progressOf(item: Item): { done: number; total: number } | undefined {
     const spec = progressSpec(this.schemaOf(item));
     return spec ? this.progress(item.id, spec.of) : undefined;
   }
 
   /**
-   * What holds an item up: the open entries of its blocking relations ("Blockiert durch") and the
-   * text of its blocking texts ("Wartet auf"), see blockingProps. Done or deleted blockers no longer count.
+   * Open targets of blocking relations ("Blockiert durch") and blocking texts ("Wartet auf"). Done
+   * or deleted blockers don't count.
    */
   blockers(item: Item): { by: Item[]; waiting?: string } {
     const by: Item[] = [];
@@ -441,7 +428,7 @@ export class Index {
     return b.by.length > 0 || !!b.waiting;
   }
 
-  /** Direct children with a status that is not done ("offene Unteraufgaben"). */
+  /** Children without a status don't count ("offene Unteraufgaben"). */
   openChildren(id: string): Item[] {
     return this.childrenOf(id)
       .map((c) => this.byId.get(c)!)
@@ -452,8 +439,8 @@ export class Index {
   }
 
   /**
-   * "Ruhend": the item or something above it is paused or done – nothing urgent comes from
-   * here (tasks of a paused project stay out of the focus lists).
+   * "Ruhend": the item or something above it is paused or done, so tasks of a paused project stay
+   * out of the focus lists.
    */
   isDormant(item: Item): boolean {
     const seen = new Set<string>();
@@ -470,33 +457,30 @@ export class Index {
     return false;
   }
 
-  /**
-   * The type "+" on an item's page creates (its type's main action), while that type exists. A main
-   * action on a deleted type counts as none.
-   */
+  /** The type "+" on the item's page creates; a deleted type counts as none. */
   mainChildType(item: Item | undefined): string | undefined {
     const pc = primaryChild(this.schemaOf(item));
     return pc && this.types.has(pc) ? pc : undefined;
   }
 
   /**
-   * The next thing to do in a project: an open entry below it (of the type its main action
-   * creates, if it has one) that is not blocked, not paused and has no open entries below
-   * itself. Order: due by today first, then in progress, then due date.
+   * An open entry below the project (of its main action type, if any) that is not blocked, not
+   * paused and has no open entries below. Due by today comes first, then in progress, then by due date.
    */
   nextTask(id: string, today: string): Item | undefined {
-    const kind = this.mainChildType(this.byId.get(id));
+    const childType = this.mainChildType(this.byId.get(id));
     const candidates = [...this.descendants(id)]
       .map((d) => this.byId.get(d)!)
       .filter((x) => {
-        if (kind && x.type !== kind) return false;
+        if (childType && x.type !== childType) return false;
         const s = statusOf(x, this.schemaOf(x));
         return !!s && s.group !== "done" && !isPausedOption(s.option) && !this.isBlocked(x) && this.openChildren(x.id).length === 0;
       });
     const key = (x: Item) => {
       const due = dueOf(x, this.schemaOf(x));
       const s = statusOf(x, this.schemaOf(x))!;
-      return [due && due <= today ? 0 : 1, due && due <= today ? due : "", s.group === "active" ? 0 : 1, due ?? "9999", x.title.toLowerCase()] as const;
+      const dueByToday = !!due && due <= today;
+      return [dueByToday ? 0 : 1, dueByToday ? due : "", s.group === "active" ? 0 : 1, due ?? "9999", x.title.toLowerCase()] as const;
     };
     return candidates.sort((a, b) => {
       const ka = key(a);
@@ -513,7 +497,6 @@ export class Index {
     return n;
   }
 
-  /** Items of a type (its list). */
   itemsOfType(typeId: string): Item[] {
     return this.live.filter((r) => r.type === typeId);
   }

@@ -1,12 +1,9 @@
-// What agents give the tools, once: the MCP server checks it with these schemas, the operations
-// (ops.ts) take the types inferred from them.
+// Tool input schemas: the MCP server validates with them, ops.ts uses the inferred types.
 import { z } from "zod";
 import { PROP_KINDS, VIEW_KINDS } from "@obtion/core/model";
 
-/** Property values by property name. */
 const values = z.record(z.string(), z.any());
 
-/** A view (tab) of a type's page: its own filter and look in query text. */
 export const viewInput = z.object({
   name: z.string().optional(),
   view: z.enum(VIEW_KINDS).optional(),
@@ -25,7 +22,7 @@ export const propInput = z.object({
     .optional()
     .describe('A select is the type\'s status when capabilities.status names it; "status" and "multiselect" still work as shorthands'),
   description: z.string().optional(),
- options: z.array(z.string()).optional().describe('for select: names; options of the status as "Name (todo|active|done)", a paused one as "Name (active, paused)", a dropped one as "Name (done, dropped)"'),
+  options: z.array(z.string()).optional().describe('for select: names; options of the status as "Name (todo|active|done)", a paused one as "Name (active, paused)", a dropped one as "Name (done, dropped)"'),
   multiple: z.boolean().optional().describe("relation: several targets; select: several options"),
   default: z.string().nullable().optional().describe("select with one value: the option new entries get; it can then not be emptied (the status always has one). null: may be empty"),
   target: z.string().optional().describe("relation target as a query, e.g. type:Person"),

@@ -1,12 +1,12 @@
-// Query engine: stored as JSON with ids, typed and shown as text in any UI language.
+// Queries are stored as JSON with ids and typed and shown as text in any UI language:
 //
 //   typ:Task status:offen unter:[[Relaunch]] fällig<=+7d sort:fällig gruppe:pfad
 //   (typ:Person | #people) #autor
 //   typ:Projekt in:diese -status:erledigt ansicht:board gruppe:status
 //
-// Space = AND, | = OR, - = NOT, parentheses group. Properties are found by name across all
-// types and free properties. The same code runs on devices, the server and for agents.
-import { type ViewTab, type FileType, type Item, type OptionDef, type PropDef, type ViewKind, FILE_TYPES, META_TYPE, QUERY_FENCE, STATUS_GROUPS, VIEW_KINDS, optionNames, titleKey } from "./model";
+// Space = AND, | = OR, - = NOT, parentheses group. Properties match by name across all types and
+// free properties.
+import { type ViewTab, type ComputedDef, type FileType, type Item, type OptionDef, type PropDef, type ViewKind, FILE_TYPES, META_TYPE, QUERY_FENCE, STATUS_GROUPS, VIEW_KINDS, optionNames, titleKey } from "./model";
 import { dateOf, todayISO } from "./date";
 import { foldUmlauts as fold } from "./text";
 import type { Index } from "./graph";
@@ -15,8 +15,7 @@ import { type Lang, LANGS, words } from "./i18n";
 import { dateEnd, dateStart, doneAt, dueOf, statusOf, statusProp } from "./traits";
 import { optionMatches, parseDate, parseNumber, statusGroupOf } from "./input";
 
-/** Is this word the name of a status option of some type? Then it means that option, not a group. */
-function byOptionName(ix: Index, word: string): boolean {
+function isStatusOptionName(ix: Index, word: string): boolean {
   const k = titleKey(word);
   for (const t of ix.types.values()) if (statusProp(t.schema)?.options?.some((o) => titleKey(o.name) === k)) return true;
   return false;
@@ -39,10 +38,10 @@ export type Cond =
   | { under: Ref }
   | { in: Ref }
   | { linked: Ref }
-  | { linkedUnder: Ref } // verknüpft:unter:[[X]] – connected to X or to a descendant of X
+  | { linkedUnder: Ref } // verknüpft:unter:[[X]] – connected to X or a descendant of X
   | { prop: string; op: Op; value?: FieldValue }
   | { status: StatusKey }
-  | { inbox: true } // whatever the inbox rule matches, without what is set aside (inbox.ts)
+  | { inbox: true } // what the inbox rule matches, minus what is set aside
   | { pinned: true }
   | { blocked: true } // an open entry under "Blockiert durch" or "Wartet auf" is set
   | { dormant: true } // it or something above it is paused or done
@@ -63,16 +62,14 @@ export interface QueryDef {
   title?: string;
   hideEmpty?: boolean;
   collapsed?: boolean; // starts closed (start page cards)
-  /** query blocks with more than one view: the views as tabs (the fields above mirror the first) */
+  /** query blocks with several views; the fields above mirror the first tab */
   tabs?: ViewTab[];
 }
 
-// Built-in fields, stored neutral.
+// Built-in fields, stored language-neutral.
 export const FIELDS = ["title", "created", "updated", "due", "done", "next", "area", "project", "subtasks", "progress"] as const;
 const GROUPS = ["path", "status", "statusGroup", "type"] as const;
 const STATUS_KEYS: StatusKey[] = ["open", "new", "active", "done"];
-
-// ---------- keywords ----------
 
 type KwTable = Map<string, string>; // word -> neutral key
 let kwCache: Record<string, KwTable> | null = null;
@@ -104,8 +101,6 @@ function tables(): Record<string, KwTable> {
 const kw = (cat: keyof typeof KW_KEYS, word: string) => tables()[cat]!.get(fold(word));
 const say = (lang: Lang, cat: string, key: string) => words(lang, `q.${cat}.${key}`)[0] ?? key;
 
-// ---------- parsing ----------
-
 export interface ParseResult {
   def: QueryDef;
   errors: string[];
@@ -130,25 +125,24 @@ function tokenize(src: string): Tok[] {
       i++;
       continue;
     }
-    if (c === "-" && i + 1 < src.length && !/\s/.test(src[i + 1]!) && (out.length === 0 || out.at(-1)!.t !== "term" || /\s|\(|\|/.test(src[i - 1] ?? " "))) {
+    const beforeWord = i + 1 < src.length && !/\s/.test(src[i + 1]!);
+    const afterGap = out.length === 0 || out.at(-1)!.t !== "term" || /\s|\(|\|/.test(src[i - 1] ?? " ");
+    if (c === "-" && beforeWord && afterGap) {
       out.push({ t: "-" });
       i++;
       continue;
     }
+    // the end of a [[link]] or "quote" opened at `from`, or the end of the source when unclosed
+    const closeAt = (close: string, from: number) => {
+      const end = src.indexOf(close, from);
+      return end < 0 ? src.length : end + close.length;
+    };
     let j = i;
     let v = "";
     while (j < src.length) {
       const ch = src[j]!;
-      if (src.startsWith("[[", j)) {
-        const end = src.indexOf("]]", j);
-        const stop = end < 0 ? src.length : end + 2;
-        v += src.slice(j, stop);
-        j = stop;
-        continue;
-      }
-      if (ch === '"') {
-        const end = src.indexOf('"', j + 1);
-        const stop = end < 0 ? src.length : end + 1;
+      if (src.startsWith("[[", j) || ch === '"') {
+        const stop = ch === '"' ? closeAt('"', j + 1) : closeAt("]]", j);
         v += src.slice(j, stop);
         j = stop;
         continue;
@@ -178,6 +172,14 @@ export function parseQuery(src: string, ix: Index): ParseResult {
     if (ix.get(title)) return { id: title };
     const id = ix.resolveTitle(title);
     return id ? { id } : { unresolved: title };
+  };
+
+  /** An unknown link target is reported and becomes an `unresolved` condition. */
+  const linkCond = (raw: string, cond: (r: Ref) => Cond): Cond => {
+    const r = ref(raw);
+    if (!("unresolved" in r)) return cond(r);
+    errors.push(`link:${r.unresolved}`);
+    return { unresolved: r.unresolved };
   };
 
   const term = (raw: string): Cond | null => {
@@ -215,27 +217,19 @@ export function parseQuery(src: string, ix: Index): ParseResult {
       case "linked": {
         // verknüpft:unter:[[X]] / linked:under:[[X]]
         const sub = key === "linked" ? /^([^:[]+):(.*)$/.exec(value) : null;
-        if (sub && kw("key", sub[1]!) === "under") {
-          const r = ref(sub[2]!);
-          if ("unresolved" in r) {
-            errors.push(`link:${r.unresolved}`);
-            return { unresolved: r.unresolved };
-          }
-          return { linkedUnder: r };
-        }
-        const r = ref(value);
-        if ("unresolved" in r) {
-          errors.push(`link:${r.unresolved}`);
-          return { unresolved: r.unresolved };
-        }
-        return key === "under" ? { under: r } : key === "in" ? { in: r } : { linked: r };
+        if (sub && kw("key", sub[1]!) === "under") return linkCond(sub[2]!, (r) => ({ linkedUnder: r }));
+        return linkCond(value, (r) => {
+          if (key === "under") return { under: r };
+          if (key === "in") return { in: r };
+          return { linked: r };
+        });
       }
       case "status": {
         const s = kw("status", value) as StatusKey | undefined;
         if (s) return { status: s };
         // a synonym of a whole group ("in Arbeit", "fertig") is the group; option names stay names
         const g = statusGroupOf(value);
-        if (g && !byOptionName(ix, value)) return { status: g === "todo" ? "new" : g };
+        if (g && !isStatusOptionName(ix, value)) return { status: g === "todo" ? "new" : g };
         return { prop: "status", op: ":", value };
       }
       case "without": {
@@ -280,23 +274,14 @@ export function parseQuery(src: string, ix: Index): ParseResult {
         return null;
       }
       case "collapsed":
-        // zu:ja – the block starts closed (a card on the start page: "Kürzlich erledigt")
         if (kw("value", value) === "yes") def.collapsed = true;
         return null;
     }
-    // property (by name) or built-in field
     const prop = kw("field", keyRaw) ?? keyRaw;
-    if (kw("value", value) === "empty") return { prop, op: "empty" };
-    if (value.startsWith("[[") || kw("value", value) === "this") {
-      const r = ref(value);
-      if ("unresolved" in r) {
-        errors.push(`link:${r.unresolved}`);
-        return { unresolved: r.unresolved };
-      }
-      return { prop, op, value: { ref: r } };
-    }
-    const today = kw("value", value) === "today";
-    return { prop, op, value: today ? "+0d" : value };
+    const valueKw = kw("value", value);
+    if (valueKw === "empty") return { prop, op: "empty" };
+    if (value.startsWith("[[") || valueKw === "this") return linkCond(value, (r) => ({ prop, op, value: { ref: r } }));
+    return { prop, op, value: valueKw === "today" ? "+0d" : value };
   };
 
   const parseOr = (): Cond | null => {
@@ -308,7 +293,7 @@ export function parseQuery(src: string, ix: Index): ParseResult {
       cur = parseAnd();
       if (cur) parts.push(cur);
     }
-    return parts.length === 0 ? null : parts.length === 1 ? parts[0]! : { or: parts };
+    return joinParts(parts, "or");
   };
   const parseAnd = (): Cond | null => {
     const parts: Cond[] = [];
@@ -316,7 +301,7 @@ export function parseQuery(src: string, ix: Index): ParseResult {
       const c = parseUnary();
       if (c) parts.push(c);
     }
-    return parts.length === 0 ? null : parts.length === 1 ? parts[0]! : { and: parts };
+    return joinParts(parts, "and");
   };
   const parseUnary = (): Cond | null => {
     const tok = toks[pos++]!;
@@ -335,20 +320,29 @@ export function parseQuery(src: string, ix: Index): ParseResult {
   let where: Cond | null = null;
   while (pos < toks.length) {
     const c = parseOr();
-    if (c) where = where ? { and: [...("and" in where ? where.and : [where]), c] } : c;
+    if (c) where = where ? { and: [...conjuncts(where), c] } : c;
     if (toks[pos]?.t === ")") pos++;
   }
   if (where) def.where = where;
   return { def, errors };
 }
 
-// ---------- printing ----------
+function joinParts(parts: Cond[], op: "and" | "or"): Cond | null {
+  if (parts.length === 0) return null;
+  if (parts.length === 1) return parts[0]!;
+  return op === "and" ? { and: parts } : { or: parts };
+}
+
+/** The top-level AND parts of a condition; any other condition is its own single part. */
+function conjuncts(c: Cond): Cond[] {
+  return "and" in c ? c.and : [c];
+}
 
 export function printQuery(def: QueryDef, lang: Lang, ix: Index): string {
   const parts: string[] = [];
   if (def.where) parts.push(printCond(def.where, lang, ix, true));
   const k = (key: string) => say(lang, "key", key);
-  const field = (f: string) => ((FIELDS as readonly string[]).includes(f) ? say(lang, "field", f) : quoteIf(f));
+  const field = (f: string) => printField(f, lang);
   if (def.sort?.length) parts.push(`${k("sort")}:${def.sort.map((s) => (s.desc ? "-" : "") + field(s.key)).join(",")}`);
   if (def.group) parts.push(`${k("group")}:${(GROUPS as readonly string[]).includes(def.group) ? say(lang, "groupBy", def.group) : field(def.group)}`);
   if (def.view) parts.push(`${k("view")}:${say(lang, "view", def.view)}`);
@@ -356,6 +350,10 @@ export function printQuery(def: QueryDef, lang: Lang, ix: Index): string {
   if (def.limit) parts.push(`${k("limit")}:${def.limit}`);
   if (def.collapsed) parts.push(`${k("collapsed")}:${say(lang, "value", "yes")}`);
   return parts.filter(Boolean).join(" ");
+}
+
+function printField(f: string, lang: Lang) {
+  return (FIELDS as readonly string[]).includes(f) ? say(lang, "field", f) : quoteIf(f);
 }
 
 function quoteIf(s: string) {
@@ -396,7 +394,7 @@ function printCond(c: Cond, lang: Lang, ix: Index, top = false): string {
   if ("filetype" in c) return `${k("filetype")}:${say(lang, "filetype", c.filetype)}`;
   if ("text" in c) return quoteIf(c.text);
   if ("unresolved" in c) return `[[${c.unresolved}]]`;
-  const name = (FIELDS as readonly string[]).includes(c.prop) ? say(lang, "field", c.prop) : quoteIf(c.prop);
+  const name = printField(c.prop, lang);
   if (c.op === "empty") return `${name}:${say(lang, "value", "empty")}`;
   const v = c.value;
   let vs = typeof v === "object" && v ? printRef(v.ref, lang, ix) : String(v ?? "");
@@ -404,8 +402,6 @@ function printCond(c: Cond, lang: Lang, ix: Index, top = false): string {
   else if (typeof v === "string") vs = quoteIf(vs);
   return `${name}${c.op}${vs}`;
 }
-
-// ---------- evaluation ----------
 
 export interface EvalCtx {
   ix: Index;
@@ -421,7 +417,7 @@ export interface FieldHit {
   inverse?: true; // read from the other side of a relation (not editable here)
 }
 
-/** The value of a field (built-in, type property or free property) on an item, by name. */
+/** Looks up a built-in field, type property or free property by name. */
 export function fieldOf(item: Item, name: string, ix: Index): FieldHit | undefined {
   switch (name) {
     case "title":
@@ -451,7 +447,7 @@ export function fieldOf(item: Item, name: string, ix: Index): FieldHit | undefin
       return p ? { kind: "item", value: p } : undefined;
     }
     case "progress": {
-      // done share of what lies below (with a status), as a percentage
+      // share of done descendants that have a status
       const pr = ix.progressOf(item);
       return pr && pr.total ? { kind: "number", value: percent(pr) } : undefined;
     }
@@ -470,19 +466,28 @@ export function fieldOf(item: Item, name: string, ix: Index): FieldHit | undefin
   const p = schema?.properties.find((x) => titleKey(x.name) === key);
   if (p) {
     if (p.kind === "relation") return { kind: "relation", value: ix.relValues(item, p.id, p.symmetric), prop: p };
-    if (p.kind === "computed") {
-      const c = p.computed;
-      const pr = c?.fn === "count" ? undefined : ix.progress(item.id, c?.of);
-      return { kind: "number", value: pr ? (pr.total ? percent(pr) : undefined) : ix.countDescendants(item.id, c?.of), prop: p };
-    }
+    if (p.kind === "computed") return { kind: "number", value: computedValue(item, p.computed, ix), prop: p };
     return { kind: p.kind, value: item.props[p.id], prop: p };
   }
   for (const [n, fv] of Object.entries(item.extra)) if (titleKey(n) === key) return { kind: fv.k, value: fv.v };
-  // the other side of a relation, by its inverse name ("Blockiert diese")
+  return inverseRelationHit(item, key, ix);
+}
+
+/** "count": the number of descendants; otherwise the percentage done, undefined when none has a status. */
+function computedValue(item: Item, c: ComputedDef | undefined, ix: Index): number | undefined {
+  if (c?.fn === "count") return ix.countDescendants(item.id, c.of);
+  const pr = ix.progress(item.id, c?.of);
+  return pr.total ? percent(pr) : undefined;
+}
+
+/** The other side of a relation, by its inverse name ("Blockiert diese"). */
+function inverseRelationHit(item: Item, key: string, ix: Index): FieldHit | undefined {
   for (const t of ix.types.values())
-    for (const p of t.schema.properties)
-      if (p.kind === "relation" && !p.symmetric && p.inverseName && titleKey(p.inverseName) === key)
-        return { kind: "relation", value: ix.backlinks(item.id).filter((b) => b.kind === "rel" && b.prop === p.id && ix.get(b.from)?.type === t.id).map((b) => b.from), prop: { ...p, name: p.inverseName }, inverse: true };
+    for (const p of t.schema.properties) {
+      if (p.kind !== "relation" || p.symmetric || !p.inverseName || titleKey(p.inverseName) !== key) continue;
+      const sources = ix.backlinks(item.id).filter((b) => b.kind === "rel" && b.prop === p.id && ix.get(b.from)?.type === t.id).map((b) => b.from);
+      return { kind: "relation", value: sources, prop: { ...p, name: p.inverseName }, inverse: true };
+    }
   return undefined;
 }
 
@@ -527,6 +532,18 @@ function isEmpty(v: unknown) {
   return v === undefined || v === null || v === "" || (Array.isArray(v) && v.length === 0);
 }
 
+/** A single value as a list, so single and multiple values compare alike. */
+function asIds(value: unknown): string[] {
+  return Array.isArray(value) ? (value as string[]) : [String(value)];
+}
+
+/** For links and relations only ":" (contains) and "!=" (doesn't) can match. */
+function membership(has: boolean, op: Op): boolean {
+  return op === "!=" ? !has : op === ":" && has;
+}
+
+const TRUE_WORDS = ["ja", "yes", "true", "1", "wahr", "x"];
+
 function matchField(item: Item, c: { prop: string; op: Op; value?: FieldValue }, ctx: EvalCtx): boolean {
   const hit = fieldOf(item, c.prop, ctx.ix);
   if (c.op === "empty") return !hit || isEmpty(hit.value);
@@ -534,9 +551,8 @@ function matchField(item: Item, c: { prop: string; op: Op; value?: FieldValue },
   const v = c.value;
   if (typeof v === "object" && v && "ref" in v) {
     const target = resolveRef(v.ref, ctx);
-    const vals = Array.isArray(hit.value) ? (hit.value as string[]) : [String(hit.value)];
-    const has = !!target && vals.includes(target);
-    return c.op === "!=" ? !has : c.op === ":" && has;
+    const has = !!target && asIds(hit.value).includes(target);
+    return membership(has, c.op);
   }
   const want = String(v ?? "");
   switch (hit.kind) {
@@ -556,11 +572,11 @@ function matchField(item: Item, c: { prop: string; op: Op; value?: FieldValue },
       return cmp(a, b, c.op);
     }
     case "checkbox": {
-      const b = ["ja", "yes", "true", "1", "wahr", "x"].includes(want.toLowerCase());
+      const b = TRUE_WORDS.includes(want.toLowerCase());
       return cmp(hit.value === true ? 1 : 0, b ? 1 : 0, c.op);
     }
     case "select": {
-      const ids = Array.isArray(hit.value) ? (hit.value as string[]) : [String(hit.value)];
+      const ids = asIds(hit.value);
       const names = hit.prop ? optionNames(hit.prop, ids) : ids;
       // option names in either language and status synonyms ("in Arbeit", "done") match too
       const opts = ids.map((id) => hit.prop?.options?.find((o) => o.id === id)).filter((o): o is NonNullable<typeof o> => !!o);
@@ -573,7 +589,7 @@ function matchField(item: Item, c: { prop: string; op: Op; value?: FieldValue },
       const ids = hit.value as string[];
       const titles = ids.map((id) => ctx.ix.get(id)?.title ?? "");
       const has = titles.some((t) => titleKey(t) === titleKey(want));
-      return c.op === "!=" ? !has : c.op === ":" && has;
+      return membership(has, c.op);
     }
     default: {
       const a = String(hit.value).toLowerCase();
@@ -656,7 +672,6 @@ export function matches(item: Item, c: Cond, ctx: EvalCtx): boolean {
   return matchField(item, c, ctx);
 }
 
-/** The single conditions of a query, below its and, or and not. */
 function leaves(c: Cond | undefined, out: Cond[] = []): Cond[] {
   if (!c) return out;
   if ("and" in c) c.and.forEach((x) => leaves(x, out));
@@ -668,14 +683,18 @@ function leaves(c: Cond | undefined, out: Cond[] = []): Cond[] {
 
 /** Type ids a query refers to that no longer exist ("Typ gelöscht"). */
 export function missingTypes(c: Cond | undefined, ix: Index): string[] {
-  return leaves(c).flatMap((x) => ("type" in x && x.type !== META_TYPE && !ix.types.has(x.type) ? [x.type] : "typeName" in x ? [x.typeName] : []));
+  return leaves(c).flatMap((x) => {
+    if ("type" in x && x.type !== META_TYPE && !ix.types.has(x.type)) return [x.type];
+    if ("typeName" in x) return [x.typeName];
+    return [];
+  });
 }
 
 export function typesIn(c: Cond | undefined): string[] {
   return leaves(c).flatMap((x) => ("type" in x ? [x.type] : []));
 }
 
-/** The types a view shows: those its query names and those of its first `sample` entries (existing ones only). */
+/** Types the query names plus those of the first `sample` items, existing ones only. */
 export function viewTypeIds(where: Cond | undefined, items: Pick<Item, "type">[], ix: Index, sample = 200): string[] {
   return [...new Set([...typesIn(where), ...items.slice(0, sample).map((i) => i.type ?? "")])].filter((id) => ix.types.has(id));
 }
@@ -711,6 +730,7 @@ export function runQuery(def: QueryDef, ctx: EvalCtx): QueryResult {
 }
 
 const GROUP_RANK: Record<string, number> = { active: 0, todo: 1, done: 3 };
+const NO_STATUS_RANK = 2; // between not started and done
 
 function sortItems(items: Item[], sort: QueryDef["sort"], ix: Index): Item[] {
   const keyed = items.map((i) => ({ i, k: sortKeys(i, sort, ix) }));
@@ -722,8 +742,8 @@ function sortItems(items: Item[], sort: QueryDef["sort"], ix: Index): Item[] {
       if (x.v === y.v) continue;
       if (x.v === undefined) return 1; // empty values last, in both directions
       if (y.v === undefined) return -1;
-      const r = typeof x.v === "number" && typeof y.v === "number" ? x.v - y.v : String(x.v).localeCompare(String(y.v), undefined, { numeric: true });
-      return desc ? -r : r;
+      const diff = typeof x.v === "number" && typeof y.v === "number" ? x.v - y.v : String(x.v).localeCompare(String(y.v), undefined, { numeric: true });
+      return desc ? -diff : diff;
     }
     return a.i.title.localeCompare(b.i.title);
   });
@@ -731,24 +751,26 @@ function sortItems(items: Item[], sort: QueryDef["sort"], ix: Index): Item[] {
 }
 
 function sortKeys(item: Item, sort: QueryDef["sort"], ix: Index): { v: string | number | undefined }[] {
+  const schema = ix.schemaOf(item);
   if (!sort?.length) {
-    // Default: active before not started before done, then due date, then title.
-    const s = statusOf(item, ix.schemaOf(item));
-    return [{ v: s ? GROUP_RANK[s.group] : 2 }, { v: dueOf(item, ix.schemaOf(item)) }, { v: item.title.toLowerCase() }];
+    const s = statusOf(item, schema);
+    return [{ v: s ? GROUP_RANK[s.group] : NO_STATUS_RANK }, { v: dueOf(item, schema) }, { v: item.title.toLowerCase() }];
   }
   return sort.map((s) => {
     if (s.key === "created") return { v: item.created };
     if (s.key === "updated") return { v: item.updated };
     if (s.key === "title") return { v: item.title.toLowerCase() };
     if (titleKey(s.key) === "status") {
-      const st = statusOf(item, ix.schemaOf(item));
-      return { v: st ? GROUP_RANK[st.group]! * 100 + (statusProp(ix.schemaOf(item))?.options?.indexOf(st.option) ?? 0) : undefined };
+      const st = statusOf(item, schema);
+      return { v: st ? GROUP_RANK[st.group]! * 100 + (statusProp(schema)?.options?.indexOf(st.option) ?? 0) : undefined };
     }
     const hit = fieldOf(item, s.key, ix);
     if (!hit || isEmpty(hit.value)) return { v: undefined };
     if (hit.prop?.options && typeof hit.value === "string") return { v: hit.prop.options.findIndex((o) => o.id === hit.value) };
     if (Array.isArray(hit.value)) return { v: hit.value.join(",") };
-    return { v: typeof hit.value === "number" ? hit.value : typeof hit.value === "boolean" ? (hit.value ? 1 : 0) : String(hit.value).toLowerCase() };
+    if (typeof hit.value === "number") return { v: hit.value };
+    if (typeof hit.value === "boolean") return { v: hit.value ? 1 : 0 };
+    return { v: String(hit.value).toLowerCase() };
   });
 }
 
@@ -763,18 +785,17 @@ export interface Group {
 }
 
 const FLOW: Record<string, number> = { todo: 0, active: 1, done: 2 };
+const UNRANKED = 9999;
 
-/** How a group is remembered (hidden groups): the option or entry it stands for, so a rename keeps it. */
+/** Hidden groups are stored by option or entry id, so a rename keeps them hidden. */
 export function groupId(g: Group): string {
   return g.option?.id ?? g.ref ?? g.key;
 }
 
 /**
- * Group results. Path groups use the way below `base`; sub-items (whose parent is in the list)
- * stay with that parent. Status groups follow the flow (open, active, done; within a group the
- * order of the options); entries without a value come last. With `empty`, every option of the
- * grouped property (in these types) is a group, also without entries – unless the query's
- * status condition rules it out.
+ * Path groups are relative to `base`; sub-items stay with a listed parent. Status groups follow the
+ * flow todo, active, done, then option order. Items without a value come last. With `empty`, every
+ * option of the grouped property is a group even without items, unless the query's status rules it out.
  */
 export function groupItems(items: Item[], by: string | undefined, ctx: EvalCtx, base?: string, empty?: { types: string[]; where?: Cond }): Group[] {
   if (!by) return [{ key: "", items }];
@@ -786,7 +807,11 @@ export function groupItems(items: Item[], by: string | undefined, ctx: EvalCtx, 
     if (item) x.items.push(item);
   };
   const rank = new Map<string, number>(); // option order, for status and select groups
-  const ranked = (p: PropDef | undefined) => p?.options?.forEach((o, n) => !rank.has(o.name) && rank.set(o.name, (by === "status" || by === "statusGroup" ? (FLOW[o.group ?? "todo"] ?? 0) * 100 : 0) + n));
+  const byStatus = by === "status" || by === "statusGroup";
+  const ranked = (p: PropDef | undefined) =>
+    p?.options?.forEach((o, n) => {
+      if (!rank.has(o.name)) rank.set(o.name, (byStatus ? (FLOW[o.group ?? "todo"] ?? 0) * 100 : 0) + n);
+    });
   for (const i of items) {
     if (by === "path") {
       let path = base ? (ix.relPath(base, i.id) ?? ix.homePath(i.id)) : ix.homePath(i.id);
@@ -808,7 +833,7 @@ export function groupItems(items: Item[], by: string | undefined, ctx: EvalCtx, 
       if (hit?.prop?.options) ranked(hit.prop);
       if (!hit || isEmpty(hit.value)) add("", {}, i);
       else if (hit.prop?.options) {
-        const ids = Array.isArray(hit.value) ? (hit.value as string[]) : [String(hit.value)];
+        const ids = asIds(hit.value);
         const opts = ids.map((id) => hit.prop!.options!.find((o) => o.id === id));
         const label = optionNames(hit.prop, ids).join(", ");
         add(label, { label, option: opts.length === 1 ? opts[0] : undefined }, i);
@@ -821,7 +846,7 @@ export function groupItems(items: Item[], by: string | undefined, ctx: EvalCtx, 
       } else add(String(hit.value), { label: String(hit.value) }, i);
     }
   }
-  // every option a group of its own, also an empty one (a place to drag to, "+ Neu" in it)
+  // empty option groups give a drop target and a "+ Neu" button
   if (empty?.types.length && by !== "path" && by !== "type") {
     const schemas = empty.types.map((id) => ix.types.get(id)?.schema).filter(Boolean);
     if (by === "statusGroup") {
@@ -835,32 +860,40 @@ export function groupItems(items: Item[], by: string | undefined, ctx: EvalCtx, 
   }
   const allowed = statusGroupsAllowed(empty?.where);
   const out = [...groups.values()].filter((g) => g.items.length || !allowed || !g.statusGroup || allowed.has(g.statusGroup));
-  const last = (a: Group, b: Group) => (a.key === "" ? 1 : 0) - (b.key === "" ? 1 : 0);
-  if (by === "path") out.sort((a, b) => (a.key === "" ? -1 : b.key === "" ? 1 : ix.pathText(a.path ?? []).localeCompare(ix.pathText(b.path ?? []))));
-  else if (by === "statusGroup") out.sort((a, b) => last(a, b) || (FLOW[a.key] ?? 3) - (FLOW[b.key] ?? 3));
-  else if (rank.size) out.sort((a, b) => last(a, b) || (rank.get(a.key) ?? 9999) - (rank.get(b.key) ?? 9999) || a.key.localeCompare(b.key));
-  else out.sort((a, b) => last(a, b) || (a.label ?? a.key).localeCompare(b.label ?? b.key, undefined, { numeric: true }));
+  const emptyLast = (a: Group, b: Group) => (a.key === "" ? 1 : 0) - (b.key === "" ? 1 : 0);
+  const pathOrder = (a: Group, b: Group) => {
+    if (a.key === "") return -1;
+    if (b.key === "") return 1;
+    return ix.pathText(a.path ?? []).localeCompare(ix.pathText(b.path ?? []));
+  };
+  if (by === "path") out.sort(pathOrder);
+  else if (by === "statusGroup") out.sort((a, b) => emptyLast(a, b) || (FLOW[a.key] ?? 3) - (FLOW[b.key] ?? 3));
+  else if (rank.size) out.sort((a, b) => emptyLast(a, b) || (rank.get(a.key) ?? UNRANKED) - (rank.get(b.key) ?? UNRANKED) || a.key.localeCompare(b.key));
+  else out.sort((a, b) => emptyLast(a, b) || (a.label ?? a.key).localeCompare(b.label ?? b.key, undefined, { numeric: true }));
   return out;
 }
 
 /**
- * The status groups a query lets through (status:offen → todo and active), read from its
- * top-level conditions; undefined when it does not say. Empty option groups outside of it are
- * not shown – "Erledigt · 0" under "offene Tasks" says nothing.
+ * Status groups the query's top-level conditions allow; undefined when it has none. Hides empty
+ * groups like "Erledigt · 0" under "offene Tasks".
  */
 function statusGroupsAllowed(where: Cond | undefined): Set<string> | undefined {
   let out: Set<string> | undefined;
-  for (const c of where ? ("and" in where ? where.and : [where]) : []) {
+  for (const c of where ? conjuncts(where) : []) {
     if (!("status" in c)) continue;
-    const g = new Set(c.status === "open" ? ["todo", "active"] : c.status === "new" ? ["todo"] : [c.status]);
+    const g = new Set(statusKeyGroups(c.status));
     out = out ? new Set([...out].filter((x) => g.has(x))) : g;
   }
   return out;
 }
 
-// ---------- helpers ----------
+function statusKeyGroups(key: StatusKey): string[] {
+  if (key === "open") return ["todo", "active"];
+  if (key === "new") return ["todo"];
+  return [key];
+}
 
-/** Parse a stored block: JSON (normal) or text form (typed by hand or by an agent). */
+/** Stored blocks are JSON; text form comes from typing by hand or from agents. */
 export function readBlock(src: string, ix: Index): { def: QueryDef; errors: string[]; wasText: boolean } {
   const s = src.trim();
   if (s.startsWith("{")) {
@@ -878,19 +911,19 @@ export function blockSource(def: QueryDef): string {
   return JSON.stringify(def);
 }
 
-/** A query block as it stands in the text. */
 export function queryFence(src: string): string {
   return "```abfrage\n" + src + "\n```";
 }
 
-/** Is this the info word of a query block's fence (```abfrage, ```query)? */
+/** The fence info string of a query block (```abfrage, ```query). */
 export function isQueryInfo(info: string): boolean {
   return info === "abfrage" || info === "query";
 }
 
-/** All ```abfrage blocks in a body, with their positions. */
-export function findBlocks(body: string): { from: number; to: number; src: string }[] {
-  const out: { from: number; to: number; src: string }[] = [];
+type Block = { from: number; to: number; src: string };
+
+export function findBlocks(body: string): Block[] {
+  const out: Block[] = [];
   for (const m of body.matchAll(QUERY_FENCE)) out.push({ from: m.index!, to: m.index! + m[0].length, src: ((m[1] ?? "") + "\n" + (m[2] ?? "")).trim() });
   // single-line form: ```abfrage typ:Task```
   const inline = /```(?:abfrage|query)[ \t]+([^`\n]+)```/g;
@@ -898,54 +931,58 @@ export function findBlocks(body: string): { from: number; to: number; src: strin
   return out.sort((a, b) => a.from - b.from);
 }
 
-/** Replace text-form blocks with JSON (what agents and fast typists write → what is stored). */
+/** Text-form blocks (from agents and fast typists) become the stored JSON. */
 export function normalizeBlocks(body: string, ix: Index): string {
-  const blocks = findBlocks(body);
-  if (!blocks.length) return body;
-  let out = "";
-  let pos = 0;
-  for (const b of blocks) {
+  return replaceBlocks(body, (b) => {
     const { def, wasText } = readBlock(b.src, ix);
-    out += body.slice(pos, b.from) + (wasText ? queryFence(blockSource(def)) : body.slice(b.from, b.to));
-    pos = b.to;
-  }
-  return out + body.slice(pos);
+    return wasText ? queryFence(blockSource(def)) : body.slice(b.from, b.to);
+  });
 }
 
-/** Show blocks in text form (for agents and the Markdown mirror). */
+/** For agents and the Markdown mirror. */
 export function blocksAsText(body: string, lang: Lang, ix: Index): string {
+  return replaceBlocks(body, (b) => queryFence(printQuery(readBlock(b.src, ix).def, lang, ix)));
+}
+
+/** Replaces each query block of the body with what `fn` returns for it. */
+function replaceBlocks(body: string, fn: (b: Block) => string): string {
   const blocks = findBlocks(body);
   if (!blocks.length) return body;
   let out = "";
   let pos = 0;
   for (const b of blocks) {
-    const { def } = readBlock(b.src, ix);
-    out += body.slice(pos, b.from) + queryFence(printQuery(def, lang, ix));
+    out += body.slice(pos, b.from) + fn(b);
     pos = b.to;
   }
   return out + body.slice(pos);
 }
 
-/** What a query block in the text already shows (blocks with in:diese or unter:diese), so the page lists it once. */
+/** Items already shown by in:diese or unter:diese blocks, so the page lists them once. */
 export function shownByBlocks(item: Item, ix: Index): Set<string> {
   const out = new Set<string>();
-  const usesIn = (c: Cond | undefined): boolean =>
-    !!c && ("and" in c ? c.and.some(usesIn) : "or" in c ? c.or.some(usesIn) : "not" in c ? false : ("in" in c && "this" in c.in) || ("under" in c && "this" in c.under));
   for (const b of findBlocks(item.body)) {
     const { def } = readBlock(b.src, ix);
-    if (!usesIn(def.where)) continue;
+    if (!usesInThis(def.where)) continue;
     for (const i of runQuery(def, { ix, thisId: item.id }).items) out.add(i.id);
   }
   return out;
 }
 
-/** Both conditions (flat: an AND stays one list, so it reads as one line of chips). */
-export function andWhere(a: Cond | undefined, b: Cond | undefined): Cond | undefined {
-  if (!a || !b) return a ?? b;
-  return { and: [...("and" in a ? a.and : [a]), ...("and" in b ? b.and : [b])] };
+/** in:diese or unter:diese, outside of any negation. */
+function usesInThis(c: Cond | undefined): boolean {
+  if (!c) return false;
+  if ("and" in c) return c.and.some(usesInThis);
+  if ("or" in c) return c.or.some(usesInThis);
+  if ("not" in c) return false;
+  return ("in" in c && "this" in c.in) || ("under" in c && "this" in c.under);
 }
 
-/** What a view shows: the base query AND the tab's filter, with the tab's look. */
+/** Keeps AND flat so it reads as one line of chips. */
+export function andWhere(a: Cond | undefined, b: Cond | undefined): Cond | undefined {
+  if (!a || !b) return a ?? b;
+  return { and: [...conjuncts(a), ...conjuncts(b)] };
+}
+
 export function tabDef(base: Cond | undefined, tab: ViewTab): QueryDef {
   return { where: andWhere(base, tab.where), sort: tab.sort, group: tab.group, columns: tab.columns, view: tab.kind };
 }

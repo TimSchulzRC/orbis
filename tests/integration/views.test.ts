@@ -1,6 +1,3 @@
-// Views as tabs on a type's page: stored on the type, one map each; without stored ones the
-// defaults; the tab filter added to the type (AND), grouping, the agent's way in, and the one
-// migration from the former collections.
 import { test, expect, beforeEach, afterAll } from "bun:test";
 import * as Y from "yjs";
 import { removeTempDirs, MemRepo } from "../support/helpers";

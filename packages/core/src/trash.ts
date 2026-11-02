@@ -1,20 +1,17 @@
-// Trash with cascade. meta.deleted is `true` (deleted itself) or "via:<root>" (deleted
-// together with that root). A cascaded item only counts as deleted while
-//   - the root is deleted,
-//   - the root is still above it ("Teil von", over all levels), and
-//   - every parent it has is deleted (another living parent always keeps it).
-// Every device computes this from the same data, so concurrent moves and deletes need no
-// coordination: an item another device moved away from the root simply stays alive.
+// meta.deleted is `true` (deleted itself) or "via:<root>" (deleted with that root). A cascaded
+// item only counts as deleted while the root is deleted, the root is still above it at any
+// depth, and every parent of it is deleted. Every device computes this from the same data, so
+// concurrent moves and deletes need no coordination: an item moved away from the root stays alive.
 import { type Item, META_TYPE, VIA, setMeta, removeParent } from "./model";
 import type { Index } from "./graph";
 import type { Writer } from "./setup";
 
-/** The parents of a record that exist among `records` (itself as its own parent does not count). */
+/** Ignores the record itself as its own parent. */
 function knownParents(r: Item | undefined, records: Map<string, Item>): string[] {
   return r ? Object.keys(r.parents).filter((p) => p !== r.id && records.has(p)) : [];
 }
 
-/** Recompute `deleted` of cascaded items from their roots. Replaces changed records in place. */
+/** Replaces changed records in `records`. */
 export function resolveCascade(records: Map<string, Item>): void {
   const via = [...records.values()].filter((r) => r.deletedVia);
   if (!via.length) return;
@@ -24,11 +21,11 @@ export function resolveCascade(records: Map<string, Item>): void {
     const seen = new Set<string>();
     const stack = parentsOf(id);
     while (stack.length) {
-      const x = stack.pop()!;
-      if (x === root) return true;
-      if (seen.has(x)) continue;
-      seen.add(x);
-      stack.push(...parentsOf(x));
+      const parent = stack.pop()!;
+      if (parent === root) return true;
+      if (seen.has(parent)) continue;
+      seen.add(parent);
+      stack.push(...parentsOf(parent));
     }
     return false;
   };
@@ -39,15 +36,15 @@ export function resolveCascade(records: Map<string, Item>): void {
     const known = memo.get(id);
     if (known !== undefined) return known;
     memo.set(id, false); // cycle guard
-    const ps = parentsOf(id);
+    const parents = parentsOf(id);
     const root = r.deletedVia;
-    const v = records.has(root) && deleted(root) && above(root, id) && ps.length > 0 && ps.every(deleted);
-    memo.set(id, v);
-    return v;
+    const result = records.has(root) && deleted(root) && above(root, id) && parents.length > 0 && parents.every(deleted);
+    memo.set(id, result);
+    return result;
   };
   for (const r of via) {
-    const d = deleted(r.id);
-    if (d !== r.deleted) records.set(r.id, { ...r, deleted: d });
+    const isDeleted = deleted(r.id);
+    if (isDeleted !== r.deleted) records.set(r.id, { ...r, deleted: isDeleted });
   }
 }
 
@@ -70,12 +67,11 @@ export function onlyBelow(ix: Index, root: string): string[] {
 }
 
 /**
- * Delete an item. Children that hang only here either go along ("trash", marked via the
- * root, restorable together) or lose this place ("inbox": the parent is removed, so untyped
- * ones land in the inbox). Children with another living parent are never touched.
+ * Children that hang only here either go along ("trash", restorable with the root) or lose this
+ * parent ("inbox", so untyped ones land in the inbox). Children with a living parent outside the cascade stay.
  */
 export function deleteItem(w: Writer, ix: Index, id: string, children: "trash" | "inbox" = "trash"): string[] {
-  // a type goes only through deleteType (typeops.ts), with its preview and the choice what becomes of the values
+  // types go through deleteType, which lets the user choose what becomes of the values
   if (ix.get(id)?.type === META_TYPE) throw new Error("Types are deleted on the type page, not moved to the trash.");
   const only = onlyBelow(ix, id);
   w.change(id, (doc) => setMeta(doc, { deleted: true }));
@@ -85,8 +81,8 @@ export function deleteItem(w: Writer, ix: Index, id: string, children: "trash" |
 }
 
 /**
- * Restore an item and exactly what was deleted with it. An item that still only hangs
- * below other deleted entries (nested deletes) stays in the trash with them.
+ * Restores exactly what was deleted with the item. An item that still hangs only below other
+ * deleted entries (nested deletes) stays in the trash with them.
  */
 export function restoreItem(w: Writer, records: Map<string, Item>, id: string): string[] {
   const after = new Map(records);
@@ -98,11 +94,11 @@ export function restoreItem(w: Writer, records: Map<string, Item>, id: string): 
   w.change(id, (doc) => setMeta(doc, { deleted: null }));
   const back: string[] = [];
   for (const r of mine) {
-    const ps = knownParents(r, after);
-    const deadParent = ps.length > 0 && ps.every((p) => after.get(p)!.deleted) ? ps.map((p) => after.get(p)!) : undefined;
-    if (deadParent) {
-      // still only below deleted entries: it now belongs to their cascade
-      const p = deadParent[0]!;
+    const parents = knownParents(r, after);
+    const onlyDeletedParents = parents.length > 0 && parents.every((p) => after.get(p)!.deleted);
+    if (onlyDeletedParents) {
+      // still only below deleted entries: join their cascade
+      const p = after.get(parents[0]!)!;
       w.change(r.id, (doc) => setMeta(doc, { deleted: VIA + (p.deletedVia ?? p.id) }));
     } else {
       w.change(r.id, (doc) => setMeta(doc, { deleted: null }));
@@ -112,7 +108,7 @@ export function restoreItem(w: Writer, records: Map<string, Item>, id: string): 
   return back;
 }
 
-/** How many items were deleted together with this root and are still in the trash with it. */
+/** Items deleted with this root that are still in the trash. */
 export function cascadeCount(records: Map<string, Item>, id: string): number {
   let n = 0;
   for (const r of records.values()) if (r.deletedVia === id && r.deleted) n++;

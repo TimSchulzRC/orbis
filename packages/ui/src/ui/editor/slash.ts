@@ -1,5 +1,4 @@
-// "/" opens the block menu as in Notion: kinds of text, a link to a page, images and files,
-// a divider, code and query blocks – filtered while typing. "@" links a page right where you are.
+// As in Notion, "/" opens the block menu and "@" links a page right where you are.
 import type { ComponentType } from "react";
 import { type Completion, type CompletionContext, type CompletionResult, startCompletion } from "@codemirror/autocomplete";
 import { EditorSelection } from "@codemirror/state";
@@ -13,7 +12,6 @@ import { iconHTML } from "./icons";
 import { foldUmlauts, plainVowels } from "@obtion/core/text";
 import { kindHint } from "../text";
 
-/** A menu entry with an icon, a description and more words it is found by. */
 interface SlashItem {
   id: string;
   icon: ComponentType<{ size?: number }>;
@@ -24,9 +22,9 @@ interface SlashItem {
 type Option = Completion & { icon?: ComponentType<{ size?: number }>; hint?: string; page?: boolean };
 
 let filesHandler: (view: EditorView, files: File[]) => void = () => {};
-/** The editor tells how chosen files are inserted (Editor.tsx). */
-export function onSlashFiles(f: typeof filesHandler) {
-  filesHandler = f;
+/** Set by Editor.tsx, which does the actual file insertion. */
+export function onSlashFiles(handler: typeof filesHandler) {
+  filesHandler = handler;
 }
 
 function chooseFiles(view: EditorView, accept: string) {
@@ -38,7 +36,7 @@ function chooseFiles(view: EditorView, accept: string) {
   input.click();
 }
 
-/** Put a block of its own on the line (the line itself if it is empty, else one below). */
+/** Uses the line itself if it is empty, else a new line below. */
 function insertBlock(view: EditorView, pos: number, text: string, cursor: number) {
   const line = view.state.doc.lineAt(pos);
   const at = line.length ? line.to : line.from;
@@ -79,90 +77,90 @@ const ITEMS: SlashItem[] = [
 
 const SECTIONS = { basic: { name: "editor.section.basic", rank: 0 }, insert: { name: "editor.section.insert", rank: 1 } };
 
-/** Does `words` contain `q`, umlauts typed either way ("ueber", "über" and "uber" all find "Überschrift")? */
-const hasWord = (words: string, q: string) => [foldUmlauts, plainVowels].some((f) => f(words).includes(f(q)));
+/** Umlauts match typed either way: "ueber", "über" and "uber" all find "Überschrift". */
+const hasWord = (words: string, query: string) => [foldUmlauts, plainVowels].some((f) => f(words).includes(f(query)));
 
-/** "/" at the start of a line or after a space. */
 export function slashCompletion(ctx: CompletionContext): CompletionResult | null {
   if (ctx.state.readOnly) return null;
-  const m = ctx.matchBefore(/(?:^|\s)\/[\p{L}\p{N}]*$/u);
-  if (!m) return null;
-  const from = m.from + m.text.indexOf("/");
-  const q = ctx.state.sliceDoc(from + 1, ctx.pos);
+  const match = ctx.matchBefore(/(?:^|\s)\/[\p{L}\p{N}]*$/u);
+  if (!match) return null;
+  const from = match.from + match.text.indexOf("/");
+  const query = ctx.state.sliceDoc(from + 1, ctx.pos);
   const options: Option[] = [];
-  for (const it of ITEMS) {
-    const kind = KINDS.find((k) => k.kind === it.id)?.kind;
-    const label = kind ? kindName(kind) : tr("editor.slash." + it.id);
-    if (q && !hasWord(label + " " + tr("editor.slash." + it.id + ".keys"), q)) continue;
+  for (const item of ITEMS) {
+    const kind = KINDS.find((k) => k.kind === item.id)?.kind;
+    const label = kind ? kindName(kind) : tr("editor.slash." + item.id);
+    if (query && !hasWord(label + " " + tr("editor.slash." + item.id + ".keys"), query)) continue;
+    const section = SECTIONS[item.section];
     options.push({
       label,
-      icon: it.icon,
-      hint: tr("editor.slash." + it.id + ".hint"),
-      section: { name: tr(SECTIONS[it.section].name), rank: SECTIONS[it.section].rank },
-      boost: -ITEMS.indexOf(it),
+      icon: item.icon,
+      hint: tr("editor.slash." + item.id + ".hint"),
+      section: { name: tr(section.name), rank: section.rank },
+      boost: -ITEMS.indexOf(item),
       apply: (view) => {
-        // the typed "/…" goes, then the block changes
+        // remove the typed "/…" before the block changes
         view.dispatch({ changes: { from, to: ctx.pos, insert: "" } });
-        it.run(view, from);
+        item.run(view, from);
       },
     });
   }
   return { from, options, filter: false };
 }
 
-/** A page among the options (links and mentions): drawn with a page icon and its type. */
-export function pageOption(o: Option): Completion {
-  return { icon: FileText, page: true, ...o } as Option;
+export function pageOption(option: Option): Completion {
+  return { icon: FileText, page: true, ...option } as Option;
 }
 
-/** "@" and a few letters of a title: a link to that page. */
+const MENTION_HITS = 20;
+const RECENT_MENTIONS = 12;
+
 export function mentionCompletion(selfId?: string) {
   return (ctx: CompletionContext): CompletionResult | null => {
     if (ctx.state.readOnly) return null;
-    const m = ctx.matchBefore(/(?:^|[\s(])@[^@\n[\]]{0,40}$/);
-    if (!m) return null;
-    const from = m.from + m.text.indexOf("@");
-    const q = ctx.state.sliceDoc(from + 1, ctx.pos);
-    if (!q && !ctx.explicit && ctx.state.sliceDoc(from - 1, from).trim()) return null;
-    const hits = (q.trim() ? repo.search(q, 20) : [...repo.live()].sort((a, b) => b.updated - a.updated).slice(0, 12)).filter((r) => r.id !== selfId && r.title);
+    const match = ctx.matchBefore(/(?:^|[\s(])@[^@\n[\]]{0,40}$/);
+    if (!match) return null;
+    const from = match.from + match.text.indexOf("@");
+    const query = ctx.state.sliceDoc(from + 1, ctx.pos);
+    if (!query && !ctx.explicit && ctx.state.sliceDoc(from - 1, from).trim()) return null;
+    const hits = (query.trim() ? repo.search(query, MENTION_HITS) : [...repo.live()].sort((a, b) => b.updated - a.updated).slice(0, RECENT_MENTIONS)).filter((hit) => hit.id !== selfId && hit.title);
     // a space after a word that finds nothing: it was no mention
-    if (!hits.length && /\s/.test(q)) return null;
+    if (!hits.length && /\s/.test(query)) return null;
     return {
       from,
       filter: false,
-      options: hits.map((r, i) =>
+      options: hits.map((hit, i) =>
         pageOption({
-        label: r.title,
-        hint: kindHint(r, repo.index()),
+        label: hit.title,
+        hint: kindHint(hit, repo.index()),
         boost: -i,
-        apply: (view, _c, a, b) => view.dispatch({ changes: { from: a, to: b, insert: `[[${r.title}]]` }, selection: EditorSelection.cursor(a + r.title.length + 4) }),
+        apply: (view, _c, a, b) => view.dispatch({ changes: { from: a, to: b, insert: `[[${hit.title}]]` }, selection: EditorSelection.cursor(a + hit.title.length + 4) }),
         }),
       ),
     };
   };
 }
 
-/** Each entry with its icon and a line on what it does (pages: their type). */
 export const slashRender = {
   position: 20,
   render(c: Completion): Node | null {
-    const o = c as Option;
-    if (!o.icon) return null;
+    const option = c as Option;
+    if (!option.icon) return null;
     const row = document.createElement("div");
-    row.className = "cm-slash" + (o.page ? " page" : "");
+    row.className = "cm-slash" + (option.page ? " page" : "");
     const tile = document.createElement("span");
     tile.className = "cm-slash-icon";
-    tile.innerHTML = iconHTML(o.icon, o.page ? 15 : 18);
+    tile.innerHTML = iconHTML(option.icon, option.page ? 15 : 18);
     const text = document.createElement("span");
     text.className = "cm-slash-text";
     const name = document.createElement("span");
     name.className = "cm-slash-name";
-    name.textContent = o.label;
+    name.textContent = option.label;
     text.append(name);
-    if (o.hint) {
+    if (option.hint) {
       const hint = document.createElement("span");
       hint.className = "cm-slash-hint";
-      hint.textContent = o.hint;
+      hint.textContent = option.hint;
       text.append(hint);
     }
     row.append(tile, text);

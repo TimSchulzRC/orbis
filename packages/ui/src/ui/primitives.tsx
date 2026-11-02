@@ -10,11 +10,7 @@ import { cn } from "../lib/utils";
 
 const VARIANTS = { ghost: "ghost", primary: "default", outline: "outline", danger: "destructive", "danger-outline": "outline", plain: "plain" } as const;
 
-/**
- * The one button of the app. `plain` has no look of its own (the caller styles it); the others are
- * the quiet (ghost), the main (primary), the framed (outline) and the destructive one; `small` is
- * for tight rows.
- */
+/** The app's only button. `plain` has no look of its own, the caller styles it. */
 export function Button({ variant = "ghost", small, className, type, ...rest }: Omit<ComponentProps<typeof ShadcnButton>, "variant" | "size"> & { variant?: keyof typeof VARIANTS; small?: boolean }) {
   if (variant === "plain") return <ShadcnButton variant="plain" size="none" type={type} className={className} {...rest} />;
   return (
@@ -25,11 +21,7 @@ export function Button({ variant = "ghost", small, className, type, ...rest }: O
 
 const ICON_SIZES = { md: "rounded-lg p-1.5", sm: "rounded-md p-1", xs: "rounded p-0.5" };
 
-/**
- * A button that is only an icon: its name as tooltip and for screen readers, the shared focus
- * ring, 44 px to tap on touch screens. `md` (16 px icon) in bars and heads, `sm`/`xs` in rows.
- * Passes all button props on (popover triggers).
- */
+/** `md` for bars and heads, `sm`/`xs` in rows. Forwards button props, so it works as a popover trigger. */
 export function IconButton({ label, icon: Icon, size = "md", iconSize = 16, className, ...rest }: { label: string; icon: ComponentType<{ size?: number }>; size?: keyof typeof ICON_SIZES; iconSize?: number } & Omit<ComponentProps<"button">, "children">) {
   return (
     <ShadcnButton variant="plain" size="none" type="button" title={label} aria-label={label} {...rest} className={cn("tap inline-flex items-center justify-center text-muted-foreground transition-colors hover:bg-hover hover:text-fg disabled:opacity-40", ICON_SIZES[size], className)}>
@@ -39,9 +31,8 @@ export function IconButton({ label, icon: Icon, size = "md", iconSize = 16, clas
 }
 
 /**
- * A quick label over a small button: after a short moment (not the browser's slow "title"), centred
- * above it; from one to the next right away. Not on touch screens (Radix opens it on hover and focus
- * only). The button keeps its aria-label; give it no title, or the browser shows its own as well.
+ * Faster than the browser's `title`. Radix opens it only on hover and focus, so never on touch. Give
+ * the button no `title`, or the browser shows its own tooltip as well.
  */
 export function Tip({ label, children }: { label: string; children: ReactElement }) {
   return (
@@ -58,17 +49,13 @@ export function Tip({ label, children }: { label: string; children: ReactElement
   );
 }
 
-/** Tools of a row that show on hover or focus (always on touch screens), per named Tailwind group. */
 export const REVEAL = {
   any: "opacity-0 group-hover:opacity-100 focus:opacity-100 pointer-coarse:opacity-100",
   row: "opacity-0 group-hover/row:opacity-100 focus:opacity-100 pointer-coarse:opacity-100",
   head: "opacity-0 group-hover/head:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100",
 };
 
-/**
- * "…": the menu of further actions of a page, a row or a group. `menu` (from useContextMenu)
- * opens the same menu with a right click, at the mouse.
- */
+/** `menu` from useContextMenu also opens it at the mouse on a right click. */
 export function MoreMenu({ children, label, align = "right", size = "md", iconSize, className, menu, ...rest }: { children: (close: () => void) => ReactNode; label?: string; align?: "left" | "right"; size?: keyof typeof ICON_SIZES; iconSize?: number; className?: string; menu?: ContextMenu } & Omit<ComponentProps<"button">, "children" | "onClick">) {
   const { t } = useT();
   return (
@@ -80,23 +67,20 @@ export function MoreMenu({ children, label, align = "right", size = "md", iconSi
 
 type ContextMenu = { open: boolean; point: { x: number; y: number } | null; onOpenChange: (o: boolean) => void; onContextMenu: (e: MouseEvent) => void };
 
-/**
- * A right click that opens a MoreMenu at the mouse: put `onContextMenu` on the row, pass the
- * whole thing as the menu's `menu`. The "…" button keeps opening it below itself.
- */
+/** Put `onContextMenu` on the row and pass the whole object as MoreMenu's `menu`. */
 export function useContextMenu(): ContextMenu {
   const [open, setOpen] = useState(false);
   const [point, setPoint] = useState<{ x: number; y: number } | null>(null);
   return {
     open,
     point,
-    // the point stays while the menu fades out: without it the menu would jump to the "…" button
-    // for that time, over the next rows, and catch a right click meant for one of them
+    // keep the point while the menu fades out, else it jumps to the "…" button over the next rows
+    // and catches a right click meant for them
     onOpenChange: (o) => (setOpen(o), o && setPoint(null)),
     onContextMenu: (e) => {
       e.preventDefault();
       e.stopPropagation();
-      // a right click in the open menu itself reaches the row through the portal: nothing to open
+      // right clicks inside the open menu bubble to the row through the portal
       if (!e.currentTarget.contains(e.target as Node)) return;
       setPoint({ x: e.clientX, y: e.clientY });
       setOpen(true);
@@ -104,7 +88,7 @@ export function useContextMenu(): ContextMenu {
   };
 }
 
-/** The quiet "+ …" entry point (a place, a ref, a property, a tag): one look everywhere. Passes all button props on, so it works as a popover trigger too. */
+/** One look for every "+ …" entry point. Forwards button props, so it works as a popover trigger. */
 export function AddButton({ children, className, icon: Icon = Plus, ...rest }: ComponentProps<"button"> & { icon?: ComponentType<{ size?: number }> }) {
   return (
     <ShadcnButton variant="plain" size="none" type="button" {...rest} className={cn("tap-y inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-hover hover:text-fg", className)}>
@@ -113,7 +97,7 @@ export function AddButton({ children, className, icon: Icon = Plus, ...rest }: C
   );
 }
 
-/** The one quiet action of a section head ("+ Notiz", "+ Update"). */
+/** At most one per section head. */
 export function SectionAction({ children, className, icon: Icon = Plus, ...rest }: ComponentProps<"button"> & { icon?: ComponentType<{ size?: number }> }) {
   return (
     <ShadcnButton variant="plain" size="none" type="button" {...rest} className={cn("tap-y flex h-7 items-center gap-1 rounded-md px-2 text-[13px] text-muted-foreground hover:bg-hover hover:text-fg", className)}>
@@ -122,7 +106,6 @@ export function SectionAction({ children, className, icon: Icon = Plus, ...rest 
   );
 }
 
-/** A property without a value: "Leer", to click and fill in. */
 export function EmptyValueButton({ className, ...rest }: Omit<ComponentProps<"button">, "children">) {
   const { t } = useT();
   return (
@@ -132,7 +115,6 @@ export function EmptyValueButton({ className, ...rest }: Omit<ComponentProps<"bu
   );
 }
 
-/** A changed view or filter not saved yet: "Entwurf · Verwerfen · Speichern". */
 export function DraftBar({ onDiscard, onSave, className }: { onDiscard: () => void; onSave: () => void; className?: string }) {
   const { t } = useT();
   return (
@@ -148,15 +130,12 @@ export function DraftBar({ onDiscard, onSave, className }: { onDiscard: () => vo
   );
 }
 
-/** In place of a page that cannot show (yet): one quiet line, centred; `fill`: in the middle of the whole area. */
+/** `fill` centres it in the whole area. */
 export function PagePlaceholder({ children, fill }: { children: ReactNode; fill?: boolean }) {
   return <div className={fill ? "flex h-full items-center justify-center text-muted-foreground" : "mx-auto max-w-3xl px-6 py-16 text-center text-muted-foreground"}>{children}</div>;
 }
 
-/**
- * A whole surface with nothing to show (inbox, an empty list, a start without anything):
- * centred, one sentence, at most one button. Never for a single section – that one is left out.
- */
+/** For a whole empty surface, one sentence and at most one button. Leave an empty section out instead. */
 export function Empty({ icon, title, children }: { icon?: ReactNode; title: string; children?: ReactNode }) {
   return (
     <div className="flex flex-col items-center justify-center gap-3 px-6 py-12 text-center">
@@ -167,10 +146,7 @@ export function Empty({ icon, title, children }: { icon?: ReactNode; title: stri
   );
 }
 
-/**
- * The one section head (design rules § 2.1): title 15/600, a count in muted, at most one quiet
- * action or one switch on the right. No capitals, no symbol before the title.
- */
+/** Design rules § 2.1: at most one action or switch on the right, no symbol before the title. */
 export function SectionTitle({ children, count, right, className }: { children: ReactNode; count?: ReactNode; right?: ReactNode; className?: string }) {
   return (
     <div className={cn("mb-2.5 flex min-h-8 items-center gap-2", className)}>
@@ -181,7 +157,7 @@ export function SectionTitle({ children, count, right, className }: { children: 
   );
 }
 
-/** A frame for one block (design rules § 2.9): surface, 1 px border, radius 12. Never a card in a card. */
+/** Design rules § 2.9: never nest a card in a card. */
 export function Card({ className, ...rest }: ComponentProps<"div">) {
   return <div {...rest} className={cn("rounded-xl border border-line bg-surface", className)} />;
 }
@@ -190,11 +166,7 @@ export function Kbd({ children }: { children: ReactNode }) {
   return <kbd className="rounded border border-line bg-surface-2 px-1 font-mono text-[10px] text-muted-foreground">{children}</kbd>;
 }
 
-/**
- * "Liste ▾": the one control for how a list looks – "Darunter", the tasks of a
- * project. The button names the current view; the menu has the choices with a check mark, in
- * sections where there is more than one (Ansicht, Gruppieren, Ebenen). Each choice applies at once.
- */
+/** The only control for how a list looks. */
 export function ViewMenu({ label, sections }: { label: string; sections: { title?: string; value: string; options: { value: string; label: string }[]; onChange: (v: string) => void }[] }) {
   const { t } = useT();
   const shown = sections.filter((s) => s.options.length > 1);
@@ -224,7 +196,6 @@ export function ViewMenu({ label, sections }: { label: string; sections: { title
   );
 }
 
-/** Popover anchored to a trigger; closes on outside click and Escape. */
 export function Popover({
   trigger,
   children,
@@ -239,36 +210,40 @@ export function Popover({
   open?: boolean;
   onOpenChange?: (o: boolean) => void;
   align?: "left" | "right";
-  /** around the trigger (e.g. to let it take the free width) */
   triggerClass?: string;
-  /** open at this point (a right click) instead of below the trigger */
+  /** e.g. a right click, opens there instead of below the trigger */
   point?: { x: number; y: number } | null;
 }) {
   const [inner, setInner] = useState(false);
   const previous = useRef<HTMLElement | null>(null);
   const isOpen = open ?? inner;
-  const set = (o: boolean) => {
-    if (o) previous.current = document.activeElement as HTMLElement;
-    if (open === undefined) setInner(o);
-    onOpenChange?.(o);
+  const setOpen = (next: boolean) => {
+    if (next) previous.current = document.activeElement as HTMLElement;
+    if (open === undefined) setInner(next);
+    onOpenChange?.(next);
+  };
+  const triggerNode = trigger({ onClick: () => setOpen(!isOpen), "aria-expanded": isOpen });
+  // restore focus only if nothing took it meanwhile – taking it from another badge's menu would close that menu
+  const restoreFocus = (e: Event) => {
+    e.preventDefault();
+    const now = document.activeElement;
+    if (previous.current?.isConnected && (!now || now === document.body)) previous.current.focus({ preventScroll: true });
   };
   return (
-    <PopoverRoot open={isOpen} onOpenChange={set}>
+    <PopoverRoot open={isOpen} onOpenChange={setOpen}>
       {point ? (
         <>
           <PopoverAnchor virtualRef={{ current: { getBoundingClientRect: () => DOMRect.fromRect({ x: point.x, y: point.y, width: 0, height: 0 }) } }} />
-          <span className={cn("relative inline-flex", triggerClass)}>{trigger({ onClick: () => set(!isOpen), "aria-expanded": isOpen })}</span>
+          <span className={cn("relative inline-flex", triggerClass)}>{triggerNode}</span>
         </>
       ) : (
         <PopoverAnchor asChild><span className={cn("relative inline-flex", triggerClass)}>
-          {trigger({ onClick: () => set(!isOpen), "aria-expanded": isOpen })}
+          {triggerNode}
         </span></PopoverAnchor>
       )}
-      {/* focus goes back to where it was only if nothing took it meanwhile – a click on another
-          badge's menu has, and taking it back would close that menu again */}
-      <PopoverContent onCloseAutoFocus={(e) => { e.preventDefault(); const now = document.activeElement; if (previous.current?.isConnected && (!now || now === document.body)) previous.current.focus({ preventScroll: true }); }} data-popover align={align === "right" ? "end" : "start"} sideOffset={4}
+      <PopoverContent onCloseAutoFocus={restoreFocus} data-popover align={align === "right" ? "end" : "start"} sideOffset={4}
         className="z-50 max-h-[70vh] w-auto min-w-48 overflow-y-auto rounded-xl p-1">
-        {typeof children === "function" ? children(() => set(false)) : children}
+        {typeof children === "function" ? children(() => setOpen(false)) : children}
       </PopoverContent>
     </PopoverRoot>
   );
@@ -283,7 +258,6 @@ export function MenuItem({ children, onClick, danger, active, icon }: { children
     >
       {icon && <span className="flex w-4 shrink-0 justify-center text-muted-foreground">{icon}</span>}
       <span className="min-w-0 flex-1 truncate">{children}</span>
-      {/* the chosen one in a choice menu: always a check mark, as everywhere */}
       {active && <Check size={14} className="shrink-0 text-muted-foreground" />}
     </Button>
   );
@@ -304,7 +278,6 @@ export function Dialog({ title, children, onClose, wide }: { title: string; chil
   </DialogRoot>;
 }
 
-/** Small segmented control. */
 export function Seg<T extends string>({ value, options, onChange, label }: { value: T; options: { value: T; label: ReactNode }[]; onChange: (v: T) => void; label: string }) {
   return <ToggleGroup type="single" value={value} onValueChange={(v) => { if (v) onChange(v as T); }} aria-label={label} className="inline-flex rounded-lg border border-line bg-secondary p-0.5 text-xs">
     {options.map((o) => <ToggleGroupItem key={o.value} value={o.value} className="tap h-auto min-w-0 rounded-md px-2 py-0.5 text-xs data-[state=on]:bg-card data-[state=on]:font-medium data-[state=on]:shadow-sm">{o.label}</ToggleGroupItem>)}

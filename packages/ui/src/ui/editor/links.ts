@@ -1,7 +1,5 @@
-// Links read as links, as in Notion: no [[ ]] or [ ](…) around them, wherever the cursor is.
-// A link is one piece of the text: a click opens it, the cursor steps over it, and its menu
-// (right click) changes its text or its target, or takes the link away and keeps the text.
-// Embedded files (![[…]]) show only below their line.
+// As in Notion, links hide their [[ ]] or [ ](…) wherever the cursor is and act as one piece of
+// text. Embedded files (![[…]]) show only below their line.
 import { syntaxTree } from "@codemirror/language";
 import { EditorSelection, type EditorState, type Range } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate, WidgetType } from "@codemirror/view";
@@ -14,28 +12,28 @@ import { formatToolbar } from "./toolbar";
 import { wikiLinkRe } from "@obtion/core/model";
 import { webHref } from "../text";
 
-
 interface Link {
   from: number;
   to: number;
-  /** What the reader sees. */
   text: string;
-  /** A page's title (with "#Section"), or a web address. */
+  /** A page title, optionally with "#Section", or a web address. */
   target: string;
   web: boolean;
-  /** An embedded file: shown below the line, nothing of it in the line. */
+  /** Embedded files show below the line, nothing of them in the line. */
   embed?: boolean;
 }
 
-/** The links of the lines between `from` and `to`. */
 function linksIn(state: EditorState, from: number, to: number): Link[] {
   const out: Link[] = [];
   for (let pos = from; pos <= to; ) {
     const line = state.doc.lineAt(pos);
     if (line.text.includes("[[")) {
-      for (const m of line.text.matchAll(wikiLinkRe())) {
-        const start = line.from + m.index!;
-        const [all, open, title, rest] = [m[0], m[1] + "[[", m[2]!, (m[3] ?? "") + (m[4] ?? "")];
+      for (const match of line.text.matchAll(wikiLinkRe())) {
+        const start = line.from + match.index!;
+        const all = match[0];
+        const open = match[1] + "[[";
+        const title = match[2]!;
+        const rest = (match[3] ?? "") + (match[4] ?? "");
         const bar = rest.indexOf("|");
         const target = title + (bar >= 0 ? rest.slice(0, bar) : rest);
         const id = open === "![[" ? repo.resolveTitle(title.trim()) : undefined;
@@ -60,7 +58,6 @@ function linksIn(state: EditorState, from: number, to: number): Link[] {
   return out.filter((l) => !l.web || !out.some((o) => !o.web && o.from <= l.from && o.to >= l.to)).sort((a, b) => a.from - b.from);
 }
 
-/** The link at `pos` (its start or its end). */
 function linkAt(state: EditorState, pos: number) {
   const line = state.doc.lineAt(pos);
   const all = linksIn(state, line.from, line.to);
@@ -69,31 +66,30 @@ function linkAt(state: EditorState, pos: number) {
 
 const pageTitle = (target: string) => target.split("#")[0]!.trim();
 
-function openLink(l: Link) {
-  if (l.web) return void window.open(webHref(l.target), "_blank", "noopener");
-  const title = pageTitle(l.target);
+function openLink(link: Link) {
+  if (link.web) return void window.open(webHref(link.target), "_blank", "noopener");
+  const title = pageTitle(link.target);
   const id = repo.resolveTitle(title);
   if (id) openItem(id);
   else navigate(`/create?title=${encodeURIComponent(title)}`);
 }
 
-/** The link as Markdown again, with another text. */
-function write(l: Link, text: string) {
-  if (l.web) return `[${text.replace(/[[\]\n]/g, "")}](${l.target})`;
+function markdownWithText(link: Link, text: string) {
+  if (link.web) return `[${text.replace(/[[\]\n]/g, "")}](${link.target})`;
   const clean = text.replace(/[|\]\n]/g, "").trim();
-  return !clean || clean === l.target ? `[[${l.target}]]` : `[[${l.target}|${clean}]]`;
+  return !clean || clean === link.target ? `[[${link.target}]]` : `[[${link.target}|${clean}]]`;
 }
 
 function linkMenu(view: EditorView, el: HTMLElement, at: { left: number; top: number }) {
-  const l = linkAt(view.state, view.posAtDOM(el));
-  if (!l) return;
+  const link = linkAt(view.state, view.posAtDOM(el));
+  if (!link) return;
   const below = () => {
-    const r = el.getBoundingClientRect();
-    return { left: r.left, top: r.bottom + 6 };
+    const rect = el.getBoundingClientRect();
+    return { left: rect.left, top: rect.bottom + 6 };
   };
   const readOnly = view.state.readOnly;
   showMenu(at, [
-    { entries: [{ label: tr("editor.link.open"), icon: ExternalLink, run: () => openLink(l) }] },
+    { entries: [{ label: tr("editor.link.open"), icon: ExternalLink, run: () => openLink(link) }] },
     ...(readOnly
       ? []
       : [
@@ -103,9 +99,9 @@ function linkMenu(view: EditorView, el: HTMLElement, at: { left: number; top: nu
                 label: tr("editor.link.editText"),
                 icon: Pencil,
                 run: async () => {
-                  const text = await askText(below(), l.text, tr("editor.link.text"));
-                  const now = linkAt(view.state, l.from);
-                  if (text !== null && now?.from === l.from && now.to === l.to) view.dispatch({ changes: { from: l.from, to: l.to, insert: write(l, text) } });
+                  const text = await askText(below(), link.text, tr("editor.link.text"));
+                  const now = linkAt(view.state, link.from);
+                  if (text !== null && now?.from === link.from && now.to === link.to) view.dispatch({ changes: { from: link.from, to: link.to, insert: markdownWithText(link, text) } });
                   view.focus();
                 },
               },
@@ -113,16 +109,16 @@ function linkMenu(view: EditorView, el: HTMLElement, at: { left: number; top: nu
                 label: tr("editor.link.editTarget"),
                 icon: Link2,
                 run: () => {
-                  view.dispatch({ selection: EditorSelection.range(l.from, l.to) });
+                  view.dispatch({ selection: EditorSelection.range(link.from, link.to) });
                   view.focus();
-                  view.plugin(formatToolbar)?.openLink({ text: l.text, target: l.web ? l.target : pageTitle(l.target) });
+                  view.plugin(formatToolbar)?.openLink({ text: link.text, target: link.web ? link.target : pageTitle(link.target) });
                 },
               },
               {
                 label: tr("editor.link.remove"),
                 icon: Unlink,
                 run: () => {
-                  view.dispatch({ changes: { from: l.from, to: l.to, insert: l.text }, selection: EditorSelection.cursor(l.from + l.text.length) });
+                  view.dispatch({ changes: { from: link.from, to: link.to, insert: link.text }, selection: EditorSelection.cursor(link.from + link.text.length) });
                   view.focus();
                 },
               },
@@ -140,22 +136,22 @@ class LinkWidget extends WidgetType {
     return o.text === this.text && o.target === this.target && o.web === this.web && o.exists === this.exists;
   }
   toDOM(view: EditorView) {
-    const a = document.createElement("span");
-    a.className = this.web ? "cm-mdlink" : "cm-wikilink" + (this.exists ? "" : " missing");
-    a.textContent = this.text;
-    a.title = this.target;
-    a.setAttribute("role", "link");
-    a.addEventListener("mousedown", (e) => e.button === 0 && e.preventDefault());
-    a.addEventListener("click", (e) => {
+    const span = document.createElement("span");
+    span.className = this.web ? "cm-mdlink" : "cm-wikilink" + (this.exists ? "" : " missing");
+    span.textContent = this.text;
+    span.title = this.target;
+    span.setAttribute("role", "link");
+    span.addEventListener("mousedown", (e) => e.button === 0 && e.preventDefault());
+    span.addEventListener("click", (e) => {
       e.preventDefault();
-      const l = linkAt(view.state, view.posAtDOM(a));
-      if (l) openLink(l);
+      const link = linkAt(view.state, view.posAtDOM(span));
+      if (link) openLink(link);
     });
-    a.addEventListener("contextmenu", (e) => {
+    span.addEventListener("contextmenu", (e) => {
       e.preventDefault();
-      linkMenu(view, a, { left: e.clientX, top: e.clientY + 4 });
+      linkMenu(view, span, { left: e.clientX, top: e.clientY + 4 });
     });
-    return a;
+    return span;
   }
   override ignoreEvent() {
     return true;
@@ -165,9 +161,13 @@ class LinkWidget extends WidgetType {
 function build(view: EditorView): DecorationSet {
   const deco: Range<Decoration>[] = [];
   for (const { from, to } of view.visibleRanges)
-    for (const l of linksIn(view.state, from, to)) {
-      if (l.embed) deco.push(Decoration.replace({}).range(l.from, l.to));
-      else deco.push(Decoration.replace({ widget: new LinkWidget(l.text || l.target, l.target, l.web, l.web || !!repo.resolveTitle(pageTitle(l.target))) }).range(l.from, l.to));
+    for (const link of linksIn(view.state, from, to)) {
+      if (link.embed) {
+        deco.push(Decoration.replace({}).range(link.from, link.to));
+        continue;
+      }
+      const exists = link.web || !!repo.resolveTitle(pageTitle(link.target));
+      deco.push(Decoration.replace({ widget: new LinkWidget(link.text || link.target, link.target, link.web, exists) }).range(link.from, link.to));
     }
   return Decoration.set(deco, true);
 }

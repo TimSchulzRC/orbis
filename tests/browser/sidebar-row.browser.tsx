@@ -29,7 +29,7 @@ async function setup() {
   return { item, link, row, href: `#/w/w1/i/${item.id}` };
 }
 
-/** Clicks the row at a point given relative to it. */
+/** Negative `x` counts from the row's right edge. */
 const clickAt = (row: HTMLElement, x: number) => {
   const r = row.getBoundingClientRect();
   return page.elementLocator(row).click({ position: { x: x < 0 ? r.width + x : x, y: r.height / 2 } });

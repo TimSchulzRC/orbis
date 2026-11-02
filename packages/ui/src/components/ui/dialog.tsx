@@ -16,10 +16,10 @@ function DialogPortal({
   return <DialogPrimitive.Portal data-slot="dialog-portal" {...props} />
 }
 
-/** The page behind anything that opens over it (dialogs, the palette, the phone menu, the tray's panel): dimmed and blurred. */
+/** Shared by everything that opens over the page (dialogs, palette, phone menu, tray panel). */
 const BACKDROP = "fixed inset-0 z-50 bg-black/40 backdrop-blur-sm"
 
-/** The backdrop as a plain element, for what opens over the page without a dialog's overlay; a click on it usually closes. */
+/** For overlays that don't use a dialog's own overlay. */
 function Backdrop({ className, ...props }: React.ComponentProps<"div">) {
   return <div data-slot="backdrop" className={cn(BACKDROP, className)} {...props} />
 }

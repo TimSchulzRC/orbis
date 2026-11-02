@@ -1,7 +1,6 @@
-// Bulk changes on types: delete a type (into a tag, into another type, or remove it),
-// take over items from a tag. Every run is recorded as an "op" document, shown in
-// Activity and reversible. Values are never lost: what the new state cannot hold as
-// typed property ends up as a free property, relations become refs.
+// Bulk changes on types. Every run is recorded as an "op" document so it shows in Activity and
+// can be reverted. Values are never lost: what no typed property can hold becomes a free
+// property, and relations become refs.
 import * as Y from "yjs";
 import {
   type FreeValue,
@@ -32,7 +31,7 @@ export type DeleteMode = { mode: "tag"; tag: string } | { mode: "type"; target: 
 
 export interface TypeUsage {
   items: string[];
-  inboxAfterRemove: number; // items that would land in the inbox (checked against the inbox's stored query)
+  inboxAfterRemove: number;
   queries: { id: string; title: string }[]; // pages whose query blocks or views use the type
   relations: { type: string; prop: string; name: string }[]; // relation targets naming the type
   progress: { type: string; name: string }[]; // progress/computed filters on the type
@@ -52,10 +51,12 @@ export function typeUsage(ix: Index, typeId: string): TypeUsage {
   const relations: TypeUsage["relations"] = [];
   const progress: TypeUsage["progress"] = [];
   const childOf: TypeUsage["childOf"] = [];
+  // the type's name in a relation target such as `typ:Aufgabe | typ:Projekt` or `type:"Task"`
+  const namesType = name ? new RegExp(`:\\s*"?${escapeRe(name)}"?(\\s|$|\\))`, "i") : undefined;
   for (const t of ix.types.values()) {
     const s = t.schema;
     for (const p of s.properties) {
-      if (p.kind === "relation" && p.target && name && new RegExp(`:\\s*"?${escapeRe(name)}"?(\\s|$|\\))`, "i").test(p.target)) relations.push({ type: t.id, prop: p.id, name: `${s.name} › ${p.name}` });
+      if (p.kind === "relation" && p.target && namesType?.test(p.target)) relations.push({ type: t.id, prop: p.id, name: `${s.name} › ${p.name}` });
       if (p.kind === "computed" && p.computed?.of === typeId) progress.push({ type: t.id, name: `${s.name} › ${p.name}` });
     }
     if (progressSpec(s)?.of === typeId && !progress.some((x) => x.type === t.id)) progress.push({ type: t.id, name: s.name });
@@ -65,10 +66,7 @@ export function typeUsage(ix: Index, typeId: string): TypeUsage {
   return { items, inboxAfterRemove, queries, relations, progress, childOf };
 }
 
-/**
- * How many of these items would be in the inbox after a change – evaluated against the stored
- * inbox query. `also` are further changed records, e.g. a parent that is about to be deleted.
- */
+/** Evaluated against the stored inbox rule. `also` are further changed records, e.g. a parent about to be deleted. */
 export function wouldBeInInbox(ix: Index, ids: string[], change: (i: Item) => Item, also: Item[] = []): number {
   const next = new Map(ix.all);
   for (const id of ids) next.set(id, change(ix.get(id)!));
@@ -97,10 +95,9 @@ export function toFree(p: PropDef, v: Value | undefined): FreeValue | undefined 
 }
 
 /**
- * Map a value from one property definition to another. Options go by name, an option of the
- * status falls back to its group, a select with several values keeps the options that match.
- * `byId` (moving to another workspace): the same option id first, and only whole – an option
- * without a match makes the value not fit; several values into one keep the first.
+ * Options match by name; a status option falls back to its group; a multi select keeps the options
+ * that match. `byId` (moving between workspaces) tries the option id first and is all or nothing:
+ * one unmatched option makes the value not fit; several values into a single select keep the first.
  */
 export function mapValue(from: PropDef, to: PropDef, v: Value, opts: { byId?: boolean } = {}): Value | undefined {
   if (from.kind === to.kind && !from.options) return v;
@@ -151,22 +148,22 @@ interface OpPayload {
 }
 
 function convertItem(doc: Y.Doc, item: Item, from: TypeSchema | undefined, ix: Index, to: { type: string | null; schema?: TypeSchema; tag?: string; removeTag?: string }): Undo {
-  const u: Undo = { id: item.id, type: item.type, props: {}, extra: {}, refsAdded: [], rels: [] };
+  const undo: Undo = { id: item.id, type: item.type, props: {}, extra: {}, refsAdded: [], rels: [] };
   setMeta(doc, { type: to.type });
   if (to.tag && !item.tags.includes(normalizeTag(to.tag))) {
     setMember(doc, "tags", to.tag, true);
-    u.tagAdded = normalizeTag(to.tag);
+    undo.tagAdded = normalizeTag(to.tag);
   }
   if (to.removeTag && item.tags.includes(to.removeTag)) {
     setMember(doc, "tags", to.removeTag, false);
-    u.tagRemoved = to.removeTag;
+    undo.tagRemoved = to.removeTag;
   }
-  const setP = (pid: string, v: Value | undefined) => {
-    if (!(pid in u.props)) u.props[pid] = item.props[pid] ?? null;
+  const setTyped = (pid: string, v: Value | undefined) => {
+    if (!(pid in undo.props)) undo.props[pid] = item.props[pid] ?? null;
     setProp(doc, pid, v ?? null);
   };
-  const setX = (name: string, v: FreeValue | null) => {
-    if (!(name in u.extra)) u.extra[name] = item.extra[name] ?? null;
+  const setFree = (name: string, v: FreeValue | null) => {
+    if (!(name in undo.extra)) undo.extra[name] = item.extra[name] ?? null;
     setExtra(doc, name, v);
   };
   const target = to.schema;
@@ -176,8 +173,13 @@ function convertItem(doc: Y.Doc, item: Item, from: TypeSchema | undefined, ix: I
       const ids = item.rels[p.id] ?? [];
       for (const t of ids) {
         if (match?.kind === "relation") {
-          if (!item.rels[match.id]?.includes(t)) (setRel(doc, match.id, t, true), u.rels.push({ prop: match.id, target: t }));
-        } else if (!item.refs.includes(t)) (setMember(doc, "refs", t, true), u.refsAdded.push(t));
+          if (item.rels[match.id]?.includes(t)) continue;
+          setRel(doc, match.id, t, true);
+          undo.rels.push({ prop: match.id, target: t });
+        } else if (!item.refs.includes(t)) {
+          setMember(doc, "refs", t, true);
+          undo.refsAdded.push(t);
+        }
       }
       continue;
     }
@@ -185,10 +187,10 @@ function convertItem(doc: Y.Doc, item: Item, from: TypeSchema | undefined, ix: I
     if (v === undefined || p.kind === "computed") continue;
     const mapped = match ? mapValue(p, match, v) : undefined;
     if (match && mapped !== undefined) {
-      setP(match.id, mapped);
+      setTyped(match.id, mapped);
     } else {
       const fv = toFree(p, v);
-      if (fv) setX(p.name, fv);
+      if (fv) setFree(p.name, fv);
     }
   }
   // Free properties that the target type defines become typed values.
@@ -198,12 +200,12 @@ function convertItem(doc: Y.Doc, item: Item, from: TypeSchema | undefined, ix: I
       if (!q || q.kind === "computed" || q.kind === "relation") continue;
       const v = mapValue({ id: "", name, kind: fv.k === "select" ? "text" : fv.k, sort: "" }, q, fv.v as Value);
       if (v === undefined) continue;
-      setP(q.id, v);
-      setX(name, null);
+      setTyped(q.id, v);
+      setFree(name, null);
     }
-    for (const [pid, v] of Object.entries(initialProps(target))) if (item.props[pid] === undefined && !(pid in u.props)) setP(pid, v);
+    for (const [pid, v] of Object.entries(initialProps(target))) if (item.props[pid] === undefined && !(pid in undo.props)) setTyped(pid, v);
   }
-  return u;
+  return undo;
 }
 
 function recordOp(w: Writer, label: string, action: string, payload: OpPayload, origin?: string): string {
@@ -215,7 +217,7 @@ function recordOp(w: Writer, label: string, action: string, payload: OpPayload, 
   return id;
 }
 
-/** Delete a type: items become tagged, another type, or untyped. Returns the op id. */
+/** Items become tagged, another type, or untyped. Returns the op id. */
 export function deleteType(w: Writer, ix: Index, typeId: string, m: DeleteMode, label: string, origin?: string): string {
   const typeItem = ix.types.get(typeId);
   if (!typeItem) throw new Error("Unknown type");
@@ -236,7 +238,7 @@ export interface TagTakeoverPreview {
   candidates: string[]; // items with the tag
   untyped: string[];
   typedOther: string[]; // already have another type (conflict)
-  already: string[]; // already this type
+  already: string[];
 }
 
 export function previewTagToType(ix: Index, tag: string, typeId: string): TagTakeoverPreview {

@@ -1,5 +1,4 @@
-// Views as tabs: each tab its own kind, filter (added to the query), grouping, sorting and
-// properties. The tab bar and the panel to set a view up; a type's page and query blocks share them.
+// View tabs, shared by a type's page and query blocks. A tab's filter is added to the query.
 import { Checkbox } from "../components/ui/checkbox";
 import { NativeSelect } from "../components/ui/native-select";
 import { useState } from "react";
@@ -18,7 +17,6 @@ import { GroupChip, fieldLabel } from "./groups";
 import type { T } from "@obtion/core/i18n";
 import { KEYS } from "./storage";
 
-/** The kinds offered for a new tab, in this order. */
 const TAB_KINDS: ViewKind[] = ["table", "board", "timeline", "calendar", "list", "gallery", "triage"];
 const KIND_ICON: Record<ViewKind, React.ComponentType<{ size?: number; className?: string }>> = {
   table: Table2,
@@ -33,10 +31,7 @@ const KIND_ICON: Record<ViewKind, React.ComponentType<{ size?: number; className
 
 export const tabName = (tab: Pick<ViewTab, "name" | "kind">, t: T) => tab.name || t("view." + tab.kind);
 
-/**
- * The tab this device showed last for `key` (a type's page, a block); an unknown one: the first.
- * `inAddress` (a page's own tabs): the address names it ("?view=<tab>"), so a shared link shows the same.
- */
+/** Remembered per device. `inAddress`: also in "?view=<tab>", so a shared link shows the same tab. */
 export function useTabChoice(key: string, tabs: ViewTab[], inAddress?: boolean): [ViewTab, (id: string) => void] {
   const named = useRoute().query.get("view");
   const [id, setId] = useLocalStorage<string | null>(KEYS.tab(key), null);
@@ -53,10 +48,7 @@ export interface TabEdit {
   settings: () => void;
 }
 
-/**
- * The tab bar: a click picks a view, a click on the shown one opens its menu (rename, set up,
- * duplicate, move, delete), "+" adds one. Tabs can be dragged into another order.
- */
+/** A click on the shown tab opens its menu. */
 export function ViewTabs({ tabs, active, onPick, edit, right }: { tabs: ViewTab[]; active: string; onPick: (id: string) => void; edit?: TabEdit; right?: React.ReactNode }) {
   const { t } = useT();
   const [menu, setMenu] = useState<string | null>(null);
@@ -73,11 +65,11 @@ export function ViewTabs({ tabs, active, onPick, edit, right }: { tabs: ViewTab[
     const after = from > to ? rest[at - 1] : rest[at];
     edit.move(drag, keyBetween(after?.pos ?? null, before?.pos ?? null));
   };
-  const step = (id: string, d: -1 | 1) => {
+  const step = (id: string, direction: -1 | 1) => {
     const n = tabs.findIndex((x) => x.id === id);
-    const a = d < 0 ? tabs[n - 2] : tabs[n + 1];
-    const b = d < 0 ? tabs[n - 1] : tabs[n + 2];
-    edit?.move(id, keyBetween(a?.pos ?? null, b?.pos ?? null));
+    const after = direction < 0 ? tabs[n - 2] : tabs[n + 1];
+    const before = direction < 0 ? tabs[n - 1] : tabs[n + 2];
+    edit?.move(id, keyBetween(after?.pos ?? null, before?.pos ?? null));
   };
   return (
     <div className="mb-3 flex items-end gap-2 border-b border-line">
@@ -171,8 +163,6 @@ export function ViewTabs({ tabs, active, onPick, edit, right }: { tabs: ViewTab[
   );
 }
 
-// ---------- what a view can show and group by ----------
-
 interface ViewField {
   key: string; // stored in columns / sort / group: a built-in field or the property's name
   label: string;
@@ -191,12 +181,12 @@ export function useViewFields(where: Cond | undefined, sample: { type: string | 
   for (const id of typeIds)
     for (const p of ix.types.get(id)!.schema.properties) push({ key: p.name, label: p.name, kind: p.kind, prop: p });
   // the other side of relations that can point here ("Blockiert diese")
-  for (const ty of ix.types.values())
-    for (const p of ty.schema.properties) {
+  for (const type of ix.types.values())
+    for (const p of type.schema.properties) {
       if (p.kind !== "relation" || p.symmetric || !p.inverseName) continue;
       const target = p.target ? typesIn(parseQuery(p.target, ix).def.where) : [];
       if (target.length && !target.some((x) => typeIds.includes(x))) continue;
-      if (!typeIds.includes(ty.id) && !target.length) continue;
+      if (!typeIds.includes(type.id) && !target.length) continue;
       push({ key: p.inverseName, label: p.inverseName, kind: "relation" });
     }
   push({ key: "project", label: t("field.project"), kind: "item" });
@@ -207,9 +197,6 @@ export function useViewFields(where: Cond | undefined, sample: { type: string | 
   return out;
 }
 
-/** The name of a column, sort or group key in the UI language. */
-// ---------- the panel to set a view up ----------
-
 interface FilterDraft {
   where: Cond | undefined;
   onChange: (where: Cond | undefined) => void;
@@ -218,10 +205,7 @@ interface FilterDraft {
   discard: () => void;
 }
 
-/**
- * How a view looks (kind, grouping, sorting, properties, date) – saved at once – and its own
- * filter, which stays a draft until "Speichern".
- */
+/** The look is saved at once; the filter stays a draft until "Speichern". */
 export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter, onClose, kinds = TAB_KINDS }: { tab: ViewTab; fields: ViewField[]; columns?: string[]; groups?: Group[]; onLook: (patch: Partial<ViewTab>) => void; filter?: FilterDraft; onClose: () => void; kinds?: ViewKind[] }) {
   const { t } = useT();
   const ix = useIndex();
@@ -242,6 +226,12 @@ export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter
   const row = "flex flex-wrap items-center gap-2";
   const label = "w-28 shrink-0 text-xs text-muted-foreground";
   const kindsHere = kinds.includes(tab.kind) ? kinds : [...kinds, tab.kind];
+  const groupedKind = tab.kind !== "triage" && tab.kind !== "calendar";
+  const sorts = tab.sort ?? [];
+  const patchSort = (n: number, patch: (s: (typeof sorts)[number]) => Partial<(typeof sorts)[number]>) => onLook({ sort: sorts.map((x, m) => (m === n ? { ...x, ...patch(x) } : x)) });
+  const isShown = (key: string) => shown.some((k) => titleKey(k) === titleKey(key));
+  // the shown ones first, in their order, then the others
+  const columnFields = [...shown.map((k) => fields.find((f) => titleKey(f.key) === titleKey(k)) ?? { key: k, label: fieldLabel(k, t, fields), kind: "text" as const }), ...fields.filter((f) => !isShown(f.key))];
   return (
     <Card className="mb-4 space-y-3 p-3 text-sm">
       <div className="flex items-start gap-2">
@@ -259,7 +249,7 @@ export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter
         )}
       </div>}
 
-      {tab.kind !== "triage" && tab.kind !== "calendar" && (
+      {groupedKind && (
         <div className={row}>
           <span className={label}>{t("view.groupBy")}</span>
           <NativeSelect value={tab.group ?? ""} onChange={(e) => onLook({ group: e.target.value || undefined })} className={select} aria-label={t("view.groupBy")}>
@@ -278,7 +268,7 @@ export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter
           )}
         </div>
       )}
-      {tab.group && groups.length > 1 && tab.kind !== "triage" && tab.kind !== "calendar" && (
+      {tab.group && groups.length > 1 && groupedKind && (
         <div className={cn(row, "items-start")}>
           <span className={cn(label, "pt-1")}>{t("view.visibleGroups")}</span>
           <ul className="flex min-w-0 flex-1 flex-wrap gap-x-3 gap-y-1.5">
@@ -330,11 +320,11 @@ export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter
         <div className={row}>
           <span className={label}>{t("view.sort")}</span>
           <div className="flex flex-wrap items-center gap-1.5">
-            {(tab.sort ?? []).map((s, n) => (
+            {sorts.map((s, n) => (
               <span key={n} className="inline-flex items-center gap-1 rounded-md border border-line bg-bg py-0.5 pl-1 pr-0.5">
                 <NativeSelect
                   value={s.key}
-                  onChange={(e) => onLook({ sort: (tab.sort ?? []).map((x, m) => (m === n ? { ...x, key: e.target.value } : x)) })}
+                  onChange={(e) => patchSort(n, () => ({ key: e.target.value }))}
                   className="bg-transparent text-sm outline-none"
                   aria-label={t("view.sort")}
                 >
@@ -344,14 +334,14 @@ export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter
                     </option>
                   ))}
                 </NativeSelect>
-                <Button variant="plain" onClick={() => onLook({ sort: (tab.sort ?? []).map((x, m) => (m === n ? { ...x, desc: !x.desc || undefined } : x)) })} className="tap rounded px-1 text-xs text-muted-foreground hover:bg-hover hover:text-fg">
+                <Button variant="plain" onClick={() => patchSort(n, (x) => ({ desc: !x.desc || undefined }))} className="tap rounded px-1 text-xs text-muted-foreground hover:bg-hover hover:text-fg">
                   {s.desc ? t("view.desc") : t("view.asc")}
                 </Button>
-                <IconButton size="xs" icon={X} iconSize={12} onClick={() => onLook({ sort: (tab.sort ?? []).filter((_, m) => m !== n) })} label={t("view.sortRemove")} />
+                <IconButton size="xs" icon={X} iconSize={12} onClick={() => onLook({ sort: sorts.filter((_, m) => m !== n) })} label={t("view.sortRemove")} />
               </span>
             ))}
-            <Button variant="plain" onClick={() => onLook({ sort: [...(tab.sort ?? []), { key: sortable.find((k) => !(tab.sort ?? []).some((s) => s.key === k)) ?? "title" }] })} className="tap inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-hover hover:text-fg">
-              <Plus size={12} /> {(tab.sort ?? []).length ? t("view.sortMore") : t("view.sortAdd")}
+            <Button variant="plain" onClick={() => onLook({ sort: [...sorts, { key: sortable.find((k) => !sorts.some((s) => s.key === k)) ?? "title" }] })} className="tap inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-hover hover:text-fg">
+              <Plus size={12} /> {sorts.length ? t("view.sortMore") : t("view.sortAdd")}
             </Button>
           </div>
         </div>
@@ -362,8 +352,8 @@ export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter
         <div className={cn(row, "items-start")}>
           <span className={cn(label, "pt-1")}>{tab.kind === "table" ? t("view.columns") : t("view.cardProps")}</span>
           <ul className="flex min-w-0 flex-1 flex-wrap gap-1.5">
-            {[...shown.map((k) => fields.find((f) => titleKey(f.key) === titleKey(k)) ?? { key: k, label: fieldLabel(k, t, fields), kind: "text" as const }), ...fields.filter((f) => !shown.some((k) => titleKey(k) === titleKey(f.key)))].map((f) => {
-              const on = shown.some((k) => titleKey(k) === titleKey(f.key));
+            {columnFields.map((f) => {
+              const on = isShown(f.key);
               return (
                 <li
                   key={f.key}

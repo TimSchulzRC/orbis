@@ -1,4 +1,3 @@
-// Which sign-in methods the environment turns on (login.ts).
 import { test, expect } from "bun:test";
 import { loginConfig, loginMethods } from "@obtion/server/login";
 

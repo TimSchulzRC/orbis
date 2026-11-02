@@ -16,14 +16,12 @@ import { NOTE_ICON } from "./icons";
 import { KEYS, readJSON, writeJSON } from "./storage";
 
 /**
- * Capture field: Enter saves. Preset is a note (no type); where it goes follows from the model –
- * a note without a place is in the inbox, with a place below it; a type puts it into the list of
- * the type. Below the field: the type (the only chip) and "Einsortieren …" (a plain text button).
- * "/name text" picks a type by name, a page mentioned with @ is offered as the place.
+ * Enter saves. Without a type it is a note, in the inbox or below its place. "/name text" picks a
+ * type by name, and a page mentioned with @ is offered as the place.
  */
 export function Capture({ anywhere, ...p }: CaptureProps & { anywhere?: boolean }) {
   const [space, setSpace] = useState(() => (anywhere ? captureSpace() : undefined));
-  // the workspaces seen changed (the chips above the inbox list): a capture lands where one looks
+  // re-pick when the shown workspaces change, so a capture lands where one looks
   const shown = useAccounts().shown.map((s) => s.id).join();
   useEffect(() => void (anywhere && setSpace(captureSpace())), [shown]);
   if (!space) return <CaptureField {...p} />;
@@ -35,7 +33,6 @@ export function Capture({ anywhere, ...p }: CaptureProps & { anywhere?: boolean 
   );
 }
 
-/** Where a capture from anywhere goes: the one workspace shown, else the one used last if it is shown, else the first shown. */
 export function captureSpace(): string | undefined {
   const shown = shownSpaces();
   if (shown.length === 1) return shown[0]!.id;
@@ -52,7 +49,7 @@ interface CaptureProps {
 }
 
 function CaptureField({ parent, placeholder, autoFocus, onDone, compact, onSpace }: CaptureProps & { onSpace?: (id: string) => void }) {
-  const r = useRepo();
+  const repo = useRepo();
   const files = useFiles();
   const space = useSpaceId();
   const { spaces } = useAccounts();
@@ -61,22 +58,21 @@ function CaptureField({ parent, placeholder, autoFocus, onDone, compact, onSpace
   const [type, setType] = useState<string | null>(null);
   const [place, setPlace] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
-  // another workspace: its types and places, the text stays
+  // a workspace switch drops type and place but keeps the text
   useEffect(() => (setType(null), setPlace(null)), [space]);
-  const ix = r.index();
+  const ix = repo.index();
   const pinned = ix.captureTypes();
   const others = ix.typesByName().filter((x) => !pinned.includes(x.id));
   const input = useRef<HTMLTextAreaElement>(null);
   const save = () => {
     const where = parent ?? place ?? undefined;
-    const id = capture(text, { type, parent: where }, r);
+    const id = capture(text, { type, parent: where }, repo);
     if (!id) return;
     if (place && !parent) rememberPlace(place);
-    // the next thought starts clean: no place or type carried over unseen
+    // never carry place or type over unseen into the next capture
     setPlace(null);
     setType(null);
-    // the notice says what it became and where, with a way there
-    const usedType = r.get(id)?.type ?? null; // "/name" in the text can set it too
+    const usedType = repo.get(id)?.type ?? null; // "/name" in the text can set it too
     const what = usedType ? ix.typeName(usedType) : t("capture.note");
     const msg = where ? t("capture.notifyUnder", { what, place: ix.get(where)?.title ?? "" }) : usedType ? t("capture.notifyAs", { what }) : t("capture.notifyInbox");
     notify.action(msg, t("capture.open"), () => openItem(id, { space }));
@@ -85,8 +81,7 @@ function CaptureField({ parent, placeholder, autoFocus, onDone, compact, onSpace
   };
   const [focused, setFocused] = useState(!!autoFocus);
   const showRow = !compact && (focused || !!text.trim() || !!type || !!place);
-  // a page mentioned with @ is offered as the place, quietly in the same row
-  const mentioned = text.includes("@") ? extractMentions(text.split("\n")[0]!, r).mentions.map((m) => ix.resolveTitle(m)).filter((id): id is string => !!id && ix.get(id)?.kind === "info") : [];
+  const mentioned = text.includes("@") ? extractMentions(text.split("\n")[0]!, repo).mentions.map((m) => ix.resolveTitle(m)).filter((id): id is string => !!id && ix.get(id)?.kind === "info") : [];
   const offer = !parent && mentioned.find((id) => id !== place);
   const pathOf = (id: string) => ix.pathText([...ix.homePath(id), id]);
   const typeSchema = type ? ix.types.get(type)?.schema : undefined;
@@ -97,6 +92,9 @@ function CaptureField({ parent, placeholder, autoFocus, onDone, compact, onSpace
     }
   };
   const ghost = "tap-y inline-flex h-7 min-w-0 items-center gap-1 rounded-md px-1.5 text-xs hover:bg-hover";
+  const chip = "tap-y inline-flex h-7 shrink-0 items-center gap-1 rounded-full border border-line px-2 text-xs hover:bg-hover";
+  const spaceName = spaces.find((s) => s.id === space)?.name;
+  const refocus = () => setTimeout(() => input.current?.focus());
   return (
     <div data-capture className="rounded-2xl border border-line bg-surface px-3 py-2 shadow-sm focus-within:border-focus">
       <div className="flex items-start gap-2">
@@ -129,20 +127,19 @@ function CaptureField({ parent, placeholder, autoFocus, onDone, compact, onSpace
         <ItemPicker
           title={t("capture.placeTitle")}
           filter={(x) => x.kind === "info"}
-          suggestions={[...mentioned.map((id) => ({ id, reason: "mentioned" as const })), ...recentPlaces(r).map((id) => ({ id, reason: "recent" as const }))].filter((x, i, l) => l.findIndex((y) => y.id === x.id) === i)}
-          onPick={(id) => (setPlace(id), setPicking(false), setTimeout(() => input.current?.focus()))}
-          onClose={() => (setPicking(false), setTimeout(() => input.current?.focus()))}
+          suggestions={[...mentioned.map((id) => ({ id, reason: "mentioned" as const })), ...recentPlaces(repo).map((id) => ({ id, reason: "recent" as const }))].filter((x, i, l) => l.findIndex((y) => y.id === x.id) === i)}
+          onPick={(id) => (setPlace(id), setPicking(false), refocus())}
+          onClose={() => (setPicking(false), refocus())}
         />
       )}
       {showRow && (
         <div className="mt-1 flex min-w-0 items-center gap-1" onMouseDown={(e) => e.preventDefault()}>
-          {/* the workspace, when it can be chosen (capture from anywhere) */}
           {onSpace && spaces.length > 1 && (
             <Popover
               trigger={(p) => (
-                <Button variant="plain" {...p} className="tap-y inline-flex h-7 shrink-0 items-center gap-1 rounded-full border border-line px-2 text-xs hover:bg-hover" aria-label={t("capture.spaceLabel", { name: spaces.find((s) => s.id === space)?.name ?? "" })}>
+                <Button variant="plain" {...p} className={chip} aria-label={t("capture.spaceLabel", { name: spaceName ?? "" })}>
                   <Layers size={12} className="text-muted-foreground" />
-                  {spaces.find((s) => s.id === space)?.name}
+                  {spaceName}
                   <ChevronDown size={12} className="text-muted-foreground" />
                 </Button>
               )}
@@ -156,10 +153,9 @@ function CaptureField({ parent, placeholder, autoFocus, onDone, compact, onSpace
               }
             </Popover>
           )}
-          {/* the type: one chip with its symbol and an arrow; the note is preset */}
           <Popover
             trigger={(p) => (
-              <Button variant="plain" {...p} className="tap-y inline-flex h-7 shrink-0 items-center gap-1 rounded-full border border-line px-2 text-xs hover:bg-hover" aria-label={t("capture.typeLabel", { name: typeSchema?.name ?? t("capture.note") })}>
+              <Button variant="plain" {...p} className={chip} aria-label={t("capture.typeLabel", { name: typeSchema?.name ?? t("capture.note") })}>
                 {typeSchema ? <TypeGlyph schema={typeSchema} size={12} /> : <NOTE_ICON size={12} style={{ color: "var(--t-note)" }} />}
                 {typeSchema?.name ?? t("capture.note")}
                 <ChevronDown size={12} className="text-muted-foreground" />
@@ -181,7 +177,7 @@ function CaptureField({ parent, placeholder, autoFocus, onDone, compact, onSpace
               </>
             )}
           </Popover>
-          {/* where it goes: a plain text button, no chip – it is no type */}
+          {/* a text button, not a chip – the place is no type */}
           {!parent &&
             (place ? (
               <span className="flex min-w-0 items-center">

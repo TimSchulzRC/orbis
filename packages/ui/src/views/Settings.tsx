@@ -1,8 +1,4 @@
-// Settings in two kinds, both in one dialog over the page. The app's (sidebar, menu, palette;
-// "#/settings" opens it too): what belongs to this device (language, appearance, files), the account
-// and its workspaces. A workspace's own (from its menu in the sidebar, the list in the app's, or
-// "#/w/<id>/settings"): name, members, invite links, examples, capture, agents, sync. Both in the
-// same look: groups with a small heading, one row per setting with its control at the right.
+// Settings in one dialog over the page: the app's (this device, the account) or one workspace's.
 import { Checkbox } from "../components/ui/checkbox";
 import { Input } from "../components/ui/input";
 import { NativeSelect } from "../components/ui/native-select";
@@ -26,7 +22,7 @@ import { NewSpaceDialog, SpaceScope } from "../ui/Spaces";
 import { closeSettings, openSettings, openSpaceSettings, useSettingsOpen } from "../ui/settings-open";
 import type { InviteLink, InviteRequest, McpConnect, Member, PasskeyInfo, ServerInfo } from "@obtion/core/api";
 
-/** navigator.clipboard exists only over HTTPS; opened as http://<address> the old way copies. */
+/** navigator.clipboard exists only in a secure context; opened as http://<address>, the old way copies. */
 function copyText(text: string) {
   if (navigator.clipboard) return void navigator.clipboard.writeText(text);
   const area = document.createElement("textarea");
@@ -39,7 +35,8 @@ function copyText(text: string) {
   area.remove();
 }
 
-/** Copies `text`, with a check mark for a moment. */
+const COPIED_MS = 1500;
+
 function CopyButton({ text }: { text: string }) {
   const { t } = useT();
   const [copied, setCopied] = useState(false);
@@ -52,7 +49,7 @@ function CopyButton({ text }: { text: string }) {
       onClick={() => {
         copyText(text);
         setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
+        setTimeout(() => setCopied(false), COPIED_MS);
       }}
     />
   );
@@ -60,22 +57,25 @@ function CopyButton({ text }: { text: string }) {
 
 function CopyBox({ text, secret, label }: { text: string; secret?: string; label: string }) {
   const { t } = useT();
-  const [show, setShow] = useState(false);
-  const shown = secret && !show ? text.replaceAll(secret, "•".repeat(12)) : text;
+  const [revealed, setRevealed] = useState(false);
+  const shown = secret && !revealed ? text.replaceAll(secret, "•".repeat(12)) : text;
   return (
     <div className="relative rounded-lg border border-line bg-surface-2">
       <pre className="overflow-x-auto whitespace-pre-wrap break-all p-3 pr-20 font-mono text-xs leading-relaxed" aria-label={label}>
         {shown}
       </pre>
       <div className="absolute right-1.5 top-1.5 flex">
-        {secret && <IconButton size="sm" iconSize={14} onClick={() => setShow(!show)} label={show ? t("settings.hideToken") : t("settings.showToken")} icon={show ? EyeOff : Eye} />}
+        {secret && <IconButton size="sm" iconSize={14} onClick={() => setRevealed(!revealed)} label={revealed ? t("settings.hideToken") : t("settings.showToken")} icon={revealed ? EyeOff : Eye} />}
         <CopyButton text={text} />
       </div>
     </div>
   );
 }
 
-/** The workspace itself: its name (owners rename it), leaving it, deleting it for everyone (owners only). */
+function GroupError({ error }: { error: string }) {
+  return error ? <p role="alert" className="px-4 py-3 text-sm text-danger">{error}</p> : null;
+}
+
 function SpaceGroup({ space }: { space: Space }) {
   const { t } = useT();
   const [name, setName] = useState(space.name);
@@ -110,12 +110,11 @@ function SpaceGroup({ space }: { space: Space }) {
         hint={t(owner ? "space.deleteHint" : "space.deleteOwner")}
         control={owner && <Button variant="danger-outline" onClick={() => void remove()}>{t("space.delete")}</Button>}
       />
-      {error && <p role="alert" className="px-4 py-3 text-sm text-danger">{error}</p>}
+      <GroupError error={error} />
     </SettingsGroup>
   );
 }
 
-/** Who is in a workspace, one row each. Owners make others owners or members and remove them (each confirmed first). */
 function MembersGroup({ space, onRemoved }: { space: Space; onRemoved: () => void }) {
   const { t } = useT();
   const [list, setList] = useState<Member[]>([]);
@@ -125,35 +124,35 @@ function MembersGroup({ space, onRemoved }: { space: Space; onRemoved: () => voi
   const owner = space.role === "owner";
   const me = activeUser();
   const fail = (e: unknown) => setError(errorText(e, t, "space"));
-  const who = (m: Member) => m.name || m.email;
-  const changeRole = async (m: Member) => {
-    const role = m.role === "owner" ? "member" : "owner";
-    const yes = await confirmAction({ title: t(`space.make.${role}.confirm`, { name: who(m) }), body: t(`space.make.${role}.hint`, { name: who(m) }), yes: t(`space.make.${role}`) });
-    if (yes) await setRole(space, m.id, role).then(load, fail);
+  const who = (member: Member) => member.name || member.email;
+  const changeRole = async (member: Member) => {
+    const role = member.role === "owner" ? "member" : "owner";
+    const yes = await confirmAction({ title: t(`space.make.${role}.confirm`, { name: who(member) }), body: t(`space.make.${role}.hint`, { name: who(member) }), yes: t(`space.make.${role}`) });
+    if (yes) await setRole(space, member.id, role).then(load, fail);
   };
-  const remove = async (m: Member) => {
-    const yes = await confirmAction({ title: t("space.removeConfirm", { name: who(m), workspace: space.name }), body: t("space.removeHint", { name: who(m) }), yes: t("space.remove"), danger: true });
+  const remove = async (member: Member) => {
+    const yes = await confirmAction({ title: t("space.removeConfirm", { name: who(member), workspace: space.name }), body: t("space.removeHint", { name: who(member) }), yes: t("space.remove"), danger: true });
     // their invite links went with them
-    if (yes) await removeMember(space, m.id).then(() => (void load(), onRemoved()), fail);
+    if (yes) await removeMember(space, member.id).then(() => (void load(), onRemoved()), fail);
   };
   return (
     <SettingsGroup title={t("space.memberList")} hint={owner ? undefined : t("space.inviteOwners")}>
       <ul className="divide-y divide-line" aria-label={t("space.memberList")}>
-        {list.map((m) => (
-          <li key={m.id} className="flex min-h-14 items-center gap-3 px-4 py-2.5">
+        {list.map((member) => (
+          <li key={member.id} className="flex min-h-14 items-center gap-3 px-4 py-2.5">
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium">{who(m)}</p>
-              {m.name && <p className="truncate text-xs text-muted-foreground">{m.email}</p>}
+              <p className="truncate text-sm font-medium">{who(member)}</p>
+              {member.name && <p className="truncate text-xs text-muted-foreground">{member.email}</p>}
             </div>
-            <span className="shrink-0 text-xs text-muted-foreground">{t(`space.role.${m.role}`)}</span>
-            {owner && m.id !== me ? (
-              <MoreMenu size="sm" iconSize={14} label={t("space.memberMenu", { name: who(m) })}>
+            <span className="shrink-0 text-xs text-muted-foreground">{t(`space.role.${member.role}`)}</span>
+            {owner && member.id !== me ? (
+              <MoreMenu size="sm" iconSize={14} label={t("space.memberMenu", { name: who(member) })}>
                 {(close) => (
                   <>
-                    <MenuItem icon={m.role === "owner" ? <UserRound size={14} /> : <Crown size={14} />} onClick={() => (close(), void changeRole(m))}>
-                      {t(`space.make.${m.role === "owner" ? "member" : "owner"}`)}
+                    <MenuItem icon={member.role === "owner" ? <UserRound size={14} /> : <Crown size={14} />} onClick={() => (close(), void changeRole(member))}>
+                      {t(`space.make.${member.role === "owner" ? "member" : "owner"}`)}
                     </MenuItem>
-                    <MenuItem danger icon={<UserMinus size={14} />} onClick={() => (close(), void remove(m))}>
+                    <MenuItem danger icon={<UserMinus size={14} />} onClick={() => (close(), void remove(member))}>
                       {t("space.remove")}
                     </MenuItem>
                   </>
@@ -165,27 +164,26 @@ function MembersGroup({ space, onRemoved }: { space: Space; onRemoved: () => voi
           </li>
         ))}
       </ul>
-      {error && <p role="alert" className="px-4 py-3 text-sm text-danger">{error}</p>}
+      <GroupError error={error} />
     </SettingsGroup>
   );
 }
 
-/** The invite links of a workspace that still work: a new one, who made each, until when, revoking. Owners only. */
 function InviteLinksGroup({ space, version }: { space: Space; version: number }) {
   const { t, lang } = useT();
   const [links, setLinks] = useState<InviteLink[]>([]);
   const [error, setError] = useState("");
-  const load = () => inviteLinks(space).then(setLinks, (e) => setError(errorText(e, t, "space")));
+  const fail = (e: unknown) => setError(errorText(e, t, "space"));
+  const load = () => inviteLinks(space).then(setLinks, fail);
   useEffect(() => void load(), [space.id, version]);
   const day = (ts: number) => fmtDate(lang, new Date(ts).toISOString());
-  const fail = (e: unknown) => setError(errorText(e, t, "space"));
   const create = (opts: InviteRequest) => inviteLink(space, opts).then(load, fail);
-  const revoke = async (l: InviteLink) => {
-    const yes = await confirmAction({ title: t("space.revokeConfirm"), body: t("space.revokeHint", { role: t(`space.role.${l.role}`), created: day(l.created) }), yes: t("space.revoke"), danger: true });
-    if (yes) await revokeInvite(space, l.code).then(load, fail);
+  const revoke = async (link: InviteLink) => {
+    const yes = await confirmAction({ title: t("space.revokeConfirm"), body: t("space.revokeHint", { role: t(`space.role.${link.role}`), created: day(link.created) }), yes: t("space.revoke"), danger: true });
+    if (yes) await revokeInvite(space, link.code).then(load, fail);
   };
   const newLink = (
-    <Popover align="right" trigger={(p) => <SectionAction {...p} icon={Link2}>{t("space.inviteNew")}</SectionAction>}>
+    <Popover align="right" trigger={(props) => <SectionAction {...props} icon={Link2}>{t("space.inviteNew")}</SectionAction>}>
       {(close) => (
         <>
           <MenuItem icon={<UserRound size={14} />} onClick={() => (close(), void create({ role: "member" }))}>
@@ -202,16 +200,16 @@ function InviteLinksGroup({ space, version }: { space: Space; version: number })
     <SettingsGroup title={t("space.invites")} hint={t("space.inviteHint")} action={newLink}>
       {links.length ? (
         <ul className="divide-y divide-line" aria-label={t("space.invites")}>
-          {links.map((l) => (
-            <li key={l.code} className="flex items-center gap-2 py-2.5 pl-4 pr-2">
+          {links.map((link) => (
+            <li key={link.code} className="flex items-center gap-2 py-2.5 pl-4 pr-2">
               <div className="min-w-0 flex-1">
-                <code className="block truncate font-mono text-xs">{joinUrl(l.code)}</code>
+                <code className="block truncate font-mono text-xs">{joinUrl(link.code)}</code>
                 <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                  {t(`space.role.${l.role}`)} · {t(l.by ? "space.inviteBy" : "space.inviteMade", { by: l.by, created: day(l.created), expires: day(l.expires) })}
+                  {t(`space.role.${link.role}`)} · {t(link.by ? "space.inviteBy" : "space.inviteMade", { by: link.by, created: day(link.created), expires: day(link.expires) })}
                 </p>
               </div>
-              <CopyButton text={joinUrl(l.code)} />
-              <Button small onClick={() => void revoke(l)}>
+              <CopyButton text={joinUrl(link.code)} />
+              <Button small onClick={() => void revoke(link)}>
                 {t("space.revoke")}
               </Button>
             </li>
@@ -220,12 +218,11 @@ function InviteLinksGroup({ space, version }: { space: Space; version: number })
       ) : (
         <p className="px-4 py-3 text-sm text-muted-foreground">{t("space.invitesNone")}</p>
       )}
-      {error && <p role="alert" className="px-4 py-3 text-sm text-danger">{error}</p>}
+      <GroupError error={error} />
     </SettingsGroup>
   );
 }
 
-/** The account: who is signed in, on which server, its password, passkeys, providers; signing out, deleting it. */
 function AccountGroup() {
   const { t } = useT();
   const { account } = useAccounts();
@@ -255,6 +252,8 @@ function AccountGroup() {
   );
 }
 
+const MIN_PASSWORD = 8;
+
 function ChangePasswordDialog({ onClose }: { onClose: () => void }) {
   const { t } = useT();
   const [current, setCurrent] = useState("");
@@ -283,8 +282,8 @@ function ChangePasswordDialog({ onClose }: { onClose: () => void }) {
         try {
           await changePassword(current, next);
           setDone(true);
-        } catch (e) {
-          setError(errorText(e, t, "password"));
+        } catch (err) {
+          setError(errorText(err, t, "password"));
         }
         setBusy(false);
       }}>
@@ -295,11 +294,11 @@ function ChangePasswordDialog({ onClose }: { onClose: () => void }) {
         </label>
         <label className="mt-3 block text-sm">
           {t("account.newPassword")}
-          <Input type="password" autoComplete="new-password" required minLength={8} value={next} disabled={busy} onChange={(e) => setNext(e.target.value)} className="mt-1 block" />
+          <Input type="password" autoComplete="new-password" required minLength={MIN_PASSWORD} value={next} disabled={busy} onChange={(e) => setNext(e.target.value)} className="mt-1 block" />
         </label>
         <label className="mt-3 block text-sm">
           {t("account.repeatPassword")}
-          <Input type="password" autoComplete="new-password" required minLength={8} value={repeat} disabled={busy} onChange={(e) => setRepeat(e.target.value)} className="mt-1 block" />
+          <Input type="password" autoComplete="new-password" required minLength={MIN_PASSWORD} value={repeat} disabled={busy} onChange={(e) => setRepeat(e.target.value)} className="mt-1 block" />
         </label>
         {error && <p role="alert" className="mt-3 text-sm text-danger">{error}</p>}
         <div className="mt-4 flex gap-2">
@@ -312,19 +311,18 @@ function ChangePasswordDialog({ onClose }: { onClose: () => void }) {
 }
 
 /**
- * Confirming who is signed in, for what needs a recent sign-in (adding a passkey, linking a
- * provider, deleting an account without a password): signing in again with a way this account
- * already has, which keeps everything on this device. Then what asked for it goes on.
+ * For what needs a recent sign-in: signing in again with a way this account already has keeps
+ * everything on this device. `onDone` lets what asked for it go on.
  */
 function Reauth({ onDone, onClose }: { onDone: () => void; onClose: () => void }) {
   const { t } = useT();
   const { account } = useAccounts();
-  // the passkey button only for an account that has one (unknown when the list fails: offered)
+  // the passkey button only for an account that has one; offered when the list fails
   const [hasPasskey, setHasPasskey] = useState<boolean | undefined>(false);
-  useEffect(() => void passkeys().then((l) => setHasPasskey(l.length > 0), () => setHasPasskey(undefined)), []);
-  const who = account?.user.id;
+  useEffect(() => void passkeys().then((list) => setHasPasskey(list.length > 0), () => setHasPasskey(undefined)), []);
+  const userId = account?.user.id;
   // a passkey of another account signs that one in instead: then nothing goes on
-  const done = () => (activeUser() === who ? onDone() : onClose());
+  const done = () => (activeUser() === userId ? onDone() : onClose());
   if (!account) return null;
   return (
     <Dialog title={t("account.reauth")} onClose={onClose}>
@@ -335,7 +333,6 @@ function Reauth({ onDone, onClose }: { onDone: () => void; onClose: () => void }
   );
 }
 
-/** The account's passkeys: signing in without a password, with this device or a phone. */
 function Passkeys() {
   const { t } = useT();
   const [list, setList] = useState<PasskeyInfo[] | null>(null);
@@ -351,9 +348,10 @@ function Passkeys() {
       await addPasskey();
       notify(t("account.passkeyAdded"));
       await load();
-    } catch (e) {
-      if (e instanceof ApiError && e.status === 403) setReauth(true);
-      else if (!(e instanceof Error && e.name === "NotAllowedError")) setError(t("account.passkeyFailed"));
+    } catch (err) {
+      const closed = err instanceof Error && err.name === "NotAllowedError";
+      if (err instanceof ApiError && err.status === 403) setReauth(true);
+      else if (!closed) setError(t("account.passkeyFailed"));
     } finally {
       setBusy(false);
     }
@@ -371,13 +369,13 @@ function Passkeys() {
     >
       {list && list.length > 0 && (
         <ul className="divide-y divide-line rounded-lg border border-line text-sm">
-          {list.map((p) => (
-            <li key={p.id} className="flex items-center gap-2 py-1.5 pl-3 pr-1.5">
+          {list.map((passkey) => (
+            <li key={passkey.id} className="flex items-center gap-2 py-1.5 pl-3 pr-1.5">
               <KeyRound size={14} className="shrink-0 text-muted-foreground" />
-              <span className="min-w-0 flex-1 truncate">{p.name || t("account.passkey")}</span>
-              <span className="shrink-0 text-xs text-muted-foreground">{new Date(p.createdAt).toLocaleDateString()}</span>
+              <span className="min-w-0 flex-1 truncate">{passkey.name || t("account.passkey")}</span>
+              <span className="shrink-0 text-xs text-muted-foreground">{new Date(passkey.createdAt).toLocaleDateString()}</span>
               <Button variant="plain" className="tap rounded-md p-1.5 text-muted-foreground hover:bg-hover" aria-label={t("account.removePasskey")} title={t("account.removePasskey")}
-                onClick={() => void removePasskey(p.id).then(load, () => setError(t("account.offline")))}>
+                onClick={() => void removePasskey(passkey.id).then(load, () => setError(t("account.offline")))}>
                 <Trash2 size={14} />
               </Button>
             </li>
@@ -390,7 +388,6 @@ function Passkeys() {
   );
 }
 
-/** OAuth providers to sign in with: linked ones, and the way to link another. */
 function Providers({ providers }: { providers: { id: string; name: string }[] }) {
   const { t } = useT();
   const [linked, setLinked] = useState<string[] | null>(null);
@@ -399,28 +396,28 @@ function Providers({ providers }: { providers: { id: string; name: string }[] })
   useEffect(() => void linkedProviders().then(setLinked, () => setLinked([])), []);
   const link = (id: string) => {
     setError("");
-    // a sign-in of the last minutes first (403): confirm, then go on
+    // 403: needs a recent sign-in, then go on
     void linkOAuth(id).catch((e: unknown) => (e instanceof ApiError && e.status === 403 ? setReauth(id) : setError(t("account.linkFailed"))));
   };
   return (
     <>
-      {providers.map((p) => (
+      {providers.map((provider) => (
         <SettingRow
-          key={p.id}
-          title={p.name}
+          key={provider.id}
+          title={provider.name}
           hint={t("account.providers")}
           control={
-            linked?.includes(p.id) ? (
+            linked?.includes(provider.id) ? (
               <span className="text-xs text-muted-foreground">{t("account.linked")}</span>
             ) : (
-              <Button variant="outline" disabled={!linked} onClick={() => link(p.id)}>
+              <Button variant="outline" disabled={!linked} onClick={() => link(provider.id)}>
                 {t("account.link")}
               </Button>
             )
           }
         />
       ))}
-      {error && <p role="alert" className="px-4 py-3 text-sm text-danger">{error}</p>}
+      <GroupError error={error} />
       {reauth && <Reauth onClose={() => setReauth(null)} onDone={() => (setReauth(null), link(reauth))} />}
     </>
   );
@@ -440,9 +437,9 @@ function DeleteAccountDialog({ onClose }: { onClose: () => void }) {
     setBusy(true);
     setError("");
     try { await deleteAccount(withPassword ? password : undefined); }
-    catch (e) {
-      if (!withPassword && e instanceof ApiError && e.status === 403 && e.message === "sign in again") setReauth(true);
-      else setError(errorText(e, t, "deleteAccount"));
+    catch (err) {
+      if (!withPassword && err instanceof ApiError && err.status === 403 && err.message === "sign in again") setReauth(true);
+      else setError(errorText(err, t, "deleteAccount"));
       setBusy(false);
     }
   };
@@ -467,17 +464,16 @@ function DeleteAccountDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
-/** The account's workspaces, each a way to its own settings, and a new one. */
 function WorkspacesGroup() {
   const { t } = useT();
   const { spaces } = useAccounts();
   const [creating, setCreating] = useState(false);
   return (
     <SettingsGroup title={t("settings.workspaces")} hint={t("settings.workspacesHint")}>
-      {spaces.map((s) => (
-        <Button variant="plain" key={s.id} onClick={() => openSpaceSettings(s.id)} className="tap-row flex w-full items-center gap-3 px-4 py-3 text-left text-sm hover:bg-hover">
-          <span className="min-w-0 flex-1 truncate font-medium">{s.name}</span>
-          <span className="shrink-0 text-xs text-muted-foreground">{t(`space.role.${s.role}`)}</span>
+      {spaces.map((space) => (
+        <Button variant="plain" key={space.id} onClick={() => openSpaceSettings(space.id)} className="tap-row flex w-full items-center gap-3 px-4 py-3 text-left text-sm hover:bg-hover">
+          <span className="min-w-0 flex-1 truncate font-medium">{space.name}</span>
+          <span className="shrink-0 text-xs text-muted-foreground">{t(`space.role.${space.role}`)}</span>
           <ChevronRight size={15} className="shrink-0 text-faint" />
         </Button>
       ))}
@@ -489,19 +485,19 @@ function WorkspacesGroup() {
   );
 }
 
-/** The file contents of every workspace on this device: one choice for all, re-rendering when any changes. */
+/** The file stores of every workspace on this device, re-rendering when any of them changes. */
 function useAllFiles() {
   const { spaces } = useAccounts();
-  const ids = spaces.map((s) => s.id).join();
-  const list = useMemo(() => spaces.map((s) => replica(s.id).files), [ids]);
+  const ids = spaces.map((space) => space.id).join();
+  const list = useMemo(() => spaces.map((space) => replica(space.id).files), [ids]);
   const subscribe = useMemo(
-    () => (l: () => void) => {
-      const offs = list.map((f) => f.subscribe(l));
+    () => (onChange: () => void) => {
+      const offs = list.map((files) => files.subscribe(onChange));
       return () => offs.forEach((off) => off());
     },
     [list],
   );
-  useSyncExternalStore(subscribe, () => list.map((f) => f.getVersion()).join());
+  useSyncExternalStore(subscribe, () => list.map((files) => files.getVersion()).join());
   return list;
 }
 
@@ -509,9 +505,10 @@ function DeviceFilesGroup() {
   const { t, lang } = useT();
   const all = useAllFiles();
   const mode = all[0]?.mode ?? "online";
-  const sum = (k: "originals" | "total" | "bytes" | "downloading" | "uploading") => all.reduce((n, f) => n + f.status[k], 0);
-  const setMode = (m: "online" | "local") => {
-    for (const f of all) (f.setMode(m), m === "online" && void f.dropOriginals());
+  const sum = (field: "originals" | "total" | "bytes" | "downloading" | "uploading") => all.reduce((n, files) => n + files.status[field], 0);
+  // one choice for all workspaces
+  const setMode = (next: "online" | "local") => {
+    for (const files of all) (files.setMode(next), next === "online" && void files.dropOriginals());
   };
   const status = [
     t("settings.filesStatus", { local: sum("originals"), total: sum("total"), size: fmtBytes(lang, sum("bytes")) }),
@@ -531,7 +528,6 @@ function DeviceFilesGroup() {
   );
 }
 
-/** How many originals are on this device: a slim bar under the mode it follows from, with the count and size. */
 function DeviceFilesMeter({ local, total, status }: { local: number; total: number; status: string }) {
   const { t } = useT();
   const share = total ? local / total : 0;
@@ -548,7 +544,7 @@ function DeviceFilesMeter({ local, total, status }: { local: number; total: numb
   );
 }
 
-/** Which build the server runs (dev, nightly or stable): with three instances, the one this is. Offline: nothing. */
+/** Which build the server runs, to tell the dev, nightly and stable instances apart. */
 function Version() {
   const { t } = useT();
   const [info, setInfo] = useState<{ version: string; commit: string }>();
@@ -559,7 +555,6 @@ function Version() {
   return <p className="text-center text-xs text-muted-foreground">{t("settings.version", { version: info.version + (info.commit ? ` (${info.commit})` : "") })}</p>;
 }
 
-/** A group of settings: a small heading (with one action at the right, if there is) above a card of rows. */
 function SettingsGroup({ title, hint, action, children }: { title: string; hint?: string; action?: ReactNode; children: ReactNode }) {
   return (
     <section>
@@ -573,7 +568,6 @@ function SettingsGroup({ title, hint, action, children }: { title: string; hint?
   );
 }
 
-/** One setting: what it is and what it does on the left, its control on the right; more below if there is. */
 function SettingRow({ title, hint, control, children }: { title: ReactNode; hint?: ReactNode; control?: ReactNode; children?: ReactNode }) {
   return (
     <div className="space-y-3 px-4 py-3">
@@ -589,23 +583,20 @@ function SettingRow({ title, hint, control, children }: { title: ReactNode; hint
   );
 }
 
-/** The settings dialog, while it is open. Lives once in the app. */
+/** Mounted once in the app. */
 export function SettingsHost() {
   const open = useSettingsOpen();
   return open ? <SettingsDialog space={open.space} onClose={closeSettings} /> : null;
 }
 
-/**
- * The settings of the app on this device and the account, with its workspaces; or, with `space`,
- * that workspace's, with the way back to the app's. A workspace that is gone (left, deleted): the app's.
- */
+/** With `space`, that workspace's settings; a workspace that is gone (left, deleted) shows the app's. */
 function SettingsDialog({ space: id, onClose }: { space: string | null; onClose: () => void }) {
   const { t } = useT();
   useAccounts(); // a workspace renamed or gone shows at once
   const space = id ? spaceById(id) : undefined;
   const previous = useRef<HTMLElement | null>(document.activeElement as HTMLElement);
   return (
-    <DialogRoot open onOpenChange={(o) => { if (!o) onClose(); }}>
+    <DialogRoot open onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent onCloseAutoFocus={(e) => { e.preventDefault(); if (previous.current?.isConnected) previous.current.focus({ preventScroll: true }); }} showCloseButton={false} aria-describedby={undefined}
         className="flex h-[min(46rem,88vh)] flex-col gap-0 overflow-hidden rounded-2xl bg-bg p-0 sm:max-w-2xl">
         <DialogHeader className="flex-row items-center gap-2 border-b border-line px-5 py-3 text-left">
@@ -613,7 +604,7 @@ function SettingsDialog({ space: id, onClose }: { space: string | null; onClose:
           <DialogTitle className="min-w-0 flex-1 truncate text-base">{space ? `${t("space.settings")} · ${space.name}` : t("nav.settings")}</DialogTitle>
           <IconButton onClick={onClose} label={t("close")} icon={X} />
         </DialogHeader>
-        {/* a new key for each view: it starts at the top */}
+        {/* a new key for each view, so it starts scrolled to the top */}
         <div key={space?.id ?? ""} className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
           {space ? (
             <SpaceScope id={space.id}>
@@ -628,7 +619,6 @@ function SettingsDialog({ space: id, onClose }: { space: string | null; onClose:
   );
 }
 
-/** The app's settings: this device, the account, its workspaces. */
 function AppSettings() {
   const { t, lang } = useT();
   const theme = useTheme();
@@ -636,9 +626,9 @@ function AppSettings() {
     <div className="space-y-7">
       <SettingsGroup title={t("settings.general")}>
         <SettingRow title={t("settings.language")} hint={t("settings.languageHint")}
-          control={<Seg label={t("settings.language")} value={lang} onChange={setLang} options={LANGS.map((l) => ({ value: l, label: ENDONYMS[l] }))} />} />
+          control={<Seg label={t("settings.language")} value={lang} onChange={setLang} options={LANGS.map((language) => ({ value: language, label: ENDONYMS[language] }))} />} />
         <SettingRow title={t("settings.theme")} hint={t("settings.themeHint")}
-          control={<Seg label={t("settings.theme")} value={theme.choice} onChange={setTheme} options={(["system", "light", "dark"] as const).map((v) => ({ value: v, label: t("theme." + v) }))} />} />
+          control={<Seg label={t("settings.theme")} value={theme.choice} onChange={setTheme} options={(["system", "light", "dark"] as const).map((choice) => ({ value: choice, label: t("theme." + choice) }))} />} />
       </SettingsGroup>
       <DeviceFilesGroup />
       <AccountGroup />
@@ -648,7 +638,7 @@ function AppSettings() {
   );
 }
 
-/** "#/settings": Heute, with the settings open over it. */
+/** "#/settings": Heute with the settings open over it. */
 export function SettingsRedirect() {
   useEffect(() => {
     navigate("/", { replace: true });
@@ -657,7 +647,7 @@ export function SettingsRedirect() {
   return null;
 }
 
-/** "#/w/<id>/settings": that workspace, with its settings open over it. */
+/** "#/w/<id>/settings": that workspace with its settings open over it. */
 export function SpaceSettingsRedirect({ space }: { space: string }) {
   useEffect(() => {
     navigate("/", { space, replace: true });
@@ -666,22 +656,22 @@ export function SpaceSettingsRedirect({ space }: { space: string }) {
   return null;
 }
 
-/** The settings of one workspace (in its SpaceScope). */
 function SpaceSettings({ space }: { space: Space }) {
-  const r = useRepo();
+  const repo = useRepo();
   const { t } = useT();
   // an MCP token is made on request (each is a new one, shown once)
-  const [c, setC] = useState<McpConnect | null>(null);
-  const [err, setErr] = useState(false);
+  const [connect, setConnect] = useState<McpConnect | null>(null);
+  const [tokenFailed, setTokenFailed] = useState(false);
   const [removed, setRemoved] = useState(0);
-  const newToken = () => mcpToken(space).then(setC, () => setErr(true));
-  const s = r.status;
-  const ix = r.index();
-  const capture = r.get(SETTINGS_ID)?.settings?.captureTypes ?? [];
+  const newToken = () => mcpToken(space).then(setConnect, () => setTokenFailed(true));
+  const status = repo.status;
+  const ix = repo.index();
+  const capture = repo.get(SETTINGS_ID)?.settings?.captureTypes ?? [];
   const types = [...ix.types.values()].sort((a, b) => a.schema!.name.localeCompare(b.schema!.name));
-  const toggleCapture = (id: string) => r.change(SETTINGS_ID, (d) => setSettings(d, { captureTypes: capture.includes(id) ? capture.filter((x) => x !== id) : [...capture, id] }));
+  const without = (id: string) => capture.filter((other) => other !== id);
+  const toggleCapture = (id: string) => repo.change(SETTINGS_ID, (doc) => setSettings(doc, { captureTypes: capture.includes(id) ? without(id) : [...capture, id] }));
   // the first capture type is the one "c" files to in the inbox
-  const setFirst = (id: string) => r.change(SETTINGS_ID, (d) => setSettings(d, { captureTypes: [id, ...capture.filter((x) => x !== id)] }));
+  const setFirst = (id: string) => repo.change(SETTINGS_ID, (doc) => setSettings(doc, { captureTypes: [id, ...without(id)] }));
   const chosen = capture.filter((id) => ix.types.has(id));
 
   return (
@@ -694,9 +684,9 @@ function SpaceSettings({ space }: { space: Space }) {
       <SettingsGroup title={t("settings.capture")}>
         <SettingRow title={t("settings.captureTypes")} hint={t("settings.captureHint")}>
           <div className="flex flex-wrap gap-1.5">
-            {types.map((tp) => (
-              <Button variant="plain" key={tp.id} onClick={() => toggleCapture(tp.id)} aria-pressed={capture.includes(tp.id)} className={cn("tap-y inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs", capture.includes(tp.id) ? "border-focus text-fg" : "border-line text-muted-foreground")}>
-                <TypeGlyph schema={tp.schema} size={12} /> {tp.schema!.name}
+            {types.map((type) => (
+              <Button variant="plain" key={type.id} onClick={() => toggleCapture(type.id)} aria-pressed={capture.includes(type.id)} className={cn("tap-y inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs", capture.includes(type.id) ? "border-focus text-fg" : "border-line text-muted-foreground")}>
+                <TypeGlyph schema={type.schema} size={12} /> {type.schema!.name}
               </Button>
             ))}
           </div>
@@ -722,21 +712,21 @@ function SpaceSettings({ space }: { space: Space }) {
         <SettingRow
           title={t("settings.mcpToken")}
           hint={t("settings.agentIntro")}
-          control={!c && <Button variant="outline" onClick={() => void newToken()}>{t("settings.newToken")}</Button>}
+          control={!connect && <Button variant="outline" onClick={() => void newToken()}>{t("settings.newToken")}</Button>}
         >
-          {err && !c && <p className="text-sm text-muted-foreground">{t("settings.connectOffline")}</p>}
-          {c && (
+          {tokenFailed && !connect && <p className="text-sm text-muted-foreground">{t("settings.connectOffline")}</p>}
+          {connect && (
             <div className="space-y-4">
               <div>
                 <div className="mb-1 text-sm font-medium">Claude Code</div>
-                <CopyBox label="Claude Code" text={c.claudeCode} secret={c.token} />
+                <CopyBox label="Claude Code" text={connect.claudeCode} secret={connect.token} />
               </div>
               <div>
                 <div className="mb-1 text-sm font-medium">{t("settings.otherClients")}</div>
-                <CopyBox label="MCP JSON" text={JSON.stringify(c.json, null, 2)} secret={c.token} />
+                <CopyBox label="MCP JSON" text={JSON.stringify(connect.json, null, 2)} secret={connect.token} />
               </div>
               <p className="text-sm text-muted-foreground">
-                {t("settings.mirror")} <code className="rounded bg-surface-2 px-1 font-mono text-xs">{c.vault}</code>
+                {t("settings.mirror")} <code className="rounded bg-surface-2 px-1 font-mono text-xs">{connect.vault}</code>
               </p>
             </div>
           )}
@@ -744,15 +734,15 @@ function SpaceSettings({ space }: { space: Space }) {
       </SettingsGroup>
 
       <SettingsGroup title={t("settings.sync")}>
-        <SettingRow title={t("settings.server")} control={<span className="text-sm text-muted-foreground">{s.online ? t("settings.connected") : t("settings.offline")}</span>} />
-        {s.pending > 0 && <SettingRow title={t("settings.pending")} control={<span className="text-sm tabular-nums text-muted-foreground">{s.pending}</span>} />}
-        <SettingRow title={t("settings.onDevice")} hint={t("settings.counts", { items: ix.live.filter((i) => i.kind === "info").length, files: ix.live.filter((i) => i.kind === "datei").length, types: ix.types.size })} />
-        <SettingRow title={t("settings.advanced")} hint={`${t("settings.position")} #${s.lastSeq}`}>
+        <SettingRow title={t("settings.server")} control={<span className="text-sm text-muted-foreground">{status.online ? t("settings.connected") : t("settings.offline")}</span>} />
+        {status.pending > 0 && <SettingRow title={t("settings.pending")} control={<span className="text-sm tabular-nums text-muted-foreground">{status.pending}</span>} />}
+        <SettingRow title={t("settings.onDevice")} hint={t("settings.counts", { items: ix.live.filter((item) => item.kind === "info").length, files: ix.live.filter((item) => item.kind === "datei").length, types: ix.types.size })} />
+        <SettingRow title={t("settings.advanced")} hint={`${t("settings.position")} #${status.lastSeq}`}>
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={() => r.resetLocal()}>
+            <Button variant="outline" onClick={() => repo.resetLocal()}>
               {t("settings.redownload")}
             </Button>
-            <Button variant="outline" onClick={() => resetInbox(r.writer)}>
+            <Button variant="outline" onClick={() => resetInbox(repo.writer)}>
               <RotateCcw size={14} /> {t("inbox.reset")}
             </Button>
           </div>
@@ -762,46 +752,46 @@ function SpaceSettings({ space }: { space: Space }) {
   );
 }
 
-/** "Beispiele entfernen": the examples of the setup to the trash, with a preview; changed ones stay unless chosen. */
+/** Examples someone changed or uses are not preselected. */
 function ExamplesGroup() {
-  const r = useRepo();
+  const repo = useRepo();
   const { t } = useT();
-  const ix = r.index();
+  const ix = repo.index();
   const list = listExamples(ix);
   const [chosen, setChosen] = useState<Set<string> | null>(null); // while the preview is open
   if (!list.length) return null;
-  const toggle = (id: string) => setChosen((c) => toggled(c!, id));
+  const toggle = (id: string) => setChosen((current) => toggled(current!, id));
   const remove = () => {
-    const ids = removeExamples(r.writer, ix, [...chosen!]);
+    const ids = removeExamples(repo.writer, ix, [...chosen!]);
     setChosen(null);
-    notify.undo(t("examples.removed", { count: ids.filter((id) => !list.find((e) => e.id === id)?.isType).length }), () => restoreExamples(r.writer, ids));
+    notify.undo(t("examples.removed", { count: ids.filter((id) => !list.find((example) => example.id === id)?.isType).length }), () => restoreExamples(repo.writer, ids));
   };
-  const entries = list.filter((e) => !e.isType).length;
-  const picked = chosen ? list.filter((e) => !e.isType && chosen.has(e.id)).length : 0;
+  const entries = list.filter((example) => !example.isType).length;
+  const picked = chosen ? list.filter((example) => !example.isType && chosen.has(example.id)).length : 0;
   return (
     <SettingsGroup title={t("examples.title")}>
       <SettingRow
         title={t("examples.fromSetup")}
         hint={t("examples.intro", { count: entries })}
-        control={<Button variant="outline" onClick={() => setChosen(new Set(list.filter((e) => !e.changed && !e.inUse).map((e) => e.id)))}>{t("examples.remove")}</Button>}
+        control={<Button variant="outline" onClick={() => setChosen(new Set(list.filter((example) => !example.changed && !example.inUse).map((example) => example.id)))}>{t("examples.remove")}</Button>}
       />
       {chosen && (
         <Dialog title={t("examples.dialogTitle")} onClose={() => setChosen(null)} wide>
           <p className="text-sm text-muted-foreground">{t("examples.preview")}</p>
           <ul className="mt-3 max-h-[50vh] overflow-y-auto rounded-lg border border-line p-1">
-            {list.map((e) => {
-              const item = ix.get(e.id);
+            {list.map((example) => {
+              const item = ix.get(example.id);
               return (
-                <li key={e.id}>
-                  <label className={cn("tap-row flex items-center gap-2 rounded-md px-2 py-1 text-sm", e.inUse ? "text-muted-foreground" : "cursor-pointer hover:bg-hover")}>
-                    <Checkbox checked={chosen.has(e.id)} disabled={e.inUse} onCheckedChange={() => toggle(e.id)} className="size-4 shrink-0" />
-                    {e.isType ? <TypeGlyph schema={item?.schema} size={14} /> : item && <ItemIcon item={item} size={14} />}
-                    <span className="min-w-0 truncate">{e.title || t("untitled")}</span>
-                    {e.isType && <span className="text-xs text-muted-foreground">{t("examples.type")}</span>}
-                    {e.inUse ? (
+                <li key={example.id}>
+                  <label className={cn("tap-row flex items-center gap-2 rounded-md px-2 py-1 text-sm", example.inUse ? "text-muted-foreground" : "cursor-pointer hover:bg-hover")}>
+                    <Checkbox checked={chosen.has(example.id)} disabled={example.inUse} onCheckedChange={() => toggle(example.id)} className="size-4 shrink-0" />
+                    {example.isType ? <TypeGlyph schema={item?.schema} size={14} /> : item && <ItemIcon item={item} size={14} />}
+                    <span className="min-w-0 truncate">{example.title || t("untitled")}</span>
+                    {example.isType && <span className="text-xs text-muted-foreground">{t("examples.type")}</span>}
+                    {example.inUse ? (
                       <span className="ml-auto shrink-0 text-xs text-muted-foreground">{t("examples.inUse")}</span>
                     ) : (
-                      e.changed && <span className="ml-auto shrink-0 rounded-full border border-line px-1.5 text-xs text-muted-foreground">{t("examples.changed")}</span>
+                      example.changed && <span className="ml-auto shrink-0 rounded-full border border-line px-1.5 text-xs text-muted-foreground">{t("examples.changed")}</span>
                     )}
                   </label>
                 </li>

@@ -1,16 +1,12 @@
-// Sync protocol between replicas (browser, later desktop/mobile) and the server.
+// Sync protocol between replicas and the server.
 //
-// The server keeps an append-only log of Yjs updates, each with a sequence number.
-// A replica remembers the last sequence it has seen. On connect it says `hello`
-// with that number and the id of the log row there (`sinceId`) and receives everything
-// newer. If the server no longer has that row – it was restored from an older backup, even if
-// other devices have pushed it past the old number since – it answers with `reset`, and
-// the replica uploads its full state. Its own offline changes sit
-// in a local outbox and are pushed until acknowledged. Yjs updates are
-// idempotent and commutative, so re-sending or re-receiving is always safe.
+// The server keeps an append-only log of Yjs updates with sequence numbers. A replica says `hello`
+// with the last sequence it saw and that row's id (`sinceId`) and receives everything newer. If the
+// server no longer has that row (restored from an older backup, even if others pushed it past the
+// old number since), it answers with `reset` and the replica uploads its full state. Offline changes
+// sit in a local outbox until acked. Yjs updates are idempotent and commutative, so re-sending is safe.
 //
-// All of it runs per area (see PERSONAL in model.ts): a replica says hello for each area it
-// holds, and every message names its area. Messages without one (apps from before areas) mean
+// Everything runs per area. Messages without an area come from apps that predate areas and mean
 // the personal area.
 
 export interface WireUpdate {
@@ -20,7 +16,7 @@ export interface WireUpdate {
   o?: string; // origin (who made the change)
 }
 
-/** A change pushed by a replica: k its key in the outbox (acked by it), s the step (user action) it belongs to. */
+/** k: outbox key (acks name it); s: the step (user action) it belongs to. */
 export interface PushItem {
   k: string;
   d: string;
@@ -57,17 +53,19 @@ export interface ActivityEvent {
   kind: "created" | "updated" | "deleted" | "restored";
   origin: string;
   changes: FieldChange[];
-  /** One user action or tool call; undone together (see undo.ts). */
+  /** One user action or tool call; undone together. */
   step?: string;
-  /** This step undoes another step. */
   undoes?: string;
-  /** This step undoes an undo: it is a redo. */
+  /** The step undoes an undo. */
   redo?: boolean;
 }
 
+// String.fromCharCode(...bytes) overflows the argument limit on large arrays
+const B64_CHUNK = 0x8000;
+
 export function toB64(u: Uint8Array): string {
   let s = "";
-  for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode(...u.subarray(i, i + 0x8000));
+  for (let i = 0; i < u.length; i += B64_CHUNK) s += String.fromCharCode(...u.subarray(i, i + B64_CHUNK));
   return btoa(s);
 }
 export function fromB64(s: string): Uint8Array {

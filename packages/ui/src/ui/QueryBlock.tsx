@@ -26,6 +26,11 @@ function blockTabs(def: QueryDef): ViewTab[] {
   return [{ ...legacyTab({ display: def.view, sort: def.sort, group: def.group, columns: def.columns }), ...(def.tabs?.[0] ? { widths: def.tabs[0].widths, name: def.tabs[0].name } : {}) }];
 }
 
+/** The block's own look ("main") turns into a tab with an id of its own once there are several. */
+function promoteMainTab(tabs: ViewTab[]): ViewTab[] {
+  return tabs.map((x, i) => (i === 0 && x.id === MAIN_TAB ? { ...x, id: shortId("v") } : x));
+}
+
 function QueryBlockView({ src, thisId, n = 0, onChange, onDelete, readOnly }: { src: string; thisId?: string; n?: number; onChange?: (def: QueryDef) => void; onDelete?: () => void; readOnly?: boolean }) {
   const ix = useIndex();
   const { t } = useT();
@@ -74,17 +79,18 @@ function QueryBlockView({ src, thisId, n = 0, onChange, onDelete, readOnly }: { 
     add: (kind) => {
       const id = shortId("v");
       // the first time: the block's own look becomes the first tab
-      const base = tabs.map((x, i) => (i === 0 && x.id === MAIN_TAB ? { ...x, id: shortId("v") } : x));
+      const base = promoteMainTab(tabs);
       writeTabs([...base, { id, pos: keyBetween(base.at(-1)?.pos ?? null, null), kind, ...(kind === "board" ? { group: "status" } : {}) }]);
       pickTab(id);
     },
     rename: (id, name) => patchTab(id, { name: name || undefined }),
     duplicate: (id) => {
-      const src = tabs.find((x) => x.id === id)!;
-      const i = tabs.indexOf(src);
-      const nid = shortId("v");
-      writeTabs([...tabs.slice(0, i + 1), { ...src, id: nid, name: t("view.copyName", { name: tabName(src, t) }), pos: keyBetween(src.pos, tabs[i + 1]?.pos ?? null) }, ...tabs.slice(i + 1)].map((x, j) => (j === 0 && x.id === MAIN_TAB ? { ...x, id: shortId("v") } : x)));
-      pickTab(nid);
+      const original = tabs.find((x) => x.id === id)!;
+      const i = tabs.indexOf(original);
+      const copyId = shortId("v");
+      const copy = { ...original, id: copyId, name: t("view.copyName", { name: tabName(original, t) }), pos: keyBetween(original.pos, tabs[i + 1]?.pos ?? null) };
+      writeTabs(promoteMainTab([...tabs.slice(0, i + 1), copy, ...tabs.slice(i + 1)]));
+      pickTab(copyId);
     },
     remove: (id) => writeTabs(tabs.filter((x) => x.id !== id)),
     move: (id, pos) => writeTabs(tabs.map((x) => (x.id === id ? { ...x, pos } : x)).sort((a, b) => cmpKey(a.pos, b.pos))),
@@ -97,7 +103,6 @@ function QueryBlockView({ src, thisId, n = 0, onChange, onDelete, readOnly }: { 
   const showTabs = tabs.length > 1 || (editing && !!onChange);
   return (
     <div className="group/qb relative my-1 rounded-xl border border-transparent px-0 py-0.5 hover:border-line" contentEditable={false}>
-      {/* the same head as every section of a page: title and count */}
       {def.title && (
         <SectionTitle className="pr-16" count={items.length || undefined}>
           {def.title}
@@ -158,7 +163,10 @@ function QueryBlockView({ src, thisId, n = 0, onChange, onDelete, readOnly }: { 
   );
 }
 
-/** The React root of a block's element: a changed block keeps it (updateDOM). */
+/** The `n`th query block in the editor's current text. */
+const blockAt = (view: EditorView, n: number) => findBlocks(view.state.doc.toString())[n];
+
+/** Kept per element so a changed block keeps its React root in updateDOM. */
 const roots = new WeakMap<HTMLElement, Root>();
 
 class BlockWidget extends WidgetType {
@@ -191,8 +199,8 @@ class BlockWidget extends WidgetType {
   }
   mount(view: EditorView) {
     const replace = (text: string) => {
-      const b = findBlocks(view.state.doc.toString())[this.n];
-      if (b) view.dispatch({ changes: { from: b.from, to: b.to, insert: text } });
+      const block = blockAt(view, this.n);
+      if (block) view.dispatch({ changes: { from: block.from, to: block.to, insert: text } });
     };
     const { wasText, def } = readBlock(this.src, repo.index());
     if (wasText) queueMicrotask(() => replace(queryFence(blockSource(def))));
@@ -204,16 +212,16 @@ class BlockWidget extends WidgetType {
           n={this.n}
           onChange={(d) => replace(queryFence(blockSource(d)))}
           onDelete={() => {
-            const b = findBlocks(view.state.doc.toString())[this.n];
-            if (b) view.dispatch({ changes: { from: b.from, to: Math.min(view.state.doc.length, b.to + 1), insert: "" } });
+            const block = blockAt(view, this.n);
+            if (block) view.dispatch({ changes: { from: block.from, to: Math.min(view.state.doc.length, block.to + 1), insert: "" } });
           }}
         />
       </StrictMode>,
     );
   }
   override destroy() {
-    const r = this.root;
-    setTimeout(() => r?.unmount());
+    const root = this.root;
+    setTimeout(() => root?.unmount());
   }
   override ignoreEvent() {
     return true;
@@ -221,25 +229,27 @@ class BlockWidget extends WidgetType {
 }
 
 function decos(state: EditorState, thisId?: string): DecorationSet {
-  const b = new RangeSetBuilder<Decoration>();
+  const builder = new RangeSetBuilder<Decoration>();
   findBlocks(state.doc.toString()).forEach((blk, n) => {
-    b.add(blk.from, blk.to, Decoration.replace({ widget: new BlockWidget(blk.src, n, thisId), block: true }));
+    builder.add(blk.from, blk.to, Decoration.replace({ widget: new BlockWidget(blk.src, n, thisId), block: true }));
   });
-  return b.finish();
+  return builder.finish();
 }
 
-// ---------- empty sections ----------
 // A heading whose section holds only query blocks that hide when empty disappears with them
 // when none of them has results ("Kürzlich erledigt" on a quiet week). It comes back as soon
 // as one of them finds something.
 
 const refresh = StateEffect.define<null>();
 
+/** The level of a Markdown heading line (1–6), or undefined. */
+const headingLevel = (text: string) => /^(#{1,6})\s/.exec(text)?.[1]!.length;
+
 function emptySections(state: EditorState, thisId?: string): DecorationSet {
   const text = state.doc.toString();
   const blocks = findBlocks(text);
-  const b = new RangeSetBuilder<Decoration>();
-  if (!blocks.some((x) => x.src.includes('"hideEmpty":true'))) return b.finish();
+  const builder = new RangeSetBuilder<Decoration>();
+  if (!blocks.some((x) => x.src.includes('"hideEmpty":true'))) return builder.finish();
   const ix = repo.index();
   const empty = (src: string) => {
     const { def } = readBlock(src, ix);
@@ -248,7 +258,7 @@ function emptySections(state: EditorState, thisId?: string): DecorationSet {
   const doc = state.doc;
   for (let n = 1; n <= doc.lines; n++) {
     const line = doc.line(n);
-    const level = /^(#{1,6})\s/.exec(line.text)?.[1]!.length;
+    const level = headingLevel(line.text);
     if (!level) continue;
     // the section: blank lines and blocks up to the next heading of this level or higher
     let pos = line.to + 1;
@@ -264,14 +274,14 @@ function emptySections(state: EditorState, thisId?: string): DecorationSet {
         pos = blk.to + 1;
         continue;
       }
-      const l = doc.lineAt(pos);
-      const h = /^(#{1,6})\s/.exec(l.text)?.[1]!.length;
-      if (h && h <= level) break;
-      if (l.text.trim()) {
+      const next = doc.lineAt(pos);
+      const nextLevel = headingLevel(next.text);
+      if (nextLevel && nextLevel <= level) break;
+      if (next.text.trim()) {
         allEmpty = false; // the section has text of its own
         break;
       }
-      pos = l.to + 1;
+      pos = next.to + 1;
     }
     if (!inSection || !allEmpty) continue;
     // hide the heading and the blank lines that belong to it (the blocks hide themselves)
@@ -283,9 +293,9 @@ function emptySections(state: EditorState, thisId?: string): DecorationSet {
     }
     const firstBlock = blocks.find((x) => x.from > line.to && x.to <= end)!;
     const to = Math.max(line.to, firstBlock.from - 1);
-    if (from < to) b.add(from, to, Decoration.replace({ block: true }));
+    if (from < to) builder.add(from, to, Decoration.replace({ block: true }));
   }
-  return b.finish();
+  return builder.finish();
 }
 
 export function queryBlocks(thisId?: string): Extension {
@@ -311,7 +321,7 @@ export function queryBlocks(thisId?: string): Extension {
   return [field, sections, watch];
 }
 
-/** Insert an empty block at the cursor (it opens in edit mode). */
+/** The new block opens in edit mode. */
 export function insertQueryBlock(view: EditorView, def: QueryDef = {}) {
   const pos = view.state.selection.main.head;
   const line = view.state.doc.lineAt(pos);

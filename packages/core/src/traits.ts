@@ -1,5 +1,5 @@
-// What a type can do. Behaviour hangs on these traits – never on a type id or name.
-// Everything that reads capabilities goes through this module.
+// Behaviour hangs on these type capabilities, never on a type id or name. Read capabilities only
+// through this module.
 import type * as Y from "yjs";
 import { type Capabilities, type Item, type OptionDef, type PropDef, type StatusGroup, type TypeSchema, type Value, metaMap, setCapability, setProp, upsertProp } from "./model";
 import type { Index } from "./graph";
@@ -12,7 +12,7 @@ function propById(schema: TypeSchema | undefined, id?: string): PropDef | undefi
   return id ? schema?.properties.find((p) => p.id === id) : undefined;
 }
 
-/** The status property that drives ticking off, "open" in queries, boards and progress: a select with one value. */
+/** Drives ticking off, "open" in queries, boards and progress. Must be a single select. */
 export function statusProp(schema?: TypeSchema): PropDef | undefined {
   const p = propById(schema, caps(schema).status);
   return p?.kind === "select" && !p.multiple ? p : undefined;
@@ -22,40 +22,39 @@ export function isStatusProp(schema: TypeSchema | undefined, p: PropDef): boolea
   return statusProp(schema)?.id === p.id;
 }
 
-/** A select with several values (once "Mehrfachauswahl"). */
 export function isMulti(p: PropDef): boolean {
   return p.kind === "select" && !!p.multiple;
 }
 
-/** A select with one value. */
 export function isSingle(p: PropDef): boolean {
   return p.kind === "select" && !p.multiple;
 }
 
-/** The chosen options of a select as a list – also a value from before the number of values changed. */
+/** Also accepts a value stored before the select switched between single and multiple. */
 export function optionIds(v: Value | undefined | null): string[] {
-  return Array.isArray(v) ? v.map(String) : typeof v === "string" && v ? [v] : [];
+  if (Array.isArray(v)) return v.map(String);
+  return typeof v === "string" && v ? [v] : [];
 }
 
 /**
- * Make a select the type's status (one per type; the one before is a plain select again): one
- * value, never empty – its default stays or the first option is –, every option in a group.
- * `fresh`: options for a select that has none yet.
+ * The previous status becomes a plain select. The status is single, never empty (its default or
+ * the first option), and every option gets a group. `fresh` is used if the select has no options.
  */
 export function useAsStatus(doc: Y.Doc, p: PropDef, fresh: OptionDef[] = []) {
   const options = (p.options?.length ? p.options : fresh).map((o) => ({ ...o, group: o.group ?? ("todo" as const) }));
+  const keepsDefault = p.default && options.some((o) => o.id === p.default);
   setCapability(doc, "status", p.id);
-  upsertProp(doc, p.id, { kind: "select", multiple: null as any, options, default: p.default && options.some((o) => o.id === p.default) ? p.default : (options[0]?.id ?? (null as any)) });
+  upsertProp(doc, p.id, { kind: "select", multiple: null as any, options, default: keepsDefault ? p.default : (options[0]?.id ?? (null as any)) });
 }
 
-/** The option new items get; a select with one is never empty. The status always has one. */
+/** The status always gets one, even without a default. */
 export function defaultOption(p: PropDef, schema?: TypeSchema): string | undefined {
   if (p.kind !== "select" || p.multiple) return undefined;
   const d = p.default && p.options?.some((o) => o.id === p.default) ? p.default : undefined;
   return d ?? (isStatusProp(schema, p) ? p.options?.[0]?.id : undefined);
 }
 
-/** "Termin": the date property marked as due date – "overdue" and "this week" work for any type. */
+/** "Termin": lets "overdue" and "this week" work for any type. */
 export function dueProp(schema?: TypeSchema): PropDef | undefined {
   const p = propById(schema, caps(schema).due);
   return p?.kind === "date" ? p : undefined;
@@ -83,15 +82,14 @@ export function isDone(item: Item, schema?: TypeSchema): boolean {
   return statusOf(item, schema)?.group === "done";
 }
 
-/** "Erledigt am": when the status last entered the group done (only while it is done). */
+/** "Erledigt am": when the status last entered the done group; undefined unless done. */
 export function doneAt(item: Item, schema?: TypeSchema): number | undefined {
   return isDone(item, schema) ? item.doneAt : undefined;
 }
 
 /**
- * Write a property value. For the main status this keeps "erledigt am" (meta.done) in step:
- * set when the status enters the group done (at `at`, e.g. the date of an update), removed
- * when it leaves it. Moving between two done options keeps the first date.
+ * For the status this keeps meta.done in step: set to `at` when entering the done group, removed
+ * when leaving it. Moving between two done options keeps the first date.
  */
 export function writeProp(doc: Y.Doc, schema: TypeSchema | undefined, propId: string, value: Value | null | undefined, at = Date.now()) {
   const sp = statusProp(schema);
@@ -105,17 +103,17 @@ export function writeProp(doc: Y.Doc, schema: TypeSchema | undefined, propId: st
   } else if (meta.has("done")) meta.delete("done");
 }
 
-/** The properties that hold an item up while set ("Blockiert durch", "Wartet auf" …): relations and texts marked so. */
+/** Properties that block the item while set ("Blockiert durch", "Wartet auf"). */
 export function blockingProps(schema?: TypeSchema): PropDef[] {
   return schema?.properties.filter((p) => p.blocks && (p.kind === "relation" || p.kind === "text")) ?? [];
 }
 
-/** First option of a group – what "tick off" sets. */
+/** What "tick off" sets. */
 export function firstOfGroup(schema: TypeSchema | undefined, group: StatusGroup): OptionDef | undefined {
   return statusOptions(schema).find((o) => (o.group ?? "todo") === group);
 }
 
-/** ISO date the item is due (end of a range), if its type marks a due date. */
+/** End of a date range. */
 export function dueOf(item: Item, schema?: TypeSchema): string | undefined {
   const p = dueProp(schema);
   if (!p) return undefined;
@@ -147,7 +145,7 @@ export function primaryChild(schema?: TypeSchema): string | undefined {
   return caps(schema).primaryChild;
 }
 
-/** Initial values for a new item of this type: template values, else the selects' defaults. */
+/** Template values win over the selects' defaults. */
 export function initialProps(schema?: TypeSchema): Record<string, Value> {
   const out: Record<string, Value> = { ...(template(schema)?.values ?? {}) };
   for (const p of schema?.properties ?? []) {
@@ -157,18 +155,15 @@ export function initialProps(schema?: TypeSchema): Record<string, Value> {
   return out;
 }
 
-/** Has this property a value on the item? (Computed ones: something to show.) */
+/** For computed properties: whether there is something to show. */
 export function hasValue(item: Item, p: PropDef, ix: Pick<Index, "relValues" | "progress">): boolean {
   if (p.kind === "relation") return ix.relValues(item, p.id, p.symmetric).length > 0;
-  if (p.kind === "computed") return p.computed?.fn === "count" ? true : ix.progress(item.id, p.computed?.of).total > 0;
+  if (p.kind === "computed") return p.computed?.fn === "count" || ix.progress(item.id, p.computed?.of).total > 0;
   const v = item.props[p.id];
   return v !== undefined && v !== null && v !== "" && !(Array.isArray(v) && !v.length);
 }
 
-/**
- * Which properties a page shows: every property of the type – an empty one as a quiet "–" to
- * click –, computed ones only once they have something to show.
- */
+/** Empty properties show (as a clickable "–"); computed ones only once they have a value. */
 export function visibleProps(item: Item, schema: TypeSchema, ix: Pick<Index, "relValues" | "progress">): PropDef[] {
   return schema.properties.filter((p) => p.kind !== "computed" || hasValue(item, p, ix));
 }

@@ -1,5 +1,4 @@
-// Parts every page shares (design rules § 3.1): the path line on top, the card of connections
-// ("Bezüge") and the quiet footer. Information pages and file pages use the same ones.
+// Parts every page shares, information and file pages alike (design rules § 3.1).
 import { useEffect } from "react";
 import { ChevronRight, Pin, RotateCcw, Star, X } from "lucide-react";
 import { type Item, META_TYPE } from "@obtion/core/model";
@@ -14,20 +13,13 @@ import { cn } from "../lib/utils";
 import { dateOf } from "@obtion/core/date";
 import { KEYS } from "./storage";
 
-/** Remember per device whether a row of a page is open (folding is a view, not a change of the page). */
+/** Per device, because folding is a view, not a change of the page. */
 function useOpen(key: string, initial: boolean): [boolean, (o: boolean) => void] {
   const [open, setOpen] = useLocalStorage(KEYS.open(key), initial);
   // stored as "1"/"0" by older versions
   return [!!open, setOpen];
 }
 
-// ---------- path line ----------
-
-/**
- * The line above the title: the home path (13 muted, chevrons faint), on a phone "… › last".
- * Without a place: the list of its type ("Karten"), "Angeheftet" for a pinned top entry,
- * "Eingang" with "Einordnen" in the inbox. More places: "+1" opens them in "Bezüge".
- */
 export function Crumbs({ item, tools, onPlaces, onPlace }: { item: Item; tools: React.ReactNode; onPlaces: () => void; onPlace: () => void }) {
   const ix = useIndex();
   const { t } = useT();
@@ -78,14 +70,12 @@ export function Crumbs({ item, tools, onPlaces, onPlace }: { item: Item; tools: 
         <Pin size={12} className="text-faint" aria-hidden /> {t("place.pinned")}
       </span>
     );
-  } else {
-    // the list of its type ("Karten", "Bücher")
-    if (item.type && ix.types.has(item.type))
-      lead = (
-        <a href={itemHref(item.type)} className={link}>
-          {ix.typePlural(item.type)}
-        </a>
-      );
+  } else if (item.type && ix.types.has(item.type)) {
+    lead = (
+      <a href={itemHref(item.type)} className={link}>
+        {ix.typePlural(item.type)}
+      </a>
+    );
   }
   return (
     <div className="page-bar flex min-h-7 items-center gap-1 text-[13px] text-muted-foreground max-md:min-h-8">
@@ -97,7 +87,6 @@ export function Crumbs({ item, tools, onPlaces, onPlace }: { item: Item; tools: 
   );
 }
 
-/** Over a page in the trash: says so, and brings it back. */
 export function TrashBanner({ onRestore }: { onRestore: () => void }) {
   const { t } = useT();
   return (
@@ -110,38 +99,33 @@ export function TrashBanner({ onRestore }: { onRestore: () => void }) {
   );
 }
 
-// ---------- Bezüge ----------
-
 interface RefKind {
   key: string;
   label: string;
   items: { item: Item; note?: React.ReactNode; tools?: React.ReactNode }[];
 }
 
-/**
- * "Bezüge" (design rules § 2.7): one card, a row per kind – "Verlinkt von", "Refs", "Orte" (only
- * with more than one place), "Verwendet in" (files). Closed they show the count and the first
- * titles; open a list. Open by default only where the page has no list of its own and the kind has
- * at most five entries. Kinds without entries are left out; without any, the card is gone.
- */
+/** Rows open by default only on pages without a list of their own (design rules § 2.7). */
+const OPEN_REFS_MAX = 5;
+
+/** Design rules § 2.7. */
 export function Bezuege({ item, typeArea, usedIn, placesOpen }: { item: Item; typeArea: boolean; usedIn?: { item: Item; note?: string }[]; placesOpen?: number }) {
   const ix = useIndex();
   const { t } = useT();
   const kinds: RefKind[] = [];
-  const seen = new Set<string>();
-  const from = ix
-    .backlinks(item.id)
-    .filter((b) => b.kind !== "rel" && (seen.has(b.from) ? false : (seen.add(b.from), true)))
-    .map((b) => ix.get(b.from)!)
+  const linkingIds = new Set(ix.backlinks(item.id).filter((b) => b.kind !== "rel").map((b) => b.from));
+  const from = [...linkingIds]
+    .map((id) => ix.get(id)!)
     .filter((x) => x && x.kind === "info" && !x.deleted && x.type !== META_TYPE && !(usedIn ?? []).some((u) => u.item.id === x.id));
   const where = (x: Item) => {
-    const p = ix.homePath(x.id);
-    return p.length ? <span className="truncate">{ix.get(p.at(-1)!)?.title}</span> : undefined;
+    const homePath = ix.homePath(x.id);
+    return homePath.length ? <span className="truncate">{ix.get(homePath.at(-1)!)?.title}</span> : undefined;
   };
   if (usedIn?.length) kinds.push({ key: "used", label: t("file.usedIn"), items: usedIn.map((x) => ({ item: x.item, note: x.note })) });
   if (from.length) kinds.push({ key: "linked", label: t("item.linkedFrom"), items: from.map((x) => ({ item: x, note: isInInbox(x, ix) ? undefined : where(x), tools: <PlaceHere target={x} page={item} /> })) });
-  const fromText = ix.textLinks(item).filter((l) => !l.embed).map((l) => l.to);
-  const embedded = ix.textLinks(item).filter((l) => l.embed).map((l) => l.to);
+  const textLinks = ix.textLinks(item);
+  const fromText = textLinks.filter((l) => !l.embed).map((l) => l.to);
+  const embedded = textLinks.filter((l) => l.embed).map((l) => l.to);
   const refIds = [...new Set([...fromText, ...item.refs])].filter((x) => ix.get(x) && x !== item.id);
   if (refIds.length)
     kinds.push({
@@ -189,7 +173,7 @@ export function Bezuege({ item, typeArea, usedIn, placesOpen }: { item: Item; ty
       <SectionTitle>{t("refs.title")}</SectionTitle>
       <Card className="overflow-hidden">
         {kinds.map((k) => (
-          <RefRow key={k.key} page={item} kind={k} initial={!typeArea && k.items.length <= 5} force={k.key === "places" ? placesOpen : undefined} />
+          <RefRow key={k.key} page={item} kind={k} initial={!typeArea && k.items.length <= OPEN_REFS_MAX} force={k.key === "places" ? placesOpen : undefined} />
         ))}
       </Card>
       <PageFooter item={item} />
@@ -200,7 +184,7 @@ export function Bezuege({ item, typeArea, usedIn, placesOpen }: { item: Item; ty
 function RefRow({ page, kind, initial, force }: { page: Item; kind: RefKind; initial: boolean; force?: number }) {
   const { t } = useT();
   const [open, setOpen] = useOpen(`refs:${page.id}:${kind.key}`, initial);
-  // "+1" in the path line opens the places
+  // bumped by "+N" in the path line to open the places
   useEffect(() => {
     if (force) (setOpen(true), document.getElementById(`refs-${kind.key}`)?.scrollIntoView({ block: "center", behavior: "smooth" }));
   }, [force]);
@@ -232,7 +216,6 @@ function RefRow({ page, kind, initial, force }: { page: Item; kind: RefKind; ini
   );
 }
 
-/** A linked entry that waits in the inbox can be put below this page with one click. */
 function PlaceHere({ target, page }: { target: Item; page: Item }) {
   const ix = useIndex();
   const { t } = useT();
@@ -244,7 +227,6 @@ function PlaceHere({ target, page }: { target: Item; page: Item }) {
   );
 }
 
-/** "Geändert vor 2 Std. · erstellt am 1. März 2026" – the last line of a page. */
 function PageFooter({ item }: { item: Item }) {
   const { t, lang } = useT();
   return (

@@ -1,10 +1,10 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "./theme.css";
-/* the classes live in this package, wherever the app that bundles it is built */
+/* scan this package for classes, wherever the bundling app is built */
 @source "./";
 
-/* light or dark: set on <html data-theme> before the first paint (index.html), per device */
+/* index.html sets <html data-theme> before the first paint */
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 @theme inline {
@@ -63,8 +63,7 @@ body {
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior-y: none;
 }
-/* In the base layer, so a field that shows focus on its container (outline-none) has one ring only,
-   and a button's cursor gives way to a cursor-* utility. */
+/* In the base layer so outline-none and cursor-* utilities win (one focus ring per field). */
 @layer base {
   :focus-visible {
     outline: 2px solid var(--focus);
@@ -78,10 +77,7 @@ body {
   background: color-mix(in srgb, var(--focus) 28%, transparent);
 }
 
-/*
- * Fields that read like text (title, inline text, date, property values) show a ring while
- * being edited – the same for all of them. Unlayered, so it wins over outline-none.
- */
+/* Fields that read like text get a ring while edited. Unlayered, so it wins over outline-none. */
 .field:focus,
 .field-within:focus-within {
   outline: 1.5px solid color-mix(in srgb, var(--focus) 60%, transparent);
@@ -90,10 +86,9 @@ body {
 }
 
 /*
- * Touch screens: every control is at least 44 × 44 px to tap; desktop stays dense.
- * .tap – buttons and icon buttons; .tap-row – menu rows and other full-width rows (height only);
- * .tap-edge – a small icon in a row (status ring, select box): an invisible 44 px tap area around it,
- *   so neither the row nor the icon moves.
+ * Touch: every control gets a 44 × 44 px tap area; desktop stays dense.
+ * .tap – buttons; .tap-row – full-width rows (height only);
+ * .tap-edge – a small icon in a row: an invisible tap area around it, so nothing moves.
  */
 @media (pointer: coarse) {
   .tap {
@@ -103,7 +98,7 @@ body {
   .tap-row {
     min-height: 44px;
   }
- /* .tap-y – a link or chip inside a line of text: the tap area grows to 44 px in height only */
+ /* .tap-y – a link or chip inside text: the tap area grows in height only */
   .tap-edge,
   .tap-y {
     position: relative;
@@ -128,7 +123,7 @@ body {
   }
 }
 
-/* iOS zooms into inputs smaller than 16px on focus (larger ones, like page titles, stay as they are). */
+/* iOS zooms into inputs smaller than 16px on focus. */
 @media (max-width: 640px) {
   input:not([data-large]),
   textarea:not([data-large]),
@@ -144,7 +139,6 @@ body {
   padding-bottom: env(safe-area-inset-bottom);
 }
 
-/* ---------- rendered markdown ---------- */
 .md {
   line-height: 1.65;
   overflow-wrap: anywhere;
@@ -228,12 +222,11 @@ body {
   border-color: var(--border);
 }
 
-/* ---------- CodeMirror editor ---------- */
 .cm-editor {
   font-size: 16px;
   background: transparent !important;
 }
-/* reading size on larger screens: 16 px, lines of about 72 characters (blocks and embeds keep the width) */
+/* reading line length on larger screens; blocks and embeds keep the full width */
 @media (min-width: 768px) {
   .cm-line {
     max-width: 72ch;
@@ -329,7 +322,6 @@ body {
   color: var(--muted-foreground);
   opacity: 1 !important;
 }
-/* the "/" menu and page options: an icon, the name and a line on what it is */
 .cm-slash {
   display: flex;
   align-items: center;
@@ -423,7 +415,6 @@ body {
   }
 }
 
-/* ---------- embeds and query blocks ---------- */
 .cm-queryblock {
   padding: 0;
   cursor: default;
@@ -476,7 +467,6 @@ body {
   border-radius: 8px;
 }
 
-/* A row an agent just changed lights up briefly (AgentNotice). */
 @keyframes agent-flash {
   from {
     background-color: color-mix(in srgb, var(--ok) 22%, transparent);
@@ -494,14 +484,14 @@ body {
   }
 }
 
-/* Numbers in lists and tables line up (dates, counts, progress). */
+/* so numbers line up in lists and tables */
 table,
 time,
 [data-id] {
   font-variant-numeric: tabular-nums;
 }
 
-/* Query blocks never make the text wider than the screen (lists truncate instead). */
+/* Query blocks must not make the text wider than the screen; lists truncate instead. */
 .cm-lineWrapping {
   min-width: 0;
 }
@@ -510,12 +500,11 @@ time,
   min-width: 0;
 }
 
-/* A text shown read-only (the start page): its query blocks have no edit tools. */
+/* read-only text (the start page) */
 .cm-content[contenteditable="false"] .qb-tools {
   display: none;
 }
 
-/* An embedded file whose content the server does not have. */
 .embed-missing {
   display: inline-block;
   border: 1px dashed var(--border);
@@ -525,8 +514,7 @@ time,
   color: var(--muted-foreground);
 }
 
-/* Table cells edited in place: the small tools (remove ×, add +, calendar) show on the row
-   under the pointer or while the cell has focus – the values stay calm. Always on touch. */
+/* Cell tools show only on hover or focus so the values stay calm; always on touch. */
 .cell-tools button:not(.tap-y) {
   opacity: 0;
 }
@@ -540,15 +528,14 @@ tr:hover .cell-tools button:not(.tap-y),
   }
 }
 
-/* The two content widths (design rules § 1.4): reading 760 (pages, settings, search …) and
-   overview 1040 (start, inbox, collections). Padding outside the width; 16 on a phone. */
+/* Content widths (design rules § 1.4): reading 760, overview 1040. Padding sits outside the width. */
 .page-read,
 .page-wide {
   box-sizing: content-box;
   margin-inline: auto;
   padding: 28px 48px 72px;
 }
-/* on a page: the path and its tools stay on top while scrolling */
+/* the page bar stays on top while scrolling */
 .page-read:has(> .page-bar) {
   padding-top: 0;
 }
@@ -575,7 +562,7 @@ tr:hover .cell-tools button:not(.tap-y),
   }
 }
 
-/* Page title (§ 1.2): 36/44 on a desktop, 28/34 on a phone */
+/* design rules § 1.2 */
 .page-title {
   font-size: 36px;
   line-height: 44px;
@@ -595,12 +582,11 @@ tr:hover .cell-tools button:not(.tap-y),
 @media (prefers-reduced-motion: reduce) {
   [data-slot] { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
-/* a page's title is edited in place like its text: no ring */
+/* the title is edited in place like body text: no ring */
 textarea.page-title.field:focus {
   outline: none;
 }
 
-/* ---------- the editor as blocks (editor/*.ts) ---------- */
 /* the size sits on the line, so an empty heading is as high as a written one */
 .cm-line.cm-h {
   padding-bottom: 1px !important;
@@ -788,7 +774,6 @@ body.cm-dragging * {
   }
 }
 
-/* menus of the editor (block menu, "Turn into") */
 .cm-menu {
   position: fixed;
   z-index: 60;
@@ -954,7 +939,7 @@ body.cm-dragging * {
   color: var(--muted-foreground);
 }
 
-/* The status button (sync, update): the old icon shrinks away, then the new one grows in. */
+/* status button: the old icon shrinks away, then the new one grows in */
 @keyframes icon-shrink {
   from {
     transform: scale(1);

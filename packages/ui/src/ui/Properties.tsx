@@ -1,5 +1,4 @@
-// Properties of an item: those its type defines, free ones, and values of removed
-// properties ("Weitere Eigenschaften") – schema changes never delete values.
+// Schema changes never delete values; values of removed properties show as "Weitere Eigenschaften".
 import { Checkbox } from "../components/ui/checkbox";
 import { NativeSelect } from "../components/ui/native-select";
 import { useState } from "react";
@@ -24,29 +23,33 @@ import { ItemPicker } from "./Picker";
 import { StatusMenu, setStatus } from "./Row";
 import { dateOf } from "@obtion/core/date";
 
+/** Longer text values get a multi-line field. */
+const MULTILINE_FROM = 60;
+const TARGET_SUGGESTIONS = 8;
+
 function displayValue(item: Item, p: PropDef): string {
-  const v = item.props[p.id];
+  const value = item.props[p.id];
   const ix = repo.index();
   if (item.rels[p.id]?.length) return item.rels[p.id]!.map((id) => ix.get(id)?.title ?? id).join(", ");
-  if (v === undefined) return "";
-  if (p.options) return optionNames(p, v).join(", ");
-  return String(v);
+  if (value === undefined) return "";
+  if (p.options) return optionNames(p, value).join(", ");
+  return String(value);
 }
 
 export function PropertyField({ item, prop, autoFocus }: { item: Item; prop: PropDef; autoFocus?: boolean }) {
   const { t, lang } = useT();
   const ix = useIndex();
-  const v = item.props[prop.id];
-  const set = (x: Value | null) => repo.setProp(item.id, prop.id, x);
+  const value = item.props[prop.id];
+  const setValue = (x: Value | null) => repo.setProp(item.id, prop.id, x);
   switch (prop.kind) {
     case "text":
-      return <InlineText value={String(v ?? "")} onCommit={(x) => set(x.trim() || null)} placeholder={t("props.empty")} label={prop.name} multiline={String(v ?? "").length > 60} autoFocus={autoFocus} className="text-sm leading-relaxed" />;
+      return <InlineText value={String(value ?? "")} onCommit={(x) => setValue(x.trim() || null)} placeholder={t("props.empty")} label={prop.name} multiline={String(value ?? "").length > MULTILINE_FROM} autoFocus={autoFocus} className="text-sm leading-relaxed" />;
     case "url":
       return (
         <span className="flex w-full items-center gap-1">
-          <InlineText value={String(v ?? "")} onCommit={(x) => set(x.trim() || null)} placeholder={t("props.empty")} label={prop.name} autoFocus={autoFocus} className="text-sm" />
-          {typeof v === "string" && /^https?:\/\//.test(v) && (
-            <a href={v} target="_blank" rel="noopener" className="text-muted-foreground hover:text-fg" aria-label={t("props.openLink")}>
+          <InlineText value={String(value ?? "")} onCommit={(x) => setValue(x.trim() || null)} placeholder={t("props.empty")} label={prop.name} autoFocus={autoFocus} className="text-sm" />
+          {typeof value === "string" && /^https?:\/\//.test(value) && (
+            <a href={value} target="_blank" rel="noopener" className="text-muted-foreground hover:text-fg" aria-label={t("props.openLink")}>
               <ExternalLink size={13} />
             </a>
           )}
@@ -55,8 +58,8 @@ export function PropertyField({ item, prop, autoFocus }: { item: Item; prop: Pro
     case "number":
       return (
         <InlineText
-          value={typeof v === "number" ? numberText(lang, v) : ""}
-          onCommit={(x) => set(parseNumber(lang, x) ?? null)}
+          value={typeof value === "number" ? numberText(lang, value) : ""}
+          onCommit={(x) => setValue(parseNumber(lang, x) ?? null)}
           placeholder={t("props.empty")}
           label={prop.name}
           autoFocus={autoFocus}
@@ -64,12 +67,12 @@ export function PropertyField({ item, prop, autoFocus }: { item: Item; prop: Pro
         />
       );
     case "date": {
-      const s = typeof v === "string" ? v : "";
-      if (!prop.range) return <DateField value={s || undefined} label={prop.name} autoFocus={autoFocus} onChange={(x) => set(x || null)} />;
-      return <RangeField value={s} name={prop.name} autoFocus={autoFocus} onChange={(x) => set(x || null)} />;
+      const text = typeof value === "string" ? value : "";
+      if (!prop.range) return <DateField value={text || undefined} label={prop.name} autoFocus={autoFocus} onChange={(x) => setValue(x || null)} />;
+      return <RangeField value={text} name={prop.name} autoFocus={autoFocus} onChange={(x) => setValue(x || null)} />;
     }
     case "checkbox":
-      return <Checkbox checked={v === true} onCheckedChange={(checked) => set(checked === true ? true : null)} aria-label={prop.name} className="size-4" />;
+      return <Checkbox checked={value === true} onCheckedChange={(checked) => setValue(checked === true ? true : null)} aria-label={prop.name} className="size-4" />;
     case "select": {
       if (prop.multiple) return <MultiField item={item} prop={prop} />;
       const schema = ix.schemaOf(item);
@@ -84,13 +87,13 @@ export function PropertyField({ item, prop, autoFocus }: { item: Item; prop: Pro
     case "relation":
       return <RelationField item={item} prop={prop} autoOpen={autoFocus} />;
     case "computed": {
-      const c = prop.computed;
-      if (c?.fn === "count") return <span className="tabular-nums text-muted-foreground">{ix.countDescendants(item.id, c.of)}</span>;
-      const p = ix.progress(item.id, c?.of);
-      return p.total ? (
+      const computed = prop.computed;
+      if (computed?.fn === "count") return <span className="tabular-nums text-muted-foreground">{ix.countDescendants(item.id, computed.of)}</span>;
+      const progress = ix.progress(item.id, computed?.of);
+      return progress.total ? (
         <span className="flex w-full max-w-64 items-center gap-2">
-          <Progress done={p.done} total={p.total} className="flex-1" />
-          <ProgressCount done={p.done} total={p.total} className="text-xs text-muted-foreground" />
+          <Progress done={progress.done} total={progress.total} className="flex-1" />
+          <ProgressCount done={progress.done} total={progress.total} className="text-xs text-muted-foreground" />
         </span>
       ) : (
         <EmptyDash />
@@ -100,7 +103,6 @@ export function PropertyField({ item, prop, autoFocus }: { item: Item; prop: Pro
   return null;
 }
 
-/** A select with several values: its options as badges, "+" adds one. */
 function MultiField({ item, prop }: { item: Item; prop: PropDef }) {
   const { t } = useT();
   const ids = optionIds(item.props[prop.id]);
@@ -108,10 +110,10 @@ function MultiField({ item, prop }: { item: Item; prop: PropDef }) {
   return (
     <>
       {ids.map((id) => {
-        const o = prop.options?.find((x) => x.id === id);
+        const option = prop.options?.find((x) => x.id === id);
         return (
           <span key={id} className="inline-flex items-center gap-0.5">
-            {o ? <StatusPill option={o} small /> : id}
+            {option ? <StatusPill option={option} small /> : id}
             <Button variant="plain" onClick={() => set(ids.filter((x) => x !== id))} className="text-muted-foreground hover:text-fg" aria-label={t("props.removeValue")}>
               <X size={11} />
             </Button>
@@ -139,21 +141,21 @@ function MultiField({ item, prop }: { item: Item; prop: PropDef }) {
   );
 }
 
-/** A select with one value (also the status): its chip with an invisible select over it, so a click picks right there. */
+/** An invisible native select lies over the chip, so a click picks right there. */
 export function OptionSelect({ item, prop, className }: { item: Item; prop: PropDef; className?: string }) {
   const { t } = useT();
-  const v = item.props[prop.id];
-  const opt = prop.options?.find((o) => o.id === v);
+  const value = item.props[prop.id];
+  const opt = prop.options?.find((o) => o.id === value);
   const schema = useIndex().schemaOf(item);
   const isStatus = isStatusProp(schema, prop);
-  // with a default it is never empty: no "–" to pick
+  // a select with a default is never empty
   const required = !!defaultOption(prop, schema);
   return (
     <label className={cn("tap-row relative cursor-pointer items-center", className)}>
       {opt ? <StatusPill option={opt} group={isStatus ? (opt.group ?? "todo") : undefined} /> : <span className="text-muted-foreground">{t("props.empty")}</span>}
       <NativeSelect
         overlay
-        value={String(v ?? "")}
+        value={String(value ?? "")}
         onChange={(e) => (isStatus && e.target.value ? void setStatus(item, e.target.value) : repo.setProp(item.id, prop.id, e.target.value || null))}
         aria-label={prop.name}
       >
@@ -178,7 +180,6 @@ export function OptionSelect({ item, prop, className }: { item: Item; prop: Prop
   );
 }
 
-/** Start and end of a range as two date fields. */
 export function RangeEditor({ value, onChange, autoFocus, className }: { value: string; onChange: (v: string) => void; autoFocus?: boolean; className?: string }) {
   const { t } = useT();
   const { start, end } = parseRange(value);
@@ -191,12 +192,10 @@ export function RangeEditor({ value, onChange, autoFocus, className }: { value: 
   );
 }
 
-/** A start–end date: empty it is one quiet "–" like every empty field; a click shows both dates. */
 function RangeField({ value, name, autoFocus, onChange }: { value: string; name: string; autoFocus?: boolean; onChange: (v: string) => void }) {
   const { t, lang } = useT();
   const [open, setOpen] = useState(!!autoFocus);
   if (!value && !open) return <EmptyValueButton type="button" onClick={() => setOpen(true)} aria-label={t("props.set", { name })} />;
-  // set: read as one line ("1. März 2026 – 30. Juni 2027"), a click opens both dates
   if (!open) {
     const { start, end } = parseRange(value);
     const long = (d: string) => (d ? fmtDate(lang, d, { day: "numeric", month: "long", year: "numeric" }) : "…");
@@ -219,23 +218,22 @@ function RelationField({ item, prop, autoOpen }: { item: Item; prop: PropDef; au
   const own = item.rels[prop.id] ?? [];
   const remove = (id: string) => {
     if (own.includes(id)) repo.setRel(item.id, prop.id, id, false);
-    else repo.setRel(id, prop.id, item.id, false); // symmetric: stored on the other side
+    else repo.setRel(id, prop.id, item.id, false); // a symmetric relation may be stored on the other side
   };
   return (
     <>
       {ids.map((id) => {
-        const x = ix.get(id)!;
+        const related = ix.get(id)!;
         return (
           <span key={id} className="inline-flex max-w-full items-center gap-1 rounded-md bg-surface-2 py-0.5 pl-1.5 pr-0.5 text-xs">
-            <ItemLink item={x} className="min-w-0" />
-            {!fits(x) && <span title={t("props.notTarget", { target: prop.target })} className="text-warn"><AlertTriangle size={11} /></span>}
+            <ItemLink item={related} className="min-w-0" />
+            {!fits(related) && <span title={t("props.notTarget", { target: prop.target })} className="text-warn"><AlertTriangle size={11} /></span>}
             <Button variant="plain" onClick={() => remove(id)} className="rounded px-1 text-muted-foreground hover:bg-hover hover:text-fg" aria-label={t("props.removeValue")}>
               <X size={11} />
             </Button>
           </span>
         );
       })}
-      {/* empty: the same quiet "–" as every empty field; with values and several allowed: "+" */}
       {!ids.length ? (
         <EmptyValueButton type="button" onClick={() => setPicking(true)} aria-label={t("props.set", { name: prop.name })} />
       ) : (
@@ -244,7 +242,7 @@ function RelationField({ item, prop, autoOpen }: { item: Item; prop: PropDef; au
       {picking && (
         <ItemPicker
           title={prop.name}
-          suggestions={ix.live.filter((x) => target && x.id !== item.id && fits(x) && !ids.includes(x.id)).slice(0, 8).map((x) => ({ id: x.id, reason: "target" as const }))}
+          suggestions={ix.live.filter((x) => target && x.id !== item.id && fits(x) && !ids.includes(x.id)).slice(0, TARGET_SUGGESTIONS).map((x) => ({ id: x.id, reason: "target" as const }))}
           exclude={(x) => x.id === item.id || ids.includes(x.id)}
           onPick={(id) => {
             if (!prop.multiple) for (const old of own) repo.setRel(item.id, prop.id, old, false);
@@ -263,9 +261,6 @@ function RelationField({ item, prop, autoOpen }: { item: Item; prop: PropDef; au
   );
 }
 
-// ---------- the property block of a page ----------
-
-/** One row of the block: label 13 muted (one line, the name as tooltip when cut), value beside it. */
 function BlockRow({ label, title, children }: { label: React.ReactNode; title?: string; children: React.ReactNode }) {
   return (
     <>
@@ -277,22 +272,18 @@ function BlockRow({ label, title, children }: { label: React.ReactNode; title?: 
   );
 }
 
-/** What the page puts around its badges: the type in front, the progress under the dates. */
+/** `first` goes before the badges, `progress` under the dates. */
 interface PageHead {
   first?: React.ReactNode;
   progress?: React.ReactNode;
 }
 
-/** Status and selections read by themselves as badges; dates by their icon. They need no label. */
+/** Status and selections read as badges by themselves, so they need no label. */
 const isBadge = (p: PropDef) => isSingle(p);
 
 /**
- * The properties of a page under the title (design rules § 2.2). First a row of badges – the
- * type, then status and selections in the type's order –, under it the dates, under them the
- * progress. The rest follows with its name: the type's properties in their order, values left
- * without a property (shown, only removable), the other side of relations ("Blockiert diese").
- * Every property of the type is there from the start – a page adds none the type lacks. Tags are
- * no property: they follow the badges (see PageTags).
+ * Design rules § 2.2. Every property of the type shows from the start, a page adds none the type
+ * lacks. Tags are no property and follow the badges (see PageTags).
  */
 export function PropertyBlock({ item, schema, head = {} }: { item: Item; schema?: TypeSchema; head?: PageHead }) {
   const { t } = useT();
@@ -321,7 +312,7 @@ export function PropertyBlock({ item, schema, head = {} }: { item: Item; schema?
           {dates.map((p) => (
             <span key={p.id} className="inline-flex items-center gap-1.5" title={p.description || p.name}>
               <CalendarDays size={15} className="shrink-0 text-muted-foreground" aria-hidden />
-              {/* the name only where the icon alone does not say which date it is */}
+              {/* name the date only where the icon alone does not say which one it is */}
               {(dates.length > 1 || !hasValue(item, p, ix)) && <span className="text-muted-foreground">{p.name}</span>}
               <PropertyField item={item} prop={p} />
             </span>
@@ -364,32 +355,28 @@ export function PropertyBlock({ item, schema, head = {} }: { item: Item; schema?
   );
 }
 
-/** The status as a badge; a click picks another. */
 function StatusBadge({ item }: { item: Item }) {
   const { t } = useT();
   const ix = useIndex();
-  const st = statusOf(item, ix.schemaOf(item));
-  if (!st) return null;
+  const status = statusOf(item, ix.schemaOf(item));
+  if (!status) return null;
   return (
     <StatusMenu
       item={item}
       trigger={(p) => (
-        <Button variant="plain" {...p} className="tap-y inline-flex" aria-label={t("row.status", { name: st.option.name })}>
-          <StatusPill option={st.option} group={st.group} />
+        <Button variant="plain" {...p} className="tap-y inline-flex" aria-label={t("row.status", { name: status.option.name })}>
+          <StatusPill option={status.option} group={status.group} />
         </Button>
       )}
     />
   );
 }
 
-/**
- * A selection as a badge that says what it is: the property's name before the value ("Phase
- * Entwurf"). Empty: the name, dashed, to pick one.
- */
+/** Shows the property's name before the value ("Phase Entwurf"). */
 function SelectBadge({ item, prop }: { item: Item; prop: PropDef }) {
   const { t } = useT();
-  const v = item.props[prop.id];
-  const opt = prop.options?.find((o) => o.id === v);
+  const value = item.props[prop.id];
+  const opt = prop.options?.find((o) => o.id === value);
   const ix = useIndex();
   // a select with a default is never empty
   const required = !!defaultOption(prop, ix.schemaOf(item));
@@ -416,7 +403,7 @@ function SelectBadge({ item, prop }: { item: Item; prop: PropDef }) {
         <>
           <p className="px-2.5 pb-1 pt-1.5 text-xs text-muted-foreground">{prop.name}</p>
           {prop.options?.map((o) => (
-            <MenuItem key={o.id} active={o.id === v} onClick={() => (close(), repo.setProp(item.id, prop.id, o.id))}>
+            <MenuItem key={o.id} active={o.id === value} onClick={() => (close(), repo.setProp(item.id, prop.id, o.id))}>
               <StatusPill option={o} />
             </MenuItem>
           ))}
@@ -434,19 +421,18 @@ function SelectBadge({ item, prop }: { item: Item; prop: PropDef }) {
   );
 }
 
-/** Other entries' relations pointing here, under the relation's inverse name ("Blockiert diese"). */
 function inverseGroups(item: Item, ix: Index, t: T): { label: string; ids: string[] }[] {
   const groups = new Map<string, { label: string; ids: string[] }>();
   for (const b of ix.backlinks(item.id)) {
     if (b.kind !== "rel") continue;
     const from = ix.get(b.from);
     if (!from) continue;
-    const p = ix.schemaOf(from)?.properties.find((x) => x.id === b.prop);
-    if (!p || p.symmetric) continue;
-    const label = p.inverseName || t("props.inverse", { prop: p.name, type: ix.typeName(from.type) ?? "" });
-    const g = groups.get(label) ?? { label, ids: [] };
-    if (!g.ids.includes(from.id)) g.ids.push(from.id);
-    groups.set(label, g);
+    const prop = ix.schemaOf(from)?.properties.find((x) => x.id === b.prop);
+    if (!prop || prop.symmetric) continue;
+    const label = prop.inverseName || t("props.inverse", { prop: prop.name, type: ix.typeName(from.type) ?? "" });
+    const group = groups.get(label) ?? { label, ids: [] };
+    if (!group.ids.includes(from.id)) group.ids.push(from.id);
+    groups.set(label, group);
   }
   return [...groups.values()];
 }

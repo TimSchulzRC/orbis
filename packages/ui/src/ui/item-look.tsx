@@ -15,24 +15,21 @@ import { ICON, INBOX_ICON, NOTE_ICON, OVERVIEW_ICON, TYPE_ICON, FILE_ICONS } fro
 
 export const pal = (color?: string) => `var(--pal-${color ?? "slate"}, var(--pal-slate))`;
 
-/** A chip in colour `c`: the colour mixed into the text, a light wash of it behind. */
 export const tint = (c: string) => ({ color: `color-mix(in srgb, ${c} 62%, var(--text))`, background: `color-mix(in srgb, ${c} 12%, transparent)` });
 
 export const GROUP_COLOR: Record<StatusGroup, string> = { todo: "var(--faint)", active: "var(--t-inbox)", done: "var(--ok)" };
 
-/** The colour of a status glyph: green once done, the option's own colour, else none (the text's). */
 export const statusColor = (option: OptionDef, done = option.group === "done") =>
   done ? "var(--ok)" : option.color && option.color !== "gray" ? pal(option.color) : undefined;
 
 export interface Look {
   icon: typeof INBOX_ICON;
   color: string;
-  /** "schema": an entry of a user type, named `name` */
+  /** "schema" is an entry of a user type, named by `name` */
   kind: "file" | "type" | "inbox" | "overview" | "note" | "schema";
   name?: string;
 }
 
-/** Visual identity of an item: its type, or note / inbox / file / type. */
 export function itemLook(item: Item, ix: Index = repo.index()): Look {
   if (item.kind === "datei") return { icon: FILE_ICONS[item.file?.filetype ?? "sonstiges"] ?? FILE_ICONS.sonstiges!, color: "var(--t-file)", kind: "file" };
   if (item.schema && item.type === META_TYPE) return { icon: ICON[item.schema.icon] ?? TYPE_ICON, color: pal(item.schema.color), kind: "type" };
@@ -43,13 +40,13 @@ export function itemLook(item: Item, ix: Index = repo.index()): Look {
   return { icon: NOTE_ICON, color: "var(--t-note)", kind: "note" };
 }
 
-/** What an entry is, in words: its type's name or "Notiz", "Datei" … `inboxAsNote`: an entry in the inbox is a note too. */
+/** `inboxAsNote` labels inbox entries as notes. */
 export function kindLabel(look: Look, t: T, opts: { inboxAsNote?: boolean } = {}): string {
   if (look.kind === "schema") return look.name ?? "";
   return t("kind." + (look.kind === "inbox" && opts.inboxAsNote ? "note" : look.kind));
 }
 
-/** `ix`: the index of the item's workspace, if it is not the open one (the sidebar shows others). */
+/** Pass `ix` when the item is in another workspace than the open one (the sidebar shows others). */
 export function ItemIcon({ item, size = 16, className, ix }: { item: Item; size?: number; className?: string; ix?: Index }) {
   const { t } = useT();
   const here = useIndex();
@@ -58,8 +55,8 @@ export function ItemIcon({ item, size = 16, className, ix }: { item: Item; size?
 }
 
 export function TypeGlyph({ schema, size = 16, className }: { schema?: TypeSchema; size?: number; className?: string }) {
-  const I = (schema && ICON[schema.icon]) || ICON.circle!;
-  return <I size={size} style={{ color: pal(schema?.color) }} className={cn("shrink-0", className)} aria-hidden />;
+  const Icon = (schema && ICON[schema.icon]) || ICON.circle!;
+  return <Icon size={size} style={{ color: pal(schema?.color) }} className={cn("shrink-0", className)} aria-hidden />;
 }
 
 export function TypeChip({ schema, onClick }: { schema: TypeSchema; onClick?: () => void }) {
@@ -72,7 +69,7 @@ export function TypeChip({ schema, onClick }: { schema: TypeSchema; onClick?: ()
   );
 }
 
-/** A status by its shape, so it reads without colour: ring, half circle, pause, check, cross. */
+/** Distinct shapes, so a status reads without colour. */
 export function StatusGlyph({ option, size = 16, className }: { option: OptionDef; size?: number; className?: string }) {
   const shape = statusShape(option);
   if (shape === "paused") return <CirclePause size={size} className={className} aria-hidden />;
@@ -88,12 +85,11 @@ export function StatusGlyph({ option, size = 16, className }: { option: OptionDe
 
 export function StatusPill({ option, small, group, label }: { option?: OptionDef; small?: boolean; group?: StatusGroup; label?: ReactNode }) {
   if (!option) return null;
-  const c = option.color ? pal(option.color) : GROUP_COLOR[group ?? option.group ?? "todo"];
-  // status options have a group and show their shape; plain select options a dot
-  const isStatus = !!(group ?? option.group);
+  const statusGroup = group ?? option.group;
+  const color = option.color ? pal(option.color) : GROUP_COLOR[statusGroup ?? "todo"];
   return (
-    <Badge className={cn("inline-flex items-center gap-1.5 whitespace-nowrap rounded-full font-medium", small ? "px-1.5 py-0 text-xs" : "px-2 py-0.5 text-xs")} style={tint(c)}>
-      {isStatus ? <StatusGlyph option={{ ...option, group: group ?? option.group }} size={12} /> : <span className="size-1.5 rounded-full" style={{ background: c }} />}
+    <Badge className={cn("inline-flex items-center gap-1.5 whitespace-nowrap rounded-full font-medium", small ? "px-1.5 py-0 text-xs" : "px-2 py-0.5 text-xs")} style={tint(color)}>
+      {statusGroup ? <StatusGlyph option={{ ...option, group: statusGroup }} size={12} /> : <span className="size-1.5 rounded-full" style={{ background: color }} />}
       {label ?? option.name}
     </Badge>
   );
@@ -129,7 +125,6 @@ export function Tag({ tag, onRemove, href }: { tag: string; onRemove?: () => voi
   );
 }
 
-/** A link to an entry. */
 export function ItemLink({ item, className }: { item: Item; className?: string }) {
   const { t } = useT();
   const hrefOf = useItemHref();
@@ -141,7 +136,6 @@ export function ItemLink({ item, className }: { item: Item; className?: string }
   );
 }
 
-/** "Darunter": the entries below one, as plain links (the inbox's views of an entry). */
 export function BelowList({ items, className }: { items: Item[]; className?: string }) {
   const { t } = useT();
   const hrefOf = useItemHref();
@@ -160,7 +154,6 @@ export function BelowList({ items, className }: { items: Item[]; className?: str
   );
 }
 
-/** A quiet amber mark on a hit that still waits in the inbox ("Im Eingang"); nothing otherwise. */
 export function InTray({ item, ix }: { item: Item; ix: Index }) {
   if (!isInInbox(item, ix)) return null;
   return (
@@ -175,19 +168,19 @@ export function RelTime({ ts }: { ts: number }) {
   return <time dateTime={new Date(ts).toISOString()}>{fmtRelative(lang, ts)}</time>;
 }
 
-/** A due date: red once overdue (unless done), amber today. `cell`: in a table's column, as big as the other values. */
+/** `cell`: sized like the other values in a table column. */
 export function DueLabel({ due, done, cell }: { due?: string; done?: boolean; cell?: boolean }) {
   const { t, lang } = useT();
   if (!due) return null;
   const today = todayISO();
   const overdue = !done && due < today;
   const isToday = due === today;
+  const tone = overdue ? "text-danger" : isToday ? "text-warn" : cell ? "text-fg" : "text-muted-foreground";
   return (
-    <span className={cn("whitespace-nowrap tabular-nums", !cell && "text-xs", !cell && (overdue || isToday) && "font-medium", overdue ? "text-danger" : isToday ? "text-warn" : cell ? "text-fg" : "text-muted-foreground")}>
+    <span className={cn("whitespace-nowrap tabular-nums", !cell && "text-xs", !cell && (overdue || isToday) && "font-medium", tone)}>
       {isToday ? t("time.today") : fmtShortDate(lang, due)}
     </span>
   );
 }
 
-/** An empty value in a cell or field. */
 export const EmptyDash = () => <span className="text-faint">–</span>;

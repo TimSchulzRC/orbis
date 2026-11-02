@@ -6,7 +6,6 @@ import { repo as current } from "../repo";
 /** Why the picker suggests an entry ("picker.reason.*"). */
 export type PickReason = "agent" | "mentioned" | "parent" | "similar" | "target" | "recent";
 
-/** Places to suggest for an item: the agent's suggestion, mentioned items, their parents, similar overviews. */
 export function placeSuggestions(item: Item, repo: Repo = current): { id: string; reason: Exclude<PickReason, "target" | "recent"> }[] {
   const ix = repo.index();
   const out: ReturnType<typeof placeSuggestions> = [];

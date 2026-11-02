@@ -1,18 +1,19 @@
-// A new version of the app: the status button (packages/ui/src/update.ts) turns while its service
-// worker loads and offers "Aktualisieren" once it waits. That activates it fully – local changes
-// first go to the server, then SKIP_WAITING, then exactly one reload when the new worker has taken
-// over. Without a waiting worker the page reloads at once. A click on the button looks for one too.
+// Applying an update: local changes go to the server first, then SKIP_WAITING, then exactly one
+// reload once the new worker has taken over.
 import { setUpdate, setUpdateCheck, unsynced } from "@obtion/ui";
 
 let reg: ServiceWorkerRegistration | undefined;
 let reloading = false;
+const TAKEOVER_TIMEOUT_MS = 4000;
+const RECHECK_MS = 30 * 60_000;
+const SYNC_POLL_MS = 150;
 
 const ready = () => setUpdate("ready", () => void apply());
 
-/** Unsent local changes: wait until the server has them (they are kept on the device anyway). */
-async function settled(ms = 5000) {
+// bounded wait: unsent changes stay on the device anyway
+async function waitForSync(ms = 5000) {
   const end = Date.now() + ms;
-  while (unsynced() && Date.now() < end) await new Promise((r) => setTimeout(r, 150));
+  while (unsynced() && Date.now() < end) await new Promise((r) => setTimeout(r, SYNC_POLL_MS));
 }
 
 function reloadOnce() {
@@ -23,35 +24,40 @@ function reloadOnce() {
 
 async function apply() {
   setUpdate("applying");
-  await settled();
+  await waitForSync();
   const waiting = reg?.waiting;
   if (!waiting) return reloadOnce();
   navigator.serviceWorker.addEventListener("controllerchange", reloadOnce, { once: true });
   waiting.postMessage({ type: "SKIP_WAITING" });
-  // a worker that does not take over: reload anyway after a while
-  setTimeout(reloadOnce, 4000);
+  // fallback for a worker that never takes over
+  setTimeout(reloadOnce, TAKEOVER_TIMEOUT_MS);
 }
 
 export function initUpdates() {
   if (!("serviceWorker" in navigator) || import.meta.env.DEV) return;
   import("virtual:pwa-register").then(({ registerSW }) => {
     registerSW({
-      // the reload is ours (exactly once, after the outbox): the plugin's own one stays off
+      // we reload ourselves, once and after the outbox has drained
       onNeedReload: () => {},
       onNeedRefresh: ready,
-      onRegisteredSW: (_url, r) => {
-        if (!r) return;
-        reg = r;
-        if (r.waiting && navigator.serviceWorker.controller) ready();
-        // a new version found: the button turns while it loads (only when this page has one running)
-        r.addEventListener("updatefound", () => navigator.serviceWorker.controller && !r.waiting && setUpdate("loading"));
-        setUpdateCheck(async () => {
-          await r.update();
-          return !!(r.installing || r.waiting);
+      onRegisteredSW: (_url, registration) => {
+        if (!registration) return;
+        reg = registration;
+        if (registration.waiting && navigator.serviceWorker.controller) ready();
+        // without a controller this is the first install, not an update
+        registration.addEventListener("updatefound", () => {
+          if (navigator.serviceWorker.controller && !registration.waiting) setUpdate("loading");
         });
-        // a page left open for long notices rollouts too
-        setInterval(() => void r.update().catch(() => {}), 30 * 60_000);
-        document.addEventListener("visibilitychange", () => document.visibilityState === "visible" && void r.update().catch(() => {}));
+        setUpdateCheck(async () => {
+          await registration.update();
+          return !!(registration.installing || registration.waiting);
+        });
+        const recheck = () => void registration.update().catch(() => {});
+        // tabs left open for days still notice rollouts
+        setInterval(recheck, RECHECK_MS);
+        document.addEventListener("visibilitychange", () => {
+          if (document.visibilityState === "visible") recheck();
+        });
       },
     });
   });

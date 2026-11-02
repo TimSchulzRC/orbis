@@ -10,7 +10,10 @@ import { ItemIcon } from "./item-look";
 import { cn } from "../lib/utils";
 import { type PickReason, placeSuggestions } from "./suggest";
 
-/** Pick an item: suggestions first, then search as you type. Optionally create a new one. */
+const SEARCH_HITS = 60;
+const MAX_ROWS = 12;
+
+/** Suggestions first, then search as you type. */
 export function ItemPicker({
   title,
   onPick,
@@ -32,21 +35,21 @@ export function ItemPicker({
   const repo = useRepo();
   const [q, setQ] = useState("");
   const [sel, setSel] = useState(0);
-  const ok = (i: Item) => (!exclude || !exclude(i)) && (!filter || filter(i)) && i.type !== META_TYPE;
-  const sugg = q.trim() ? [] : suggestions.filter((s) => repo.get(s.id) && ok(repo.get(s.id)!));
+  const allowed = (i: Item) => (!exclude || !exclude(i)) && (!filter || filter(i)) && i.type !== META_TYPE;
+  const suggested = q.trim() ? [] : suggestions.filter((s) => repo.get(s.id) && allowed(repo.get(s.id)!));
   // overviews (items with children) first: they are the usual places
   const ix = repo.index();
-  const found = (q.trim() ? repo.search(q, 60) : [...repo.live()].sort((a, b) => b.updated - a.updated))
-    .filter(ok)
+  const found = (q.trim() ? repo.search(q, SEARCH_HITS) : [...repo.live()].sort((a, b) => b.updated - a.updated))
+    .filter(allowed)
     .sort((a, b) => Number(isOverview(b, ix)) - Number(isOverview(a, ix)))
-    .filter((i) => !sugg.some((s) => s.id === i.id))
-    .slice(0, 12);
-  const rows: { id?: string; reason?: PickReason; create?: string }[] = [...sugg, ...found.map((i) => ({ id: i.id }))];
+    .filter((i) => !suggested.some((s) => s.id === i.id))
+    .slice(0, MAX_ROWS);
+  const rows: { id?: string; reason?: PickReason; create?: string }[] = [...suggested, ...found.map((i) => ({ id: i.id }))];
   if (onCreate && q.trim() && !found.some((i) => i.title.toLowerCase() === titleKey(q))) rows.push({ create: q.trim() });
-  const pick = (r?: (typeof rows)[number]) => {
-    if (!r) return;
-    if (r.create) onCreate!(r.create);
-    else onPick(r.id!);
+  const pick = (row?: (typeof rows)[number]) => {
+    if (!row) return;
+    if (row.create) onCreate!(row.create);
+    else onPick(row.id!);
   };
   return (
     <Dialog title={title} onClose={onClose}>
@@ -62,26 +65,26 @@ export function ItemPicker({
         placeholder={t("picker.search")}
         className="mb-2 focus:border-focus"
       />
-      {sugg.length > 0 && <p className="px-2 pb-1 text-xs font-medium text-muted-foreground">{t("picker.suggested")}</p>}
+      {suggested.length > 0 && <p className="px-2 pb-1 text-xs font-medium text-muted-foreground">{t("picker.suggested")}</p>}
       <div className="flex flex-col">
-        {rows.map((r, i) => {
-          const item = r.id ? repo.get(r.id) : undefined;
+        {rows.map((row, i) => {
+          const item = row.id ? repo.get(row.id) : undefined;
           return (
             <Button variant="plain"
-              key={r.id ?? "create"}
+              key={row.id ?? "create"}
               onMouseEnter={() => setSel(i)}
-              onClick={() => pick(r)}
-              className={cn("flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm", i === sel && "bg-selected", i === sugg.length && sugg.length > 0 && "mt-2")}
+              onClick={() => pick(row)}
+              className={cn("flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm", i === sel && "bg-selected", i === suggested.length && suggested.length > 0 && "mt-2")}
             >
               {item ? <ItemIcon item={item} size={15} /> : <Plus size={15} className="text-muted-foreground" />}
-              <span className="min-w-0 flex-1 truncate">{item ? titleOf(item, t) : t("picker.create", { title: r.create })}</span>
-              {r.reason && (
+              <span className="min-w-0 flex-1 truncate">{item ? titleOf(item, t) : t("picker.create", { title: row.create })}</span>
+              {row.reason && (
                 <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
-                  {r.reason === "agent" && <Sparkles size={11} />}
-                  {t("picker.reason." + r.reason)}
+                  {row.reason === "agent" && <Sparkles size={11} />}
+                  {t("picker.reason." + row.reason)}
                 </span>
               )}
-              {item && !r.reason && <PathHint item={item} />}
+              {item && !row.reason && <PathHint item={item} />}
             </Button>
           );
         })}
@@ -98,7 +101,7 @@ function PathHint({ item }: { item: Item }) {
   return <span className="max-w-[45%] shrink-0 truncate text-xs text-muted-foreground">{ix.pathText(path)}</span>;
 }
 
-/** Where to put entries (one or several, of one workspace): a place they may all go below, or a new one. */
+/** Offers only places all entries may go below; they must share one workspace. */
 export function PlacePicker({ list, title, onPick, onClose }: { list: Item[]; title?: string; onPick: (place: string) => void; onClose: () => void }) {
   const { t } = useT();
   const repo = useRepo();

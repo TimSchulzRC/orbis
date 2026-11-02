@@ -1,14 +1,10 @@
-// The tray's panel ("Eingang"): looking in, not sorting. Every entry of the workspaces seen, newest
-// first, with a line of its text, its workspace and age; one opens here to read and add to it and
-// stays in the inbox – sorting is the review's (views/Review.tsx): the same panel, sorting, from the
-// tray's own button. Its whole page is one click away (the icon at the end of a row, on hover). Below, folded,
-// what waits until tomorrow ("Morgen wieder"): the rest of what is not sorted, one click from back.
-// Above the tray on a desktop, as a sheet on a phone. What lands in the inbox: behind "…".
-// On Heute on a desktop it is part of the page (`pinned`): always open, it does not close. Without
-// room for it there, Heute shows the newest entries as cards (ShelfCards), each opens the panel.
+// The tray's inbox panel ("Eingang") is for reading, not sorting: an opened entry stays in the
+// inbox, and sorting happens in the review. On Heute on a desktop it is `pinned` into the page and
+// never closes.
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowUp, ChevronDown, ChevronRight, Maximize2, RotateCcw, SlidersHorizontal, Undo2 } from "lucide-react";
 import { type Item, SETTINGS_ID, setMeta, setSettings } from "@obtion/core/model";
+import type { Repo } from "@obtion/sync";
 import type { QueryDef } from "@obtion/core/query";
 import { inboxWhere } from "@obtion/core/inbox";
 import { resetInbox } from "@obtion/core/setup";
@@ -31,6 +27,11 @@ import { type InboxEntry, closeShelf, dismissShelf, openReview, openShelf, useIn
 import { sameValue } from "@obtion/core/equal";
 import { filePreview } from "./text";
 
+/** An open dialog or menu (a tooltip's popper does not count): Escape is theirs. */
+const OVERLAY_OPEN = "[role=dialog][data-state=open], [data-radix-popper-content-wrapper]:not(:has([role=tooltip]))";
+/** A waiting entry ("Morgen wieder") comes back into the inbox now. */
+const backNow = (repo: Repo, id: string) => repo.change(id, (d) => setMeta(d, { later: null }));
+
 export function ShelfPanel({ desktop, pinned }: { desktop: boolean; pinned?: boolean }) {
   const { t } = useT();
   // sorting (lying over the panel pinned on Heute) its `at` is the review's
@@ -44,13 +45,13 @@ export function ShelfPanel({ desktop, pinned }: { desktop: boolean; pinned?: boo
   useEffect(() => void (at && !entry && openShelf()), [at, !!entry]);
   // Escape: from an entry back to the list, from the list closed – unless a dialog or menu above it takes it
   useEffect(() => {
-    const on = (e: KeyboardEvent) => {
-      if (e.key !== "Escape" || e.defaultPrevented || document.querySelector("[role=dialog][data-state=open], [data-radix-popper-content-wrapper]:not(:has([role=tooltip]))")) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented || document.querySelector(OVERLAY_OPEN)) return;
       if (entry) openShelf();
       else if (!pinned) dismissShelf();
     };
-    window.addEventListener("keydown", on);
-    return () => window.removeEventListener("keydown", on);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   }, [!!entry]);
   return (
     <div
@@ -73,10 +74,7 @@ export function ShelfPanel({ desktop, pinned }: { desktop: boolean; pinned?: boo
   );
 }
 
-/**
- * The list: newest first; ↑↓ choose, ↵ opens, Esc closes (pinned: it stays, and takes the focus only
- * when clicked). Below, folded, the entries back tomorrow; unfolded the arrows go through them too.
- */
+/** Pinned, Esc does not close it and it takes the focus only when clicked. */
 function List({ entries, later, pinned }: { entries: InboxEntry[]; later: InboxEntry[]; pinned?: boolean }) {
   const { t } = useT();
   const { shown } = useAccounts();
@@ -201,18 +199,14 @@ export function ShelfCards({ entries }: { entries: InboxEntry[] }) {
 
 /** What an entry says in one line: its text, else what it is (a file, notes below). */
 function preview(e: InboxEntry, t: T, lang: Lang, notes: number): string {
-  const i = e.item;
-  const text = plainText(i.body || i.file?.text || "").slice(0, 200);
+  const item = e.item;
+  const text = plainText(item.body || item.file?.text || "").slice(0, 200);
   if (text) return notes ? `${text} · ${t("triage.notes", { count: notes })}` : text;
-  if (i.file) return [t("kind.file"), fmtBytes(lang, i.file.size)].join(" · ");
+  if (item.file) return [t("kind.file"), fmtBytes(lang, item.file.size)].join(" · ");
   return notes ? t("triage.notes", { count: notes }) : "";
 }
 
-/**
- * One entry: above its workspace (with what it is) and its age in the corner, then its title and a
- * line of its text. Hovered or chosen by the arrows, the corner shows its buttons instead of the
- * age: the whole page at the end, before it "back into the inbox now" for one back tomorrow.
- */
+/** Hovered or chosen by the arrows, the corner shows the row's buttons instead of the age. */
 function Row({ entry, n, on, waiting, space, onHover }: { entry: InboxEntry; n: number; on: boolean; waiting: boolean; space?: string; onHover: () => void }) {
   const { t, lang } = useT();
   const repo = replica(entry.space).repo;
@@ -235,7 +229,7 @@ function Row({ entry, n, on, waiting, space, onHover }: { entry: InboxEntry; n: 
       <span className={cn("absolute right-2 top-2 flex items-center gap-0.5 focus-within:opacity-100 pointer-coarse:opacity-100", on ? "opacity-100" : "opacity-0 group-hover/row:opacity-100")}>
         {waiting && (
           <Tip label={t("tray.backNow")}>
-            <Button variant="plain" onClick={() => repo.change(entry.item.id, (d) => setMeta(d, { later: null }))} className={iconTap} aria-label={t("tray.backNow")}>
+            <Button variant="plain" onClick={() => backNow(repo, entry.item.id)} className={iconTap} aria-label={t("tray.backNow")}>
               <Undo2 size={15} />
             </Button>
           </Tip>
@@ -260,10 +254,6 @@ function OpenFull({ entry, className }: { entry: InboxEntry; className?: string 
   );
 }
 
-/**
- * One entry, to read and add to: its title and text editable, the notes below it. It stays in the
- * inbox – the banner says so, with the way to sort it now in the review.
- */
 function EntryView({ entry, waiting, desktop, pinned }: { entry: InboxEntry; waiting: boolean; desktop: boolean; pinned?: boolean }) {
   const { t } = useT();
   return (
@@ -298,7 +288,7 @@ function EntryBody({ entry, waiting }: { entry: InboxEntry; waiting: boolean }) 
         </span>
         {waiting ? (
           // back into the inbox now: then it is an entry like the others (this banner turns into the one below)
-          <Button variant="plain" onClick={() => repo.change(item.id, (d) => setMeta(d, { later: null }))} className="shrink-0 text-muted-foreground underline decoration-dotted underline-offset-4 hover:text-fg max-lg:basis-full max-lg:pl-5">
+          <Button variant="plain" onClick={() => backNow(repo, item.id)} className="shrink-0 text-muted-foreground underline decoration-dotted underline-offset-4 hover:text-fg max-lg:basis-full max-lg:pl-5">
             {t("tray.backNow")}
           </Button>
         ) : (
@@ -335,8 +325,8 @@ function EntryBody({ entry, waiting }: { entry: InboxEntry; waiting: boolean }) 
 function FileBody({ item }: { item: Item }) {
   const { t } = useT();
   const repo = useRepo();
-  const f = item.file!;
-  const img = useBlobUrl(f.filetype === "bild" ? (f.display ?? f.hash) : f.thumb, true);
+  const file = item.file!;
+  const img = useBlobUrl(file.filetype === "bild" ? (file.display ?? file.hash) : file.thumb, true);
   // saved on leaving the field, and when the panel goes back or closes while it is being edited
   const draft = useRef<string | null>(null);
   const save = () => {
@@ -348,8 +338,8 @@ function FileBody({ item }: { item: Item }) {
     <>
       {img ? (
         <img src={img} alt={item.body || item.title} className="mt-3 max-h-[40vh] w-auto rounded-lg border border-line" />
-      ) : f.text ? (
-        <p className="mt-3 line-clamp-6 text-[15px] leading-[1.65] text-muted-foreground">{filePreview(f.text)}</p>
+      ) : file.text ? (
+        <p className="mt-3 line-clamp-6 text-[15px] leading-[1.65] text-muted-foreground">{filePreview(file.text)}</p>
       ) : null}
       <Textarea
       variant="inline"

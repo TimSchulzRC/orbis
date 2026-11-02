@@ -1,41 +1,29 @@
-// The data model shared by server, devices and agents.
-//
-// Everything is an *item*, stored as one Yjs document (guid = item id):
-//   kind "info"      an information (a type, being an information with the system type
-//                    META_TYPE, adds a `schema` map)
-//   kind "datei"     a file: metadata here, content on the server by SHA-256
-//   kind "op"        a reversible bulk operation (e.g. deleting a type), shown in Activity
-//   kind "settings"  the one shared settings doc (start page, capture types, the inbox rule)
-//   (documents of the former kind "sammlung" are ignored since 26.10.: see migrateCollections)
+// The data model shared by server, devices and agents. Every item is one Yjs document (guid = item id).
+// Kinds: "info" (a type is an info of type META_TYPE plus a `schema` map), "datei" (metadata only,
+// content on the server by SHA-256), "op" (a reversible bulk operation), "settings" (the one shared
+// settings doc). Documents of the former kind "sammlung" are ignored.
 //
 // Top-level Yjs types of a document:
-//   meta     Y.Map   id-free scalars: kind, title, type, home, pinned (sort key | null), created,
-//                    updated, deleted, later …
-//                    (no inbox field: the inbox is computed, see placement.ts; later only
-//                    sets an entry aside, see inbox.ts. An old "kept" is ignored since 01.11.)
-//   parents  Y.Map   parentId -> { sort, at }  ("Teil von"; sort is per parent, at = when added)
-//   props    Y.Map   propId -> value           (values of the type's properties)
-//   extra    Y.Map   name -> { k, v }          (free properties: left over from a removed type or property)
+//   meta     Y.Map   scalars: kind, title, type, home, pinned, created, updated, deleted, later …
+//                    No inbox field, the inbox is computed. An old "kept" is ignored since 01.11.
+//   parents  Y.Map   parentId -> { sort, at }  (sort is per parent, at = when added)
+//   props    Y.Map   propId -> value
+//   extra    Y.Map   name -> { k, v }          (left over from a removed type or property)
 //   rels     Y.Map   propId -> Y.Map<targetId, true>
 //   tags     Y.Map   tag -> true
 //   refs     Y.Map   targetId -> true          (explicit only; links in the text are derived)
 //   body     Y.Text  Markdown with [[links]] and ```abfrage blocks
 //   updates  Y.Array { id, at, text, by, status? }
-//   views    Y.Map   viewId -> view definition (query, display)
-//   schema   Y.Map   types only: name, plural, icon, color, description, pos (order in the
-//                    sidebar), capabilities (Y.Map), properties (Y.Map<propId, Y.Map>)
-//   tabs     Y.Map   types only: tabId -> Y.Map, the views of the type's page (see ViewTab);
-//                    empty: the default views
-//   file     Y.Map   files only: hash, name, mime, filetype, size, width, height, pages, duration,
-//                    display, thumb, history
-//   op       Y.Map   ops only
-//   settings Y.Map   settings only
+//   views    Y.Map   viewId -> ViewDef
+//   schema   Y.Map   types only; capabilities and each property are nested Y.Maps
+//   tabs     Y.Map   types only: tabId -> Y.Map (ViewTab); empty means the default views
+//   file, op, settings  Y.Map  only in documents of that kind
 import * as Y from "yjs";
 import { cmpKey, keyBetween } from "./sortkey";
 import type { Cond, QueryDef } from "./query";
 import { escapeRe } from "./text";
 
-/** The meta type "Typ": every type document has this as its type. Not a document, cannot be deleted. */
+/** The type of every type document ("Typ"). Not a document itself, so it cannot be deleted. */
 export const META_TYPE = "sys:type";
 export const SETTINGS_ID = "sys:settings";
 
@@ -47,28 +35,25 @@ export type StatusGroup = "todo" | "active" | "done";
 export const STATUS_GROUPS: StatusGroup[] = ["todo", "active", "done"];
 
 /**
- * "select" is every choice from a list of options: one value or several (`multiple`), may stay
- * empty or not (`default`), and is the type's status when capabilities.status names it. Stored
- * schemas from before 30.10.2026 have the kinds "status" and "multiselect"; readSchema turns them
- * into this (see legacyKind).
+ * "select" covers single and multiple choice and the status (when capabilities.status names it).
+ * Schemas stored before 30.10.2026 use "status" and "multiselect"; readSchema converts them.
  */
 export type PropKind = "text" | "number" | "date" | "checkbox" | "url" | "select" | "relation" | "computed";
 export const PROP_KINDS: PropKind[] = ["text", "number", "date", "checkbox", "url", "select", "relation", "computed"];
-/** Free properties: values left without a property when a type or property goes (simple kinds only).
- *  They are kept and shown, can be removed, and are never added by hand. */
+/** Free properties hold values left over when a type or property goes. Never added by hand. */
 export type FreeKind = "text" | "number" | "date" | "checkbox" | "url" | "select";
 
 export interface OptionDef {
   id: string;
   name: string;
-  group?: StatusGroup; // options of the status only
-  state?: "paused" | "dropped"; // options of the status only: active but paused (nothing to do now), done but dropped
+  group?: StatusGroup; // status options only
+  state?: "paused" | "dropped"; // status options only: paused is active with nothing to do now, dropped is done without finishing
   color?: string;
 }
 
 export interface ComputedDef {
   fn: "progress" | "count";
-  of?: string; // optional type filter
+  of?: string; // type filter
 }
 
 export interface PropDef {
@@ -90,14 +75,10 @@ export interface PropDef {
   sort: string;
 }
 
-/**
- * Capabilities as the plan describes them: status, progress, updates, due date ("Termin"),
- * main action and template. Status and due name the property they use. Read them only
- * through traits.ts.
- */
+/** Read only through traits.ts. */
 export interface Capabilities {
   status?: string; // propId of the main status property
-  due?: string; // "Termin": propId of the date property that is the due date
+  due?: string; // propId of the due date property ("Termin")
   progress?: { of?: string }; // share of done descendants with a status (optional type filter)
   updates?: boolean;
   template?: { body?: string; values?: Record<string, Value> };
@@ -106,15 +87,15 @@ export interface Capabilities {
 
 export interface TypeSchema {
   name: string;
-  plural?: string; // the name of the list ("Bücher"); unset: a guess, see typePlural
+  plural?: string; // the list name ("Bücher"); unset: guessed by typePlural
   pos?: string; // order among the types in the sidebar; unset: at the end
-  views?: ViewTab[]; // the views of the type's page; unset: the default views (setup.ts typeTabs)
+  views?: ViewTab[]; // unset: the default views
   icon: string;
   color: string;
   description: string;
   capabilities: Capabilities;
-  properties: PropDef[]; // sorted, active ones
-  removedProperties: PropDef[]; // removed ones, values stay in `props` ("Weitere Eigenschaften")
+  properties: PropDef[]; // sorted, active only
+  removedProperties: PropDef[]; // their values stay in `props` ("Weitere Eigenschaften")
 }
 
 export type Value = string | number | boolean | string[];
@@ -133,14 +114,14 @@ export interface UpdateEntry {
   at: number;
   text: string;
   by: string;
-  status?: string; // option id set together with this update
+  status?: string; // option id set with this update
 }
 
 export const VIEW_KINDS = ["list", "table", "board", "tree", "gallery", "triage", "calendar", "timeline"] as const;
 export type ViewKind = (typeof VIEW_KINDS)[number];
 
 export interface ViewDef {
-  query?: QueryDef; // stored as JSON with ids, see query.ts
+  query?: QueryDef; // stored as JSON with ids
   display?: ViewKind;
   scope?: "level" | "all"; // "Nur diese Ebene" / "Inkl. Unterprojekte"
   group?: string;
@@ -180,34 +161,33 @@ export interface OpRecord {
 }
 
 /**
- * Areas ("Bereiche"): every information, type, file and change belongs to exactly one. The unit
- * of sync and, later, of storage and rights. Until teams come there is one, the personal area,
- * without any interface. Documents from before areas are read as personal.
+ * Every item belongs to exactly one area ("Bereich"), the unit of sync and later of rights. Until
+ * teams exist there is only this one. Documents from before areas count as personal.
  */
 export const PERSONAL = "personal";
 
 /**
- * Format of the data. A newer app upgrades older data once (setup.ts); an older app that meets
- * newer data still reads it but asks for an update before it writes (see the client's repo).
+ * A newer app upgrades older data once; an older app that meets newer data still reads it but asks
+ * for an update before it writes.
  */
 export const FORMAT = 1;
 
 export interface SettingsRecord {
   setupLang?: string;
-  format?: number; // see FORMAT; unset: data from before format versions (0)
+  format?: number; // unset means 0 (data from before format versions)
   captureTypes: string[]; // pinned types in the capture type picker
-  upgrades?: string[]; // one-time data upgrades already applied (each runs once, even if the user later undoes its effect)
-  inbox?: Cond; // what lands in the inbox; unset: the default (inbox.ts)
+  upgrades?: string[]; // applied one-time upgrades; each runs once even if the user later undoes its effect
+  inbox?: Cond; // what lands in the inbox; unset: the default
   filesPos?: string; // where "Dateien" stands among the types in the sidebar
 }
 
 /**
- * One view, shown as a tab (a type's page, a query block). Its filter is added to the base query
- * (AND); grouping, sorting and properties are its own. An empty name shows the kind's name.
+ * One view shown as a tab. `where` is ANDed with the base query; grouping, sorting and columns are
+ * its own. An empty name shows the kind's name.
  */
 export interface ViewTab {
   id: string;
-  pos: string; // sort key: the order of the tabs
+  pos: string; // sort key
   name?: string;
   kind: ViewKind;
   where?: Cond;
@@ -215,7 +195,7 @@ export interface ViewTab {
   group?: string; // "status" | "statusGroup" | "type" | "path" | field or property name
   subgroup?: string; // boards: rows ("swimlanes") within the columns
   hideEmpty?: boolean; // hide empty groups
-  hiddenGroups?: string[]; // groups hidden by hand (see groupId), shown again from "N ausgeblendete Gruppen"
+  hiddenGroups?: string[]; // group ids hidden by hand
   columns?: string[]; // shown properties in this order (table columns, card lines)
   widths?: Record<string, number>; // table column widths in px
   date?: string; // calendar and timeline: the date property
@@ -224,17 +204,17 @@ export interface ViewTab {
 /** The tab a single view (a query block without tabs, an old collection) is read as. */
 export const MAIN_TAB = "main";
 export function legacyTab(view: { display?: ViewKind; sort?: { key: string; desc?: boolean }[]; group?: string; columns?: string[] }): ViewTab {
-  const t: ViewTab = { id: MAIN_TAB, pos: "V", kind: view.display ?? "list" };
-  if (view.sort?.length) t.sort = view.sort;
-  if (view.group) t.group = view.group;
-  if (view.columns?.length) t.columns = view.columns;
-  return t;
+  const tab: ViewTab = { id: MAIN_TAB, pos: "V", kind: view.display ?? "list" };
+  if (view.sort?.length) tab.sort = view.sort;
+  if (view.group) tab.group = view.group;
+  if (view.columns?.length) tab.columns = view.columns;
+  return tab;
 }
 
 export interface Item {
   id: string;
   kind: Kind;
-  area: string; // see PERSONAL
+  area: string;
   title: string;
   type: string | null;
   home: string | null; // stored; the effective home comes from the index
@@ -253,12 +233,12 @@ export interface Item {
   op?: OpRecord;
   settings?: SettingsRecord;
   suggestion?: Suggestion;
-  /** Out of the inbox until then ("Morgen wieder", inbox.ts). */
+  /** Out of the inbox until then ("Morgen wieder"). */
   later?: number;
   created: number;
   updated: number;
   createdBy?: string;
-  /** In the trash: deleted itself, or deleted together with a root that is (see trash.ts). */
+  /** In the trash: deleted itself, or together with a deleted root. */
   deleted: boolean;
   /** meta.deleted = "via:<root>": deleted together with that root (raw mark). */
   deletedVia?: string;
@@ -267,18 +247,14 @@ export interface Item {
   source?: string;
 }
 
-/** A type: an information of the meta type, always with its schema. */
 export type TypeItem = Item & { schema: TypeSchema };
 
-// ---------- reading ----------
-
-/** meta.deleted is true or "via:<root>" (deleted together with that root, see trash.ts). */
+/** meta.deleted is true, or "via:<root>" when deleted together with that root. */
 export const VIA = "via:";
 function viaRoot(raw: unknown): string | undefined {
   return typeof raw === "string" && raw.startsWith(VIA) ? raw.slice(VIA.length) : undefined;
 }
 
-/** A JSON value or a nested Yjs type (a property, a tab, the capabilities). */
 function plain(v: unknown): unknown {
   return v instanceof Y.AbstractType ? v.toJSON() : v;
 }
@@ -287,25 +263,23 @@ function isObject(v: unknown): v is Record<string, unknown> {
   return !!v && typeof v === "object" && !Array.isArray(v);
 }
 
-/** The top-level maps of a document (see the list above; query, view and pin: former collections). */
+/** The top-level maps of a document; query, view and pin belong to former collections. */
 export const DOC_MAPS = ["meta", "parents", "props", "extra", "rels", "tags", "refs", "views", "schema", "tabs", "file", "op", "settings", "query", "view", "pin"] as const;
 
-/** What meta holds: scalars and the suggestion. Narrow on reading, the data comes from other devices. */
+/** Narrow on reading: the data comes from other devices. */
 export type MetaValue = string | number | boolean | Suggestion;
 
 export function metaMap(doc: Y.Doc): Y.Map<MetaValue> {
   return doc.getMap<MetaValue>("meta");
 }
 
-/** Scalars, and the capabilities and properties as nested maps. */
 export function schemaMap(doc: Y.Doc): Y.Map<unknown> {
   return doc.getMap<unknown>("schema");
 }
 
 /**
- * The kinds "status" and "multiselect" as they were stored before 30.10.2026: a select. A status
- * never was empty – new items got its first option –, so the type's status keeps that as default.
- * Also for input (MCP, imports) that still names the old kinds.
+ * Converts the kinds "status" and "multiselect" (stored before 30.10.2026, still sent by MCP and
+ * imports) to select. A status was never empty, so the type's status keeps its first option as default.
  */
 export function legacyKind(p: PropDef, isStatus: boolean): PropDef {
   const k = p.kind as string;
@@ -321,15 +295,16 @@ export function readSchema(doc: Y.Doc): TypeSchema {
     return typeof v === "string" ? v : undefined;
   };
   const caps = plain(s.get("capabilities"));
+  const statusId = isObject(caps) ? caps.status : undefined;
   const props = s.get("properties");
   const properties: PropDef[] = [];
   if (props instanceof Y.Map) {
     for (const [id, p] of props) {
       const o = plain(p);
       if (!isObject(o)) continue;
-      const d = o as Partial<PropDef>;
-      if (!d.name && !d.kind) continue;
-      properties.push(legacyKind({ ...d, id, name: d.name ?? "", kind: d.kind ?? "text", sort: d.sort ?? "V" }, isObject(caps) && caps.status === id));
+      const def = o as Partial<PropDef>;
+      if (!def.name && !def.kind) continue;
+      properties.push(legacyKind({ ...def, id, name: def.name ?? "", kind: def.kind ?? "text", sort: def.sort ?? "V" }, statusId === id));
     }
   }
   properties.sort((a, b) => cmpKey(a.sort, b.sort) || a.id.localeCompare(b.id));
@@ -349,7 +324,7 @@ export function readSchema(doc: Y.Doc): TypeSchema {
 export function readItem(id: string, doc: Y.Doc): Item | null {
   const meta = metaMap(doc);
   const kind = meta.get("kind");
-  // not initialised yet (half-synced), or a legacy document (a former collection)
+  // half-synced, or a former collection
   if (typeof kind !== "string" || !kind || kind === "sammlung") return null;
   const rels: Record<string, string[]> = {};
   for (const [p, m] of doc.getMap<unknown>("rels")) if (m instanceof Y.Map && m.size) rels[p] = [...m.keys()];
@@ -361,6 +336,7 @@ export function readItem(id: string, doc: Y.Doc): Item | null {
     const v = meta.get(k);
     return typeof v === "number" ? v : undefined;
   };
+  const deletedVia = viaRoot(meta.get("deleted"));
   const item: Item = {
     id,
     kind: kind as Kind,
@@ -381,8 +357,8 @@ export function readItem(id: string, doc: Y.Doc): Item | null {
     created: Number(meta.get("created") ?? 0),
     updated: Number(meta.get("updated") ?? meta.get("created") ?? 0),
     createdBy: str("createdBy"),
-    deleted: meta.get("deleted") === true || viaRoot(meta.get("deleted")) !== undefined,
-    deletedVia: viaRoot(meta.get("deleted")),
+    deleted: meta.get("deleted") === true || deletedVia !== undefined,
+    deletedVia,
     doneAt: num("done"),
     source: str("source"),
   };
@@ -398,12 +374,19 @@ export function readItem(id: string, doc: Y.Doc): Item | null {
   if (kind === "op") item.op = doc.getMap("op").toJSON() as OpRecord;
   if (kind === "settings") {
     const s: Partial<SettingsRecord> = doc.getMap("settings").toJSON();
-    item.settings = { setupLang: s.setupLang, format: typeof s.format === "number" ? s.format : undefined, captureTypes: s.captureTypes ?? [], upgrades: s.upgrades ?? [], inbox: s.inbox ?? undefined, filesPos: s.filesPos ?? undefined };
+    item.settings = {
+      setupLang: s.setupLang,
+      format: typeof s.format === "number" ? s.format : undefined,
+      captureTypes: s.captureTypes ?? [],
+      upgrades: s.upgrades ?? [],
+      inbox: s.inbox ?? undefined,
+      filesPos: s.filesPos ?? undefined,
+    };
   }
   return item;
 }
 
-/** The stored tabs of a document, in order; none stored: its old single view (former collections). */
+/** Without stored tabs, the old single view of a former collection. */
 export function readTabs(doc: Y.Doc): ViewTab[] {
   const tabs: ViewTab[] = [];
   for (const [id, v] of doc.getMap<unknown>("tabs")) {
@@ -416,11 +399,11 @@ export function readTabs(doc: Y.Doc): ViewTab[] {
   return tabs.length ? tabs : [legacyTab(doc.getMap("view").toJSON())];
 }
 
-// ---------- writing (call inside doc.transact) ----------
+// Writers: call inside doc.transact.
 
 export interface ItemInit {
   kind?: Kind;
-  area?: string; // default: the personal area
+  area?: string; // default: PERSONAL
   title?: string;
   type?: string | null;
   body?: string;
@@ -459,7 +442,7 @@ export function initItem(doc: Y.Doc, init: ItemInit, now = Date.now()) {
 
 export type MetaField = "title" | "type" | "home" | "pinned" | "deleted" | "source" | "suggestion" | "later";
 
-/** Set meta fields; null or "" clears. */
+/** null, "" or false clears a field. */
 export function setMeta(doc: Y.Doc, fields: Partial<Record<MetaField, MetaValue | null>>, now = Date.now()) {
   const meta = metaMap(doc);
   for (const [k, v] of Object.entries(fields)) {
@@ -476,11 +459,12 @@ export function touch(doc: Y.Doc, now = Date.now()) {
 }
 
 /**
- * Typing is a change: local edits of the text move meta.updated ("geändert", "Zuletzt bearbeitet"),
- * right away and then at most every `every` ms (the last edit of a burst counts too). Edits that
- * arrive from other devices or tabs don't – they bring their own time. Runs in its own
- * transaction, outside the text's undo history. Returns a function that stops it.
+ * Local text edits move meta.updated right away, then at most every `every` ms (the last edit of a
+ * burst counts too). Remote edits don't, they bring their own time. Stamps in a separate
+ * transaction so it stays out of the text's undo history. Returns a stop function.
  */
+const TOUCH_ORIGIN = "touch";
+
 export function touchOnTextEdit(doc: Y.Doc, every = 3000, clock: () => number = Date.now): () => void {
   const text = doc.getText("body");
   let last = 0;
@@ -498,16 +482,18 @@ export function touchOnTextEdit(doc: Y.Doc, every = 3000, clock: () => number = 
   text.observe(onEdit);
   return () => {
     text.unobserve(onEdit);
-    if (timer) (clearTimeout(timer), stamp());
+    if (timer) {
+      clearTimeout(timer);
+      stamp();
+    }
   };
 }
-const TOUCH_ORIGIN = "touch";
 
-/** Add a parent. The first parent becomes the home. */
+/** The first parent becomes the home. */
 export function addParent(doc: Y.Doc, parentId: string, sort?: string, at = Date.now()) {
   const parents = doc.getMap<ParentLink>("parents");
   if (parents.has(parentId)) return;
-  // a file has exactly one parent (where else it is used shows under "Verwendet in"): a new place replaces the old one
+  // a file has exactly one parent (other uses show under "Verwendet in"), so a new place replaces the old one
   const meta = metaMap(doc);
   if (meta.get("kind") === "datei") for (const k of [...parents.keys()]) parents.delete(k);
   parents.set(parentId, { sort: sort ?? keyBetween(null, null), at });
@@ -521,7 +507,7 @@ export function setParentSort(doc: Y.Doc, parentId: string, sort: string) {
   if (cur) parents.set(parentId, { ...cur, sort });
 }
 
-/** Remove a parent; if it was the home, the oldest remaining parent becomes home. */
+/** If it was the home, the oldest remaining parent becomes home. */
 export function removeParent(doc: Y.Doc, parentId: string) {
   const parents = doc.getMap<ParentLink>("parents");
   if (!parents.has(parentId)) return;
@@ -599,8 +585,6 @@ export function setView(doc: Y.Doc, viewId: string, def: ViewDef | null) {
   else views.delete(viewId);
 }
 
-// ---------- types (schema) ----------
-
 export function initSchema(doc: Y.Doc, s: Partial<Omit<TypeSchema, "properties" | "removedProperties">> & { properties?: Omit<PropDef, "sort">[] }) {
   const schema = schemaMap(doc);
   for (const k of ["name", "icon", "color", "description"] as const) if (s[k] !== undefined) schema.set(k, s[k]);
@@ -615,7 +599,6 @@ export function initSchema(doc: Y.Doc, s: Partial<Omit<TypeSchema, "properties" 
   }
 }
 
-/** A new type: an information of the meta type, titled like the type, with its schema. */
 export function initType(doc: Y.Doc, s: Parameters<typeof initSchema>[1] & { name: string }, init: Pick<ItemInit, "createdBy" | "created" | "source"> = {}, now = Date.now()) {
   initItem(doc, { kind: "info", type: META_TYPE, title: s.name, ...init }, now);
   initSchema(doc, { ...s, icon: s.icon ?? "box", description: s.description ?? "" });
@@ -627,7 +610,7 @@ export function setSchemaField(doc: Y.Doc, field: "name" | "plural" | "icon" | "
 }
 
 export function setCapability<K extends keyof Capabilities>(doc: Y.Doc, key: K, value: Capabilities[K] | null | undefined) {
-  const caps = subMap(schemaMap(doc), "capabilities");
+  const caps = ensureSubMap(schemaMap(doc), "capabilities");
   if (value === null || value === undefined || value === false) caps.delete(key);
   else caps.set(key, value);
 }
@@ -637,29 +620,30 @@ export type Patch<T> = { [K in keyof T]?: T[K] | null };
 
 /** Each property is its own Y.Map, so two devices can change different properties at once. */
 export function upsertProp(doc: Y.Doc, propId: string, patch: Patch<Omit<PropDef, "id">>) {
-  const props = subMap(schemaMap(doc), "properties");
+  const props = ensureSubMap(schemaMap(doc), "properties");
   const found = props.get(propId);
-  const p = found instanceof Y.Map ? found : new Y.Map<unknown>();
-  if (p !== found) {
-    props.set(propId, p);
-    if (!patch.sort) {
-      const last = [...props.values()].map((x) => (x instanceof Y.Map ? x.get("sort") : undefined)).filter((x): x is string => typeof x === "string" && !!x).sort().at(-1);
-      p.set("sort", keyBetween(last ?? null, null));
-    }
+  const prop = found instanceof Y.Map ? found : new Y.Map<unknown>();
+  if (prop !== found) {
+    props.set(propId, prop);
+    if (!patch.sort) prop.set("sort", keyBetween(lastSortKey(props), null));
   }
   for (const [k, v] of Object.entries(patch)) {
     if (v === undefined) continue;
-    if (v === null || v === "") p.delete(k);
-    else p.set(k, v);
+    if (v === null || v === "") prop.delete(k);
+    else prop.set(k, v);
   }
 }
 
-/** Removing a property keeps all values in `props` and the definition as a tombstone, so they still show up by name as "Weitere Eigenschaften". */
+/** The highest sort key among the properties, null when none has one. */
+function lastSortKey(props: Y.Map<unknown>): string | null {
+  const keys = [...props.values()].map((p) => (p instanceof Y.Map ? p.get("sort") : undefined)).filter((k): k is string => typeof k === "string" && !!k);
+  return keys.sort().at(-1) ?? null;
+}
+
+/** Keeps the values and the definition as a tombstone, so they still show by name under "Weitere Eigenschaften". */
 export function removeProp(doc: Y.Doc, propId: string) {
   upsertProp(doc, propId, { removed: true });
 }
-
-// ---------- files, ops, settings ----------
 
 export function setFileMeta(doc: Y.Doc, patch: Patch<FileMeta>) {
   const f = doc.getMap<unknown>("file");
@@ -675,7 +659,7 @@ export function setOp(doc: Y.Doc, patch: Partial<OpRecord>) {
   for (const [k, v] of Object.entries(patch)) if (v !== undefined) o.set(k, v);
 }
 
-/** Change one tab: undefined leaves a field, null clears it; `null` as the patch removes the tab. */
+/** `null` as the patch removes the tab. */
 export function setTab(doc: Y.Doc, id: string, patch: Patch<Omit<ViewTab, "id">> | null) {
   const tabs = doc.getMap<unknown>("tabs");
   if (patch === null) tabs.delete(id);
@@ -694,7 +678,7 @@ export function setTab(doc: Y.Doc, id: string, patch: Patch<Omit<ViewTab, "id">>
   touch(doc);
 }
 
-/** Replace all tabs; an empty list goes back to the defaults ("Ansichten zurücksetzen"). */
+/** An empty list goes back to the default views. */
 export function setTabs(doc: Y.Doc, list: Omit<ViewTab, "pos">[]) {
   const tabs = doc.getMap<unknown>("tabs");
   for (const k of [...tabs.keys()]) tabs.delete(k);
@@ -706,8 +690,7 @@ export function setTabs(doc: Y.Doc, list: Omit<ViewTab, "pos">[]) {
   touch(doc);
 }
 
-/** The nested map under `key`, created if missing. */
-function subMap(parent: Y.Map<unknown>, key: string): Y.Map<unknown> {
+function ensureSubMap(parent: Y.Map<unknown>, key: string): Y.Map<unknown> {
   const m = parent.get(key);
   if (m instanceof Y.Map) return m;
   const fresh = new Y.Map<unknown>();
@@ -723,11 +706,11 @@ function toMap(o: Record<string, unknown>): Y.Map<unknown> {
 
 export function setSettings(doc: Y.Doc, patch: Patch<SettingsRecord>) {
   const s = doc.getMap<unknown>("settings");
-  for (const [k, v] of Object.entries(patch)) if (v === null) s.delete(k);
-  else if (v !== undefined) s.set(k, v);
+  for (const [k, v] of Object.entries(patch)) {
+    if (v === null) s.delete(k);
+    else if (v !== undefined) s.set(k, v);
+  }
 }
-
-// ---------- helpers ----------
 
 export function normalizeTag(t: string): string {
   return t.trim().replace(/^#+/, "").replace(/\s+/g, "-").toLowerCase();
@@ -735,11 +718,11 @@ export function normalizeTag(t: string): string {
 
 // Time-sortable ids: 9 chars of time + 8 random chars, base36.
 export function newId(): string {
-  const t = Date.now().toString(36).padStart(9, "0");
-  const r = Array.from(crypto.getRandomValues(new Uint8Array(8)))
+  const time = Date.now().toString(36).padStart(9, "0");
+  const random = Array.from(crypto.getRandomValues(new Uint8Array(8)))
     .map((b) => (b % 36).toString(36))
     .join("");
-  return t + r;
+  return time + random;
 }
 
 export function shortId(prefix: string): string {
@@ -760,28 +743,24 @@ export function parseRange(v: unknown): { start: string; end: string } {
 /** The stored form of a range; "" when both sides are empty. */
 export const formatRange = (start: string, end: string) => (start || end ? `${start}/${end}` : "");
 
-/** What an item is called: its title, else (a file) its file name; "" when it has neither. */
 export function displayTitle(item: Pick<Item, "title" | "file">): string {
   return item.title || item.file?.name || "";
 }
 
-/** The area a document belongs to (see PERSONAL). */
 export function areaOf(doc: Y.Doc | undefined): string {
   const a = doc && metaMap(doc).get("area");
   return typeof a === "string" ? a : PERSONAL;
 }
 
-/** The names of the options a select value holds, one or several (an unknown id as itself). */
+/** An unknown option id stays as is. */
 export function optionNames(p: PropDef, v: Value): string[] {
   return (Array.isArray(v) ? v : [v]).map((id) => p.options?.find((o) => o.id === id)?.name ?? String(id));
 }
 
-/** Live means: not deleted and a real information or file (not an op or the settings). */
+/** Not deleted, and an information or file rather than an op or the settings. */
 export function isContent(i: Item) {
   return !i.deleted && (i.kind === "info" || i.kind === "datei");
 }
-
-// ---------- links in the text ----------
 
 /** [[Page]], [[Page#Section]], [[Page|text]], ![[file.png|320]]: groups embed mark, target, "#section", "|text". */
 const WIKILINK = /(!?)\[\[([^\]|#\n]+)(#[^\]|\n]*)?(\|[^\]\n]*)?\]\]/g;
@@ -799,16 +778,12 @@ export interface WikiLinkMatch {
   label?: string; // the text after "|"
 }
 
-/** Replace every wikilink in `text` by what `fn` makes of it. */
 export function mapWikiLinks(text: string, fn: (l: WikiLinkMatch) => string): string {
   if (!text.includes("[[")) return text;
   return text.replace(WIKILINK, (raw, bang: string, target: string, section?: string, label?: string) => fn({ raw, embed: bang === "!", target, section: section ?? "", label: label?.slice(1) }));
 }
 
-/**
- * The text with its [[links]] to `oldTitle` (any case, with section or label) pointing at
- * `newTitle`; null when nothing changes.
- */
+/** Matches `oldTitle` in any case, with or without section or label; null when nothing changes. */
 export function renameLinksIn(body: string, oldTitle: string, newTitle: string): string | null {
   if (!newTitle.trim() || !body.includes("[[")) return null;
   const re = new RegExp(`(!?\\[\\[)${escapeRe(oldTitle)}(?=[\\]|#])`, "gi");
@@ -830,9 +805,9 @@ export function parseWikiLinks(body: string): WikiLink[] {
   const text = stripQueryBlocks(body);
   for (const m of text.matchAll(WIKILINK)) {
     const target = m[2]!.trim();
-    const extra = m[4]?.slice(1).trim();
-    const size = extra && /^\d+(x\d+)?$/.test(extra) ? Number(extra.split("x")[0]) : undefined;
-    out.push({ target, embed: m[1] === "!", size, alias: size ? undefined : extra || undefined });
+    const afterPipe = m[4]?.slice(1).trim();
+    const size = afterPipe && /^\d+(x\d+)?$/.test(afterPipe) ? Number(afterPipe.split("x")[0]) : undefined;
+    out.push({ target, embed: m[1] === "!", size, alias: size ? undefined : afterPipe || undefined });
   }
   return out;
 }
@@ -845,7 +820,6 @@ export function stripQueryBlocks(body: string) {
 
 const IMAGE_EXT = /\.(png|jpe?g|gif|webp|avif|bmp|svg|heic)$/i;
 
-/** Looks like a file name ("x.pdf", "y.png") rather than an information title. */
 export function looksLikeFileName(name: string) {
   return /\.[a-z0-9]{2,5}$/i.test(name) && !/\s\.[a-z]+$/i.test(name);
 }
@@ -860,12 +834,13 @@ export function fileTypeOf(name: string, mime = ""): FileType {
   return "sonstiges";
 }
 
+const MIME_BY_EXT: Record<string, string> = {
+  png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", avif: "image/avif", bmp: "image/bmp", svg: "image/svg+xml", heic: "image/heic",
+  pdf: "application/pdf", mp3: "audio/mpeg", m4a: "audio/mp4", wav: "audio/wav", ogg: "audio/ogg", flac: "audio/flac", opus: "audio/opus",
+  mp4: "video/mp4", mov: "video/quicktime", webm: "video/webm", txt: "text/plain", md: "text/markdown", csv: "text/csv",
+};
+
 export function mimeOf(name: string): string {
   const ext = name.toLowerCase().split(".").pop() ?? "";
-  const m: Record<string, string> = {
-    png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", avif: "image/avif", bmp: "image/bmp", svg: "image/svg+xml", heic: "image/heic",
-    pdf: "application/pdf", mp3: "audio/mpeg", m4a: "audio/mp4", wav: "audio/wav", ogg: "audio/ogg", flac: "audio/flac", opus: "audio/opus",
-    mp4: "video/mp4", mov: "video/quicktime", webm: "video/webm", txt: "text/plain", md: "text/markdown", csv: "text/csv",
-  };
-  return m[ext] ?? "application/octet-stream";
+  return MIME_BY_EXT[ext] ?? "application/octet-stream";
 }

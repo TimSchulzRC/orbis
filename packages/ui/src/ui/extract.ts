@@ -4,9 +4,11 @@ import { repo } from "../repo";
 import { tr } from "../i18n";
 import { notify } from "./feedback";
 
+const MAX_TITLE = 80;
+
 /**
- * "Herauslösen" (toolbar): the selected text becomes a new item of `type`, and a link to it
- * takes its place. Without a selection the paragraph at the cursor is used.
+ * The selected text becomes a new item of `type` and a link to it takes its place. Without a
+ * selection the paragraph at the cursor is used.
  */
 export function extractAs(view: EditorView, type: string) {
   const sel = view.state.selection.main;
@@ -20,8 +22,9 @@ export function extractAs(view: EditorView, type: string) {
   if (!text) return notify(tr("extract.empty"));
   const lines = text.split("\n");
   const first = lines[0]!.replace(/^[-*#>\s]+/, "").trim();
-  const title = first.length > 80 ? first.slice(0, 77) + "…" : first;
-  const body = lines.length > 1 || first.length > 80 ? text : "";
+  const tooLong = first.length > MAX_TITLE;
+  const title = tooLong ? first.slice(0, MAX_TITLE - 3) + "…" : first;
+  const body = lines.length > 1 || tooLong ? text : "";
   const ix = repo.index();
   let unique = title;
   for (let n = 2; ix.resolveTitle(unique); n++) unique = `${title} (${n})`;

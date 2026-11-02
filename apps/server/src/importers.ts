@@ -1,5 +1,5 @@
-// Bringing data in: from an Obsidian vault and from the Notion export. Sources are only read. Re-running is safe: the same source
-// gives the same item (source key or deterministic id), no duplicates.
+// Sources are only read. Re-running is safe: the same source gives the same item (source key or
+// deterministic id).
 import { type Stats, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join, relative } from "node:path";
 import {
@@ -30,7 +30,7 @@ import { dueProp, statusProp } from "@obtion/core/traits";
 import type { Store } from "./store";
 import { type Blobs, sha256 } from "./blobs";
 
-/** Who the setup and the upgrades of shipped types act as. */
+/** Also the origin of upgrades to shipped types. */
 export const SETUP_ORIGIN = "system:setup";
 
 export function storeWriter(store: Store, origin: string, quiet = true): Writer {
@@ -40,7 +40,7 @@ export function storeWriter(store: Store, origin: string, quiet = true): Writer 
   };
 }
 
-/** First setup on the server, optionally with the examples: the same code the setup page runs. */
+/** Same code the setup page runs. */
 export async function setUp(store: Store, blobs: Blobs, lang: Lang, opts: { examples?: boolean; quiet?: boolean } = {}) {
   runSetup(storeWriter(store, SETUP_ORIGIN, opts.quiet), lang, SETUP_ORIGIN);
   if (opts.examples)
@@ -54,9 +54,7 @@ export async function setUp(store: Store, blobs: Blobs, lang: Lang, opts: { exam
 
 export type Log = (msg: string) => void;
 
-// ---------- shared mapping ----------
-
-/** Old status names (English, from Notion) → setup keys, so they match options in any language. */
+/** Old English status names from Notion → setup keys, to match options in any language. */
 const STATUS_KEYS: Record<string, string> = {
   backlog: "backlog",
   planning: "planning",
@@ -82,7 +80,7 @@ const STATUS_GROUP: Record<string, "todo" | "active" | "done"> = {
   archived: "done",
 };
 
-/** Find the status option for a name: same name, the same status in another language, else by group. */
+/** Match by name, then the same status in another language, then by group. */
 function statusOption(schema: TypeSchema | undefined, name?: string): string | undefined {
   const p = statusProp(schema);
   if (!p || !name) return undefined;
@@ -96,10 +94,21 @@ function statusOption(schema: TypeSchema | undefined, name?: string): string | u
   return group ? p.options?.find((o) => (o.group ?? "todo") === group)?.id : undefined;
 }
 
-/** The property a column of the export goes to: the shipped one, or one with its name in either language. */
+/** The shipped property, or one with its name in any language. */
 function columnProp(schema: TypeSchema | undefined, id: string, key: string, kind: PropKind): PropDef | undefined {
   const names = (Object.keys(CATALOGS) as Lang[]).map((l) => translate(l, `setup.prop.${key}`).toLowerCase());
   return schema?.properties.find((x) => x.kind === kind && (x.id === id || names.includes(x.name.toLowerCase())));
+}
+
+/** Status and priority by name, for the type's own properties. */
+function statusAndPriority(schema: TypeSchema | undefined, status?: string, priority?: string): Record<string, Value> {
+  const props: Record<string, Value> = {};
+  const statusId = statusOption(schema, status);
+  if (statusId && statusProp(schema)) props[statusProp(schema)!.id] = statusId;
+  const priorityDef = columnProp(schema, "p_priority", "priority", "select");
+  const priorityId = priorityOption(priorityDef, priority);
+  if (priorityId) props[priorityDef!.id] = priorityId;
+  return props;
 }
 
 function priorityOption(p: PropDef | undefined, name?: string): string | undefined {
@@ -118,7 +127,7 @@ const AREA_NAME: Record<string, Record<Lang, string>> = {
   business: { de: "Gewerbe", en: "Business" },
 };
 
-/** "Work (MOC)", "Studium (MOC)" … → the area they stand for. */
+/** "Work (MOC)" → "work" */
 function areaOfTitle(title: string): string | undefined {
   const k = titleKey(title.replace(/\s*\(MOC\)\s*$/i, ""));
   return AREA_KEY[k];
@@ -129,7 +138,7 @@ function areaName(area: string, lang: Lang): string {
   return k ? AREA_NAME[k]![lang] : area;
 }
 
-/** The type with this id or name; a missing default type is created from the shipped definition. */
+/** `ref` is an id or name. A missing default type is created from the shipped definition. */
 function ensureType(w: Writer, ref: string, lang: Lang, store: Store): string {
   const ix = store.index();
   if (ix.types.has(ref)) return ref;
@@ -147,7 +156,6 @@ function ensureType(w: Writer, ref: string, lang: Lang, store: Store): string {
     store.flush();
     return ref;
   }
-  // a new, empty type with that name
   const id = newId();
   w.change(id, (doc) => {
     initItem(doc, { type: META_TYPE, title: ref });
@@ -157,12 +165,11 @@ function ensureType(w: Writer, ref: string, lang: Lang, store: Store): string {
   return id;
 }
 
-/** The next pinned position (after everything pinned so far). */
 function nextPin(store: Store): string {
   return nextPinKey(store.live());
 }
 
-/** A pinned information without a type (an overview once it has children) with this title; created if missing. */
+/** Untyped and pinned, so it shows as an overview once it has children. Created if missing. */
 function ensurePinnedOverview(w: Writer, store: Store, title: string): string {
   const ix = store.index();
   const hit = ix.live.find((i) => i.kind === "info" && titleKey(i.title) === titleKey(title) && ix.parentsOf(i.id).length === 0 && (i.pinned || !i.type));
@@ -177,7 +184,6 @@ function ensurePinnedOverview(w: Writer, store: Store, title: string): string {
   return id;
 }
 
-/** Top-level MOCs (no parent) are pinned. */
 function pinTopLevel(w: Writer, store: Store, ids: string[]): number {
   const ix = store.index();
   let n = 0;
@@ -191,16 +197,13 @@ function pinTopLevel(w: Writer, store: Store, ids: string[]): number {
   return n;
 }
 
-// ---------- files ----------
-
-/** When a file on disk was made: its birth time where the system keeps one, else when it last changed. */
+// birth time where the file system keeps one, else mtime
 const createdAt = (st: Stats) => Math.min(st.birthtimeMs || st.mtimeMs, st.mtimeMs);
 
-/** A file from disk as a file item; same content gives the same id. */
 async function importFile(w: Writer, store: Store, blobs: Blobs, path: string, opts: { created?: number; source?: string } = {}): Promise<string> {
   const hash = await blobs.putFile(path);
   const name = basename(path);
-  // same content under the same name = same item; the same content under another name stays linkable by that name
+  // same content and name = same item; a copy under another name stays linkable by that name
   const id = "f_" + hash.slice(0, 20) + Bun.hash(name).toString(36).slice(0, 6);
   if (store.records.get(id)) return id;
   const st = statSync(path);
@@ -211,8 +214,6 @@ async function importFile(w: Writer, store: Store, blobs: Blobs, path: string, o
   });
   return id;
 }
-
-// ---------- Obsidian ----------
 
 const SKIP_DIRS = new Set([".obsidian", ".trash", ".git", "Calendar", "Extras", "Excalidraw", "textgenerator", ".stfolder"]);
 
@@ -233,15 +234,66 @@ function parseCreated(s?: string): number | undefined {
   return new Date(`${m[3]}-${m[2]}-${m[1]}T12:00:00`).getTime();
 }
 
+interface Note {
+  body: string;
+  tags: string[];
+  refs: string[];
+  created?: number;
+}
+
+/** Frontmatter and the vault's inline fields (Tags::, Refs::, the Home line) become note data; the rest is the body. */
+function parseNote(raw: string, rel: string, log: Log): Note {
+  let text = raw.replace(/\r\n/g, "\n");
+  const tags: string[] = [];
+  const refs: string[] = [];
+  let created: number | undefined;
+  const frontmatter = text.match(/^---\n([\s\S]*?)\n---\n?/);
+  if (frontmatter) {
+    try {
+      const yaml = (Bun.YAML.parse(frontmatter[1]!) ?? {}) as Record<string, any>;
+      const yamlTags = yaml.tags ?? yaml.Tags;
+      if (Array.isArray(yamlTags)) tags.push(...yamlTags.map(String));
+      else if (typeof yamlTags === "string") tags.push(...yamlTags.split(/[ ,]+/));
+      if (yaml.created) created = Date.parse(yaml.created) || undefined;
+    } catch (e) {
+      log(`${rel}: frontmatter not read (${(e as Error).message})`);
+    }
+    text = text.slice(frontmatter[0].length);
+  }
+  const out: string[] = [];
+  for (const line of text.split("\n")) {
+    if (/^\[\[Home 🏠\]\]/.test(line)) {
+      created = parseCreated(line) ?? created;
+      continue;
+    }
+    const tagsField = line.match(/^Tags::(.*)$/);
+    if (tagsField) {
+      tags.push(...(tagsField[1]!.match(/#[^\s#]+/g) ?? []));
+      continue;
+    }
+    const refsField = line.match(/^Refs::(.*)$/);
+    if (refsField) {
+      refs.push(...parseWikiLinks(refsField[1]!).map((l) => l.target));
+      continue;
+    }
+    if (/^`=.*`\s*$/.test(line.trim())) continue;
+    out.push(line);
+  }
+  const body = out.join("\n").replace(/^(?:[ \t]*(?:___)?[ \t]*\n)+/, "").trim();
+  return { body, tags, refs, created };
+}
+
+/** Folders below Spaces/ that name an area. */
+const SPACE_AREA: Record<string, string> = { Arbeit: "work", "Studium Informatik": "study", Personal: "personal" };
+
 interface ObsidianOptions {
   lang: Lang;
   mocParents: boolean;
 }
 
 /**
- * Encounters (raw notes) → no type, no parent: the inbox. Cards → Karte. MOCs → information
- * without type (below the area's pinned overview; top-level ones pinned). Folders → tags. [[Links]], #tags, Refs:: → links, tags,
- * explicit refs. Attachments → files; ![[…]] keeps working.
+ * Encounters go to the inbox, cards become Karte, MOCs untyped items below the area's pinned
+ * overview (top-level ones pinned). Folders become tags, Refs:: explicit refs.
  */
 export async function importObsidian(store: Store, blobs: Blobs, vault: string, opts: ObsidianOptions, log: Log) {
   const origin = "import:obsidian";
@@ -260,7 +312,6 @@ export async function importObsidian(store: Store, blobs: Blobs, vault: string, 
     }
   };
   indexFiles(vault);
-  const AREA: Record<string, string> = { Arbeit: "work", "Studium Informatik": "study", Personal: "personal" };
   const pendingRefs: { id: string; refs: string[] }[] = [];
   const maps: string[] = [];
   let made = 0;
@@ -277,52 +328,18 @@ export async function importObsidian(store: Store, blobs: Blobs, vault: string, 
     if (rel === "Home 🏠.md" || (top === "Atlas" && !rel.includes("MOCs"))) continue;
     const raw = readFileSync(path, "utf8");
     const st = statSync(path);
-    let text = raw.replace(/\r\n/g, "\n");
-    let tags: string[] = [];
-    const refs: string[] = [];
-    let created: number | undefined;
-    const fm = text.match(/^---\n([\s\S]*?)\n---\n?/);
-    if (fm) {
-      try {
-        const y = (Bun.YAML.parse(fm[1]!) ?? {}) as Record<string, any>;
-        const t = y.tags ?? y.Tags;
-        if (Array.isArray(t)) tags.push(...t.map(String));
-        else if (typeof t === "string") tags.push(...t.split(/[ ,]+/));
-        if (y.created) created = Date.parse(y.created) || undefined;
-      } catch (e) {
-        log(`${rel}: frontmatter not read (${(e as Error).message})`);
-      }
-      text = text.slice(fm[0].length);
-    }
-    const out: string[] = [];
-    for (const line of text.split("\n")) {
-      if (/^\[\[Home 🏠\]\]/.test(line)) {
-        created = parseCreated(line) ?? created;
-        continue;
-      }
-      const tm = line.match(/^Tags::(.*)$/);
-      if (tm) {
-        tags.push(...(tm[1]!.match(/#[^\s#]+/g) ?? []));
-        continue;
-      }
-      const rm = line.match(/^Refs::(.*)$/);
-      if (rm) {
-        refs.push(...parseWikiLinks(rm[1]!).map((l) => l.target));
-        continue;
-      }
-      if (/^`=.*`\s*$/.test(line.trim())) continue;
-      out.push(line);
-    }
-    const body = out.join("\n").replace(/^(?:[ \t]*(?:___)?[ \t]*\n)+/, "").trim();
+    const note = parseNote(raw, rel, log);
+    const { body, refs, created } = note;
+    let tags = note.tags;
     const title = basename(path, ".md");
     if (!body && !refs.length && (!tags.length || /^Unbenannt|^Untitled|\.pdf$/i.test(title))) continue;
     let type: string | null = card;
     if (top === "Encounters" || top === "Readwise") type = null;
     const isMap = rel.includes("• MOCs") || tags.some((t) => /^#?map$/i.test(t));
-    if (isMap) type = null; // a MOC is an information without type; its children make it an overview
+    if (isMap) type = null; // its children make it an overview
     let area = isMap ? areaOfTitle(title) : undefined;
     if (top === "Spaces") {
-      area = AREA[parts[1]!];
+      area = SPACE_AREA[parts[1]!];
       tags.push(...parts.slice(2, -1).filter((p) => !["Areas", "Projects", "• MOCs"].includes(p)));
       if (area && !isMap) tags.push(areaName(area, opts.lang));
     }
@@ -330,7 +347,6 @@ export async function importObsidian(store: Store, blobs: Blobs, vault: string, 
     if (top === "Readwise") tags.push("readwise", parts[1] ?? "");
     tags = [...new Set(tags.map(normalizeTag).filter((t) => t && t !== "map" && !/^[0-9a-f]{6}$/i.test(t)))];
     const parents = isMap && area ? [ensurePinnedOverview(w, store, areaName(area, opts.lang))] : [];
-    // attachments the note uses
     for (const l of parseWikiLinks(body)) {
       const src = attachments.get(basename(l.target));
       if (src) await importFile(w, store, blobs, src, { source: `obsidian-file:${basename(l.target)}` });
@@ -350,7 +366,9 @@ export async function importObsidian(store: Store, blobs: Blobs, vault: string, 
     w.change(p.id, (doc) => {
       for (const t of p.refs) {
         const target = ix.resolveTitle(t);
-        if (target && target !== p.id) (setMember(doc, "refs", target, true), refCount++);
+        if (!target || target === p.id) continue;
+        setMember(doc, "refs", target, true);
+        refCount++;
       }
     });
   let placed = 0;
@@ -370,22 +388,18 @@ export async function importObsidian(store: Store, blobs: Blobs, vault: string, 
   log(`Obsidian: ${made} notes (${skipped} already there), ${refCount} Refs:: resolved, ${placed} cards placed below MOCs, ${pinned} top-level MOCs pinned.`);
 }
 
-// ---------- Notion ----------
-
 interface NotionOptions {
   lang: Lang;
   projectType: string; // id or name; created if missing
   taskType: string;
 }
 
-/** The export file: projects as objects, tasks as rows. */
 interface NotionExport {
   projects: { id: string; title: string; area?: string; status?: string; priority?: string; start?: string; end?: string; summary?: string; created: string }[];
-  /** id, title, status, priority, due, tags, project, parent, blocked by, created */
-  tasks: [string, string, string | null, string | null, string | null, string[], string | null, string | null, string[], string][];
+  tasks: [id: string, title: string, status: string | null, priority: string | null, due: string | null, tags: string[], project: string | null, parent: string | null, blockedBy: string[], created: string][];
 }
 
-/** Projects → project type below the area's pinned overview; tasks and sub-items → task type below project / parent task. */
+/** Projects go below the area's pinned overview, tasks below their project or parent task. */
 export function importNotion(store: Store, file: string, opts: NotionOptions, log: Log) {
   const origin = "import:notion";
   const w = storeWriter(store, origin);
@@ -393,22 +407,17 @@ export function importNotion(store: Store, file: string, opts: NotionOptions, lo
   const projectType = ensureType(w, opts.projectType, opts.lang, store);
   const taskType = ensureType(w, opts.taskType, opts.lang, store);
   const ix = store.index();
-  const ps = ix.types.get(projectType)!.schema;
-  const ts = ix.types.get(taskType)!.schema;
+  const projectSchema = ix.types.get(projectType)!.schema;
+  const taskSchema = ix.types.get(taskType)!.schema;
   const idFor = (nid: string) => "n_" + nid;
   let made = 0;
   for (const p of data.projects) {
     if (store.records.get(idFor(p.id))) continue;
     const parents = p.area ? [ensurePinnedOverview(w, store, areaName(p.area, opts.lang))] : [];
-    const props: Record<string, Value> = {};
-    const st = statusOption(ps, p.status);
-    if (st && statusProp(ps)) props[statusProp(ps)!.id] = st;
-    const prio = columnProp(ps, "p_priority", "priority", "select");
-    const pr = priorityOption(prio, p.priority);
-    if (pr) props[prio!.id] = pr;
-    const period = columnProp(ps, "p_period", "period", "date");
+    const props = statusAndPriority(projectSchema, p.status, p.priority);
+    const period = columnProp(projectSchema, "p_period", "period", "date");
     if ((p.start || p.end) && period) props[period.id] = `${p.start ?? ""}/${p.end ?? ""}`;
-    const summary = columnProp(ps, "p_summary", "summary", "text");
+    const summary = columnProp(projectSchema, "p_summary", "summary", "text");
     if (p.summary && summary) props[summary.id] = p.summary;
     w.change(idFor(p.id), (doc) => initItem(doc, { title: p.title, type: projectType, parents, props, source: `notion:${p.id}`, created: Date.parse(p.created) }));
     made++;
@@ -419,15 +428,10 @@ export function importNotion(store: Store, file: string, opts: NotionOptions, lo
     if (store.records.get(idFor(nid))) continue;
     const proj = project ?? (parent ? taskProject.get(parent) : null);
     const parents = parent ? [idFor(parent)] : proj ? [idFor(proj)] : [];
-    const props: Record<string, Value> = {};
-    const st = statusOption(ts, status ?? undefined);
-    if (st && statusProp(ts)) props[statusProp(ts)!.id] = st;
-    const prio = columnProp(ts, "p_priority", "priority", "select");
-    const pr = priorityOption(prio, priority ?? undefined);
-    if (pr) props[prio!.id] = pr;
-    const dp = dueProp(ts);
+    const props = statusAndPriority(taskSchema, status ?? undefined, priority ?? undefined);
+    const dp = dueProp(taskSchema);
     if (due && dp) props[dp.id] = due;
-    const rel = ts?.properties.find((x) => x.kind === "relation" && x.blocks);
+    const rel = taskSchema?.properties.find((x) => x.kind === "relation" && x.blocks);
     w.change(idFor(nid), (doc) => {
       initItem(doc, { title, type: taskType, parents, props, tags, source: `notion:${nid}`, created: Date.parse(created) });
       if (rel) for (const b of blockedBy) setRel(doc, rel.id, idFor(b), true);

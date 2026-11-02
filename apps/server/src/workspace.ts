@@ -1,6 +1,4 @@
-// One workspace on the server: its own folder (workspaces/<id>/) with the database, the file
-// contents, the Markdown mirror, the daily backups – what the whole server was before accounts. Opened when it is first used; everything below sees only it, so
-// workspaces cannot reach each other's data.
+// Everything below a Workspace sees only its own folder, so workspaces cannot reach each other's data.
 import { join } from "node:path";
 import type { ServerWebSocket } from "bun";
 import { AreaError, Store } from "./store";
@@ -11,7 +9,7 @@ import { Blobs } from "./blobs";
 import { MAX_BLOB } from "./config";
 import { body, fail, json } from "./http";
 import { Backups } from "./backup";
-import { FORMAT, PERSONAL, fileTypeOf } from "@obtion/core/model";
+import { FORMAT, type Item, PERSONAL, fileTypeOf } from "@obtion/core/model";
 import { addLaterDefaultProps, migrateCollections, renameShippedLabels, upgradeAreas, upgradeExplicitRoles, upgradeHideEmptyTaskFields } from "@obtion/core/setup";
 import { SETUP_ORIGIN, storeWriter } from "./importers";
 import { UndoError, undoStep } from "./undo";
@@ -20,15 +18,15 @@ import { z } from "zod";
 
 export interface Conn {
   userId: string;
-  session?: string; // the app session it was opened with: changing the password ends the others
+  session?: string; // a password change closes connections of the other sessions
   workspace: string;
-  areas: Set<string>; // said hello for these: only then it gets (and may push) their updates
+  areas: Set<string>; // only areas it said hello for are sent and accepted
   origin: string;
   user: Person;
 }
 
-/** Uploads: only kinds the app knows how to show (no HTML, scripts, executables). */
-const UPLOAD_OK = (name: string) => fileTypeOf(name) !== "sonstiges" || /\.(zip|json|xml|ics|vcf)$/i.test(name);
+// only kinds the app can show: no HTML, scripts or executables
+const uploadAllowed = (name: string) => fileTypeOf(name) !== "sonstiges" || /\.(zip|json|xml|ics|vcf)$/i.test(name);
 const INLINE = /^(image\/(png|jpeg|gif|webp|avif|bmp|svg\+xml)|application\/pdf|audio\/|video\/|text\/plain)/;
 
 async function sniffImage(path: string): Promise<string> {
@@ -39,42 +37,45 @@ async function sniffImage(path: string): Promise<string> {
   return "application/octet-stream";
 }
 
-/** One-time upgrades of older data, as the server ran them at start before workspaces. */
-function upgrade(store: Store) {
-  // Properties shipped after a default type was set up ("Wartet auf"): added once, nothing migrated.
+function upgradeOldData(store: Store) {
+  // properties shipped after a default type was set up: added once, nothing migrated
   const lang = store.setupLang();
-  const w = storeWriter(store, SETUP_ORIGIN);
-  if (lang && addLaterDefaultProps(w, lang).length) store.flush();
-  if (lang && renameShippedLabels(w, lang)) store.flush();
-  if (upgradeHideEmptyTaskFields(w)) store.flush();
-  // explicit roles (31.10.): what was recognised by name ("Wartet auf", "Pausiert" …) is marked in the types
-  if (upgradeExplicitRoles(w, store.index()).length) store.flush();
-  // collections are gone (26.10.): their views go to the types, the inbox rule to the settings
-  const moved = lang ? migrateCollections(w, store.index(), store.eachDoc(), lang) : [];
-  if (moved.length) (store.flush(), console.log(`[obtion] collections migrated:\n  ${moved.join("\n  ")}`));
-  // areas (27.10.): every document from before belongs to the personal area
-  const marked = upgradeAreas(w, store.eachDoc());
-  if (marked) (store.flush(), console.log(`[obtion] areas: ${marked} documents marked as personal`));
+  const writer = storeWriter(store, SETUP_ORIGIN);
+  if (lang && addLaterDefaultProps(writer, lang).length) store.flush();
+  if (lang && renameShippedLabels(writer, lang)) store.flush();
+  if (upgradeHideEmptyTaskFields(writer)) store.flush();
+  // 31.10.: roles once recognised by name ("Wartet auf", "Pausiert") become explicit in the types
+  if (upgradeExplicitRoles(writer, store.index()).length) store.flush();
+  // 26.10.: collections removed; their views move to the types, the inbox rule to the settings
+  const moved = lang ? migrateCollections(writer, store.index(), store.eachDoc(), lang) : [];
+  if (moved.length) {
+    store.flush();
+    console.log(`[obtion] collections migrated:\n  ${moved.join("\n  ")}`);
+  }
+  // 27.10.: documents from before areas belong to the personal area
+  const marked = upgradeAreas(writer, store.eachDoc());
+  if (marked) {
+    store.flush();
+    console.log(`[obtion] areas: ${marked} documents marked as personal`);
+  }
 }
 
-/**
- * The areas a device may sync inside a workspace. One: the workspace is the unit of rights now,
- * the area inside it stays the personal one.
- */
+// The workspace is the unit of rights now; inside it only the personal area syncs.
 const AREAS = new Set([PERSONAL]);
+/** Documents per message of a first sync. */
+const SYNC_BATCH = 150;
+const BLOBS = "/api/blobs/";
 
-/** What a device may send on the sync socket; anything else is dropped. */
 const clientMsg: z.ZodType<ClientMsg> = z.discriminatedUnion("t", [
   z.object({ t: z.literal("hello"), area: z.string().optional(), since: z.number(), sinceId: z.string().optional(), device: z.string().optional() }),
   z.object({ t: z.literal("push"), area: z.string().optional(), items: z.array(z.object({ k: z.string(), d: z.string(), u: z.string(), s: z.string().optional() })) }),
   z.object({ t: z.literal("ping") }),
 ]);
 
-/** A message from a device, or null when it is not one (not JSON, wrong shape). */
 export function parseClientMsg(raw: string): ClientMsg | null {
   try {
-    const r = clientMsg.safeParse(JSON.parse(raw));
-    return r.success ? r.data : null;
+    const parsed = clientMsg.safeParse(JSON.parse(raw));
+    return parsed.success ? parsed.data : null;
   } catch {
     return null;
   }
@@ -89,9 +90,9 @@ export class Workspace {
 
   constructor(dir: string) {
     this.store = new Store(dir);
-    upgrade(this.store);
+    upgradeOldData(this.store);
     this.blobs = new Blobs(join(dir, "blobs"), this.store);
-    const mirror = (this.mirror = new Mirror(this.store, join(dir, "vault"), this.blobs));
+    this.mirror = new Mirror(this.store, join(dir, "vault"), this.blobs);
     this.store.on({
       update: (u, from) => {
         const item: WireUpdate = { s: u.seq, d: u.doc, u: toB64(u.data), o: u.origin };
@@ -110,7 +111,7 @@ export class Workspace {
       for (const ws of this.conns) if (ws.data.areas.size) send(ws, { t: "blob", hash });
     };
     this.blobs.scan();
-    mirror.start();
+    this.mirror.start();
     this.backups = new Backups(this.store, join(dir, "backups"));
     this.backups.start();
   }
@@ -121,7 +122,7 @@ export class Workspace {
     this.store.flush();
   }
 
-  /** Closed for good (deleted): connections end, nothing writes into its folder any more. */
+  /** For a deleted workspace: nothing may write into its folder afterwards. */
   shut() {
     for (const ws of this.conns) ws.close(4404, "workspace deleted");
     this.close();
@@ -129,10 +130,8 @@ export class Workspace {
     this.store.db.close();
   }
 
-  // ---------- sync ----------
-
   hello(ws: ServerWebSocket<Conn>, msg: Extract<ClientMsg, { t: "hello" }>) {
-    const area = msg.area ?? PERSONAL; // apps from before areas: personal
+    const area = msg.area ?? PERSONAL; // clients from before areas send none
     if (!AREAS.has(area)) return send(ws, { t: "denied", area });
     if (msg.device) ws.data.origin = personOrigin(ws.data.user, msg.device);
     const store = this.store;
@@ -140,11 +139,10 @@ export class Workspace {
     send(ws, { t: "welcome", hub: store.serverId, area, seq: last.seq, format: FORMAT });
     const reset = !store.knowsCursor(area, msg.since, msg.sinceId); // server restored from an older backup; replica must merge everything
     const ids = store.docsSince(area, reset ? 0 : msg.since);
-    const BATCH = 150;
     if (ids.length === 0) send(ws, { t: "updates", area, items: [], last: last.seq, lastId: last.uid || undefined, initial: true, done: true, reset });
-    for (let i = 0; i < ids.length; i += BATCH) {
-      const items = ids.slice(i, i + BATCH).map((d) => ({ d, u: toB64(store.stateOf(d)) }));
-      const done = i + BATCH >= ids.length;
+    for (let i = 0; i < ids.length; i += SYNC_BATCH) {
+      const items = ids.slice(i, i + SYNC_BATCH).map((d) => ({ d, u: toB64(store.stateOf(d)) }));
+      const done = i + SYNC_BATCH >= ids.length;
       // Only the final batch carries the real position, so an interrupted first sync is retried.
       send(ws, { t: "updates", area, items, last: done ? last.seq : 0, lastId: done ? last.uid || undefined : undefined, initial: true, done, reset: reset && i === 0 });
     }
@@ -155,8 +153,8 @@ export class Workspace {
     if (msg.t === "hello") this.hello(ws, msg);
     else if (msg.t === "ping") send(ws, { t: "pong" });
     else if (msg.t === "push") {
-      // only after the welcome: the client has to know which server it writes to (server-id check);
-      // no ack, so its outbox keeps the changes and sends them again after the next hello
+      // before the welcome the client has not checked the server id. No ack, so its outbox
+      // resends after the next hello.
       const area = msg.area ?? PERSONAL;
       if (!ws.data.areas.has(area)) return;
       const keys: string[] = [];
@@ -176,9 +174,7 @@ export class Workspace {
     }
   }
 
-  // ---------- http: /w/<id>/<rest> ----------
-
-  /** The workspace's API for a member. `rest` is the path after /w/<id>; `ctx.user` is who they are. */
+  /** `rest` is the path after /w/<id>. */
   async handle(req: Request, rest: string, ctx: { user: Person }): Promise<Response> {
     const url = new URL(req.url);
     const store = this.store;
@@ -201,11 +197,11 @@ export class Workspace {
       }
     }
 
-    if (rest.startsWith("/api/blobs/")) return this.blob(req, url, rest.slice("/api/blobs/".length));
+    if (rest.startsWith(BLOBS)) return this.blob(req, url, rest.slice(BLOBS.length));
     return fail(404, "not found");
   }
 
-  /** `person`: whose MCP token it is; none for the address from before accounts. */
+  /** No person for the pre-accounts /mcp address. */
   mcp(req: Request, person?: Person): Promise<Response> {
     return handleMcp(this.store, req, this.blobs, person);
   }
@@ -215,25 +211,29 @@ export class Workspace {
     if (!Blobs.valid(hash)) return fail(400, "bad hash");
     if (req.method === "PUT") {
       const name = url.searchParams.get("name") ?? "";
-      if (!UPLOAD_OK(name) && !url.searchParams.has("derived")) return fail(415, "file type not allowed");
+      if (!uploadAllowed(name) && !url.searchParams.has("derived")) return fail(415, "file type not allowed");
       if (Number(req.headers.get("content-length") ?? 0) > MAX_BLOB) return fail(413, "too large");
       const data = new Uint8Array(await req.arrayBuffer());
       if (data.length > MAX_BLOB) return fail(413, "too large");
       return (await blobs.put(hash, data)) ? json({ ok: true }) : fail(422, "hash mismatch");
     }
-    // the app asks politely (no error in the console) and shows "Datei fehlt"
-    if (!blobs.has(hash)) return req.headers.get("x-obtion-probe") ? new Response(null, { status: 204, headers: { "x-obtion-missing": "1" } }) : fail(404, "not found");
+    // the probe header lets the app check without a console error
+    if (!blobs.has(hash)) {
+      if (req.headers.get("x-obtion-probe")) return new Response(null, { status: 204, headers: { "x-obtion-missing": "1" } });
+      return fail(404, "not found");
+    }
     if (url.searchParams.has("check")) return new Response(null, { status: 204 });
-    const rec = store.live().find((r) => r.file?.hash === hash) ?? [...store.records.values()].find((r) => r.file?.hash === hash);
-    const mime = rec?.file?.mime ?? (await sniffImage(blobs.path(hash))); // derived versions: WebP (or PNG/JPEG from a device)
+    const hasThisFile = (r: Item) => r.file?.hash === hash;
+    const record = store.live().find(hasThisFile) ?? [...store.records.values()].find(hasThisFile);
+    const mime = record?.file?.mime ?? (await sniffImage(blobs.path(hash))); // derived versions have no record
     const headers: Record<string, string> = {
       "cache-control": "private, max-age=31536000, immutable",
       "x-content-type-options": "nosniff",
-      // Never let a file run as part of the app (SVG, HTML-like content).
+      // never let a file run as part of the app (SVG, HTML-like content)
       "content-security-policy": mime === "application/pdf" ? "script-src 'none'" : "sandbox",
       "content-type": INLINE.test(mime) ? mime : "application/octet-stream",
     };
-    const fname = (url.searchParams.get("name") ?? rec?.file?.name ?? hash).replace(/["\\\r\n]/g, "");
+    const fname = (url.searchParams.get("name") ?? record?.file?.name ?? hash).replace(/["\\\r\n]/g, "");
     if (url.searchParams.has("download") || !INLINE.test(mime)) headers["content-disposition"] = `attachment; filename*=UTF-8''${encodeURIComponent(fname)}`;
     return new Response(Bun.file(blobs.path(hash)), { headers });
   }

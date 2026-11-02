@@ -1,5 +1,4 @@
-// Tags of a page: their own thing, not a property. They sit in the badge row under the title,
-// after type and status; "#" opens a field right there with the list of all tags under it.
+// Tags are their own thing, not a property.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Hash, Plus } from "lucide-react";
 import { type Item, normalizeTag } from "@obtion/core/model";
@@ -17,10 +16,7 @@ const splitTags = (s: string) => s.split(SEP).map(normalizeTag).filter(Boolean);
 const BOX = "inline-flex h-6 items-center rounded-md border px-1 text-xs";
 const setTag = (item: Item, tag: string, on: boolean) => repo.setMember(item.id, "tags", tag, on);
 
-/**
- * The page's tags as chips, then "+" to add more (quiet while there are some). Opened, the "+"
- * turns into the "#" in front of the field – same box, same height, so the row does not move.
- */
+/** Opened, the "+" turns into the "#" in front of the field in the same box, so the row does not move. */
 export function PageTags({ item }: { item: Item }) {
   const { t } = useT();
   const [open, setOpen] = useState(false);
@@ -52,20 +48,18 @@ export function PageTags({ item }: { item: Item }) {
 }
 
 /**
- * A field behind "#" with every tag under it to tick. Typing filters; Enter, space or comma adds
- * what was typed and the field stays for the next one; pasting "a, b c" adds all three; Backspace
- * on empty takes off the tag added last here; Esc or leaving closes. A click in the list toggles a tag and
- * keeps the list open, so several go in one pass.
+ * Enter, space or comma adds what was typed and keeps the field open; Backspace on empty removes
+ * the tag added last here. A click in the list toggles a tag and keeps the list open.
  */
 function TagPicker({ item, onClose }: { item: Item; onClose: () => void }) {
   const { t } = useT();
   const ix = useIndex();
-  const [v, setV] = useState("");
+  const [text, setText] = useState("");
   // the highlighted option; none (-1) until typed or picked with the arrow keys
   const [sel, setSel] = useState(-1);
   // added in this pass, newest last (the page keeps its tags sorted, so its last is not the newest)
   const [added, setAdded] = useState<string[]>([]);
-  const q = normalizeTag(v);
+  const q = normalizeTag(text);
   const options = useMemo(() => {
     const counts = new Map(ix.tags().map((x) => [x.tag, x.count]));
     const all = [...counts].map(([tag, count]) => ({ tag, count, isNew: false }));
@@ -86,16 +80,16 @@ function TagPicker({ item, onClose }: { item: Item; onClose: () => void }) {
     const fresh = tags.filter((x) => !item.tags.includes(x));
     for (const x of fresh) setTag(item, x, true);
     setAdded((a) => [...a.filter((x) => !fresh.includes(x)), ...fresh]);
-    setV("");
+    setText("");
     setSel(-1);
   };
-  const toggle = (tag: string) => (item.tags.includes(tag) ? (setTag(item, tag, false), setV(""), setSel(-1)) : add([tag]));
+  const toggle = (tag: string) => (item.tags.includes(tag) ? (setTag(item, tag, false), setText(""), setSel(-1)) : add([tag]));
   return (
     <span className={cn(BOX, "relative border-line bg-surface")}>
       <Hash size={12} className="shrink-0 text-muted-foreground" aria-hidden />
       <input
         autoFocus
-        value={v}
+        value={text}
         role="combobox"
         aria-expanded={options.length > 0}
         aria-controls="tag-picker-list"
@@ -103,34 +97,34 @@ function TagPicker({ item, onClose }: { item: Item; onClose: () => void }) {
         placeholder={t("tag.search")}
         onBlur={() => setTimeout(onClose, 150)}
         onChange={(e) => {
-          const x = e.target.value;
-          if (!SEP.test(x)) return void (setV(x), setSel(x ? 0 : -1));
+          const value = e.target.value;
+          if (!SEP.test(value)) return void (setText(value), setSel(value ? 0 : -1));
           // a separator typed or pasted: everything before the last one becomes tags
-          const parts = x.split(SEP);
+          const parts = value.split(SEP);
           const rest = parts.pop() ?? "";
           add(parts.flatMap(splitTags));
-          setV(rest);
+          setText(rest);
         }}
         onPaste={(e) => {
           // pasted with separators: every part becomes a tag, the last one too
-          const text = e.clipboardData.getData("text");
-          if (!SEP.test(text)) return;
+          const pasted = e.clipboardData.getData("text");
+          if (!SEP.test(pasted)) return;
           e.preventDefault();
-          const i = e.currentTarget;
-          add(splitTags(v.slice(0, i.selectionStart ?? v.length) + text + v.slice(i.selectionEnd ?? v.length)));
+          const field = e.currentTarget;
+          add(splitTags(text.slice(0, field.selectionStart ?? text.length) + pasted + text.slice(field.selectionEnd ?? text.length)));
         }}
         onKeyDown={(e) => {
           if (e.key === "ArrowDown") (e.preventDefault(), setSel(Math.min(options.length - 1, active + 1)));
           else if (e.key === "ArrowUp") (e.preventDefault(), setSel(Math.max(0, active - 1)));
           else if (e.key === "Enter") {
             e.preventDefault();
-            const o = options[active];
+            const option = options[active];
             // typed: Enter adds (one the page has already just clears the field); picked with
             // the arrow keys from the list: Enter ticks or unticks it, like a click; nothing: close
-            if (o) q ? add([o.tag]) : toggle(o.tag);
+            if (option) q ? add([option.tag]) : toggle(option.tag);
             else e.currentTarget.blur();
           } else if (e.key === "Escape") e.currentTarget.blur();
-          else if (e.key === "Backspace" && !v) {
+          else if (e.key === "Backspace" && !text) {
             const last = added.findLast((x) => item.tags.includes(x));
             if (last) (setTag(item, last, false), setAdded((a) => a.filter((x) => x !== last)));
           }

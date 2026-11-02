@@ -1,7 +1,5 @@
-// Tolerant input for agents and queries: dates in German, English and US notation and
-// words like "morgen"; status as group or option name in either language, with synonyms;
-// option names in the other language. Unclear input is rejected with an explanation
-// (InputError) instead of guessed.
+// Tolerant input for agents and queries, in German and English. Unclear input throws an
+// InputError with an explanation instead of being guessed.
 import { type OptionDef, type PropDef, type StatusGroup, addDaysISO } from "./model";
 import { defaultTypes } from "./setup";
 import { type Lang, LANGS } from "./i18n";
@@ -9,12 +7,9 @@ import { foldUmlauts } from "./text";
 
 export class InputError extends Error {}
 
-/** Lower case, umlauts as two letters, spaces/hyphens/underscores as one "_". */
 function foldWord(s: string): string {
   return foldUmlauts(s.trim()).replace(/[\s_-]+/g, "_");
 }
-
-// ---------- dates ----------
 
 const DAY_WORDS: Record<string, number> = {
   heute: 0, today: 0,
@@ -32,6 +27,15 @@ const WEEKDAYS: Record<string, number> = {
   samstag: 6, saturday: 6, sa: 6, sat: 6,
 };
 
+/** Days per unit of a relative date (+3d, +2w, +1m, +1y); months and years are approximate. */
+const UNIT_DAYS: Record<string, number> = { d: 1, w: 7, m: 30, y: 365 };
+
+/** "26" → 2026; a four-digit year stays; none means this year. */
+function fullYear(year: string | undefined, thisYear: number): number {
+  if (!year) return thisYear;
+  return year.length === 2 ? 2000 + +year : +year;
+}
+
 function iso(y: number, m: number, d: number): string | undefined {
   const s = `${String(y).padStart(4, "0")}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
   const dt = new Date(s + "T12:00:00Z");
@@ -39,7 +43,6 @@ function iso(y: number, m: number, d: number): string | undefined {
 }
 
 /**
- * A date as typed → ISO (YYYY-MM-DD), or undefined if it is not a date.
  * Accepts 2026-10-30, 2026-10-30T09:00, 30.10.2026, 30.10.26, 30.10. (this year), 10/30/2026 (US),
  * heute/today, morgen/tomorrow, übermorgen, gestern, a weekday (the next one), +3d/-2w/+1m/+1y,
  * "in 3 Tagen", "in 2 weeks".
@@ -50,13 +53,13 @@ export function parseDate(input: string, today: string): string | undefined {
   let m = /^(\d{4})-(\d{2})-(\d{2})(?:[T ][\d:.]+(?:Z|[+-]\d{2}:?\d{2})?)?$/.exec(v);
   if (m) return iso(+m[1]!, +m[2]!, +m[3]!);
   m = /^(\d{1,2})\.(\d{1,2})\.(\d{2}|\d{4})?$/.exec(v);
-  if (m) return iso(m[3] ? (m[3].length === 2 ? 2000 + +m[3] : +m[3]) : base.getFullYear(), +m[2]!, +m[1]!);
+  if (m) return iso(fullYear(m[3], base.getFullYear()), +m[2]!, +m[1]!);
   m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(v);
   if (m) return iso(+m[3]!, +m[1]!, +m[2]!);
   m = /^([+-])(\d+)([dwmy])$/.exec(v);
   if (m) {
     const n = Number(m[2]) * (m[1] === "-" ? -1 : 1);
-    return addDaysISO(m[3] === "d" ? n : m[3] === "w" ? n * 7 : m[3] === "m" ? n * 30 : n * 365, base);
+    return addDaysISO(n * UNIT_DAYS[m[3]!]!, base);
   }
   m = /^in (\d+) (tag|tagen|day|days|woche|wochen|week|weeks)$/i.exec(v);
   if (m) return addDaysISO(Number(m[1]) * (/^w/i.test(m[2]!) ? 7 : 1), base);
@@ -69,7 +72,7 @@ export function parseDate(input: string, today: string): string | undefined {
   return undefined;
 }
 
-/** An ISO date as typed in the app language: 30.10.2026 (de) or 10/30/2026 (en, read back by parseDate). */
+/** 30.10.2026 (de) or 10/30/2026 (en); parseDate reads both back. */
 export function dateText(lang: Lang, iso?: string): string {
   const m = iso && /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
   if (!m) return "";
@@ -78,18 +81,15 @@ export function dateText(lang: Lang, iso?: string): string {
 
 export const DATE_HELP = "a date like 2026-10-30, 30.10.2026, 10/30/2026, today/heute, tomorrow/morgen, a weekday or +3d";
 
-// ---------- numbers ----------
-
-/** A number for an input field in the app language, without grouping: 1234,5 (de) or 1234.5 (en). */
+/** Without grouping: 1234,5 (de) or 1234.5 (en). */
 export function numberText(lang: Lang, n: number): string {
   const s = String(n);
   return lang === "de" ? s.replace(".", ",") : s;
 }
 
 /**
- * A number as typed in the app language → number, or undefined if it is none. Takes grouping
- * (1.234,5 / 1,234.5) and spaces; a lone other separator that is not grouping counts as the
- * decimal mark (1.5 in German, 1,5 in English).
+ * Takes grouping (1.234,5 / 1,234.5) and spaces. A lone other separator that is not grouping
+ * counts as the decimal mark (1.5 in German, 1,5 in English).
  */
 export function parseNumber(lang: Lang, input: string): number | undefined {
   const [dec, group] = lang === "de" ? [",", "."] : [".", ","];
@@ -101,10 +101,8 @@ export function parseNumber(lang: Lang, input: string): number | undefined {
   return /^[+-]?(\d+\.?\d*|\.\d+)$/.test(s) ? Number(s) : undefined;
 }
 
-// ---------- status and options ----------
-
 type Alias = { group: StatusGroup; names?: string[]; state?: OptionDef["state"] };
-/** Synonyms → status group, and option names to prefer within it (both languages); paused and dropped ones also by state. */
+/** Synonym → status group, plus option names to prefer within it; paused and dropped also match by state. */
 const STATUS_ALIASES: Record<string, Alias> = {};
 const alias = (words: string, a: Alias) => words.split(",").forEach((w) => (STATUS_ALIASES[foldWord(w)] = a));
 alias("open,offen,todo,to do,new,neu,not started,nicht begonnen,noch nicht begonnen", { group: "todo" });
@@ -117,7 +115,7 @@ alias("canceled,cancelled,abgebrochen,aborted,verworfen,dropped,discarded", { gr
 alias("archived,archiviert", { group: "done", names: ["archiviert", "archived"] });
 const NOT_A_STATUS = new Set(["blocked", "blockiert", "waiting", "wartet", "waiting_for", "wartet_auf"].map(foldWord));
 
-/** Names the shipped options have in every language (an English "High" finds "Hoch"). */
+/** Shipped option names in every language, so an English "High" finds "Hoch". */
 let shippedNames: Map<string, string[]> | null = null;
 function namesOf(optionId: string): string[] {
   if (!shippedNames) {
@@ -134,10 +132,12 @@ function byName(options: OptionDef[], word: string): OptionDef | undefined {
   return options.find((o) => foldWord(o.name) === w) ?? options.find((o) => o.id === word.trim() || namesOf(o.id).includes(w));
 }
 
-/** Options with groups are a status's (open, active, done): words for a group find them too. */
+/** Only a status has grouped options; group words match those too. */
 const grouped = (p: PropDef) => !!p.options?.some((o) => o.group);
 
-/** The option of a select (also the status) meant by `raw`; throws InputError if unclear. */
+const groupOf = (o: OptionDef): StatusGroup => o.group ?? "todo";
+
+/** Throws InputError if unclear. */
 export function matchOption(p: PropDef, raw: string): OptionDef {
   const options = p.options ?? [];
   const hit = byName(options, raw);
@@ -149,56 +149,54 @@ export function matchOption(p: PropDef, raw: string): OptionDef {
     const a = STATUS_ALIASES[w];
     if (a) {
       // "on hold" means the option marked paused, even if another one is called "Paused"
-      const marked = a.state && options.find((x) => (x.group ?? "todo") === a.group && x.state === a.state);
+      const inGroup = (x: OptionDef) => groupOf(x) === a.group;
+      const marked = a.state && options.find((x) => inGroup(x) && x.state === a.state);
       if (marked) return marked;
       for (const n of a.names ?? []) {
         const o = byName(options, n);
-        if (o && (o.group ?? "todo") === a.group) return o;
+        if (o && inGroup(o)) return o;
       }
-      const o = options.find((x) => (x.group ?? "todo") === a.group && x.state === a.state) ?? options.find((x) => (x.group ?? "todo") === a.group);
+      const o = options.find((x) => inGroup(x) && x.state === a.state) ?? options.find(inGroup);
       if (o) return o;
     }
   }
-  const list = options.map((o) => (grouped(p) ? `${o.name} (${o.group ?? "todo"}${o.state ? `, ${o.state}` : ""})` : o.name)).join(", ");
+  const list = options.map((o) => (grouped(p) ? `${o.name} (${groupOf(o)}${o.state ? `, ${o.state}` : ""})` : o.name)).join(", ");
   throw new InputError(`"${raw}" is not an option of "${p.name}". Options: ${list}${grouped(p) ? "; or a group: open, active, done" : ""}.`);
 }
 
-/** A paused option (state "paused"): active by group, but nothing to work on now. */
+/** Active by group, but nothing to work on now. */
 export function isPausedOption(o: OptionDef): boolean {
   return o.state === "paused";
 }
 
 export type StatusShape = "open" | "active" | "paused" | "done" | "dropped";
-/** How a status looks (shape, not only colour): ring, half circle, pause, check, cross. */
+/** Shape, not only colour: ring, half circle, pause, check, cross. */
 export function statusShape(o: OptionDef): StatusShape {
-  const g = o.group ?? "todo";
+  const g = groupOf(o);
   if (g === "todo") return "open";
   if (g === "active") return isPausedOption(o) ? "paused" : "active";
   return o.state === "dropped" ? "dropped" : "done";
 }
 
-/** The state a status word stands for ("on hold" → paused, "verworfen" → dropped), if any. */
+/** "on hold" → paused, "verworfen" → dropped. */
 export function statusStateOf(raw: string): OptionDef["state"] {
   return STATUS_ALIASES[foldWord(raw)]?.state;
 }
 
-/** Status group meant by a word (offen, in Arbeit, done …), if it names one. */
 export function statusGroupOf(raw: string): StatusGroup | undefined {
   return STATUS_ALIASES[foldWord(raw)]?.group;
 }
 
-/** Does a status/select option match the word (name, other language, or synonym)? */
+/** Matches by name, the other language's name or a synonym. */
 export function optionMatches(p: PropDef, o: OptionDef, raw: string): boolean {
   try {
-    return matchOption(p, raw).id === o.id || (grouped(p) && !STATUS_ALIASES[foldWord(raw)]?.names && statusGroupOf(raw) === (o.group ?? "todo"));
+    return matchOption(p, raw).id === o.id || (grouped(p) && !STATUS_ALIASES[foldWord(raw)]?.names && statusGroupOf(raw) === groupOf(o));
   } catch {
     return false;
   }
 }
 
-// ---------- type names ----------
-
-/** Singular and plural forms count as the same type name: Task/Tasks, Projekt/Projekte, Karte/Karten. */
+/** Singular and plural count as the same: Task/Tasks, Projekt/Projekte, Karte/Karten. */
 export function sameTypeName(name: string, input: string): boolean {
   const a = foldWord(name);
   const b = foldWord(input);

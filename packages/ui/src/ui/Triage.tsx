@@ -1,12 +1,5 @@
-// "Sortieren" (design rules § 5): go through entries and decide – place, give a type, delete.
-// Works for any list or query block; the inbox is just one. An entry leaves the list as
-// soon as it no longer matches the query. The actions live in TriageActions.tsx.
-//
-// Desktop: one card, the list on the left (one line per entry, nothing grows or appears on
-// hover), the selected entry in full on the right with a fixed action bar. Several can be
-// marked (box, Space, Shift+j/k); then a bar of the same height acts on all of them.
-// Phone: the list; tapping opens the entry. (The inbox has its own ways: the tray's panel to look
-// in, the review to sort – views/Review.tsx.)
+// "Sortieren" (design rules § 5) for any list or query block. An entry leaves the list as soon as
+// it no longer matches the query.
 import { Checkbox } from "../components/ui/checkbox";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, FolderInput, Shapes, Sparkles, Trash2, Check, X } from "lucide-react";
@@ -27,17 +20,26 @@ import { usePickers, useTriageActions } from "./TriageActions";
 import type { T } from "@obtion/core/i18n";
 import { filePreview } from "./text";
 
-/** Age groups: this week, this month, older. */
+/** Rows shown at first and added by "more". */
+const PAGE = 60;
+/** Places the detail offers to sort into. */
+const MAX_PLACES = 4;
+
 function ageGroup(created: number, now = Date.now()): "week" | "month" | "older" {
   const days = (now - created) / DAY_MS;
   return days <= 7 ? "week" : days <= 30 ? "month" : "older";
+}
+
+/** The agent's suggestion in words: its type and places ("Task · Relaunch"). */
+function suggestionText(sug: NonNullable<Item["suggestion"]>, ix: Index): string {
+  return [sug.type ? ix.typeName(sug.type) : null, ...(sug.parents ?? []).map((p) => ix.get(p)?.title)].filter(Boolean).join(" · ");
 }
 
 /** The quiet hint of a row: the agent's suggestion, a mentioned place, or the notes bundled below. */
 function rowHint(item: Item, ix: Index, t: T): { icon: React.ReactNode; text: string } | null {
   const sug = item.suggestion;
   if (sug) {
-    const what = [sug.type ? ix.typeName(sug.type) : null, ...(sug.parents ?? []).map((p) => ix.get(p)?.title)].filter(Boolean).join(" · ");
+    const what = suggestionText(sug, ix);
     if (what) return { icon: <Sparkles size={12} />, text: what };
   }
   const mentioned = ix.items(ix.mentions(item)).find((x) => x.kind === "info");
@@ -69,7 +71,7 @@ export function Triage({ items }: { items: Item[] }) {
   const phone = !useDesktop();
   const [sel, setSel] = useState(0);
   const [marked, setMarked] = useState<Set<string>>(new Set());
-  const [limit, setLimit] = useState(60);
+  const [limit, setLimit] = useState(PAGE);
   const act = useTriageActions(spaceOf);
   const pick = usePickers(spaceOf, act.place, act.giveType, () => setMarked(new Set()));
   const list = useRef<HTMLDivElement>(null);
@@ -82,8 +84,9 @@ export function Triage({ items }: { items: Item[] }) {
 
   // what an action applies to: the marked entries, else the selected one
   const targets = (): Item[] => {
-    const m = items.filter((i) => marked.has(keyOf(i)));
-    return m.length ? m : items[sel] ? [items[sel]!] : [];
+    const markedItems = items.filter((i) => marked.has(keyOf(i)));
+    if (markedItems.length) return markedItems;
+    return items[sel] ? [items[sel]!] : [];
   };
   const toggle = (id: string, on?: boolean) =>
     setMarked((m) => (on === undefined || on !== m.has(id) ? toggled(m, id) : m));
@@ -93,17 +96,15 @@ export function Triage({ items }: { items: Item[] }) {
     if (keyOwner !== me || pick.placing || pick.typing || isTypingTarget(e.target as Element) || e.metaKey || e.ctrlKey || e.altKey) return;
     const cur = items[sel];
     const k = e.key;
-    if (k === "J" || (k === "ArrowDown" && e.shiftKey)) {
+    // Shift: marks the selected entry and the one it moves to
+    const markOnTo = (n: number) => {
       if (cur) toggle(keyOf(cur), true);
-      const n = Math.min(items.length - 1, sel + 1);
       if (items[n]) toggle(keyOf(items[n]!), true);
       setSel(n);
-    } else if (k === "K" || (k === "ArrowUp" && e.shiftKey)) {
-      if (cur) toggle(keyOf(cur), true);
-      const n = Math.max(0, sel - 1);
-      if (items[n]) toggle(keyOf(items[n]!), true);
-      setSel(n);
-    } else if (k === "j" || k === "ArrowDown") setSel((s) => Math.min(items.length - 1, s + 1));
+    };
+    if (k === "J" || (k === "ArrowDown" && e.shiftKey)) markOnTo(Math.min(items.length - 1, sel + 1));
+    else if (k === "K" || (k === "ArrowUp" && e.shiftKey)) markOnTo(Math.max(0, sel - 1));
+    else if (k === "j" || k === "ArrowDown") setSel((s) => Math.min(items.length - 1, s + 1));
     else if (k === "k" || k === "ArrowUp") setSel((s) => Math.max(0, s - 1));
     else if (k === " " && cur) toggle(keyOf(cur));
     else if (k === "Escape" && marked.size) setMarked(new Set());
@@ -123,7 +124,8 @@ export function Triage({ items }: { items: Item[] }) {
   }, [sel, items.length]);
   // marks of entries that left the list go with them
   useEffect(() => {
-    if (marked.size && [...marked].some((id) => !items.some((i) => keyOf(i) === id))) setMarked(new Set([...marked].filter((id) => items.some((i) => keyOf(i) === id))));
+    const listed = (id: string) => items.some((i) => keyOf(i) === id);
+    if (marked.size && [...marked].some((id) => !listed(id))) setMarked(new Set([...marked].filter(listed)));
   }, [items]);
 
   const shown = items.slice(0, limit);
@@ -189,7 +191,7 @@ export function Triage({ items }: { items: Item[] }) {
         );
       })}
       {items.length > limit && (
-        <Button variant="plain" onClick={() => setLimit(limit + 60)} className="w-full py-3 text-sm text-muted-foreground hover:text-fg">
+        <Button variant="plain" onClick={() => setLimit(limit + PAGE)} className="w-full py-3 text-sm text-muted-foreground hover:text-fg">
           {t("query.more", { count: items.length - limit })}
         </Button>
       )}
@@ -275,19 +277,20 @@ function Detail({ item, onPlaced }: { item: Item; onPlaced: (p: string) => void 
   const kids = ix.items(ix.childrenOf(item.id));
   const sug = item.suggestion;
   const places = useMemo(() => {
-    const s = placeSuggestions(item, repo).slice(0, 4).map((x) => ({ id: x.id, why: t("triage.why." + x.reason) }));
-    for (const id of recentPlaces(repo)) if (s.length < 4 && !s.some((x) => x.id === id) && id !== item.id && !item.parents[id] && !ix.wouldCycle(item.id, id)) s.push({ id, why: t("triage.why.recent") });
-    return s;
+    const offered = placeSuggestions(item, repo).slice(0, MAX_PLACES).map((x) => ({ id: x.id, why: t("triage.why." + x.reason) }));
+    for (const id of recentPlaces(repo)) if (offered.length < MAX_PLACES && !offered.some((x) => x.id === id) && id !== item.id && !item.parents[id] && !ix.wouldCycle(item.id, id)) offered.push({ id, why: t("triage.why.recent") });
+    return offered;
   }, [item, repo, ix, t]);
+  const dismissSuggestion = () => repo.change(item.id, (doc) => setMeta(doc, { suggestion: null }));
   const applySuggestion = () => {
     if (!sug) return;
     if (sug.type && ix.types.has(sug.type)) repo.setType(item.id, sug.type);
-    for (const [k, v] of Object.entries(sug.props ?? {})) repo.setProp(item.id, k, v);
+    for (const [prop, value] of Object.entries(sug.props ?? {})) repo.setProp(item.id, prop, value);
     for (const p of sug.parents ?? []) if (ix.get(p)) onPlaced(p);
-    repo.change(item.id, (doc) => setMeta(doc, { suggestion: null }));
+    dismissSuggestion();
   };
   const section = "mt-5";
-  const k = "mb-1.5 text-xs font-semibold text-muted-foreground";
+  const label = "mb-1.5 text-xs font-semibold text-muted-foreground";
   return (
     <div className="min-h-0 flex-1 overflow-y-auto px-7 py-6">
       <a href={hrefOf(item.id)} className="block text-xl font-semibold leading-[26px] hover:underline">
@@ -307,7 +310,7 @@ function Detail({ item, onPlaced }: { item: Item; onPlaced: (p: string) => void 
       <BelowList items={kids} className={section} />
       {item.tags.length > 0 && (
       <div className={section}>
-        <p className={k}>{t("item.tags")}</p>
+        <p className={label}>{t("item.tags")}</p>
         <div className="flex flex-wrap items-center gap-1.5">
           {item.tags.map((x) => (
             <Tag key={x} tag={x} onRemove={() => repo.setMember(item.id, "tags", x, false)} />
@@ -318,17 +321,17 @@ function Detail({ item, onPlaced }: { item: Item; onPlaced: (p: string) => void 
       )}
       {sug && (
         <div className={section}>
-          <p className={k}>{t("triage.fromAgent")}</p>
+          <p className={label}>{t("triage.fromAgent")}</p>
           <div className="flex flex-wrap items-center gap-2.5 rounded-[10px] bg-surface-2 px-3 py-2 text-sm">
             <Sparkles size={15} className="shrink-0 text-muted-foreground" />
             <span className="min-w-0 flex-1 basis-48">
-              {[sug.type ? ix.typeName(sug.type) : null, ...(sug.parents ?? []).map((p) => ix.get(p)?.title)].filter(Boolean).join(" · ")}
+              {suggestionText(sug, ix)}
               {sug.note && <span className="text-muted-foreground"> – {sug.note}</span>}
             </span>
             <Button variant="outline" onClick={applySuggestion} className="h-7 shrink-0 px-2 text-[13px]">
               <Check size={13} /> {t("triage.accept")}
             </Button>
-            <Button variant="plain" onClick={() => repo.change(item.id, (doc) => setMeta(doc, { suggestion: null }))} className="tap shrink-0 rounded p-1 text-faint hover:bg-hover hover:text-fg" aria-label={t("triage.dismiss")}>
+            <Button variant="plain" onClick={dismissSuggestion} className="tap shrink-0 rounded p-1 text-faint hover:bg-hover hover:text-fg" aria-label={t("triage.dismiss")}>
               <X size={14} />
             </Button>
           </div>
@@ -336,7 +339,7 @@ function Detail({ item, onPlaced }: { item: Item; onPlaced: (p: string) => void 
       )}
       {places.length > 0 && (
         <div className={section}>
-          <p className={k}>{t("triage.placeIn")}</p>
+          <p className={label}>{t("triage.placeIn")}</p>
           <div className="flex flex-wrap gap-1.5">
             {places.map((p) => (
               <Button variant="plain" key={p.id} onClick={() => onPlaced(p.id)} className="tap-y inline-flex h-[30px] items-center gap-1.5 whitespace-nowrap rounded-lg border border-line bg-surface px-2.5 text-[13px] hover:bg-hover">

@@ -1,8 +1,5 @@
-// Workspaces side by side: the sidebar and the inbox show the workspaces chosen in the
-// selector (several at once; on this device, the account stays as it is). Each part of a page
-// that belongs to one workspace sits in its SpaceScope (useRepo and useFiles read that
-// workspace's replica there, and links inside open in it). Moving an item from one workspace into another asks first if
-// something changes on the way (a type copied, values that become free properties, links left behind).
+// Several workspaces side by side. The selector choice is per device; each part of a page that
+// belongs to one workspace sits in its SpaceScope, where useRepo and useFiles read that replica.
 import { Checkbox } from "../components/ui/checkbox";
 import { Input } from "../components/ui/input";
 import { useMemo, useState, useSyncExternalStore } from "react";
@@ -23,10 +20,12 @@ export function SpaceScope({ id, children }: { id: string; children: React.React
   const { active } = useAccounts();
   const value = useMemo(() => ({ id, ...replica(id) }), [id]);
   const onClickCapture = (e: React.MouseEvent) => {
-    if (active?.id === id || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    const modifiedClick = e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey;
+    if (active?.id === id || e.defaultPrevented || modifiedClick) return;
     const href = (e.target as HTMLElement).closest("a")?.getAttribute("href");
+    if (!href?.startsWith("#/") || href.startsWith("#/w/")) return;
     // a page of no workspace ("#/settings", "#/review") stays one
-    if (!href?.startsWith("#/") || href.startsWith("#/w/") || globalPage(href.slice(1).split("?")[0]!.split("/").filter(Boolean))) return;
+    if (globalPage(href.slice(1).split("?")[0]!.split("/").filter(Boolean))) return;
     e.preventDefault();
     navigate(parseHash(href).rest, { space: id });
   };
@@ -39,7 +38,7 @@ export function SpaceScope({ id, children }: { id: string; children: React.React
   );
 }
 
-/** Above the title of a page of one workspace: which one it is, once there are several. */
+/** Shown only once there are several workspaces. */
 export function SpaceEyebrow() {
   const { spaces } = useAccounts();
   const id = useSpaceId();
@@ -93,10 +92,9 @@ export function SpaceSelector({ className, onNew }: { className?: string; onNew:
 }
 
 /**
- * Workspaces as chips. Without `onChange` they are the workspaces seen (the inbox: the same choice
- * as the selector in the sidebar); with it a page's own choice (activity, trash: `value`, null for
- * all). From "Alle", a chip shows that workspace only; then chips add and take away one by one
- * (every one picked stays picked); none left is "Alle" again.
+ * Without `onChange` the chips edit the sidebar selector's choice; with it a page's own choice
+ * (`value`, null for all). From "Alle", a chip shows that workspace only; then chips toggle one by
+ * one, and none left is "Alle" again.
  */
 export function SpaceFilter({ className, value, onChange }: { className?: string; value?: string[] | null; onChange?: (ids: string[] | null) => void }) {
   const { t } = useT();
@@ -110,7 +108,7 @@ export function SpaceFilter({ className, value, onChange }: { className?: string
     choose(next.length ? next : null);
   };
   const on = (id: string) => !!chosen?.includes(id);
-  const chip = (on: boolean) => cn("shrink-0 whitespace-nowrap rounded-full border px-3 py-1", on ? "border-focus bg-surface text-fg" : "border-line text-muted-foreground hover:bg-hover hover:text-fg");
+  const chip = (pressed: boolean) => cn("shrink-0 whitespace-nowrap rounded-full border px-3 py-1", pressed ? "border-focus bg-surface text-fg" : "border-line text-muted-foreground hover:bg-hover hover:text-fg");
   return (
     <div className={cn("-mx-4 mb-4 flex gap-1 overflow-x-auto px-4 text-sm [scrollbar-width:none] md:mx-0 md:px-0", className)} role="group" aria-label={t("space.choose")}>
       <Button variant="plain" onClick={() => choose(null)} aria-pressed={!chosen} className={chip(!chosen)}>
@@ -148,7 +146,7 @@ export function NewSpaceDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
-/** A new workspace: its name and whether it starts with the examples; set up in the app's language. */
+/** The workspace is set up in the app's language. */
 export function NewSpaceForm({ name: initial = "", onCancel, onDone }: { name?: string; onCancel?: () => void; onDone?: () => void }) {
   const { t } = useT();
   const [name, setName] = useState(initial);
@@ -185,21 +183,23 @@ export function NewSpaceForm({ name: initial = "", onCancel, onDone }: { name?: 
   );
 }
 
-/**
- * Move `id` from workspace `from` into `to` (below `parent` there). If something changes on the
- * way it says what and asks; then tells how it went, with a way to the moved item.
- */
+/** What changes when the page moves to `workspace`, one line each. */
+function previewLines(plan: Awaited<ReturnType<typeof planToSpace>>, from: string, workspace: string) {
+  return [
+    plan.items > 1 && tr(plan.files ? "move.preview.itemsFiles" : "move.preview.items", { count: plan.items, files: plan.files }),
+    plan.copiedTypes.length && tr("move.preview.types", { count: plan.copiedTypes.length, names: plan.copiedTypes.join(", "), workspace }),
+    plan.freeProps.length && tr("move.preview.free", { count: plan.freeProps.length, names: plan.freeProps.join(", ") }),
+    plan.droppedLinks && tr("move.preview.links", { count: plan.droppedLinks, from: spaceById(from)?.name ?? "" }),
+  ].filter(Boolean);
+}
+
+/** Asks first if something changes on the way (a type copied, values that become free properties, links left behind). */
 export async function moveTo(id: string, from: string, to: string, parent?: string) {
   const workspace = spaceById(to)?.name ?? "";
   try {
     const plan = await planToSpace(id, from, to);
     if (plan.copiedTypes.length || plan.freeProps.length || plan.droppedLinks) {
-      const lines = [
-        plan.items > 1 && tr(plan.files ? "move.preview.itemsFiles" : "move.preview.items", { count: plan.items, files: plan.files }),
-        plan.copiedTypes.length && tr("move.preview.types", { count: plan.copiedTypes.length, names: plan.copiedTypes.join(", "), workspace }),
-        plan.freeProps.length && tr("move.preview.free", { count: plan.freeProps.length, names: plan.freeProps.join(", ") }),
-        plan.droppedLinks && tr("move.preview.links", { count: plan.droppedLinks, from: spaceById(from)?.name ?? "" }),
-      ].filter(Boolean);
+      const lines = previewLines(plan, from, workspace);
       const item = replica(from).repo.get(id);
       const title = item ? titleOf(item) : tr("untitled");
       if (!(await confirmAction({ title: tr("move.preview.title", { title, workspace }), body: lines.map((l) => `– ${l}`).join("\n"), yes: tr("move.confirm") }))) return;

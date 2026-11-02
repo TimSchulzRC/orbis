@@ -1,7 +1,6 @@
-// The HTTP API of a server as server and app both see it: accounts and workspaces (/api/…) and
-// the undo of a workspace (/w/<id>/api/undo). Errors come as JSON { error } with their status.
+// HTTP API types shared by server and app. Errors come as JSON { error } with their status.
 
-/** Who may create an account: anyone, only with an invite link, or nobody (the first account always may). */
+/** The first account may always sign up, whatever the policy. */
 export type SignupPolicy = "open" | "invite" | "off";
 
 export type Role = "owner" | "member";
@@ -16,7 +15,7 @@ export interface WorkspaceInfo {
   id: string;
   name: string;
   role: Role;
-  /** The data of the server from before accounts: devices keep their local copy of it. */
+  /** The server's data from before accounts; devices keep their local copy of it. */
   legacy?: boolean;
 }
 
@@ -32,13 +31,12 @@ export interface Ok {
   ok: true;
 }
 
-/** How one can sign in on a server (each set up by its admin, see .env.example). */
+/** Each method is enabled by the server admin (.env.example). */
 export interface LoginMethods {
   password: boolean;
-  /** a code sent by email */
   emailCode: boolean;
   passkey: boolean;
-  /** OAuth providers: oidc (any OpenID Connect provider), github, google */
+  /** oidc (any OpenID Connect provider), github, google */
   oauth: { id: string; name: string }[];
 }
 
@@ -55,7 +53,7 @@ export interface ServerInfo {
 export interface AccountInfo {
   user: User;
   admin: boolean;
-  /** the account can sign in with a password */
+  /** the account has a password set */
   password: boolean;
   workspaces: WorkspaceInfo[];
 }
@@ -73,13 +71,13 @@ export interface SignupRequest {
   email?: string;
   password?: string;
   invite?: string;
-  /** the language of the email with the code */
+  /** language of the email with the code */
   lang?: string;
-  /** where codes are on: the code sent to the address (the first answer is { verify: true }) */
+  /** when email codes are on: the code sent to the address (the first answer is { verify: true }) */
   code?: string;
 }
 
-/** POST /api/account/signup where codes are on and no code came yet: send one, then sign up with it. */
+/** POST /api/account/signup with codes on and no code yet: request a code for the address, then sign up again with it. */
 export interface VerifyFirst {
   verify: true;
 }
@@ -94,12 +92,11 @@ export interface SignedIn {
 export interface InviteInfo {
   workspace: string;
   by: string;
-  /** the role whoever joins with it gets */
   role: Role;
   signup: boolean;
 }
 
-/** POST /api/workspaces/<id>/invites: the role it gives (default member). A link works for one person. */
+/** POST /api/workspaces/<id>/invites (role defaults to member). A link works for one person. */
 export interface InviteRequest {
   role?: Role;
 }
@@ -112,14 +109,14 @@ export interface InviteCode {
 /** GET /api/workspaces/<id>/invites (owners only): a link that still works. */
 export interface InviteLink {
   code: string;
-  /** the name of who made it ("" if their account is gone) */
+  /** "" if the creator's account is gone */
   by: string;
   created: number;
   expires: number;
   role: Role;
 }
 
-/** POST /api/workspaces/<id>/mcp-token: a token for agents on the workspace, shown once, with the ready-made commands. */
+/** POST /api/workspaces/<id>/mcp-token. The token is shown only once. */
 export interface McpConnect {
   mcpUrl: string;
   token: string;

@@ -19,18 +19,18 @@ export function StatusMenu({ item, trigger }: { item: Item; trigger: (p: { onCli
   const repo = useRepo();
   const ix = repo.index();
   const schema = ix.schemaOf(item);
-  const sp = statusProp(schema);
-  const cur = sp ? item.props[sp.id] : undefined;
+  const statusProperty = statusProp(schema);
+  const selected = statusProperty ? item.props[statusProperty.id] : undefined;
   return (
     <Popover trigger={trigger}>
       {(close) =>
         STATUS_GROUPS.map((g) => (
           <div key={g}>
             <p className="px-2.5 pb-0.5 pt-1.5 text-xs text-muted-foreground">{t("group." + g)}</p>
-            {(sp?.options ?? [])
+            {(statusProperty?.options ?? [])
               .filter((o) => (o.group ?? "todo") === g)
               .map((o) => (
-                <MenuItem key={o.id} active={o.id === cur} icon={<StatusGlyph option={o} size={14} />} onClick={() => (close(), void setStatus(item, o.id, repo))}>
+                <MenuItem key={o.id} active={o.id === selected} icon={<StatusGlyph option={o} size={14} />} onClick={() => (close(), void setStatus(item, o.id, repo))}>
                   {o.name}
                 </MenuItem>
               ))}
@@ -57,28 +57,29 @@ function openBelow(item: Item, repo: Repo = current): Item[] {
 export async function setStatus(item: Item, optionId: string, repo: Repo = current): Promise<boolean> {
   const ix = repo.index();
   const schema = ix.schemaOf(item);
-  const sp = statusProp(schema);
-  const opt = sp?.options?.find((o) => o.id === optionId);
-  if (!sp || !opt) return false;
-  const before = item.props[sp.id];
-  const closing = (opt.group ?? "todo") === "done" && !isDone(item, schema);
+  const statusProperty = statusProp(schema);
+  const option = statusProperty?.options?.find((o) => o.id === optionId);
+  if (!statusProperty || !option) return false;
+  const before = item.props[statusProperty.id];
+  const closing = (option.group ?? "todo") === "done" && !isDone(item, schema);
   if (closing) {
     const open = openBelow(item, repo);
     if (open.length) {
       const ok = await confirmAction({
         title: tr("tick.openTitle", { title: titleOf(item) }),
         body: tr("tick.openBody", { count: open.length, titles: open.slice(0, 3).map((x) => `„${x.title}“`).join(", ") }),
-        yes: tr("tick.closeAnyway", { name: opt.name }),
+        yes: tr("tick.closeAnyway", { name: option.name }),
       });
       if (!ok) return false;
     }
   }
-  repo.setProp(item.id, sp.id, optionId);
-  if (closing) notify.undo(tr("tick.done", { title: titleOf(item), name: opt.name }), () => repo.setProp(item.id, sp.id, (before as string) ?? null));
+  repo.setProp(item.id, statusProperty.id, optionId);
+  if (closing) notify.undo(tr("tick.done", { title: titleOf(item), name: option.name }), () => repo.setProp(item.id, statusProperty.id, (before as string) ?? null));
   return true;
 }
 
 // Ticked entries stay visible, struck through, for a moment before they leave the list.
+const LINGER = 900;
 const lingering = new Map<string, ReturnType<typeof setTimeout>>();
 const lingerVersion = createStore(0);
 const lingerEmit = () => lingerVersion.set(lingerVersion.get() + 1);
@@ -87,18 +88,15 @@ function useLingering(id: string) {
   return lingering.has(id);
 }
 
-/**
- * The ring in a list: ticks a task off (or reopens it). Entries with open entries below ask
- * first. The write waits a moment so the row can be seen struck through.
- */
+/** The write waits a moment so the row can be seen struck through. */
 export function tick(item: Item, repo: Repo = current) {
   const ix = repo.index();
   const schema = ix.schemaOf(item);
-  const sp = statusProp(schema);
-  if (!sp) return;
-  const next = isDone(item, schema) ? firstOfGroup(schema, "todo") : firstOfGroup(schema, "done");
+  if (!statusProp(schema)) return;
+  const reopening = isDone(item, schema);
+  const next = firstOfGroup(schema, reopening ? "todo" : "done");
   if (!next) return;
-  if (isDone(item, schema) || openBelow(item, repo).length) return void setStatus(item, next.id, repo);
+  if (reopening || openBelow(item, repo).length) return void setStatus(item, next.id, repo);
   if (lingering.has(item.id)) return;
   lingering.set(
     item.id,
@@ -106,15 +104,11 @@ export function tick(item: Item, repo: Repo = current) {
       lingering.delete(item.id);
       void setStatus(repo.get(item.id) ?? item, next.id, repo);
       lingerEmit();
-    }, 900),
+    }, LINGER),
   );
   lingerEmit();
 }
 
-/**
- * A group in a list (by path, status, type …): a quiet heading with its count, then the rows.
- * The same in query blocks, task lists and note lists.
- */
 export function Group({ heading, count, first, children }: { heading?: React.ReactNode; count?: number; first?: boolean; children: React.ReactNode }) {
   return (
     <div className={first ? undefined : "mt-2"}>
@@ -155,12 +149,12 @@ export function ItemRow({
   const hrefOf = useItemHref();
   const ix = repo.index();
   const schema = ix.schemaOf(item);
-  const st = statusOf(item, schema);
+  const status = statusOf(item, schema);
   const ticked = useLingering(item.id);
-  const done = st?.group === "done" || ticked;
+  const done = status?.group === "done" || ticked;
   const due = dueOf(item, schema);
-  const prog = ix.progressOf(item);
-  const blocked = !!st && !done && ix.isBlocked(item);
+  const progress = ix.progressOf(item);
+  const blocked = !!status && !done && ix.isBlocked(item);
   return (
     <div
       data-id={item.id}
@@ -180,9 +174,9 @@ export function ItemRow({
       </a>
       {/* the shape tells the status; words only for what deviates */}
       {blocked && <span className="shrink-0 text-xs text-warn">{t("row.blocked")}</span>}
-      {st && !done && statusShape(st.option) === "paused" && <StatusPill option={st.option} group={st.group} small />}
-      {prog && prog.total > 0 && (
-        <ProgressCount done={prog.done} total={prog.total} className="w-10 shrink-0 text-right text-xs text-muted-foreground" />
+      {status && !done && statusShape(status.option) === "paused" && <StatusPill option={status.option} group={status.group} small />}
+      {progress && progress.total > 0 && (
+        <ProgressCount done={progress.done} total={progress.total} className="w-10 shrink-0 text-right text-xs text-muted-foreground" />
       )}
       {due && <DueLabel due={due} done={done} />}
       {item.file && <span className="shrink-0 text-xs text-muted-foreground">{fmtBytes(lang, item.file.size)}</span>}
@@ -191,9 +185,8 @@ export function ItemRow({
 }
 
 /**
- * The status shape at the start of a row: a click ticks a task off (and back); containers
- * (their "+" creates another type, e.g. a project's tasks) open the status menu instead.
- * Without a status: the entry's icon.
+ * A click ticks a task off (and back). Containers (their "+" creates another type, e.g. a
+ * project's tasks) open the status menu instead. Without a status it shows the entry's icon.
  */
 export function RowStatus({ item, size = 17 }: { item: Item; size?: number }) {
   const { t } = useT();
@@ -204,11 +197,12 @@ export function RowStatus({ item, size = 17 }: { item: Item; size?: number }) {
   const ticked = useLingering(item.id);
   const done = st?.group === "done" || ticked;
   if (!st) return <ItemIcon item={item} size={size - 1} />;
-  const pc = ix.mainChildType(item);
-  const viaMenu = !!pc && pc !== item.type;
+  const childType = ix.mainChildType(item);
+  const viaMenu = !!childType && childType !== item.type;
   // the shape in the option's colour (as on its pill): open grey, running amber, done green …
-  const opt = ticked ? (firstOfGroup(schema, "done") ?? st.option) : st.option;
-  const glyph = <span style={{ color: done ? "var(--ok)" : opt.color && opt.color !== "gray" ? pal(opt.color) : undefined }}><StatusGlyph option={opt} size={size} /></span>;
+  const option = ticked ? (firstOfGroup(schema, "done") ?? st.option) : st.option;
+  const color = done ? "var(--ok)" : option.color && option.color !== "gray" ? pal(option.color) : undefined;
+  const glyph = <span style={{ color }}><StatusGlyph option={option} size={size} /></span>;
   return viaMenu ? (
     <StatusMenu item={item} trigger={(p) => (
       <Button variant="plain" {...p} className="tap-edge shrink-0 text-muted-foreground hover:text-fg" aria-label={t("row.status", { name: st.option.name })} title={st.option.name}>

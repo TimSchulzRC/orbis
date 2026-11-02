@@ -2,11 +2,9 @@ import * as React from "react"
 import { cn, framedFocus } from "../../lib/utils"
 
 const LOOKS = {
-  /** a framed field in a form or a dialog */
   default: "rounded-lg border border-line bg-bg px-3 py-2",
-  /** a small framed field in a row, a menu or a dialog's line */
   sm: "rounded-md border border-line bg-bg px-2 py-1",
-  /** no frame: text in a line, a cell, a bar (the caller places it) */
+  /** the caller places it */
   bare: "",
 }
 

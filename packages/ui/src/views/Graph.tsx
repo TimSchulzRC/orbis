@@ -1,4 +1,3 @@
-// Graph: informations as nodes; links, "Teil von" and relations as edges, filterable.
 import { Checkbox } from "../components/ui/checkbox";
 import { Input } from "../components/ui/input";
 import { NativeSelect } from "../components/ui/native-select";
@@ -40,17 +39,17 @@ function edgesOf(ix: Index, ids: Set<string>, kinds: Set<EdgeKind>): GLink[] {
   const seen = new Set<string>();
   const add = (a: string, b: string, kind: EdgeKind) => {
     if (a === b || !ids.has(a) || !ids.has(b) || !kinds.has(kind)) return;
-    const k = a < b ? a + b + kind : b + a + kind;
-    if (seen.has(k)) return;
-    seen.add(k);
+    const key = a < b ? a + b + kind : b + a + kind;
+    if (seen.has(key)) return;
+    seen.add(key);
     out.push({ source: a, target: b, kind });
   };
   for (const id of ids) {
-    const it = ix.get(id)!;
-    for (const l of ix.textLinks(it)) add(id, l.to, "link");
-    for (const r of it.refs) add(id, r, "link");
+    const item = ix.get(id)!;
+    for (const l of ix.textLinks(item)) add(id, l.to, "link");
+    for (const ref of item.refs) add(id, ref, "link");
     for (const p of ix.parentsOf(id)) add(id, p, "part");
-    for (const v of Object.values(it.rels)) for (const x of v) add(id, x, "rel");
+    for (const targets of Object.values(item.rels)) for (const x of targets) add(id, x, "rel");
   }
   return out;
 }
@@ -61,8 +60,8 @@ function buildGraph(ix: Index, items: Item[], kinds: Set<EdgeKind>) {
   const deg = new Map<string, number>();
   for (const l of links) for (const x of [l.source as string, l.target as string]) deg.set(x, (deg.get(x) ?? 0) + 1);
   const nodes: GNode[] = items.map((n) => {
-    const s = ix.schemaOf(n);
-    return { id: n.id, title: n.title || "–", color: n.kind === "datei" ? "--t-file" : (s?.color ?? "--t-note"), square: !!statusProp(s), deg: deg.get(n.id) ?? 0 };
+    const schema = ix.schemaOf(n);
+    return { id: n.id, title: n.title || "–", color: n.kind === "datei" ? "--t-file" : (schema?.color ?? "--t-note"), square: !!statusProp(schema), deg: deg.get(n.id) ?? 0 };
   });
   return { nodes, links };
 }
@@ -91,39 +90,42 @@ function GraphCanvas({ data, highlight }: { data: { nodes: GNode[]; links: GLink
       .nodeLabel(() => "")
       .linkColor((l) => (l.kind === "part" ? colorOf("violet") + "66" : l.kind === "rel" ? colorOf("teal") + "66" : line))
       .linkWidth((l) => {
-        const h = hover.current;
-        if (!h) return 1;
-        const s = (l.source as GNode).id, t = (l.target as GNode).id;
-        return s === h.id || t === h.id ? 2 : 0.6;
+        const hovered = hover.current;
+        if (!hovered) return 1;
+        const source = (l.source as GNode).id, target = (l.target as GNode).id;
+        return source === hovered.id || target === hovered.id ? 2 : 0.6;
       })
       .nodeCanvasObject((n, ctx, scale) => {
-        const r = 2.5 + Math.sqrt(n.deg) * 1.6;
-        const h = hover.current;
+        const radius = 2.5 + Math.sqrt(n.deg) * 1.6;
+        const hovered = hover.current;
         const lit = hl.current;
-        const dim = (h && h.id !== n.id && !neighbours.get(h.id)?.has(n.id)) || (lit && lit.size > 0 && !lit.has(n.id));
+        const isHovered = hovered?.id === n.id;
+        const nextToHovered = !!hovered && !!neighbours.get(hovered.id)?.has(n.id);
+        const dim = (hovered && !isHovered && !nextToHovered) || (lit && lit.size > 0 && !lit.has(n.id));
         ctx.globalAlpha = dim ? 0.18 : 1;
         ctx.beginPath();
-        if (n.square) ctx.rect(n.x! - r * 0.85, n.y! - r * 0.85, r * 1.7, r * 1.7);
-        else ctx.arc(n.x!, n.y!, r, 0, 2 * Math.PI);
+        if (n.square) ctx.rect(n.x! - radius * 0.85, n.y! - radius * 0.85, radius * 1.7, radius * 1.7);
+        else ctx.arc(n.x!, n.y!, radius, 0, 2 * Math.PI);
         ctx.fillStyle = colorOf(n.color);
         ctx.fill();
-        const showLabel = h?.id === n.id || (h && neighbours.get(h.id)?.has(n.id)) || scale > 2.2 || (scale > 1 && n.deg > 6) || (lit?.has(n.id) && lit.size < 30);
+        // labels: the hovered node and its neighbours, every node when zoomed in, hubs a little earlier, a few highlighted
+        const showLabel = isHovered || nextToHovered || scale > 2.2 || (scale > 1 && n.deg > 6) || (lit?.has(n.id) && lit.size < 30);
         if (showLabel && !dim) {
-          const fs = Math.max(10 / scale, 2.5);
-          ctx.font = `${h?.id === n.id ? 600 : 400} ${fs}px system-ui, sans-serif`;
+          const fontSize = Math.max(10 / scale, 2.5);
+          ctx.font = `${isHovered ? 600 : 400} ${fontSize}px system-ui, sans-serif`;
           ctx.textAlign = "center";
           ctx.textBaseline = "top";
-          ctx.fillStyle = h?.id === n.id ? text : faint;
+          ctx.fillStyle = isHovered ? text : faint;
           const label = n.title.length > 40 ? n.title.slice(0, 38) + "…" : n.title;
-          ctx.fillText(label, n.x!, n.y! + r + 1.5);
+          ctx.fillText(label, n.x!, n.y! + radius + 1.5);
         }
         ctx.globalAlpha = 1;
       })
       .nodePointerAreaPaint((n, color, ctx) => {
-        const r = 4 + Math.sqrt(n.deg) * 1.6;
+        const radius = 4 + Math.sqrt(n.deg) * 1.6;
         ctx.fillStyle = color;
         ctx.beginPath();
-        ctx.arc(n.x!, n.y!, r, 0, 2 * Math.PI);
+        ctx.arc(n.x!, n.y!, radius, 0, 2 * Math.PI);
         ctx.fill();
       })
       .onNodeHover((n) => {
@@ -140,13 +142,13 @@ function GraphCanvas({ data, highlight }: { data: { nodes: GNode[]; links: GLink
       });
     g.d3Force("charge")?.strength?.(-38);
     graph.current = g;
-    const ro = new ResizeObserver(() => {
+    const resize = new ResizeObserver(() => {
       g.width(el.clientWidth);
       g.height(el.clientHeight);
     });
-    ro.observe(el);
+    resize.observe(el);
     return () => {
-      ro.disconnect();
+      resize.disconnect();
       g._destructor();
     };
   }, [theme]); // colours are read once: drawn again when light/dark changes
@@ -156,18 +158,18 @@ function GraphCanvas({ data, highlight }: { data: { nodes: GNode[]; links: GLink
     const neighbours = links.current;
     neighbours.clear();
     for (const l of data.links) {
-      const s = typeof l.source === "string" ? l.source : l.source.id;
-      const t = typeof l.target === "string" ? l.target : l.target.id;
-      if (!neighbours.has(s)) neighbours.set(s, new Set());
-      if (!neighbours.has(t)) neighbours.set(t, new Set());
-      neighbours.get(s)!.add(t);
-      neighbours.get(t)!.add(s);
+      const source = typeof l.source === "string" ? l.source : l.source.id;
+      const target = typeof l.target === "string" ? l.target : l.target.id;
+      if (!neighbours.has(source)) neighbours.set(source, new Set());
+      if (!neighbours.has(target)) neighbours.set(target, new Set());
+      neighbours.get(source)!.add(target);
+      neighbours.get(target)!.add(source);
     }
     // Keep positions of nodes that survive a data change.
     const old = new Map(g.graphData().nodes.map((n) => [n.id, n]));
     const nodes = data.nodes.map((n) => {
-      const o = old.get(n.id);
-      return o ? Object.assign(o, { title: n.title, color: n.color, deg: n.deg }) : { ...n };
+      const kept = old.get(n.id);
+      return kept ? Object.assign(kept, { title: n.title, color: n.color, deg: n.deg }) : { ...n };
     });
     g.graphData({ nodes, links: data.links.map((l) => ({ ...l })) });
     fitted.current = false;
@@ -178,19 +180,19 @@ function GraphCanvas({ data, highlight }: { data: { nodes: GNode[]; links: GLink
     const g = graph.current;
     if (!g) return;
     g.autoPauseRedraw(false);
-    const t = setTimeout(() => g.autoPauseRedraw(true), 300);
+    const timer = setTimeout(() => g.autoPauseRedraw(true), 300);
     if (highlight?.size) g.zoomToFit(500, 80, (n) => highlight.has(n.id));
-    return () => clearTimeout(t);
+    return () => clearTimeout(timer);
   }, [highlight]);
 
   return <div ref={host} className="absolute inset-0" />;
 }
 
 export function GraphView() {
-  const r = useRepo();
+  const repo = useRepo();
   const { t } = useT();
   useDocumentTitle(t("nav.graph"));
-  const ix = r.index();
+  const ix = repo.index();
   const types = ix.typesByName();
   // "" = without type, "#file" = files
   const [hidden, setHidden] = useState<Set<string>>(() => new Set(["#file"]));
@@ -202,26 +204,26 @@ export function GraphView() {
   const data = useMemo(() => {
     const key = (n: Item) => (n.kind === "datei" ? "#file" : (ix.typeOf(n) ?? ""));
     const items = ix.live.filter((n) => n.type !== META_TYPE && !hidden.has(key(n)) && (!tag || n.tags.includes(tag)) && (!hideDone || !isDone(n, ix.schemaOf(n))));
-    const g = buildGraph(ix, items, kinds);
-    if (!hideOrphans) return g;
-    return { nodes: g.nodes.filter((n) => n.deg > 0), links: g.links };
-  }, [r.version, hidden, kinds, hideOrphans, hideDone, tag]);
+    const graph = buildGraph(ix, items, kinds);
+    if (!hideOrphans) return graph;
+    return { nodes: graph.nodes.filter((n) => n.deg > 0), links: graph.links };
+  }, [repo.version, hidden, kinds, hideOrphans, hideDone, tag]);
   const highlight = useMemo(() => {
-    const lq = q.trim().toLowerCase();
-    if (!lq) return undefined;
-    const byTitle = ix.live.filter((n) => n.title.toLowerCase().includes(lq));
-    return new Set((byTitle.length ? byTitle : r.search(q, 15)).map((n) => n.id));
-  }, [q, r.version]);
-  const tags = useMemo(() => ix.tags().slice(0, 80), [r.version]);
+    const needle = q.trim().toLowerCase();
+    if (!needle) return undefined;
+    const byTitle = ix.live.filter((n) => n.title.toLowerCase().includes(needle));
+    return new Set((byTitle.length ? byTitle : repo.search(q, 15)).map((n) => n.id));
+  }, [q, repo.version]);
+  const tags = useMemo(() => ix.tags().slice(0, 80), [repo.version]);
   const chip = (on: boolean) => cn("flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs", on ? "bg-hover text-fg" : "text-muted-foreground");
   return (
     <div className="relative h-full">
       <GraphCanvas data={data} highlight={highlight} />
       <div className="pointer-events-none absolute inset-x-0 top-0 flex flex-wrap items-start gap-2 p-3">
         <div className="pointer-events-auto flex flex-wrap items-center gap-1 rounded-xl border border-line bg-surface/90 p-1 shadow-sm backdrop-blur">
-          {types.map((tp) => (
-            <Button variant="plain" key={tp.id} onClick={() => setHidden(toggled(hidden, tp.id))} className={chip(!hidden.has(tp.id))} aria-pressed={!hidden.has(tp.id)}>
-              <TypeGlyph schema={tp.schema} size={13} /> {tp.schema.name}
+          {types.map((type) => (
+            <Button variant="plain" key={type.id} onClick={() => setHidden(toggled(hidden, type.id))} className={chip(!hidden.has(type.id))} aria-pressed={!hidden.has(type.id)}>
+              <TypeGlyph schema={type.schema} size={13} /> {type.schema.name}
             </Button>
           ))}
           <Button variant="plain" onClick={() => setHidden(toggled(hidden, ""))} className={chip(!hidden.has(""))} aria-pressed={!hidden.has("")}>

@@ -1,34 +1,27 @@
-// How people sign in on this server, from the environment (see .env.example). OBTION_LOGIN lists
-// the ways: password, code (by email), passkey; default "password,passkey". OAuth providers (any
-// OpenID Connect provider, GitHub, Google) come with their own settings. Sending mail (SMTP) is a
-// setting of its own: it switches nothing on.
+// Sign-in methods from the environment (see .env.example). SMTP settings alone switch nothing on.
 import { createTransport } from "nodemailer";
 import type { LoginMethods } from "@obtion/core/api";
 
 export interface OAuthProvider {
-  /** oidc (generic OpenID Connect), github, google */
   id: "oidc" | "github" | "google";
-  /** the button's label */
+  /** button label */
   name: string;
   clientId: string;
   clientSecret: string;
-  /** oidc: the provider's discovery document */
+  /** oidc only */
   discoveryUrl?: string;
 }
 
-/** Sends a sign-in code. */
 export type SendCode = (to: string, code: string, lang: string | undefined) => Promise<void>;
 
 export interface LoginConfig {
   password: boolean;
-  /** codes by email: how they are sent */
   sendCode?: SendCode;
-  /** passkeys: bound to one host name, the public one */
+  /** bound to the public host name */
   passkey?: { rpID: string; origin: string };
   oauth: OAuthProvider[];
 }
 
-/** The ways OBTION_LOGIN can list. */
 const WAYS = ["password", "code", "passkey"] as const;
 const DEFAULT_LOGIN = "password,passkey";
 
@@ -37,7 +30,7 @@ const MAIL = {
   en: { subject: (code: string) => `${code} is your Obtion sign-in code`, body: (code: string, host: string) => `Your code for signing in at ${host}:\n\n${code}\n\nIt is valid for 10 minutes. If you did not try to sign in, ignore this email.` },
 };
 
-/** Codes by email: over SMTP, or (OBTION_SMTP_URL=log) into the server's log for whoever reads it. */
+// OBTION_SMTP_URL=log prints the codes to the server log instead of sending mail.
 function mailer(env: Record<string, string | undefined>, host: string): SendCode | undefined {
   const url = env.OBTION_SMTP_URL?.trim();
   if (!url) return undefined;
@@ -48,17 +41,14 @@ function mailer(env: Record<string, string | undefined>, host: string): SendCode
   const from = env.OBTION_MAIL_FROM?.trim() || `Obtion <obtion@${host.replace(/:\d+$/, "")}>`;
   const transport = createTransport(url);
   return async (to, code, lang) => {
-    const m = lang === "en" ? MAIL.en : MAIL.de;
-    await transport.sendMail({ from, to, subject: m.subject(code), text: m.body(code, host) }).catch((e: unknown) => {
+    const mail = lang === "en" ? MAIL.en : MAIL.de;
+    await transport.sendMail({ from, to, subject: mail.subject(code), text: mail.body(code, host) }).catch((e: unknown) => {
       console.error(`[obtion] could not send the sign-in code to ${to}:`, e instanceof Error ? e.message : e);
     });
   };
 }
 
-/**
- * The sign-in methods the environment sets up. `publicUrl`: OBTION_PUBLIC_URL (passkeys and OAuth
- * need it). Throws when the settings cannot work (codes without a way to send them, no way to sign up).
- */
+/** Throws when the settings cannot work, e.g. codes without a mailer or no way to sign up. */
 export function loginConfig(env: Record<string, string | undefined>, publicUrl: string): LoginConfig {
   const pub = publicUrl ? new URL(publicUrl) : undefined;
   const listed = env.OBTION_LOGIN?.trim();
@@ -99,7 +89,6 @@ export function loginConfig(env: Record<string, string | undefined>, publicUrl: 
   return config;
 }
 
-/** What the sign-in page offers (GET /api/info). */
 export const loginMethods = (c: LoginConfig): LoginMethods => ({
   password: c.password,
   emailCode: !!c.sendCode,

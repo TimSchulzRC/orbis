@@ -4,10 +4,8 @@ import "@obtion/ui/styles.css";
 import { App, refresh } from "@obtion/ui";
 import { initUpdates } from "./update";
 
-// Service worker: a new version waits until the user reloads it from the one notice (update.ts).
 initUpdates();
 
-// the account's workspaces, as the server knows them now (offline: as last known)
 void refresh();
 
 createRoot(document.getElementById("root")!).render(

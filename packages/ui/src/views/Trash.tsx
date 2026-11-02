@@ -1,4 +1,3 @@
-// The trash of every workspace (or the ones chosen here, apart from the sidebar's choice), newest first.
 import { useState } from "react";
 import { RotateCcw } from "lucide-react";
 import type { Item } from "@obtion/core/model";
@@ -13,10 +12,10 @@ import { useT, titleOf } from "../i18n";
 import { Button, Empty } from "../ui/primitives";
 import { ItemIcon, RelTime } from "../ui/item-look";
 
-/** What a workspace's trash lists: items deleted together with a root are listed with it and come back with it. */
-function trashed(r: Repo): Item[] {
-  const withRoot = (i: Item) => !!i.deletedVia && !!r.records.get(i.deletedVia)?.deleted;
-  return [...r.records.values()].filter((i) => i.deleted && !withRoot(i) && (i.kind === "info" || i.kind === "datei"));
+/** Items deleted together with a root are listed with it and come back with it. */
+function trashed(repo: Repo): Item[] {
+  const withRoot = (i: Item) => !!i.deletedVia && !!repo.records.get(i.deletedVia)?.deleted;
+  return [...repo.records.values()].filter((i) => i.deleted && !withRoot(i) && (i.kind === "info" || i.kind === "datei"));
 }
 
 export function TrashView() {
@@ -50,45 +49,46 @@ export function TrashView() {
   );
 }
 
-/** One deleted item in its workspace's scope; `space`: the workspace's name, with several. */
-function TrashRow({ item: i, space }: { item: Item; space?: string }) {
-  const r = useRepo();
+/** `space`: the workspace's name, with several. */
+function TrashRow({ item, space }: { item: Item; space?: string }) {
+  const repo = useRepo();
   const itemHref = useItemHref();
   const { t } = useT();
   // where it was: its home and the homes above (so two "R&S" in the trash can be told apart)
   const path: string[] = [];
-  let id = i.home ?? Object.keys(i.parents)[0];
+  let id = item.home ?? Object.keys(item.parents)[0];
   for (let n = 0; id && n < 4; n++) {
-    const p = r.records.get(id);
-    if (!p) break;
-    path.unshift(titleOf(p, t));
-    id = p.home ?? Object.keys(p.parents)[0];
+    const place = repo.records.get(id);
+    if (!place) break;
+    path.unshift(titleOf(place, t));
+    id = place.home ?? Object.keys(place.parents)[0];
   }
   const where = [space, path.join(" › ")].filter(Boolean).join(" · ");
-  const children = cascadeCount(r.records, i.id);
+  const children = cascadeCount(repo.records, item.id);
   const restore = () => {
-    r.restore(i.id);
+    repo.restore(item.id);
     // say where it went once the index has it back
     setTimeout(() => {
-      const ix = r.index();
-      const now = ix.get(i.id);
-      const home = now ? ix.homePath(i.id) : [];
-      const title = titleOf(i, t);
-      notify(home.length ? t("trash.restoredUnder", { title, place: ix.pathText(home) }) : now && isInInbox(now, ix) ? t("trash.restoredInbox", { title }) : t("trash.restored", { title }));
+      const ix = repo.index();
+      const now = ix.get(item.id);
+      const home = now ? ix.homePath(item.id) : [];
+      const title = titleOf(item, t);
+      if (home.length) notify(t("trash.restoredUnder", { title, place: ix.pathText(home) }));
+      else notify(now && isInInbox(now, ix) ? t("trash.restoredInbox", { title }) : t("trash.restored", { title }));
     }, 50);
   };
   return (
     <>
-      <ItemIcon item={i} size={15} />
+      <ItemIcon item={item} size={15} />
       <span className="flex min-w-0 flex-1 flex-col">
-        <a href={itemHref(i.id)} className="truncate hover:underline">
-          {titleOf(i, t)}
+        <a href={itemHref(item.id)} className="truncate hover:underline">
+          {titleOf(item, t)}
         </a>
         {where && <span className="truncate text-xs text-muted-foreground">{where}</span>}
       </span>
       {children > 0 && <span className="text-xs text-muted-foreground">{t("trash.withChildren", { count: children })}</span>}
       <span className="text-xs text-muted-foreground">
-        <RelTime ts={i.updated} />
+        <RelTime ts={item.updated} />
       </span>
       <Button onClick={restore}>
         <RotateCcw size={14} /> {t("item.restore")}

@@ -1,13 +1,11 @@
-// The replica's platform in a browser (web app, later the desktop app's window): IndexedDB as
-// storage, a workspace on the server that served the page, other tabs over
-// BroadcastChannel, dialogs of the UI.
+// The replica's host in a browser: IndexedDB storage, the serving server's workspace, other tabs
+// over BroadcastChannel, UI dialogs.
 import { openDB, type IDBPDatabase } from "idb";
 import type { OutItem, RepoHost, ReplicaStorage, SyncSocket, TabMsg } from "@obtion/sync";
 import type { Person } from "@obtion/core/origin";
 import { tr } from "./i18n";
 import { KEYS, readJSON, writeJSON } from "./ui/storage";
 
-/** Where a workspace is: its address on the server (…/w/<id>), the account (token, who), the names of its storage here. */
 export interface SpaceLink {
   base: string;
   token: string;
@@ -17,26 +15,22 @@ export interface SpaceLink {
 
 export type StorageNames = ReturnType<typeof storageNames>;
 
-/**
- * The names of a workspace's storage on this device: the replica (IndexedDB and BroadcastChannel),
- * its files (IndexedDB) and their blobs (OPFS). The data from before accounts keeps the names it had.
- */
+/** Data from before accounts keeps its old names. */
 export function storageNames(space: { id: string; legacy?: boolean }) {
   if (space.legacy) return { replica: "obtion", files: "obtion-files", blobs: "blobs" };
   const replica = `obtion-ws-${space.id}`;
   return { replica, files: `${replica}-files`, blobs: `blobs-${replica}` };
 }
 
-/** The replica in IndexedDB: stores "updates" (per document), "outbox", "meta" (cursor, server id). */
 function idbStorage(name: string): ReplicaStorage {
   let db!: IDBPDatabase;
   return {
     async open() {
       db = await openDB(name, 1, {
-        // Another tab wants to delete/upgrade the database (e.g. "re-download everything"): step aside.
+        // Another tab wants to delete or upgrade the database (e.g. "re-download everything").
         blocking: () => {
           db.close();
-          // Signing out already clears the account and will reload after all copies are removed.
+          // Signing out reloads by itself once all copies are removed.
           if (localStorage.getItem(KEYS.account) !== "null") location.reload();
         },
         upgrade(db) {
@@ -89,14 +83,14 @@ function idbStorage(name: string): ReplicaStorage {
     async destroy() {
       db.close();
       await new Promise((res) => {
-        const r = indexedDB.deleteDatabase(name);
-        r.onsuccess = r.onerror = r.onblocked = res;
+        const request = indexedDB.deleteDatabase(name);
+        request.onsuccess = request.onerror = request.onblocked = res;
       });
     },
   };
 }
 
-/** The browser as the replica's platform for one workspace. The token goes as subprotocol: browsers send no headers on WebSockets. */
+/** The token goes as a subprotocol because browsers send no headers on WebSockets. */
 export function browserHost(link: SpaceLink): RepoHost {
   const bc = typeof BroadcastChannel !== "undefined" ? new BroadcastChannel(link.storage.replica) : null;
   return {
@@ -126,7 +120,7 @@ export function browserHost(link: SpaceLink): RepoHost {
     },
     async askOtherServer() {
       const { chooseAction } = await import("./ui/feedback");
-      const answer = await chooseAction({
+      return chooseAction({
         title: tr("sync.otherServer.title"),
         body: tr("sync.otherServer.body"),
         choices: [
@@ -134,7 +128,6 @@ export function browserHost(link: SpaceLink): RepoHost {
           { key: "replace", label: tr("sync.otherServer.replace"), primary: true },
         ],
       });
-      return answer;
     },
     async confirmDiscard(count) {
       const { chooseAction } = await import("./ui/feedback");
@@ -147,12 +140,15 @@ export function browserHost(link: SpaceLink): RepoHost {
   };
 }
 
-/** How this device is named in the origin of its changes (kept for later queries, never shown): made once, kept in the browser. */
+/** First match wins: an iPad's agent also says "Mac". */
+const DEVICE_NAMES: [RegExp, string][] = [[/iPhone/, "iPhone"], [/iPad/, "iPad"], [/Android/, "Android"], [/Mac/, "Mac"], [/Windows/, "Windows"]];
+
+/** Names this device in the origin of its changes (for later queries, never shown). */
 function deviceName(): string {
   const saved = readJSON(KEYS.device, "");
   if (saved) return saved;
   const ua = navigator.userAgent;
-  const name = /iPhone/.test(ua) ? "iPhone" : /iPad/.test(ua) ? "iPad" : /Android/.test(ua) ? "Android" : /Mac/.test(ua) ? "Mac" : /Windows/.test(ua) ? "Windows" : "Browser";
+  const name = DEVICE_NAMES.find(([pattern]) => pattern.test(ua))?.[1] ?? "Browser";
   const full = `${name}-${Math.random().toString(36).slice(2, 6)}`;
   writeJSON(KEYS.device, full);
   return full;
