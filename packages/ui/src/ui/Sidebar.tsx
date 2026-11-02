@@ -3,13 +3,13 @@
 // another workspace's block, an item moves there. Dragging a workspace's name to the nearest gap
 // reorders the blocks; the order is the account's, on every device.
 import { useEffect, useState } from "react";
-import { ArrowDown, ArrowLeft, ArrowUp, ChevronRight, ChevronDown, History, Search, Settings, Link2, Plus, Paperclip, Shapes, Sun, Trash2, Waypoints } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowUp, ChevronRight, ChevronDown, History, Search, Settings, Link2, Plus, Paperclip, Pencil, RotateCcw, Sun, Trash2, Waypoints } from "lucide-react";
 import { type Item, META_TYPE, SETTINGS_ID, setSchemaField, setSettings } from "@obtion/core/model";
 import { sidebarChildren, sidebarRoots } from "@obtion/core/placement";
 import { keyBetween, keysFor, cmpKey } from "@obtion/core/sortkey";
 import { useRepo, useRoute, useSpaceId, itemPath, spaceHref, useLocalStorage, leavePage, navigate } from "../hooks";
 import { type Space, moveSpace, useAccounts } from "../accounts";
-import { useT } from "../i18n";
+import { getLang, useT } from "../i18n";
 import { Button, IconButton, Kbd, MenuItem, MoreMenu, REVEAL, useContextMenu } from "./primitives";
 import { TypeGlyph, ItemIcon } from "./item-look";
 import { cn, moveInArray } from "../lib/utils";
@@ -21,6 +21,8 @@ import { NewSpaceDialog, SpaceScope, SpaceSelector, moveTo } from "./Spaces";
 import { KEYS } from "./storage";
 import { notify } from "./toasts";
 import { openSettings, openSpaceSettings } from "./settings-open";
+import { editType, openNewType } from "./type-edit";
+import { restoreDefaultTypes } from "@obtion/core/setup";
 import { Tip } from "../components/ui/tooltip";
 
 /**
@@ -172,8 +174,14 @@ export function SpaceTree({ space, touch }: { space: Space; touch?: boolean }) {
   const [typesOpen, setTypesOpen] = useLocalStorage<boolean>(KEYS.sidebarTypes(space.id), shown.length === 1);
   const [over, setOver] = useState(false);
   const menu = useContextMenu();
+  const typesMenu = useContextMenu();
   const ix = repo.index();
   const roots = sidebarRoots(ix);
+  // missing or deleted default types come back; the others stay as they are
+  const restoreTypes = () => {
+    const changed = restoreDefaultTypes(repo.writer, getLang(), repo.origin);
+    notify(changed.length ? t("types.restored") : t("types.allThere"));
+  };
   const ready = !!repo.get(SETTINGS_ID);
   const row = cn("flex items-center gap-2 rounded-lg pr-2", touch ? "py-2 text-[15px]" : "py-1 text-sm");
   // up and down among the blocks seen (the hidden ones keep their place in the order)
@@ -234,7 +242,6 @@ export function SpaceTree({ space, touch }: { space: Space; touch?: boolean }) {
           {(close) => (
             <>
               <MenuItem icon={<Settings size={14} />} onClick={() => (close(), openSpaceSettings(space.id))}>{t("space.settings")}</MenuItem>
-              <MenuItem icon={<Shapes size={14} />} onClick={() => (close(), go("/types"))}>{t("nav.types")}</MenuItem>
               <MenuItem icon={<Waypoints size={14} />} onClick={() => (close(), go("/graph"))}>{t("nav.graph")}</MenuItem>
               {shown.length > 1 && (
                 <>
@@ -252,11 +259,29 @@ export function SpaceTree({ space, touch }: { space: Space; touch?: boolean }) {
       {open && ready && (
         <div className={cn(!touch && "px-2")}>
           <PinnedTree touch={touch} here={here} />
-          {/* a label over the types, not a row like the pinned: smaller, no hover */}
-          <Button variant="plain" onClick={() => setTypesOpen(!typesOpen)} aria-expanded={typesOpen} className={cn("mt-2 flex w-full items-center gap-1 pl-2.5 font-medium text-muted-foreground hover:text-fg", touch ? "py-1.5 text-[13px]" : "py-1 text-xs")}>
-            <ChevronRight size={12} className={cn("shrink-0 text-faint transition-transform", typesOpen && "rotate-90")} />
-            {t("nav.types")}
-          </Button>
+          {/* a label over the types, not a row like the pinned: smaller, no hover; its "…" makes
+              a new type or brings the default ones back */}
+          <div onContextMenu={touch ? undefined : typesMenu.onContextMenu} className="group/types mt-2 flex items-center pr-1">
+            <Button variant="plain" onClick={() => setTypesOpen(!typesOpen)} aria-expanded={typesOpen} className={cn("flex min-w-0 flex-1 items-center gap-1 pl-2.5 font-medium text-muted-foreground hover:text-fg", touch ? "py-1.5 text-[13px]" : "py-1 text-xs")}>
+              <ChevronRight size={12} className={cn("shrink-0 text-faint transition-transform", typesOpen && "rotate-90")} />
+              {t("nav.types")}
+            </Button>
+            <MoreMenu
+              menu={touch ? undefined : typesMenu}
+              align="left"
+              size="xs"
+              iconSize={14}
+              label={t("nav.typesMenu")}
+              className={touch ? "p-1.5" : "opacity-0 focus:opacity-100 group-hover/types:opacity-100 pointer-coarse:opacity-100"}
+            >
+              {(close) => (
+                <>
+                  <MenuItem icon={<Plus size={14} />} onClick={() => (close(), openNewType(space.id))}>{t("types.new")}</MenuItem>
+                  <MenuItem icon={<RotateCcw size={14} />} onClick={() => (close(), restoreTypes())}>{t("types.restore")}</MenuItem>
+                </>
+              )}
+            </MoreMenu>
+          </div>
           {typesOpen && <TypeNav touch={touch} here={here} />}
         </div>
       )}
@@ -335,10 +360,7 @@ function TypeNav({ touch, here }: { touch?: boolean; here: boolean }) {
   return (
     <nav className="flex flex-col gap-px" aria-label={t("nav.types")}>
       {rows.map((row) => (
-        <a
-          key={row.id}
-          href={row.href}
-          draggable={!touch}
+        <TypeRow key={row.id} row={row} touch={touch} active={active(row.id)} drop={drop?.id === row.id ? (drop.before ? "before" : "after") : null}
           onDragStart={(e) => startDrag(e, { id: row.id, from: "types", space }, row.label)}
           onDragOver={(e) => {
             if (!ours() || dragging!.id === row.id) return;
@@ -353,15 +375,52 @@ function TypeNav({ touch, here }: { touch?: boolean; here: boolean }) {
             dragging = null;
             setDrop(null);
           }}
-          aria-current={active(row.id) ? "page" : undefined}
-          className={cn("relative flex items-center gap-2 rounded-lg pl-[30px] pr-2", touch ? "py-2 text-[15px]" : "py-1 text-sm", active(row.id) ? "bg-hover font-medium text-fg" : "text-muted-foreground hover:bg-hover hover:text-fg")}
-        >
-          {drop?.id === row.id && <span className={cn("absolute inset-x-1 h-0.5 rounded bg-focus", drop.before ? "-top-px" : "-bottom-px")} />}
-          {row.icon}
-          <span className="min-w-0 flex-1 truncate">{row.label}</span>
-        </a>
+        />
       ))}
     </nav>
+  );
+}
+
+/**
+ * A type (or the files) under a workspace: dragged to reorder; a type's "…" (or a right click)
+ * has "Typ bearbeiten". The link covers the whole row (::after), only the "…" lies above it.
+ */
+function TypeRow({ row: r, touch, active, drop, ...drag }: {
+  row: { id: string; label: string; href: string; icon: React.ReactNode };
+  touch?: boolean;
+  active: boolean;
+  drop: "before" | "after" | null;
+  onDragStart: (e: React.DragEvent) => void;
+  onDragOver: (e: React.DragEvent) => void;
+  onDragLeave: () => void;
+  onDrop: (e: React.DragEvent) => void;
+}) {
+  const { t } = useT();
+  const space = useSpaceId()!;
+  const menu = useContextMenu();
+  const isType = r.id !== "files";
+  return (
+    <div
+      draggable={!touch}
+      {...drag}
+      onContextMenu={touch || !isType ? undefined : menu.onContextMenu}
+      className={cn("group/row relative flex items-center gap-2 rounded-lg pl-[30px] pr-1", touch ? "py-2 text-[15px]" : "py-1 text-sm", active ? "bg-hover font-medium text-fg" : "text-muted-foreground hover:bg-hover hover:text-fg")}
+    >
+      {drop && <span className={cn("absolute inset-x-1 h-0.5 rounded bg-focus", drop === "before" ? "-top-px" : "-bottom-px")} />}
+      {r.icon}
+      <a href={r.href} draggable={false} aria-current={active ? "page" : undefined} className="min-w-0 flex-1 truncate after:absolute after:inset-0 after:rounded-lg">
+        {r.label}
+      </a>
+      {!touch && isType && (
+        <MoreMenu menu={menu} size="xs" iconSize={14} tabIndex={-1} className={cn("relative z-10 hover:bg-surface-2", REVEAL.row)}>
+          {(close) => (
+            <MenuItem icon={<Pencil size={14} />} onClick={() => (close(), editType(r.id, active ? undefined : { space }))}>
+              {t("type.edit")}
+            </MenuItem>
+          )}
+        </MoreMenu>
+      )}
+    </div>
   );
 }
 
@@ -528,6 +587,7 @@ function TreeNode({
         {!touch && <MoreMenu menu={menu} size="xs" iconSize={14} tabIndex={-1} className={cn("relative z-10 hover:bg-surface-2", REVEAL.row)}>
           {(close) => (
             <>
+              {isType && <MenuItem onClick={() => (close(), editType(item.id, activeId === item.id ? undefined : { space }))}>{t("type.edit")}</MenuItem>}
               <MenuItem onClick={() => (close(), repo.pin(item.id, !item.pinned))}>{item.pinned ? t("item.unpin") : t("item.pin")}</MenuItem>
               {parent && secondary && <MenuItem onClick={() => (close(), repo.setHome(item.id, parent))}>{t("place.makeHome")}</MenuItem>}
               {/* types are deleted on their page, with the preview of what becomes of the values */}

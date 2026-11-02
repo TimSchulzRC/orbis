@@ -23,7 +23,7 @@ import { FilesPage } from "./views/Lists";
 import { Today } from "./views/Today";
 import { Tray } from "./ui/Tray";
 import { entryKey, setShelfPinned, syncShelf, useInboxItems, useShelf } from "./ui/inbox";
-import { TypesView } from "./views/Types";
+import { NewTypeHost } from "./views/Types";
 import { GraphView } from "./views/Graph";
 import { Activity } from "./views/Activity";
 import { TrashView } from "./views/Trash";
@@ -143,8 +143,6 @@ function Main() {
         return <SearchView />;
       case "files":
         return <FilesPage />;
-      case "types":
-        return <TypesView />;
       case "graph":
         return <GraphView />;
       case "activity":
@@ -216,6 +214,7 @@ function Main() {
       )}
       {captureOpen && <CaptureSheet onClose={() => setCaptureOpen(false)} />}
       <SettingsHost />
+      <NewTypeHost />
       <AgentNotice />
       <LightboxHost />
     </div>
@@ -305,6 +304,8 @@ function oldAddress(parts: string[], space?: string): string | undefined {
   if (parts[0] === "inbox" && parts[1]) return `/review?at=${encodeURIComponent(entryKey(activeSpace()!.id, parts[1]))}`;
   // workspace settings (before 31.10.)
   if (parts[0] === "workspace") return "/settings";
+  // the list of types (before 1.11.)
+  if (parts[0] === "types") return "/";
   // per-workspace activity or trash (before 1.11.)
   if ((parts[0] === "activity" || parts[0] === "trash") && space) return "/" + parts[0];
 }
