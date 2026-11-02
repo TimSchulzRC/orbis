@@ -2,8 +2,7 @@ import { ToggleGroup, ToggleGroupItem } from "../components/ui/toggle-group";
 import { Button as ShadcnButton } from "../components/ui/button";
 import { Dialog as DialogRoot, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { Popover as PopoverRoot, PopoverAnchor, PopoverContent } from "../components/ui/popover";
-import { type ComponentProps, type ComponentType, type MouseEvent, type ReactElement, type ReactNode, useRef, useState } from "react";
-import { Tooltip as TooltipPrimitive } from "radix-ui";
+import { type ComponentProps, type ComponentType, type MouseEvent, type ReactNode, useRef, useState } from "react";
 import { X, Check, ChevronDown, MoreHorizontal, Plus } from "lucide-react";
 import { useT } from "../i18n";
 import { cn } from "../lib/utils";
@@ -27,36 +26,6 @@ export function IconButton({ label, icon: Icon, size = "md", iconSize = 16, clas
     <ShadcnButton variant="plain" size="none" type="button" title={label} aria-label={label} {...rest} className={cn("tap inline-flex items-center justify-center text-muted-foreground transition-colors hover:bg-hover hover:text-fg disabled:opacity-40", ICON_SIZES[size], className)}>
       <Icon size={iconSize} />
     </ShadcnButton>
-  );
-}
-
-/**
- * Faster than the browser's `title`. Radix opens it only on hover and focus, so never on touch. Give
- * the button no `title`, or the browser shows its own tooltip as well. With `card` it is a small
- * card instead of the dark label (`label` is then what a screen reader hears); `off` keeps it shut.
- */
-export function Tip({ label, card, off, children }: { label: string; card?: ReactNode; off?: boolean; children: ReactElement }) {
-  return (
-    <TooltipPrimitive.Provider delayDuration={150} skipDelayDuration={400}>
-      <TooltipPrimitive.Root open={off ? false : undefined}>
-        <TooltipPrimitive.Trigger asChild>{children}</TooltipPrimitive.Trigger>
-        <TooltipPrimitive.Portal>
-          <TooltipPrimitive.Content
-            side="top"
-            align={card ? "start" : "center"}
-            sideOffset={card ? 10 : 6}
-            collisionPadding={8}
-            aria-label={card ? label : undefined}
-            className={cn(
-              "z-50 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=delayed-open]:animate-in data-[state=delayed-open]:fade-in-0",
-              card ? "rounded-xl border border-line bg-surface p-3 text-[13px] text-fg shadow-[var(--shadow-pop)]" : "rounded-md bg-fg px-2 py-1 text-xs font-medium text-bg shadow-md",
-            )}
-          >
-            {card ?? label}
-          </TooltipPrimitive.Content>
-        </TooltipPrimitive.Portal>
-      </TooltipPrimitive.Root>
-    </TooltipPrimitive.Provider>
   );
 }
 
@@ -291,6 +260,6 @@ export function Dialog({ title, children, onClose, wide }: { title: string; chil
 
 export function Seg<T extends string>({ value, options, onChange, label }: { value: T; options: { value: T; label: ReactNode }[]; onChange: (v: T) => void; label: string }) {
   return <ToggleGroup type="single" value={value} onValueChange={(v) => { if (v) onChange(v as T); }} aria-label={label} className="inline-flex rounded-lg border border-line bg-secondary p-0.5 text-xs">
-    {options.map((o) => <ToggleGroupItem key={o.value} value={o.value} className="tap h-auto min-w-0 rounded-md px-2 py-0.5 text-xs data-[state=on]:bg-card data-[state=on]:font-medium data-[state=on]:shadow-sm">{o.label}</ToggleGroupItem>)}
+    {options.map((o) => <ToggleGroupItem key={o.value} value={o.value} className="tap h-auto min-w-0 rounded-md px-2 py-0.5 text-xs data-[state=on]:bg-card data-[state=on]:font-medium data-[state=on]:shadow-sm dark:text-muted-foreground dark:data-[state=on]:bg-foreground/15 dark:data-[state=on]:text-foreground">{o.label}</ToggleGroupItem>)}
   </ToggleGroup>;
 }

@@ -3,9 +3,8 @@
 // Mouse only; touch has no hover.
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { TIP_CLASS } from "../components/ui/tooltip";
 
-/** The look of every tooltip in the app (components/ui/tooltip.tsx too). */
-export const TIP_CLASS = "rounded-md border border-line bg-popover px-2 py-1 text-xs leading-snug text-popover-foreground shadow-md";
 
 const DELAY = 500;
 const GAP = 6;

@@ -13,7 +13,8 @@ import { useRepo, useIndex, itemHref, leavePage, setParams, showTitle, useDocume
 import { repo } from "../repo";
 import { useT, tr, getLang, titleOf } from "../i18n";
 import { Editor, insertFilesAtCursor } from "../ui/Editor";
-import { Button, Dialog, MenuItem, Popover, MoreMenu, PagePlaceholder, Tip } from "../ui/primitives";
+import { Button, Dialog, MenuItem, Popover, MoreMenu, PagePlaceholder } from "../ui/primitives";
+import { Tip } from "../components/ui/tooltip";
 import { ItemIcon, TypeChip, TypeGlyph } from "../ui/item-look";
 import { ProgressBand } from "../ui/progress";
 import { cn } from "../lib/utils";
