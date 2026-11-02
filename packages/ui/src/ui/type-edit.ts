@@ -22,7 +22,8 @@ export function editType(id: string, open?: { space?: string }) {
 
 export const closeTypeEditor = () => set(null);
 /** The type whose editor is open, or null. */
-export const useTypeEditing = () => useSyncExternalStore((f) => (listeners.add(f), () => listeners.delete(f)), () => editing);
+export const typeEditing = () => editing;
+export const useTypeEditing = () => useSyncExternalStore((f) => (listeners.add(f), () => listeners.delete(f)), typeEditing);
 
 // another page (also the same type in another workspace) closes it, else it would open again
 // on the next visit to that type
@@ -39,4 +40,6 @@ const setCreating = (next: string | null) => ((creating = next), createListeners
 /** "Neuer Typ" in workspace `space`. */
 export const openNewType = (space: string) => setCreating(space);
 export const closeNewType = () => setCreating(null);
-export const useNewTypeOpen = () => useSyncExternalStore((f) => (createListeners.add(f), () => createListeners.delete(f)), () => creating);
+/** The workspace whose "Neuer Typ" dialog is open, or null. */
+export const newTypeOpen = () => creating;
+export const useNewTypeOpen = () => useSyncExternalStore((f) => (createListeners.add(f), () => createListeners.delete(f)), newTypeOpen);

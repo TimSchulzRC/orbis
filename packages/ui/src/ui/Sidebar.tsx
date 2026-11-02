@@ -180,7 +180,7 @@ export function SpaceTree({ space, touch }: { space: Space; touch?: boolean }) {
   // missing or deleted default types come back; the others stay as they are
   const restoreTypes = () => {
     const changed = restoreDefaultTypes(repo.writer, getLang(), repo.origin);
-    notify(changed.length ? t("types.restored") : t("types.allThere"));
+    notify(t("types.restored", { count: changed.length }));
   };
   const ready = !!repo.get(SETTINGS_ID);
   const row = cn("flex items-center gap-2 rounded-lg pr-2", touch ? "py-2 text-[15px]" : "py-1 text-sm");
@@ -271,7 +271,7 @@ export function SpaceTree({ space, touch }: { space: Space; touch?: boolean }) {
               align="left"
               size="xs"
               iconSize={14}
-              label={t("nav.typesMenu")}
+              label={t("types.menu")}
               className={touch ? "p-1.5" : "opacity-0 focus:opacity-100 group-hover/types:opacity-100 pointer-coarse:opacity-100"}
             >
               {(close) => (
@@ -332,7 +332,7 @@ function PinnedTree({ touch, here }: { touch?: boolean; here: boolean }) {
   );
 }
 
-/** The page of every type of a workspace and the files, in an order of their own (synced); a new type comes last. New types are made on the types page. */
+/** The page of every type of a workspace and the files, in an order of their own (synced); a new type comes last. New types are made from the "…" next to "Typen". */
 function TypeNav({ touch, here }: { touch?: boolean; here: boolean }) {
   const { t } = useT();
   const repo = useRepo();
