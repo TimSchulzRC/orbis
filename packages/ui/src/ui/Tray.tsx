@@ -1,17 +1,18 @@
 // The inbox tray below every page. The tray opens its panel to look in; its button starts the
 // review to sort. On Heute on a desktop with room, the panel is pinned open as part of the page.
-import { type CSSProperties, useRef } from "react";
-import { Check, ChevronDown, ChevronUp, Layers, Plus } from "lucide-react";
+import { useRef } from "react";
+import { Check, ChevronDown, ChevronUp, Inbox, Layers, Plus } from "lucide-react";
 import { useT } from "../i18n";
 import { cn } from "../lib/utils";
 import { Capture } from "./Capture";
 import { type InboxEntry, dismissShelf, openReview, openShelf, useInboxItems, useShelf } from "./inbox";
 import { ShelfPanel } from "./Shelf";
 import { ReviewPanel } from "../views/Review";
-import { Button } from "./primitives";
+import { Button, Tip } from "./primitives";
 import { Backdrop } from "../components/ui/dialog";
 
 const FILL = 10;
+const DAY = 86_400_000;
 /** Pixels a finger moves up on the tray to open its panel. */
 const SWIPE_UP = 40;
 
@@ -24,8 +25,11 @@ export function Tray({ desktop, pinned, onCapture }: { desktop: boolean; pinned?
   // the list over the page (pinned it is part of the page and stays)
   const looking = open && !sort && !pinned;
   const touch = useRef<number | null>(null);
+  const ages = entries.map((e) => age(e.item.created)).sort((a, b) => b - a);
   const tray = (
-    <div className={cn("relative flex shrink-0 items-center rounded-xl", !pinned && "group/tray", !desktop && "min-w-0 flex-[1_0_0%]")}>
+    <div className={cn("relative flex shrink-0 items-center rounded-xl", !desktop && "min-w-0 flex-[1_0_0%]")}>
+      {/* the legend of the marks, while the panel above is shut */}
+      <Tip label={t("tray.open", { count })} card={<Legend ages={ages} />} off={looking || sorting}>
       <Button
         variant="plain"
         // pinned it does not close, so nothing to click
@@ -38,18 +42,19 @@ export function Tray({ desktop, pinned, onCapture }: { desktop: boolean; pinned?
         }}
         aria-expanded={pinned || (open && !sort)}
         aria-label={t("tray.open", { count })}
-        className={cn("relative flex min-w-0 items-center gap-2 rounded-xl py-1.5 pr-2 text-left", desktop ? "min-h-11 pl-[136px]" : "min-h-10 pl-[100px]", pinned && !sorting ? "cursor-default" : cn("hover:bg-hover", looking && "bg-hover"), !desktop && "flex-1")}
+        className={cn("relative flex min-w-0 items-center gap-2.5 rounded-xl py-1.5 pl-2.5 pr-2 text-left", desktop ? "min-h-11" : "min-h-10", pinned && !sorting ? "cursor-default" : cn("hover:bg-hover", looking && "bg-hover"), !desktop && "flex-1")}
       >
-        <Sheets entries={entries.slice(0, 3)} desktop={desktop} />
+        <Inbox size={18} className={cn("shrink-0", count ? "text-muted-foreground" : "text-faint")} aria-hidden />
         <span className="flex min-w-0 flex-col gap-1.5">
           <span className="text-sm font-semibold leading-none">
             {t("tray.title")} · <span className="tabular-nums text-warn">{count}</span>
           </span>
-          <Fill count={count} />
+          <Fill ages={ages} />
         </span>
         {/* pinned it stays, hidden, so the field beside does not move between Heute and other pages */}
         {looking ? <ChevronDown size={14} className="text-muted-foreground" /> : <ChevronUp size={14} className={cn("text-muted-foreground", pinned && "invisible")} />}
       </Button>
+      </Tip>
     </div>
   );
   // while sorting it stays, pressed, and closes it again (sorted to the end it stays too)
@@ -122,61 +127,42 @@ export function Tray({ desktop, pinned, onCapture }: { desktop: boolean; pinned?
   );
 }
 
-/** Back to front: where a sheet rests in the well, and fanned out while the tray is hovered. */
-const POSES: { left: [number, number]; rest: [string, string]; fan: [string, string] }[] = [
-  { left: [9, 6], rest: ["-8deg", "0 10px"], fan: ["-14deg", "-5px 0"] },
-  { left: [18, 12], rest: ["3deg", "0 4px"], fan: ["2deg", "0 -8px"] },
-  { left: [30, 20], rest: ["-2deg", "0 -2px"], fan: ["8deg", "0 -6px"] },
-];
+/** How long an entry has lain: 0 put down today, 1 since yesterday, 2 over a week. */
+type Age = 0 | 1 | 2;
+function age(created: number, now = Date.now()): Age {
+  if (created >= new Date(now).setHours(0, 0, 0, 0)) return 0;
+  return now - created > 7 * DAY ? 2 : 1;
+}
+const AGE_LOOK = ["bg-faint", "bg-inbox", "bg-danger"] as const;
+const AGE_TEXT = ["tray.age.today", "tray.age.days", "tray.age.week"] as const;
 
-/** Part of the tray's button: a click on a sheet opens the panel like one on the tray. */
-function Sheets({ entries, desktop }: { entries: InboxEntry[]; desktop: boolean }) {
-  const poses = POSES.slice(POSES.length - entries.length);
+/** One mark per entry on a track of ten, the oldest first, coloured by how long it has lain; past ten a "+n". */
+function Fill({ ages }: { ages: Age[] }) {
   return (
-    <span aria-hidden className={cn("absolute inset-y-0 left-0 z-10 block [--well:color-mix(in_srgb,var(--card)_93%,black)] dark:[--well:color-mix(in_srgb,var(--card)_65%,black)]", desktop ? "w-[120px]" : "w-[84px]")}>
-      <span className="absolute inset-0 rounded-[11px] border border-line bg-[var(--well)] shadow-[inset_0_3px_8px_rgb(0_0_0/0.12)] dark:shadow-[inset_0_3px_8px_rgb(0_0_0/0.7)]" aria-hidden />
-      <span className="absolute -top-px left-0.5 h-[3px] w-[calc(100%-4px)] rounded-b-[3px] bg-[linear-gradient(90deg,transparent,color-mix(in_srgb,var(--t-inbox)_60%,transparent),transparent)]" aria-hidden />
-      {/* the sheets may stick out above the well; cut off by overflow, as a clip-path would let a
-          fanned sheet make the page scroll */}
-      <span className="pointer-events-none absolute -inset-x-[300px] -top-[300px] bottom-1 overflow-clip">
-      <span className="absolute inset-y-0 left-[300px] right-[300px]">
-      {[...entries].reverse().map((e, n, all) => {
-        const front = n === all.length - 1;
-        const { left, rest, fan } = poses[n]!;
-        return (
-          <span
-            key={e.key}
-            className={cn(
-              "pointer-events-auto absolute rounded-[7px] border shadow-[0_-2px_10px_rgb(0_0_0/0.15)] transition-[rotate,translate] duration-300 ease-[cubic-bezier(.2,.8,.2,1)] [rotate:var(--r)] [translate:var(--t)] group-hover/tray:[rotate:var(--rf)] group-hover/tray:[translate:var(--tf)]",
-              desktop ? "-bottom-7 h-[92px] w-[84px]" : "-bottom-6 h-[78px] w-[56px]",
-              front ? "border-faint/50 bg-hover" : "border-line bg-surface-2",
-            )}
-            style={{ left: left[desktop ? 0 : 1], zIndex: n, ...vars({ r: rest[0], t: rest[1], rf: fan[0], tf: fan[1] }) }}
-          >
-            <span className={cn("absolute left-2.5 h-[3px] rounded-full bg-faint/40", desktop ? "right-[22px] top-3" : "right-3 top-2")} />
-            <span className={cn("absolute left-2.5 h-[3px] rounded-full bg-faint/30", desktop ? "right-[22px] top-5" : "right-3 top-4")} />
-            <span className={cn("absolute left-2.5 h-[3px] rounded-full bg-faint/25", desktop ? "right-[22px] top-7" : "right-3 top-6")} />
-            {front && <span className="absolute right-2 top-2 size-2 rounded-full bg-inbox shadow-[0_0_10px_var(--t-inbox)]" />}
-          </span>
-        );
-      })}
-      </span>
-      </span>
-      {/* where they are cut off, the sheets fade into the dark of the well */}
-      <span className="pointer-events-none absolute inset-x-px bottom-px z-10 h-4 rounded-b-[10px] bg-[linear-gradient(to_top,var(--well)_6px,transparent)]" aria-hidden />
+    <span className="flex items-center gap-[3px]" aria-hidden>
+      {Array.from({ length: FILL }, (_, n) => (
+        <span key={n} className={cn("h-1 w-2.5 rounded-full", n < ages.length ? AGE_LOOK[ages[n]!] : "bg-line")} />
+      ))}
+      {ages.length > FILL && <span className="ml-0.5 text-[11px] leading-none text-muted-foreground tabular-nums">+{ages.length - FILL}</span>}
     </span>
   );
 }
 
-const vars = (v: Record<string, string>) => Object.fromEntries(Object.entries(v).map(([k, x]) => [`--${k}`, x])) as CSSProperties;
-
-/** One of ten marks per entry. */
-function Fill({ count }: { count: number }) {
+/** What the marks mean, with how many lie in each stretch of time. */
+function Legend({ ages }: { ages: Age[] }) {
+  const { t } = useT();
   return (
-    <span className="flex gap-[3px]" aria-hidden>
-      {Array.from({ length: FILL }, (_, n) => (
-        <span key={n} className={cn("h-1 w-2.5 rounded-full", n < count ? "bg-inbox" : "bg-line")} />
-      ))}
-    </span>
+    <div className="w-60">
+      <p className="mb-2 font-semibold">{t("tray.age.title")}</p>
+      <ul className="space-y-1.5">
+        {AGE_LOOK.map((look, a) => (
+          <li key={a} className="flex items-center gap-2">
+            <span className={cn("h-1 w-2.5 shrink-0 rounded-full", look)} />
+            <span className="flex-1 text-muted-foreground">{t(AGE_TEXT[a]!)}</span>
+            <span className="tabular-nums">{ages.filter((x) => x === a).length}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }

@@ -32,16 +32,27 @@ export function IconButton({ label, icon: Icon, size = "md", iconSize = 16, clas
 
 /**
  * Faster than the browser's `title`. Radix opens it only on hover and focus, so never on touch. Give
- * the button no `title`, or the browser shows its own tooltip as well.
+ * the button no `title`, or the browser shows its own tooltip as well. With `card` it is a small
+ * card instead of the dark label (`label` is then what a screen reader hears); `off` keeps it shut.
  */
-export function Tip({ label, children }: { label: string; children: ReactElement }) {
+export function Tip({ label, card, off, children }: { label: string; card?: ReactNode; off?: boolean; children: ReactElement }) {
   return (
     <TooltipPrimitive.Provider delayDuration={150} skipDelayDuration={400}>
-      <TooltipPrimitive.Root>
+      <TooltipPrimitive.Root open={off ? false : undefined}>
         <TooltipPrimitive.Trigger asChild>{children}</TooltipPrimitive.Trigger>
         <TooltipPrimitive.Portal>
-          <TooltipPrimitive.Content side="top" align="center" sideOffset={6} collisionPadding={8} className="z-50 rounded-md bg-fg px-2 py-1 text-xs font-medium text-bg shadow-md data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=delayed-open]:animate-in data-[state=delayed-open]:fade-in-0">
-            {label}
+          <TooltipPrimitive.Content
+            side="top"
+            align={card ? "start" : "center"}
+            sideOffset={card ? 10 : 6}
+            collisionPadding={8}
+            aria-label={card ? label : undefined}
+            className={cn(
+              "z-50 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=delayed-open]:animate-in data-[state=delayed-open]:fade-in-0",
+              card ? "rounded-xl border border-line bg-surface p-3 text-[13px] text-fg shadow-[var(--shadow-pop)]" : "rounded-md bg-fg px-2 py-1 text-xs font-medium text-bg shadow-md",
+            )}
+          >
+            {card ?? label}
           </TooltipPrimitive.Content>
         </TooltipPrimitive.Portal>
       </TooltipPrimitive.Root>
