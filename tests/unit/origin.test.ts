@@ -20,8 +20,7 @@ test("separators in a name cannot break the format", () => {
   expect(parseOrigin(personOrigin({ id: "u2", name: "A;n=B,C" }))).toMatchObject({ person: { id: "u2", name: "A n B C" } });
 });
 
-test("entries from before still read: name@device, a bare name, several origins", () => {
-  expect(parseOrigin("web:Tim@Mac-x3f9")).toEqual({ kind: "web", name: "Tim", person: { id: undefined, name: "Tim" }, device: "Mac-x3f9" });
+test("a bare name and several origins read", () => {
   expect(parseOrigin("web:Tim")).toMatchObject({ person: { name: "Tim" }, device: undefined });
   expect(parseOrigin("agent:claude, web:Tim")).toMatchObject({ kind: "agent", name: "claude" });
   expect(originText("import:notion")).toBe("import:notion");

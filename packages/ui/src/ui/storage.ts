@@ -7,7 +7,6 @@ export const KEYS = {
   active: "obtion.active",
   shown: "obtion.shown",
   /** before workspaces: the accounts of this device, moved over once */
-  legacyAccounts: "obtion.accounts",
   lang: "obtion.lang",
   theme: "obtion.theme",
   device: "obtion.device",

@@ -71,48 +71,23 @@ export class Store {
     this.db.exec(`
       PRAGMA journal_mode = WAL;
       PRAGMA synchronous = NORMAL;
-      CREATE TABLE IF NOT EXISTS updates (seq INTEGER PRIMARY KEY AUTOINCREMENT, doc TEXT NOT NULL, data BLOB NOT NULL, origin TEXT NOT NULL, ts INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS updates (seq INTEGER PRIMARY KEY AUTOINCREMENT, doc TEXT NOT NULL, data BLOB NOT NULL, origin TEXT NOT NULL, ts INTEGER NOT NULL, uid TEXT, step TEXT, area TEXT NOT NULL DEFAULT '${PERSONAL}');
       CREATE INDEX IF NOT EXISTS updates_doc ON updates(doc, seq);
+      CREATE INDEX IF NOT EXISTS updates_step ON updates(step);
+      CREATE INDEX IF NOT EXISTS updates_area ON updates(area, seq);
       CREATE TABLE IF NOT EXISTS docstate (id TEXT PRIMARY KEY, state BLOB NOT NULL, seq INTEGER NOT NULL);
-      CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, doc TEXT NOT NULL, title TEXT, type TEXT, kind TEXT, origin TEXT, changes TEXT);
+      CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, doc TEXT NOT NULL, title TEXT, type TEXT, kind TEXT, origin TEXT, changes TEXT, step TEXT, area TEXT NOT NULL DEFAULT '${PERSONAL}');
       CREATE INDEX IF NOT EXISTS events_doc ON events(doc, id);
       CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT);
       CREATE TABLE IF NOT EXISTS steps (id TEXT PRIMARY KEY, actor TEXT, ts INTEGER, undoes TEXT);
       CREATE INDEX IF NOT EXISTS steps_undoes ON steps(undoes);
-      CREATE TABLE IF NOT EXISTS versions (id INTEGER PRIMARY KEY AUTOINCREMENT, doc TEXT NOT NULL, ts INTEGER NOT NULL, origin TEXT NOT NULL, step TEXT, event INTEGER, base INTEGER NOT NULL DEFAULT 0, len INTEGER NOT NULL, data BLOB NOT NULL);
+      CREATE TABLE IF NOT EXISTS versions (id INTEGER PRIMARY KEY AUTOINCREMENT, doc TEXT NOT NULL, ts INTEGER NOT NULL, origin TEXT NOT NULL, step TEXT, event INTEGER, len INTEGER NOT NULL, data BLOB NOT NULL);
       CREATE INDEX IF NOT EXISTS versions_doc ON versions(doc, id);
       CREATE INDEX IF NOT EXISTS versions_event ON versions(event);
     `);
-    // A replica's cursor is seq + uid, so it can tell whether the server still has the row it saw.
-    // Older databases get uids for their existing rows once.
-    const cols = this.columns("updates");
-    if (!cols.has("uid")) {
-      this.db.exec("ALTER TABLE updates ADD COLUMN uid TEXT");
-      this.db.exec("UPDATE updates SET uid = lower(hex(randomblob(9))) WHERE uid IS NULL");
-    }
-    // A step is one undo unit; rows from before steps have none.
-    if (!cols.has("step")) {
-      this.db.exec("ALTER TABLE updates ADD COLUMN step TEXT");
-      this.db.exec("CREATE INDEX IF NOT EXISTS updates_step ON updates(step)");
-    }
-    const eventCols = this.columns("events");
-    if (!eventCols.has("step")) this.db.exec("ALTER TABLE events ADD COLUMN step TEXT");
-    // 27.10.: every log row and activity entry belongs to an area; older rows are personal.
-    if (!cols.has("area")) {
-      this.db.exec(`ALTER TABLE updates ADD COLUMN area TEXT NOT NULL DEFAULT '${PERSONAL}'`);
-      this.db.exec("CREATE INDEX IF NOT EXISTS updates_area ON updates(area, seq)");
-    }
-    if (!eventCols.has("area")) this.db.exec(`ALTER TABLE events ADD COLUMN area TEXT NOT NULL DEFAULT '${PERSONAL}'`);
-    // what an item had before versions began is "an earlier state" of unknown origin
-    if (!this.kvGet("versionsSince")) this.kvSet("versionsSince", String(Date.now()));
     this.load();
     // the server was called hub before; renaming the key would look like a new server to devices
     if (!this.kvGet("hubId")) this.kvSet("hubId", newId());
-  }
-
-  private columns(table: string): Set<string> {
-    const rows = this.db.query(`PRAGMA table_info(${table})`).all() as { name: string }[];
-    return new Set(rows.map((c) => c.name));
   }
 
   /** A device seeing a different id knows it met a new server. */
@@ -471,8 +446,8 @@ export class Store {
   // earlier version can be shown, compared and restored. Versions fold like activity entries:
   // the same author in the same step within the merge window updates the newest version instead
   // of adding one – typing a paragraph makes one version, not one per keystroke. The first time
-  // an item from before versions existed changes, its previous text is kept first ("base"), so
-  // its history starts with what it was. Versions are never dropped: a text edited in a
+  // an item that has no version yet changes, the text it was created with is kept first, so its
+  // history starts with it. Versions are never dropped: a text edited in a
   // hundred sessions costs a hundred compressed copies – a few MB for long, busy pages, which
   // is small next to the update log that keeps every keystroke anyway. Backups copy the whole
   // database (VACUUM INTO), versions included.
@@ -482,16 +457,11 @@ export class Store {
     const last = this.db.query("SELECT id, ts, origin, step, event FROM versions WHERE doc = ? ORDER BY id DESC LIMIT 1").get(id) as
       | { id: number; ts: number; origin: string; step: string | null; event: number | null }
       | null;
-    const insert = this.db.query("INSERT INTO versions (doc, ts, origin, step, event, base, len, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-    if (!last && prev.body) {
-      // made after versions began: its text is the one it was created with; else an earlier state of unknown origin
-      const since = Number(this.kvGet("versionsSince") ?? 0);
-      const known = prev.created >= since;
-      insert.run(id, known ? prev.created : prev.updated, known ? (prev.createdBy ?? "") : "", null, null, known ? 0 : 1, prev.body.length, pack(prev.body));
-    }
+    const insert = this.db.query("INSERT INTO versions (doc, ts, origin, step, event, len, data) VALUES (?, ?, ?, ?, ?, ?, ?)");
+    if (!last && prev.body) insert.run(id, prev.created, prev.createdBy ?? "", null, null, prev.body.length, pack(prev.body));
     const fold = last && (event ? event.merged && last.event === event.id : last.event === null && last.origin === origin && (last.step ?? undefined) === step && ts - last.ts < EVENT_MERGE_WINDOW_MS);
     if (fold) this.db.query("UPDATE versions SET ts = ?, len = ?, data = ? WHERE id = ?").run(ts, next.body.length, pack(next.body), last.id);
-    else insert.run(id, ts, origin, step ?? null, event?.id ?? null, 0, next.body.length, pack(next.body));
+    else insert.run(id, ts, origin, step ?? null, event?.id ?? null, next.body.length, pack(next.body));
   }
 
   private hasVersions(event: number): boolean {
@@ -500,8 +470,8 @@ export class Store {
 
   /** The versions of a document's text, oldest first, numbered from 1 (the number stays: versions are never dropped). */
   versions(doc: string): Version[] {
-    const rows = this.db.query("SELECT id, ts, origin, step, event, base, len FROM versions WHERE doc = ? ORDER BY id").all(doc) as (Omit<Version, "n" | "base" | "step" | "event"> & { base: number; step: string | null; event: number | null })[];
-    return rows.map((r, i) => ({ ...r, n: i + 1, base: !!r.base, step: r.step ?? undefined, event: r.event ?? undefined }));
+    const rows = this.db.query("SELECT id, ts, origin, step, event, len FROM versions WHERE doc = ? ORDER BY id").all(doc) as (Omit<Version, "n" | "step" | "event"> & { step: string | null; event: number | null })[];
+    return rows.map((r, i) => ({ ...r, n: i + 1, step: r.step ?? undefined, event: r.event ?? undefined }));
   }
 
   /** The text of a version by its id (undefined if unknown, or of another document when `doc` is given). */

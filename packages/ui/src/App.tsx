@@ -22,7 +22,7 @@ import { SearchView } from "./views/Search";
 import { FilesPage } from "./views/Lists";
 import { Today } from "./views/Today";
 import { Tray } from "./ui/Tray";
-import { entryKey, setShelfPinned, syncShelf, useInboxItems, useShelf } from "./ui/inbox";
+import { setShelfPinned, syncShelf, useInboxItems, useShelf } from "./ui/inbox";
 import { NewTypeHost } from "./views/Types";
 import { GraphView } from "./views/Graph";
 import { Activity } from "./views/Activity";
@@ -32,7 +32,7 @@ import { ICON } from "./ui/icons";
 import { NewSpaceDialog, SpaceScope, SpaceSelector, useReplicas } from "./ui/Spaces";
 import { globalPage } from "./scope";
 import { Gate } from "./views/Account";
-import { activeSpace, signOut, useAccounts } from "./accounts";
+import { signOut, useAccounts } from "./accounts";
 import { openSettings } from "./ui/settings-open";
 
 export function App() {
@@ -121,12 +121,7 @@ function Main() {
   // workspace pages wait until it is set up; global pages show whatever every workspace has
   const settings = repo.get(SETTINGS_ID);
   const global = globalPage(route.parts, route.space);
-  const old = oldAddress(route.parts, route.space);
   const page = (() => {
-    if (old !== undefined) {
-      const oldIsGlobal = old.startsWith("/review") || old === "/activity" || old === "/trash";
-      return <Redirect to={oldIsGlobal ? old : spaceHref(route.space ?? active?.id, old).slice(1)} />;
-    }
     // don't fall back to the open workspace when the address names one the account isn't in
     if (route.space && !spaces.some((s) => s.id === route.space)) return <PagePlaceholder>{t("app.noSpace")}</PagePlaceholder>;
     if (!global) {
@@ -151,9 +146,6 @@ function Main() {
         return <TrashView />;
       case "settings":
         return global || !route.space ? <SettingsRedirect /> : <SpaceSettingsRedirect space={route.space} />;
-      // old setup page; workspaces are now set up when created
-      case "setup":
-        return <Redirect to="/" />;
       case "i":
         return <ItemPage id={route.parts[1]!} isNew={route.query.get("new") === "1"} />;
       default:
@@ -161,7 +153,7 @@ function Main() {
     }
   })();
   const isGraph = route.parts[0] === "graph";
-  const tray = !!settings && !(route.parts[0] === "inbox" && route.parts[1]);
+  const tray = !!settings;
   const column = useRef<HTMLDivElement>(null);
   const main = useRef<HTMLElement>(null);
   const pinned = useRoom(tray && wide && (route.parts[0] === undefined || route.parts[0] === "inbox" || route.parts[0] === "review"), column, main, route.path);
@@ -297,26 +289,6 @@ function MobileMenu({ onSettings }: { onSettings: () => void }) {
 }
 
 /** Where old addresses lead now. Remove once no saved link or bookmark uses them. */
-function oldAddress(parts: string[], space?: string): string | undefined {
-  // lists as collections (before 26.10.)
-  if (parts[0] === "c") return OLD_LISTS[parts[1]!] ?? "/";
-  // an inbox entry's own page (before the review)
-  if (parts[0] === "inbox" && parts[1]) return `/review?at=${encodeURIComponent(entryKey(activeSpace()!.id, parts[1]))}`;
-  // workspace settings (before 31.10.)
-  if (parts[0] === "workspace") return "/settings";
-  // the list of types (before 1.11.)
-  if (parts[0] === "types") return "/";
-  // per-workspace activity or trash (before 1.11.)
-  if ((parts[0] === "activity" || parts[0] === "trash") && space) return "/" + parts[0];
-}
-
-const OLD_LISTS: Record<string, string> = { "sys:c-project": "/i/sys:project", "sys:c-task": "/i/sys:task", "sys:c-card": "/i/sys:card", "sys:c-files": "/files", "sys:c-images": "/files?kind=image", "sys:inbox": "/inbox" };
-
-function Redirect({ to }: { to: string }) {
-  useEffect(() => navigate(to, { replace: true }), [to]);
-  return null;
-}
-
 /** With exactly one workspace shown, its first two types join the bar; with several they stay in the menu. */
 function MobileNav() {
   const { t } = useT();

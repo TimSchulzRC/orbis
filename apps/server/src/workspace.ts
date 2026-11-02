@@ -68,8 +68,8 @@ const SYNC_BATCH = 150;
 const BLOBS = "/api/blobs/";
 
 const clientMsg: z.ZodType<ClientMsg> = z.discriminatedUnion("t", [
-  z.object({ t: z.literal("hello"), area: z.string().optional(), since: z.number(), sinceId: z.string().optional(), device: z.string().optional() }),
-  z.object({ t: z.literal("push"), area: z.string().optional(), items: z.array(z.object({ k: z.string(), d: z.string(), u: z.string(), s: z.string().optional() })) }),
+  z.object({ t: z.literal("hello"), area: z.string(), since: z.number(), sinceId: z.string().optional(), device: z.string().optional() }),
+  z.object({ t: z.literal("push"), area: z.string(), items: z.array(z.object({ k: z.string(), d: z.string(), u: z.string(), s: z.string().optional() })) }),
   z.object({ t: z.literal("ping") }),
 ]);
 
@@ -132,7 +132,7 @@ export class Workspace {
   }
 
   hello(ws: ServerWebSocket<Conn>, msg: Extract<ClientMsg, { t: "hello" }>) {
-    const area = msg.area ?? PERSONAL; // clients from before areas send none
+    const area = msg.area;
     if (!AREAS.has(area)) return send(ws, { t: "denied", area });
     if (msg.device) ws.data.origin = personOrigin(ws.data.user, msg.device);
     const store = this.store;
@@ -156,7 +156,7 @@ export class Workspace {
     else if (msg.t === "push") {
       // before the welcome the client has not checked the server id. No ack, so its outbox
       // resends after the next hello.
-      const area = msg.area ?? PERSONAL;
+      const area = msg.area;
       if (!ws.data.areas.has(area)) return;
       const keys: string[] = [];
       for (const it of msg.items) {

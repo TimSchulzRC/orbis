@@ -1080,8 +1080,6 @@
  "history.empty": "Noch keine früheren Fassungen. Ab der nächsten Änderung am Text hält Obtion jede Fassung fest.",
  "history.version": "Fassung {n}",
  "history.current": "aktuell",
- "history.base": "Früherer Stand",
- "history.baseLong": "Stand vor Beginn des Verlaufs, zuletzt geändert {date}",
  "history.unknown": "unbekannt",
  "history.chars": "{count, plural, one {# Zeichen} other {# Zeichen}}",
  "history.compare": "Vergleichen mit",

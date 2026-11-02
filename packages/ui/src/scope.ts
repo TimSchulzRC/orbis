@@ -8,4 +8,4 @@ export const ScopeContext = createContext<{ id: string; repo: Repo; files: Devic
 
 /** Pages that show every workspace. "settings" with a `space` in the address is that workspace's own page. */
 export const globalPage = (parts: string[], space?: string) =>
-  !parts.length || (parts[0] === "inbox" && !parts[1]) || ["review", "search", "c", "activity", "trash"].includes(parts[0]!) || (parts[0] === "settings" && !space);
+  !parts.length || (parts[0] === "inbox" && !parts[1]) || ["review", "search", "activity", "trash"].includes(parts[0]!) || (parts[0] === "settings" && !space);

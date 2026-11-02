@@ -38,13 +38,6 @@ const read = <T>(k: string, def: T): T => {
   }
 };
 
-// the app could hold accounts of other servers for a day (2026-10-27): keep the one of this server
-if (localStorage.getItem(KEYS.legacyAccounts)) {
-  const mine = read<{ server: string }[]>(KEYS.legacyAccounts, []).find((a) => a.server === location.origin);
-  if (mine) localStorage.setItem(KEYS.account, JSON.stringify(mine));
-  for (const k of [KEYS.legacyAccounts, KEYS.spaces, KEYS.active]) localStorage.removeItem(k);
-}
-
 let account: Account | null = read(KEYS.account, null);
 let spaces: Space[] = read(KEYS.spaces, []);
 let active: string | null = localStorage.getItem(KEYS.active);

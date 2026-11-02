@@ -111,7 +111,7 @@ test("an agent marks what holds up and what is paused; the type shows it", () =>
     {
       name: "Schritt",
       properties: [
-        { name: "Stand", kind: "status", options: ["Neu (todo)", "Ruht (active, paused)", "Fertig (done)", "Eingestellt (done, dropped)"] },
+        { name: "Stand", kind: "select", options: ["Neu (todo)", "Ruht (active, paused)", "Fertig (done)", "Eingestellt (done, dropped)"] },
         { name: "Hängt an", kind: "relation", multiple: true, blocks: true },
       ],
       capabilities: { status: "Stand" },
@@ -135,7 +135,7 @@ test("define a type and its views without code, query by type name", () => {
       name: "Buch",
       properties: [
         { name: "Autor", kind: "relation", target: "typ:Person", inverse: "Bücher", multiple: true },
-        { name: "Status", kind: "status", options: ["Will lesen (todo)", "Lese (active)", "Gelesen (done)"] },
+        { name: "Status", kind: "select", options: ["Will lesen (todo)", "Lese (active)", "Gelesen (done)"] },
         { name: "Bewertung", kind: "number" },
       ],
       capabilities: { status: "Status" },
@@ -170,8 +170,7 @@ test("one kind of select: several values, a default that keeps it filled, any se
       properties: [
         { name: "Phase", kind: "select", options: ["Idee", "Entwurf", "Fertig"], default: "Idee" },
         { name: "Kanäle", kind: "select", multiple: true, options: ["Blog", "Newsletter"] },
-        // the old kind still works and makes it the status
-        { name: "Stand", kind: "multiselect", options: ["A", "B"] },
+        { name: "Stand", kind: "select", multiple: true, options: ["A", "B"] },
       ],
     },
     A,

@@ -426,7 +426,7 @@ export class Repo {
   }
 
   private async onWelcome(msg: Extract<ServerMsg, { t: "welcome" }>) {
-    this.serverFormat = msg.format ?? 0;
+    this.serverFormat = msg.format;
     const known = this.serverId ?? (await this.db.serverId());
     if (known && known !== msg.hub && this.docs.size > 0) {
       // Usually the server was set up anew and this copy is stale (replace, recommended); rarely it

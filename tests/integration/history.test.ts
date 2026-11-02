@@ -44,9 +44,9 @@ test("every change of the text keeps a version; typing in one step folds into on
   expect(s.versions(id)).toEqual([]); // created: nothing to keep yet, the first change keeps it
   typing(TIM, id, ["Zeile eins\nZ", "Zeile eins\nZeile zw", "Zeile eins\nZeile zwei\n"]);
   const v = s.versions(id);
-  expect(v.map((x) => [x.n, x.origin, x.base])).toEqual([
-    [1, AG, false], // the text it was created with, by whoever created it
-    [2, TIM, false], // three flushes of typing: one version
+  expect(v.map((x) => [x.n, x.origin])).toEqual([
+    [1, AG], // the text it was created with, by whoever created it
+    [2, TIM], // three flushes of typing: one version
   ]);
   expect(s.versionText(v[0]!.id)).toBe("Zeile eins\n");
   expect(s.versionText(v[1]!.id)).toBe("Zeile eins\nZeile zwei\n");
@@ -58,17 +58,6 @@ test("every change of the text keeps a version; typing in one step folds into on
   // only changes of the text make versions
   ops.call(AG, () => (ops.update("Mapping-Konzept", { tags_add: ["konzept"] }, AG), "ok"));
   expect(s.versions(id).length).toBe(4);
-});
-
-test("an item from before versions were kept starts its history with what it had", () => {
-  ops.call(AG, () => (ops.create({ title: "Altes Protokoll", body: "Stand Oktober\n" }, AG), "ok"));
-  const id = idOf("Altes Protokoll");
-  s.kvSet("versionsSince", String(Date.now() + 60_000)); // as if versions began after it was made
-  edit(TIM, id, "Stand November\n");
-  const [base, now] = s.versions(id);
-  expect(base).toMatchObject({ n: 1, base: true, origin: "" });
-  expect(s.versionText(base!.id)).toBe("Stand Oktober\n");
-  expect(now).toMatchObject({ n: 2, base: false, origin: TIM });
 });
 
 test("versions are stored compressed and travel with the daily backup", () => {
@@ -248,7 +237,7 @@ test("what an activity entry changed: the versions before and after it", async (
   expect(s.eventText(ev.id)).toEqual({ doc: id, before: "eins\n", after: "eins\nzwei\n", from: 1, to: 2 });
   const [v1] = s.versions(id);
   expect(s.versionText(v1!.id, "andere-id")).toBeUndefined();
-  // an entry from before versions (only lengths) has nothing to show
+  // an entry that kept no version (the creation) has nothing to show
   const created = s.events({ doc: id, limit: 5 }).find((e) => e.kind === "created")!;
   expect(s.eventText(created.id)).toBeUndefined();
 });

@@ -88,18 +88,12 @@ export class Accounts {
     this.auth = makeAuth(this, opts.secret, opts.baseURL);
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS workspaces (id TEXT PRIMARY KEY, name TEXT NOT NULL, created INTEGER NOT NULL, legacy INTEGER NOT NULL DEFAULT 0);
-      CREATE TABLE IF NOT EXISTS members (workspace TEXT NOT NULL, user TEXT NOT NULL, role TEXT NOT NULL, joined INTEGER NOT NULL, PRIMARY KEY (workspace, user));
+      CREATE TABLE IF NOT EXISTS members (workspace TEXT NOT NULL, user TEXT NOT NULL, role TEXT NOT NULL, joined INTEGER NOT NULL, pos INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (workspace, user));
       CREATE INDEX IF NOT EXISTS members_user ON members(user);
       CREATE TABLE IF NOT EXISTS invites (code TEXT PRIMARY KEY, workspace TEXT NOT NULL, by TEXT NOT NULL, created INTEGER NOT NULL, expires INTEGER NOT NULL, role TEXT NOT NULL DEFAULT 'member');
       CREATE TABLE IF NOT EXISTS tokens (hash TEXT PRIMARY KEY, user TEXT NOT NULL, workspace TEXT NOT NULL, label TEXT, created INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS admins (user TEXT PRIMARY KEY);
     `);
-    // invites from before roles are for members
-    const cols = (this.db.query("PRAGMA table_info(invites)").all() as { name: string }[]).map((c) => c.name);
-    if (!cols.includes("role")) this.db.exec("ALTER TABLE invites ADD COLUMN role TEXT NOT NULL DEFAULT 'member'");
-    // each member's own order of their workspaces (smallest first); before it, the order was by joining
-    const memberCols = (this.db.query("PRAGMA table_info(members)").all() as { name: string }[]).map((c) => c.name);
-    if (!memberCols.includes("pos")) this.db.exec("ALTER TABLE members ADD COLUMN pos INTEGER NOT NULL DEFAULT 0; UPDATE members SET pos = joined;");
   }
 
   policy: SignupPolicy;

@@ -7,7 +7,6 @@ import {
   type OptionDef,
   type Patch,
   type PropDef,
-  type PropKind,
   type TypeItem,
   type StatusGroup,
   type TypeSchema,
@@ -727,7 +726,7 @@ export class Ops {
       return v;
     };
     const textOf = (n: number) => (n === 0 ? "" : this.store.versionText(pick(n).id)!);
-    const label = (v: TextVersion) => `#${v.n} · ${new Date(v.ts).toISOString().slice(0, 16).replace("T", " ")} · ${v.base ? "earlier state (from before versions were kept)" : originText(v.origin) || "unknown"}`;
+    const label = (v: TextVersion) => `#${v.n} · ${new Date(v.ts).toISOString().slice(0, 16).replace("T", " ")} · ${originText(v.origin) || "unknown"}`;
     if (opts.version !== undefined) {
       const v = pick(opts.version);
       return `Version ${label(v)} · ${v.len} characters of ${name}:\n\n${textOf(v.n)}`;
@@ -1064,11 +1063,9 @@ export class Ops {
       if (!p) throw new OpError(`Type ${s.name} has no property "${name}".`);
       return p;
     };
-    // "status" and "multiselect" are selects now; agents may still name them
-    const legacy = (k?: PropInput["kind"]): PropKind | undefined => (k === "status" || k === "multiselect" ? "select" : k);
     const toDef = (p: PropInput, cur?: PropDef): Patch<Omit<PropDef, "id">> => {
-      const kind = legacy(p.kind) ?? cur?.kind;
-      const grouped = p.kind === "status" || (!!cur && statusProp(s)?.id === cur.id) || !!p.options?.some((o) => OPTION_GROUP.test(o));
+      const kind = p.kind ?? cur?.kind;
+      const grouped = (!!cur && statusProp(s)?.id === cur.id) || !!p.options?.some((o) => OPTION_GROUP.test(o));
       const options = p.options?.map((o) => {
         const m = OPTION_PARTS.exec(o)!;
         const existing = cur?.options?.find((x) => x.name === m[1]);
@@ -1084,13 +1081,8 @@ export class Ops {
       }
       let computed = cur?.computed;
       if (p.computed) computed = { fn: p.computed.startsWith("count") ? "count" : "progress", of: p.computed.includes(":") ? this.resolveType(p.computed.split(":")[1]!.trim()).id : undefined };
-      let multiple: boolean | null | undefined = p.multiple;
-      if (p.kind === "multiselect") multiple = true;
-      else if (p.kind === "status") multiple = null;
-      return { name: p.name, kind, description: p.description, options, multiple, default: def, target: p.target, inverseName: p.inverse, symmetric: p.symmetric, range: p.range, computed, hideEmpty: p.hide_empty, blocks: p.blocks };
+      return { name: p.name, kind, description: p.description, options, multiple: p.multiple, default: def, target: p.target, inverseName: p.inverse, symmetric: p.symmetric, range: p.range, computed, hideEmpty: p.hide_empty, blocks: p.blocks };
     };
-    // properties given the old kind "status" become the type's status below, once they exist
-    const asStatus = [...(input.add_properties ?? []), ...(input.change_properties ?? [])].filter((p) => p.kind === "status").map((p): string => p.name ?? ("property" in p && typeof p.property === "string" ? p.property : ""));
     this.store.change(t.id, origin, (doc) => {
       if (input.name) {
         setSchemaField(doc, "name", input.name);
@@ -1116,8 +1108,7 @@ export class Ops {
     });
     this.store.flush();
     const s2 = this.store.index().types.get(t.id)!.schema;
-    const c: CapInput | undefined = input.capabilities ?? (asStatus.length ? {} : undefined);
-    if (c && c.status === undefined && asStatus.length) c.status = asStatus.at(-1)!;
+    const c: CapInput | undefined = input.capabilities;
     if (c) {
       const pid = (name: string | null | undefined, kind: string) => {
         if (!name) return null;
