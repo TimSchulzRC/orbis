@@ -52,6 +52,8 @@ export class Index {
 
   private _titles?: Map<string, string>;
   private _files?: Map<string, string>;
+  /** Title and file name keys that more than one entry answers to. */
+  private _shared?: Set<string>;
   private _parents?: Map<string, string[]>;
   private _children?: Map<string, string[]>;
   private _cycleEdges?: ParentEdge[];
@@ -140,13 +142,18 @@ export class Index {
     if (!this._titles) {
       const byTitle = new Map<string, string>();
       const byFileName = new Map<string, string>();
+      const seen = new Set<string>();
+      const shared = new Set<string>();
       // Older first so the most recently edited wins on duplicate titles.
       for (const r of [...this.live].sort((a, b) => a.updated - b.updated)) {
+        const keys = new Set([r.title.trim() ? titleKey(r.title) : "", r.file?.name ? titleKey(r.file.name) : ""]);
+        for (const k of keys) if (k) (seen.has(k) ? shared : seen).add(k);
         if (r.title.trim()) byTitle.set(titleKey(r.title), r.id);
         if (r.file?.name) byFileName.set(titleKey(r.file.name), r.id);
       }
       this._titles = byTitle;
       this._files = byFileName;
+      this._shared = shared;
     }
     return this._titles;
   }
@@ -160,6 +167,16 @@ export class Index {
     // [[id|Label]] links exactly, also to titles that can't be linked by name
     return byTitle.get(k) ?? file ?? (this.byId.has(title.trim()) ? title.trim() : undefined);
   };
+
+  /**
+   * How a [[link]] to the item is written: its title when that leads to it and to nothing
+   * else, else its id (two entries with one title, or # | [ ] in it), so the link stays exact.
+   */
+  linkTarget(item: Item): string {
+    const title = item.title.trim();
+    const unique = !!title && !/[\]|#[\n]/.test(title) && this.resolveTitle(title) === item.id && !this._shared!.has(titleKey(title));
+    return unique ? title : item.id;
+  }
 
   /** True when [[links]] by this title lead to the item, so renaming it renames them too. */
   ownsTitle(item: Item): boolean {

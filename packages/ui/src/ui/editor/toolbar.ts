@@ -12,7 +12,7 @@ import { pal } from "../item-look";
 import { iconButton, iconHTML } from "./icons";
 import { showMenu } from "./menu";
 import { titleKey } from "@obtion/core/model";
-import { kindHint, webHref } from "../text";
+import { kindHint, placeHint, webHref } from "../text";
 
 const EXTRACT_MENU_ROWS = 10;
 const LINK_HITS = 6;
@@ -34,8 +34,10 @@ function link(view: EditorView, target: { page?: string; url?: string }, text = 
   view.focus();
 }
 
+/** `page` is a title or, for a page its title can't name exactly, its id. */
 function pageLink(page: string, text: string) {
-  return titleKey(text) === page.toLowerCase() ? `[[${page}]]` : `[[${page}|${text}]]`;
+  if (titleKey(text) === page.toLowerCase() && !repo.get(page)) return `[[${page}]]`;
+  return `[[${page}|${text.replace(/[|\]\n]/g, "").trim()}]]`; // a | or ] would end the link
 }
 
 class Toolbar {
@@ -57,7 +59,7 @@ class Toolbar {
   picked = 0;
   /** Set while relinking; the selection is then the whole link. */
   relinkText: string | null = null;
-  hits: { title: string; type: string }[] = [];
+  hits: { title: string; target: string; type: string; place: string }[] = [];
   constructor(readonly view: EditorView) {
     this.dom = document.createElement("div");
     this.dom.className = "cm-toolbar";
@@ -211,13 +213,13 @@ class Toolbar {
     const text = this.relinkText ?? this.view.state.sliceDoc(sel.from, sel.to);
     const ix = repo.index();
     const found = repo.search(query.trim() ? query : text, LINK_HITS).filter((hit) => hit.title);
-    this.hits = found.map((hit) => ({ title: hit.title, type: kindHint(hit, ix) }));
+    this.hits = found.map((hit) => ({ title: hit.title, target: ix.linkTarget(hit), type: kindHint(hit, ix), place: placeHint(hit, ix) }));
     this.picked = 0;
     this.results.textContent = "";
     const isWeb = isURL(query);
-    const rows: { icon: typeof Globe; label: string; hint: string; run: () => void }[] = [];
+    const rows: { icon: typeof Globe; label: string; hint: string; place?: string; run: () => void }[] = [];
     if (isWeb) rows.push({ icon: Globe, label: query.trim(), hint: tr("editor.fmt.linkWeb"), run: () => this.choose({ url: query.trim() }) });
-    if (this.hits.length) for (const hit of this.hits) rows.push({ icon: FileText, label: hit.title, hint: hit.type, run: () => this.choose({ page: hit.title }) });
+    if (this.hits.length) for (const hit of this.hits) rows.push({ icon: FileText, label: hit.title, hint: hit.type, place: hit.place, run: () => this.choose({ page: hit.target }) });
     else if (!isWeb) {
       const hint = Object.assign(document.createElement("div"), { className: "cm-toolbar-empty", textContent: tr("editor.fmt.linkNone") });
       this.results.append(hint);
@@ -227,8 +229,15 @@ class Toolbar {
       button.type = "button";
       button.className = "cm-menu-row" + (i === 0 ? " active" : "");
       button.innerHTML = `<span class="cm-menu-icon">${iconHTML(row.icon, 15)}</span><span class="cm-menu-label"></span><span class="cm-menu-hint"></span>`;
-      button.querySelector(".cm-menu-label")!.textContent = row.label;
+      const label = button.querySelector(".cm-menu-label")!;
+      label.textContent = row.label;
       button.querySelector(".cm-menu-hint")!.textContent = row.hint;
+      if (row.place) {
+        // The path goes below the title: two entries with one title differ there.
+        const lines = Object.assign(document.createElement("span"), { className: "cm-menu-lines" });
+        label.replaceWith(lines);
+        lines.append(label, Object.assign(document.createElement("span"), { className: "cm-menu-place", textContent: row.place }));
+      }
       button.addEventListener("click", row.run);
       this.results.append(button);
     });

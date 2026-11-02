@@ -33,7 +33,7 @@ import { yCollab, yUndoManagerKeymap } from "y-codemirror.next";
 import { repo } from "../repo";
 import { files } from "../files";
 import { tr } from "../i18n";
-import { kindHint } from "./text";
+import { kindHint, linkInner, placeHint } from "./text";
 
 const highlight = HighlightStyle.define([
   { tag: t.strong, fontWeight: "650" },
@@ -114,10 +114,12 @@ const linkCompletion = (selfId?: string) => (ctx: CompletionContext): Completion
   const query = match.text.slice(2);
   const close = ctx.state.sliceDoc(ctx.pos, ctx.pos + 2) === "]]" ? "" : "]]";
   const hits = (query.trim() ? repo.search(query, LINK_HITS) : [...repo.live()].sort((a, b) => b.updated - a.updated).slice(0, LINK_HITS)).filter((hit) => hit.id !== selfId);
+  const ix = repo.index();
   const options: Completion[] = hits.map((hit) => pageOption({
     label: hit.title,
-    hint: kindHint(hit, repo.index()),
-    apply: hit.title + close,
+    hint: kindHint(hit, ix),
+    place: placeHint(hit, ix),
+    apply: linkInner(hit, ix) + close,
     boost: hit.title.toLowerCase().startsWith(query.toLowerCase()) ? 10 : 0,
   }));
   if (query.trim() && !hits.some((h) => h.title.toLowerCase() === titleKey(query)))

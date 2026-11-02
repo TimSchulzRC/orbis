@@ -145,6 +145,96 @@ describe("links", () => {
   });
 });
 
+describe("links to entries with one title", () => {
+  /** A title of its own per run: a retry finds no pages left from the try before. */
+  const fresh = (title: string) => `${title}${Math.random().toString(36).slice(2, 7)}`;
+  /** Two pages with one title, one under "Arbeit", one under "Privat". */
+  const twins = (title: string) => {
+    const work = repo.create({ title: "Arbeit" });
+    const home = repo.create({ title: "Privat" });
+    return { work: repo.create({ title, parents: [work] }), home: repo.create({ title, parents: [home] }) };
+  };
+  const options = () => [...document.querySelectorAll(".cm-tooltip-autocomplete li")];
+  /** The paths below the options named `title`. */
+  const places = (title: string) => options().filter((li) => li.querySelector(".cm-slash-name")?.textContent === title).map((li) => li.querySelector(".cm-slash-place")?.textContent);
+  const selectedPlace = () => document.querySelector(".cm-tooltip-autocomplete [aria-selected] .cm-slash-place")?.textContent ?? "";
+  /** Select the option with this path by keys, each press once (the list may be slow to follow). */
+  const pick = async (place: string) => {
+    await pastInteractionDelay(); // the arrow keys too do nothing right after the list opens
+    const all = options();
+    const steps = all.findIndex((li) => li.querySelector(".cm-slash-place")?.textContent === place) - all.findIndex((li) => li.hasAttribute("aria-selected"));
+    for (let i = 0; i < steps; i++) await commands.keys("press", "ArrowDown");
+    await expect.poll(selectedPlace).toBe(place);
+    await pastInteractionDelay();
+  };
+
+  test('"[[" lists both with their path and links the chosen one by its id', async () => {
+    const title = fresh("Zwilling");
+    const t = twins(title);
+    const { doc } = await open();
+    await clickEnd(lineEls().at(-1)!);
+    await commands.keys("press", "End");
+    await commands.keys("type", ` [[${title}`);
+    // both, each with its path below
+    await expect.poll(() => places(title).sort()).toEqual(["Arbeit", "Privat"]);
+    await pick("Privat");
+    await commands.keys("press", "Enter");
+    expect(doc().endsWith(`Vierter Absatz [[${t.home}|${title}]]`)).toBe(true);
+    expect(lines().at(-1)!.text).toBe(`Vierter Absatz ${title}`);
+  });
+
+  test('"@" lists both with their path and links the chosen one by its id', async () => {
+    const title = fresh("Zwilling");
+    const t = twins(title);
+    const { doc } = await open();
+    await clickEnd(lineEls().at(-1)!);
+    await commands.keys("press", "End");
+    await commands.keys("type", ` @${title}`);
+    await expect.poll(() => places(title).sort()).toEqual(["Arbeit", "Privat"]);
+    await pick("Arbeit");
+    await commands.keys("press", "Enter");
+    expect(doc().endsWith(`Vierter Absatz [[${t.work}|${title}]]`)).toBe(true);
+  });
+
+  test("the link box shows the path of every page and links a twin by its id", async () => {
+    const title = fresh("Doppelgänger");
+    const t = twins(title);
+    const { doc } = await open();
+    const r = rect(document.querySelector(".cm-wikilink")!);
+    await commands.mouse("click", r.left + r.width / 2, r.top + r.height / 2, { button: "right" });
+    await expect.poll(() => [...document.querySelectorAll(".cm-menu-row")].some((x) => x.textContent?.includes("Ziel ändern"))).toBe(true);
+    const target = [...document.querySelectorAll<HTMLElement>(".cm-menu-row")].find((x) => x.textContent?.includes("Ziel ändern"))!;
+    await commands.mouse("click", rect(target).left + 10, rect(target).top + rect(target).height / 2);
+    await expect.poll(() => document.querySelector(".cm-toolbar-link input")).not.toBeNull();
+    await commands.keys("type", title);
+    const rows = () => [...document.querySelectorAll(".cm-toolbar-results .cm-menu-row")];
+    const places = () => rows().filter((x) => x.querySelector(".cm-menu-label")?.textContent === title).map((x) => x.querySelector(".cm-menu-place")?.textContent);
+    await expect.poll(() => places().sort()).toEqual(["Arbeit", "Privat"]);
+    const steps = rows().findIndex((x) => x.querySelector(".cm-menu-place")?.textContent === "Arbeit") - rows().findIndex((x) => x.classList.contains("active"));
+    for (let i = 0; i < steps; i++) await commands.keys("press", "ArrowDown");
+    await expect.poll(() => document.querySelector(".cm-toolbar-results .cm-menu-row.active .cm-menu-place")?.textContent).toBe("Arbeit");
+    await commands.keys("press", "Enter");
+    expect(doc()).toContain(`[[${t.work}|dem Kurs]]`);
+  });
+
+  test("a title with ] links by id, and the ] stays out of the link text", async () => {
+    const title = fresh("Plan ] alt ");
+    const id = repo.create({ title });
+    const { view, doc } = await open();
+    const at = doc().indexOf("Dritter Absatz");
+    view.dispatch({ changes: { from: at, to: at + "Dritter Absatz".length, insert: title } });
+    view.dispatch({ selection: { anchor: at, head: at + title.length } });
+    view.focus();
+    await commands.keys("press", "ControlOrMeta+k");
+    await expect.poll(() => document.querySelector(".cm-toolbar-link input")).not.toBeNull();
+    await expect.poll(() => document.querySelector(".cm-toolbar-results .cm-menu-row.active .cm-menu-label")?.textContent).toBe(title);
+    await commands.keys("press", "Enter");
+    const text = title.replace("]", "");
+    expect(doc()).toContain(`[[${id}|${text}]]`);
+    await expect.poll(() => [...document.querySelectorAll(".cm-wikilink")].map((a) => a.textContent)).toContain(text);
+  });
+});
+
 test('"/Trennlinie" right under a line of text draws a line and keeps the text as it was', async () => {
   const { doc } = await open();
   await clickEnd(lineEls().at(-1)!);
