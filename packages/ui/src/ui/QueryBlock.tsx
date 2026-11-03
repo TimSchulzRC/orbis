@@ -167,6 +167,7 @@ function QueryBlockView({ src, thisId, n = 0, onChange, onDelete, readOnly }: { 
         </div>
       )}
       <div className={cn("px-4 pb-3 max-sm:px-3", (editable || !def.title) && "pt-3")}>
+        <InCard.Provider value>
         <div data-handle-anchor={!editable && !def.title ? "" : undefined}>
         {showTabs && <ViewTabs tabs={tabs} active={tab.id} onPick={pickTab} edit={onChange && !readOnly ? tabEdit : undefined} />}
         {editable && (
@@ -185,7 +186,6 @@ function QueryBlockView({ src, thisId, n = 0, onChange, onDelete, readOnly }: { 
         {!def.where ? (
           <p className="py-1 text-sm text-muted-foreground">{t("query.start")}</p>
         ) : (
-          <InCard.Provider value>
           <Results
             def={eff}
             thisId={thisId}
@@ -193,9 +193,9 @@ function QueryBlockView({ src, thisId, n = 0, onChange, onDelete, readOnly }: { 
             look={{ key: `block:${thisId}:${n}:${tab.id}`, tab, onLook: onChange && !readOnly ? (p) => patchTab(tab.id, p) : undefined }}
             empty={<p className="px-0 py-1 text-sm text-muted-foreground">{def.where && "inbox" in def.where ? t("inbox.emptyShort") : t("query.empty")}</p>}
           />
-          </InCard.Provider>
         )}
         </div>
+        </InCard.Provider>
       </div>
     </div>
     </div>

@@ -242,7 +242,7 @@ export function MenuItem({ children, onClick, danger, active, icon }: { children
       aria-current={active || undefined}
       className={cn("tap-row flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm hover:bg-hover", danger && "text-danger", active && "font-medium")}
     >
-      {icon && <span className="flex w-4 shrink-0 justify-center text-muted-foreground">{icon}</span>}
+      {icon && <span className={cn("flex w-4 shrink-0 justify-center", danger ? "text-danger" : "text-muted-foreground")}>{icon}</span>}
       <span className="min-w-0 flex-1 truncate">{children}</span>
       {active && <Check size={14} className="shrink-0 text-muted-foreground" />}
     </Button>

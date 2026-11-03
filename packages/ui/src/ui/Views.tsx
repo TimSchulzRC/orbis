@@ -1,7 +1,7 @@
 // View tabs, shared by a type's page and query blocks. A tab's filter is added to the query.
 import { Checkbox } from "../components/ui/checkbox";
 import { NativeSelect } from "../components/ui/native-select";
-import { useState } from "react";
+import { useContext, useState } from "react";
 import { CalendarDays, ChartGantt, ChevronLeft, ChevronRight, Copy, GripVertical, LayoutGrid, List, ListChecks, ListTree, Plus, SlidersHorizontal, SquareKanban, Table2, Trash2, X } from "lucide-react";
 import { type ViewTab, type PropDef, type ViewKind, titleKey } from "@obtion/core/model";
 import { type Cond, type Group, groupId, parseQuery, typesIn, viewTypeIds } from "@obtion/core/query";
@@ -9,7 +9,7 @@ import { statusProp } from "@obtion/core/traits";
 import { keyBetween } from "@obtion/core/sortkey";
 import { setParams, useIndex, useLocalStorage, useRoute } from "../hooks";
 import { useT } from "../i18n";
-import { Card, Button, MenuItem, Popover, Seg, IconButton, DraftBar } from "./primitives";
+import { Card, Button, InCard, MenuItem, Popover, Seg, IconButton, DraftBar } from "./primitives";
 import { InlineText } from "./fields";
 import { cn, moveInArray } from "../lib/utils";
 import { QueryEditor } from "./QueryEditor";
@@ -51,6 +51,7 @@ export interface TabEdit {
 /** A click on the shown tab opens its menu. */
 export function ViewTabs({ tabs, active, onPick, edit, right }: { tabs: ViewTab[]; active: string; onPick: (id: string) => void; edit?: TabEdit; right?: React.ReactNode }) {
   const { t } = useT();
+  const inCard = useContext(InCard);
   const [menu, setMenu] = useState<string | null>(null);
   const [drag, setDrag] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
@@ -97,6 +98,7 @@ export function ViewTabs({ tabs, active, onPick, edit, right }: { tabs: ViewTab[
                   onDrop={(e) => (e.preventDefault(), drop(tab.id), setDrag(null), setOver(null))}
                   className={cn(
                     "tap-y flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-2.5 py-2 text-sm",
+                    n === 0 && inCard && "pl-0", // in a card the first tab starts on the heading's line
                     on ? "border-[var(--text)] font-medium text-fg" : "border-transparent text-muted-foreground hover:text-fg",
                     over === tab.id && "bg-hover",
                   )}
@@ -206,7 +208,7 @@ interface FilterDraft {
 }
 
 /** The look is saved at once; the filter stays a draft until "Speichern". */
-export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter, onClose, kinds = TAB_KINDS, flat }: { tab: ViewTab; fields: ViewField[]; columns?: string[]; groups?: Group[]; onLook: (patch: Partial<ViewTab>) => void; filter?: FilterDraft; onClose: () => void; kinds?: ViewKind[]; /** inside a card (a query block): no card of its own and no close button */ flat?: boolean }) {
+export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter, onClose, kinds = TAB_KINDS, flat }: { tab: ViewTab; fields: ViewField[]; columns?: string[]; groups?: Group[]; onLook: (patch: Partial<ViewTab>) => void; filter?: FilterDraft; onClose: () => void; kinds?: ViewKind[]; /** inside a card (a query block): no card of its own, no kind switch and no close button */ flat?: boolean }) {
   const { t } = useT();
   const ix = useIndex();
   const hasStatus = [...ix.types.values()].some((x) => statusProp(x.schema));
@@ -235,12 +237,15 @@ export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter
   const columnFields = [...shown.map((k) => fields.find((f) => titleKey(f.key) === titleKey(k)) ?? { key: k, label: fieldLabel(k, t, fields), kind: "text" as const }), ...fields.filter((f) => !isShown(f.key))];
   return (
     <Box className={cn("mb-4 space-y-3 p-3 text-sm", flat && "rounded-lg bg-surface-2/50")}>
-      <div className="flex items-start gap-2">
-        <div className="min-w-0 flex-1 overflow-x-auto [scrollbar-width:none]">
-          <Seg label={t("view.label")} value={tab.kind} onChange={(k) => onLook({ kind: k })} options={kindsHere.map((k) => ({ value: k, label: t("view." + k) }))} />
+      {/* in a query block another kind is another tab: add it with "+" and remove the old one */}
+      {!flat && (
+        <div className="flex items-start gap-2">
+          <div className="min-w-0 flex-1 overflow-x-auto [scrollbar-width:none]">
+            <Seg label={t("view.label")} value={tab.kind} onChange={(k) => onLook({ kind: k })} options={kindsHere.map((k) => ({ value: k, label: t("view." + k) }))} />
+          </div>
+          <IconButton size="sm" icon={X} iconSize={15} onClick={onClose} label={t("view.closeSettings")} />
         </div>
-        {!flat && <IconButton size="sm" icon={X} iconSize={15} onClick={onClose} label={t("view.closeSettings")} />}
-      </div>
+      )}
 
       {filter && <div>
         <p className="mb-1 text-xs text-muted-foreground">{t("view.filter")}</p>
