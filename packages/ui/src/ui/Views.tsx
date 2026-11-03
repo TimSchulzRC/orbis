@@ -48,11 +48,12 @@ export interface TabEdit {
   settings: () => void;
 }
 
-/** A click on the shown tab opens its menu. */
-export function ViewTabs({ tabs, active, onPick, edit, right }: { tabs: ViewTab[]; active: string; onPick: (id: string) => void; edit?: TabEdit; right?: React.ReactNode }) {
+/** A click on the shown tab, or a right click on any tab, opens its menu. `left` stays put while the tabs scroll. */
+export function ViewTabs({ tabs, active, onPick, edit, left, right }: { tabs: ViewTab[]; active: string; onPick: (id: string) => void; edit?: TabEdit; left?: React.ReactNode; right?: React.ReactNode }) {
   const { t } = useT();
   const inCard = useContext(InCard);
   const [menu, setMenu] = useState<string | null>(null);
+  const [point, setPoint] = useState<{ x: number; y: number } | null>(null); // a right click: the menu opens there
   const [drag, setDrag] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
   const drop = (target: string) => {
@@ -74,6 +75,7 @@ export function ViewTabs({ tabs, active, onPick, edit, right }: { tabs: ViewTab[
   };
   return (
     <div className="mb-3 flex items-end gap-2 border-b border-line">
+      {left && <div className="flex min-w-0 max-w-[45%] shrink-0 items-center gap-2 self-stretch py-1 pr-1">{left}<span aria-hidden className="ml-1 h-4 w-px shrink-0 bg-line" /></div>}
       <div role="tablist" aria-label={t("view.tabs")} className="-mb-px flex min-w-0 flex-1 items-end overflow-x-auto [scrollbar-width:none]">
         {tabs.map((tab, n) => {
           const Icon = KIND_ICON[tab.kind] ?? List;
@@ -82,6 +84,7 @@ export function ViewTabs({ tabs, active, onPick, edit, right }: { tabs: ViewTab[
             <Popover
               key={tab.id}
               open={menu === tab.id}
+              point={menu === tab.id ? point : null}
               onOpenChange={(o) => setMenu(o ? tab.id : null)}
               trigger={(p) => (
                 <Button variant="plain"
@@ -89,7 +92,8 @@ export function ViewTabs({ tabs, active, onPick, edit, right }: { tabs: ViewTab[
                   aria-selected={on}
                   aria-haspopup={on && edit ? "menu" : undefined}
                   aria-expanded={on && edit ? p["aria-expanded"] : undefined}
-                  onClick={() => (on ? edit && p.onClick() : onPick(tab.id))}
+                  onClick={() => (on ? edit && (setPoint(null), p.onClick()) : onPick(tab.id))}
+                  onContextMenu={edit && ((e) => (e.preventDefault(), setPoint({ x: e.clientX, y: e.clientY }), setMenu(tab.id)))}
                   draggable={!!edit}
                   onDragStart={(e) => (e.dataTransfer.setData("obtion/tab", tab.id), setDrag(tab.id))}
                   onDragEnd={() => (setDrag(null), setOver(null))}
@@ -98,7 +102,7 @@ export function ViewTabs({ tabs, active, onPick, edit, right }: { tabs: ViewTab[
                   onDrop={(e) => (e.preventDefault(), drop(tab.id), setDrag(null), setOver(null))}
                   className={cn(
                     "tap-y flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-2.5 py-2 text-sm",
-                    n === 0 && inCard && "pl-0", // in a card the first tab starts on the heading's line
+                    n === 0 && inCard && !left && "pl-0", // in a card the first tab starts on the heading's line
                     on ? "border-[var(--text)] font-medium text-fg" : "border-transparent text-muted-foreground hover:text-fg",
                     over === tab.id && "bg-hover",
                   )}
@@ -113,7 +117,7 @@ export function ViewTabs({ tabs, active, onPick, edit, right }: { tabs: ViewTab[
                   <div className="px-1.5 pb-1 pt-0.5">
                     <InlineText value={tab.name ?? ""} placeholder={t("view." + tab.kind)} onCommit={(v) => edit!.rename(tab.id, v.trim())} label={t("view.rename")} className="rounded-md border border-line bg-bg px-2 py-1 text-sm" />
                   </div>
-                  <MenuItem icon={<SlidersHorizontal size={14} />} onClick={() => (close(), edit!.settings())}>
+                  <MenuItem icon={<SlidersHorizontal size={14} />} onClick={() => (close(), on || onPick(tab.id), edit!.settings())}>
                     {t("view.settings")}
                   </MenuItem>
                   <MenuItem icon={<Copy size={14} />} onClick={() => (close(), edit!.duplicate(tab.id))}>
