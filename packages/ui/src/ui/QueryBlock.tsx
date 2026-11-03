@@ -129,7 +129,7 @@ function QueryBlockView({ src, thisId, n = 0, onChange, onDelete, readOnly }: { 
           {tools}
         </div>
       ) : def.title ? (
-        <div className="flex items-start gap-2 px-4 pt-3 max-sm:px-3">
+        <div className="flex items-start gap-2 px-4 pt-1.5 max-sm:px-3">
           <div className="min-w-0 flex-1" data-handle-anchor>
             <SectionTitle className="mb-1" count={items.length || undefined}>
               {def.title}
@@ -166,7 +166,7 @@ function QueryBlockView({ src, thisId, n = 0, onChange, onDelete, readOnly }: { 
           </div>
         </div>
       )}
-      <div className={cn("px-4 pb-3 max-sm:px-3", (editable || !def.title) && "pt-3")}>
+      <div className={cn("px-4 pb-3 max-sm:px-3", editable && "pt-3")}>
         <div data-handle-anchor={!editable && !def.title ? "" : undefined}>
         {showTabs && <ViewTabs tabs={tabs} active={tab.id} onPick={pickTab} edit={onChange && !readOnly ? tabEdit : undefined} />}
         {editable && (
