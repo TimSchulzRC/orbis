@@ -29,6 +29,7 @@ import { isStatusProp, statusProp, useAsStatus } from "@obtion/core/traits";
 import { keyBetween } from "@obtion/core/sortkey";
 import { parseQuery, printQuery, runQuery } from "@obtion/core/query";
 import { type DeleteMode, deleteType, previewTagToType, tagToType, typeUsage } from "@obtion/core/typeops";
+import { followKindChange, followPropChange, followTypeRename } from "@obtion/core/typerefs";
 import { useIndex, navigate, useDocumentTitle, useRepo, useSpaceId } from "../hooks";
 import { useT } from "../i18n";
 import { Card, Button, Dialog, MenuItem, Popover, SectionTitle, Seg, AddButton, IconButton, MoreMenu, PagePlaceholder } from "../ui/primitives";
@@ -148,7 +149,11 @@ function TypeEditor({ item, onClose }: { item: Item; onClose: () => void }) {
           <InlineText
             value={schema.name}
             label={t("type.name")}
-            onCommit={(v) => v.trim() && change((d) => (setSchemaField(d, "name", v.trim()), setMeta(d, { title: v.trim() })))}
+            onCommit={(v) => {
+              if (!v.trim()) return;
+              change((d) => (setSchemaField(d, "name", v.trim()), setMeta(d, { title: v.trim() })));
+              followTypeRename(repo.writer, ix, schema.name, v.trim());
+            }}
             className="text-2xl font-semibold tracking-tight"
             large
           />
@@ -317,7 +322,7 @@ function relationTargets(prop: PropDef, ix: ReturnType<typeof useIndex>): number
 
 function PropEditor({ item, prop }: { item: Item; prop: PropDef }) {
   const repo = useRepo();
-  const { t } = useT();
+  const { t, lang } = useT();
   const ix = useIndex();
   const set = (patch: Patch<Omit<PropDef, "id">>) => repo.change(item.id, (d) => upsertProp(d, prop.id, patch));
   const field = (label: string, inner: React.ReactNode) => (
@@ -331,11 +336,20 @@ function PropEditor({ item, prop }: { item: Item; prop: PropDef }) {
   const types = [...ix.types.values()];
   const isStatus = isStatusProp(item.schema!, prop);
   const other = statusProp(item.schema!);
+  // stored values follow where they can (an option becomes its name as text and back)
+  const changeKind = (next: { kind?: PropKind; multiple?: boolean }) => {
+    repo.change(item.id, (d) => {
+      if (next.kind) upsertProp(d, prop.id, { kind: next.kind });
+      if (next.multiple !== undefined) upsertProp(d, prop.id, next.multiple ? { multiple: true, default: null } : { multiple: null });
+      if (next.kind && isStatus) setCapability(d, "status", null);
+    });
+    followKindChange(repo.writer, ix, item.id, prop, { ...prop, ...next });
+  };
   return (
     <Card className="p-4" key={prop.id}>
       <div className="flex items-center gap-2">
-        <InlineText value={prop.name} onCommit={(v) => v.trim() && set({ name: v.trim() })} className="font-semibold" label={t("props.name")} />
-        <NativeSelect value={prop.kind} onChange={(e) => repo.change(item.id, (d) => (upsertProp(d, prop.id, { kind: e.target.value as PropKind }), isStatus && setCapability(d, "status", null)))} className="rounded-md border border-line bg-bg px-1.5 py-0.5 text-xs" aria-label={t("props.kind")}>
+        <InlineText value={prop.name} onCommit={(v) => v.trim() && (set({ name: v.trim() }), followPropChange(repo.writer, ix, { type: item.id, prop: prop.id, from: prop.name, to: v.trim() }, lang))} className="font-semibold" label={t("props.name")} />
+        <NativeSelect value={prop.kind} onChange={(e) => changeKind({ kind: e.target.value as PropKind })} className="rounded-md border border-line bg-bg px-1.5 py-0.5 text-xs" aria-label={t("props.kind")}>
           {PROP_KINDS.map((k) => (
             <option key={k} value={k}>
               {t("kind.prop." + k)}
@@ -362,7 +376,7 @@ function PropEditor({ item, prop }: { item: Item; prop: PropDef }) {
             isStatus ? (
               <p className="text-sm text-muted-foreground">{t("type.statusOne")}</p>
             ) : (
-              <Seg label={t("type.values")} value={prop.multiple ? "many" : "one"} onChange={(v) => set(v === "many" ? { multiple: true, default: null as any } : { multiple: null as any })} options={[{ value: "one", label: t("type.one") }, { value: "many", label: t("type.many") }]} />
+              <Seg label={t("type.values")} value={prop.multiple ? "many" : "one"} onChange={(v) => changeKind({ multiple: v === "many" })} options={[{ value: "one", label: t("type.one") }, { value: "many", label: t("type.many") }]} />
             ),
           )}
           {!prop.multiple &&
@@ -435,7 +449,7 @@ function PropEditor({ item, prop }: { item: Item; prop: PropDef }) {
         </>
       )}
       <div className="mt-5 flex justify-end">
-        <Button variant="danger" onClick={() => repo.change(item.id, (d) => removeProp(d, prop.id))}>
+        <Button variant="danger" onClick={() => (repo.change(item.id, (d) => removeProp(d, prop.id)), followPropChange(repo.writer, ix, { type: item.id, prop: prop.id, from: prop.name, to: null }, lang))}>
           <Trash2 size={14} /> {t("type.removeProp")}
         </Button>
       </div>

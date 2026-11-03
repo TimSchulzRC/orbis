@@ -56,6 +56,7 @@ import { DAY_MS, dateOf } from "@obtion/core/date";
 import { freshColor } from "@obtion/core/palette";
 import { DATE_HELP, InputError, matchOption, parseDate, parseNumber, statusGroupOf } from "@obtion/core/input";
 import { type Writer, runSetup, typeTabs } from "@obtion/core/setup";
+import { type PropChange, followKindChange, followPropChange, followTypeRename } from "@obtion/core/typerefs";
 import { type Lang, translate } from "@obtion/core/i18n";
 import { deleteItem, onlyBelow, restoreItem } from "@obtion/core/trash";
 import { fromB64 } from "@obtion/core/protocol";
@@ -1307,6 +1308,22 @@ export class Ops {
       }
       for (const r of input.remove_properties ?? []) upsertProp(doc, find(r).id, { removed: true });
     });
+    this.store.flush();
+    // views, query blocks and relation targets name properties and types by text
+    const follow: PropChange[] = [
+      ...(input.change_properties ?? []).flatMap((p) => {
+        const cur = find(p.property);
+        return p.name && p.name !== cur.name ? [{ type: t.id, prop: cur.id, from: cur.name, to: p.name }] : [];
+      }),
+      ...(input.remove_properties ?? []).map((r) => ({ type: t.id, prop: find(r).id, from: find(r).name, to: null })),
+    ];
+    for (const c of follow) followPropChange(this.writer(origin), this.ix, c, this.store.lang());
+    for (const p of input.change_properties ?? []) {
+      const cur = find(p.property);
+      const now = this.ix.types.get(t.id)!.schema.properties.find((x) => x.id === cur.id);
+      if (now) followKindChange(this.writer(origin), this.ix, t.id, cur, now);
+    }
+    if (input.name && input.name !== s.name) followTypeRename(this.writer(origin), this.ix, s.name, input.name);
     this.store.flush();
     const s2 = this.store.index().types.get(t.id)!.schema;
     const c: CapInput | undefined = input.capabilities;
