@@ -1,7 +1,7 @@
 // Links of a page, both ways, behind one button in the page head: its number counts all of them,
 // a click lists "Verlinkt von" and "Verweist auf". The page has no section for them at the end.
 import { afterEach, expect, test } from "vitest";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { cleanup, render } from "vitest-browser-react";
 import { ItemPage } from "../../packages/ui/src/views/ItemPage";
 import { workspace } from "./workspace";
@@ -74,15 +74,46 @@ test("refs show as chips after the link button; a link from the text can be pinn
   const chips = () => page.getByRole("link", { name: /Roadmap 2027|Website-Relaunch/ }).elements().filter((a) => !a.closest(".cm-editor"));
   await expect.poll(() => chips().map((a) => a.textContent)).toEqual(["Roadmap 2027"]);
 
-  // pinned from the menu, the link from the text shows as a chip too
+  // pinned from the menu, the link from the text shows as a chip too, in front
   await page.getByRole("button", { name: "Links: 2" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Oben anheften" }).click();
-  await expect.poll(() => repo.get(id)!.refs).toEqual([roadmap, relaunch]);
+  await expect.poll(() => repo.get(id)!.refs).toEqual([relaunch, roadmap]);
   await page.getByRole("button", { name: "Links: 2" }).click(); // close the menu
-  await expect.poll(() => chips().map((a) => a.textContent)).toEqual(["Roadmap 2027", "Website-Relaunch"]);
+  await expect.poll(() => chips().map((a) => a.textContent)).toEqual(["Website-Relaunch", "Roadmap 2027"]);
 
   // its × unpins it; the link in the text stays
   await page.getByRole("button", { name: "Nicht mehr oben anheften" }).click();
   await expect.poll(() => repo.get(id)!.refs).toEqual([roadmap]);
   expect(repo.get(id)!.body).toContain("[[Website-Relaunch]]");
+});
+
+test("refs keep their order: a pinned link goes in front, chips can be dragged or moved with Alt+arrows", async () => {
+  const repo = await workspace(false);
+  const home = repo.create({ title: "Arbeit", pinned: "a" });
+  const a = repo.create({ title: "Alpha", parents: [home] });
+  const b = repo.create({ title: "Beta", parents: [home] });
+  const g = repo.create({ title: "Gamma", parents: [home] });
+  const id = repo.create({ title: "Seite", parents: [home], body: "Siehe [[Gamma]]." });
+  repo.setMember(id, "refs", a, true);
+  repo.setMember(id, "refs", b, true);
+  await render(<ItemPage id={id} isNew={false} />);
+
+  // pinned from the menu, the link from the text goes in front
+  await page.getByRole("button", { name: "Links: 3" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Oben anheften" }).click();
+  await expect.poll(() => repo.get(id)!.refs).toEqual([g, a, b]);
+  await page.getByRole("button", { name: "Links: 3" }).click();
+  const chips = () => [...document.querySelectorAll("[data-ref]")].map((x) => x.textContent);
+  await expect.poll(chips).toEqual(["Gamma", "Alpha", "Beta"]);
+
+  // dragged onto the first chip, the last one takes its place
+  await userEvent.dragAndDrop(page.getByText("Beta", { exact: true }), page.getByText("Gamma", { exact: true }));
+  await expect.poll(() => repo.get(id)!.refs).toEqual([b, g, a]);
+
+  // Alt+→ moves the focused chip one place to the right
+  const beta = page.getByRole("link", { name: /Beta$/ });
+  await beta.element().focus();
+  await userEvent.keyboard("{Alt>}{ArrowRight}{/Alt}");
+  await expect.poll(() => repo.get(id)!.refs).toEqual([g, b, a]);
+  await expect.poll(chips).toEqual(["Gamma", "Beta", "Alpha"]);
 });

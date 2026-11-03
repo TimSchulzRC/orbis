@@ -185,7 +185,7 @@ function linkGroups(item: Item, ix: Index, t: T, usedIn: { item: Item; note?: st
               item.refs.includes(x) ? (
                 <IconButton size="xs" icon={PinOff} iconSize={12} onClick={() => repo.setMember(item.id, "refs", x, false)} className="text-muted-foreground" label={t("links.unpin")} />
               ) : (
-                <IconButton size="xs" icon={Pin} iconSize={12} onClick={() => repo.setMember(item.id, "refs", x, true)} className={cn("text-faint", REVEAL.any)} label={t("links.pin")} />
+                <IconButton size="xs" icon={Pin} iconSize={12} onClick={() => repo.pinRef(item.id, x)} className={cn("text-faint", REVEAL.any)} label={t("links.pin")} />
               )
             ) : (
               <IconButton size="xs" icon={X} iconSize={12} onClick={() => repo.setMember(item.id, "refs", x, false)} className={cn("text-faint", REVEAL.any)} label={t("item.removeRef")} />
@@ -295,13 +295,50 @@ export function AddRef({ item, text }: { item: Item; text?: boolean }) {
 export function LinksRow({ item }: { item: Item }) {
   const ix = useIndex();
   const { t } = useT();
+  const [drag, setDrag] = useState<string | null>(null);
+  const [over, setOver] = useState<string | null>(null);
   const refs = pinnedRefs(item, ix);
   if (!refs.length) return null;
   const inText = new Set(ix.textLinks(item).map((l) => l.to));
+  const ids = refs.map((x) => x.id);
+  // dropped on a chip: it takes that chip's place (before it when coming from the right)
+  const drop = (target: string) => {
+    if (!drag || drag === target) return;
+    const from = ids.indexOf(drag);
+    const to = ids.indexOf(target);
+    repo.moveRef(item.id, drag, from > to ? target : (ids[to + 1] ?? null));
+  };
+  // Alt+← / Alt+→ on a chip moves it by one
+  const step = (id: string, direction: -1 | 1) => {
+    const n = ids.indexOf(id);
+    if (direction < 0 && n > 0) repo.moveRef(item.id, id, ids[n - 1]!);
+    if (direction > 0 && n < ids.length - 1) repo.moveRef(item.id, id, ids[n + 2] ?? null);
+    // moving the chip in the page takes the focus with it
+    requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-ref="${id}"] a`)?.focus());
+  };
   return (
     <div className="mt-2 flex flex-wrap items-center gap-1.5">
       {refs.map((x) => (
-        <span key={x.id} className="group inline-flex max-w-full items-center gap-1 rounded-md bg-surface-2 py-0.5 pl-1.5 pr-0.5 text-[13px]">
+        <span
+          key={x.id}
+          draggable
+          onDragStart={(e) => (e.dataTransfer.setData("obtion/ref", x.id), (e.dataTransfer.effectAllowed = "move"), setDrag(x.id))}
+          onDragEnd={() => (setDrag(null), setOver(null))}
+          onDragOver={(e) => drag && (e.preventDefault(), setOver(x.id))}
+          onDragLeave={() => setOver(null)}
+          onDrop={(e) => (e.preventDefault(), drop(x.id), setDrag(null), setOver(null))}
+          onKeyDown={(e) => {
+            if (!e.altKey || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return;
+            e.preventDefault();
+            step(x.id, e.key === "ArrowLeft" ? -1 : 1);
+          }}
+          data-ref={x.id}
+          className={cn(
+            "group inline-flex max-w-full cursor-grab items-center gap-1 rounded-md bg-surface-2 py-0.5 pl-1.5 pr-0.5 text-[13px] active:cursor-grabbing",
+            drag === x.id && "opacity-50",
+            over === x.id && drag !== x.id && "ring-1 ring-faint",
+          )}
+        >
           <ItemLink item={x} className="min-w-0" />
           {inText.has(x.id) ? (
             // pinned from the text: the pin says why it is here, hovered it turns into the ×
