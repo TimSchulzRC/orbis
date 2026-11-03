@@ -799,6 +799,8 @@
  "links.title": "Links",
  "links.to": "Verweist auf",
  "links.count": "{count} Links",
+ "links.pin": "Oben anheften",
+ "links.unpin": "Nicht mehr oben anheften",
  "links.placeHere": "Hier einsortieren",
  "caps.primaryChild": "Hauptaktion",
  "caps.primaryChildHint": "„+“ auf der Seite legt ein Kind dieses Typs an, mit Liste über alle Ebenen.",

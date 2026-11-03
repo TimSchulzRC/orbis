@@ -45,3 +45,29 @@ test("no links, no button", async () => {
   await expect.element(page.getByText("Allein").first()).toBeVisible();
   expect(page.getByRole("button", { name: /Links$/ }).query()).toBeNull();
 });
+
+test("refs show as chips after the link button; a link from the text can be pinned there", async () => {
+  const repo = await workspace(false);
+  const home = repo.create({ title: "Arbeit", pinned: "a" });
+  const roadmap = repo.create({ title: "Roadmap 2027", parents: [home] });
+  const relaunch = repo.create({ title: "Website-Relaunch", parents: [home] });
+  const id = repo.create({ title: "Marketing", parents: [home], body: "Stand unter [[Website-Relaunch]]." });
+  repo.setMember(id, "refs", roadmap, true);
+  await render(<ItemPage id={id} isNew={false} />);
+
+  // the ref set by hand is a chip; the link in the text is not
+  const chips = () => page.getByRole("link", { name: /Roadmap 2027|Website-Relaunch/ }).elements().filter((a) => !a.closest(".cm-editor"));
+  await expect.poll(() => chips().map((a) => a.textContent)).toEqual(["Roadmap 2027"]);
+
+  // pinned from the menu, the link from the text shows as a chip too
+  await page.getByRole("button", { name: "2 Links" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Oben anheften" }).click();
+  await expect.poll(() => repo.get(id)!.refs).toEqual([roadmap, relaunch]);
+  await page.getByRole("button", { name: "2 Links" }).click(); // close the menu
+  await expect.poll(() => chips().map((a) => a.textContent)).toEqual(["Roadmap 2027", "Website-Relaunch"]);
+
+  // its × unpins it; the link in the text stays
+  await page.getByRole("button", { name: "Nicht mehr oben anheften" }).click();
+  await expect.poll(() => repo.get(id)!.refs).toEqual([roadmap]);
+  expect(repo.get(id)!.body).toContain("[[Website-Relaunch]]");
+});

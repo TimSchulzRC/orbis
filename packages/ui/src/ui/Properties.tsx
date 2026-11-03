@@ -272,10 +272,14 @@ function BlockRow({ label, title, children }: { label: React.ReactNode; title?: 
   );
 }
 
-/** `first` goes before the badges, `end` at the right edge after the tags, `progress` under the dates. */
+/**
+ * `first` goes before the badges, `end` at the right edge after the tags, `links` in a row of its own
+ * below them (a divider follows), `progress` under the dates.
+ */
 interface PageHead {
   first?: React.ReactNode;
   end?: React.ReactNode;
+  links?: React.ReactNode;
   progress?: React.ReactNode;
 }
 
@@ -299,7 +303,7 @@ export function PropertyBlock({ item, schema, head = {} }: { item: Item; schema?
   const rows = shown.length || free.length || inverse.length || leftovers.length;
   return (
     <div className="group/props">
-      <div className="mt-4 flex flex-wrap items-center gap-1.5">
+      <div className="mt-3 flex flex-wrap items-center gap-1.5">
         {head.first}
         {badges.map((p) => (
           <span key={p.id} className="inline-flex">
@@ -307,8 +311,10 @@ export function PropertyBlock({ item, schema, head = {} }: { item: Item; schema?
           </span>
         ))}
         <PageTags item={item} />
-        {head.end && <span className="ml-auto inline-flex items-center gap-0.5">{head.end}</span>}
+        {head.end && <span className="ml-auto inline-flex">{head.end}</span>}
       </div>
+      {head.links}
+      <div className="mt-3 border-t border-line" />
       {dates.length > 0 && (
         <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
           {dates.map((p) => (
@@ -352,7 +358,7 @@ export function PropertyBlock({ item, schema, head = {} }: { item: Item; schema?
       ))}
       </div>
       )}
-      <div className="mt-2" />
+      {(dates.length > 0 || !!head.progress || rows > 0) && <div className="mt-4 border-t border-line" />}
     </div>
   );
 }

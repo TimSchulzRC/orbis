@@ -1,5 +1,5 @@
 // Parts every page shares, information and file pages alike (design rules § 3.1).
-import { ChevronRight, Link2, Pin, Plus, RotateCcw, Star, X } from "lucide-react";
+import { ChevronRight, Link2, Pin, PinOff, Plus, RotateCcw, Star, X } from "lucide-react";
 import { type Item, META_TYPE } from "@obtion/core/model";
 import { hasPlace, isInInbox } from "@obtion/core/placement";
 import { fmtDate, type T } from "@obtion/core/i18n";
@@ -7,7 +7,7 @@ import type { Index } from "@obtion/core/graph";
 import { repo } from "../repo";
 import { itemHref, useIndex, usePhone } from "../hooks";
 import { useT, titleOf } from "../i18n";
-import { ItemIcon, RelTime } from "./item-look";
+import { ItemIcon, ItemLink, RelTime } from "./item-look";
 import { Button, IconButton, MenuItem, MoreMenu, Popover, REVEAL } from "./primitives";
 import { Tip } from "../components/ui/tooltip";
 import { cn } from "../lib/utils";
@@ -178,7 +178,14 @@ function linkGroups(item: Item, ix: Index, t: T, usedIn: { item: Item; note?: st
         tools: (
           <>
             <PlaceHere target={ix.get(x)!} page={item} />
-            {!fromText.includes(x) && !embedded.includes(x) && (
+            {fromText.includes(x) || embedded.includes(x) ? (
+              // a link in the text shows in the head too once pinned
+              item.refs.includes(x) ? (
+                <IconButton size="xs" icon={PinOff} iconSize={12} onClick={() => repo.setMember(item.id, "refs", x, false)} className="text-muted-foreground" label={t("links.unpin")} />
+              ) : (
+                <IconButton size="xs" icon={Pin} iconSize={12} onClick={() => repo.setMember(item.id, "refs", x, true)} className={cn("text-faint", REVEAL.any)} label={t("links.pin")} />
+              )
+            ) : (
               <IconButton size="xs" icon={X} iconSize={12} onClick={() => repo.setMember(item.id, "refs", x, false)} className={cn("text-faint", REVEAL.any)} label={t("item.removeRef")} />
             )}
           </>
@@ -241,6 +248,37 @@ function PlaceHere({ target, page }: { target: Item; page: Item }) {
     <Button variant="plain" onClick={(e) => (e.preventDefault(), repo.addParent(target.id, page.id))} className="tap-y rounded-md px-1.5 py-0.5 text-xs text-link hover:bg-hover">
       {t("links.placeHere")}
     </Button>
+  );
+}
+
+/**
+ * The row under type and tags: the link button first, then the refs as chips, the ones set by hand
+ * and links from the text that were pinned. Nothing linked, no row.
+ */
+export function LinksRow({ item }: { item: Item }) {
+  const ix = useIndex();
+  const { t } = useT();
+  const inText = new Set(ix.textLinks(item).map((l) => l.to));
+  const refs = item.refs.map((id) => ix.get(id)).filter((x): x is Item => !!x && !x.deleted && x.id !== item.id);
+  // every ref is in the menu as well, so no links means no refs either
+  if (!linkGroups(item, ix, t, []).length) return null;
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+      <LinksMenu item={item} />
+      {refs.map((x) => (
+        <span key={x.id} className="group inline-flex max-w-full items-center gap-1 rounded-md bg-surface-2 py-0.5 pl-1.5 pr-0.5 text-[13px]">
+          <ItemLink item={x} className="min-w-0" />
+          <IconButton
+            size="xs"
+            icon={X}
+            iconSize={11}
+            onClick={() => repo.setMember(item.id, "refs", x.id, false)}
+            className={cn("text-muted-foreground", REVEAL.any)}
+            label={inText.has(x.id) ? t("links.unpin") : t("item.removeRef")}
+          />
+        </span>
+      ))}
+    </div>
   );
 }
 

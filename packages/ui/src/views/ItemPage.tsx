@@ -21,7 +21,7 @@ import { cn } from "../lib/utils";
 import { ItemPicker } from "../ui/Picker";
 import { PropertyBlock } from "../ui/Properties";
 import { BelowCard, ChildList, Updates, mainGrouping } from "../ui/Sections";
-import { Crumbs, LinksMenu, PageFooter, TrashBanner } from "../ui/PageParts";
+import { Crumbs, LinksRow, PageFooter, TrashBanner } from "../ui/PageParts";
 import { PlacePicker } from "../ui/Picker";
 import { pluralOf } from "@obtion/core/plural";
 import { queryBlocks, insertQueryBlock } from "../ui/QueryBlock";
@@ -183,28 +183,24 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
           <AlertTriangle size={12} /> {t("item.cycle", { titles: cycles.map((c) => ix.get(c)?.title).join(", ") })}
         </p>
       )}
-      {/* what the page is as badges, its dates, its progress, then the properties with their names */}
+      <div className="mt-3 border-t border-line" />
+      {/* what the page is as badges, the links, its dates, its progress, then the properties with their names */}
       <PropertyBlock
         item={item}
         schema={schema}
         head={{
           first: <TypeSwitch item={item} />,
-          end: (
-            <>
-            <LinksMenu item={item} />
-            {!item.deleted && (
+          end: !item.deleted && (
             <Tip label={t("rules.title")}>
               <Button variant="plain" onClick={() => setRulesOpen(true)} aria-label={t("rules.title")} className={cn("tap inline-flex items-center justify-center rounded-lg p-1.5 transition-colors hover:bg-hover hover:text-fg", item.rules.trim() ? "text-fg" : "text-muted-foreground")}>
                 <Bot size={16} />
               </Button>
             </Tip>
-            )}
-            </>
           ),
+          links: <LinksRow item={item} />,
           progress: progress && <ProgressBand done={progress.done} total={progress.total} desc={progressText(item, ix, progress.done, progress.total)} />,
         }}
       />
-      <div className="mt-2 border-t border-line" />
 
       {/* 2 · text */}
       <PageText item={item} doc={doc} long={typeArea} isNew={isNew} onView={setView} hasMore={typeArea || ix.childrenOf(item.id).length > 0} />
