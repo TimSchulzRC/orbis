@@ -2,7 +2,7 @@ import { Input } from "../components/ui/input";
 import { useState } from "react";
 import { Plus, Sparkles } from "lucide-react";
 import { type Item, META_TYPE, titleKey } from "@obtion/core/model";
-import { canPlaceIn, isOverview } from "@obtion/core/placement";
+import { canPlaceIn } from "@obtion/core/placement";
 import { useT, titleOf } from "../i18n";
 import { useIndex, useRepo } from "../hooks";
 import { Button, Dialog } from "./primitives";
@@ -37,11 +37,11 @@ export function ItemPicker({
   const [sel, setSel] = useState(0);
   const allowed = (i: Item) => (!exclude || !exclude(i)) && (!filter || filter(i)) && i.type !== META_TYPE;
   const suggested = q.trim() ? [] : suggestions.filter((s) => repo.get(s.id) && allowed(repo.get(s.id)!));
-  // overviews (items with children) first: they are the usual places
+  // items with entries below first: they are the usual places
   const ix = repo.index();
   const found = (q.trim() ? repo.search(q, SEARCH_HITS) : [...repo.live()].sort((a, b) => b.updated - a.updated))
     .filter(allowed)
-    .sort((a, b) => Number(isOverview(b, ix)) - Number(isOverview(a, ix)))
+    .sort((a, b) => Number(ix.childrenOf(b.id).length > 0) - Number(ix.childrenOf(a.id).length > 0))
     .filter((i) => !suggested.some((s) => s.id === i.id))
     .slice(0, MAX_ROWS);
   const rows: { id?: string; reason?: PickReason; create?: string }[] = [...suggested, ...found.map((i) => ({ id: i.id }))];

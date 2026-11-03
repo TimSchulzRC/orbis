@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { CircleCheck, CirclePause, CircleX } from "lucide-react";
 import { type Item, type OptionDef, type StatusGroup, type TypeSchema, META_TYPE, todayISO } from "@obtion/core/model";
 import { type T, fmtRelative, fmtShortDate } from "@obtion/core/i18n";
-import { isInInbox, isOverview } from "@obtion/core/placement";
+import { isInInbox } from "@obtion/core/placement";
 import type { Index } from "@obtion/core/graph";
 import { statusShape } from "@obtion/core/input";
 import { repo } from "../repo";
@@ -11,7 +11,7 @@ import { useIndex, useItemHref } from "../hooks";
 import { tr, useT, titleOf } from "../i18n";
 import { cn } from "../lib/utils";
 import { Button } from "./primitives";
-import { ICON, INBOX_ICON, NOTE_ICON, OVERVIEW_ICON, TYPE_ICON, FILE_ICONS } from "./icons";
+import { ICON, INBOX_ICON, NOTE_ICON, TYPE_ICON, FILE_ICONS } from "./icons";
 
 export const pal = (color?: string) => `var(--pal-${color ?? "slate"}, var(--pal-slate))`;
 
@@ -26,7 +26,7 @@ export interface Look {
   icon: typeof INBOX_ICON;
   color: string;
   /** "schema" is an entry of a user type, named by `name` */
-  kind: "file" | "type" | "inbox" | "overview" | "note" | "schema";
+  kind: "file" | "type" | "inbox" | "note" | "schema";
   name?: string;
 }
 
@@ -36,7 +36,6 @@ export function itemLook(item: Item, ix: Index = repo.index()): Look {
   const schema = ix.schemaOf(item);
   if (schema) return { icon: ICON[schema.icon] ?? ICON.circle!, color: pal(schema.color), kind: "schema", name: schema.name };
   if (isInInbox(item, ix)) return { icon: INBOX_ICON, color: "var(--t-inbox)", kind: "inbox" };
-  if (isOverview(item, ix)) return { icon: OVERVIEW_ICON, color: "var(--pal-violet)", kind: "overview" };
   return { icon: NOTE_ICON, color: "var(--t-note)", kind: "note" };
 }
 

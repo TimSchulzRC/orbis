@@ -5,7 +5,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { EditorView } from "@codemirror/view";
 import { Trash2, Plus, AlertTriangle, ImagePlus, ListFilter, Pin, PinOff, FilePlus, FolderInput, Link2, ArrowRightLeft, History, Bot } from "lucide-react";
 import { type Item, META_TYPE, titleKey } from "@obtion/core/model";
-import { isInInbox, isOverview } from "@obtion/core/placement";
+import { isInInbox } from "@obtion/core/placement";
 import { wouldBeInInbox } from "@obtion/core/typeops";
 import { onlyBelow } from "@obtion/core/trash";
 import { hasUpdates, progressSpec } from "@obtion/core/traits";
@@ -30,7 +30,7 @@ import { TitleField } from "../ui/TitleField";
 import { HistoryDialog } from "../ui/History";
 import { TypePage } from "./TypePage";
 import { createAndOpen, rememberPlace } from "../actions";
-import { INBOX_ICON, NOTE_ICON, OVERVIEW_ICON } from "../ui/icons";
+import { INBOX_ICON, NOTE_ICON } from "../ui/icons";
 import { toolbarExtract } from "../ui/editor/toolbar";
 import { movedItems } from "@obtion/core/transfer";
 import { useAccounts } from "../accounts";
@@ -295,7 +295,6 @@ function TypeSwitch({ item }: { item: Item }) {
   const { t } = useT();
   const schema = ix.schemaOf(item);
   const inbox = isInInbox(item, ix);
-  const overview = isOverview(item, ix);
   const types = ix.typesByName();
   const deletedType = item.type && !schema ? ix.all.get(item.type)?.schema?.name : undefined;
   return (
@@ -306,10 +305,10 @@ function TypeSwitch({ item }: { item: Item }) {
             <TypeChip schema={schema} onClick={p.onClick} />
           </span>
         ) : (
-          // no type: a plain line, not a chip – "Übersicht" and "Notiz" are no types
+          // no type: a plain line, not a chip – "Notiz" is no type
           <Button variant="plain" {...p} className={cn("tap-y inline-flex items-center gap-1 rounded px-0.5 text-[13px] hover:underline", inbox ? "text-warn" : "text-muted-foreground")} title={t("item.giveType")}>
-            {inbox ? <INBOX_ICON size={12} /> : overview ? <OVERVIEW_ICON size={12} /> : <NOTE_ICON size={12} />}
-            {inbox ? t("kind.inbox") : overview ? t("kind.overviewCount", { count: ix.childrenOf(item.id).length }) : t("kind.note")}
+            {inbox ? <INBOX_ICON size={12} /> : <NOTE_ICON size={12} />}
+            {inbox ? t("kind.inbox") : t("kind.note")}
             {deletedType && <span className="text-muted-foreground">· {t("type.deletedName", { name: deletedType })}</span>}
           </Button>
         )
