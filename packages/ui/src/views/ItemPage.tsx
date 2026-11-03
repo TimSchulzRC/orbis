@@ -3,7 +3,7 @@
 import { Input } from "../components/ui/input";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { EditorView } from "@codemirror/view";
-import { Trash2, Plus, AlertTriangle, ImagePlus, ListFilter, Pin, PinOff, FilePlus, FolderInput, Link2, ArrowRightLeft, History, Bot } from "lucide-react";
+import { Trash2, Plus, AlertTriangle, ImagePlus, ListFilter, Pin, PinOff, FilePlus, FolderInput, ArrowRightLeft, History, Bot } from "lucide-react";
 import { type Item, META_TYPE, titleKey } from "@obtion/core/model";
 import { isInInbox, isOverview } from "@obtion/core/placement";
 import { wouldBeInInbox } from "@obtion/core/typeops";
@@ -18,10 +18,9 @@ import { Tip } from "../components/ui/tooltip";
 import { ItemIcon, TypeChip, TypeGlyph } from "../ui/item-look";
 import { ProgressBand } from "../ui/progress";
 import { cn } from "../lib/utils";
-import { ItemPicker } from "../ui/Picker";
 import { PropertyBlock } from "../ui/Properties";
 import { BelowCard, ChildList, Updates, mainGrouping } from "../ui/Sections";
-import { Bezuege, Crumbs, PageFooter, TrashBanner } from "../ui/PageParts";
+import { AddRef, Crumbs, LinksMenu, LinksRow, PageFooter, TrashBanner, pinnedRefs } from "../ui/PageParts";
 import { PlacePicker } from "../ui/Picker";
 import { pluralOf } from "@obtion/core/plural";
 import { queryBlocks, insertQueryBlock } from "../ui/QueryBlock";
@@ -88,8 +87,6 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
   const [moving, setMoving] = useState(false);
   const [history, setHistory] = useState(false);
   const others = useAccounts().spaces.length > 1;
-  const [refPicking, setRefPicking] = useState(false);
-  const [placesOpen, setPlacesOpen] = useState(0);
   const [rulesOpen, setRulesOpen] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
@@ -124,9 +121,6 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
         <>
           <MenuItem icon={<FolderInput size={14} />} onClick={() => (close(), setPlacing(true))}>
             {ix.parentsOf(item.id).length ? t("place.addAnother") : t("place.place")}
-          </MenuItem>
-          <MenuItem icon={<Link2 size={14} />} onClick={() => (close(), setRefPicking(true))}>
-            {t("item.addRef")}
           </MenuItem>
           <MenuItem icon={<ImagePlus size={14} />} onClick={() => (close(), fileInput.current?.click())}>
             {t("editor.addFile")}
@@ -167,7 +161,7 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
         <TrashBanner onRestore={() => repo.restore(item.id)} />
       )}
       {/* 1 · head: path, title with the main action, type and status, progress, properties */}
-      <Crumbs item={item} tools={tools} onPlaces={() => setPlacesOpen((n) => n + 1)} onPlace={() => setPlacing(true)} />
+      <Crumbs item={item} tools={tools} onPlace={() => setPlacing(true)} />
       <div className="mt-6 flex items-start gap-4 max-md:mt-3">
         <div data-page-title className="min-w-0 flex-1 rounded-lg">
           <TitleField item={item} autoFocus={isNew && !item.title} />
@@ -184,23 +178,31 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
           <AlertTriangle size={12} /> {t("item.cycle", { titles: cycles.map((c) => ix.get(c)?.title).join(", ") })}
         </p>
       )}
-      {/* what the page is as badges, its dates, its progress, then the properties with their names */}
+      <div className="mt-3 border-t border-line" />
+      {/* what the page is as badges, the links, its dates, its progress, then the properties with their names */}
       <PropertyBlock
         item={item}
         schema={schema}
         head={{
           first: <TypeSwitch item={item} />,
-          end: !item.deleted && (
-            <Tip label={t("rules.title")}>
-              <Button variant="plain" onClick={() => setRulesOpen(true)} aria-label={t("rules.title")} className={cn("tap inline-flex items-center justify-center rounded-lg p-1.5 transition-colors hover:bg-hover hover:text-fg", item.rules.trim() ? "text-fg" : "text-muted-foreground")}>
-                <Bot size={16} />
-              </Button>
-            </Tip>
+          // "+ Ref" next to "+ Tags" until refs are pinned; then the "+" follows their chips
+          afterTags: !pinnedRefs(item, ix).length && <AddRef item={item} text />,
+          end: (
+            <>
+              <LinksMenu item={item} />
+              {!item.deleted && (
+                <Tip label={t("rules.title")}>
+                  <Button variant="plain" onClick={() => setRulesOpen(true)} aria-label={t("rules.title")} className={cn("tap inline-flex items-center justify-center rounded-lg p-1.5 transition-colors hover:bg-hover hover:text-fg", item.rules.trim() ? "text-fg" : "text-muted-foreground")}>
+                    <Bot size={16} />
+                  </Button>
+                </Tip>
+              )}
+            </>
           ),
+          links: <LinksRow item={item} />,
           progress: progress && <ProgressBand done={progress.done} total={progress.total} desc={progressText(item, ix, progress.done, progress.total)} />,
         }}
       />
-      <div className="mt-2 border-t border-line" />
 
       {/* 2 · text */}
       <PageText item={item} doc={doc} long={typeArea} isNew={isNew} onView={setView} hasMore={typeArea || ix.childrenOf(item.id).length > 0} />
@@ -213,9 +215,8 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
         {mainType && <ChildList item={item} typeId={mainType} />}
         {hasUpdates(schema) && <Updates item={item} />}
 
-        {/* 4 · below, 5 · connections */}
+        {/* 4 · below (the links are in the head) */}
         <BelowCard item={item} exclude={exclude} gathers={gathers} quietAdd={!typeArea} />
-        <Bezuege item={item} typeArea={typeArea} placesOpen={placesOpen} footer={false} />
       </div>
       {/* one more line above the dates, unless nothing came between */}
       <PageFooter item={item} className="mt-10 border-t border-line pt-4 max-md:mt-8 [.page-below:empty+&]:mt-4 [.page-below:empty+&]:border-t-0 [.page-below:empty+&]:pt-0" />
@@ -227,14 +228,6 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
         </Button>
       )}
       {placing && <PlacePicker list={[item]} title={t("place.add")} onPick={(pid) => (repo.addParent(item.id, pid), rememberPlace(pid), setPlacing(false))} onClose={() => setPlacing(false)} />}
-      {refPicking && (
-        <ItemPicker
-          title={t("item.addRef")}
-          exclude={(x) => x.id === item.id || item.refs.includes(x.id)}
-          onPick={(x) => (repo.setMember(item.id, "refs", x, true), setRefPicking(false))}
-          onClose={() => setRefPicking(false)}
-        />
-      )}
       {deleting && <DeleteDialog item={item} onClose={() => setDeleting(false)} />}
       {rulesOpen && <AgentRulesDialog item={item} onClose={() => setRulesOpen(false)} />}
       {moving && <MoveDialog item={item} onClose={() => setMoving(false)} />}

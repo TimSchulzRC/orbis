@@ -1,26 +1,27 @@
 // Parts every page shares, information and file pages alike (design rules § 3.1).
-import { useEffect } from "react";
-import { ChevronRight, Pin, RotateCcw, Star, X } from "lucide-react";
+import { ChevronRight, Link2, Pin, PinOff, Plus, RotateCcw, Star, X } from "lucide-react";
+import { useState } from "react";
 import { type Item, META_TYPE } from "@obtion/core/model";
 import { hasPlace, isInInbox } from "@obtion/core/placement";
-import { fmtDate } from "@obtion/core/i18n";
+import { fmtDate, type T } from "@obtion/core/i18n";
+import type { Index } from "@obtion/core/graph";
 import { repo } from "../repo";
-import { itemHref, useIndex, useLocalStorage, usePhone } from "../hooks";
+import { itemHref, useIndex, usePhone } from "../hooks";
 import { useT, titleOf } from "../i18n";
-import { ItemIcon, RelTime } from "./item-look";
-import { Card, Button, IconButton, MenuItem, MoreMenu, REVEAL, SectionTitle } from "./primitives";
+import { ItemIcon, ItemLink, RelTime } from "./item-look";
+import { Button, IconButton, MenuItem, MoreMenu, Popover, REVEAL } from "./primitives";
+import { Tip } from "../components/ui/tooltip";
+import { ItemPicker } from "./Picker";
 import { cn } from "../lib/utils";
 import { dateOf } from "@obtion/core/date";
-import { KEYS } from "./storage";
 
-/** Per device, because folding is a view, not a change of the page. */
-function useOpen(key: string, initial: boolean): [boolean, (o: boolean) => void] {
-  const [open, setOpen] = useLocalStorage(KEYS.open(key), initial);
-  // stored as "1"/"0" by older versions
-  return [!!open, setOpen];
-}
+/**
+ * Row tools in a popover: on hover, or focused by keyboard. Not on plain focus: opening the popover
+ * focuses its first button, which would show the tools of the first row.
+ */
+const REVEAL_IN_MENU = "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 aria-expanded:opacity-100 pointer-coarse:opacity-100";
 
-export function Crumbs({ item, tools, onPlaces, onPlace }: { item: Item; tools: React.ReactNode; onPlaces: () => void; onPlace: () => void }) {
+export function Crumbs({ item, tools, onPlace }: { item: Item; tools: React.ReactNode; onPlace: () => void }) {
   const ix = useIndex();
   const { t } = useT();
   const narrow = usePhone();
@@ -46,11 +47,7 @@ export function Crumbs({ item, tools, onPlaces, onPlace }: { item: Item; tools: 
             </a>
           </span>
         ))}
-        {others > 0 && (
-          <Button variant="plain" onClick={onPlaces} className="tap-y ml-1 shrink-0 whitespace-nowrap rounded-full border border-line px-1.5 text-xs hover:text-fg" title={t("refs.places")}>
-            +{others}
-          </Button>
-        )}
+        {others > 0 && <PlacesMenu item={item} count={others} onPlace={onPlace} />}
       </>
     );
   } else if (isInInbox(item, ix)) {
@@ -87,6 +84,63 @@ export function Crumbs({ item, tools, onPlaces, onPlace }: { item: Item; tools: 
   );
 }
 
+/** "+N" in the path: every place of the entry, the home first, each with its path. */
+function PlacesMenu({ item, count, onPlace }: { item: Item; count: number; onPlace: () => void }) {
+  const ix = useIndex();
+  const { t } = useT();
+  const home = ix.home(item.id);
+  const parents = [...ix.parentsOf(item.id)].sort((a, b) => (a === home ? -1 : b === home ? 1 : 0));
+  return (
+    <Popover
+      trigger={(p) => (
+        <Button variant="plain" {...p} className="tap-y ml-1 shrink-0 whitespace-nowrap rounded-full border border-line px-1.5 text-xs hover:text-fg aria-expanded:border-faint aria-expanded:text-fg" title={t("refs.places")}>
+          +{count}
+        </Button>
+      )}
+    >
+      {(close) => (
+        <div className="w-80 max-w-[calc(100vw-2rem)]">
+          <p className="px-2.5 pb-1 pt-1.5 text-xs font-semibold text-muted-foreground">
+            {t("refs.places")} <span className="font-normal tabular-nums">{parents.length}</span>
+          </p>
+          {parents.map((p) => {
+            const place = ix.get(p);
+            if (!place) return null;
+            const above = ix.homePath(p).map((id) => titleOf(ix.get(id)!, t));
+            return (
+              <div key={p} className="group flex min-h-9 items-center gap-2 rounded-lg px-2.5 hover:bg-hover">
+                <ItemIcon item={place} size={14} className="shrink-0" />
+                <a href={itemHref(p)} onClick={close} className="flex min-w-0 flex-1 flex-col py-1">
+                  <span className="truncate text-sm text-fg">{titleOf(place, t)}</span>
+                  {above.length > 0 && <span className="truncate text-xs text-muted-foreground">{above.join(" › ")}</span>}
+                </a>
+                {p === home && (
+                  <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
+                    <Star size={11} aria-hidden /> {t("place.home")}
+                  </span>
+                )}
+                <MoreMenu size="xs" iconSize={13} className={cn("text-faint", REVEAL_IN_MENU)}>
+                  {(closeMenu) => (
+                    <>
+                      {p !== home && <MenuItem onClick={() => (closeMenu(), repo.setHome(item.id, p))}>{t("place.makeHome")}</MenuItem>}
+                      <MenuItem onClick={() => (closeMenu(), close(), repo.removeParent(item.id, p))}>{t("place.removeHere")}</MenuItem>
+                    </>
+                  )}
+                </MoreMenu>
+              </div>
+            );
+          })}
+          <div className="mt-1 border-t border-line pt-1">
+            <MenuItem icon={<Plus size={14} />} onClick={() => (close(), onPlace())}>
+              {t("place.addAnother")}
+            </MenuItem>
+          </div>
+        </div>
+      )}
+    </Popover>
+  );
+}
+
 export function TrashBanner({ onRestore }: { onRestore: () => void }) {
   const { t } = useT();
   return (
@@ -99,121 +153,98 @@ export function TrashBanner({ onRestore }: { onRestore: () => void }) {
   );
 }
 
-interface RefKind {
+interface LinkGroup {
   key: string;
   label: string;
   items: { item: Item; note?: React.ReactNode; tools?: React.ReactNode }[];
 }
 
-/** Rows open by default only on pages without a list of their own (design rules § 2.7). */
-const OPEN_REFS_MAX = 5;
-
-/** Design rules § 2.7. */
-/** `footer`: the line with the dates goes below; off when the page puts it there itself. */
-export function Bezuege({ item, typeArea, usedIn, placesOpen, footer = true }: { item: Item; typeArea: boolean; usedIn?: { item: Item; note?: string }[]; placesOpen?: number; footer?: boolean }) {
-  const ix = useIndex();
-  const { t } = useT();
-  const kinds: RefKind[] = [];
+/** Everything linked with the page, both ways (design rules § 2.7): what points here, and where it points. */
+function linkGroups(item: Item, ix: Index, t: T, usedIn: { item: Item; note?: string }[]): LinkGroup[] {
+  const groups: LinkGroup[] = [];
   const linkingIds = new Set(ix.backlinks(item.id).filter((b) => b.kind !== "rel").map((b) => b.from));
   const from = [...linkingIds]
     .map((id) => ix.get(id)!)
-    .filter((x) => x && x.kind === "info" && !x.deleted && x.type !== META_TYPE && !(usedIn ?? []).some((u) => u.item.id === x.id));
+    .filter((x) => x && x.kind === "info" && !x.deleted && x.type !== META_TYPE && !usedIn.some((u) => u.item.id === x.id));
   const where = (x: Item) => {
     const homePath = ix.homePath(x.id);
     return homePath.length ? <span className="truncate">{ix.get(homePath.at(-1)!)?.title}</span> : undefined;
   };
-  if (usedIn?.length) kinds.push({ key: "used", label: t("file.usedIn"), items: usedIn.map((x) => ({ item: x.item, note: x.note })) });
-  if (from.length) kinds.push({ key: "linked", label: t("item.linkedFrom"), items: from.map((x) => ({ item: x, note: isInInbox(x, ix) ? undefined : where(x), tools: <PlaceHere target={x} page={item} /> })) });
+  if (usedIn.length) groups.push({ key: "used", label: t("file.usedIn"), items: usedIn.map((x) => ({ item: x.item, note: x.note })) });
+  if (from.length) groups.push({ key: "linked", label: t("item.linkedFrom"), items: from.map((x) => ({ item: x, note: isInInbox(x, ix) ? undefined : where(x), tools: <PlaceHere target={x} page={item} /> })) });
   const textLinks = ix.textLinks(item);
   const fromText = textLinks.filter((l) => !l.embed).map((l) => l.to);
   const embedded = textLinks.filter((l) => l.embed).map((l) => l.to);
-  const refIds = [...new Set([...fromText, ...item.refs])].filter((x) => ix.get(x) && x !== item.id);
-  if (refIds.length)
-    kinds.push({
-      key: "refs",
-      label: t("item.refs"),
-      items: refIds.map((x) => ({
+  const toIds = [...new Set([...fromText, ...embedded, ...item.refs])].filter((x) => ix.get(x) && !ix.get(x)!.deleted && x !== item.id);
+  if (toIds.length)
+    groups.push({
+      key: "to",
+      label: t("links.to"),
+      items: toIds.map((x) => ({
         item: ix.get(x)!,
         note: fromText.includes(x) ? t("item.inText") : embedded.includes(x) ? t("refs.embedded") : undefined,
         tools: (
           <>
             <PlaceHere target={ix.get(x)!} page={item} />
-            {!fromText.includes(x) && (
-              <IconButton size="xs" icon={X} iconSize={12} onClick={(e) => (e.preventDefault(), repo.setMember(item.id, "refs", x, false))} className={cn("text-faint", REVEAL.any)} label={t("item.removeRef")} />
+            {fromText.includes(x) || embedded.includes(x) ? (
+              // a link in the text shows in the head too once pinned
+              item.refs.includes(x) ? (
+                <IconButton size="xs" icon={PinOff} iconSize={12} onClick={() => repo.setMember(item.id, "refs", x, false)} className={cn("text-faint", REVEAL_IN_MENU)} label={t("links.unpin")} />
+              ) : (
+                <IconButton size="xs" icon={Pin} iconSize={12} onClick={() => repo.pinRef(item.id, x)} className={cn("text-faint", REVEAL_IN_MENU)} label={t("links.pin")} />
+              )
+            ) : (
+              <IconButton size="xs" icon={X} iconSize={12} onClick={() => repo.setMember(item.id, "refs", x, false)} className={cn("text-faint", REVEAL_IN_MENU)} label={t("item.removeRef")} />
             )}
           </>
         ),
       })),
     });
-  const parents = ix.parentsOf(item.id);
-  const home = ix.home(item.id);
-  if (parents.length > 1)
-    kinds.push({
-      key: "places",
-      label: t("refs.places"),
-      items: [...parents]
-        .sort((a, b) => (a === home ? -1 : b === home ? 1 : 0))
-        .map((p) => ({
-          item: ix.get(p)!,
-          note: p === home ? <span className="flex items-center gap-1"><Star size={11} aria-hidden /> {t("place.home")}</span> : undefined,
-          tools: (
-            <MoreMenu size="xs" iconSize={13} onClickCapture={(e) => e.preventDefault()} className={cn("text-faint", REVEAL.any)}>
-              {(close) => (
-                <>
-                  {p !== home && <MenuItem onClick={() => (close(), repo.setHome(item.id, p))}>{t("place.makeHome")}</MenuItem>}
-                  <MenuItem onClick={() => (close(), repo.removeParent(item.id, p))}>{t("place.removeHere")}</MenuItem>
-                </>
-              )}
-            </MoreMenu>
-          ),
-        })),
-    });
-  if (!kinds.length) return footer ? <PageFooter item={item} /> : null;
-  return (
-    <section className="mt-10 max-md:mt-8">
-      <SectionTitle>{t("refs.title")}</SectionTitle>
-      <Card className="overflow-hidden">
-        {kinds.map((k) => (
-          <RefRow key={k.key} page={item} kind={k} initial={!typeArea && k.items.length <= OPEN_REFS_MAX} force={k.key === "places" ? placesOpen : undefined} />
-        ))}
-      </Card>
-      {footer && <PageFooter item={item} />}
-    </section>
-  );
+  return groups;
 }
 
-function RefRow({ page, kind, initial, force }: { page: Item; kind: RefKind; initial: boolean; force?: number }) {
+/** The link button in the page head: the number of all links, both ways; a click lists them. None, no button. */
+export function LinksMenu({ item, usedIn = [] }: { item: Item; usedIn?: { item: Item; note?: string }[] }) {
+  const ix = useIndex();
   const { t } = useT();
-  const [open, setOpen] = useOpen(`refs:${page.id}:${kind.key}`, initial);
-  // bumped by "+N" in the path line to open the places
-  useEffect(() => {
-    if (force) (setOpen(true), document.getElementById(`refs-${kind.key}`)?.scrollIntoView({ block: "center", behavior: "smooth" }));
-  }, [force]);
+  const groups = linkGroups(item, ix, t, usedIn);
+  const count = groups.reduce((n, g) => n + g.items.length, 0);
+  if (!count) return null;
   return (
-    <div className="border-t border-line first:border-t-0" id={`refs-${kind.key}`}>
-      <Button variant="plain" onClick={() => setOpen(!open)} aria-expanded={open} className="flex min-h-11 w-full items-center gap-2.5 px-3.5 text-left hover:bg-hover max-md:min-h-12">
-        <ChevronRight size={13} className={cn("shrink-0 text-faint transition-transform", open && "rotate-90")} aria-hidden />
-        <span className="whitespace-nowrap text-sm font-medium">{kind.label}</span>
-        <span className="text-[13px] tabular-nums text-muted-foreground">{kind.items.length}</span>
-        {!open && <span className="min-w-0 flex-1 truncate text-[13px] text-muted-foreground">{kind.items.map((x) => titleOf(x.item, t)).join(", ")}</span>}
-      </Button>
-      {open && (
-        <ul className="pb-2.5 pl-10 pr-3.5">
-          {kind.items.map(({ item: x, note, tools }) => (
-            <li key={x.id} className="group relative flex min-h-8 items-center gap-2 text-sm">
-              <ItemIcon item={x} size={14} className="shrink-0" />
-              <a href={itemHref(x.id)} className="min-w-0 truncate hover:underline">
-                {titleOf(x, t)}
-              </a>
-              <span className="ml-auto flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
-                {note}
-                {tools}
-              </span>
-            </li>
-          ))}
-        </ul>
+    <Popover
+      align="right"
+      trigger={(p) => (
+        <Tip label={t("links.title")}>
+          <Button variant="plain" {...p} aria-label={t("links.count", { count })} className="tap inline-flex items-center gap-1 rounded-lg px-1.5 py-1 text-[13px] tabular-nums text-muted-foreground transition-colors hover:bg-hover hover:text-fg aria-expanded:bg-hover aria-expanded:text-fg">
+            <Link2 size={16} /> {count}
+          </Button>
+        </Tip>
       )}
-    </div>
+    >
+      {(close) => (
+        <div className="w-80 max-w-[calc(100vw-2rem)]">
+          {groups.map((g, i) => (
+            <div key={g.key} className={cn(i > 0 && "mt-1 border-t border-line pt-1")}>
+              <p className="px-2.5 pb-1 pt-1.5 text-xs font-semibold text-muted-foreground">
+                {g.label} <span className="font-normal tabular-nums">{g.items.length}</span>
+              </p>
+              {g.items.map(({ item: x, note, tools }) => (
+                <div key={x.id} className="group flex min-h-9 items-center gap-2 rounded-lg px-2.5 hover:bg-hover">
+                  <ItemIcon item={x} size={14} className="shrink-0" />
+                  <a href={itemHref(x.id)} onClick={close} className="min-w-0 flex-1 truncate py-1 text-sm text-fg">
+                    {titleOf(x, t)}
+                  </a>
+                  <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+                    {note}
+                    {tools}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+    </Popover>
   );
 }
 
@@ -225,6 +256,134 @@ function PlaceHere({ target, page }: { target: Item; page: Item }) {
     <Button variant="plain" onClick={(e) => (e.preventDefault(), repo.addParent(target.id, page.id))} className="tap-y rounded-md px-1.5 py-0.5 text-xs text-link hover:bg-hover">
       {t("links.placeHere")}
     </Button>
+  );
+}
+
+/** The refs shown in the head: set by hand, or links from the text that were pinned. */
+export function pinnedRefs(item: Item, ix: Index): Item[] {
+  return item.refs.map((id) => ix.get(id)).filter((x): x is Item => !!x && !x.deleted && x.id !== item.id);
+}
+
+/** "+" for another ref, with the item picker. `text` names it ("+ Ref"), for where no chip says what it adds. */
+export function AddRef({ item, text }: { item: Item; text?: boolean }) {
+  const { t } = useT();
+  const [picking, setPicking] = useState(false);
+  if (item.deleted) return null;
+  return (
+    <>
+      <Tip label={t("item.addRef")}>
+        <Button
+          variant="plain"
+          onClick={() => setPicking(true)}
+          aria-label={t("item.addRef")}
+          className={cn("tap inline-flex items-center rounded-md text-muted-foreground transition-colors hover:bg-hover hover:text-fg", text ? "h-6 gap-0.5 px-1 text-xs" : "justify-center p-1")}
+        >
+          <Plus size={text ? 12 : 14} className="shrink-0" />
+          {text && <span className="px-1">{t("links.ref")}</span>}
+        </Button>
+      </Tip>
+      {picking && (
+        <ItemPicker
+          title={t("item.addRef")}
+          exclude={(x) => x.id === item.id || item.refs.includes(x.id)}
+          onPick={(x) => (repo.setMember(item.id, "refs", x, true), setPicking(false))}
+          onClose={() => setPicking(false)}
+        />
+      )}
+    </>
+  );
+}
+
+/**
+ * The pinned refs as chips in a row of their own under type and tags, then "+" for another one.
+ * Without pinned refs there is no row; "+ Ref" sits after the tags then (see AddRef).
+ */
+export function LinksRow({ item }: { item: Item }) {
+  const ix = useIndex();
+  const { t } = useT();
+  const [drag, setDrag] = useState<string | null>(null);
+  // where the dragged chip would land: in front of this ref, or `null` for the end
+  const [at, setAt] = useState<string | null | undefined>(undefined);
+  const refs = pinnedRefs(item, ix);
+  if (!refs.length) return null;
+  const inText = new Set(ix.textLinks(item).map((l) => l.to));
+  const ids = refs.map((x) => x.id);
+  const end = () => (setDrag(null), setAt(undefined));
+  // the left half of a chip means in front of it, the right half after it
+  const aim = (e: React.DragEvent<HTMLElement>, id: string) => {
+    if (!drag) return;
+    e.preventDefault();
+    const box = e.currentTarget.getBoundingClientRect();
+    const before = e.clientX < box.left + box.width / 2 ? id : (ids[ids.indexOf(id) + 1] ?? null);
+    // in front of itself or of the next one leaves it where it is: no line
+    setAt(before === drag || before === (ids[ids.indexOf(drag) + 1] ?? null) ? undefined : before);
+  };
+  // Alt+← / Alt+→ on a chip moves it by one
+  const step = (id: string, direction: -1 | 1) => {
+    const n = ids.indexOf(id);
+    if (direction < 0 && n > 0) repo.moveRef(item.id, id, ids[n - 1]!);
+    if (direction > 0 && n < ids.length - 1) repo.moveRef(item.id, id, ids[n + 2] ?? null);
+    // moving the chip in the page takes the focus with it
+    requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-ref="${id}"] a`)?.focus());
+  };
+  const line = "pointer-events-none absolute -top-0.5 -bottom-0.5 w-0.5 rounded-full bg-link";
+  return (
+    <div
+      className="mt-2 flex flex-wrap items-center gap-1.5"
+      onDragOver={(e) => drag && e.preventDefault()}
+      onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget as Node | null) && setAt(undefined)}
+      onDrop={(e) => (e.preventDefault(), drag && at !== undefined && repo.moveRef(item.id, drag, at), end())}
+    >
+      {refs.map((x, n) => (
+        <span
+          key={x.id}
+          draggable
+          onDragStart={(e) => {
+            // the chip is dragged, not its link: no URL to drop elsewhere, the chip itself under the pointer
+            e.dataTransfer.clearData();
+            e.dataTransfer.setData("obtion/ref", x.id);
+            e.dataTransfer.effectAllowed = "move";
+            const box = e.currentTarget.getBoundingClientRect();
+            e.dataTransfer.setDragImage(e.currentTarget, e.clientX - box.left, e.clientY - box.top);
+            setDrag(x.id);
+          }}
+          onDragEnd={end}
+          onDragOver={(e) => aim(e, x.id)}
+          onKeyDown={(e) => {
+            if (!e.altKey || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return;
+            e.preventDefault();
+            step(x.id, e.key === "ArrowLeft" ? -1 : 1);
+          }}
+          data-ref={x.id}
+          className={cn(
+            "group relative inline-flex max-w-full cursor-grab select-none items-center gap-1 rounded-md bg-surface-2 py-0.5 pl-1.5 pr-0.5 text-[13px] active:cursor-grabbing",
+            drag === x.id && "opacity-50",
+          )}
+        >
+          {/* the line where the chip would land, in the middle of the gap */}
+          {at === x.id && <span aria-hidden data-drop-line className={cn(line, "-left-1")} />}
+          {at === null && n === ids.length - 1 && <span aria-hidden data-drop-line className={cn(line, "-right-1")} />}
+          <ItemLink item={x} draggable={false} className="min-w-0" />
+          {inText.has(x.id) ? (
+            // pinned from the text: the pin says why it is here, hovered it turns into the ×
+            <Button variant="plain" onClick={() => repo.setMember(item.id, "refs", x.id, false)} aria-label={t("links.unpin")} title={t("links.unpin")} className="tap inline-flex items-center justify-center rounded p-0.5 text-muted-foreground transition-colors hover:bg-hover hover:text-fg">
+              <Pin size={11} className="group-hover:hidden group-focus-within:hidden pointer-coarse:hidden" aria-hidden />
+              <X size={11} className="hidden group-hover:block group-focus-within:block pointer-coarse:block" aria-hidden />
+            </Button>
+          ) : (
+            <IconButton
+              size="xs"
+              icon={X}
+              iconSize={11}
+              onClick={() => repo.setMember(item.id, "refs", x.id, false)}
+              className={cn("text-muted-foreground", REVEAL.any)}
+              label={t("item.removeRef")}
+            />
+          )}
+        </span>
+      ))}
+      <AddRef item={item} />
+    </div>
   );
 }
 

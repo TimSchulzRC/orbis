@@ -24,6 +24,8 @@ import {
   setExtra,
   setHome,
   setMember,
+  addRef,
+  moveRef,
   setMeta,
   setParentSort,
   setProp,
@@ -639,6 +641,14 @@ export class Repo {
   }
   setMember(id: string, set: "tags" | "refs", key: string, on: boolean) {
     this.changeAndTouch(id, (doc) => setMember(doc, set, key, on));
+  }
+  /** A link from the text pinned to the head: in front of the other refs. */
+  pinRef(id: string, target: string) {
+    this.changeAndTouch(id, (doc) => addRef(doc, target, true));
+  }
+  /** Moves a ref in front of `before`, or to the end. */
+  moveRef(id: string, target: string, before: string | null) {
+    this.changeAndTouch(id, (doc) => moveRef(doc, target, before));
   }
   setBody(id: string, body: string) {
     this.change(id, (doc) => replaceBody(doc, body));

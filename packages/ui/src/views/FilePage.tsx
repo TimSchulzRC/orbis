@@ -10,7 +10,7 @@ import { useT, titleOf } from "../i18n";
 import { useBlobUrl } from "../files";
 import { MenuItem, MoreMenu } from "../ui/primitives";
 import { ItemIcon, Tag } from "../ui/item-look";
-import { Bezuege, Crumbs, TrashBanner } from "../ui/PageParts";
+import { Crumbs, LinksMenu, PageFooter, TrashBanner } from "../ui/PageParts";
 import { TagInput } from "../ui/TagInput";
 import { ItemPicker } from "../ui/Picker";
 import { TitleField } from "../ui/TitleField";
@@ -27,7 +27,7 @@ export function FilePage({ item }: { item: Item }) {
   const [picking, setPicking] = useState(false);
   const isImg = file.filetype === "bild";
   const display = useBlobUrl(isImg ? (file.display ?? file.hash) : file.filetype === "pdf" ? undefined : file.thumb, true);
-  const used = ix.usedIn(item.id);
+  const usedIn = ix.usedIn(item.id).map((b) => ({ item: ix.get(b.from)!, note: t("file.use." + b.kind) })).filter((x) => x.item);
   const parents = ix.parentsOf(item.id);
   const local = files.hasLocal(file.hash);
   useEffect(() => void files.check(file.hash), [file.hash]);
@@ -91,7 +91,7 @@ export function FilePage({ item }: { item: Item }) {
         <TrashBanner onRestore={() => repo.restore(item.id)} />
       )}
       {missing && <p className="mb-3 rounded-lg border border-dashed border-line px-3 py-2 text-sm text-muted-foreground">{t(files.missingKey(item.created) === "file.uploading" ? "file.uploadingHint" : "file.missingHint")}</p>}
-      <Crumbs item={item} tools={tools} onPlaces={() => setPicking(true)} onPlace={() => setPicking(true)} />
+      <Crumbs item={item} tools={tools} onPlace={() => setPicking(true)} />
       <div className="mt-1.5 flex items-start gap-4">
         <div className="min-w-0 flex-1">
           <TitleField item={item} autoFocus={false} placeholder={file.name} />
@@ -100,9 +100,12 @@ export function FilePage({ item }: { item: Item }) {
           <Download size={15} /> <span className="max-md:hidden">{t("file.download")}</span>
         </a>
       </div>
-      <p className="mt-2.5 flex items-center gap-1.5 text-[13px] text-muted-foreground">
+      <div className="mt-2.5 flex items-center gap-1.5 text-[13px] text-muted-foreground">
         <ItemIcon item={item} size={13} /> {facts[0]![1]}
-      </p>
+        <span className="ml-auto inline-flex">
+          <LinksMenu item={item} usedIn={usedIn} />
+        </span>
+      </div>
       {/* facts as the property block (no "+ Eigenschaft") */}
       <div className="mt-[18px] grid grid-cols-[148px_minmax(0,1fr)] gap-x-3 max-md:grid-cols-[124px_minmax(0,1fr)]">
         {[[t("file.name"), file.name] as [string, React.ReactNode], ...facts.slice(1)].map(([label, value]) => (
@@ -139,7 +142,7 @@ export function FilePage({ item }: { item: Item }) {
         className="field mt-4 w-full resize-y bg-transparent text-[15px] leading-[1.65] outline-none placeholder:text-faint max-md:text-base"
       />
 
-      <Bezuege item={item} typeArea={false} usedIn={used.map((b) => ({ item: ix.get(b.from)!, note: t("file.use." + b.kind) })).filter((x) => x.item)} />
+      <PageFooter item={item} />
       {picking && (
         <ItemPicker
           title={parents.length ? t("place.changeTitle") : t("place.add")}

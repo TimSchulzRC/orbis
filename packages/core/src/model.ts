@@ -11,7 +11,7 @@
 //   extra    Y.Map   name -> { k, v }          (left over from a removed type or property)
 //   rels     Y.Map   propId -> Y.Map<targetId, true>
 //   tags     Y.Map   tag -> true
-//   refs     Y.Map   targetId -> true          (explicit only; links in the text are derived)
+//   refs     Y.Map   targetId -> sort key      (explicit only; links in the text are derived; older: true)
 //   body     Y.Text  Markdown with [[links]] and ```abfrage blocks
 //   rules    Y.Text  "Regeln für Agenten": Markdown, binding for agents on this item and all below it
 //                    (see rules.ts); in the settings doc: the rules of the whole workspace
@@ -352,7 +352,7 @@ export function readItem(id: string, doc: Y.Doc): Item | null {
     extra: doc.getMap<FreeValue>("extra").toJSON() as Record<string, FreeValue>,
     rels,
     tags: [...doc.getMap("tags").keys()].sort(),
-    refs: [...doc.getMap("refs").keys()],
+    refs: refOrder(doc),
     body: doc.getText("body").toString(),
     rules: doc.getText("rules").toString(),
     updates: doc.getArray<UpdateEntry>("updates").toArray().slice(),
@@ -558,8 +558,53 @@ export function setMember(doc: Y.Doc, set: "tags" | "refs", key: string, on: boo
   const m = doc.getMap(set);
   const k = set === "tags" ? normalizeTag(key) : key;
   if (!k) return;
-  if (on) m.set(k, true);
+  if (on && set === "refs") addRef(doc, k);
+  else if (on) m.set(k, true);
   else m.delete(k);
+}
+
+/** The refs in their order: by sort key; older ones stored as `true` follow in the map's order. */
+export function refOrder(doc: Y.Doc): string[] {
+  const entries = [...doc.getMap<string | true>("refs").entries()];
+  const keyed = entries.filter((e): e is [string, string] => typeof e[1] === "string").sort((a, b) => cmpKey(a[1], b[1]) || cmpKey(a[0], b[0]));
+  return [...keyed, ...entries.filter(([, v]) => typeof v !== "string")].map(([k]) => k);
+}
+
+/** Gives a key to each ref that has none (older ones) or shares its place with the one before
+ * (added at once on two devices), so one can go between two. Other refs keep theirs: rewriting a
+ * ref would bring it back if another device removed it meanwhile. */
+function keyedRefs(doc: Y.Doc): Y.Map<string | true> {
+  const m = doc.getMap<string | true>("refs");
+  let prev: string | null = null;
+  for (const k of refOrder(doc)) {
+    const v = m.get(k);
+    if (typeof v === "string" && (prev === null || cmpKey(v, prev) > 0)) prev = v;
+    else m.set(k, (prev = keyBetween(prev, null)));
+  }
+  return m;
+}
+
+/** A ref at the front (a link from the text, pinned) or the end (set by hand); one already there
+ * keeps its place. Writes no other ref, see keyedRefs. */
+export function addRef(doc: Y.Doc, target: string, front = false) {
+  const m = doc.getMap<string | true>("refs");
+  if (m.has(target)) return;
+  const keys = [...m.values()].filter((v): v is string => typeof v === "string").sort(cmpKey);
+  if (front) m.set(target, keyBetween(null, keys[0] ?? null));
+  else if (keys.length < m.size) m.set(target, true); // behind the older ones, like them
+  else m.set(target, keyBetween(keys.at(-1) ?? null, null));
+}
+
+/** Moves a ref in front of `before`, or to the end. */
+export function moveRef(doc: Y.Doc, target: string, before: string | null) {
+  const m = keyedRefs(doc);
+  if (!m.has(target) || target === before) return;
+  const rest = refOrder(doc).filter((k) => k !== target);
+  const at = before === null ? rest.length : rest.indexOf(before);
+  if (at < 0) return;
+  const lo = rest[at - 1];
+  const hi = rest[at];
+  m.set(target, keyBetween(lo === undefined ? null : (m.get(lo) as string), hi === undefined ? null : (m.get(hi) as string)));
 }
 
 /** The texts of a document (Y.Text): the body and the rules for agents. */

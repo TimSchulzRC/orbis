@@ -126,11 +126,12 @@ export function Tag({ tag, onRemove, onOpen }: { tag: string; onRemove?: () => v
   );
 }
 
-export function ItemLink({ item, className }: { item: Item; className?: string }) {
+/** `draggable={false}` where the link sits in something dragged itself (the browser would drag the link). */
+export function ItemLink({ item, className, draggable }: { item: Item; className?: string; draggable?: boolean }) {
   const { t } = useT();
   const hrefOf = useItemHref();
   return (
-    <a href={hrefOf(item.id)} className={cn("inline-flex min-w-0 items-center gap-1.5 hover:underline", className)}>
+    <a href={hrefOf(item.id)} draggable={draggable} className={cn("inline-flex min-w-0 items-center gap-1.5 hover:underline", className)}>
       <ItemIcon item={item} size={14} />
       <span className="truncate">{titleOf(item, t)}</span>
     </a>
