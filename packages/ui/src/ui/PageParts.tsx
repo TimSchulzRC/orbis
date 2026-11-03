@@ -1,6 +1,5 @@
 // Parts every page shares, information and file pages alike (design rules § 3.1).
-import { useEffect } from "react";
-import { ChevronRight, Pin, RotateCcw, Star, X } from "lucide-react";
+import { ChevronRight, Pin, Plus, RotateCcw, Star, X } from "lucide-react";
 import { type Item, META_TYPE } from "@obtion/core/model";
 import { hasPlace, isInInbox } from "@obtion/core/placement";
 import { fmtDate } from "@obtion/core/i18n";
@@ -8,7 +7,7 @@ import { repo } from "../repo";
 import { itemHref, useIndex, useLocalStorage, usePhone } from "../hooks";
 import { useT, titleOf } from "../i18n";
 import { ItemIcon, RelTime } from "./item-look";
-import { Card, Button, IconButton, MenuItem, MoreMenu, REVEAL, SectionTitle } from "./primitives";
+import { Card, Button, IconButton, MenuItem, MoreMenu, Popover, REVEAL, SectionTitle } from "./primitives";
 import { cn } from "../lib/utils";
 import { dateOf } from "@obtion/core/date";
 import { KEYS } from "./storage";
@@ -20,7 +19,7 @@ function useOpen(key: string, initial: boolean): [boolean, (o: boolean) => void]
   return [!!open, setOpen];
 }
 
-export function Crumbs({ item, tools, onPlaces, onPlace }: { item: Item; tools: React.ReactNode; onPlaces: () => void; onPlace: () => void }) {
+export function Crumbs({ item, tools, onPlace }: { item: Item; tools: React.ReactNode; onPlace: () => void }) {
   const ix = useIndex();
   const { t } = useT();
   const narrow = usePhone();
@@ -46,11 +45,7 @@ export function Crumbs({ item, tools, onPlaces, onPlace }: { item: Item; tools: 
             </a>
           </span>
         ))}
-        {others > 0 && (
-          <Button variant="plain" onClick={onPlaces} className="tap-y ml-1 shrink-0 whitespace-nowrap rounded-full border border-line px-1.5 text-xs hover:text-fg" title={t("refs.places")}>
-            +{others}
-          </Button>
-        )}
+        {others > 0 && <PlacesMenu item={item} count={others} onPlace={onPlace} />}
       </>
     );
   } else if (isInInbox(item, ix)) {
@@ -87,6 +82,63 @@ export function Crumbs({ item, tools, onPlaces, onPlace }: { item: Item; tools: 
   );
 }
 
+/** "+N" in the path: every place of the entry, the home first, each with its path. */
+function PlacesMenu({ item, count, onPlace }: { item: Item; count: number; onPlace: () => void }) {
+  const ix = useIndex();
+  const { t } = useT();
+  const home = ix.home(item.id);
+  const parents = [...ix.parentsOf(item.id)].sort((a, b) => (a === home ? -1 : b === home ? 1 : 0));
+  return (
+    <Popover
+      trigger={(p) => (
+        <Button variant="plain" {...p} className="tap-y ml-1 shrink-0 whitespace-nowrap rounded-full border border-line px-1.5 text-xs hover:text-fg aria-expanded:border-faint aria-expanded:text-fg" title={t("refs.places")}>
+          +{count}
+        </Button>
+      )}
+    >
+      {(close) => (
+        <div className="w-80 max-w-[calc(100vw-2rem)]">
+          <p className="px-2.5 pb-1 pt-1.5 text-xs font-semibold text-muted-foreground">
+            {t("refs.places")} <span className="font-normal tabular-nums">{parents.length}</span>
+          </p>
+          {parents.map((p) => {
+            const place = ix.get(p);
+            if (!place) return null;
+            const above = ix.homePath(p).map((id) => titleOf(ix.get(id)!, t));
+            return (
+              <div key={p} className="group flex min-h-9 items-center gap-2 rounded-lg px-2.5 hover:bg-hover">
+                <ItemIcon item={place} size={14} className="shrink-0" />
+                <a href={itemHref(p)} onClick={close} className="flex min-w-0 flex-1 flex-col py-1">
+                  <span className="truncate text-sm text-fg">{titleOf(place, t)}</span>
+                  {above.length > 0 && <span className="truncate text-xs text-muted-foreground">{above.join(" › ")}</span>}
+                </a>
+                {p === home && (
+                  <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
+                    <Star size={11} aria-hidden /> {t("place.home")}
+                  </span>
+                )}
+                <MoreMenu size="xs" iconSize={13} className={cn("text-faint", REVEAL.any)}>
+                  {(closeMenu) => (
+                    <>
+                      {p !== home && <MenuItem onClick={() => (closeMenu(), repo.setHome(item.id, p))}>{t("place.makeHome")}</MenuItem>}
+                      <MenuItem onClick={() => (closeMenu(), close(), repo.removeParent(item.id, p))}>{t("place.removeHere")}</MenuItem>
+                    </>
+                  )}
+                </MoreMenu>
+              </div>
+            );
+          })}
+          <div className="mt-1 border-t border-line pt-1">
+            <MenuItem icon={<Plus size={14} />} onClick={() => (close(), onPlace())}>
+              {t("place.addAnother")}
+            </MenuItem>
+          </div>
+        </div>
+      )}
+    </Popover>
+  );
+}
+
 export function TrashBanner({ onRestore }: { onRestore: () => void }) {
   const { t } = useT();
   return (
@@ -109,7 +161,7 @@ interface RefKind {
 const OPEN_REFS_MAX = 5;
 
 /** Design rules § 2.7. */
-export function Bezuege({ item, typeArea, usedIn, placesOpen }: { item: Item; typeArea: boolean; usedIn?: { item: Item; note?: string }[]; placesOpen?: number }) {
+export function Bezuege({ item, typeArea, usedIn }: { item: Item; typeArea: boolean; usedIn?: { item: Item; note?: string }[] }) {
   const ix = useIndex();
   const { t } = useT();
   const kinds: RefKind[] = [];
@@ -144,36 +196,13 @@ export function Bezuege({ item, typeArea, usedIn, placesOpen }: { item: Item; ty
         ),
       })),
     });
-  const parents = ix.parentsOf(item.id);
-  const home = ix.home(item.id);
-  if (parents.length > 1)
-    kinds.push({
-      key: "places",
-      label: t("refs.places"),
-      items: [...parents]
-        .sort((a, b) => (a === home ? -1 : b === home ? 1 : 0))
-        .map((p) => ({
-          item: ix.get(p)!,
-          note: p === home ? <span className="flex items-center gap-1"><Star size={11} aria-hidden /> {t("place.home")}</span> : undefined,
-          tools: (
-            <MoreMenu size="xs" iconSize={13} onClickCapture={(e) => e.preventDefault()} className={cn("text-faint", REVEAL.any)}>
-              {(close) => (
-                <>
-                  {p !== home && <MenuItem onClick={() => (close(), repo.setHome(item.id, p))}>{t("place.makeHome")}</MenuItem>}
-                  <MenuItem onClick={() => (close(), repo.removeParent(item.id, p))}>{t("place.removeHere")}</MenuItem>
-                </>
-              )}
-            </MoreMenu>
-          ),
-        })),
-    });
   if (!kinds.length) return <PageFooter item={item} />;
   return (
     <section className="mt-10 max-md:mt-8">
       <SectionTitle>{t("refs.title")}</SectionTitle>
       <Card className="overflow-hidden">
         {kinds.map((k) => (
-          <RefRow key={k.key} page={item} kind={k} initial={!typeArea && k.items.length <= OPEN_REFS_MAX} force={k.key === "places" ? placesOpen : undefined} />
+          <RefRow key={k.key} page={item} kind={k} initial={!typeArea && k.items.length <= OPEN_REFS_MAX} />
         ))}
       </Card>
       <PageFooter item={item} />
@@ -181,15 +210,11 @@ export function Bezuege({ item, typeArea, usedIn, placesOpen }: { item: Item; ty
   );
 }
 
-function RefRow({ page, kind, initial, force }: { page: Item; kind: RefKind; initial: boolean; force?: number }) {
+function RefRow({ page, kind, initial }: { page: Item; kind: RefKind; initial: boolean }) {
   const { t } = useT();
   const [open, setOpen] = useOpen(`refs:${page.id}:${kind.key}`, initial);
-  // bumped by "+N" in the path line to open the places
-  useEffect(() => {
-    if (force) (setOpen(true), document.getElementById(`refs-${kind.key}`)?.scrollIntoView({ block: "center", behavior: "smooth" }));
-  }, [force]);
   return (
-    <div className="border-t border-line first:border-t-0" id={`refs-${kind.key}`}>
+    <div className="border-t border-line first:border-t-0">
       <Button variant="plain" onClick={() => setOpen(!open)} aria-expanded={open} className="flex min-h-11 w-full items-center gap-2.5 px-3.5 text-left hover:bg-hover max-md:min-h-12">
         <ChevronRight size={13} className={cn("shrink-0 text-faint transition-transform", open && "rotate-90")} aria-hidden />
         <span className="whitespace-nowrap text-sm font-medium">{kind.label}</span>

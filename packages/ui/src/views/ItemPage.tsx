@@ -89,7 +89,6 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
   const [history, setHistory] = useState(false);
   const others = useAccounts().spaces.length > 1;
   const [refPicking, setRefPicking] = useState(false);
-  const [placesOpen, setPlacesOpen] = useState(0);
   const [rulesOpen, setRulesOpen] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
@@ -167,7 +166,7 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
         <TrashBanner onRestore={() => repo.restore(item.id)} />
       )}
       {/* 1 · head: path, title with the main action, type and status, progress, properties */}
-      <Crumbs item={item} tools={tools} onPlaces={() => setPlacesOpen((n) => n + 1)} onPlace={() => setPlacing(true)} />
+      <Crumbs item={item} tools={tools} onPlace={() => setPlacing(true)} />
       <div className="mt-6 flex items-start gap-4 max-md:mt-3">
         <div data-page-title className="min-w-0 flex-1 rounded-lg">
           <TitleField item={item} autoFocus={isNew && !item.title} />
@@ -212,7 +211,7 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
 
       {/* 4 · below, 5 · connections and footer */}
       <BelowCard item={item} exclude={exclude} gathers={gathers} quietAdd={!typeArea} />
-      <Bezuege item={item} typeArea={typeArea} placesOpen={placesOpen} />
+      <Bezuege item={item} typeArea={typeArea} />
 
       {/* on a phone the main action floats above the bottom bar */}
       {mainAction && (
