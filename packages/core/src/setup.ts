@@ -62,7 +62,7 @@ export function defaultTypes(lang: Lang): Record<string, TypeSpec> {
       icon: "folder-kanban",
       color: "green",
       description: t("project.description"),
-      capabilities: { status: "p_status", updates: true, template: { body: "" } },
+      capabilities: { status: "p_status", updates: true, template: { body: "" }, list: "on" },
       properties: [
         {
           id: "p_status",
@@ -90,7 +90,7 @@ export function defaultTypes(lang: Lang): Record<string, TypeSpec> {
       icon: "circle-check",
       color: "slate",
       description: t("task.description"),
-      capabilities: { status: "p_status", due: "p_due" },
+      capabilities: { status: "p_status", due: "p_due", list: "on" },
       properties: [
         {
           id: "p_status",

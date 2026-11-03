@@ -84,6 +84,8 @@ export interface Capabilities {
   /** Legacy: progress is a computed property now (see `progressProp`); read only while the type has none. */
   progress?: { of?: string };
   updates?: boolean;
+  /** "Eigene Liste": entries of this type get their own list on the page above. Unset: on while the type has a status. */
+  list?: "on" | "off";
   template?: { body?: string; values?: Record<string, Value> };
 }
 

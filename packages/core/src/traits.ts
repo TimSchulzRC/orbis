@@ -13,6 +13,12 @@ function propById(schema: TypeSchema | undefined, id?: string): PropDef | undefi
 }
 
 /** Drives ticking off, "open" in queries, boards and progress. Must be a single select. */
+/** Entries of this type get their own list on the page above them ("Eigene Liste"). */
+export function ownList(schema?: TypeSchema): boolean {
+  const l = caps(schema).list;
+  return l ? l === "on" : !!statusProp(schema);
+}
+
 export function statusProp(schema?: TypeSchema): PropDef | undefined {
   const p = propById(schema, caps(schema).status);
   return p?.kind === "select" && !p.multiple ? p : undefined;

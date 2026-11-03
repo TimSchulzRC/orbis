@@ -36,6 +36,7 @@ export const capInput = z.object({
   status: z.string().nullable().optional().describe("name of a select property with one value: becomes the status (options get groups, a default)"),
   due_date: z.string().nullable().optional().describe("name of a date property"),
   updates: z.boolean().optional(),
+  own_list: z.boolean().optional().describe("entries of this type get their own list on the page above them (default: on while the type has a status)"),
   template: z.string().nullable().optional(),
 });
 export type CapInput = z.infer<typeof capInput>;

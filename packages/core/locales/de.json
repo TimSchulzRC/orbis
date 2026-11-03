@@ -669,6 +669,8 @@
  "caps.statusHint": "Optionen gehören zu Offen / Aktiv / Erledigt. Abhaken, „offen“ in Abfragen, Boards.",
  "caps.due": "Termin",
  "caps.dueHint": "Dieses Datumsfeld zählt als Fälligkeit: „überfällig“ und „diese Woche“ funktionieren für jeden Typ.",
+ "caps.list": "Eigene Liste",
+ "caps.listHint": "Einträge dieses Typs stehen auf der Seite darüber in einer eigenen Liste, über alle Ebenen. Sonst unter „Darunter“.",
  "caps.updates": "Updates",
  "caps.updatesHint": "Datierte Fortschrittsnotizen mit optionalem Statuswechsel.",
  "caps.template": "Vorlage für neue Einträge",

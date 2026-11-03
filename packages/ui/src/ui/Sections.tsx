@@ -97,7 +97,9 @@ export function ChildList({ item, typeId }: { item: Item; typeId: string }) {
   if (!all.length) return null;
   // sub-projects: children of the page's own type; each one a group
   const subs = same ? [] : ix.items(ix.childrenOf(item.id)).filter((x) => x.type === item.type && !x.deleted);
-  const by = subs.length ? mainGrouping(item) : "sub";
+  // without a status ("Eigene Liste" on a type without one) there is nothing open or done to group or count
+  const hasStatus = !!statusProp(schema);
+  const by = subs.length && hasStatus ? mainGrouping(item) : "sub";
   let groups: PageGroup[];
   if (by === "status")
     groups = groupItems(sorted, "status", { ix, thisId: item.id }).map((g) => ({ key: g.key || "_", label: g.label || t("group.none"), items: g.items }));
@@ -117,9 +119,9 @@ export function ChildList({ item, typeId }: { item: Item; typeId: string }) {
   return (
     <section className="mt-10 max-md:mt-8">
       <SectionTitle
-        count={t("children.openCount", { count: open.length })}
+        count={hasStatus ? t("children.openCount", { count: open.length }) : all.length}
         right={
-          subs.length > 0 && (
+          subs.length > 0 && hasStatus && (
             <>
               <span className="max-md:hidden">
                 <Seg label={t("children.groupBy")} value={by} onChange={groupBy} options={groupOptions} />

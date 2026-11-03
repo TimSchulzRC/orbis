@@ -669,6 +669,8 @@
  "caps.statusHint": "Options belong to Open / Active / Done. Ticking off, \"open\" in queries, boards.",
  "caps.due": "Due date",
  "caps.dueHint": "This date counts as the due date: \"overdue\" and \"this week\" work for any type.",
+ "caps.list": "Own list",
+ "caps.listHint": "Entries of this type get their own list on the page above them, over all levels. Otherwise under “Below”.",
  "caps.updates": "Updates",
  "caps.updatesHint": "Dated progress notes with an optional status change.",
  "caps.template": "Template for new entries",
