@@ -259,7 +259,7 @@ export function pinnedRefs(item: Item, ix: Index): Item[] {
 }
 
 /** "+" for another ref, with the item picker. `text` names it ("+ Ref"), for where no chip says what it adds. */
-function AddRef({ item, text }: { item: Item; text?: boolean }) {
+export function AddRef({ item, text }: { item: Item; text?: boolean }) {
   const { t } = useT();
   const [picking, setPicking] = useState(false);
   if (item.deleted) return null;
@@ -288,38 +288,37 @@ function AddRef({ item, text }: { item: Item; text?: boolean }) {
   );
 }
 
-/** Without pinned refs, the links go after the tags: the link button (if anything is linked), then "+ Ref". */
-export function LinksInline({ item }: { item: Item }) {
-  return (
-    <>
-      <LinksMenu item={item} />
-      <AddRef item={item} text />
-    </>
-  );
-}
-
 /**
- * With pinned refs, a row of its own under type and tags: the link button first, then the refs as
- * chips, then "+" for another one.
+ * The pinned refs as chips in a row of their own under type and tags, then "+" for another one.
+ * Without pinned refs there is no row; "+ Ref" sits after the tags then (see AddRef).
  */
 export function LinksRow({ item }: { item: Item }) {
   const ix = useIndex();
   const { t } = useT();
+  const refs = pinnedRefs(item, ix);
+  if (!refs.length) return null;
   const inText = new Set(ix.textLinks(item).map((l) => l.to));
   return (
     <div className="mt-2 flex flex-wrap items-center gap-1.5">
-      <LinksMenu item={item} />
-      {pinnedRefs(item, ix).map((x) => (
+      {refs.map((x) => (
         <span key={x.id} className="group inline-flex max-w-full items-center gap-1 rounded-md bg-surface-2 py-0.5 pl-1.5 pr-0.5 text-[13px]">
           <ItemLink item={x} className="min-w-0" />
-          <IconButton
-            size="xs"
-            icon={X}
-            iconSize={11}
-            onClick={() => repo.setMember(item.id, "refs", x.id, false)}
-            className={cn("text-muted-foreground", REVEAL.any)}
-            label={inText.has(x.id) ? t("links.unpin") : t("item.removeRef")}
-          />
+          {inText.has(x.id) ? (
+            // pinned from the text: the pin says why it is here, hovered it turns into the ×
+            <Button variant="plain" onClick={() => repo.setMember(item.id, "refs", x.id, false)} aria-label={t("links.unpin")} title={t("links.unpin")} className="tap inline-flex items-center justify-center rounded p-0.5 text-muted-foreground transition-colors hover:bg-hover hover:text-fg">
+              <Pin size={11} className="group-hover:hidden group-focus-within:hidden pointer-coarse:hidden" aria-hidden />
+              <X size={11} className="hidden group-hover:block group-focus-within:block pointer-coarse:block" aria-hidden />
+            </Button>
+          ) : (
+            <IconButton
+              size="xs"
+              icon={X}
+              iconSize={11}
+              onClick={() => repo.setMember(item.id, "refs", x.id, false)}
+              className={cn("text-muted-foreground", REVEAL.any)}
+              label={t("item.removeRef")}
+            />
+          )}
         </span>
       ))}
       <AddRef item={item} />

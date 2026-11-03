@@ -20,7 +20,7 @@ import { ProgressBand } from "../ui/progress";
 import { cn } from "../lib/utils";
 import { PropertyBlock } from "../ui/Properties";
 import { BelowCard, ChildList, Updates, mainGrouping } from "../ui/Sections";
-import { Crumbs, LinksInline, LinksRow, PageFooter, TrashBanner, pinnedRefs } from "../ui/PageParts";
+import { AddRef, Crumbs, LinksMenu, LinksRow, PageFooter, TrashBanner, pinnedRefs } from "../ui/PageParts";
 import { PlacePicker } from "../ui/Picker";
 import { pluralOf } from "@obtion/core/plural";
 import { queryBlocks, insertQueryBlock } from "../ui/QueryBlock";
@@ -185,15 +185,21 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
         schema={schema}
         head={{
           first: <TypeSwitch item={item} />,
-          end: !item.deleted && (
-            <Tip label={t("rules.title")}>
-              <Button variant="plain" onClick={() => setRulesOpen(true)} aria-label={t("rules.title")} className={cn("tap inline-flex items-center justify-center rounded-lg p-1.5 transition-colors hover:bg-hover hover:text-fg", item.rules.trim() ? "text-fg" : "text-muted-foreground")}>
-                <Bot size={16} />
-              </Button>
-            </Tip>
+          // "+ Ref" next to "+ Tags" until refs are pinned; then the "+" follows their chips
+          afterTags: !pinnedRefs(item, ix).length && <AddRef item={item} text />,
+          end: (
+            <>
+              <LinksMenu item={item} />
+              {!item.deleted && (
+                <Tip label={t("rules.title")}>
+                  <Button variant="plain" onClick={() => setRulesOpen(true)} aria-label={t("rules.title")} className={cn("tap inline-flex items-center justify-center rounded-lg p-1.5 transition-colors hover:bg-hover hover:text-fg", item.rules.trim() ? "text-fg" : "text-muted-foreground")}>
+                    <Bot size={16} />
+                  </Button>
+                </Tip>
+              )}
+            </>
           ),
-          // pinned refs get a row of their own; without them the links fit after the tags
-          ...(pinnedRefs(item, ix).length ? { links: <LinksRow item={item} /> } : { afterTags: <LinksInline item={item} /> }),
+          links: <LinksRow item={item} />,
           progress: progress && <ProgressBand done={progress.done} total={progress.total} desc={progressText(item, ix, progress.done, progress.total)} />,
         }}
       />

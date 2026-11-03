@@ -313,7 +313,7 @@ export function PropertyBlock({ item, schema, head = {} }: { item: Item; schema?
         ))}
         <PageTags item={item} />
         {head.afterTags}
-        {head.end && <span className="ml-auto inline-flex">{head.end}</span>}
+        {head.end && <span className="ml-auto inline-flex items-center gap-0.5">{head.end}</span>}
       </div>
       {head.links}
       <div className="mt-3 border-t border-line" />
