@@ -24,6 +24,7 @@ import { openSettings, openSpaceSettings } from "./settings-open";
 import { editType, openNewType } from "./type-edit";
 import { restoreDefaultTypes } from "@obtion/core/setup";
 import { Tip } from "../components/ui/tooltip";
+import { startPointerDrag } from "../lib/drag";
 
 /**
  * What is being dragged in the sidebar: an item (from below `from`, null: pinned; `type`: a pinned
@@ -58,6 +59,48 @@ function spaceGapAt(area: HTMLElement, clientY: number, dragged: string) {
   for (let i = 0; i < gaps.length; i++) if (i !== below && (index < 0 || Math.abs(gaps[i]! - clientY) < Math.abs(gaps[index]! - clientY))) index = i;
   return { index, y: gaps[index]! - box.top + area.scrollTop };
 }
+/** Width of the sidebar in px: by default, and how narrow or wide dragging its edge can make it. */
+export const SIDEBAR_WIDTH = { initial: 256, min: 200, max: 480 };
+const clampWidth = (w: number) => Math.max(SIDEBAR_WIDTH.min, Math.min(SIDEBAR_WIDTH.max, Math.round(w)));
+
+/**
+ * The sidebar's right edge: dragged, it sets the width, remembered per device. Arrow keys change it
+ * in steps, a double click goes back to the default.
+ */
+function ResizeHandle({ width, onWidth, onDone }: { width: number; onWidth: (w: number) => void; onDone: (w: number) => void }) {
+  const { t } = useT();
+  return (
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      aria-label={t("nav.resize")}
+      aria-valuenow={width}
+      aria-valuemin={SIDEBAR_WIDTH.min}
+      aria-valuemax={SIDEBAR_WIDTH.max}
+      tabIndex={0}
+      className="absolute inset-y-0 -right-1 z-20 w-2 cursor-col-resize touch-none outline-none hover:bg-focus/40 focus-visible:bg-focus/40"
+      onPointerDown={(e) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        const x0 = e.clientX;
+        let w = width;
+        document.body.style.cursor = "col-resize";
+        startPointerDrag(
+          (ev) => onWidth((w = clampWidth(width + ev.clientX - x0))),
+          () => ((document.body.style.cursor = ""), onDone(w)),
+        );
+      }}
+      onDoubleClick={() => onDone(SIDEBAR_WIDTH.initial)}
+      onKeyDown={(e) => {
+        const step = e.key === "ArrowLeft" ? -16 : e.key === "ArrowRight" ? 16 : 0;
+        if (!step) return;
+        e.preventDefault();
+        onDone(clampWidth(width + step));
+      }}
+    />
+  );
+}
+
 /** Can it go into another workspace? Items can (a move), type pages and rows of "Typen" not. */
 const movable = (d: typeof dragging) => !!d && d.from !== "types" && !d.type;
 /** Icons of tree rows: larger in the phone menu. */
@@ -74,6 +117,10 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
   const route = useRoute();
   const { shown } = useAccounts();
   const [creating, setCreating] = useState(false);
+  const [storedWidth, setStoredWidth] = useLocalStorage<number>(KEYS.sidebarWidth, SIDEBAR_WIDTH.initial);
+  // while dragging: only on screen, stored when let go
+  const [liveWidth, setLiveWidth] = useState<number | null>(null);
+  const width = liveWidth ?? clampWidth(storedWidth);
   const [spaceGap, setSpaceGap] = useState<{ index: number; y: number } | null>(null);
   // a drag let go outside the sidebar (or broken off) leaves no line behind
   useEffect(() => {
@@ -85,12 +132,12 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
   const navCls = (active: boolean) => cn("flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm", active ? "bg-hover font-medium text-fg" : "text-muted-foreground hover:bg-hover hover:text-fg");
 
   return (
-    <aside className="flex w-[256px] shrink-0 flex-col border-r border-line bg-surface-2/50 pt-safe">
+    <aside style={{ width }} className="relative flex shrink-0 flex-col border-r border-line bg-surface-2/50 pt-safe">
       <div className="flex items-center px-2 pb-px pt-2">
         <SpaceSelector className="flex-1" onNew={() => setCreating(true)} />
       </div>
       <div
-        className="relative min-h-0 flex-1 overflow-y-auto pb-3"
+        className="relative min-h-0 flex-1 overflow-y-auto pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         // a workspace's block dragged by its name: anywhere here, the nearest gap between the blocks
         onDragOver={(e) => {
           if (!draggingSpace) return;
@@ -160,6 +207,7 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
         )}
         <StatusButton className="ml-auto" />
       </div>
+      <ResizeHandle width={width} onWidth={setLiveWidth} onDone={(w) => (setStoredWidth(w), setLiveWidth(null))} />
     </aside>
   );
 }
