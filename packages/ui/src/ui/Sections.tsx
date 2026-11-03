@@ -164,10 +164,9 @@ function notesBelow(item: Item, ix: Index): Item[] {
  * "Darunter" (design rules § 3.1, zone 4): what lies below the page and is not shown above. A page
  * that gathers (a project) shows notes and files of all levels.
  */
-export function BelowCard({ item, exclude, gathers, quietAdd }: { item: Item; exclude: Set<string>; gathers: boolean; quietAdd: boolean }) {
+export function BelowCard({ item, exclude, gathers }: { item: Item; exclude: Set<string>; gathers: boolean }) {
   const { t, lang } = useT();
   const ix = useIndex();
-  const [adding, setAdding] = useState(false);
   const [more, setMore] = useState<Set<string>>(new Set());
   const hidden = shownByBlocks(item, ix);
   const isNote = (x: Item) => x.kind === "info" && !ix.typeOf(x);
@@ -183,13 +182,7 @@ export function BelowCard({ item, exclude, gathers, quietAdd }: { item: Item; ex
     ...[...byType.entries()].sort((a, b) => (ix.typeName(a[0]) ?? "").localeCompare(ix.typeName(b[0]) ?? "")).map(([k, items]) => ({ key: "type:" + k, label: listTitle(ix, k, false) || (ix.typeName(k) ?? ""), items })),
   ];
   const count = groups.reduce((n, g) => n + g.items.length, 0);
-  const addNote = (title: string) => repo.create({ title, parents: [item.id] });
-  if (!count && !adding)
-    return quietAdd ? (
-      <div className="mt-2">
-        <AddRow label={t("below.addNoteBelow")} onAdd={addNote} />
-      </div>
-    ) : null;
+  if (!count) return null;
   const right = (x: Item) =>
     x.file ? (
       <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{fmtBytes(lang, x.file.size)}</span>
@@ -200,20 +193,8 @@ export function BelowCard({ item, exclude, gathers, quietAdd }: { item: Item; ex
     );
   return (
     <section className="mt-10 max-md:mt-8">
-      <SectionTitle
-        count={count}
-        right={
-          <SectionAction onClick={() => setAdding(true)}>{t("below.note")}</SectionAction>
-        }
-      >
-        {t("below.title")}
-      </SectionTitle>
+      <SectionTitle count={count}>{t("below.title")}</SectionTitle>
       <Card className="overflow-hidden">
-        {adding && (
-          <div className="border-b border-line px-1">
-            <AddRow label={t("below.addNote")} autoFocus onAdd={addNote} onDone={() => setAdding(false)} />
-          </div>
-        )}
         {groups.map((g) => {
           const all = more.has(g.key);
           return (
