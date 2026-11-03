@@ -29,7 +29,7 @@ import { isStatusProp, statusProp, useAsStatus } from "@obtion/core/traits";
 import { keyBetween } from "@obtion/core/sortkey";
 import { parseQuery, printQuery, runQuery } from "@obtion/core/query";
 import { type DeleteMode, deleteType, previewTagToType, tagToType, typeUsage } from "@obtion/core/typeops";
-import { useIndex, navigate, useDocumentTitle, useRepo } from "../hooks";
+import { useIndex, navigate, useDocumentTitle, useRepo, useSpaceId } from "../hooks";
 import { useT } from "../i18n";
 import { Card, Button, Dialog, MenuItem, Popover, SectionTitle, Seg, AddButton, IconButton, MoreMenu, PagePlaceholder } from "../ui/primitives";
 import { InlineText } from "../ui/fields";
@@ -40,13 +40,14 @@ import { TypeList } from "./Lists";
 import { notify } from "../ui/feedback";
 import type { T } from "@obtion/core/i18n";
 import { NewTypeDialog } from "./Types";
+import { SpaceScope } from "../ui/Spaces";
 import { closeTypeEditor, editType, useTypeEditing } from "../ui/type-edit";
 
 export function TypePage({ item }: { item: Item }) {
   const repo = useRepo();
   const { t } = useT();
   const ix = useIndex();
-  const editing = useTypeEditing() === item.id;
+  const space = useSpaceId();
   const plural = ix.typePlural(item.id);
   useDocumentTitle(plural);
   if (item.deleted) return <PagePlaceholder>{t("type.isDeleted", { name: item.schema!.name })}</PagePlaceholder>;
@@ -61,7 +62,7 @@ export function TypePage({ item }: { item: Item }) {
         <MoreMenu>
           {(close) => (
             <>
-              <MenuItem icon={<Pencil size={14} />} onClick={() => (close(), editType(item.id))}>
+              <MenuItem icon={<Pencil size={14} />} onClick={() => (close(), editType(item.id, space))}>
                 {t("type.edit")}
               </MenuItem>
               <MenuItem icon={<Pin size={14} />} onClick={() => (close(), repo.pin(item.id, !item.pinned))}>
@@ -74,13 +75,28 @@ export function TypePage({ item }: { item: Item }) {
           )}
         </MoreMenu>
       </div>
-      {editing && <TypeEditor item={item} onClose={closeTypeEditor} />}
       <TypeList type={item} />
     </div>
   );
 }
 
-/** "Typ bearbeiten", as a dialog over the list. */
+/** "Typ bearbeiten" while it is open (editType), over the page that is open. Lives once in the app. */
+export function TypeEditorHost() {
+  const editing = useTypeEditing();
+  if (!editing) return null;
+  const editor = <OpenTypeEditor id={editing.id} />;
+  return editing.space ? <SpaceScope id={editing.space}>{editor}</SpaceScope> : editor;
+}
+
+/** The editor of type `id`; a type that is gone (deleted, not synced) closes it. */
+function OpenTypeEditor({ id }: { id: string }) {
+  const item = useRepo().get(id);
+  const gone = !item?.schema || item.deleted;
+  useEffect(() => void (gone && closeTypeEditor()), [gone]);
+  return gone ? null : <TypeEditor key={id} item={item} onClose={closeTypeEditor} />;
+}
+
+/** "Typ bearbeiten", as a dialog. */
 function TypeEditor({ item, onClose }: { item: Item; onClose: () => void }) {
   const repo = useRepo();
   const { t } = useT();

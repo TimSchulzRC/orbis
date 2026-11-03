@@ -31,7 +31,7 @@ export function NewTypeDialog({ title, onClose, onCreated }: { title?: string; o
     const id = createType(trimmed, repo);
     onClose();
     if (onCreated) onCreated(id);
-    else editType(id, { space });
+    else editType(id, space, true);
   };
   return (
     <Dialog title={title ?? t("types.new")} onClose={onClose}>

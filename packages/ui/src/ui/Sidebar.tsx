@@ -462,7 +462,7 @@ function TypeRow({ row: r, touch, active, drop, ...drag }: {
       {!touch && isType && (
         <MoreMenu menu={menu} size="xs" iconSize={14} tabIndex={-1} className={cn("relative z-10 hover:bg-surface-2", REVEAL.row)}>
           {(close) => (
-            <MenuItem icon={<Pencil size={14} />} onClick={() => (close(), editType(r.id, active ? undefined : { space }))}>
+            <MenuItem icon={<Pencil size={14} />} onClick={() => (close(), editType(r.id, space))}>
               {t("type.edit")}
             </MenuItem>
           )}
@@ -635,7 +635,7 @@ function TreeNode({
         {!touch && <MoreMenu menu={menu} size="xs" iconSize={14} tabIndex={-1} className={cn("relative z-10 hover:bg-surface-2", REVEAL.row)}>
           {(close) => (
             <>
-              {isType && <MenuItem onClick={() => (close(), editType(item.id, activeId === item.id ? undefined : { space }))}>{t("type.edit")}</MenuItem>}
+              {isType && <MenuItem onClick={() => (close(), editType(item.id, space))}>{t("type.edit")}</MenuItem>}
               <MenuItem onClick={() => (close(), repo.pin(item.id, !item.pinned))}>{item.pinned ? t("item.unpin") : t("item.pin")}</MenuItem>
               {parent && secondary && <MenuItem onClick={() => (close(), repo.setHome(item.id, parent))}>{t("place.makeHome")}</MenuItem>}
               {/* types are deleted on their page, with the preview of what becomes of the values */}

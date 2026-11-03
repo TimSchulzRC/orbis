@@ -1,23 +1,27 @@
-// "Typ bearbeiten" opens as a dialog over the type's page: from the page's "…", from the type's
-// "…" in the sidebar, after "Neuer Typ". It is no part of the address; another page closes it.
+// "Typ bearbeiten" opens as a dialog over the page that is open: from the type's page's "…", from
+// the type's "…" in the sidebar, after "Neuer Typ" (over the new type's page). It is no part of the
+// address; another page closes it.
 // "Neuer Typ" is a dialog over any page too (from "Typen" in the sidebar, the palette).
 import { useSyncExternalStore } from "react";
 import { itemPath, navigate, parseHash } from "../hooks";
 
-let editing: string | null = null; // the type whose dialog is open
-let at: { space?: string; path?: string } = {}; // the page it is open on: workspace (if named) and "/i/<id>"
+/** The type whose editor is open, in workspace `space` (its replica). */
+export type TypeEditing = { id: string; space?: string };
+let editing: TypeEditing | null = null;
+let at: { space?: string; path: string } = { path: "/" }; // the page it is open on: workspace (if named) and path
 const listeners = new Set<() => void>();
-const set = (next: string | null) => ((editing = next), listeners.forEach((f) => f()));
+const set = (next: TypeEditing | null) => ((editing = next), listeners.forEach((f) => f()));
 const page = () => {
   const { space, rest } = parseHash();
-  return { space, path: /^\/i\/[^/?]+/.exec(rest)?.[0] };
+  // an item's page without the title after its id ("/i/<id>/<title>"), which changes while typing
+  return { space, path: /^\/i\/[^/?]+/.exec(rest)?.[0] ?? rest.split("?")[0]! };
 };
 
-/** Opens type `id`'s editor; with `open`, also its page (in workspace `open.space`, if given) – not when it is open already. */
-export function editType(id: string, open?: { space?: string }) {
-  if (open) navigate(itemPath(id), open);
+/** Opens type `id`'s editor (of workspace `space`) over the page that is open; with `show`, over the type's page. */
+export function editType(id: string, space?: string, show?: boolean) {
+  if (show) navigate(itemPath(id), { space });
   at = page();
-  set(id);
+  set({ id, space });
 }
 
 export const closeTypeEditor = () => set(null);
@@ -25,8 +29,7 @@ export const closeTypeEditor = () => set(null);
 export const typeEditing = () => editing;
 export const useTypeEditing = () => useSyncExternalStore((f) => (listeners.add(f), () => listeners.delete(f)), typeEditing);
 
-// another page (also the same type in another workspace) closes it, else it would open again
-// on the next visit to that type
+// another page closes it (a view or tab in the address does not)
 // on the way the address may get the open workspace's name: no other page
 addEventListener("hashchange", () => {
   if (editing === null) return;

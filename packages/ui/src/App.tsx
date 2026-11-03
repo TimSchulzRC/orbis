@@ -23,6 +23,7 @@ import { Today } from "./views/Today";
 import { Tray } from "./ui/Tray";
 import { setShelfPinned, syncShelf, useInboxItems, useShelf } from "./ui/inbox";
 import { NewTypeHost } from "./views/Types";
+import { TypeEditorHost } from "./views/TypePage";
 import { GraphView } from "./views/Graph";
 import { Activity } from "./views/Activity";
 import { TrashView } from "./views/Trash";
@@ -204,6 +205,7 @@ function Main() {
       {captureOpen && <CaptureSheet onClose={() => setCaptureOpen(false)} />}
       <SettingsHost />
       <NewTypeHost />
+      <TypeEditorHost />
       <AgentNotice />
       <LightboxHost />
     </div>

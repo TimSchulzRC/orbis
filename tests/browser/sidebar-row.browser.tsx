@@ -103,13 +103,14 @@ test("the … next to Typen brings back a deleted default type", async () => {
   await expect.poll(() => repo.get(SYS.task)?.deleted).toBe(false);
 });
 
-test("a type's … in the sidebar opens its page with \"Typ bearbeiten\"", async () => {
-  const { repo } = await setup();
+test("a type's … in the sidebar opens \"Typ bearbeiten\" over the page that is open", async () => {
+  const { repo, href } = await setup();
+  location.hash = href;
   const plural = repo.index().typePlural(SYS.task);
   const row = page.getByRole("navigation", { name: "Typen" }).getByRole("link", { name: plural, exact: true }).element().parentElement!;
   await page.elementLocator(row.querySelector("button")!).click({ force: true });
   await page.getByRole("button", { name: "Typ bearbeiten", exact: true }).click();
-  expect(location.hash).toBe(`#/w/w1/i/${SYS.task}`);
-  expect(typeEditing()).toBe(SYS.task);
+  expect(location.hash).toBe(href);
+  expect(typeEditing()).toEqual({ id: SYS.task, space: "w1" });
   closeTypeEditor();
 });
