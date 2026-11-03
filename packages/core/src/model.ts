@@ -81,7 +81,8 @@ export interface PropDef {
 export interface Capabilities {
   status?: string; // propId of the main status property
   due?: string; // propId of the due date property ("Termin")
-  progress?: { of?: string }; // share of done descendants with a status (optional type filter)
+  /** Legacy: progress is a computed property now (see `progressProp`); read only while the type has none. */
+  progress?: { of?: string };
   updates?: boolean;
   template?: { body?: string; values?: Record<string, Value> };
 }

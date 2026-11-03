@@ -62,7 +62,7 @@ export function defaultTypes(lang: Lang): Record<string, TypeSpec> {
       icon: "folder-kanban",
       color: "green",
       description: t("project.description"),
-      capabilities: { status: "p_status", progress: { of: SYS.task }, updates: true, template: { body: "" } },
+      capabilities: { status: "p_status", updates: true, template: { body: "" } },
       properties: [
         {
           id: "p_status",
@@ -90,7 +90,7 @@ export function defaultTypes(lang: Lang): Record<string, TypeSpec> {
       icon: "circle-check",
       color: "slate",
       description: t("task.description"),
-      capabilities: { status: "p_status", due: "p_due", progress: { of: SYS.task } },
+      capabilities: { status: "p_status", due: "p_due" },
       properties: [
         {
           id: "p_status",
@@ -108,6 +108,7 @@ export function defaultTypes(lang: Lang): Record<string, TypeSpec> {
         },
         priority,
         { id: "p_due", name: t("prop.due"), kind: "date" },
+        { id: "p_progress", name: t("prop.progress"), kind: "computed", computed: { fn: "progress", of: SYS.task } },
         blockedBy,
         { id: WAITING_FOR, name: t("prop.waitingFor"), kind: "text", hideEmpty: true, blocks: true },
       ],

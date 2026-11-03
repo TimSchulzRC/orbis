@@ -25,7 +25,7 @@ import {
   upsertProp,
 } from "@obtion/core/model";
 import { COLORS, ICONS } from "@obtion/core/palette";
-import { isStatusProp, statusProp, useAsStatus } from "@obtion/core/traits";
+import { isProgressProp, isStatusProp, progressProp, statusProp, useAsStatus } from "@obtion/core/traits";
 import { keyBetween } from "@obtion/core/sortkey";
 import { parseQuery, printQuery, runQuery } from "@obtion/core/query";
 import { type DeleteMode, deleteType, previewTagToType, tagToType, typeUsage } from "@obtion/core/typeops";
@@ -435,6 +435,7 @@ function PropEditor({ item, prop }: { item: Item; prop: PropDef }) {
             t("type.computed"),
             <Seg label={t("type.computed")} value={prop.computed?.fn ?? "progress"} onChange={(fn) => set({ computed: { ...prop.computed, fn } })} options={[{ value: "progress", label: t("type.fnProgress") }, { value: "count", label: t("type.fnCount") }]} />,
           )}
+          {isProgressProp(prop) && <p className="text-xs text-muted-foreground">{t(progressProp(item.schema)?.id === prop.id ? "type.progressMain" : "type.progressMore")}</p>}
           {field(
             t("type.ofType"),
             <NativeSelect full value={prop.computed?.of ?? ""} onChange={(e) => set({ computed: { fn: prop.computed?.fn ?? "progress", of: e.target.value || undefined } })} className={box}>
@@ -549,19 +550,6 @@ function Capabilities({ item }: { item: Item }) {
             {dateProps.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
-              </option>
-            ))}
-          </NativeSelect>,
-        )}
-        {row(
-          t("caps.progress"),
-          t("caps.progressHint"),
-          <NativeSelect value={caps.progress ? (caps.progress.of ?? "*") : ""} onChange={(e) => set("progress", e.target.value ? (e.target.value === "*" ? {} : { of: e.target.value }) : null)} className={selectClass} aria-label={t("caps.progress")}>
-            <option value="">{t("caps.off")}</option>
-            <option value="*">{t("caps.anyWithStatus")}</option>
-            {types.map((x) => (
-              <option key={x.id} value={x.id}>
-                {x.schema.name}
               </option>
             ))}
           </NativeSelect>,

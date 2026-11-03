@@ -35,7 +35,6 @@ export type PropInput = z.infer<typeof propInput>;
 export const capInput = z.object({
   status: z.string().nullable().optional().describe("name of a select property with one value: becomes the status (options get groups, a default)"),
   due_date: z.string().nullable().optional().describe("name of a date property"),
-  progress: z.union([z.boolean(), z.string()]).nullable().optional().describe("true, or a type name to count only that type"),
   updates: z.boolean().optional(),
   template: z.string().nullable().optional(),
 });

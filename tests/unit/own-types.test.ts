@@ -3,10 +3,11 @@
 import { test, expect } from "bun:test";
 import { MemRepo } from "../support/helpers";
 import { runSetup, SYS } from "@obtion/core/setup";
-import { type PropDef, upsertProp } from "@obtion/core/model";
+import { type PropDef, removeProp, upsertProp } from "@obtion/core/model";
 import { deleteType } from "@obtion/core/typeops";
 import { matchOption, statusShape } from "@obtion/core/input";
 import { activeProjects } from "@obtion/core/today";
+import { progressSpec } from "@obtion/core/traits";
 
 /** A project and its steps under other names, without any default type. */
 function ownTypes() {
@@ -35,8 +36,11 @@ function ownTypes() {
   });
   m.addType("t_plan", {
     name: "Vorhaben",
-    capabilities: { status: "p_state", progress: { of: "t_step" } },
-    properties: [{ id: "p_state", name: "Stand", kind: "select", default: "v_on", options: [{ id: "v_on", name: "Läuft", group: "active" }, { id: "v_rest", name: "Ruht", group: "active", state: "paused" }] }],
+    capabilities: { status: "p_state" },
+    properties: [
+      { id: "p_state", name: "Stand", kind: "select", default: "v_on", options: [{ id: "v_on", name: "Läuft", group: "active" }, { id: "v_rest", name: "Ruht", group: "active", state: "paused" }] },
+      { id: "p_done", name: "Erledigt", kind: "computed", computed: { fn: "progress", of: "t_step" } },
+    ],
   });
   return m;
 }
@@ -86,7 +90,7 @@ test("renaming the shipped properties and options changes nothing; a look-alike 
 test("progress on a deleted type filters nothing", () => {
   const m = ownTypes();
   m.addType("t_gone", { name: "Weg" });
-  m.change("t_plan", (doc) => (doc.getMap<any>("schema").get("capabilities") as any).set("progress", { of: "t_gone" }));
+  m.change("t_plan", (doc) => upsertProp(doc, "p_done", { computed: { fn: "progress", of: "t_gone" } }));
   const plan = m.add({ title: "Umzug", type: "t_plan", props: { p_state: "v_on" } });
   const a = m.add({ title: "Kartons", type: "t_step", parents: [plan], props: { p_state: "s_new" } });
   deleteType(m.writer, m.index(), "t_gone", { mode: "remove" }, "test");
@@ -126,4 +130,17 @@ test("a word for paused finds the option marked paused, not one only called so",
   };
   expect(matchOption(p, "on hold").id).toBe("b");
   expect(matchOption(p, "Paused").id).toBe("a"); // the exact name still wins
+});
+
+test("progress comes from the computed property; old types read the capability until they have one", () => {
+  const m = new MemRepo();
+  m.addType("t_old", { name: "Alt", capabilities: { progress: { of: "t_old" } } });
+  let s = m.index().types.get("t_old")!.schema;
+  expect(progressSpec(s)).toEqual({ of: "t_old" }); // from before the property
+  m.change("t_old", (doc) => upsertProp(doc, "p_pr", { name: "Fortschritt", kind: "computed", computed: { fn: "progress" } }));
+  s = m.index().types.get("t_old")!.schema;
+  expect(progressSpec(s)).toEqual({ of: undefined }); // the property wins
+  m.change("t_old", (doc) => removeProp(doc, "p_pr"));
+  s = m.index().types.get("t_old")!.schema;
+  expect(progressSpec(s)).toBeUndefined(); // removing it turns the bar off
 });

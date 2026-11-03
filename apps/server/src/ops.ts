@@ -335,7 +335,6 @@ export class Ops {
       capabilities: {
         status: name(c.status) ? `"${name(c.status)}" (tick off, status:open/done in queries)` : undefined,
         due_date: name(c.due) ? `"${name(c.due)}" (overdue / this week)` : undefined,
-        progress: c.progress ? `share of done descendants${c.progress.of ? ` of type ${this.store.index().typeName(c.progress.of) ?? "(deleted)"}` : " with a status"}` : undefined,
         updates: c.updates ? "dated progress notes via add_update" : undefined,
       },
       entries: this.store.index().itemsOfType(t.id).length,
@@ -1341,7 +1340,6 @@ export class Ops {
           useAsStatus(doc, p);
         }
         if (c.due_date !== undefined) setCapability(doc, "due", pid(c.due_date, "date"));
-        if (c.progress !== undefined) setCapability(doc, "progress", c.progress === false || c.progress === null ? null : { of: typeof c.progress === "string" ? this.resolveType(c.progress).id : undefined });
         if (c.updates !== undefined) setCapability(doc, "updates", c.updates || null);
         if (c.template !== undefined) setCapability(doc, "template", c.template === null ? null : { body: c.template });
       });
