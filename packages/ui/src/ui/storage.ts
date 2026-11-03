@@ -15,6 +15,7 @@ export const KEYS = {
   captureSpace: "obtion.capture.space",
   timelineScale: "obtion.timeline.scale",
   sidebarTree: "obtion.sidebar.tree",
+  sidebarWidth: "obtion.sidebar.width",
   sidebarSpace: (space: string) => `obtion.sidebar.space.${space}`,
   sidebarTypes: (space: string) => `obtion.sidebar.types.${space}`,
   /** a view's tab shown last (a type's page, a block) */
