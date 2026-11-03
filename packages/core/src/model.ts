@@ -570,25 +570,29 @@ export function refOrder(doc: Y.Doc): string[] {
   return [...keyed, ...entries.filter(([, v]) => typeof v !== "string")].map(([k]) => k);
 }
 
-/** Gives every ref a key in its current order (older ones have none), so one can go between two. */
+/** Gives a key to each ref that has none (older ones) or shares its place with the one before
+ * (added at once on two devices), so one can go between two. Other refs keep theirs: rewriting a
+ * ref would bring it back if another device removed it meanwhile. */
 function keyedRefs(doc: Y.Doc): Y.Map<string | true> {
   const m = doc.getMap<string | true>("refs");
-  const order = refOrder(doc);
-  if (order.some((k) => typeof m.get(k) !== "string")) {
-    let prev: string | null = null;
-    for (const k of order) m.set(k, (prev = keyBetween(prev, null)));
+  let prev: string | null = null;
+  for (const k of refOrder(doc)) {
+    const v = m.get(k);
+    if (typeof v === "string" && (prev === null || cmpKey(v, prev) > 0)) prev = v;
+    else m.set(k, (prev = keyBetween(prev, null)));
   }
   return m;
 }
 
-/** A ref at the front (a link from the text, pinned) or the end (set by hand); one already there keeps its place. */
+/** A ref at the front (a link from the text, pinned) or the end (set by hand); one already there
+ * keeps its place. Writes no other ref, see keyedRefs. */
 export function addRef(doc: Y.Doc, target: string, front = false) {
-  const m = keyedRefs(doc);
+  const m = doc.getMap<string | true>("refs");
   if (m.has(target)) return;
-  const order = refOrder(doc);
-  const edge = front ? order[0] : order.at(-1);
-  const k = edge === undefined ? null : (m.get(edge) as string);
-  m.set(target, front ? keyBetween(null, k) : keyBetween(k, null));
+  const keys = [...m.values()].filter((v): v is string => typeof v === "string").sort(cmpKey);
+  if (front) m.set(target, keyBetween(null, keys[0] ?? null));
+  else if (keys.length < m.size) m.set(target, true); // behind the older ones, like them
+  else m.set(target, keyBetween(keys.at(-1) ?? null, null));
 }
 
 /** Moves a ref in front of `before`, or to the end. */

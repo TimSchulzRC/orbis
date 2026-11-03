@@ -46,3 +46,32 @@ test("the order merges between two devices", () => {
   expect(refOrder(one)).toEqual(refOrder(two));
   expect(refOrder(one).slice(-2)).toEqual(["a", "b"]);
 });
+
+test("a ref removed on one device stays removed while the other adds one", () => {
+  const one = new Y.Doc();
+  for (const k of ["x", "y"]) one.getMap("refs").set(k, true); // older refs, no keys
+  const two = new Y.Doc();
+  Y.applyUpdate(two, Y.encodeStateAsUpdate(one));
+  addRef(one, "z");
+  addRef(one, "p", true);
+  setMember(two, "refs", "x", false);
+  Y.applyUpdate(two, Y.encodeStateAsUpdate(one));
+  Y.applyUpdate(one, Y.encodeStateAsUpdate(two));
+  expect(refOrder(one)).toEqual(["p", "y", "z"]);
+  expect(refOrder(two)).toEqual(refOrder(one));
+});
+
+test("refs added at once on two devices can still be moved between", () => {
+  const one = new Y.Doc();
+  setMember(one, "refs", "a", true);
+  const two = new Y.Doc();
+  Y.applyUpdate(two, Y.encodeStateAsUpdate(one));
+  setMember(one, "refs", "b", true);
+  setMember(two, "refs", "c", true); // same key as b
+  Y.applyUpdate(two, Y.encodeStateAsUpdate(one));
+  Y.applyUpdate(one, Y.encodeStateAsUpdate(two));
+  setMember(one, "refs", "z", true);
+  expect(refOrder(one)).toEqual(["a", "b", "c", "z"]);
+  moveRef(one, "z", "c");
+  expect(refOrder(one)).toEqual(["a", "b", "z", "c"]);
+});
