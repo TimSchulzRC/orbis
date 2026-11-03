@@ -1,7 +1,7 @@
 // Links of a page, both ways, behind one button in the page head: its number counts all of them,
 // a click lists "Verlinkt von" and "Verweist auf". The page has no section for them at the end.
 import { afterEach, expect, test } from "vitest";
-import { page, userEvent } from "vitest/browser";
+import { commands, page, userEvent } from "vitest/browser";
 import { cleanup, render } from "vitest-browser-react";
 import { ItemPage } from "../../packages/ui/src/views/ItemPage";
 import { workspace } from "./workspace";
@@ -106,13 +106,21 @@ test("refs keep their order: a pinned link goes in front, chips can be dragged o
   const chips = () => [...document.querySelectorAll("[data-ref]")].map((x) => x.textContent);
   await expect.poll(chips).toEqual(["Gamma", "Alpha", "Beta"]);
 
-  // dragged onto the first chip, the last one takes its place
-  await userEvent.dragAndDrop(page.getByText("Beta", { exact: true }), page.getByText("Gamma", { exact: true }));
+  // dragged over the left half of the first chip, a line shows in front of it, and the chip lands there
+  const box = (title: string) => document.querySelector(`[data-ref="${({ Alpha: a, Beta: b, Gamma: g } as Record<string, string>)[title]}"]`)!.getBoundingClientRect();
+  const from = box("Beta");
+  await commands.mouse("move", from.left + from.width / 2, from.top + from.height / 2);
+  await commands.mouse("down");
+  const to = box("Gamma");
+  await commands.mouse("move", to.left + 4, to.top + to.height / 2, { steps: 8 });
+  await expect.poll(() => document.querySelectorAll("[data-drop-line]").length).toBe(1);
+  expect(document.querySelector(`[data-ref="${g}"] [data-drop-line]`)).not.toBeNull();
+  await commands.mouse("up");
   await expect.poll(() => repo.get(id)!.refs).toEqual([b, g, a]);
+  expect(document.querySelector("[data-drop-line]")).toBeNull();
 
   // Alt+→ moves the focused chip one place to the right
-  const beta = page.getByRole("link", { name: /Beta$/ });
-  await beta.element().focus();
+  document.querySelector<HTMLElement>(`[data-ref="${b}"] a`)!.focus();
   await userEvent.keyboard("{Alt>}{ArrowRight}{/Alt}");
   await expect.poll(() => repo.get(id)!.refs).toEqual([g, b, a]);
   await expect.poll(chips).toEqual(["Gamma", "Beta", "Alpha"]);

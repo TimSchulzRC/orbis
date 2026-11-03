@@ -296,17 +296,21 @@ export function LinksRow({ item }: { item: Item }) {
   const ix = useIndex();
   const { t } = useT();
   const [drag, setDrag] = useState<string | null>(null);
-  const [over, setOver] = useState<string | null>(null);
+  // where the dragged chip would land: in front of this ref, or `null` for the end
+  const [at, setAt] = useState<string | null | undefined>(undefined);
   const refs = pinnedRefs(item, ix);
   if (!refs.length) return null;
   const inText = new Set(ix.textLinks(item).map((l) => l.to));
   const ids = refs.map((x) => x.id);
-  // dropped on a chip: it takes that chip's place (before it when coming from the right)
-  const drop = (target: string) => {
-    if (!drag || drag === target) return;
-    const from = ids.indexOf(drag);
-    const to = ids.indexOf(target);
-    repo.moveRef(item.id, drag, from > to ? target : (ids[to + 1] ?? null));
+  const end = () => (setDrag(null), setAt(undefined));
+  // the left half of a chip means in front of it, the right half after it
+  const aim = (e: React.DragEvent<HTMLElement>, id: string) => {
+    if (!drag) return;
+    e.preventDefault();
+    const box = e.currentTarget.getBoundingClientRect();
+    const before = e.clientX < box.left + box.width / 2 ? id : (ids[ids.indexOf(id) + 1] ?? null);
+    // in front of itself or of the next one leaves it where it is: no line
+    setAt(before === drag || before === (ids[ids.indexOf(drag) + 1] ?? null) ? undefined : before);
   };
   // Alt+← / Alt+→ on a chip moves it by one
   const step = (id: string, direction: -1 | 1) => {
@@ -316,17 +320,21 @@ export function LinksRow({ item }: { item: Item }) {
     // moving the chip in the page takes the focus with it
     requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-ref="${id}"] a`)?.focus());
   };
+  const line = "pointer-events-none absolute -top-0.5 -bottom-0.5 w-0.5 rounded-full bg-link";
   return (
-    <div className="mt-2 flex flex-wrap items-center gap-1.5">
-      {refs.map((x) => (
+    <div
+      className="mt-2 flex flex-wrap items-center gap-1.5"
+      onDragOver={(e) => drag && e.preventDefault()}
+      onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget as Node | null) && setAt(undefined)}
+      onDrop={(e) => (e.preventDefault(), drag && at !== undefined && repo.moveRef(item.id, drag, at), end())}
+    >
+      {refs.map((x, n) => (
         <span
           key={x.id}
           draggable
           onDragStart={(e) => (e.dataTransfer.setData("obtion/ref", x.id), (e.dataTransfer.effectAllowed = "move"), setDrag(x.id))}
-          onDragEnd={() => (setDrag(null), setOver(null))}
-          onDragOver={(e) => drag && (e.preventDefault(), setOver(x.id))}
-          onDragLeave={() => setOver(null)}
-          onDrop={(e) => (e.preventDefault(), drop(x.id), setDrag(null), setOver(null))}
+          onDragEnd={end}
+          onDragOver={(e) => aim(e, x.id)}
           onKeyDown={(e) => {
             if (!e.altKey || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return;
             e.preventDefault();
@@ -334,11 +342,13 @@ export function LinksRow({ item }: { item: Item }) {
           }}
           data-ref={x.id}
           className={cn(
-            "group inline-flex max-w-full cursor-grab items-center gap-1 rounded-md bg-surface-2 py-0.5 pl-1.5 pr-0.5 text-[13px] active:cursor-grabbing",
+            "group relative inline-flex max-w-full cursor-grab items-center gap-1 rounded-md bg-surface-2 py-0.5 pl-1.5 pr-0.5 text-[13px] active:cursor-grabbing",
             drag === x.id && "opacity-50",
-            over === x.id && drag !== x.id && "ring-1 ring-faint",
           )}
         >
+          {/* the line where the chip would land, in the middle of the gap */}
+          {at === x.id && <span aria-hidden data-drop-line className={cn(line, "-left-1")} />}
+          {at === null && n === ids.length - 1 && <span aria-hidden data-drop-line className={cn(line, "-right-1")} />}
           <ItemLink item={x} className="min-w-0" />
           {inText.has(x.id) ? (
             // pinned from the text: the pin says why it is here, hovered it turns into the ×
