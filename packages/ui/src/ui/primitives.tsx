@@ -2,7 +2,7 @@ import { ToggleGroup, ToggleGroupItem } from "../components/ui/toggle-group";
 import { Button as ShadcnButton } from "../components/ui/button";
 import { Dialog as DialogRoot, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { Popover as PopoverRoot, PopoverAnchor, PopoverContent } from "../components/ui/popover";
-import { type ComponentProps, type ComponentType, type MouseEvent, type ReactNode, useRef, useState } from "react";
+import { type ComponentProps, type ComponentType, type MouseEvent, type ReactNode, createContext, useRef, useState } from "react";
 import { X, Check, ChevronDown, MoreHorizontal, Plus } from "lucide-react";
 import { useT } from "../i18n";
 import { cn } from "../lib/utils";
@@ -137,6 +137,12 @@ export function SectionTitle({ children, count, right, className }: { children: 
   );
 }
 
+/**
+ * Set by a card around a list (a query block): a list that brings its own card leaves it out
+ * and lines its outer edges up with the card's padding.
+ */
+export const InCard = createContext(false);
+
 /** Design rules § 2.9: never nest a card in a card. */
 export function Card({ className, ...rest }: ComponentProps<"div">) {
   return <div {...rest} className={cn("rounded-xl border border-line bg-surface", className)} />;
@@ -236,7 +242,7 @@ export function MenuItem({ children, onClick, danger, active, icon }: { children
       aria-current={active || undefined}
       className={cn("tap-row flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm hover:bg-hover", danger && "text-danger", active && "font-medium")}
     >
-      {icon && <span className="flex w-4 shrink-0 justify-center text-muted-foreground">{icon}</span>}
+      {icon && <span className={cn("flex w-4 shrink-0 justify-center", danger ? "text-danger" : "text-muted-foreground")}>{icon}</span>}
       <span className="min-w-0 flex-1 truncate">{children}</span>
       {active && <Check size={14} className="shrink-0 text-muted-foreground" />}
     </Button>

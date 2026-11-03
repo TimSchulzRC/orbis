@@ -1,7 +1,7 @@
 // View tabs, shared by a type's page and query blocks. A tab's filter is added to the query.
 import { Checkbox } from "../components/ui/checkbox";
 import { NativeSelect } from "../components/ui/native-select";
-import { useState } from "react";
+import { useContext, useState } from "react";
 import { CalendarDays, ChartGantt, ChevronLeft, ChevronRight, Copy, GripVertical, LayoutGrid, List, ListChecks, ListTree, Plus, SlidersHorizontal, SquareKanban, Table2, Trash2, X } from "lucide-react";
 import { type ViewTab, type PropDef, type ViewKind, titleKey } from "@obtion/core/model";
 import { type Cond, type Group, groupId, parseQuery, typesIn, viewTypeIds } from "@obtion/core/query";
@@ -9,7 +9,7 @@ import { statusProp } from "@obtion/core/traits";
 import { keyBetween } from "@obtion/core/sortkey";
 import { setParams, useIndex, useLocalStorage, useRoute } from "../hooks";
 import { useT } from "../i18n";
-import { Card, Button, MenuItem, Popover, Seg, IconButton, DraftBar } from "./primitives";
+import { Card, Button, InCard, MenuItem, Popover, Seg, IconButton, DraftBar } from "./primitives";
 import { InlineText } from "./fields";
 import { cn, moveInArray } from "../lib/utils";
 import { QueryEditor } from "./QueryEditor";
@@ -51,6 +51,7 @@ export interface TabEdit {
 /** A click on the shown tab opens its menu. */
 export function ViewTabs({ tabs, active, onPick, edit, right }: { tabs: ViewTab[]; active: string; onPick: (id: string) => void; edit?: TabEdit; right?: React.ReactNode }) {
   const { t } = useT();
+  const inCard = useContext(InCard);
   const [menu, setMenu] = useState<string | null>(null);
   const [drag, setDrag] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
@@ -97,6 +98,7 @@ export function ViewTabs({ tabs, active, onPick, edit, right }: { tabs: ViewTab[
                   onDrop={(e) => (e.preventDefault(), drop(tab.id), setDrag(null), setOver(null))}
                   className={cn(
                     "tap-y flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-2.5 py-2 text-sm",
+                    n === 0 && inCard && "pl-0", // in a card the first tab starts on the heading's line
                     on ? "border-[var(--text)] font-medium text-fg" : "border-transparent text-muted-foreground hover:text-fg",
                     over === tab.id && "bg-hover",
                   )}
@@ -206,7 +208,7 @@ interface FilterDraft {
 }
 
 /** The look is saved at once; the filter stays a draft until "Speichern". */
-export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter, onClose, kinds = TAB_KINDS }: { tab: ViewTab; fields: ViewField[]; columns?: string[]; groups?: Group[]; onLook: (patch: Partial<ViewTab>) => void; filter?: FilterDraft; onClose: () => void; kinds?: ViewKind[] }) {
+export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter, onClose, kinds = TAB_KINDS, part }: { tab: ViewTab; fields: ViewField[]; columns?: string[]; groups?: Group[]; onLook: (patch: Partial<ViewTab>) => void; filter?: FilterDraft; onClose: () => void; kinds?: ViewKind[]; /** one part only, for a popover (a query block's tools): no card, kind switch, filter or close button */ part?: "sort" | "group" | "more" }) {
   const { t } = useT();
   const ix = useIndex();
   const hasStatus = [...ix.types.values()].some((x) => statusProp(x.schema));
@@ -231,17 +233,22 @@ export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter
   const patchSort = (n: number, patch: (s: (typeof sorts)[number]) => Partial<(typeof sorts)[number]>) => onLook({ sort: sorts.map((x, m) => (m === n ? { ...x, ...patch(x) } : x)) });
   const isShown = (key: string) => shown.some((k) => titleKey(k) === titleKey(key));
   // the shown ones first, in their order, then the others
+  const Box = part ? "div" : Card;
+  const shows = (x: "sort" | "group" | "more") => !part || part === x;
   const columnFields = [...shown.map((k) => fields.find((f) => titleKey(f.key) === titleKey(k)) ?? { key: k, label: fieldLabel(k, t, fields), kind: "text" as const }), ...fields.filter((f) => !isShown(f.key))];
   return (
-    <Card className="mb-4 space-y-3 p-3 text-sm">
-      <div className="flex items-start gap-2">
-        <div className="min-w-0 flex-1 overflow-x-auto [scrollbar-width:none]">
-          <Seg label={t("view.label")} value={tab.kind} onChange={(k) => onLook({ kind: k })} options={kindsHere.map((k) => ({ value: k, label: t("view." + k) }))} />
+    <Box className={cn("space-y-3 text-sm", !part && "mb-4 p-3")}>
+      {/* in a query block another kind is another tab: add it with "+" and remove the old one */}
+      {!part && (
+        <div className="flex items-start gap-2">
+          <div className="min-w-0 flex-1 overflow-x-auto [scrollbar-width:none]">
+            <Seg label={t("view.label")} value={tab.kind} onChange={(k) => onLook({ kind: k })} options={kindsHere.map((k) => ({ value: k, label: t("view." + k) }))} />
+          </div>
+          <IconButton size="sm" icon={X} iconSize={15} onClick={onClose} label={t("view.closeSettings")} />
         </div>
-        <IconButton size="sm" icon={X} iconSize={15} onClick={onClose} label={t("view.closeSettings")} />
-      </div>
+      )}
 
-      {filter && <div>
+      {filter && !part && <div>
         <p className="mb-1 text-xs text-muted-foreground">{t("view.filter")}</p>
         <QueryEditor def={{ where: filter.where }} onChange={(d) => filter.onChange(d.where)} />
         {filter.dirty && (
@@ -249,7 +256,7 @@ export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter
         )}
       </div>}
 
-      {groupedKind && (
+      {groupedKind && shows("group") && (
         <div className={row}>
           <span className={label}>{t("view.groupBy")}</span>
           <NativeSelect value={tab.group ?? ""} onChange={(e) => onLook({ group: e.target.value || undefined })} className={select} aria-label={t("view.groupBy")}>
@@ -268,15 +275,15 @@ export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter
           )}
         </div>
       )}
-      {tab.group && groups.length > 1 && groupedKind && (
+      {tab.group && groups.length > 1 && groupedKind && shows("group") && (
         <div className={cn(row, "items-start")}>
           <span className={cn(label, "pt-1")}>{t("view.visibleGroups")}</span>
           <ul className="flex min-w-0 flex-1 flex-wrap gap-x-3 gap-y-1.5">
             {groups.map((g) => {
               const hidden = (tab.hiddenGroups ?? []).includes(groupId(g));
               return (
-                <li key={g.key || "_"}>
-                  <label className="flex cursor-pointer items-center gap-1.5">
+                <li key={g.key || "_"} className="min-w-0 max-w-full">
+                  <label className="flex min-w-0 cursor-pointer items-center gap-1.5">
                     <Checkbox
                       checked={!hidden}
                       onCheckedChange={(checked) => onLook({ hiddenGroups: checked === true ? (tab.hiddenGroups ?? []).filter((x) => x !== groupId(g)) : [...(tab.hiddenGroups ?? []), groupId(g)] })}
@@ -289,7 +296,7 @@ export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter
           </ul>
         </div>
       )}
-      {tab.kind === "board" && (
+      {tab.kind === "board" && shows("group") && (
         <div className={row}>
           <span className={label}>{t("view.subgroup")}</span>
           <NativeSelect value={tab.subgroup ?? ""} onChange={(e) => onLook({ subgroup: e.target.value || undefined })} className={select} aria-label={t("view.subgroup")}>
@@ -302,7 +309,7 @@ export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter
           </NativeSelect>
         </div>
       )}
-      {(tab.kind === "calendar" || tab.kind === "timeline") && (
+      {(tab.kind === "calendar" || tab.kind === "timeline") && shows("more") && (
         <div className={row}>
           <span className={label}>{t("view.date")}</span>
           <NativeSelect value={tab.date ?? ""} onChange={(e) => onLook({ date: e.target.value || undefined })} className={select} aria-label={t("view.date")}>
@@ -316,7 +323,7 @@ export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter
         </div>
       )}
 
-      {tab.kind !== "triage" && (
+      {tab.kind !== "triage" && shows("sort") && (
         <div className={row}>
           <span className={label}>{t("view.sort")}</span>
           <div className="flex flex-wrap items-center gap-1.5">
@@ -348,7 +355,7 @@ export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter
       )}
 
       {/* properties: columns of a table, lines on board cards (lists and galleries show their own) */}
-      {(tab.kind === "table" || tab.kind === "board") && (
+      {(tab.kind === "table" || tab.kind === "board") && shows("more") && (
         <div className={cn(row, "items-start")}>
           <span className={cn(label, "pt-1")}>{tab.kind === "table" ? t("view.columns") : t("view.cardProps")}</span>
           <ul className="flex min-w-0 flex-1 flex-wrap gap-1.5">
@@ -381,6 +388,6 @@ export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter
           </ul>
         </div>
       )}
-    </Card>
+    </Box>
   );
 }

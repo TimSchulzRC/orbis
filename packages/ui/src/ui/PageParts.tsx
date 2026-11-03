@@ -109,7 +109,8 @@ interface RefKind {
 const OPEN_REFS_MAX = 5;
 
 /** Design rules § 2.7. */
-export function Bezuege({ item, typeArea, usedIn, placesOpen }: { item: Item; typeArea: boolean; usedIn?: { item: Item; note?: string }[]; placesOpen?: number }) {
+/** `footer`: the line with the dates goes below; off when the page puts it there itself. */
+export function Bezuege({ item, typeArea, usedIn, placesOpen, footer = true }: { item: Item; typeArea: boolean; usedIn?: { item: Item; note?: string }[]; placesOpen?: number; footer?: boolean }) {
   const ix = useIndex();
   const { t } = useT();
   const kinds: RefKind[] = [];
@@ -167,7 +168,7 @@ export function Bezuege({ item, typeArea, usedIn, placesOpen }: { item: Item; ty
           ),
         })),
     });
-  if (!kinds.length) return <PageFooter item={item} />;
+  if (!kinds.length) return footer ? <PageFooter item={item} /> : null;
   return (
     <section className="mt-10 max-md:mt-8">
       <SectionTitle>{t("refs.title")}</SectionTitle>
@@ -176,7 +177,7 @@ export function Bezuege({ item, typeArea, usedIn, placesOpen }: { item: Item; ty
           <RefRow key={k.key} page={item} kind={k} initial={!typeArea && k.items.length <= OPEN_REFS_MAX} force={k.key === "places" ? placesOpen : undefined} />
         ))}
       </Card>
-      <PageFooter item={item} />
+      {footer && <PageFooter item={item} />}
     </section>
   );
 }
@@ -227,10 +228,10 @@ function PlaceHere({ target, page }: { target: Item; page: Item }) {
   );
 }
 
-function PageFooter({ item }: { item: Item }) {
+export function PageFooter({ item, className }: { item: Item; className?: string }) {
   const { t, lang } = useT();
   return (
-    <p className="mt-4 text-xs text-muted-foreground">
+    <p className={cn("mt-4 text-xs text-muted-foreground", className)}>
       {t("item.edited")} <RelTime ts={item.updated} /> · {t("page.createdOn", { date: fmtDate(lang, dateOf(item.created), { day: "numeric", month: "long", year: "numeric" }) })}
     </p>
   );
