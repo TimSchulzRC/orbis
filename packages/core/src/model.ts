@@ -84,7 +84,6 @@ export interface Capabilities {
   progress?: { of?: string }; // share of done descendants with a status (optional type filter)
   updates?: boolean;
   template?: { body?: string; values?: Record<string, Value> };
-  primaryChild?: string; // main action: "+" on the page creates a child of this type
 }
 
 export interface TypeSchema {

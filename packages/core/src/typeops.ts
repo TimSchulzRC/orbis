@@ -23,7 +23,7 @@ import {
 import { Index } from "./graph";
 import { isInInbox } from "./placement";
 import { findBlocks, readBlock, typesIn } from "./query";
-import { initialProps, isMulti, isSingle, optionIds, primaryChild, progressSpec } from "./traits";
+import { initialProps, isMulti, isSingle, optionIds, progressSpec } from "./traits";
 import type { Writer } from "./setup";
 import { escapeRe } from "./text";
 
@@ -35,7 +35,6 @@ export interface TypeUsage {
   queries: { id: string; title: string }[]; // pages whose query blocks or views use the type
   relations: { type: string; prop: string; name: string }[]; // relation targets naming the type
   progress: { type: string; name: string }[]; // progress/computed filters on the type
-  childOf: { type: string; name: string }[]; // types whose main action creates this type
 }
 
 export function typeUsage(ix: Index, typeId: string): TypeUsage {
@@ -50,7 +49,6 @@ export function typeUsage(ix: Index, typeId: string): TypeUsage {
   }
   const relations: TypeUsage["relations"] = [];
   const progress: TypeUsage["progress"] = [];
-  const childOf: TypeUsage["childOf"] = [];
   // the type's name in a relation target such as `typ:Aufgabe | typ:Projekt` or `type:"Task"`
   const namesType = name ? new RegExp(`:\\s*"?${escapeRe(name)}"?(\\s|$|\\))`, "i") : undefined;
   for (const t of ix.types.values()) {
@@ -60,10 +58,9 @@ export function typeUsage(ix: Index, typeId: string): TypeUsage {
       if (p.kind === "computed" && p.computed?.of === typeId) progress.push({ type: t.id, name: `${s.name} › ${p.name}` });
     }
     if (progressSpec(s)?.of === typeId && !progress.some((x) => x.type === t.id)) progress.push({ type: t.id, name: s.name });
-    if (primaryChild(s) === typeId && t.id !== typeId) childOf.push({ type: t.id, name: s.name });
   }
   const inboxAfterRemove = wouldBeInInbox(ix, items, (i) => ({ ...i, type: null }));
-  return { items, inboxAfterRemove, queries, relations, progress, childOf };
+  return { items, inboxAfterRemove, queries, relations, progress };
 }
 
 /** Evaluated against the stored inbox rule. `also` are further changed records, e.g. a parent about to be deleted. */

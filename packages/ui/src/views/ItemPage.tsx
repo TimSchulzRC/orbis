@@ -19,7 +19,7 @@ import { ItemIcon, TypeChip, TypeGlyph } from "../ui/item-look";
 import { ProgressBand } from "../ui/progress";
 import { cn } from "../lib/utils";
 import { PropertyBlock } from "../ui/Properties";
-import { BelowCard, ChildList, Updates, mainGrouping } from "../ui/Sections";
+import { AddBelow, BelowCard, ChildList, Updates, listedInText, mainGrouping } from "../ui/Sections";
 import { AddRef, Crumbs, LinksMenu, LinksRow, PageFooter, TrashBanner, pinnedRefs } from "../ui/PageParts";
 import { PlacePicker } from "../ui/Picker";
 import { pluralOf } from "@obtion/core/plural";
@@ -104,15 +104,16 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
     };
   }, [item.id, isNew]);
 
-  const mainType = ix.mainChildType(item);
+  // one list per type with a status below the page (tasks, or sub-tasks on a task)
+  const lists = ix.listTypes(item).filter((x) => !listedInText(item, x, ix));
   const cycles = ix.cycleEdgesOf(item.id);
-  // a page that gathers its tasks over all levels (main action or progress) gathers its notes too
-  const gathers = !!mainType || !!progressSpec(schema);
-  // the type's own area: the main list and updates (§ 3.1, zone 3)
-  const typeArea = !!mainType || hasUpdates(schema);
-  // what "Darunter" leaves out: the main list's type, and sub-projects while they are groups of it
-  const exclude = new Set<string>(mainType ? ["type:" + mainType] : []);
-  if (mainType && mainType !== item.type && mainGrouping(item) === "sub") for (const c of ix.childrenOf(item.id)) if (ix.get(c)?.type === item.type) exclude.add(c);
+  // a page with progress (a project, a task) gathers its notes and files over all levels
+  const gathers = !!progressSpec(schema);
+  // the type's area: the lists and updates (§ 3.1, zone 3)
+  const typeArea = lists.length > 0 || hasUpdates(schema);
+  // what "Darunter" leaves out: the lists' types, and sub-projects while they are groups of them
+  const exclude = new Set<string>(lists.map((x) => "type:" + x));
+  if (lists.some((x) => x !== item.type) && mainGrouping(item) === "sub") for (const c of ix.childrenOf(item.id)) if (ix.get(c)?.type === item.type) exclude.add(c);
   const progress = progressSpec(schema) ? ix.progressOf(item) : undefined;
 
   const tools = (
@@ -153,26 +154,18 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
       )}
     </MoreMenu>
   );
-  const mainAction = mainType && !item.deleted;
-  // below an entry of the same type the button says what it makes: "Unter-Task", not "Task"
-  const mainLabel = mainType && (mainType === item.type ? t("children.subOf", { name: ix.typeName(mainType) ?? "" }) : ix.typeName(mainType));
 
   return (
     <div className="page-read">
       {item.deleted && (
         <TrashBanner onRestore={() => repo.restore(item.id)} />
       )}
-      {/* 1 · head: path, title with the main action, type and status, progress, properties */}
+      {/* 1 · head: path, title, type and status, progress, properties */}
       <Crumbs item={item} tools={tools} onPlace={() => setPlacing(true)} />
       <div className="mt-6 flex items-start gap-4 max-md:mt-3">
         <div data-page-title className="min-w-0 flex-1 rounded-lg">
           <TitleField item={item} autoFocus={isNew && !item.title} />
         </div>
-        {mainAction && (
-          <Button variant="primary" onClick={() => createAndOpen({ type: mainType, parents: [item.id] })} className="shrink-0 max-md:hidden">
-            <Plus size={15} /> {mainLabel}
-          </Button>
-        )}
       </div>
       <TitleClash item={item} />
       {cycles.length > 0 && (
@@ -215,21 +208,16 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
       <div className="mt-7 border-t border-line" />
       <div className="page-below [&>:first-child]:mt-6">
         {/* 3 · the type's area: main list, updates */}
-        {mainType && <ChildList item={item} typeId={mainType} />}
+        {lists.map((x) => <ChildList key={x} item={item} typeId={x} />)}
         {hasUpdates(schema) && <Updates item={item} />}
 
         {/* 4 · below (the links are in the head) */}
         <BelowCard item={item} exclude={exclude} gathers={gathers} />
+        {!item.deleted && <AddBelow item={item} />}
       </div>
       {/* one more line above the dates, unless nothing came between */}
       <PageFooter item={item} className="mt-10 border-t border-line pt-4 max-md:mt-8 [.page-below:empty+&]:mt-4 [.page-below:empty+&]:border-t-0 [.page-below:empty+&]:pt-0" />
 
-      {/* on a phone the main action floats above the bottom bar */}
-      {mainAction && (
-        <Button variant="plain" onClick={() => createAndOpen({ type: mainType, parents: [item.id] })} className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] right-4 z-20 flex h-12 items-center gap-1.5 rounded-full bg-ink pl-3.5 pr-[18px] text-[15px] font-semibold text-ink-text shadow-lg md:hidden">
-          <Plus size={18} /> {mainLabel}
-        </Button>
-      )}
       {placing && <PlacePicker list={[item]} title={t("place.add")} onPick={(pid) => (repo.addParent(item.id, pid), rememberPlace(pid), setPlacing(false))} onClose={() => setPlacing(false)} />}
       {deleting && <DeleteDialog item={item} onClose={() => setDeleting(false)} />}
       {rulesOpen && <AgentRulesDialog item={item} onClose={() => setRulesOpen(false)} />}

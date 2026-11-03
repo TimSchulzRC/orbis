@@ -140,11 +140,6 @@ export function template(schema?: TypeSchema): { body?: string; values?: Record<
   return caps(schema).template;
 }
 
-/** Main action of a page: "+" creates a child of type X (e.g. project → task). */
-export function primaryChild(schema?: TypeSchema): string | undefined {
-  return caps(schema).primaryChild;
-}
-
 /** Template values win over the selects' defaults. */
 export function initialProps(schema?: TypeSchema): Record<string, Value> {
   const out: Record<string, Value> = { ...(template(schema)?.values ?? {}) };

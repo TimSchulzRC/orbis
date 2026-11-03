@@ -337,7 +337,6 @@ export class Ops {
         due_date: name(c.due) ? `"${name(c.due)}" (overdue / this week)` : undefined,
         progress: c.progress ? `share of done descendants${c.progress.of ? ` of type ${this.store.index().typeName(c.progress.of) ?? "(deleted)"}` : " with a status"}` : undefined,
         updates: c.updates ? "dated progress notes via add_update" : undefined,
-        main_action: c.primaryChild ? `"+" on its page creates a ${this.store.index().typeName(c.primaryChild) ?? "(deleted type)"}` : undefined,
       },
       entries: this.store.index().itemsOfType(t.id).length,
       list: this.store.index().typePlural(t.id),
@@ -1254,7 +1253,7 @@ export class Ops {
   deletePreview(ref: string) {
     const t = this.resolveType(ref);
     const u = typeUsage(this.store.index(), t.id);
-    return { type: t.schema.name, entries: u.items.length, would_land_in_inbox: u.inboxAfterRemove, used_in_queries: u.queries.map((q) => q.title), relations: u.relations.map((r) => r.name), progress: u.progress.map((p) => p.name), main_action_of: u.childOf.map((c) => c.name), note: "Deleting is confirmed in the app (type page › … › Delete type): into a tag, into another type, or remove. Values stay as free properties." };
+    return { type: t.schema.name, entries: u.items.length, would_land_in_inbox: u.inboxAfterRemove, used_in_queries: u.queries.map((q) => q.title), relations: u.relations.map((r) => r.name), progress: u.progress.map((p) => p.name), note: "Deleting is confirmed in the app (type page › … › Delete type): into a tag, into another type, or remove. Values stay as free properties." };
   }
 
   updateType(ref: string, input: UpdateTypeInput, origin: string) {
@@ -1344,7 +1343,6 @@ export class Ops {
         if (c.due_date !== undefined) setCapability(doc, "due", pid(c.due_date, "date"));
         if (c.progress !== undefined) setCapability(doc, "progress", c.progress === false || c.progress === null ? null : { of: typeof c.progress === "string" ? this.resolveType(c.progress).id : undefined });
         if (c.updates !== undefined) setCapability(doc, "updates", c.updates || null);
-        if (c.main_action !== undefined) setCapability(doc, "primaryChild", c.main_action ? this.resolveType(c.main_action).id : null);
         if (c.template !== undefined) setCapability(doc, "template", c.template === null ? null : { body: c.template });
       });
       this.store.flush();

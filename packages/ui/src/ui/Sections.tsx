@@ -12,8 +12,9 @@ import { dueOf, dueProp, isDone, statusOf, statusProp } from "@obtion/core/trait
 import { repo } from "../repo";
 import { itemHref, useIndex } from "../hooks";
 import { useT, tr, titleOf } from "../i18n";
-import { Card, Button, Seg, SectionTitle, ViewMenu, SectionAction } from "./primitives";
-import { DueLabel, ItemIcon, RelTime } from "./item-look";
+import { Card, Button, Seg, SectionTitle, ViewMenu, SectionAction, Popover, MenuItem } from "./primitives";
+import { DueLabel, ItemIcon, RelTime, TypeGlyph } from "./item-look";
+import { NOTE_ICON } from "./icons";
 import { type PageGroup, PageTable } from "./PageTable";
 import { shortPath } from "./Row";
 import { agentLabel, agentName } from "./AgentNotice";
@@ -60,14 +61,22 @@ function AddRow({ label, onAdd, autoFocus, onDone }: { label: string; onAdd: (ti
   );
 }
 
+/** A query block in the text lists the open ones already (e.g. "Offene Tasks", unter:diese): one list per page. */
+export function listedInText(item: Item, typeId: string, ix: Index): boolean {
+  const schema = ix.types.get(typeId)?.schema;
+  const open = ix.items(ix.descendants(item.id)).filter((x) => x.type === typeId && !x.deleted && !isDone(x, schema));
+  const inText = shownByBlocks(item, ix);
+  return open.length > 0 && open.every((x) => inText.has(x.id));
+}
+
 export function mainGrouping(item: Item): "sub" | "status" {
   return item.views.main?.group === "status" ? "status" : "sub";
 }
 
 /**
- * The page's main list (design rules § 2.4, § 3.2): descendants of the main action's type, over
- * all levels. Grouped by sub-project ("Direkt in …" first; groups show even with nothing open) or
- * by status.
+ * A list of the page (design rules § 2.4, § 3.2): descendants of one type with a status, over all
+ * levels (see `Index.listTypes`). Grouped by sub-project ("Direkt in …" first; groups show even with
+ * nothing open) or by status.
  */
 export function ChildList({ item, typeId }: { item: Item; typeId: string }) {
   const { t } = useT();
@@ -83,18 +92,9 @@ export function ChildList({ item, typeId }: { item: Item; typeId: string }) {
   const rank = (x: Item) => ({ active: 0, todo: 1, done: 2 })[statusOf(x, schema)?.group ?? "todo"];
   const due = (x: Item) => dueOf(x, schema) ?? "9999";
   const sorted = [...shown].sort((a, b) => rank(a) - rank(b) || cmpKey(due(a), due(b)) || a.title.localeCompare(b.title));
-  // a query block in the text lists these already (e.g. "Offene Tasks", unter:diese): one list per page
-  const inText = shownByBlocks(item, ix);
   const open = all.filter((x) => !isDone(x, schema));
   const title = listTitle(ix, typeId, same);
-  if (open.length > 0 && open.every((x) => inText.has(x.id))) return null;
-  // nothing yet: on a task one quiet row for the first sub-task (a project has "+ Task" in its head)
-  if (!all.length)
-    return same ? (
-      <section className="mt-8">
-        <AddRow label={subOne(schema.name)} onAdd={(title) => repo.create({ title, type: typeId, parents: [item.id] })} />
-      </section>
-    ) : null;
+  if (!all.length) return null;
   // sub-projects: children of the page's own type; each one a group
   const subs = same ? [] : ix.items(ix.childrenOf(item.id)).filter((x) => x.type === item.type && !x.deleted);
   const by = subs.length ? mainGrouping(item) : "sub";
@@ -143,6 +143,43 @@ export function ChildList({ item, typeId }: { item: Item; typeId: string }) {
         done={{ count: doneCount, shown: !!view.showDone, toggle: () => setView({ showDone: !view.showDone }) }}
       />
     </section>
+  );
+}
+
+/** "+ Darunter anlegen": a child of any type, which then shows in its type's list or group. */
+export function AddBelow({ item }: { item: Item }) {
+  const { t } = useT();
+  const ix = useIndex();
+  // undefined: closed; null: a note (no type)
+  const [type, setType] = useState<string | null | undefined>(undefined);
+  if (type !== undefined)
+    return (
+      <div className="mt-6">
+        <AddRow
+          label={t("below.addOf", { name: (type ? ix.typeName(type) : undefined) ?? t("kind.note") })}
+          autoFocus
+          onAdd={(title) => repo.create({ title, parents: [item.id], ...(type ? { type } : {}) })}
+          onDone={() => setType(undefined)}
+        />
+      </div>
+    );
+  return (
+    <div className="mt-6">
+      <Popover trigger={(p) => <SectionAction {...p}>{t("below.add")}</SectionAction>}>
+        {(close) => (
+          <>
+            <MenuItem icon={<NOTE_ICON size={14} style={{ color: "var(--t-note)" }} />} onClick={() => (setType(null), close())}>
+              {t("kind.note")}
+            </MenuItem>
+            {ix.typesByName().map((x) => (
+              <MenuItem key={x.id} icon={<TypeGlyph schema={x.schema} size={14} />} onClick={() => (setType(x.id), close())}>
+                {x.schema.name}
+              </MenuItem>
+            ))}
+          </>
+        )}
+      </Popover>
+    </div>
   );
 }
 

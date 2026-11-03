@@ -567,18 +567,6 @@ function Capabilities({ item }: { item: Item }) {
           </NativeSelect>,
         )}
         {row(t("caps.updates"), t("caps.updatesHint"), <Checkbox checked={!!caps.updates} onCheckedChange={(checked) => set("updates", checked === true || null)} className="size-4" aria-label={t("caps.updates")} />)}
-        {row(
-          t("caps.primaryChild"),
-          t("caps.primaryChildHint"),
-          <NativeSelect value={caps.primaryChild ?? ""} onChange={(e) => set("primaryChild", e.target.value || null)} className={selectClass} aria-label={t("caps.primaryChild")}>
-            <option value="">{t("caps.off")}</option>
-            {types.map((x) => (
-              <option key={x.id} value={x.id}>
-                {x.schema.name}
-              </option>
-            ))}
-          </NativeSelect>,
-        )}
         <div className="py-2">
           <label className="flex items-center gap-2 text-sm font-medium">
             <Checkbox checked={!!caps.template} onCheckedChange={(checked) => set("template", checked === true ? { body: "" } : null)} className="size-4" /> {t("caps.template")}
@@ -626,7 +614,6 @@ function DeleteTypeDialog({ item, onClose, toTag }: { item: Item; onClose: () =>
         {usage.queries.length > 0 && <li>{t("type.usedInQueries", { list: usage.queries.map((q) => q.title).join(", ") })}</li>}
         {usage.relations.length > 0 && <li>{t("type.usedInRelations", { list: usage.relations.map((r) => r.name).join(", ") })}</li>}
         {usage.progress.length > 0 && <li>{t("type.usedInProgress", { list: usage.progress.map((r) => r.name).join(", ") })}</li>}
-        {usage.childOf.length > 0 && <li>{t("type.usedAsChild", { list: usage.childOf.map((r) => r.name).join(", ") })}</li>}
       </ul>
       {!toTag && (
         <div className="mt-4">

@@ -29,8 +29,7 @@ function lastTouched(ix: Index, item: Item): number {
 
 export function activeProjects(ix: Index): { item: Item; touched: number }[] {
   const active = ix.live.filter((i) => {
-    const childType = ix.mainChildType(i);
-    return !!childType && childType !== i.type && statusOf(i, ix.schemaOf(i))?.group === "active" && !ix.isDormant(i);
+    return ix.isContainer(i) && statusOf(i, ix.schemaOf(i))?.group === "active" && !ix.isDormant(i);
   });
   const ids = new Set(active.map((i) => i.id));
   return active

@@ -11,7 +11,7 @@ import {
   parseWikiLinks,
   titleKey,
 } from "./model";
-import { blockingProps, dueOf, isDone, primaryChild, progressSpec, statusOf, statusProp } from "./traits";
+import { blockingProps, dueOf, isDone, progressSpec, statusOf, statusProp } from "./traits";
 import { isPausedOption, sameTypeName } from "./input";
 import { pluralOf } from "./plural";
 import { cmpKey } from "./sortkey";
@@ -494,18 +494,42 @@ export class Index {
     return false;
   }
 
-  /** The type "+" on the item's page creates; a deleted type counts as none. */
-  mainChildType(item: Item | undefined): string | undefined {
-    const pc = primaryChild(this.schemaOf(item));
-    return pc && this.types.has(pc) ? pc : undefined;
+  /** A project-like entry: its progress counts entries of another type below it (a project: tasks). */
+  isContainer(item: Item | undefined): boolean {
+    const p = progressSpec(this.schemaOf(item));
+    return !!item && !!p && p.of !== item.type;
   }
 
   /**
-   * An open entry below the project (of its main action type, if any) that is not blocked, not
+   * Types with a status among the entries below the page, each with its own list there. Children of
+   * the page's own type (sub-projects) are looked through: their entries count, and they become
+   * groups of those lists. Only when nothing else is below do they get the list ("Unter-Tasks").
+   */
+  listTypes(item: Item): string[] {
+    const own = item.type;
+    const found = new Set<string>();
+    let ownBelow = false;
+    const seen = new Set<string>();
+    const walk = (id: string) => {
+      for (const c of this.items(this.childrenOf(id))) {
+        if (c.deleted || seen.has(c.id) || !c.type || !this.types.has(c.type) || !statusProp(this.schemaOf(c))) continue;
+        seen.add(c.id);
+        if (c.type === own) (ownBelow = true), walk(c.id);
+        else found.add(c.type);
+      }
+    };
+    walk(item.id);
+    if (found.size) return [...found].sort((a, b) => (this.typeName(a) ?? "").localeCompare(this.typeName(b) ?? ""));
+    return ownBelow && own ? [own] : [];
+  }
+
+  /**
+   * An open entry below the project (of the type its progress counts, if any) that is not blocked, not
    * paused and has no open entries below. Due by today comes first, then in progress, then by due date.
    */
   nextTask(id: string, today: string): Item | undefined {
-    const childType = this.mainChildType(this.byId.get(id));
+    const of = progressSpec(this.schemaOf(this.byId.get(id)))?.of;
+    const childType = of && this.types.has(of) ? of : undefined; // a deleted type filters nothing
     const candidates = [...this.descendants(id)]
       .map((d) => this.byId.get(d)!)
       .filter((x) => {

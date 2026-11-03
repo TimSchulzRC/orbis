@@ -37,7 +37,6 @@ export const capInput = z.object({
   due_date: z.string().nullable().optional().describe("name of a date property"),
   progress: z.union([z.boolean(), z.string()]).nullable().optional().describe("true, or a type name to count only that type"),
   updates: z.boolean().optional(),
-  main_action: z.string().nullable().optional().describe('type name of the children "+" creates on its page'),
   template: z.string().nullable().optional(),
 });
 export type CapInput = z.infer<typeof capInput>;

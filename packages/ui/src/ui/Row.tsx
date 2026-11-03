@@ -197,8 +197,8 @@ export function RowStatus({ item, size = 17 }: { item: Item; size?: number }) {
   const ticked = useLingering(item.id);
   const done = st?.group === "done" || ticked;
   if (!st) return <ItemIcon item={item} size={size - 1} />;
-  const childType = ix.mainChildType(item);
-  const viaMenu = !!childType && childType !== item.type;
+  // a project's status is set from a menu; a task is ticked off
+  const viaMenu = ix.isContainer(item);
   // the shape in the option's colour (as on its pill): open grey, running amber, done green …
   const option = ticked ? (firstOfGroup(schema, "done") ?? st.option) : st.option;
   const color = done ? "var(--ok)" : option.color && option.color !== "gray" ? pal(option.color) : undefined;

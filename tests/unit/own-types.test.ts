@@ -35,7 +35,7 @@ function ownTypes() {
   });
   m.addType("t_plan", {
     name: "Vorhaben",
-    capabilities: { status: "p_state", primaryChild: "t_step" },
+    capabilities: { status: "p_state", progress: { of: "t_step" } },
     properties: [{ id: "p_state", name: "Stand", kind: "select", default: "v_on", options: [{ id: "v_on", name: "Läuft", group: "active" }, { id: "v_rest", name: "Ruht", group: "active", state: "paused" }] }],
   });
   return m;
@@ -83,17 +83,34 @@ test("renaming the shipped properties and options changes nothing; a look-alike 
   expect(ix.isBlocked(ix.get(x)!)).toBe(false);
 });
 
-test("a main action on a deleted type counts as none", () => {
+test("progress on a deleted type filters nothing", () => {
   const m = ownTypes();
   m.addType("t_gone", { name: "Weg" });
-  m.change("t_plan", (doc) => (doc.getMap<any>("schema").get("capabilities") as any).set("primaryChild", "t_gone"));
+  m.change("t_plan", (doc) => (doc.getMap<any>("schema").get("capabilities") as any).set("progress", { of: "t_gone" }));
   const plan = m.add({ title: "Umzug", type: "t_plan", props: { p_state: "v_on" } });
   const a = m.add({ title: "Kartons", type: "t_step", parents: [plan], props: { p_state: "s_new" } });
   deleteType(m.writer, m.index(), "t_gone", { mode: "remove" }, "test");
   const ix = m.index();
-  expect(ix.mainChildType(ix.get(plan))).toBeUndefined();
   expect(ix.nextTask(plan, "2026-10-31")?.id).toBe(a); // was: nothing, every step filtered out by the deleted type
-  expect(activeProjects(ix)).toEqual([]); // no main action, no project
+  expect(activeProjects(ix).map((x) => x.item.id)).toEqual([plan]); // still counts progress of others
+});
+
+test("a page lists each type with a status below it; sub-entries of its own type are looked through", () => {
+  const m = ownTypes();
+  const plan = m.add({ title: "Umzug", type: "t_plan", props: { p_state: "v_on" } });
+  const part = m.add({ title: "Küche", type: "t_plan", parents: [plan], props: { p_state: "v_on" } });
+  const note = m.add({ title: "Notiz", parents: [plan] });
+  let ix = m.index();
+  expect(ix.listTypes(ix.get(plan)!)).toEqual(["t_plan"]); // only sub-plans: they are the list
+  expect(ix.listTypes(ix.get(note)!)).toEqual([]);
+  const step = m.add({ title: "Kartons", type: "t_step", parents: [part], props: { p_state: "s_new" } });
+  m.add({ title: "Teller", type: "t_step", parents: [step], props: { p_state: "s_new" } });
+  ix = m.index();
+  expect(ix.listTypes(ix.get(plan)!)).toEqual(["t_step"]); // steps below the sub-plan; the sub-plan is a group
+  expect(ix.listTypes(ix.get(step)!)).toEqual(["t_step"]); // sub-steps
+  m.add({ title: "Umzug planen", type: "t_plan", parents: [note], props: { p_state: "v_on" } });
+  ix = m.index();
+  expect(ix.listTypes(ix.get(note)!)).toEqual(["t_plan"]); // a note looks through nothing
 });
 
 test("a word for paused finds the option marked paused, not one only called so", () => {
