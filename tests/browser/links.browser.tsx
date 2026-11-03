@@ -102,6 +102,10 @@ test("refs keep their order: a pinned link goes in front, chips can be dragged o
   await page.getByRole("button", { name: "Links: 3" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Oben anheften" }).click();
   await expect.poll(() => repo.get(id)!.refs).toEqual([g, a, b]);
+  // the first row of the open menu shows no tools until hovered (the menu focuses its first button)
+  await commands.mouse("move", 5, 600);
+  const unpin = page.getByRole("dialog").getByRole("button", { name: "Nicht mehr oben anheften" });
+  await expect.poll(() => getComputedStyle(unpin.element()).opacity).toBe("0");
   await page.getByRole("button", { name: "Links: 3" }).click();
   const chips = () => [...document.querySelectorAll("[data-ref]")].map((x) => x.textContent);
   await expect.poll(chips).toEqual(["Gamma", "Alpha", "Beta"]);

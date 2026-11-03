@@ -15,6 +15,12 @@ import { ItemPicker } from "./Picker";
 import { cn } from "../lib/utils";
 import { dateOf } from "@obtion/core/date";
 
+/**
+ * Row tools in a popover: on hover, or focused by keyboard. Not on plain focus: opening the popover
+ * focuses its first button, which would show the tools of the first row.
+ */
+const REVEAL_IN_MENU = "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 aria-expanded:opacity-100 pointer-coarse:opacity-100";
+
 export function Crumbs({ item, tools, onPlace }: { item: Item; tools: React.ReactNode; onPlace: () => void }) {
   const ix = useIndex();
   const { t } = useT();
@@ -113,7 +119,7 @@ function PlacesMenu({ item, count, onPlace }: { item: Item; count: number; onPla
                     <Star size={11} aria-hidden /> {t("place.home")}
                   </span>
                 )}
-                <MoreMenu size="xs" iconSize={13} className={cn("text-faint", REVEAL.any)}>
+                <MoreMenu size="xs" iconSize={13} className={cn("text-faint", REVEAL_IN_MENU)}>
                   {(closeMenu) => (
                     <>
                       {p !== home && <MenuItem onClick={() => (closeMenu(), repo.setHome(item.id, p))}>{t("place.makeHome")}</MenuItem>}
@@ -183,12 +189,12 @@ function linkGroups(item: Item, ix: Index, t: T, usedIn: { item: Item; note?: st
             {fromText.includes(x) || embedded.includes(x) ? (
               // a link in the text shows in the head too once pinned
               item.refs.includes(x) ? (
-                <IconButton size="xs" icon={PinOff} iconSize={12} onClick={() => repo.setMember(item.id, "refs", x, false)} className="text-muted-foreground" label={t("links.unpin")} />
+                <IconButton size="xs" icon={PinOff} iconSize={12} onClick={() => repo.setMember(item.id, "refs", x, false)} className={cn("text-faint", REVEAL_IN_MENU)} label={t("links.unpin")} />
               ) : (
-                <IconButton size="xs" icon={Pin} iconSize={12} onClick={() => repo.pinRef(item.id, x)} className={cn("text-faint", REVEAL.any)} label={t("links.pin")} />
+                <IconButton size="xs" icon={Pin} iconSize={12} onClick={() => repo.pinRef(item.id, x)} className={cn("text-faint", REVEAL_IN_MENU)} label={t("links.pin")} />
               )
             ) : (
-              <IconButton size="xs" icon={X} iconSize={12} onClick={() => repo.setMember(item.id, "refs", x, false)} className={cn("text-faint", REVEAL.any)} label={t("item.removeRef")} />
+              <IconButton size="xs" icon={X} iconSize={12} onClick={() => repo.setMember(item.id, "refs", x, false)} className={cn("text-faint", REVEAL_IN_MENU)} label={t("item.removeRef")} />
             )}
           </>
         ),
