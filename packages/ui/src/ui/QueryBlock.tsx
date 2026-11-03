@@ -13,7 +13,7 @@ import { type QueryDef, andWhere, blockSource, findBlocks, readBlock, runQuery, 
 import { repo } from "../repo";
 import { useIndex } from "../hooks";
 import { useT } from "../i18n";
-import { Results, defaultColumns, useQuery } from "./Results";
+import { InCard, Results, defaultColumns, useQuery } from "./Results";
 import { viewGroups } from "./groups";
 import { type TabEdit, ViewSettings, ViewTabs, tabName, useTabChoice, useViewFields } from "./Views";
 import { QueryEditor } from "./QueryEditor";
@@ -185,6 +185,7 @@ function QueryBlockView({ src, thisId, n = 0, onChange, onDelete, readOnly }: { 
         {!def.where ? (
           <p className="py-1 text-sm text-muted-foreground">{t("query.start")}</p>
         ) : (
+          <InCard.Provider value>
           <Results
             def={eff}
             thisId={thisId}
@@ -192,6 +193,7 @@ function QueryBlockView({ src, thisId, n = 0, onChange, onDelete, readOnly }: { 
             look={{ key: `block:${thisId}:${n}:${tab.id}`, tab, onLook: onChange && !readOnly ? (p) => patchTab(tab.id, p) : undefined }}
             empty={<p className="px-0 py-1 text-sm text-muted-foreground">{def.where && "inbox" in def.where ? t("inbox.emptyShort") : t("query.empty")}</p>}
           />
+          </InCard.Provider>
         )}
         </div>
       </div>
