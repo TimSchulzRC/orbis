@@ -1,12 +1,10 @@
 // Live query blocks inside a text: ```abfrage … ``` is stored as JSON with ids and shown
 // as its results. Text-form blocks (typed by hand or by an agent) are normalised to JSON.
-import { Checkbox } from "../components/ui/checkbox";
-import { Input } from "../components/ui/input";
-import { StrictMode, useState } from "react";
+import { StrictMode, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { StateEffect, StateField, type EditorState, type Extension, RangeSetBuilder } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, WidgetType } from "@codemirror/view";
-import { Pencil, Trash2, Check } from "lucide-react";
+import { ArrowUpDown, EyeOff, Funnel, Heading, MoreHorizontal, Rows3, Trash2 } from "lucide-react";
 import { type ViewTab, MAIN_TAB, legacyTab, shortId } from "@obtion/core/model";
 import { keyBetween, cmpKey } from "@obtion/core/sortkey";
 import { type QueryDef, andWhere, blockSource, findBlocks, readBlock, runQuery, queryFence } from "@obtion/core/query";
@@ -17,7 +15,9 @@ import { Results, defaultColumns, useQuery } from "./Results";
 import { viewGroups } from "./groups";
 import { type TabEdit, ViewSettings, ViewTabs, tabName, useTabChoice, useViewFields } from "./Views";
 import { QueryEditor } from "./QueryEditor";
-import { Button, SectionTitle, DraftBar } from "./primitives";
+import { IconButton, InCard, MenuItem, Popover, DraftBar } from "./primitives";
+import { InlineText } from "./fields";
+import { cn } from "../lib/utils";
 import { sameValue } from "@obtion/core/equal";
 
 /** A block's views: its tabs, or its one look as the only tab. */
@@ -35,10 +35,16 @@ function QueryBlockView({ src, thisId, n = 0, onChange, onDelete, readOnly }: { 
   const ix = useIndex();
   const { t } = useT();
   const { def: stored } = readBlock(src, ix);
-  const [editing, setEditing] = useState(!stored.where && !readOnly);
-  // the conditions are a draft until "Speichern" (or the check mark): trying a filter changes
-  // nothing. Title, view and "hide when empty" apply at once, like everywhere.
-  const [draft, setDraft] = useState<{ scope: string; where: QueryDef["where"] } | null>(null); // scope: "base" or a tab id
+  // the tools beside the tabs open one popover at a time; a new block starts with its filter
+  const [panel, setPanel] = useState<"filter" | "sort" | "group" | "more" | null>(!stored.where && !readOnly ? "filter" : null);
+  const [addingTitle, setAddingTitle] = useState(false);
+  // the conditions are a draft until "Speichern" or until the filter closes: trying a filter
+  // changes nothing. Title, view and "hide when empty" apply at once, like everywhere.
+  type Draft = { scope: string; where: QueryDef["where"] } | null; // scope: "base" or a tab id
+  const [draft, setDraftState] = useState<Draft>(null);
+  // the latest draft at once: closing the filter commits typed text and saves in one go
+  const draftRef = useRef<Draft>(null);
+  const setDraft = (d: Draft) => ((draftRef.current = d), setDraftState(d));
   const tabs = blockTabs(stored);
   const [tab, pickTab] = useTabChoice(`block:${thisId}:${n}`, tabs);
   const baseWhere = draft?.scope === "base" ? draft.where : stored.where;
@@ -69,9 +75,11 @@ function QueryBlockView({ src, thisId, n = 0, onChange, onDelete, readOnly }: { 
     if (!sameValue(look, was)) onChange?.({ ...look, where: stored.where });
   };
   const save = () => {
-    if (dirty && onChange && draft) {
-      if (draft.scope === "base") onChange({ ...stored, where: draft.where });
-      else patchTab(draft.scope, { where: draft.where });
+    const d = draftRef.current;
+    const saved = d && (d.scope === "base" ? stored.where : tabs.find((x) => x.id === d.scope)?.where);
+    if (d && onChange && !sameValue(d.where, saved)) {
+      if (d.scope === "base") onChange({ ...stored, where: d.where });
+      else patchTab(d.scope, { where: d.where });
     }
     setDraft(null);
   };
@@ -94,71 +102,122 @@ function QueryBlockView({ src, thisId, n = 0, onChange, onDelete, readOnly }: { 
     },
     remove: (id) => writeTabs(tabs.filter((x) => x.id !== id)),
     move: (id, pos) => writeTabs(tabs.map((x) => (x.id === id ? { ...x, pos } : x)).sort((a, b) => cmpKey(a.pos, b.pos))),
-    settings: () => setEditing(true),
+    settings: () => setPanel("more"),
   };
   const eff: QueryDef = { ...def, where: andWhere(def.where, tabWhere), view: tab.kind, sort: tab.sort, group: tab.group, columns: tab.columns };
   const { items, ctx } = useQuery(eff, thisId);
   const fields = useViewFields(def.where, items);
-  if (def.hideEmpty && !items.length && !editing) return <div className="h-0" />;
-  const showTabs = tabs.length > 1 || (editing && !!onChange);
+  if (def.hideEmpty && !items.length && !panel) return <div className="h-0" />;
+  const editable = !!onChange && !readOnly;
+  /** Opening one tool closes the others; closing the filter keeps what was typed. */
+  const openPanel = (next: typeof panel) => {
+    if (panel === "filter" && next !== "filter") {
+      // the text form commits on blur, which would come after the popover is gone
+      const focused = document.activeElement;
+      if (focused instanceof HTMLElement && focused.closest("[data-popover]")) focused.blur();
+      save();
+    }
+    setPanel(next);
+  };
+  const settingsFor = (part: "sort" | "group" | "more") => (
+    <ViewSettings part={part} tab={{ ...tab, where: tabWhere }} fields={fields} columns={tab.kind === "table" ? defaultColumns(items, ctx) : undefined} groups={viewGroups(items, eff, ctx)} onLook={(p) => patchTab(tab.id, p)} onClose={() => openPanel(null)} />
+  );
+  const hasMore = tab.kind === "table" || tab.kind === "board" || tab.kind === "calendar" || tab.kind === "timeline";
+  const tool = (key: "filter" | "sort" | "group", icon: typeof Funnel, label: string, active: boolean, body: React.ReactNode) => (
+    <Popover
+      align="right"
+      open={panel === key}
+      onOpenChange={(o) => openPanel(o ? key : null)}
+      trigger={(p) => <IconButton {...p} size="sm" icon={icon} iconSize={15} label={label} className={cn(active && "text-fg")} />}
+    >
+      <div className="w-[min(26rem,85vw)] p-2 text-sm">{body}</div>
+    </Popover>
+  );
+  const toolbar = editable && (
+    <div className="flex items-center gap-0.5">
+      {tool(
+        "filter",
+        Funnel,
+        t("block.filter"),
+        !!stored.where,
+        <div className="space-y-3">
+          <QueryEditor context def={{ where: baseWhere }} autoFocus={!stored.where} onChange={(d) => !sameValue(d.where, baseWhere) && setDraft({ scope: "base", where: d.where })} />
+          {tabs.length > 1 && (
+            <div>
+              <p className="mb-1 text-xs text-muted-foreground">{t("block.filterTab")}</p>
+              <QueryEditor def={{ where: tabWhere }} onChange={(d) => !sameValue(d.where, tabWhere) && setDraft({ scope: tab.id, where: d.where })} />
+            </div>
+          )}
+          {dirty && <DraftBar onDiscard={() => setDraft(null)} onSave={save} />}
+        </div>,
+      )}
+      {tab.kind !== "triage" && tool("sort", ArrowUpDown, t("view.sort"), !!tab.sort?.length, settingsFor("sort"))}
+      {tab.kind !== "triage" && tab.kind !== "calendar" && tool("group", Rows3, t("view.groupBy"), !!tab.group, settingsFor("group"))}
+      <Popover
+        align="right"
+        open={panel === "more"}
+        onOpenChange={(o) => openPanel(o ? "more" : null)}
+        trigger={(p) => <IconButton {...p} size="sm" icon={MoreHorizontal} iconSize={15} label={t("more")} />}
+      >
+        {(close) => (
+          <div className="min-w-56">
+            {hasMore && <div className="w-[min(26rem,85vw)] border-b border-line p-2 text-sm">{settingsFor("more")}</div>}
+            {!def.title && (
+              <MenuItem icon={<Heading size={14} />} onClick={() => (close(), setAddingTitle(true))}>
+                {t("block.addTitle")}
+              </MenuItem>
+            )}
+            <MenuItem icon={<EyeOff size={14} />} active={!!def.hideEmpty} onClick={() => edit({ ...stored, hideEmpty: !def.hideEmpty || undefined })}>
+              {t("block.hideEmpty")}
+            </MenuItem>
+            <MenuItem danger icon={<Trash2 size={14} />} onClick={() => (close(), onDelete?.())}>
+              {t("block.delete")}
+            </MenuItem>
+          </div>
+        )}
+      </Popover>
+    </div>
+  );
+  const setTitle = (v: string) => {
+    setAddingTitle(false);
+    if ((v.trim() || undefined) !== def.title) edit({ ...stored, title: v.trim() || undefined });
+  };
+  const showTitle = !!def.title || addingTitle;
   return (
-    <div className="group/qb relative my-1 rounded-xl border border-transparent px-0 py-0.5 hover:border-line" contentEditable={false}>
-      {def.title && (
-        <SectionTitle className="pr-16" count={items.length || undefined}>
-          {def.title}
-        </SectionTitle>
-      )}
-      {!readOnly && (
-          <span className="qb-tools absolute right-1 top-1 z-10 flex gap-0.5 rounded-md bg-bg opacity-0 transition-opacity group-hover/qb:opacity-100">
-            <Button variant="plain" onClick={() => (editing && save(), setEditing(!editing))} className="tap rounded p-1 text-muted-foreground hover:bg-hover hover:text-fg" aria-label={editing ? t("view.save") : t("block.edit")}>
-              {editing ? <Check size={13} /> : <Pencil size={13} />}
-            </Button>
-            <Button variant="plain" onClick={onDelete} className="tap rounded p-1 text-muted-foreground hover:bg-hover hover:text-danger" aria-label={t("block.delete")}>
-              <Trash2 size={13} />
-            </Button>
-          </span>
-      )}
-      {editing && onChange && (
-        <div className="my-2 space-y-2">
-          <Input
-            variant="sm"
-            defaultValue={def.title ?? ""}
-            onBlur={(e) => (e.target.value.trim() || undefined) !== def.title && edit({ ...stored, title: e.target.value.trim() || undefined })}
-            placeholder={t("block.title")}
-            className="rounded-lg py-1.5"
-          />
-          <QueryEditor context def={{ where: baseWhere }} autoFocus={!def.where} onChange={(d) => !sameValue(d.where, baseWhere) && setDraft({ scope: "base", where: d.where })} />
-          <label className="flex items-center gap-1 text-xs text-muted-foreground">
-            <Checkbox checked={!!def.hideEmpty} onCheckedChange={(checked) => edit({ ...stored, hideEmpty: checked === true || undefined })} />
-            {t("block.hideEmpty")}
-          </label>
-          {dirty && draft?.scope === "base" && <DraftBar onDiscard={() => setDraft(null)} onSave={save} />}
+    // a card of its own in the text: what it shows comes from elsewhere. Padding, not margin,
+    // around it: CodeMirror leaves a block widget's margins out of its heights
+    <div className="py-3" contentEditable={false}>
+    <div className="relative rounded-xl border border-line bg-surface">
+      {showTitle && (
+        <div className="flex items-center gap-2 px-4 pt-3 max-sm:px-3" data-handle-anchor>
+          {editable ? (
+            <InlineText value={def.title ?? ""} onCommit={setTitle} autoFocus={addingTitle} placeholder={t("block.title")} label={t("block.heading")} className="w-auto min-w-0 max-w-full truncate text-[15px] font-semibold leading-[22px] [field-sizing:content]" />
+          ) : (
+            <h2 className="truncate text-[15px] font-semibold leading-[22px] text-fg">{def.title}</h2>
+          )}
+          {!!items.length && <span className="shrink-0 text-[13px] tabular-nums text-muted-foreground">{items.length}</span>}
         </div>
       )}
-      {showTabs && <ViewTabs tabs={tabs} active={tab.id} onPick={pickTab} edit={onChange && !readOnly ? tabEdit : undefined} />}
-      {editing && onChange && (
-        <ViewSettings
-          tab={{ ...tab, where: tabWhere }}
-          fields={fields}
-          columns={tab.kind === "table" ? defaultColumns(items, ctx) : undefined}
-          groups={viewGroups(items, eff, ctx)}
-          onLook={(p) => patchTab(tab.id, p)}
-          onClose={() => (save(), setEditing(false))}
-          filter={tabs.length > 1 ? { where: tabWhere, onChange: (x) => !sameValue(x, tabWhere) && setDraft({ scope: tab.id, where: x }), dirty: dirty && draft?.scope === tab.id, save, discard: () => setDraft(null) } : undefined}
-        />
-      )}
-      {/* a new block shows nothing until it has a condition (not "everything") */}
-      {!def.where ? (
-        <p className="py-1 text-sm text-muted-foreground">{t("query.start")}</p>
-      ) : (
-      <Results
-        def={eff}
-        thisId={thisId}
-        keyPrefix={`block:${thisId}`}
-        look={{ key: `block:${thisId}:${n}:${tab.id}`, tab, onLook: onChange && !readOnly ? (p) => patchTab(tab.id, p) : undefined }}
-        empty={<p className="px-0 py-1 text-sm text-muted-foreground">{def.where && "inbox" in def.where ? t("inbox.emptyShort") : t("query.empty")}</p>}
-      />
-      )}
+      <div className={cn("px-4 pb-3 max-sm:px-3", !showTitle && "pt-1")}>
+        <InCard.Provider value>
+        <div data-handle-anchor={showTitle ? undefined : ""}>
+          <ViewTabs tabs={tabs} active={tab.id} onPick={pickTab} edit={editable ? tabEdit : undefined} right={toolbar} />
+        </div>
+        {/* a new block shows nothing until it has a condition (not "everything") */}
+        {!def.where ? (
+          <p className="py-1 text-sm text-muted-foreground">{t("query.start")}</p>
+        ) : (
+          <Results
+            def={eff}
+            thisId={thisId}
+            keyPrefix={`block:${thisId}`}
+            look={{ key: `block:${thisId}:${n}:${tab.id}`, tab, onLook: editable ? (p) => patchTab(tab.id, p) : undefined }}
+            empty={<p className="px-0 py-1 text-sm text-muted-foreground">{def.where && "inbox" in def.where ? t("inbox.emptyShort") : t("query.empty")}</p>}
+          />
+        )}
+        </InCard.Provider>
+      </div>
+    </div>
     </div>
   );
 }

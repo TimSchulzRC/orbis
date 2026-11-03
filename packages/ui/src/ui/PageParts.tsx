@@ -381,10 +381,10 @@ export function LinksRow({ item }: { item: Item }) {
   );
 }
 
-export function PageFooter({ item }: { item: Item }) {
+export function PageFooter({ item, className }: { item: Item; className?: string }) {
   const { t, lang } = useT();
   return (
-    <p className="mt-4 text-xs text-muted-foreground">
+    <p className={cn("mt-4 text-xs text-muted-foreground", className)}>
       {t("item.edited")} <RelTime ts={item.updated} /> · {t("page.createdOn", { date: fmtDate(lang, dateOf(item.created), { day: "numeric", month: "long", year: "numeric" }) })}
     </p>
   );

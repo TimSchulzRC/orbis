@@ -1,6 +1,6 @@
 // Rendered for query blocks with "spalten:fortschritt,nächste" (design rules § 2.4).
 import { Table as ShadcnTable, TableHeader, TableBody, TableRow, TableHead, TableCell } from "../components/ui/table";
-import { useState } from "react";
+import { useContext, useState } from "react";
 import { ChevronRight, CornerDownRight } from "lucide-react";
 import { type Item, todayISO } from "@obtion/core/model";
 import { dueOf } from "@obtion/core/traits";
@@ -10,13 +10,17 @@ import { DueLabel, EmptyDash } from "./item-look";
 import { PercentBar } from "./progress";
 import { cn, toggled } from "../lib/utils";
 import { RowStatus } from "./Row";
-import { Button } from "./primitives";
+import { Button, InCard } from "./primitives";
 
 /** A next task shared within a tree shows only in its top visible row. */
 export function ProjectTable({ items }: { items: Item[] }) {
   const ix = useIndex();
   const { t } = useT();
   const phone = usePhone();
+  // in a card: the outer cells line up with the card's own padding (its heading)
+  const inCard = useContext(InCard);
+  const left = inCard ? "pl-4 max-sm:pl-3" : "pl-3.5";
+  const right = inCard ? "pr-4 max-sm:pr-3" : "pr-3.5";
   const [open, setOpen] = useState<Set<string>>(new Set());
   const ids = new Set(items.map((i) => i.id));
   const parentOf = (i: Item) => [...ix.homePath(i.id)].reverse().find((p) => ids.has(p));
@@ -62,7 +66,7 @@ export function ProjectTable({ items }: { items: Item[] }) {
         {tops.map((i) => {
           const next = nextOf(i);
           return (
-            <div key={i.id} className="flex min-h-[52px] items-center gap-2.5 border-t border-line px-3.5 py-1.5 first:border-t-0">
+            <div key={i.id} className={cn("flex min-h-[52px] items-center gap-2.5 border-t border-line py-1.5 first:border-t-0", left, right)}>
               <RowStatus item={i} size={16} />
               <a href={itemHref(i.id)} className="flex min-w-0 flex-1 flex-col">
                 <span className="truncate text-[15px]">{titleOf(i, t)}</span>
@@ -78,9 +82,9 @@ export function ProjectTable({ items }: { items: Item[] }) {
     <ShadcnTable className="w-full border-collapse text-sm">
       <TableHeader>
         <TableRow className="h-8 bg-[color-mix(in_srgb,var(--surface-2)_45%,var(--surface))] text-left text-xs text-muted-foreground">
-          <TableHead className="px-3.5 font-medium">{t("start.project")}</TableHead>
+          <TableHead className={cn("pr-3.5 font-medium", left)}>{t("start.project")}</TableHead>
           <TableHead className="w-[1%] whitespace-nowrap px-3 font-medium">{t("field.progress")}</TableHead>
-          <TableHead className="w-[38%] px-3.5 font-medium">{t("start.nextTask")}</TableHead>
+          <TableHead className={cn("w-[38%] pl-3.5 font-medium", right)}>{t("start.nextTask")}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -89,7 +93,7 @@ export function ProjectTable({ items }: { items: Item[] }) {
           const nextDue = next ? dueOf(next, ix.schemaOf(next)) : undefined;
           return (
             <TableRow key={i.id} data-id={i.id} className="h-10 border-t border-line hover:bg-hover">
-              <TableCell className="max-w-0 px-3.5">
+              <TableCell className={cn("max-w-0 pr-3.5", left)}>
                 <span className="flex min-w-0 items-center gap-2" style={{ paddingLeft: depth * 22 }}>
                   {depth > 0 && <CornerDownRight size={13} className="-mr-1 shrink-0 text-faint" aria-hidden />}
                   {chevron(i)}
@@ -100,7 +104,7 @@ export function ProjectTable({ items }: { items: Item[] }) {
                 </span>
               </TableCell>
               <TableCell className="whitespace-nowrap px-3">{progressCell(i)}</TableCell>
-              <TableCell className="max-w-0 px-3.5">
+              <TableCell className={cn("max-w-0 pl-3.5", right)}>
                 {next ? (
                   <span className="flex min-w-0 items-center gap-2">
                     <a href={itemHref(next.id)} className="min-w-0 truncate hover:underline">

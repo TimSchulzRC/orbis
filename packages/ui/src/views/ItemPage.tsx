@@ -208,13 +208,18 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
       <PageText item={item} doc={doc} long={typeArea} isNew={isNew} onView={setView} hasMore={typeArea || ix.childrenOf(item.id).length > 0} />
       <Input variant="bare" ref={fileInput} type="file" multiple className="hidden" onChange={(e) => view && insertFilesAtCursor(view, [...(e.target.files ?? [])])} />
 
-      {/* 3 · the type's area: main list, updates */}
-      {mainType && <ChildList item={item} typeId={mainType} />}
-      {hasUpdates(schema) && <Updates item={item} />}
+      {/* a line between the text one writes and what the page adds below it */}
+      <div className="mt-6 border-t border-line" />
+      <div className="page-below [&>:first-child]:mt-6">
+        {/* 3 · the type's area: main list, updates */}
+        {mainType && <ChildList item={item} typeId={mainType} />}
+        {hasUpdates(schema) && <Updates item={item} />}
 
-      {/* 4 · below, 5 · footer (the links are in the head) */}
-      <BelowCard item={item} exclude={exclude} gathers={gathers} quietAdd={!typeArea} />
-      <PageFooter item={item} />
+        {/* 4 · below (the links are in the head) */}
+        <BelowCard item={item} exclude={exclude} gathers={gathers} quietAdd={!typeArea} />
+      </div>
+      {/* one more line above the dates, unless nothing came between */}
+      <PageFooter item={item} className="mt-10 border-t border-line pt-4 max-md:mt-8 [.page-below:empty+&]:mt-4 [.page-below:empty+&]:border-t-0 [.page-below:empty+&]:pt-0" />
 
       {/* on a phone the main action floats above the bottom bar */}
       {mainAction && (

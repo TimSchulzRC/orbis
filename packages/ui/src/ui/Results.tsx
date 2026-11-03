@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useContext, useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import { type Item, type ViewKind, todayISO } from "@obtion/core/model";
 import { type QueryDef, type EvalCtx, fieldOf, groupItems, pathBase, runQuery } from "@obtion/core/query";
@@ -16,7 +16,7 @@ import { BoardView } from "./Board";
 import { GalleryView } from "./Gallery";
 import { type Look, GroupedTable } from "./Table";
 import { HiddenGroups, fieldLabel, hiddenPatch, splitHidden } from "./groups";
-import { Card, Button } from "./primitives";
+import { Card, Button, InCard } from "./primitives";
 
 export function useQuery(def: QueryDef, thisId?: string) {
   const ix = useIndex();
@@ -60,6 +60,7 @@ function MissingTypes({ ids }: { ids: string[] }) {
 export function Results({ def, thisId, display, empty, keyPrefix = "", look }: { def: QueryDef; thisId?: string; display?: ViewKind; empty?: React.ReactNode; keyPrefix?: string; look?: Look }) {
   const { t } = useT();
   const res = useQuery(def, thisId);
+  const inCard = useContext(InCard);
   const { total, missingTypes, ctx } = res;
   // long results render in pages, so a collection of hundreds stays responsive
   const [shown, setShown] = useState(FIRST_PAGE);
@@ -86,9 +87,15 @@ export function Results({ def, thisId, display, empty, keyPrefix = "", look }: {
         <Triage items={items} />
       ) : def.columns?.includes("progress") && !def.group ? (
         // projects with progress and next task: a table in a card
-        <Card className="overflow-hidden">
-          <ProjectTable items={items} />
-        </Card>
+        inCard ? (
+          <div className="-mx-4 max-sm:-mx-3">
+            <ProjectTable items={items} />
+          </div>
+        ) : (
+          <Card className="overflow-hidden">
+            <ProjectTable items={items} />
+          </Card>
+        )
       ) : (
         <ListView items={items} def={def} ctx={ctx} look={look} />
       )}
