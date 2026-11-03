@@ -183,25 +183,26 @@ function QueryBlockView({ src, thisId, n = 0, onChange, onDelete, readOnly }: { 
     if ((v.trim() || undefined) !== def.title) edit({ ...stored, title: v.trim() || undefined });
   };
   const showTitle = !!def.title || addingTitle;
+  const title = (
+    <>
+      {editable ? (
+        <InlineText value={def.title ?? ""} onCommit={setTitle} autoFocus={addingTitle} placeholder={t("block.title")} label={t("block.heading")} className="w-auto min-w-0 max-w-full truncate text-[16px] font-semibold leading-[22px] [field-sizing:content]" />
+      ) : (
+        <h2 className="min-w-0 truncate text-[16px] font-semibold leading-[22px] text-fg">{def.title}</h2>
+      )}
+      {!!items.length && <span className="shrink-0 text-[13px] tabular-nums text-muted-foreground">{items.length}</span>}
+    </>
+  );
   return (
     // a card of its own in the text: what it shows comes from elsewhere. Padding, not margin,
     // around it: CodeMirror leaves a block widget's margins out of its heights
     <div className="py-3" contentEditable={false}>
     <div className="relative rounded-xl border border-line bg-surface">
-      {showTitle && (
-        <div className="flex items-center gap-2 px-4 pt-3 max-sm:px-3" data-handle-anchor>
-          {editable ? (
-            <InlineText value={def.title ?? ""} onCommit={setTitle} autoFocus={addingTitle} placeholder={t("block.title")} label={t("block.heading")} className="w-auto min-w-0 max-w-full truncate text-[15px] font-semibold leading-[22px] [field-sizing:content]" />
-          ) : (
-            <h2 className="truncate text-[15px] font-semibold leading-[22px] text-fg">{def.title}</h2>
-          )}
-          {!!items.length && <span className="shrink-0 text-[13px] tabular-nums text-muted-foreground">{items.length}</span>}
-        </div>
-      )}
-      <div className={cn("px-4 pb-3 max-sm:px-3", !showTitle && "pt-1")}>
+      <div className="px-4 pb-3 pt-1 max-sm:px-3">
         <InCard.Provider value>
-        <div data-handle-anchor={showTitle ? undefined : ""}>
-          <ViewTabs tabs={tabs} active={tab.id} onPick={pickTab} edit={editable ? tabEdit : undefined} right={toolbar} />
+        {/* the title shares the tabs' line and stays put while they scroll */}
+        <div data-handle-anchor="">
+          <ViewTabs tabs={tabs} active={tab.id} onPick={pickTab} edit={editable ? tabEdit : undefined} left={showTitle && title} right={toolbar} />
         </div>
         {/* a new block shows nothing until it has a condition (not "everything") */}
         {!def.where ? (
