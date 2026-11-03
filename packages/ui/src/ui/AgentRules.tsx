@@ -70,16 +70,41 @@ export function RulesField({ id, value, autoFocus, onBlur, label, placeholder }:
 }
 
 /** The robot icon after the tags: an item's own rules and what applies from above. Only agents act
- * on them, so they live in this dialog and not on the page. */
+ * on them, so they live in this dialog and not on the page. Nothing is saved until "Speichern"
+ * (or Ctrl/Cmd+Enter); closing the dialog drops what was typed. Until then a change from elsewhere
+ * replaces the text, unless it was edited. */
 export function AgentRulesDialog({ item, onClose }: { item: Item; onClose: () => void }) {
   const ix = useIndex();
+  const repo = useRepo();
   const { t } = useT();
   const { active } = useAccounts();
   const inherited = inheritedOwners(ix, item.id);
   const ws = workspaceRules(ix);
+  const [draft, setDraft] = useState(item.rules);
+  const [base, setBase] = useState(item.rules);
+  if (item.rules !== base) {
+    setBase(item.rules);
+    if (draft === base) setDraft(item.rules);
+  }
+  const dirty = draft !== item.rules;
+  const save = () => {
+    if (dirty) repo.setRules(item.id, draft);
+    onClose();
+  };
   return (
     <Dialog title={t("rules.title")} onClose={onClose}>
-      <RulesField id={item.id} value={item.rules} autoFocus label={t("rules.title")} placeholder={t("rules.placeholder")} />
+      <Textarea
+        aria-label={t("rules.title")}
+        value={draft}
+        autoFocus
+        placeholder={t("rules.placeholder")}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) (e.preventDefault(), save());
+        }}
+        rows={3}
+        className="min-h-20 w-full resize-y rounded-lg border-line bg-bg text-sm"
+      />
       <p className="mt-2 text-xs text-muted-foreground">{t("rules.hint")}</p>
       {(inherited.length > 0 || ws) && (
         <p className="mt-3 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[13px] text-muted-foreground">
@@ -100,6 +125,14 @@ export function AgentRulesDialog({ item, onClose }: { item: Item; onClose: () =>
           ))}
         </p>
       )}
+      <div className="mt-4 flex justify-end gap-2">
+        <Button variant="outline" onClick={onClose}>
+          {t("cancel")}
+        </Button>
+        <Button variant="primary" onClick={save} disabled={!dirty}>
+          {t("view.save")}
+        </Button>
+      </div>
     </Dialog>
   );
 }
