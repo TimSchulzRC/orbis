@@ -53,7 +53,8 @@ export function ViewTabs({ tabs, active, onPick, edit, left, right }: { tabs: Vi
   const { t } = useT();
   const inCard = useContext(InCard);
   const [menu, setMenu] = useState<string | null>(null);
-  const [point, setPoint] = useState<{ x: number; y: number } | null>(null); // a right click: the menu opens there
+  // a right click: the menu opens there. Kept while it fades out, else it jumps below the tab
+  const [point, setPoint] = useState<{ id: string; x: number; y: number } | null>(null);
   const [drag, setDrag] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
   const drop = (target: string) => {
@@ -84,7 +85,7 @@ export function ViewTabs({ tabs, active, onPick, edit, left, right }: { tabs: Vi
             <Popover
               key={tab.id}
               open={menu === tab.id}
-              point={menu === tab.id ? point : null}
+              point={point?.id === tab.id ? point : null}
               onOpenChange={(o) => setMenu(o ? tab.id : null)}
               trigger={(p) => (
                 <Button variant="plain"
@@ -93,7 +94,7 @@ export function ViewTabs({ tabs, active, onPick, edit, left, right }: { tabs: Vi
                   aria-haspopup={on && edit ? "menu" : undefined}
                   aria-expanded={on && edit ? p["aria-expanded"] : undefined}
                   onClick={() => (on ? edit && (setPoint(null), p.onClick()) : onPick(tab.id))}
-                  onContextMenu={edit && ((e) => (e.preventDefault(), setPoint({ x: e.clientX, y: e.clientY }), setMenu(tab.id)))}
+                  onContextMenu={edit && ((e) => (e.preventDefault(), setPoint({ id: tab.id, x: e.clientX, y: e.clientY }), setMenu(tab.id)))}
                   draggable={!!edit}
                   onDragStart={(e) => (e.dataTransfer.setData("obtion/tab", tab.id), setDrag(tab.id))}
                   onDragEnd={() => (setDrag(null), setOver(null))}
