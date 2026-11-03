@@ -21,7 +21,7 @@ import { cn } from "../lib/utils";
 import { ItemPicker } from "../ui/Picker";
 import { PropertyBlock } from "../ui/Properties";
 import { BelowCard, ChildList, Updates, mainGrouping } from "../ui/Sections";
-import { Bezuege, Crumbs, TrashBanner } from "../ui/PageParts";
+import { Crumbs, LinksMenu, PageFooter, TrashBanner } from "../ui/PageParts";
 import { PlacePicker } from "../ui/Picker";
 import { pluralOf } from "@obtion/core/plural";
 import { queryBlocks, insertQueryBlock } from "../ui/QueryBlock";
@@ -189,12 +189,17 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
         schema={schema}
         head={{
           first: <TypeSwitch item={item} />,
-          end: !item.deleted && (
+          end: (
+            <>
+            <LinksMenu item={item} />
+            {!item.deleted && (
             <Tip label={t("rules.title")}>
               <Button variant="plain" onClick={() => setRulesOpen(true)} aria-label={t("rules.title")} className={cn("tap inline-flex items-center justify-center rounded-lg p-1.5 transition-colors hover:bg-hover hover:text-fg", item.rules.trim() ? "text-fg" : "text-muted-foreground")}>
                 <Bot size={16} />
               </Button>
             </Tip>
+            )}
+            </>
           ),
           progress: progress && <ProgressBand done={progress.done} total={progress.total} desc={progressText(item, ix, progress.done, progress.total)} />,
         }}
@@ -209,9 +214,9 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
       {mainType && <ChildList item={item} typeId={mainType} />}
       {hasUpdates(schema) && <Updates item={item} />}
 
-      {/* 4 · below, 5 · connections and footer */}
+      {/* 4 · below, 5 · footer (the links are in the head) */}
       <BelowCard item={item} exclude={exclude} gathers={gathers} quietAdd={!typeArea} />
-      <Bezuege item={item} typeArea={typeArea} />
+      <PageFooter item={item} />
 
       {/* on a phone the main action floats above the bottom bar */}
       {mainAction && (

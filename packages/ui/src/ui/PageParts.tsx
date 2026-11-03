@@ -1,23 +1,17 @@
 // Parts every page shares, information and file pages alike (design rules § 3.1).
-import { ChevronRight, Pin, Plus, RotateCcw, Star, X } from "lucide-react";
+import { ChevronRight, Link2, Pin, Plus, RotateCcw, Star, X } from "lucide-react";
 import { type Item, META_TYPE } from "@obtion/core/model";
 import { hasPlace, isInInbox } from "@obtion/core/placement";
-import { fmtDate } from "@obtion/core/i18n";
+import { fmtDate, type T } from "@obtion/core/i18n";
+import type { Index } from "@obtion/core/graph";
 import { repo } from "../repo";
-import { itemHref, useIndex, useLocalStorage, usePhone } from "../hooks";
+import { itemHref, useIndex, usePhone } from "../hooks";
 import { useT, titleOf } from "../i18n";
 import { ItemIcon, RelTime } from "./item-look";
-import { Card, Button, IconButton, MenuItem, MoreMenu, Popover, REVEAL, SectionTitle } from "./primitives";
+import { Button, IconButton, MenuItem, MoreMenu, Popover, REVEAL } from "./primitives";
+import { Tip } from "../components/ui/tooltip";
 import { cn } from "../lib/utils";
 import { dateOf } from "@obtion/core/date";
-import { KEYS } from "./storage";
-
-/** Per device, because folding is a view, not a change of the page. */
-function useOpen(key: string, initial: boolean): [boolean, (o: boolean) => void] {
-  const [open, setOpen] = useLocalStorage(KEYS.open(key), initial);
-  // stored as "1"/"0" by older versions
-  return [!!open, setOpen];
-}
 
 export function Crumbs({ item, tools, onPlace }: { item: Item; tools: React.ReactNode; onPlace: () => void }) {
   const ix = useIndex();
@@ -151,93 +145,91 @@ export function TrashBanner({ onRestore }: { onRestore: () => void }) {
   );
 }
 
-interface RefKind {
+interface LinkGroup {
   key: string;
   label: string;
   items: { item: Item; note?: React.ReactNode; tools?: React.ReactNode }[];
 }
 
-/** Rows open by default only on pages without a list of their own (design rules § 2.7). */
-const OPEN_REFS_MAX = 5;
-
-/** Design rules § 2.7. */
-export function Bezuege({ item, typeArea, usedIn }: { item: Item; typeArea: boolean; usedIn?: { item: Item; note?: string }[] }) {
-  const ix = useIndex();
-  const { t } = useT();
-  const kinds: RefKind[] = [];
+/** Everything linked with the page, both ways (design rules § 2.7): what points here, and where it points. */
+function linkGroups(item: Item, ix: Index, t: T, usedIn: { item: Item; note?: string }[]): LinkGroup[] {
+  const groups: LinkGroup[] = [];
   const linkingIds = new Set(ix.backlinks(item.id).filter((b) => b.kind !== "rel").map((b) => b.from));
   const from = [...linkingIds]
     .map((id) => ix.get(id)!)
-    .filter((x) => x && x.kind === "info" && !x.deleted && x.type !== META_TYPE && !(usedIn ?? []).some((u) => u.item.id === x.id));
+    .filter((x) => x && x.kind === "info" && !x.deleted && x.type !== META_TYPE && !usedIn.some((u) => u.item.id === x.id));
   const where = (x: Item) => {
     const homePath = ix.homePath(x.id);
     return homePath.length ? <span className="truncate">{ix.get(homePath.at(-1)!)?.title}</span> : undefined;
   };
-  if (usedIn?.length) kinds.push({ key: "used", label: t("file.usedIn"), items: usedIn.map((x) => ({ item: x.item, note: x.note })) });
-  if (from.length) kinds.push({ key: "linked", label: t("item.linkedFrom"), items: from.map((x) => ({ item: x, note: isInInbox(x, ix) ? undefined : where(x), tools: <PlaceHere target={x} page={item} /> })) });
+  if (usedIn.length) groups.push({ key: "used", label: t("file.usedIn"), items: usedIn.map((x) => ({ item: x.item, note: x.note })) });
+  if (from.length) groups.push({ key: "linked", label: t("item.linkedFrom"), items: from.map((x) => ({ item: x, note: isInInbox(x, ix) ? undefined : where(x), tools: <PlaceHere target={x} page={item} /> })) });
   const textLinks = ix.textLinks(item);
   const fromText = textLinks.filter((l) => !l.embed).map((l) => l.to);
   const embedded = textLinks.filter((l) => l.embed).map((l) => l.to);
-  const refIds = [...new Set([...fromText, ...item.refs])].filter((x) => ix.get(x) && x !== item.id);
-  if (refIds.length)
-    kinds.push({
-      key: "refs",
-      label: t("item.refs"),
-      items: refIds.map((x) => ({
+  const toIds = [...new Set([...fromText, ...embedded, ...item.refs])].filter((x) => ix.get(x) && !ix.get(x)!.deleted && x !== item.id);
+  if (toIds.length)
+    groups.push({
+      key: "to",
+      label: t("links.to"),
+      items: toIds.map((x) => ({
         item: ix.get(x)!,
         note: fromText.includes(x) ? t("item.inText") : embedded.includes(x) ? t("refs.embedded") : undefined,
         tools: (
           <>
             <PlaceHere target={ix.get(x)!} page={item} />
-            {!fromText.includes(x) && (
-              <IconButton size="xs" icon={X} iconSize={12} onClick={(e) => (e.preventDefault(), repo.setMember(item.id, "refs", x, false))} className={cn("text-faint", REVEAL.any)} label={t("item.removeRef")} />
+            {!fromText.includes(x) && !embedded.includes(x) && (
+              <IconButton size="xs" icon={X} iconSize={12} onClick={() => repo.setMember(item.id, "refs", x, false)} className={cn("text-faint", REVEAL.any)} label={t("item.removeRef")} />
             )}
           </>
         ),
       })),
     });
-  if (!kinds.length) return <PageFooter item={item} />;
-  return (
-    <section className="mt-10 max-md:mt-8">
-      <SectionTitle>{t("refs.title")}</SectionTitle>
-      <Card className="overflow-hidden">
-        {kinds.map((k) => (
-          <RefRow key={k.key} page={item} kind={k} initial={!typeArea && k.items.length <= OPEN_REFS_MAX} />
-        ))}
-      </Card>
-      <PageFooter item={item} />
-    </section>
-  );
+  return groups;
 }
 
-function RefRow({ page, kind, initial }: { page: Item; kind: RefKind; initial: boolean }) {
+/** The link button in the page head: the number of all links, both ways; a click lists them. None, no button. */
+export function LinksMenu({ item, usedIn = [] }: { item: Item; usedIn?: { item: Item; note?: string }[] }) {
+  const ix = useIndex();
   const { t } = useT();
-  const [open, setOpen] = useOpen(`refs:${page.id}:${kind.key}`, initial);
+  const groups = linkGroups(item, ix, t, usedIn);
+  const count = groups.reduce((n, g) => n + g.items.length, 0);
+  if (!count) return null;
   return (
-    <div className="border-t border-line first:border-t-0">
-      <Button variant="plain" onClick={() => setOpen(!open)} aria-expanded={open} className="flex min-h-11 w-full items-center gap-2.5 px-3.5 text-left hover:bg-hover max-md:min-h-12">
-        <ChevronRight size={13} className={cn("shrink-0 text-faint transition-transform", open && "rotate-90")} aria-hidden />
-        <span className="whitespace-nowrap text-sm font-medium">{kind.label}</span>
-        <span className="text-[13px] tabular-nums text-muted-foreground">{kind.items.length}</span>
-        {!open && <span className="min-w-0 flex-1 truncate text-[13px] text-muted-foreground">{kind.items.map((x) => titleOf(x.item, t)).join(", ")}</span>}
-      </Button>
-      {open && (
-        <ul className="pb-2.5 pl-10 pr-3.5">
-          {kind.items.map(({ item: x, note, tools }) => (
-            <li key={x.id} className="group relative flex min-h-8 items-center gap-2 text-sm">
-              <ItemIcon item={x} size={14} className="shrink-0" />
-              <a href={itemHref(x.id)} className="min-w-0 truncate hover:underline">
-                {titleOf(x, t)}
-              </a>
-              <span className="ml-auto flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
-                {note}
-                {tools}
-              </span>
-            </li>
-          ))}
-        </ul>
+    <Popover
+      align="right"
+      trigger={(p) => (
+        <Tip label={t("links.title")}>
+          <Button variant="plain" {...p} aria-label={t("links.count", { count })} className="tap inline-flex items-center gap-1 rounded-lg px-1.5 py-1 text-[13px] tabular-nums text-muted-foreground transition-colors hover:bg-hover hover:text-fg aria-expanded:bg-hover aria-expanded:text-fg">
+            <Link2 size={16} /> {count}
+          </Button>
+        </Tip>
       )}
-    </div>
+    >
+      {(close) => (
+        <div className="w-80 max-w-[calc(100vw-2rem)]">
+          {groups.map((g, i) => (
+            <div key={g.key} className={cn(i > 0 && "mt-1 border-t border-line pt-1")}>
+              <p className="px-2.5 pb-1 pt-1.5 text-xs font-semibold text-muted-foreground">
+                {g.label} <span className="font-normal tabular-nums">{g.items.length}</span>
+              </p>
+              {g.items.map(({ item: x, note, tools }) => (
+                <div key={x.id} className="group flex min-h-9 items-center gap-2 rounded-lg px-2.5 hover:bg-hover">
+                  <ItemIcon item={x} size={14} className="shrink-0" />
+                  <a href={itemHref(x.id)} onClick={close} className="min-w-0 flex-1 truncate py-1 text-sm text-fg">
+                    {titleOf(x, t)}
+                  </a>
+                  <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+                    {note}
+                    {tools}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+    </Popover>
   );
 }
 
@@ -252,7 +244,7 @@ function PlaceHere({ target, page }: { target: Item; page: Item }) {
   );
 }
 
-function PageFooter({ item }: { item: Item }) {
+export function PageFooter({ item }: { item: Item }) {
   const { t, lang } = useT();
   return (
     <p className="mt-4 text-xs text-muted-foreground">

@@ -307,7 +307,7 @@ export function PropertyBlock({ item, schema, head = {} }: { item: Item; schema?
           </span>
         ))}
         <PageTags item={item} />
-        {head.end && <span className="ml-auto inline-flex">{head.end}</span>}
+        {head.end && <span className="ml-auto inline-flex items-center gap-0.5">{head.end}</span>}
       </div>
       {dates.length > 0 && (
         <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
