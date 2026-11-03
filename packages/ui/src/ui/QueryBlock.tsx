@@ -1,6 +1,6 @@
 // Live query blocks inside a text: ```abfrage … ``` is stored as JSON with ids and shown
 // as its results. Text-form blocks (typed by hand or by an agent) are normalised to JSON.
-import { StrictMode, useState } from "react";
+import { StrictMode, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { StateEffect, StateField, type EditorState, type Extension, RangeSetBuilder } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, WidgetType } from "@codemirror/view";
@@ -40,7 +40,11 @@ function QueryBlockView({ src, thisId, n = 0, onChange, onDelete, readOnly }: { 
   const [addingTitle, setAddingTitle] = useState(false);
   // the conditions are a draft until "Speichern" or until the filter closes: trying a filter
   // changes nothing. Title, view and "hide when empty" apply at once, like everywhere.
-  const [draft, setDraft] = useState<{ scope: string; where: QueryDef["where"] } | null>(null); // scope: "base" or a tab id
+  type Draft = { scope: string; where: QueryDef["where"] } | null; // scope: "base" or a tab id
+  const [draft, setDraftState] = useState<Draft>(null);
+  // the latest draft at once: closing the filter commits typed text and saves in one go
+  const draftRef = useRef<Draft>(null);
+  const setDraft = (d: Draft) => ((draftRef.current = d), setDraftState(d));
   const tabs = blockTabs(stored);
   const [tab, pickTab] = useTabChoice(`block:${thisId}:${n}`, tabs);
   const baseWhere = draft?.scope === "base" ? draft.where : stored.where;
@@ -71,9 +75,11 @@ function QueryBlockView({ src, thisId, n = 0, onChange, onDelete, readOnly }: { 
     if (!sameValue(look, was)) onChange?.({ ...look, where: stored.where });
   };
   const save = () => {
-    if (dirty && onChange && draft) {
-      if (draft.scope === "base") onChange({ ...stored, where: draft.where });
-      else patchTab(draft.scope, { where: draft.where });
+    const d = draftRef.current;
+    const saved = d && (d.scope === "base" ? stored.where : tabs.find((x) => x.id === d.scope)?.where);
+    if (d && onChange && !sameValue(d.where, saved)) {
+      if (d.scope === "base") onChange({ ...stored, where: d.where });
+      else patchTab(d.scope, { where: d.where });
     }
     setDraft(null);
   };
@@ -105,7 +111,12 @@ function QueryBlockView({ src, thisId, n = 0, onChange, onDelete, readOnly }: { 
   const editable = !!onChange && !readOnly;
   /** Opening one tool closes the others; closing the filter keeps what was typed. */
   const openPanel = (next: typeof panel) => {
-    if (panel === "filter" && next !== "filter") save();
+    if (panel === "filter" && next !== "filter") {
+      // the text form commits on blur, which would come after the popover is gone
+      const focused = document.activeElement;
+      if (focused instanceof HTMLElement && focused.closest("[data-popover]")) focused.blur();
+      save();
+    }
     setPanel(next);
   };
   const settingsFor = (part: "sort" | "group" | "more") => (
