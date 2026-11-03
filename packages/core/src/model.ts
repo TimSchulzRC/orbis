@@ -84,8 +84,6 @@ export interface Capabilities {
   /** Legacy: progress is a computed property now (see `progressProp`); read only while the type has none. */
   progress?: { of?: string };
   updates?: boolean;
-  /** "Eigene Liste": entries of this type get their own list on the page above. Unset: on while the type has a status. */
-  list?: "on" | "off";
   template?: { body?: string; values?: Record<string, Value> };
 }
 
@@ -127,7 +125,7 @@ export type ViewKind = (typeof VIEW_KINDS)[number];
 export interface ViewDef {
   query?: QueryDef; // stored as JSON with ids
   display?: ViewKind;
-  scope?: "level" | "all"; // "Nur diese Ebene" / "Inkl. Unterprojekte"
+  scope?: "level" | "all"; // "Nur diese Ebene" / "Inkl. Unterprojekte"; "Darunter": "Direkt" / "Alle Ebenen" open
   group?: string;
   showDone?: boolean;
 }

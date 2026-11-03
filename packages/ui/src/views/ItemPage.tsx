@@ -19,7 +19,7 @@ import { ItemIcon, TypeChip, TypeGlyph } from "../ui/item-look";
 import { ProgressBand } from "../ui/progress";
 import { cn } from "../lib/utils";
 import { PropertyBlock } from "../ui/Properties";
-import { AddBelow, BelowCard, ChildList, Updates, listedInText, mainGrouping } from "../ui/Sections";
+import { Below, Updates } from "../ui/Sections";
 import { AddRef, Crumbs, LinksMenu, LinksRow, PageFooter, TrashBanner, pinnedRefs } from "../ui/PageParts";
 import { PlacePicker } from "../ui/Picker";
 import { pluralOf } from "@obtion/core/plural";
@@ -104,16 +104,9 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
     };
   }, [item.id, isNew]);
 
-  // one list per type with a status below the page (tasks, or sub-tasks on a task)
-  const lists = ix.listTypes(item).filter((x) => !listedInText(item, x, ix));
   const cycles = ix.cycleEdgesOf(item.id);
-  // a page with progress (a project, a task) gathers its notes and files over all levels
-  const gathers = !!progressSpec(schema);
-  // the type's area: the lists and updates (§ 3.1, zone 3)
-  const typeArea = lists.length > 0 || hasUpdates(schema);
-  // what "Darunter" leaves out: the lists' types, and sub-projects while they are groups of them
-  const exclude = new Set<string>(lists.map((x) => "type:" + x));
-  if (lists.some((x) => x !== item.type) && mainGrouping(item) === "sub") for (const c of ix.childrenOf(item.id)) if (ix.get(c)?.type === item.type) exclude.add(c);
+  // the type's area (§ 3.1, zone 3): long texts fold so the updates stay in sight
+  const typeArea = hasUpdates(schema);
   const progress = progressSpec(schema) ? ix.progressOf(item) : undefined;
 
   const tools = (
@@ -207,13 +200,10 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
           mt-7, not mt-6: the editor has 4px padding on top only, so the text sits in the middle */}
       <div className="mt-7 border-t border-line" />
       <div className="page-below [&>:first-child]:mt-6">
-        {/* 3 · the type's area: main list, updates */}
-        {lists.map((x) => <ChildList key={x} item={item} typeId={x} />)}
+        {/* 3 · below: everything under the page, the same for every type (the links are in the head) */}
+        <Below item={item} />
+        {/* 4 · the type's area: updates */}
         {hasUpdates(schema) && <Updates item={item} />}
-
-        {/* 4 · below (the links are in the head) */}
-        <BelowCard item={item} exclude={exclude} gathers={gathers} />
-        {!item.deleted && <AddBelow item={item} />}
       </div>
       {/* one more line above the dates, unless nothing came between */}
       <PageFooter item={item} className="mt-10 border-t border-line pt-4 max-md:mt-8 [.page-below:empty+&]:mt-4 [.page-below:empty+&]:border-t-0 [.page-below:empty+&]:pt-0" />

@@ -25,7 +25,7 @@ import {
   upsertProp,
 } from "@obtion/core/model";
 import { COLORS, ICONS } from "@obtion/core/palette";
-import { isProgressProp, isStatusProp, ownList, progressProp, statusProp, useAsStatus } from "@obtion/core/traits";
+import { isProgressProp, isStatusProp, progressProp, statusProp, useAsStatus } from "@obtion/core/traits";
 import { keyBetween } from "@obtion/core/sortkey";
 import { parseQuery, printQuery, runQuery } from "@obtion/core/query";
 import { type DeleteMode, deleteType, previewTagToType, tagToType, typeUsage } from "@obtion/core/typeops";
@@ -554,7 +554,6 @@ function Capabilities({ item }: { item: Item }) {
             ))}
           </NativeSelect>,
         )}
-        {row(t("caps.list"), t("caps.listHint"), <Checkbox checked={ownList(schema)} onCheckedChange={(checked) => set("list", checked === true ? "on" : "off")} className="size-4" aria-label={t("caps.list")} />)}
         {row(t("caps.updates"), t("caps.updatesHint"), <Checkbox checked={!!caps.updates} onCheckedChange={(checked) => set("updates", checked === true || null)} className="size-4" aria-label={t("caps.updates")} />)}
         <div className="py-2">
           <label className="flex items-center gap-2 text-sm font-medium">

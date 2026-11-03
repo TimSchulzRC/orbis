@@ -47,7 +47,7 @@ import type { Index } from "@obtion/core/graph";
 import { blocksAsText, matches, normalizeBlocks, parseQuery, printQuery, runQuery, relDate, tabDef, typesIn, type Cond, type QueryDef } from "@obtion/core/query";
 import { inboxWhere } from "@obtion/core/inbox";
 import { isInInbox } from "@obtion/core/placement";
-import { caps, doneAt, dueOf, dueProp, firstOfGroup, hasUpdates, initialProps, ownList, statusOf, statusProp, template, useAsStatus, writeProp } from "@obtion/core/traits";
+import { caps, doneAt, dueOf, dueProp, firstOfGroup, hasUpdates, initialProps, statusOf, statusProp, template, useAsStatus, writeProp } from "@obtion/core/traits";
 import { previewTagToType, typeUsage } from "@obtion/core/typeops";
 import { excerpt, searchHits, searchIds } from "@obtion/core/search";
 import { type Heading, findSection, outline, page } from "@obtion/core/outline";
@@ -336,7 +336,6 @@ export class Ops {
         status: name(c.status) ? `"${name(c.status)}" (tick off, status:open/done in queries)` : undefined,
         due_date: name(c.due) ? `"${name(c.due)}" (overdue / this week)` : undefined,
         updates: c.updates ? "dated progress notes via add_update" : undefined,
-        own_list: ownList(s) ? "entries get their own list on the page above them" : undefined,
       },
       entries: this.store.index().itemsOfType(t.id).length,
       list: this.store.index().typePlural(t.id),
@@ -1342,7 +1341,6 @@ export class Ops {
         }
         if (c.due_date !== undefined) setCapability(doc, "due", pid(c.due_date, "date"));
         if (c.updates !== undefined) setCapability(doc, "updates", c.updates || null);
-        if (c.own_list !== undefined) setCapability(doc, "list", c.own_list ? "on" : "off");
         if (c.template !== undefined) setCapability(doc, "template", c.template === null ? null : { body: c.template });
       });
       this.store.flush();

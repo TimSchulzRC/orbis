@@ -1,37 +1,30 @@
-// Sections of a page, all derived from "Teil von" and the type's capabilities.
+// The page's lower part: "Darunter" (everything below the page, as one tree) and the updates.
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
 import { NativeSelect } from "../components/ui/native-select";
-import { useState } from "react";
-import { Plus, Send } from "lucide-react";
+import { Fragment, useState } from "react";
+import { ChevronRight, Plus, Send } from "lucide-react";
 import { type Item, type ViewDef } from "@obtion/core/model";
 import type { Index } from "@obtion/core/graph";
 import { fmtBytes, fmtDateTime } from "@obtion/core/i18n";
-import { groupItems, runQuery, shownByBlocks } from "@obtion/core/query";
-import { dueOf, dueProp, isDone, statusOf, statusProp } from "@obtion/core/traits";
-import { repo } from "../repo";
-import { itemHref, useIndex } from "../hooks";
-import { useT, tr, titleOf } from "../i18n";
-import { Card, Button, Seg, SectionTitle, ViewMenu, SectionAction, Popover, MenuItem } from "./primitives";
-import { DueLabel, ItemIcon, RelTime, TypeGlyph } from "./item-look";
-import { NOTE_ICON } from "./icons";
-import { type PageGroup, PageTable } from "./PageTable";
-import { shortPath } from "./Row";
-import { agentLabel, agentName } from "./AgentNotice";
+import { dueOf, isDone, statusOf, statusProp } from "@obtion/core/traits";
 import { cmpKey } from "@obtion/core/sortkey";
 import type { T } from "@obtion/core/i18n";
+import { repo } from "../repo";
+import { itemHref, useIndex, useStoredSet } from "../hooks";
+import { useT, titleOf } from "../i18n";
+import { Card, Button, Seg, SectionTitle, SectionAction, Popover, MenuItem } from "./primitives";
+import { DueLabel, ItemIcon, RelTime, TypeGlyph } from "./item-look";
+import { NOTE_ICON } from "./icons";
+import { ProgressCount } from "./progress";
+import { RowStatus } from "./Row";
+import { agentLabel, agentName } from "./AgentNotice";
+import { KEYS } from "./storage";
+import { cn } from "../lib/utils";
 
-/** Entries per group of "Darunter" before "Alle …". */
-const FEW = 8;
 /** Updates shown at first, and at most after "Alle …". */
 const UPDATES_FIRST = 3;
 const UPDATES_MAX = 50;
-
-/** The type's plural list name ("Tasks"); below an entry of the same type "Unter-{plural}". */
-function listTitle(ix: Index, typeId: string, same: boolean): string {
-  const plural = ix.typePlural(typeId);
-  return same ? tr("children.subOf", { name: plural }) : plural;
-}
 
 function AddRow({ label, onAdd, autoFocus, onDone }: { label: string; onAdd: (title: string) => void; autoFocus?: boolean; onDone?: () => void }) {
   const [text, setText] = useState("");
@@ -61,205 +54,154 @@ function AddRow({ label, onAdd, autoFocus, onDone }: { label: string; onAdd: (ti
   );
 }
 
-/** A query block in the text lists the open ones already (e.g. "Offene Tasks", unter:diese): one list per page. */
-export function listedInText(item: Item, typeId: string, ix: Index): boolean {
-  const schema = ix.types.get(typeId)?.schema;
-  const open = ix.items(ix.descendants(item.id)).filter((x) => x.type === typeId && !x.deleted && !isDone(x, schema));
-  const inText = shownByBlocks(item, ix);
-  return open.length > 0 && open.every((x) => inText.has(x.id));
+/** Which group of "Darunter" an entry belongs to: its type, notes (no type) or files. */
+function groupOf(x: Item): string {
+  return x.kind === "datei" ? "files" : (x.type ?? "notes");
 }
 
-export function mainGrouping(item: Item): "sub" | "status" {
-  return item.views.main?.group === "status" ? "status" : "sub";
+/** Open ones first (running before not started), then by due date and title. */
+function order(ix: Index) {
+  const rank = (x: Item) => ({ active: 0, todo: 1, done: 2 })[statusOf(x, ix.schemaOf(x))?.group ?? "todo"];
+  const due = (x: Item) => dueOf(x, ix.schemaOf(x)) ?? "9999";
+  return (a: Item, b: Item) => rank(a) - rank(b) || cmpKey(due(a), due(b)) || a.title.localeCompare(b.title);
 }
 
 /**
- * A list of the page (design rules § 2.4, § 3.2): descendants of one type with a status, over all
- * levels (see `Index.listTypes`). Grouped by sub-project ("Direkt in …" first; groups show even with
- * nothing open) or by status.
+ * "Darunter" (design rules § 3.1, zone 4): everything below the page, the same for every type.
+ * The entries directly below, grouped by type; each one with entries below opens into them, any
+ * type, any depth. "Direkt" starts closed, "Alle Ebenen" starts open. Done ones stay hidden
+ * until "erledigte einblenden".
  */
-export function ChildList({ item, typeId }: { item: Item; typeId: string }) {
-  const { t } = useT();
+export function Below({ item }: { item: Item }) {
+  const { t, lang } = useT();
   const ix = useIndex();
-  const schema = ix.types.get(typeId)!.schema;
-  const view: ViewDef = { showDone: false, ...(item.views.main ?? {}) };
+  const view: ViewDef = item.views.main ?? {};
   const setView = (patch: Partial<ViewDef>) => repo.setView(item.id, "main", { ...view, ...patch });
-  const same = item.type === typeId; // sub-tasks of a task
-  const subOne = (name?: string) => t("children.subOf", { name: name ?? "" }); // "Unter-Task", "Unter-Projekt"
-  const all = ix.items(ix.descendants(item.id)).filter((x) => x.type === typeId && !x.deleted);
-  const doneCount = all.filter((x) => isDone(x, schema)).length;
-  const shown = view.showDone ? all : all.filter((x) => !isDone(x, schema));
-  const rank = (x: Item) => ({ active: 0, todo: 1, done: 2 })[statusOf(x, schema)?.group ?? "todo"];
-  const due = (x: Item) => dueOf(x, schema) ?? "9999";
-  const sorted = [...shown].sort((a, b) => rank(a) - rank(b) || cmpKey(due(a), due(b)) || a.title.localeCompare(b.title));
-  const open = all.filter((x) => !isDone(x, schema));
-  const title = listTitle(ix, typeId, same);
-  if (!all.length) return null;
-  // sub-projects: children of the page's own type; each one a group
-  const subs = same ? [] : ix.items(ix.childrenOf(item.id)).filter((x) => x.type === item.type && !x.deleted);
-  // without a status ("Eigene Liste" on a type without one) there is nothing open or done to group or count
-  const hasStatus = !!statusProp(schema);
-  const by = subs.length && hasStatus ? mainGrouping(item) : "sub";
-  let groups: PageGroup[];
-  if (by === "status")
-    groups = groupItems(sorted, "status", { ix, thisId: item.id }).map((g) => ({ key: g.key || "_", label: g.label || t("group.none"), items: g.items }));
-  else {
-    const subOf = (x: Item) => (ix.relPath(item.id, x.id) ?? []).find((p) => subs.some((s) => s.id === p));
-    const direct = sorted.filter((x) => !subOf(x));
-    groups = [
-      ...(direct.length || !subs.length ? [{ key: "direct", label: t("children.directIn", { title: titleOf(item, t) }), items: direct }] : []),
-      ...subs.map((s) => ({ key: s.id, label: titleOf(s, t), ref: s.id, items: sorted.filter((x) => subOf(x) === s.id) })),
-    ];
-  }
-  const dueProperty = dueProp(schema);
-  const cols = dueProperty ? [{ key: "due", label: dueProperty.name }] : [];
-  const subLabel = subOne(ix.typeName(item.type));
-  const groupOptions = [{ value: "sub", label: subLabel }, { value: "status", label: t("group.status") }];
-  const groupBy = (x: string) => setView({ group: x === "status" ? "status" : "path" });
+  const allOpen = view.scope === "all";
+  // entries folded against the default ("Direkt": opened ones, "Alle Ebenen": closed ones)
+  const [flipped, flip, setFlipped] = useStoredSet(KEYS.fold(`below:${item.id}`));
+  // the type of the entry being added at the top: undefined closed, null a note
+  const [adding, setAdding] = useState<string | null | undefined>(undefined);
+  const cmp = order(ix);
+  const done = (x: Item) => isDone(x, ix.schemaOf(x));
+  const below = (id: string) => ix.items(ix.childrenOf(id)).filter((c) => !c.deleted && (view.showDone || !done(c)));
+  const doneCount = [...ix.descendants(item.id)].filter((id) => {
+    const x = ix.get(id);
+    return !!x && !x.deleted && done(x);
+  }).length;
+  const direct = below(item.id);
+  const groups = new Map<string, Item[]>();
+  for (const c of direct) (groups.get(groupOf(c)) ?? groups.set(groupOf(c), []).get(groupOf(c))!).push(c);
+  // types by name, then notes, then files
+  const label = (g: string) => (g === "notes" ? t("below.untyped") : g === "files" ? t("below.files") : ix.typePlural(g));
+  const rankOf = (g: string) => (g === "files" ? 2 : g === "notes" ? 1 : 0);
+  const keys = [...groups.keys()].sort((a, b) => rankOf(a) - rankOf(b) || label(a).localeCompare(label(b)));
+  const create = (title: string, type: string | null) => repo.create({ title, parents: [item.id], ...(type ? { type } : {}) });
+  const typeName = (type: string | null) => (type ? ix.typeName(type) : undefined) ?? t("kind.note");
+
+  const right = (x: Item) => {
+    if (x.file) return <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{fmtBytes(lang, x.file.size)}</span>;
+    const due = dueOf(x, ix.schemaOf(x));
+    if (due) return <DueLabel due={due} done={done(x)} />;
+    if (!x.type) return <span className="shrink-0 text-xs text-muted-foreground"><RelTime ts={x.updated} /></span>;
+    return null;
+  };
+  const row = (x: Item, depth: number, path: Set<string>): React.ReactNode => {
+    const kids = path.has(x.id) ? [] : below(x.id).sort((a, b) => cmpKey(groupOf(a), groupOf(b)) || cmp(a, b));
+    const open = kids.length > 0 && allOpen !== flipped.has(x.id);
+    const progress = ix.progressOf(x);
+    const status = statusOf(x, ix.schemaOf(x));
+    const blocked = !!status && status.group !== "done" && ix.isBlocked(x);
+    const inner = new Set(path).add(x.id);
+    return (
+      <Fragment key={x.id + ":" + depth}>
+        <div data-id={x.id} className="flex min-h-10 items-center gap-2 border-t border-line pr-3 hover:bg-hover max-md:min-h-[48px]" style={{ paddingLeft: 6 + depth * 22 }}>
+          {kids.length > 0 ? (
+            <Button variant="plain" onClick={() => flip(x.id, !flipped.has(x.id))} aria-expanded={open} aria-label={open ? t("below.close") : t("below.open")} className="tap-edge flex size-5 shrink-0 items-center justify-center rounded text-faint hover:bg-hover hover:text-fg">
+              <ChevronRight size={13} className={cn("transition-transform", open && "rotate-90")} />
+            </Button>
+          ) : (
+            <span className="size-5 shrink-0" />
+          )}
+          <RowStatus item={x} size={15} />
+          <a href={itemHref(x.id)} className={cn("min-w-0 truncate text-sm hover:underline max-md:text-[15px]", done(x) && "text-muted-foreground line-through")}>
+            {titleOf(x, t)}
+          </a>
+          {progress && progress.total > 0 && <ProgressCount done={progress.done} total={progress.total} className="shrink-0 text-xs text-muted-foreground" />}
+          {blocked && <span className="shrink-0 text-xs text-warn">{t("row.blocked")}</span>}
+          {!open && kids.length > 0 && !progress?.total && <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{kids.length}</span>}
+          <span className="ml-auto shrink-0">{right(x)}</span>
+        </div>
+        {open && kids.map((k) => row(k, depth + 1, inner))}
+      </Fragment>
+    );
+  };
+
+  const addMenu = (
+    <Popover trigger={(p) => <SectionAction {...p}>{t("below.add")}</SectionAction>}>
+      {(close) => (
+        <>
+          <MenuItem icon={<NOTE_ICON size={14} style={{ color: "var(--t-note)" }} />} onClick={() => (setAdding(null), close())}>
+            {t("kind.note")}
+          </MenuItem>
+          {ix.typesByName().map((x) => (
+            <MenuItem key={x.id} icon={<TypeGlyph schema={x.schema} size={14} />} onClick={() => (setAdding(x.id), close())}>
+              {x.schema.name}
+            </MenuItem>
+          ))}
+        </>
+      )}
+    </Popover>
+  );
+  const addRow = adding !== undefined && (
+    <div className="border-b border-line px-1">
+      <AddRow label={t("below.addOf", { name: typeName(adding) })} autoFocus onAdd={(title) => create(title, adding)} onDone={() => setAdding(undefined)} />
+    </div>
+  );
+  // nothing below: only the button
+  if (!direct.length && !doneCount)
+    return (
+      <div className="mt-6">
+        {adding === undefined ? addMenu : <Card className="overflow-hidden">{addRow}</Card>}
+      </div>
+    );
+  const depthOptions = [{ value: "level", label: t("below.direct") }, { value: "all", label: t("below.allLevels") }];
   return (
     <section className="mt-10 max-md:mt-8">
       <SectionTitle
-        count={hasStatus ? t("children.openCount", { count: open.length }) : all.length}
+        count={direct.length}
         right={
-          subs.length > 0 && hasStatus && (
-            <>
-              <span className="max-md:hidden">
-                <Seg label={t("children.groupBy")} value={by} onChange={groupBy} options={groupOptions} />
-              </span>
-              <span className="md:hidden">
-                <ViewMenu label={by === "status" ? t("group.status") : subLabel} sections={[{ value: by, options: groupOptions, onChange: groupBy }]} />
-              </span>
-            </>
-          )
+          <>
+            <Seg label={t("below.depth")} value={allOpen ? "all" : "level"} onChange={(v) => (setFlipped([]), setView({ scope: v === "all" ? "all" : "level" }))} options={depthOptions} />
+            {addMenu}
+          </>
         }
       >
-        {title}
+        {t("below.title")}
       </SectionTitle>
-      <PageTable
-        groups={groups}
-        cols={cols}
-        head={same ? subOne(schema.name) : schema.name}
-        here={item.id}
-        foldKey={`main:${item.id}`}
-        add={{ init: { type: typeId, parents: [item.id] }, label: same ? subOne(schema.name) : t("children.newOf", { name: schema.name }) }}
-        done={{ count: doneCount, shown: !!view.showDone, toggle: () => setView({ showDone: !view.showDone }) }}
-      />
-    </section>
-  );
-}
-
-/** "+ Darunter anlegen": a child of any type, which then shows in its type's list or group. */
-export function AddBelow({ item }: { item: Item }) {
-  const { t } = useT();
-  const ix = useIndex();
-  // undefined: closed; null: a note (no type)
-  const [type, setType] = useState<string | null | undefined>(undefined);
-  if (type !== undefined)
-    return (
-      <div className="mt-6">
-        <AddRow
-          label={t("below.addOf", { name: (type ? ix.typeName(type) : undefined) ?? t("kind.note") })}
-          autoFocus
-          onAdd={(title) => repo.create({ title, parents: [item.id], ...(type ? { type } : {}) })}
-          onDone={() => setType(undefined)}
-        />
-      </div>
-    );
-  return (
-    <div className="mt-6">
-      <Popover trigger={(p) => <SectionAction {...p}>{t("below.add")}</SectionAction>}>
-        {(close) => (
-          <>
-            <MenuItem icon={<NOTE_ICON size={14} style={{ color: "var(--t-note)" }} />} onClick={() => (setType(null), close())}>
-              {t("kind.note")}
-            </MenuItem>
-            {ix.typesByName().map((x) => (
-              <MenuItem key={x.id} icon={<TypeGlyph schema={x.schema} size={14} />} onClick={() => (setType(x.id), close())}>
-                {x.schema.name}
-              </MenuItem>
-            ))}
-          </>
-        )}
-      </Popover>
-    </div>
-  );
-}
-
-/** Files of a page that gathers: below it, or used in an entry below it (same as the query unter:diese). */
-function filesBelow(item: Item, ix: Index): Item[] {
-  return runQuery({ where: { and: [{ file: true }, { under: { id: item.id } }] }, sort: [{ key: "created", desc: true }] }, { ix, thisId: item.id }).items;
-}
-
-/** Notes (entries without a type) on every level below, for pages that gather like a project. */
-function notesBelow(item: Item, ix: Index): Item[] {
-  const hidden = shownByBlocks(item, ix);
-  return [...ix.descendants(item.id)]
-    .map((id) => ix.get(id)!)
-    .filter((x) => x && x.kind === "info" && !ix.typeOf(x) && !hidden.has(x.id))
-    .sort((a, b) => b.updated - a.updated);
-}
-
-/**
- * "Darunter" (design rules § 3.1, zone 4): what lies below the page and is not shown above. A page
- * that gathers (a project) shows notes and files of all levels.
- */
-export function BelowCard({ item, exclude, gathers }: { item: Item; exclude: Set<string>; gathers: boolean }) {
-  const { t, lang } = useT();
-  const ix = useIndex();
-  const [more, setMore] = useState<Set<string>>(new Set());
-  const hidden = shownByBlocks(item, ix);
-  const isNote = (x: Item) => x.kind === "info" && !ix.typeOf(x);
-  const direct = ix.items(ix.childrenOf(item.id)).filter((c) => !c.deleted && !hidden.has(c.id) && !exclude.has(c.id) && !(c.type && exclude.has("type:" + c.type)));
-  const notes = gathers ? notesBelow(item, ix) : direct.filter(isNote);
-  const files = gathers ? filesBelow(item, ix) : direct.filter((c) => c.kind === "datei");
-  const rest = direct.filter((c) => !isNote(c) && c.kind !== "datei");
-  const byType = new Map<string, Item[]>();
-  for (const c of rest) (byType.get(c.type ?? "") ?? byType.set(c.type ?? "", []).get(c.type ?? "")!).push(c);
-  const groups: { key: string; label: string; items: Item[] }[] = [
-    ...(notes.length ? [{ key: "notes", label: t("below.untyped"), items: notes }] : []),
-    ...(files.length ? [{ key: "files", label: t("below.files"), items: files }] : []),
-    ...[...byType.entries()].sort((a, b) => (ix.typeName(a[0]) ?? "").localeCompare(ix.typeName(b[0]) ?? "")).map(([k, items]) => ({ key: "type:" + k, label: listTitle(ix, k, false) || (ix.typeName(k) ?? ""), items })),
-  ];
-  const count = groups.reduce((n, g) => n + g.items.length, 0);
-  if (!count) return null;
-  const right = (x: Item) =>
-    x.file ? (
-      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{fmtBytes(lang, x.file.size)}</span>
-    ) : isNote(x) ? (
-      <span className="shrink-0 text-xs text-muted-foreground"><RelTime ts={x.updated} /></span>
-    ) : (
-      <DueLabel due={dueOf(x, ix.schemaOf(x))} />
-    );
-  return (
-    <section className="mt-10 max-md:mt-8">
-      <SectionTitle count={count}>{t("below.title")}</SectionTitle>
       <Card className="overflow-hidden">
-        {groups.map((g) => {
-          const all = more.has(g.key);
-          return (
-            <div key={g.key}>
-              <p className="px-3 pb-1 pt-2.5 text-xs font-semibold text-muted-foreground">{g.label}</p>
-              {(all ? g.items : g.items.slice(0, FEW)).map((x) => {
-                const rel = gathers ? (ix.relPath(item.id, x.id) ?? []) : [];
-                return (
-                  <a key={x.id} href={itemHref(x.id)} data-id={x.id} className="flex min-h-11 items-center gap-2.5 border-t border-line px-3 py-1.5 first-of-type:border-t-0 hover:bg-hover max-md:min-h-[52px]">
-                    <ItemIcon item={x} size={15} className="shrink-0" />
-                    <span className="flex min-w-0 flex-1 flex-col">
-                      <span className="truncate text-sm max-md:text-[15px]">{titleOf(x, t)}</span>
-                      {rel.length > 0 && <span className="truncate text-xs text-muted-foreground">{shortPath(rel)}</span>}
-                    </span>
-                    {right(x)}
-                  </a>
-                );
-              })}
-              {g.items.length > FEW && (
-                <Button variant="plain" onClick={() => setMore(new Set(all ? [...more].filter((k) => k !== g.key) : [...more, g.key]))} className="tap-y block w-full border-t border-line px-3 py-2 text-left text-[13px] text-muted-foreground hover:text-fg">
-                  {all ? t("notes.fewer") : t("notes.all", { count: g.items.length })}
-                </Button>
-              )}
-            </div>
-          );
-        })}
+        {addRow}
+        {keys.map((g) => (
+          <div key={g}>
+            <p className="px-3 pb-1.5 pt-3 text-xs font-semibold text-muted-foreground first:pt-2.5">{label(g)}</p>
+            {groups
+              .get(g)!
+              .sort(cmp)
+              .map((x) => row(x, 0, new Set([item.id])))}
+            {g !== "files" && (
+              <div className="border-t border-line px-1">
+                <AddRow label={typeName(g === "notes" ? null : g)} onAdd={(title) => create(title, g === "notes" ? null : g)} />
+              </div>
+            )}
+          </div>
+        ))}
+        {doneCount > 0 && (
+          <div className="flex min-h-10 items-center border-t border-line px-3 text-[13px] text-muted-foreground">
+            <Button variant="plain" onClick={() => setView({ showDone: !view.showDone })} className="tap-y ml-auto whitespace-nowrap hover:text-fg">
+              {view.showDone ? t("children.doneHide") : t("children.doneShow", { count: doneCount })}
+            </Button>
+          </div>
+        )}
       </Card>
     </section>
   );

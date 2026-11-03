@@ -11,7 +11,7 @@ import {
   parseWikiLinks,
   titleKey,
 } from "./model";
-import { blockingProps, dueOf, isDone, ownList, progressSpec, statusOf, statusProp } from "./traits";
+import { blockingProps, dueOf, isDone, progressSpec, statusOf, statusProp } from "./traits";
 import { isPausedOption, sameTypeName } from "./input";
 import { pluralOf } from "./plural";
 import { cmpKey } from "./sortkey";
@@ -498,29 +498,6 @@ export class Index {
   isContainer(item: Item | undefined): boolean {
     const p = progressSpec(this.schemaOf(item));
     return !!item && !!p && p.of !== item.type;
-  }
-
-  /**
-   * Types with "Eigene Liste" among the entries below the page, each with its own list there. Children of
-   * the page's own type (sub-projects) are looked through: their entries count, and they become
-   * groups of those lists. Only when nothing else is below do they get the list ("Unter-Tasks").
-   */
-  listTypes(item: Item): string[] {
-    const own = item.type;
-    const found = new Set<string>();
-    let ownBelow = false;
-    const seen = new Set<string>();
-    const walk = (id: string) => {
-      for (const c of this.items(this.childrenOf(id))) {
-        if (c.deleted || seen.has(c.id) || !c.type || !this.types.has(c.type) || !ownList(this.schemaOf(c))) continue;
-        seen.add(c.id);
-        if (c.type === own) (ownBelow = true), walk(c.id);
-        else found.add(c.type);
-      }
-    };
-    walk(item.id);
-    if (found.size) return [...found].sort((a, b) => (this.typeName(a) ?? "").localeCompare(this.typeName(b) ?? ""));
-    return ownBelow && own ? [own] : [];
   }
 
   /**

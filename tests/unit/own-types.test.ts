@@ -3,7 +3,7 @@
 import { test, expect } from "bun:test";
 import { MemRepo } from "../support/helpers";
 import { runSetup, SYS } from "@obtion/core/setup";
-import { type PropDef, removeProp, setCapability, upsertProp } from "@obtion/core/model";
+import { type PropDef, removeProp, upsertProp } from "@obtion/core/model";
 import { deleteType } from "@obtion/core/typeops";
 import { matchOption, statusShape } from "@obtion/core/input";
 import { activeProjects } from "@obtion/core/today";
@@ -99,24 +99,6 @@ test("progress on a deleted type filters nothing", () => {
   expect(activeProjects(ix).map((x) => x.item.id)).toEqual([plan]); // still counts progress of others
 });
 
-test("a page lists each type with a status below it; sub-entries of its own type are looked through", () => {
-  const m = ownTypes();
-  const plan = m.add({ title: "Umzug", type: "t_plan", props: { p_state: "v_on" } });
-  const part = m.add({ title: "Küche", type: "t_plan", parents: [plan], props: { p_state: "v_on" } });
-  const note = m.add({ title: "Notiz", parents: [plan] });
-  let ix = m.index();
-  expect(ix.listTypes(ix.get(plan)!)).toEqual(["t_plan"]); // only sub-plans: they are the list
-  expect(ix.listTypes(ix.get(note)!)).toEqual([]);
-  const step = m.add({ title: "Kartons", type: "t_step", parents: [part], props: { p_state: "s_new" } });
-  m.add({ title: "Teller", type: "t_step", parents: [step], props: { p_state: "s_new" } });
-  ix = m.index();
-  expect(ix.listTypes(ix.get(plan)!)).toEqual(["t_step"]); // steps below the sub-plan; the sub-plan is a group
-  expect(ix.listTypes(ix.get(step)!)).toEqual(["t_step"]); // sub-steps
-  m.add({ title: "Umzug planen", type: "t_plan", parents: [note], props: { p_state: "v_on" } });
-  ix = m.index();
-  expect(ix.listTypes(ix.get(note)!)).toEqual(["t_plan"]); // a note looks through nothing
-});
-
 test("a word for paused finds the option marked paused, not one only called so", () => {
   const p: PropDef = {
     id: "p",
@@ -143,18 +125,4 @@ test("progress comes from the computed property; old types read the capability u
   m.change("t_old", (doc) => removeProp(doc, "p_pr"));
   s = m.index().types.get("t_old")!.schema;
   expect(progressSpec(s)).toBeUndefined(); // removing it turns the bar off
-});
-
-test("\"Eigene Liste\" decides which types get a list; unset follows the status", () => {
-  const m = ownTypes();
-  m.addType("t_book", { name: "Buch" });
-  const plan = m.add({ title: "Umzug", type: "t_plan", props: { p_state: "v_on" } });
-  m.add({ title: "Kartons", type: "t_step", parents: [plan], props: { p_state: "s_new" } });
-  m.add({ title: "Ratgeber", type: "t_book", parents: [plan] });
-  let ix = m.index();
-  expect(ix.listTypes(ix.get(plan)!)).toEqual(["t_step"]); // a status, nothing set: on; no status: off
-  m.change("t_step", (doc) => setCapability(doc, "list", "off"));
-  m.change("t_book", (doc) => setCapability(doc, "list", "on"));
-  ix = m.index();
-  expect(ix.listTypes(ix.get(plan)!)).toEqual(["t_book"]);
 });
