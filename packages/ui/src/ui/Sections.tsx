@@ -172,16 +172,12 @@ export function BelowCard({ item, exclude, gathers, quietAdd }: { item: Item; ex
   const hidden = shownByBlocks(item, ix);
   const isNote = (x: Item) => x.kind === "info" && !ix.typeOf(x);
   const direct = ix.items(ix.childrenOf(item.id)).filter((c) => !c.deleted && !hidden.has(c.id) && !exclude.has(c.id) && !(c.type && exclude.has("type:" + c.type)));
-  // without a type: overviews (they have entries below) apart from notes
-  const untyped = gathers ? notesBelow(item, ix) : direct.filter(isNote);
-  const overviews = untyped.filter((c) => ix.childrenOf(c.id).length > 0);
-  const notes = untyped.filter((c) => !overviews.includes(c));
+  const notes = gathers ? notesBelow(item, ix) : direct.filter(isNote);
   const files = gathers ? filesBelow(item, ix) : direct.filter((c) => c.kind === "datei");
   const rest = direct.filter((c) => !isNote(c) && c.kind !== "datei");
   const byType = new Map<string, Item[]>();
   for (const c of rest) (byType.get(c.type ?? "") ?? byType.set(c.type ?? "", []).get(c.type ?? "")!).push(c);
   const groups: { key: string; label: string; items: Item[] }[] = [
-    ...(overviews.length ? [{ key: "overviews", label: t("below.overviews"), items: overviews }] : []),
     ...(notes.length ? [{ key: "notes", label: t("below.untyped"), items: notes }] : []),
     ...(files.length ? [{ key: "files", label: t("below.files"), items: files }] : []),
     ...[...byType.entries()].sort((a, b) => (ix.typeName(a[0]) ?? "").localeCompare(ix.typeName(b[0]) ?? "")).map(([k, items]) => ({ key: "type:" + k, label: listTitle(ix, k, false) || (ix.typeName(k) ?? ""), items })),

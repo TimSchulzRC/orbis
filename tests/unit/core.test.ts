@@ -5,7 +5,7 @@ import { type TypeSchema, initSchema, readSchema } from "@obtion/core/model";
 import { initialProps, optionIds, statusProp } from "@obtion/core/traits";
 import { addParent, readItem, removeParent, setMeta, setProp, setSettings, initItem, META_TYPE, SETTINGS_ID, touchOnTextEdit } from "@obtion/core/model";
 import { keyBetween, keysFor } from "@obtion/core/sortkey";
-import { isInInbox, isOverview, inbox, laterItems, sidebarRoots, sidebarChildren } from "@obtion/core/placement";
+import { isInInbox, inbox, laterItems, sidebarRoots, sidebarChildren } from "@obtion/core/placement";
 import { runSetup, restoreDefaultTypes, resetInbox, SYS } from "@obtion/core/setup";
 import { parseQuery, printQuery, runQuery } from "@obtion/core/query";
 import { CATALOGS } from "@obtion/core/i18n";
@@ -81,7 +81,7 @@ describe("Teil von", () => {
   });
 });
 
-describe("inbox and overviews", () => {
+describe("inbox and sidebar", () => {
   test("inbox = no type and no parent; refs, links and tags do not count", () => {
     const m = new MemRepo();
     runSetup(m.writer, "de");
@@ -113,7 +113,7 @@ describe("inbox and overviews", () => {
     expect(ix.usedIn(img).length).toBe(1);
   });
 
-  test("an overview is any information with children; pinned items form the top of the sidebar", () => {
+  test("pinned items form the top of the sidebar", () => {
     const m = new MemRepo();
     runSetup(m.writer, "de");
     const arbeit = m.add({ title: "Arbeit", pinned: "V" });
@@ -125,9 +125,6 @@ describe("inbox and overviews", () => {
     const steuer = m.add({ title: "Steuererklärung 2025", type: SYS.project, parents: [kunden], pinned: "X" });
     const ix = m.index();
     expect(sidebarRoots(ix).map((i) => i.title)).toEqual(["Arbeit", "Gewerbe", "Steuererklärung 2025"]);
-    expect(isOverview(ix.get(arbeit)!, ix)).toBe(true);
-    expect(isOverview(ix.get(gewerbe)!, ix)).toBe(false);
-    expect(isOverview(ix.get(kunden)!, ix)).toBe(true); // has a child (the pinned project)
     expect(isInInbox(ix.get(gewerbe)!, ix)).toBe(false);
     // all children, whatever the type; done ones not, except the open page; pinned items also below their parent
     expect(sidebarChildren(arbeit, ix).map((i) => i.id).sort()).toEqual([kunden, open, card].sort());
@@ -145,7 +142,6 @@ describe("inbox and overviews", () => {
     m.add({ title: "Notiz 1", parents: [kw] });
     let ix = m.index();
     expect(isInInbox(ix.get(kw)!, ix)).toBe(true);
-    expect(isOverview(ix.get(kw)!, ix)).toBe(true);
     m.change(kw, (d) => setMeta(d, { pinned: "V" }));
     ix = m.index();
     expect(isInInbox(ix.get(kw)!, ix)).toBe(false);
@@ -251,7 +247,7 @@ describe("zero types", () => {
     runSetup(m.writer, "en");
     expect(m.get(SYS.task)!.schema!.name).toBe("Task");
     expect(m.get(SYS.card)!.schema!.name).toBe("Card");
-    expect(m.index().types.size).toBe(3); // Karte, Projekt, Task – no overview type
+    expect(m.index().types.size).toBe(3); // Karte, Projekt, Task
     m.change(SYS.task, (d) => setMeta(d, { deleted: true }));
     expect(m.index().types.has(SYS.task)).toBe(false);
     expect(restoreDefaultTypes(m.writer, "en")).toEqual([SYS.task]);

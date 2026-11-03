@@ -1,5 +1,4 @@
-// An overview is not a type: any information with children is one. Done items are hidden in the
-// sidebar but stay in "Darunter", the type's page and search. Pinning counts as a place, so pinned
+// Done items are hidden in the sidebar but stay in "Darunter", the type's page and search. Pinning counts as a place, so pinned
 // items are never in the inbox.
 import { type Item, META_TYPE, isContent } from "./model";
 import type { Index } from "./graph";
@@ -7,10 +6,6 @@ import { isDone } from "./traits";
 import { matches } from "./query";
 import { inboxWhere } from "./inbox";
 import { cmpKey } from "./sortkey";
-
-export function isOverview(item: Item, ix: Index): boolean {
-  return item.kind === "info" && ix.childrenOf(item.id).length > 0;
-}
 
 export function hasPlace(item: Item, ix: Index): boolean {
   return !!item.pinned || ix.parentsOf(item.id).length > 0;

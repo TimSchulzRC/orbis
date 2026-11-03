@@ -96,7 +96,7 @@ async function check(page: Page, label: string, path: string, errors: string[], 
 }
 
 const ROUTES = ["/", "/#/inbox", "/#/review", "/#/graph", "/#/activity", "/#/trash", "/#/settings", "/#/nope", "/#/i/sys%3Aproject", "/#/i/sys%3Atask", "/#/i/sys%3Acard", "/#/i/ex-type-book", "/#/files", "/#/files?kind=bild"];
-// one page per kind: overview, article with translation, project, sub-project, task, card, note,
+// one page per kind: note with entries below, article with translation, project, sub-project, task, card, note,
 // inbox item, inbox bundle, course, book, image, PDF, query page, welcome note
 const ITEMS = ["ex-work", "ex-art-de", "ex-relaunch", "ex-design", "ex-t-pages", "ex-k-nf", "ex-n-lecture", "ex-i-podcast", "ex-i-trip", "ex-course", "ex-b-moor", "ex-f-diagram", "ex-f-sheet", "ex-week", "ex-welcome"];
 

@@ -46,7 +46,7 @@ import {
 import type { Index } from "@obtion/core/graph";
 import { blocksAsText, matches, normalizeBlocks, parseQuery, printQuery, runQuery, relDate, tabDef, typesIn, type Cond, type QueryDef } from "@obtion/core/query";
 import { inboxWhere } from "@obtion/core/inbox";
-import { isInInbox, isOverview } from "@obtion/core/placement";
+import { isInInbox } from "@obtion/core/placement";
 import { caps, doneAt, dueOf, dueProp, firstOfGroup, hasUpdates, initialProps, statusOf, statusProp, template, useAsStatus, writeProp } from "@obtion/core/traits";
 import { previewTagToType, typeUsage } from "@obtion/core/typeops";
 import { excerpt, searchHits, searchIds } from "@obtion/core/search";
@@ -161,7 +161,7 @@ const OPTION_PARTS = /^(.*?)(?:\s*\((todo|active|done)(?:,\s*(paused|dropped))?\
 const DOWNLOAD_TIMEOUT_MS = 30_000;
 
 /** What an untyped item is, by its place. */
-const placeKind = (i: Item, ix: Index) => (isInInbox(i, ix) ? "inbox" : isOverview(i, ix) ? "overview" : "note");
+const placeKind = (i: Item, ix: Index) => (isInInbox(i, ix) ? "inbox" : "note");
 
 /** An option name ("Pausiert") wins over the group it belongs to. */
 function optionNamed(p: PropDef, name: string): OptionDef | undefined {
@@ -303,7 +303,7 @@ export class Ops {
       notes: [
         "Items without a type, without a parent and not pinned are in the inbox (its query, see inbox.query, decides).",
         "Every type has its page: a list of its entries with views as tabs (see views; change them with update_type).",
-        "Any item with children is an overview (not a type). Belonging comes from children (part of); [[links]] are only mentions.",
+        "Belonging comes from children (part of); [[links]] are only mentions.",
         "Pinned items form the top of the sidebar and count as a place.",
         "Property values are given by property name; options by name; relations by title or id.",
       ],
@@ -810,7 +810,7 @@ export class Ops {
     const ix = this.store.index();
     if (i.type === META_TYPE) return "type";
     if (i.kind === "datei") return "file";
-    return this.typeName(i.type) ?? (isInInbox(i, ix) ? "inbox" : isOverview(i, ix) ? "overview" : "note");
+    return this.typeName(i.type) ?? (isInInbox(i, ix) ? "inbox" : "note");
   }
 
   /** A type's name, also of a deleted type. */

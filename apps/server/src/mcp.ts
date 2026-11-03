@@ -18,7 +18,7 @@ const INSTRUCTIONS = `Obtion is the user's personal system for knowledge and wor
 
 The model:
 - Everything is an information (title, Markdown body, tags, refs) or a file. An information has at most one type. Types are data: call \`schema\` first – it lists every type with its description, properties (with options) and capabilities. Follow the descriptions. Never assume a type exists because of its name.
-- "Part of" (place) builds the tree: an item can have several parents, one is its home. Any item with children is an overview – that is not a type. Links ([[Title]]) and refs are mentions; they connect without sorting. Relations are typed properties.
+- "Part of" (place) builds the tree: an item can have several parents, one is its home. Links ([[Title]]) and refs are mentions; they connect without sorting. Relations are typed properties.
 - Pinned items form the top of the sidebar (place with pin:true); pinning counts as a place.
 - An information without a type, without a parent and not pinned is in the inbox (precisely: whatever the inbox query matches, see \`schema\`). Without a type but with a parent it is a note.
 - Capabilities say what a type can do: a status with groups (todo/active/done), a due date ("Termin"), progress over descendants with a status, dated updates, a main action (which type "+" creates as a child).
@@ -316,7 +316,7 @@ function buildMcpServer(store: Store, origin: string, blobs?: Blobs, lang: Lang 
   server.registerPrompt("process_inbox", { title: "Process the inbox", description: "Go through the inbox and suggest a type and a place for each item." }, () =>
     userPrompt(`Go through my inbox (today is ${todayISO()}).
 1. Read the types and their descriptions with schema, then the inbox with query "inbox".
-2. For each item (oldest first): get it, look at what it mentions and links, and search for similar items and likely places (overviews, projects).
+2. For each item (oldest first): get it, look at what it mentions and links, and search for similar items and likely places (items with entries below, projects).
 3. Suggest a type and/or a place with suggest – only where it is clear. Leave unclear items alone and say why. Don't place, type or delete anything yourself; I accept suggestions in the app.
 4. End with a short list: item → suggestion, and the items you left alone.`),
   );

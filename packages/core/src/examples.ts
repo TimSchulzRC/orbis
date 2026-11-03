@@ -194,7 +194,7 @@ Connect an MCP client in the workspace settings to read and change your entries 
       L("Alles rund um den Job. Projekte, Kunden, Besprechungen.\n\n", "Everything about the job. Projects, clients, meetings.\n\n") +
       block({ title: L("Aktive Projekte", "Active projects"), where: { and: [{ type: SYS.project }, { under: here }, { status: "active" }] }, columns: ["progress", "next"] }),
   });
-  const clients = put("ex-clients", { title: L("Kunden", "Clients"), parents: [work], body: L("Eine Übersicht pro Kunde. Projekte hängen zusätzlich hier.\n", "One overview per client. Projects also live here.\n") });
+  const clients = put("ex-clients", { title: L("Kunden", "Clients"), parents: [work], body: L("Eine Seite pro Kunde. Projekte hängen zusätzlich hier.\n", "One page per client. Projects also live here.\n") });
   const nordlicht = put("ex-nordlicht", {
     title: customerTitle,
     parents: [clients],
