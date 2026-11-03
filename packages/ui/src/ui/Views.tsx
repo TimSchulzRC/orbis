@@ -208,7 +208,7 @@ interface FilterDraft {
 }
 
 /** The look is saved at once; the filter stays a draft until "Speichern". */
-export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter, onClose, kinds = TAB_KINDS, flat }: { tab: ViewTab; fields: ViewField[]; columns?: string[]; groups?: Group[]; onLook: (patch: Partial<ViewTab>) => void; filter?: FilterDraft; onClose: () => void; kinds?: ViewKind[]; /** inside a card (a query block): no card of its own, no kind switch and no close button */ flat?: boolean }) {
+export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter, onClose, kinds = TAB_KINDS, part }: { tab: ViewTab; fields: ViewField[]; columns?: string[]; groups?: Group[]; onLook: (patch: Partial<ViewTab>) => void; filter?: FilterDraft; onClose: () => void; kinds?: ViewKind[]; /** one part only, for a popover (a query block's tools): no card, kind switch, filter or close button */ part?: "sort" | "group" | "more" }) {
   const { t } = useT();
   const ix = useIndex();
   const hasStatus = [...ix.types.values()].some((x) => statusProp(x.schema));
@@ -233,12 +233,13 @@ export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter
   const patchSort = (n: number, patch: (s: (typeof sorts)[number]) => Partial<(typeof sorts)[number]>) => onLook({ sort: sorts.map((x, m) => (m === n ? { ...x, ...patch(x) } : x)) });
   const isShown = (key: string) => shown.some((k) => titleKey(k) === titleKey(key));
   // the shown ones first, in their order, then the others
-  const Box = flat ? "div" : Card;
+  const Box = part ? "div" : Card;
+  const shows = (x: "sort" | "group" | "more") => !part || part === x;
   const columnFields = [...shown.map((k) => fields.find((f) => titleKey(f.key) === titleKey(k)) ?? { key: k, label: fieldLabel(k, t, fields), kind: "text" as const }), ...fields.filter((f) => !isShown(f.key))];
   return (
-    <Box className={cn("mb-4 space-y-3 p-3 text-sm", flat && "rounded-lg bg-surface-2/50")}>
+    <Box className={cn("space-y-3 text-sm", !part && "mb-4 p-3")}>
       {/* in a query block another kind is another tab: add it with "+" and remove the old one */}
-      {!flat && (
+      {!part && (
         <div className="flex items-start gap-2">
           <div className="min-w-0 flex-1 overflow-x-auto [scrollbar-width:none]">
             <Seg label={t("view.label")} value={tab.kind} onChange={(k) => onLook({ kind: k })} options={kindsHere.map((k) => ({ value: k, label: t("view." + k) }))} />
@@ -247,7 +248,7 @@ export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter
         </div>
       )}
 
-      {filter && <div>
+      {filter && !part && <div>
         <p className="mb-1 text-xs text-muted-foreground">{t("view.filter")}</p>
         <QueryEditor def={{ where: filter.where }} onChange={(d) => filter.onChange(d.where)} />
         {filter.dirty && (
@@ -255,7 +256,7 @@ export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter
         )}
       </div>}
 
-      {groupedKind && (
+      {groupedKind && shows("group") && (
         <div className={row}>
           <span className={label}>{t("view.groupBy")}</span>
           <NativeSelect value={tab.group ?? ""} onChange={(e) => onLook({ group: e.target.value || undefined })} className={select} aria-label={t("view.groupBy")}>
@@ -274,15 +275,15 @@ export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter
           )}
         </div>
       )}
-      {tab.group && groups.length > 1 && groupedKind && (
+      {tab.group && groups.length > 1 && groupedKind && shows("group") && (
         <div className={cn(row, "items-start")}>
           <span className={cn(label, "pt-1")}>{t("view.visibleGroups")}</span>
           <ul className="flex min-w-0 flex-1 flex-wrap gap-x-3 gap-y-1.5">
             {groups.map((g) => {
               const hidden = (tab.hiddenGroups ?? []).includes(groupId(g));
               return (
-                <li key={g.key || "_"}>
-                  <label className="flex cursor-pointer items-center gap-1.5">
+                <li key={g.key || "_"} className="min-w-0 max-w-full">
+                  <label className="flex min-w-0 cursor-pointer items-center gap-1.5">
                     <Checkbox
                       checked={!hidden}
                       onCheckedChange={(checked) => onLook({ hiddenGroups: checked === true ? (tab.hiddenGroups ?? []).filter((x) => x !== groupId(g)) : [...(tab.hiddenGroups ?? []), groupId(g)] })}
@@ -295,7 +296,7 @@ export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter
           </ul>
         </div>
       )}
-      {tab.kind === "board" && (
+      {tab.kind === "board" && shows("group") && (
         <div className={row}>
           <span className={label}>{t("view.subgroup")}</span>
           <NativeSelect value={tab.subgroup ?? ""} onChange={(e) => onLook({ subgroup: e.target.value || undefined })} className={select} aria-label={t("view.subgroup")}>
@@ -308,7 +309,7 @@ export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter
           </NativeSelect>
         </div>
       )}
-      {(tab.kind === "calendar" || tab.kind === "timeline") && (
+      {(tab.kind === "calendar" || tab.kind === "timeline") && shows("more") && (
         <div className={row}>
           <span className={label}>{t("view.date")}</span>
           <NativeSelect value={tab.date ?? ""} onChange={(e) => onLook({ date: e.target.value || undefined })} className={select} aria-label={t("view.date")}>
@@ -322,7 +323,7 @@ export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter
         </div>
       )}
 
-      {tab.kind !== "triage" && (
+      {tab.kind !== "triage" && shows("sort") && (
         <div className={row}>
           <span className={label}>{t("view.sort")}</span>
           <div className="flex flex-wrap items-center gap-1.5">
@@ -354,7 +355,7 @@ export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter
       )}
 
       {/* properties: columns of a table, lines on board cards (lists and galleries show their own) */}
-      {(tab.kind === "table" || tab.kind === "board") && (
+      {(tab.kind === "table" || tab.kind === "board") && shows("more") && (
         <div className={cn(row, "items-start")}>
           <span className={cn(label, "pt-1")}>{tab.kind === "table" ? t("view.columns") : t("view.cardProps")}</span>
           <ul className="flex min-w-0 flex-1 flex-wrap gap-1.5">
