@@ -101,7 +101,7 @@ function belongs(where: Cond | undefined, c: PropChange, ix: Index): boolean {
  * On removal it also leaves the template and the status and due capabilities.
  */
 export function followPropChange(w: Writer, ix: Index, c: PropChange, lang: Lang) {
-  if (c.to !== null && titleKey(c.to) === titleKey(c.from) && c.to.trim() === c.from.trim()) return;
+  if (c.to !== null && c.to.trim() === c.from.trim()) return;
   const type = ix.types.get(c.type);
   if (type) {
     const tabs = typeTabs(type, lang);
@@ -153,6 +153,7 @@ function followInItem(w: Writer, ix: Index, item: Item, c: PropChange) {
     let out = "";
     let pos = 0;
     for (const b of blocks) {
+      // text-form blocks become JSON when the page is saved next; until then they stay as typed
       const { def, wasText } = readBlock(b.src, ix);
       const next = !wasText && belongs(def.where, c, ix) ? mapQuery(def, c) : def;
       out += item.body.slice(pos, b.from) + (same(def, next) ? item.body.slice(b.from, b.to) : queryFence(blockSource(next)));
@@ -161,8 +162,10 @@ function followInItem(w: Writer, ix: Index, item: Item, c: PropChange) {
     out += item.body.slice(pos);
     if (out !== item.body) body = out;
   }
-  const inbox = item.id === SETTINGS_ID && item.settings?.inbox && belongs(item.settings.inbox, c, ix) ? mapCond(item.settings.inbox, c) : undefined;
-  const inboxChanged = item.id === SETTINGS_ID && item.settings?.inbox && inbox !== undefined && !same(inbox, item.settings.inbox);
+  // an inbox rule left empty would mean the default rule, so one that only filtered on it stays
+  const rule = item.id === SETTINGS_ID ? item.settings?.inbox : undefined;
+  const inbox = rule && belongs(rule, c, ix) ? mapCond(rule, c) : undefined;
+  const inboxChanged = inbox !== undefined && !same(inbox, rule);
   if (!views.length && body === null && !inboxChanged) return;
   w.change(item.id, (doc) => {
     for (const [id, v] of views) setView(doc, id, v);
