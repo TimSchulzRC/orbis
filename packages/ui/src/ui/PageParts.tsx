@@ -332,7 +332,15 @@ export function LinksRow({ item }: { item: Item }) {
         <span
           key={x.id}
           draggable
-          onDragStart={(e) => (e.dataTransfer.setData("obtion/ref", x.id), (e.dataTransfer.effectAllowed = "move"), setDrag(x.id))}
+          onDragStart={(e) => {
+            // the chip is dragged, not its link: no URL to drop elsewhere, the chip itself under the pointer
+            e.dataTransfer.clearData();
+            e.dataTransfer.setData("obtion/ref", x.id);
+            e.dataTransfer.effectAllowed = "move";
+            const box = e.currentTarget.getBoundingClientRect();
+            e.dataTransfer.setDragImage(e.currentTarget, e.clientX - box.left, e.clientY - box.top);
+            setDrag(x.id);
+          }}
           onDragEnd={end}
           onDragOver={(e) => aim(e, x.id)}
           onKeyDown={(e) => {
@@ -342,14 +350,14 @@ export function LinksRow({ item }: { item: Item }) {
           }}
           data-ref={x.id}
           className={cn(
-            "group relative inline-flex max-w-full cursor-grab items-center gap-1 rounded-md bg-surface-2 py-0.5 pl-1.5 pr-0.5 text-[13px] active:cursor-grabbing",
+            "group relative inline-flex max-w-full cursor-grab select-none items-center gap-1 rounded-md bg-surface-2 py-0.5 pl-1.5 pr-0.5 text-[13px] active:cursor-grabbing",
             drag === x.id && "opacity-50",
           )}
         >
           {/* the line where the chip would land, in the middle of the gap */}
           {at === x.id && <span aria-hidden data-drop-line className={cn(line, "-left-1")} />}
           {at === null && n === ids.length - 1 && <span aria-hidden data-drop-line className={cn(line, "-right-1")} />}
-          <ItemLink item={x} className="min-w-0" />
+          <ItemLink item={x} draggable={false} className="min-w-0" />
           {inText.has(x.id) ? (
             // pinned from the text: the pin says why it is here, hovered it turns into the ×
             <Button variant="plain" onClick={() => repo.setMember(item.id, "refs", x.id, false)} aria-label={t("links.unpin")} title={t("links.unpin")} className="tap inline-flex items-center justify-center rounded p-0.5 text-muted-foreground transition-colors hover:bg-hover hover:text-fg">
