@@ -208,8 +208,9 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
       <PageText item={item} doc={doc} long={typeArea} isNew={isNew} onView={setView} hasMore={typeArea || ix.childrenOf(item.id).length > 0} />
       <Input variant="bare" ref={fileInput} type="file" multiple className="hidden" onChange={(e) => view && insertFilesAtCursor(view, [...(e.target.files ?? [])])} />
 
-      {/* a line between the text one writes and what the page adds below it */}
-      <div className="mt-6 border-t border-line" />
+      {/* a line between the text one writes and what the page adds below it;
+          mt-7, not mt-6: the editor has 4px padding on top only, so the text sits in the middle */}
+      <div className="mt-7 border-t border-line" />
       <div className="page-below [&>:first-child]:mt-6">
         {/* 3 · the type's area: main list, updates */}
         {mainType && <ChildList item={item} typeId={mainType} />}
