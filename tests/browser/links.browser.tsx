@@ -19,7 +19,7 @@ test("the button counts links both ways and lists them; a ref outside the text c
   await render(<ItemPage id={id} isNew={false} />);
 
   // one incoming, two outgoing (one in the text, one set by hand)
-  const button = page.getByRole("button", { name: "3 Links" });
+  const button = page.getByRole("button", { name: "Links: 3" });
   await expect.element(button).toBeVisible();
   expect(page.getByText("Bezüge").query()).toBeNull();
   expect(page.getByText("Verlinkt von").query()).toBeNull();
@@ -35,15 +35,30 @@ test("the button counts links both ways and lists them; a ref outside the text c
   expect(menu.getByRole("button", { name: "Ref entfernen" }).elements()).toHaveLength(1);
   await menu.getByRole("button", { name: "Ref entfernen" }).click();
   await expect.poll(() => repo.get(id)!.refs).toEqual([]);
-  await expect.element(page.getByRole("button", { name: "2 Links" })).toBeVisible();
+  await expect.element(page.getByRole("button", { name: "Links: 2" })).toBeVisible();
 });
 
-test("no links, no button", async () => {
+test("no links, no link button; + after the chips adds a ref, the page menu no longer does", async () => {
   const repo = await workspace(false);
-  const id = repo.create({ title: "Allein", pinned: "a" });
+  const home = repo.create({ title: "Arbeit", pinned: "a" });
+  const roadmap = repo.create({ title: "Roadmap 2027", parents: [home] });
+  const id = repo.create({ title: "Allein", parents: [home] });
   await render(<ItemPage id={id} isNew={false} />);
   await expect.element(page.getByText("Allein").first()).toBeVisible();
-  expect(page.getByRole("button", { name: /Links$/ }).query()).toBeNull();
+  expect(page.getByRole("button", { name: /^Links:/ }).query()).toBeNull();
+
+  await page.getByRole("button", { name: "Mehr" }).first().click();
+  const pageMenu = page.getByRole("dialog");
+  await expect.element(pageMenu.getByRole("button", { name: "Verlauf" })).toBeVisible();
+  expect(pageMenu.getByRole("button", { name: "Ref hinzufügen" }).query()).toBeNull();
+  await page.getByRole("button", { name: "Mehr" }).first().click();
+
+  await page.getByRole("button", { name: "Ref hinzufügen" }).click();
+  const picker = page.getByRole("dialog", { name: "Ref hinzufügen" });
+  await picker.getByRole("textbox").fill("Roadmap");
+  await picker.getByText("Roadmap 2027").click();
+  await expect.poll(() => repo.get(id)!.refs).toEqual([roadmap]);
+  await expect.element(page.getByRole("button", { name: "Links: 1" })).toBeVisible();
 });
 
 test("refs show as chips after the link button; a link from the text can be pinned there", async () => {
@@ -60,10 +75,10 @@ test("refs show as chips after the link button; a link from the text can be pinn
   await expect.poll(() => chips().map((a) => a.textContent)).toEqual(["Roadmap 2027"]);
 
   // pinned from the menu, the link from the text shows as a chip too
-  await page.getByRole("button", { name: "2 Links" }).click();
+  await page.getByRole("button", { name: "Links: 2" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Oben anheften" }).click();
   await expect.poll(() => repo.get(id)!.refs).toEqual([roadmap, relaunch]);
-  await page.getByRole("button", { name: "2 Links" }).click(); // close the menu
+  await page.getByRole("button", { name: "Links: 2" }).click(); // close the menu
   await expect.poll(() => chips().map((a) => a.textContent)).toEqual(["Roadmap 2027", "Website-Relaunch"]);
 
   // its × unpins it; the link in the text stays

@@ -1,5 +1,6 @@
 // Parts every page shares, information and file pages alike (design rules § 3.1).
 import { ChevronRight, Link2, Pin, PinOff, Plus, RotateCcw, Star, X } from "lucide-react";
+import { useState } from "react";
 import { type Item, META_TYPE } from "@obtion/core/model";
 import { hasPlace, isInInbox } from "@obtion/core/placement";
 import { fmtDate, type T } from "@obtion/core/i18n";
@@ -10,6 +11,7 @@ import { useT, titleOf } from "../i18n";
 import { ItemIcon, ItemLink, RelTime } from "./item-look";
 import { Button, IconButton, MenuItem, MoreMenu, Popover, REVEAL } from "./primitives";
 import { Tip } from "../components/ui/tooltip";
+import { ItemPicker } from "./Picker";
 import { cn } from "../lib/utils";
 import { dateOf } from "@obtion/core/date";
 
@@ -251,21 +253,63 @@ function PlaceHere({ target, page }: { target: Item; page: Item }) {
   );
 }
 
+/** The refs shown in the head: set by hand, or links from the text that were pinned. */
+export function pinnedRefs(item: Item, ix: Index): Item[] {
+  return item.refs.map((id) => ix.get(id)).filter((x): x is Item => !!x && !x.deleted && x.id !== item.id);
+}
+
+/** "+" for another ref, with the item picker. `text` names it ("+ Ref"), for where no chip says what it adds. */
+function AddRef({ item, text }: { item: Item; text?: boolean }) {
+  const { t } = useT();
+  const [picking, setPicking] = useState(false);
+  if (item.deleted) return null;
+  return (
+    <>
+      <Tip label={t("item.addRef")}>
+        <Button
+          variant="plain"
+          onClick={() => setPicking(true)}
+          aria-label={t("item.addRef")}
+          className={cn("tap inline-flex items-center rounded-md text-muted-foreground transition-colors hover:bg-hover hover:text-fg", text ? "h-6 gap-0.5 px-1 text-xs" : "justify-center p-1")}
+        >
+          <Plus size={text ? 12 : 14} className="shrink-0" />
+          {text && <span className="px-1">{t("links.ref")}</span>}
+        </Button>
+      </Tip>
+      {picking && (
+        <ItemPicker
+          title={t("item.addRef")}
+          exclude={(x) => x.id === item.id || item.refs.includes(x.id)}
+          onPick={(x) => (repo.setMember(item.id, "refs", x, true), setPicking(false))}
+          onClose={() => setPicking(false)}
+        />
+      )}
+    </>
+  );
+}
+
+/** Without pinned refs, the links go after the tags: the link button (if anything is linked), then "+ Ref". */
+export function LinksInline({ item }: { item: Item }) {
+  return (
+    <>
+      <LinksMenu item={item} />
+      <AddRef item={item} text />
+    </>
+  );
+}
+
 /**
- * The row under type and tags: the link button first, then the refs as chips, the ones set by hand
- * and links from the text that were pinned. Nothing linked, no row.
+ * With pinned refs, a row of its own under type and tags: the link button first, then the refs as
+ * chips, then "+" for another one.
  */
 export function LinksRow({ item }: { item: Item }) {
   const ix = useIndex();
   const { t } = useT();
   const inText = new Set(ix.textLinks(item).map((l) => l.to));
-  const refs = item.refs.map((id) => ix.get(id)).filter((x): x is Item => !!x && !x.deleted && x.id !== item.id);
-  // every ref is in the menu as well, so no links means no refs either
-  if (!linkGroups(item, ix, t, []).length) return null;
   return (
     <div className="mt-2 flex flex-wrap items-center gap-1.5">
       <LinksMenu item={item} />
-      {refs.map((x) => (
+      {pinnedRefs(item, ix).map((x) => (
         <span key={x.id} className="group inline-flex max-w-full items-center gap-1 rounded-md bg-surface-2 py-0.5 pl-1.5 pr-0.5 text-[13px]">
           <ItemLink item={x} className="min-w-0" />
           <IconButton
@@ -278,6 +322,7 @@ export function LinksRow({ item }: { item: Item }) {
           />
         </span>
       ))}
+      <AddRef item={item} />
     </div>
   );
 }

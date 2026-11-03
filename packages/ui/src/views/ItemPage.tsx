@@ -3,7 +3,7 @@
 import { Input } from "../components/ui/input";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { EditorView } from "@codemirror/view";
-import { Trash2, Plus, AlertTriangle, ImagePlus, ListFilter, Pin, PinOff, FilePlus, FolderInput, Link2, ArrowRightLeft, History, Bot } from "lucide-react";
+import { Trash2, Plus, AlertTriangle, ImagePlus, ListFilter, Pin, PinOff, FilePlus, FolderInput, ArrowRightLeft, History, Bot } from "lucide-react";
 import { type Item, META_TYPE, titleKey } from "@obtion/core/model";
 import { isInInbox, isOverview } from "@obtion/core/placement";
 import { wouldBeInInbox } from "@obtion/core/typeops";
@@ -18,10 +18,9 @@ import { Tip } from "../components/ui/tooltip";
 import { ItemIcon, TypeChip, TypeGlyph } from "../ui/item-look";
 import { ProgressBand } from "../ui/progress";
 import { cn } from "../lib/utils";
-import { ItemPicker } from "../ui/Picker";
 import { PropertyBlock } from "../ui/Properties";
 import { BelowCard, ChildList, Updates, mainGrouping } from "../ui/Sections";
-import { Crumbs, LinksRow, PageFooter, TrashBanner } from "../ui/PageParts";
+import { Crumbs, LinksInline, LinksRow, PageFooter, TrashBanner, pinnedRefs } from "../ui/PageParts";
 import { PlacePicker } from "../ui/Picker";
 import { pluralOf } from "@obtion/core/plural";
 import { queryBlocks, insertQueryBlock } from "../ui/QueryBlock";
@@ -88,7 +87,6 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
   const [moving, setMoving] = useState(false);
   const [history, setHistory] = useState(false);
   const others = useAccounts().spaces.length > 1;
-  const [refPicking, setRefPicking] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
@@ -123,9 +121,6 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
         <>
           <MenuItem icon={<FolderInput size={14} />} onClick={() => (close(), setPlacing(true))}>
             {ix.parentsOf(item.id).length ? t("place.addAnother") : t("place.place")}
-          </MenuItem>
-          <MenuItem icon={<Link2 size={14} />} onClick={() => (close(), setRefPicking(true))}>
-            {t("item.addRef")}
           </MenuItem>
           <MenuItem icon={<ImagePlus size={14} />} onClick={() => (close(), fileInput.current?.click())}>
             {t("editor.addFile")}
@@ -197,7 +192,8 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
               </Button>
             </Tip>
           ),
-          links: <LinksRow item={item} />,
+          // pinned refs get a row of their own; without them the links fit after the tags
+          ...(pinnedRefs(item, ix).length ? { links: <LinksRow item={item} /> } : { afterTags: <LinksInline item={item} /> }),
           progress: progress && <ProgressBand done={progress.done} total={progress.total} desc={progressText(item, ix, progress.done, progress.total)} />,
         }}
       />
@@ -221,14 +217,6 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
         </Button>
       )}
       {placing && <PlacePicker list={[item]} title={t("place.add")} onPick={(pid) => (repo.addParent(item.id, pid), rememberPlace(pid), setPlacing(false))} onClose={() => setPlacing(false)} />}
-      {refPicking && (
-        <ItemPicker
-          title={t("item.addRef")}
-          exclude={(x) => x.id === item.id || item.refs.includes(x.id)}
-          onPick={(x) => (repo.setMember(item.id, "refs", x, true), setRefPicking(false))}
-          onClose={() => setRefPicking(false)}
-        />
-      )}
       {deleting && <DeleteDialog item={item} onClose={() => setDeleting(false)} />}
       {rulesOpen && <AgentRulesDialog item={item} onClose={() => setRulesOpen(false)} />}
       {moving && <MoveDialog item={item} onClose={() => setMoving(false)} />}
