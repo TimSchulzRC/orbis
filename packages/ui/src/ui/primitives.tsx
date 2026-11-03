@@ -2,7 +2,7 @@ import { ToggleGroup, ToggleGroupItem } from "../components/ui/toggle-group";
 import { Button as ShadcnButton } from "../components/ui/button";
 import { Dialog as DialogRoot, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { Popover as PopoverRoot, PopoverAnchor, PopoverContent } from "../components/ui/popover";
-import { type ComponentProps, type ComponentType, type MouseEvent, type ReactNode, useRef, useState } from "react";
+import { type ComponentProps, type ComponentType, type MouseEvent, type ReactNode, createContext, useRef, useState } from "react";
 import { X, Check, ChevronDown, MoreHorizontal, Plus } from "lucide-react";
 import { useT } from "../i18n";
 import { cn } from "../lib/utils";
@@ -136,6 +136,12 @@ export function SectionTitle({ children, count, right, className }: { children: 
     </div>
   );
 }
+
+/**
+ * Set by a card around a list (a query block): a list that brings its own card leaves it out
+ * and lines its outer edges up with the card's padding.
+ */
+export const InCard = createContext(false);
 
 /** Design rules § 2.9: never nest a card in a card. */
 export function Card({ className, ...rest }: ComponentProps<"div">) {

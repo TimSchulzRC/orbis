@@ -1,4 +1,4 @@
-import { createContext, useContext, useState } from "react";
+import { useContext, useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import { type Item, type ViewKind, todayISO } from "@obtion/core/model";
 import { type QueryDef, type EvalCtx, fieldOf, groupItems, pathBase, runQuery } from "@obtion/core/query";
@@ -16,7 +16,7 @@ import { BoardView } from "./Board";
 import { GalleryView } from "./Gallery";
 import { type Look, GroupedTable } from "./Table";
 import { HiddenGroups, fieldLabel, hiddenPatch, splitHidden } from "./groups";
-import { Card, Button } from "./primitives";
+import { Card, Button, InCard } from "./primitives";
 
 export function useQuery(def: QueryDef, thisId?: string) {
   const ix = useIndex();
@@ -56,9 +56,6 @@ function MissingTypes({ ids }: { ids: string[] }) {
     </p>
   );
 }
-
-/** Set by a card around the results (a query block): lists that bring their own card leave it out. */
-export const InCard = createContext(false);
 
 export function Results({ def, thisId, display, empty, keyPrefix = "", look }: { def: QueryDef; thisId?: string; display?: ViewKind; empty?: React.ReactNode; keyPrefix?: string; look?: Look }) {
   const { t } = useT();
