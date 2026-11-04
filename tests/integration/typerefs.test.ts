@@ -27,13 +27,12 @@ function page(where: object, columns: string[]): string {
 const blockOf = (id: string) => readBlock(findBlocks(s.records.get(id)!.body)[0]!.src, s.index()).def;
 
 test("renaming a property: the type's default views, pages on the type and its filters follow", () => {
-  expect(s.records.get(SYS.project)!.schema!.views).toBeUndefined();
+  expect(s.records.get(SYS.project)!.schema!.views).toBeDefined(); // setup writes the shipped views into the type
   const onType = page({ type: SYS.project }, ["Status", "Priorität"]);
   const anyType = page({ tag: "x" }, ["Priorität"]); // the task's "Priorität" may be meant
   ops.updateType("Projekt", { change_properties: [{ property: "Priorität", name: "Wichtigkeit" }] }, A);
   s.flush();
   const tabs = tabsOf(SYS.project);
-  expect(s.records.get(SYS.project)!.schema!.views).toBeDefined(); // stored so it could change
   expect(tabs.find((t) => t.id === "v_all")!.columns).toContain("Wichtigkeit");
   expect(tabs.flatMap((t) => t.columns ?? [])).not.toContain("Priorität");
   expect(blockOf(onType)).toMatchObject({ columns: ["Status", "Wichtigkeit"], sort: [{ key: "Wichtigkeit" }] });
