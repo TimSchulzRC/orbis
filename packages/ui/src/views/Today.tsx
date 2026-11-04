@@ -2,7 +2,7 @@
 import { Sun } from "lucide-react";
 import { type Item, SETTINGS_ID, todayISO } from "@obtion/core/model";
 import { fmtDate } from "@obtion/core/i18n";
-import { activeProjects, dueBy, recentlyChanged } from "@obtion/core/today";
+import { running, dueBy, recentlyChanged } from "@obtion/core/today";
 import { useDesktop, useIndex, useItemHref, useDocumentTitle } from "../hooks";
 import { useAccounts } from "../accounts";
 import { useT, titleOf } from "../i18n";
@@ -45,7 +45,7 @@ export function Today() {
   const perSpace = shown.map((s, n) => ({ space: s.id, ix: repos[n]!.get(SETTINGS_ID) ? repos[n]!.index() : undefined }));
   const all = <T,>(list: (ix: NonNullable<(typeof perSpace)[number]["ix"]>) => T[]): Of<T>[] => perSpace.flatMap((p) => (p.ix ? list(p.ix).map((value) => ({ space: p.space, value })) : []));
   const due = all((ix) => dueBy(ix, today)).sort((a, b) => cmpKey(a.value.due, b.value.due));
-  const projects = all((ix) => activeProjects(ix)).sort((a, b) => b.value.touched - a.value.touched);
+  const runs = all((ix) => running(ix)).sort((a, b) => b.value.touched - a.value.touched);
   const recent = all((ix) => recentlyChanged(ix, RECENT)).sort((a, b) => b.value.updated - a.value.updated).slice(0, RECENT);
   const several = shown.length > 1;
   const nameOf = (space: string) => (several ? shown.find((s) => s.id === space)?.name : undefined);
@@ -63,7 +63,7 @@ export function Today() {
       </p>
       <h1 className="mt-2 text-[34px] font-bold leading-[40px] tracking-[-0.02em] max-lg:text-[28px] max-lg:leading-[34px]">{name ? t(`today.greet.${part}`, { name }) : t(`today.greet.${part}Plain`)}</h1>
       <p className="mt-2 text-[15px] leading-6 text-muted-foreground">
-        {t("today.due", { count: due.length })} {projects.length > 0 && t("today.projects", { count: projects.length })}{" "}
+        {t("today.due", { count: due.length })} {runs.length > 0 && t("today.projects", { count: runs.length })}{" "}
         {inbox ? (
           <>
             {before}
@@ -83,7 +83,7 @@ export function Today() {
       {/* the panel not pinned below (too little room): the newest entries, a way into it */}
       {desktop && !pinned && inbox > 0 && <ShelfCards entries={entries} />}
 
-      <div className={cn("mt-9 grid items-start gap-x-8 gap-y-9", due.length > 0 && projects.length > 0 && "lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]")}>
+      <div className={cn("mt-9 grid items-start gap-x-8 gap-y-9", due.length > 0 && runs.length > 0 && "lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]")}>
         {due.length > 0 && (
           <section>
             <SectionTitle count={due.length}>{t("today.dueTitle")}</SectionTitle>
@@ -96,13 +96,13 @@ export function Today() {
             </Card>
           </section>
         )}
-        {projects.length > 0 && (
+        {runs.length > 0 && (
           <section>
-            <SectionTitle count={projects.length}>{t("today.projectsTitle")}</SectionTitle>
+            <SectionTitle count={runs.length}>{t("today.projectsTitle")}</SectionTitle>
             <Card className="overflow-hidden">
-              {projects.slice(0, PROJECTS).map(({ space, value }) => (
+              {runs.slice(0, PROJECTS).map(({ space, value }) => (
                 <SpaceScope key={`${space}/${value.item.id}`} id={space}>
-                  <ProjectRow item={value.item} touched={value.touched} space={nameOf(space)} />
+                  <RunningRow item={value.item} touched={value.touched} space={nameOf(space)} />
                 </SpaceScope>
               ))}
             </Card>
@@ -142,8 +142,8 @@ function DueRow({ item, due, space }: { item: Item; due: string; space?: string 
   const { t } = useT();
   const hrefOf = useItemHref();
   const ix = useIndex();
-  const project = ix.get(ix.project(item.id));
-  const where = [project?.title, space].filter(Boolean).join(" · ");
+  const home = ix.get(ix.home(item.id));
+  const where = [home?.title, space].filter(Boolean).join(" · ");
   return (
     <div className={row}>
       <RowStatus item={item} />
@@ -157,7 +157,7 @@ function DueRow({ item, due, space }: { item: Item; due: string; space?: string 
 }
 
 /** The progress ring shows only when there are entries to count. */
-function ProjectRow({ item, touched, space }: { item: Item; touched: number; space?: string }) {
+function RunningRow({ item, touched, space }: { item: Item; touched: number; space?: string }) {
   const { t, lang } = useT();
   const hrefOf = useItemHref();
   const ix = useIndex();

@@ -132,17 +132,29 @@ export function hasUpdates(schema?: TypeSchema): boolean {
   return caps(schema).updates === true;
 }
 
+/** The type's progress: its first computed property "Fortschritt" (share of done descendants). */
+export function progressProp(schema?: TypeSchema): PropDef | undefined {
+  return schema?.properties.find(isProgressProp);
+}
+
+export function isProgressProp(p: PropDef): boolean {
+  return p.kind === "computed" && p.computed?.fn !== "count";
+}
+
+/**
+ * What the progress counts: the bar in the page's head, `fortschritt` in queries, a project's
+ * next task. Types from before the property read the old capability until they have one (a removed
+ * one too, so removing it turns the bar off).
+ */
 export function progressSpec(schema?: TypeSchema): { of?: string } | undefined {
+  const p = progressProp(schema);
+  if (p) return { of: p.computed?.of };
+  if (schema?.removedProperties?.some(isProgressProp)) return undefined;
   return caps(schema).progress;
 }
 
 export function template(schema?: TypeSchema): { body?: string; values?: Record<string, Value> } | undefined {
   return caps(schema).template;
-}
-
-/** Main action of a page: "+" creates a child of type X (e.g. project → task). */
-export function primaryChild(schema?: TypeSchema): string | undefined {
-  return caps(schema).primaryChild;
 }
 
 /** Template values win over the selects' defaults. */

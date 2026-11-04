@@ -11,7 +11,7 @@ import {
   parseWikiLinks,
   titleKey,
 } from "./model";
-import { blockingProps, dueOf, isDone, primaryChild, progressSpec, statusOf, statusProp } from "./traits";
+import { blockingProps, dueOf, isDone, progressSpec, statusOf } from "./traits";
 import { isPausedOption, sameTypeName } from "./input";
 import { pluralOf } from "./plural";
 import { cmpKey } from "./sortkey";
@@ -388,17 +388,6 @@ export class Index {
     return this.homePath(id).find((p) => this.byId.get(p)?.pinned);
   }
 
-  /** The nearest ancestor with a status and a different type, so a sub-task gets its project, not its parent task. */
-  project(id: string): string | undefined {
-    const item = this.byId.get(id);
-    const path = this.homePath(id);
-    for (let n = path.length - 1; n >= 0; n--) {
-      const p = this.byId.get(path[n]!);
-      if (p && p.type !== item?.type && statusProp(this.schemaOf(p))) return p.id;
-    }
-    return undefined;
-  }
-
   /** Embedded, linked or referenced from an information; relations don't count. */
   usedIn(fileId: string): Backlink[] {
     return this.backlinks(fileId).filter((b) => b.kind !== "rel" && this.byId.get(b.from)?.kind === "info");
@@ -494,22 +483,13 @@ export class Index {
     return false;
   }
 
-  /** The type "+" on the item's page creates; a deleted type counts as none. */
-  mainChildType(item: Item | undefined): string | undefined {
-    const pc = primaryChild(this.schemaOf(item));
-    return pc && this.types.has(pc) ? pc : undefined;
-  }
-
   /**
-   * An open entry below the project (of its main action type, if any) that is not blocked, not
-   * paused and has no open entries below. Due by today comes first, then in progress, then by due date.
+   * An open entry below the item that is not blocked, not paused and has no open entries below. Due by today comes first, then in progress, then by due date.
    */
   nextTask(id: string, today: string): Item | undefined {
-    const childType = this.mainChildType(this.byId.get(id));
     const candidates = [...this.descendants(id)]
       .map((d) => this.byId.get(d)!)
       .filter((x) => {
-        if (childType && x.type !== childType) return false;
         const s = statusOf(x, this.schemaOf(x));
         return !!s && s.group !== "done" && !isPausedOption(s.option) && !this.isBlocked(x) && this.openChildren(x.id).length === 0;
       });

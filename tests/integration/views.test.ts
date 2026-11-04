@@ -4,7 +4,7 @@ import { removeTempDirs, MemRepo } from "../support/helpers";
 import { setupStore } from "../support/store";
 import type { Store } from "@obtion/server/store";
 import type { Ops } from "@obtion/server/ops";
-import { SYS, runSetup, typeTabs } from "@obtion/core/setup";
+import { SYS, runSetup, typeTabs, upgradeSetup } from "@obtion/core/setup";
 import { setTab, setTabs } from "@obtion/core/model";
 import { groupId, groupItems, runQuery, tabDef } from "@obtion/core/query";
 
@@ -60,7 +60,7 @@ test("a tab's filter is added to the type (AND)", () => {
   expect(runQuery(active, { ix }).items.map((i) => i.title)).toEqual(["Läuft"]);
 });
 
-test("grouping: status in the order of the work, with empty options; project, area and status group", () => {
+test("grouping: status in the order of the work, with empty options; above, area and status group", () => {
   const r = new MemRepo();
   runSetup(r.writer, "de");
   const area = r.add({ title: "Arbeit", pinned: "a0" });
@@ -80,13 +80,14 @@ test("grouping: status in the order of the work, with empty options; project, ar
   // under status:offen the empty done options say nothing and stay away
   const open = groupItems(items, "status", ctx, undefined, { types: ["sys:task"], where: { and: [{ type: "sys:task" }, { status: "open" }] } });
   expect(open.map((g) => g.label)).toEqual(["Nicht begonnen", "In Bearbeitung", "Pausiert", "Erledigt"]); // "Erledigt" has an entry here
-  // a sub-task belongs to its project, not to its parent task; without one: last
+  // "Darüber": the entry it lives under, whatever its type; without one: last
   const byProject = groupItems(items, "project", ctx);
   expect(byProject.map((g) => [g.label ?? "", g.items.map((i) => i.title)])).toEqual([
-    ["Portal", ["Login", "Passwort"]],
+    ["Login", ["Passwort"]],
+    ["Portal", ["Login"]],
     ["", ["Lose"]],
   ]);
-  expect(byProject[0]!.ref).toBe(p1);
+  expect(byProject[1]!.ref).toBe(p1);
   expect(groupItems([ix.get(p1)!], "area", ctx).map((g) => g.label)).toEqual(["Arbeit"]);
   expect(groupItems(items, "statusGroup", ctx).map((g) => g.key)).toEqual(["todo", "active", "done"]);
 });
@@ -110,3 +111,21 @@ test("update_type sets the views; the same name keeps its tab; hidden groups are
   expect(() => ops.updateType("Projekt", { views: [] }, A)).toThrow(/at least one view/);
 });
 
+
+test("views live in the type: shipped types get theirs at setup, older workspaces once on open, own types one table", () => {
+  const r = new MemRepo();
+  runSetup(r.writer, "de");
+  expect(r.index().types.get(SYS.task)!.schema!.views!.map((v) => v.id)).toEqual(["v_byproject", "v_progress", "v_priority", "v_all"]);
+  // a workspace from before: the shipped type without stored views shows one table, until the upgrade
+  r.change(SYS.project, (doc) => doc.getMap("tabs").clear());
+  expect(typeTabs(r.index().types.get(SYS.project)!, "de").map((v) => v.id)).toEqual(["v_all"]);
+  upgradeSetup(r.writer, "de");
+  const project = r.index().types.get(SYS.project)!;
+  expect(project.schema!.views!.map((v) => v.id)).toEqual(["v_active", "v_timeline", "v_board", "v_all", "v_calendar"]);
+  // views the user changed stay
+  r.change(SYS.project, (doc) => doc.getMap("tabs").delete("v_board"));
+  upgradeSetup(r.writer, "de");
+  expect(r.index().types.get(SYS.project)!.schema!.views!.some((v) => v.id === "v_board")).toBe(false);
+  r.addType("t_modul", { name: "Modul" });
+  expect(typeTabs(r.index().types.get("t_modul")!, "de").map((v) => v.id)).toEqual(["v_all"]);
+});

@@ -19,7 +19,7 @@ import { ItemIcon, TypeChip, TypeGlyph } from "../ui/item-look";
 import { ProgressBand } from "../ui/progress";
 import { cn } from "../lib/utils";
 import { PropertyBlock } from "../ui/Properties";
-import { BelowCard, ChildList, Updates, mainGrouping } from "../ui/Sections";
+import { Below, Updates } from "../ui/Sections";
 import { AddRef, Crumbs, LinksMenu, LinksRow, PageFooter, TrashBanner, pinnedRefs } from "../ui/PageParts";
 import { PlacePicker } from "../ui/Picker";
 import { pluralOf } from "@obtion/core/plural";
@@ -104,15 +104,9 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
     };
   }, [item.id, isNew]);
 
-  const mainType = ix.mainChildType(item);
   const cycles = ix.cycleEdgesOf(item.id);
-  // a page that gathers its tasks over all levels (main action or progress) gathers its notes too
-  const gathers = !!mainType || !!progressSpec(schema);
-  // the type's own area: the main list and updates (§ 3.1, zone 3)
-  const typeArea = !!mainType || hasUpdates(schema);
-  // what "Darunter" leaves out: the main list's type, and sub-projects while they are groups of it
-  const exclude = new Set<string>(mainType ? ["type:" + mainType] : []);
-  if (mainType && mainType !== item.type && mainGrouping(item) === "sub") for (const c of ix.childrenOf(item.id)) if (ix.get(c)?.type === item.type) exclude.add(c);
+  // the type's area (§ 3.1, zone 3): long texts fold so the updates stay in sight
+  const typeArea = hasUpdates(schema);
   const progress = progressSpec(schema) ? ix.progressOf(item) : undefined;
 
   const tools = (
@@ -153,24 +147,18 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
       )}
     </MoreMenu>
   );
-  const mainAction = mainType && mainType !== item.type && !item.deleted;
 
   return (
     <div className="page-read">
       {item.deleted && (
         <TrashBanner onRestore={() => repo.restore(item.id)} />
       )}
-      {/* 1 · head: path, title with the main action, type and status, progress, properties */}
+      {/* 1 · head: path, title, type and status, progress, properties */}
       <Crumbs item={item} tools={tools} onPlace={() => setPlacing(true)} />
       <div className="mt-6 flex items-start gap-4 max-md:mt-3">
         <div data-page-title className="min-w-0 flex-1 rounded-lg">
           <TitleField item={item} autoFocus={isNew && !item.title} />
         </div>
-        {mainAction && (
-          <Button variant="primary" onClick={() => createAndOpen({ type: mainType, parents: [item.id] })} className="shrink-0 max-md:hidden">
-            <Plus size={15} /> {ix.typeName(mainType)}
-          </Button>
-        )}
       </div>
       <TitleClash item={item} />
       {cycles.length > 0 && (
@@ -212,22 +200,14 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
           mt-7, not mt-6: the editor has 4px padding on top only, so the text sits in the middle */}
       <div className="mt-7 border-t border-line" />
       <div className="page-below [&>:first-child]:mt-6">
-        {/* 3 · the type's area: main list, updates */}
-        {mainType && <ChildList item={item} typeId={mainType} />}
+        {/* 3 · below: everything under the page, the same for every type (the links are in the head) */}
+        <Below item={item} />
+        {/* 4 · the type's area: updates */}
         {hasUpdates(schema) && <Updates item={item} />}
-
-        {/* 4 · below (the links are in the head) */}
-        <BelowCard item={item} exclude={exclude} gathers={gathers} quietAdd={!typeArea} />
       </div>
       {/* one more line above the dates, unless nothing came between */}
       <PageFooter item={item} className="mt-10 border-t border-line pt-4 max-md:mt-8 [.page-below:empty+&]:mt-4 [.page-below:empty+&]:border-t-0 [.page-below:empty+&]:pt-0" />
 
-      {/* on a phone the main action floats above the bottom bar */}
-      {mainAction && (
-        <Button variant="plain" onClick={() => createAndOpen({ type: mainType, parents: [item.id] })} className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] right-4 z-20 flex h-12 items-center gap-1.5 rounded-full bg-ink pl-3.5 pr-[18px] text-[15px] font-semibold text-ink-text shadow-lg md:hidden">
-          <Plus size={18} /> {ix.typeName(mainType)}
-        </Button>
-      )}
       {placing && <PlacePicker list={[item]} title={t("place.add")} onPick={(pid) => (repo.addParent(item.id, pid), rememberPlace(pid), setPlacing(false))} onClose={() => setPlacing(false)} />}
       {deleting && <DeleteDialog item={item} onClose={() => setDeleting(false)} />}
       {rulesOpen && <AgentRulesDialog item={item} onClose={() => setRulesOpen(false)} />}
@@ -237,10 +217,9 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
   );
 }
 
-/** "2 von 9 Tasks erledigt, alle Ebenen" / "1 von 2 Unteraufgaben erledigt". */
+/** "2 von 9 Tasks erledigt, alle Ebenen". */
 function progressText(item: Item, ix: Index, done: number, total: number): string {
   const of = progressSpec(ix.schemaOf(item))?.of;
-  if (of && of === item.type) return tr("progress.subtasks", { done, total });
   const name = of ? (ix.typeName(of) ?? "") : "";
   return tr(of ? "progress.allLevelsOf" : "progress.allLevels", { done, total, name: name && pluralOf(name, getLang()) });
 }

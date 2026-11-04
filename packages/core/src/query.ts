@@ -443,7 +443,7 @@ export function fieldOf(item: Item, name: string, ix: Index): FieldHit | undefin
       return a ? { kind: "item", value: a } : undefined;
     }
     case "project": {
-      const p = ix.project(item.id);
+      const p = ix.home(item.id); // "Darüber": where the entry lives
       return p ? { kind: "item", value: p } : undefined;
     }
     case "progress": {

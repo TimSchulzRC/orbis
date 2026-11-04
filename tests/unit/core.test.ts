@@ -10,7 +10,7 @@ import { runSetup, restoreDefaultTypes, resetInbox, SYS } from "@obtion/core/set
 import { parseQuery, printQuery, runQuery } from "@obtion/core/query";
 import { CATALOGS } from "@obtion/core/i18n";
 import { setAside, tomorrow } from "@obtion/core/inbox";
-import { activeProjects, dueBy, recentlyChanged } from "@obtion/core/today";
+import { running, dueBy, recentlyChanged } from "@obtion/core/today";
 
 describe("sort keys", () => {
   test("between always sorts between", () => {
@@ -223,7 +223,7 @@ describe("today", () => {
     m.add({ title: "Lose Idee", updated: 900 });
     const ix = m.index();
     expect(dueBy(ix, "2026-10-29").map((x) => x.item.title)).toEqual(["Überfällig", "Heute"]);
-    const active = activeProjects(ix);
+    const active = running(ix);
     expect(active.map((x) => x.item.title)).toEqual(["Relaunch"]);
     expect(active[0]!.touched).toBeGreaterThanOrEqual(500);
     expect(recentlyChanged(ix, 50).some((i) => i.title === "Lose Idee")).toBe(false);
