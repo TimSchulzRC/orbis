@@ -1,11 +1,10 @@
 import { Badge } from "../components/ui/badge";
 import type { ReactNode } from "react";
-import { CircleCheck, CirclePause, CircleX } from "lucide-react";
+import { CircleCheck } from "lucide-react";
 import { type Item, type OptionDef, type StatusGroup, type TypeSchema, META_TYPE, todayISO } from "@obtion/core/model";
 import { type T, fmtRelative, fmtShortDate } from "@obtion/core/i18n";
 import { isInInbox } from "@obtion/core/placement";
 import type { Index } from "@obtion/core/graph";
-import { statusShape } from "@obtion/core/input";
 import { repo } from "../repo";
 import { useIndex, useItemHref } from "../hooks";
 import { tr, useT, titleOf } from "../i18n";
@@ -68,16 +67,14 @@ export function TypeChip({ schema, onClick }: { schema: TypeSchema; onClick?: ()
   );
 }
 
-/** Distinct shapes, so a status reads without colour. */
+/** Distinct shapes per group, so a status reads without colour: ring, half circle, check. */
 export function StatusGlyph({ option, size = 16, className }: { option: OptionDef; size?: number; className?: string }) {
-  const shape = statusShape(option);
-  if (shape === "paused") return <CirclePause size={size} className={className} aria-hidden />;
-  if (shape === "done") return <CircleCheck size={size} className={className} aria-hidden />;
-  if (shape === "dropped") return <CircleX size={size} className={className} aria-hidden />;
+  const group = option.group ?? "todo";
+  if (group === "done") return <CircleCheck size={size} className={className} aria-hidden />;
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className={className} aria-hidden>
       <circle cx="12" cy="12" r="10" />
-      {shape === "active" && <path d="M12 6a6 6 0 0 0 0 12z" fill="currentColor" stroke="none" />}
+      {group === "active" && <path d="M12 6a6 6 0 0 0 0 12z" fill="currentColor" stroke="none" />}
     </svg>
   );
 }

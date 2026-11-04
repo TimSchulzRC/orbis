@@ -1,11 +1,11 @@
-// Behaviour hangs on what the types mark (capabilities, `blocks`, an option's `state`), never on a
+// Behaviour hangs on what the types mark (capabilities, `blocks`, a status option's group), never on a
 // type's or property's id or name: without the default types, with other names, everything works.
 import { test, expect } from "bun:test";
 import { MemRepo } from "../support/helpers";
 import { runSetup, SYS } from "@obtion/core/setup";
 import { type PropDef, removeProp, upsertProp } from "@obtion/core/model";
 import { deleteType } from "@obtion/core/typeops";
-import { matchOption, statusShape } from "@obtion/core/input";
+import { matchOption } from "@obtion/core/input";
 import { running } from "@obtion/core/today";
 import { progressSpec } from "@obtion/core/traits";
 
@@ -14,19 +14,18 @@ function ownTypes() {
   const m = new MemRepo();
   m.addType("t_step", {
     name: "Schritt",
-    capabilities: { status: "p_state" },
     properties: [
       {
         id: "p_state",
         name: "Stand",
-        kind: "select",
+        kind: "status",
         default: "s_new",
         options: [
           { id: "s_new", name: "Neu", group: "todo" },
           { id: "s_on", name: "Läuft", group: "active" },
-          { id: "s_rest", name: "Ruht", group: "active", state: "paused" },
+          { id: "s_rest", name: "Ruht", group: "active" },
           { id: "s_ok", name: "Fertig", group: "done" },
-          { id: "s_no", name: "Eingestellt", group: "done", state: "dropped" },
+          { id: "s_no", name: "Eingestellt", group: "done" },
         ],
       },
       { id: "p_after", name: "Hängt an", kind: "relation", multiple: true, blocks: true },
@@ -36,16 +35,15 @@ function ownTypes() {
   });
   m.addType("t_plan", {
     name: "Vorhaben",
-    capabilities: { status: "p_state" },
     properties: [
-      { id: "p_state", name: "Stand", kind: "select", default: "v_on", options: [{ id: "v_on", name: "Läuft", group: "active" }, { id: "v_rest", name: "Ruht", group: "active", state: "paused" }] },
+      { id: "p_state", name: "Stand", kind: "status", default: "v_on", options: [{ id: "v_on", name: "Läuft", group: "active" }, { id: "v_rest", name: "Ruht", group: "active" }, { id: "v_ok", name: "Fertig", group: "done" }] },
       { id: "p_done", name: "Erledigt", kind: "computed", computed: { fn: "progress", of: "t_step" } },
     ],
   });
   return m;
 }
 
-test("blocked, paused and dropped come from the marks, under any name and without the default types", () => {
+test("blocked and done come from the marks and groups, under any name and without the default types", () => {
   const m = ownTypes();
   const plan = m.add({ title: "Umzug", type: "t_plan", props: { p_state: "v_on" } });
   const a = m.add({ title: "Kartons", type: "t_step", parents: [plan], props: { p_state: "s_new" } });
@@ -58,13 +56,16 @@ test("blocked, paused and dropped come from the marks, under any name and withou
   expect(ix.isBlocked(ix.get(d)!)).toBe(false); // a relation without the mark holds nothing up
   expect(ix.nextTask(plan, "2026-10-31")?.id).toBe(a); // "Kartons" before "Notiz"; the blocked ones not
   expect(running(ix).map((x) => x.item.id)).toEqual([plan]);
-  // paused: the plan and everything below it rests
+  // an option called "Ruht" is just active: nothing below it rests
   m.change(plan, (doc) => doc.getMap("props").set("p_state", "v_rest"));
+  ix = m.index();
+  expect(ix.isDormant(ix.get(a)!)).toBe(false);
+  expect(running(ix).map((x) => x.item.id)).toEqual([plan]);
+  // done: the plan and everything below it rests
+  m.change(plan, (doc) => doc.getMap("props").set("p_state", "v_ok"));
   ix = m.index();
   expect(ix.isDormant(ix.get(a)!)).toBe(true);
   expect(running(ix)).toEqual([]);
-  const options = ix.types.get("t_step")!.schema!.properties[0]!.options!;
-  expect(options.map(statusShape)).toEqual(["open", "active", "paused", "done", "dropped"]);
 });
 
 test("renaming the shipped properties and options changes nothing; a look-alike name without the mark does nothing", () => {
@@ -79,7 +80,7 @@ test("renaming the shipped properties and options changes nothing; a look-alike 
   const c = m.add({ title: "C", type: SYS.task, props: { p_status: "st_paused" } });
   let ix = m.index();
   expect(ix.isBlocked(ix.get(b)!)).toBe(true);
-  expect(ix.isDormant(ix.get(c)!)).toBe(true);
+  expect(ix.isDormant(ix.get(c)!)).toBe(false); // "Pausiert" is an option in Aktiv, nothing more
   // an own type with a relation that only is called "Blockiert durch"
   m.addType("t_x", { name: "X", properties: [{ id: "p_x", name: "Blockiert durch", kind: "relation" }] });
   const x = m.add({ title: "X1", type: "t_x", rels: { p_x: [a] } });
@@ -109,19 +110,30 @@ test("running lists active entries of any type, the topmost only", () => {
   expect(running(m.index()).map((x) => x.item.id).sort()).toEqual([plan, loose].sort());
 });
 
-test("a word for paused finds the option marked paused, not one only called so", () => {
+test("a status word picks an option of its group, preferring a fitting name", () => {
   const p: PropDef = {
     id: "p",
     name: "Stand",
-    kind: "select",
+    kind: "status",
     sort: "V",
     options: [
-      { id: "a", name: "Paused", group: "active" },
-      { id: "b", name: "Resting", group: "active", state: "paused" },
+      { id: "a", name: "Läuft", group: "active" },
+      { id: "b", name: "Pausiert", group: "active" },
+      { id: "c", name: "Fertig", group: "done" },
     ],
   };
   expect(matchOption(p, "on hold").id).toBe("b");
-  expect(matchOption(p, "Paused").id).toBe("a"); // the exact name still wins
+  expect(matchOption(p, "in Arbeit").id).toBe("a");
+  expect(matchOption(p, "verworfen").id).toBe("c"); // no option called so: the first of done
+});
+
+test("progress counts every option of the done group as finished", () => {
+  const m = ownTypes();
+  const plan = m.add({ title: "Umzug", type: "t_plan", props: { p_state: "v_on" } });
+  m.add({ title: "Kartons", type: "t_step", parents: [plan], props: { p_state: "s_ok" } });
+  m.add({ title: "Klavier", type: "t_step", parents: [plan], props: { p_state: "s_no" } });
+  m.add({ title: "Packen", type: "t_step", parents: [plan], props: { p_state: "s_rest" } });
+  expect(m.index().progressOf(m.index().get(plan)!)).toEqual({ done: 2, total: 3 });
 });
 
 test("progress comes from the computed property; old types read the capability until they have one", () => {

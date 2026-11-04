@@ -12,6 +12,7 @@ import { firstName, personOrigin } from "@obtion/core/origin";
 import { type Lang, LANGS, acceptLang, translate } from "@obtion/core/i18n";
 import { SETUP_ORIGIN, setUp, storeWriter } from "./setup";
 import { upgradeSetup } from "@obtion/core/setup";
+import { META_TYPE, migrateStatus } from "@obtion/core/model";
 import { allowedHosts } from "./trust";
 import { DATA, MAX_WS_MESSAGE, PORT } from "./config";
 import { body, fail, json } from "./http";
@@ -62,7 +63,10 @@ function workspace(id: string): Workspace | undefined {
   const known = open.get(id);
   if (known || !accounts.exists(id)) return known;
   const opened = new Workspace(accounts.dir(id));
-  upgradeSetup(storeWriter(opened.store, SETUP_ORIGIN), opened.store.lang());
+  const w = storeWriter(opened.store, SETUP_ORIGIN);
+  // types from before the status was a property kind; a no-op once done
+  for (const r of opened.store.records.values()) if (r.type === META_TYPE) w.change(r.id, migrateStatus);
+  upgradeSetup(w, opened.store.lang());
   open.set(id, opened);
   return opened;
 }

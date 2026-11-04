@@ -73,6 +73,7 @@ export function PropertyField({ item, prop, autoFocus }: { item: Item; prop: Pro
     }
     case "checkbox":
       return <Checkbox checked={value === true} onCheckedChange={(checked) => setValue(checked === true ? true : null)} aria-label={prop.name} className="size-4" />;
+    case "status":
     case "select": {
       if (prop.multiple) return <MultiField item={item} prop={prop} />;
       const schema = ix.schemaOf(item);

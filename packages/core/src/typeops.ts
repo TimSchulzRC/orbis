@@ -82,7 +82,8 @@ export function toFree(p: PropDef, v: Value | undefined): FreeValue | undefined 
     case "checkbox":
     case "url":
       return { k: p.kind, v: v as string | number | boolean };
-    case "select": {
+    case "select":
+    case "status": {
       const names = optionIds(v).map((id) => p.options?.find((o) => o.id === id)?.name ?? id);
       return p.multiple ? { k: "text", v: names.join(", ") } : { k: "select", v: names[0] ?? String(v) };
     }

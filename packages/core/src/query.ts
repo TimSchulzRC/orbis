@@ -12,7 +12,7 @@ import { foldUmlauts as fold } from "./text";
 import type { Index } from "./graph";
 import { inboxWhere, setAside } from "./inbox";
 import { type Lang, LANGS, words } from "./i18n";
-import { dateEnd, dateStart, doneAt, dueOf, statusOf, statusProp } from "./traits";
+import { dateEnd, dateStart, doneAt, dueOf, hasOptions, statusOf, statusProp } from "./traits";
 import { optionMatches, parseDate, parseNumber, statusGroupOf } from "./input";
 
 function isStatusOptionName(ix: Index, word: string): boolean {
@@ -44,7 +44,7 @@ export type Cond =
   | { inbox: true } // what the inbox rule matches, minus what is set aside
   | { pinned: true }
   | { blocked: true } // an open entry under "Blockiert durch" or "Wartet auf" is set
-  | { dormant: true } // it or something above it is paused or done
+  | { dormant: true } // it or something above it is done
   | { without: Without }
   | { file: true }
   | { filetype: FileType }
@@ -575,7 +575,8 @@ function matchField(item: Item, c: { prop: string; op: Op; value?: FieldValue },
       const b = TRUE_WORDS.includes(want.toLowerCase());
       return cmp(hit.value === true ? 1 : 0, b ? 1 : 0, c.op);
     }
-    case "select": {
+    case "select":
+    case "status": {
       const ids = asIds(hit.value);
       const names = hit.prop ? optionNames(hit.prop, ids) : ids;
       // option names in either language and status synonyms ("in Arbeit", "done") match too
@@ -853,7 +854,7 @@ export function groupItems(items: Item[], by: string | undefined, ctx: EvalCtx, 
       if (schemas.some((sc) => statusProp(sc))) for (const g of STATUS_GROUPS) add(g, { statusGroup: g });
     } else
       for (const sc of schemas) {
-        const p = by === "status" ? statusProp(sc) : sc!.properties.find((x) => titleKey(x.name) === titleKey(by) && x.kind === "select");
+        const p = by === "status" ? statusProp(sc) : sc!.properties.find((x) => titleKey(x.name) === titleKey(by) && hasOptions(x));
         ranked(p);
         for (const o of p?.options ?? []) add(o.name, { label: o.name, statusGroup: by === "status" ? (o.group ?? "todo") : undefined, option: o });
       }

@@ -16,6 +16,7 @@ import {
   setTabs,
 } from "./model";
 import { keysFor } from "./sortkey";
+import { blockSource, queryFence } from "./query";
 import { type Lang, translate, words } from "./i18n";
 
 export const SYS = {
@@ -63,20 +64,20 @@ export function defaultTypes(lang: Lang): Record<string, TypeSpec> {
       icon: "folder-kanban",
       color: "green",
       description: t("project.description"),
-      capabilities: { status: "p_status", updates: true, template: { body: "" } },
+      capabilities: { updates: true, template: { body: queryFence(blockSource({ title: t("project.tasks"), where: { and: [{ type: SYS.task }, { under: { this: true } }] }, view: "board", group: "status" })) + "\n" } },
       properties: [
         {
           id: "p_status",
           name: t("prop.status"),
-          kind: "select",
+          kind: "status",
           default: "st_backlog",
           options: [
             { id: "st_backlog", name: t("status.backlog"), group: "todo", color: "gray" },
             { id: "st_planning", name: t("status.planning"), group: "active", color: "blue" },
             { id: "st_active", name: t("status.inProgress"), group: "active", color: "amber" },
-            { id: "st_paused", name: t("status.paused"), group: "active", state: "paused", color: "violet" },
+            { id: "st_paused", name: t("status.paused"), group: "active", color: "violet" },
             { id: "st_done", name: t("status.done"), group: "done", color: "green" },
-            { id: "st_canceled", name: t("status.canceled"), group: "done", state: "dropped", color: "red" },
+            { id: "st_canceled", name: t("status.canceled"), group: "done", color: "red" },
           ],
         },
         priority,
@@ -91,19 +92,19 @@ export function defaultTypes(lang: Lang): Record<string, TypeSpec> {
       icon: "circle-check",
       color: "slate",
       description: t("task.description"),
-      capabilities: { status: "p_status", due: "p_due" },
+      capabilities: { due: "p_due" },
       properties: [
         {
           id: "p_status",
           name: t("prop.status"),
-          kind: "select",
+          kind: "status",
           default: "st_todo",
           options: [
             { id: "st_todo", name: t("status.notStarted"), group: "todo", color: "gray" },
             { id: "st_active", name: t("status.inProgress"), group: "active", color: "amber" },
-            { id: "st_paused", name: t("status.paused"), group: "active", state: "paused", color: "violet" },
+            { id: "st_paused", name: t("status.paused"), group: "active", color: "violet" },
             { id: "st_done", name: t("status.done"), group: "done", color: "green" },
-            { id: "st_dropped", name: t("status.dropped"), group: "done", state: "dropped", color: "brown" },
+            { id: "st_dropped", name: t("status.dropped"), group: "done", color: "brown" },
             { id: "st_archived", name: t("status.archived"), group: "done", color: "gray" },
           ],
         },

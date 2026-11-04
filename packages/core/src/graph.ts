@@ -12,7 +12,7 @@ import {
   titleKey,
 } from "./model";
 import { blockingProps, dueOf, isDone, progressSpec, statusOf } from "./traits";
-import { isPausedOption, sameTypeName } from "./input";
+import { sameTypeName } from "./input";
 import { pluralOf } from "./plural";
 import { cmpKey } from "./sortkey";
 
@@ -465,8 +465,8 @@ export class Index {
   }
 
   /**
-   * "Ruhend": the item or something above it is paused or done, so tasks of a paused project stay
-   * out of the focus lists.
+   * "Ruhend": the item or something above it is done, so tasks of a finished project stay out of
+   * the focus lists.
    */
   isDormant(item: Item): boolean {
     const seen = new Set<string>();
@@ -477,21 +477,21 @@ export class Index {
       seen.add(id);
       const x = this.byId.get(id);
       const s = x && statusOf(x, this.schemaOf(x));
-      if (s && (s.group === "done" || isPausedOption(s.option))) return true;
+      if (s?.group === "done") return true;
       stack.push(...this.parentsOf(id));
     }
     return false;
   }
 
   /**
-   * An open entry below the item that is not blocked, not paused and has no open entries below. Due by today comes first, then in progress, then by due date.
+   * An open entry below the item that is not blocked and has no open entries below. Due by today comes first, then in progress, then by due date.
    */
   nextTask(id: string, today: string): Item | undefined {
     const candidates = [...this.descendants(id)]
       .map((d) => this.byId.get(d)!)
       .filter((x) => {
         const s = statusOf(x, this.schemaOf(x));
-        return !!s && s.group !== "done" && !isPausedOption(s.option) && !this.isBlocked(x) && this.openChildren(x.id).length === 0;
+        return !!s && s.group !== "done" && !this.isBlocked(x) && this.openChildren(x.id).length === 0;
       });
     const key = (x: Item) => {
       const due = dueOf(x, this.schemaOf(x));

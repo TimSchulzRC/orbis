@@ -1,19 +1,17 @@
 import { type Item, STATUS_GROUPS } from "@obtion/core/model";
 import { confirmAction, notify } from "./feedback";
-import { dueOf, firstOfGroup, isDone, statusOf, statusProp } from "@obtion/core/traits";
+import { dueOf, isDone, statusOf, statusProp } from "@obtion/core/traits";
 import { fmtBytes } from "@obtion/core/i18n";
 import type { Repo } from "@obtion/sync";
 import { repo as current } from "../repo";
 import { useItemHref, useRepo } from "../hooks";
 import { tr, useT, titleOf } from "../i18n";
-import { DueLabel, ItemIcon, StatusGlyph, StatusPill, pal } from "./item-look";
+import { DueLabel, ItemIcon, StatusGlyph, pal } from "./item-look";
 import { Button, MenuItem, Popover } from "./primitives";
 import { cn } from "../lib/utils";
-import { createStore } from "../lib/store";
 import { ProgressCount } from "./progress";
-import { statusShape } from "@obtion/core/input";
 
-/** Status choice as a small menu (rows of projects; the ring there does not tick off). */
+/** Status choice as a small menu, options under their group (like the status pill in Notion). */
 export function StatusMenu({ item, trigger }: { item: Item; trigger: (p: { onClick: () => void; "aria-expanded": boolean }) => React.ReactNode }) {
   const { t } = useT();
   const repo = useRepo();
@@ -78,37 +76,6 @@ export async function setStatus(item: Item, optionId: string, repo: Repo = curre
   return true;
 }
 
-// Ticked entries stay visible, struck through, for a moment before they leave the list.
-const LINGER = 900;
-const lingering = new Map<string, ReturnType<typeof setTimeout>>();
-const lingerVersion = createStore(0);
-const lingerEmit = () => lingerVersion.set(lingerVersion.get() + 1);
-function useLingering(id: string) {
-  lingerVersion.use();
-  return lingering.has(id);
-}
-
-/** The write waits a moment so the row can be seen struck through. */
-export function tick(item: Item, repo: Repo = current) {
-  const ix = repo.index();
-  const schema = ix.schemaOf(item);
-  if (!statusProp(schema)) return;
-  const reopening = isDone(item, schema);
-  const next = firstOfGroup(schema, reopening ? "todo" : "done");
-  if (!next) return;
-  if (reopening || openBelow(item, repo).length) return void setStatus(item, next.id, repo);
-  if (lingering.has(item.id)) return;
-  lingering.set(
-    item.id,
-    setTimeout(() => {
-      lingering.delete(item.id);
-      void setStatus(repo.get(item.id) ?? item, next.id, repo);
-      lingerEmit();
-    }, LINGER),
-  );
-  lingerEmit();
-}
-
 export function Group({ heading, count, first, children }: { heading?: React.ReactNode; count?: number; first?: boolean; children: React.ReactNode }) {
   return (
     <div className={first ? undefined : "mt-2"}>
@@ -150,8 +117,7 @@ export function ItemRow({
   const ix = repo.index();
   const schema = ix.schemaOf(item);
   const status = statusOf(item, schema);
-  const ticked = useLingering(item.id);
-  const done = status?.group === "done" || ticked;
+  const done = status?.group === "done";
   const due = dueOf(item, schema);
   const progress = ix.progressOf(item);
   const blocked = !!status && !done && ix.isBlocked(item);
@@ -174,7 +140,6 @@ export function ItemRow({
       </a>
       {/* the shape tells the status; words only for what deviates */}
       {blocked && <span className="shrink-0 text-xs text-warn">{t("row.blocked")}</span>}
-      {status && !done && statusShape(status.option) === "paused" && <StatusPill option={status.option} group={status.group} small />}
       {progress && progress.total > 0 && (
         <ProgressCount done={progress.done} total={progress.total} className="w-10 shrink-0 text-right text-xs text-muted-foreground" />
       )}
@@ -184,27 +149,27 @@ export function ItemRow({
   );
 }
 
-/** A click ticks the entry off (and back), whatever its type; the type's icon follows. Without a status only the icon. */
+/** A click opens the status menu, whatever its type; the type's icon follows. Without a status only the icon. */
 export function RowStatus({ item, size = 17 }: { item: Item; size?: number }) {
   const { t } = useT();
   const repo = useRepo();
   const ix = repo.index();
-  const schema = ix.schemaOf(item);
-  const st = statusOf(item, schema);
-  const ticked = useLingering(item.id);
-  const done = st?.group === "done" || ticked;
+  const st = statusOf(item, ix.schemaOf(item));
   if (!st) return <ItemIcon item={item} size={size - 1} />;
   // the shape in the option's colour (as on its pill): open grey, running amber, done green …
-  const option = ticked ? (firstOfGroup(schema, "done") ?? st.option) : st.option;
-  const color = done ? "var(--ok)" : option.color && option.color !== "gray" ? pal(option.color) : undefined;
-  const glyph = <span style={{ color }}><StatusGlyph option={option} size={size} /></span>;
-  // every entry with a status is ticked off here; other options are set on its page. The type's
-  // icon follows, so a project and a task look different
+  const done = st.group === "done";
+  const color = done ? "var(--ok)" : st.option.color && st.option.color !== "gray" ? pal(st.option.color) : undefined;
+  // the type's icon follows, so a project and a task look different
   return (
     <>
-      <Button variant="plain" onClick={() => tick(item, repo)} className="tap-edge shrink-0 text-muted-foreground hover:text-ok" aria-label={done ? t("row.reopen") : t("row.done")} title={done ? t("row.reopen") : t("row.done")}>
-        {glyph}
-      </Button>
+      <StatusMenu
+        item={item}
+        trigger={(p) => (
+          <Button variant="plain" {...p} className="tap-edge shrink-0 text-muted-foreground" aria-label={t("row.status", { name: st.option.name })} title={st.option.name}>
+            <span style={{ color }}><StatusGlyph option={st.option} size={size} /></span>
+          </Button>
+        )}
+      />
       <ItemIcon item={item} size={size - 3} />
     </>
   );

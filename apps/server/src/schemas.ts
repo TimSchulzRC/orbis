@@ -17,11 +17,11 @@ export type ViewInput = z.infer<typeof viewInput>;
 
 export const propInput = z.object({
   name: z.string().optional(),
-  kind: z.enum(PROP_KINDS).optional().describe("A select is the type's status when capabilities.status names it"),
+  kind: z.enum(PROP_KINDS).optional().describe('"status": a single choice whose options sit in the groups todo, active, done; a type has at most one'),
   description: z.string().optional(),
-  options: z.array(z.string()).optional().describe('for select: names; options of the status as "Name (todo|active|done)", a paused one as "Name (active, paused)", a dropped one as "Name (done, dropped)"'),
+  options: z.array(z.string()).optional().describe('for select: names; for status: "Name (todo|active|done)"'),
   multiple: z.boolean().optional().describe("relation: several targets; select: several options"),
-  default: z.string().nullable().optional().describe("select with one value: the option new entries get; it can then not be emptied (the status always has one). null: may be empty"),
+  default: z.string().nullable().optional().describe("select with one value or status: the option new entries get; it can then not be emptied (the status always has one). null: may be empty"),
   target: z.string().optional().describe("relation target as a query, e.g. type:Person"),
   inverse: z.string().optional().describe("name shown on the target, e.g. Books"),
   symmetric: z.boolean().optional(),
@@ -33,7 +33,6 @@ export const propInput = z.object({
 export type PropInput = z.infer<typeof propInput>;
 
 export const capInput = z.object({
-  status: z.string().nullable().optional().describe("name of a select property with one value: becomes the status (options get groups, a default)"),
   due_date: z.string().nullable().optional().describe("name of a date property"),
   updates: z.boolean().optional(),
   template: z.string().nullable().optional(),
