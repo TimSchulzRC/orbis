@@ -497,7 +497,7 @@ export class Index {
   /** A project-like entry: its progress counts entries of another type below it (a project: tasks). */
   isContainer(item: Item | undefined): boolean {
     const p = progressSpec(this.schemaOf(item));
-    return !!item && !!p && p.of !== item.type;
+    return !!item && !!p?.of && p.of !== item.type;
   }
 
   /**

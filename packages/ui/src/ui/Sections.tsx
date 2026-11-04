@@ -95,7 +95,8 @@ export function Below({ item }: { item: Item }) {
   // types by name, then notes, then files
   const label = (g: string) => (g === "notes" ? t("below.untyped") : g === "files" ? t("below.files") : ix.typePlural(g));
   const rankOf = (g: string) => (g === "files" ? 2 : g === "notes" ? 1 : 0);
-  const keys = [...groups.keys()].sort((a, b) => rankOf(a) - rankOf(b) || label(a).localeCompare(label(b)));
+  const byGroup = (a: string, b: string) => rankOf(a) - rankOf(b) || label(a).localeCompare(label(b));
+  const keys = [...groups.keys()].sort(byGroup);
   const create = (title: string, type: string | null) => repo.create({ title, parents: [item.id], ...(type ? { type } : {}) });
   const typeName = (type: string | null) => (type ? ix.typeName(type) : undefined) ?? t("kind.note");
 
@@ -107,7 +108,7 @@ export function Below({ item }: { item: Item }) {
     return null;
   };
   const row = (x: Item, depth: number, path: Set<string>): React.ReactNode => {
-    const kids = path.has(x.id) ? [] : below(x.id).sort((a, b) => cmpKey(groupOf(a), groupOf(b)) || cmp(a, b));
+    const kids = path.has(x.id) ? [] : below(x.id).sort((a, b) => byGroup(groupOf(a), groupOf(b)) || cmp(a, b));
     const open = kids.length > 0 && allOpen !== flipped.has(x.id);
     const progress = ix.progressOf(x);
     const status = statusOf(x, ix.schemaOf(x));

@@ -99,6 +99,16 @@ test("progress on a deleted type filters nothing", () => {
   expect(activeProjects(ix).map((x) => x.item.id)).toEqual([plan]); // still counts progress of others
 });
 
+test("progress that counts everything below does not make a project", () => {
+  const m = ownTypes();
+  m.change("t_plan", (doc) => upsertProp(doc, "p_done", { computed: { fn: "progress" } }));
+  const plan = m.add({ title: "Umzug", type: "t_plan", props: { p_state: "v_on" } });
+  m.add({ title: "Kartons", type: "t_step", parents: [plan], props: { p_state: "s_new" } });
+  const ix = m.index();
+  expect(ix.isContainer(ix.get(plan))).toBe(false);
+  expect(activeProjects(ix)).toEqual([]);
+});
+
 test("a word for paused finds the option marked paused, not one only called so", () => {
   const p: PropDef = {
     id: "p",
