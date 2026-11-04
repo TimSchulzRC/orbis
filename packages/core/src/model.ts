@@ -125,7 +125,6 @@ export interface ViewDef {
   display?: ViewKind;
   scope?: "level" | "all"; // "Nur diese Ebene" / "Inkl. Unterprojekte"
   group?: string;
-  showDone?: boolean;
 }
 
 export interface FileMeta {

@@ -4,7 +4,7 @@ import { Textarea } from "../components/ui/textarea";
 import { NativeSelect } from "../components/ui/native-select";
 import { Fragment, useState } from "react";
 import { ChevronRight, Plus, Send } from "lucide-react";
-import { type Item, type ViewDef } from "@obtion/core/model";
+import { type Item } from "@obtion/core/model";
 import type { Index } from "@obtion/core/graph";
 import { fmtBytes, fmtDateTime } from "@obtion/core/i18n";
 import { dueOf, isDone, statusOf, statusProp } from "@obtion/core/traits";
@@ -69,25 +69,19 @@ function order(ix: Index) {
 /**
  * "Darunter" (design rules § 3.1, zone 4): everything below the page, the same for every type.
  * The entries directly below, grouped by type; each one with entries below opens into them, any
- * type, any depth; all start closed. Done ones stay hidden
- * until "erledigte einblenden".
+ * type, any depth; all start closed. Done ones show at the end of their group.
  */
 export function Below({ item }: { item: Item }) {
   const { t, lang } = useT();
   const ix = useIndex();
-  const view: ViewDef = item.views.main ?? {};
-  const setView = (patch: Partial<ViewDef>) => repo.setView(item.id, "main", { ...view, ...patch });
   // the entries opened to show what lies below them
   const [opened, flip] = useStoredSet(KEYS.fold(`below:${item.id}`));
   // the type of the entry being added at the top: undefined closed, null a note
   const [adding, setAdding] = useState<string | null | undefined>(undefined);
   const cmp = order(ix);
   const done = (x: Item) => isDone(x, ix.schemaOf(x));
-  const below = (id: string) => ix.items(ix.childrenOf(id)).filter((c) => !c.deleted && (view.showDone || !done(c)));
-  const doneCount = [...ix.descendants(item.id)].filter((id) => {
-    const x = ix.get(id);
-    return !!x && !x.deleted && done(x);
-  }).length;
+  // done ones stay, at the end of their group
+  const below = (id: string) => ix.items(ix.childrenOf(id)).filter((c) => !c.deleted);
   const direct = below(item.id);
   const groups = new Map<string, Item[]>();
   for (const c of direct) (groups.get(groupOf(c)) ?? groups.set(groupOf(c), []).get(groupOf(c))!).push(c);
@@ -159,7 +153,7 @@ export function Below({ item }: { item: Item }) {
     </div>
   );
   // nothing below: only the button
-  if (!direct.length && !doneCount)
+  if (!direct.length)
     return (
       <div className="mt-6">
         {adding === undefined ? addMenu : <Card className="overflow-hidden">{addRow}</Card>}
@@ -189,13 +183,6 @@ export function Below({ item }: { item: Item }) {
             )}
           </div>
         ))}
-        {doneCount > 0 && (
-          <div className="flex min-h-10 items-center border-t border-line px-3 text-[13px] text-muted-foreground">
-            <Button variant="plain" onClick={() => setView({ showDone: !view.showDone })} className="tap-y ml-auto whitespace-nowrap hover:text-fg">
-              {view.showDone ? t("children.doneHide") : t("children.doneShow", { count: doneCount })}
-            </Button>
-          </div>
-        )}
       </Card>
     </section>
   );
