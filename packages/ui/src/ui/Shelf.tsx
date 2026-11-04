@@ -1,9 +1,9 @@
-// The tray's inbox panel ("Eingang") is for reading, not sorting: an opened entry stays in the
-// inbox, and sorting happens in the review. On Heute on a desktop it is `pinned` into the page and
-// never closes.
-import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, ArrowUp, ChevronDown, ChevronRight, Maximize2, RotateCcw, SlidersHorizontal, Undo2 } from "lucide-react";
-import { type Item, SETTINGS_ID, setMeta, setSettings } from "@obtion/core/model";
+// The inbox panel's list (left of the entry on a desktop, the panel itself on a phone): what waits,
+// what was sorted with its undo (kept until cleared), and folded below what comes back tomorrow ("Morgen wieder").
+// Also the newest entries as cards on Heute, and the rule of what lands in the inbox.
+import { useState } from "react";
+import { ArrowUp, Check, ChevronDown, ChevronRight, ListX, Maximize2, RotateCcw, SlidersHorizontal, Undo2 } from "lucide-react";
+import { SETTINGS_ID, setMeta, setSettings } from "@obtion/core/model";
 import type { Repo } from "@obtion/sync";
 import type { QueryDef } from "@obtion/core/query";
 import { inboxWhere } from "@obtion/core/inbox";
@@ -11,94 +11,48 @@ import { resetInbox } from "@obtion/core/setup";
 import { plainText } from "@obtion/core/search";
 import { type Lang, type T, fmtBytes } from "@obtion/core/i18n";
 import { useRepo, itemPath, spaceHref } from "../hooks";
-import { useBlobUrl } from "../files";
-import { Textarea } from "../components/ui/textarea";
 import { replica, spaceById, useAccounts } from "../accounts";
 import { useT, titleOf } from "../i18n";
-import { Button, Dialog, MenuItem, MoreMenu, DraftBar } from "./primitives";
+import { Button, Dialog, IconButton, MenuItem, MoreMenu, DraftBar } from "./primitives";
 import { Tip } from "../components/ui/tooltip";
-import { ItemIcon, RelTime, BelowList } from "./item-look";
+import { ItemIcon, RelTime } from "./item-look";
 import { cn } from "../lib/utils";
-import { Editor } from "./Editor";
-import { TitleField } from "./TitleField";
 import { QueryEditor } from "./QueryEditor";
 import { SpaceFilter, SpaceScope } from "./Spaces";
 import { notify } from "./feedback";
-import { type InboxEntry, closeShelf, dismissShelf, openReview, openShelf, useInboxItems, useLaterItems, useShelf } from "./inbox";
+import { type InboxEntry, openShelf } from "./inbox";
 import { sameValue } from "@obtion/core/equal";
-import { filePreview } from "./text";
 
-/** An open dialog or menu (a tooltip's popper does not count): Escape is theirs. */
-const OVERLAY_OPEN = "[role=dialog][data-state=open], [data-radix-popper-content-wrapper]:not(:has([role=tooltip]))";
 /** A waiting entry ("Morgen wieder") comes back into the inbox now. */
-const backNow = (repo: Repo, id: string) => repo.change(id, (d) => setMeta(d, { later: null }));
+export const backNow = (repo: Repo, id: string) => repo.change(id, (d) => setMeta(d, { later: null }));
 
-export function ShelfPanel({ desktop, pinned }: { desktop: boolean; pinned?: boolean }) {
-  const { t } = useT();
-  // sorting (lying over the panel pinned on Heute) its `at` is the review's
-  const { at: openAt, sort } = useShelf();
-  const at = sort ? undefined : openAt;
-  const entries = useInboxItems();
-  const later = useLaterItems();
-  const inInbox = at ? entries.find((e) => e.key === at) : undefined;
-  const entry = inInbox ?? (at ? later.find((e) => e.key === at) : undefined);
-  // a key from before (the entry was sorted elsewhere meanwhile): the list
-  useEffect(() => void (at && !entry && openShelf()), [at, !!entry]);
-  // Escape: from an entry back to the list, from the list closed – unless a dialog or menu above it takes it
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape" || e.defaultPrevented || document.querySelector(OVERLAY_OPEN)) return;
-      if (entry) openShelf();
-      else if (!pinned) dismissShelf();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [!!entry]);
-  return (
-    <div
-      // pinned it is part of the tray's region, else a dialog over the page
-      role={pinned ? undefined : "dialog"}
-      aria-label={pinned ? undefined : t("tray.title")}
-      data-shelf-panel={pinned ? "pinned" : "open"}
-      // a link inside leads away: the panel closes behind it
-      onClickCapture={(e) => (e.target as HTMLElement).closest("a[href]") && closeShelf()}
-      className={cn(
-        "flex flex-col overflow-hidden border border-line bg-surface",
-        pinned
-          ? "h-full rounded-2xl shadow-[0_6px_24px_-12px_rgb(0_0_0/0.25)]"
-          : cn("shadow-[0_18px_50px_-12px_rgb(0_0_0/0.45)]", desktop ? "max-h-[min(640px,calc(100dvh-160px))] rounded-2xl" : entry ? "h-full rounded-t-2xl" : "max-h-[min(70dvh,560px)] rounded-2xl"),
-      )}
-    >
-      {!desktop && <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-line" aria-hidden />}
-      {entry ? <EntryView entry={entry} waiting={!inInbox} desktop={desktop} pinned={pinned} /> : <List entries={entries} later={later} pinned={pinned} />}
-    </div>
-  );
+/** Sorted entries shown before "Alle anzeigen". */
+const SORTED_SHOWN = 5;
+
+export interface SortedRow {
+  key: string;
+  title: string;
+  what: string;
 }
 
-/** Pinned, Esc does not close it and it takes the focus only when clicked. */
-function List({ entries, later, pinned }: { entries: InboxEntry[]; later: InboxEntry[]; pinned?: boolean }) {
+/** `current`: the entry shown beside (none on a phone's list). */
+/** `onClear`: empties "Einsortiert"; the entries stay where they were sorted to. */
+export function InboxList({ waiting, later, sorted, current, onPick, onUndo, onClear }: { waiting: InboxEntry[]; later: InboxEntry[]; sorted: SortedRow[]; current?: string; onPick: (key: string) => void; onUndo: (key: string) => void; onClear: () => void }) {
   const { t } = useT();
   const { shown } = useAccounts();
-  // the chosen row (-1: none): by the arrows or the pointer; the pointer leaving the list takes it away
-  const [sel, setSel] = useState(-1);
   const [laterOpen, setLaterOpen] = useState(false);
-  const rows = laterOpen ? [...entries, ...later] : entries;
-  const row = (e: InboxEntry, n: number) => <Row key={e.key} entry={e} n={n} on={n === sel} waiting={n >= entries.length} space={spaceById(e.space)?.name} onHover={() => setSel(n)} />;
+  const [allSorted, setAllSorted] = useState(false);
   const [rule, setRule] = useState<string | null>(null);
-  const box = useRef<HTMLDivElement>(null);
-  useEffect(() => void (!pinned && box.current?.focus()), []);
-  // only the arrows scroll the chosen row into view: on hover a half-shown row would scroll, another
-  // come under the pointer and be chosen in turn – the list flickered
-  const byKey = useRef(false);
-  useEffect(() => {
-    if (byKey.current) box.current?.querySelector(`[data-shelf="${sel}"]`)?.scrollIntoView({ block: "nearest" });
-    byKey.current = false;
-  }, [sel]);
+  const space = (e: InboxEntry) => spaceById(e.space)?.name;
+  const newestSorted = [...sorted].reverse();
+  const sortedShown = allSorted ? newestSorted : newestSorted.slice(0, SORTED_SHOWN);
+  const section = "mt-1 border-t border-line pt-1";
+  const fold = "flex w-full items-center gap-1.5 rounded-lg px-3 py-2 text-left text-[13px] text-muted-foreground hover:bg-hover hover:text-fg";
   return (
     <>
       <div className="flex shrink-0 items-center gap-2 border-b border-line py-2.5 pl-5 pr-2">
         <h2 className="text-[15px] font-semibold">
-          {t("tray.title")} <span className="tabular-nums text-warn">{entries.length}</span>
+          {t("tray.title")} <span className="tabular-nums text-warn">{waiting.length}</span>
         </h2>
         <span className="flex-1" />
         <MoreMenu>
@@ -115,35 +69,55 @@ function List({ entries, later, pinned }: { entries: InboxEntry[]; later: InboxE
       <div className="shrink-0 px-5 pt-3 empty:hidden [&>div]:mb-1">
         <SpaceFilter />
       </div>
-      <div
-        ref={box}
-        tabIndex={-1}
-        role="listbox"
-        aria-label={t("triage.list")}
-        className="min-h-0 flex-1 overflow-y-auto p-1.5 outline-none"
-        onMouseLeave={() => setSel(-1)}
-        onKeyDown={(e) => {
-          if (e.key === "ArrowDown") ((byKey.current = true), setSel((s) => Math.min(rows.length - 1, s + 1)));
-          else if (e.key === "ArrowUp") ((byKey.current = true), setSel((s) => Math.max(0, s - 1)));
-          // Enter on a button or link inside (a row, its tools, "Morgen wieder") is its own
-          else if (e.key === "Enter" && rows[sel] && !(e.target as HTMLElement).closest("button, a")) openShelf(rows[sel]!.key);
-          else return;
-          e.preventDefault();
-        }}
-      >
-        {entries.length ? entries.map((e, n) => row(e, n)) : <p className="px-4 py-8 text-center text-[15px] text-muted-foreground">{t("inbox.empty")}</p>}
+      <div className="min-h-0 flex-1 overflow-y-auto p-1.5" aria-label={t("triage.list")}>
+        {waiting.length ? (
+          <ul>
+            {waiting.map((e) => (
+              <Row key={e.key} entry={e} current={e.key === current} waiting={false} space={space(e)} onPick={() => onPick(e.key)} />
+            ))}
+          </ul>
+        ) : (
+          <p className="px-4 py-8 text-center text-[15px] text-muted-foreground">{t("inbox.empty")}</p>
+        )}
+        {sorted.length > 0 && (
+          <section aria-label={t("review.sorted")} className={section}>
+            <div className="flex items-center gap-1.5 py-1 pl-3 pr-3 text-[13px] text-muted-foreground">
+              <Check size={14} className="text-ok" /> {t("review.sorted")} <span className="tabular-nums">· {sorted.length}</span>
+              <span className="flex-1" />
+              <IconButton size="sm" icon={ListX} iconSize={14} onClick={() => (onClear(), setAllSorted(false))} title={t("review.clearSorted")} label={t("review.clearSorted")} className="shrink-0" />
+            </div>
+            <ul>
+              {sortedShown.map((s) => (
+                <li key={s.key} data-row={s.key} className="group/sorted flex items-center gap-2 rounded-xl px-3 py-2">
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[15px] text-muted-foreground">{s.title}</span>
+                    <span className="block truncate text-[13px] text-muted-foreground">{s.what}</span>
+                  </span>
+                  <IconButton size="sm" icon={RotateCcw} iconSize={14} onClick={() => onUndo(s.key)} title={t("triage.undo")} label={t("review.undoNamed", { title: s.title })} className="shrink-0 opacity-60 group-hover/sorted:opacity-100 focus-visible:opacity-100" />
+                </li>
+              ))}
+            </ul>
+            {sorted.length > SORTED_SHOWN && (
+              <Button variant="plain" aria-expanded={allSorted} onClick={() => setAllSorted((o) => !o)} className={fold}>
+                {allSorted ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                {allSorted ? t("review.sortedFewer") : t("review.sortedAll", { count: sorted.length })}
+              </Button>
+            )}
+          </section>
+        )}
         {later.length > 0 && (
-          <section aria-label={t("review.later")} className="mt-1 border-t border-line pt-1">
-            <Button
-              variant="plain"
-              aria-expanded={laterOpen}
-              onClick={() => (setLaterOpen((o) => !o), setSel((s) => Math.min(s, Math.max(0, entries.length - 1))))}
-              className="flex w-full items-center gap-1.5 rounded-lg px-3 py-2 text-left text-[13px] text-muted-foreground hover:bg-hover hover:text-fg"
-            >
+          <section aria-label={t("review.later")} className={section}>
+            <Button variant="plain" aria-expanded={laterOpen} onClick={() => setLaterOpen((o) => !o)} className={fold}>
               {laterOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
               {t("review.later")} <span className="tabular-nums">· {later.length}</span>
             </Button>
-            {laterOpen && later.map((e, n) => row(e, entries.length + n))}
+            {laterOpen && (
+              <ul>
+                {later.map((e) => (
+                  <Row key={e.key} entry={e} current={e.key === current} waiting space={space(e)} onPick={() => onPick(e.key)} />
+                ))}
+              </ul>
+            )}
           </section>
         )}
       </div>
@@ -207,27 +181,28 @@ function preview(e: InboxEntry, t: T, lang: Lang, notes: number): string {
   return notes ? t("triage.notes", { count: notes }) : "";
 }
 
-/** Hovered or chosen by the arrows, the corner shows the row's buttons instead of the age. */
-function Row({ entry, n, on, waiting, space, onHover }: { entry: InboxEntry; n: number; on: boolean; waiting: boolean; space?: string; onHover: () => void }) {
+/** Hovered, the corner shows the row's buttons instead of the age (on a touch screen always). */
+function Row({ entry, current, waiting, space, onPick }: { entry: InboxEntry; current: boolean; waiting: boolean; space?: string; onPick: () => void }) {
   const { t, lang } = useT();
   const repo = replica(entry.space).repo;
   const ix = repo.index();
-  const line = preview(entry, t, lang, ix.childrenOf(entry.item.id).length);
+  const item = repo.get(entry.item.id) ?? entry.item;
+  const line = preview({ ...entry, item }, t, lang, ix.childrenOf(item.id).length);
   return (
-    <div data-shelf={n} role="option" aria-selected={on} onMouseMove={onHover} className={cn("group/row relative rounded-xl", on && "bg-hover")}>
-      <Button variant="plain" onClick={() => openShelf(entry.key)} className="block w-full min-w-0 rounded-xl px-3 py-2.5 text-left">
+    <li data-row={entry.key} className={cn("group/row relative rounded-xl hover:bg-hover", current && "bg-selected before:absolute before:inset-y-2.5 before:left-0 before:w-[3px] before:rounded-r before:bg-inbox")}>
+      <Button variant="plain" onClick={onPick} aria-current={current} className="block w-full min-w-0 rounded-xl px-3 py-2.5 text-left">
         <span className="flex min-h-6 items-center gap-1.5 text-[13px] text-muted-foreground">
-          <ItemIcon item={entry.item} size={14} ix={ix} />
+          <ItemIcon item={item} size={14} ix={ix} />
           <span className="min-w-0 flex-1 truncate">{space}</span>
           {/* the buttons take the corner: the age gives way (always on a touch screen, where they always show) */}
-          <span className={cn("shrink-0 text-xs pointer-coarse:invisible", on ? "invisible" : "group-hover/row:invisible")}>
-            <RelTime ts={entry.item.created} />
+          <span className="shrink-0 text-xs group-hover/row:invisible pointer-coarse:invisible">
+            <RelTime ts={item.created} />
           </span>
         </span>
-        <span className="mt-0.5 block truncate text-[15px] font-medium">{titleOf(entry.item, t)}</span>
+        <span className="mt-0.5 block truncate text-[15px] font-medium">{titleOf(item, t)}</span>
         {line && <span className="block truncate text-[13px] text-muted-foreground">{line}</span>}
       </Button>
-      <span className={cn("absolute right-2 top-2 flex items-center gap-0.5 focus-within:opacity-100 pointer-coarse:opacity-100", on ? "opacity-100" : "opacity-0 group-hover/row:opacity-100")}>
+      <span className="absolute right-2 top-2 flex items-center gap-0.5 opacity-0 focus-within:opacity-100 group-hover/row:opacity-100 pointer-coarse:opacity-100">
         {waiting && (
           <Tip label={t("tray.backNow")}>
             <Button variant="plain" onClick={() => backNow(repo, entry.item.id)} className={iconTap} aria-label={t("tray.backNow")}>
@@ -237,7 +212,7 @@ function Row({ entry, n, on, waiting, space, onHover }: { entry: InboxEntry; n: 
         )}
         <OpenFull entry={entry} className="p-1 hover:bg-surface" />
       </span>
-    </div>
+    </li>
   );
 }
 
@@ -252,108 +227,6 @@ function OpenFull({ entry, className }: { entry: InboxEntry; className?: string 
         <Maximize2 size={15} />
       </a>
     </Tip>
-  );
-}
-
-function EntryView({ entry, waiting, desktop, pinned }: { entry: InboxEntry; waiting: boolean; desktop: boolean; pinned?: boolean }) {
-  const { t } = useT();
-  return (
-    <SpaceScope id={entry.space}>
-      <div className="flex shrink-0 items-center gap-1 border-b border-line py-2 pl-2 pr-2">
-        <Button variant="plain" onClick={() => openShelf()} className="tap inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[15px] text-muted-foreground hover:bg-hover hover:text-fg">
-          <ArrowLeft size={16} /> {t("tray.title")}
-        </Button>
-        {desktop && <span className="min-w-0 truncate text-[15px]">/ {titleOf(entry.item, t)}</span>}
-        <span className="flex-1" />
-        <OpenFull entry={entry} />
-        {!pinned && !desktop && <Button onClick={dismissShelf} className="font-semibold">{t("tray.done")}</Button>}
-      </div>
-      <EntryBody entry={entry} waiting={waiting} />
-    </SpaceScope>
-  );
-}
-
-function EntryBody({ entry, waiting }: { entry: InboxEntry; waiting: boolean }) {
-  const { t } = useT();
-  const repo = useRepo();
-  const ix = repo.index();
-  const item = repo.get(entry.item.id) ?? entry.item;
-  const { shown } = useAccounts();
-  const kids = ix.items(ix.childrenOf(item.id));
-  return (
-    <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6 pt-4 max-lg:px-4">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-inbox/40 bg-inbox/10 px-3.5 py-2.5 text-[13px]">
-        <span className="size-2 shrink-0 rounded-full bg-inbox" aria-hidden />
-        <span className="min-w-0 flex-1 basis-48">
-          <b className="font-semibold text-warn">{t(waiting ? "tray.laterTitle" : "tray.staysTitle")}</b> <span className="text-muted-foreground">{t(waiting ? "tray.laterHint" : "tray.staysHint")}</span>
-        </span>
-        {waiting ? (
-          // back into the inbox now: then it is an entry like the others (this banner turns into the one below)
-          <Button variant="plain" onClick={() => backNow(repo, item.id)} className="shrink-0 text-muted-foreground underline decoration-dotted underline-offset-4 hover:text-fg max-lg:basis-full max-lg:pl-5">
-            {t("tray.backNow")}
-          </Button>
-        ) : (
-          <Button variant="plain" onClick={() => openReview(entry.key)} className="shrink-0 text-muted-foreground underline decoration-dotted underline-offset-4 hover:text-fg max-lg:basis-full max-lg:pl-5">
-            {t("tray.sortNow")}
-          </Button>
-        )}
-      </div>
-      <p className="mt-4 flex flex-wrap items-center gap-x-2 text-[13px] text-muted-foreground">
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-line px-2 py-0.5 text-fg">
-          <ItemIcon item={item} size={13} /> {item.kind === "datei" ? t("kind.file") : t("kind.note")}
-        </span>
-        {shown.length > 1 && <span>{spaceById(entry.space)?.name}</span>}
-        <span>
-          {t("tray.putDown")} <RelTime ts={item.created} />
-        </span>
-      </p>
-      <div className="mt-2 text-[26px] font-bold leading-8 tracking-[-0.015em] [&_textarea]:text-[26px] [&_textarea]:font-bold">
-        <TitleField item={item} autoFocus={false} placeholder={item.file?.name} />
-      </div>
-      {item.file ? (
-        <FileBody key={item.id} item={item} />
-      ) : (
-        <div className="mt-2 text-[15px]">
-          <Editor doc={repo.getDoc(item.id)} nodeId={item.id} minHeight="min-h-24" />
-        </div>
-      )}
-      <BelowList items={kids} className="mt-6" />
-    </div>
-  );
-}
-
-/** A file: what it shows (a picture, else the text found in it) and its description, as on its page. */
-function FileBody({ item }: { item: Item }) {
-  const { t } = useT();
-  const repo = useRepo();
-  const file = item.file!;
-  const img = useBlobUrl(file.filetype === "bild" ? (file.display ?? file.hash) : file.thumb, true);
-  // saved on leaving the field, and when the panel goes back or closes while it is being edited
-  const draft = useRef<string | null>(null);
-  const save = () => {
-    if (draft.current !== null && draft.current !== (repo.get(item.id)?.body ?? "")) repo.setBody(item.id, draft.current);
-    draft.current = null;
-  };
-  useEffect(() => save, []);
-  return (
-    <>
-      {img ? (
-        <img src={img} alt={item.body || item.title} className="mt-3 max-h-[40vh] w-auto rounded-lg border border-line" />
-      ) : file.text ? (
-        <p className="mt-3 line-clamp-6 text-[15px] leading-[1.65] text-muted-foreground">{filePreview(file.text)}</p>
-      ) : null}
-      <Textarea
-      variant="inline"
-        defaultValue={item.body}
-        key={item.id}
-        onChange={(e) => (draft.current = e.target.value)}
-        onBlur={save}
-        placeholder={t("file.descriptionPlaceholder")}
-        aria-label={t("file.description")}
-        rows={2}
-        className="field mt-3 w-full resize-y bg-transparent text-[15px] leading-[1.65] outline-none placeholder:text-faint"
-      />
-    </>
   );
 }
 

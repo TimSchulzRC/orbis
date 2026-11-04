@@ -19,7 +19,7 @@ import { createAndOpen } from "../actions";
 import { Button } from "./primitives";
 import { openSettings } from "./settings-open";
 import { openNewType } from "./type-edit";
-import { openReview } from "./inbox";
+import { openShelf } from "./inbox";
 
 /** Search hits shown for a query. The palette is the only search, so it lists more than fit at once. */
 const MAX_HITS = 30;
@@ -64,7 +64,7 @@ export function CommandPalette({ query: initial = "", onClose }: { query?: strin
   const pinnedTypes = ix.captureTypes();
   const captureTypes = [...pinnedTypes, ...ix.typesByName().filter((x) => !pinnedTypes.includes(x.id)).map((x) => x.id)];
   const cmds: [string, () => void][] = [
-    [t("palette.cmd.sortInbox"), () => openReview()],
+    [t("palette.cmd.sortInbox"), () => openShelf()],
     [t("nav.settings"), openSettings],
     [t("palette.cmd.newType"), () => openNewType(captureIn)],
     [t("palette.cmd.language"), () => setLang(getLang() === "de" ? "en" : "de")],

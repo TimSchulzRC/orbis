@@ -1,5 +1,6 @@
-// The tray's panel: every row has the whole page one click away (an icon, shown on hover); what
-// waits until tomorrow is folded below ("Morgen wieder") and can come back into the inbox now.
+// The inbox panel's list: every row has the whole page one click away (an icon, shown on hover); what
+// waits until tomorrow is folded below ("Morgen wieder"), opens beside and can come back into the inbox
+// now. Pinned on Heute the panel takes its keys only while the focus is in it.
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { commands, page } from "vitest/browser";
 import { cleanup, render } from "vitest-browser-react";
@@ -7,7 +8,7 @@ import type { Repo } from "@obtion/sync";
 import { setMeta } from "@obtion/core/model";
 import { inbox } from "@obtion/core/placement";
 import { tomorrow } from "@obtion/core/inbox";
-import { ShelfPanel } from "../../packages/ui/src/ui/Shelf";
+import { InboxPanel } from "../../packages/ui/src/views/Review";
 import { openShelf } from "../../packages/ui/src/ui/inbox";
 import { workspace } from "./workspace";
 
@@ -15,22 +16,25 @@ let repo: Repo;
 let title = "";
 
 beforeEach(async () => {
+  localStorage.removeItem("obtion.inbox.sorted");
   repo = await workspace();
   const waiting = inbox(repo.index())[0]!;
   title = waiting.title;
   repo.change(waiting.id, (d) => setMeta(d, { later: tomorrow() }));
-  openShelf(); // the panel is one for the app: at the list, not at an entry a test before opened
-  // away from the window's edge, as above the tray (at the edge a label moves inwards to stay whole)
+  openShelf(); // the panel is one for the app: not at an entry a test before opened
   await render(
-    <div style={{ width: 640, margin: "0 auto" }}>
-      <ShelfPanel desktop pinned />
+    <div style={{ width: 1040, height: 700, margin: "0 auto" }}>
+      <InboxPanel desktop pinned />
     </div>,
   );
 });
 afterEach(() => cleanup());
 
+const rows = () => page.getByRole("listitem").filter({ has: page.getByRole("button", { name: /.+/ }) });
+const titleNow = () => document.querySelector("article h2")?.textContent?.trim() ?? "";
+
 test("a row: workspace, title, text; on hover its buttons take the corner from the age", async () => {
-  const row = page.getByRole("option").first();
+  const row = rows().first();
   await expect.element(row).toBeVisible();
   expect(row.element().textContent?.normalize()).toContain("Persönlich".normalize());
   const open = row.getByRole("link", { name: "Ganz öffnen" });
@@ -45,23 +49,36 @@ test("a row: workspace, title, text; on hover its buttons take the corner from t
   await expect.element(row.getByRole("button", { name: "Jetzt zurück in den Eingang" })).not.toBeInTheDocument();
 });
 
-test('"Morgen wieder" lists what waits, folded; it opens in the panel and comes back into the inbox now', async () => {
-  await expect.element(page.getByRole("option").getByText(title, { exact: true })).not.toBeInTheDocument();
+test('"Morgen wieder" lists what waits, folded; it opens beside and comes back into the inbox now', async () => {
+  const later = page.getByRole("region", { name: "Morgen wieder" });
+  await expect.element(later.getByText(title, { exact: true })).not.toBeInTheDocument();
   await page.getByRole("button", { name: /Morgen wieder · 1/ }).click();
-  const waiting = page.getByRole("option").filter({ hasText: title });
+  const waiting = later.getByRole("listitem").filter({ hasText: title });
   await waiting.hover();
   await expect.element(waiting.getByRole("button", { name: "Jetzt zurück in den Eingang" })).toBeVisible();
-  await page.getByRole("option").getByText(title, { exact: true }).click();
-  await expect.element(page.getByText("Kommt morgen wieder in den Eingang.")).toBeVisible();
-  // the header: the whole page as an icon, nothing to close
-  await expect.element(page.getByRole("link", { name: "Ganz öffnen" })).toBeVisible();
+  await later.getByText(title, { exact: true }).click();
+  await expect.poll(titleNow).toBe(title);
+  // pinned: nothing to close
   await expect.element(page.getByRole("button", { name: "Schließen" })).not.toBeInTheDocument();
-  await page.getByRole("button", { name: "Jetzt zurück in den Eingang" }).click();
-  await expect.element(page.getByText("Bleibt im Eingang bis zum Einsortieren.")).toBeVisible();
+  await page.getByRole("button", { name: /^Zurückholen/ }).click();
+  await expect.element(page.getByRole("button", { name: /^Morgen/ }).first()).toBeVisible();
+  await expect.element(later.getByText(title, { exact: true })).not.toBeInTheDocument();
+});
+
+test("pinned, the keys are the panel's only while the focus is in it", async () => {
+  await expect.poll(titleNow).not.toBe("");
+  const first = titleNow();
+  (document.activeElement as HTMLElement | null)?.blur();
+  await commands.keys("press", "a");
+  await new Promise((r) => setTimeout(r, 200));
+  expect(titleNow(), "a key on the page does not pin the entry").toBe(first);
+  page.getByRole("article").element().closest<HTMLElement>("[data-shelf-panel]")!.focus();
+  await commands.keys("press", "a");
+  await expect.poll(titleNow, { message: "in the panel it does" }).not.toBe(first);
 });
 
 test("a button's label shows quickly, centred above it", async () => {
-  const row = page.getByRole("option").first();
+  const row = rows().first();
   await row.hover();
   const open = row.getByRole("link", { name: "Ganz öffnen" });
   await open.hover();
@@ -71,15 +88,4 @@ test("a button's label shows quickly, centred above it", async () => {
   const box = document.querySelector("[data-radix-popper-content-wrapper] > *")!.getBoundingClientRect();
   expect(Math.abs(box.left + box.width / 2 - (b.left + b.width / 2))).toBeLessThan(2);
   expect(box.bottom).toBeLessThanOrEqual(b.top);
-});
-
-test("with a row chosen by the arrows, Enter on a button inside is the button's, not the row's", async () => {
-  page.getByRole("listbox").element().focus();
-  await commands.keys("press", "ArrowDown");
-  await expect.element(page.getByRole("option").first()).toHaveAttribute("aria-selected", "true");
-  const toggle = page.getByRole("button", { name: /Morgen wieder · 1/ });
-  toggle.element().focus();
-  await commands.keys("press", "Enter");
-  await expect.element(toggle).toHaveAttribute("aria-expanded", "true");
-  await expect.element(page.getByText("Bleibt im Eingang bis zum Einsortieren.")).not.toBeInTheDocument();
 });
