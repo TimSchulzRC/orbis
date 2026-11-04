@@ -167,8 +167,9 @@ export const PERSONAL = "personal";
 
 /**
  * An older app that meets newer data still reads it but asks for an update before it writes.
+ * 2: the status is a property kind, no longer the capability `status` on a select.
  */
-export const FORMAT = 1;
+export const FORMAT = 2;
 
 export interface SettingsRecord {
   setupLang?: string;

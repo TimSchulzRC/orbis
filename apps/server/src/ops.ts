@@ -1276,6 +1276,7 @@ export class Ops {
         return { id: existing?.id ?? shortId("o"), name: m[1]!.trim(), group: grouped ? ((m[2] as StatusGroup | undefined) ?? existing?.group ?? "todo") : undefined, color: existing?.color ?? "gray" };
       });
       const opts = options ?? cur?.options ?? [];
+      if (grouped && options && !options.length) throw new OpError(`A status needs at least one option.`);
       let def: string | null | undefined;
       if (p.default === null || p.default === "") def = null;
       else if (p.default !== undefined) {

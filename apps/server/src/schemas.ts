@@ -36,7 +36,9 @@ export const capInput = z.object({
   due_date: z.string().nullable().optional().describe("name of a date property"),
   updates: z.boolean().optional(),
   template: z.string().nullable().optional(),
-});
+})
+  // removed ones (status, progress, main_action) fail loudly instead of being dropped
+  .strict();
 export type CapInput = z.infer<typeof capInput>;
 
 export const getInput = z.object({

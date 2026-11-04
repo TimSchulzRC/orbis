@@ -6,6 +6,7 @@ import { join } from "node:path";
 import * as Y from "yjs";
 import type { Store } from "@obtion/server/store";
 import { type Ops, OpError } from "@obtion/server/ops";
+import { capInput } from "@obtion/server/schemas";
 import { Mirror } from "@obtion/server/mirror";
 import { SYS } from "@obtion/core/setup";
 import { storeWriter } from "@obtion/server/setup";
@@ -211,6 +212,11 @@ test("a status added later: default options, existing entries show the default, 
   // several values into the one status: the first that matches an option
   ops.updateType("Notizzettel", { change_properties: [{ property: "Etappe", kind: "status", options: ["Neu (todo)", "Erledigt (done)"] }] }, A);
   expect(ops.get(old.id).status).toBe("Erledigt (done)");
+  // a status never runs out of options
+  expect(() => ops.updateType("Zettel", { change_properties: [{ property: "Stand", options: [] }] }, A)).toThrow(/at least one option/);
+  // removed capabilities are refused, not silently dropped
+  expect(capInput.safeParse({ status: "Stand" }).success).toBe(false);
+  expect(capInput.safeParse({ updates: true }).success).toBe(true);
 });
 
 test("query blocks written by an agent in text form are stored as JSON and read back as text", () => {

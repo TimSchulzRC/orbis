@@ -185,6 +185,9 @@ export function upgradeSetup(w: Writer, lang: Lang) {
     const type = w.get(id);
     if (type && !type.deleted && type.schema && !type.schema.views?.length) w.change(id, (doc) => setTabs(doc, tabs));
   }
+  // stored, so an older app stays read-only even offline once it has synced this
+  const settings = w.get(SETTINGS_ID);
+  if (settings && (settings.settings?.format ?? 0) < FORMAT) w.change(SETTINGS_ID, (doc) => setSettings(doc, { format: FORMAT }));
 }
 
 /** "Standard wiederherstellen" of the inbox. */

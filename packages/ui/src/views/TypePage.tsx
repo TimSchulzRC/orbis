@@ -491,9 +491,12 @@ function OptionsEditor({ prop, grouped, onChange }: { prop: PropDef; grouped: bo
           ))}
         </NativeSelect>
       )}
-      <Button variant="plain" onClick={() => onChange(options.filter((_, n) => n !== i))} className="text-muted-foreground hover:text-danger" aria-label={t("type.removeOption")}>
-        <X size={13} />
-      </Button>
+      {/* a status keeps at least one option */}
+      {!(grouped && options.length === 1) && (
+        <Button variant="plain" onClick={() => onChange(options.filter((_, n) => n !== i))} className="text-muted-foreground hover:text-danger" aria-label={t("type.removeOption")}>
+          <X size={13} />
+        </Button>
+      )}
     </div>
   );
   if (!grouped)

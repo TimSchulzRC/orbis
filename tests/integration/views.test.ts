@@ -5,7 +5,7 @@ import { setupStore } from "../support/store";
 import type { Store } from "@obtion/server/store";
 import type { Ops } from "@obtion/server/ops";
 import { SYS, runSetup, typeTabs, upgradeSetup } from "@obtion/core/setup";
-import { setTab, setTabs } from "@obtion/core/model";
+import { FORMAT, SETTINGS_ID, setSettings, setTab, setTabs } from "@obtion/core/model";
 import { groupId, groupItems, runQuery, tabDef } from "@obtion/core/query";
 
 afterAll(removeTempDirs);
@@ -128,4 +128,8 @@ test("views live in the type: shipped types get theirs at setup, older workspace
   expect(r.index().types.get(SYS.project)!.schema!.views!.some((v) => v.id === "v_board")).toBe(false);
   r.addType("t_modul", { name: "Modul" });
   expect(typeTabs(r.index().types.get("t_modul")!, "de").map((v) => v.id)).toEqual(["v_all"]);
+  // the stored format follows, so an older app turns read-only even offline
+  r.change(SETTINGS_ID, (doc) => setSettings(doc, { format: 1 }));
+  upgradeSetup(r.writer, "de");
+  expect(r.writer.get(SETTINGS_ID)!.settings!.format).toBe(FORMAT);
 });
