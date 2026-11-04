@@ -37,37 +37,29 @@ function useEntries(pick: (ix: Index) => Item[]): InboxEntry[] {
     .sort((a, b) => b.item.created - a.item.created);
 }
 
-const REVIEW_SECONDS_PER_ENTRY = 20;
-export const reviewMinutes = (count: number) => Math.max(1, Math.round((count * REVIEW_SECONDS_PER_ENTRY) / 60));
-
 /**
- * `sort` means the review is open, starting at `at`. The open panel is a history step, so Back
- * closes it instead of leaving the app on a phone. On Heute that step is "#/inbox" or "#/review",
- * elsewhere the page's own address once more. Switching between list and review needs no step.
+ * The inbox panel, open at `at` (an entry key; none: the first waiting). The open panel is a
+ * history step, so Back closes it instead of leaving the app on a phone. On Heute that step is
+ * "#/inbox", elsewhere the page's own address once more. "#/review" is the old address of the same.
  */
-const shelf = createStore<{ open: boolean; at?: string; sort?: boolean }>({ open: false });
+const shelf = createStore<{ open: boolean; at?: string }>({ open: false });
 const hashPath = () => location.hash.split("?")[0];
-const onInbox = () => hashPath() === "#/inbox";
-const onReview = () => hashPath() === "#/review";
+const onInbox = () => hashPath() === "#/inbox" || hashPath() === "#/review";
 const onToday = () => ["", "#", "#/"].includes(hashPath()!);
-const reviewAt = () => new URLSearchParams(location.hash.split("?")[1] ?? "").get("at") ?? undefined;
+const addressAt = () => new URLSearchParams(location.hash.split("?")[1] ?? "").get("at") ?? undefined;
 
-function openPanel(sort: boolean, at?: string) {
+export function openShelf(at?: string) {
   const s = shelf.get();
-  if (onInbox() || onReview()) {
-    // Heute with the panel: the address says which way it is open
-    if (onInbox() === sort) location.replace(sort ? "#/review" : "#/inbox");
+  if (onInbox()) {
+    if (hashPath() === "#/review") location.replace("#/inbox");
   } else if (!s.open) {
     if (onToday()) {
-      location.hash = sort ? "#/review" : "#/inbox";
+      location.hash = "#/inbox";
       history.replaceState({ ...history.state, shelf: true }, "");
-    } else history.pushState({ ...history.state, shelf: true, sort }, "");
-  } else if (history.state?.shelf) history.replaceState({ ...history.state, sort }, "");
-  shelf.set({ open: true, at, sort });
+    } else history.pushState({ ...history.state, shelf: true }, "");
+  }
+  shelf.set({ open: true, at });
 }
-
-export const openShelf = (at?: string) => openPanel(false, at);
-export const openReview = (at?: string) => openPanel(true, at);
 
 /** Keeps the history step, so Back reopens the panel. For links that lead away. */
 export const closeShelf = () => shelf.get().open && shelf.set({ open: false });
@@ -77,16 +69,14 @@ export function dismissShelf() {
   if (!shelf.get().open) return;
   if (history.state?.shelf) return history.back();
   shelf.set({ open: false });
-  if (onInbox() || onReview()) location.replace("#/");
+  if (onInbox()) location.replace("#/");
 }
 
 /** Follows the history step; the chosen entry stays. */
 export function syncShelf() {
-  const open = !!history.state?.shelf || onInbox() || onReview();
-  const sort = open && (onReview() || (!onInbox() && !!history.state?.sort));
-  const s = shelf.get();
-  if (open === s.open && sort === !!s.sort) return;
-  shelf.set({ open, sort, at: open && onReview() ? reviewAt() : undefined });
+  const open = !!history.state?.shelf || onInbox();
+  if (open === shelf.get().open) return;
+  shelf.set({ open, at: open ? addressAt() : undefined });
 }
 addEventListener("popstate", syncShelf);
 

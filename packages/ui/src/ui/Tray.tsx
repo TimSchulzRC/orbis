@@ -1,13 +1,12 @@
-// The inbox tray below every page. The tray opens its panel to look in; its button starts the
-// review to sort. On Heute on a desktop with room, the panel is pinned open as part of the page.
+// The inbox tray below every page. The tray opens its panel, the list and an entry to sort. On Heute
+// on a desktop with room, the panel is pinned open as part of the page.
 import { useRef } from "react";
-import { Check, ChevronDown, ChevronUp, Inbox, Layers, Plus } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Inbox, Plus } from "lucide-react";
 import { useT } from "../i18n";
 import { cn } from "../lib/utils";
 import { Capture } from "./Capture";
-import { type InboxEntry, dismissShelf, openReview, openShelf, useInboxItems, useShelf } from "./inbox";
-import { ShelfPanel } from "./Shelf";
-import { ReviewPanel } from "../views/Review";
+import { dismissShelf, openShelf, useInboxItems, useShelf } from "./inbox";
+import { InboxPanel } from "../views/Review";
 import { Button } from "./primitives";
 import { Tip } from "../components/ui/tooltip";
 import { Backdrop } from "../components/ui/dialog";
@@ -21,29 +20,27 @@ export function Tray({ desktop, pinned, onCapture }: { desktop: boolean; pinned?
   const { t } = useT();
   const entries = useInboxItems();
   const count = entries.length;
-  const { open, at, sort } = useShelf();
-  const sorting = open && !!sort;
-  // the list over the page (pinned it is part of the page and stays)
-  const looking = open && !sort && !pinned;
+  const { open, at } = useShelf();
+  // the panel over the page (pinned it is part of the page and stays)
+  const looking = open && !pinned;
   const touch = useRef<number | null>(null);
   const ages = entries.map((e) => age(e.item.created)).sort((a, b) => b - a);
   const tray = (
     <div className={cn("relative flex shrink-0 items-center rounded-xl", !desktop && "min-w-0 flex-[1_0_0%]")}>
       {/* the legend of the marks, while the panel above is shut */}
-      <Tip label={t("tray.open", { count })} card={<Legend ages={ages} />} off={looking || sorting}>
+      <Tip label={t("tray.open", { count })} card={<Legend ages={ages} />} off={looking}>
       <Button
         variant="plain"
         // pinned it does not close, so nothing to click
-        // while sorting it switches to the list: the same panel, looked into
-        onClick={() => (sorting ? openShelf() : looking ? dismissShelf() : !pinned && openShelf())}
+        onClick={() => (looking ? dismissShelf() : !pinned && openShelf())}
         onTouchStart={(e) => (touch.current = e.touches[0]!.clientY)}
         onTouchEnd={(e) => {
           if (touch.current !== null && touch.current - (e.changedTouches[0]?.clientY ?? 0) > SWIPE_UP) (e.preventDefault(), openShelf());
           touch.current = null;
         }}
-        aria-expanded={pinned || (open && !sort)}
+        aria-expanded={pinned || open}
         aria-label={t("tray.open", { count })}
-        className={cn("relative flex min-w-0 items-center gap-2.5 rounded-xl py-1.5 pl-2.5 pr-2 text-left", desktop ? "min-h-11" : "min-h-10", pinned && !sorting ? "cursor-default" : cn("hover:bg-hover", looking && "bg-hover"), !desktop && "flex-1")}
+        className={cn("relative flex min-w-0 items-center gap-2.5 rounded-xl py-1.5 pl-2.5 pr-2 text-left", desktop ? "min-h-11" : "min-h-10", pinned ? "cursor-default" : cn("hover:bg-hover", looking && "bg-hover"), !desktop && "flex-1")}
       >
         <Inbox size={18} className={cn("shrink-0", count ? "text-muted-foreground" : "text-faint")} aria-hidden />
         <span className="flex min-w-0 flex-col gap-1.5">
@@ -58,59 +55,35 @@ export function Tray({ desktop, pinned, onCapture }: { desktop: boolean; pinned?
       </Tip>
     </div>
   );
-  // while sorting it stays, pressed, and closes it again (sorted to the end it stays too)
-  const review = count || sorting ? (
-    <Button
-      variant="plain"
-      onClick={() => (sorting ? dismissShelf() : openReview())}
-      aria-pressed={sorting}
-      aria-label={desktop ? undefined : t("tray.toReview")}
-      className={cn("flex h-10 shrink-0 items-center gap-2 rounded-xl border text-sm font-semibold text-warn", sorting ? "border-inbox/70 bg-inbox/25" : "border-inbox/45 bg-inbox/12 hover:bg-inbox/20", desktop ? "px-3" : "w-10 justify-center")}
-    >
-      <Layers size={16} />
-      {desktop && t("tray.toReview")}
-    </Button>
-  ) : (
+  const empty = !count && (
     <span className="flex h-10 shrink-0 items-center gap-1.5 px-2 text-sm text-muted-foreground">
       <Check size={15} className="text-ok" /> {t("tray.empty")}
     </span>
   );
   return (
     <>
-      {(looking || sorting) && <Backdrop className="z-30" onClick={dismissShelf} aria-hidden />}
+      {looking && <Backdrop className="z-30" onClick={dismissShelf} aria-hidden />}
       <div className={cn("relative z-40", pinned ? "flex min-h-[308px] flex-1 flex-col" : "shrink-0", desktop ? cn(pinned ? "px-8" : "px-6", "pb-4 pt-2") : "px-3 pb-2 pt-1")} role="region" aria-label={t("tray.title")}>
         <div className={cn("mx-auto", desktop && "max-w-[1040px]", pinned && "flex min-h-0 w-full flex-1 flex-col")}>
           {pinned ? (
             // above the sheets sticking out of the tray, which stay
             <div className="min-h-0 flex-1 pb-10">
-              <ShelfPanel desktop pinned />
+              <InboxPanel desktop pinned />
             </div>
           ) : looking && (
             // on a phone an entry takes the whole screen, as a sheet
             <div className={cn(desktop ? "absolute inset-x-6 bottom-full mx-auto max-w-[1040px] pb-10" : at ? "fixed inset-x-0 bottom-0 top-3 z-50 pt-safe" : "absolute inset-x-2 bottom-full pb-7")}>
-              <ShelfPanel desktop={desktop} />
-            </div>
-          )}
-          {sorting && !desktop && (
-            // on a phone the whole screen, as a sheet
-            <div className="fixed inset-x-0 bottom-0 top-3 z-50 pt-safe">
-              <ReviewPanel desktop={false} />
+              <InboxPanel desktop={desktop} />
             </div>
           )}
           {desktop ? (
             <div className="relative">
-              {/* sorting: as wide as the tray, nearly to the top; pinned over the panel on Heute */}
-              {sorting && (
-                <div className="absolute inset-x-0 bottom-full pb-10">
-                  <ReviewPanel desktop />
-                </div>
-              )}
               <div className="flex items-center gap-3 rounded-2xl bg-surface p-2 shadow-[0_6px_24px_-12px_rgb(0_0_0/0.25)]">
                 {tray}
                 <div className="min-w-0 flex-1">
                   <Capture anywhere placeholder={t("tray.placeholder")} />
                 </div>
-                {review}
+                {empty}
               </div>
             </div>
           ) : (
@@ -119,7 +92,6 @@ export function Tray({ desktop, pinned, onCapture }: { desktop: boolean; pinned?
               <Button variant="plain" onClick={onCapture} aria-label={t("capture.title")} className="tap flex size-10 shrink-0 items-center justify-center rounded-xl border border-line hover:bg-hover">
                 <Plus size={20} />
               </Button>
-              {review}
             </div>
           )}
         </div>

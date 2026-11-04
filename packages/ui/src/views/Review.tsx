@@ -1,25 +1,27 @@
-// The review ("einsortieren"): the inbox one entry at a time, as a stack in the tray's panel. The
-// card keeps one height for every entry, so the choices below it never move.
-import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
+// The inbox panel: the list on the left, the chosen entry on the right to read, edit and sort; on a
+// phone the list, and the entry as a sheet over it. Sorting moves on to the next entry and the sorted
+// one down under "Einsortiert" in the list, with its undo. The entry's card keeps one height, so the
+// choices below it never move.
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import type { EditorView } from "@codemirror/view";
-import { Check, Clock, FolderInput, Layers, Maximize2, Pencil, Pin, RotateCcw, Shapes, Trash2, Undo2, X } from "lucide-react";
-import { type Item, todayISO } from "@obtion/core/model";
+import { ArrowLeft, Check, Clock, FolderInput, Maximize2, Pencil, Pin, Shapes, Trash2, Undo2, X } from "lucide-react";
+import type { Item } from "@obtion/core/model";
 import { plainText } from "@obtion/core/search";
 import { useRepo, useItemHref, openItem } from "../hooks";
 import { replica, spaceById, useAccounts } from "../accounts";
 import { useT, titleOf } from "../i18n";
-import { recentPlaces } from "../actions";
 import { useBlobUrl } from "../files";
 import { Button, Empty, Kbd, IconButton } from "../ui/primitives";
-import { ItemIcon, RelTime, Tag, TypeGlyph, itemLook, kindLabel } from "../ui/item-look";
+import { ItemIcon, RelTime, Tag, itemLook, kindLabel } from "../ui/item-look";
 import { cn } from "../lib/utils";
 import { Markdown } from "../ui/Markdown";
 import { Editor } from "../ui/Editor";
 import { TitleField } from "../ui/TitleField";
 import { SpaceScope } from "../ui/Spaces";
-import { placeSuggestions } from "../ui/suggest";
-import { type InboxEntry, closeShelf, dismissShelf, reviewMinutes, useInboxItems, useShelf } from "../ui/inbox";
-import { type Undo, captureTypes, revert, usePickers, useTriageActions } from "../ui/TriageActions";
+import { InboxList, backNow } from "../ui/Shelf";
+import { type InboxEntry, closeShelf, dismissShelf, openShelf, useInboxItems, useLaterItems, useShelf } from "../ui/inbox";
+import { type Undo, revert, usePickers, useTriageActions } from "../ui/TriageActions";
+import { KEYS, readJSON, writeJSON } from "../ui/storage";
 
 interface Sorted {
   key: string;
@@ -31,12 +33,9 @@ interface Sorted {
 /** Where the entry was clicked to edit it (`title`: the caret offset in the title); null from the button. */
 type Edit = { x: number; y: number; title?: number } | null;
 
-/** Today's review on this device: kept when leaving it ("Später weiter"), not across a reload. */
-let session: { day: string; order: string[]; sorted: Sorted[]; at?: string } | null = null;
-
-/** The sheets of the pile behind the card, the next entry first. */
-const PILE_ORIGIN = "50% 0%";
-const SHEETS = ["translateY(-12px) scale(.95)", "translateY(-23px) scale(.9)"];
+/** The sorting on this device: kept while the panel is closed. What was sorted stays, also across a reload and into tomorrow, until "Fertig" or cleared by hand. */
+let session: { order: string[]; at?: string } | null = null;
+const storedSorted = () => readJSON<Sorted[]>(KEYS.inboxSorted, []);
 
 /** Pixels the arrow keys scroll a long entry. */
 const ARROW_SCROLL = 80;
@@ -46,36 +45,43 @@ const SWIPE = 70;
 const MAX_STEPS = 16;
 /** Characters of a file's text shown in place of a body. */
 const FILE_TEXT_PREVIEW = 1200;
-/** Places offered as quick choices. */
-const QUICK_PLACES = 3;
+/** An open dialog or menu (a tooltip's popper does not count): Escape is theirs. */
+const OVERLAY_OPEN = "[role=dialog][data-state=open], [data-radix-popper-content-wrapper]:not(:has([role=tooltip]))";
 
-export function ReviewPanel({ desktop }: { desktop: boolean }) {
+/** Pinned (on desktop Heute) it is part of the page: no close, and the keys only while the focus is in it. */
+export function InboxPanel({ desktop, pinned }: { desktop: boolean; pinned?: boolean }) {
   const { t } = useT();
   const { at } = useShelf();
   const self = useRef<HTMLDivElement>(null);
   // take the keys from the button that opened the panel
-  useEffect(() => self.current?.focus(), []);
+  useEffect(() => void (!pinned && self.current?.focus()), []);
   useEffect(() => {
+    if (pinned) return;
     const was = document.title;
     document.title = t("review.title");
     return () => void (document.title = was);
-  }, []);
+  }, [pinned]);
+  // on a phone the list, an entry over it as a sheet
+  const sheet = !desktop && !!at;
   return (
     <div
       ref={self}
       tabIndex={-1}
-      role="dialog"
-      aria-label={t("review.title")}
-      data-shelf-panel="sort"
-      // a link inside leads away from the review
+      // pinned it is part of the tray's region, else a dialog over the page
+      role={pinned ? undefined : "dialog"}
+      aria-label={pinned ? undefined : t("review.title")}
+      data-shelf-panel={pinned ? "pinned" : "open"}
+      // a link inside leads away: the panel closes behind it
       onClickCapture={(e) => (e.target as HTMLElement).closest("a[href]") && closeShelf()}
       className={cn(
-        "flex flex-col overflow-hidden border border-line bg-surface shadow-[0_18px_50px_-12px_rgb(0_0_0/0.45)] outline-none",
-        desktop ? "h-[min(900px,calc(100dvh-150px))] rounded-2xl" : "h-full rounded-t-2xl",
+        "flex flex-col overflow-hidden border border-line bg-surface outline-none",
+        pinned
+          ? "h-full rounded-2xl shadow-[0_6px_24px_-12px_rgb(0_0_0/0.25)]"
+          : cn("shadow-[0_18px_50px_-12px_rgb(0_0_0/0.45)]", desktop ? "h-[min(900px,calc(100dvh-150px))] rounded-2xl" : sheet ? "h-full rounded-t-2xl" : "max-h-[min(70dvh,560px)] rounded-2xl"),
       )}
     >
       {!desktop && <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-line" aria-hidden />}
-      <Review at={at} desktop={desktop} />
+      <Inbox at={at} desktop={desktop} pinned={!!pinned} panel={self} />
     </div>
   );
 }
@@ -87,27 +93,36 @@ function othersKey(el: Element) {
   return !!layer && !layer.hasAttribute("data-shelf-panel");
 }
 
-/** `at`: the entry to begin with, "<workspace>/<id>". */
-function Review({ at, desktop }: { at?: string; desktop: boolean }) {
+/** `at`: the entry asked for, "<workspace>/<id>" (a card on Heute, a row on a phone). */
+function Inbox({ at, desktop, pinned, panel }: { at?: string; desktop: boolean; pinned: boolean; panel: React.RefObject<HTMLDivElement | null> }) {
   const { t } = useT();
   const entries = useInboxItems();
+  const later = useLaterItems();
   const { shown } = useAccounts();
-  if (session?.day !== todayISO()) session = null;
   const order = useRef<string[]>(session?.order ?? []);
-  // what arrives meanwhile joins the end of the stack
+  // what arrives meanwhile joins the end
   for (const e of entries) if (!order.current.includes(e.key)) order.current.push(e.key);
-  const [sorted, setSorted] = useState<Sorted[]>(() => session?.sorted ?? []);
+  const [sorted, setSorted] = useState<Sorted[]>(storedSorted);
   const [chosen, setChosen] = useState<string | undefined>(at ?? session?.at);
-  // another entry asked for while open ("Jetzt schon einsortieren")
+  // another entry asked for while open
   useEffect(() => void (at && setChosen(at)), [at]);
-  const closed = useRef(false);
   const card = useRef<HTMLDivElement>(null);
-  const byKey = new Map(entries.map((e) => [e.key, e]));
-  const left = order.current.filter((k) => byKey.has(k) && !sorted.some((s) => s.key === k));
-  // the chosen entry while it still waits, else the next one after its place
-  const pickAt = (wanted?: string) => (wanted && left.includes(wanted) ? wanted : (order.current.slice(order.current.indexOf(wanted ?? "") + 1).find((k) => left.includes(k)) ?? left.at(-1)));
+  const byKey = new Map([...entries, ...later].map((e) => [e.key, e]));
+  // set aside till tomorrow and back in the inbox now: waiting again, no longer sorted
+  const due = sorted.filter((s) => s.undo.steps.some((step) => step.later !== undefined) && entries.some((e) => e.key === s.key));
+  useEffect(() => void (due.length && setSorted((list) => list.filter((s) => !due.includes(s)))), [due.length]);
+  const done = (k: string) => sorted.some((s) => s.key === k && !due.includes(s));
+  const left = order.current.filter((k) => entries.some((e) => e.key === k) && !done(k));
+  // back tomorrow and not just sent there here (that one is under "Einsortiert")
+  const waitingLater = later.filter((e) => !done(e.key));
+  const isLater = (k?: string) => !!k && waitingLater.some((e) => e.key === k);
+  // the chosen entry while it still waits (also one back tomorrow), else the next one after its place
+  const pickAt = (wanted?: string) => (wanted && (left.includes(wanted) || isLater(wanted)) ? wanted : (order.current.slice(order.current.indexOf(wanted ?? "") + 1).find((k) => left.includes(k)) ?? left.at(-1)));
   const key = pickAt(chosen);
   const entry = key ? byKey.get(key) : undefined;
+  const waiting = isLater(key);
+  // a phone shows the entry only when one was asked for
+  const listOnly = !desktop && !at;
   // editing belongs to the entry shown: another one (sorted, stepped to, undone) starts unedited
   const [editing, setEditing] = useState<{ key?: string; at: Edit } | null>(null);
   if (editing && editing.key !== key) setEditing(null);
@@ -115,19 +130,20 @@ function Review({ at, desktop }: { at?: string; desktop: boolean }) {
     (document.activeElement as HTMLElement | null)?.blur();
     setEditing(null);
   };
-  useEffect(() => void (closed.current || (session = { day: todayISO(), order: order.current, sorted, at: key })), [sorted, key]);
+  useEffect(() => void (session = { order: order.current, at: key }), [key]);
+  useEffect(() => writeJSON(KEYS.inboxSorted, sorted), [sorted]);
 
   const act = useTriageActions(() => entry!.space, { quiet: true });
   const record = (target: InboxEntry, what: string, undo?: Undo | null) => {
     if (!undo) return;
     const title = replica(target.space).repo.get(target.item.id)?.title ?? target.item.title; // may have just been edited
-    setSorted((list) => [...list, { key: target.key, title: titleOf({ title, file: target.item.file }, t), what, undo }]);
+    setSorted((list) => [...list.filter((s) => s.key !== target.key), { key: target.key, title: titleOf({ title, file: target.item.file }, t), what, undo }]);
     setChosen(target.key);
   };
   const placeIn = (list: Item[], place: string) => entry && record(entry, `→ ${replica(entry.space).repo.index().get(place)?.title ?? ""}`, act.place(list, place));
   const typeAs = (list: Item[], type: string) => entry && record(entry, replica(entry.space).repo.index().typeName(type) ?? "", act.giveType(list, type));
   const pick = usePickers(() => entry!.space, placeIn, typeAs);
-  const later = () => entry && record(entry, t("review.done.later"), act.later([entry.item]));
+  const later_ = () => entry && (waiting ? backNow(replica(entry.space).repo, entry.item.id) : record(entry, t("review.done.later"), act.later([entry.item])));
   const pin = () => entry && record(entry, t("review.done.pinned"), act.pin([entry.item]));
   const trash = () => entry && void act.trash([entry.item]).then((back) => record(entry, t("review.done.trashed"), back));
   const undo = (target = sorted.at(-1)) => {
@@ -136,13 +152,16 @@ function Review({ at, desktop }: { at?: string; desktop: boolean }) {
     setSorted((list) => list.filter((s) => s !== target));
     setChosen(target.key);
   };
+  const choose = (k: string) => (desktop ? setChosen(k) : (setChosen(k), openShelf(k)));
   const step = (direction: 1 | -1) => {
     const index = key ? left.indexOf(key) : -1;
     const next = left[index + direction];
     if (next) setChosen(next);
   };
   const finish = () => {
-    (closed.current = true), (session = null);
+    session = null;
+    writeJSON(KEYS.inboxSorted, []); // closing unmounts before the effect would store it
+    setSorted([]);
     dismissShelf();
   };
 
@@ -150,23 +169,27 @@ function Review({ at, desktop }: { at?: string; desktop: boolean }) {
   const keys = useRef<(e: KeyboardEvent) => void>(null);
   keys.current = (e) => {
     const el = e.target as HTMLElement;
+    // pinned the panel is part of the page: its keys only while the focus is in it
+    if (pinned && !panel.current?.contains(document.activeElement)) return;
     // while editing the keys are the text's (Esc: below, after the editor)
     if (editing || pick.placing || pick.typing || othersKey(el) || e.metaKey || e.ctrlKey || e.altKey) return;
     const pressed = e.key;
     // Enter on a button or link is its own; Tab moves the focus
     if ((pressed === "Enter" && el.closest("button, a")) || pressed === "Tab") return;
     // a menu or popover open above (a tooltip aside) gets its own Esc
-    if (pressed === "Escape" && document.querySelector("[role=dialog][data-state=open], [data-radix-popper-content-wrapper]:not(:has([role=tooltip]))")) return;
+    if (pressed === "Escape" && document.querySelector(OVERLAY_OPEN)) return;
+    if (listOnly && pressed !== "Escape") return;
     e.stopPropagation();
-    const firstType = entry && offeredTypes(entry)[0];
     const info = entry?.item.kind === "info";
-    if (pressed === "Escape") dismissShelf();
-    else if (pressed === "u" || pressed === "z") undo();
+    if (pressed === "Escape") {
+      if (!desktop && at) openShelf();
+      else if (!pinned) dismissShelf();
+      else return;
+    } else if (pressed === "u" || pressed === "z") undo();
     else if (!entry) return;
     else if (pressed === "e") pick.setPlacing([entry.item]);
-    else if (pressed === "c" && firstType && info) typeAs([entry.item], firstType);
     else if (pressed === "y" && info) pick.setTyping([entry.item]);
-    else if (pressed === "s") later();
+    else if (pressed === "s") later_();
     else if (pressed === "a") pin();
     else if (pressed === "x" || pressed === "Delete") trash();
     else if (pressed === "ArrowDown" || pressed === "ArrowUp") card.current?.scrollBy({ top: pressed === "ArrowDown" ? ARROW_SCROLL : -ARROW_SCROLL });
@@ -190,23 +213,28 @@ function Review({ at, desktop }: { at?: string; desktop: boolean }) {
   const total = sorted.length + left.length;
   const several = shown.length > 1;
   const touchX = useRef<number | null>(null);
-  const head = (
-    <ReviewHead
-      total={total}
-      at={entry ? sorted.length + 1 : total}
-      sorted={sorted.length}
-      minutes={reviewMinutes(left.length)}
+  const list = (
+    <InboxList
+      waiting={left.map((k) => byKey.get(k)!)}
+      later={waitingLater}
+      sorted={sorted}
+      current={desktop ? key : undefined}
+      onPick={choose}
+      onUndo={(k) => undo(sorted.find((s) => s.key === k))}
+      onClear={() => setSorted([])}
     />
   );
+  const head = <ReviewHead total={total} at={entry && !waiting ? sorted.length + 1 : total} sorted={sorted.length} onBack={desktop ? undefined : () => openShelf()} onClose={pinned ? undefined : dismissShelf} />;
   const body = entry ? (
     <SpaceScope id={entry.space}>
-      <EntryCard key={entry.key} entry={entry} space={several ? spaceById(entry.space)?.name : undefined} more={left.length - 1} scroller={card} editing={editing} onEdit={(at) => setEditing({ key, at })} onDone={stopEditing} />
-      <Choices entry={entry} onPlace={(place) => placeIn([entry.item], place)} onPick={() => (stopEditing(), pick.setPlacing([entry.item]))} onType={(type) => typeAs([entry.item], type)} onTypes={() => (stopEditing(), pick.setTyping([entry.item]))} onLater={later} onPin={pin} onTrash={trash} onUndo={sorted.length ? () => undo() : undefined} keys={desktop} quiet={!!editing} />
+      <EntryCard key={entry.key} entry={entry} space={several ? spaceById(entry.space)?.name : undefined} scroller={card} editing={editing} onEdit={(at) => setEditing({ key, at })} onDone={stopEditing} />
+      <Choices entry={entry} waiting={waiting} onPick={() => (stopEditing(), pick.setPlacing([entry.item]))} onTypes={() => (stopEditing(), pick.setTyping([entry.item]))} onLater={later_} onPin={pin} onTrash={trash} keys={desktop} quiet={!!editing} />
     </SpaceScope>
   ) : (
-    <Finished count={sorted.length} onDone={finish} />
+    <Finished count={sorted.length} onDone={pinned ? undefined : finish} />
   );
 
+  if (listOnly) return <div className="flex min-h-0 flex-1 flex-col">{list}{pick.node}</div>;
   if (!desktop)
     return (
       <div
@@ -226,33 +254,28 @@ function Review({ at, desktop }: { at?: string; desktop: boolean }) {
       </div>
     );
   return (
-    <div className="flex min-h-0 flex-1 flex-col p-6">
-      {head}
-      <div className="mt-5 flex min-h-0 flex-1 gap-6">
-        <div className="flex min-w-0 flex-1 flex-col">{body}</div>
-        <ReviewList left={left} current={key} byKey={byKey} sorted={sorted} onPick={setChosen} onUndo={undo} />
+    <div className="flex min-h-0 flex-1">
+      <div className="flex w-[280px] shrink-0 flex-col border-r border-line">{list}</div>
+      <div className="flex min-w-0 flex-1 flex-col p-6">
+        {head}
+        <div className="mt-5 flex min-h-0 flex-1 flex-col">{body}</div>
       </div>
       {pick.node}
     </div>
   );
 }
 
-function ReviewHead({ total, at, sorted, minutes }: { total: number; at: number; sorted: number; minutes: number }) {
+function ReviewHead({ total, at, sorted, onBack, onClose }: { total: number; at: number; sorted: number; onBack?: () => void; onClose?: () => void }) {
   const { t } = useT();
   return (
     <header className="shrink-0">
       <div className="flex items-center gap-3">
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-inbox/35 bg-inbox/12 text-inbox max-lg:hidden">
-          <Layers size={18} />
-        </span>
+        {onBack && <IconButton icon={ArrowLeft} iconSize={16} onClick={onBack} label={t("tray.title")} title={t("tray.title")} className="-ml-1.5 shrink-0" />}
         <div className="min-w-0 flex-1">
-          <h2 className="truncate text-lg font-semibold leading-6">{t("review.title")}</h2>
-          <p className="truncate text-[13px] tabular-nums text-muted-foreground">
-            {total ? t("review.position", { at, count: total }) : t("review.empty")}
-            {total > sorted && <> · {t("review.minutesLeft", { count: minutes })}</>}
-          </p>
+          <h2 className="truncate text-lg font-semibold leading-6">{t("review.heading")}</h2>
+          <p className="truncate text-[13px] tabular-nums text-muted-foreground">{total ? t("review.position", { at, count: total }) : t("review.empty")}</p>
         </div>
-        <IconButton icon={X} iconSize={16} onClick={dismissShelf} label={t("review.close")} title={t("review.close")} className="shrink-0 self-start" />
+        {onClose && <IconButton icon={X} iconSize={16} onClick={onClose} label={t("review.close")} title={t("review.close")} className="shrink-0 self-start" />}
       </div>
       {total > 0 && <Steps total={total} done={sorted} />}
     </header>
@@ -278,7 +301,7 @@ function Steps({ total, done }: { total: number; done: number }) {
 }
 
 /** As tall as the panel leaves, the same for every entry, so the choices below never move; a long entry scrolls inside. */
-function EntryCard({ entry, space, more, scroller, editing, onEdit, onDone }: { entry: InboxEntry; space?: string; more: number; scroller: React.RefObject<HTMLDivElement | null>; editing: { at: Edit } | null; onEdit: (at: Edit) => void; onDone: () => void }) {
+function EntryCard({ entry, space, scroller, editing, onEdit, onDone }: { entry: InboxEntry; space?: string; scroller: React.RefObject<HTMLDivElement | null>; editing: { at: Edit } | null; onEdit: (at: Edit) => void; onDone: () => void }) {
   const { t } = useT();
   const hrefOf = useItemHref();
   const repo = useRepo();
@@ -327,13 +350,8 @@ function EntryCard({ entry, space, more, scroller, editing, onEdit, onDone }: { 
     return () => (observer.disconnect(), el.removeEventListener("scroll", measure));
   }, []);
   return (
-    // room above the card for the edges of the pile
-    <div className="min-h-[180px] flex-1 pt-6">
+    <div className="min-h-[180px] flex-1">
       <div className="relative h-full">
-      {/* the farther sheet first, so it lies behind */}
-      {SHEETS.slice(0, Math.min(more, SHEETS.length))
-        .map((pose, n) => <div key={n} aria-hidden className={cn("absolute inset-0 rounded-2xl border border-line shadow-[0_4px_14px_-6px_rgb(0_0_0/0.35)]", n ? "bg-hover" : "bg-surface-2")} style={{ transform: pose, transformOrigin: PILE_ORIGIN }} />)
-        .reverse()}
       <article
         ref={self}
         className={cn(
@@ -431,18 +449,13 @@ function EntryCard({ entry, space, more, scroller, editing, onEdit, onDone }: { 
 
 /**
  * The five buttons stay the same and in the same place for every entry. Key hints go invisible while
- * the entry is edited, keeping their room so the buttons do not move.
+ * the entry is edited, keeping their room so the buttons do not move. One back tomorrow comes back now
+ * instead of "Morgen".
  */
-function Choices({ entry, onPlace, onPick, onType, onTypes, onLater, onPin, onTrash, onUndo, keys, quiet }: { entry: InboxEntry; onPlace: (p: string) => void; onPick: () => void; onType: (type: string) => void; onTypes: () => void; onLater: () => void; onPin: () => void; onTrash: () => void; onUndo?: () => void; keys: boolean; quiet: boolean }) {
+function Choices({ entry, waiting, onPick, onTypes, onLater, onPin, onTrash, keys, quiet }: { entry: InboxEntry; waiting: boolean; onPick: () => void; onTypes: () => void; onLater: () => void; onPin: () => void; onTrash: () => void; keys: boolean; quiet: boolean }) {
   const { t } = useT();
-  const repo = useRepo();
-  const ix = repo.index();
-  const item = entry.item;
-  const info = item.kind === "info";
-  const places = placeSuggestions(item, repo).map((suggestion) => suggestion.id);
-  for (const id of recentPlaces(repo)) if (!places.includes(id) && id !== item.id && !item.parents[id] && !ix.wouldCycle(item.id, id)) places.push(id);
-  const type = info ? offeredTypes(entry)[0] : undefined;
-  const hint = (key: string, narrow?: boolean) => keys && <span className={cn(narrow ? "hidden @[600px]:inline-flex" : "inline-flex", quiet && "invisible")}><Kbd>{key}</Kbd></span>;
+  const info = entry.item.kind === "info";
+  const hint = (key: string) => keys && <span className={cn("hidden @[600px]:inline-flex", quiet && "invisible")}><Kbd>{key}</Kbd></span>;
   const tile = (icon: ReactNode, label: string, key: string, onClick: () => void, opts: { primary?: boolean; danger?: boolean; disabled?: boolean } = {}) => (
     <Button
       variant="plain"
@@ -458,112 +471,17 @@ function Choices({ entry, onPlace, onPick, onType, onTypes, onLater, onPin, onTr
     >
       {icon}
       <span className={cn("min-w-0 flex-1 truncate px-1 text-center", opts.danger && "lg:sr-only")}>{label}</span>
-      {!opts.danger && hint(key, true)}
+      {!opts.danger && hint(key)}
     </Button>
   );
-  const chip = "tap inline-flex h-7 max-w-[220px] shrink-0 items-center gap-1.5 rounded-full border border-line bg-surface px-2.5 text-[13px] hover:bg-hover";
   return (
-    <div className="mt-6 shrink-0 space-y-3">
-      <div className="@container flex gap-2 max-lg:grid max-lg:grid-cols-2">
-        {tile(<FolderInput size={15} />, t("review.placeAction"), "e", onPick, { primary: true })}
-        {tile(<Shapes size={15} />, t("review.convertAction"), "y", onTypes, { disabled: !info })}
-        {tile(<Clock size={15} />, t("review.laterAction"), "s", onLater)}
-        {tile(<Pin size={15} />, t("review.pin"), "a", onPin)}
-        {tile(<Trash2 size={15} />, t("triage.delete"), "x", onTrash, { danger: true })}
-      </div>
-      <div className="flex min-h-8 items-center gap-2">
-        <span className="shrink-0 text-[13px] text-muted-foreground">{t("review.suggested")}</span>
-        <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto [scrollbar-width:none]">
-          {type && (
-            <Button variant="plain" onClick={() => onType(type)} className={chip}>
-              <TypeGlyph schema={ix.types.get(type)?.schema} size={13} />
-              <span className="truncate">{t("review.asType", { type: ix.typeName(type) ?? "" })}</span>
-              {hint("c")}
-            </Button>
-          )}
-          {places.slice(0, QUICK_PLACES).map((id) => (
-            <Button key={id} variant="plain" onClick={() => onPlace(id)} className={chip} title={t("review.placeIn", { place: ix.get(id)?.title ?? "" })}>
-              <FolderInput size={13} className="shrink-0 text-muted-foreground" />
-              <span className="truncate">{ix.get(id)?.title}</span>
-            </Button>
-          ))}
-          {!places.length && !type && <span className="text-[13px] text-muted-foreground">–</span>}
-        </div>
-        <Button onClick={onUndo} disabled={!onUndo} className="shrink-0">
-          <Undo2 size={15} /> {t("review.back")} {hint("u")}
-        </Button>
-      </div>
+    <div className="@container mt-6 flex shrink-0 gap-2 max-lg:grid max-lg:grid-cols-2">
+      {tile(<FolderInput size={15} />, t("review.placeAction"), "e", onPick, { primary: true })}
+      {tile(<Shapes size={15} />, t("review.convertAction"), "y", onTypes, { disabled: !info })}
+      {waiting ? tile(<Undo2 size={15} />, t("review.backAction"), "s", onLater) : tile(<Clock size={15} />, t("review.laterAction"), "s", onLater)}
+      {tile(<Pin size={15} />, t("review.pin"), "a", onPin)}
+      {tile(<Trash2 size={15} />, t("triage.delete"), "x", onTrash, { danger: true })}
     </div>
-  );
-}
-
-/** Not the type the entry has already; "c" takes the first. */
-const offeredTypes = (entry: InboxEntry) => captureTypes(entry.space).filter((type) => type !== entry.item.type).slice(0, 3);
-
-const SLIDE = { duration: 320, easing: "cubic-bezier(.2,.8,.2,1)" };
-
-/** One list for waiting and sorted entries, so a sorted entry slides down into the lower part and an undone one back up. */
-function ReviewList({ left, current, byKey, sorted, onPick, onUndo }: { left: string[]; current?: string; byKey: Map<string, InboxEntry>; sorted: Sorted[]; onPick: (k: string) => void; onUndo: (s: Sorted) => void }) {
-  const { t } = useT();
-  const box = useRef<HTMLUListElement>(null);
-  // where each row was after the last render: from there it slides to where it is now
-  const tops = useRef<Map<string, number> | null>(null);
-  useLayoutEffect(() => {
-    const ul = box.current;
-    if (!ul) return;
-    const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const was = tops.current;
-    const now = new Map<string, number>();
-    for (const el of ul.querySelectorAll<HTMLElement>("[data-row]")) {
-      const rowKey = el.dataset.row!;
-      now.set(rowKey, el.offsetTop);
-      if (!was || reducedMotion) continue;
-      const from = was.get(rowKey);
-      if (from === undefined) el.animate([{ opacity: 0 }, { opacity: 1 }], SLIDE);
-      else if (from !== el.offsetTop) el.animate([{ transform: `translateY(${from - el.offsetTop}px)` }, { transform: "none" }], SLIDE);
-    }
-    tops.current = now;
-  });
-  useEffect(() => void box.current?.querySelector("[aria-current=true]")?.scrollIntoView({ block: "nearest" }), [current]);
-  const head = (key: string, label: string, count: number, gap?: boolean) => (
-    <li key={key} data-row={key} className={cn("flex items-baseline gap-1.5 px-2.5 pb-1 text-xs font-semibold text-muted-foreground", gap ? "mt-3 border-t border-line pt-3" : "pt-1")}>
-      {label} <span className="font-normal tabular-nums">{count}</span>
-    </li>
-  );
-  const row = "relative flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left";
-  return (
-    <aside className="flex w-[280px] shrink-0 flex-col" aria-label={t("triage.list")}>
-      <ul ref={box} className="relative min-h-0 flex-1 overflow-y-auto rounded-xl border border-line p-1.5" aria-live="polite">
-        {left.length > 0 && head("h:left", t("review.left"), left.length)}
-        {left.map((k) => {
-          const entry = byKey.get(k)!;
-          return (
-            <li key={k} data-row={k}>
-              <Button variant="plain" onClick={() => onPick(k)} aria-current={k === current} className={cn(row, "hover:bg-hover", k === current && "bg-selected before:absolute before:inset-y-1.5 before:left-0 before:w-[3px] before:rounded-r before:bg-inbox")}>
-                <ItemIcon item={entry.item} size={14} ix={replica(entry.space).repo.index()} />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm">{titleOf(entry.item, t)}</span>
-                  <span className="block truncate text-xs text-muted-foreground">
-                    <RelTime ts={entry.item.created} />
-                  </span>
-                </span>
-              </Button>
-            </li>
-          );
-        })}
-        {sorted.length > 0 && head("h:sorted", t("review.sorted"), sorted.length, left.length > 0)}
-        {[...sorted].reverse().map((s) => (
-          <li key={s.key} data-row={s.key} className={cn(row, "group/sorted")}>
-            <Check size={14} className="shrink-0 text-ok" />
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm text-muted-foreground">{s.title}</span>
-              <span className="block truncate text-xs text-muted-foreground">{s.what}</span>
-            </span>
-            <IconButton size="sm" icon={RotateCcw} iconSize={14} onClick={() => onUndo(s)} title={t("triage.undo")} label={t("review.undoNamed", { title: s.title })} className="shrink-0 opacity-60 group-hover/sorted:opacity-100 focus-visible:opacity-100" />
-          </li>
-        ))}
-      </ul>
-    </aside>
   );
 }
 
@@ -583,14 +501,16 @@ function LastSorted({ last, onUndo }: { last: Sorted; onUndo: () => void }) {
   );
 }
 
-function Finished({ count, onDone }: { count: number; onDone: () => void }) {
+function Finished({ count, onDone }: { count: number; onDone?: () => void }) {
   const { t } = useT();
   return (
     <div className="flex flex-1 flex-col justify-center rounded-2xl border border-line bg-surface">
       <Empty icon={<Check size={22} className="text-ok" />} title={count ? t("review.finished", { count }) : t("inbox.empty")}>
-        <Button variant="primary" onClick={onDone} className="mt-2">
-          {t("review.finish")}
-        </Button>
+        {onDone && (
+          <Button variant="primary" onClick={onDone} className="mt-2">
+            {t("review.finish")}
+          </Button>
+        )}
       </Empty>
     </div>
   );

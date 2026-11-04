@@ -16,6 +16,8 @@ export const KEYS = {
   timelineScale: "obtion.timeline.scale",
   sidebarTree: "obtion.sidebar.tree",
   sidebarWidth: "obtion.sidebar.width",
+  /** the inbox's "Einsortiert" with each entry's undo, until cleared */
+  inboxSorted: "obtion.inbox.sorted",
   sidebarSpace: (space: string) => `obtion.sidebar.space.${space}`,
   sidebarTypes: (space: string) => `obtion.sidebar.types.${space}`,
   /** a view's tab shown last (a type's page, a block) */
