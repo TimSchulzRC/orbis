@@ -55,7 +55,6 @@
  "setup.card.description": "Standalone knowledge in your own words, reusable across projects. Needs no place. Test: would I still understand it if the project no longer existed?",
  "setup.project.name": "Project",
  "setup.project.description": "An undertaking with a goal and an end. Has status, priority, period, tasks as children and dated updates. Progress counts done tasks across all levels.",
- "setup.project.tasks": "Tasks",
  "setup.task.name": "Task",
  "setup.task.description": "Something to get done. Attached via \"part of\" to a project or another task (sub-task). Due is the due date.",
  "setup.prop.status": "Status",

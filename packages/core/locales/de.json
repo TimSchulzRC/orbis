@@ -55,7 +55,6 @@
  "setup.card.description": "Eigenständiges Wissen in eigenen Worten, wiederverwendbar über Projekte hinweg. Braucht keinen Ort. Testfrage: Verstehe ich sie noch, wenn das Projekt nicht mehr existiert?",
  "setup.project.name": "Projekt",
  "setup.project.description": "Ein Vorhaben mit Ziel und Ende. Hat Status, Priorität, Zeitraum, Tasks als Kinder und datierte Updates. Fortschritt zählt erledigte Tasks über alle Ebenen.",
- "setup.project.tasks": "Tasks",
  "setup.task.name": "Task",
  "setup.task.description": "Eine erledigbare Aufgabe. Hängt per „Teil von“ an einem Projekt oder einer anderen Task (Unteraufgabe). Fällig ist das Fälligkeitsdatum.",
  "setup.prop.status": "Status",

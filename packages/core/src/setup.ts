@@ -16,7 +16,6 @@ import {
   setTabs,
 } from "./model";
 import { keysFor } from "./sortkey";
-import { blockSource, queryFence } from "./query";
 import { type Lang, translate, words } from "./i18n";
 
 export const SYS = {
@@ -64,7 +63,7 @@ export function defaultTypes(lang: Lang): Record<string, TypeSpec> {
       icon: "folder-kanban",
       color: "green",
       description: t("project.description"),
-      capabilities: { updates: true, template: { body: queryFence(blockSource({ title: t("project.tasks"), where: { and: [{ type: SYS.task }, { under: { this: true } }] }, view: "board", group: "status" })) + "\n" } },
+      capabilities: { updates: true, template: { body: "" } },
       properties: [
         {
           id: "p_status",
