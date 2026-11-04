@@ -600,7 +600,7 @@
  "type.statusOne": "Der Status hat immer genau einen Wert.",
  "type.statusGroup.todo": "Noch nicht angefangen: zählt als offen, im Fortschritt als nicht fertig und kann überfällig werden.",
  "type.statusGroup.active": "In Arbeit: zählt als offen und erscheint auf Heute unter „Läuft gerade“, wenn darüber nicht schon etwas läuft.",
- "type.statusGroup.done": "Zählt im Fortschritt als fertig, wird in „Darunter“ ausgeblendet, ist nie überfällig und blockiert nichts mehr.",
+ "type.statusGroup.done": "Zählt im Fortschritt als fertig, steht in „Darunter“ am Ende, ist nie überfällig und blockiert nichts mehr.",
  "type.default": "Standardwert",
  "type.defaultNone": "Keiner – darf leer bleiben",
  "type.defaultHint": "Neue Seiten bekommen ihn, und die Eigenschaft lässt sich nicht mehr leeren.",

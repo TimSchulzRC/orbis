@@ -600,7 +600,7 @@
  "type.statusOne": "The status always has exactly one value.",
  "type.statusGroup.todo": "Not started: counts as open, as not finished in progress, and can become overdue.",
  "type.statusGroup.active": "Being worked on: counts as open and shows on Today under “In progress”, unless something above it is already running.",
- "type.statusGroup.done": "Counts as finished in progress, is hidden in “Below”, is never overdue and no longer blocks anything.",
+ "type.statusGroup.done": "Counts as finished in progress, comes last in “Below”, is never overdue and no longer blocks anything.",
  "type.default": "Default",
  "type.defaultNone": "None – may stay empty",
  "type.defaultHint": "New pages get it, and the property can no longer be emptied.",
