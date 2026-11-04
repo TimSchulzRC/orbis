@@ -112,9 +112,10 @@ export function mapValue(from: PropDef, to: PropDef, v: Value, opts: { byId?: bo
     if (group && to.options?.some((o) => o.group)) return to.options?.find((o) => (o.group ?? "todo") === group)?.id;
     return undefined;
   }
-  if (isSingle(to) && opts.byId && Array.isArray(v)) {
+  if (isSingle(to) && Array.isArray(v) && (opts.byId || to.kind === "status")) {
     const ids = v.map((x) => option(String(x)));
-    return ids.every(Boolean) ? ids[0] : undefined;
+    // into the status (one value): the first option that matches
+    return opts.byId ? (ids.every(Boolean) ? ids[0] : undefined) : ids.find(Boolean);
   }
   if (isMulti(to)) {
     const ids = (Array.isArray(v) ? v : [v]).map((x) => option(String(x)));

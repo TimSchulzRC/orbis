@@ -461,12 +461,13 @@ export function fieldOf(item: Item, name: string, ix: Index): FieldHit | undefin
   const schema = ix.schemaOf(item);
   if (key === "status") {
     const sp = statusProp(schema);
-    if (sp) return { kind: "select", value: item.props[sp.id], prop: sp };
+    if (sp) return { kind: "select", value: statusOf(item, schema)?.option.id, prop: sp };
   }
   const p = schema?.properties.find((x) => titleKey(x.name) === key);
   if (p) {
     if (p.kind === "relation") return { kind: "relation", value: ix.relValues(item, p.id, p.symmetric), prop: p };
     if (p.kind === "computed") return { kind: "number", value: computedValue(item, p.computed, ix), prop: p };
+    if (p.kind === "status") return { kind: "select", value: statusOf(item, schema)?.option.id, prop: p };
     return { kind: p.kind, value: item.props[p.id], prop: p };
   }
   for (const [n, fv] of Object.entries(item.extra)) if (titleKey(n) === key) return { kind: fv.k, value: fv.v };

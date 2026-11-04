@@ -26,7 +26,7 @@ import {
   upsertProp,
 } from "@obtion/core/model";
 import { COLORS, ICONS } from "@obtion/core/palette";
-import { isProgressProp, kindPatch, progressProp, statusProp } from "@obtion/core/traits";
+import { defaultStatusOptions, isProgressProp, kindPatch, progressProp, statusProp } from "@obtion/core/traits";
 import { keyBetween } from "@obtion/core/sortkey";
 import { parseQuery, printQuery, runQuery } from "@obtion/core/query";
 import { type DeleteMode, deleteType, previewTagToType, tagToType, typeUsage } from "@obtion/core/typeops";
@@ -307,14 +307,6 @@ function AddProperty({ item, onAdded }: { item: Item; onAdded: (id: string) => v
 /** A select with several values says so. */
 function kindLabel(p: PropDef, t: T): string {
   return t(p.kind === "select" && p.multiple ? "kind.prop.multiselect" : "kind.prop." + p.kind);
-}
-
-function defaultStatusOptions(t: T): OptionDef[] {
-  return [
-    { id: shortId("st"), name: t("group.todo"), group: "todo", color: "gray" },
-    { id: shortId("st"), name: t("group.active"), group: "active", color: "amber" },
-    { id: shortId("st"), name: t("group.done"), group: "done", color: "green" },
-  ];
 }
 
 /** How many entries a relation can point to; without a target anything can be chosen. */

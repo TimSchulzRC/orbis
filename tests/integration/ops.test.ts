@@ -195,6 +195,24 @@ test("one kind of select: several values, a default that keeps it filled, a sele
   expect(() => ops.updateType("Artikel", { change_properties: [{ property: "Kanäle", kind: "status" }] }, A)).toThrow(/has a status already/);
 });
 
+test("a status added later: default options, existing entries show the default, a multi select keeps its first match", () => {
+  ops.defineType({ name: "Notizzettel", properties: [{ name: "Etappe", kind: "select", multiple: true, options: ["Neu", "Erledigt"] }] }, A);
+  const old = ops.create({ title: "Alter Zettel", type: "Notizzettel", properties: { Etappe: "Erledigt, Neu" } }, A);
+  ops.defineType({ name: "Zettel" }, A);
+  const z = ops.create({ title: "Vorher da", type: "Zettel" }, A);
+  // no options given: the three default ones
+  ops.updateType("Zettel", { add_properties: [{ name: "Stand", kind: "status" }] }, A);
+  const info = (ops.schema() as any).types.find((x: any) => x.name === "Zettel");
+  expect(info.properties[0].options).toEqual(["Offen (todo)", "Aktiv (active)", "Erledigt (done)"]);
+  expect(ops.get(z.id).status).toBe("Offen (todo)");
+  expect(ops.query("typ:Zettel status:offen").items.map((i) => i.title)).toEqual(["Vorher da"]);
+  expect(ops.query("typ:Zettel stand:offen").items.map((i) => i.title)).toEqual(["Vorher da"]);
+  expect(ops.query("typ:Zettel stand:leer").items).toEqual([]);
+  // several values into the one status: the first that matches an option
+  ops.updateType("Notizzettel", { change_properties: [{ property: "Etappe", kind: "status", options: ["Neu (todo)", "Erledigt (done)"] }] }, A);
+  expect(ops.get(old.id).status).toBe("Erledigt (done)");
+});
+
 test("query blocks written by an agent in text form are stored as JSON and read back as text", () => {
   const o = ops.create({ title: "Arbeit", body: "Projekte:\n\n```abfrage typ:Projekt unter:diese```" }, A);
   expect(s.records.get(o.id)!.body).toContain('"type":"sys:project"');

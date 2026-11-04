@@ -1,8 +1,9 @@
 // Behaviour hangs on these type capabilities, never on a type id or name. Read capabilities only
 // through this module.
 import type * as Y from "yjs";
-import { type Capabilities, type Item, type OptionDef, type Patch, type PropDef, type PropKind, type StatusGroup, type TypeSchema, type Value, metaMap, setProp } from "./model";
+import { type Capabilities, type Item, type OptionDef, type Patch, type PropDef, type PropKind, type StatusGroup, type TypeSchema, type Value, metaMap, setProp, shortId } from "./model";
 import type { Index } from "./graph";
+import type { T } from "./i18n";
 
 export function caps(schema?: TypeSchema): Capabilities {
   return schema?.capabilities ?? {};
@@ -46,6 +47,15 @@ export function optionIds(v: Value | undefined | null): string[] {
  * the first option) and every option sits in a group; `fresh` is used if it has no options. Leaving
  * the status drops the groups. Values stay as they are.
  */
+/** What a new status starts with: one option per group. */
+export function defaultStatusOptions(t: T): OptionDef[] {
+  return [
+    { id: shortId("st"), name: t("group.todo"), group: "todo", color: "gray" },
+    { id: shortId("st"), name: t("group.active"), group: "active", color: "amber" },
+    { id: shortId("st"), name: t("group.done"), group: "done", color: "green" },
+  ];
+}
+
 export function kindPatch(p: Pick<PropDef, "options" | "default">, kind: PropKind, fresh: OptionDef[] = []): Patch<Omit<PropDef, "id">> {
   if (kind === "status") {
     const options = (p.options?.length ? p.options : fresh).map((o) => ({ ...o, group: o.group ?? ("todo" as const) }));
@@ -81,8 +91,9 @@ export interface StatusValue {
 export function statusOf(item: Item, schema?: TypeSchema): StatusValue | undefined {
   const p = statusProp(schema);
   if (!p) return undefined;
+  // no value (the status came later) or a removed option: the default, as in Notion
   const id = item.props[p.id];
-  const option = p.options?.find((o) => o.id === id);
+  const option = p.options?.find((o) => o.id === id) ?? p.options?.find((o) => o.id === defaultOption(p));
   if (!option) return undefined;
   return { option, group: option.group ?? "todo" };
 }

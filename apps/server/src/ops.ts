@@ -47,7 +47,7 @@ import type { Index } from "@obtion/core/graph";
 import { blocksAsText, matches, normalizeBlocks, parseQuery, printQuery, runQuery, relDate, tabDef, typesIn, type Cond, type QueryDef } from "@obtion/core/query";
 import { inboxWhere } from "@obtion/core/inbox";
 import { isInInbox } from "@obtion/core/placement";
-import { caps, doneAt, dueOf, firstOfGroup, hasUpdates, initialProps, kindPatch, statusOf, statusProp, template, writeProp } from "@obtion/core/traits";
+import { caps, defaultStatusOptions, doneAt, dueOf, firstOfGroup, hasUpdates, initialProps, kindPatch, statusOf, statusProp, template, writeProp } from "@obtion/core/traits";
 import { previewTagToType, typeUsage } from "@obtion/core/typeops";
 import { excerpt, searchHits, searchIds } from "@obtion/core/search";
 import { type Heading, findSection, outline, page } from "@obtion/core/outline";
@@ -1287,7 +1287,7 @@ export class Ops {
       const out = { name: p.name, kind, description: p.description, options, multiple: p.multiple, default: def, target: p.target, inverseName: p.inverse, symmetric: p.symmetric, range: p.range, computed, hideEmpty: p.hide_empty, blocks: p.blocks };
       if (kind === "status" && !status) status = { id: cur?.id ?? "", name: p.name ?? cur?.name ?? "", kind, sort: "" };
       // entering or leaving the status: groups and a default come or go
-      if (kind && kind !== cur?.kind && (kind === "status" || cur?.kind === "status")) return { ...out, ...kindPatch({ options: options ?? cur?.options, default: def ?? cur?.default }, kind) };
+      if (kind && kind !== cur?.kind && (kind === "status" || cur?.kind === "status")) return { ...out, ...kindPatch({ options: options ?? cur?.options, default: def ?? cur?.default }, kind, defaultStatusOptions((k) => translate(this.store.lang(), k))) };
       if (kind === "status") return { ...out, multiple: null, default: def === null ? undefined : def };
       return out;
     };

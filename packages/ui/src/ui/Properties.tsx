@@ -145,10 +145,11 @@ function MultiField({ item, prop }: { item: Item; prop: PropDef }) {
 /** An invisible native select lies over the chip, so a click picks right there. */
 export function OptionSelect({ item, prop, className }: { item: Item; prop: PropDef; className?: string }) {
   const { t } = useT();
-  const value = item.props[prop.id];
-  const opt = prop.options?.find((o) => o.id === value);
   const schema = useIndex().schemaOf(item);
   const isStatus = isStatusProp(schema, prop);
+  // the status shows its default when no value is stored yet
+  const value = isStatus ? statusOf(item, schema)?.option.id : item.props[prop.id];
+  const opt = prop.options?.find((o) => o.id === value);
   // a select with a default is never empty
   const required = !!defaultOption(prop, schema);
   return (
