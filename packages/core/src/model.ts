@@ -37,11 +37,11 @@ export type StatusGroup = "todo" | "active" | "done";
 export const STATUS_GROUPS: StatusGroup[] = ["todo", "active", "done"];
 
 /**
- * "select" covers single and multiple choice and the status (when capabilities.status names it).
- * Schemas stored before 30.10.2026 use "status" and "multiselect"; readSchema converts them.
+ * "select" covers single and multiple choice. "status" is a single choice whose options each sit in
+ * a group; a type has at most one. readSchema converts older shapes (see legacyKind).
  */
-export type PropKind = "text" | "number" | "date" | "checkbox" | "url" | "select" | "relation" | "computed";
-export const PROP_KINDS: PropKind[] = ["text", "number", "date", "checkbox", "url", "select", "relation", "computed"];
+export type PropKind = "text" | "number" | "date" | "checkbox" | "url" | "select" | "status" | "relation" | "computed";
+export const PROP_KINDS: PropKind[] = ["text", "number", "date", "checkbox", "url", "select", "status", "relation", "computed"];
 /** Free properties hold values left over when a type or property goes. Never added by hand. */
 export type FreeKind = "text" | "number" | "date" | "checkbox" | "url" | "select";
 
@@ -49,7 +49,6 @@ export interface OptionDef {
   id: string;
   name: string;
   group?: StatusGroup; // status options only
-  state?: "paused" | "dropped"; // status options only: paused is active with nothing to do now, dropped is done without finishing
   color?: string;
 }
 
@@ -79,7 +78,6 @@ export interface PropDef {
 
 /** Read only through traits.ts. */
 export interface Capabilities {
-  status?: string; // propId of the main status property
   due?: string; // propId of the due date property ("Termin")
   /** Legacy: progress is a computed property now (see `progressProp`); read only while the type has none. */
   progress?: { of?: string };
@@ -127,7 +125,6 @@ export interface ViewDef {
   display?: ViewKind;
   scope?: "level" | "all"; // "Nur diese Ebene" / "Inkl. Unterprojekte"
   group?: string;
-  showDone?: boolean;
 }
 
 export interface FileMeta {
@@ -170,8 +167,9 @@ export const PERSONAL = "personal";
 
 /**
  * An older app that meets newer data still reads it but asks for an update before it writes.
+ * 2: the status is a property kind, no longer the capability `status` on a select.
  */
-export const FORMAT = 1;
+export const FORMAT = 2;
 
 export interface SettingsRecord {
   setupLang?: string;
@@ -265,6 +263,10 @@ function isObject(v: unknown): v is Record<string, unknown> {
   return !!v && typeof v === "object" && !Array.isArray(v);
 }
 
+function withoutStatus({ status: _, ...caps }: Capabilities & { status?: unknown }): Capabilities {
+  return caps;
+}
+
 /** The top-level maps of a document; query, view and pin belong to former collections. */
 export const DOC_MAPS = ["meta", "parents", "props", "extra", "rels", "tags", "refs", "views", "schema", "tabs", "file", "op", "settings", "query", "view", "pin"] as const;
 
@@ -280,14 +282,28 @@ export function schemaMap(doc: Y.Doc): Y.Map<unknown> {
 }
 
 /**
- * Converts the kinds "status" and "multiselect" (stored before 30.10.2026, still sent by MCP and
- * imports) to select. A status was never empty, so the type's status keeps its first option as default.
+ * "multiselect" becomes a multiple select. The type's status is the select named by the former
+ * capability `status` (until migrateStatus rewrote it), else the first property of kind "status";
+ * other "status" properties (stored before 30.10.2026) become selects. A status is single, never
+ * empty (it keeps its first option as default) and its options lose the former marks paused/dropped.
  */
 export function legacyKind(p: PropDef, isStatus: boolean): PropDef {
   const k = p.kind as string;
   if (k === "multiselect") return { ...p, kind: "select", multiple: true };
-  if (k === "status") return { ...p, kind: "select", multiple: undefined, default: p.default ?? (isStatus ? p.options?.[0]?.id : undefined) };
+  if (isStatus) {
+    const options = p.options?.map(({ state: _, ...o }: OptionDef & { state?: unknown }) => ({ ...o, group: o.group ?? ("todo" as const) }));
+    const keeps = p.default && options?.some((o) => o.id === p.default);
+    return { ...p, kind: "status", multiple: undefined, options, default: keeps ? p.default : options?.[0]?.id };
+  }
+  if (k === "status") return { ...p, kind: "select", multiple: undefined };
   return p;
+}
+
+/** The property readSchema treats as the status: the legacy capability's select, else the first live one of kind "status". */
+function statusIdOf(caps: unknown, defs: [string, Partial<PropDef>][]): string | undefined {
+  const legacy = isObject(caps) && typeof caps.status === "string" ? defs.find(([id, d]) => id === caps.status && !d.removed && ((d.kind === "select" && !d.multiple) || (d.kind as string) === "status")) : undefined;
+  if (legacy) return legacy[0];
+  return defs.filter(([, d]) => !d.removed && (d.kind as string) === "status").sort(([a, x], [b, y]) => cmpKey(x.sort ?? "V", y.sort ?? "V") || a.localeCompare(b))[0]?.[0];
 }
 
 export function readSchema(doc: Y.Doc): TypeSchema {
@@ -297,18 +313,18 @@ export function readSchema(doc: Y.Doc): TypeSchema {
     return typeof v === "string" ? v : undefined;
   };
   const caps = plain(s.get("capabilities"));
-  const statusId = isObject(caps) ? caps.status : undefined;
   const props = s.get("properties");
-  const properties: PropDef[] = [];
+  const defs: [string, Partial<PropDef>][] = [];
   if (props instanceof Y.Map) {
     for (const [id, p] of props) {
       const o = plain(p);
       if (!isObject(o)) continue;
       const def = o as Partial<PropDef>;
-      if (!def.name && !def.kind) continue;
-      properties.push(legacyKind({ ...def, id, name: def.name ?? "", kind: def.kind ?? "text", sort: def.sort ?? "V" }, statusId === id));
+      if (def.name || def.kind) defs.push([id, def]);
     }
   }
+  const statusId = statusIdOf(caps, defs);
+  const properties = defs.map(([id, def]) => legacyKind({ ...def, id, name: def.name ?? "", kind: def.kind ?? "text", sort: def.sort ?? "V" }, statusId === id));
   properties.sort((a, b) => cmpKey(a.sort, b.sort) || a.id.localeCompare(b.id));
   return {
     removedProperties: properties.filter((p) => p.removed),
@@ -318,7 +334,7 @@ export function readSchema(doc: Y.Doc): TypeSchema {
     icon: text("icon") ?? "circle",
     color: text("color") ?? "slate",
     description: text("description") ?? "",
-    capabilities: isObject(caps) ? (caps as Capabilities) : {},
+    capabilities: isObject(caps) ? withoutStatus(caps as Capabilities & { status?: unknown }) : {},
     properties: properties.filter((p) => !p.removed),
   };
 }
@@ -676,6 +692,28 @@ export function setCapability<K extends keyof Capabilities>(doc: Y.Doc, key: K, 
   const caps = ensureSubMap(schemaMap(doc), "capabilities");
   if (value === null || value === undefined || value === false) caps.delete(key);
   else caps.set(key, value);
+}
+
+/**
+ * Rewrites the stored status into the shape readSchema already reports: the select named by the
+ * former capability `status` becomes kind "status" (options and groups kept, the former marks
+ * paused and dropped removed), and the capability goes. Returns whether it changed anything; idempotent.
+ */
+export function migrateStatus(doc: Y.Doc): boolean {
+  const s = schemaMap(doc);
+  const caps = s.get("capabilities");
+  if (!(caps instanceof Y.Map) || !caps.has("status")) return false;
+  const schema = readSchema(doc);
+  const status = schema.properties.find((p) => p.kind === "status");
+  doc.transact(() => {
+    caps.delete("status");
+    if (status) upsertProp(doc, status.id, { kind: "status", multiple: null, options: status.options, default: status.default ?? null });
+    // older "status" properties that were not the type's status stay selects
+    const stored = s.get("properties");
+    for (const p of [...schema.properties, ...schema.removedProperties])
+      if (p.id !== status?.id && stored instanceof Y.Map && (stored.get(p.id) as Y.Map<unknown> | undefined)?.get?.("kind") === "status") upsertProp(doc, p.id, { kind: "select" });
+  });
+  return true;
 }
 
 /** A change of a record: undefined leaves a field, null clears it. */

@@ -63,20 +63,20 @@ export function defaultTypes(lang: Lang): Record<string, TypeSpec> {
       icon: "folder-kanban",
       color: "green",
       description: t("project.description"),
-      capabilities: { status: "p_status", updates: true, template: { body: "" } },
+      capabilities: { updates: true, template: { body: "" } },
       properties: [
         {
           id: "p_status",
           name: t("prop.status"),
-          kind: "select",
+          kind: "status",
           default: "st_backlog",
           options: [
             { id: "st_backlog", name: t("status.backlog"), group: "todo", color: "gray" },
             { id: "st_planning", name: t("status.planning"), group: "active", color: "blue" },
             { id: "st_active", name: t("status.inProgress"), group: "active", color: "amber" },
-            { id: "st_paused", name: t("status.paused"), group: "active", state: "paused", color: "violet" },
+            { id: "st_paused", name: t("status.paused"), group: "active", color: "violet" },
             { id: "st_done", name: t("status.done"), group: "done", color: "green" },
-            { id: "st_canceled", name: t("status.canceled"), group: "done", state: "dropped", color: "red" },
+            { id: "st_canceled", name: t("status.canceled"), group: "done", color: "red" },
           ],
         },
         priority,
@@ -91,19 +91,19 @@ export function defaultTypes(lang: Lang): Record<string, TypeSpec> {
       icon: "circle-check",
       color: "slate",
       description: t("task.description"),
-      capabilities: { status: "p_status", due: "p_due" },
+      capabilities: { due: "p_due" },
       properties: [
         {
           id: "p_status",
           name: t("prop.status"),
-          kind: "select",
+          kind: "status",
           default: "st_todo",
           options: [
             { id: "st_todo", name: t("status.notStarted"), group: "todo", color: "gray" },
             { id: "st_active", name: t("status.inProgress"), group: "active", color: "amber" },
-            { id: "st_paused", name: t("status.paused"), group: "active", state: "paused", color: "violet" },
+            { id: "st_paused", name: t("status.paused"), group: "active", color: "violet" },
             { id: "st_done", name: t("status.done"), group: "done", color: "green" },
-            { id: "st_dropped", name: t("status.dropped"), group: "done", state: "dropped", color: "brown" },
+            { id: "st_dropped", name: t("status.dropped"), group: "done", color: "brown" },
             { id: "st_archived", name: t("status.archived"), group: "done", color: "gray" },
           ],
         },
@@ -185,6 +185,9 @@ export function upgradeSetup(w: Writer, lang: Lang) {
     const type = w.get(id);
     if (type && !type.deleted && type.schema && !type.schema.views?.length) w.change(id, (doc) => setTabs(doc, tabs));
   }
+  // stored, so an older app stays read-only even offline once it has synced this
+  const settings = w.get(SETTINGS_ID);
+  if (settings && (settings.settings?.format ?? 0) < FORMAT) w.change(SETTINGS_ID, (doc) => setSettings(doc, { format: FORMAT }));
 }
 
 /** "Standard wiederherstellen" of the inbox. */

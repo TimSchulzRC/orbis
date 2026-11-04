@@ -98,7 +98,7 @@ function belongs(where: Cond | undefined, c: PropChange, ix: Index): boolean {
 /**
  * Carries a property rename or removal over to the type's own views (the default views are stored
  * first so they can change), to the views and query blocks of every page, and to the inbox rule.
- * On removal it also leaves the template and the status and due capabilities.
+ * On removal it also leaves the template and the due capability (a removed status property is simply gone).
  */
 export function followPropChange(w: Writer, ix: Index, c: PropChange, lang: Lang) {
   if (c.to !== null && c.to.trim() === c.from.trim()) return;
@@ -120,7 +120,6 @@ export function followPropChange(w: Writer, ix: Index, c: PropChange, lang: Lang
           const { [c.prop]: _gone, ...rest } = values;
           setCapability(doc, "template", { ...caps.template, values: rest });
         }
-        if (caps.status === c.prop) setCapability(doc, "status", null);
         if (caps.due === c.prop) setCapability(doc, "due", null);
       });
     }

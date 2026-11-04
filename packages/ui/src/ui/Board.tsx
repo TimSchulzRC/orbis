@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ChevronDown, ChevronRight, EyeOff } from "lucide-react";
 import { type Item, type StatusGroup } from "@obtion/core/model";
 import { type QueryDef, type EvalCtx, type Group as QGroup, fieldOf, groupItems, viewTypeIds } from "@obtion/core/query";
-import { firstOfGroup, statusProp } from "@obtion/core/traits";
+import { firstOfGroup, hasOptions, statusProp } from "@obtion/core/traits";
 import { useRepo, itemHref, openItem } from "../hooks";
 import { useT, titleOf } from "../i18n";
 import { ItemIcon } from "./item-look";
@@ -35,7 +35,7 @@ export function BoardView({ items, def, ctx, look }: { items: Item[]; def: Query
       if (first) void setStatus(item, first.id, repo);
       return;
     }
-    const prop = by === "status" ? statusProp(schema) : schema?.properties.find((p) => p.name.toLowerCase() === by.toLowerCase() && p.kind === "select");
+    const prop = by === "status" ? statusProp(schema) : schema?.properties.find((p) => p.name.toLowerCase() === by.toLowerCase() && hasOptions(p));
     const opt = prop?.options?.find((o) => o.name === g.label);
     if (prop && opt && prop.id === statusProp(schema)?.id) void setStatus(item, opt.id, repo);
     else if (prop && opt) repo.setProp(id, prop.id, prop.multiple ? [opt.id] : opt.id);

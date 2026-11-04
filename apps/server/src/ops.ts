@@ -47,7 +47,7 @@ import type { Index } from "@obtion/core/graph";
 import { blocksAsText, matches, normalizeBlocks, parseQuery, printQuery, runQuery, relDate, tabDef, typesIn, type Cond, type QueryDef } from "@obtion/core/query";
 import { inboxWhere } from "@obtion/core/inbox";
 import { isInInbox } from "@obtion/core/placement";
-import { caps, doneAt, dueOf, firstOfGroup, hasUpdates, initialProps, statusOf, statusProp, template, useAsStatus, writeProp } from "@obtion/core/traits";
+import { caps, defaultStatusOptions, doneAt, dueOf, firstOfGroup, hasUpdates, initialProps, kindPatch, statusOf, statusProp, template, writeProp } from "@obtion/core/traits";
 import { previewTagToType, typeUsage } from "@obtion/core/typeops";
 import { excerpt, searchHits, searchIds } from "@obtion/core/search";
 import { type Heading, findSection, outline, page } from "@obtion/core/outline";
@@ -141,7 +141,7 @@ export function versionOf(i: Item): string {
 }
 
 export const QUERY_HELP =
-  "type:Name #tag under:[[X]] in:[[X]] linked:[[X]] linked:under:[[X]] status:open|new|active|done (open = new or active) property:value property<value property:empty without:type|parents|children|usage pinned inbox blocked dormant (it or something above it paused or done) file filetype:image|pdf; space=AND, |=OR, -=NOT, (…); sort:field group:path|status|type limit:n. German keywords work too.";
+  "type:Name #tag under:[[X]] in:[[X]] linked:[[X]] linked:under:[[X]] status:open|new|active|done (open = new or active) property:value property<value property:empty without:type|parents|children|usage pinned inbox blocked dormant (it or something above it done) file filetype:image|pdf; space=AND, |=OR, -=NOT, (…); sort:field group:path|status|type limit:n. German keywords work too.";
 
 /** Characters that end or split a [[link]] target: such titles can't be linked by title. */
 /** Longer bodies and file texts come as their outline unless a part is asked for. */
@@ -158,8 +158,7 @@ export const RULE_CAP = 3000;
 
 const isDoneNow = (i: Item, schema: TypeSchema | undefined) => statusOf(i, schema)?.group === "done";
 /** An option given as "Name (group)" or "Name (group, state)". */
-const OPTION_GROUP = /\((todo|active|done)(?:,\s*(paused|dropped))?\)\s*$/;
-const OPTION_PARTS = /^(.*?)(?:\s*\((todo|active|done)(?:,\s*(paused|dropped))?\))?$/;
+const OPTION_PARTS = /^(.*?)(?:\s*\((todo|active|done)\))?$/;
 const DOWNLOAD_TIMEOUT_MS = 30_000;
 
 /** What an untyped item is, by its place. */
@@ -334,7 +333,6 @@ export class Ops {
       description: s.description || undefined,
       properties: s.properties.map((p) => this.propInfo(p)),
       capabilities: {
-        status: name(c.status) ? `"${name(c.status)}" (tick off, status:open/done in queries)` : undefined,
         due_date: name(c.due) ? `"${name(c.due)}" (overdue / this week)` : undefined,
         updates: c.updates ? "dated progress notes via add_update" : undefined,
       },
@@ -350,7 +348,7 @@ export class Ops {
       name: p.name,
       kind: p.kind,
       description: p.description || undefined,
-      options: p.options?.map((o) => (o.group ? `${o.name} (${o.group}${o.state ? `, ${o.state}` : ""})` : o.name)),
+      options: p.options?.map((o) => (p.kind === "status" ? `${o.name} (${o.group ?? "todo"})` : o.name)),
       multiple: p.multiple || undefined,
       default: p.default ? p.options?.find((o) => o.id === p.default)?.name : undefined,
       target: p.target || undefined,
@@ -661,7 +659,7 @@ export class Ops {
     const line = (i: Item) => (touched?.add(i.id), this.line(i));
     const today = todayISO();
     const in7 = relDate("+7d", today)!;
-    // nothing from paused or finished projects in the urgent lists
+    // nothing from finished projects in the urgent lists
     const withDue = ix.live.map((i) => ({ i, due: dueOf(i, ix.schemaOf(i)), st: statusOf(i, ix.schemaOf(i)) })).filter((x) => x.st?.group !== "done" && !(x.due && ix.isDormant(x.i)));
     return {
       today,
@@ -924,7 +922,7 @@ export class Ops {
 
   toValue(p: PropDef, raw: unknown, ctx: Item | undefined): { value?: Value | null; rels?: string[] } {
     if (raw === null || raw === "") {
-      if (p.kind === "select" && !p.multiple && p.default) throw new OpError(`"${p.name}" has a default and cannot be empty; set another option.`);
+      if (p.kind === "status" || (p.kind === "select" && !p.multiple && p.default)) throw new OpError(`"${p.name}" has a default and cannot be empty; set another option.`);
       return { value: null };
     }
     switch (p.kind) {
@@ -952,7 +950,8 @@ export class Ops {
         if (range) return { value: range };
         throw new OpError(`"${p.name}" needs ${DATE_HELP}${p.range ? ", or start/end" : ""}; got "${raw}".`);
       }
-      case "select": {
+      case "select":
+      case "status": {
         if (!p.multiple) return { value: matchOption(p, String(raw)).id };
         const list = Array.isArray(raw) ? raw : String(raw).split(",");
         return { value: list.map((x) => matchOption(p, String(x)).id) };
@@ -1265,16 +1264,19 @@ export class Ops {
       if (!p) throw new OpError(`Type ${s.name} has no property "${name}".`);
       return p;
     };
+    // a type has one status
+    let status = statusProp(s);
     const toDef = (p: PropInput, cur?: PropDef): Patch<Omit<PropDef, "id">> => {
       const kind = p.kind ?? cur?.kind;
-      const grouped = (!!cur && statusProp(s)?.id === cur.id) || !!p.options?.some((o) => OPTION_GROUP.test(o));
+      if (kind === "status" && status && status.id !== cur?.id) throw new OpError(`${s.name} has a status already ("${status.name}"); a type has one.`);
+      const grouped = kind === "status";
       const options = p.options?.map((o) => {
         const m = OPTION_PARTS.exec(o)!;
         const existing = cur?.options?.find((x) => x.name === m[1]);
-        const state = grouped ? ((m[3] as OptionDef["state"]) ?? (m[2] ? undefined : existing?.state)) : undefined;
-        return { id: existing?.id ?? shortId("o"), name: m[1]!.trim(), group: grouped ? ((m[2] as StatusGroup | undefined) ?? existing?.group ?? "todo") : undefined, ...(state ? { state } : {}), color: existing?.color ?? "gray" };
+        return { id: existing?.id ?? shortId("o"), name: m[1]!.trim(), group: grouped ? ((m[2] as StatusGroup | undefined) ?? existing?.group ?? "todo") : undefined, color: existing?.color ?? "gray" };
       });
       const opts = options ?? cur?.options ?? [];
+      if (grouped && options && !options.length) throw new OpError(`A status needs at least one option.`);
       let def: string | null | undefined;
       if (p.default === null || p.default === "") def = null;
       else if (p.default !== undefined) {
@@ -1283,7 +1285,12 @@ export class Ops {
       }
       let computed = cur?.computed;
       if (p.computed) computed = { fn: p.computed.startsWith("count") ? "count" : "progress", of: p.computed.includes(":") ? this.resolveType(p.computed.split(":")[1]!.trim()).id : undefined };
-      return { name: p.name, kind, description: p.description, options, multiple: p.multiple, default: def, target: p.target, inverseName: p.inverse, symmetric: p.symmetric, range: p.range, computed, hideEmpty: p.hide_empty, blocks: p.blocks };
+      const out = { name: p.name, kind, description: p.description, options, multiple: p.multiple, default: def, target: p.target, inverseName: p.inverse, symmetric: p.symmetric, range: p.range, computed, hideEmpty: p.hide_empty, blocks: p.blocks };
+      if (kind === "status" && !status) status = { id: cur?.id ?? "", name: p.name ?? cur?.name ?? "", kind, sort: "" };
+      // entering or leaving the status: groups and a default come or go
+      if (kind && kind !== cur?.kind && (kind === "status" || cur?.kind === "status")) return { ...out, ...kindPatch({ options: options ?? cur?.options, default: def ?? cur?.default }, kind, defaultStatusOptions((k) => translate(this.store.lang(), k))) };
+      if (kind === "status") return { ...out, multiple: null, default: def === null ? undefined : def };
+      return out;
     };
     this.store.change(t.id, origin, (doc) => {
       if (input.name) {
@@ -1335,12 +1342,6 @@ export class Ops {
         return p.id;
       };
       this.store.change(t.id, origin, (doc) => {
-        if (c.status === null) setCapability(doc, "status", null);
-        else if (c.status !== undefined) {
-          const p = s2.properties.find((x) => titleKey(x.name) === titleKey(c.status!) && x.kind === "select" && !x.multiple);
-          if (!p) throw new OpError(`"${c.status}" must be a select property with one value of ${s2.name}.`);
-          useAsStatus(doc, p);
-        }
         if (c.due_date !== undefined) setCapability(doc, "due", pid(c.due_date, "date"));
         if (c.updates !== undefined) setCapability(doc, "updates", c.updates || null);
         if (c.template !== undefined) setCapability(doc, "template", c.template === null ? null : { body: c.template });

@@ -5,7 +5,7 @@ import { ChevronDown, ChevronRight, Plus } from "lucide-react";
 import { type ViewTab, type Item, type ItemInit, type PropDef, type StatusGroup, type TypeSchema, parseRange, titleKey } from "@obtion/core/model";
 import { type EvalCtx, type Group, type QueryDef, FIELDS, fieldOf, groupItems, pathBase, viewTypeIds } from "@obtion/core/query";
 import { fmtDate } from "@obtion/core/i18n";
-import { firstOfGroup, isStatusProp, statusProp } from "@obtion/core/traits";
+import { firstOfGroup, statusProp } from "@obtion/core/traits";
 import { repo } from "../repo";
 import { itemHref, useIndex, useNarrow, useStoredSet } from "../hooks";
 import { useT, titleOf } from "../i18n";
@@ -36,11 +36,10 @@ const MAX_WIDTH = 800;
 
 const WIDTH: Record<string, number> = { status: 150, select: 130, multiselect: 170, date: 130, range: 230, computed: 160, relation: 190, text: 220, number: 100, checkbox: 80, url: 180, item: 170, tags: 170 };
 
-/** A select is as wide as what it holds: the status, one option or several. */
-function widthKey(p: PropDef, schema: TypeSchema | undefined): string {
+/** A select is as wide as what it holds: one option or several. */
+function widthKey(p: PropDef): string {
   if (p.kind === "date" && p.range) return "range";
-  if (p.kind !== "select") return p.kind;
-  return p.multiple ? "multiselect" : isStatusProp(schema, p) ? "status" : "select";
+  return p.kind === "select" && p.multiple ? "multiselect" : p.kind;
 }
 
 function defaultWidth(col: string, items: Item[], ctx: EvalCtx): number {
@@ -51,7 +50,7 @@ function defaultWidth(col: string, items: Item[], ctx: EvalCtx): number {
   if ((FIELDS as readonly string[]).includes(col)) return 120;
   for (const i of items.slice(0, 30)) {
     const hit = fieldOf(i, col, ctx.ix);
-    if (hit?.prop) return WIDTH[widthKey(hit.prop, ctx.ix.schemaOf(i))] ?? 160;
+    if (hit?.prop) return WIDTH[widthKey(hit.prop)] ?? 160;
     if (hit) return WIDTH[hit.kind] ?? 160;
   }
   return 160;
@@ -98,6 +97,7 @@ export function TableCell({ item, col, ctx }: { item: Item; col: string; ctx: Ev
   }
   if (!own || !prop) return <CellValue item={item} name={col} ctx={ctx} />;
   switch (prop.kind) {
+    case "status":
     case "select":
       if (prop.multiple) return <span className="cell-tools flex min-w-0 items-center gap-1 overflow-hidden"><PropertyField item={item} prop={prop} /></span>;
       return <OptionSelect item={item} prop={prop} className="flex min-h-6 w-full" />;

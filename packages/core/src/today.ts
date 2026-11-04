@@ -1,4 +1,4 @@
-// Data for the "Heute" page. Dormant entries (paused or done above them) are left out, as the
+// Data for the "Heute" page. Dormant entries (done above them) are left out, as the
 // focus lists do.
 import { type Item, META_TYPE } from "./model";
 import type { Index } from "./graph";
@@ -27,7 +27,7 @@ function lastTouched(ix: Index, item: Item): number {
   return [...ix.descendants(item.id)].reduce((latest, id) => Math.max(latest, ix.get(id)?.updated ?? 0), item.updated);
 }
 
-/** Entries of any type whose status is active (not paused), the topmost only: a running sub-entry shows under its parent. */
+/** Entries of any type whose status is in the active group, the topmost only: a running sub-entry shows under its parent. */
 export function running(ix: Index): { item: Item; touched: number }[] {
   const active = ix.live.filter((i) => statusOf(i, ix.schemaOf(i))?.group === "active" && !ix.isDormant(i));
   const ids = new Set(active.map((i) => i.id));

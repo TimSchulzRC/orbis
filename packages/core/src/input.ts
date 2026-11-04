@@ -101,17 +101,17 @@ export function parseNumber(lang: Lang, input: string): number | undefined {
   return /^[+-]?(\d+\.?\d*|\.\d+)$/.test(s) ? Number(s) : undefined;
 }
 
-type Alias = { group: StatusGroup; names?: string[]; state?: OptionDef["state"] };
-/** Synonym → status group, plus option names to prefer within it; paused and dropped also match by state. */
+type Alias = { group: StatusGroup; names?: string[] };
+/** Synonym → status group, plus option names to prefer within it. */
 const STATUS_ALIASES: Record<string, Alias> = {};
 const alias = (words: string, a: Alias) => words.split(",").forEach((w) => (STATUS_ALIASES[foldWord(w)] = a));
 alias("open,offen,todo,to do,new,neu,not started,nicht begonnen,noch nicht begonnen", { group: "todo" });
 alias("backlog,idee,idea,someday,irgendwann", { group: "todo", names: ["backlog"] });
 alias("active,aktiv,in progress,in arbeit,in bearbeitung,doing,wip,started,begonnen,läuft,progress", { group: "active", names: ["in bearbeitung", "in progress"] });
 alias("planning,planung,geplant,planned", { group: "active", names: ["planung", "planning"] });
-alias("paused,pausiert,on hold,hold,angehalten,pause", { group: "active", names: ["pausiert", "paused"], state: "paused" });
+alias("paused,pausiert,on hold,hold,angehalten,pause", { group: "active", names: ["pausiert", "paused"] });
 alias("done,erledigt,fertig,abgeschlossen,completed,complete,finished,closed,geschlossen", { group: "done", names: ["erledigt", "done"] });
-alias("canceled,cancelled,abgebrochen,aborted,verworfen,dropped,discarded", { group: "done", names: ["abgebrochen", "verworfen", "canceled", "dropped"], state: "dropped" });
+alias("canceled,cancelled,abgebrochen,aborted,verworfen,dropped,discarded", { group: "done", names: ["abgebrochen", "verworfen", "canceled", "dropped"] });
 alias("archived,archiviert", { group: "done", names: ["archiviert", "archived"] });
 const NOT_A_STATUS = new Set(["blocked", "blockiert", "waiting", "wartet", "waiting_for", "wartet_auf"].map(foldWord));
 
@@ -145,43 +145,22 @@ export function matchOption(p: PropDef, raw: string): OptionDef {
   const w = foldWord(raw);
   if (grouped(p)) {
     if (NOT_A_STATUS.has(w))
-      throw new InputError(`"${raw}" is not a status. Set a property that holds it up (blocks), e.g. "Blockiert durch" (the blocking entry) or "Wartet auf" (what it waits for); optionally also a paused status.`);
+      throw new InputError(`"${raw}" is not a status. Set a property that holds it up (blocks), e.g. "Blockiert durch" (the blocking entry) or "Wartet auf" (what it waits for).`);
     const a = STATUS_ALIASES[w];
     if (a) {
-      // "on hold" means the option marked paused, even if another one is called "Paused"
       const inGroup = (x: OptionDef) => groupOf(x) === a.group;
-      const marked = a.state && options.find((x) => inGroup(x) && x.state === a.state);
-      if (marked) return marked;
       for (const n of a.names ?? []) {
         const o = byName(options, n);
         if (o && inGroup(o)) return o;
       }
-      const o = options.find((x) => inGroup(x) && x.state === a.state) ?? options.find(inGroup);
+      const o = options.find(inGroup);
       if (o) return o;
     }
   }
-  const list = options.map((o) => (grouped(p) ? `${o.name} (${groupOf(o)}${o.state ? `, ${o.state}` : ""})` : o.name)).join(", ");
+  const list = options.map((o) => (grouped(p) ? `${o.name} (${groupOf(o)})` : o.name)).join(", ");
   throw new InputError(`"${raw}" is not an option of "${p.name}". Options: ${list}${grouped(p) ? "; or a group: open, active, done" : ""}.`);
 }
 
-/** Active by group, but nothing to work on now. */
-export function isPausedOption(o: OptionDef): boolean {
-  return o.state === "paused";
-}
-
-export type StatusShape = "open" | "active" | "paused" | "done" | "dropped";
-/** Shape, not only colour: ring, half circle, pause, check, cross. */
-export function statusShape(o: OptionDef): StatusShape {
-  const g = groupOf(o);
-  if (g === "todo") return "open";
-  if (g === "active") return isPausedOption(o) ? "paused" : "active";
-  return o.state === "dropped" ? "dropped" : "done";
-}
-
-/** "on hold" → paused, "verworfen" → dropped. */
-export function statusStateOf(raw: string): OptionDef["state"] {
-  return STATUS_ALIASES[foldWord(raw)]?.state;
-}
 
 export function statusGroupOf(raw: string): StatusGroup | undefined {
   return STATUS_ALIASES[foldWord(raw)]?.group;

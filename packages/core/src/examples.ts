@@ -95,13 +95,13 @@ export function writeExamples(w: Writer, lang: Lang, files: Partial<Record<Examp
       icon: "book",
       color: "brown",
       description: L("Bücher, die ich lese oder lesen will.", "Books I read or want to read."),
-      capabilities: { status: "p_ex_read" },
+      capabilities: {},
       properties: [
         { id: "p_ex_author", name: L("Autor", "Author"), kind: "relation", multiple: true, target: `${typeKey}:${person}`, inverseName: L("Bücher", "Books") },
         {
           id: "p_ex_read",
           name: L("Lesestatus", "Reading"),
-          kind: "select",
+          kind: "status",
           default: "rd_want",
           options: [
             { id: "rd_want", name: L("Will ich lesen", "Want to read"), group: "todo", color: "gray" },

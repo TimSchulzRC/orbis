@@ -1,8 +1,8 @@
 import { test, expect, describe, jest } from "bun:test";
 import * as Y from "yjs";
 import { MemRepo } from "../support/helpers";
-import { type TypeSchema, initSchema, readSchema } from "@obtion/core/model";
-import { initialProps, optionIds, statusProp } from "@obtion/core/traits";
+import { type PropDef, type TypeSchema, initSchema, migrateStatus, readSchema } from "@obtion/core/model";
+import { initialProps, kindPatch, optionIds, statusProp } from "@obtion/core/traits";
 import { addParent, readItem, removeParent, setMeta, setProp, setSettings, initItem, META_TYPE, SETTINGS_ID, touchOnTextEdit } from "@obtion/core/model";
 import { keyBetween, keysFor } from "@obtion/core/sortkey";
 import { isInInbox, inbox, laterItems, sidebarRoots, sidebarChildren } from "@obtion/core/placement";
@@ -213,13 +213,13 @@ describe("today", () => {
     const m = new MemRepo();
     runSetup(m.writer, "de");
     const relaunch = m.add({ title: "Relaunch", type: SYS.project, props: { p_status: "st_active" }, updated: 100 });
-    const paused = m.add({ title: "Pausiert", type: SYS.project, props: { p_status: "st_paused" } });
+    const closed = m.add({ title: "Abgeschlossen", type: SYS.project, props: { p_status: "st_done" } });
     m.add({ title: "Unterprojekt", type: SYS.project, props: { p_status: "st_active" }, parents: [relaunch] });
     m.add({ title: "Überfällig", type: SYS.task, props: { p_due: "2026-10-27" }, parents: [relaunch], updated: 500 });
     m.add({ title: "Heute", type: SYS.task, props: { p_due: "2026-10-29" } });
     m.add({ title: "Erledigt", type: SYS.task, props: { p_due: "2026-10-28", p_status: "st_done" } });
     m.add({ title: "Morgen", type: SYS.task, props: { p_due: "2026-10-30" } });
-    m.add({ title: "Im pausierten", type: SYS.task, props: { p_due: "2026-10-01" }, parents: [paused] });
+    m.add({ title: "Im abgeschlossenen", type: SYS.task, props: { p_due: "2026-10-01" }, parents: [closed] });
     m.add({ title: "Lose Idee", updated: 900 });
     const ix = m.index();
     expect(dueBy(ix, "2026-10-29").map((x) => x.item.title)).toEqual(["Überfällig", "Heute"]);
@@ -331,25 +331,25 @@ test("typing moves the change time: local text edits touch meta.updated, edits f
 });
 
 describe("selects", () => {
-  test("schemas stored with the kinds status and multiselect read as selects", () => {
+  test("schemas stored with the kinds status and multiselect: the first status stays one, the rest are selects", () => {
     const d = new Y.Doc();
     initSchema(d, {
       name: "Alt",
       icon: "box",
       color: "gray",
       description: "",
-      capabilities: { status: "p_st" },
+      capabilities: {},
       properties: [
-        { id: "p_st", name: "Status", kind: "status" as any, options: [{ id: "a", name: "Offen", group: "todo" }, { id: "b", name: "Fertig", group: "done" }] },
+        { id: "p_st", name: "Status", kind: "status", options: [{ id: "a", name: "Offen", group: "todo" }, { id: "b", name: "Fertig", group: "done" }] },
         { id: "p_ms", name: "Tags", kind: "multiselect" as any, options: [{ id: "x", name: "X" }] },
-        { id: "p_old", name: "Zweiter Status", kind: "status" as any, options: [{ id: "c", name: "C", group: "todo" }] },
+        { id: "p_old", name: "Zweiter Status", kind: "status", options: [{ id: "c", name: "C", group: "todo" }] },
       ],
     });
     const s = readSchema(d);
     expect(s.properties.map((p) => [p.id, p.kind, !!p.multiple, p.default])).toEqual([
-      ["p_st", "select", false, "a"],
+      ["p_st", "status", false, "a"],
       ["p_ms", "select", true, undefined],
-      // not the type's status: a plain select that may be empty
+      // a type has one status: a plain select that may be empty
       ["p_old", "select", false, undefined],
     ]);
     expect(statusProp(s)?.id).toBe("p_st");
@@ -357,8 +357,8 @@ describe("selects", () => {
   });
 
   test("a select with a default fills new items; the status always starts filled", () => {
-    const s = { name: "T", icon: "box", color: "gray", description: "", capabilities: { status: "p_st" }, removedProperties: [], properties: [
-      { id: "p_st", name: "Status", kind: "select", options: [{ id: "a", name: "Offen", group: "todo" }] },
+    const s = { name: "T", icon: "box", color: "gray", description: "", capabilities: {}, removedProperties: [], properties: [
+      { id: "p_st", name: "Status", kind: "status", options: [{ id: "a", name: "Offen", group: "todo" }] },
       { id: "p_pr", name: "Prio", kind: "select", default: "m", options: [{ id: "h", name: "Hoch" }, { id: "m", name: "Mittel" }] },
       { id: "p_x", name: "Leer", kind: "select", options: [{ id: "q", name: "Q" }] },
       { id: "p_many", name: "Viele", kind: "select", multiple: true, default: "z", options: [{ id: "z", name: "Z" }], sort: "D" },
@@ -367,6 +367,52 @@ describe("selects", () => {
     expect(optionIds("a")).toEqual(["a"]);
     expect(optionIds(["a", "b"])).toEqual(["a", "b"]);
     expect(optionIds(undefined)).toEqual([]);
+  });
+
+  test("a type's former status capability on a select reads as kind status and migrates without loss", () => {
+    const d = new Y.Doc();
+    initSchema(d, {
+      name: "Alt",
+      icon: "box",
+      color: "gray",
+      description: "",
+      capabilities: { status: "p_st", due: "p_due" } as any,
+      properties: [
+        { id: "p_old", name: "Alter Status", kind: "status", options: [{ id: "c", name: "C", group: "todo" }] },
+        { id: "p_st", name: "Stand", kind: "select", options: [{ id: "a", name: "Neu", group: "todo" }, { id: "p", name: "Ruht", group: "active", state: "paused" }, { id: "x", name: "Verworfen", group: "done", state: "dropped" }, { id: "n" as string, name: "Ohne" }] as any },
+        { id: "p_due", name: "Termin", kind: "date" },
+      ],
+    });
+    const before = readSchema(d);
+    // readers understand the old shape before the migration ran
+    expect(statusProp(before)?.id).toBe("p_st");
+    expect(before.properties.map((p) => p.kind)).toEqual(["select", "status", "date"]);
+    expect(before.capabilities).toEqual({ due: "p_due" });
+    expect(statusProp(before)?.options).toEqual([
+      { id: "a", name: "Neu", group: "todo" },
+      { id: "p", name: "Ruht", group: "active" },
+      { id: "x", name: "Verworfen", group: "done" },
+      { id: "n", name: "Ohne", group: "todo" },
+    ]);
+    expect(statusProp(before)?.default).toBe("a");
+    expect(migrateStatus(d)).toBe(true);
+    const caps = d.getMap("schema").get("capabilities") as Y.Map<unknown>;
+    expect(caps.has("status")).toBe(false);
+    const stored = (d.getMap("schema").get("properties") as Y.Map<Y.Map<unknown>>);
+    expect(stored.get("p_st")!.get("kind")).toBe("status");
+    expect(stored.get("p_old")!.get("kind")).toBe("select");
+    expect(JSON.stringify(stored.get("p_st")!.get("options"))).not.toContain("state");
+    expect(readSchema(d)).toEqual(before);
+    expect(migrateStatus(d)).toBe(false); // idempotent
+    expect(readSchema(d)).toEqual(before);
+  });
+
+  test("changing a property's kind into and out of the status", () => {
+    const sel: PropDef = { id: "p", name: "Phase", kind: "select", sort: "V", options: [{ id: "a", name: "Idee" }, { id: "b", name: "Fertig" }] };
+    const toStatus = kindPatch(sel, "status");
+    expect(toStatus).toEqual({ kind: "status", multiple: null, options: [{ id: "a", name: "Idee", group: "todo" }, { id: "b", name: "Fertig", group: "todo" }], default: "a" });
+    expect(kindPatch({ options: [] }, "status", [{ id: "f", name: "Offen", group: "todo" }]).options).toEqual([{ id: "f", name: "Offen", group: "todo" }]);
+    expect(kindPatch({ options: toStatus.options! }, "select").options).toEqual(sel.options);
   });
 });
 

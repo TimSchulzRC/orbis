@@ -6,6 +6,7 @@ import { join } from "node:path";
 import * as Y from "yjs";
 import type { Store } from "@obtion/server/store";
 import { type Ops, OpError } from "@obtion/server/ops";
+import { capInput } from "@obtion/server/schemas";
 import { Mirror } from "@obtion/server/mirror";
 import { SYS } from "@obtion/core/setup";
 import { storeWriter } from "@obtion/server/setup";
@@ -106,15 +107,14 @@ test("a file has exactly one parent: a new place replaces it; MCP refuses a seco
   expect(s.index().parentsOf(n).length).toBe(3);
 });
 
-test("an agent marks what holds up and what is paused; the type shows it", () => {
+test("an agent marks what holds up; the type shows the status groups", () => {
   ops.defineType(
     {
       name: "Schritt",
       properties: [
-        { name: "Stand", kind: "select", options: ["Neu (todo)", "Ruht (active, paused)", "Fertig (done)", "Eingestellt (done, dropped)"] },
+        { name: "Stand", kind: "status", options: ["Neu (todo)", "Ruht (active)", "Fertig (done)", "Eingestellt (done)"] },
         { name: "Hängt an", kind: "relation", multiple: true, blocks: true },
       ],
-      capabilities: { status: "Stand" },
     },
     A,
   );
@@ -122,10 +122,12 @@ test("an agent marks what holds up and what is paused; the type shows it", () =>
   const b = ops.create({ title: "Packen", type: "Schritt", properties: { "Hängt an": ["Kartons"] } }, A);
   const ix = s.index();
   expect(ix.isBlocked(ix.get(b.id)!)).toBe(true);
-  ops.update("Kartons", { properties: { Stand: "on hold" } }, A); // a synonym finds the paused option by its state
+  ops.update("Kartons", { properties: { Stand: "in Arbeit" } }, A); // a synonym finds the group
   expect(ops.get(a.id).status).toBe("Ruht (active)");
   const info = (ops.schema() as any).types.find((x: any) => x.name === "Schritt");
-  expect(info.properties.map((p: any) => p.options ?? p.blocks)).toEqual([["Neu (todo)", "Ruht (active, paused)", "Fertig (done)", "Eingestellt (done, dropped)"], true]);
+  expect(info.properties.map((p: any) => p.options ?? p.blocks)).toEqual([["Neu (todo)", "Ruht (active)", "Fertig (done)", "Eingestellt (done)"], true]);
+  // a type has one status
+  expect(() => ops.updateType("Schritt", { add_properties: [{ name: "Zweiter", kind: "status", options: ["A (todo)"] }] }, A)).toThrow(/has a status already/);
 });
 
 test("define a type and its views without code, query by type name", () => {
@@ -135,10 +137,9 @@ test("define a type and its views without code, query by type name", () => {
       name: "Buch",
       properties: [
         { name: "Autor", kind: "relation", target: "typ:Person", inverse: "Bücher", multiple: true },
-        { name: "Status", kind: "select", options: ["Will lesen (todo)", "Lese (active)", "Gelesen (done)"] },
+        { name: "Status", kind: "status", options: ["Will lesen (todo)", "Lese (active)", "Gelesen (done)"] },
         { name: "Bewertung", kind: "number" },
       ],
-      capabilities: { status: "Status" },
     },
     A,
   );
@@ -163,7 +164,7 @@ test("define a type and its views without code, query by type name", () => {
   expect(ops.convertPreview({ type: "Buch", direction: "type_to_tag" }).would_lose_type).toBe(2);
 });
 
-test("one kind of select: several values, a default that keeps it filled, any select as status", () => {
+test("one kind of select: several values, a default that keeps it filled, a select turned into the status", () => {
   ops.defineType(
     {
       name: "Artikel",
@@ -186,12 +187,36 @@ test("one kind of select: several values, a default that keeps it filled, any se
   expect((ops.get(a.id) as any).properties).toMatchObject({ Phase: "Idee", Kanäle: "Blog, Newsletter" });
   // with a default it cannot be emptied
   expect(() => ops.update(a.id, { properties: { Phase: null } }, A)).toThrow(/cannot be empty/);
-  // a select with one value becomes the status: its options get groups, "done" works
-  ops.updateType("Artikel", { change_properties: [{ property: "Phase", options: ["Idee (todo)", "Entwurf (active)", "Fertig (done)"] }], capabilities: { status: "Phase" } }, A);
+  // a select becomes the status: its options get groups, "done" works
+  ops.updateType("Artikel", { change_properties: [{ property: "Phase", kind: "status", options: ["Idee (todo)", "Entwurf (active)", "Fertig (done)"] }] }, A);
   ops.update(a.id, { properties: { Phase: "erledigt" } }, A);
   expect((ops.get(a.id) as any).properties.Phase).toBe("Fertig");
-  // several values cannot be the status
-  expect(() => ops.updateType("Artikel", { capabilities: { status: "Kanäle" } }, A)).toThrow(/one value/);
+  expect(() => ops.update(a.id, { properties: { Phase: null } }, A)).toThrow(/cannot be empty/);
+  // a second status is refused
+  expect(() => ops.updateType("Artikel", { change_properties: [{ property: "Kanäle", kind: "status" }] }, A)).toThrow(/has a status already/);
+});
+
+test("a status added later: default options, existing entries show the default, a multi select keeps its first match", () => {
+  ops.defineType({ name: "Notizzettel", properties: [{ name: "Etappe", kind: "select", multiple: true, options: ["Neu", "Erledigt"] }] }, A);
+  const old = ops.create({ title: "Alter Zettel", type: "Notizzettel", properties: { Etappe: "Erledigt, Neu" } }, A);
+  ops.defineType({ name: "Zettel" }, A);
+  const z = ops.create({ title: "Vorher da", type: "Zettel" }, A);
+  // no options given: the three default ones
+  ops.updateType("Zettel", { add_properties: [{ name: "Stand", kind: "status" }] }, A);
+  const info = (ops.schema() as any).types.find((x: any) => x.name === "Zettel");
+  expect(info.properties[0].options).toEqual(["Offen (todo)", "Aktiv (active)", "Erledigt (done)"]);
+  expect(ops.get(z.id).status).toBe("Offen (todo)");
+  expect(ops.query("typ:Zettel status:offen").items.map((i) => i.title)).toEqual(["Vorher da"]);
+  expect(ops.query("typ:Zettel stand:offen").items.map((i) => i.title)).toEqual(["Vorher da"]);
+  expect(ops.query("typ:Zettel stand:leer").items).toEqual([]);
+  // several values into the one status: the first that matches an option
+  ops.updateType("Notizzettel", { change_properties: [{ property: "Etappe", kind: "status", options: ["Neu (todo)", "Erledigt (done)"] }] }, A);
+  expect(ops.get(old.id).status).toBe("Erledigt (done)");
+  // a status never runs out of options
+  expect(() => ops.updateType("Zettel", { change_properties: [{ property: "Stand", options: [] }] }, A)).toThrow(/at least one option/);
+  // removed capabilities are refused, not silently dropped
+  expect(capInput.safeParse({ status: "Stand" }).success).toBe(false);
+  expect(capInput.safeParse({ updates: true }).success).toBe(true);
 });
 
 test("query blocks written by an agent in text form are stored as JSON and read back as text", () => {
