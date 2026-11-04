@@ -27,10 +27,9 @@ function lastTouched(ix: Index, item: Item): number {
   return [...ix.descendants(item.id)].reduce((latest, id) => Math.max(latest, ix.get(id)?.updated ?? 0), item.updated);
 }
 
-export function activeProjects(ix: Index): { item: Item; touched: number }[] {
-  const active = ix.live.filter((i) => {
-    return ix.isContainer(i) && statusOf(i, ix.schemaOf(i))?.group === "active" && !ix.isDormant(i);
-  });
+/** Entries of any type whose status is active (not paused), the topmost only: a running sub-entry shows under its parent. */
+export function running(ix: Index): { item: Item; touched: number }[] {
+  const active = ix.live.filter((i) => statusOf(i, ix.schemaOf(i))?.group === "active" && !ix.isDormant(i));
   const ids = new Set(active.map((i) => i.id));
   return active
     .filter((i) => !ix.homePath(i.id).some((p) => ids.has(p)))

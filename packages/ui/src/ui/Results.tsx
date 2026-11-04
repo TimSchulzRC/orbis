@@ -1,4 +1,4 @@
-import { useContext, useState } from "react";
+import { useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import { type Item, type ViewKind, todayISO } from "@obtion/core/model";
 import { type QueryDef, type EvalCtx, fieldOf, groupItems, pathBase, runQuery } from "@obtion/core/query";
@@ -11,12 +11,11 @@ import { ItemRow, pathLabel, treeOrder, Group } from "./Row";
 import { Triage } from "./Triage";
 import { openReview } from "./inbox";
 import { CalendarView, TimelineView } from "./TimeViews";
-import { ProjectTable } from "./ProjectTable";
 import { BoardView } from "./Board";
 import { GalleryView } from "./Gallery";
 import { type Look, GroupedTable } from "./Table";
 import { HiddenGroups, fieldLabel, hiddenPatch, splitHidden } from "./groups";
-import { Card, Button, InCard } from "./primitives";
+import { Button } from "./primitives";
 
 export function useQuery(def: QueryDef, thisId?: string) {
   const ix = useIndex();
@@ -60,7 +59,6 @@ function MissingTypes({ ids }: { ids: string[] }) {
 export function Results({ def, thisId, display, empty, keyPrefix = "", look }: { def: QueryDef; thisId?: string; display?: ViewKind; empty?: React.ReactNode; keyPrefix?: string; look?: Look }) {
   const { t } = useT();
   const res = useQuery(def, thisId);
-  const inCard = useContext(InCard);
   const { total, missingTypes, ctx } = res;
   // long results render in pages, so a collection of hundreds stays responsive
   const [shown, setShown] = useState(FIRST_PAGE);
@@ -85,17 +83,6 @@ export function Results({ def, thisId, display, empty, keyPrefix = "", look }: {
         <GalleryView items={items} ctx={ctx} />
       ) : view === "triage" ? (
         <Triage items={items} />
-      ) : def.columns?.includes("progress") && !def.group ? (
-        // projects with progress and next task: a table in a card
-        inCard ? (
-          <div className="-mx-4 max-sm:-mx-3">
-            <ProjectTable items={items} />
-          </div>
-        ) : (
-          <Card className="overflow-hidden">
-            <ProjectTable items={items} />
-          </Card>
-        )
       ) : (
         <ListView items={items} def={def} ctx={ctx} look={look} />
       )}

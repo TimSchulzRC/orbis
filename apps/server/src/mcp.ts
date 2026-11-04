@@ -21,7 +21,7 @@ The model:
 - "Part of" (place) builds the tree: an item can have several parents, one is its home. Links ([[Title]]) and refs are mentions; they connect without sorting. Relations are typed properties.
 - Pinned items form the top of the sidebar (place with pin:true); pinning counts as a place.
 - An information without a type, without a parent and not pinned is in the inbox (precisely: whatever the inbox query matches, see \`schema\`). Without a type but with a parent it is a note.
-- Capabilities say what a type can do: a status with groups (todo/active/done), a due date ("Termin"), dated updates. Progress is a computed property ("progress" or "progress:Type"): the first one is the bar on the page and makes the type project-like when it counts another type.
+- Capabilities say what a type can do: a status with groups (todo/active/done), a due date ("Termin"), dated updates. Progress is a computed property ("progress" or "progress:Type"): the first one is the bar on the page. The app gives no type a special role: what a project or a task is comes from the types the user made.
 - Every type has a page: the list of its entries with views as tabs (\`update_type\` views). Mixed lists are pages with query blocks. Query syntax: ${QUERY_HELP} In bodies, \`\`\`query <text>\`\`\` blocks are live lists.
 
 Values are read tolerantly: a status as option name or group (open, active, done) in German or English, also synonyms like "in Arbeit" or "fertig"; dates as 2026-10-30, 30.10.2026, 10/30/2026, today/heute, tomorrow/morgen, a weekday or +3d; type names in singular or plural. "blocked" is not a status: set a property that holds it up (blocks: true in its type, e.g. "Blockiert durch" or "Wartet auf"). What can't be read is rejected with the reason – nothing is guessed.
@@ -320,12 +320,12 @@ function buildMcpServer(store: Store, origin: string, blobs?: Blobs, lang: Lang 
 3. Suggest a type and/or a place with suggest – only where it is clear. Leave unclear items alone and say why. Don't place, type or delete anything yourself; I accept suggestions in the app.
 4. End with a short list: item → suggestion, and the items you left alone.`),
   );
-  server.registerPrompt("weekly_review", { title: "Weekly review", description: "Done in 7 days, overdue, blocked, projects without updates, inbox." }, () =>
+  server.registerPrompt("weekly_review", { title: "Weekly review", description: "Done in 7 days, overdue, blocked, running entries without updates, inbox." }, () =>
     userPrompt(`Run my weekly review (today is ${todayISO()}). Use these queries and summarise each part in a few lines, citing titles:
 1. Done in the last 7 days: query "done>-7d".
 2. Overdue: query "status:open due<today".
 3. Blocked: query "blocked status:open" – for each, what it waits for.
-4. Active projects without an update for 14 days: focus and get, compare the last update with today.
+4. Running entries (focus → active) without an update for 14 days: get them, compare the last update with today.
 5. Inbox: query "inbox" – how many, how old is the oldest.
 Then ask what I want to change. Don't change anything before I answer.`),
   );

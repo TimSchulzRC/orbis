@@ -217,10 +217,9 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
   );
 }
 
-/** "2 von 9 Tasks erledigt, alle Ebenen" / "1 von 2 Unteraufgaben erledigt". */
+/** "2 von 9 Tasks erledigt, alle Ebenen". */
 function progressText(item: Item, ix: Index, done: number, total: number): string {
   const of = progressSpec(ix.schemaOf(item))?.of;
-  if (of && of === item.type) return tr("progress.subtasks", { done, total });
   const name = of ? (ix.typeName(of) ?? "") : "";
   return tr(of ? "progress.allLevelsOf" : "progress.allLevels", { done, total, name: name && pluralOf(name, getLang()) });
 }

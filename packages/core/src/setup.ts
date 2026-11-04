@@ -13,6 +13,7 @@ import {
   setMeta,
   setSchemaField,
   setSettings,
+  setTabs,
 } from "./model";
 import { keysFor } from "./sortkey";
 import { type Lang, translate, words } from "./i18n";
@@ -116,8 +117,12 @@ export function defaultTypes(lang: Lang): Record<string, TypeSpec> {
   };
 }
 
-function createType(w: Writer, id: string, spec: TypeSpec, origin?: string) {
-  w.change(id, (doc) => initType(doc, spec, { createdBy: origin }));
+function createType(w: Writer, id: string, spec: TypeSpec, lang: Lang, origin?: string) {
+  const tabs = defaultTabs(lang)[id];
+  w.change(id, (doc) => {
+    initType(doc, spec, { createdBy: origin });
+    if (tabs) setTabs(doc, tabs);
+  });
 }
 
 /** Creates missing default types and undeletes deleted ones. */
@@ -127,7 +132,7 @@ export function restoreDefaultTypes(w: Writer, lang: Lang, origin?: string): str
   for (const [id, spec] of Object.entries(specs)) {
     const cur = w.get(id);
     if (!cur) {
-      createType(w, id, spec, origin);
+      createType(w, id, spec, lang, origin);
       changed.push(id);
     } else if (cur.deleted) {
       w.change(id, (doc) => setMeta(doc, { deleted: null }));
@@ -143,19 +148,20 @@ const DEFAULT_CAPTURE_TYPES = [SYS.card, SYS.task, SYS.project];
  * Names and columns are in the setup language, like the type names. A view named like its kind
  * has no name, so it follows the UI language.
  */
-function defaultViews(lang: Lang): { project: Omit<ViewTab, "pos">[]; task: Omit<ViewTab, "pos">[] } {
+/** The shipped types' views, written into the type when it is created. */
+function defaultTabs(lang: Lang): Record<string, Omit<ViewTab, "pos">[]> {
   const p = (k: string) => translate(lang, `setup.prop.${k}`);
   const v = (k: string) => translate(lang, `setup.view.${k}`);
   const projectCols = [p("status"), "area", p("period"), p("priority"), p("progress"), p("blockedBy")];
   return {
-    project: [
+    [SYS.project]: [
       { id: "v_active", name: v("active"), kind: "table", group: "status", hideEmpty: true, hiddenGroups: ["st_backlog", "st_done", "st_canceled"], columns: projectCols },
       { id: "v_timeline", kind: "timeline", group: "statusGroup", date: p("period") },
       { id: "v_board", kind: "board", group: "status", columns: [p("period"), p("status")] },
       { id: "v_all", name: v("all"), kind: "table", sort: [{ key: "status" }, { key: "updated", desc: true }], columns: projectCols },
       { id: "v_calendar", kind: "calendar", date: p("period") },
     ],
-    task: [
+    [SYS.task]: [
       { id: "v_byproject", name: v("byProject"), kind: "table", where: { status: "open" }, group: "project", hideEmpty: true, sort: [{ key: "due" }], columns: [p("status"), p("priority"), p("blockedBy"), p("blocking"), p("due"), "tags"] },
       { id: "v_progress", name: v("progress"), kind: "board", group: "status", hiddenGroups: ["st_dropped", "st_archived"], subgroup: "project", sort: [{ key: p("priority") }], columns: [p("due")] },
       { id: "v_priority", name: p("priority"), kind: "board", where: { status: "open" }, group: p("priority"), sort: [{ key: "status" }], columns: ["subtasks"] },
@@ -164,12 +170,21 @@ function defaultViews(lang: Lang): { project: Omit<ViewTab, "pos">[]; task: Omit
   };
 }
 
+/** The type's views; a type without any shows one table of all. */
 export function typeTabs(type: Item, lang: Lang): ViewTab[] {
   if (type.schema?.views?.length) return type.schema.views;
-  const views = defaultViews(lang);
-  const list: Omit<ViewTab, "pos">[] = type.id === SYS.project ? views.project : type.id === SYS.task ? views.task : [{ id: "v_all", name: translate(lang, "setup.view.all"), kind: "table" }];
-  const pos = keysFor(list.length); // same keys setTabs writes
-  return list.map((tab, i) => ({ ...tab, pos: pos[i]! }));
+  return [{ id: "v_all", name: translate(lang, "setup.view.all"), kind: "table", pos: keysFor(1)[0]! }];
+}
+
+/**
+ * Workspaces set up before the views lived in the type: writes the shipped views into the shipped
+ * types that still have none. Runs when the server opens a workspace; a second run changes nothing.
+ */
+export function upgradeSetup(w: Writer, lang: Lang) {
+  for (const [id, tabs] of Object.entries(defaultTabs(lang))) {
+    const type = w.get(id);
+    if (type && !type.deleted && type.schema && !type.schema.views?.length) w.change(id, (doc) => setTabs(doc, tabs));
+  }
 }
 
 /** "Standard wiederherstellen" of the inbox. */

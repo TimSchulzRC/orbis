@@ -47,7 +47,7 @@ import type { Index } from "@obtion/core/graph";
 import { blocksAsText, matches, normalizeBlocks, parseQuery, printQuery, runQuery, relDate, tabDef, typesIn, type Cond, type QueryDef } from "@obtion/core/query";
 import { inboxWhere } from "@obtion/core/inbox";
 import { isInInbox } from "@obtion/core/placement";
-import { caps, doneAt, dueOf, dueProp, firstOfGroup, hasUpdates, initialProps, statusOf, statusProp, template, useAsStatus, writeProp } from "@obtion/core/traits";
+import { caps, doneAt, dueOf, firstOfGroup, hasUpdates, initialProps, statusOf, statusProp, template, useAsStatus, writeProp } from "@obtion/core/traits";
 import { previewTagToType, typeUsage } from "@obtion/core/typeops";
 import { excerpt, searchHits, searchIds } from "@obtion/core/search";
 import { type Heading, findSection, outline, page } from "@obtion/core/outline";
@@ -57,6 +57,7 @@ import { freshColor } from "@obtion/core/palette";
 import { DATE_HELP, InputError, matchOption, parseDate, parseNumber, statusGroupOf } from "@obtion/core/input";
 import { type Writer, runSetup, typeTabs } from "@obtion/core/setup";
 import { type PropChange, followKindChange, followPropChange, followTypeRename } from "@obtion/core/typerefs";
+import { running } from "@obtion/core/today";
 import { type Lang, translate } from "@obtion/core/i18n";
 import { deleteItem, onlyBelow, restoreItem } from "@obtion/core/trash";
 import { fromB64 } from "@obtion/core/protocol";
@@ -666,7 +667,8 @@ export class Ops {
       today,
       overdue: withDue.filter((x) => x.due && x.due < today).map((x) => line(x.i)),
       due_next_7_days: withDue.filter((x) => x.due && x.due >= today && x.due <= in7).map((x) => line(x.i)),
-      active: ix.live.filter((i) => statusOf(i, ix.schemaOf(i))?.group === "active" && !dueProp(ix.schemaOf(i)) && !ix.isDormant(i)).map((i) => {
+      // as "Läuft gerade" on the Heute page
+      active: running(ix).map(({ item: i }) => {
         const next = ix.nextTask(i.id, today);
         if (next) touched?.add(next.id);
         return line(i) + (next ? ` · next: “${next.title}”` : "") + (i.updates.length ? ` · last update: “${i.updates.at(-1)!.text}”` : "");

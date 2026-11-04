@@ -197,19 +197,12 @@ export function RowStatus({ item, size = 17 }: { item: Item; size?: number }) {
   const ticked = useLingering(item.id);
   const done = st?.group === "done" || ticked;
   if (!st) return <ItemIcon item={item} size={size - 1} />;
-  // a project's status is set from a menu; a task is ticked off
-  const viaMenu = ix.isContainer(item);
   // the shape in the option's colour (as on its pill): open grey, running amber, done green …
   const option = ticked ? (firstOfGroup(schema, "done") ?? st.option) : st.option;
   const color = done ? "var(--ok)" : option.color && option.color !== "gray" ? pal(option.color) : undefined;
   const glyph = <span style={{ color }}><StatusGlyph option={option} size={size} /></span>;
-  return viaMenu ? (
-    <StatusMenu item={item} trigger={(p) => (
-      <Button variant="plain" {...p} className="tap-edge shrink-0 text-muted-foreground hover:text-fg" aria-label={t("row.status", { name: st.option.name })} title={st.option.name}>
-        {glyph}
-      </Button>
-    )} />
-  ) : (
+  // every entry with a status is ticked off here; other options are set on its page
+  return (
     <Button variant="plain" onClick={() => tick(item, repo)} className="tap-edge shrink-0 text-muted-foreground hover:text-ok" aria-label={done ? t("row.reopen") : t("row.done")} title={done ? t("row.reopen") : t("row.done")}>
       {glyph}
     </Button>

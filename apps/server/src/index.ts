@@ -10,7 +10,8 @@ import type { AccountInfo, InviteCode, InviteInfo, InviteLink, McpConnect, Ok, R
 import { type Conn, Workspace, parseClientMsg } from "./workspace";
 import { firstName, personOrigin } from "@obtion/core/origin";
 import { type Lang, LANGS, acceptLang, translate } from "@obtion/core/i18n";
-import { setUp } from "./setup";
+import { SETUP_ORIGIN, setUp, storeWriter } from "./setup";
+import { upgradeSetup } from "@obtion/core/setup";
 import { allowedHosts } from "./trust";
 import { DATA, MAX_WS_MESSAGE, PORT } from "./config";
 import { body, fail, json } from "./http";
@@ -61,6 +62,7 @@ function workspace(id: string): Workspace | undefined {
   const known = open.get(id);
   if (known || !accounts.exists(id)) return known;
   const opened = new Workspace(accounts.dir(id));
+  upgradeSetup(storeWriter(opened.store, SETUP_ORIGIN), opened.store.lang());
   open.set(id, opened);
   return opened;
 }
