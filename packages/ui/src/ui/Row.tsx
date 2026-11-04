@@ -184,10 +184,7 @@ export function ItemRow({
   );
 }
 
-/**
- * A click ticks a task off (and back). Containers (their "+" creates another type, e.g. a
- * project's tasks) open the status menu instead. Without a status it shows the entry's icon.
- */
+/** A click ticks the entry off (and back), whatever its type; the type's icon follows. Without a status only the icon. */
 export function RowStatus({ item, size = 17 }: { item: Item; size?: number }) {
   const { t } = useT();
   const repo = useRepo();
@@ -201,11 +198,15 @@ export function RowStatus({ item, size = 17 }: { item: Item; size?: number }) {
   const option = ticked ? (firstOfGroup(schema, "done") ?? st.option) : st.option;
   const color = done ? "var(--ok)" : option.color && option.color !== "gray" ? pal(option.color) : undefined;
   const glyph = <span style={{ color }}><StatusGlyph option={option} size={size} /></span>;
-  // every entry with a status is ticked off here; other options are set on its page
+  // every entry with a status is ticked off here; other options are set on its page. The type's
+  // icon follows, so a project and a task look different
   return (
-    <Button variant="plain" onClick={() => tick(item, repo)} className="tap-edge shrink-0 text-muted-foreground hover:text-ok" aria-label={done ? t("row.reopen") : t("row.done")} title={done ? t("row.reopen") : t("row.done")}>
-      {glyph}
-    </Button>
+    <>
+      <Button variant="plain" onClick={() => tick(item, repo)} className="tap-edge shrink-0 text-muted-foreground hover:text-ok" aria-label={done ? t("row.reopen") : t("row.done")} title={done ? t("row.reopen") : t("row.done")}>
+        {glyph}
+      </Button>
+      <ItemIcon item={item} size={size - 3} />
+    </>
   );
 }
 
