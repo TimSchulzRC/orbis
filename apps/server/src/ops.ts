@@ -551,7 +551,7 @@ export class Ops {
       out.file = file;
       out.used_in = ix.usedIn(i.id).map((b) => `${ix.get(b.from)?.title} (${b.kind})`);
       // a text read from another content (replaced, undone) is not shown; it is read anew
-      const reading = f.extracted !== extractMark(f.hash) && f.filetype !== "bild" && f.filetype !== "audio" && f.filetype !== "video" && !!this.blobs?.has(f.hash);
+      const reading = !!f.hash && f.extracted !== extractMark(f.hash) && f.filetype !== "bild" && f.filetype !== "audio" && f.filetype !== "video" && !!this.blobs?.has(f.hash);
       if (reading) out.text_note = "The server is still reading this file's text; get it again in a moment.";
       else if (f.text && opts.include_body !== false) this.readText(out, "text", f.text, opts);
     }

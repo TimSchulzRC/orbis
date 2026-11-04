@@ -10,7 +10,7 @@ import { Store } from "@obtion/server/store";
 import { Workspace } from "@obtion/server/workspace";
 import { initItem, setFileMeta } from "@obtion/core/model";
 import { runSetup } from "@obtion/core/setup";
-import { storeWriter } from "@obtion/server/importers";
+import { storeWriter } from "@obtion/server/setup";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 
