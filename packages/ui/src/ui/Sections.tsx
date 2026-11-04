@@ -13,7 +13,7 @@ import type { T } from "@obtion/core/i18n";
 import { repo } from "../repo";
 import { itemHref, useIndex, useStoredSet } from "../hooks";
 import { useT, titleOf } from "../i18n";
-import { Card, Button, Seg, SectionTitle, SectionAction, Popover, MenuItem } from "./primitives";
+import { Card, Button, SectionTitle, SectionAction, Popover, MenuItem } from "./primitives";
 import { DueLabel, ItemIcon, RelTime, TypeGlyph } from "./item-look";
 import { NOTE_ICON } from "./icons";
 import { ProgressCount } from "./progress";
@@ -69,7 +69,7 @@ function order(ix: Index) {
 /**
  * "Darunter" (design rules § 3.1, zone 4): everything below the page, the same for every type.
  * The entries directly below, grouped by type; each one with entries below opens into them, any
- * type, any depth. "Direkt" starts closed, "Alle Ebenen" starts open. Done ones stay hidden
+ * type, any depth; all start closed. Done ones stay hidden
  * until "erledigte einblenden".
  */
 export function Below({ item }: { item: Item }) {
@@ -77,9 +77,8 @@ export function Below({ item }: { item: Item }) {
   const ix = useIndex();
   const view: ViewDef = item.views.main ?? {};
   const setView = (patch: Partial<ViewDef>) => repo.setView(item.id, "main", { ...view, ...patch });
-  const allOpen = view.scope === "all";
-  // entries folded against the default ("Direkt": opened ones, "Alle Ebenen": closed ones)
-  const [flipped, flip, setFlipped] = useStoredSet(KEYS.fold(`below:${item.id}`));
+  // the entries opened to show what lies below them
+  const [opened, flip] = useStoredSet(KEYS.fold(`below:${item.id}`));
   // the type of the entry being added at the top: undefined closed, null a note
   const [adding, setAdding] = useState<string | null | undefined>(undefined);
   const cmp = order(ix);
@@ -109,7 +108,7 @@ export function Below({ item }: { item: Item }) {
   };
   const row = (x: Item, depth: number, path: Set<string>): React.ReactNode => {
     const kids = path.has(x.id) ? [] : below(x.id).sort((a, b) => byGroup(groupOf(a), groupOf(b)) || cmp(a, b));
-    const open = kids.length > 0 && allOpen !== flipped.has(x.id);
+    const open = kids.length > 0 && opened.has(x.id);
     const progress = ix.progressOf(x);
     const status = statusOf(x, ix.schemaOf(x));
     const blocked = !!status && status.group !== "done" && ix.isBlocked(x);
@@ -118,7 +117,7 @@ export function Below({ item }: { item: Item }) {
       <Fragment key={x.id + ":" + depth}>
         <div data-id={x.id} className="flex min-h-10 items-center gap-2 border-t border-line pr-3 hover:bg-hover max-md:min-h-[48px]" style={{ paddingLeft: 6 + depth * 22 }}>
           {kids.length > 0 ? (
-            <Button variant="plain" onClick={() => flip(x.id, !flipped.has(x.id))} aria-expanded={open} aria-label={open ? t("below.close") : t("below.open")} className="tap-edge flex size-5 shrink-0 items-center justify-center rounded text-faint hover:bg-hover hover:text-fg">
+            <Button variant="plain" onClick={() => flip(x.id, !opened.has(x.id))} aria-expanded={open} aria-label={open ? t("below.close") : t("below.open")} className="tap-edge flex size-5 shrink-0 items-center justify-center rounded text-faint hover:bg-hover hover:text-fg">
               <ChevronRight size={13} className={cn("transition-transform", open && "rotate-90")} />
             </Button>
           ) : (
@@ -166,17 +165,11 @@ export function Below({ item }: { item: Item }) {
         {adding === undefined ? addMenu : <Card className="overflow-hidden">{addRow}</Card>}
       </div>
     );
-  const depthOptions = [{ value: "level", label: t("below.direct") }, { value: "all", label: t("below.allLevels") }];
   return (
     <section className="mt-10 max-md:mt-8">
       <SectionTitle
         count={direct.length}
-        right={
-          <>
-            <Seg label={t("below.depth")} value={allOpen ? "all" : "level"} onChange={(v) => (setFlipped([]), setView({ scope: v === "all" ? "all" : "level" }))} options={depthOptions} />
-            {addMenu}
-          </>
-        }
+        right={addMenu}
       >
         {t("below.title")}
       </SectionTitle>

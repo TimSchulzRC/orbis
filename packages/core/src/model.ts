@@ -125,7 +125,7 @@ export type ViewKind = (typeof VIEW_KINDS)[number];
 export interface ViewDef {
   query?: QueryDef; // stored as JSON with ids
   display?: ViewKind;
-  scope?: "level" | "all"; // "Nur diese Ebene" / "Inkl. Unterprojekte"; "Darunter": "Direkt" / "Alle Ebenen" open
+  scope?: "level" | "all"; // "Nur diese Ebene" / "Inkl. Unterprojekte"
   group?: string;
   showDone?: boolean;
 }
