@@ -4,8 +4,8 @@ import type { Item } from "@obtion/core/model";
 import { useFocusDraft, useRepo } from "../hooks";
 import { useT } from "../i18n";
 
-/** Multi-line title that wraps instead of clipping; Enter commits. */
-export function TitleField({ item, autoFocus, placeholder }: { item: Item; autoFocus: boolean; placeholder?: string }) {
+/** Multi-line title that wraps instead of clipping; Enter commits (`onEnter`: and goes on, as into the text). */
+export function TitleField({ item, autoFocus, placeholder, onEnter }: { item: Item; autoFocus: boolean; placeholder?: string; onEnter?: () => void }) {
   const { t } = useT();
   // the workspace of this part of the page (the tray's panel shows entries of several)
   const repo = useRepo();
@@ -36,7 +36,7 @@ export function TitleField({ item, autoFocus, placeholder }: { item: Item; autoF
       onFocus={() => (focused.current = true)}
       onBlur={commit}
       onChange={(e) => setDraft(e.target.value.replace(/\n/g, " "))}
-      onKeyDown={onKeyDown}
+      onKeyDown={(e) => (onKeyDown(e), e.key === "Enter" && !e.nativeEvent.isComposing && onEnter?.())}
       data-large
       className="field page-title block w-full resize-none overflow-hidden bg-transparent outline-none placeholder:text-faint focus-visible:ring-0"
     />

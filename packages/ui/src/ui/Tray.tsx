@@ -1,10 +1,11 @@
-// The inbox tray below every page. The tray opens its panel, the list and an entry to sort. On Heute
-// on a desktop with room, the panel is pinned open as part of the page.
+// The inbox tray below every page. The tray opens its panel, the list and an entry to sort; the field
+// beside it (on a phone the "+") a quick note. On Heute on a desktop with room, the panel is pinned
+// open as part of the page.
 import { useRef } from "react";
 import { Check, ChevronDown, ChevronUp, Inbox, Plus } from "lucide-react";
 import { useT } from "../i18n";
 import { cn } from "../lib/utils";
-import { Capture } from "./Capture";
+import { QuickNote, QuickNoteField, closeQuickNote, openQuickNote, useQuickNote } from "./QuickNote";
 import { dismissShelf, openShelf, useInboxItems, useShelf } from "./inbox";
 import { InboxPanel } from "../views/Review";
 import { Button } from "./primitives";
@@ -16,13 +17,15 @@ const DAY = 86_400_000;
 /** Pixels a finger moves up on the tray to open its panel. */
 const SWIPE_UP = 40;
 
-export function Tray({ desktop, pinned, onCapture }: { desktop: boolean; pinned?: boolean; onCapture: () => void }) {
+export function Tray({ desktop, pinned }: { desktop: boolean; pinned?: boolean }) {
   const { t } = useT();
   const entries = useInboxItems();
   const count = entries.length;
   const { open, at } = useShelf();
   // the panel over the page (pinned it is part of the page and stays)
   const looking = open && !pinned;
+  const writing = useQuickNote().open;
+  const openPanel = () => (writing && closeQuickNote(), openShelf());
   const touch = useRef<number | null>(null);
   const ages = entries.map((e) => age(e.item.created)).sort((a, b) => b - a);
   const tray = (
@@ -32,10 +35,10 @@ export function Tray({ desktop, pinned, onCapture }: { desktop: boolean; pinned?
       <Button
         variant="plain"
         // pinned it does not close, so nothing to click
-        onClick={() => (looking ? dismissShelf() : !pinned && openShelf())}
+        onClick={() => (looking ? dismissShelf() : !pinned && openPanel())}
         onTouchStart={(e) => (touch.current = e.touches[0]!.clientY)}
         onTouchEnd={(e) => {
-          if (touch.current !== null && touch.current - (e.changedTouches[0]?.clientY ?? 0) > SWIPE_UP) (e.preventDefault(), openShelf());
+          if (touch.current !== null && touch.current - (e.changedTouches[0]?.clientY ?? 0) > SWIPE_UP) (e.preventDefault(), openPanel());
           touch.current = null;
         }}
         aria-expanded={pinned || open}
@@ -63,11 +66,13 @@ export function Tray({ desktop, pinned, onCapture }: { desktop: boolean; pinned?
   return (
     <>
       {looking && <Backdrop className="z-30" onClick={dismissShelf} aria-hidden />}
+      {writing && <Backdrop className="z-30" onClick={closeQuickNote} aria-hidden />}
       <div className={cn("relative z-40", pinned ? "flex min-h-[308px] flex-1 flex-col" : "shrink-0", desktop ? cn(pinned ? "px-8" : "px-6", "pb-4 pt-2") : "px-3 pb-2 pt-1")} role="region" aria-label={t("tray.title")}>
         <div className={cn("mx-auto", desktop && "max-w-[1040px]", pinned && "flex min-h-0 w-full flex-1 flex-col")}>
           {pinned ? (
             // above the sheets sticking out of the tray, which stay
-            <div className="min-h-0 flex-1 pb-10">
+            // the quick note above it: the inbox steps back, so nothing distracts
+            <div className={cn("min-h-0 flex-1 pb-10 transition-opacity", writing && "pointer-events-none opacity-30")} inert={writing}>
               <InboxPanel desktop pinned />
             </div>
           ) : looking && (
@@ -76,12 +81,21 @@ export function Tray({ desktop, pinned, onCapture }: { desktop: boolean; pinned?
               <InboxPanel desktop={desktop} />
             </div>
           )}
+          {!desktop && writing && (
+            <div className="fixed inset-x-0 bottom-0 top-3 z-50 pt-safe">
+              <QuickNote desktop={false} />
+            </div>
+          )}
           {desktop ? (
             <div className="relative">
               <div className="flex items-center gap-3 rounded-2xl bg-surface p-2 shadow-[0_6px_24px_-12px_rgb(0_0_0/0.25)]">
                 {tray}
-                <div className="min-w-0 flex-1">
-                  <Capture anywhere placeholder={t("tray.placeholder")} />
+                <div className="relative min-w-0 flex-1">
+                  {/* the card stands on the field it came from, as wide */}
+                  <div className="absolute inset-x-0 bottom-full mb-5 empty:hidden">
+                    <QuickNote desktop />
+                  </div>
+                  <QuickNoteField />
                 </div>
                 {empty}
               </div>
@@ -89,7 +103,7 @@ export function Tray({ desktop, pinned, onCapture }: { desktop: boolean; pinned?
           ) : (
             <div className="flex items-center gap-2 rounded-2xl bg-surface p-1.5 shadow-sm">
               {tray}
-              <Button variant="plain" onClick={onCapture} aria-label={t("capture.title")} className="tap flex size-10 shrink-0 items-center justify-center rounded-xl border border-line hover:bg-hover">
+              <Button variant="plain" onClick={openQuickNote} aria-label={t("capture.title")} className="tap flex size-10 shrink-0 items-center justify-center rounded-xl border border-line hover:bg-hover">
                 <Plus size={20} />
               </Button>
             </div>

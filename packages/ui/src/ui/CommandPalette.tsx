@@ -8,7 +8,7 @@ import { statusOf } from "@obtion/core/traits";
 import { itemPath, spaceHref, openItem } from "../hooks";
 import { useAccounts } from "../accounts";
 import { useReplicas } from "./Spaces";
-import { captureSpace } from "./Capture";
+import { captureSpace } from "./QuickNote";
 import { setTheme } from "../theme";
 import { useT, setLang, getLang, titleOf } from "../i18n";
 import { InTray, ItemIcon, StatusPill, TypeGlyph } from "./item-look";

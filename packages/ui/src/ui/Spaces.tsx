@@ -193,8 +193,8 @@ function previewLines(plan: Awaited<ReturnType<typeof planToSpace>>, from: strin
   ].filter(Boolean);
 }
 
-/** Asks first if something changes on the way (a type copied, values that become free properties, links left behind). */
-export async function moveTo(id: string, from: string, to: string, parent?: string) {
+/** Asks first if something changes on the way (a type copied, values that become free properties, links left behind). The moved item's id there, unless it stayed. */
+export async function moveTo(id: string, from: string, to: string, parent?: string): Promise<string | undefined> {
   const workspace = spaceById(to)?.name ?? "";
   try {
     const plan = await planToSpace(id, from, to);
@@ -206,6 +206,7 @@ export async function moveTo(id: string, from: string, to: string, parent?: stri
     }
     const moved = await moveToSpace(id, from, to, parent);
     notify.action(tr("move.done", { workspace }), tr("move.open"), () => openItem(moved, { space: to }));
+    return moved;
   } catch (e) {
     notify(e instanceof MoveError ? tr(`move.error.${e.message}`) : String((e as Error).message ?? e));
   }

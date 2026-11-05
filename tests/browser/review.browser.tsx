@@ -6,6 +6,7 @@ import { cleanup, render } from "vitest-browser-react";
 import { InboxPanel } from "../../packages/ui/src/views/Review";
 import type { Repo } from "@obtion/sync";
 import { setMeta } from "@obtion/core/model";
+import { queryFence } from "@obtion/core/query";
 import { workspace } from "./workspace";
 
 const panel = () =>
@@ -104,6 +105,16 @@ describe("editing in the card", () => {
     await commands.keys("press", "Escape");
     await expect.poll(() => document.querySelector("main article textarea")).toBeNull();
     await expect.element(page.getByRole("article").getByText(/ Ys$/)).toBeVisible();
+  });
+});
+
+describe("the card's text", () => {
+  test("a query shows its results while read, as on the note's page", async () => {
+    await expect.element(card()).toBeVisible();
+    const id = repo.index().live.find((i) => i.title === titleNow())!.id;
+    repo.getDoc(id).getText("body").insert(0, queryFence('{"where":{"type":"task"}}') + "\n");
+    await expect.poll(() => document.querySelector("main article .cm-queryblock")).not.toBeNull();
+    expect(document.querySelector("main article textarea"), "still read, not edited").toBeNull();
   });
 });
 

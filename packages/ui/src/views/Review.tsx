@@ -2,24 +2,18 @@
 // phone the list, and the entry as a sheet over it. Sorting moves on to the next entry and the sorted
 // one down under "Einsortiert" in the list, with its undo. The entry's card keeps one height, so the
 // choices below it never move.
-import { type ReactNode, useEffect, useRef, useState } from "react";
-import type { EditorView } from "@codemirror/view";
-import { ArrowLeft, Check, Clock, FolderInput, Maximize2, Pencil, Pin, Shapes, Trash2, Undo2, X } from "lucide-react";
-import { belowOf } from "@obtion/core/placement";
+import { useEffect, useRef, useState } from "react";
+import { ArrowLeft, Check, X } from "lucide-react";
 import type { Item } from "@obtion/core/model";
-import { plainText } from "@obtion/core/search";
-import { useRepo, useItemHref, openItem } from "../hooks";
+import { useRepo, openItem } from "../hooks";
 import { replica, spaceById, useAccounts } from "../accounts";
 import { useT, titleOf } from "../i18n";
-import { useBlobUrl } from "../files";
-import { Button, Empty, Kbd, IconButton } from "../ui/primitives";
-import { ItemIcon, RelTime, Tag, itemLook, kindLabel } from "../ui/item-look";
+import { Button, Empty, IconButton } from "../ui/primitives";
 import { cn } from "../lib/utils";
-import { Markdown } from "../ui/Markdown";
-import { Editor } from "../ui/Editor";
-import { TitleField } from "../ui/TitleField";
 import { SpaceScope } from "../ui/Spaces";
 import { InboxList, backNow } from "../ui/Shelf";
+import { type Edit, NoteCard } from "../ui/NoteCard";
+import { SortChoices } from "../ui/SortChoices";
 import { type InboxEntry, closeShelf, dismissShelf, openShelf, useInboxItems, useLaterItems, useShelf } from "../ui/inbox";
 import { type Undo, revert, usePickers, useTriageActions } from "../ui/TriageActions";
 import { KEYS, readJSON, writeJSON } from "../ui/storage";
@@ -31,9 +25,6 @@ interface Sorted {
   undo: Undo;
 }
 
-/** Where the entry was clicked to edit it (`title`: the caret offset in the title); null from the button. */
-type Edit = { x: number; y: number; title?: number } | null;
-
 /** The sorting on this device: kept while the panel is closed. What was sorted stays, also across a reload and into tomorrow, until "Fertig" or cleared by hand. */
 let session: { order: string[]; at?: string } | null = null;
 const storedSorted = () => readJSON<Sorted[]>(KEYS.inboxSorted, []);
@@ -44,8 +35,6 @@ const ARROW_SCROLL = 80;
 const SWIPE = 70;
 /** Above this many entries the progress is a bar instead of steps. */
 const MAX_STEPS = 16;
-/** Characters of a file's text shown in place of a body. */
-const FILE_TEXT_PREVIEW = 1200;
 /** An open dialog or menu (a tooltip's popper does not count): Escape is theirs. */
 const OVERLAY_OPEN = "[role=dialog][data-state=open], [data-radix-popper-content-wrapper]:not(:has([role=tooltip]))";
 
@@ -228,8 +217,8 @@ function Inbox({ at, desktop, pinned, panel }: { at?: string; desktop: boolean; 
   const head = <ReviewHead total={total} at={entry && !waiting ? sorted.length + 1 : total} sorted={sorted.length} onBack={desktop ? undefined : () => openShelf()} onClose={pinned ? undefined : dismissShelf} />;
   const body = entry ? (
     <SpaceScope id={entry.space}>
-      <EntryCard key={entry.key} entry={entry} space={several ? spaceById(entry.space)?.name : undefined} scroller={card} editing={editing} onEdit={(at) => setEditing({ key, at })} onDone={stopEditing} />
-      <Choices entry={entry} waiting={waiting} onPick={() => (stopEditing(), pick.setPlacing([entry.item]))} onTypes={() => (stopEditing(), pick.setTyping([entry.item]))} onLater={later_} onPin={pin} onTrash={trash} keys={desktop} quiet={!!editing} />
+      <Entry key={entry.key} entry={entry} space={several ? spaceById(entry.space)?.name : undefined} scroller={card} editing={editing} onEdit={(at) => setEditing({ key, at })} onDone={stopEditing} />
+      <SortChoices item={entry.item} waiting={waiting} onPick={() => (stopEditing(), pick.setPlacing([entry.item]))} onTypes={() => (stopEditing(), pick.setTyping([entry.item]))} onLater={later_} onPin={pin} onTrash={trash} keys={desktop} quiet={!!editing} className="mt-6" />
     </SpaceScope>
   ) : (
     <Finished count={sorted.length} onDone={pinned ? undefined : finish} />
@@ -301,189 +290,10 @@ function Steps({ total, done }: { total: number; done: number }) {
   );
 }
 
-/** As tall as the panel leaves, the same for every entry, so the choices below never move; a long entry scrolls inside. */
-function EntryCard({ entry, space, scroller, editing, onEdit, onDone }: { entry: InboxEntry; space?: string; scroller: React.RefObject<HTMLDivElement | null>; editing: { at: Edit } | null; onEdit: (at: Edit) => void; onDone: () => void }) {
-  const { t } = useT();
-  const hrefOf = useItemHref();
-  const repo = useRepo();
-  const ix = repo.index();
-  const item = repo.get(entry.item.id) ?? entry.item;
-  // in the inbox, a loose note is just a note
-  const kind = kindLabel(itemLook(item, ix), t, { inboxAsNote: true });
-  const children = belowOf(item.id, ix);
-  const image = useBlobUrl(item.file?.filetype === "bild" ? (item.file.display ?? item.file.hash) : item.file?.thumb, true);
-  const [overflows, setOverflows] = useState(false);
-  const self = useRef<HTMLElement>(null);
-  const at = editing?.at;
-  // a click outside the card ends editing, but not one in what the editor opened (a menu, a picture)
-  useEffect(() => {
-    if (!editing) return;
-    const onPointer = (e: PointerEvent) => {
-      const el = e.target as Element;
-      if (!self.current?.contains(el) && !el.closest?.(".cm-menu, .cm-tooltip, [role=dialog]:not([data-shelf-panel]), [data-radix-popper-content-wrapper]")) onDone();
-    };
-    document.addEventListener("pointerdown", onPointer, true);
-    return () => document.removeEventListener("pointerdown", onPointer, true);
-  }, [!!editing]);
-  const hasText = !item.file;
-  // the title clicked (or a file, which has no text here): the caret where clicked, else at its end
-  useEffect(() => {
-    if (!editing || (hasText && at?.title === undefined)) return;
-    const el = scroller.current?.querySelector("textarea");
-    const caret = Math.min(at?.title ?? Infinity, el?.value.length ?? 0);
-    el?.focus();
-    el?.setSelectionRange(caret, caret);
-  }, [!!editing]);
-  const placeCaret = (view: EditorView | null) => {
-    if (!view || at?.title !== undefined) return;
-    view.focus();
-    // after the editor's first measure: before it, its heights are guesses
-    requestAnimationFrame(() => view.dom.isConnected && view.dispatch({ selection: { anchor: (at && view.posAtCoords(at, false)) ?? view.state.doc.length } }));
-  };
-  useEffect(() => {
-    const el = scroller.current;
-    if (!el) return;
-    const measure = () => setOverflows(el.scrollHeight - el.scrollTop - el.clientHeight > 4);
-    const observer = new ResizeObserver(measure);
-    observer.observe(el);
-    for (const child of el.children) observer.observe(child);
-    el.addEventListener("scroll", measure, { passive: true });
-    return () => (observer.disconnect(), el.removeEventListener("scroll", measure));
-  }, []);
-  return (
-    <div className="min-h-[180px] flex-1">
-      <div className="relative h-full">
-      <article
-        ref={self}
-        className={cn(
-          "relative flex h-full flex-col overflow-hidden rounded-2xl border bg-surface shadow-sm",
-          editing ? "border-focus/55 ring-4 ring-focus/12" : "cursor-text border-line",
-        )}
-        onClick={(e) => {
-          const el = e.target as HTMLElement;
-          if (editing || el.closest("a, button, img") || getSelection()?.toString()) return;
-          const caret = document.caretPositionFromPoint?.(e.clientX, e.clientY)?.offset ?? document.caretRangeFromPoint?.(e.clientX, e.clientY)?.startOffset; // Safari has only the latter
-          onEdit({ x: e.clientX, y: e.clientY, title: el.closest("h2") ? (caret ?? Infinity) : undefined });
-        }}
-      >
-        <div className="relative min-h-0 flex-1">
-        <div ref={scroller} className="h-full overflow-y-auto px-8 pb-3 pt-7 max-lg:px-5 max-lg:pt-5">
-        <div className="flex items-start gap-2 text-[13px] text-muted-foreground">
-          <p className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 pt-0.5">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-line px-2 py-0.5 text-fg">
-              <ItemIcon item={item} size={13} /> {kind}
-            </span>
-            {space && <span>{space}</span>}
-            <span>
-              {t("triage.captured")} <RelTime ts={item.created} />
-            </span>
-          </p>
-          <a href={hrefOf(item.id)} className="tap -mr-1.5 -mt-1 shrink-0 rounded-md p-1.5 hover:bg-hover hover:text-fg" aria-label={t("review.open")} title={t("review.open")}>
-            <Maximize2 size={15} />
-          </a>
-        </div>
-        {editing ? (
-          <>
-            {/* as large as the title it replaces (over the page title's own size), so nothing below moves */}
-            <div className="mt-4 [&_textarea]:text-[28px]! [&_textarea]:leading-[34px]! [&_textarea]:tracking-[-0.015em]! max-lg:[&_textarea]:text-2xl!">
-              <TitleField item={item} autoFocus={false} placeholder={item.file?.name} />
-            </div>
-            {hasText && (
-              <div className="mt-3 max-w-[68ch] text-[15px] leading-[1.65]">
-                <Editor doc={repo.getDoc(item.id)} nodeId={item.id} minHeight="min-h-24" onView={placeCaret} />
-              </div>
-            )}
-          </>
-        ) : (
-          <h2 className="mt-4 text-[28px] font-bold leading-[34px] tracking-[-0.015em] max-lg:text-2xl">{titleOf(item, t)}</h2>
-        )}
-        {editing && hasText ? null : item.body.trim() ? (
-          <div className="mt-4 max-w-[68ch] text-[15px] leading-[1.65]">
-            <Markdown src={item.body} />
-          </div>
-        ) : item.file?.text ? (
-          <p className="mt-4 max-w-[68ch] text-[15px] leading-[1.65] text-muted-foreground">{plainText(item.file.text).slice(0, FILE_TEXT_PREVIEW)}</p>
-        ) : null}
-        {image && <img src={image} alt={item.title} className="mt-4 max-h-[50vh] w-auto rounded-lg border border-line" />}
-        {item.tags.length > 0 && (
-          <div className="mt-4 flex flex-wrap gap-1.5">
-            {item.tags.map((tag) => (
-              <Tag key={tag} tag={tag} />
-            ))}
-          </div>
-        )}
-        {children.length > 0 && (
-          <div className="mt-5 border-t border-line pt-4">
-            <p className="mb-1.5 text-xs font-semibold text-muted-foreground">{t("below.title")}</p>
-            <ul className="space-y-1 text-sm">
-              {children.map((child) => (
-                <li key={child.id} className="flex items-center gap-2">
-                  <ItemIcon item={child} size={14} /> <a href={hrefOf(child.id)} className="truncate hover:underline">{titleOf(child, t)}</a>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-        </div>
-        {overflows && <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-surface to-transparent" aria-hidden />}
-        </div>
-        {/* as far from the corner as "Öffnen" above (its box: the padding less its -1.5 margins) */}
-        <div className="flex shrink-0 justify-end pb-6 pl-8 pr-6.5 pt-1 max-lg:pb-4 max-lg:pl-5 max-lg:pr-3.5">
-          <Button
-            variant="plain"
-            onClick={() => (editing ? onDone() : onEdit(null))}
-            className={cn(
-              "tap inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[13px] font-medium",
-              editing
-                ? "border-focus/40 bg-focus/10 text-focus hover:bg-focus/16"
-                : "border-transparent text-muted-foreground hover:bg-hover hover:text-fg",
-            )}
-          >
-            {editing ? <Check size={15} /> : <Pencil size={14} />} {t(editing ? "review.editDone" : "review.edit")}
-          </Button>
-        </div>
-      </article>
-      </div>
-    </div>
-  );
-}
-
-/**
- * The five buttons stay the same and in the same place for every entry. Key hints go invisible while
- * the entry is edited, keeping their room so the buttons do not move. One back tomorrow comes back now
- * instead of "Morgen".
- */
-function Choices({ entry, waiting, onPick, onTypes, onLater, onPin, onTrash, keys, quiet }: { entry: InboxEntry; waiting: boolean; onPick: () => void; onTypes: () => void; onLater: () => void; onPin: () => void; onTrash: () => void; keys: boolean; quiet: boolean }) {
-  const { t } = useT();
-  const info = entry.item.kind === "info";
-  const hint = (key: string) => keys && <span className={cn("hidden @[600px]:inline-flex", quiet && "invisible")}><Kbd>{key}</Kbd></span>;
-  const tile = (icon: ReactNode, label: string, key: string, onClick: () => void, opts: { primary?: boolean; danger?: boolean; disabled?: boolean } = {}) => (
-    <Button
-      variant="plain"
-      onClick={onClick}
-      disabled={opts.disabled}
-      // delete on a desktop is only its icon: the name and key on hover
-      title={opts.danger && keys ? `${label} (${key})` : undefined}
-      className={cn(
-        "tap flex h-9 min-w-0 flex-1 items-center gap-1.5 whitespace-nowrap rounded-lg border px-2 text-[13px] font-medium disabled:opacity-40",
-        opts.primary ? "border-transparent bg-primary text-primary-foreground hover:bg-primary/90 max-lg:col-span-2" : "border-line bg-surface hover:bg-hover",
-        opts.danger && "text-danger lg:w-9 lg:flex-none lg:justify-center lg:px-0",
-      )}
-    >
-      {icon}
-      <span className={cn("min-w-0 flex-1 truncate px-1 text-center", opts.danger && "lg:sr-only")}>{label}</span>
-      {!opts.danger && hint(key)}
-    </Button>
-  );
-  return (
-    <div className="@container mt-6 flex shrink-0 gap-2 max-lg:grid max-lg:grid-cols-2">
-      {tile(<FolderInput size={15} />, t("review.placeAction"), "e", onPick, { primary: true })}
-      {tile(<Shapes size={15} />, t("review.convertAction"), "y", onTypes, { disabled: !info })}
-      {waiting ? tile(<Undo2 size={15} />, t("review.backAction"), "s", onLater) : tile(<Clock size={15} />, t("review.laterAction"), "s", onLater)}
-      {tile(<Pin size={15} />, t("review.pin"), "a", onPin)}
-      {tile(<Trash2 size={15} />, t("triage.delete"), "x", onTrash, { danger: true })}
-    </div>
-  );
+/** The entry's card, as tall as the panel leaves, the same for every entry, so the choices below never move. */
+function Entry({ entry, space, scroller, editing, onEdit, onDone }: { entry: InboxEntry; space?: string; scroller: React.RefObject<HTMLDivElement | null>; editing: { at: Edit } | null; onEdit: (at: Edit) => void; onDone: () => void }) {
+  const item = useRepo().get(entry.item.id) ?? entry.item;
+  return <NoteCard item={item} meta={space && <span>{space}</span>} scroller={scroller} editing={editing} onEdit={onEdit} onDone={onDone} onOutside={onDone} className="flex-1" />;
 }
 
 /** The phone's "Erledigt" in place of the list. */
