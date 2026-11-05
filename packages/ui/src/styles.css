@@ -1044,16 +1044,32 @@ body.cm-dragging * {
   }
 }
 
-/* Drawings: Excalidraw full screen, in the app's colours */
+/* Drawings: Excalidraw full screen, in the app's colours: its violet becomes the app's yellow, its
+   tinted surfaces the app's neutral greys (dark: .theme--dark has the same weight, so both are named) */
 .drawing-full .excalidraw,
 .drawing-full .excalidraw.theme--dark {
   --ui-font: var(--font-sans);
-  --color-primary: var(--t-drawing);
-  --color-primary-darker: color-mix(in srgb, var(--t-drawing) 85%, black);
-  --color-primary-darkest: color-mix(in srgb, var(--t-drawing) 70%, black);
-  --color-primary-hover: color-mix(in srgb, var(--t-drawing) 85%, black);
-  --color-primary-light: color-mix(in srgb, var(--t-drawing) 16%, var(--card));
-  --color-primary-light-darker: color-mix(in srgb, var(--t-drawing) 26%, var(--card));
+  --color-primary: var(--pal-amber);
+  --color-primary-darker: color-mix(in srgb, var(--pal-amber) 85%, var(--foreground));
+  --color-primary-darkest: color-mix(in srgb, var(--pal-amber) 70%, var(--foreground));
+  --color-primary-hover: color-mix(in srgb, var(--pal-amber) 85%, var(--foreground));
+  --color-primary-light: color-mix(in srgb, var(--pal-amber) 18%, var(--card));
+  --color-primary-light-darker: color-mix(in srgb, var(--pal-amber) 28%, var(--card));
+  --color-brand-hover: color-mix(in srgb, var(--pal-amber) 85%, var(--foreground));
+  --color-brand-active: color-mix(in srgb, var(--pal-amber) 70%, var(--foreground));
+  --color-selection: var(--pal-amber);
+  --color-surface-primary-container: color-mix(in srgb, var(--pal-amber) 22%, var(--card));
+  --color-on-primary-container: var(--foreground);
+  --color-surface-lowest: var(--card);
+  --color-surface-low: var(--secondary);
+  --color-surface-mid: var(--secondary);
+  --color-surface-high: var(--accent);
+  --island-bg-color: var(--card);
+  --color-slider-track: color-mix(in srgb, var(--pal-amber) 45%, var(--card));
+}
+/* the dark canvas is drawn inverted (invert + hue-rotate): a dark amber shows as the app's yellow */
+.drawing-full .excalidraw.theme--dark {
+  --color-selection: #6e4400;
 }
 .drawing-top {
   display: flex;
