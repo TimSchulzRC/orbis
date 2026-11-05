@@ -55,3 +55,6 @@ jobs:
             apps/desktop/release/*.AppImage
             apps/desktop/release/*.deb
           if-no-files-found: error
+          # installers are large (about 1 GB per run): a week is enough to try one, and the
+          # account's artifact storage stays free for the next runs
+          retention-days: 7
