@@ -615,6 +615,12 @@ tr:hover .cell-tools button:not(.tap-y),
 .page-read {
   max-width: 760px;
 }
+/* a side panel docked at the right (the updates, Updates.tsx): the page makes room for it */
+@media (min-width: 1280px) {
+  [data-side-panel] [data-column] {
+    padding-right: 440px;
+  }
+}
 .page-wide {
   max-width: 1040px;
   padding-inline: 32px;
