@@ -92,13 +92,14 @@ function SheetContent({
 }: React.ComponentProps<typeof DialogPrimitive.Content>) {
   return (
     <DialogPortal>
-      <DialogOverlay />
+      {/* lighter than a dialog's: the page stays readable beside the panel */}
+      <DialogOverlay className="bg-black/30 backdrop-blur-none md:bg-black/20" />
       <DialogPrimitive.Content
         data-slot="sheet-content"
         className={cn(
           "fixed z-50 flex flex-col border-line bg-surface shadow-2xl outline-none duration-200 data-[state=closed]:animate-out data-[state=open]:animate-in",
           "inset-y-0 right-0 w-[440px] max-w-[calc(100%-3rem)] border-l data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right",
-          "max-md:inset-x-0 max-md:top-auto max-md:max-h-[88vh] max-md:w-full max-md:max-w-none max-md:rounded-t-2xl max-md:border-t max-md:border-l-0 max-md:pb-safe max-md:data-[state=closed]:slide-out-to-bottom max-md:data-[state=open]:slide-in-from-bottom",
+          "max-md:inset-x-0 max-md:top-auto max-md:max-h-[88dvh] max-md:w-full max-md:max-w-none max-md:rounded-t-2xl max-md:border-t max-md:border-l-0 max-md:pb-safe max-md:data-[state=closed]:slide-out-to-bottom max-md:data-[state=open]:slide-in-from-bottom",
           className
         )}
         onInteractOutside={(e) => {
