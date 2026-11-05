@@ -110,14 +110,6 @@ export function hydrateFiles(root: HTMLElement | null, files: DeviceFiles = curr
     const hash = el.dataset.hash!;
     if (el.dataset.done) return;
     el.dataset.done = "1";
-    // without a local original, stream audio and video from the server instead of loading them whole
-    if (el instanceof HTMLMediaElement) {
-      void files.isLocal(hash).then(async (here) => {
-        const url = here ? await files.url(hash) : files.serverUrl(hash);
-        if (url) el.src = url;
-      });
-      return;
-    }
     const keep = el.tagName === "IMG";
     files.url(hash, { keep }).then((url) => {
       if (url) (el as HTMLImageElement).src = url;

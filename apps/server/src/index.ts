@@ -1,5 +1,5 @@
-// Workspace routes under /w/<id>/ need a member's token. With a token any site may call them
-// (CORS), so an app served by one server can hold workspaces of other servers.
+// Workspace routes under /w/<id>/ need a member's token in the Authorization header. The server
+// sends no CORS headers: only the app on its own origin calls them.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve, extname } from "node:path";
 import type { ServerWebSocket } from "bun";
@@ -8,13 +8,14 @@ import { Accounts, AccountError, FRESH_SECONDS, SIGNUP_COOKIE, randomToken } fro
 import { loginConfig, loginMethods } from "./login";
 import type { AccountInfo, InviteCode, InviteInfo, InviteLink, McpConnect, Ok, Role, ServerInfo, SignedIn, SignupPolicy, SignupRequest } from "@obtion/core/api";
 import { type Conn, Workspace, parseClientMsg } from "./workspace";
-import { firstName, personOrigin } from "@obtion/core/origin";
+import { agentOrigin, firstName, personOrigin } from "@obtion/core/origin";
+import { agentName } from "./mcp";
 import { type Lang, LANGS, acceptLang, translate } from "@obtion/core/i18n";
 import { SETUP_ORIGIN, setUp, storeWriter } from "./setup";
 import { upgradeSetup } from "@obtion/core/setup";
 import { META_TYPE, migrateStatus } from "@obtion/core/model";
 import { allowedHosts } from "./trust";
-import { DATA, MAX_WS_MESSAGE, PORT } from "./config";
+import { DATA, MAX_ATTACH, MAX_BLOB, MAX_WS_MESSAGE, PORT } from "./config";
 import { body, fail, json } from "./http";
 
 const HOST = process.env.HOST ?? "127.0.0.1";
@@ -34,6 +35,7 @@ const config: { token: string; authSecret?: string } = existsSync(configPath) ? 
 const freshConfig = !config.authSecret || !existsSync(configPath);
 config.authSecret ??= randomToken() + randomToken();
 if (freshConfig) writeFileSync(configPath, JSON.stringify(config, null, 2), { mode: 0o600 });
+
 
 const legacyWorkspaceName = (lang?: string) => translate(LANGS.includes(lang as Lang) ? (lang as Lang) : "de", "account.personal");
 
@@ -255,6 +257,7 @@ async function accountApi(req: Request, path: string, url: URL): Promise<Respons
       }
       if (sub.startsWith("/invites/") && req.method === "DELETE") return (accounts.revokeInvite(id, user.id, sub.slice("/invites/".length)), json<Ok>({ ok: true }));
       // the token is shown only once
+      if (sub === "/mcp-token" && req.method === "DELETE") return (accounts.revokeMcpToken(id, user.id), json<Ok>({ ok: true }));
       if (sub === "/mcp-token" && req.method === "POST") {
         const base = PUBLIC_URL || `${url.protocol}//${req.headers.get("host")}`;
         const mcpUrl = `${base}/w/${id}/mcp`;
@@ -274,14 +277,50 @@ async function accountApi(req: Request, path: string, url: URL): Promise<Respons
   return null;
 }
 
+/** Body limit of every route but the ones below. */
+const SMALL_BODY = 1024 * 1024;
+/** MCP: attach takes a file as base64 in the JSON. */
+const MCP_BODY = Math.ceil((MAX_ATTACH * 4) / 3) + SMALL_BODY;
+const FILE_ROUTE = /^\/w\/[\w-]{1,40}\/api\/(files(\/|$)|blobs\/)/;
+
+/** Only the file routes take a file's content; they count it themselves while it streams. */
+function bodyLimit(req: Request, path: string): number {
+  if ((req.method === "POST" || req.method === "PUT") && FILE_ROUTE.test(path)) return MAX_BLOB;
+  if (path === "/mcp" || /^\/w\/[\w-]{1,40}\/mcp$/.test(path)) return MCP_BODY;
+  return SMALL_BODY;
+}
+
+/**
+ * 413 before anything reads a body over `max`: by Content-Length, or for a chunked body by reading
+ * it up to `max` (the small routes read it whole anyway).
+ */
+async function capBody(req: Request, max: number): Promise<Request | Response> {
+  const tooLarge = () => fail(413, `request too large (max ${Math.floor(max / 1024 / 1024)} MB)`);
+  const length = req.headers.get("content-length");
+  if (length !== null) return Number(length) > max ? tooLarge() : req;
+  if (!req.body || max === MAX_BLOB) return req;
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for await (const chunk of req.body) {
+    if ((size += chunk.length) > max) return tooLarge();
+    chunks.push(chunk);
+  }
+  return new Request(req, { body: Buffer.concat(chunks) });
+}
+
 const server = Bun.serve<Conn>({
   port: PORT,
   hostname: HOST,
   idleTimeout: 0,
-  async fetch(req, srv) {
-    const url = new URL(req.url);
+  // a file's content may be as large as MAX_BLOB (Bun's default stops at 128 MB); bodyLimit keeps
+  // every other route far below
+  maxRequestBodySize: MAX_BLOB,
+  async fetch(incoming, srv) {
+    const url = new URL(incoming.url);
     const path = url.pathname;
-    if (!allowedHost(req.headers.get("host"))) return new Response("Unknown host. Add it to OBTION_ALLOWED_HOSTS or set OBTION_PUBLIC_URL.", { status: 421 });
+    if (!allowedHost(incoming.headers.get("host"))) return new Response("Unknown host. Add it to OBTION_ALLOWED_HOSTS or set OBTION_PUBLIC_URL.", { status: 421 });
+    const req = await capBody(incoming, bodyLimit(incoming, path));
+    if (req instanceof Response) return req;
 
     if (path.startsWith("/api/auth/")) {
       // an OAuth provider sends the browser back from its own site; Better Auth checks the state
@@ -316,13 +355,23 @@ const server = Bun.serve<Conn>({
     if (route) {
       const id = route.id!;
       const rest = route.rest!;
-      // a file opened by URL (img, download link) carries the token as ?t=
-      const blobRead = req.method === "GET" && rest.startsWith("/api/blobs/");
-      const token = tokenOf(req) ?? (blobRead ? (url.searchParams.get("t") ?? undefined) : undefined);
+      // tokens come in the header only, never in the URL
+      const token = tokenOf(req);
+      const base = PUBLIC_URL || `${url.protocol}//${req.headers.get("host")}`;
+      const filesUrl = `${base}/w/${id}/api/files`;
       if (rest === "/mcp") {
         const user = token && accounts.mcpUser(id, token);
         if (!user || !workspace(id)) return fail(401, "unauthorized");
-        return workspace(id)!.mcp(req, { id: user.id, name: firstName(user) });
+        return workspace(id)!.mcp(req, { id: user.id, name: firstName(user) }, filesUrl);
+      }
+      // the file API (only it) also takes the workspace's MCP token: agents and scripts move files with it
+      const files = rest === "/api/files" || rest.startsWith("/api/files/");
+      const agent = files && token ? accounts.mcpUser(id, token) : undefined;
+      if (agent) {
+        const w = workspace(id);
+        if (!w) return fail(404, "no such workspace");
+        const person = { id: agent.id, name: firstName(agent) };
+        return w.handle(req, rest, { user: person, origin: agentOrigin(agentName(req), person), filesUrl });
       }
       const user = await accounts.userOf(token);
       if (!user) return fail(401, "unauthorized");
@@ -334,7 +383,7 @@ const server = Bun.serve<Conn>({
         const ok = srv.upgrade(req, { data: { workspace: id, areas: new Set<string>(), origin: personOrigin(person), user: person, userId: user.id, session: token }, headers: { "sec-websocket-protocol": "obtion" } });
         return ok ? undefined : fail(400, "expected WebSocket");
       }
-      return w.handle(req, rest, { user: person });
+      return w.handle(req, rest, { user: person, filesUrl });
     }
 
     if (!WEB_APP) return new Response("This Obtion server serves sync, API and MCP only (OBTION_WEB_APP=off).", { status: 404 });

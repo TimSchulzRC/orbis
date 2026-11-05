@@ -1,9 +1,13 @@
-// Content-addressed file store. Devices that add images offline make previews themselves; the
-// server only fills gaps.
-import { existsSync, mkdirSync, renameSync, statSync, readdirSync, unlinkSync } from "node:fs";
+// Content-addressed file store (data/blobs/<sha256>). Images get a preview and a display version,
+// audio and video a duration, every other file its text (extract.ts). The whole text stays here
+// (texts/<sha256>), the file's facts carry its start: they sync to every device. A file whose content wasn't
+// read yet (`extracted` missing or for another content, e.g. after a restart) is read when the
+// workspace opens. Devices that add images offline make previews themselves; the server fills gaps.
+import { existsSync, mkdirSync, readFileSync, renameSync, statSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { type FileMeta, type Item, setFileMeta } from "@obtion/core/model";
 import type { Store } from "./store";
+import { FACTS_TEXT, extractMark, extractText, factsText } from "./extract";
 
 const HASH = /^[0-9a-f]{64}$/;
 const FFMPEG = Bun.which("ffmpeg");
@@ -11,8 +15,6 @@ const FFPROBE = Bun.which("ffprobe");
 const MAX_PARALLEL = 2;
 const DISPLAY_WIDTH = 1600;
 const THUMB_WIDTH = 320;
-const PDF_TEXT_MAX_PAGES = 60;
-const PDF_TEXT_MAX_CHARS = 40_000;
 
 export function sha256(data: Uint8Array | ArrayBuffer | string): string {
   return new Bun.CryptoHasher("sha256").update(data).digest("hex");
@@ -20,15 +22,39 @@ export function sha256(data: Uint8Array | ArrayBuffer | string): string {
 
 export class Blobs {
   private busy = new Set<string>();
+  private again = new Set<string>();
   private queue: string[] = [];
   private running = 0;
   onStored?: (hash: string) => void;
+
+  private texts: string;
 
   constructor(
     public dir: string,
     private store: Store,
   ) {
     mkdirSync(dir, { recursive: true });
+    this.texts = join(dir, "..", "texts");
+    mkdirSync(this.texts, { recursive: true });
+  }
+
+  /** Where the whole text read from a content is kept, when it is longer than the facts' part. */
+  textPath(hash: string) {
+    return join(this.texts, hash);
+  }
+
+  /** Written whole or not at all: a stop halfway leaves no cut text that the facts then rely on. */
+  private keepText(hash: string, text: string) {
+    const tmp = `${this.textPath(hash)}.${process.pid}.tmp`;
+    writeFileSync(tmp, text);
+    renameSync(tmp, this.textPath(hash));
+  }
+
+  /** A file's whole text: kept here when its facts carry only the start. */
+  text(f: FileMeta): string | undefined {
+    if (!f.text || !HASH.test(f.hash)) return f.text;
+    const p = this.textPath(f.hash);
+    return existsSync(p) ? readFileSync(p, "utf8") : f.text;
   }
 
   static valid(hash: string) {
@@ -60,6 +86,47 @@ export class Blobs {
     return true;
   }
 
+  /**
+   * Store a streamed content (HTTP upload): hashed while it is written, at most `max` bytes.
+   * "too large" when the stream is longer, "hash mismatch" when `expect` is given and the content
+   * has another hash (nothing stays behind either way).
+   */
+  async putStream(body: ReadableStream<Uint8Array> | null, max: number, expect?: string): Promise<{ hash: string; size: number } | "too large" | "hash mismatch"> {
+    const tmp = join(this.dir, `tmp-${crypto.randomUUID()}.part`);
+    const hasher = new Bun.CryptoHasher("sha256");
+    await Bun.write(tmp, "");
+    const sink = Bun.file(tmp).writer({ highWaterMark: 1024 * 1024 });
+    let size = 0;
+    try {
+      if (body)
+        for await (const chunk of body) {
+          size += chunk.length;
+          if (size > max) break;
+          hasher.update(chunk);
+          sink.write(chunk);
+        }
+      await sink.end();
+    } catch (e) {
+      await Promise.resolve(sink.end()).catch(() => {});
+      if (existsSync(tmp)) unlinkSync(tmp);
+      throw e;
+    }
+    if (size > max) {
+      unlinkSync(tmp);
+      return "too large";
+    }
+    const hash = hasher.digest("hex");
+    if (expect !== undefined && hash !== expect) {
+      unlinkSync(tmp);
+      return "hash mismatch";
+    }
+    if (this.has(hash)) unlinkSync(tmp);
+    else renameSync(tmp, this.path(hash));
+    this.onStored?.(hash);
+    for (const r of this.store.live()) if (r.file?.hash === hash) this.schedule(r.id);
+    return { hash, size };
+  }
+
   async putFile(srcPath: string): Promise<string> {
     const data = new Uint8Array(await Bun.file(srcPath).arrayBuffer());
     const hash = sha256(data);
@@ -83,11 +150,22 @@ export class Blobs {
   collect(dryRun = false): string[] {
     const keep = this.referenced();
     const unused = readdirSync(this.dir).filter((name) => HASH.test(name) && !keep.has(name));
-    if (!dryRun) for (const hash of unused) unlinkSync(this.path(hash));
+    if (!dryRun) {
+      for (const hash of unused) unlinkSync(this.path(hash));
+      for (const name of readdirSync(this.texts)) if (!keep.has(name)) unlinkSync(this.textPath(name));
+    }
     return unused;
   }
 
   scan() {
+    // texts from before they were kept here: the whole one moves here, the facts keep the start
+    for (const r of this.store.records.values()) {
+      const f = r.file;
+      if (!f?.text || f.text.length <= FACTS_TEXT + 2 || f.extracted !== extractMark(f.hash) || !HASH.test(f.hash)) continue;
+      // there already when another file has the same content, or after a stop between the two steps
+      if (!existsSync(this.textPath(f.hash))) this.keepText(f.hash, f.text);
+      this.store.change(r.id, "system:files", (doc) => setFileMeta(doc, { text: factsText(f.text!) }), { quiet: true });
+    }
     for (const r of this.store.live()) if (this.needsWork(r)) this.schedule(r.id);
     // PDF previews a device announced but never uploaded: drop them so a device renders them again
     for (const r of this.store.live()) {
@@ -101,16 +179,16 @@ export class Blobs {
     if (!f?.hash || !this.has(f.hash)) return false;
     if (f.filetype === "bild") return (!f.display || !f.thumb || !f.width) && !/svg/.test(f.mime) && !!FFMPEG;
     if (f.filetype === "audio" || f.filetype === "video") return f.duration === undefined && !!FFPROBE;
-    if (f.filetype === "pdf") return f.pages === undefined;
-    return false;
+    return f.extracted !== extractMark(f.hash);
   }
 
   stop() {
     this.queue.length = 0;
+    this.again.clear();
   }
 
   schedule(id: string) {
-    if (this.busy.has(id)) return;
+    if (this.busy.has(id)) return void this.again.add(id); // changed while being read: once more after that
     this.busy.add(id);
     this.queue.push(id);
     this.pump();
@@ -125,6 +203,7 @@ export class Blobs {
         .finally(() => {
           this.running--;
           this.busy.delete(id);
+          if (this.again.delete(id)) this.schedule(id);
           this.pump();
         });
     }
@@ -148,12 +227,17 @@ export class Blobs {
         if (media.width) Object.assign(patch, { width: media.width, height: media.height });
         if (!f.thumb) patch.thumb = await this.derive(src, THUMB_WIDTH, true);
       }
-    } else if (f.filetype === "pdf") {
-      const info = await pdfInfo(src);
-      patch.pages = info.pages;
-      if (info.text) patch.text = info.text;
+    } else {
+      // a content that can't be read is marked as read too, so it isn't tried at every start
+      const got = await extractText(src, f.name).catch((e) => (console.warn("[blobs] no text from", f.name, e?.message ?? e), undefined));
+      if (got?.pages) patch.pages = got.pages;
+      // the whole text first, so the search finds it once the facts change
+      if (got?.text && got.text.length > FACTS_TEXT) this.keepText(f.hash, got.text);
+      Object.assign(patch, { text: got?.text ? factsText(got.text) : null, extracted: extractMark(f.hash) });
     }
     const clean = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined));
+    // replaced while it was read: what was found belongs to the old content (the new one is scheduled)
+    if (this.store.records.get(id)?.file?.hash !== f.hash) return;
     if (Object.keys(clean).length) this.store.change(id, "system:files", (doc) => setFileMeta(doc, clean), { quiet: true });
   }
 
@@ -188,21 +272,4 @@ async function probe(path: string): Promise<{ width?: number; height?: number; d
   } catch {
     return {};
   }
-}
-
-let pdfjs: typeof import("pdfjs-dist/legacy/build/pdf.mjs") | undefined;
-async function pdfInfo(path: string): Promise<{ pages: number; text?: string }> {
-  pdfjs ??= await import("pdfjs-dist/legacy/build/pdf.mjs");
-  const data = new Uint8Array(await Bun.file(path).arrayBuffer());
-  const task = pdfjs.getDocument({ data, disableFontFace: true, verbosity: 0 });
-  const doc = await task.promise;
-  const pages = doc.numPages;
-  let text = "";
-  for (let i = 1; i <= Math.min(pages, PDF_TEXT_MAX_PAGES) && text.length < PDF_TEXT_MAX_CHARS; i++) {
-    const page = await doc.getPage(i);
-    const content = await page.getTextContent();
-    text += content.items.map((x) => ("str" in x ? x.str : "")).join(" ").replace(/\s+/g, " ") + "\n";
-  }
-  await task.destroy();
-  return { pages, text: text.trim().slice(0, PDF_TEXT_MAX_CHARS) || undefined };
 }

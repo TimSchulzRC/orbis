@@ -3,7 +3,7 @@ import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
 import { useEffect, useState } from "react";
 import { ArrowRightLeft, Download, Trash2, Replace } from "lucide-react";
-import { type Item, setFileMeta } from "@obtion/core/model";
+import { type FileMeta, type Item, setFileMeta } from "@obtion/core/model";
 import { fmtBytes, fmtDate, fmtDuration } from "@obtion/core/i18n";
 import { useIndex, leavePage, useDocumentTitle, useFiles, useRepo } from "../hooks";
 import { useT, titleOf } from "../i18n";
@@ -31,20 +31,20 @@ export function FilePage({ item }: { item: Item }) {
   const parents = ix.parentsOf(item.id);
   const local = files.hasLocal(file.hash);
   useEffect(() => void files.check(file.hash), [file.hash]);
-  // the original on this device ("alles lokal", offline): viewer and download use it instead of the server
-  const [localSrc, setLocalSrc] = useState<string | undefined>();
+  // PDF, audio and video from a blob: URL – the original here, or loaded with the token in the header
+  const viewed = file.filetype === "pdf" || file.filetype === "audio" || file.filetype === "video";
+  const [src, setSrc] = useState<{ hash: string; url: string }>();
   useEffect(() => {
+    if (!viewed) return;
     let url: string | undefined;
     let gone = false;
-    if (local) void files.localUrl(file.hash, file.mime).then((u) => (gone ? u && URL.revokeObjectURL(u) : setLocalSrc((url = u))));
-    else setLocalSrc(undefined);
+    void files.viewUrl(file.hash, file.mime).then((u) => (gone ? u && URL.revokeObjectURL(u) : u && setSrc({ hash: file.hash, url: (url = u) })));
     return () => {
       gone = true;
       if (url) URL.revokeObjectURL(url);
     };
-  }, [file.hash, local]);
-  // audio and video stream from the server (the player loads what it plays), unless the original is here
-  const media = localSrc ?? (local ? undefined : files.serverUrl(file.hash));
+  }, [file.hash, local, viewed]);
+  const media = src?.hash === file.hash ? src.url : undefined;
   const missing = files.isMissing(file.hash);
   // who added it; from before accounts the app wrote only the device: then nobody is named
   const by = item.createdBy ? who(item.createdBy, t) : undefined;
@@ -62,7 +62,7 @@ export function FilePage({ item }: { item: Item }) {
   const replace = async (upload: File) => {
     const meta = await files.prepare(upload, file.name);
     repo.change(item.id, (doc) =>
-      setFileMeta(doc, { ...meta, name: file.name, display: meta.display ?? null, thumb: meta.thumb ?? null, pages: null, text: null, duration: null, history: [...(file.history ?? []), { hash: file.hash, at: Date.now() }] }),
+      setFileMeta(doc, { ...meta, name: file.name, display: meta.display ?? null, thumb: meta.thumb ?? null, pages: null, text: null, extracted: null, duration: null, history: [...(file.history ?? []), { hash: file.hash, at: Date.now() }] }),
     );
   };
   const tools = (
@@ -96,7 +96,7 @@ export function FilePage({ item }: { item: Item }) {
         <div className="min-w-0 flex-1">
           <TitleField item={item} autoFocus={false} placeholder={file.name} />
         </div>
-        <a href={localSrc ?? files.serverUrl(file.hash, file.name, true)} download={localSrc ? file.name : undefined} className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-line bg-surface px-3 text-sm font-medium text-fg hover:bg-hover">
+        <a href={media ?? "#"} download={file.name} onClick={(e) => !media && (e.preventDefault(), void files.download(file.hash, file.name, file.mime))} className="inline-flex cursor-pointer h-8 shrink-0 items-center gap-1.5 rounded-lg border border-line bg-surface px-3 text-sm font-medium text-fg hover:bg-hover">
           <Download size={15} /> <span className="max-md:hidden">{t("file.download")}</span>
         </a>
       </div>
@@ -126,11 +126,17 @@ export function FilePage({ item }: { item: Item }) {
 
       <div className="mt-6 overflow-hidden rounded-xl border border-line bg-surface-2">
         {isImg && display && <img src={display} alt={item.body || item.title} className="mx-auto max-h-[70vh] w-auto" />}
-        {file.filetype === "pdf" && (!local || localSrc) && <iframe title={item.title} src={localSrc ?? files.serverUrl(file.hash)} className="h-[75vh] w-full bg-white" />}
+        {file.filetype === "pdf" && media && <iframe title={item.title} src={media} className="h-[75vh] w-full bg-white" />}
         {file.filetype === "audio" && media && <audio controls src={media} className="w-full p-4" />}
         {file.filetype === "video" && media && <video controls src={media} className="w-full" />}
-        {!isImg && file.filetype !== "pdf" && file.filetype !== "audio" && file.filetype !== "video" && <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">{file.name}</div>}
+        {!isImg && file.filetype !== "pdf" && file.filetype !== "audio" && file.filetype !== "video" && <FileText file={file} missing={missing} />}
       </div>
+      {file.filetype === "pdf" && file.text && (
+        <details className="mt-3 rounded-xl border border-line bg-surface-2">
+          <summary className="cursor-pointer px-4 py-2.5 text-[13px] text-muted-foreground">{t("file.extracted")}</summary>
+          <TextBlock text={file.text} hash={file.hash} mono={false} />
+        </details>
+      )}
       <Textarea
       variant="inline"
         defaultValue={item.body}
@@ -155,5 +161,60 @@ export function FilePage({ item }: { item: Item }) {
         />
       )}
     </div>
+  );
+}
+
+/** Formats whose text the server takes out (Office, mails); the rest is shown as it is. */
+const EXTRACTED = /\.(docx?|docm|dotx|xlsx?|xlsm|pptx?|potx|od[tsp]|msg|pdf)$/i;
+/** Prose in a proportional font; code, lists and tables (columns by tabs) in monospace. */
+const PROSE = /\.(docx?|docm|dotx|pptx?|potx|odt|odp|msg|pdf)$/i;
+
+/**
+ * The text of a file that is neither image, PDF nor media: a text or code file as it is, an
+ * Office file's text, a ZIP's list of entries – as the server read it (the file's `text`), never
+ * rendered as HTML.
+ */
+function FileText({ file: f, missing }: { file: FileMeta; missing: boolean }) {
+  const { t } = useT();
+  if (!f.text) {
+    const reading = !missing && f.extracted === undefined;
+    return <div className="flex h-40 flex-col items-center justify-center gap-1 px-4 text-center text-sm text-muted-foreground"><span className="break-all">{f.name}</span><span className="text-[13px] text-faint">{t(reading ? "file.reading" : "file.noText")}</span></div>;
+  }
+  const extracted = EXTRACTED.test(f.name);
+  return (
+    <div>
+      <div className="border-b border-line px-4 py-2 text-[13px] text-muted-foreground">{t(extracted ? "file.extracted" : "file.content")}</div>
+      <TextBlock text={f.text} hash={f.hash} mono={!PROSE.test(f.name)} />
+    </div>
+  );
+}
+
+/** The facts carry the start of a long text ("…" at the end); the whole one comes from the server. */
+function useWholeText(text: string, hash: string): string {
+  const files = useFiles();
+  const [whole, setWhole] = useState<{ hash: string; text: string }>();
+  const cut = text.endsWith("\n…");
+  useEffect(() => {
+    if (!cut) return;
+    let alive = true;
+    void files.wholeText(hash).then((w) => alive && w && setWhole({ hash, text: w }));
+    return () => {
+      alive = false;
+    };
+  }, [hash, cut]);
+  return whole?.hash === hash ? whole.text : text;
+}
+
+function TextBlock({ text: start, hash, mono }: { text: string; hash: string; mono: boolean }) {
+  const { t } = useT();
+  const text = useWholeText(start, hash);
+  const cut = text.endsWith("\n…");
+  return (
+    <>
+      <pre data-testid="file-text" className={`max-h-[70vh] overflow-auto px-4 py-3 text-[13px] leading-[1.55] whitespace-pre-wrap break-words ${mono ? "font-mono" : "font-sans"}`} tabIndex={0}>
+        {cut ? text.slice(0, -2) : text}
+      </pre>
+      {cut && <p className="border-t border-line px-4 py-2 text-[13px] text-muted-foreground">{t("file.truncated")}</p>}
+    </>
   );
 }

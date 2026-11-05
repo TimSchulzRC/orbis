@@ -1,4 +1,5 @@
 // Everything below a Workspace sees only its own folder, so workspaces cannot reach each other's data.
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { ServerWebSocket } from "bun";
 import { AreaError, Store } from "./store";
@@ -10,7 +11,8 @@ import { Blobs } from "./blobs";
 import { MAX_BLOB } from "./config";
 import { body, fail, json } from "./http";
 import { Backups } from "./backup";
-import { FORMAT, type Item, PERSONAL, fileTypeOf } from "@obtion/core/model";
+import { FORMAT, type Item, PERSONAL } from "@obtion/core/model";
+import { OpError, Ops, fileName } from "./ops";
 import { UndoError, undoStep } from "./undo";
 import { type ClientMsg, type ServerMsg, type WireUpdate, fromB64, toB64 } from "@obtion/core/protocol";
 import { z } from "zod";
@@ -24,9 +26,33 @@ export interface Conn {
   user: Person;
 }
 
-// only kinds the app can show: no HTML, scripts or executables
-const uploadAllowed = (name: string) => fileTypeOf(name) !== "sonstiges" || /\.(zip|json|xml|ics|vcf)$/i.test(name);
-const INLINE = /^(image\/(png|jpeg|gif|webp|avif|bmp|svg\+xml)|application\/pdf|audio\/|video\/|text\/plain)/;
+// Every file type may be uploaded. Only these types are shown inline (nosniff, sandboxed);
+// everything else is served as application/octet-stream with "attachment".
+const INLINE = /^(image\/(?:png|jpeg|gif|webp|avif|bmp|svg\+xml)|application\/pdf|audio\/[\w.+-]+|video\/[\w.+-]+|text\/plain)\s*(;.*)?$/i;
+/** The type a content is served as: one of INLINE, else application/octet-stream. */
+const servedType = (mime: string) => INLINE.exec(mime)?.[1]?.toLowerCase() ?? "application/octet-stream";
+
+/** Headers for an original or a derived version; `download`: always as a file to save. */
+function fileHeaders(mime: string, name: string, download: boolean): Record<string, string> {
+  const type = servedType(mime);
+  const headers: Record<string, string> = {
+    "x-content-type-options": "nosniff",
+    // a link inside the file gets no address of this server
+    "referrer-policy": "no-referrer",
+    // never let a file run as part of the app (SVG, HTML-like content)
+    "content-security-policy": type === "application/pdf" ? "script-src 'none'" : "sandbox",
+    "content-type": type,
+  };
+  if (download || type === "application/octet-stream") headers["content-disposition"] = contentDisposition(name);
+  return headers;
+}
+
+/** attachment with the file's name: plain ASCII for old clients, UTF-8 for the rest. */
+function contentDisposition(name: string): string {
+  const clean = name.replace(/[\u0000-\u001f\u007f"\\]/g, "") || "file";
+  const ascii = clean.replace(/[^\x20-\x7e]/g, "_");
+  return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(clean)}`;
+}
 
 async function sniffImage(path: string): Promise<string> {
   const head = new Uint8Array(await Bun.file(path).slice(0, 12).arrayBuffer());
@@ -41,6 +67,7 @@ const AREAS = new Set([PERSONAL]);
 /** Documents per message of a first sync. */
 const SYNC_BATCH = 150;
 const BLOBS = "/api/blobs/";
+const TEXTS = "/api/texts/";
 
 const clientMsg: z.ZodType<ClientMsg> = z.discriminatedUnion("t", [
   z.object({ t: z.literal("hello"), area: z.string(), since: z.number(), sinceId: z.string().optional(), device: z.string().optional() }),
@@ -67,6 +94,8 @@ export class Workspace {
   constructor(dir: string) {
     this.store = new Store(dir);
     this.blobs = new Blobs(join(dir, "blobs"), this.store);
+    this.store.fileText = (f) => this.blobs.text(f);
+    this.store.reindexFiles();
     this.mirror = new Mirror(this.store, join(dir, "vault"), this.blobs);
     this.store.on({
       update: (u, from) => {
@@ -150,7 +179,7 @@ export class Workspace {
   }
 
   /** `rest` is the path after /w/<id>. */
-  async handle(req: Request, rest: string, ctx: { user: Person }): Promise<Response> {
+  async handle(req: Request, rest: string, ctx: { user: Person; origin?: string; filesUrl?: string }): Promise<Response> {
     const url = new URL(req.url);
     const store = this.store;
 
@@ -190,24 +219,90 @@ export class Workspace {
     }
 
     if (rest.startsWith(BLOBS)) return this.blob(req, url, rest.slice(BLOBS.length));
+    // a file's whole text, when its facts carry only the start (the app shows it on the file's page)
+    if (rest.startsWith(TEXTS) && req.method === "GET") {
+      const hash = rest.slice(TEXTS.length);
+      if (!Blobs.valid(hash) || !existsSync(this.blobs.textPath(hash))) return fail(404, "no text kept for this content");
+      return new Response(Bun.file(this.blobs.textPath(hash)), { headers: { "content-type": "text/plain; charset=utf-8", "x-content-type-options": "nosniff", "content-security-policy": "sandbox", "cache-control": "private, max-age=31536000, immutable" } });
+    }
+    if (rest === "/api/files" || rest.startsWith("/api/files/")) return this.files(req, url, rest.slice("/api/files".length), { origin: ctx.origin ?? personOrigin(ctx.user, req.headers.get("x-obtion-device") ?? undefined), filesUrl: ctx.filesUrl });
     return fail(404, "not found");
   }
 
-  /** No person for the pre-accounts /mcp address. */
-  mcp(req: Request, person?: Person): Promise<Response> {
-    return handleMcp(this.store, req, this.blobs, person);
+  /** No person for the pre-accounts /mcp address. `filesUrl`: the file API, named to agents. */
+  mcp(req: Request, person?: Person, filesUrl?: string): Promise<Response> {
+    return handleMcp(this.store, req, this.blobs, person, filesUrl);
+  }
+
+  /**
+   * The file API for scripts and agents (members, by app session or MCP token):
+   *   POST /api/files?name=<name>[&parent=<id or title>]   body: the content → 201 { id, name, hash, size, mime, url, step }
+   *   PUT  /api/files/<item id>                           body: the new content (same item, old one kept in its history)
+   *   GET  /api/files/<item id>                           the original, as a download with its name
+   * Uploads and replacements are one step each (activity, undo), written as `origin`.
+   */
+  private async files(req: Request, url: URL, sub: string, ctx: { origin: string; filesUrl?: string }): Promise<Response> {
+    const ops = new Ops(this.store, this.blobs, ctx.filesUrl);
+    const id = sub.replace(/^\//, "");
+    if (id && !/^[\w-]{1,64}$/.test(id)) return fail(404, "not found");
+    const item = id ? this.store.records.get(id) : undefined;
+    if (id && (item?.kind !== "datei" || !item.file)) return fail(404, "no such file");
+
+    if (req.method === "GET" || req.method === "HEAD") {
+      if (!item) return fail(405, "POST a file, or GET /api/files/<file id>");
+      const f = item.file!;
+      if (!this.blobs.has(f.hash)) return fail(404, "content not on the server (yet)");
+      return new Response(req.method === "HEAD" ? null : Bun.file(this.blobs.path(f.hash)), {
+        headers: { ...fileHeaders(f.mime, f.name, true), "cache-control": "private, no-cache", etag: `"${f.hash}"`, "x-obtion-hash": f.hash, ...(req.method === "HEAD" ? { "content-length": String(f.size) } : {}) },
+      });
+    }
+    if ((req.method === "POST" && id) || (req.method === "PUT" && !id) || (req.method !== "POST" && req.method !== "PUT")) return fail(405, "POST /api/files?name=… or PUT /api/files/<file id>");
+    if (Number(req.headers.get("content-length") ?? 0) > MAX_BLOB) return fail(413, `too large (max ${MAX_BLOB / 1024 / 1024} MB)`);
+    // check what can be checked before the content is read
+    const name = url.searchParams.get("name") ?? "";
+    const parent = url.searchParams.get("parent") ?? undefined;
+    try {
+      if (!id) {
+        fileName(name);
+        if (parent) ops.resolve(parent);
+      } else if (item!.deleted) throw new OpError(`"${item!.title}" is in the trash. Restore it first.`);
+    } catch (e) {
+      if (e instanceof OpError) return fail(id ? 409 : 400, e.message);
+      throw e;
+    }
+    const got = await this.blobs.putStream(req.body, MAX_BLOB);
+    if (typeof got === "string") return fail(413, `too large (max ${MAX_BLOB / 1024 / 1024} MB)`);
+    let out: Item | undefined;
+    let previous: string | undefined;
+    try {
+      const said = ops.call(ctx.origin, () => {
+        if (id) {
+          const r = ops.replaceFile(id, got, ctx.origin);
+          out = r.item;
+          previous = r.previous;
+          return previous ? "replaced" : "same content";
+        }
+        out = ops.addFile({ name, hash: got.hash, size: got.size, parent }, ctx.origin);
+        return "created";
+      });
+      const f = out!.file!;
+      const step = /\(step (s\w+)/.exec(said)?.[1];
+      const body = { id: out!.id, name: f.name, hash: f.hash, size: f.size, mime: f.mime, url: ctx.filesUrl ? `${ctx.filesUrl}/${out!.id}` : `/api/files/${out!.id}`, step, ...(id ? { replaced: !!previous, previous } : {}) };
+      return json(body, id ? 200 : 201);
+    } catch (e) {
+      if (e instanceof OpError) return fail(id ? 409 : 400, e.message);
+      throw e;
+    }
   }
 
   private async blob(req: Request, url: URL, hash: string): Promise<Response> {
     const { blobs, store } = this;
     if (!Blobs.valid(hash)) return fail(400, "bad hash");
     if (req.method === "PUT") {
-      const name = url.searchParams.get("name") ?? "";
-      if (!uploadAllowed(name) && !url.searchParams.has("derived")) return fail(415, "file type not allowed");
       if (Number(req.headers.get("content-length") ?? 0) > MAX_BLOB) return fail(413, "too large");
-      const data = new Uint8Array(await req.arrayBuffer());
-      if (data.length > MAX_BLOB) return fail(413, "too large");
-      return (await blobs.put(hash, data)) ? json({ ok: true }) : fail(422, "hash mismatch");
+      const got = await blobs.putStream(req.body, MAX_BLOB, hash);
+      if (got === "too large") return fail(413, "too large");
+      return got === "hash mismatch" ? fail(400, "hash mismatch") : json({ ok: true });
     }
     // the probe header lets the app check without a console error
     if (!blobs.has(hash)) {
@@ -215,18 +310,9 @@ export class Workspace {
       return fail(404, "not found");
     }
     if (url.searchParams.has("check")) return new Response(null, { status: 204 });
-    const hasThisFile = (r: Item) => r.file?.hash === hash;
-    const record = store.live().find(hasThisFile) ?? [...store.records.values()].find(hasThisFile);
+    const record = store.live().find((r) => r.file?.hash === hash) ?? [...store.records.values()].find((r) => r.file?.hash === hash);
     const mime = record?.file?.mime ?? (await sniffImage(blobs.path(hash))); // derived versions have no record
-    const headers: Record<string, string> = {
-      "cache-control": "private, max-age=31536000, immutable",
-      "x-content-type-options": "nosniff",
-      // never let a file run as part of the app (SVG, HTML-like content)
-      "content-security-policy": mime === "application/pdf" ? "script-src 'none'" : "sandbox",
-      "content-type": INLINE.test(mime) ? mime : "application/octet-stream",
-    };
-    const fname = (url.searchParams.get("name") ?? record?.file?.name ?? hash).replace(/["\\\r\n]/g, "");
-    if (url.searchParams.has("download") || !INLINE.test(mime)) headers["content-disposition"] = `attachment; filename*=UTF-8''${encodeURIComponent(fname)}`;
+    const headers = { "cache-control": "private, max-age=31536000, immutable", ...fileHeaders(mime, url.searchParams.get("name") ?? record?.file?.name ?? hash, url.searchParams.has("download")) };
     return new Response(Bun.file(blobs.path(hash)), { headers });
   }
 }

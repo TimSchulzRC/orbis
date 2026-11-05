@@ -181,3 +181,24 @@ test("an original opened while everything is local, switched to online only whil
   expect(await opened).toBeTruthy();
   expect(files.hasLocal(a.hash)).toBe(false);
 });
+
+test("contents from the server: loaded with the token in the header, shown from URLs that never reach the server", async () => {
+  const read = globalThis.fetch.bind(globalThis); // the real one, for blob: URLs
+  const srv = server();
+  const repo = await workspace(false);
+  const { files } = deviceFiles(repo);
+  const pdf = await srv.add("%PDF-1.4 inhalt");
+  const svg = await srv.add('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>');
+  const last = () => vi.mocked(fetch).mock.calls.at(-1)!;
+
+  const view = (await files.viewUrl(pdf.hash, "application/pdf"))!;
+  expect(view).toMatch(/^blob:/);
+  expect(String(last()[0])).toBe(`http://server.test/api/blobs/${pdf.hash}`);
+  expect((last()[1]?.headers as Record<string, string>).authorization).toBe("Bearer t");
+  expect((await (await read(view)).blob()).type).toBe("application/pdf");
+  // a type that could run in the app's origin never goes on a blob: URL
+  const html = (await files.viewUrl(pdf.hash, "text/html"))!;
+  expect((await (await read(html)).blob()).type).toBe("application/octet-stream");
+  // an SVG as data: (no origin when opened on its own), not as blob:
+  expect(await files.url(svg.hash)).toMatch(/^data:image\/svg\+xml;base64,/);
+});

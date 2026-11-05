@@ -6,6 +6,7 @@ import { openDB, type IDBPDatabase } from "idb";
 import { useContext, useEffect, useState, useSyncExternalStore } from "react";
 import { type FileMeta, type Item, fileTypeOf, initItem, mimeOf, newId, setFileMeta } from "@obtion/core/model";
 import type { Repo } from "@obtion/sync";
+import { toB64 } from "@obtion/core/protocol";
 import type { SpaceLink } from "./browser";
 import { ScopeContext } from "./scope";
 import { KEYS } from "./ui/storage";
@@ -107,6 +108,8 @@ const PREVIEW_QUALITY = 0.8;
 const MAX_DOWNLOADS = 3;
 /** A file younger than this whose content the server lacks is probably still uploading. */
 const UPLOAD_GRACE_MS = 60 * 60_000;
+/** Types a blob: URL may carry: they show, never run as part of the app (no HTML, no SVG). */
+const VIEWED = /^(application\/pdf|audio\/[\w.+-]+|video\/[\w.+-]+)$/;
 
 async function scaled(file: Blob, width: number): Promise<{ blob: Blob; w: number; h: number } | undefined> {
   try {
@@ -266,27 +269,39 @@ export class DeviceFiles {
     }
     if (!blob) return undefined;
     // stored contents carry no type; images are recognised without one, SVGs are not
-    if (!blob.type && /^\s*(<\?xml[^>]*>\s*)?<svg[\s>]/.test(await blob.slice(0, 256).text())) blob = new Blob([blob], { type: "image/svg+xml" });
-    const url = URL.createObjectURL(blob);
+    // an SVG as a data: URL: opened on its own (a new tab) it has no origin, while a blob: URL would
+    // run its scripts as part of the app
+    const svg = !blob.type && /^\s*(<\?xml[^>]*>\s*)?<svg[\s>]/.test(await blob.slice(0, 256).text());
+    const url = svg ? `data:image/svg+xml;base64,${toB64(new Uint8Array(await blob.arrayBuffer()))}` : URL.createObjectURL(blob);
     this.urls.set(hash, url);
     return url;
   }
 
-  /** A plain link can't carry an auth header, so the token goes in the query. */
-  serverUrl(hash: string, name?: string, download = false) {
-    const q = new URLSearchParams();
-    if (name) q.set("name", name);
-    if (download) q.set("download", "1");
-    q.set("t", this.link.token);
-    return `${this.link.base}/api/blobs/${hash}?${q}`;
+  /** A file's whole text; its facts carry only the start of a long one. Undefined offline. */
+  async wholeText(hash: string): Promise<string | undefined> {
+    const res = await fetch(`${this.link.base}/api/texts/${hash}`, { headers: this.auth }).catch(() => null);
+    return res?.ok ? res.text() : undefined;
   }
 
-  /** Sets the type explicitly because the PDF viewer needs it and stored blobs have none. */
-  async localUrl(hash: string, mime: string): Promise<string | undefined> {
+  /**
+   * The content as a `blob:` URL with its type (the PDF viewer needs one): from this device, else
+   * loaded whole from the server with the token in the header. No URL reaches the server's
+   * contents without a token. The caller revokes it.
+   */
+  async viewUrl(hash: string, mime: string): Promise<string | undefined> {
     await this.ready;
-    if (!this.local.has(hash)) return undefined;
-    const blob = await this.store.get(hash);
-    return blob ? URL.createObjectURL(new Blob([blob], { type: mime || blob.type })) : undefined;
+    const blob = (this.local.has(hash) ? await this.store.get(hash) : undefined) ?? (await this.fetchVerified(hash));
+    return blob ? URL.createObjectURL(new Blob([blob], { type: VIEWED.test(mime) ? mime : "application/octet-stream" })) : undefined;
+  }
+
+  /** Saves the content under its name, loaded like viewUrl. False when it can't be had (offline). */
+  async download(hash: string, name: string, mime: string): Promise<boolean> {
+    const url = await this.viewUrl(hash, mime);
+    if (!url) return false;
+    const a = Object.assign(document.createElement("a"), { href: url, download: name });
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    return true;
   }
 
   missingKey(created: number): "file.uploading" | "file.missing" {
@@ -515,7 +530,7 @@ export class DeviceFiles {
         if (u.derived) q.set("derived", "1");
         const res = await fetch(`${this.link.base}/api/blobs/${u.hash}?${q}`, { method: "PUT", body: blob, headers: this.auth }).catch(() => null);
         if (!res) break; // offline again
-        const rejectedForGood = res.status === 413 || res.status === 415 || res.status === 422;
+        const rejectedForGood = res.status === 400 || res.status === 413 || res.status === 415 || res.status === 422;
         if (res.ok || rejectedForGood) {
           await this.db.delete("uploads", u.hash);
           this.status.uploading--;
