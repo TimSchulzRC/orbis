@@ -77,6 +77,15 @@ test("pinned, the keys are the panel's only while the focus is in it", async () 
   await expect.poll(titleNow, { message: "in the panel it does" }).not.toBe(first);
 });
 
+test("pinned, Esc in the title leaves it and the keys are the panel's again", async () => {
+  await expect.poll(titleNow).not.toBe("");
+  const first = titleNow();
+  await page.getByRole("article").getByRole("textbox", { name: "Titel" }).click();
+  await commands.keys("press", "Escape");
+  await commands.keys("press", "a");
+  await expect.poll(titleNow).not.toBe(first);
+});
+
 test("a button's label shows quickly, centred above it", async () => {
   const row = rows().first();
   await row.hover();

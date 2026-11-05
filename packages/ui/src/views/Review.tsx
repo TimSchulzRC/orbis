@@ -182,11 +182,11 @@ function Inbox({ at, desktop, pinned, panel }: { at?: string; desktop: boolean; 
     else return;
     e.preventDefault();
   };
-  // Esc leaves the title or the text, unless the editor used it (its completions close first); the keys are the panel's again
+  // Esc leaves the title or the text, unless the editor used it (its completions close first); the keys are the panel's again (pinned: only with the focus in it)
   const escape = useRef<(e: KeyboardEvent) => void>(null);
   escape.current = (e) => {
     const el = document.activeElement as HTMLElement | null;
-    if (e.key === "Escape" && !e.defaultPrevented && !pick.placing && !pick.typing && el && card.current?.contains(el)) (e.preventDefault(), el.blur());
+    if (e.key === "Escape" && !e.defaultPrevented && !pick.placing && !pick.typing && el && card.current?.contains(el)) (e.preventDefault(), el.blur(), panel.current?.focus());
   };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => keys.current?.(e);
@@ -225,10 +225,11 @@ function Inbox({ at, desktop, pinned, panel }: { at?: string; desktop: boolean; 
     return (
       <div
         className="flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden px-4 pb-4 pt-2"
-        onTouchStart={(e) => (touchX.current = e.touches[0]!.clientX)}
+        // a swipe steps to the next entry, but not one in the title or the text (it selects there)
+        onTouchStart={(e) => (touchX.current = othersKey(e.target as Element) ? null : e.touches[0]!.clientX)}
         onTouchEnd={(e) => {
           const dx = (e.changedTouches[0]?.clientX ?? 0) - (touchX.current ?? 0);
-          if (Math.abs(dx) > SWIPE) step(dx < 0 ? 1 : -1);
+          if (touchX.current !== null && Math.abs(dx) > SWIPE) step(dx < 0 ? 1 : -1);
           touchX.current = null;
         }}
       >

@@ -13,6 +13,7 @@ import { useBlobUrl } from "../files";
 import { ItemIcon, RelTime, Tag, itemLook, kindLabel } from "./item-look";
 import { cn } from "../lib/utils";
 import { NoteEditor } from "./NoteEditor";
+import { Markdown } from "./Markdown";
 import { TitleField } from "./TitleField";
 
 /** Characters of a file's text shown in place of a body. */
@@ -72,6 +73,11 @@ export function NoteCard({ item, meta, autoFocus = false, scroller, className }:
             {hasText ? (
               <div className="mt-3 max-w-[68ch] text-[15px] leading-[1.65]">
                 <NoteEditor item={item} onView={setView} minHeight="min-h-24" />
+              </div>
+            ) : item.body.trim() ? (
+              // a file's own text, written on its page; else the text read from the file
+              <div className="mt-4 max-w-[68ch] text-[15px] leading-[1.65]">
+                <Markdown src={item.body} />
               </div>
             ) : item.file?.text ? (
               <p className="mt-4 max-w-[68ch] text-[15px] leading-[1.65] text-muted-foreground">{plainText(item.file.text).slice(0, FILE_TEXT_PREVIEW)}</p>

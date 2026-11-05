@@ -9,7 +9,7 @@ import { Editor } from "./Editor";
 import { queryBlocks } from "./QueryBlock";
 import { toolbarExtract } from "./editor/toolbar";
 
-export function NoteEditor({ item, autoFocus, minHeight, placeholder, onView }: { item: Item; autoFocus?: boolean; minHeight?: string; placeholder?: string; onView?: (v: EditorView | null) => void }) {
+export function NoteEditor({ item, autoFocus, minHeight, onView }: { item: Item; autoFocus?: boolean; minHeight?: string; onView?: (v: EditorView | null) => void }) {
   const { t } = useT();
   // the workspace of this part of the page (the inbox shows entries of several)
   const repo = useRepo();
@@ -23,7 +23,7 @@ export function NoteEditor({ item, autoFocus, minHeight, placeholder, onView }: 
       onView={onView}
       extra={[queryBlocks(item.id), toolbarExtract.of(true)]}
       minHeight={minHeight}
-      placeholder={placeholder ?? t(typed ? "editor.placeholderTyped" : "editor.placeholder")}
+      placeholder={t(typed ? "editor.placeholderTyped" : "editor.placeholder")}
     />
   );
 }
