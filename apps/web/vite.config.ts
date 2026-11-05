@@ -56,8 +56,8 @@ const excalidrawFonts: Plugin = {
 			createReadStream(file).pipe(res);
 		});
 	},
-	writeBundle() {
-		cpSync(excalidraw, "dist/excalidraw/fonts", { recursive: true });
+	writeBundle({ dir }) {
+		cpSync(excalidraw, join(dir!, "excalidraw/fonts"), { recursive: true });
 	},
 };
 
