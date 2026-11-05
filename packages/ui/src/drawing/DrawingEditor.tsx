@@ -1,7 +1,7 @@
 // The full-screen drawing: Excalidraw itself, with its tools, menus and shortcuts, bound to the
 // drawing's document. Loaded only when a drawing opens.
 import "@excalidraw/excalidraw/index.css";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { Excalidraw, MainMenu, WelcomeScreen, CaptureUpdateAction, reconcileElements, hashElementsVersion, useHandleLibrary } from "@excalidraw/excalidraw";
 import type { ExcalidrawImperativeAPI, BinaryFiles, LibraryItems, AppState } from "@excalidraw/excalidraw/types";
@@ -9,7 +9,9 @@ import type { OrderedExcalidrawElement } from "@excalidraw/excalidraw/element/ty
 import { Pencil, X } from "lucide-react";
 import { DRAWING, DRAWING_FILES, DRAWING_STATE, type DrawingFile, type SceneElement, readElements, readScene, setDrawingFile, setDrawingState, writeElements } from "@obtion/core/drawing";
 import { touch } from "@obtion/core/model";
-import { useRepo, useFiles } from "../hooks";
+import { useFiles } from "../hooks";
+import { ScopeContext } from "../scope";
+import { repo as current } from "../repo";
 import { useT } from "../i18n";
 import { useTheme } from "../theme";
 import { KEYS } from "../ui/storage";
@@ -18,8 +20,12 @@ import { DRAWING_ICON } from "../ui/icons";
 
 (window as { EXCALIDRAW_ASSET_PATH?: string }).EXCALIDRAW_ASSET_PATH ??= "/excalidraw/";
 
-/** Excalidraw calls onChange on every pointer move; the document gets the result at most this often. */
-const WRITE_EVERY_MS = 300;
+/**
+ * Excalidraw calls onChange on every pointer move. The document gets the result once drawing pauses,
+ * and during a long stroke at least this often, so other devices follow along.
+ */
+const WRITE_AFTER_MS = 500;
+const WRITE_AT_LEAST_MS = 2000;
 
 /** Excalidraw's language codes; ours are "de" and "en". */
 const LANG_CODE: Record<string, string> = { de: "de-DE", en: "en" };
@@ -39,13 +45,17 @@ const library = {
   },
 };
 
-export default function DrawingEditor({ id, view, onEdit, onClose }: { id: string; view: boolean; onEdit: () => void; onClose: () => void }) {
-  const repo = useRepo();
+/**
+ * Renders again only when its title, the theme or the language change: Excalidraw redraws its
+ * whole interface on a render, so it must not follow every change in the workspace.
+ */
+export default memo(function DrawingEditor({ id, view, onEdit, onClose }: { id: string; view: boolean; onEdit: () => void; onClose: () => void }) {
+  const repo = useContext(ScopeContext)?.repo ?? current;
   const files = useFiles();
   const { t, lang } = useT();
   const dark = useTheme().resolved === "dark";
   const doc = useMemo(() => repo.getDoc(id), [repo, id]);
-  const item = repo.get(id);
+  const title = useSyncExternalStore(repo.subscribe, () => repo.get(id)?.title ?? "");
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
   const [root, setRoot] = useState<HTMLDivElement | null>(null);
   const initial = useMemo(() => {
@@ -56,6 +66,7 @@ export default function DrawingEditor({ id, view, onEdit, onClose }: { id: strin
   // ---- writing: the scene into the document, throttled ----
   const writing = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const pendingSince = useRef<number | undefined>(undefined);
   const lastVersion = useRef<string | undefined>(undefined);
   const stored = useRef(new Set<string>()); // image ids in the document or on their way there
 
@@ -92,6 +103,7 @@ export default function DrawingEditor({ id, view, onEdit, onClose }: { id: strin
   const flush = () => {
     clearTimeout(timer.current);
     timer.current = undefined;
+    pendingSince.current = undefined;
     if (!api || view || repo.readOnly) return;
     const elements = api.getSceneElementsIncludingDeleted() as unknown as SceneElement[];
     const state = api.getAppState() as unknown as Record<string, unknown>;
@@ -109,14 +121,19 @@ export default function DrawingEditor({ id, view, onEdit, onClose }: { id: strin
   const flushRef = useRef(flush);
   flushRef.current = flush;
 
-  const onChange = (elements: readonly OrderedExcalidrawElement[], state: AppState, all: BinaryFiles) => {
-    if (view) return;
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  const onChange = useCallback((elements: readonly OrderedExcalidrawElement[], state: AppState, all: BinaryFiles) => {
+    if (viewRef.current) return;
     // scrolling and zooming change nothing worth keeping
     const version = [hashElementsVersion(elements), Object.keys(all).length, state.viewBackgroundColor, state.gridModeEnabled, state.gridSize, state.gridStep].join(":");
     if (version === lastVersion.current) return;
     lastVersion.current = version;
-    timer.current ??= setTimeout(() => flushRef.current(), WRITE_EVERY_MS);
-  };
+    const now = Date.now();
+    pendingSince.current ??= now;
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => flushRef.current(), Math.max(0, Math.min(WRITE_AFTER_MS, pendingSince.current + WRITE_AT_LEAST_MS - now)));
+  }, []);
 
   // what is not written yet goes in when the drawing closes or the tab goes away
   useEffect(() => {
@@ -179,13 +196,15 @@ export default function DrawingEditor({ id, view, onEdit, onClose }: { id: strin
     return () => document.removeEventListener("keydown", stop);
   }, [view]);
 
-  const close = () => {
-    flush();
-    onClose();
-  };
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  const close = useCallback(() => {
+    flushRef.current();
+    onCloseRef.current();
+  }, []);
 
   /** Links to pages of this app open here (the drawing closes first); others in a new tab. */
-  const onLinkOpen = (element: { link: string | null }, event: CustomEvent<{ nativeEvent: MouseEvent | React.PointerEvent<HTMLCanvasElement> }>) => {
+  const onLinkOpen = useCallback((element: { link: string | null }, event: CustomEvent<{ nativeEvent: MouseEvent | React.PointerEvent<HTMLCanvasElement> }>) => {
     if (!element.link) return;
     let url: URL;
     try {
@@ -197,26 +216,26 @@ export default function DrawingEditor({ id, view, onEdit, onClose }: { id: strin
     event.preventDefault();
     close();
     location.hash = url.hash;
-  };
+  }, [close]);
 
   /** Title, "Bearbeiten" and close. A phone's toolbar needs the whole width: there they sit in the bottom bar. */
-  const topRight = (phone: boolean) => (
+  const topRight = useCallback((phone: boolean) => (
     <div className={phone ? "drawing-top drawing-top-phone" : "drawing-top"}>
       {phone ? null : view ? (
-        <span className="drawing-title" title={item?.title}>
-          {item?.title || t("drawing.untitled")}
+        <span className="drawing-title" title={title}>
+          {title || t("drawing.untitled")}
         </span>
       ) : (
         <input
-          key={item?.title}
+          key={title}
           className="drawing-title"
-          defaultValue={item?.title ?? ""}
+          defaultValue={title}
           placeholder={t("drawing.untitled")}
           aria-label={t("item.title")}
           onKeyDown={(e) => {
             if (e.key === "Enter" || e.key === "Escape") e.currentTarget.blur();
           }}
-          onBlur={(e) => e.target.value !== (item?.title ?? "") && repo.setTitle(id, e.target.value.trim())}
+          onBlur={(e) => e.target.value !== title && repo.setTitle(id, e.target.value.trim())}
         />
       )}
       {view && (
@@ -228,25 +247,12 @@ export default function DrawingEditor({ id, view, onEdit, onClose }: { id: strin
         <X size={18} />
       </button>
     </div>
-  );
+  ), [view, title, t, repo, id, onEdit, close]);
+  const renderTopRightUI = useCallback((phone: boolean) => (phone ? root && createPortal(topRight(true), root) : topRight(false)), [root, topRight]);
 
-  return (
-    <div ref={setRoot} className="drawing-full fixed inset-0 z-50" role="dialog" aria-modal aria-label={item?.title || t("kind.drawing")}>
-      <Excalidraw
-        excalidrawAPI={setApi}
-        initialData={initial}
-        onChange={onChange}
-        theme={dark ? "dark" : "light"}
-        langCode={LANG_CODE[lang] ?? "en"}
-        viewModeEnabled={view}
-        name={item?.title || t("drawing.untitled")}
-        handleKeyboardGlobally
-        autoFocus
-        aiEnabled={false}
-        onLinkOpen={onLinkOpen}
-        UIOptions={{ canvasActions: { toggleTheme: null } }}
-        renderTopRightUI={(phone) => (phone ? root && createPortal(topRight(true), root) : topRight(false))}
-      >
+  const menus = useMemo(
+    () => (
+      <>
         <MainMenu>
           <MainMenu.DefaultItems.LoadScene />
           <MainMenu.DefaultItems.SaveToActiveFile />
@@ -270,7 +276,7 @@ export default function DrawingEditor({ id, view, onEdit, onClose }: { id: strin
           <WelcomeScreen.Center>
             <WelcomeScreen.Center.Logo>
               <span className="drawing-logo">
-                <DRAWING_ICON size={28} /> {item?.title || t("kind.drawing")}
+                <DRAWING_ICON size={28} /> {title || t("kind.drawing")}
               </span>
             </WelcomeScreen.Center.Logo>
             <WelcomeScreen.Center.Heading>{t("drawing.welcome")}</WelcomeScreen.Center.Heading>
@@ -280,7 +286,33 @@ export default function DrawingEditor({ id, view, onEdit, onClose }: { id: strin
             </WelcomeScreen.Center.Menu>
           </WelcomeScreen.Center>
         </WelcomeScreen>
+      </>
+    ),
+    [title, t, close],
+  );
+
+  return (
+    <div ref={setRoot} className="drawing-full fixed inset-0 z-50" role="dialog" aria-modal aria-label={title || t("kind.drawing")}>
+      <Excalidraw
+        excalidrawAPI={setApi}
+        initialData={initial}
+        onChange={onChange}
+        theme={dark ? "dark" : "light"}
+        langCode={LANG_CODE[lang] ?? "en"}
+        viewModeEnabled={view}
+        name={title || t("drawing.untitled")}
+        handleKeyboardGlobally
+        autoFocus
+        aiEnabled={false}
+        onLinkOpen={onLinkOpen}
+        UIOptions={UI_OPTIONS}
+        renderTopRightUI={renderTopRightUI}
+      >
+        {menus}
       </Excalidraw>
     </div>
   );
-}
+});
+
+/** The theme follows the app, so Excalidraw's own switch is not offered. */
+const UI_OPTIONS = { canvasActions: { toggleTheme: null } };
