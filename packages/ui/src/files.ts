@@ -468,7 +468,8 @@ export class DeviceFiles {
         .then(async (blob) => {
           // the mode may switch to "online" during the fetch or the write
           const wanted = () => this.mode === "local" || keptOnline(this.repo).has(h);
-          if (blob && wanted()) await this.save(h, blob);
+          // stored meanwhile (made on this device): writing it again would break the object URLs shown
+          if (blob && wanted() && !this.local.has(h)) await this.save(h, blob);
           if (this.local.has(h) && !wanted()) await this.drop(h);
         })
         .finally(() => {
