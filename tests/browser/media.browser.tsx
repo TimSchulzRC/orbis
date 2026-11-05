@@ -1,13 +1,12 @@
-// Audio and video embedded in a text: streamed from the server when the original is not on this
-// device, never loaded whole into memory first; from this device when it is.
+// Audio and video embedded in a text: from this device, or loaded with the token in the header and
+// played from a blob: URL. Never a server URL in src, since no URL may open a content without a token.
 import { expect, test, vi } from "vitest";
 import type { DeviceFiles } from "../../packages/ui/src/files";
 import { hydrateFiles } from "../../packages/ui/src/ui/Markdown";
 
-/** `local`: whether the original is here, answered once the storage is open (`opened`). */
-function fakeFiles(local: boolean, opened: Promise<void> = Promise.resolve()) {
-  const url = vi.fn(async (h: string) => `blob:local-${h}`);
-  const files = { isLocal: async () => (await opened, local), serverLink: async (h: string) => `https://server.test/api/blobs/${h}?s=signiert`, renewOnError: vi.fn(), url, isMissing: () => false } as unknown as DeviceFiles;
+function fakeFiles() {
+  const url = vi.fn(async (h: string) => `blob:geladen-${h}`);
+  const files = { url, isMissing: () => false } as unknown as DeviceFiles;
   return { files, url };
 }
 
@@ -17,30 +16,10 @@ function embed(tag: "audio" | "video") {
   return { root, el: root.querySelector(tag)! };
 }
 
-test.each(["audio", "video"] as const)("%s not on this device: streams from the server", async (tag) => {
-  const { files, url } = fakeFiles(false);
+test.each(["audio", "video"] as const)("%s plays from a blob: URL, never from a server URL", async (tag) => {
+  const { files, url } = fakeFiles();
   const { root, el } = embed(tag);
   hydrateFiles(root, files);
-  await expect.poll(() => el.getAttribute("src")).toBe("https://server.test/api/blobs/abc?s=signiert");
-  expect(url).not.toHaveBeenCalled();
-});
-
-test("video on this device: played from here", async () => {
-  const { files, url } = fakeFiles(true);
-  const { root, el } = embed("video");
-  hydrateFiles(root, files);
-  await expect.poll(() => el.getAttribute("src")).toBe("blob:local-abc");
-  expect(url).toHaveBeenCalledWith("abc");
-});
-
-test("video on this device, the storage here still opening: waits and plays from here", async () => {
-  let open!: () => void;
-  const { files, url } = fakeFiles(true, new Promise((r) => (open = r)));
-  const { root, el } = embed("video");
-  hydrateFiles(root, files);
-  await new Promise((r) => setTimeout(r, 50));
-  expect(el.getAttribute("src")).toBeNull();
-  open();
-  await expect.poll(() => el.getAttribute("src")).toBe("blob:local-abc");
-  expect(url).toHaveBeenCalledWith("abc");
+  await expect.poll(() => el.getAttribute("src")).toBe("blob:geladen-abc");
+  expect(url).toHaveBeenCalledWith("abc", { keep: false });
 });

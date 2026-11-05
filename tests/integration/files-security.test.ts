@@ -1,6 +1,6 @@
 // Who may read and write file contents, and how much a request may carry: every way in needs a
-// token in the header (or a short signed link for one content), never a session or MCP token in the
-// URL. Starts a real server.
+// token in the header, never a session or MCP token in the URL, and no link opens a content
+// without one. Starts a real server.
 import { test, expect, beforeAll, afterAll, setDefaultTimeout } from "bun:test";
 import { tempDir, removeTempDirs } from "../support/helpers";
 import { bootServer, del, get, mcpTool, post } from "../support/server";
@@ -138,22 +138,18 @@ test("the MCP token of another workspace, or a session of a non-member: 401/403,
   expect((await fetch(`${base}/w/${ws}/mcp`, { method: "POST", headers: { ...bearer(strangerAgent), "content-type": "application/json" }, body: "{}" })).status).toBe(401);
 });
 
-test("a former member: session and MCP token refused at once, also a link made before", async () => {
+test("a former member: session and MCP token refused at once", async () => {
   const { code } = await post(base, `/api/workspaces/${ws}/invites`, {}, owner.token).then((r) => r.json());
   const member = await signUp("mitglied@example.org");
   expect((await post(base, `/api/invites/${code}`, {}, member.token)).status).toBe(200);
   const memberAgent = (await post(base, `/api/workspaces/${ws}/mcp-token`, {}, member.token).then((r) => r.json())).token;
   const secret = "Geheimer Inhalt 3";
   const f = await uploaded("geheim3.txt", secret, memberAgent);
-  const link = (await get(base, `/w/${ws}/api/links/${f.hash}`, member.token).then((r) => r.json())) as { s: string };
-  expect(await (await fetch(`${blobs(f.hash)}?s=${link.s}`)).text()).toBe(secret);
+  expect(await (await get(base, `/w/${ws}/api/blobs/${f.hash}`, member.token)).text()).toBe(secret);
 
   expect((await del(base, `/api/workspaces/${ws}/members/${member.user.id}`, owner.token)).status).toBe(200);
   await refused(f, secret, bearer(member.token));
   await refused(f, secret, bearer(memberAgent));
-  const old = await fetch(`${blobs(f.hash)}?s=${link.s}`);
-  expect(old.status).toBe(403);
-  expect(await old.text()).not.toContain(secret);
   expect((await fetch(`${base}/w/${ws}/mcp`, { method: "POST", headers: { ...bearer(memberAgent), "content-type": "application/json" }, body: "{}" })).status).toBe(401);
 });
 
@@ -172,27 +168,22 @@ test("a new MCP token ends the one before; a revoked one is refused at once", as
   strangerAgent = (await post(base, `/api/workspaces/${strangerWs}/mcp-token`, {}, stranger.token).then((r) => r.json())).token;
 });
 
-test("a signed link reads one content, in one workspace, for minutes; never writes", async () => {
+test("no link opens a content without a token: no signed links, no token in the URL", async () => {
   const secret = "Geheimer Inhalt 4";
   const f = await uploaded("geheim4.txt", secret);
-  const other = await uploaded("anderes.txt", "Anderer Inhalt");
-  const link = (await get(base, `/w/${ws}/api/links/${f.hash}`, owner.token).then((r) => r.json())) as { s: string; expires: number };
-  expect(link.expires - Date.now()).toBeLessThanOrEqual(10 * 60_000 + 1000);
-  expect(link.s).not.toContain(owner.token);
-  const ok = await fetch(`${blobs(f.hash)}?s=${link.s}&download=1&name=a.txt`);
-  expect(ok.status).toBe(200);
+  // the app reads with the session in the header and shows the content from a blob: URL
+  const ok = await get(base, `/w/${ws}/api/blobs/${f.hash}`, owner.token);
   expect(await ok.text()).toBe(secret);
   expect(ok.headers.get("referrer-policy")).toBe("no-referrer");
-  // another content, another workspace, a changed time or user, a write: refused
-  expect((await fetch(`${blobs(other.hash)}?s=${link.s}`)).status).toBe(401);
-  expect((await fetch(`${blobs(f.hash, strangerWs)}?s=${link.s}`)).status).toBe(401);
-  const [exp, user, mac] = link.s.split(".");
-  expect((await fetch(`${blobs(f.hash)}?s=${Number(exp) + 60}.${user}.${mac}`)).status).toBe(401);
-  expect((await fetch(`${blobs(f.hash)}?s=${exp}.${Buffer.from(stranger.user.id).toString("base64url")}.${mac}`)).status).toBe(401);
-  expect((await fetch(`${blobs(f.hash)}?s=${link.s}`, { method: "PUT", body: secret })).status).toBe(401);
-  expect((await fetch(`${files()}/${f.id}?s=${link.s}`)).status).toBe(401);
-  // links come only with the token in the header, for members
-  expect((await get(base, `/w/${ws}/api/links/${f.hash}`, stranger.token)).status).toBe(403);
+  // nothing hands out a link, and nothing in a URL stands in for the token
+  expect((await get(base, `/w/${ws}/api/links/${f.hash}`, owner.token)).status).toBe(404);
+  for (const q of ["?s=1.x.y", `?s=${Math.floor(Date.now() / 1000) + 300}.${Buffer.from(owner.user.id).toString("base64url")}.abc`, "?download=1&name=a.txt"]) {
+    for (const url of [`${blobs(f.hash)}${q}`, `${files()}/${f.id}${q}`, `${base}/w/${ws}/api/texts/${f.hash}${q}`]) {
+      const res = await fetch(url);
+      expect(res.status).toBe(401);
+      expect(await res.text()).not.toContain(secret);
+    }
+  }
 });
 
 test("contents by hash: no reading across workspaces, no foreign content under a hash", async () => {
@@ -235,8 +226,7 @@ test("HTML and SVG never run in the app's origin, on any route", async () => {
   const svg = '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>';
   for (const [name, content] of [["x.html", html], ["x.svg", svg], ["x.htm", html], ["x.xhtml", html]] as const) {
     const f = await uploaded(name, content);
-    const link = (await get(base, `/w/${ws}/api/links/${f.hash}`, owner.token).then((r) => r.json())) as { s: string };
-    for (const res of [await get(base, `/w/${ws}/api/files/${f.id}`, agent), await get(base, `/w/${ws}/api/blobs/${f.hash}`, owner.token), await fetch(`${blobs(f.hash)}?s=${link.s}`)]) {
+    for (const res of [await get(base, `/w/${ws}/api/files/${f.id}`, agent), await get(base, `/w/${ws}/api/blobs/${f.hash}`, owner.token)]) {
       expect(res.headers.get("x-content-type-options")).toBe("nosniff");
       expect(res.headers.get("content-security-policy")).toBe("sandbox");
       // an SVG shows as an image (sandboxed, its script never runs); the rest downloads
@@ -276,7 +266,7 @@ test("answers, instructions, docs and the vault carry no token and no link that 
   }
 });
 
-test("attach with a url fetches public addresses only, also after a redirect", async () => {
+test("attach with a url fetches public addresses only", async () => {
   const tool = (args: unknown) => mcpTool(base, agent, "attach", { name: "x.txt", parent: undefined, ...(args as object) }, `/w/${ws}/mcp`);
   for (const url of [`${base}/api/info`, "http://localhost:1/", "http://[::1]/", "http://169.254.169.254/latest/meta-data/", "http://10.0.0.1/", "http://192.168.1.1/", "http://[::ffff:127.0.0.1]/", "http://0.0.0.0/", "file:///etc/passwd"]) {
     const out = await tool({ url });

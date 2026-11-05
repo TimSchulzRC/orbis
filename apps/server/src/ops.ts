@@ -50,7 +50,7 @@ import { isInInbox } from "@obtion/core/placement";
 import { caps, defaultStatusOptions, doneAt, dueOf, firstOfGroup, hasUpdates, initialProps, kindPatch, statusOf, statusProp, template, writeProp } from "@obtion/core/traits";
 import { previewTagToType, typeUsage } from "@obtion/core/typeops";
 import { excerpt, searchHits, searchIds } from "@obtion/core/search";
-import { BlockedAddress, fetchPublic } from "./fetch-public";
+import { BlockedAddress, DownloadFailed, fetchPublic } from "./fetch-public";
 import { type Heading, findSection, outline, page } from "@obtion/core/outline";
 import { keyBetween, nextPinKey } from "@obtion/core/sortkey";
 import { DAY_MS, dateOf } from "@obtion/core/date";
@@ -1437,7 +1437,8 @@ export class Ops {
       try {
         got = await fetchPublic(input.url, { max: MAX_ATTACH, timeoutMs: DOWNLOAD_TIMEOUT_MS });
       } catch (e) {
-        if (e instanceof BlockedAddress || e instanceof TypeError) throw new OpError(e instanceof BlockedAddress ? e.message : `Bad URL: ${input.url}`);
+        if (e instanceof BlockedAddress || e instanceof DownloadFailed) throw new OpError(e.message);
+        if (e instanceof TypeError) throw new OpError(`Bad URL: ${input.url}`);
         throw e;
       }
       if (got === "too large") throw new OpError(`File too large (max ${MAX_ATTACH / 1024 / 1024} MB via attach). Upload it over HTTP instead (see the attach description).`);

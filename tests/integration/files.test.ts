@@ -12,7 +12,7 @@ import { initItem, setFileMeta } from "@obtion/core/model";
 import { runSetup } from "@obtion/core/setup";
 import { storeWriter } from "@obtion/server/setup";
 import { searchIds } from "@obtion/core/search";
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 setDefaultTimeout(60_000);
@@ -275,6 +275,11 @@ test("the facts of a file hold at most the start of its text; an older long text
     initItem(doc, { kind: "datei", title: "alt.txt" });
     setFileMeta(doc, { hash: sha256(long), name: "alt.txt", mime: "text/plain", filetype: "dokument", size: long.length, text: long, extracted: sha256(long).slice(0, 16) });
   });
+  // the same content once more: the text is kept already when this one's turn comes
+  s.change("alt-2", "test", (doc) => {
+    initItem(doc, { kind: "datei", title: "alt-kopie.txt" });
+    setFileMeta(doc, { hash: sha256(long), name: "alt-kopie.txt", mime: "text/plain", filetype: "dokument", size: long.length, text: long, extracted: sha256(long).slice(0, 16) });
+  });
   s.change("neu-1", "test", (doc) => {
     initItem(doc, { kind: "datei", title: "neu.txt" });
     setFileMeta(doc, { hash: sha256(fresh), name: "neu.txt", mime: "text/plain", filetype: "dokument", size: fresh.length });
@@ -284,13 +289,55 @@ test("the facts of a file hold at most the start of its text; an older long text
   const w = new Workspace(dir);
   try {
     for (let i = 0; i < 100 && !w.store.records.get("neu-1")!.file!.text; i++) await Bun.sleep(50);
-    for (const [id, text, word] of [["alt-1", long, "Zielwort"], ["neu-1", fresh, "Spurwort"]] as const) {
+    for (const [id, text] of [["alt-1", long], ["alt-2", long], ["neu-1", fresh]] as const) {
       const f = w.store.records.get(id)!.file!;
       expect(f.text!.length).toBeLessThanOrEqual(4002);
       expect(f.text).toEndWith("\n…");
       expect(w.blobs.text(f)).toBe(text);
-      expect(searchIds(w.store.searchIndex, word)).toEqual([id]);
     }
+    expect(searchIds(w.store.searchIndex, "Zielwort").sort()).toEqual(["alt-1", "alt-2"]);
+    expect(searchIds(w.store.searchIndex, "Spurwort")).toEqual(["neu-1"]);
+  } finally {
+    w.shut();
+  }
+});
+
+test("collect removes contents and texts no file points to, keeps older versions; a dry run removes nothing", async () => {
+  const dir = tempDir("obtion-collect-");
+  const w = new Workspace(dir);
+  try {
+    const [now, before, orphan] = ["jetzt", "vorher", "verwaist"].map((c) => `${c}\n${"Zeile\n".repeat(900)}`);
+    for (const c of [now!, before!, orphan!]) await Bun.write(join(dir, "blobs", sha256(c)), c);
+    for (const c of [now!, before!, orphan!]) await Bun.write(w.blobs.textPath(sha256(c)), c);
+    w.store.change("f-1", "test", (doc) => {
+      initItem(doc, { kind: "datei", title: "a.txt" });
+      setFileMeta(doc, { hash: sha256(now!), name: "a.txt", mime: "text/plain", filetype: "dokument", size: now!.length, extracted: sha256(now!).slice(0, 16), history: [{ hash: sha256(before!), at: 1 }] });
+    });
+    w.store.flush();
+    expect(w.blobs.collect(true)).toEqual([sha256(orphan!)]);
+    expect(existsSync(join(dir, "blobs", sha256(orphan!)))).toBe(true);
+    expect(existsSync(w.blobs.textPath(sha256(orphan!)))).toBe(true);
+    expect(w.blobs.collect()).toEqual([sha256(orphan!)]);
+    expect(readdirSync(join(dir, "blobs")).filter((n) => /^[0-9a-f]{64}$/.test(n)).sort()).toEqual([sha256(now!), sha256(before!)].sort());
+    expect(existsSync(w.blobs.textPath(sha256(orphan!)))).toBe(false);
+    for (const c of [now!, before!]) expect(existsSync(w.blobs.textPath(sha256(c)))).toBe(true);
+  } finally {
+    w.shut();
+  }
+});
+
+test("a content over the limit is refused while it streams and leaves nothing behind", async () => {
+  const dir = tempDir("obtion-limit-");
+  const w = new Workspace(dir);
+  try {
+    const body = new ReadableStream<Uint8Array>({
+      start(c) {
+        for (let i = 0; i < 8; i++) c.enqueue(new Uint8Array(1024).fill(i));
+        c.close();
+      },
+    });
+    expect(await w.blobs.putStream(body, 4096)).toBe("too large");
+    expect(readdirSync(join(dir, "blobs"))).toEqual([]);
   } finally {
     w.shut();
   }

@@ -43,6 +43,13 @@ export class Blobs {
     return join(this.texts, hash);
   }
 
+  /** Written whole or not at all: a stop halfway leaves no cut text that the facts then rely on. */
+  private keepText(hash: string, text: string) {
+    const tmp = `${this.textPath(hash)}.${process.pid}.tmp`;
+    writeFileSync(tmp, text);
+    renameSync(tmp, this.textPath(hash));
+  }
+
   /** A file's whole text: kept here when its facts carry only the start. */
   text(f: FileMeta): string | undefined {
     if (!f.text || !HASH.test(f.hash)) return f.text;
@@ -154,8 +161,9 @@ export class Blobs {
     // texts from before they were kept here: the whole one moves here, the facts keep the start
     for (const r of this.store.records.values()) {
       const f = r.file;
-      if (!f?.text || f.text.length <= FACTS_TEXT + 2 || f.extracted !== extractMark(f.hash) || !HASH.test(f.hash) || existsSync(this.textPath(f.hash))) continue;
-      writeFileSync(this.textPath(f.hash), f.text);
+      if (!f?.text || f.text.length <= FACTS_TEXT + 2 || f.extracted !== extractMark(f.hash) || !HASH.test(f.hash)) continue;
+      // there already when another file has the same content, or after a stop between the two steps
+      if (!existsSync(this.textPath(f.hash))) this.keepText(f.hash, f.text);
       this.store.change(r.id, "system:files", (doc) => setFileMeta(doc, { text: factsText(f.text!) }), { quiet: true });
     }
     for (const r of this.store.live()) if (this.needsWork(r)) this.schedule(r.id);
@@ -224,7 +232,7 @@ export class Blobs {
       const got = await extractText(src, f.name).catch((e) => (console.warn("[blobs] no text from", f.name, e?.message ?? e), undefined));
       if (got?.pages) patch.pages = got.pages;
       // the whole text first, so the search finds it once the facts change
-      if (got?.text && got.text.length > FACTS_TEXT) await Bun.write(this.textPath(f.hash), got.text);
+      if (got?.text && got.text.length > FACTS_TEXT) this.keepText(f.hash, got.text);
       Object.assign(patch, { text: got?.text ? factsText(got.text) : null, extracted: extractMark(f.hash) });
     }
     const clean = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined));

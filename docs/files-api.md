@@ -56,6 +56,6 @@ The server reads the text of every file it can (PDF incl. embedded Factur-X/ZUGF
 
 ## Serving in the browser
 
-The app shows images, PDFs, audio and video with links that can't carry a header. It asks the server for a signed link per content (`GET /w/<id>/api/links/<hash>` with the session in the header). The link names the workspace, the hash and the member, is valid for 10 minutes, reads that one content only, and stops working when the person leaves the workspace. It never contains a session or MCP token, and it can't write.
+No URL opens a file without a token, see Authentication. The app loads images, PDFs, audio and video with the header and shows them from `blob:` URLs on the device. Audio and video therefore load whole before they play.
 
 Only images, PDF, audio, video and plain text are shown inline, always with `X-Content-Type-Options: nosniff` and a sandbox CSP. Everything else, HTML and SVG downloads through this API included, is sent as `application/octet-stream` with `attachment`.

@@ -1,12 +1,12 @@
-// Workspace routes under /w/<id>/ need a member's token. With a token any site may call them
-// (CORS), so an app served by one server can hold workspaces of other servers.
+// Workspace routes under /w/<id>/ need a member's token in the Authorization header. The server
+// sends no CORS headers: only the app on its own origin calls them.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve, extname } from "node:path";
 import type { ServerWebSocket } from "bun";
 import { Store } from "./store";
 import { Accounts, AccountError, FRESH_SECONDS, SIGNUP_COOKIE, randomToken } from "./accounts";
 import { loginConfig, loginMethods } from "./login";
-import type { AccountInfo, BlobLink, InviteCode, InviteInfo, InviteLink, McpConnect, Ok, Role, ServerInfo, SignedIn, SignupPolicy, SignupRequest } from "@obtion/core/api";
+import type { AccountInfo, InviteCode, InviteInfo, InviteLink, McpConnect, Ok, Role, ServerInfo, SignedIn, SignupPolicy, SignupRequest } from "@obtion/core/api";
 import { type Conn, Workspace, parseClientMsg } from "./workspace";
 import { agentOrigin, firstName, personOrigin } from "@obtion/core/origin";
 import { agentName } from "./mcp";
@@ -17,7 +17,6 @@ import { META_TYPE, migrateStatus } from "@obtion/core/model";
 import { allowedHosts } from "./trust";
 import { DATA, MAX_ATTACH, MAX_BLOB, MAX_WS_MESSAGE, PORT } from "./config";
 import { body, fail, json } from "./http";
-import { BlobLinks } from "./links";
 
 const HOST = process.env.HOST ?? "127.0.0.1";
 const DIST = resolve(process.env.OBTION_WEB_DIST ?? join(import.meta.dir, "../../web/dist"));
@@ -37,7 +36,6 @@ const freshConfig = !config.authSecret || !existsSync(configPath);
 config.authSecret ??= randomToken() + randomToken();
 if (freshConfig) writeFileSync(configPath, JSON.stringify(config, null, 2), { mode: 0o600 });
 
-const blobLinks = new BlobLinks(config.authSecret);
 
 const legacyWorkspaceName = (lang?: string) => translate(LANGS.includes(lang as Lang) ? (lang as Lang) : "de", "account.personal");
 
@@ -375,25 +373,12 @@ const server = Bun.serve<Conn>({
         const person = { id: agent.id, name: firstName(agent) };
         return w.handle(req, rest, { user: person, origin: agentOrigin(agentName(req), person), filesUrl });
       }
-      // a file opened by URL (img, audio, video, PDF viewer, download link): a signed link for one content
-      const blob = /^\/api\/blobs\/([0-9a-f]{64})$/.exec(rest)?.[1];
-      const signed = url.searchParams.get("s");
-      if (!token && signed !== null && blob && (req.method === "GET" || req.method === "HEAD")) {
-        const member = blobLinks.verify(signed, id, blob);
-        if (!member) return fail(401, "link invalid or expired");
-        if (!accounts.role(id, member)) return fail(403, "not a member");
-        const w = workspace(id);
-        if (!w) return fail(404, "no such workspace");
-        return w.handle(req, rest, { user: { id: member, name: "" } });
-      }
       const user = await accounts.userOf(token);
       if (!user) return fail(401, "unauthorized");
       if (!accounts.role(id, user.id)) return fail(403, "not a member");
       const w = workspace(id);
       if (!w) return fail(404, "no such workspace");
       const person = { id: user.id, name: firstName(user) };
-      const linkFor = /^\/api\/links\/([0-9a-f]{64})$/.exec(rest)?.[1];
-      if (linkFor && req.method === "GET") return json<BlobLink>(blobLinks.sign(id, linkFor, user.id));
       if (rest === "/sync") {
         const ok = srv.upgrade(req, { data: { workspace: id, areas: new Set<string>(), origin: personOrigin(person), user: person, userId: user.id, session: token }, headers: { "sec-websocket-protocol": "obtion" } });
         return ok ? undefined : fail(400, "expected WebSocket");

@@ -94,6 +94,8 @@ export class Accounts {
       CREATE TABLE IF NOT EXISTS tokens (hash TEXT PRIMARY KEY, user TEXT NOT NULL, workspace TEXT NOT NULL, label TEXT, created INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS admins (user TEXT PRIMARY KEY);
     `);
+    // from before a new MCP token ended the one before: only the newest per member and workspace stays
+    this.db.exec(`DELETE FROM tokens WHERE label = 'mcp' AND EXISTS (SELECT 1 FROM tokens n WHERE n.label = 'mcp' AND n.workspace = tokens.workspace AND n.user = tokens.user AND (n.created > tokens.created OR (n.created = tokens.created AND n.hash > tokens.hash)))`);
   }
 
   policy: SignupPolicy;

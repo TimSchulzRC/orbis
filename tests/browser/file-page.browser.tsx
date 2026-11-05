@@ -11,7 +11,8 @@ import { workspace } from "./workspace";
 
 afterEach(() => cleanup());
 
-/** Contents only on the server: links point there, nothing is on this device. */
+/** Contents only on the server, nothing on this device: loaded with the token, shown from blob: URLs. */
+const saved: unknown[][] = [];
 const serverFiles = {
   subscribe: () => () => {},
   getVersion: () => 0,
@@ -19,10 +20,10 @@ const serverFiles = {
   hasLocal: () => false,
   check: async () => {},
   url: async () => undefined,
-  localUrl: async () => undefined,
+  viewUrl: async (hash: string) => `blob:geladen-${hash}`,
+  download: async (...args: unknown[]) => (saved.push(args), true),
   missingKey: () => "file.missing",
   wholeText: async () => undefined,
-  serverLink: async (hash: string, o: { name?: string; download?: boolean } = {}) => `https://server.test/api/blobs/${hash}?s=signiert&name=${o.name ?? ""}${o.download ? "&download=1" : ""}`,
 } as unknown as DeviceFiles;
 
 async function show(meta: Partial<FileMeta> & { name: string }, files: DeviceFiles = serverFiles) {
@@ -47,10 +48,11 @@ test("a code file: its content in monospace, scrollable, with the download", asy
   expect(pre.element().textContent).toContain('<xs:element name="Beispiel"/>');
   expect(pre.element().className).toContain("font-mono");
   expect(getComputedStyle(pre.element()).overflowY).toBe("auto");
-  await expect.element(download()).toHaveAttribute("href", expect.stringContaining("download=1"));
-  // a signed link, never the session token
-  expect(download().element().getAttribute("href")).toContain("s=signiert");
-  expect(download().element().getAttribute("href")).not.toContain("t=");
+  // no server URL: the click loads the content with the token and saves it
+  expect(download().element().getAttribute("href")).toBe("#");
+  saved.length = 0;
+  await download().click();
+  expect(saved).toEqual([["a".repeat(64), "schema.xsd", "application/octet-stream"]]);
 });
 
 test("a Word file: the extracted text", async () => {
@@ -92,4 +94,11 @@ test("the facts carry the start of a long text: the page shows the whole one fro
   await expect.poll(() => page.getByTestId("file-text").element().textContent).toBe("Anfang\nMitte\nEnde");
   expect(asked).toEqual(["a".repeat(64)]);
   expect(document.body.textContent).not.toContain("Gekürzt");
+});
+
+test("a PDF shows from a blob: URL, and its download saves that", async () => {
+  await show({ name: "rechnung.pdf", filetype: "pdf", mime: "application/pdf", extracted: "x" });
+  await expect.poll(() => document.querySelector("iframe")?.getAttribute("src")).toBe(`blob:geladen-${"a".repeat(64)}`);
+  expect(download().element().getAttribute("href")).toBe(`blob:geladen-${"a".repeat(64)}`);
+  expect(download().element().getAttribute("download")).toBe("rechnung.pdf");
 });
