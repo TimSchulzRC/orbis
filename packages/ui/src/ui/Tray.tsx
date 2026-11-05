@@ -91,8 +91,8 @@ export function Tray({ desktop, pinned }: { desktop: boolean; pinned?: boolean }
               <div className="flex items-center gap-3 rounded-2xl bg-surface p-2 shadow-[0_6px_24px_-12px_rgb(0_0_0/0.25)]">
                 {tray}
                 <div className="relative min-w-0 flex-1">
-                  {/* the card stands on the field it came from, as wide */}
-                  <div className="absolute inset-x-0 bottom-full mb-5 empty:hidden">
+                  {/* the card grows out of the field, as wide, and covers it */}
+                  <div className="absolute inset-x-0 bottom-0 z-10 empty:hidden">
                     <QuickNote desktop />
                   </div>
                   <QuickNoteField />
@@ -103,7 +103,7 @@ export function Tray({ desktop, pinned }: { desktop: boolean; pinned?: boolean }
           ) : (
             <div className="flex items-center gap-2 rounded-2xl bg-surface p-1.5 shadow-sm">
               {tray}
-              <Button variant="plain" onClick={openQuickNote} aria-label={t("capture.title")} className="tap flex size-10 shrink-0 items-center justify-center rounded-xl border border-line hover:bg-hover">
+              <Button variant="plain" onClick={() => openQuickNote()} aria-label={t("capture.title")} className="tap flex size-10 shrink-0 items-center justify-center rounded-xl border border-line hover:bg-hover">
                 <Plus size={20} />
               </Button>
             </div>

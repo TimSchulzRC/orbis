@@ -169,6 +169,8 @@
  "quick.title": "Neue Notiz",
  "quick.writing": "Notiz wird geschrieben …",
  "quick.draft": "Entwurf: {title}",
+ "quick.hintText": "weiter im Text",
+ "quick.hintFile": "ablegen",
  "start.showSub": "Unterprojekte zeigen",
  "start.hideSub": "Unterprojekte verbergen",
  "item.missing": "Diese Information gibt es nicht.",

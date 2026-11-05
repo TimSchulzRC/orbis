@@ -1003,6 +1003,24 @@ body.cm-dragging * {
   color: var(--muted-foreground);
 }
 
+/* the quick note: the card grows up out of the tray's field (as high as it, 44px) */
+@keyframes quick-grow {
+  from {
+    clip-path: inset(calc(100% - 44px) 0 0 0 round 16px);
+  }
+  to {
+    clip-path: inset(0 round 16px);
+  }
+}
+.quick-grow {
+  animation: quick-grow 180ms cubic-bezier(0.2, 0, 0, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .quick-grow {
+    animation: none;
+  }
+}
+
 /* status button: the old icon shrinks away, then the new one grows in */
 @keyframes icon-shrink {
   from {

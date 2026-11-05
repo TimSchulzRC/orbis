@@ -169,6 +169,8 @@
  "quick.title": "New note",
  "quick.writing": "Writing a note …",
  "quick.draft": "Draft: {title}",
+ "quick.hintText": "on to the text",
+ "quick.hintFile": "file",
  "start.showSub": "Show sub-projects",
  "start.hideSub": "Hide sub-projects",
  "item.missing": "This doesn't exist.",
