@@ -119,7 +119,7 @@ export const attachInput = z.object({
   url: z.string().optional().describe("public http(s) address the server downloads the file from"),
   base64: z.string().optional().describe("the content, base64 – only for small files; local files go over the HTTP upload"),
   replace: z.string().optional().describe("id or title of an existing file: put the new content into it instead of creating a file (same item, the old content stays in its history)"),
-  parent: z.string().optional().describe("the one place of the file (a file has exactly one parent)"),
+  parent: z.string().optional().describe("the one place of the file (a file has exactly one parent). Always give it: without it the file lands in the inbox, which agents can't sort afterwards"),
   tags: z.array(z.string()).optional(),
   description: z.string().optional(),
 });

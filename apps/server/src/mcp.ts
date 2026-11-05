@@ -40,7 +40,7 @@ How to work:
 - New use cases need no code: \`define_type\` / \`update_type\` (properties, capabilities, views). Tag ↔ type conversions are previewed with \`convert\`; the user runs them in the app.
 - Answers list one line per entry: title [id] · type · status · due · path · ⚠ blocked by / waiting for; after a write it ends with · version <hash> (its base_version from now on). A writing call is all or nothing: "Nothing changed" means no part of it was applied – fix the reason and call again. Read the Hints after a write (unresolved links, duplicate titles, open items below something done …).
 - Link exactly with [[id|Label]], always for titles with # | [ ] ^. Never link an item to itself.
-- Files: \`get\` on a file shows its facts, the extracted text (PDF incl. embedded invoice XML, Word, Excel, PowerPoint, text and code files, a ZIP's entries) and, where the server offers it, a download command. Every file type is accepted. Small things: \`attach\` with base64 or a public url. A file on your disk: upload it over HTTP (below) – don't push large files through base64.
+- Files: \`get\` on a file shows its facts, the extracted text (PDF incl. embedded invoice XML, Word, Excel, PowerPoint, text and code files, a ZIP's entries) and, where the server offers it, a download command. Every file type is accepted. Small things: \`attach\` with base64 or a public url. A file on your disk: upload it over HTTP (below) – don't push large files through base64. Always give a parent when you add a file: one without lands in the inbox, which you may not sort afterwards (only \`suggest\`).
 - Never delete unless asked; deletes go to the trash. Today is in \`schema\`. Reply in the language of the user's message.
 
 Rules for agents:
@@ -60,7 +60,7 @@ function instructions(ops: Ops): string {
 /** The HTTP file API, for the instructions and the attach description. */
 function filesHelp(url: string) {
   return `HTTP file API (token: the one this MCP connection uses, as $OBTION_TOKEN – never write the real token into answers or files):
-- Upload a new file: curl -fsS -X POST -H "Authorization: Bearer $OBTION_TOKEN" --data-binary @report.pdf "${url}?name=report.pdf&parent=<id>" → JSON with id, hash, size. parent is optional (an id or exact title).
+- Upload a new file: curl -fsS -X POST -H "Authorization: Bearer $OBTION_TOKEN" --data-binary @report.pdf "${url}?name=report.pdf&parent=<id>" → JSON with id, hash, size. Always give parent (an id or exact title): without it the file lands in the inbox, and from there you can no longer place it yourself – only suggest a place, which the user has to accept.
 - Replace the content of a file (same item, old version kept): curl -fsS -X PUT -H "Authorization: Bearer $OBTION_TOKEN" --data-binary @report.pdf ${url}/<file id>
 - Download the original: curl -fsS -H "Authorization: Bearer $OBTION_TOKEN" -o report.pdf ${url}/<file id>
 Uploads and replacements show up in the activity and can be undone with undo like a tool call.`;
@@ -250,7 +250,7 @@ function buildMcpServer(store: Store, origin: string, blobs?: Blobs, lang: Lang 
     "attach",
     {
       title: "Attach file",
-      description: `Create a file from a public URL or base64 (small files only; max ${MAX_ATTACH / 1024 / 1024} MB), optionally below a parent and with tags. Any file type. replace: put the new content into an existing file instead. ${filesUrl ? `A file on your disk goes over HTTP, not base64: curl -fsS -X POST -H "Authorization: Bearer $OBTION_TOKEN" --data-binary @file.xsd "${filesUrl}?name=file.xsd&parent=<id>" (PUT ${filesUrl}/<file id> replaces a content). $OBTION_TOKEN is the token of this MCP connection.` : ""}`.trim(),
+      description: `Create a file from a public URL or base64 (small files only; max ${MAX_ATTACH / 1024 / 1024} MB) below a parent, optionally with tags. Any file type. Always give parent: without it the file lands in the inbox, and agents can't place inbox items afterwards (only suggest). replace: put the new content into an existing file instead. ${filesUrl ? `A file on your disk goes over HTTP, not base64: curl -fsS -X POST -H "Authorization: Bearer $OBTION_TOKEN" --data-binary @file.xsd "${filesUrl}?name=file.xsd&parent=<id>" (PUT ${filesUrl}/<file id> replaces a content). $OBTION_TOKEN is the token of this MCP connection.` : ""}`.trim(),
       inputSchema: attachInput.shape,
     },
     wrap(ruled((a, touched) => ops.attach(a, origin, touched)), true),

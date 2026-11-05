@@ -25,9 +25,11 @@ curl -fsS -X POST -H "Authorization: Bearer $OBTION_TOKEN" \
   "$BASE?name=schema.xsd&parent=<id or exact title>"
 ```
 
+> Always pass `parent`. A file uploaded without it sits in the inbox, and from there an agent can only suggest a place.
+
 - The body is the raw content, streamed to disk. Any file type, up to 512 MB.
 - `name` (required): the file name with extension. Folders in it are dropped (`a/b.xsd` becomes `b.xsd`).
-- `parent` (optional): an item id or a unique title. Without it the file lands in the inbox.
+- `parent`: an item id or a unique title. Formally optional, but always give it when an agent or script transfers files. Without it the file lands in the inbox, and agents may not sort the inbox: afterwards they can only `suggest` a place, which a person has to accept in the app. With the MCP token there is no way to move the file out of the inbox.
 - `201` with `{ id, name, hash, size, mime, url, step }`. `hash` is the SHA-256 of the content; `url` is the file's address for download and replace; `step` can be undone with the MCP `undo` tool.
 - `400` for a missing name or an unknown parent, `413` when too large. Nothing is created then.
 

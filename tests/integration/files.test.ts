@@ -172,6 +172,8 @@ test("get on a file: facts, download URL and curl commands with a placeholder, n
   // the instructions and attach explain the upload, without the token
   const init = await fetch(`${base}/w/${ws}/mcp`, { method: "POST", headers: { authorization: `Bearer ${agent}`, "content-type": "application/json", accept: "application/json, text/event-stream" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "1" } } }) }).then((r) => r.json());
   expect(init.result.instructions).toContain(`--data-binary @report.pdf "${files()}?name=report.pdf`);
+  // an upload without parent lands in the inbox, where the agent can only suggest
+  expect(init.result.instructions).toContain("Always give parent (an id or exact title): without it the file lands in the inbox");
   expect(JSON.stringify(init)).not.toContain(agent);
 });
 
@@ -217,6 +219,7 @@ test("attach: any type, one step with undo; base64 limits point to the HTTP uplo
   const list = await fetch(`${base}/w/${ws}/mcp`, { method: "POST", headers: { authorization: `Bearer ${agent}`, "content-type": "application/json", accept: "application/json, text/event-stream" }, body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list" }) }).then((r) => r.json());
   const attach = list.result.tools.find((t: { name: string }) => t.name === "attach");
   expect(attach.description).toContain(`--data-binary @file.xsd "${files()}?name=file.xsd`);
+  expect(attach.description).toContain("Always give parent");
 });
 
 test("a file whose text was not read yet (e.g. the server stopped) is read when the workspace opens", async () => {
