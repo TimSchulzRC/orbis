@@ -176,6 +176,9 @@ export function GroupedTable({ items, def, ctx, look }: { items: Item[]; def: Qu
     );
   };
   const sticky = "sticky left-0 z-[1] bg-bg";
+  // the last, empty column takes the rest of the row, so a table with few columns still spans the page
+  // (up to the right edge of the content: the wrapper reaches 0.5rem past it on both sides)
+  const filler = "border-b border-l border-line p-0";
   const head = (
     <TableHeader>
       <TableRow className="text-left text-xs text-muted-foreground">
@@ -202,6 +205,7 @@ export function GroupedTable({ items, def, ctx, look }: { items: Item[]; def: Qu
             {look?.onLook && <Resizer onPointerDown={(e) => resize(c, e)} />}
           </TableHead>
         ))}
+        <TableHead className={filler} aria-hidden />
       </TableRow>
     </TableHeader>
   );
@@ -211,6 +215,7 @@ export function GroupedTable({ items, def, ctx, look }: { items: Item[]; def: Qu
       {cols.map((c) => (
         <col key={c} style={{ width: width(c) }} />
       ))}
+      <col />
     </colgroup>
   );
   const rows = (g: Group) => {
@@ -244,6 +249,7 @@ export function GroupedTable({ items, def, ctx, look }: { items: Item[]; def: Qu
               <TableCell item={i} col={c} ctx={ctx} />
             </ShadcnTableCell>
           ))}
+          <ShadcnTableCell className={filler} aria-hidden />
         </TableRow>,
       );
     });
@@ -303,7 +309,7 @@ export function GroupedTable({ items, def, ctx, look }: { items: Item[]; def: Qu
               </div>
             )}
             {!isFolded && (
-              <ShadcnTable className="table-fixed border-collapse" style={{ width: total }}>
+              <ShadcnTable className="table-fixed border-collapse" style={{ width: "calc(100% - 0.5rem)", minWidth: total }}>
                 {colgroup}
                 {head}
                 <TableBody>{rows(g)}</TableBody>
