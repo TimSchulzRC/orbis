@@ -53,12 +53,12 @@ export function drawingSvg(id: string, doc: Y.Doc, version: number, dark: boolea
     hit = renderSvg(doc, dark, files).then(
       ({ svg, complete }) => {
         // an image not here yet: drawn again next time
-        if (!complete) svgs.delete(key);
+        if (!complete && svgs.get(key) === hit) svgs.delete(key);
         return svg;
       },
       (e) => {
         console.warn("drawing preview failed", e);
-        svgs.delete(key);
+        if (svgs.get(key) === hit) svgs.delete(key);
         return null;
       },
     );
@@ -67,6 +67,11 @@ export function drawingSvg(id: string, doc: Y.Doc, version: number, dark: boolea
     for (const k of svgs.keys()) if (k.startsWith(id + ":") && !k.startsWith(`${id}:${version}:`)) svgs.delete(k);
   }
   return hit.then((svg) => (svg ? (svg.cloneNode(true) as SVGSVGElement) : null));
+}
+
+/** An image arrived: the next drawingSvg draws afresh, also while an earlier render is still running. */
+export function forgetDrawingSvg(id: string) {
+  for (const k of svgs.keys()) if (k.startsWith(id + ":")) svgs.delete(k);
 }
 
 async function renderSvg(doc: Y.Doc, dark: boolean, files: DeviceFiles): Promise<{ svg: SVGSVGElement | null; complete: boolean }> {

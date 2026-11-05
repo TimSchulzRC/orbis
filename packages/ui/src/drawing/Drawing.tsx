@@ -11,7 +11,7 @@ import { useTheme } from "../theme";
 import { createStore } from "../lib/store";
 import { cn } from "../lib/utils";
 import { escapeHtml } from "../ui/text";
-import { drawingSvg } from "./scene";
+import { drawingSvg, forgetDrawingSvg } from "./scene";
 
 const DrawingEditor = lazy(() => import("./DrawingEditor"));
 
@@ -87,7 +87,11 @@ export function DrawingPreview({ item, className, onOpen }: { item: Item; classN
   // an image that arrives later (still uploading elsewhere) draws the preview again
   const [blobs, setBlobs] = useState(0);
   useEffect(() => {
-    const stop = repo.onBlob((hash) => item.drawing?.files.includes(hash) && setBlobs((n) => n + 1));
+    const stop = repo.onBlob((hash) => {
+      if (!item.drawing?.files.includes(hash)) return;
+      forgetDrawingSvg(item.id);
+      setBlobs((n) => n + 1);
+    });
     return () => void stop();
   }, [repo, item.drawing?.files.join()]);
   useEffect(() => {
@@ -146,7 +150,9 @@ export function hydrateDrawings(root: HTMLElement, repo: Repo = current, files =
     // an image still uploading elsewhere: drawn again once it is here; a removed embed stops listening
     const stop = repo.onBlob((hash) => {
       if (!fig.isConnected) return void stop();
-      if (item.drawing!.files.includes(hash)) draw();
+      if (!item.drawing!.files.includes(hash)) return;
+      forgetDrawingSvg(id);
+      draw();
     });
   });
 }
