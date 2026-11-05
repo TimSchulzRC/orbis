@@ -2,7 +2,7 @@
 import { test, expect } from "bun:test";
 import { MemRepo } from "../support/helpers";
 import { appendUpdate } from "@obtion/core/model";
-import { byAgent, byDay, unread, updateFeed } from "@obtion/core/updates";
+import { byAgent, byDay, markRead, NOT_READ, type ReadMark, unread, updateFeed } from "@obtion/core/updates";
 
 const at = (iso: string) => new Date(iso).getTime();
 
@@ -31,15 +31,29 @@ test("only agents count as agents, not people or imports", () => {
   expect(byAgent("agent:claude")).toBe(true);
 });
 
-test("unread: agent updates newer than the last look at the page they were written on", () => {
+test("unread: agent updates not read on the page they were written on", () => {
   const { m, parent, child } = project();
   const feed = updateFeed(m.index(), parent);
-  expect(unread(feed, () => 0).map((e) => e.u.text)).toEqual(["Blockiert", "Mockups"]);
-  // looked at the child page after its update: only the parent's own one is left
-  const seen: Record<string, number> = { [child]: at("2026-11-05T13:00:00") };
-  expect(unread(feed, (id) => seen[id] ?? 0).map((e) => e.u.text)).toEqual(["Mockups"]);
-  seen[parent] = at("2026-11-04T10:00:00");
-  expect(unread(feed, (id) => seen[id] ?? 0)).toEqual([]);
+  expect(unread(feed, () => NOT_READ).map((e) => e.u.text)).toEqual(["Blockiert", "Mockups"]);
+  // read up to after the child's update: only the parent's own one is left
+  const marks: Record<string, ReadMark> = { [child]: { at: at("2026-11-05T13:00:00"), ids: [] } };
+  expect(unread(feed, (id) => marks[id] ?? NOT_READ).map((e) => e.u.text)).toEqual(["Mockups"]);
+  marks[parent] = { at: 0, ids: [feed.find((e) => e.u.text === "Mockups")!.u.id] };
+  expect(unread(feed, (id) => marks[id] ?? NOT_READ)).toEqual([]);
+});
+
+test("marking read: all of a page up to now when nothing is left, else one by one", () => {
+  const m = new MemRepo();
+  const page = m.add({ title: "Relaunch" });
+  for (let n = 0; n < 3; n++) m.change(page, (d) => appendUpdate(d, { at: at(`2026-11-0${n + 1}T10:00:00`), text: `Stand ${n}`, by: "agent:claude" }));
+  const feed = updateFeed(m.index(), page);
+  const [newest, middle, oldest] = feed.map((e) => e.u.id) as [string, string, string];
+  // only the newest two were on screen: they count, the oldest stays unread
+  const some = markRead(feed, page, NOT_READ, new Set([newest, middle]), at("2026-11-05T10:00:00"));
+  expect(some).toEqual({ at: 0, ids: [newest, middle] });
+  expect(unread(feed, () => some).map((e) => e.u.id)).toEqual([oldest]);
+  // later the oldest too: all read, the list of single ones is gone
+  expect(markRead(feed, page, some, new Set([oldest]), at("2026-11-06T10:00:00"))).toEqual({ at: at("2026-11-06T10:00:00"), ids: [] });
 });
 
 test("days keep the feed's order", () => {

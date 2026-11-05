@@ -8,7 +8,7 @@ import { fmtDate, fmtRelative, fmtTime } from "@obtion/core/i18n";
 import type { T } from "@obtion/core/i18n";
 import { addDays, todayISO } from "@obtion/core/date";
 import { statusProp } from "@obtion/core/traits";
-import { byAgent, byDay, unread, updateFeed, type FeedEntry } from "@obtion/core/updates";
+import { byAgent, byDay, markRead, NOT_READ, unread, updateFeed, type FeedEntry, type ReadMark } from "@obtion/core/updates";
 import { Dialog, DialogTitle, SheetContent } from "../components/ui/dialog";
 import { Textarea } from "../components/ui/textarea";
 import { NativeSelect } from "../components/ui/native-select";
@@ -26,7 +26,7 @@ import { cn } from "../lib/utils";
 const PAGE = 30;
 
 /** From this width the panel docks beside the page instead of covering it. */
-const DOCKED = "(min-width: 1280px)";
+const DOCKED = "(min-width: 1440px)";
 
 type Filter = "all" | "here" | "agents";
 
@@ -78,14 +78,23 @@ function Origin({ e, item, onLeave, className }: { e: FeedEntry; item: Item; onL
   );
 }
 
-/** Drafts per page while the app runs: leaving the page (the docked panel stays usable) loses none. */
-const drafts = new Map<string, Draft>();
 const EMPTY: Draft = { text: "", status: "" };
 /** The docked panel stays open from page to page until it is closed. */
 let dockedOpen = false;
+/** Pages holding the docked panel open; the page keeps its room while one hands over to the next. */
+let rooms = 0;
 
-/** One opening of the panel: what was new then and what has been on screen since. */
-type Session = { openedAt: number; fresh: Set<string>; onScreen: Set<string> };
+/** What has been read of a page's updates on this device; before marks, a plain time. */
+function readMark(pageId: string): ReadMark {
+  const v = readJSON<ReadMark | number>(KEYS.updatesSeen(pageId), NOT_READ);
+  return typeof v === "number" ? { at: v, ids: [] } : v;
+}
+
+/**
+ * One opening of the panel: what was new then, what has been on screen since. `quiet`: opened
+ * again by moving to another page with the panel docked, so no slide and the focus stays put.
+ */
+type Session = { openedAt: number; fresh: Set<string>; onScreen: Set<string>; quiet: boolean };
 
 /** Zone 1 of a page whose type has updates: the newest one, and the panel with all of them. */
 export function PageUpdates({ item }: { item: Item }) {
@@ -93,18 +102,19 @@ export function PageUpdates({ item }: { item: Item }) {
   const ix = useIndex();
   const docked = useMediaQuery(DOCKED);
   const feed = useMemo(() => updateFeed(ix, item.id), [ix, item.id]);
-  // when each page of the feed was last looked at (on this device): read once per change
+  // what has been read of each page of the feed (on this device): read once per change
   const [looked, setLooked] = useState(0);
-  const seen = useMemo(() => new Map([...new Set(feed.map((e) => e.from.id))].map((id) => [id, readJSON<number>(KEYS.updatesSeen(id), 0)])), [feed, looked]);
-  const news = unread(feed, (id) => seen.get(id) ?? 0);
+  const marks = useMemo(() => new Map([...new Set(feed.map((e) => e.from.id))].map((id) => [id, readMark(id)])), [feed, looked]);
+  const news = unread(feed, (id) => marks.get(id) ?? NOT_READ);
 
   const [open, setOpen] = useState<false | "read" | "write">(false);
   const [round, setRound] = useState(0);
-  const [draft, setDraftState] = useState<Draft>(() => drafts.get(item.id) ?? EMPTY);
+  // kept per page on this device: closing the panel, leaving the page or reloading loses nothing
+  const [draft, setDraftState] = useState<Draft>(() => readJSON<Draft>(KEYS.updatesDraft(item.id), EMPTY));
   const setDraft = (d: Draft) => {
     setDraftState(d);
-    if (d.text || d.status) drafts.set(item.id, d);
-    else drafts.delete(item.id);
+    if (d.text || d.status) writeJSON(KEYS.updatesDraft(item.id), d);
+    else localStorage.removeItem(KEYS.updatesDraft(item.id));
   };
   const session = useRef<Session | null>(null);
   const feedNow = useRef(feed);
@@ -112,21 +122,19 @@ export function PageUpdates({ item }: { item: Item }) {
   const trigger = useRef<HTMLButtonElement>(null);
   const textId = useId();
 
-  const show = (mode: "read" | "write") => {
+  const show = (mode: "read" | "write", quiet = false) => {
     if (session.current) return;
-    session.current = { openedAt: Date.now(), fresh: new Set(news.map((e) => e.u.id)), onScreen: new Set() };
+    session.current = { openedAt: Date.now(), fresh: new Set(news.map((e) => e.u.id)), onScreen: new Set(), quiet };
     setRound((n) => n + 1);
     setOpen(mode);
   };
-  // a page counts as read when every update that was new from it has been on screen
+  // what has been on screen counts as read, one by one (core/updates.ts markRead)
   const commit = () => {
     const s = session.current;
     if (!s) return;
     session.current = null;
-    for (const id of new Set(feedNow.current.map((e) => e.from.id))) {
-      const missed = feedNow.current.some((e) => e.from.id === id && s.fresh.has(e.u.id) && !s.onScreen.has(e.u.id));
-      if (!missed) writeJSON(KEYS.updatesSeen(id), s.openedAt);
-    }
+    const now = Date.now();
+    for (const id of new Set(feedNow.current.map((e) => e.from.id))) writeJSON(KEYS.updatesSeen(id), markRead(feedNow.current, id, readMark(id), s.onScreen, now));
   };
   const close = () => {
     commit();
@@ -136,7 +144,7 @@ export function PageUpdates({ item }: { item: Item }) {
   };
   // leaving the page with the panel open: what was read counts; docked, the next page opens it again
   useEffect(() => {
-    if (dockedOpen && matchMedia(DOCKED).matches) show("read");
+    if (dockedOpen && matchMedia(DOCKED).matches) show("read", true);
     return commit;
   }, []);
   useEffect(() => {
@@ -146,14 +154,22 @@ export function PageUpdates({ item }: { item: Item }) {
   // docked: the page makes room for the panel
   const room = !!open && docked;
   useEffect(() => {
-    document.documentElement.toggleAttribute("data-side-panel", room);
-    return () => document.documentElement.removeAttribute("data-side-panel");
+    if (!room) return;
+    rooms++;
+    document.documentElement.setAttribute("data-side-panel", "");
+    return () => {
+      rooms--;
+      // moving to another page with the panel docked: the next page takes over without a jump
+      setTimeout(() => rooms || document.documentElement.removeAttribute("data-side-panel"));
+    };
   }, [room]);
 
-  const latest = feed[0];
-  // while the panel is open, the panel shows what is new
-  const marked = open ? 0 : news.length;
-  const latestIsNew = !open && latest && news.some((e) => e.u.id === latest.u.id);
+  // the line shows the newest unread update, else the newest; while the panel is open, the panel
+  // shows what is new
+  const fresh = open ? [] : news;
+  const latest = fresh[0] ?? feed[0];
+  const status = latest && latest.u.status ? statusProp(ix.schemaOf(latest.from))?.options?.find((o) => o.id === latest.u.status)?.name : undefined;
+  const where = latest && [latest.from.id !== item.id ? latest.from.title : "", status ? t("updates.statusTo", { name: status }) : ""].filter(Boolean).join(", ");
   return (
     <>
       {latest ? (
@@ -163,14 +179,14 @@ export function PageUpdates({ item }: { item: Item }) {
           onClick={() => show("read")}
           aria-haspopup="dialog"
           aria-expanded={!!open}
-          aria-label={[`${t("updates.latest")}, ${fmtRelative(lang, latest.u.at)}, ${authorLabel(latest.u.by, t)}`, marked ? t("updates.newCount", { count: marked }) : "", t("updates.openAll", { count: feed.length })].filter(Boolean).join(". ")}
+          aria-label={[`${fresh.length ? t("updates.newOne") : t("updates.latest")}, ${fmtRelative(lang, latest.u.at)}, ${authorLabel(latest.u.by, t)}${where ? `, ${where}` : ""}`, fresh.length ? t("updates.newCount", { count: fresh.length }) : "", t("updates.openAll", { count: feed.length })].filter(Boolean).join(". ")}
           aria-describedby={textId}
-          className="group -mx-2.5 mt-3 flex w-[calc(100%+20px)] items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-hover focus-visible:bg-hover aria-expanded:bg-hover"
+          className="group -mx-2.5 mt-3 flex w-[calc(100%+20px)] items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-hover focus-visible:bg-hover"
         >
-          {latestIsNew && <span className="mt-[5px] size-2 shrink-0 rounded-full bg-ok" aria-hidden />}
+          {fresh.length > 0 && <span className="mt-[5px] size-2 shrink-0 rounded-full bg-ok" aria-hidden />}
           <span className="min-w-0 flex-1">
             <span className={META}>
-              <span className="font-medium text-fg">{t("updates.latest")}</span>
+              {fresh.length ? <span className="font-medium text-ok">{t("updates.newOne")}</span> : <span className="font-medium text-fg">{t("updates.latest")}</span>}
               <time dateTime={new Date(latest.u.at).toISOString()}>{fmtRelative(lang, latest.u.at)}</time>
               <span>{authorLabel(latest.u.by, t)}</span>
               <Origin e={latest} item={item} className="max-md:hidden" />
@@ -182,7 +198,7 @@ export function PageUpdates({ item }: { item: Item }) {
             </span>
           </span>
           <span className="flex shrink-0 items-center gap-0.5 self-center whitespace-nowrap text-xs text-muted-foreground group-hover:text-fg">
-            {marked > 0 ? <span className="font-medium text-ok">{t("updates.newCount", { count: marked })}</span> : feed.length > 1 && <span>{t("updates.all", { count: feed.length })}</span>}
+            {fresh.length > 1 ? <span className="font-medium text-ok">{t("updates.newCount", { count: fresh.length })}</span> : feed.length > 1 && <span>{t("updates.all", { count: feed.length })}</span>}
             <ChevronRight size={14} aria-hidden />
           </span>
         </Button>
@@ -223,21 +239,36 @@ function UpdatesSheet({ open, docked, item, feed, session, write, draft, onDraft
     scroller.current = el;
     setListBox(el);
   }, []);
-  // the marks of this opening; kept while the panel slides out
+  // the marks of this opening, kept while the panel slides out; what arrives while it is open is new too
   const [fresh] = useState(() => session?.fresh ?? new Set<string>());
+  const [openedAt] = useState(() => session?.openedAt ?? Date.now());
+  const isNew = (e: FeedEntry) => fresh.has(e.u.id) || (byAgent(e.u.by) && e.u.at > openedAt);
+  const quiet = !!session?.quiet;
   const list = feed.filter((e) => (filter === "here" ? e.from.id === item.id : filter === "agents" ? byAgent(e.u.by) : true));
   const visible = list.slice(0, shown);
+  const firstNew = visible.find(isNew)?.u.id;
+  // a filter only where it would leave something out
+  const people = feed.some((e) => !byAgent(e.u.by));
+  const filters: { value: Filter; label: string }[] = [
+    { value: "all", label: t("updates.filter.all") },
+    ...(feed.some((e) => e.from.id !== item.id) ? [{ value: "here" as const, label: t("updates.filter.here") }] : []),
+    ...(people && feed.some((e) => byAgent(e.u.by)) ? [{ value: "agents" as const, label: t("updates.filter.agents") }] : []),
+  ];
   const visibleKey = visible.map((e) => e.u.id).join();
 
   // what scrolls into view counts as read, not what was merely rendered further down
   useEffect(() => {
     const root = listBox;
     if (!open || !session || !root) return;
+    // read: half of it in view, or, taller than the list, half the list filled by it
     const watch = new IntersectionObserver(
       (seen) => {
-        for (const e of seen) if (e.isIntersecting) session.onScreen.add((e.target as HTMLElement).dataset.update!);
+        for (const e of seen) {
+          const enough = e.intersectionRatio >= 0.5 || e.intersectionRect.height >= root.clientHeight / 2;
+          if (e.isIntersecting && enough) session.onScreen.add((e.target as HTMLElement).dataset.update!);
+        }
       },
-      { root, threshold: 0.5 },
+      { root, threshold: [0, 0.25, 0.5, 0.75, 1] },
     );
     for (const el of root.querySelectorAll("[data-update]")) watch.observe(el);
     return () => watch.disconnect();
@@ -268,27 +299,31 @@ function UpdatesSheet({ open, docked, item, feed, session, write, draft, onDraft
         aria-describedby={undefined}
         tabIndex={-1}
         onOpenAutoFocus={(e) => {
-          // reading: focus the panel, not the text box (no keyboard popping up on phones)
-          if (write) return;
+          // reading: focus the panel, not the text box (no keyboard popping up on phones); opened
+          // again on another page: the focus stays where the user is
+          if (write && !quiet) return;
           e.preventDefault();
-          (e.currentTarget as HTMLElement).focus();
+          if (!quiet) (e.currentTarget as HTMLElement).focus();
         }}
+        className={quiet ? "data-[state=open]:animate-none" : undefined}
         onCloseAutoFocus={(e) => (e.preventDefault(), onClosed())}
         // docked, the page beside it stays in use: a click there does not close the panel, nor does
         // Escape pressed in the page (an editor menu, a selection)
         onInteractOutside={(e) => docked && e.preventDefault()}
         onEscapeKeyDown={(e) => docked && !panel.current?.contains(document.activeElement) && e.preventDefault()}
       >
-        <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-line md:hidden" aria-hidden />
-        <div className="flex items-center gap-2 border-b border-line px-4 py-3 max-md:pt-2">
+        <div className="flex items-center gap-2 border-b border-line px-4 py-3">
           <div className="min-w-0 flex-1">
             <div className="flex items-baseline gap-2">
               <DialogTitle className="text-base font-semibold">{t("updates.title")}</DialogTitle>
               {feed.length > 0 && <span className="text-[13px] tabular-nums text-muted-foreground">{feed.length}</span>}
             </div>
-            <p className="mt-0.5 flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
-              <ItemIcon item={item} size={11} /> <span className="truncate">{item.title || t("untitled")}</span>
-            </p>
+            {/* over the page it says which page; docked, the page is right beside it */}
+            {!docked && (
+              <p className="mt-0.5 flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
+                <ItemIcon item={item} size={11} /> <span className="truncate">{item.title || t("untitled")}</span>
+              </p>
+            )}
           </div>
           <IconButton onClick={onClose} label={t("close")} icon={X} />
         </div>
@@ -299,15 +334,11 @@ function UpdatesSheet({ open, docked, item, feed, session, write, draft, onDraft
           {said}
         </p>
         <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto px-4 pb-6 pt-3">
-          {feed.length > 1 && (
+          {filters.length > 1 && (
             <div className="mb-3">
               <Seg
                 value={filter}
-                options={[
-                  { value: "all", label: t("updates.filter.all") },
-                  { value: "here", label: t("updates.filter.here") },
-                  { value: "agents", label: t("updates.filter.agents") },
-                ]}
+                options={filters}
                 onChange={(f) => (setFilter(f), setShown(PAGE))}
                 label={t("updates.filter.label")}
               />
@@ -317,12 +348,12 @@ function UpdatesSheet({ open, docked, item, feed, session, write, draft, onDraft
           {byDay(visible).map(([day, group]) => (
             <section key={day} className="mt-3 first:mt-0" aria-label={dayLabel(day)}>
               <h3 className="sticky top-0 z-10 -mx-4 bg-surface/95 px-4 py-1 text-xs font-medium text-muted-foreground backdrop-blur">{dayLabel(day)}</h3>
-              <ol className="ml-1 mt-1 space-y-4 border-l border-line pb-1 pl-5">
+              <ol className="ml-1 mt-1 space-y-4 border-l border-line pl-5">
                 {group.map((e) => {
-                  const isNew = fresh.has(e.u.id);
+                  const marked = isNew(e);
                   return (
                     <li key={e.u.id} data-update={e.u.id} className="relative">
-                      <span className={cn("absolute -left-[25px] top-1.5 size-2.5 rounded-full border-2 border-surface", isNew ? "bg-ok" : "bg-faint")} aria-hidden />
+                      <span className={cn("absolute -left-[25px] top-1.5 size-2.5 rounded-full border-2 border-surface", marked ? "bg-ok" : "bg-faint")} aria-hidden />
                       <div className={META}>
                         <time dateTime={new Date(e.u.at).toISOString()}>{fmtTime(lang, e.u.at)}</time>
                         <span title={e.u.by}>
@@ -331,10 +362,12 @@ function UpdatesSheet({ open, docked, item, feed, session, write, draft, onDraft
                             {authorLabel(e.u.by, t)}
                           </span>
                         </span>
-                        <Origin e={e} item={item} onLeave={onClose} />
+                        {/* docked, following the link keeps the panel open beside the next page */}
+                        <Origin e={e} item={item} onLeave={docked ? () => {} : onClose} />
+                        {/* the word once, at the first new one, explains the green dots */}
+                        {e.u.id === firstNew && <span className="font-medium text-ok">{t("updates.new")}</span>}
                       </div>
-                      {/* the green dot says it; a word on every new entry would be loud */}
-                      {isNew && <span className="sr-only">{t("updates.new")}</span>}
+                      {marked && e.u.id !== firstNew && <span className="sr-only">{t("updates.new")}</span>}
                       <div className="mt-0.5 whitespace-pre-wrap text-[15px] [overflow-wrap:anywhere]">{e.u.text}</div>
                     </li>
                   );

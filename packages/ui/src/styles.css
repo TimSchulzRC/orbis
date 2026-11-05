@@ -618,9 +618,10 @@ tr:hover .cell-tools button:not(.tap-y),
 /* a side panel docked at the right (the updates, Updates.tsx): the page makes room for it, as fast
    as the panel slides in */
 :root {
-  --side-panel: 440px;
+  --side-panel: clamp(360px, 30vw, 440px);
 }
-@media (min-width: 1280px) {
+/* the width from which it docks: DOCKED in Updates.tsx */
+@media (min-width: 1440px) {
   [data-column] {
     transition: padding-right 200ms ease;
   }

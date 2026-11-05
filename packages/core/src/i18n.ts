@@ -80,7 +80,7 @@ export function fmtDateTime(lang: Lang, ts: number) {
   return new Date(ts).toLocaleString(locale(lang), { dateStyle: "medium", timeStyle: "short" });
 }
 
-/** "14:05" / "2:05 PM". */
+/** "14:05" / "02:05 PM". */
 export function fmtTime(lang: Lang, ts: number) {
   return new Date(ts).toLocaleTimeString(locale(lang), { hour: "2-digit", minute: "2-digit" });
 }
