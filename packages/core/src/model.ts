@@ -560,8 +560,10 @@ export function setExtra(doc: Y.Doc, name: string, value: FreeValue | null | und
 
 export function setRel(doc: Y.Doc, propId: string, target: string, on: boolean) {
   const rels = doc.getMap<unknown>("rels");
-  let m = rels.get(propId);
-  if (!(m instanceof Y.Map)) {
+  const found = rels.get(propId);
+  let m: Y.Map<unknown>;
+  if (found instanceof Y.Map) m = found;
+  else {
     if (!on) return;
     m = new Y.Map();
     rels.set(propId, m);
@@ -723,7 +725,7 @@ export type Patch<T> = { [K in keyof T]?: T[K] | null };
 export function upsertProp(doc: Y.Doc, propId: string, patch: Patch<Omit<PropDef, "id">>) {
   const props = ensureSubMap(schemaMap(doc), "properties");
   const found = props.get(propId);
-  const prop = found instanceof Y.Map ? found : new Y.Map<unknown>();
+  const prop: Y.Map<unknown> = found instanceof Y.Map ? found : new Y.Map<unknown>();
   if (prop !== found) {
     props.set(propId, prop);
     if (!patch.sort) prop.set("sort", keyBetween(lastSortKey(props), null));
@@ -765,9 +767,11 @@ export function setTab(doc: Y.Doc, id: string, patch: Patch<Omit<ViewTab, "id">>
   const tabs = doc.getMap<unknown>("tabs");
   if (patch === null) tabs.delete(id);
   else {
-    let m = tabs.get(id);
-    if (!(m instanceof Y.Map)) {
-      const o = plain(m);
+    const found = tabs.get(id);
+    let m: Y.Map<unknown>;
+    if (found instanceof Y.Map) m = found;
+    else {
+      const o = plain(found);
       tabs.set(id, (m = toMap(isObject(o) ? o : {})));
     }
     for (const [k, v] of Object.entries(patch)) {

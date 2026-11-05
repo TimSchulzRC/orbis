@@ -71,7 +71,7 @@ function writeField(doc: Y.Doc, key: string, value: unknown) {
     const schema = doc.getMap<unknown>("schema");
     const name = area === "schema.prop" ? "properties" : "capabilities";
     const found = schema.get(name);
-    const map = found instanceof Y.Map ? found : new Y.Map<unknown>();
+    const map: Y.Map<unknown> = found instanceof Y.Map ? found : new Y.Map<unknown>();
     if (map !== found) schema.set(name, map);
     return value === undefined ? map.delete(k) : map.set(k, area === "schema.prop" ? toY(value) : value);
   }
