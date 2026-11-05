@@ -319,8 +319,19 @@ export class DeviceFiles {
     }
   }
 
+  /**
+   * Writes a content once: writing the same file again (a download finishing after the device made
+   * it, two loads at once) breaks the object URLs already shown for it (ERR_FILE_NOT_FOUND).
+   */
+  private saving = new Map<string, Promise<void>>();
   private async save(hash: string, blob: Blob) {
-    await this.store.put(hash, blob);
+    if (this.local.has(hash)) return void this.fresh.add(hash);
+    let writing = this.saving.get(hash);
+    if (!writing) {
+      writing = this.store.put(hash, blob).finally(() => this.saving.delete(hash));
+      this.saving.set(hash, writing);
+    }
+    await writing;
     this.local.add(hash);
     this.fresh.add(hash);
   }
@@ -382,7 +393,7 @@ export class DeviceFiles {
   async addContent(blob: Blob, name: string): Promise<string> {
     await this.ready;
     const hash = await sha256(blob);
-    if (!this.local.has(hash)) await this.save(hash, blob);
+    await this.save(hash, blob);
     await this.enqueueUpload({ hash, name });
     this.scheduleSync(10);
     return hash;
@@ -468,8 +479,7 @@ export class DeviceFiles {
         .then(async (blob) => {
           // the mode may switch to "online" during the fetch or the write
           const wanted = () => this.mode === "local" || keptOnline(this.repo).has(h);
-          // stored meanwhile (made on this device): writing it again would break the object URLs shown
-          if (blob && wanted() && !this.local.has(h)) await this.save(h, blob);
+          if (blob && wanted()) await this.save(h, blob);
           if (this.local.has(h) && !wanted()) await this.drop(h);
         })
         .finally(() => {

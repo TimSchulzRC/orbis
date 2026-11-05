@@ -32,7 +32,7 @@ export function canPlaceIn(item: Item, target: Item, ix: Index): boolean {
 
 export function sidebarRoots(ix: Index): Item[] {
   return ix.live
-    .filter((i) => i.pinned)
+    .filter((i) => i.pinned && i.kind !== "zeichnung")
     .sort((a, b) => cmpKey(a.pinned!, b.pinned!) || a.title.localeCompare(b.title));
 }
 

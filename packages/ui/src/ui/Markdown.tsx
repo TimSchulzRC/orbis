@@ -61,7 +61,7 @@ md.use({
         const file = item?.file;
         const size = link.alias && /^\d+$/.test(link.alias) ? Number(link.alias) : undefined;
         if (file && link.embed) return embedHTML(item!, size, renderingSpace);
-        if (item?.kind === "zeichnung" && link.embed && !item.deleted) return drawingEmbedHTML(item, size);
+        if (item?.kind === "zeichnung" && link.embed && !item.deleted) return drawingEmbedHTML(item);
         if (file) return `<a class="file-chip" href="${spaceHref(renderingSpace, itemPath(id!))}">📎 ${escapeHtml(link.alias || item!.title)} <small>${fmtBytes(getLang(), file.size)}</small></a>`;
         const label = escapeHtml(link.alias || link.target);
         return id

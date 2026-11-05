@@ -13,7 +13,6 @@ import { insertTable } from "./tables";
 import { foldUmlauts, plainVowels } from "@obtion/core/text";
 import { kindHint, linkInner, placeHint } from "../text";
 import { DRAWING_ICON } from "../icons";
-import { openDrawing } from "../../drawing/Drawing";
 
 /** The item whose text the editor shows; a drawing made with "/" goes below it. */
 export const editorNode = Facet.define<string | undefined, string | undefined>({ combine: (v) => v[0] });
@@ -85,17 +84,14 @@ const ITEMS: SlashItem[] = [
 
 /**
  * A drawing as a block of this text: kept as a document of its own below the note (so it syncs per
- * element and its images are files), embedded by id, opened full screen to draw.
+ * element and its images are files), embedded by id. A click on the block opens it to draw.
  */
 export function insertDrawing(view: EditorView, pos = view.state.selection.main.head) {
   const parent = view.state.facet(editorNode);
   const id = repo.create({ kind: "zeichnung", title: "", parents: parent ? [parent] : [] });
   const embed = `![[${id}]]`;
   // after the index has the new drawing (next microtask), so the embed shows at once
-  queueMicrotask(() => {
-    insertBlock(view, pos, embed + "\n", embed.length + 1);
-    openDrawing(id);
-  });
+  queueMicrotask(() => insertBlock(view, pos, embed + "\n", embed.length + 1));
 }
 
 const SECTIONS = { basic: { name: "editor.section.basic", rank: 0 }, insert: { name: "editor.section.insert", rank: 1 } };

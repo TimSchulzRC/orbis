@@ -23,6 +23,9 @@ interface Link {
   embed?: boolean;
 }
 
+/** A line that is nothing but one embed: a drawing there takes the whole line (Editor.tsx). */
+export const isDrawingLine = (text: string) => wikiLinkRe(true).exec(text.trim())?.[0].length === text.trim().length && text.trim().startsWith("![[");
+
 function linksIn(state: EditorState, from: number, to: number): Link[] {
   const out: Link[] = [];
   for (let pos = from; pos <= to; ) {
@@ -39,7 +42,10 @@ function linksIn(state: EditorState, from: number, to: number): Link[] {
         const id = open === "![[" ? repo.resolveTitle(title.trim()) : undefined;
         // [[id]] without a text reads as the page's title
         const text = bar >= 0 ? rest.slice(bar + 1) : (repo.get(title.trim())?.title ?? target);
-        out.push({ from: start, to: start + all.length, text, target, web: false, embed: !!(id && (repo.get(id)?.file || repo.get(id)?.kind === "zeichnung")) });
+        const drawing = !!id && repo.get(id)?.kind === "zeichnung";
+        // the drawing's block covers its line already
+        if (drawing && isDrawingLine(line.text)) continue;
+        out.push({ from: start, to: start + all.length, text, target, web: false, embed: !!(id && (repo.get(id)?.file || drawing)) });
       }
     }
     pos = line.to + 1;

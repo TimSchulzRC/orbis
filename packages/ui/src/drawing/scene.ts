@@ -83,11 +83,12 @@ async function renderSvg(doc: Y.Doc, dark: boolean, files: DeviceFiles): Promise
   const images = wanted.size ? await loadImages(Object.fromEntries(Object.entries(scene.files).filter(([id]) => wanted.has(id))), files) : [];
   const svg = await exportToSvg({
     elements: elements as never,
-    appState: { exportBackground: true, viewBackgroundColor: (scene.state.viewBackgroundColor as string) ?? "#ffffff", exportWithDarkMode: dark, exportEmbedScene: false },
+    appState: { exportBackground: false, viewBackgroundColor: (scene.state.viewBackgroundColor as string) ?? "#ffffff", exportWithDarkMode: dark, exportEmbedScene: false },
     files: Object.fromEntries(images.map((f) => [f.id, f])),
     exportPadding: 16,
   });
-  // its own width, shrunk to fit (styles.css); the height follows
+  // sized by its block (styles.css)
+  svg.removeAttribute("width");
   svg.removeAttribute("height");
   return { svg, complete: images.length >= wanted.size };
 }

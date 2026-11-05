@@ -24,7 +24,7 @@ import { autocompletion, type Completion, type CompletionContext, type Completio
 import { FilePlus } from "lucide-react";
 import { livePreview } from "./editor/livePreview";
 import { tables } from "./editor/tables";
-import { links, refreshEmbeds } from "./editor/links";
+import { isDrawingLine, links, refreshEmbeds } from "./editor/links";
 import { editorNode, mentionCompletion, onSlashFiles, pageOption, slashCompletion, slashRender } from "./editor/slash";
 import { blockHandles } from "./editor/handles";
 import { formatKeymap, formatToolbar } from "./editor/toolbar";
@@ -98,8 +98,12 @@ function imageDecos(state: EditorState): DecorationSet {
       const id = link.embed ? repo.resolveTitle(link.target) : undefined;
       const item = id ? repo.get(id) : undefined;
       if (!item || item.deleted) continue;
-      const html = item.file ? embedHTML(item, link.size) : item.kind === "zeichnung" ? drawingEmbedHTML(item, link.size) : undefined;
-      if (html) builder.add(line.to, line.to, Decoration.widget({ widget: new EmbedWidget(html), block: true, side: 1 }));
+      // a drawing on a line of its own is that line: a block with no text around it
+      if (item.kind === "zeichnung" && isDrawingLine(line.text)) builder.add(line.from, line.to, Decoration.replace({ widget: new EmbedWidget(drawingEmbedHTML(item)), block: true }));
+      else {
+        const html = item.file ? embedHTML(item, link.size) : item.kind === "zeichnung" ? drawingEmbedHTML(item) : undefined;
+        if (html) builder.add(line.to, line.to, Decoration.widget({ widget: new EmbedWidget(html), block: true, side: 1 }));
+      }
     }
   }
   return builder.finish();

@@ -76,10 +76,10 @@ function DrawingInNote({ item }: { item: Item }) {
   const scoped = useRepo();
   const { t } = useT();
   const ix = scoped.index();
-  const note = ix.backlinks(item.id).find((b) => b.kind !== "rel" && ix.get(b.from)?.kind === "info")?.from ?? ix.parentsOf(item.id)[0];
+  const note = ix.backlinks(item.id).find((b) => b.kind === "embed" && ix.get(b.from)?.kind === "info")?.from ?? ix.parentsOf(item.id)[0];
   useEffect(() => {
     if (note) openItem(note, { replace: true });
-    openDrawing(item.id, { view: !!item.drawing?.count });
+    openDrawing(item.id);
   }, [item.id]);
   return <PagePlaceholder>{note ? t("drawing.loading") : titleOf(item, t)}</PagePlaceholder>;
 }

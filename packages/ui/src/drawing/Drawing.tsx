@@ -1,5 +1,5 @@
-// Drawings outside the full-screen editor: opening one, and its picture as a block in a text (read
-// only: a click opens it full screen to zoom and pan, "Bearbeiten" there to draw).
+// Drawings outside the full-screen editor: opening one, and its picture as a block in a text (a click
+// on it opens it full screen to draw).
 import { Suspense, lazy, memo, useEffect } from "react";
 import type { Repo } from "@obtion/sync";
 import type { Item } from "@obtion/core/model";
@@ -13,11 +13,12 @@ import { drawingSvg, forgetDrawingSvg } from "./scene";
 
 const DrawingEditor = lazy(() => import("./DrawingEditor"));
 
-const open = createStore<{ id: string; view: boolean } | null>(null);
+const open = createStore<{ id: string } | null>(null);
 
-/** `view`: to look at (zoom, pan); the editor's "Bearbeiten" switches to drawing. */
-export function openDrawing(id: string, opts: { view?: boolean } = {}) {
-  open.set({ id, view: !!opts.view });
+export function openDrawing(id: string) {
+  // keys go to the drawing, not to the note's text the click came from
+  if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  open.set({ id });
 }
 
 /** Called with a drawing's id when its full screen closes: pictures held back meanwhile draw then. */
@@ -48,7 +49,7 @@ export const DrawingHost = memo(function DrawingHost() {
   };
   return (
     <Suspense fallback={<Loading />}>
-      <DrawingEditor key={shown.id} id={shown.id} view={shown.view} onEdit={() => open.set({ ...shown, view: false })} onClose={close} />
+      <DrawingEditor key={shown.id} id={shown.id} onClose={close} />
     </Suspense>
   );
 });
@@ -59,8 +60,8 @@ function Loading() {
 }
 
 /** For texts (the editor and read-only Markdown): filled in by hydrateDrawings. */
-export function drawingEmbedHTML(item: Item, size?: number): string {
-  return `<figure class="embed-drawing" data-drawing="${escapeHtml(item.id)}" data-v="${item.updated}"${size ? ` style="max-width:${size}px"` : ""}><div class="embed-drawing-svg" role="button" tabindex="0" aria-label="${escapeHtml(tr("drawing.view"))}">${item.drawing?.count ? "" : `<span class="embed-drawing-empty">${escapeHtml(tr("drawing.empty"))}</span>`}</div>${item.title ? `<figcaption>${escapeHtml(item.title)}</figcaption>` : ""}</figure>`;
+export function drawingEmbedHTML(item: Item): string {
+  return `<figure class="embed-drawing" data-drawing="${escapeHtml(item.id)}" data-v="${item.updated}"><div class="embed-drawing-svg" role="button" tabindex="0" aria-label="${escapeHtml(tr("drawing.edit"))}">${item.drawing?.count ? "" : `<span class="embed-drawing-empty">${escapeHtml(tr("drawing.empty"))}</span>`}</div>${item.title ? `<figcaption>${escapeHtml(item.title)}</figcaption>` : ""}</figure>`;
 }
 
 /** Draws the drawings embedded in `root`; a click on one opens it to look at. */
@@ -75,7 +76,7 @@ export function hydrateDrawings(root: HTMLElement, repo: Repo = current, files =
     const show = (e: Event) => {
       e.preventDefault();
       e.stopPropagation();
-      openDrawing(id, { view: !!repo.get(id)?.drawing?.count });
+      openDrawing(id);
     };
     box.addEventListener("click", show);
     box.addEventListener("keydown", (e) => (e.key === "Enter" || e.key === " ") && show(e));
@@ -95,7 +96,13 @@ export function hydrateDrawings(root: HTMLElement, repo: Repo = current, files =
         return;
       }
       const now = repo.get(id);
-      void drawingSvg(id, repo.getDoc(id), now?.updated ?? item.updated, dark, files).then((svg) => svg && box.replaceChildren(svg));
+      void drawingSvg(id, repo.getDoc(id), now?.updated ?? item.updated, dark, files).then((svg) => {
+        if (!svg) return;
+        // full width; the height follows the drawing's proportions within the block's limits (styles.css)
+        const [, , w, h] = (svg.getAttribute("viewBox") ?? "").split(/\s+/).map(Number);
+        if (w && h) box.style.aspectRatio = `${w} / ${h}`;
+        box.replaceChildren(svg);
+      });
     };
     draw();
     if (!item.drawing.files.length) return;

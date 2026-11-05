@@ -178,15 +178,20 @@ async function pages(browser: import("playwright").Browser, serverName: string, 
       await menu.waitFor({ state: "detached" });
     }, { phone });
   if (serverName === "seeded" && !phone)
-    // a drawing made with "/" in a note: drawn on full screen, a block of the text, opened again from there
+    // a drawing made with "/" in a note: a block of the text, drawn on full screen after a click on it
     await check(page, label, "/#/i/ex-course", errors, async (p) => {
       await p.locator(".cm-line").first().click();
       await p.keyboard.press("Control+End");
       await p.keyboard.press("Enter");
       await p.keyboard.type("/zeichnung");
       await p.locator(".cm-slash-name", { hasText: "Zeichnung" }).first().click({ timeout: 3000 });
+      // a block in the text, opened by a click on it, not at once
+      const block = p.locator(".cm-embed .embed-drawing-svg");
+      if (!(await block.waitFor({ timeout: 5000 }).then(() => true, () => false))) return void failures.push(`${label}: no drawing block in the text`);
+      if (await p.locator(".drawing-full").count()) failures.push(`${label}: "/zeichnung" opens the drawing at once`);
+      await block.click();
       const canvas = p.locator(".drawing-full canvas.interactive");
-      if (!(await canvas.waitFor({ timeout: 20000 }).then(() => true, () => false))) return void failures.push(`${label}: the drawing does not open`);
+      if (!(await canvas.waitFor({ timeout: 20000 }).then(() => true, () => false))) return void failures.push(`${label}: a click on the block does not open the drawing`);
       const box = (await canvas.boundingBox())!;
       await p.keyboard.press("r");
       await p.mouse.move(box.x + 400, box.y + 300);
@@ -194,12 +199,8 @@ async function pages(browser: import("playwright").Browser, serverName: string, 
       await p.mouse.move(box.x + 600, box.y + 420, { steps: 5 });
       await p.mouse.up();
       await p.locator(".drawing-close").click();
-      const embed = p.locator(".cm-embed .embed-drawing svg");
-      if (!(await embed.waitFor({ timeout: 10000 }).then(() => true, () => false))) return void failures.push(`${label}: the drawing does not show in the note`);
+      if (!(await p.locator(".cm-embed .embed-drawing svg").waitFor({ timeout: 10000 }).then(() => true, () => false))) return void failures.push(`${label}: the drawing does not show in the note`);
       if (await p.getByText("Zeichnungen", { exact: true }).count()) failures.push(`${label}: the drawing is listed below the note`);
-      await p.locator(".cm-embed .embed-drawing-svg").click();
-      if (!(await p.locator(".drawing-full canvas.interactive").waitFor({ timeout: 10000 }).then(() => true, () => false))) return void failures.push(`${label}: a click on the drawing does not open it`);
-      await p.locator(".drawing-close").click();
     });
   if (serverName === "seeded") {
     // the open panel is a step in the history: Back closes it and stays on the page

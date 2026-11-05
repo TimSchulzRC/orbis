@@ -6,7 +6,7 @@ import { createPortal } from "react-dom";
 import { Excalidraw, MainMenu, WelcomeScreen, CaptureUpdateAction, reconcileElements, hashElementsVersion, useHandleLibrary } from "@excalidraw/excalidraw";
 import type { ExcalidrawImperativeAPI, BinaryFiles, LibraryItems, AppState } from "@excalidraw/excalidraw/types";
 import type { OrderedExcalidrawElement } from "@excalidraw/excalidraw/element/types";
-import { Pencil, X } from "lucide-react";
+import { X } from "lucide-react";
 import { DRAWING, DRAWING_FILES, DRAWING_STATE, type DrawingFile, type SceneElement, readElements, readScene, setDrawingFile, setDrawingState, writeElements } from "@obtion/core/drawing";
 import { touch } from "@obtion/core/model";
 import { useFiles } from "../hooks";
@@ -49,7 +49,7 @@ const library = {
  * Renders again only when its title, the theme or the language change: Excalidraw redraws its
  * whole interface on a render, so it must not follow every change in the workspace.
  */
-export default memo(function DrawingEditor({ id, view, onEdit, onClose }: { id: string; view: boolean; onEdit: () => void; onClose: () => void }) {
+export default memo(function DrawingEditor({ id, onClose }: { id: string; onClose: () => void }) {
   const repo = useContext(ScopeContext)?.repo ?? current;
   const files = useFiles();
   const { t, lang } = useT();
@@ -104,7 +104,7 @@ export default memo(function DrawingEditor({ id, view, onEdit, onClose }: { id: 
     clearTimeout(timer.current);
     timer.current = undefined;
     pendingSince.current = undefined;
-    if (!api || view || repo.readOnly) return;
+    if (!api || repo.readOnly) return;
     const elements = api.getSceneElementsIncludingDeleted() as unknown as SceneElement[];
     const state = api.getAppState() as unknown as Record<string, unknown>;
     write((d) => {
@@ -121,10 +121,7 @@ export default memo(function DrawingEditor({ id, view, onEdit, onClose }: { id: 
   const flushRef = useRef(flush);
   flushRef.current = flush;
 
-  const viewRef = useRef(view);
-  viewRef.current = view;
   const onChange = useCallback((elements: readonly OrderedExcalidrawElement[], state: AppState, all: BinaryFiles) => {
-    if (viewRef.current) return;
     // scrolling and zooming change nothing worth keeping
     const version = [hashElementsVersion(elements), Object.keys(all).length, state.viewBackgroundColor, state.gridModeEnabled, state.gridSize, state.gridStep].join(":");
     if (version === lastVersion.current) return;
@@ -188,13 +185,10 @@ export default memo(function DrawingEditor({ id, view, onEdit, onClose }: { id: 
   // The app's own shortcuts (⌘K, single keys on pages) stay off while drawing; Excalidraw listens on
   // the document, before the window.
   useEffect(() => {
-    const stop = (e: KeyboardEvent) => {
-      if (view && e.key === "Escape") onClose();
-      e.stopPropagation();
-    };
+    const stop = (e: KeyboardEvent) => e.stopPropagation();
     document.addEventListener("keydown", stop);
     return () => document.removeEventListener("keydown", stop);
-  }, [view]);
+  }, []);
 
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
@@ -218,14 +212,10 @@ export default memo(function DrawingEditor({ id, view, onEdit, onClose }: { id: 
     location.hash = url.hash;
   }, [close]);
 
-  /** Title, "Bearbeiten" and close. A phone's toolbar needs the whole width: there they sit in the bottom bar. */
+  /** Title and close. A phone's toolbar needs the whole width: there close sits in the bottom bar. */
   const topRight = useCallback((phone: boolean) => (
     <div className={phone ? "drawing-top drawing-top-phone" : "drawing-top"}>
-      {phone ? null : view ? (
-        <span className="drawing-title" title={title}>
-          {title || t("drawing.untitled")}
-        </span>
-      ) : (
+      {!phone && (
         <input
           key={title}
           className="drawing-title"
@@ -238,16 +228,11 @@ export default memo(function DrawingEditor({ id, view, onEdit, onClose }: { id: 
           onBlur={(e) => e.target.value !== title && repo.setTitle(id, e.target.value.trim())}
         />
       )}
-      {view && (
-        <button type="button" className={phone ? "drawing-button drawing-close" : "drawing-button"} onClick={onEdit} aria-label={t("drawing.edit")} title={t("drawing.edit")}>
-          <Pencil size={15} /> {!phone && t("drawing.edit")}
-        </button>
-      )}
       <button type="button" className="drawing-button drawing-close" onClick={close} aria-label={t("drawing.close")} title={t("drawing.close")}>
         <X size={18} />
       </button>
     </div>
-  ), [view, title, t, repo, id, onEdit, close]);
+  ), [title, t, repo, id, close]);
   const renderTopRightUI = useCallback((phone: boolean) => (phone ? root && createPortal(topRight(true), root) : topRight(false)), [root, topRight]);
 
   const menus = useMemo(
@@ -299,7 +284,6 @@ export default memo(function DrawingEditor({ id, view, onEdit, onClose }: { id: 
         onChange={onChange}
         theme={dark ? "dark" : "light"}
         langCode={LANG_CODE[lang] ?? "en"}
-        viewModeEnabled={view}
         name={title || t("drawing.untitled")}
         handleKeyboardGlobally
         autoFocus

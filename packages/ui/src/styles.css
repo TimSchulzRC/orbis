@@ -1126,24 +1126,30 @@ body.cm-dragging * {
   margin: 0;
 }
 :is(.md, .cm-embed) .embed-drawing-svg {
-  width: fit-content;
-  max-width: 100%;
-  min-height: 3rem;
+  /* always the text's width and about this tall; the drawing's proportions move it within the limits */
+  display: flex;
+  width: 100%;
+  aspect-ratio: 2 / 1;
+  min-height: 240px;
+  max-height: 440px;
+  padding: 12px;
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--card);
-  cursor: zoom-in;
+  cursor: pointer;
 }
 :is(.md, .cm-embed) .embed-drawing-svg svg {
   display: block;
-  max-width: 100%;
-  height: auto;
-  margin: 0 auto;
+  width: 100%;
+  height: 100%;
+}
+.cm-embed:has(> .embed-drawing) {
+  margin: 4px 0 8px;
 }
 :is(.md, .cm-embed) .embed-drawing-empty {
   display: flex;
-  height: 6rem;
+  flex: 1;
   align-items: center;
   justify-content: center;
   font-size: 0.85em;
