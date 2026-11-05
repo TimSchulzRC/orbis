@@ -15,8 +15,7 @@ import { itemHref, useIndex, useStoredSet } from "../hooks";
 import { useT, titleOf } from "../i18n";
 import { Card, Button, SectionTitle, SectionAction, Popover, MenuItem } from "./primitives";
 import { DueLabel, ItemIcon, RelTime, TypeGlyph } from "./item-look";
-import { DRAWING_ICON, NOTE_ICON } from "./icons";
-import { createDrawing } from "../drawing/Drawing";
+import { NOTE_ICON } from "./icons";
 import { ProgressCount } from "./progress";
 import { RowStatus } from "./Row";
 import { agentLabel, agentName } from "./AgentNotice";
@@ -55,9 +54,9 @@ function AddRow({ label, onAdd, autoFocus, onDone }: { label: string; onAdd: (ti
   );
 }
 
-/** Which group of "Darunter" an entry belongs to: its type, notes (no type), drawings or files. */
+/** Which group of "Darunter" an entry belongs to: its type, notes (no type) or files. */
 function groupOf(x: Item): string {
-  return x.kind === "datei" ? "files" : x.kind === "zeichnung" ? "drawings" : (x.type ?? "notes");
+  return x.kind === "datei" ? "files" : (x.type ?? "notes");
 }
 
 /** Open ones first (running before not started), then by due date and title. */
@@ -82,13 +81,14 @@ export function Below({ item }: { item: Item }) {
   const cmp = order(ix);
   const done = (x: Item) => isDone(x, ix.schemaOf(x));
   // done ones stay, at the end of their group
-  const below = (id: string) => ix.items(ix.childrenOf(id)).filter((c) => !c.deleted);
+  // drawings are blocks in the text above, not entries of their own
+  const below = (id: string) => ix.items(ix.childrenOf(id)).filter((c) => !c.deleted && c.kind !== "zeichnung");
   const direct = below(item.id);
   const groups = new Map<string, Item[]>();
   for (const c of direct) (groups.get(groupOf(c)) ?? groups.set(groupOf(c), []).get(groupOf(c))!).push(c);
-  // types by name, then notes, drawings, files
-  const label = (g: string) => (g === "notes" ? t("below.untyped") : g === "files" ? t("below.files") : g === "drawings" ? t("below.drawings") : ix.typePlural(g));
-  const rankOf = (g: string) => (g === "files" ? 3 : g === "drawings" ? 2 : g === "notes" ? 1 : 0);
+  // types by name, then notes, then files
+  const label = (g: string) => (g === "notes" ? t("below.untyped") : g === "files" ? t("below.files") : ix.typePlural(g));
+  const rankOf = (g: string) => (g === "files" ? 2 : g === "notes" ? 1 : 0);
   const byGroup = (a: string, b: string) => rankOf(a) - rankOf(b) || label(a).localeCompare(label(b));
   const keys = [...groups.keys()].sort(byGroup);
   const create = (title: string, type: string | null) => repo.create({ title, parents: [item.id], ...(type ? { type } : {}) });
@@ -144,9 +144,6 @@ export function Below({ item }: { item: Item }) {
               {x.schema.name}
             </MenuItem>
           ))}
-          <MenuItem icon={<DRAWING_ICON size={14} style={{ color: "var(--t-drawing)" }} />} onClick={() => (close(), createDrawing({ parents: [item.id] }))}>
-            {t("kind.drawing")}
-          </MenuItem>
         </>
       )}
     </Popover>
@@ -180,7 +177,7 @@ export function Below({ item }: { item: Item }) {
               .get(g)!
               .sort(cmp)
               .map((x) => row(x, 0, new Set([item.id])))}
-            {g !== "files" && g !== "drawings" && (
+            {g !== "files" && (
               <div className="border-t border-line px-1">
                 <AddRow label={typeName(g === "notes" ? null : g)} onAdd={(title) => create(title, g === "notes" ? null : g)} />
               </div>

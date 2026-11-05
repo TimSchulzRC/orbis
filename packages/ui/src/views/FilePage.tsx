@@ -3,7 +3,7 @@ import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
 import { useEffect, useState } from "react";
 import { ArrowRightLeft, Download, Trash2, Replace } from "lucide-react";
-import { type Item, holdsItems, setFileMeta } from "@obtion/core/model";
+import { type Item, setFileMeta } from "@obtion/core/model";
 import { fmtBytes, fmtDate, fmtDuration } from "@obtion/core/i18n";
 import { useIndex, leavePage, useDocumentTitle, useFiles, useRepo } from "../hooks";
 import { useT, titleOf } from "../i18n";
@@ -146,7 +146,7 @@ export function FilePage({ item }: { item: Item }) {
       {picking && (
         <ItemPicker
           title={parents.length ? t("place.changeTitle") : t("place.add")}
-          exclude={(x) => x.id === item.id || parents.includes(x.id) || !holdsItems(x)}
+          exclude={(x) => x.id === item.id || parents.includes(x.id) || x.kind !== "info"}
           onPick={(p) => {
             repo.addParent(item.id, p);
             setPicking(false);

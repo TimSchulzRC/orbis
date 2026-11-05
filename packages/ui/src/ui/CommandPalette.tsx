@@ -16,7 +16,6 @@ import { cn } from "../lib/utils";
 import { modName } from "../lib/platform";
 import { shortPath } from "./Row";
 import { createAndOpen } from "../actions";
-import { createDrawing } from "../drawing/Drawing";
 import { Button } from "./primitives";
 import { openSettings } from "./settings-open";
 import { openNewType } from "./type-edit";
@@ -68,7 +67,6 @@ export function CommandPalette({ query: initial = "", onClose }: { query?: strin
     [t("palette.cmd.sortInbox"), () => openShelf()],
     [t("nav.settings"), openSettings],
     [t("palette.cmd.newType"), () => openNewType(captureIn)],
-    [t("palette.cmd.newDrawing"), () => createDrawing({}, repo, captureIn)],
     [t("palette.cmd.language"), () => setLang(getLang() === "de" ? "en" : "de")],
     ...(["system", "light", "dark"] as const).map((v): [string, () => void] => [t("palette.cmd.theme", { name: t("theme." + v) }), () => setTheme(v)]),
   ];

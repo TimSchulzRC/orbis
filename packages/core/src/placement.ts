@@ -1,6 +1,6 @@
 // Done items are hidden in the sidebar but stay in "Darunter", the type's page and search. Pinning counts as a place, so pinned
 // items are never in the inbox.
-import { type Item, META_TYPE, holdsItems, isContent } from "./model";
+import { type Item, META_TYPE, isContent } from "./model";
 import type { Index } from "./graph";
 import { isDone } from "./traits";
 import { matches } from "./query";
@@ -12,7 +12,8 @@ export function hasPlace(item: Item, ix: Index): boolean {
 }
 
 export function isInInbox(item: Item, ix: Index): boolean {
-  if (!isContent(item) || item.type === META_TYPE) return false;
+  // a drawing is part of the note it is drawn in, never sorted on its own
+  if (!isContent(item) || item.type === META_TYPE || item.kind === "zeichnung") return false;
   return matches(item, { inbox: true }, { ix });
 }
 
@@ -26,7 +27,7 @@ export function laterItems(ix: Index, now = Date.now()): Item[] {
 }
 
 export function canPlaceIn(item: Item, target: Item, ix: Index): boolean {
-  return holdsItems(target) && !item.parents[target.id] && !ix.wouldCycle(item.id, target.id);
+  return target.kind === "info" && !item.parents[target.id] && !ix.wouldCycle(item.id, target.id);
 }
 
 export function sidebarRoots(ix: Index): Item[] {
@@ -40,5 +41,5 @@ export function sidebarChildren(id: string, ix: Index, keep: string[] = []): Ite
   return ix
     .childrenOf(id)
     .map((c) => ix.get(c)!)
-    .filter((c) => keep.includes(c.id) || !isDone(c, ix.schemaOf(c)));
+    .filter((c) => c.kind !== "zeichnung" && (keep.includes(c.id) || !isDone(c, ix.schemaOf(c))));
 }

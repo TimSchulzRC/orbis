@@ -1122,17 +1122,12 @@ body.cm-dragging * {
   font: 600 22px var(--ui-font);
   color: var(--t-drawing);
 }
-.drawing-svg svg {
-  display: block;
-  width: 100%;
-  height: auto;
-  max-height: 70vh;
-}
 :is(.md, .cm-embed) .embed-drawing {
   margin: 0;
 }
 :is(.md, .cm-embed) .embed-drawing-svg {
-  max-width: min(100%, 720px);
+  width: fit-content;
+  max-width: 100%;
   min-height: 3rem;
   overflow: hidden;
   border: 1px solid var(--border);
@@ -1142,9 +1137,9 @@ body.cm-dragging * {
 }
 :is(.md, .cm-embed) .embed-drawing-svg svg {
   display: block;
-  width: 100%;
+  max-width: 100%;
   height: auto;
-  max-height: 480px;
+  margin: 0 auto;
 }
 :is(.md, .cm-embed) .embed-drawing-empty {
   display: flex;
@@ -1159,9 +1154,6 @@ body.cm-dragging * {
   margin-top: 0.3em;
   font-size: 0.8em;
   color: var(--muted-foreground);
-}
-:is(.md, .cm-embed) .embed-drawing figcaption a {
-  color: inherit;
 }
 /* on a phone Excalidraw puts this next to its toolbar, which needs the width; the bottom bar is free in the middle */
 .drawing-top-phone {

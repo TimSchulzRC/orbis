@@ -12,7 +12,6 @@ import { Button, MenuItem, Popover, IconButton } from "./primitives";
 import { TypeGlyph } from "./item-look";
 import { cn } from "../lib/utils";
 import { ItemPicker } from "./Picker";
-import { holdsItems } from "@obtion/core/model";
 
 type Step = "root" | "type" | "status" | "due" | "tag";
 type Ctx = { ix: Index; t: T; lang: Lang };
@@ -95,7 +94,6 @@ function CondPicker({ pick, onUnder, context }: { pick: (c: Cond) => void; onUnd
       <MenuItem onClick={() => setStep("tag")}>{t("query.cond.tag")}</MenuItem>
       <MenuItem onClick={() => pick({ inbox: true })}>{t("query.cond.inbox")}</MenuItem>
       <MenuItem onClick={() => pick({ file: true })}>{t("query.cond.file")}</MenuItem>
-      <MenuItem onClick={() => pick({ drawing: true })}>{t("query.cond.drawing")}</MenuItem>
     </>
   );
 }
@@ -148,7 +146,7 @@ export function AddFilter({ onAdd, trigger, context }: { onAdd: (c: Cond) => voi
       {picking && (
         <ItemPicker
           title={t("query.cond.under")}
-          filter={holdsItems}
+          filter={(x) => x.kind === "info"}
           onPick={(id) => (onAdd({ under: { id } }), setPicking(false))}
           onClose={() => setPicking(false)}
         />
@@ -289,7 +287,7 @@ export function QueryEditor({ def, onChange, autoFocus, context, bare }: { def: 
       {picking && (
         <ItemPicker
           title={t("query.cond.under")}
-          filter={holdsItems}
+          filter={(x) => x.kind === "info"}
           onPick={(id) => {
             picking({ under: { id } });
             setPicking(null);

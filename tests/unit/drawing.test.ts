@@ -1,9 +1,9 @@
 import { test, expect } from "bun:test";
 import { MemRepo, fork, sync } from "../support/helpers";
 import { type SceneElement, drawingInfo, excalidrawFile, readElements, readScene, setDrawingFile, setDrawingState, writeElements } from "@obtion/core/drawing";
-import { holdsItems, isContent } from "@obtion/core/model";
-import { canPlaceIn, isInInbox } from "@obtion/core/placement";
-import { parseQuery, printQuery, runQuery } from "@obtion/core/query";
+import { isContent } from "@obtion/core/model";
+import { canPlaceIn, isInInbox, sidebarChildren } from "@obtion/core/placement";
+import { parseQuery, runQuery } from "@obtion/core/query";
 import { createIndex, indexRecord, searchIds } from "@obtion/core/search";
 
 const el = (id: string, more: Partial<SceneElement> = {}): SceneElement => ({ id, type: "rectangle", version: 1, versionNonce: 10, index: "a0", x: 0, y: 0, ...more });
@@ -83,31 +83,25 @@ test("two devices changing one element at once: the newer version wins on both, 
   }
 });
 
-test("a drawing is placed, nested and found like a note", () => {
+test("a drawing is a block of its note: kept below it, never sorted or listed on its own, found by its text", () => {
   const m = new MemRepo();
-  const project = m.add({ title: "Projekt" });
-  const loose = m.add({ kind: "zeichnung", title: "Lose Skizze" });
-  const placed = m.add({ kind: "zeichnung", title: "Ablauf", parents: [project] });
-  m.change(placed, (d) => writeElements(d, [text("t", "Freigabe durch Kunde", "a0")]));
-  const note = m.add({ title: "Detail", parents: [placed] });
+  const note = m.add({ title: "Architektur", pinned: "V" });
+  const drawing = m.add({ kind: "zeichnung", title: "", parents: [note] });
+  m.change(note, (d) => d.getText("body").insert(0, `Überblick\n![[${drawing}]]\n`));
+  m.change(drawing, (d) => writeElements(d, [text("t", "Freigabe durch Kunde", "a0")]));
+  const loose = m.add({ kind: "zeichnung", title: "" });
+  const other = m.add({ title: "Notiz" });
   const ix = m.index();
-  const drawing = ix.get(placed)!;
-  expect(isContent(drawing) && holdsItems(drawing)).toBe(true);
-  expect(ix.childrenOf(placed)).toEqual([note]);
-  expect(ix.childrenOf(project)).toEqual([placed]);
-  // a drawing can hold other entries, like a note
-  expect(canPlaceIn(ix.get(loose)!, drawing, ix)).toBe(true);
-  expect(canPlaceIn(ix.get(project)!, drawing, ix)).toBe(false); // a cycle
-  // without a place it waits in the inbox, like a note
-  expect(isInInbox(ix.get(loose)!, ix)).toBe(true);
-  expect(isInInbox(drawing, ix)).toBe(false);
+  expect(isContent(ix.get(drawing)!)).toBe(true);
+  // kept below the note, so it goes to the trash with it
+  expect(ix.parentsOf(drawing)).toEqual([note]);
+  // not in the inbox, not in the sidebar, not in lists, nothing goes below it
+  for (const d of [drawing, loose]) expect(isInInbox(ix.get(d)!, ix)).toBe(false);
+  expect(sidebarChildren(note, ix)).toEqual([]);
+  expect(runQuery(parseQuery("", ix).def, { ix }).items.map((i) => i.id)).not.toContain(drawing);
+  expect(canPlaceIn(ix.get(other)!, ix.get(drawing)!, ix)).toBe(false);
   // its text is searchable
   const search = createIndex();
   for (const i of ix.live) indexRecord(search, i);
-  expect(searchIds(search, "freigabe", 5)).toEqual([placed]);
-  // "zeichnung" / "drawing" in queries
-  const de = parseQuery("zeichnung", ix);
-  expect(de.def).toEqual(parseQuery("drawing", ix).def);
-  expect(printQuery(de.def, "de", ix)).toBe("zeichnung");
-  expect(runQuery(de.def, { ix }).items.map((i) => i.title).sort()).toEqual(["Ablauf", "Lose Skizze"]);
+  expect(searchIds(search, "freigabe", 5)).toEqual([drawing]);
 });

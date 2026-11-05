@@ -9,7 +9,7 @@ import { isInInbox } from "@obtion/core/placement";
 import { wouldBeInInbox } from "@obtion/core/typeops";
 import { onlyBelow } from "@obtion/core/trash";
 import { hasUpdates, progressSpec } from "@obtion/core/traits";
-import { useRepo, useIndex, itemHref, leavePage, setParams, showTitle, useDocumentTitle } from "../hooks";
+import { useRepo, useIndex, itemHref, leavePage, openItem, setParams, showTitle, useDocumentTitle } from "../hooks";
 import { repo } from "../repo";
 import { useT, tr, getLang, titleOf } from "../i18n";
 import { Editor, insertFilesAtCursor } from "../ui/Editor";
@@ -25,8 +25,8 @@ import { PlacePicker } from "../ui/Picker";
 import { pluralOf } from "@obtion/core/plural";
 import { queryBlocks, insertQueryBlock } from "../ui/QueryBlock";
 import { FilePage } from "./FilePage";
-import { DrawingPage } from "./DrawingPage";
-import { createDrawing } from "../drawing/Drawing";
+import { openDrawing } from "../drawing/Drawing";
+import { insertDrawing } from "../ui/editor/slash";
 import { DRAWING_ICON } from "../ui/icons";
 import { TitleField } from "../ui/TitleField";
 import { HistoryDialog } from "../ui/History";
@@ -63,9 +63,25 @@ export function ItemPage({ id, isNew }: { id: string; isNew: boolean }) {
     return <PagePlaceholder>{scoped.status.synced ? t("item.missing") : t("item.loading")}</PagePlaceholder>;
   if (item.kind === "op") return <PagePlaceholder>{item.title}</PagePlaceholder>;
   if (item.kind === "datei") return <FilePage key={id} item={item} />;
-  if (item.kind === "zeichnung") return <DrawingPage key={id} item={item} />;
+  if (item.kind === "zeichnung") return <DrawingInNote key={id} item={item} />;
   if (item.type === META_TYPE) return <TypePage key={id} item={item} />;
   return <InfoView key={id} item={item} isNew={isNew} />;
+}
+
+/**
+ * A drawing has no page: it is a block in a note. A link to it (search, an agent) opens that note,
+ * the one whose text embeds it or else the one it is kept under, and the drawing over it.
+ */
+function DrawingInNote({ item }: { item: Item }) {
+  const scoped = useRepo();
+  const { t } = useT();
+  const ix = scoped.index();
+  const note = ix.backlinks(item.id).find((b) => b.kind !== "rel" && ix.get(b.from)?.kind === "info")?.from ?? ix.parentsOf(item.id)[0];
+  useEffect(() => {
+    if (note) openItem(note, { replace: true });
+    openDrawing(item.id, { view: !!item.drawing?.count });
+  }, [item.id]);
+  return <PagePlaceholder>{note ? t("drawing.loading") : titleOf(item, t)}</PagePlaceholder>;
 }
 
 const openItems = new Set<string>();
@@ -124,6 +140,11 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
             {t("editor.addFile")}
           </MenuItem>
           {view && (
+            <MenuItem icon={<DRAWING_ICON size={14} />} onClick={() => (close(), insertDrawing(view))}>
+              {t("drawing.insert")}
+            </MenuItem>
+          )}
+          {view && (
             <MenuItem icon={<ListFilter size={14} />} onClick={() => (close(), insertQueryBlock(view))}>
               {t("item.insertQuery")}
             </MenuItem>
@@ -133,9 +154,6 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
           </MenuItem>
           <MenuItem icon={<FilePlus size={14} />} onClick={() => (close(), createAndOpen({ parents: [item.id] }))}>
             {t("item.newBelow")}
-          </MenuItem>
-          <MenuItem icon={<DRAWING_ICON size={14} />} onClick={() => (close(), createDrawing({ parents: [item.id] }))}>
-            {t("drawing.newBelow")}
           </MenuItem>
           <MenuItem icon={<History size={14} />} onClick={() => (close(), setHistory(true))}>
             {t("item.history")}

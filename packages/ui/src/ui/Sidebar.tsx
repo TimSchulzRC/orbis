@@ -16,8 +16,6 @@ import { cn, moveInArray } from "../lib/utils";
 import { shortcut } from "../lib/platform";
 import { StatusButton } from "./StatusButton";
 import { createAndOpen } from "../actions";
-import { createDrawing } from "../drawing/Drawing";
-import { DRAWING_ICON } from "./icons";
 import { DeleteDialog, deleteOrAsk } from "../views/ItemPage";
 import { NewSpaceDialog, SpaceScope, SpaceSelector, moveTo } from "./Spaces";
 import { KEYS } from "./storage";
@@ -293,7 +291,6 @@ export function SpaceTree({ space, touch }: { space: Space; touch?: boolean }) {
             <>
               <MenuItem icon={<Settings size={14} />} onClick={() => (close(), openSpaceSettings(space.id))}>{t("space.settings")}</MenuItem>
               <MenuItem icon={<Waypoints size={14} />} onClick={() => (close(), go("/graph"))}>{t("nav.graph")}</MenuItem>
-              {ready && <MenuItem icon={<DRAWING_ICON size={14} />} onClick={() => (close(), createDrawing({ pinned: keyBetween(roots.at(-1)?.pinned ?? null, null) }, repo, space.id))}>{t("drawing.newPinned")}</MenuItem>}
               {shown.length > 1 && (
                 <>
                   <div className="my-1 border-t border-line" />
@@ -639,7 +636,6 @@ function TreeNode({
           {(close) => (
             <>
               {isType && <MenuItem onClick={() => (close(), editType(item.id, space))}>{t("type.edit")}</MenuItem>}
-              {!isType && <MenuItem onClick={() => (close(), isOpen || toggle(key, depth), createDrawing({ parents: [item.id] }, repo, space))}>{t("drawing.newBelow")}</MenuItem>}
               <MenuItem onClick={() => (close(), repo.pin(item.id, !item.pinned))}>{item.pinned ? t("item.unpin") : t("item.pin")}</MenuItem>
               {parent && secondary && <MenuItem onClick={() => (close(), repo.setHome(item.id, parent))}>{t("place.makeHome")}</MenuItem>}
               {/* types are deleted on their page, with the preview of what becomes of the values */}

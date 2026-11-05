@@ -87,7 +87,7 @@ async function renderSvg(doc: Y.Doc, dark: boolean, files: DeviceFiles): Promise
     files: Object.fromEntries(images.map((f) => [f.id, f])),
     exportPadding: 16,
   });
-  svg.removeAttribute("width");
+  // its own width, shrunk to fit (styles.css); the height follows
   svg.removeAttribute("height");
   return { svg, complete: images.length >= wanted.size };
 }

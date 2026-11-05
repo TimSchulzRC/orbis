@@ -1,8 +1,8 @@
 // The data model shared by server, devices and agents. Every item is one Yjs document (guid = item id).
 // Kinds: "info" (a type is an info of type META_TYPE plus a `schema` map), "datei" (metadata only,
-// content on the server by SHA-256), "zeichnung" (a drawing: placed and linked like an info, its
-// content an Excalidraw scene, see drawing.ts), "op" (a reversible bulk operation), "settings" (the
-// one shared settings doc). Documents of the former kind "sammlung" are ignored.
+// content on the server by SHA-256), "zeichnung" (a drawing: a block in a note, kept as a document
+// of its own below that note, its content an Excalidraw scene, see drawing.ts), "op" (a reversible
+// bulk operation), "settings" (the one shared settings doc). Documents of the former kind "sammlung" are ignored.
 //
 // Top-level Yjs types of a document:
 //   meta     Y.Map   scalars: kind, title, type, home, pinned, created, updated, deleted, later …
@@ -875,11 +875,6 @@ export function optionNames(p: PropDef, v: Value): string[] {
 /** Not deleted, and an information, file or drawing rather than an op or the settings. */
 export function isContent(i: Item) {
   return !i.deleted && (i.kind === "info" || i.kind === "datei" || i.kind === "zeichnung");
-}
-
-/** Items that are pages with a place for others below them: informations and drawings, not files. */
-export function holdsItems(i: Pick<Item, "kind">) {
-  return i.kind === "info" || i.kind === "zeichnung";
 }
 
 /**
