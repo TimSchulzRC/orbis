@@ -21,12 +21,13 @@ const serverFiles = {
   url: async () => undefined,
   localUrl: async () => undefined,
   missingKey: () => "file.missing",
+  wholeText: async () => undefined,
   serverUrl: (hash: string, name?: string, download = false) => `https://server.test/api/blobs/${hash}?name=${name ?? ""}${download ? "&download=1" : ""}`,
 } as unknown as DeviceFiles;
 
-async function show(meta: Partial<FileMeta> & { name: string }) {
+async function show(meta: Partial<FileMeta> & { name: string }, files: DeviceFiles = serverFiles) {
   const repo: Repo = await workspace(false);
-  setFiles(serverFiles);
+  setFiles(files);
   const id = newId();
   repo.change(id, (doc) => {
     initItem(doc, { kind: "datei", title: meta.name });
@@ -79,4 +80,13 @@ test("long text cut on the server says so", async () => {
   await show({ name: "gross.csv", text: "a;b\nc;d\n…", extracted: "x" });
   await expect.element(page.getByText("Gekürzt – der ganze Inhalt steckt im Download.")).toBeVisible();
   expect(page.getByTestId("file-text").element().textContent).toBe("a;b\nc;d");
+});
+
+test("the facts carry the start of a long text: the page shows the whole one from the server", async () => {
+  const asked: string[] = [];
+  const whole = { ...serverFiles, wholeText: async (h: string) => (asked.push(h), "Anfang\nMitte\nEnde") } as unknown as DeviceFiles;
+  await show({ name: "lang.txt", text: "Anfang\n…", extracted: "x" }, whole);
+  await expect.poll(() => page.getByTestId("file-text").element().textContent).toBe("Anfang\nMitte\nEnde");
+  expect(asked).toEqual(["a".repeat(64)]);
+  expect(document.body.textContent).not.toContain("Gekürzt");
 });

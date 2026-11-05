@@ -1,5 +1,5 @@
-// Text from file contents, for search and for agents (`get`). Stored in the file's `text`, like
-// the text of a PDF. No programs and no extra packages: Office files and ZIPs are read with the
+// Text from file contents, for search and for agents (`get`). Kept beside the content on the
+// server; the file's `text` (synced) holds only its start. No programs and no extra packages: Office files and ZIPs are read with the
 // ZIP reader below (zlib for the compressed parts), text files are decoded as they are.
 //
 //   Word, PowerPoint, Excel (docx, pptx, xlsx) and OpenDocument (odt, ods, odp): their text
@@ -10,8 +10,13 @@
 //   HTML without its tags
 import { inflateRawSync } from "node:zlib";
 
-/** Stored text, in characters (it syncs to every device with the file's facts). */
+/** Text kept per file, in characters (on the server, beside the content: Blobs.text). */
 export const TEXT_MAX = 100_000;
+/** The start of it in the file's facts, which sync to every device (preview, offline search). */
+export const FACTS_TEXT = 4_000;
+
+/** What of a text goes into the facts; a cut one ends in "\n…" like a text cut at TEXT_MAX. */
+export const factsText = (text: string) => (text.length > FACTS_TEXT ? text.slice(0, FACTS_TEXT).trimEnd() + "\n…" : text);
 /** What is read of a text file. */
 const TEXT_READ = 1024 * 1024;
 /** One part of an Office file or an embedded file, unpacked. */

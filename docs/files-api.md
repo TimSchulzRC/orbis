@@ -52,7 +52,7 @@ Always a download (`Content-Disposition: attachment` with the file name). Header
 
 ## Text
 
-The server reads the text of every file it can (PDF incl. embedded Factur-X/ZUGFeRD/XRechnung XML, Word, Excel, PowerPoint, OpenDocument, text and code files in UTF-8, UTF-16 or Windows-1252, HTML as text, a ZIP's list of entries, Outlook `.msg` roughly). It is searchable and shown by MCP `get`, at most 100,000 characters per file. Files from before are read once when the workspace opens.
+The server reads the text of every file it can (PDF incl. embedded Factur-X/ZUGFeRD/XRechnung XML, Word, Excel, PowerPoint, OpenDocument, text and code files in UTF-8, UTF-16 or Windows-1252, HTML as text, a ZIP's list of entries, Outlook `.msg` roughly). It is searchable and shown by MCP `get`, at most 100,000 characters per file. The whole text stays on the server beside the content; the file's facts, which sync to every device, carry only its first 4,000 characters (preview and offline search). The app loads the rest on the file's page. Files from before are read once when the workspace opens; texts of older versions move out of the facts then.
 
 ## Serving in the browser
 

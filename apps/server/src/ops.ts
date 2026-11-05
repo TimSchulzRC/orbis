@@ -553,7 +553,7 @@ export class Ops {
       // a text read from another content (replaced, undone) is not shown; it is read anew
       const reading = !!f.hash && f.extracted !== extractMark(f.hash) && f.filetype !== "bild" && f.filetype !== "audio" && f.filetype !== "video" && !!this.blobs?.has(f.hash);
       if (reading) out.text_note = "The server is still reading this file's text; get it again in a moment.";
-      else if (f.text && opts.include_body !== false) this.readText(out, "text", f.text, opts);
+      else if (f.text && opts.include_body !== false) this.readText(out, "text", this.blobs?.text(f) ?? f.text, opts);
     }
     const refs = [...new Set([...ix.textLinks(i).map((l) => l.to), ...i.refs])].map((x) => ix.get(x)?.title).filter(Boolean);
     if (refs.length) out.refs = refs;
@@ -667,7 +667,7 @@ export class Ops {
       .filter((h): h is { i: Item; terms: string[] } => !!h.i && h.i.type !== META_TYPE)
       .slice(0, limit)
       .map(({ i, terms }) => {
-        const e = q.trim() ? excerpt(i.body || i.file?.text || "", q, 160, terms) : undefined;
+        const e = q.trim() ? excerpt(i.body || (i.file && this.blobs?.text(i.file)) || i.file?.text || "", q, 160, terms) : undefined;
         return { item: i, snippet: e?.text || undefined, heading: e?.heading };
       });
   }

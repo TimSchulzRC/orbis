@@ -5,7 +5,7 @@ import { Database } from "bun:sqlite";
 import * as Y from "yjs";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { type Item, type ItemInit, type UpdateEntry, PERSONAL, SETTINGS_ID, areaOf, initItem, isContent, metaMap, newId, readItem } from "@obtion/core/model";
+import { type FileMeta, type Item, type ItemInit, type UpdateEntry, PERSONAL, SETTINGS_ID, areaOf, initItem, isContent, metaMap, newId, readItem } from "@obtion/core/model";
 import { sameValue } from "@obtion/core/equal";
 import type { Lang } from "@obtion/core/i18n";
 import { Index } from "@obtion/core/graph";
@@ -50,6 +50,8 @@ export class Store {
   private areas = new Map<string, string>();
   records = new Map<string, Item>();
   searchIndex: SearchIndex = createIndex();
+  /** A file's whole text where it is kept apart from its facts (Blobs.text); the search reads that. */
+  fileText?: (f: FileMeta) => string | undefined;
   seq = 0;
   lastUid = "";
   private listeners = new Set<Listener>();
@@ -105,7 +107,17 @@ export class Store {
       if (rec) this.records.set(id, rec);
     }
     resolveCascade(this.records);
-    for (const rec of this.records.values()) indexRecord(this.searchIndex, rec);
+    for (const rec of this.records.values()) this.indexForSearch(rec);
+  }
+
+  private indexForSearch(rec: Item) {
+    const text = rec.file && this.fileText?.(rec.file);
+    indexRecord(this.searchIndex, text ? { ...rec, file: { ...rec.file!, text } } : rec);
+  }
+
+  /** After `fileText` is set: files are searched by their whole text. */
+  reindexFiles() {
+    for (const rec of this.records.values()) if (rec.file) this.indexForSearch(rec);
   }
 
   /** For passes over all documents. Docs not in memory are read for the caller and not kept. */
@@ -321,7 +333,7 @@ export class Store {
     resolveCascade(this.records);
     for (const id of ids) {
       const rec = this.records.get(id);
-      if (rec) indexRecord(this.searchIndex, rec);
+      if (rec) this.indexForSearch(rec);
     }
     this._ix = null;
   }
@@ -386,7 +398,7 @@ export class Store {
     for (const [id, was] of viaBefore) {
       const rec = this.records.get(id)!;
       if (prevs.has(id) || rec.deleted === was) continue;
-      indexRecord(this.searchIndex, rec);
+      this.indexForSearch(rec);
       changed.push(rec);
     }
     this.db.transaction(() => {
@@ -396,7 +408,7 @@ export class Store {
         if (!prevs.has(id)) continue;
         const prev = prevs.get(id);
         const next = this.records.get(id)!;
-        indexRecord(this.searchIndex, next);
+        this.indexForSearch(next);
         changed.push(next);
         const origin = [...p.origins].join(", ");
         const ts = Date.now();

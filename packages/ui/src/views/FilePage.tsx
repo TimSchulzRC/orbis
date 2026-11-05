@@ -134,7 +134,7 @@ export function FilePage({ item }: { item: Item }) {
       {file.filetype === "pdf" && file.text && (
         <details className="mt-3 rounded-xl border border-line bg-surface-2">
           <summary className="cursor-pointer px-4 py-2.5 text-[13px] text-muted-foreground">{t("file.extracted")}</summary>
-          <TextBlock text={file.text} mono={false} />
+          <TextBlock text={file.text} hash={file.hash} mono={false} />
         </details>
       )}
       <Textarea
@@ -184,13 +184,30 @@ function FileText({ file: f, missing }: { file: FileMeta; missing: boolean }) {
   return (
     <div>
       <div className="border-b border-line px-4 py-2 text-[13px] text-muted-foreground">{t(extracted ? "file.extracted" : "file.content")}</div>
-      <TextBlock text={f.text} mono={!PROSE.test(f.name)} />
+      <TextBlock text={f.text} hash={f.hash} mono={!PROSE.test(f.name)} />
     </div>
   );
 }
 
-function TextBlock({ text, mono }: { text: string; mono: boolean }) {
+/** The facts carry the start of a long text ("…" at the end); the whole one comes from the server. */
+function useWholeText(text: string, hash: string): string {
+  const files = useFiles();
+  const [whole, setWhole] = useState<{ hash: string; text: string }>();
+  const cut = text.endsWith("\n…");
+  useEffect(() => {
+    if (!cut) return;
+    let alive = true;
+    void files.wholeText(hash).then((w) => alive && w && setWhole({ hash, text: w }));
+    return () => {
+      alive = false;
+    };
+  }, [hash, cut]);
+  return whole?.hash === hash ? whole.text : text;
+}
+
+function TextBlock({ text: start, hash, mono }: { text: string; hash: string; mono: boolean }) {
   const { t } = useT();
+  const text = useWholeText(start, hash);
   const cut = text.endsWith("\n…");
   return (
     <>

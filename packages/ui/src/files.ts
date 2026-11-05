@@ -281,6 +281,12 @@ export class DeviceFiles {
     return `${this.link.base}/api/blobs/${hash}?${q}`;
   }
 
+  /** A file's whole text; its facts carry only the start of a long one. Undefined offline. */
+  async wholeText(hash: string): Promise<string | undefined> {
+    const res = await fetch(`${this.link.base}/api/texts/${hash}`, { headers: this.auth }).catch(() => null);
+    return res?.ok ? res.text() : undefined;
+  }
+
   /** Sets the type explicitly because the PDF viewer needs it and stored blobs have none. */
   async localUrl(hash: string, mime: string): Promise<string | undefined> {
     await this.ready;

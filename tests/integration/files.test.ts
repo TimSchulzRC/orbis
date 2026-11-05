@@ -11,6 +11,7 @@ import { Workspace } from "@obtion/server/workspace";
 import { initItem, setFileMeta } from "@obtion/core/model";
 import { runSetup } from "@obtion/core/setup";
 import { storeWriter } from "@obtion/server/setup";
+import { searchIds } from "@obtion/core/search";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 
@@ -241,6 +242,55 @@ test("a file whose text was not read yet (e.g. the server stopped) is read when 
     expect(w.store.records.get("alt-1")!.file!.text).toBe(content);
     expect(w.store.records.get("alt-1")!.file!.extracted).toBe(sha256(content).slice(0, 16));
     expect(w.blobs.needsWork(w.store.records.get("alt-1")!)).toBe(false);
+  } finally {
+    w.shut();
+  }
+});
+
+test("a long text stays on the server: the facts carry its start, get and search the whole", async () => {
+  const words = Array.from({ length: 800 }, (_, i) => `Wort${i}`).join(" ");
+  const content = `Anfang des Protokolls\n${words}\nSchlusswort Zielmarke`;
+  const made = await (await upload("protokoll.txt", content, agent, "&parent=Unterlagen")).json();
+  const out = await readText(made.id);
+  expect(out.text).toContain("Schlusswort Zielmarke");
+  expect(await tool("search", { query: "Zielmarke" })).toContain("protokoll.txt");
+  // the app reads the whole text with its session; the MCP token does not open it
+  const whole = await get(base, `/w/${ws}/api/texts/${made.hash}`, owner.token);
+  expect(whole.status).toBe(200);
+  expect(await whole.text()).toBe(content);
+  expect((await get(base, `/w/${ws}/api/texts/${made.hash}`, agent)).status).toBe(401);
+  expect((await get(base, `/w/${ws}/api/texts/${made.hash}`, other.token)).status).toBe(403);
+});
+
+test("the facts of a file hold at most the start of its text; an older long text moves out when the workspace opens", async () => {
+  const dir = tempDir("obtion-facts-text-");
+  const s = new Store(dir);
+  runSetup(storeWriter(s, "system:setup"), "de");
+  const long = `Kopf\n${"Zeile mit Inhalt\n".repeat(600)}Ende Zielwort`;
+  const fresh = `Neu\n${"noch eine Zeile\n".repeat(600)}Fuss Spurwort`;
+  mkdirSync(join(dir, "blobs"), { recursive: true });
+  for (const c of [long, fresh]) await Bun.write(join(dir, "blobs", sha256(c)), c);
+  // read by an older server: the whole text in the facts
+  s.change("alt-1", "test", (doc) => {
+    initItem(doc, { kind: "datei", title: "alt.txt" });
+    setFileMeta(doc, { hash: sha256(long), name: "alt.txt", mime: "text/plain", filetype: "dokument", size: long.length, text: long, extracted: sha256(long).slice(0, 16) });
+  });
+  s.change("neu-1", "test", (doc) => {
+    initItem(doc, { kind: "datei", title: "neu.txt" });
+    setFileMeta(doc, { hash: sha256(fresh), name: "neu.txt", mime: "text/plain", filetype: "dokument", size: fresh.length });
+  });
+  s.flush();
+  s.db.close();
+  const w = new Workspace(dir);
+  try {
+    for (let i = 0; i < 100 && !w.store.records.get("neu-1")!.file!.text; i++) await Bun.sleep(50);
+    for (const [id, text, word] of [["alt-1", long, "Zielwort"], ["neu-1", fresh, "Spurwort"]] as const) {
+      const f = w.store.records.get(id)!.file!;
+      expect(f.text!.length).toBeLessThanOrEqual(4002);
+      expect(f.text).toEndWith("\n…");
+      expect(w.blobs.text(f)).toBe(text);
+      expect(searchIds(w.store.searchIndex, word)).toEqual([id]);
+    }
   } finally {
     w.shut();
   }

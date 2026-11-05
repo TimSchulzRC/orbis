@@ -1,4 +1,5 @@
 // Everything below a Workspace sees only its own folder, so workspaces cannot reach each other's data.
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { ServerWebSocket } from "bun";
 import { AreaError, Store } from "./store";
@@ -64,6 +65,7 @@ const AREAS = new Set([PERSONAL]);
 /** Documents per message of a first sync. */
 const SYNC_BATCH = 150;
 const BLOBS = "/api/blobs/";
+const TEXTS = "/api/texts/";
 
 const clientMsg: z.ZodType<ClientMsg> = z.discriminatedUnion("t", [
   z.object({ t: z.literal("hello"), area: z.string(), since: z.number(), sinceId: z.string().optional(), device: z.string().optional() }),
@@ -90,6 +92,8 @@ export class Workspace {
   constructor(dir: string) {
     this.store = new Store(dir);
     this.blobs = new Blobs(join(dir, "blobs"), this.store);
+    this.store.fileText = (f) => this.blobs.text(f);
+    this.store.reindexFiles();
     this.mirror = new Mirror(this.store, join(dir, "vault"), this.blobs);
     this.store.on({
       update: (u, from) => {
@@ -213,6 +217,12 @@ export class Workspace {
     }
 
     if (rest.startsWith(BLOBS)) return this.blob(req, url, rest.slice(BLOBS.length));
+    // a file's whole text, when its facts carry only the start (the app shows it on the file's page)
+    if (rest.startsWith(TEXTS) && req.method === "GET") {
+      const hash = rest.slice(TEXTS.length);
+      if (!Blobs.valid(hash) || !existsSync(this.blobs.textPath(hash))) return fail(404, "no text kept for this content");
+      return new Response(Bun.file(this.blobs.textPath(hash)), { headers: { "content-type": "text/plain; charset=utf-8", "x-content-type-options": "nosniff", "content-security-policy": "sandbox", "cache-control": "private, max-age=31536000, immutable" } });
+    }
     if (rest === "/api/files" || rest.startsWith("/api/files/")) return this.files(req, url, rest.slice("/api/files".length), { origin: ctx.origin ?? personOrigin(ctx.user, req.headers.get("x-obtion-device") ?? undefined), filesUrl: ctx.filesUrl });
     return fail(404, "not found");
   }

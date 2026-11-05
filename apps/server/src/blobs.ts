@@ -1,12 +1,13 @@
 // Content-addressed file store (data/blobs/<sha256>). Images get a preview and a display version,
-// audio and video a duration, every other file its text (extract.ts). A file whose content wasn't
+// audio and video a duration, every other file its text (extract.ts). The whole text stays here
+// (texts/<sha256>), the file's facts carry its start: they sync to every device. A file whose content wasn't
 // read yet (`extracted` missing or for another content, e.g. after a restart) is read when the
 // workspace opens. Devices that add images offline make previews themselves; the server fills gaps.
-import { existsSync, mkdirSync, renameSync, statSync, readdirSync, unlinkSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, statSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { type FileMeta, type Item, setFileMeta } from "@obtion/core/model";
 import type { Store } from "./store";
-import { extractMark, extractText } from "./extract";
+import { FACTS_TEXT, extractMark, extractText, factsText } from "./extract";
 
 const HASH = /^[0-9a-f]{64}$/;
 const FFMPEG = Bun.which("ffmpeg");
@@ -26,11 +27,27 @@ export class Blobs {
   private running = 0;
   onStored?: (hash: string) => void;
 
+  private texts: string;
+
   constructor(
     public dir: string,
     private store: Store,
   ) {
     mkdirSync(dir, { recursive: true });
+    this.texts = join(dir, "..", "texts");
+    mkdirSync(this.texts, { recursive: true });
+  }
+
+  /** Where the whole text read from a content is kept, when it is longer than the facts' part. */
+  textPath(hash: string) {
+    return join(this.texts, hash);
+  }
+
+  /** A file's whole text: kept here when its facts carry only the start. */
+  text(f: FileMeta): string | undefined {
+    if (!f.text || !HASH.test(f.hash)) return f.text;
+    const p = this.textPath(f.hash);
+    return existsSync(p) ? readFileSync(p, "utf8") : f.text;
   }
 
   static valid(hash: string) {
@@ -126,11 +143,21 @@ export class Blobs {
   collect(dryRun = false): string[] {
     const keep = this.referenced();
     const unused = readdirSync(this.dir).filter((name) => HASH.test(name) && !keep.has(name));
-    if (!dryRun) for (const hash of unused) unlinkSync(this.path(hash));
+    if (!dryRun) {
+      for (const hash of unused) unlinkSync(this.path(hash));
+      for (const name of readdirSync(this.texts)) if (!keep.has(name)) unlinkSync(this.textPath(name));
+    }
     return unused;
   }
 
   scan() {
+    // texts from before they were kept here: the whole one moves here, the facts keep the start
+    for (const r of this.store.records.values()) {
+      const f = r.file;
+      if (!f?.text || f.text.length <= FACTS_TEXT + 2 || f.extracted !== extractMark(f.hash) || !HASH.test(f.hash) || existsSync(this.textPath(f.hash))) continue;
+      writeFileSync(this.textPath(f.hash), f.text);
+      this.store.change(r.id, "system:files", (doc) => setFileMeta(doc, { text: factsText(f.text!) }), { quiet: true });
+    }
     for (const r of this.store.live()) if (this.needsWork(r)) this.schedule(r.id);
     // PDF previews a device announced but never uploaded: drop them so a device renders them again
     for (const r of this.store.live()) {
@@ -196,7 +223,9 @@ export class Blobs {
       // a content that can't be read is marked as read too, so it isn't tried at every start
       const got = await extractText(src, f.name).catch((e) => (console.warn("[blobs] no text from", f.name, e?.message ?? e), undefined));
       if (got?.pages) patch.pages = got.pages;
-      Object.assign(patch, { text: got?.text ?? null, extracted: extractMark(f.hash) });
+      // the whole text first, so the search finds it once the facts change
+      if (got?.text && got.text.length > FACTS_TEXT) await Bun.write(this.textPath(f.hash), got.text);
+      Object.assign(patch, { text: got?.text ? factsText(got.text) : null, extracted: extractMark(f.hash) });
     }
     const clean = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined));
     // replaced while it was read: what was found belongs to the old content (the new one is scheduled)
