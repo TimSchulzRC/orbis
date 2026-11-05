@@ -239,7 +239,7 @@ export class Store {
         const arr = d.getArray<UpdateEntry | undefined>("updates");
         for (const [u, i] of lateUpdates) {
           arr.delete(i, 1);
-          arr.insert(i, [{ ...(u as UpdateEntry), at: now }]);
+          arr.insert(i, [{ ...u!, at: now }]); // the filter above keeps only entries with a time
         }
       },
       { quiet: true },

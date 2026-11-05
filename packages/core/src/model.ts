@@ -565,8 +565,10 @@ export function setExtra(doc: Y.Doc, name: string, value: FreeValue | null | und
 
 export function setRel(doc: Y.Doc, propId: string, target: string, on: boolean) {
   const rels = doc.getMap<unknown>("rels");
-  let m = asMap(rels.get(propId));
-  if (!m) {
+  const found = rels.get(propId);
+  let m: Y.Map<unknown>;
+  if (found instanceof Y.Map) m = found;
+  else {
     if (!on) return;
     m = new Y.Map();
     rels.set(propId, m);
@@ -728,7 +730,7 @@ export type Patch<T> = { [K in keyof T]?: T[K] | null };
 export function upsertProp(doc: Y.Doc, propId: string, patch: Patch<Omit<PropDef, "id">>) {
   const props = ensureSubMap(schemaMap(doc), "properties");
   const found = props.get(propId);
-  const prop = asMap(found) ?? new Y.Map<unknown>();
+  const prop: Y.Map<unknown> = found instanceof Y.Map ? found : new Y.Map<unknown>();
   if (prop !== found) {
     props.set(propId, prop);
     if (!patch.sort) prop.set("sort", keyBetween(lastSortKey(props), null));
@@ -770,10 +772,11 @@ export function setTab(doc: Y.Doc, id: string, patch: Patch<Omit<ViewTab, "id">>
   const tabs = doc.getMap<unknown>("tabs");
   if (patch === null) tabs.delete(id);
   else {
-    const cur = tabs.get(id);
-    let m = asMap(cur);
-    if (!m) {
-      const o = plain(cur);
+    const found = tabs.get(id);
+    let m: Y.Map<unknown>;
+    if (found instanceof Y.Map) m = found;
+    else {
+      const o = plain(found);
       tabs.set(id, (m = toMap(isObject(o) ? o : {})));
     }
     for (const [k, v] of Object.entries(patch)) {
@@ -795,14 +798,6 @@ export function setTabs(doc: Y.Doc, list: Omit<ViewTab, "pos">[]) {
     tabs.set(id, toMap({ ...t, pos }));
   }
   touch(doc);
-}
-
-/**
- * A nested map, typed as one: yjs's published types narrow `x instanceof Y.Map` on `unknown` to a
- * map whose methods TypeScript cannot call.
- */
-function asMap(v: unknown): Y.Map<unknown> | undefined {
-  return v instanceof Y.Map ? (v as Y.Map<unknown>) : undefined;
 }
 
 function ensureSubMap(parent: Y.Map<unknown>, key: string): Y.Map<unknown> {
