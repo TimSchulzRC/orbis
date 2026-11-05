@@ -1043,3 +1043,122 @@ body.cm-dragging * {
     animation: none;
   }
 }
+
+/* While a drawing is open the app behind it is not drawn at all: Excalidraw redraws on every pointer
+   move, and style and layout work then stays inside the drawing (scroll positions are kept) */
+html.drawing-open #root main,
+html.drawing-open #root aside {
+  content-visibility: hidden;
+}
+
+/* Drawings: Excalidraw full screen, in the app's colours: its violet becomes the app's yellow, its
+   tinted surfaces the app's neutral greys (dark: .theme--dark has the same weight, so both are named) */
+.drawing-full .excalidraw,
+.drawing-full .excalidraw.theme--dark {
+  --ui-font: var(--font-sans);
+  --color-primary: var(--pal-amber);
+  --color-primary-darker: color-mix(in srgb, var(--pal-amber) 85%, var(--foreground));
+  --color-primary-darkest: color-mix(in srgb, var(--pal-amber) 70%, var(--foreground));
+  --color-primary-hover: color-mix(in srgb, var(--pal-amber) 85%, var(--foreground));
+  --color-primary-light: color-mix(in srgb, var(--pal-amber) 18%, var(--card));
+  --color-primary-light-darker: color-mix(in srgb, var(--pal-amber) 28%, var(--card));
+  --color-brand-hover: color-mix(in srgb, var(--pal-amber) 85%, var(--foreground));
+  --color-brand-active: color-mix(in srgb, var(--pal-amber) 70%, var(--foreground));
+  --color-selection: var(--pal-amber);
+  --color-surface-primary-container: color-mix(in srgb, var(--pal-amber) 22%, var(--card));
+  --color-on-primary-container: var(--foreground);
+  --color-surface-lowest: var(--card);
+  --color-surface-low: var(--secondary);
+  --color-surface-mid: var(--secondary);
+  --color-surface-high: var(--accent);
+  --island-bg-color: var(--card);
+  --color-slider-track: color-mix(in srgb, var(--pal-amber) 45%, var(--card));
+}
+/* the dark canvas is drawn inverted (invert + hue-rotate): a dark amber shows as the app's yellow */
+.drawing-full .excalidraw.theme--dark {
+  --color-selection: #6e4400;
+}
+.drawing-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  pointer-events: auto;
+}
+.drawing-button {
+  height: 2.25rem;
+  border: 0;
+  border-radius: var(--border-radius-lg, 8px);
+  background: var(--island-bg-color);
+  box-shadow: var(--shadow-island);
+  color: var(--text-primary-color);
+  font: 500 14px var(--ui-font);
+}
+.drawing-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  cursor: pointer;
+}
+.drawing-button:hover {
+  background: var(--button-hover-bg, var(--island-bg-color));
+}
+.drawing-close {
+  width: 2.25rem;
+  justify-content: center;
+  padding: 0;
+}
+.drawing-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font: 600 22px var(--ui-font);
+  color: var(--t-drawing);
+}
+:is(.md, .cm-embed) .embed-drawing {
+  margin: 0;
+}
+:is(.md, .cm-embed) .embed-drawing-svg {
+  /* always the text's width and about this tall; the drawing's proportions move it within the limits */
+  display: flex;
+  width: 100%;
+  aspect-ratio: 2 / 1;
+  min-height: 240px;
+  max-height: 440px;
+  padding: 12px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  cursor: pointer;
+}
+:is(.md, .cm-embed) .embed-drawing-svg svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.cm-embed:has(> .embed-drawing) {
+  margin: 4px 0 8px;
+}
+:is(.md, .cm-embed) .embed-drawing-empty {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85em;
+  color: var(--muted-foreground);
+  cursor: pointer;
+}
+/* on a phone Excalidraw puts this next to its toolbar, which needs the width; the bottom bar is free in the middle */
+.drawing-top-phone {
+  position: fixed;
+  left: 50%;
+  bottom: calc(1.25rem + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 5;
+}
+.drawing-top-phone .drawing-button {
+  background: transparent;
+  box-shadow: none;
+  color: var(--foreground);
+}

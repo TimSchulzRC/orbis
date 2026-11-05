@@ -17,14 +17,15 @@ import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { parseWikiLinks, titleKey, touchOnTextEdit } from "@obtion/core/model";
 import { embedHTML, hydrateFiles } from "./Markdown";
+import { drawingEmbedHTML, hydrateDrawings } from "../drawing/Drawing";
 import { openLightbox } from "./Lightbox";
 import { notify } from "./feedback";
 import { autocompletion, type Completion, type CompletionContext, type CompletionResult } from "@codemirror/autocomplete";
 import { FilePlus } from "lucide-react";
 import { livePreview } from "./editor/livePreview";
 import { tables } from "./editor/tables";
-import { links } from "./editor/links";
-import { mentionCompletion, onSlashFiles, pageOption, slashCompletion, slashRender } from "./editor/slash";
+import { isDrawingLine, links, refreshEmbeds } from "./editor/links";
+import { editorNode, mentionCompletion, onSlashFiles, pageOption, slashCompletion, slashRender } from "./editor/slash";
 import { blockHandles } from "./editor/handles";
 import { formatKeymap, formatToolbar } from "./editor/toolbar";
 import { moveBy } from "./editor/blocks";
@@ -62,6 +63,7 @@ class EmbedWidget extends WidgetType {
     wrap.className = "cm-embed";
     wrap.innerHTML = this.html;
     hydrateFiles(wrap);
+    hydrateDrawings(wrap);
     wrap.addEventListener("click", (e) => {
       const img = (e.target as HTMLElement).closest<HTMLImageElement>(".embed-img img");
       if (!img) return;
@@ -95,17 +97,38 @@ function imageDecos(state: EditorState): DecorationSet {
     for (const link of parseWikiLinks(line.text)) {
       const id = link.embed ? repo.resolveTitle(link.target) : undefined;
       const item = id ? repo.get(id) : undefined;
-      if (item?.file && !item.deleted) builder.add(line.to, line.to, Decoration.widget({ widget: new EmbedWidget(embedHTML(item, link.size)), block: true, side: 1 }));
+      if (!item || item.deleted) continue;
+      // a drawing on a line of its own is that line: a block with no text around it
+      if (item.kind === "zeichnung" && isDrawingLine(line.text)) builder.add(line.from, line.to, Decoration.replace({ widget: new EmbedWidget(drawingEmbedHTML(item)), block: true }));
+      else {
+        const html = item.file ? embedHTML(item, link.size) : item.kind === "zeichnung" ? drawingEmbedHTML(item) : undefined;
+        if (html) builder.add(line.to, line.to, Decoration.widget({ widget: new EmbedWidget(html), block: true, side: 1 }));
+      }
     }
   }
   return builder.finish();
 }
 
+
 const images = StateField.define<DecorationSet>({
   create: imageDecos,
-  update: (deco, tr) => (tr.docChanged ? imageDecos(tr.state) : deco),
-  provide: (f) => EditorView.decorations.from(f),
+  update: (deco, tr) => (tr.docChanged || tr.effects.some((e) => e.is(refreshEmbeds)) ? imageDecos(tr.state) : deco),
+  // a diagram's block is one piece: arrows and Backspace never enter the text hidden behind it
+  provide: (f) => [EditorView.decorations.from(f), EditorView.atomicRanges.of((view) => view.state.field(f))],
 });
+
+/** What the embedded drawings of the text show, so drawing on one redraws it (files keep their element). */
+function embedsKey(state: EditorState): string {
+  const text = state.doc.toString();
+  if (!text.includes("![[")) return "";
+  return parseWikiLinks(text)
+    .filter((l) => l.embed)
+    .map((l) => {
+      const item = repo.get(repo.resolveTitle(l.target));
+      return item?.kind === "zeichnung" ? `${item.id}:${item.updated}:${item.deleted}` : "";
+    })
+    .join("|");
+}
 
 const LINK_HITS = 40;
 
@@ -256,6 +279,7 @@ export function Editor({
       tables,
       images,
       autocompletion({ override: [linkCompletion(nodeId), slashCompletion, mentionCompletion(nodeId)], icons: false, addToOptions: [slashRender], maxRenderedOptions: 40 }),
+      editorNode.of(nodeId),
       blockHandles,
       formatToolbar,
       shortcuts,
@@ -267,6 +291,13 @@ export function Editor({
     ];
     const view = new EditorView({ state: EditorState.create({ doc: ytext.toString(), extensions }), parent: host.current! });
     viewRef.current = view;
+    let embeds = embedsKey(view.state);
+    const stopEmbeds = repo.subscribe(() => {
+      const next = embedsKey(view.state);
+      if (next === embeds) return;
+      embeds = next;
+      view.dispatch({ effects: refreshEmbeds.of(null) });
+    });
     if (autoFocus) view.focus();
     onView?.(view);
     return () => {
@@ -275,6 +306,7 @@ export function Editor({
       view.destroy();
       undoManager.destroy();
       stopTouch();
+      stopEmbeds();
     };
   }, [doc]);
   return <div ref={host} className={minHeight} />;

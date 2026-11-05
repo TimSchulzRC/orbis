@@ -12,6 +12,8 @@ export const KEYS = {
   device: "obtion.device",
   fileMode: "obtion.fileMode",
   recentPlaces: "obtion.recentPlaces",
+  /** Excalidraw's library ("Bibliothek"): shapes kept for all drawings */
+  drawingLibrary: "obtion.drawing.library",
   captureSpace: "obtion.capture.space",
   timelineScale: "obtion.timeline.scale",
   sidebarTree: "obtion.sidebar.tree",

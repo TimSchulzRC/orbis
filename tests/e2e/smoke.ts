@@ -177,6 +177,38 @@ async function pages(browser: import("playwright").Browser, serverName: string, 
       await p.keyboard.press("Escape");
       await menu.waitFor({ state: "detached" });
     }, { phone });
+  if (serverName === "seeded" && !phone)
+    // a diagram made with "/" in a note: a block of the text, drawn on full screen after a click on it
+    await check(page, label, "/#/i/ex-course", errors, async (p) => {
+      await p.locator(".cm-line").first().click();
+      await p.keyboard.press("Control+End");
+      await p.keyboard.press("Enter");
+      await p.keyboard.type("/diagramm");
+      await p.locator(".cm-slash-name", { hasText: "Diagramm" }).first().click({ timeout: 3000 });
+      // a block in the text, opened by a click on it, not at once
+      const block = p.locator(".cm-embed .embed-drawing-svg");
+      if (!(await block.waitFor({ timeout: 5000 }).then(() => true, () => false))) return void failures.push(`${label}: no drawing block in the text`);
+      if (await p.locator(".drawing-full").count()) failures.push(`${label}: "/diagramm" opens the diagram at once`);
+      await block.click();
+      const canvas = p.locator(".drawing-full canvas.interactive");
+      if (!(await canvas.waitFor({ timeout: 20000 }).then(() => true, () => false))) return void failures.push(`${label}: a click on the block does not open the drawing`);
+      const box = (await canvas.boundingBox())!;
+      await p.keyboard.press("r");
+      await p.mouse.move(box.x + 400, box.y + 300);
+      await p.mouse.down();
+      await p.mouse.move(box.x + 600, box.y + 420, { steps: 5 });
+      await p.mouse.up();
+      // a step in the history: Back closes it, Forward opens it again, closing goes back to the note
+      await p.goBack();
+      if (!(await p.locator(".cm-embed .embed-drawing svg").waitFor({ timeout: 10000 }).then(() => true, () => false))) return void failures.push(`${label}: Back does not close the drawing, or it does not show in the note`);
+      await p.goForward();
+      if (!(await canvas.waitFor({ timeout: 10000 }).then(() => true, () => false))) return void failures.push(`${label}: Forward does not open the drawing again`);
+      const note = p.url().split("?")[0];
+      await p.locator(".drawing-close").click();
+      await p.locator(".drawing-full").waitFor({ state: "detached", timeout: 5000 }).catch(() => failures.push(`${label}: closing does not close the drawing`));
+      if (p.url() !== note) failures.push(`${label}: closing does not go back to the note (${p.url()})`);
+      if (await p.getByText("Diagramme", { exact: true }).count()) failures.push(`${label}: the drawing is listed below the note`);
+    });
   if (serverName === "seeded") {
     // the open panel is a step in the history: Back closes it and stays on the page
     await check(page, label, "/#/i/ex-relaunch", errors, async (p) => {

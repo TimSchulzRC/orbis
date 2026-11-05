@@ -30,7 +30,9 @@ export function tr(key: string, values?: Values) {
   return t(key, values);
 }
 
-export function titleOf(item: Pick<Item, "title" | "file">, translate: T = tr): string {
+export function titleOf(item: Pick<Item, "title" | "file"> & { kind?: Item["kind"] }, translate: T = tr): string {
+  // a diagram has no name: "Diagramm", and where it is (the note) shows beside it
+  if (item.kind === "zeichnung") return translate("kind.drawing");
   return displayTitle(item) || translate("untitled");
 }
 

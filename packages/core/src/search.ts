@@ -36,7 +36,7 @@ function tokenizeForIndex(text: string): string[] {
 const OPTION_ID = /^(st|pr)_/;
 
 function bodyText(doc: Item): string {
-  return stripQueryBlocks(doc.body) + (doc.file ? ` ${doc.file.name} ${doc.file.text ?? ""}` : "") + (doc.schema ? ` ${doc.schema.description}` : "");
+  return stripQueryBlocks(doc.body) + (doc.file ? ` ${doc.file.name} ${doc.file.text ?? ""}` : "") + (doc.drawing ? ` ${doc.drawing.text}` : "") + (doc.schema ? ` ${doc.schema.description}` : "");
 }
 
 function propsText(doc: Item): string {

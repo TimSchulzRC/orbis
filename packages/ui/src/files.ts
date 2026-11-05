@@ -319,9 +319,26 @@ export class DeviceFiles {
     }
   }
 
+  /** Writes and deletes of one content, one after the other. */
+  private pending = new Map<string, Promise<void>>();
+  private inTurn(hash: string, fn: () => Promise<void>): Promise<void> {
+    const next = (this.pending.get(hash) ?? Promise.resolve()).then(fn, fn);
+    const settled = next.catch(() => {});
+    this.pending.set(hash, settled);
+    void settled.then(() => this.pending.get(hash) === settled && this.pending.delete(hash));
+    return next;
+  }
+
+  /**
+   * Writes a content once: writing the same file again (a download finishing after the device made
+   * it, two loads at once) breaks the object URLs already shown for it (ERR_FILE_NOT_FOUND).
+   */
   private async save(hash: string, blob: Blob) {
-    await this.store.put(hash, blob);
-    this.local.add(hash);
+    await this.inTurn(hash, async () => {
+      if (this.local.has(hash)) return;
+      await this.store.put(hash, blob);
+      this.local.add(hash);
+    });
     this.fresh.add(hash);
   }
 
@@ -378,6 +395,16 @@ export class DeviceFiles {
     return meta;
   }
 
+  /** An image in a drawing: stored and uploaded like a file's content, without a file of its own. */
+  async addContent(blob: Blob, name: string): Promise<string> {
+    await this.ready;
+    const hash = await sha256(blob);
+    await this.save(hash, blob);
+    await this.enqueueUpload({ hash, name });
+    this.scheduleSync(10);
+    return hash;
+  }
+
   private async addDerived(blob: Blob): Promise<string> {
     const h = await sha256(blob);
     await this.save(h, blob);
@@ -407,6 +434,8 @@ export class DeviceFiles {
       for (const h of [m.thumb, m.display]) if (h && !this.local.has(h)) want.push(h);
       if (this.mode === "local" && !this.local.has(m.hash)) want.push(m.hash);
     }
+    // images in drawings stay on the device like the previews, so drawings show offline
+    for (const r of this.repo.live()) for (const h of r.drawing?.files ?? []) if (!this.local.has(h)) want.push(h);
     if (this.repo.status.online) for (const h of want) if (!this.queue.includes(h) && !this.missing.has(h)) this.queue.push(h);
     this.pump();
     if (this.repo.status.online) this.makePdfPreviews(files).catch(() => {});
@@ -431,7 +460,7 @@ export class DeviceFiles {
    */
   private async collect() {
     const keep = new Set<string>();
-    for (const r of this.repo.records.values()) for (const h of [r.file?.hash, r.file?.display, r.file?.thumb]) if (h) keep.add(h);
+    for (const r of this.repo.records.values()) for (const h of [r.file?.hash, r.file?.display, r.file?.thumb, ...(r.drawing?.files ?? [])]) if (h) keep.add(h);
     const pending = await this.pendingUploads();
     for (const h of [...this.local]) if (!keep.has(h) && !pending.has(h) && !this.fresh.has(h)) await this.drop(h);
   }
@@ -457,7 +486,9 @@ export class DeviceFiles {
           // the mode may switch to "online" during the fetch or the write
           const wanted = () => this.mode === "local" || keptOnline(this.repo).has(h);
           if (blob && wanted()) await this.save(h, blob);
-          if (this.local.has(h) && !wanted()) await this.drop(h);
+          // made on this device meanwhile (a new file whose record comes after its contents): kept,
+          // like collect() keeps it; dropping it would break the picture already shown
+          if (this.local.has(h) && !wanted() && !this.fresh.has(h)) await this.drop(h);
         })
         .finally(() => {
           this.active--;
@@ -531,9 +562,11 @@ export class DeviceFiles {
 
   /** Also forgets the object URL, which stops working once the content is gone. */
   private async drop(hash: string) {
-    await this.store.delete(hash);
-    this.local.delete(hash);
-    this.urls.delete(hash);
+    await this.inTurn(hash, async () => {
+      await this.store.delete(hash);
+      this.local.delete(hash);
+      this.urls.delete(hash);
+    });
   }
 }
 
@@ -543,9 +576,9 @@ function keptOnline(repo: Repo): Set<string> {
   return keep;
 }
 
-/** Images without a display version (SVGs) show their original. */
+/** Images without a display version (SVGs) show their original, and so do images in drawings. */
 function shownItself(repo: Repo): Set<string> {
-  return new Set(repo.live().flatMap((r) => (r.file?.filetype === "bild" && !r.file.display ? [r.file.hash] : [])));
+  return new Set(repo.live().flatMap((r) => (r.file?.filetype === "bild" && !r.file.display ? [r.file.hash] : (r.drawing?.files ?? []))));
 }
 
 export let files: DeviceFiles;

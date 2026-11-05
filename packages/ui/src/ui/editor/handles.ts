@@ -8,6 +8,7 @@ import { KINDS, blockAt, deleteBlock, duplicateBlock, kindName, kindOf, moveBloc
 import { iconButton } from "./icons";
 import { showMenu } from "./menu";
 import { menuCell, tableAt, tableEntries } from "./tables";
+import { drawingOnLine } from "./links";
 import { MOD, isCoarse as coarse } from "../../lib/platform";
 
 const ALT = MOD === "⌘" ? "⌥" : "Alt ";
@@ -29,14 +30,16 @@ function blockMenu(view: EditorView, pos: number, at: { left: number; top: numbe
   const line = view.state.doc.lineAt(pos);
   const current = kindOf(line.text);
   const fenced = blockAt(view.state, pos).to !== line.to || line.text.startsWith("```");
+  // a diagram is no text: nothing to turn it into, and a copy would show the same diagram twice
+  const diagram = !!drawingOnLine(line.text);
   const table = tableAt(view.state, pos);
   const cell = table && menuCell(view.state, table);
   return showMenu(at, [
-    ...(fenced ? [] : [{ title: tr("editor.turnInto"), entries: KINDS.map((k) => ({ label: kindName(k.kind), icon: k.icon, active: k.kind === current, run: () => setKind(view, pos, k.kind) })) }]),
+    ...(fenced || diagram ? [] : [{ title: tr("editor.turnInto"), entries: KINDS.map((k) => ({ label: kindName(k.kind), icon: k.icon, active: k.kind === current, run: () => setKind(view, pos, k.kind) })) }]),
     ...(table && cell ? [{ title: tr("editor.table.title"), entries: tableEntries(view, table, cell.n, cell.col) }] : []),
     {
       entries: [
-        { label: tr("editor.duplicate"), icon: Copy, run: () => duplicateBlock(view, pos) },
+        ...(diagram ? [] : [{ label: tr("editor.duplicate"), icon: Copy, run: () => duplicateBlock(view, pos) }]),
         { label: tr("editor.moveUp"), icon: ArrowUp, hint: ALT + "↑", run: () => (moveBy(view, pos, -1), view.focus()) },
         { label: tr("editor.moveDown"), icon: ArrowDown, hint: ALT + "↓", run: () => (moveBy(view, pos, 1), view.focus()) },
         { label: tr("editor.deleteBlock"), icon: Trash2, danger: true, run: () => deleteBlock(view, pos) },
@@ -72,6 +75,9 @@ export const blockHandles = ViewPlugin.fromClass(
     move = (e: MouseEvent) => {
       if (this.dragging) return;
       cancelAnimationFrame(this.frame);
+      // a dialog over the text (a diagram on full screen): no handles, and no measuring of the text
+      // behind it on every move
+      if ((e.target as Element | null)?.closest?.("[aria-modal]")) return void (this.box.classList.contains("shown") && this.hide());
       this.frame = requestAnimationFrame(() => this.hover(e.clientX, e.clientY));
     };
     hover(x: number, y: number) {

@@ -2,7 +2,7 @@ import { Input } from "../components/ui/input";
 import { useState } from "react";
 import { Plus, Sparkles } from "lucide-react";
 import { type Item, META_TYPE, titleKey } from "@obtion/core/model";
-import { canPlaceIn } from "@obtion/core/placement";
+import { belowOf, canPlaceIn } from "@obtion/core/placement";
 import { useT, titleOf } from "../i18n";
 import { useIndex, useRepo } from "../hooks";
 import { Button, Dialog } from "./primitives";
@@ -41,7 +41,7 @@ export function ItemPicker({
   const ix = repo.index();
   const found = (q.trim() ? repo.search(q, SEARCH_HITS) : [...repo.live()].sort((a, b) => b.updated - a.updated))
     .filter(allowed)
-    .sort((a, b) => Number(ix.childrenOf(b.id).length > 0) - Number(ix.childrenOf(a.id).length > 0))
+    .sort((a, b) => Number(belowOf(b.id, ix).length > 0) - Number(belowOf(a.id, ix).length > 0))
     .filter((i) => !suggested.some((s) => s.id === i.id))
     .slice(0, MAX_ROWS);
   const rows: { id?: string; reason?: PickReason; create?: string }[] = [...suggested, ...found.map((i) => ({ id: i.id }))];

@@ -4,6 +4,7 @@ import { Textarea } from "../components/ui/textarea";
 import { NativeSelect } from "../components/ui/native-select";
 import { Fragment, useState } from "react";
 import { ChevronRight, Plus, Send } from "lucide-react";
+import { belowOf } from "@obtion/core/placement";
 import { type Item } from "@obtion/core/model";
 import type { Index } from "@obtion/core/graph";
 import { fmtBytes, fmtDateTime } from "@obtion/core/i18n";
@@ -81,7 +82,8 @@ export function Below({ item }: { item: Item }) {
   const cmp = order(ix);
   const done = (x: Item) => isDone(x, ix.schemaOf(x));
   // done ones stay, at the end of their group
-  const below = (id: string) => ix.items(ix.childrenOf(id)).filter((c) => !c.deleted);
+  // drawings are blocks in the text above, not entries of their own
+  const below = (id: string) => belowOf(id, ix);
   const direct = below(item.id);
   const groups = new Map<string, Item[]>();
   for (const c of direct) (groups.get(groupOf(c)) ?? groups.set(groupOf(c), []).get(groupOf(c))!).push(c);

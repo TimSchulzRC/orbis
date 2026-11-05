@@ -203,7 +203,8 @@ export function GraphView() {
   const [q, setQ] = useState("");
   const data = useMemo(() => {
     const key = (n: Item) => (n.kind === "datei" ? "#file" : (ix.typeOf(n) ?? ""));
-    const items = ix.live.filter((n) => n.type !== META_TYPE && !hidden.has(key(n)) && (!tag || n.tags.includes(tag)) && (!hideDone || !isDone(n, ix.schemaOf(n))));
+    // drawings are part of their note
+    const items = ix.live.filter((n) => n.type !== META_TYPE && n.kind !== "zeichnung" && !hidden.has(key(n)) && (!tag || n.tags.includes(tag)) && (!hideDone || !isDone(n, ix.schemaOf(n))));
     const graph = buildGraph(ix, items, kinds);
     if (!hideOrphans) return graph;
     return { nodes: graph.nodes.filter((n) => n.deg > 0), links: graph.links };

@@ -3,6 +3,7 @@
 import { Checkbox } from "../components/ui/checkbox";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, FolderInput, Shapes, Sparkles, Trash2, Check, X } from "lucide-react";
+import { belowOf } from "@obtion/core/placement";
 import { type Item, setMeta } from "@obtion/core/model";
 import type { Index } from "@obtion/core/graph";
 import { useIndex, useRepo, useSpaceId, useItemHref, useDesktop, openItem, isTypingTarget, useWindowKeys } from "../hooks";
@@ -44,7 +45,7 @@ function rowHint(item: Item, ix: Index, t: T): { icon: React.ReactNode; text: st
   }
   const mentioned = ix.items(ix.mentions(item)).find((x) => x.kind === "info");
   if (mentioned) return { icon: <ArrowRight size={12} />, text: mentioned.title };
-  const kids = ix.childrenOf(item.id).length;
+  const kids = belowOf(item.id, ix).length;
   if (kids) return { icon: <NOTE_ICON size={12} />, text: t("triage.notes", { count: kids }) };
   return null;
 }
@@ -274,7 +275,7 @@ function Detail({ item, onPlaced }: { item: Item; onPlaced: (p: string) => void 
   const hrefOf = useItemHref();
   const ix = repo.index();
   const mentioned = ix.items(new Set(ix.mentions(item))).filter((x) => x.kind === "info");
-  const kids = ix.items(ix.childrenOf(item.id));
+  const kids = belowOf(item.id, ix);
   const sug = item.suggestion;
   const places = useMemo(() => {
     const offered = placeSuggestions(item, repo).slice(0, MAX_PLACES).map((x) => ({ id: x.id, why: t("triage.why." + x.reason) }));

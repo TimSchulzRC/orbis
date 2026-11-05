@@ -2,7 +2,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { VitePWA } from "vite-plugin-pwa";
-import { copyFileSync, mkdirSync, readdirSync, renameSync, rmSync } from "node:fs";
+import { copyFileSync, cpSync, createReadStream, existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import type { Plugin, ProxyOptions } from "vite";
@@ -15,6 +15,23 @@ const pdfWasm = {
   writeBundle() {
     mkdirSync("dist/pdfjs/wasm", { recursive: true });
     for (const f of ["jbig2.wasm", "openjpeg.wasm", "qcms_bg.wasm"]) copyFileSync(join(pdfjs, "wasm", f), `dist/pdfjs/wasm/${f}`);
+  },
+};
+
+// Excalidraw loads its fonts from EXCALIDRAW_ASSET_PATH ("/excalidraw/"), so drawings work offline.
+const excalidraw = join(dirname(createRequire(createRequire(import.meta.url).resolve("@obtion/ui")).resolve("@excalidraw/excalidraw")), "fonts");
+const excalidrawFonts: Plugin = {
+  name: "excalidraw-fonts",
+  configureServer(server) {
+    server.middlewares.use("/excalidraw/fonts/", (req, res, next) => {
+      const file = join(excalidraw, decodeURIComponent((req.url ?? "").split("?")[0]!).replace(/\.\.+/g, ""));
+      if (!existsSync(file) || !statSync(file).isFile()) return next();
+      res.setHeader("content-type", "font/woff2");
+      createReadStream(file).pipe(res);
+    });
+  },
+  writeBundle() {
+    cpSync(excalidraw, "dist/excalidraw/fonts", { recursive: true });
   },
 };
 
@@ -67,6 +84,7 @@ export default defineConfig({
     react(),
     tailwindcss(),
     pdfWasm,
+    excalidrawFonts,
     atomicWatch,
     VitePWA({
       // the app asks before switching versions instead of silently serving the old cache
@@ -92,6 +110,9 @@ export default defineConfig({
         // app routes live in the hash (#/w/<id>/…): every /w/ path is the server's (files, sync, MCP)
         navigateFallbackDenylist: [/^\/api/, /^\/mcp/, /^\/w\//],
         globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
+        // the Chinese handwriting font is 200 parts (13 MB): kept once a drawing needed them
+        globIgnores: ["excalidraw/fonts/Xiaolai/**"],
+        runtimeCaching: [{ urlPattern: /\/excalidraw\/fonts\//, handler: "CacheFirst", options: { cacheName: "excalidraw-fonts", expiration: { maxEntries: 300 } } }],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
       },
     }),

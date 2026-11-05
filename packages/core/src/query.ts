@@ -724,7 +724,8 @@ export function runQuery(def: QueryDef, ctx: EvalCtx): QueryResult {
   const ix = ctx.ix;
   const missing = missingTypes(def.where, ix);
   const wantTypes = typesIn(def.where).includes(META_TYPE);
-  let items = ix.live.filter((i) => (wantTypes || i.type !== META_TYPE) && (!def.where || matches(i, def.where, ctx)));
+  // drawings belong to their note: lists show the note
+  let items = ix.live.filter((i) => i.kind !== "zeichnung" && (wantTypes || i.type !== META_TYPE) && (!def.where || matches(i, def.where, ctx)));
   items = sortItems(items, def.sort, ix);
   const total = items.length;
   if (def.limit) items = items.slice(0, def.limit);
