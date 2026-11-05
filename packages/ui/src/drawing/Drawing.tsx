@@ -9,7 +9,9 @@ import { tr, useT } from "../i18n";
 import { parseHash } from "../hooks";
 import { createStore } from "../lib/store";
 import { escapeHtml } from "../ui/text";
-import { drawingSvg, forgetDrawingSvg } from "./scene";
+import { drawingSvg, forgetDrawingSvg, loadExcalidraw, readLibrary, saveLibrary } from "./scene";
+import { onLibraryLink } from "./library-link";
+import { notify } from "../ui/feedback";
 
 const DrawingEditor = lazy(() => import("./DrawingEditor"));
 
@@ -20,6 +22,39 @@ export function openDrawing(id: string) {
   if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
   open.set({ id });
 }
+
+/** The open drawing takes a library itself (it shows it at once); returns the way to let go. */
+let liveLibrary: ((blob: Blob) => Promise<void>) | null = null;
+export function setLiveLibrary(fn: (blob: Blob) => Promise<void>) {
+  liveLibrary = fn;
+  return () => void (liveLibrary === fn && (liveLibrary = null));
+}
+
+/** Only libraries from Excalidraw's own collection come in this way. */
+function libraryUrl(raw: string): URL | null {
+  try {
+    const url = new URL(raw);
+    return url.protocol === "https:" && url.hostname === "libraries.excalidraw.com" ? url : null;
+  } catch {
+    return null;
+  }
+}
+
+onLibraryLink(async (raw) => {
+  const url = libraryUrl(raw);
+  if (!url) return notify(tr("drawing.libraryFailed"));
+  try {
+    const blob = await (await fetch(url)).blob();
+    if (liveLibrary) return void (await liveLibrary(blob));
+    // no drawing open (the link came to a tab of its own): into the library for the next one
+    const { loadLibraryFromBlob, mergeLibraryItems } = await loadExcalidraw();
+    saveLibrary(mergeLibraryItems(readLibrary(), await loadLibraryFromBlob(blob, "published")));
+    notify(tr("drawing.libraryAdded"));
+  } catch (e) {
+    console.warn("library not added", e);
+    notify(tr("drawing.libraryFailed"));
+  }
+});
 
 /** Called with a drawing's id when its full screen closes: pictures held back meanwhile draw then. */
 const closedListeners = new Set<(id: string) => void>();
@@ -61,7 +96,7 @@ function Loading() {
 
 /** For texts (the editor and read-only Markdown): filled in by hydrateDrawings. */
 export function drawingEmbedHTML(item: Item): string {
-  return `<figure class="embed-drawing" data-drawing="${escapeHtml(item.id)}" data-v="${item.updated}"><div class="embed-drawing-svg" role="button" tabindex="0" aria-label="${escapeHtml(tr("drawing.edit"))}">${item.drawing?.count ? "" : `<span class="embed-drawing-empty">${escapeHtml(tr("drawing.empty"))}</span>`}</div>${item.title ? `<figcaption>${escapeHtml(item.title)}</figcaption>` : ""}</figure>`;
+  return `<figure class="embed-drawing" data-drawing="${escapeHtml(item.id)}" data-v="${item.updated}"><div class="embed-drawing-svg" role="button" tabindex="0" aria-label="${escapeHtml(tr("drawing.edit"))}">${item.drawing?.count ? "" : `<span class="embed-drawing-empty">${escapeHtml(tr("drawing.empty"))}</span>`}</div></figure>`;
 }
 
 /** Draws the drawings embedded in `root`; a click on one opens it to look at. */

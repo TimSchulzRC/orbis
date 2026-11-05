@@ -1,6 +1,7 @@
 // Between a drawing's document and Excalidraw: images, the lazily loaded library and the preview.
 import type * as Y from "yjs";
-import type { BinaryFileData } from "@excalidraw/excalidraw/types";
+import type { BinaryFileData, LibraryItems } from "@excalidraw/excalidraw/types";
+import { KEYS } from "../ui/storage";
 import { type DrawingFile, readScene } from "@obtion/core/drawing";
 import type { DeviceFiles } from "../files";
 
@@ -10,6 +11,19 @@ export function loadExcalidraw() {
   // fonts come from this app (copied by the build), so drawings also work offline
   (window as { EXCALIDRAW_ASSET_PATH?: string }).EXCALIDRAW_ASSET_PATH ??= "/excalidraw/";
   return (loading ??= import("@excalidraw/excalidraw"));
+}
+
+/** The library ("Bibliothek") belongs to the person, not the drawing: kept on this device like on excalidraw.com. */
+export function readLibrary(): LibraryItems {
+  try {
+    const items = JSON.parse(localStorage.getItem(KEYS.drawingLibrary) ?? "null") as LibraryItems | null;
+    return Array.isArray(items) ? items : [];
+  } catch {
+    return [];
+  }
+}
+export function saveLibrary(items: LibraryItems) {
+  localStorage.setItem(KEYS.drawingLibrary, JSON.stringify(items));
 }
 
 export function blobToDataURL(blob: Blob): Promise<string> {

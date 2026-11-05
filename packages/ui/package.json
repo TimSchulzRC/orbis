@@ -6,7 +6,8 @@
   "license": "AGPL-3.0-or-later",
   "exports": {
     ".": "./src/index.ts",
-    "./styles.css": "./src/styles.css"
+    "./styles.css": "./src/styles.css",
+    "./library-link": "./src/drawing/library-link.ts"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.4",

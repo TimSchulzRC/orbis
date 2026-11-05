@@ -14,8 +14,8 @@ import { ScopeContext } from "../scope";
 import { repo as current } from "../repo";
 import { useT } from "../i18n";
 import { useTheme } from "../theme";
-import { KEYS } from "../ui/storage";
-import { dataURLToBlob, imageName, loadImages } from "./scene";
+import { dataURLToBlob, imageName, loadImages, readLibrary, saveLibrary } from "./scene";
+import { setLiveLibrary } from "./Drawing";
 import { DRAWING_ICON } from "../ui/icons";
 
 (window as { EXCALIDRAW_ASSET_PATH?: string }).EXCALIDRAW_ASSET_PATH ??= "/excalidraw/";
@@ -30,23 +30,13 @@ const WRITE_AT_LEAST_MS = 2000;
 /** Excalidraw's language codes; ours are "de" and "en". */
 const LANG_CODE: Record<string, string> = { de: "de-DE", en: "en" };
 
-/** The library ("Bibliothek") belongs to the person, not the drawing: kept on this device like on excalidraw.com. */
 const library = {
-  load: async () => {
-    try {
-      const items = JSON.parse(localStorage.getItem(KEYS.drawingLibrary) ?? "null") as LibraryItems | null;
-      return items ? { libraryItems: items } : null;
-    } catch {
-      return null;
-    }
-  },
-  save: async ({ libraryItems }: { libraryItems: LibraryItems }) => {
-    localStorage.setItem(KEYS.drawingLibrary, JSON.stringify(libraryItems));
-  },
+  load: async () => ({ libraryItems: readLibrary() }),
+  save: async ({ libraryItems }: { libraryItems: LibraryItems }) => saveLibrary(libraryItems),
 };
 
 /**
- * Renders again only when its title, the theme or the language change: Excalidraw redraws its
+ * Renders again only when its note's title, the theme or the language change: Excalidraw redraws its
  * whole interface on a render, so it must not follow every change in the workspace.
  */
 export default memo(function DrawingEditor({ id, onClose }: { id: string; onClose: () => void }) {
@@ -55,7 +45,11 @@ export default memo(function DrawingEditor({ id, onClose }: { id: string; onClos
   const { t, lang } = useT();
   const dark = useTheme().resolved === "dark";
   const doc = useMemo(() => repo.getDoc(id), [repo, id]);
-  const title = useSyncExternalStore(repo.subscribe, () => repo.get(id)?.title ?? "");
+  // a diagram has no name of its own: an export ("Bild exportieren", "Speichern") is named after its note
+  const note = useSyncExternalStore(repo.subscribe, () => {
+    const parent = repo.get(id)?.parents;
+    return (parent && repo.get(Object.keys(parent)[0])?.title) || "";
+  });
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
   const [root, setRoot] = useState<HTMLDivElement | null>(null);
   const initial = useMemo(() => {
@@ -182,6 +176,16 @@ export default memo(function DrawingEditor({ id, onClose }: { id: string; onClos
 
   useHandleLibrary({ excalidrawAPI: api, adapter: library });
 
+  // "Bibliotheken durchsuchen" opens libraries.excalidraw.com; its "Add to Excalidraw" goes to the
+  // window of this name, so the library comes back into this drawing (library-link.ts)
+  useEffect(() => {
+    if (!window.name) window.name = "obtion-" + Math.random().toString(36).slice(2, 10);
+    if (!api) return;
+    return setLiveLibrary(async (blob) => {
+      await api.updateLibrary({ libraryItems: blob, merge: true, defaultStatus: "published", openLibraryMenu: true });
+    });
+  }, [api]);
+
   // The app's own shortcuts (⌘K, single keys on pages) stay off while drawing; Excalidraw listens on
   // the document, before the window.
   useEffect(() => {
@@ -212,27 +216,14 @@ export default memo(function DrawingEditor({ id, onClose }: { id: string; onClos
     location.hash = url.hash;
   }, [close]);
 
-  /** Title and close. A phone's toolbar needs the whole width: there close sits in the bottom bar. */
+  /** Close. A phone's toolbar needs the whole width: there it sits in the bottom bar. */
   const topRight = useCallback((phone: boolean) => (
     <div className={phone ? "drawing-top drawing-top-phone" : "drawing-top"}>
-      {!phone && (
-        <input
-          key={title}
-          className="drawing-title"
-          defaultValue={title}
-          placeholder={t("drawing.untitled")}
-          aria-label={t("item.title")}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === "Escape") e.currentTarget.blur();
-          }}
-          onBlur={(e) => e.target.value !== title && repo.setTitle(id, e.target.value.trim())}
-        />
-      )}
       <button type="button" className="drawing-button drawing-close" onClick={close} aria-label={t("drawing.close")} title={t("drawing.close")}>
         <X size={18} />
       </button>
     </div>
-  ), [title, t, repo, id, close]);
+  ), [t, close]);
   const renderTopRightUI = useCallback((phone: boolean) => (phone ? root && createPortal(topRight(true), root) : topRight(false)), [root, topRight]);
 
   const menus = useMemo(
@@ -261,7 +252,7 @@ export default memo(function DrawingEditor({ id, onClose }: { id: string; onClos
           <WelcomeScreen.Center>
             <WelcomeScreen.Center.Logo>
               <span className="drawing-logo">
-                <DRAWING_ICON size={28} /> {title || t("kind.drawing")}
+                <DRAWING_ICON size={28} /> {t("kind.drawing")}
               </span>
             </WelcomeScreen.Center.Logo>
             <WelcomeScreen.Center.Heading>{t("drawing.welcome")}</WelcomeScreen.Center.Heading>
@@ -273,18 +264,18 @@ export default memo(function DrawingEditor({ id, onClose }: { id: string; onClos
         </WelcomeScreen>
       </>
     ),
-    [title, t, close],
+    [t, close],
   );
 
   return (
-    <div ref={setRoot} className="drawing-full fixed inset-0 z-50" role="dialog" aria-modal aria-label={title || t("kind.drawing")}>
+    <div ref={setRoot} className="drawing-full fixed inset-0 z-50" role="dialog" aria-modal aria-label={t("kind.drawing")}>
       <Excalidraw
         excalidrawAPI={setApi}
         initialData={initial}
         onChange={onChange}
         theme={dark ? "dark" : "light"}
         langCode={LANG_CODE[lang] ?? "en"}
-        name={title || t("drawing.untitled")}
+        name={note || t("kind.drawing")}
         handleKeyboardGlobally
         autoFocus
         aiEnabled={false}

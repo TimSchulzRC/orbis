@@ -26,6 +26,13 @@ interface Link {
 /** A line that is nothing but one embed: a drawing there takes the whole line (Editor.tsx). */
 export const isDrawingLine = (text: string) => wikiLinkRe(true).exec(text.trim())?.[0].length === text.trim().length && text.trim().startsWith("![[");
 
+/** The drawing whose block a line is, if it is one. */
+export function drawingOnLine(text: string): string | undefined {
+  if (!isDrawingLine(text)) return undefined;
+  const id = repo.resolveTitle(wikiLinkRe(true).exec(text.trim())![2]!.trim());
+  return id && repo.get(id)?.kind === "zeichnung" ? id : undefined;
+}
+
 function linksIn(state: EditorState, from: number, to: number): Link[] {
   const out: Link[] = [];
   for (let pos = from; pos <= to; ) {

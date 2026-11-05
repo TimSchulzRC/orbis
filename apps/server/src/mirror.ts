@@ -90,7 +90,7 @@ export class Mirror {
       }
       // a drawing as a file Excalidraw opens (its images are blobs and stay out)
       if (i.kind === "zeichnung") {
-        want.set(pathOf(i, `${safe(i.title) || "Drawing"}.excalidraw`), { content: excalidrawFile(readScene(this.store.getDoc(i.id))) });
+        want.set(pathOf(i, `${translate(lang, "kind.drawing")}.excalidraw`), { content: excalidrawFile(readScene(this.store.getDoc(i.id))) });
         continue;
       }
       // children go into a folder named after this item (folder-note style)

@@ -1077,7 +1077,6 @@ body.cm-dragging * {
   gap: 6px;
   pointer-events: auto;
 }
-.drawing-title,
 .drawing-button {
   height: 2.25rem;
   border: 0;
@@ -1086,19 +1085,6 @@ body.cm-dragging * {
   box-shadow: var(--shadow-island);
   color: var(--text-primary-color);
   font: 500 14px var(--ui-font);
-}
-.drawing-title {
-  width: 14rem;
-  max-width: 34vw;
-  padding: 0 10px;
-  outline: none;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  overflow: hidden;
-  line-height: 2.25rem;
-}
-.drawing-title:focus {
-  box-shadow: 0 0 0 1px var(--color-primary);
 }
 .drawing-button {
   display: inline-flex;
@@ -1155,11 +1141,6 @@ body.cm-dragging * {
   font-size: 0.85em;
   color: var(--muted-foreground);
   cursor: pointer;
-}
-:is(.md, .cm-embed) .embed-drawing figcaption {
-  margin-top: 0.3em;
-  font-size: 0.8em;
-  color: var(--muted-foreground);
 }
 /* on a phone Excalidraw puts this next to its toolbar, which needs the width; the bottom bar is free in the middle */
 .drawing-top-phone {
