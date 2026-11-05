@@ -64,9 +64,10 @@ export class Blobs {
 
   /**
    * Store a streamed content (HTTP upload): hashed while it is written, at most `max` bytes.
-   * "too large" when the stream is longer (nothing stays behind).
+   * "too large" when the stream is longer, "hash mismatch" when `expect` is given and the content
+   * has another hash (nothing stays behind either way).
    */
-  async putStream(body: ReadableStream<Uint8Array> | null, max: number): Promise<{ hash: string; size: number } | "too large"> {
+  async putStream(body: ReadableStream<Uint8Array> | null, max: number, expect?: string): Promise<{ hash: string; size: number } | "too large" | "hash mismatch"> {
     const tmp = join(this.dir, `tmp-${crypto.randomUUID()}.part`);
     const hasher = new Bun.CryptoHasher("sha256");
     await Bun.write(tmp, "");
@@ -91,6 +92,10 @@ export class Blobs {
       return "too large";
     }
     const hash = hasher.digest("hex");
+    if (expect !== undefined && hash !== expect) {
+      unlinkSync(tmp);
+      return "hash mismatch";
+    }
     if (this.has(hash)) unlinkSync(tmp);
     else renameSync(tmp, this.path(hash));
     this.onStored?.(hash);

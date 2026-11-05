@@ -515,7 +515,7 @@ export class DeviceFiles {
         if (u.derived) q.set("derived", "1");
         const res = await fetch(`${this.link.base}/api/blobs/${u.hash}?${q}`, { method: "PUT", body: blob, headers: this.auth }).catch(() => null);
         if (!res) break; // offline again
-        const rejectedForGood = res.status === 413 || res.status === 415 || res.status === 422;
+        const rejectedForGood = res.status === 400 || res.status === 413 || res.status === 415 || res.status === 422;
         if (res.ok || rejectedForGood) {
           await this.db.delete("uploads", u.hash);
           this.status.uploading--;

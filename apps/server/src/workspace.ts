@@ -259,7 +259,7 @@ export class Workspace {
       throw e;
     }
     const got = await this.blobs.putStream(req.body, MAX_BLOB);
-    if (got === "too large") return fail(413, `too large (max ${MAX_BLOB / 1024 / 1024} MB)`);
+    if (typeof got === "string") return fail(413, `too large (max ${MAX_BLOB / 1024 / 1024} MB)`);
     let out: Item | undefined;
     let previous: string | undefined;
     try {
@@ -288,9 +288,9 @@ export class Workspace {
     if (!Blobs.valid(hash)) return fail(400, "bad hash");
     if (req.method === "PUT") {
       if (Number(req.headers.get("content-length") ?? 0) > MAX_BLOB) return fail(413, "too large");
-      const data = new Uint8Array(await req.arrayBuffer());
-      if (data.length > MAX_BLOB) return fail(413, "too large");
-      return (await blobs.put(hash, data)) ? json({ ok: true }) : fail(422, "hash mismatch");
+      const got = await blobs.putStream(req.body, MAX_BLOB, hash);
+      if (got === "too large") return fail(413, "too large");
+      return got === "hash mismatch" ? fail(400, "hash mismatch") : json({ ok: true });
     }
     // the probe header lets the app check without a console error
     if (!blobs.has(hash)) {

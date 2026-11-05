@@ -15,7 +15,7 @@ import { SETUP_ORIGIN, setUp, storeWriter } from "./setup";
 import { upgradeSetup } from "@obtion/core/setup";
 import { META_TYPE, migrateStatus } from "@obtion/core/model";
 import { allowedHosts } from "./trust";
-import { DATA, MAX_BLOB, MAX_WS_MESSAGE, PORT } from "./config";
+import { DATA, MAX_ATTACH, MAX_BLOB, MAX_WS_MESSAGE, PORT } from "./config";
 import { body, fail, json } from "./http";
 
 const HOST = process.env.HOST ?? "127.0.0.1";
@@ -275,16 +275,50 @@ async function accountApi(req: Request, path: string, url: URL): Promise<Respons
   return null;
 }
 
+/** Body limit of every route but the ones below. */
+const SMALL_BODY = 1024 * 1024;
+/** MCP: attach takes a file as base64 in the JSON. */
+const MCP_BODY = Math.ceil((MAX_ATTACH * 4) / 3) + SMALL_BODY;
+const FILE_ROUTE = /^\/w\/[\w-]{1,40}\/api\/(files(\/|$)|blobs\/)/;
+
+/** Only the file routes take a file's content; they count it themselves while it streams. */
+function bodyLimit(req: Request, path: string): number {
+  if ((req.method === "POST" || req.method === "PUT") && FILE_ROUTE.test(path)) return MAX_BLOB;
+  if (path === "/mcp" || /^\/w\/[\w-]{1,40}\/mcp$/.test(path)) return MCP_BODY;
+  return SMALL_BODY;
+}
+
+/**
+ * 413 before anything reads a body over `max`: by Content-Length, or for a chunked body by reading
+ * it up to `max` (the small routes read it whole anyway).
+ */
+async function capBody(req: Request, max: number): Promise<Request | Response> {
+  const tooLarge = () => fail(413, `request too large (max ${Math.floor(max / 1024 / 1024)} MB)`);
+  const length = req.headers.get("content-length");
+  if (length !== null) return Number(length) > max ? tooLarge() : req;
+  if (!req.body || max === MAX_BLOB) return req;
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for await (const chunk of req.body) {
+    if ((size += chunk.length) > max) return tooLarge();
+    chunks.push(chunk);
+  }
+  return new Request(req, { body: Buffer.concat(chunks) });
+}
+
 const server = Bun.serve<Conn>({
   port: PORT,
   hostname: HOST,
   idleTimeout: 0,
-  // a file's content may be as large as MAX_BLOB (Bun's default stops at 128 MB); the routes check it themselves
+  // a file's content may be as large as MAX_BLOB (Bun's default stops at 128 MB); bodyLimit keeps
+  // every other route far below
   maxRequestBodySize: MAX_BLOB,
-  async fetch(req, srv) {
-    const url = new URL(req.url);
+  async fetch(incoming, srv) {
+    const url = new URL(incoming.url);
     const path = url.pathname;
-    if (!allowedHost(req.headers.get("host"))) return new Response("Unknown host. Add it to OBTION_ALLOWED_HOSTS or set OBTION_PUBLIC_URL.", { status: 421 });
+    if (!allowedHost(incoming.headers.get("host"))) return new Response("Unknown host. Add it to OBTION_ALLOWED_HOSTS or set OBTION_PUBLIC_URL.", { status: 421 });
+    const req = await capBody(incoming, bodyLimit(incoming, path));
+    if (req instanceof Response) return req;
 
     if (path.startsWith("/api/auth/")) {
       // an OAuth provider sends the browser back from its own site; Better Auth checks the state
