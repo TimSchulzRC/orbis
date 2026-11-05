@@ -140,6 +140,13 @@ export function hydrateDrawings(root: HTMLElement, repo: Repo = current, files =
     box.addEventListener("click", show);
     box.addEventListener("keydown", (e) => (e.key === "Enter" || e.key === " ") && show(e));
     if (!item?.drawing?.count) return;
-    void drawingSvg(id, repo.getDoc(id), item.updated, dark, files).then((svg) => svg && box.replaceChildren(svg));
+    const draw = () => void drawingSvg(id, repo.getDoc(id), item.updated, dark, files).then((svg) => svg && box.replaceChildren(svg));
+    draw();
+    if (!item.drawing.files.length) return;
+    // an image still uploading elsewhere: drawn again once it is here; a removed embed stops listening
+    const stop = repo.onBlob((hash) => {
+      if (!fig.isConnected) return void stop();
+      if (item.drawing!.files.includes(hash)) draw();
+    });
   });
 }

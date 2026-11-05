@@ -184,8 +184,7 @@ async function pages(browser: import("playwright").Browser, serverName: string, 
       await p.keyboard.press("Control+End");
       await p.keyboard.press("Enter");
       await p.keyboard.type("/zeichnung");
-      await p.locator(".cm-slash-name", { hasText: "Zeichnung" }).first().waitFor({ timeout: 3000 });
-      await p.keyboard.press("Enter");
+      await p.locator(".cm-slash-name", { hasText: "Zeichnung" }).first().click({ timeout: 3000 });
       const canvas = p.locator(".drawing-full canvas.interactive");
       if (!(await canvas.waitFor({ timeout: 20000 }).then(() => true, () => false))) return void failures.push(`${label}: the drawing does not open`);
       const box = (await canvas.boundingBox())!;

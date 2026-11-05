@@ -112,7 +112,7 @@ const images = StateField.define<DecorationSet>({
   provide: (f) => EditorView.decorations.from(f),
 });
 
-/** What the embeds of the text show, so a change to one of them redraws it. */
+/** What the embedded drawings of the text show, so drawing on one redraws it (files keep their element). */
 function embedsKey(state: EditorState): string {
   const text = state.doc.toString();
   if (!text.includes("![[")) return "";
@@ -120,7 +120,7 @@ function embedsKey(state: EditorState): string {
     .filter((l) => l.embed)
     .map((l) => {
       const item = repo.get(repo.resolveTitle(l.target));
-      return item ? `${item.id}:${item.updated}:${item.deleted}` : "";
+      return item?.kind === "zeichnung" ? `${item.id}:${item.updated}:${item.deleted}` : "";
     })
     .join("|");
 }
