@@ -113,7 +113,8 @@ function imageDecos(state: EditorState): DecorationSet {
 const images = StateField.define<DecorationSet>({
   create: imageDecos,
   update: (deco, tr) => (tr.docChanged || tr.effects.some((e) => e.is(refreshEmbeds)) ? imageDecos(tr.state) : deco),
-  provide: (f) => EditorView.decorations.from(f),
+  // a diagram's block is one piece: arrows and Backspace never enter the text hidden behind it
+  provide: (f) => [EditorView.decorations.from(f), EditorView.atomicRanges.of((view) => view.state.field(f))],
 });
 
 /** What the embedded drawings of the text show, so drawing on one redraws it (files keep their element). */
