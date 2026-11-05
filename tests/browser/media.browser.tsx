@@ -7,7 +7,7 @@ import { hydrateFiles } from "../../packages/ui/src/ui/Markdown";
 /** `local`: whether the original is here, answered once the storage is open (`opened`). */
 function fakeFiles(local: boolean, opened: Promise<void> = Promise.resolve()) {
   const url = vi.fn(async (h: string) => `blob:local-${h}`);
-  const files = { isLocal: async () => (await opened, local), serverUrl: (h: string) => `https://server.test/api/blobs/${h}?t=x`, url, isMissing: () => false } as unknown as DeviceFiles;
+  const files = { isLocal: async () => (await opened, local), serverLink: async (h: string) => `https://server.test/api/blobs/${h}?s=signiert`, renewOnError: vi.fn(), url, isMissing: () => false } as unknown as DeviceFiles;
   return { files, url };
 }
 
@@ -21,7 +21,7 @@ test.each(["audio", "video"] as const)("%s not on this device: streams from the 
   const { files, url } = fakeFiles(false);
   const { root, el } = embed(tag);
   hydrateFiles(root, files);
-  await expect.poll(() => el.getAttribute("src")).toBe("https://server.test/api/blobs/abc?t=x");
+  await expect.poll(() => el.getAttribute("src")).toBe("https://server.test/api/blobs/abc?s=signiert");
   expect(url).not.toHaveBeenCalled();
 });
 

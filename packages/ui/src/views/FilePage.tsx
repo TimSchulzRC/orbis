@@ -43,8 +43,11 @@ export function FilePage({ item }: { item: Item }) {
       if (url) URL.revokeObjectURL(url);
     };
   }, [file.hash, local]);
-  // audio and video stream from the server (the player loads what it plays), unless the original is here
-  const media = localSrc ?? (local ? undefined : files.serverUrl(file.hash));
+  // audio, video and PDF stream from the server (the player loads what it plays), unless the
+  // original is here. Signed links, valid for minutes: the viewer's is made once, the download's renewed.
+  const remote = useServerLink(local ? undefined : file.hash);
+  const downloadLink = useServerLink(local ? undefined : file.hash, { name: file.name, download: true, renew: true });
+  const media = localSrc ?? (local ? undefined : remote);
   const missing = files.isMissing(file.hash);
   // who added it; from before accounts the app wrote only the device: then nobody is named
   const by = item.createdBy ? who(item.createdBy, t) : undefined;
@@ -96,7 +99,7 @@ export function FilePage({ item }: { item: Item }) {
         <div className="min-w-0 flex-1">
           <TitleField item={item} autoFocus={false} placeholder={file.name} />
         </div>
-        <a href={localSrc ?? files.serverUrl(file.hash, file.name, true)} download={localSrc ? file.name : undefined} className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-line bg-surface px-3 text-sm font-medium text-fg hover:bg-hover">
+        <a href={localSrc ?? downloadLink} download={localSrc ? file.name : undefined} rel="noreferrer" className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-line bg-surface px-3 text-sm font-medium text-fg hover:bg-hover">
           <Download size={15} /> <span className="max-md:hidden">{t("file.download")}</span>
         </a>
       </div>
@@ -126,9 +129,9 @@ export function FilePage({ item }: { item: Item }) {
 
       <div className="mt-6 overflow-hidden rounded-xl border border-line bg-surface-2">
         {isImg && display && <img src={display} alt={item.body || item.title} className="mx-auto max-h-[70vh] w-auto" />}
-        {file.filetype === "pdf" && (!local || localSrc) && <iframe title={item.title} src={localSrc ?? files.serverUrl(file.hash)} className="h-[75vh] w-full bg-white" />}
-        {file.filetype === "audio" && media && <audio controls src={media} className="w-full p-4" />}
-        {file.filetype === "video" && media && <video controls src={media} className="w-full" />}
+        {file.filetype === "pdf" && (localSrc ?? remote) && <iframe title={item.title} src={localSrc ?? remote} className="h-[75vh] w-full bg-white" />}
+        {file.filetype === "audio" && media && <audio controls src={media} onError={(e) => !localSrc && files.renewOnError(e.currentTarget, file.hash)} className="w-full p-4" />}
+        {file.filetype === "video" && media && <video controls src={media} onError={(e) => !localSrc && files.renewOnError(e.currentTarget, file.hash)} className="w-full" />}
         {!isImg && file.filetype !== "pdf" && file.filetype !== "audio" && file.filetype !== "video" && <FileText file={file} missing={missing} />}
       </div>
       {file.filetype === "pdf" && file.text && (
@@ -162,6 +165,27 @@ export function FilePage({ item }: { item: Item }) {
       )}
     </div>
   );
+}
+
+/**
+ * A signed link to the content on the server; undefined without a hash or while offline.
+ * `renew`: asked for again before it runs out (a download link); else made once (a player's src).
+ */
+function useServerLink(hash: string | undefined, opts: { name?: string; download?: boolean; renew?: boolean } = {}): string | undefined {
+  const files = useFiles();
+  const [link, setLink] = useState<{ hash: string; url: string }>();
+  useEffect(() => {
+    if (!hash) return;
+    let alive = true;
+    const load = () => void files.serverLink(hash, opts).then((url) => alive && url && setLink({ hash, url }));
+    load();
+    const timer = opts.renew ? setInterval(load, 4 * 60_000) : undefined;
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, [hash, opts.name]);
+  return link && link.hash === hash ? link.url : undefined;
 }
 
 /** Formats whose text the server takes out (Office, mails); the rest is shown as it is. */

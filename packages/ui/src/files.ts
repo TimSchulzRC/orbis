@@ -6,6 +6,7 @@ import { openDB, type IDBPDatabase } from "idb";
 import { useContext, useEffect, useState, useSyncExternalStore } from "react";
 import { type FileMeta, type Item, fileTypeOf, initItem, mimeOf, newId, setFileMeta } from "@obtion/core/model";
 import type { Repo } from "@obtion/sync";
+import type { BlobLink } from "@obtion/core/api";
 import type { SpaceLink } from "./browser";
 import { ScopeContext } from "./scope";
 import { KEYS } from "./ui/storage";
@@ -105,6 +106,8 @@ const THUMB_WIDTH = 320;
 const PREVIEW_TYPE = "image/webp";
 const PREVIEW_QUALITY = 0.8;
 const MAX_DOWNLOADS = 3;
+/** A signed link is asked for again when it has less left than this. */
+const LINK_MARGIN_MS = 2 * 60_000;
 /** A file younger than this whose content the server lacks is probably still uploading. */
 const UPLOAD_GRACE_MS = 60 * 60_000;
 
@@ -272,13 +275,38 @@ export class DeviceFiles {
     return url;
   }
 
-  /** A plain link can't carry an auth header, so the token goes in the query. */
-  serverUrl(hash: string, name?: string, download = false) {
-    const q = new URLSearchParams();
-    if (name) q.set("name", name);
-    if (download) q.set("download", "1");
-    q.set("t", this.link.token);
+  private signed = new Map<string, BlobLink>();
+
+  /**
+   * A link to a content on the server for what can't send a header (img, audio, video, the PDF
+   * viewer, a download link). Never the session token: the server signs it for this content and
+   * person, valid for minutes. `fresh`: a new one, e.g. after a player's link ran out.
+   */
+  async serverLink(hash: string, opts: { name?: string; download?: boolean; fresh?: boolean } = {}): Promise<string | undefined> {
+    let link = this.signed.get(hash);
+    if (!link || opts.fresh || link.expires - Date.now() < LINK_MARGIN_MS) {
+      const res = await fetch(`${this.link.base}/api/links/${hash}`, { headers: this.auth }).catch(() => null);
+      if (!res?.ok) return undefined;
+      link = (await res.json()) as BlobLink;
+      this.signed.set(hash, link);
+    }
+    const q = new URLSearchParams({ s: link.s });
+    if (opts.name) q.set("name", opts.name);
+    if (opts.download) q.set("download", "1");
     return `${this.link.base}/api/blobs/${hash}?${q}`;
+  }
+
+  /** A player whose link ran out (seeking after minutes) gets a new one and goes on where it was. */
+  renewOnError(el: HTMLMediaElement, hash: string) {
+    const last = Number(el.dataset.renewed ?? 0);
+    if (Date.now() - last < 30_000) return; // a broken content, not an old link
+    el.dataset.renewed = String(Date.now());
+    const at = el.currentTime;
+    void this.serverLink(hash, { fresh: true }).then((url) => {
+      if (!url) return;
+      el.src = url;
+      el.currentTime = at;
+    });
   }
 
   /** A file's whole text; its facts carry only the start of a long one. Undefined offline. */

@@ -96,8 +96,9 @@ test("a workspace is only open to its members – sync, files, activity, MCP", a
   expect((await get(bare, `/w/${cw.id}/api/activity`)).status).toBe(401);
   const hash = "0".repeat(64);
   expect((await get(bare, `/w/${cw.id}/api/blobs/${hash}`, dan.token)).status).toBe(403);
-  expect((await get(bare, `/w/${cw.id}/api/blobs/${hash}?t=${dan.token}`)).status).toBe(403);
-  expect((await get(bare, `/w/${cw.id}/api/blobs/${hash}?t=${carla.token}`)).status).toBe(404);
+  expect((await get(bare, `/w/${cw.id}/api/blobs/${hash}?t=${dan.token}`)).status).toBe(401); // a token in the URL counts for nothing
+  expect((await get(bare, `/w/${cw.id}/api/blobs/${hash}?t=${carla.token}`)).status).toBe(401);
+  expect((await get(bare, `/w/${cw.id}/api/blobs/${hash}`, carla.token)).status).toBe(404);
   await expect(connect(bare, cw.id, dan.token)).rejects.toThrow();
   // MCP: a member's token for one workspace opens that one only
   const { token, mcpUrl } = await post(bare, `/api/workspaces/${cw.id}/mcp-token`, {}, carla.token).then((r) => r.json());

@@ -434,12 +434,20 @@ export class Accounts {
     return this.workspacesOf(user).find((w) => w.id === inv.workspace)!;
   }
 
-  /** Only the hash is stored, so the token can be shown once. */
+  /** Only the hash is stored, so the token can be shown once. A new one ends the one before. */
   mcpToken(workspace: string, user: string): string {
     if (!this.role(workspace, user)) throw new AccountError("not a member", 403);
     const token = "obt_" + randomToken();
-    this.db.query("INSERT INTO tokens (hash, user, workspace, label, created) VALUES (?, ?, ?, ?, ?)").run(sha256(token), user, workspace, "mcp", Date.now());
+    this.db.transaction(() => {
+      this.revokeMcpToken(workspace, user);
+      this.db.query("INSERT INTO tokens (hash, user, workspace, label, created) VALUES (?, ?, ?, ?, ?)").run(sha256(token), user, workspace, "mcp", Date.now());
+    })();
     return token;
+  }
+
+  /** Ends the user's MCP token for this workspace at once. */
+  revokeMcpToken(workspace: string, user: string) {
+    this.db.query("DELETE FROM tokens WHERE workspace = ? AND user = ? AND label = 'mcp'").run(workspace, user);
   }
 
   /** Undefined once the user is no longer a member. */

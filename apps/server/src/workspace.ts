@@ -37,6 +37,8 @@ function fileHeaders(mime: string, name: string, download: boolean): Record<stri
   const type = servedType(mime);
   const headers: Record<string, string> = {
     "x-content-type-options": "nosniff",
+    // a signed link must not leave through a link inside the file
+    "referrer-policy": "no-referrer",
     // never let a file run as part of the app (SVG, HTML-like content)
     "content-security-policy": type === "application/pdf" ? "script-src 'none'" : "sandbox",
     "content-type": type,

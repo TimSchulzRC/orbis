@@ -125,6 +125,13 @@ export interface McpConnect {
   vault: string;
 }
 
+/** GET /w/<id>/api/links/<hash>: `s` for /w/<id>/api/blobs/<hash>?s=…, a link without the session token. */
+export interface BlobLink {
+  s: string;
+  /** ms; ask again before */
+  expires: number;
+}
+
 /** POST /w/<id>/api/undo */
 export interface UndoRequest {
   step: string;

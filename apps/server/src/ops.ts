@@ -50,6 +50,7 @@ import { isInInbox } from "@obtion/core/placement";
 import { caps, defaultStatusOptions, doneAt, dueOf, firstOfGroup, hasUpdates, initialProps, kindPatch, statusOf, statusProp, template, writeProp } from "@obtion/core/traits";
 import { previewTagToType, typeUsage } from "@obtion/core/typeops";
 import { excerpt, searchHits, searchIds } from "@obtion/core/search";
+import { BlockedAddress, fetchPublic } from "./fetch-public";
 import { type Heading, findSection, outline, page } from "@obtion/core/outline";
 import { keyBetween, nextPinKey } from "@obtion/core/sortkey";
 import { DAY_MS, dateOf } from "@obtion/core/date";
@@ -1432,11 +1433,16 @@ export class Ops {
     if (input.base64 && input.url) throw new OpError("Give url or base64, not both.");
     if (input.base64) data = fromB64(input.base64);
     else if (input.url) {
-      const u = new URL(input.url);
-      if (!["http:", "https:"].includes(u.protocol)) throw new OpError("Only http(s) URLs.");
-      const res = await fetch(u, { signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) });
-      if (!res.ok) throw new OpError(`Download failed: ${res.status}`);
-      data = new Uint8Array(await res.arrayBuffer());
+      let got: Awaited<ReturnType<typeof fetchPublic>>;
+      try {
+        got = await fetchPublic(input.url, { max: MAX_ATTACH, timeoutMs: DOWNLOAD_TIMEOUT_MS });
+      } catch (e) {
+        if (e instanceof BlockedAddress || e instanceof TypeError) throw new OpError(e instanceof BlockedAddress ? e.message : `Bad URL: ${input.url}`);
+        throw e;
+      }
+      if (got === "too large") throw new OpError(`File too large (max ${MAX_ATTACH / 1024 / 1024} MB via attach). Upload it over HTTP instead (see the attach description).`);
+      if (!(got instanceof Uint8Array)) throw new OpError(`Download failed: ${got.status}`);
+      data = got;
     } else throw new OpError("Give url or base64. For a local file use the HTTP upload (see the attach description).");
     if (data.length > MAX_ATTACH) throw new OpError(`File too large (max ${MAX_ATTACH / 1024 / 1024} MB via attach). Upload it over HTTP instead (see the attach description).`);
     return data;

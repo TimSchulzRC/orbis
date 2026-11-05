@@ -12,10 +12,10 @@ The MCP `get` tool prints the exact URL for a file, and the MCP instructions nam
 
 `Authorization: Bearer <token>`, one of:
 
-- the workspace's MCP token (settings › "Connect an agent (MCP)", or `POST /api/workspaces/<id>/mcp-token`). It opens these file routes and `/mcp`, nothing else.
+- the workspace's MCP token (settings › "Connect an agent (MCP)", or `POST /api/workspaces/<id>/mcp-token`). It opens these file routes and `/mcp` of its own workspace, nothing else. Each member has one per workspace: a new one ends the previous one at once, `DELETE /api/workspaces/<id>/mcp-token` ends it without a new one.
 - an app session token.
 
-The token's owner must still be a member of the workspace. A token never goes into the query string. Without a valid token the answer is `401`; a session of someone who isn't a member gets `403`.
+The token's owner must still be a member of the workspace. A token never goes into the query string, and the server ignores one there. Requests without the header get no CORS headers, and cookies count for nothing. Without a valid token the answer is `401`; a session of someone who isn't a member gets `403`.
 
 ## Upload a new file
 
@@ -55,5 +55,7 @@ Always a download (`Content-Disposition: attachment` with the file name). Header
 The server reads the text of every file it can (PDF incl. embedded Factur-X/ZUGFeRD/XRechnung XML, Word, Excel, PowerPoint, OpenDocument, text and code files in UTF-8, UTF-16 or Windows-1252, HTML as text, a ZIP's list of entries, Outlook `.msg` roughly). It is searchable and shown by MCP `get`, at most 100,000 characters per file. The whole text stays on the server beside the content; the file's facts, which sync to every device, carry only its first 4,000 characters (preview and offline search). The app loads the rest on the file's page. Files from before are read once when the workspace opens; texts of older versions move out of the facts then.
 
 ## Serving in the browser
+
+The app shows images, PDFs, audio and video with links that can't carry a header. It asks the server for a signed link per content (`GET /w/<id>/api/links/<hash>` with the session in the header). The link names the workspace, the hash and the member, is valid for 10 minutes, reads that one content only, and stops working when the person leaves the workspace. It never contains a session or MCP token, and it can't write.
 
 Only images, PDF, audio, video and plain text are shown inline, always with `X-Content-Type-Options: nosniff` and a sandbox CSP. Everything else, HTML and SVG downloads through this API included, is sent as `application/octet-stream` with `attachment`.

@@ -22,7 +22,7 @@ const serverFiles = {
   localUrl: async () => undefined,
   missingKey: () => "file.missing",
   wholeText: async () => undefined,
-  serverUrl: (hash: string, name?: string, download = false) => `https://server.test/api/blobs/${hash}?name=${name ?? ""}${download ? "&download=1" : ""}`,
+  serverLink: async (hash: string, o: { name?: string; download?: boolean } = {}) => `https://server.test/api/blobs/${hash}?s=signiert&name=${o.name ?? ""}${o.download ? "&download=1" : ""}`,
 } as unknown as DeviceFiles;
 
 async function show(meta: Partial<FileMeta> & { name: string }, files: DeviceFiles = serverFiles) {
@@ -48,6 +48,9 @@ test("a code file: its content in monospace, scrollable, with the download", asy
   expect(pre.element().className).toContain("font-mono");
   expect(getComputedStyle(pre.element()).overflowY).toBe("auto");
   await expect.element(download()).toHaveAttribute("href", expect.stringContaining("download=1"));
+  // a signed link, never the session token
+  expect(download().element().getAttribute("href")).toContain("s=signiert");
+  expect(download().element().getAttribute("href")).not.toContain("t=");
 });
 
 test("a Word file: the extracted text", async () => {

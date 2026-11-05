@@ -6,7 +6,7 @@ import type { ServerWebSocket } from "bun";
 import { Store } from "./store";
 import { Accounts, AccountError, FRESH_SECONDS, SIGNUP_COOKIE, randomToken } from "./accounts";
 import { loginConfig, loginMethods } from "./login";
-import type { AccountInfo, InviteCode, InviteInfo, InviteLink, McpConnect, Ok, Role, ServerInfo, SignedIn, SignupPolicy, SignupRequest } from "@obtion/core/api";
+import type { AccountInfo, BlobLink, InviteCode, InviteInfo, InviteLink, McpConnect, Ok, Role, ServerInfo, SignedIn, SignupPolicy, SignupRequest } from "@obtion/core/api";
 import { type Conn, Workspace, parseClientMsg } from "./workspace";
 import { agentOrigin, firstName, personOrigin } from "@obtion/core/origin";
 import { agentName } from "./mcp";
@@ -17,6 +17,7 @@ import { META_TYPE, migrateStatus } from "@obtion/core/model";
 import { allowedHosts } from "./trust";
 import { DATA, MAX_ATTACH, MAX_BLOB, MAX_WS_MESSAGE, PORT } from "./config";
 import { body, fail, json } from "./http";
+import { BlobLinks } from "./links";
 
 const HOST = process.env.HOST ?? "127.0.0.1";
 const DIST = resolve(process.env.OBTION_WEB_DIST ?? join(import.meta.dir, "../../web/dist"));
@@ -35,6 +36,8 @@ const config: { token: string; authSecret?: string } = existsSync(configPath) ? 
 const freshConfig = !config.authSecret || !existsSync(configPath);
 config.authSecret ??= randomToken() + randomToken();
 if (freshConfig) writeFileSync(configPath, JSON.stringify(config, null, 2), { mode: 0o600 });
+
+const blobLinks = new BlobLinks(config.authSecret);
 
 const legacyWorkspaceName = (lang?: string) => translate(LANGS.includes(lang as Lang) ? (lang as Lang) : "de", "account.personal");
 
@@ -256,6 +259,7 @@ async function accountApi(req: Request, path: string, url: URL): Promise<Respons
       }
       if (sub.startsWith("/invites/") && req.method === "DELETE") return (accounts.revokeInvite(id, user.id, sub.slice("/invites/".length)), json<Ok>({ ok: true }));
       // the token is shown only once
+      if (sub === "/mcp-token" && req.method === "DELETE") return (accounts.revokeMcpToken(id, user.id), json<Ok>({ ok: true }));
       if (sub === "/mcp-token" && req.method === "POST") {
         const base = PUBLIC_URL || `${url.protocol}//${req.headers.get("host")}`;
         const mcpUrl = `${base}/w/${id}/mcp`;
@@ -353,9 +357,8 @@ const server = Bun.serve<Conn>({
     if (route) {
       const id = route.id!;
       const rest = route.rest!;
-      // a file opened by URL (img, download link) carries the token as ?t=
-      const blobRead = req.method === "GET" && rest.startsWith("/api/blobs/");
-      const token = tokenOf(req) ?? (blobRead ? (url.searchParams.get("t") ?? undefined) : undefined);
+      // tokens come in the header only, never in the URL
+      const token = tokenOf(req);
       const base = PUBLIC_URL || `${url.protocol}//${req.headers.get("host")}`;
       const filesUrl = `${base}/w/${id}/api/files`;
       if (rest === "/mcp") {
@@ -372,12 +375,25 @@ const server = Bun.serve<Conn>({
         const person = { id: agent.id, name: firstName(agent) };
         return w.handle(req, rest, { user: person, origin: agentOrigin(agentName(req), person), filesUrl });
       }
+      // a file opened by URL (img, audio, video, PDF viewer, download link): a signed link for one content
+      const blob = /^\/api\/blobs\/([0-9a-f]{64})$/.exec(rest)?.[1];
+      const signed = url.searchParams.get("s");
+      if (!token && signed !== null && blob && (req.method === "GET" || req.method === "HEAD")) {
+        const member = blobLinks.verify(signed, id, blob);
+        if (!member) return fail(401, "link invalid or expired");
+        if (!accounts.role(id, member)) return fail(403, "not a member");
+        const w = workspace(id);
+        if (!w) return fail(404, "no such workspace");
+        return w.handle(req, rest, { user: { id: member, name: "" } });
+      }
       const user = await accounts.userOf(token);
       if (!user) return fail(401, "unauthorized");
       if (!accounts.role(id, user.id)) return fail(403, "not a member");
       const w = workspace(id);
       if (!w) return fail(404, "no such workspace");
       const person = { id: user.id, name: firstName(user) };
+      const linkFor = /^\/api\/links\/([0-9a-f]{64})$/.exec(rest)?.[1];
+      if (linkFor && req.method === "GET") return json<BlobLink>(blobLinks.sign(id, linkFor, user.id));
       if (rest === "/sync") {
         const ok = srv.upgrade(req, { data: { workspace: id, areas: new Set<string>(), origin: personOrigin(person), user: person, userId: user.id, session: token }, headers: { "sec-websocket-protocol": "obtion" } });
         return ok ? undefined : fail(400, "expected WebSocket");

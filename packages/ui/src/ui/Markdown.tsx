@@ -113,8 +113,9 @@ export function hydrateFiles(root: HTMLElement | null, files: DeviceFiles = curr
     // without a local original, stream audio and video from the server instead of loading them whole
     if (el instanceof HTMLMediaElement) {
       void files.isLocal(hash).then(async (here) => {
-        const url = here ? await files.url(hash) : files.serverUrl(hash);
+        const url = here ? await files.url(hash) : await files.serverLink(hash);
         if (url) el.src = url;
+        if (!here) el.addEventListener("error", () => files.renewOnError(el, hash));
       });
       return;
     }

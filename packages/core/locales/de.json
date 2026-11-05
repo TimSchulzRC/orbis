@@ -744,7 +744,7 @@
  "settings.captureDefault": "Im Eingang",
  "settings.captureDefaultHint": "Als das sortiert die Taste c im Eingang ein.",
  "settings.agent": "Agent verbinden (MCP)",
- "settings.agentIntro": "Jeder MCP-Client kann deine Daten lesen und ändern. Änderungen durch Agents sind in der Aktivität gekennzeichnet.",
+ "settings.agentIntro": "Jeder MCP-Client kann deine Daten lesen und ändern. Änderungen durch Agents sind in der Aktivität gekennzeichnet. Ein neues Token macht das bisherige sofort ungültig.",
  "settings.mcpToken": "MCP-Token",
  "settings.connectOffline": "Verbinde dich mit dem Server, um die Zugangsdaten zu sehen.",
  "settings.otherClients": "Andere Clients (JSON, Streamable HTTP)",
