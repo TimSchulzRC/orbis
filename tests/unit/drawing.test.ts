@@ -2,7 +2,7 @@ import { test, expect } from "bun:test";
 import { MemRepo, fork, sync } from "../support/helpers";
 import { type SceneElement, drawingInfo, excalidrawFile, readElements, readScene, setDrawingFile, setDrawingState, writeElements } from "@obtion/core/drawing";
 import { isContent } from "@obtion/core/model";
-import { canPlaceIn, isInInbox, sidebarChildren, sidebarRoots } from "@obtion/core/placement";
+import { belowOf, canPlaceIn, isInInbox, sidebarChildren, sidebarRoots } from "@obtion/core/placement";
 import { parseQuery, runQuery } from "@obtion/core/query";
 import { createIndex, indexRecord, searchIds } from "@obtion/core/search";
 
@@ -98,6 +98,8 @@ test("a drawing is a block of its note: kept below it, never sorted or listed on
   // not in the inbox, not in the sidebar, not in lists, nothing goes below it
   for (const d of [drawing, loose]) expect(isInInbox(ix.get(d)!, ix)).toBe(false);
   expect(sidebarChildren(note, ix)).toEqual([]);
+  // nor in "Darunter" (the note page, the inbox, the review)
+  expect(belowOf(note, ix)).toEqual([]);
   expect(sidebarRoots(ix).map((i) => i.id)).toEqual([note]);
   expect(runQuery(parseQuery("", ix).def, { ix }).items.map((i) => i.id)).not.toContain(drawing);
   expect(canPlaceIn(ix.get(other)!, ix.get(drawing)!, ix)).toBe(false);

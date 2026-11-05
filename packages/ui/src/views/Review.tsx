@@ -5,6 +5,7 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import type { EditorView } from "@codemirror/view";
 import { ArrowLeft, Check, Clock, FolderInput, Maximize2, Pencil, Pin, Shapes, Trash2, Undo2, X } from "lucide-react";
+import { belowOf } from "@obtion/core/placement";
 import type { Item } from "@obtion/core/model";
 import { plainText } from "@obtion/core/search";
 import { useRepo, useItemHref, openItem } from "../hooks";
@@ -309,7 +310,7 @@ function EntryCard({ entry, space, scroller, editing, onEdit, onDone }: { entry:
   const item = repo.get(entry.item.id) ?? entry.item;
   // in the inbox, a loose note is just a note
   const kind = kindLabel(itemLook(item, ix), t, { inboxAsNote: true });
-  const children = ix.items(ix.childrenOf(item.id));
+  const children = belowOf(item.id, ix);
   const image = useBlobUrl(item.file?.filetype === "bild" ? (item.file.display ?? item.file.hash) : item.file?.thumb, true);
   const [overflows, setOverflows] = useState(false);
   const self = useRef<HTMLElement>(null);

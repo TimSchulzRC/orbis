@@ -198,8 +198,15 @@ async function pages(browser: import("playwright").Browser, serverName: string, 
       await p.mouse.down();
       await p.mouse.move(box.x + 600, box.y + 420, { steps: 5 });
       await p.mouse.up();
+      // a step in the history: Back closes it, Forward opens it again, closing goes back to the note
+      await p.goBack();
+      if (!(await p.locator(".cm-embed .embed-drawing svg").waitFor({ timeout: 10000 }).then(() => true, () => false))) return void failures.push(`${label}: Back does not close the drawing, or it does not show in the note`);
+      await p.goForward();
+      if (!(await canvas.waitFor({ timeout: 10000 }).then(() => true, () => false))) return void failures.push(`${label}: Forward does not open the drawing again`);
+      const note = p.url().split("?")[0];
       await p.locator(".drawing-close").click();
-      if (!(await p.locator(".cm-embed .embed-drawing svg").waitFor({ timeout: 10000 }).then(() => true, () => false))) return void failures.push(`${label}: the drawing does not show in the note`);
+      await p.locator(".drawing-full").waitFor({ state: "detached", timeout: 5000 }).catch(() => failures.push(`${label}: closing does not close the drawing`));
+      if (p.url() !== note) failures.push(`${label}: closing does not go back to the note (${p.url()})`);
       if (await p.getByText("Diagramme", { exact: true }).count()) failures.push(`${label}: the drawing is listed below the note`);
     });
   if (serverName === "seeded") {

@@ -25,7 +25,6 @@ import { PlacePicker } from "../ui/Picker";
 import { pluralOf } from "@obtion/core/plural";
 import { queryBlocks, insertQueryBlock } from "../ui/QueryBlock";
 import { FilePage } from "./FilePage";
-import { openDrawing } from "../drawing/Drawing";
 import { insertDrawing } from "../ui/editor/slash";
 import { DRAWING_ICON } from "../ui/icons";
 import { TitleField } from "../ui/TitleField";
@@ -78,8 +77,9 @@ function DrawingInNote({ item }: { item: Item }) {
   const ix = scoped.index();
   const note = ix.backlinks(item.id).find((b) => b.kind === "embed" && ix.get(b.from)?.kind === "info")?.from ?? ix.parentsOf(item.id)[0];
   useEffect(() => {
-    if (note) openItem(note, { replace: true });
-    openDrawing(item.id);
+    // the drawing opens on its note (a search hit, a link to it)
+    if (note) openItem(note, { replace: true, query: "?d=" + encodeURIComponent(item.id) });
+    else setParams({ d: item.id });
   }, [item.id]);
   return <PagePlaceholder>{note ? t("drawing.loading") : titleOf(item, t)}</PagePlaceholder>;
 }

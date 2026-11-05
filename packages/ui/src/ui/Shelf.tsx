@@ -3,6 +3,7 @@
 // Also the newest entries as cards on Heute, and the rule of what lands in the inbox.
 import { useState } from "react";
 import { ArrowUp, Check, ChevronDown, ChevronRight, ListX, Maximize2, RotateCcw, SlidersHorizontal, Undo2 } from "lucide-react";
+import { belowOf } from "@obtion/core/placement";
 import { SETTINGS_ID, setMeta, setSettings } from "@obtion/core/model";
 import type { Repo } from "@obtion/sync";
 import type { QueryDef } from "@obtion/core/query";
@@ -148,7 +149,7 @@ export function ShelfCards({ entries }: { entries: InboxEntry[] }) {
       <div className="grid grid-cols-2 gap-3 @3xl:grid-cols-4">
         {entries.slice(0, 4).map((e) => {
           const ix = replica(e.space).repo.index();
-          const line = preview(e, t, lang, ix.childrenOf(e.item.id).length);
+          const line = preview(e, t, lang, belowOf(e.item.id, ix).length);
           return (
             <Button
               key={e.key}
@@ -187,7 +188,7 @@ function Row({ entry, current, waiting, space, onPick }: { entry: InboxEntry; cu
   const repo = replica(entry.space).repo;
   const ix = repo.index();
   const item = repo.get(entry.item.id) ?? entry.item;
-  const line = preview({ ...entry, item }, t, lang, ix.childrenOf(item.id).length);
+  const line = preview({ ...entry, item }, t, lang, belowOf(item.id, ix).length);
   return (
     <li data-row={entry.key} className={cn("group/row relative rounded-xl hover:bg-hover", current && "bg-selected before:absolute before:inset-y-2.5 before:left-0 before:w-[3px] before:rounded-r before:bg-inbox")}>
       <Button variant="plain" onClick={onPick} aria-current={current} className="block w-full min-w-0 rounded-xl px-3 py-2.5 text-left">

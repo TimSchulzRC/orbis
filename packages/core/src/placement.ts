@@ -36,6 +36,11 @@ export function sidebarRoots(ix: Index): Item[] {
     .sort((a, b) => cmpKey(a.pinned!, b.pinned!) || a.title.localeCompare(b.title));
 }
 
+/** "Darunter": what sits below an item. A diagram is a block of its note's text, not something below it. */
+export function belowOf(id: string, ix: Index): Item[] {
+  return ix.items(ix.childrenOf(id)).filter((c) => !c.deleted && c.kind !== "zeichnung");
+}
+
 /** Done children are hidden, except those in `keep` (the path to the open page). */
 export function sidebarChildren(id: string, ix: Index, keep: string[] = []): Item[] {
   return ix

@@ -66,6 +66,7 @@ export default memo(function DrawingEditor({ id, onClose }: { id: string; onClos
   const pendingSince = useRef<number | undefined>(undefined);
   const lastVersion = useRef<string | undefined>(undefined);
   const dirty = useRef(false);
+  const scene = useRef<{ elements: readonly OrderedExcalidrawElement[]; state: AppState; files: BinaryFiles } | null>(null);
   const stored = useRef(new Set<string>()); // image ids in the document or on their way there
 
   const uploadImages = (all: BinaryFiles) => {
@@ -103,24 +104,28 @@ export default memo(function DrawingEditor({ id, onClose }: { id: string; onClos
     timer.current = undefined;
     pendingSince.current = undefined;
     dirty.current = false;
-    if (!api || repo.readOnly) return;
-    const elements = api.getSceneElementsIncludingDeleted() as unknown as SceneElement[];
-    const state = api.getAppState() as unknown as Record<string, unknown>;
+    // the scene as Excalidraw last reported it: on closing, Excalidraw empties its own before this runs
+    const last = scene.current;
+    if (!last || repo.readOnly) return;
+    const elements = last.elements as unknown as SceneElement[];
+    const state = last.state as unknown as Record<string, unknown>;
     write((d) => {
-      // an element gone from the scene (another file opened, the canvas reset) is deleted on every device
+      // an element gone from the scene (another file opened) is deleted on every device; "Leeren" marks
+      // them deleted instead, so an empty scene is never one to delete everything by
       const here = new Set(elements.map((e) => e.id));
-      const gone = readElements(d)
+      const gone = (elements.length ? readElements(d) : [])
         .filter((e) => !here.has(e.id) && !e.isDeleted)
         .map((e) => ({ ...e, isDeleted: true, version: e.version + 1, versionNonce: Math.floor(Math.random() * 2 ** 31), updated: Date.now() }));
       const n = writeElements(d, [...elements, ...gone]);
       if (setDrawingState(d, state) || n) touch(d);
     });
-    uploadImages(api.getFiles());
+    uploadImages(last.files);
   };
   const flushRef = useRef(flush);
   flushRef.current = flush;
 
   const onChange = useCallback((elements: readonly OrderedExcalidrawElement[], state: AppState, all: BinaryFiles) => {
+    scene.current = { elements, state, files: all };
     // scrolling and zooming change nothing worth keeping
     const version = [hashElementsVersion(elements), Object.keys(all).length, state.viewBackgroundColor, state.gridModeEnabled, state.gridSize, state.gridStep].join(":");
     if (version !== lastVersion.current) {
@@ -246,8 +251,9 @@ export default memo(function DrawingEditor({ id, onClose }: { id: string; onClos
     }
     if (url.origin !== location.origin || !url.hash.startsWith("#/")) return;
     event.preventDefault();
-    close();
-    location.hash = url.hash;
+    // the page takes the drawing's place in the history: Back from there goes to the note
+    flushRef.current();
+    location.replace(url.hash);
   }, [close]);
 
   /**

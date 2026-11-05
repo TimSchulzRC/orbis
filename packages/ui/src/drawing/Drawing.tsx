@@ -1,26 +1,54 @@
 // Drawings outside the full-screen editor: opening one, and its picture as a block in a text (a click
-// on it opens it full screen to draw).
-import { Suspense, lazy, memo, useEffect } from "react";
+// on it opens it full screen to draw). An open drawing is a step in the browser's history ("?d=<id>"
+// on the note's address): Back closes it, Forward opens it again.
+import { memo, useEffect, useRef, useState } from "react";
 import type { Repo } from "@obtion/sync";
 import type { Item } from "@obtion/core/model";
 import { repo as current } from "../repo";
 import { files as currentFiles } from "../files";
 import { tr, useT } from "../i18n";
-import { parseHash } from "../hooks";
-import { createStore } from "../lib/store";
+import { setParams, useRoute } from "../hooks";
 import { escapeHtml } from "../ui/text";
 import { drawingSvg, forgetDrawingSvg, loadExcalidraw, readLibrary, saveLibrary } from "./scene";
 import { onLibraryLink } from "./library-link";
 import { notify } from "../ui/feedback";
 
-const DrawingEditor = lazy(() => import("./DrawingEditor"));
+/**
+ * The editor's code, fetched ahead (a note with a drawing shows, the pointer is on one) so opening
+ * waits for nothing. No Suspense: React would hold its placeholder for at least 300 ms.
+ */
+type EditorModule = typeof import("./DrawingEditor");
+let editorModule: Promise<EditorModule> | undefined;
+let Editor: EditorModule["default"] | null = null;
+export function loadEditor(): Promise<EditorModule> {
+  return (editorModule ??= import("./DrawingEditor").then(
+    (m) => ((Editor = m.default), m),
+    (e) => {
+      editorModule = undefined;
+      throw e;
+    },
+  ));
+}
 
-const open = createStore<{ id: string } | null>(null);
+const OPEN = "d";
+const openId = () => new URLSearchParams(location.hash.split("?")[1] ?? "").get(OPEN);
 
 export function openDrawing(id: string) {
   // keys go to the drawing, not to the note's text the click came from
   if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
-  open.set({ id });
+  void loadEditor().catch(() => {});
+  const [path, qs] = location.hash.replace(/^#/, "").split("?");
+  const query = new URLSearchParams(qs ?? "");
+  query.set(OPEN, id);
+  location.hash = path + "?" + query;
+  // opened from here: closing is going Back (a link or a reload opened it: the note replaces it)
+  history.replaceState({ ...history.state, drawing: id }, "");
+}
+
+function closeDrawing() {
+  const id = openId();
+  if (id && history.state?.drawing === id) history.back();
+  else setParams({ [OPEN]: null });
 }
 
 /** The open drawing takes a library itself (it shows it at once); returns the way to let go. */
@@ -62,31 +90,24 @@ function onDrawingClosed(fn: (id: string) => void) {
   closedListeners.add(fn);
   return () => void closedListeners.delete(fn);
 }
-const isOpen = (id: string) => open.get()?.id === id;
+const isOpen = (id: string) => openId() === id;
 
-/** Without props, so the app's renders don't reach the editor; it follows only what opens. */
+/** Shows the drawing the address names; the editor itself renders only when that changes. */
 export const DrawingHost = memo(function DrawingHost() {
-  const shown = open.use();
-  // another page closes it (Back, a link in the drawing)
+  const id = useRoute().query.get(OPEN);
+  const [, loaded] = useState(0);
   useEffect(() => {
-    if (!shown) return;
-    // the page, not the whole address: the app rewrites that once a page opened (workspace, title)
-    const page = () => parseHash().rest.split("?")[0]!.split("/").slice(0, 3).join("/");
-    const from = page();
-    const onHash = () => page() !== from && open.set(null);
-    addEventListener("hashchange", onHash);
-    return () => removeEventListener("hashchange", onHash);
-  }, [shown?.id]);
-  if (!shown) return null;
-  const close = () => {
-    open.set(null);
-    closedListeners.forEach((l) => l(shown.id));
-  };
-  return (
-    <Suspense fallback={<Loading />}>
-      <DrawingEditor key={shown.id} id={shown.id} onClose={close} />
-    </Suspense>
-  );
+    if (id && !Editor) loadEditor().then(() => loaded((n) => n + 1), (e) => (console.warn("drawing editor not loaded", e), closeDrawing()));
+  }, [id]);
+  const shown = useRef<string | null>(null);
+  useEffect(() => {
+    const was = shown.current;
+    shown.current = id;
+    if (was && was !== id) closedListeners.forEach((l) => l(was));
+  }, [id]);
+  if (!id) return null;
+  if (!Editor) return <Loading />;
+  return <Editor key={id} id={id} onClose={closeDrawing} />;
 });
 
 function Loading() {
@@ -102,6 +123,11 @@ export function drawingEmbedHTML(item: Item): string {
 /** Draws the drawings embedded in `root`; a click on one opens it to look at. */
 export function hydrateDrawings(root: HTMLElement, repo: Repo = current, files = currentFiles) {
   const dark = document.documentElement.dataset.theme === "dark";
+  // a drawing on the page: its editor is fetched while nothing else happens, so a tap opens it at once
+  if (!editorModule && root.querySelector("[data-drawing]")) {
+    const idle = window.requestIdleCallback ?? ((f: () => void) => setTimeout(f, 200));
+    idle(() => void loadEditor().catch(() => {}), { timeout: 3000 });
+  }
   root.querySelectorAll<HTMLElement>("[data-drawing]").forEach((fig) => {
     if (fig.dataset.drawn) return;
     fig.dataset.drawn = "1";
@@ -114,6 +140,7 @@ export function hydrateDrawings(root: HTMLElement, repo: Repo = current, files =
       openDrawing(id);
     };
     box.addEventListener("click", show);
+    box.addEventListener("pointerenter", () => void loadEditor().catch(() => {}), { once: true });
     box.addEventListener("keydown", (e) => (e.key === "Enter" || e.key === " ") && show(e));
     if (!item?.drawing?.count) return;
     let waiting = false;
