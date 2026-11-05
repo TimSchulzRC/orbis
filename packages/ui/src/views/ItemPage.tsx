@@ -25,6 +25,9 @@ import { PlacePicker } from "../ui/Picker";
 import { pluralOf } from "@obtion/core/plural";
 import { queryBlocks, insertQueryBlock } from "../ui/QueryBlock";
 import { FilePage } from "./FilePage";
+import { DrawingPage } from "./DrawingPage";
+import { createDrawing } from "../drawing/Drawing";
+import { DRAWING_ICON } from "../ui/icons";
 import { TitleField } from "../ui/TitleField";
 import { HistoryDialog } from "../ui/History";
 import { TypePage } from "./TypePage";
@@ -60,6 +63,7 @@ export function ItemPage({ id, isNew }: { id: string; isNew: boolean }) {
     return <PagePlaceholder>{scoped.status.synced ? t("item.missing") : t("item.loading")}</PagePlaceholder>;
   if (item.kind === "op") return <PagePlaceholder>{item.title}</PagePlaceholder>;
   if (item.kind === "datei") return <FilePage key={id} item={item} />;
+  if (item.kind === "zeichnung") return <DrawingPage key={id} item={item} />;
   if (item.type === META_TYPE) return <TypePage key={id} item={item} />;
   return <InfoView key={id} item={item} isNew={isNew} />;
 }
@@ -129,6 +133,9 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
           </MenuItem>
           <MenuItem icon={<FilePlus size={14} />} onClick={() => (close(), createAndOpen({ parents: [item.id] }))}>
             {t("item.newBelow")}
+          </MenuItem>
+          <MenuItem icon={<DRAWING_ICON size={14} />} onClick={() => (close(), createDrawing({ parents: [item.id] }))}>
+            {t("drawing.newBelow")}
           </MenuItem>
           <MenuItem icon={<History size={14} />} onClick={() => (close(), setHistory(true))}>
             {t("item.history")}

@@ -9,6 +9,7 @@ import { type DeviceFiles, files as current } from "../files";
 import type { Repo } from "@obtion/sync";
 import { getLang, tr } from "../i18n";
 import { escapeHtml } from "./text";
+import { drawingEmbedHTML, hydrateDrawings } from "../drawing/Drawing";
 
 const WIKILINK_AT_START = wikiLinkRe(true);
 
@@ -60,6 +61,7 @@ md.use({
         const file = item?.file;
         const size = link.alias && /^\d+$/.test(link.alias) ? Number(link.alias) : undefined;
         if (file && link.embed) return embedHTML(item!, size, renderingSpace);
+        if (item?.kind === "zeichnung" && link.embed && !item.deleted) return drawingEmbedHTML(item, size, renderingSpace);
         if (file) return `<a class="file-chip" href="${spaceHref(renderingSpace, itemPath(id!))}">📎 ${escapeHtml(link.alias || item!.title)} <small>${fmtBytes(getLang(), file.size)}</small></a>`;
         const label = escapeHtml(link.alias || link.target);
         return id
@@ -136,7 +138,10 @@ export function Markdown({ src, className }: { src: string; className?: string }
   const files = useFiles();
   const ref = useRef<HTMLDivElement>(null);
   const html = useMemo(() => renderMarkdown(src, spaceRepo, space), [src, spaceRepo, space, spaceRepo.version]);
-  useEffect(() => hydrateFiles(ref.current, files), [html]);
+  useEffect(() => {
+    hydrateFiles(ref.current, files);
+    if (ref.current) hydrateDrawings(ref.current, spaceRepo, files);
+  }, [html]);
   const onClick = (e: React.MouseEvent) => {
     const img = (e.target as HTMLElement).closest<HTMLImageElement>(".embed-img img");
     if (!img || !ref.current) return;

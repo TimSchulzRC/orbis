@@ -1,7 +1,8 @@
 // The data model shared by server, devices and agents. Every item is one Yjs document (guid = item id).
 // Kinds: "info" (a type is an info of type META_TYPE plus a `schema` map), "datei" (metadata only,
-// content on the server by SHA-256), "op" (a reversible bulk operation), "settings" (the one shared
-// settings doc). Documents of the former kind "sammlung" are ignored.
+// content on the server by SHA-256), "zeichnung" (a drawing: placed and linked like an info, its
+// content an Excalidraw scene, see drawing.ts), "op" (a reversible bulk operation), "settings" (the
+// one shared settings doc). Documents of the former kind "sammlung" are ignored.
 //
 // Top-level Yjs types of a document:
 //   meta     Y.Map   scalars: kind, title, type, home, pinned, created, updated, deleted, later …
@@ -20,16 +21,18 @@
 //   schema   Y.Map   types only; capabilities and each property are nested Y.Maps
 //   tabs     Y.Map   types only: tabId -> Y.Map (ViewTab); empty means the default views
 //   file, op, settings  Y.Map  only in documents of that kind
+//   drawing, drawingFiles, drawingState  only in drawings (see drawing.ts)
 import * as Y from "yjs";
 import { cmpKey, keyBetween } from "./sortkey";
 import type { Cond, QueryDef } from "./query";
 import { escapeRe } from "./text";
+import { DRAWING, DRAWING_FILES, DRAWING_STATE, type DrawingInfo, drawingInfo } from "./drawing";
 
 /** The type of every type document ("Typ"). Not a document itself, so it cannot be deleted. */
 export const META_TYPE = "sys:type";
 export const SETTINGS_ID = "sys:settings";
 
-export type Kind = "info" | "datei" | "op" | "settings";
+export type Kind = "info" | "datei" | "zeichnung" | "op" | "settings";
 export type FileType = "bild" | "pdf" | "audio" | "video" | "dokument" | "sonstiges";
 export const FILE_TYPES: FileType[] = ["bild", "pdf", "audio", "video", "dokument", "sonstiges"];
 
@@ -230,6 +233,7 @@ export interface Item {
   views: Record<string, ViewDef>;
   schema?: TypeSchema;
   file?: FileMeta;
+  drawing?: DrawingInfo;
   op?: OpRecord;
   settings?: SettingsRecord;
   suggestion?: Suggestion;
@@ -268,7 +272,7 @@ function withoutStatus({ status: _, ...caps }: Capabilities & { status?: unknown
 }
 
 /** The top-level maps of a document; query, view and pin belong to former collections. */
-export const DOC_MAPS = ["meta", "parents", "props", "extra", "rels", "tags", "refs", "views", "schema", "tabs", "file", "op", "settings", "query", "view", "pin"] as const;
+export const DOC_MAPS = ["meta", "parents", "props", "extra", "rels", "tags", "refs", "views", "schema", "tabs", "file", "op", "settings", "query", "view", "pin", DRAWING, DRAWING_FILES, DRAWING_STATE] as const;
 
 /** Narrow on reading: the data comes from other devices. */
 export type MetaValue = string | number | boolean | Suggestion;
@@ -390,6 +394,7 @@ export function readItem(id: string, doc: Y.Doc): Item | null {
     if (doc.getMap("tabs").size) item.schema.views = readTabs(doc);
   }
   if (kind === "datei") item.file = doc.getMap("file").toJSON() as FileMeta;
+  if (kind === "zeichnung") item.drawing = drawingInfo(doc);
   if (kind === "op") item.op = doc.getMap("op").toJSON() as OpRecord;
   if (kind === "settings") {
     const s: Partial<SettingsRecord> = doc.getMap("settings").toJSON();
@@ -858,9 +863,14 @@ export function optionNames(p: PropDef, v: Value): string[] {
   return (Array.isArray(v) ? v : [v]).map((id) => p.options?.find((o) => o.id === id)?.name ?? String(id));
 }
 
-/** Not deleted, and an information or file rather than an op or the settings. */
+/** Not deleted, and an information, file or drawing rather than an op or the settings. */
 export function isContent(i: Item) {
-  return !i.deleted && (i.kind === "info" || i.kind === "datei");
+  return !i.deleted && (i.kind === "info" || i.kind === "datei" || i.kind === "zeichnung");
+}
+
+/** Items that are pages with a place for others below them: informations and drawings, not files. */
+export function holdsItems(i: Pick<Item, "kind">) {
+  return i.kind === "info" || i.kind === "zeichnung";
 }
 
 /**

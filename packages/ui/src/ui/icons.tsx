@@ -1,7 +1,7 @@
 import {
   StickyNote, Map as MapIcon, FolderKanban, CircleCheck, Book, User, PenLine, GraduationCap, Building2, FileText, Star, Heart,
   Lightbulb, Calendar, Flag, Bookmark, Briefcase, House, Music, Film, Globe, Code, Coffee, Camera, Users, Target, Layers, Box,
-  Leaf, Rocket, MessageCircle, Link, Circle, Inbox, Image, FileType2, FileAudio, FileVideo, File, Shapes, Paperclip, ListTodo, Archive,
+  Leaf, Rocket, MessageCircle, Link, Circle, Inbox, Image, FileType2, FileAudio, FileVideo, File, Shapes, Paperclip, ListTodo, Archive, PenTool,
   type LucideIcon,
 } from "lucide-react";
 
@@ -53,3 +53,4 @@ export const NOTE_ICON = FileText;
 export const TYPE_ICON = Shapes;
 export const FILE_ICONS: Record<string, LucideIcon> = { bild: Image, pdf: FileType2, audio: FileAudio, video: FileVideo, dokument: File, sonstiges: File };
 export const FILES_ICON = Paperclip;
+export const DRAWING_ICON = PenTool;

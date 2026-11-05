@@ -278,7 +278,7 @@ export class Ops {
 
   label(i: Item) {
     const ix = this.store.index();
-    const kind = i.kind === "datei" ? "file" : (ix.typeName(i.type) ?? placeKind(i, ix));
+    const kind = i.kind === "datei" ? "file" : i.kind === "zeichnung" ? "drawing" : (ix.typeName(i.type) ?? placeKind(i, ix));
     return `${displayTitle(i) || "(untitled)"} [${kind}]`;
   }
 
@@ -385,6 +385,7 @@ export class Ops {
     const out: Record<string, unknown> = { id: i.id, title: i.title };
     const tn = ix.typeName(i.type);
     if (i.kind === "datei") out.file = `${i.file?.filetype} ${i.file?.name}`;
+    else if (i.kind === "zeichnung") out.kind = "drawing";
     else if (tn) out.type = tn;
     else out.kind = placeKind(i, ix);
     if (i.pinned) out.pinned = true;
@@ -404,7 +405,7 @@ export class Ops {
     const schema = ix.schemaOf(i);
     const parts = [`${displayTitle(i) || "(untitled)"} [${i.id}]`];
     const tn = ix.typeName(i.type);
-    parts.push(i.kind === "datei" ? `file ${i.file?.filetype ?? ""}`.trim() : (tn ?? placeKind(i, ix)));
+    parts.push(i.kind === "datei" ? `file ${i.file?.filetype ?? ""}`.trim() : i.kind === "zeichnung" ? "drawing" : (tn ?? placeKind(i, ix)));
     if (i.pinned) parts.push("pinned");
     const st = statusOf(i, schema);
     if (st) parts.push(`${st.option.name} (${st.group})`);
@@ -566,6 +567,8 @@ export class Ops {
       if (skip > 0 || start > 0) out.updates_range = `${i.updates.length - end + 1}–${i.updates.length - start} newest of ${i.updates.length}${start > 0 ? ` – older ones with updates_offset: ${skip + UPDATES}` : ""}`;
     }
     // a file's long content is its text, an information's its body
+    // a drawing's text is what its text elements say; the drawing itself is for people
+    if (i.drawing) out.drawing = { elements: i.drawing.count, text: i.drawing.text };
     if (opts.include_body !== false && i.body) {
       const body = blocksAsText(i.body, this.store.lang(), ix);
       if (i.file) out.body = body;
@@ -809,6 +812,7 @@ export class Ops {
     const ix = this.store.index();
     if (i.type === META_TYPE) return "type";
     if (i.kind === "datei") return "file";
+    if (i.kind === "zeichnung") return "drawing";
     return this.typeName(i.type) ?? (isInInbox(i, ix) ? "inbox" : "note");
   }
 
@@ -868,7 +872,7 @@ export class Ops {
 
   private anyItem(ref: string): Item {
     const byId = this.store.records.get(ref.trim().replace(/^\[\[|\]\]$/g, ""));
-    return byId && (byId.kind === "info" || byId.kind === "datei") ? byId : this.resolve(ref);
+    return byId && (byId.kind === "info" || byId.kind === "datei" || byId.kind === "zeichnung") ? byId : this.resolve(ref);
   }
 
   /**
@@ -1024,7 +1028,7 @@ export class Ops {
     const item = this.target(ref, "update");
     const ix = this.store.index();
     if (input.type !== undefined) {
-      if (input.type && item.kind !== "info") throw new OpError(`"${item.title}" is a file. Files have no type, only the file type (filetype).`);
+      if (input.type && item.kind !== "info") throw new OpError(item.kind === "zeichnung" ? `"${item.title}" is a drawing. Drawings have no type.` : `"${item.title}" is a file. Files have no type, only the file type (filetype).`);
       this.guardInbox(item, "giving it a type");
     }
     // null or "" removes the type
@@ -1203,7 +1207,7 @@ export class Ops {
   suggest(ref: string, input: SuggestInput, by: string, origin: string, touched?: Set<string>) {
     const item = this.target(ref, "suggest");
     touched?.add(item.id);
-    if (input.type && item.kind !== "info") throw new OpError(`"${item.title}" is a file. Files have no type; suggest a place instead.`);
+    if (input.type && item.kind !== "info") throw new OpError(`"${item.title}" is a ${item.kind === "zeichnung" ? "drawing" : "file"}. ${item.kind === "zeichnung" ? "Drawings" : "Files"} have no type; suggest a place instead.`);
     if (item.kind === "datei" && (input.parents?.length ?? 0) > 1) throw new OpError(`"${item.title}" is a file, and a file has exactly one parent. Suggest one place.`);
     const type = input.type ? this.resolveType(input.type).id : undefined;
     const parents = (input.parents ?? []).map((p) => this.resolve(p).id);

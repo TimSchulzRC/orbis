@@ -6,7 +6,7 @@
 //
 // Space = AND, | = OR, - = NOT, parentheses group. Properties match by name across all types and
 // free properties.
-import { type ViewTab, type ComputedDef, type FileType, type Item, type OptionDef, type PropDef, type ViewKind, FILE_TYPES, META_TYPE, QUERY_FENCE, STATUS_GROUPS, VIEW_KINDS, optionNames, titleKey } from "./model";
+import { type ViewTab, type ComputedDef, type FileType, type Item, type OptionDef, type PropDef, type ViewKind, FILE_TYPES, META_TYPE, QUERY_FENCE, STATUS_GROUPS, VIEW_KINDS, holdsItems, optionNames, titleKey } from "./model";
 import { dateOf, todayISO } from "./date";
 import { foldUmlauts as fold } from "./text";
 import type { Index } from "./graph";
@@ -47,6 +47,7 @@ export type Cond =
   | { dormant: true } // it or something above it is done
   | { without: Without }
   | { file: true }
+  | { drawing: true }
   | { filetype: FileType }
   | { text: string }
   | { unresolved: string }; // [[Title]] that does not exist
@@ -76,7 +77,7 @@ let kwCache: Record<string, KwTable> | null = null;
 
 const KW_KEYS = {
   key: ["type", "under", "in", "linked", "status", "filetype", "without", "sort", "group", "view", "columns", "limit", "collapsed"],
-  bare: ["inbox", "file", "pinned", "blocked", "dormant"],
+  bare: ["inbox", "file", "drawing", "pinned", "blocked", "dormant"],
   value: ["this", "empty", "today", "yes"],
   field: [...FIELDS],
   status: STATUS_KEYS,
@@ -189,6 +190,7 @@ export function parseQuery(src: string, ix: Index): ParseResult {
       const bare = kw("bare", raw);
       if (bare === "inbox") return { inbox: true };
       if (bare === "file") return { file: true };
+      if (bare === "drawing") return { drawing: true };
       if (bare === "pinned") return { pinned: true };
       if (bare === "blocked") return { blocked: true };
       if (bare === "dormant") return { dormant: true };
@@ -391,6 +393,7 @@ function printCond(c: Cond, lang: Lang, ix: Index, top = false): string {
   if ("dormant" in c) return say(lang, "bare", "dormant");
   if ("without" in c) return `${k("without")}:${say(lang, "without", c.without)}`;
   if ("file" in c) return say(lang, "bare", "file");
+  if ("drawing" in c) return say(lang, "bare", "drawing");
   if ("filetype" in c) return `${k("filetype")}:${say(lang, "filetype", c.filetype)}`;
   if ("text" in c) return quoteIf(c.text);
   if ("unresolved" in c) return `[[${c.unresolved}]]`;
@@ -648,7 +651,7 @@ export function matches(item: Item, c: Cond, ctx: EvalCtx): boolean {
   if ("without" in c) {
     switch (c.without) {
       case "type":
-        return item.kind === "info" && item.type !== META_TYPE && ix.typeOf(item) === null;
+        return holdsItems(item) && item.type !== META_TYPE && ix.typeOf(item) === null;
       case "parents":
         return ix.parentsOf(item.id).length === 0;
       case "children":
@@ -660,12 +663,13 @@ export function matches(item: Item, c: Cond, ctx: EvalCtx): boolean {
     }
   }
   if ("file" in c) return item.kind === "datei";
+  if ("drawing" in c) return item.kind === "zeichnung";
   if ("pinned" in c) return !!item.pinned;
   if ("blocked" in c) return ix.isBlocked(item);
   if ("dormant" in c) return ix.isDormant(item);
   if ("filetype" in c) return item.file?.filetype === c.filetype;
   if ("text" in c) {
-    const hay = (item.title + "\n" + item.tags.join(" ") + "\n" + item.body + "\n" + (item.file?.name ?? "")).toLowerCase();
+    const hay = (item.title + "\n" + item.tags.join(" ") + "\n" + item.body + "\n" + (item.file?.name ?? "") + "\n" + (item.drawing?.text ?? "")).toLowerCase();
     return c.text
       .toLowerCase()
       .split(/\s+/)

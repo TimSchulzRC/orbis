@@ -602,7 +602,7 @@ export class Store {
 // ---------- helpers ----------
 
 /** Items whose text has versions: informations and files (not settings, not operations). */
-const hasBody = (i: Item) => i.kind === "info" || i.kind === "datei";
+const hasBody = (i: Item) => i.kind === "info" || i.kind === "datei" || i.kind === "zeichnung";
 
 const utf8 = new TextEncoder();
 const fromUtf8 = new TextDecoder();

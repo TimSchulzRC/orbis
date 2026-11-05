@@ -12,6 +12,7 @@ import { ConfirmHost } from "./ui/feedback";
 import { AppToaster } from "./ui/toasts";
 import { TitleTips } from "./ui/TitleTips";
 import { LightboxHost } from "./ui/Lightbox";
+import { DrawingHost } from "./drawing/Drawing";
 import { PageBoundary } from "./ui/ErrorBoundary";
 import { Sidebar, SpaceTree } from "./ui/Sidebar";
 import { StatusButton } from "./ui/StatusButton";
@@ -208,6 +209,7 @@ function Main() {
       <TypeEditorHost />
       <AgentNotice />
       <LightboxHost />
+      <DrawingHost />
     </div>
   );
 }

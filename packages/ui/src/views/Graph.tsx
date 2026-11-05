@@ -61,7 +61,7 @@ function buildGraph(ix: Index, items: Item[], kinds: Set<EdgeKind>) {
   for (const l of links) for (const x of [l.source as string, l.target as string]) deg.set(x, (deg.get(x) ?? 0) + 1);
   const nodes: GNode[] = items.map((n) => {
     const schema = ix.schemaOf(n);
-    return { id: n.id, title: n.title || "–", color: n.kind === "datei" ? "--t-file" : (schema?.color ?? "--t-note"), square: !!statusProp(schema), deg: deg.get(n.id) ?? 0 };
+    return { id: n.id, title: n.title || "–", color: n.kind === "datei" ? "--t-file" : n.kind === "zeichnung" ? "--t-drawing" : (schema?.color ?? "--t-note"), square: !!statusProp(schema), deg: deg.get(n.id) ?? 0 };
   });
   return { nodes, links };
 }
@@ -202,7 +202,7 @@ export function GraphView() {
   const [tag, setTag] = useState("");
   const [q, setQ] = useState("");
   const data = useMemo(() => {
-    const key = (n: Item) => (n.kind === "datei" ? "#file" : (ix.typeOf(n) ?? ""));
+    const key = (n: Item) => (n.kind === "datei" ? "#file" : n.kind === "zeichnung" ? "#drawing" : (ix.typeOf(n) ?? ""));
     const items = ix.live.filter((n) => n.type !== META_TYPE && !hidden.has(key(n)) && (!tag || n.tags.includes(tag)) && (!hideDone || !isDone(n, ix.schemaOf(n))));
     const graph = buildGraph(ix, items, kinds);
     if (!hideOrphans) return graph;

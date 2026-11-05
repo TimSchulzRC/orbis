@@ -10,6 +10,7 @@ import { isInInbox } from "@obtion/core/placement";
 import { type Lang, translate } from "@obtion/core/i18n";
 import type { Store } from "./store";
 import type { Blobs } from "./blobs";
+import { excalidrawFile, readScene } from "@obtion/core/drawing";
 
 /** Records change in bursts (typing, imports): the first change starts the timer, and one write covers everything until it fires. */
 const SYNC_DELAY_MS = 1500;
@@ -85,6 +86,11 @@ export class Mirror {
     for (const i of ix.live) {
       if (i.kind === "datei" && i.file) {
         want.set(pathOf(i, safe(i.file.name)), { blob: i.file.hash });
+        continue;
+      }
+      // a drawing as a file Excalidraw opens (its images are blobs and stay out)
+      if (i.kind === "zeichnung") {
+        want.set(pathOf(i, `${safe(i.title) || "Drawing"}.excalidraw`), { content: excalidrawFile(readScene(this.store.getDoc(i.id))) });
         continue;
       }
       // children go into a folder named after this item (folder-note style)

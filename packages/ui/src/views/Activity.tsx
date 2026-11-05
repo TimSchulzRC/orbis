@@ -131,7 +131,7 @@ function Entry({ e, compact, noVerb, space }: { e: ActivityEvent; compact?: bool
           <span className="font-medium">{op.title}</span>
         ) : item?.kind === "settings" ? (
           <span className="font-medium">{t("activity.workspaceSettings")}</span>
-        ) : e.doc && item && (item.kind === "info" || item.kind === "datei") ? (
+        ) : e.doc && item && (item.kind === "info" || item.kind === "datei" || item.kind === "zeichnung") ? (
           <a href={itemHref(item.id)} className="inline-flex items-center gap-1 font-medium hover:underline">
             <ItemIcon item={item} size={13} />
             {/* a type is named as one: its title alone reads like an entry */}

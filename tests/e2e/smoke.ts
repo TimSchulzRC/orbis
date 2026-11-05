@@ -177,6 +177,29 @@ async function pages(browser: import("playwright").Browser, serverName: string, 
       await p.keyboard.press("Escape");
       await menu.waitFor({ state: "detached" });
     }, { phone });
+  if (serverName === "seeded" && !phone)
+    // a drawing made with "/" in a note: drawn on full screen, embedded in the text, its own page
+    await check(page, label, "/#/i/ex-course", errors, async (p) => {
+      await p.locator(".cm-line").first().click();
+      await p.keyboard.press("Control+End");
+      await p.keyboard.press("Enter");
+      await p.keyboard.type("/zeichnung");
+      await p.locator(".cm-slash-name", { hasText: "Zeichnung" }).first().waitFor({ timeout: 3000 });
+      await p.keyboard.press("Enter");
+      const canvas = p.locator(".drawing-full canvas.interactive");
+      if (!(await canvas.waitFor({ timeout: 20000 }).then(() => true, () => false))) return void failures.push(`${label}: the drawing does not open`);
+      const box = (await canvas.boundingBox())!;
+      await p.keyboard.press("r");
+      await p.mouse.move(box.x + 400, box.y + 300);
+      await p.mouse.down();
+      await p.mouse.move(box.x + 600, box.y + 420, { steps: 5 });
+      await p.mouse.up();
+      await p.locator(".drawing-close").click();
+      const embed = p.locator(".cm-embed .embed-drawing svg");
+      if (!(await embed.waitFor({ timeout: 10000 }).then(() => true, () => false))) return void failures.push(`${label}: the drawing does not show in the note`);
+      await p.locator(".cm-embed .embed-drawing figcaption a").click();
+      if (!(await p.locator(".drawing-svg svg").waitFor({ timeout: 10000 }).then(() => true, () => false))) failures.push(`${label}: the drawing's page shows no drawing`);
+    });
   if (serverName === "seeded") {
     // the open panel is a step in the history: Back closes it and stays on the page
     await check(page, label, "/#/i/ex-relaunch", errors, async (p) => {

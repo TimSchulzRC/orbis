@@ -1,6 +1,6 @@
 // Done items are hidden in the sidebar but stay in "Darunter", the type's page and search. Pinning counts as a place, so pinned
 // items are never in the inbox.
-import { type Item, META_TYPE, isContent } from "./model";
+import { type Item, META_TYPE, holdsItems, isContent } from "./model";
 import type { Index } from "./graph";
 import { isDone } from "./traits";
 import { matches } from "./query";
@@ -26,7 +26,7 @@ export function laterItems(ix: Index, now = Date.now()): Item[] {
 }
 
 export function canPlaceIn(item: Item, target: Item, ix: Index): boolean {
-  return target.kind === "info" && !item.parents[target.id] && !ix.wouldCycle(item.id, target.id);
+  return holdsItems(target) && !item.parents[target.id] && !ix.wouldCycle(item.id, target.id);
 }
 
 export function sidebarRoots(ix: Index): Item[] {

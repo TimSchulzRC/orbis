@@ -378,6 +378,16 @@ export class DeviceFiles {
     return meta;
   }
 
+  /** An image in a drawing: stored and uploaded like a file's content, without a file of its own. */
+  async addContent(blob: Blob, name: string): Promise<string> {
+    await this.ready;
+    const hash = await sha256(blob);
+    if (!this.local.has(hash)) await this.save(hash, blob);
+    await this.enqueueUpload({ hash, name });
+    this.scheduleSync(10);
+    return hash;
+  }
+
   private async addDerived(blob: Blob): Promise<string> {
     const h = await sha256(blob);
     await this.save(h, blob);
@@ -407,6 +417,8 @@ export class DeviceFiles {
       for (const h of [m.thumb, m.display]) if (h && !this.local.has(h)) want.push(h);
       if (this.mode === "local" && !this.local.has(m.hash)) want.push(m.hash);
     }
+    // images in drawings stay on the device like the previews, so drawings show offline
+    for (const r of this.repo.live()) for (const h of r.drawing?.files ?? []) if (!this.local.has(h)) want.push(h);
     if (this.repo.status.online) for (const h of want) if (!this.queue.includes(h) && !this.missing.has(h)) this.queue.push(h);
     this.pump();
     if (this.repo.status.online) this.makePdfPreviews(files).catch(() => {});
@@ -431,7 +443,7 @@ export class DeviceFiles {
    */
   private async collect() {
     const keep = new Set<string>();
-    for (const r of this.repo.records.values()) for (const h of [r.file?.hash, r.file?.display, r.file?.thumb]) if (h) keep.add(h);
+    for (const r of this.repo.records.values()) for (const h of [r.file?.hash, r.file?.display, r.file?.thumb, ...(r.drawing?.files ?? [])]) if (h) keep.add(h);
     const pending = await this.pendingUploads();
     for (const h of [...this.local]) if (!keep.has(h) && !pending.has(h) && !this.fresh.has(h)) await this.drop(h);
   }
@@ -543,9 +555,9 @@ function keptOnline(repo: Repo): Set<string> {
   return keep;
 }
 
-/** Images without a display version (SVGs) show their original. */
+/** Images without a display version (SVGs) show their original, and so do images in drawings. */
 function shownItself(repo: Repo): Set<string> {
-  return new Set(repo.live().flatMap((r) => (r.file?.filetype === "bild" && !r.file.display ? [r.file.hash] : [])));
+  return new Set(repo.live().flatMap((r) => (r.file?.filetype === "bild" && !r.file.display ? [r.file.hash] : (r.drawing?.files ?? []))));
 }
 
 export let files: DeviceFiles;

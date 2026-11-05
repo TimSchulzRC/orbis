@@ -10,7 +10,7 @@ import { useIndex, useItemHref } from "../hooks";
 import { tr, useT, titleOf } from "../i18n";
 import { cn } from "../lib/utils";
 import { Button } from "./primitives";
-import { ICON, INBOX_ICON, NOTE_ICON, TYPE_ICON, FILE_ICONS } from "./icons";
+import { ICON, INBOX_ICON, NOTE_ICON, TYPE_ICON, FILE_ICONS, DRAWING_ICON } from "./icons";
 
 export const pal = (color?: string) => `var(--pal-${color ?? "slate"}, var(--pal-slate))`;
 
@@ -25,12 +25,13 @@ export interface Look {
   icon: typeof INBOX_ICON;
   color: string;
   /** "schema" is an entry of a user type, named by `name` */
-  kind: "file" | "type" | "inbox" | "note" | "schema";
+  kind: "file" | "drawing" | "type" | "inbox" | "note" | "schema";
   name?: string;
 }
 
 export function itemLook(item: Item, ix: Index = repo.index()): Look {
   if (item.kind === "datei") return { icon: FILE_ICONS[item.file?.filetype ?? "sonstiges"] ?? FILE_ICONS.sonstiges!, color: "var(--t-file)", kind: "file" };
+  if (item.kind === "zeichnung") return { icon: DRAWING_ICON, color: "var(--t-drawing)", kind: "drawing" };
   if (item.schema && item.type === META_TYPE) return { icon: ICON[item.schema.icon] ?? TYPE_ICON, color: pal(item.schema.color), kind: "type" };
   const schema = ix.schemaOf(item);
   if (schema) return { icon: ICON[schema.icon] ?? ICON.circle!, color: pal(schema.color), kind: "schema", name: schema.name };

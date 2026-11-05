@@ -94,6 +94,7 @@ function CondPicker({ pick, onUnder, context }: { pick: (c: Cond) => void; onUnd
       <MenuItem onClick={() => setStep("tag")}>{t("query.cond.tag")}</MenuItem>
       <MenuItem onClick={() => pick({ inbox: true })}>{t("query.cond.inbox")}</MenuItem>
       <MenuItem onClick={() => pick({ file: true })}>{t("query.cond.file")}</MenuItem>
+      <MenuItem onClick={() => pick({ drawing: true })}>{t("query.cond.drawing")}</MenuItem>
     </>
   );
 }

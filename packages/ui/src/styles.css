@@ -1043,3 +1043,120 @@ body.cm-dragging * {
     animation: none;
   }
 }
+
+/* Drawings: Excalidraw full screen, in the app's colours */
+.drawing-full .excalidraw,
+.drawing-full .excalidraw.theme--dark {
+  --ui-font: var(--font-sans);
+  --color-primary: var(--t-drawing);
+  --color-primary-darker: color-mix(in srgb, var(--t-drawing) 85%, black);
+  --color-primary-darkest: color-mix(in srgb, var(--t-drawing) 70%, black);
+  --color-primary-hover: color-mix(in srgb, var(--t-drawing) 85%, black);
+  --color-primary-light: color-mix(in srgb, var(--t-drawing) 16%, var(--card));
+  --color-primary-light-darker: color-mix(in srgb, var(--t-drawing) 26%, var(--card));
+}
+.drawing-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  pointer-events: auto;
+}
+.drawing-title,
+.drawing-button {
+  height: 2.25rem;
+  border: 0;
+  border-radius: var(--border-radius-lg, 8px);
+  background: var(--island-bg-color);
+  box-shadow: var(--shadow-island);
+  color: var(--text-primary-color);
+  font: 500 14px var(--ui-font);
+}
+.drawing-title {
+  width: 14rem;
+  max-width: 34vw;
+  padding: 0 10px;
+  outline: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+  line-height: 2.25rem;
+}
+.drawing-title:focus {
+  box-shadow: 0 0 0 1px var(--color-primary);
+}
+.drawing-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  cursor: pointer;
+}
+.drawing-button:hover {
+  background: var(--button-hover-bg, var(--island-bg-color));
+}
+.drawing-close {
+  width: 2.25rem;
+  justify-content: center;
+  padding: 0;
+}
+.drawing-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font: 600 22px var(--ui-font);
+  color: var(--t-drawing);
+}
+.drawing-svg svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 70vh;
+}
+:is(.md, .cm-embed) .embed-drawing {
+  margin: 0;
+}
+:is(.md, .cm-embed) .embed-drawing-svg {
+  max-width: min(100%, 720px);
+  min-height: 3rem;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  cursor: zoom-in;
+}
+:is(.md, .cm-embed) .embed-drawing-svg svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 480px;
+}
+:is(.md, .cm-embed) .embed-drawing-empty {
+  display: flex;
+  height: 6rem;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85em;
+  color: var(--muted-foreground);
+  cursor: pointer;
+}
+:is(.md, .cm-embed) .embed-drawing figcaption {
+  margin-top: 0.3em;
+  font-size: 0.8em;
+  color: var(--muted-foreground);
+}
+:is(.md, .cm-embed) .embed-drawing figcaption a {
+  color: inherit;
+}
+/* on a phone Excalidraw puts this next to its toolbar, which needs the width; the bottom bar is free in the middle */
+.drawing-top-phone {
+  position: fixed;
+  left: 50%;
+  bottom: calc(1.25rem + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 5;
+}
+.drawing-top-phone .drawing-button {
+  background: transparent;
+  box-shadow: none;
+  color: var(--foreground);
+}

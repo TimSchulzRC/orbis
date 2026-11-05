@@ -71,6 +71,7 @@ export class Blobs {
   referenced(): Set<string> {
     const out = new Set<string>();
     for (const r of this.store.records.values()) {
+      for (const h of r.drawing?.files ?? []) out.add(h);
       const f = r.file;
       if (!f) continue;
       for (const h of [f.hash, f.display, f.thumb, ...(f.history ?? []).map((x) => x.hash)]) if (h) out.add(h);

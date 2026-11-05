@@ -1,7 +1,7 @@
 // As in Notion, links hide their [[ ]] or [ ](…) wherever the cursor is and act as one piece of
 // text. Embedded files (![[…]]) show only below their line.
 import { syntaxTree } from "@codemirror/language";
-import { EditorSelection, type EditorState, type Range } from "@codemirror/state";
+import { EditorSelection, type EditorState, type Range, StateEffect } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate, WidgetType } from "@codemirror/view";
 import { ExternalLink, Link2, Pencil, Unlink } from "lucide-react";
 import { navigate, openItem } from "../../hooks";
@@ -39,7 +39,7 @@ function linksIn(state: EditorState, from: number, to: number): Link[] {
         const id = open === "![[" ? repo.resolveTitle(title.trim()) : undefined;
         // [[id]] without a text reads as the page's title
         const text = bar >= 0 ? rest.slice(bar + 1) : (repo.get(title.trim())?.title ?? target);
-        out.push({ from: start, to: start + all.length, text, target, web: false, embed: !!(id && repo.get(id)?.file) });
+        out.push({ from: start, to: start + all.length, text, target, web: false, embed: !!(id && (repo.get(id)?.file || repo.get(id)?.kind === "zeichnung")) });
       }
     }
     pos = line.to + 1;
@@ -161,6 +161,9 @@ class LinkWidget extends WidgetType {
   }
 }
 
+/** An embedded item changed elsewhere (a drawing was drawn on, one just made got its place in the index). */
+export const refreshEmbeds = StateEffect.define<null>();
+
 function build(view: EditorView): DecorationSet {
   const deco: Range<Decoration>[] = [];
   for (const { from, to } of view.visibleRanges)
@@ -182,7 +185,7 @@ export const links = ViewPlugin.fromClass(
       this.decorations = build(view);
     }
     update(u: ViewUpdate) {
-      if (u.docChanged || u.viewportChanged || syntaxTree(u.startState) !== syntaxTree(u.state)) this.decorations = build(u.view);
+      if (u.docChanged || u.viewportChanged || syntaxTree(u.startState) !== syntaxTree(u.state) || u.transactions.some((tr) => tr.effects.some((e) => e.is(refreshEmbeds)))) this.decorations = build(u.view);
     }
   },
   {
