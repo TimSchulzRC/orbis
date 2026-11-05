@@ -62,6 +62,27 @@ test("edits from two devices merge per element", () => {
   expect(b.get(id)!.drawing!.count).toBe(2);
 });
 
+test("two devices changing one element at once: the newer version wins on both, whatever Yjs picks", () => {
+  for (let run = 0; run < 12; run++) {
+    const a = new MemRepo();
+    const id = a.add({ kind: "zeichnung", title: "Board" });
+    a.change(id, (d) => writeElements(d, [el("x", { version: 1 })]));
+    const b = fork(a);
+    a.change(id, (d) => writeElements(d, [el("x", { version: 5, x: 50 })]));
+    b.change(id, (d) => writeElements(d, [el("x", { version: 2, x: 20 })]));
+    sync(a, b);
+    for (const r of [a, b]) expect(readElements(r.doc(id)).map((e) => [e.version, e.x])).toEqual([[5, 50]]);
+    // a deletion is a newer version too: an older edit from elsewhere does not bring the element back
+    a.change(id, (d) => writeElements(d, [el("x", { version: 6, isDeleted: true })]));
+    b.change(id, (d) => writeElements(d, [el("x", { version: 3, x: 30 })]));
+    sync(a, b);
+    for (const r of [a, b]) expect(r.get(id)!.drawing!.count).toBe(0);
+    // a write drops the copies it outdates
+    b.change(id, (d) => writeElements(d, [el("x", { version: 7 })]));
+    expect(b.doc(id).getMap("drawing").size).toBe(1);
+  }
+});
+
 test("a drawing is placed, nested and found like a note", () => {
   const m = new MemRepo();
   const project = m.add({ title: "Projekt" });

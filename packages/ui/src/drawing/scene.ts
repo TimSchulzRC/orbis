@@ -50,11 +50,18 @@ export function drawingSvg(id: string, doc: Y.Doc, version: number, dark: boolea
   const key = `${id}:${version}:${dark ? 1 : 0}`;
   let hit = svgs.get(key);
   if (!hit) {
-    hit = renderSvg(doc, dark, files).catch((e) => {
-      console.warn("drawing preview failed", e);
-      svgs.delete(key);
-      return null;
-    });
+    hit = renderSvg(doc, dark, files).then(
+      ({ svg, complete }) => {
+        // an image not here yet: drawn again next time
+        if (!complete) svgs.delete(key);
+        return svg;
+      },
+      (e) => {
+        console.warn("drawing preview failed", e);
+        svgs.delete(key);
+        return null;
+      },
+    );
     svgs.set(key, hit);
     // keep only the newest version of each drawing
     for (const k of svgs.keys()) if (k.startsWith(id + ":") && !k.startsWith(`${id}:${version}:`)) svgs.delete(k);
@@ -62,12 +69,13 @@ export function drawingSvg(id: string, doc: Y.Doc, version: number, dark: boolea
   return hit.then((svg) => (svg ? (svg.cloneNode(true) as SVGSVGElement) : null));
 }
 
-async function renderSvg(doc: Y.Doc, dark: boolean, files: DeviceFiles): Promise<SVGSVGElement | null> {
+async function renderSvg(doc: Y.Doc, dark: boolean, files: DeviceFiles): Promise<{ svg: SVGSVGElement | null; complete: boolean }> {
   const scene = readScene(doc);
   const elements = scene.elements.filter((e) => !e.isDeleted);
-  if (!elements.length) return null;
+  if (!elements.length) return { svg: null, complete: true };
   const { exportToSvg } = await loadExcalidraw();
-  const images = elements.some((e) => e.type === "image") ? await loadImages(scene.files, files) : [];
+  const wanted = new Set(elements.flatMap((e) => (e.type === "image" && typeof e.fileId === "string" ? [e.fileId] : [])));
+  const images = wanted.size ? await loadImages(Object.fromEntries(Object.entries(scene.files).filter(([id]) => wanted.has(id))), files) : [];
   const svg = await exportToSvg({
     elements: elements as never,
     appState: { exportBackground: true, viewBackgroundColor: (scene.state.viewBackgroundColor as string) ?? "#ffffff", exportWithDarkMode: dark, exportEmbedScene: false },
@@ -76,5 +84,5 @@ async function renderSvg(doc: Y.Doc, dark: boolean, files: DeviceFiles): Promise
   });
   svg.removeAttribute("width");
   svg.removeAttribute("height");
-  return svg;
+  return { svg, complete: images.length >= wanted.size };
 }

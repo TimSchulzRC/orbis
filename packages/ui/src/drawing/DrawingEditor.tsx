@@ -102,8 +102,7 @@ export default function DrawingEditor({ id, view, onEdit, onClose }: { id: strin
         .filter((e) => !here.has(e.id) && !e.isDeleted)
         .map((e) => ({ ...e, isDeleted: true, version: e.version + 1, versionNonce: Math.floor(Math.random() * 2 ** 31), updated: Date.now() }));
       const n = writeElements(d, [...elements, ...gone]);
-      setDrawingState(d, state);
-      if (n) touch(d);
+      if (setDrawingState(d, state) || n) touch(d);
     });
     uploadImages(api.getFiles());
   };
@@ -148,6 +147,11 @@ export default function DrawingEditor({ id, view, onEdit, onClose }: { id: strin
       api.updateScene({ elements: merged, captureUpdate: CaptureUpdateAction.NEVER });
     };
     const onFiles = () => !writing.current && addImages(readScene(doc).files);
+    // an image whose content was still uploading on the other device: in once the server has it
+    const stopBlobs = repo.onBlob((hash) => {
+      const all = readScene(doc).files;
+      if (Object.values(all).some((f) => f.hash === hash)) addImages(all);
+    });
     const onState = () => !writing.current && api.updateScene({ appState: doc.getMap(DRAWING_STATE).toJSON() as never, captureUpdate: CaptureUpdateAction.NEVER });
     const maps = [doc.getMap(DRAWING), doc.getMap(DRAWING_FILES), doc.getMap(DRAWING_STATE)] as const;
     maps[0].observe(onElements);
@@ -155,11 +159,12 @@ export default function DrawingEditor({ id, view, onEdit, onClose }: { id: strin
     maps[2].observe(onState);
     return () => {
       live = false;
+      stopBlobs();
       maps[0].unobserve(onElements);
       maps[1].unobserve(onFiles);
       maps[2].unobserve(onState);
     };
-  }, [api, doc]);
+  }, [api, doc, repo]);
 
   useHandleLibrary({ excalidrawAPI: api, adapter: library });
 

@@ -84,6 +84,12 @@ export function DrawingPreview({ item, className, onOpen }: { item: Item; classN
   const doc = useMemo(() => repo.getDoc(item.id), [repo, item.id]);
   const box = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<"loading" | "empty" | "shown">(item.drawing?.count ? "loading" : "empty");
+  // an image that arrives later (still uploading elsewhere) draws the preview again
+  const [blobs, setBlobs] = useState(0);
+  useEffect(() => {
+    const stop = repo.onBlob((hash) => item.drawing?.files.includes(hash) && setBlobs((n) => n + 1));
+    return () => void stop();
+  }, [repo, item.drawing?.files.join()]);
   useEffect(() => {
     if (!item.drawing?.count) {
       box.current?.replaceChildren();
@@ -97,7 +103,7 @@ export function DrawingPreview({ item, className, onOpen }: { item: Item; classN
       setState(svg ? "shown" : "empty");
     });
     return () => void (live = false);
-  }, [item.id, item.updated, dark, doc, files]);
+  }, [item.id, item.updated, dark, doc, files, blobs]);
   return (
     <button
       type="button"

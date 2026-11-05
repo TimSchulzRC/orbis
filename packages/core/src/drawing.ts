@@ -2,7 +2,10 @@
 // Markdown. It is placed, linked and nested like a note. The scene lives in three maps of its
 // document, so edits from two devices merge per element (the newer `version` of an element wins):
 //
-//   drawing       Y.Map  elementId -> element (Excalidraw's JSON, deleted ones too: isDeleted)
+//   drawing       Y.Map  "elementId@clientId" -> element (Excalidraw's JSON, deleted ones too:
+//                        isDeleted). Each device writes its own key: Yjs settles two writes to one key
+//                        by client id, not by version, so the copies live side by side and reading
+//                        takes the newest (isNewer). A write drops the copies it outdates.
 //   drawingFiles  Y.Map  fileId -> { hash, mimeType, created }  (images; the content is a blob)
 //   drawingState  Y.Map  name -> value  (the canvas: viewBackgroundColor, gridSize, gridModeEnabled)
 //
@@ -59,13 +62,23 @@ export function byIndex(a: SceneElement, b: SceneElement): number {
   return x < y ? -1 : x > y ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }
 
-export function readElements(doc: Y.Doc): SceneElement[] {
-  const out: SceneElement[] = [];
-  for (const v of doc.getMap<unknown>(DRAWING).values()) {
+/** Every stored copy of each element, by element id. */
+function copies(doc: Y.Doc): Map<string, { key: string; el: SceneElement }[]> {
+  const out = new Map<string, { key: string; el: SceneElement }[]>();
+  for (const [key, v] of doc.getMap<unknown>(DRAWING)) {
     const el = v instanceof Y.AbstractType ? v.toJSON() : v;
-    if (isElement(el)) out.push(el);
+    if (!isElement(el)) continue;
+    const list = out.get(el.id);
+    if (list) list.push({ key, el });
+    else out.set(el.id, [{ key, el }]);
   }
-  return out.sort(byIndex);
+  return out;
+}
+
+const newest = (list: { el: SceneElement }[]) => list.reduce((a, b) => (isNewer(b.el, a.el) ? b : a)).el;
+
+export function readElements(doc: Y.Doc): SceneElement[] {
+  return [...copies(doc).values()].map(newest).sort(byIndex);
 }
 
 export function readScene(doc: Y.Doc): Scene {
@@ -96,12 +109,15 @@ export function drawingInfo(doc: Y.Doc): DrawingInfo {
  */
 export function writeElements(doc: Y.Doc, elements: readonly SceneElement[]): number {
   const map = doc.getMap<unknown>(DRAWING);
+  const stored = copies(doc);
+  const own = `@${doc.clientID}`;
   let n = 0;
   for (const el of elements) {
-    const cur = map.get(el.id) as SceneElement | undefined;
-    if (cur && !isNewer(el, cur)) continue;
-    // only plain JSON goes into the document
-    map.set(el.id, JSON.parse(JSON.stringify(el)));
+    const list = stored.get(el.id) ?? [];
+    if (list.length && !isNewer(el, newest(list))) continue;
+    // only plain JSON goes into the document; the copies this one outdates go
+    map.set(el.id + own, JSON.parse(JSON.stringify(el)));
+    for (const c of list) if (c.key !== el.id + own) map.delete(c.key);
     n++;
   }
   return n;
@@ -112,14 +128,18 @@ export function setDrawingFile(doc: Y.Doc, id: string, file: DrawingFile) {
   if (map.get(id)?.hash !== file.hash) map.set(id, file);
 }
 
-/** Only the keys in DRAWING_STATE_KEYS; unchanged values are not written again. */
-export function setDrawingState(doc: Y.Doc, state: Record<string, unknown>) {
+/** Only the keys in DRAWING_STATE_KEYS; unchanged values are not written again. True if one changed. */
+export function setDrawingState(doc: Y.Doc, state: Record<string, unknown>): boolean {
   const map = doc.getMap<unknown>(DRAWING_STATE);
+  let changed = false;
   for (const k of DRAWING_STATE_KEYS) {
     const v = state[k];
     if (v === undefined) continue;
-    if (JSON.stringify(map.get(k)) !== JSON.stringify(v)) map.set(k, v === null ? null : JSON.parse(JSON.stringify(v)));
+    if (JSON.stringify(map.get(k)) === JSON.stringify(v)) continue;
+    map.set(k, v === null ? null : JSON.parse(JSON.stringify(v)));
+    changed = true;
   }
+  return changed;
 }
 
 /** Is a version of `remote` newer than `local`? Excalidraw's rule: higher version, on a tie the lower nonce. */
