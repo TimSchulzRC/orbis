@@ -8,14 +8,13 @@ import { Button, Kbd } from "./primitives";
 import { cn } from "../lib/utils";
 
 /**
- * The buttons stay the same and in the same place for every entry. `keys`: their key hints, which go
- * invisible while `quiet` (the note is edited), keeping their room so nothing moves. `waiting`: one back
- * tomorrow comes back now instead of "Morgen". Without `onTrash` there is no "Löschen".
+ * The buttons stay the same and in the same place for every entry. `keys`: their key hints.
+ * `waiting`: one back tomorrow comes back now instead of "Morgen". Without `onTrash` there is no "Löschen".
  */
-export function SortChoices({ item, waiting, onPick, onTypes, onLater, onPin, onTrash, keys, quiet, className }: { item: Item; waiting?: boolean; onPick: () => void; onTypes: () => void; onLater: () => void; onPin: () => void; onTrash?: () => void; keys: boolean; quiet: boolean; className?: string }) {
+export function SortChoices({ item, waiting, onPick, onTypes, onLater, onPin, onTrash, keys, className }: { item: Item; waiting?: boolean; onPick: () => void; onTypes: () => void; onLater: () => void; onPin: () => void; onTrash?: () => void; keys: boolean; className?: string }) {
   const { t } = useT();
   const info = item.kind === "info";
-  const hint = (key: string) => keys && <span className={cn("hidden @[600px]:inline-flex", quiet && "invisible")}><Kbd>{key}</Kbd></span>;
+  const hint = (key: string) => keys && <span className="hidden @[600px]:inline-flex"><Kbd>{key}</Kbd></span>;
   const tile = (icon: ReactNode, label: string, key: string, onClick: () => void, opts: { primary?: boolean; danger?: boolean; disabled?: boolean; wide?: boolean } = {}) => (
     <Button
       variant="plain"

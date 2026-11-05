@@ -9,8 +9,7 @@ import { Editor } from "./Editor";
 import { queryBlocks } from "./QueryBlock";
 import { toolbarExtract } from "./editor/toolbar";
 
-/** `readOnly`: shown as it reads (queries with their results), editable again without a new editor. */
-export function NoteEditor({ item, autoFocus, readOnly, minHeight, placeholder, onView }: { item: Item; autoFocus?: boolean; readOnly?: boolean; minHeight?: string; placeholder?: string; onView?: (v: EditorView | null) => void }) {
+export function NoteEditor({ item, autoFocus, minHeight, placeholder, onView }: { item: Item; autoFocus?: boolean; minHeight?: string; placeholder?: string; onView?: (v: EditorView | null) => void }) {
   const { t } = useT();
   // the workspace of this part of the page (the inbox shows entries of several)
   const repo = useRepo();
@@ -21,7 +20,6 @@ export function NoteEditor({ item, autoFocus, readOnly, minHeight, placeholder, 
       doc={doc}
       nodeId={item.id}
       autoFocus={autoFocus}
-      readOnly={readOnly}
       onView={onView}
       extra={[queryBlocks(item.id), toolbarExtract.of(true)]}
       minHeight={minHeight}

@@ -12,7 +12,7 @@ import { Button, Empty, IconButton } from "../ui/primitives";
 import { cn } from "../lib/utils";
 import { SpaceScope } from "../ui/Spaces";
 import { InboxList, backNow } from "../ui/Shelf";
-import { type Edit, NoteCard } from "../ui/NoteCard";
+import { NoteCard } from "../ui/NoteCard";
 import { SortChoices } from "../ui/SortChoices";
 import { type InboxEntry, closeShelf, dismissShelf, openShelf, useInboxItems, useLaterItems, useShelf } from "../ui/inbox";
 import { type Undo, revert, usePickers, useTriageActions } from "../ui/TriageActions";
@@ -113,13 +113,6 @@ function Inbox({ at, desktop, pinned, panel }: { at?: string; desktop: boolean; 
   const waiting = isLater(key);
   // a phone shows the entry only when one was asked for
   const listOnly = !desktop && !at;
-  // editing belongs to the entry shown: another one (sorted, stepped to, undone) starts unedited
-  const [editing, setEditing] = useState<{ key?: string; at: Edit } | null>(null);
-  if (editing && editing.key !== key) setEditing(null);
-  const stopEditing = () => {
-    (document.activeElement as HTMLElement | null)?.blur();
-    setEditing(null);
-  };
   useEffect(() => void (session = { order: order.current, at: key }), [key]);
   useEffect(() => writeJSON(KEYS.inboxSorted, sorted), [sorted]);
 
@@ -161,8 +154,8 @@ function Inbox({ at, desktop, pinned, panel }: { at?: string; desktop: boolean; 
     const el = e.target as HTMLElement;
     // pinned the panel is part of the page: its keys only while the focus is in it
     if (pinned && !panel.current?.contains(document.activeElement)) return;
-    // while editing the keys are the text's (Esc: below, after the editor)
-    if (editing || pick.placing || pick.typing || othersKey(el) || e.metaKey || e.ctrlKey || e.altKey) return;
+    // in the title or the text the keys are theirs (Esc: below, after the editor)
+    if (pick.placing || pick.typing || othersKey(el) || e.metaKey || e.ctrlKey || e.altKey) return;
     const pressed = e.key;
     // Enter on a button or link is its own; Tab moves the focus
     if ((pressed === "Enter" && el.closest("button, a")) || pressed === "Tab") return;
@@ -189,9 +182,12 @@ function Inbox({ at, desktop, pinned, panel }: { at?: string; desktop: boolean; 
     else return;
     e.preventDefault();
   };
-  // Esc ends editing once the editor had it, unless it used it (its completions close first)
+  // Esc leaves the title or the text, unless the editor used it (its completions close first); the keys are the panel's again
   const escape = useRef<(e: KeyboardEvent) => void>(null);
-  escape.current = (e) => editing && e.key === "Escape" && !e.defaultPrevented && !pick.placing && !pick.typing && (e.preventDefault(), stopEditing());
+  escape.current = (e) => {
+    const el = document.activeElement as HTMLElement | null;
+    if (e.key === "Escape" && !e.defaultPrevented && !pick.placing && !pick.typing && el && card.current?.contains(el)) (e.preventDefault(), el.blur());
+  };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => keys.current?.(e);
     const onEscape = (e: KeyboardEvent) => escape.current?.(e);
@@ -217,8 +213,8 @@ function Inbox({ at, desktop, pinned, panel }: { at?: string; desktop: boolean; 
   const head = <ReviewHead total={total} at={entry && !waiting ? sorted.length + 1 : total} sorted={sorted.length} onBack={desktop ? undefined : () => openShelf()} onClose={pinned ? undefined : dismissShelf} />;
   const body = entry ? (
     <SpaceScope id={entry.space}>
-      <Entry key={entry.key} entry={entry} space={several ? spaceById(entry.space)?.name : undefined} scroller={card} editing={editing} onEdit={(at) => setEditing({ key, at })} onDone={stopEditing} />
-      <SortChoices item={entry.item} waiting={waiting} onPick={() => (stopEditing(), pick.setPlacing([entry.item]))} onTypes={() => (stopEditing(), pick.setTyping([entry.item]))} onLater={later_} onPin={pin} onTrash={trash} keys={desktop} quiet={!!editing} className="mt-6" />
+      <Entry key={entry.key} entry={entry} space={several ? spaceById(entry.space)?.name : undefined} scroller={card} />
+      <SortChoices item={entry.item} waiting={waiting} onPick={() => pick.setPlacing([entry.item])} onTypes={() => pick.setTyping([entry.item])} onLater={later_} onPin={pin} onTrash={trash} keys={desktop} className="mt-6" />
     </SpaceScope>
   ) : (
     <Finished count={sorted.length} onDone={pinned ? undefined : finish} />
@@ -232,7 +228,7 @@ function Inbox({ at, desktop, pinned, panel }: { at?: string; desktop: boolean; 
         onTouchStart={(e) => (touchX.current = e.touches[0]!.clientX)}
         onTouchEnd={(e) => {
           const dx = (e.changedTouches[0]?.clientX ?? 0) - (touchX.current ?? 0);
-          if (!editing && Math.abs(dx) > SWIPE) step(dx < 0 ? 1 : -1);
+          if (Math.abs(dx) > SWIPE) step(dx < 0 ? 1 : -1);
           touchX.current = null;
         }}
       >
@@ -291,9 +287,9 @@ function Steps({ total, done }: { total: number; done: number }) {
 }
 
 /** The entry's card, as tall as the panel leaves, the same for every entry, so the choices below never move. */
-function Entry({ entry, space, scroller, editing, onEdit, onDone }: { entry: InboxEntry; space?: string; scroller: React.RefObject<HTMLDivElement | null>; editing: { at: Edit } | null; onEdit: (at: Edit) => void; onDone: () => void }) {
+function Entry({ entry, space, scroller }: { entry: InboxEntry; space?: string; scroller: React.RefObject<HTMLDivElement | null> }) {
   const item = useRepo().get(entry.item.id) ?? entry.item;
-  return <NoteCard item={item} meta={space && <span>{space}</span>} scroller={scroller} editing={editing} onEdit={onEdit} onDone={onDone} onOutside={onDone} className="flex-1" />;
+  return <NoteCard item={item} meta={space && <span>{space}</span>} scroller={scroller} className="flex-1" />;
 }
 
 /** The phone's "Erledigt" in place of the list. */

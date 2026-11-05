@@ -31,7 +31,7 @@ beforeEach(async () => {
 afterEach(() => cleanup());
 
 const rows = () => page.getByRole("listitem").filter({ has: page.getByRole("button", { name: /.+/ }) });
-const titleNow = () => document.querySelector("article h2")?.textContent?.trim() ?? "";
+const titleNow = () => document.querySelector<HTMLTextAreaElement>("article textarea")?.value.trim() ?? "";
 
 test("a row: workspace, title, text; on hover its buttons take the corner from the age", async () => {
   const row = rows().first();

@@ -1,6 +1,5 @@
-// The quick note: the tray's field takes the title where it was clicked, Enter grows it into a card,
-// written with the page's editor and sorted at once with the inbox's choices. Closed, the note stays
-// as the draft; left empty, it goes.
+// The quick note: the tray's button opens one new note as a card, written with the page's editor and
+// sorted at once with the inbox's choices. Closed, the note lies in the inbox; left empty, it goes.
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { commands, page } from "vitest/browser";
 import { cleanup, render } from "vitest-browser-react";
@@ -22,23 +21,19 @@ beforeEach(async () => {
 });
 afterEach(() => (closeQuickNote(), cleanup()));
 
-const field = () => page.getByRole("textbox", { name: "Neue Notiz" });
-const draftField = () => page.getByRole("button", { name: /Entwurf:/ });
+const field = () => page.getByRole("button", { name: "Neue Notiz" });
 const card = () => page.getByRole("dialog", { name: "Neue Notiz" });
 const titleField = () => card().getByRole("textbox", { name: "Titel" });
 const found = (title: string) => repo.live().find((i) => i.title === title);
 const open = async () => {
   await field().click();
-  await commands.keys("press", "Enter");
   await expect.element(titleField()).toHaveFocus();
 };
 
-test("the title typed into the field itself, Enter grows the card with the caret in the text, ⌘↵: the note lies in the inbox", async () => {
-  await field().click();
+test("a title, Enter into the text, ⌘↵: the note lies in the inbox, the card closes", async () => {
+  await open();
   await commands.keys("type", "Gespräch mit Lena");
-  expect(document.querySelector("[data-quick-note]")).toBeNull();
   await commands.keys("press", "Enter");
-  await expect.element(titleField()).toHaveValue("Gespräch mit Lena");
   await expect.poll(() => document.querySelector("[data-quick-note] .cm-editor.cm-focused")).not.toBeNull();
   await commands.keys("type", "Termin verschiebt sich");
   await commands.keys("press", "Control+Enter");
@@ -49,15 +44,14 @@ test("the title typed into the field itself, Enter grows the card with the caret
   expect(note.type).toBeNull();
 });
 
-test("Esc keeps the draft: the field names it and opens it again", async () => {
+test("Esc closes the card; the note lies in the inbox, the button starts a new one", async () => {
   await open();
   await commands.keys("type", "Halber Gedanke");
   await commands.keys("press", "Escape");
   await expect.poll(() => document.querySelector("[data-quick-note]")).toBeNull();
-  await expect.element(page.getByRole("button", { name: "Entwurf: Halber Gedanke" })).toBeVisible();
-  await draftField().click();
-  await expect.element(titleField()).toHaveValue("Halber Gedanke");
-  expect(repo.live().filter((i) => i.title === "Halber Gedanke")).toHaveLength(1);
+  await expect.poll(() => found("Halber Gedanke")).toBeTruthy();
+  await field().click();
+  await expect.element(titleField()).toHaveValue("");
 });
 
 test("left empty, the note goes", async () => {
@@ -66,20 +60,7 @@ test("left empty, the note goes", async () => {
   await commands.keys("press", "Escape");
   await expect.poll(() => document.querySelector("[data-quick-note]")).toBeNull();
   await expect.poll(() => repo.live().length).toBe(before);
-  await expect.element(field()).toBeVisible();
-});
-
-test("⌘↵ in the field files the title alone; Esc there keeps it as the draft", async () => {
-  await field().click();
-  await commands.keys("type", "Nur ein Titel");
-  await commands.keys("press", "Control+Enter");
-  await expect.poll(() => found("Nur ein Titel")).toBeTruthy();
-  expect(document.querySelector("[data-quick-note]")).toBeNull();
-  await expect.element(field()).toHaveValue("");
-  await field().click();
-  await commands.keys("type", "Später");
-  await commands.keys("press", "Escape");
-  await expect.element(page.getByRole("button", { name: "Entwurf: Später" })).toBeVisible();
+  await expect.element(page.getByRole("button", { name: "Neue Notiz" })).toBeVisible();
 });
 
 test('the inbox\'s choices are there but "Löschen"; "Anheften" sorts the note and closes the card', async () => {
@@ -97,4 +78,19 @@ test("a query in the text shows its results, as on the note's page", async () =>
   const note = [...repo.live()].sort((a, b) => b.created - a.created)[0]!;
   repo.getDoc(note.id).getText("body").insert(0, queryFence('{"where":{"type":"task"}}') + "\n");
   await expect.poll(() => document.querySelector("[data-quick-note] .cm-queryblock")).not.toBeNull();
+});
+
+test("on the pinned inbox (Heute), a click on the dimmed inbox beside the card closes it", async () => {
+  await cleanup();
+  await render(
+    <div className="fixed inset-0 flex flex-col justify-end">
+      <Tray desktop pinned />
+    </div>,
+  );
+  await open();
+  await commands.keys("type", "Neben der Karte");
+  const beside = document.querySelector<HTMLElement>("[data-quick-beside]")!.getBoundingClientRect();
+  await commands.mouse("click", beside.left + 20, beside.top + 20);
+  await expect.poll(() => document.querySelector("[data-quick-note]")).toBeNull();
+  await expect.poll(() => found("Neben der Karte")).toBeTruthy();
 });
