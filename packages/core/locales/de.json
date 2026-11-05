@@ -1082,5 +1082,17 @@
  "editor.slash.drawing.keys": "diagramm, zeichnung, skizze, whiteboard, excalidraw, drawing, diagram",
  "drawing.insert": "Diagramm einfügen",
  "drawing.libraryAdded": "Bibliothek für Diagramme hinzugefügt",
- "drawing.libraryFailed": "Die Bibliothek konnte nicht hinzugefügt werden."
+ "drawing.libraryFailed": "Die Bibliothek konnte nicht hinzugefügt werden.",
+ "drawing.libraries": "Bibliotheken",
+ "drawing.librarySearch": "Bibliotheken durchsuchen",
+ "drawing.librarySort": "Sortierung",
+ "drawing.libraryPopular": "Beliebt",
+ "drawing.libraryNew": "Neu",
+ "drawing.libraryUpdated": "Aktualisiert",
+ "drawing.librariesLoading": "Bibliotheken werden geladen …",
+ "drawing.librariesFailed": "Die Bibliotheken konnten nicht geladen werden. Bist du online?",
+ "drawing.librariesNone": "Keine Bibliothek gefunden.",
+ "drawing.libraryAdd": "Zu Obtion hinzufügen",
+ "drawing.libraryAddedShort": "Hinzugefügt",
+ "drawing.libraryRetry": "Fehlgeschlagen – nochmal versuchen"
 }

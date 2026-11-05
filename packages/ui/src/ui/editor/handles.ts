@@ -75,6 +75,9 @@ export const blockHandles = ViewPlugin.fromClass(
     move = (e: MouseEvent) => {
       if (this.dragging) return;
       cancelAnimationFrame(this.frame);
+      // a dialog over the text (a diagram on full screen): no handles, and no measuring of the text
+      // behind it on every move
+      if ((e.target as Element | null)?.closest?.("[aria-modal]")) return void (this.box.classList.contains("shown") && this.hide());
       this.frame = requestAnimationFrame(() => this.hover(e.clientX, e.clientY));
     };
     hover(x: number, y: number) {

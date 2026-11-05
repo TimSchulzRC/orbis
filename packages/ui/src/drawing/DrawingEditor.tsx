@@ -16,13 +16,16 @@ import { useT } from "../i18n";
 import { useTheme } from "../theme";
 import { dataURLToBlob, imageName, loadImages, readLibrary, saveLibrary } from "./scene";
 import { setLiveLibrary } from "./Drawing";
+import { LibraryBrowser } from "./LibraryBrowser";
 import { DRAWING_ICON } from "../ui/icons";
 
 (window as { EXCALIDRAW_ASSET_PATH?: string }).EXCALIDRAW_ASSET_PATH ??= "/excalidraw/";
 
 /**
- * Excalidraw calls onChange on every pointer move. The document gets the result once drawing pauses,
- * and during a long stroke at least this often, so other devices follow along.
+ * Excalidraw calls onChange on every pointer move. The document gets the result once drawing pauses
+ * (the pointer is up), and while working on without a pause at least this often, so other devices
+ * follow along. Nothing is written in the middle of a stroke: a write makes the app re-render, and
+ * that would stall the stroke.
  */
 const WRITE_AFTER_MS = 500;
 const WRITE_AT_LEAST_MS = 2000;
@@ -62,6 +65,7 @@ export default memo(function DrawingEditor({ id, onClose }: { id: string; onClos
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const pendingSince = useRef<number | undefined>(undefined);
   const lastVersion = useRef<string | undefined>(undefined);
+  const dirty = useRef(false);
   const stored = useRef(new Set<string>()); // image ids in the document or on their way there
 
   const uploadImages = (all: BinaryFiles) => {
@@ -98,6 +102,7 @@ export default memo(function DrawingEditor({ id, onClose }: { id: string; onClos
     clearTimeout(timer.current);
     timer.current = undefined;
     pendingSince.current = undefined;
+    dirty.current = false;
     if (!api || repo.readOnly) return;
     const elements = api.getSceneElementsIncludingDeleted() as unknown as SceneElement[];
     const state = api.getAppState() as unknown as Record<string, unknown>;
@@ -118,12 +123,17 @@ export default memo(function DrawingEditor({ id, onClose }: { id: string; onClos
   const onChange = useCallback((elements: readonly OrderedExcalidrawElement[], state: AppState, all: BinaryFiles) => {
     // scrolling and zooming change nothing worth keeping
     const version = [hashElementsVersion(elements), Object.keys(all).length, state.viewBackgroundColor, state.gridModeEnabled, state.gridSize, state.gridStep].join(":");
-    if (version === lastVersion.current) return;
-    lastVersion.current = version;
-    const now = Date.now();
-    pendingSince.current ??= now;
+    if (version !== lastVersion.current) {
+      lastVersion.current = version;
+      dirty.current = true;
+      pendingSince.current ??= Date.now();
+    }
+    if (!dirty.current) return;
     clearTimeout(timer.current);
-    timer.current = setTimeout(() => flushRef.current(), Math.max(0, Math.min(WRITE_AFTER_MS, pendingSince.current + WRITE_AT_LEAST_MS - now)));
+    timer.current = undefined;
+    if (state.cursorButton === "down") return;
+    const wait = Math.max(0, Math.min(WRITE_AFTER_MS, pendingSince.current! + WRITE_AT_LEAST_MS - Date.now()));
+    timer.current = setTimeout(() => flushRef.current(), wait);
   }, []);
 
   // what is not written yet goes in when the drawing closes or the tab goes away
@@ -134,7 +144,7 @@ export default memo(function DrawingEditor({ id, onClose }: { id: string; onClos
     return () => {
       removeEventListener("pagehide", save);
       document.removeEventListener("visibilitychange", save);
-      if (timer.current) flushRef.current();
+      if (dirty.current) flushRef.current();
     };
   }, []);
 
@@ -176,15 +186,39 @@ export default memo(function DrawingEditor({ id, onClose }: { id: string; onClos
 
   useHandleLibrary({ excalidrawAPI: api, adapter: library });
 
-  // "Bibliotheken durchsuchen" opens libraries.excalidraw.com; its "Add to Excalidraw" goes to the
-  // window of this name, so the library comes back into this drawing (library-link.ts)
-  useEffect(() => {
-    if (!window.name) window.name = "obtion-" + Math.random().toString(36).slice(2, 10);
-    if (!api) return;
-    return setLiveLibrary(async (blob) => {
-      await api.updateLibrary({ libraryItems: blob, merge: true, defaultStatus: "published", openLibraryMenu: true });
-    });
+  const addLibrary = useCallback(async (blob: Blob) => {
+    await api?.updateLibrary({ libraryItems: blob, merge: true, defaultStatus: "published", openLibraryMenu: true });
   }, [api]);
+  // a library link from elsewhere (library-link.ts) comes into the open drawing
+  useEffect(() => (api ? setLiveLibrary(addLibrary) : undefined), [api, addLibrary]);
+
+  // "Bibliotheken durchsuchen" shows the libraries here instead of on libraries.excalidraw.com
+  const [browsing, setBrowsing] = useState(false);
+  const addFromBrowser = useCallback(async (blob: Blob) => {
+    await api?.updateLibrary({ libraryItems: blob, merge: true, defaultStatus: "published" });
+  }, [api]);
+  // a click in the dialog closed Excalidraw's library: it opens again with what came in
+  const closeBrowser = useCallback((added: boolean) => {
+    setBrowsing(false);
+    if (added) requestAnimationFrame(() => api?.toggleSidebar({ name: "default", tab: "library", force: true }));
+  }, [api]);
+  useEffect(() => {
+    if (!root) return;
+    const onClick = (e: MouseEvent) => {
+      if (!(e.target as Element | null)?.closest?.('a.library-menu-browse-button, a[href^="https://libraries.excalidraw.com"]')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setBrowsing(true);
+    };
+    root.addEventListener("click", onClick, true);
+    return () => root.removeEventListener("click", onClick, true);
+  }, [root]);
+
+  // the app behind is hidden while drawing (styles.css)
+  useEffect(() => {
+    document.documentElement.classList.add("drawing-open");
+    return () => document.documentElement.classList.remove("drawing-open");
+  }, []);
 
   // The app's own shortcuts (⌘K, single keys on pages) stay off while drawing; Excalidraw listens on
   // the document, before the window.
@@ -216,15 +250,22 @@ export default memo(function DrawingEditor({ id, onClose }: { id: string; onClos
     location.hash = url.hash;
   }, [close]);
 
-  /** Close. A phone's toolbar needs the whole width: there it sits in the bottom bar. */
-  const topRight = useCallback((phone: boolean) => (
-    <div className={phone ? "drawing-top drawing-top-phone" : "drawing-top"}>
-      <button type="button" className="drawing-button drawing-close" onClick={close} aria-label={t("drawing.close")} title={t("drawing.close")}>
-        <X size={18} />
-      </button>
-    </div>
-  ), [t, close]);
-  const renderTopRightUI = useCallback((phone: boolean) => (phone ? root && createPortal(topRight(true), root) : topRight(false)), [root, topRight]);
+  /**
+   * Close. A phone's toolbar needs the whole width: there it sits in the bottom bar. Excalidraw asks for
+   * it on every render (every pointer move while drawing): the same elements each time, so React
+   * skips them.
+   */
+  const [desk, phone] = useMemo(() => {
+    const top = (phone: boolean) => (
+      <div className={phone ? "drawing-top drawing-top-phone" : "drawing-top"}>
+        <button type="button" className="drawing-button drawing-close" onClick={close} aria-label={t("drawing.close")} title={t("drawing.close")}>
+          <X size={18} />
+        </button>
+      </div>
+    );
+    return [top(false), root && createPortal(top(true), root)];
+  }, [t, close, root]);
+  const renderTopRightUI = useCallback((isPhone: boolean) => (isPhone ? phone : desk), [desk, phone]);
 
   const menus = useMemo(
     () => (
@@ -285,6 +326,7 @@ export default memo(function DrawingEditor({ id, onClose }: { id: string; onClos
       >
         {menus}
       </Excalidraw>
+      {browsing && <LibraryBrowser onAdd={addFromBrowser} onClose={closeBrowser} />}
     </div>
   );
 });

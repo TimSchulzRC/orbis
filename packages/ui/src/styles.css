@@ -1044,6 +1044,13 @@ body.cm-dragging * {
   }
 }
 
+/* While a drawing is open the app behind it is not drawn at all: Excalidraw redraws on every pointer
+   move, and style and layout work then stays inside the drawing (scroll positions are kept) */
+html.drawing-open #root main,
+html.drawing-open #root aside {
+  content-visibility: hidden;
+}
+
 /* Drawings: Excalidraw full screen, in the app's colours: its violet becomes the app's yellow, its
    tinted surfaces the app's neutral greys (dark: .theme--dark has the same weight, so both are named) */
 .drawing-full .excalidraw,

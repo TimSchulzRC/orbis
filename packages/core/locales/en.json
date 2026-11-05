@@ -1082,5 +1082,17 @@
  "editor.slash.drawing.keys": "diagram, drawing, sketch, whiteboard, excalidraw, zeichnung, diagramm",
  "drawing.insert": "Insert diagram",
  "drawing.libraryAdded": "Library added for diagrams",
- "drawing.libraryFailed": "The library could not be added."
+ "drawing.libraryFailed": "The library could not be added.",
+ "drawing.libraries": "Libraries",
+ "drawing.librarySearch": "Search libraries",
+ "drawing.librarySort": "Sort",
+ "drawing.libraryPopular": "Popular",
+ "drawing.libraryNew": "New",
+ "drawing.libraryUpdated": "Updated",
+ "drawing.librariesLoading": "Loading libraries …",
+ "drawing.librariesFailed": "The libraries could not be loaded. Are you online?",
+ "drawing.librariesNone": "No library found.",
+ "drawing.libraryAdd": "Add to Obtion",
+ "drawing.libraryAddedShort": "Added",
+ "drawing.libraryRetry": "Failed – try again"
 }
