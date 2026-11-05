@@ -1,31 +1,23 @@
-// The page's lower part: "Darunter" (everything below the page, as one tree) and the updates.
+// The page's lower part: "Darunter", everything below the page as one tree.
 import { Input } from "../components/ui/input";
-import { Textarea } from "../components/ui/textarea";
-import { NativeSelect } from "../components/ui/native-select";
 import { Fragment, useState } from "react";
-import { ChevronRight, Plus, Send } from "lucide-react";
+import { ChevronRight, Plus } from "lucide-react";
 import { belowOf } from "@obtion/core/placement";
 import { type Item } from "@obtion/core/model";
 import type { Index } from "@obtion/core/graph";
-import { fmtBytes, fmtDateTime } from "@obtion/core/i18n";
-import { dueOf, isDone, statusOf, statusProp } from "@obtion/core/traits";
+import { fmtBytes } from "@obtion/core/i18n";
+import { dueOf, isDone, statusOf } from "@obtion/core/traits";
 import { cmpKey } from "@obtion/core/sortkey";
-import type { T } from "@obtion/core/i18n";
 import { repo } from "../repo";
 import { itemHref, useIndex, useStoredSet } from "../hooks";
 import { useT, titleOf } from "../i18n";
 import { Card, Button, SectionTitle, SectionAction, Popover, MenuItem } from "./primitives";
-import { DueLabel, ItemIcon, RelTime, TypeGlyph } from "./item-look";
+import { DueLabel, RelTime, TypeGlyph } from "./item-look";
 import { NOTE_ICON } from "./icons";
 import { ProgressCount } from "./progress";
 import { RowStatus } from "./Row";
-import { agentLabel, agentName } from "./AgentNotice";
 import { KEYS } from "./storage";
 import { cn } from "../lib/utils";
-
-/** Updates shown at first, and at most after "Alle …". */
-const UPDATES_FIRST = 3;
-const UPDATES_MAX = 50;
 
 function AddRow({ label, onAdd, autoFocus, onDone }: { label: string; onAdd: (title: string) => void; autoFocus?: boolean; onDone?: () => void }) {
   const [text, setText] = useState("");
@@ -187,125 +179,5 @@ export function Below({ item }: { item: Item }) {
         ))}
       </Card>
     </section>
-  );
-}
-
-/** Dated updates of this page and its descendants, with an optional status change. */
-export function Updates({ item }: { item: Item }) {
-  const ix = useIndex();
-  const { t, lang } = useT();
-  const schema = ix.schemaOf(item);
-  const statusProperty = statusProp(schema);
-  const [text, setText] = useState("");
-  const [status, setStatus] = useState("");
-  const [writing, setWriting] = useState(false);
-  const [all, setAll] = useState(false);
-  const every = [item, ...[...ix.descendants(item.id)].map((id) => ix.get(id)!)]
-    .flatMap((x) => x.updates.map((u) => ({ u, from: x })))
-    .sort((a, b) => b.u.at - a.u.at);
-  const entries = every.slice(0, all ? UPDATES_MAX : UPDATES_FIRST);
-  const submit = () => {
-    if (!text.trim()) return;
-    repo.addUpdate(item.id, text.trim(), status && statusProperty ? { prop: statusProperty.id, option: status } : undefined);
-    setText("");
-    setStatus("");
-    setWriting(false);
-  };
-  // no updates and not writing one: the section is not there ("+ Update" is in the page menu then)
-  if (!every.length && !writing) return <UpdateStarter onStart={() => setWriting(true)} />;
-  return (
-    <section className="mt-10">
-      <SectionTitle
-        count={every.length || undefined}
-        right={
-          !writing && (
-            <SectionAction onClick={() => setWriting(true)}>{t("updates.one")}</SectionAction>
-          )
-        }
-      >
-        {t("updates.title")}
-      </SectionTitle>
-      {writing && (
-      <Card className="mb-4 p-3 focus-within:border-focus">
-        <Textarea
-          autoFocus
-          onBlur={() => !text.trim() && setWriting(false)}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) (e.preventDefault(), submit());
-          }}
-          rows={text ? 3 : 1}
-          placeholder={t("updates.placeholder")}
-          className="w-full resize-none bg-transparent px-1 text-[15px] outline-none placeholder:text-muted-foreground"
-          aria-label={t("updates.write")}
-        />
-        {text && (
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            {statusProperty && (
-              <NativeSelect value={status} onChange={(e) => setStatus(e.target.value)} className="rounded-md border border-line bg-bg px-1.5 py-1 text-xs text-muted-foreground" aria-label={t("updates.status")}>
-                <option value="">{t("updates.keepStatus")}</option>
-                {statusProperty.options?.filter((o) => o.id !== item.props[statusProperty.id]).map((o) => (
-                  <option key={o.id} value={o.id}>
-                    → {o.name}
-                  </option>
-                ))}
-              </NativeSelect>
-            )}
-            <Button variant="primary" onClick={submit}>
-              <Send size={14} /> {t("updates.post")}
-            </Button>
-          </div>
-        )}
-      </Card>
-      )}
-      {entries.length > 0 && (
-        <ol className="relative ml-1 space-y-4 border-l border-line pl-5">
-          {entries.map(({ u, from }) => {
-            const newStatus = statusProperty?.options?.find((o) => o.id === u.status) ?? ix.schemaOf(from)?.properties.flatMap((p) => p.options ?? []).find((o) => o.id === u.status);
-            return (
-              <li key={u.id} className="relative">
-                <span className="absolute -left-[25px] top-1.5 size-2.5 rounded-full border-2 border-bg" style={{ background: u.by === "you" ? "var(--faint)" : "var(--ok)" }} />
-                <div className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
-                  <span>{fmtDateTime(lang, u.at)}</span>
-                  {from.id !== item.id && (
-                    <span className="inline-flex items-center gap-1">
-                      · <ItemIcon item={from} size={11} /> {from.title}
-                    </span>
-                  )}
-                  <span title={u.by}>· {authorLabel(u.by, t)}</span>
-                  {newStatus && <span>· {t("updates.statusTo", { name: newStatus.name })}</span>}
-                </div>
-                <div className="whitespace-pre-wrap text-[15px]">{u.text}</div>
-              </li>
-            );
-          })}
-        </ol>
-      )}
-      {every.length > UPDATES_FIRST && (
-        <Button variant="plain" onClick={() => setAll(!all)} className="tap-y mt-2 text-[13px] text-muted-foreground hover:text-fg">
-          {all ? t("updates.fewer") : t("updates.all", { count: every.length })}
-        </Button>
-      )}
-    </section>
-  );
-}
-
-/** Who wrote an update: "Du", an import, or the agent's name. */
-function authorLabel(by: string, t: T): string {
-  if (by === "you") return t("updates.you");
-  if (by.startsWith("import:")) return t("updates.import");
-  return agentLabel(agentName(by) ?? by, t);
-}
-
-/** A type with updates but none yet: one quiet row to write the first. */
-function UpdateStarter({ onStart }: { onStart: () => void }) {
-  const { t } = useT();
-  return (
-    <div className="mt-6">
-      <SectionAction onClick={onStart} className="h-8 gap-1.5 px-1">
-        {t("updates.one")}
-      </SectionAction>
-    </div>
   );
 }

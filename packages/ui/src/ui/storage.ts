@@ -26,6 +26,8 @@ export const KEYS = {
   tab: (key: string) => `obtion.tab.${key}`,
   /** folded groups of a table */
   fold: (key: string) => `obtion.fold.${key}`,
+  /** when a page's updates were last opened: newer ones by agents count as new */
+  updatesSeen: (item: string) => `obtion.updates.seen.${item}`,
   /** opened rows: sub-items of a table, parts of a page */
   open: (key: string) => `obtion.open.${key}`,
 };
