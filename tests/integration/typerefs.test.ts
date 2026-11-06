@@ -4,7 +4,7 @@ import { setupStore } from "../support/store";
 import type { Store } from "@obtion/server/store";
 import type { Ops } from "@obtion/server/ops";
 import { BLOCKED_BY, SYS, typeTabs } from "@obtion/core/setup";
-import { replaceBody, setCapability, setView } from "@obtion/core/model";
+import { replaceBody, setCapability } from "@obtion/core/model";
 import { blockSource, findBlocks, queryFence, readBlock } from "@obtion/core/query";
 
 afterAll(removeTempDirs);
@@ -16,11 +16,11 @@ beforeEach(() => ({ s, ops } = setupStore("obtion-typerefs-")));
 const tabsOf = (id: string) => typeTabs(s.records.get(id)!, "de");
 const prio = () => s.index().types.get(SYS.project)!.schema.properties.find((p) => p.name === "Priorität")!;
 
-/** A page with a query block and a stored view; returns its id. */
+/** A page with a query block; returns its id. */
 function page(where: object, columns: string[]): string {
   const id = ops.create({ title: "Übersicht " + JSON.stringify(where) }, A).id;
   const def = { where, columns, sort: [{ key: "Priorität" }] };
-  s.change(id, A, (d) => (replaceBody(d, "Text\n\n" + queryFence(blockSource(def as never)) + "\n"), setView(d, "v", { query: def as never, group: "Priorität" })));
+  s.change(id, A, (d) => replaceBody(d, "Text\n\n" + queryFence(blockSource(def as never)) + "\n"));
   s.flush();
   return id;
 }
@@ -36,7 +36,6 @@ test("renaming a property: the type's default views, pages on the type and its f
   expect(tabs.find((t) => t.id === "v_all")!.columns).toContain("Wichtigkeit");
   expect(tabs.flatMap((t) => t.columns ?? [])).not.toContain("Priorität");
   expect(blockOf(onType)).toMatchObject({ columns: ["Status", "Wichtigkeit"], sort: [{ key: "Wichtigkeit" }] });
-  expect(s.records.get(onType)!.views.v).toMatchObject({ group: "Wichtigkeit", query: { columns: ["Status", "Wichtigkeit"] } });
   expect(blockOf(anyType).columns).toEqual(["Priorität"]);
   expect(s.records.get(anyType)!.body.startsWith("Text\n\n```abfrage")).toBe(true);
   // the task's views name its own "Priorität" and stay
@@ -51,7 +50,6 @@ test("removing a property: it leaves views, filters, grouping, the template and 
   s.flush();
   expect(tabsOf(SYS.project).flatMap((t) => [...(t.columns ?? []), ...(t.sort ?? []).map((x) => x.key), t.group])).not.toContain("Priorität");
   expect(blockOf(id)).toEqual({ where: { type: SYS.project }, columns: ["area"] });
-  expect(s.records.get(id)!.views.v!.group).toBeUndefined();
   const caps = s.records.get(SYS.project)!.schema!.capabilities;
   expect(caps.template).toEqual({ body: "x", values: {} });
   expect(caps.due).toBeUndefined();

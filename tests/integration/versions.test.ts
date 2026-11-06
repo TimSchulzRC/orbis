@@ -35,7 +35,7 @@ test("lost update: a stale full replace no longer wipes out what another agent a
   expect(r.text).toMatch(/^Nothing changed\. "Lieferantenliste" \[\w+\] changed since you read it/);
   expect(r.text).toMatch(/Only in the current body \(your replace would drop it\):\n(  .*\n)*  WICHTIG von A\n/);
   expect(r.text).toMatch(/Only in your body:\n {2}Zweite Zeile, von B überarbeitet\./);
-  expect(r.text).toMatch(/Last changes:\n- \S+ by \S+: text: /);
+  expect(r.text).toMatch(/Last changes:\n- \S+ by mcp for Kai: text: /);
   expect(body("Lieferantenliste")).toContain("WICHTIG von A");
   expect(body("Lieferantenliste")).not.toContain("von B");
   // B reads again, merges, and passes the new version

@@ -19,7 +19,7 @@ async function setUp(policy: SignupPolicy, opts: { password?: boolean } = {}) {
     policy,
     login: { password: opts.password ?? true, oauth: [], sendCode: async (to, code, lang) => void codes.push({ to, code, lang }) },
   });
-  await accounts.init(() => "Personal");
+  await accounts.init();
   const ip = `10.0.0.${++address}`;
   /** A request of the app's page to Better Auth, as the server passes it on. */
   const call = (path: string, body: unknown, ctx?: { invite?: string; lang?: string }) =>

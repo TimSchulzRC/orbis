@@ -48,7 +48,7 @@ export function defaultTypes(lang: Lang): Record<string, TypeSpec> {
       { id: "pr_low", name: t("priority.low"), color: "green" },
     ],
   };
-  const blockedBy: Omit<PropDef, "sort"> = { id: BLOCKED_BY, name: t("prop.blockedBy"), kind: "relation", multiple: true, target: `${typeKey}:${t("task.name")} | ${typeKey}:${t("project.name")}`, inverseName: t("prop.blocking"), hideEmpty: true, blocks: true };
+  const blockedBy: Omit<PropDef, "sort"> = { id: BLOCKED_BY, name: t("prop.blockedBy"), kind: "relation", multiple: true, target: `${typeKey}:${t("task.name")} | ${typeKey}:${t("project.name")}`, inverseName: t("prop.blocking"), blocks: true };
   return {
     [SYS.card]: {
       name: t("card.name"),
@@ -111,7 +111,7 @@ export function defaultTypes(lang: Lang): Record<string, TypeSpec> {
         { id: "p_due", name: t("prop.due"), kind: "date" },
         { id: "p_progress", name: t("prop.progress"), kind: "computed", computed: { fn: "progress", of: SYS.task } },
         blockedBy,
-        { id: WAITING_FOR, name: t("prop.waitingFor"), kind: "text", hideEmpty: true, blocks: true },
+        { id: WAITING_FOR, name: t("prop.waitingFor"), kind: "text", blocks: true },
       ],
     },
   };

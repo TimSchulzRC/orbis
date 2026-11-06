@@ -6,8 +6,7 @@
 // old number since), it answers with `reset` and the replica uploads its full state. Offline changes
 // sit in a local outbox until acked. Yjs updates are idempotent and commutative, so re-sending is safe.
 //
-// Everything runs per area. Messages without an area come from apps that predate areas and mean
-// the personal area.
+// Everything runs per area.
 
 export interface WireUpdate {
   s?: number; // server sequence (server -> client)
@@ -30,7 +29,7 @@ export type ClientMsg =
   | { t: "ping" };
 
 export type ServerMsg =
-  | { t: "welcome"; hub: string; area: string; seq: number; format: number } // hub: the server id
+  | { t: "welcome"; server: string; area: string; seq: number; format: number } // server: the server id
   | { t: "denied"; area: string } // an area this device may not sync
   | { t: "updates"; area: string; items: WireUpdate[]; last: number; lastId?: string; initial?: boolean; done?: boolean; reset?: boolean }
   | { t: "ack"; area: string; keys: string[]; last: number; lastId?: string }

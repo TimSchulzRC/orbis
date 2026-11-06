@@ -236,7 +236,7 @@ async function keep(token: string) {
   await refresh();
 }
 
-/** Older servers send no `login`: password only. */
+/** Before the server answered: password only. */
 export const loginOf = (info: ServerInfo | null): LoginMethods => info?.login ?? { password: true, emailCode: false, passkey: false, oauth: [] };
 
 /** The server reads this cookie when a code or OAuth sign-in creates the user. */

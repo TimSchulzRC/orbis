@@ -27,7 +27,6 @@ export const propInput = z.object({
   symmetric: z.boolean().optional(),
   range: z.boolean().optional(),
   computed: z.string().optional().describe('"progress", "progress:Type" or "count:Type"'),
-  hide_empty: z.boolean().optional().describe("pages show it only when it has a value (default: every property shows, empty as –)"),
   blocks: z.boolean().optional().describe("relation or text: the item counts as blocked while it is set (a relation: while a linked item is open)"),
 });
 export type PropInput = z.infer<typeof propInput>;
@@ -37,7 +36,7 @@ export const capInput = z.object({
   updates: z.boolean().optional(),
   template: z.string().nullable().optional(),
 })
-  // removed ones (status, progress, main_action) fail loudly instead of being dropped
+  // unknown keys fail loudly instead of being dropped
   .strict();
 export type CapInput = z.infer<typeof capInput>;
 

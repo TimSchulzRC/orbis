@@ -46,9 +46,7 @@ export function FilePage({ item }: { item: Item }) {
   }, [file.hash, local, viewed]);
   const media = src?.hash === file.hash ? src.url : undefined;
   const missing = files.isMissing(file.hash);
-  // who added it; from before accounts the app wrote only the device: then nobody is named
-  const by = item.createdBy ? who(item.createdBy, t) : undefined;
-  const addedBy = by && (by.agent || by.person?.id) ? by.label : "";
+  const addedBy = item.createdBy ? who(item.createdBy, t).label : "";
   const extension = (file.name.split(".").pop() ?? "").toUpperCase();
   const dimensions = file.width && file.height ? `${file.width} × ${file.height}` : "";
   const size = [dimensions, file.pages ? t("file.pages", { count: file.pages }) : "", file.duration ? fmtDuration(file.duration) : "", fmtBytes(lang, file.size)].filter(Boolean).join(" · ");

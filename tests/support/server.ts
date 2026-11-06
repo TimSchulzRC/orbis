@@ -48,7 +48,7 @@ export const del = (base: string, path: string, token?: string, body?: unknown) 
 
 export const mcpPost = (base: string, path: string, token: string, method: string, params?: unknown) =>
   fetch(base + path, { method: "POST", headers: { ...auth(token), "content-type": "application/json", accept: MCP_ACCEPT }, body: rpcBody(method, params) });
-export async function mcpTool(base: string, token: string, name: string, args: unknown, path = "/mcp"): Promise<string> {
+export async function mcpTool(base: string, token: string, name: string, args: unknown, path: string): Promise<string> {
   return toolText(await (await mcpPost(base, path, token, "tools/call", { name, arguments: args })).json());
 }
 

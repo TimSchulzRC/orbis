@@ -1,7 +1,7 @@
 import { test, expect, describe, jest } from "bun:test";
 import * as Y from "yjs";
 import { MemRepo } from "../support/helpers";
-import { type PropDef, type TypeSchema, initSchema, migrateStatus, readSchema } from "@obtion/core/model";
+import { type PropDef, type TypeSchema, initSchema, readSchema } from "@obtion/core/model";
 import { initialProps, kindPatch, optionIds, statusProp } from "@obtion/core/traits";
 import { addParent, readItem, removeParent, setMeta, setProp, setSettings, initItem, META_TYPE, SETTINGS_ID, touchOnTextEdit } from "@obtion/core/model";
 import { keyBetween, keysFor } from "@obtion/core/sortkey";
@@ -286,7 +286,7 @@ describe("i18n", () => {
   });
 });
 
-test("readItem ignores uninitialised and legacy documents", () => {
+test("readItem ignores uninitialised documents", () => {
   const d = new Y.Doc();
   expect(readItem("x", d)).toBeNull();
   d.getMap("meta").set("type", "x"); // no kind: not an Obtion document
@@ -331,26 +331,23 @@ test("typing moves the change time: local text edits touch meta.updated, edits f
 });
 
 describe("selects", () => {
-  test("schemas stored with the kinds status and multiselect: the first status stays one, the rest are selects", () => {
+  test("a type has one status: a second one (added at once on another device) reads as a select; the status is never empty", () => {
     const d = new Y.Doc();
     initSchema(d, {
-      name: "Alt",
+      name: "Zwei",
       icon: "box",
       color: "gray",
       description: "",
       capabilities: {},
       properties: [
         { id: "p_st", name: "Status", kind: "status", options: [{ id: "a", name: "Offen", group: "todo" }, { id: "b", name: "Fertig", group: "done" }] },
-        { id: "p_ms", name: "Tags", kind: "multiselect" as any, options: [{ id: "x", name: "X" }] },
-        { id: "p_old", name: "Zweiter Status", kind: "status", options: [{ id: "c", name: "C", group: "todo" }] },
+        { id: "p_two", name: "Zweiter Status", kind: "status", options: [{ id: "c", name: "C", group: "todo" }] },
       ],
     });
     const s = readSchema(d);
-    expect(s.properties.map((p) => [p.id, p.kind, !!p.multiple, p.default])).toEqual([
-      ["p_st", "status", false, "a"],
-      ["p_ms", "select", true, undefined],
-      // a type has one status: a plain select that may be empty
-      ["p_old", "select", false, undefined],
+    expect(s.properties.map((p) => [p.id, p.kind, p.default])).toEqual([
+      ["p_st", "status", "a"],
+      ["p_two", "select", undefined],
     ]);
     expect(statusProp(s)?.id).toBe("p_st");
     expect(initialProps(s)).toEqual({ p_st: "a" });
@@ -367,44 +364,6 @@ describe("selects", () => {
     expect(optionIds("a")).toEqual(["a"]);
     expect(optionIds(["a", "b"])).toEqual(["a", "b"]);
     expect(optionIds(undefined)).toEqual([]);
-  });
-
-  test("a type's former status capability on a select reads as kind status and migrates without loss", () => {
-    const d = new Y.Doc();
-    initSchema(d, {
-      name: "Alt",
-      icon: "box",
-      color: "gray",
-      description: "",
-      capabilities: { status: "p_st", due: "p_due" } as any,
-      properties: [
-        { id: "p_old", name: "Alter Status", kind: "status", options: [{ id: "c", name: "C", group: "todo" }] },
-        { id: "p_st", name: "Stand", kind: "select", options: [{ id: "a", name: "Neu", group: "todo" }, { id: "p", name: "Ruht", group: "active", state: "paused" }, { id: "x", name: "Verworfen", group: "done", state: "dropped" }, { id: "n" as string, name: "Ohne" }] as any },
-        { id: "p_due", name: "Termin", kind: "date" },
-      ],
-    });
-    const before = readSchema(d);
-    // readers understand the old shape before the migration ran
-    expect(statusProp(before)?.id).toBe("p_st");
-    expect(before.properties.map((p) => p.kind)).toEqual(["select", "status", "date"]);
-    expect(before.capabilities).toEqual({ due: "p_due" });
-    expect(statusProp(before)?.options).toEqual([
-      { id: "a", name: "Neu", group: "todo" },
-      { id: "p", name: "Ruht", group: "active" },
-      { id: "x", name: "Verworfen", group: "done" },
-      { id: "n", name: "Ohne", group: "todo" },
-    ]);
-    expect(statusProp(before)?.default).toBe("a");
-    expect(migrateStatus(d)).toBe(true);
-    const caps = d.getMap("schema").get("capabilities") as Y.Map<unknown>;
-    expect(caps.has("status")).toBe(false);
-    const stored = (d.getMap("schema").get("properties") as Y.Map<Y.Map<unknown>>);
-    expect(stored.get("p_st")!.get("kind")).toBe("status");
-    expect(stored.get("p_old")!.get("kind")).toBe("select");
-    expect(JSON.stringify(stored.get("p_st")!.get("options"))).not.toContain("state");
-    expect(readSchema(d)).toEqual(before);
-    expect(migrateStatus(d)).toBe(false); // idempotent
-    expect(readSchema(d)).toEqual(before);
   });
 
   test("changing a property's kind into and out of the status", () => {

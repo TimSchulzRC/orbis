@@ -15,8 +15,6 @@ export interface WorkspaceInfo {
   id: string;
   name: string;
   role: Role;
-  /** The server's data from before accounts; devices keep their local copy of it. */
-  legacy?: boolean;
 }
 
 export interface Member extends User {

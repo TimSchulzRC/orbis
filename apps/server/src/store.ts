@@ -13,6 +13,7 @@ import { resolveCascade } from "@obtion/core/trash";
 import type { ActivityEvent, FieldChange } from "@obtion/core/protocol";
 import type { TextVersion as Version } from "@obtion/core/api";
 import { createIndex, indexRecord, type SearchIndex } from "@obtion/core/search";
+import { migrate } from "./migrate";
 
 const REMOTE = Symbol("remote");
 
@@ -42,6 +43,23 @@ const EVENT_MERGE_WINDOW_MS = 5 * 60_000;
 const MAX_CLOCK_SKEW_MS = 10 * 60_000;
 const MAX_UNDO_CHAIN = 20;
 
+/** See migrate.ts: append a step for a schema change. */
+const SCHEMA = [
+  `CREATE TABLE IF NOT EXISTS updates (seq INTEGER PRIMARY KEY AUTOINCREMENT, doc TEXT NOT NULL, data BLOB NOT NULL, origin TEXT NOT NULL, ts INTEGER NOT NULL, uid TEXT NOT NULL, step TEXT, area TEXT NOT NULL);
+  CREATE INDEX IF NOT EXISTS updates_doc ON updates(doc, seq);
+  CREATE INDEX IF NOT EXISTS updates_step ON updates(step);
+  CREATE INDEX IF NOT EXISTS updates_area ON updates(area, seq);
+  CREATE TABLE IF NOT EXISTS docstate (id TEXT PRIMARY KEY, state BLOB NOT NULL, seq INTEGER NOT NULL);
+  CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, doc TEXT NOT NULL, title TEXT, type TEXT, kind TEXT, origin TEXT, changes TEXT, step TEXT, area TEXT NOT NULL);
+  CREATE INDEX IF NOT EXISTS events_doc ON events(doc, id);
+  CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT);
+  CREATE TABLE IF NOT EXISTS steps (id TEXT PRIMARY KEY, actor TEXT, ts INTEGER, undoes TEXT);
+  CREATE INDEX IF NOT EXISTS steps_undoes ON steps(undoes);
+  CREATE TABLE IF NOT EXISTS versions (id INTEGER PRIMARY KEY AUTOINCREMENT, doc TEXT NOT NULL, ts INTEGER NOT NULL, origin TEXT NOT NULL, step TEXT, event INTEGER, len INTEGER NOT NULL, data BLOB NOT NULL);
+  CREATE INDEX IF NOT EXISTS versions_doc ON versions(doc, id);
+  CREATE INDEX IF NOT EXISTS versions_event ON versions(event);`,
+];
+
 export class Store {
   db: Database;
   /** LRU order, oldest first. Not every document is here. */
@@ -70,31 +88,15 @@ export class Store {
   ) {
     mkdirSync(dir, { recursive: true });
     this.db = new Database(join(dir, "obtion.db"));
-    this.db.exec(`
-      PRAGMA journal_mode = WAL;
-      PRAGMA synchronous = NORMAL;
-      CREATE TABLE IF NOT EXISTS updates (seq INTEGER PRIMARY KEY AUTOINCREMENT, doc TEXT NOT NULL, data BLOB NOT NULL, origin TEXT NOT NULL, ts INTEGER NOT NULL, uid TEXT, step TEXT, area TEXT NOT NULL DEFAULT '${PERSONAL}');
-      CREATE INDEX IF NOT EXISTS updates_doc ON updates(doc, seq);
-      CREATE INDEX IF NOT EXISTS updates_step ON updates(step);
-      CREATE INDEX IF NOT EXISTS updates_area ON updates(area, seq);
-      CREATE TABLE IF NOT EXISTS docstate (id TEXT PRIMARY KEY, state BLOB NOT NULL, seq INTEGER NOT NULL);
-      CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, doc TEXT NOT NULL, title TEXT, type TEXT, kind TEXT, origin TEXT, changes TEXT, step TEXT, area TEXT NOT NULL DEFAULT '${PERSONAL}');
-      CREATE INDEX IF NOT EXISTS events_doc ON events(doc, id);
-      CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT);
-      CREATE TABLE IF NOT EXISTS steps (id TEXT PRIMARY KEY, actor TEXT, ts INTEGER, undoes TEXT);
-      CREATE INDEX IF NOT EXISTS steps_undoes ON steps(undoes);
-      CREATE TABLE IF NOT EXISTS versions (id INTEGER PRIMARY KEY AUTOINCREMENT, doc TEXT NOT NULL, ts INTEGER NOT NULL, origin TEXT NOT NULL, step TEXT, event INTEGER, len INTEGER NOT NULL, data BLOB NOT NULL);
-      CREATE INDEX IF NOT EXISTS versions_doc ON versions(doc, id);
-      CREATE INDEX IF NOT EXISTS versions_event ON versions(event);
-    `);
+    this.db.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;");
+    migrate(this.db, SCHEMA);
     this.load();
-    // the server was called hub before; renaming the key would look like a new server to devices
-    if (!this.kvGet("hubId")) this.kvSet("hubId", newId());
+    if (!this.kvGet("serverId")) this.kvSet("serverId", newId());
   }
 
   /** A device seeing a different id knows it met a new server. */
   get serverId(): string {
-    return this.kvGet("hubId")!;
+    return this.kvGet("serverId")!;
   }
 
   private load() {
@@ -202,7 +204,7 @@ export class Store {
     return () => this.listeners.delete(l);
   }
 
-  /** Documents from before areas are personal; undefined if unknown. */
+  /** Undefined if unknown. */
   areaOf(docId: string): string | undefined {
     return this.areas.get(docId);
   }
@@ -518,9 +520,8 @@ export class Store {
   knowsCursor(area: string, since: number, sinceId?: string): boolean {
     if (since <= 0) return true;
     if (since > this.last(area).seq) return false;
-    if (!sinceId) return true; // replica from before cursor ids: seq is all we can check
     const row = this.db.query("SELECT uid, area FROM updates WHERE seq = ?").get(since) as { uid: string; area: string } | null;
-    return row?.uid === sinceId && row.area === area;
+    return !!row && row.uid === sinceId && row.area === area;
   }
 
   /** The position a replica of the area has after catching up. */

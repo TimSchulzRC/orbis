@@ -8,7 +8,7 @@ afterAll(removeTempDirs);
 test("a co-owner can delete their account, including admin and credential records", async () => {
   const accounts = new Accounts(tempDir("obtion-account-delete-"), { secret: "a-test-secret-longer-than-thirty-two-characters", baseURL: "http://localhost:8480", policy: "open" });
   try {
-    await accounts.init(() => "Personal");
+    await accounts.init();
     const first = await accounts.signUp({ email: "first@example.org", name: "First", password: "geheim12345" });
     const workspace = accounts.createWorkspace(first.user.id, "Personal");
     const invite = accounts.createInvite(workspace.id, first.user.id);
@@ -28,7 +28,7 @@ test("a co-owner can delete their account, including admin and credential record
 test("changing the password needs the current one and ends every other session", async () => {
   const accounts = new Accounts(tempDir("obtion-account-password-"), { secret: "a-test-secret-longer-than-thirty-two-characters", baseURL: "http://localhost:8480", policy: "open" });
   try {
-    await accounts.init(() => "Personal");
+    await accounts.init();
     const here = await accounts.signUp({ email: "me@example.org", name: "Me", password: "geheim12345" });
     const other = await accounts.auth.api.signInEmail({ body: { email: "me@example.org", password: "geheim12345" } });
     await expect(accounts.changePassword(here.user.id, here.token, "falsch12345", "neues-geheim")).rejects.toThrow("invalid password");
@@ -45,7 +45,7 @@ test("changing the password needs the current one and ends every other session",
 test("a new or joined workspace comes first; each account keeps its own order", async () => {
   const accounts = new Accounts(tempDir("obtion-account-order-"), { secret: "a-test-secret-longer-than-thirty-two-characters", baseURL: "http://localhost:8480", policy: "open" });
   try {
-    await accounts.init(() => "Personal");
+    await accounts.init();
     const me = await accounts.signUp({ email: "me@example.org", name: "Me", password: "geheim12345" });
     const other = await accounts.signUp({ email: "other@example.org", name: "Other", password: "geheim12345" });
     const names = (user: string) => accounts.workspacesOf(user).map((w) => w.name);
@@ -64,27 +64,4 @@ test("a new or joined workspace comes first; each account keeps its own order", 
     expect(names(me.user.id)).toEqual(["Theirs", "B", "A", "C"]);
     expect(names(other.user.id)).toEqual(["Theirs"]);
   } finally { accounts.db.close(); }
-});
-
-test("MCP tokens from before they were exclusive: at the next start only the newest per member and workspace stays", async () => {
-  const dir = tempDir("obtion-account-mcp-");
-  const opts = { secret: "a-test-secret-longer-than-thirty-two-characters", baseURL: "http://localhost:8480", policy: "open" as const };
-  const accounts = new Accounts(dir, opts);
-  await accounts.init(() => "Personal");
-  const me = await accounts.signUp({ email: "me@example.org", name: "Me", password: "geheim12345" });
-  const a = accounts.createWorkspace(me.user.id, "A");
-  const b = accounts.createWorkspace(me.user.id, "B");
-  const inB = accounts.mcpToken(b.id, me.user.id);
-  // as an older server left them: several valid MCP tokens for one workspace
-  const tokens = ["obt_alt", "obt_mittel", "obt_neu"];
-  tokens.forEach((t, i) => accounts.db.query("INSERT INTO tokens (hash, user, workspace, label, created) VALUES (?, ?, ?, 'mcp', ?)").run(new Bun.CryptoHasher("sha256").update(t).digest("hex"), me.user.id, a.id, i + 1));
-  for (const t of tokens) expect(accounts.mcpUser(a.id, t)?.id).toBe(me.user.id);
-  accounts.db.close();
-  const again = new Accounts(dir, opts);
-  try {
-    expect(again.mcpUser(a.id, "obt_alt")).toBeUndefined();
-    expect(again.mcpUser(a.id, "obt_mittel")).toBeUndefined();
-    expect(again.mcpUser(a.id, "obt_neu")?.id).toBe(me.user.id);
-    expect(again.mcpUser(b.id, inB)?.id).toBe(me.user.id);
-  } finally { again.db.close(); }
 });

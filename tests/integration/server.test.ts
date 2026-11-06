@@ -1,14 +1,13 @@
 // The server as a program: accounts and workspaces (who sees what), with and without the web app,
-// the data from before accounts, and the sync per workspace. Starts real servers.
+// and the sync per workspace. Starts real servers.
 import { test, expect, beforeAll, afterAll, setDefaultTimeout } from "bun:test";
 import * as Y from "yjs";
 import { tempDir, removeTempDirs } from "../support/helpers";
 import { bootServer, del, get, mcpPost, mcpTool, post } from "../support/server";
 import { FORMAT, PERSONAL, initItem } from "@obtion/core/model";
 import { type ServerMsg, toB64 } from "@obtion/core/protocol";
-import { Store } from "@obtion/server/store";
 import { Database } from "bun:sqlite";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 // Booting a server can exceed bun's 5 s default on a cold cache in CI. A timeout also kills every
@@ -24,24 +23,15 @@ async function start(env: Record<string, string>): Promise<string> {
 
 let plain = "";
 let bare = "";
-let legacy = "";
-let legacyDir = "";
 let bareDir = "";
 beforeAll(async () => {
   // a built web app of its own: the test does not depend on `bun run build`
   const dist = tempDir("obtion-dist-");
   writeFileSync(join(dist, "index.html"), "<!doctype html><title>Obtion im Test</title>");
-  // a data folder from before accounts, with one item
-  legacyDir = tempDir("obtion-server-");
-  const s = new Store(legacyDir);
-  s.create({ title: "Von früher" }, "test", { id: "old-1" });
-  s.flush();
-  s.db.close();
   bareDir = tempDir("obtion-server-");
-  [plain, bare, legacy] = await Promise.all([
+  [plain, bare] = await Promise.all([
     start({ OBTION_DATA: tempDir("obtion-server-"), OBTION_WEB_DIST: dist }),
     start({ OBTION_DATA: bareDir, OBTION_WEB_APP: "off", OBTION_SIGNUP: "open" }),
-    start({ OBTION_DATA: legacyDir }),
   ]);
 });
 afterAll(async () => {
@@ -200,22 +190,6 @@ test("linking a provider (its address may differ) needs a sign-in of the last mi
   expect((await post(bare, "/api/auth/link-social", { provider: "github", callbackURL: "/" }, undefined, { origin: bare })).status).toBe(403);
 });
 
-test("the data from before accounts become a workspace of the first account; the old MCP address still opens them", async () => {
-  expect(existsSync(join(legacyDir, "obtion.db"))).toBe(false);
-  const ada = await signUp(legacy, "ada@example.org");
-  const [w] = (await account(legacy, ada.token)).workspaces;
-  expect(w).toEqual({ id: expect.any(String), name: "Persönlich", role: "owner", legacy: true });
-  expect(existsSync(join(legacyDir, "workspaces", w.id, "obtion.db"))).toBe(true);
-  const c = await connect(legacy, w.id, ada.token);
-  c.ws.send(JSON.stringify({ t: "hello", area: PERSONAL, since: 0, client: "a" }));
-  const first = (await c.until((m) => m.t === "updates" && !!m.done)) as Extract<ServerMsg, { t: "updates" }>;
-  expect(first.items.map((i) => i.d)).toContain("old-1");
-  c.ws.close();
-  const old = JSON.parse(readFileSync(join(legacyDir, "config.json"), "utf8")).token;
-  expect((await mcpPost(legacy, "/mcp", old, "tools/list")).status).toBe(200);
-  expect((await mcpPost(legacy, "/mcp", "wrong", "tools/list")).status).toBe(401);
-});
-
 test("every server brings the web app; OBTION_WEB_APP=off leaves sync, API and MCP", async () => {
   const app = await fetch(plain + "/");
   expect(app.status).toBe(200);
@@ -224,7 +198,7 @@ test("every server brings the web app; OBTION_WEB_APP=off leaves sync, API and M
   expect(none.status).toBe(404);
   expect(await none.text()).toContain("OBTION_WEB_APP=off");
   expect((await fetch(bare + "/api/info")).status).toBe(200);
-  expect((await fetch(bare + "/mcp", { method: "POST" })).status).toBe(401); // there, asks for its token
+  expect((await fetch(bare + "/w/x/mcp", { method: "POST" })).status).toBe(401); // there, asks for its token
 });
 
 /** A sync connection to a workspace that collects what the server sends; the token goes as subprotocol, as in browsers. */

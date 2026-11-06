@@ -15,9 +15,7 @@ export interface SpaceLink {
 
 export type StorageNames = ReturnType<typeof storageNames>;
 
-/** Data from before accounts keeps its old names. */
-export function storageNames(space: { id: string; legacy?: boolean }) {
-  if (space.legacy) return { replica: "obtion", files: "obtion-files", blobs: "blobs" };
+export function storageNames(space: { id: string }) {
   const replica = `obtion-ws-${space.id}`;
   return { replica, files: `${replica}-files`, blobs: `blobs-${replica}` };
 }
@@ -70,15 +68,14 @@ function idbStorage(name: string): ReplicaStorage {
         if (w.cursor.lastId) tx.objectStore("meta").put(w.cursor.lastId, "lastId");
         else tx.objectStore("meta").delete("lastId");
       }
-      // key "hubId" from when the server was called hub; kept so devices still recognise it
-      if (w.serverId) tx.objectStore("meta").put(w.serverId, "hubId");
+      if (w.serverId) tx.objectStore("meta").put(w.serverId, "serverId");
       await tx.done;
     },
     async outbox() {
       return (await db.getAll("outbox")) as OutItem[];
     },
     async serverId() {
-      return (await db.get("meta", "hubId")) as string | undefined;
+      return (await db.get("meta", "serverId")) as string | undefined;
     },
     async destroy() {
       db.close();

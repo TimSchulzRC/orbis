@@ -359,7 +359,6 @@ export class Ops {
       target: p.target || undefined,
       inverse: p.inverseName || undefined,
       symmetric: p.symmetric || undefined,
-      hide_empty: p.hideEmpty || undefined,
       blocks: p.blocks || undefined,
       range: p.range || undefined,
       computed: p.computed ? `${p.computed.fn}${p.computed.of ? ` of ${this.store.index().typeName(p.computed.of)}` : ""}` : undefined,
@@ -1307,7 +1306,7 @@ export class Ops {
       }
       let computed = cur?.computed;
       if (p.computed) computed = { fn: p.computed.startsWith("count") ? "count" : "progress", of: p.computed.includes(":") ? this.resolveType(p.computed.split(":")[1]!.trim()).id : undefined };
-      const out = { name: p.name, kind, description: p.description, options, multiple: p.multiple, default: def, target: p.target, inverseName: p.inverse, symmetric: p.symmetric, range: p.range, computed, hideEmpty: p.hide_empty, blocks: p.blocks };
+      const out = { name: p.name, kind, description: p.description, options, multiple: p.multiple, default: def, target: p.target, inverseName: p.inverse, symmetric: p.symmetric, range: p.range, computed, blocks: p.blocks };
       if (kind === "status" && !status) status = { id: cur?.id ?? "", name: p.name ?? cur?.name ?? "", kind, sort: "" };
       // entering or leaving the status: groups and a default come or go
       if (kind && kind !== cur?.kind && (kind === "status" || cur?.kind === "status")) return { ...out, ...kindPatch({ options: options ?? cur?.options, default: def ?? cur?.default }, kind, defaultStatusOptions((k) => translate(this.store.lang(), k))) };

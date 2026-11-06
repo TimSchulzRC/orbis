@@ -1,11 +1,11 @@
 // The built app against real servers: every route and one page per kind opens without errors or a
 // blank page on desktop and phone, plus the flows that need a server. Accounts come from the API
 // and the browser holds them as if signed in; the sign-in page is checked once.
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type Page, chromium } from "playwright";
-import { ROOT, bootServer, firstAccount, mcpTool, seedExamples } from "../support/server";
+import { ROOT, bootServer, firstAccount, mcpTool, post, seedExamples } from "../support/server";
 
 const failures: string[] = [];
 let checks = 0;
@@ -13,21 +13,25 @@ let checks = 0;
 async function startServer(seeded: boolean, noTypes = false, workspace = true) {
   const dir = mkdtempSync(join(tmpdir(), "obtion-e2e-"));
   const env = { ...process.env, OBTION_DATA: dir };
+  let { url, proc } = await bootServer({ OBTION_DATA: dir });
+  // the first account (the admin) with a workspace made through the API (the app sets it up) – or
+  // none, to create it on the page
+  const { token: session, me } = await firstAccount(url, workspace);
   if (seeded) {
+    // the examples go into that workspace while no server runs, as `cli.ts setup` asks
+    (proc.kill(), await proc.exited);
     await seedExamples(env);
     if (noTypes) {
       const del = Bun.spawnSync(["bun", "tests/support/no-types.ts"], { cwd: ROOT, env });
       if (!del.stdout.toString().includes("types left: 0")) throw new Error("deleting types failed: " + del.stderr.toString());
     }
+    ({ url, proc } = await bootServer({ OBTION_DATA: dir }));
   }
-  const { url, proc } = await bootServer({ OBTION_DATA: dir });
-  // the first account (the admin): with the seeded data it gets them, otherwise a workspace made
-  // through the API (the app sets it up) – or none, to create it on the page
-  const { token: session, me } = await firstAccount(url, workspace);
   const server = { dir, url, proc, file: "", trashed: "", token: session, me };
   if (seeded && !noTypes) {
-    const token = JSON.parse(readFileSync(join(dir, "config.json"), "utf8")).token as string;
-    const mcp = async (name: string, args: unknown) => /\[([\w-]+)\]/.exec(await mcpTool(url, token, name, args))?.[1] ?? "";
+    const ws = me.workspaces[0]!.id;
+    const { token } = (await post(url, `/api/workspaces/${ws}/mcp-token`, {}, session).then((r) => r.json())) as { token: string };
+    const mcp = async (name: string, args: unknown) => /\[([\w-]+)\]/.exec(await mcpTool(url, token, name, args, `/w/${ws}/mcp`))?.[1] ?? "";
     // a 1×1 PNG below the course
     const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
     server.file = await mcp("attach", { name: "skizze.png", base64: png, parent: "Kurs Datenbanken", description: "Eine Skizze" });

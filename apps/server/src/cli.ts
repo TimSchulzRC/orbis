@@ -82,8 +82,7 @@ function workspaceDir(): string {
     if (!dir) (console.error(`No workspace ${id} in ${DATA}.`), process.exit(1));
     return dir;
   }
-  const preAccountsLayout = existsSync(join(DATA, "obtion.db")) || dirs.length === 0;
-  if (preAccountsLayout) return DATA;
+  if (dirs.length === 0) (console.error(`No workspace in ${DATA} yet: create one in the app first.`), process.exit(1));
   if (dirs.length === 1) return dirs[0]!;
   console.error(`Several workspaces – name one with --workspace:\n  ${dirs.map((d) => basename(d)).join("\n  ")}`);
   process.exit(1);

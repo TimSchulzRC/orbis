@@ -348,7 +348,7 @@ Then ask what I want to change. Don't change anything before I answer.`),
 }
 
 /** `filesUrl`: the workspace's HTTP file API (…/w/<id>/api/files), named in answers and instructions. */
-export async function handleMcp(store: Store, req: Request, blobs?: Blobs, person?: Person, filesUrl?: string): Promise<Response> {
+export async function handleMcp(store: Store, req: Request, blobs: Blobs | undefined, person: Person, filesUrl?: string): Promise<Response> {
   store.flush();
   const server = buildMcpServer(store, agentOrigin(agentName(req), person), blobs, acceptLang(req.headers.get("accept-language")), filesUrl);
   const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });

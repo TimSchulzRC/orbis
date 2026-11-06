@@ -21,7 +21,7 @@ export const stepOf = (out: string) => /\(step (s\w+)/.exec(out)![1]!;
 /** One MCP request straight into the store's handler, no server in between. */
 export async function rpc(s: Store, method: string, params?: unknown): Promise<any> {
   const req = new Request("http://127.0.0.1/mcp", { method: "POST", headers: { "content-type": "application/json", accept: MCP_ACCEPT }, body: rpcBody(method, params) });
-  return (await handleMcp(s, req)).json();
+  return (await handleMcp(s, req, undefined, { id: "u0", name: "Kai" })).json();
 }
 export async function tool(s: Store, name: string, args: unknown): Promise<{ text: string; error: boolean }> {
   const r = await rpc(s, "tools/call", { name, arguments: args });

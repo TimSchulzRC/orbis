@@ -168,14 +168,14 @@ test("activity by: people, agents, others, a name", async () => {
   const people = await by("people");
   expect(people).toContain("· Tim ·");
   expect(people).toContain("· Anna ·");
-  expect(people).not.toContain("· mcp ·");
+  expect(people).not.toContain("· mcp for Kai ·");
   const agents = await by("agents");
-  expect(agents).toContain("· mcp ·");
+  expect(agents).toContain("· mcp for Kai ·");
   expect(agents).not.toContain("· Tim ·");
-  // the test calls come from the agent "mcp": others are everyone else
+  // the test calls come from the agent "mcp" for Kai: others are everyone else
   const others = await by("others");
   expect(others).toContain("· Anna ·");
-  expect(others).not.toContain("· mcp ·");
+  expect(others).not.toContain("· mcp for Kai ·");
   const anna = await by("anna");
   expect(anna).toContain("· Anna ·");
   expect(anna).not.toContain("· Tim ·");
@@ -190,7 +190,7 @@ test("history: the list, one version, and diffs between versions or to now", asy
   const list = (await tool("history", { ref: "Leitfaden" })).text;
   expect(list).toContain('3 version(s) of the text of "Leitfaden"');
   expect(list).toMatch(/#3 · .* · Anna · \d+ characters · \+1 −1 line\(s\)/);
-  expect(list).toMatch(/#1 · .* · mcp · /);
+  expect(list).toMatch(/#1 · .* · mcp for Kai · /);
   expect(list).toContain("The text now is version 3.");
   expect((await tool("history", { ref: id, version: 1 })).text).toEndWith("\n\nSchritt 1\n");
   const d = (await tool("history", { ref: id, from: 1, to: 2 })).text;
@@ -214,7 +214,7 @@ test("restoring a version is a change of its own: a new version, in the activity
   const step = s.step(TIM, (st) => (s.change(id, TIM, (d) => (replaceBody(d, s.versionText(a!.id)!), touch(d))), st));
   s.flush();
   expect(s.records.get(id)!.body).toBe("Fassung A\n");
-  expect(s.versions(id).map((v) => v.origin)).toEqual(["agent:mcp", ANNA, TIM]);
+  expect(s.versions(id).map((v) => v.origin)).toEqual(["agent:mcp;u=u0;n=Kai", ANNA, TIM]);
   const restored = s.events({ doc: id, limit: 1 })[0]!;
   expect(restored).toMatchObject({ origin: TIM, step });
   expect(restored.changes.find((c) => c.field === "body")).toMatchObject({ diff: true });

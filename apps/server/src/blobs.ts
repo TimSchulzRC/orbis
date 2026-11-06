@@ -158,14 +158,6 @@ export class Blobs {
   }
 
   scan() {
-    // texts from before they were kept here: the whole one moves here, the facts keep the start
-    for (const r of this.store.records.values()) {
-      const f = r.file;
-      if (!f?.text || f.text.length <= FACTS_TEXT + 2 || f.extracted !== extractMark(f.hash) || !HASH.test(f.hash)) continue;
-      // there already when another file has the same content, or after a stop between the two steps
-      if (!existsSync(this.textPath(f.hash))) this.keepText(f.hash, f.text);
-      this.store.change(r.id, "system:files", (doc) => setFileMeta(doc, { text: factsText(f.text!) }), { quiet: true });
-    }
     for (const r of this.store.live()) if (this.needsWork(r)) this.schedule(r.id);
     // PDF previews a device announced but never uploaded: drop them so a device renders them again
     for (const r of this.store.live()) {

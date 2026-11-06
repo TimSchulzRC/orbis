@@ -32,7 +32,7 @@ export type DeleteMode = { mode: "tag"; tag: string } | { mode: "type"; target: 
 export interface TypeUsage {
   items: string[];
   inboxAfterRemove: number;
-  queries: { id: string; title: string }[]; // pages whose query blocks or views use the type
+  queries: { id: string; title: string }[]; // pages whose query blocks use the type
   relations: { type: string; prop: string; name: string }[]; // relation targets naming the type
   progress: { type: string; name: string }[]; // progress/computed filters on the type
 }
@@ -43,9 +43,8 @@ export function typeUsage(ix: Index, typeId: string): TypeUsage {
   const queries: TypeUsage["queries"] = [];
   for (const i of ix.all.values()) {
     if (i.deleted) continue;
-    const viewTypes = Object.values(i.views).flatMap((v) => typesIn(v.query?.where));
     const blockTypes = findBlocks(i.body).flatMap((b) => typesIn(readBlock(b.src, ix).def.where));
-    if ([...viewTypes, ...blockTypes].includes(typeId)) queries.push({ id: i.id, title: i.kind === "settings" ? "Start" : i.title });
+    if (blockTypes.includes(typeId)) queries.push({ id: i.id, title: i.kind === "settings" ? "Start" : i.title });
   }
   const relations: TypeUsage["relations"] = [];
   const progress: TypeUsage["progress"] = [];

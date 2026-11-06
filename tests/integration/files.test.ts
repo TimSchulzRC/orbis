@@ -262,24 +262,13 @@ test("a long text stays on the server: the facts carry its start, get and search
   expect((await get(base, `/w/${ws}/api/texts/${made.hash}`, other.token)).status).toBe(403);
 });
 
-test("the facts of a file hold at most the start of its text; an older long text moves out when the workspace opens", async () => {
+test("the facts of a file hold at most the start of its text; the whole text stays beside the content", async () => {
   const dir = tempDir("obtion-facts-text-");
   const s = new Store(dir);
   runSetup(storeWriter(s, "system:setup"), "de");
-  const long = `Kopf\n${"Zeile mit Inhalt\n".repeat(600)}Ende Zielwort`;
   const fresh = `Neu\n${"noch eine Zeile\n".repeat(600)}Fuss Spurwort`;
   mkdirSync(join(dir, "blobs"), { recursive: true });
-  for (const c of [long, fresh]) await Bun.write(join(dir, "blobs", sha256(c)), c);
-  // read by an older server: the whole text in the facts
-  s.change("alt-1", "test", (doc) => {
-    initItem(doc, { kind: "datei", title: "alt.txt" });
-    setFileMeta(doc, { hash: sha256(long), name: "alt.txt", mime: "text/plain", filetype: "dokument", size: long.length, text: long, extracted: sha256(long).slice(0, 16) });
-  });
-  // the same content once more: the text is kept already when this one's turn comes
-  s.change("alt-2", "test", (doc) => {
-    initItem(doc, { kind: "datei", title: "alt-kopie.txt" });
-    setFileMeta(doc, { hash: sha256(long), name: "alt-kopie.txt", mime: "text/plain", filetype: "dokument", size: long.length, text: long, extracted: sha256(long).slice(0, 16) });
-  });
+  await Bun.write(join(dir, "blobs", sha256(fresh)), fresh);
   s.change("neu-1", "test", (doc) => {
     initItem(doc, { kind: "datei", title: "neu.txt" });
     setFileMeta(doc, { hash: sha256(fresh), name: "neu.txt", mime: "text/plain", filetype: "dokument", size: fresh.length });
@@ -289,13 +278,12 @@ test("the facts of a file hold at most the start of its text; an older long text
   const w = new Workspace(dir);
   try {
     for (let i = 0; i < 100 && !w.store.records.get("neu-1")!.file!.text; i++) await Bun.sleep(50);
-    for (const [id, text] of [["alt-1", long], ["alt-2", long], ["neu-1", fresh]] as const) {
+    for (const [id, text] of [["neu-1", fresh]] as const) {
       const f = w.store.records.get(id)!.file!;
       expect(f.text!.length).toBeLessThanOrEqual(4002);
       expect(f.text).toEndWith("\n…");
       expect(w.blobs.text(f)).toBe(text);
     }
-    expect(searchIds(w.store.searchIndex, "Zielwort").sort()).toEqual(["alt-1", "alt-2"]);
     expect(searchIds(w.store.searchIndex, "Spurwort")).toEqual(["neu-1"]);
   } finally {
     w.shut();

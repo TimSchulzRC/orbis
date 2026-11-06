@@ -10,7 +10,6 @@ import {
   type ItemInit,
   type FreeValue,
   type Value,
-  type ViewDef,
   addParent,
   appendUpdate,
   initItem,
@@ -31,7 +30,6 @@ import {
   setProp,
   setRel,
   setRules,
-  setView,
   touch,
 } from "@obtion/core/model";
 import { Index } from "@obtion/core/graph";
@@ -47,7 +45,7 @@ import { type Person, personOrigin } from "@obtion/core/origin";
 const REMOTE = Symbol("remote");
 /** One area until teams come; the single sync cursor belongs to it. */
 const AREAS = [PERSONAL];
-export type OutItem = PushItem & { a?: string };
+export type OutItem = PushItem & { a: string };
 
 const LOAD = Symbol("load");
 const TAB = Symbol("tab");
@@ -386,7 +384,7 @@ export class Repo {
     for (const o of await this.db.outbox()) this.outbox.set(o.k, o);
     this.status.pending = this.outbox.size;
     for (const area of AREAS) {
-      const items = [...this.outbox.values()].filter((o) => (o.a ?? PERSONAL) === area); // items from before areas: personal
+      const items = [...this.outbox.values()].filter((o) => o.a === area);
       for (let i = 0; i < items.length; i += PUSH_BATCH) this.send({ t: "push", area, items: items.slice(i, i + PUSH_BATCH) });
     }
   }
@@ -431,7 +429,7 @@ export class Repo {
   private async onWelcome(msg: Extract<ServerMsg, { t: "welcome" }>) {
     this.serverFormat = msg.format;
     const known = this.serverId ?? (await this.db.serverId());
-    if (known && known !== msg.hub && this.docs.size > 0) {
+    if (known && known !== msg.server && this.docs.size > 0) {
       // Usually the server was set up anew and this copy is stale (replace, recommended); rarely it
       // was restored from a backup and misses what only this device has (upload). Only the user knows.
       const answer = await this.host.askOtherServer();
@@ -443,7 +441,7 @@ export class Repo {
         return;
       }
       if (answer !== "upload") {
-        await this.db.write({ serverId: msg.hub });
+        await this.db.write({ serverId: msg.server });
         await this.resetLocal(true);
         return;
       }
@@ -454,8 +452,8 @@ export class Repo {
       await this.db.write({ cursor: { lastSeq: 0 } });
       this.send({ t: "hello", area: msg.area, since: 0, device: this.device });
     }
-    this.serverId = msg.hub;
-    if (known !== msg.hub) await this.db.write({ serverId: msg.hub });
+    this.serverId = msg.server;
+    if (known !== msg.server) await this.db.write({ serverId: msg.server });
     await this.flushOutbox();
   }
 
@@ -660,10 +658,6 @@ export class Repo {
       touch(doc);
     });
   }
-  setView(id: string, viewId: string, def: ViewDef | null) {
-    this.change(id, (doc) => setView(doc, viewId, def));
-  }
-
   /** `status.option` is an option id of the status property. */
   addUpdate(id: string, text: string, status?: { prop: string; option: string }) {
     const schema = this.index().schemaOf(this.records.get(id));

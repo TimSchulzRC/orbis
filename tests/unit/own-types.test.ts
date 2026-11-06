@@ -136,14 +136,14 @@ test("progress counts every option of the done group as finished", () => {
   expect(m.index().progressOf(m.index().get(plan)!)).toEqual({ done: 2, total: 3 });
 });
 
-test("progress comes from the computed property; old types read the capability until they have one", () => {
+test("progress comes from the computed property", () => {
   const m = new MemRepo();
-  m.addType("t_old", { name: "Alt", capabilities: { progress: { of: "t_old" } } });
+  m.addType("t_old", { name: "Alt" });
   let s = m.index().types.get("t_old")!.schema;
-  expect(progressSpec(s)).toEqual({ of: "t_old" }); // from before the property
+  expect(progressSpec(s)).toBeUndefined();
   m.change("t_old", (doc) => upsertProp(doc, "p_pr", { name: "Fortschritt", kind: "computed", computed: { fn: "progress" } }));
   s = m.index().types.get("t_old")!.schema;
-  expect(progressSpec(s)).toEqual({ of: undefined }); // the property wins
+  expect(progressSpec(s)).toEqual({ of: undefined });
   m.change("t_old", (doc) => removeProp(doc, "p_pr"));
   s = m.index().types.get("t_old")!.schema;
   expect(progressSpec(s)).toBeUndefined(); // removing it turns the bar off

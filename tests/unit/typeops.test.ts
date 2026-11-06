@@ -103,15 +103,12 @@ test("pages show every property of a type, empty ones too – computed ones once
     name: "Buch",
     properties: [
       { id: "p_autor", name: "Autor", kind: "relation" },
-      { id: "p_isbn", name: "ISBN", kind: "text", hideEmpty: true },
+      { id: "p_isbn", name: "ISBN", kind: "text" },
       { id: "p_n", name: "Kapitel", kind: "computed", computed: { fn: "progress" } },
     ],
   });
   const b = m.add({ title: "Neues Buch", type: "t_book" });
   const shown = () => visibleProps(m.index().get(b)!, m.index().schemaOf(m.index().get(b)!)!, m.index()).map((p) => p.name);
-  expect(shown()).toEqual(["Autor", "ISBN"]); // empty and even an old "only when set" mark: shown; nothing computed yet
-  // the shipped task: "Blockiert durch" and "Wartet auf" only when set
-  const task = m.index().types.get(SYS.task)!.schema;
-  expect(task.properties.filter((p) => p.hideEmpty).map((p) => p.id).sort()).toEqual(["p_blocked", "p_waiting"]);
+  expect(shown()).toEqual(["Autor", "ISBN"]); // empty ones too; nothing computed yet
 });
 
