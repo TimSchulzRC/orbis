@@ -9,8 +9,7 @@
 //                    No inbox field, the inbox is computed. An old "kept" is ignored since 01.11.
 //   parents  Y.Map   parentId -> { sort, at }  (sort is per parent, at = when added)
 //   props    Y.Map   propId -> value
-//   extra    Y.Map   name -> { k, v }          (free properties: left over from a removed type or
-//                                              property, or set by an agent; k "list": v is string[])
+//   extra    Y.Map   name -> { k, v }          (left over from a removed type or property; k "list": v is string[])
 //   rels     Y.Map   propId -> Y.Map<targetId, true>
 //   tags     Y.Map   tag -> true
 //   refs     Y.Map   targetId -> sort key      (explicit only; links in the text are derived; older: true)
@@ -48,11 +47,7 @@ export const STATUS_GROUPS: StatusGroup[] = ["todo", "active", "done"];
  */
 export type PropKind = "text" | "number" | "date" | "checkbox" | "url" | "select" | "status" | "relation" | "computed";
 export const PROP_KINDS: PropKind[] = ["text", "number", "date", "checkbox", "url", "select", "status", "relation", "computed"];
-/**
- * Free properties hold values without a property of the item's type: left over when a type or
- * property goes, or set by an agent. Never added by hand in the app.
- * "list" holds several texts (e.g. a former multiple choice).
- */
+/** Free properties hold values left over when a type or property goes. Never added by hand. "list" holds a former multiple choice. */
 export type FreeKind = "text" | "number" | "date" | "checkbox" | "url" | "select" | "list";
 
 export interface OptionDef {

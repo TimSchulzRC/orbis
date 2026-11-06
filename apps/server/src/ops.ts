@@ -3,7 +3,6 @@
 import * as Y from "yjs";
 import {
   type ViewTab,
-  type FreeValue,
   type Item,
   type OptionDef,
   type Patch,
@@ -192,25 +191,6 @@ function firstLine(text: string): string {
 }
 
 /** "start/end", either side may be empty. Tries every slash, since a date itself may contain one. */
-function freeValue(name: string, v: unknown): FreeValue | null {
-  if (v === null || v === undefined || v === "") return null;
-  if (typeof v === "boolean") return { k: "checkbox", v };
-  if (typeof v === "number") {
-    if (!Number.isFinite(v)) throw new OpError(`"${name}" is not a finite number.`);
-    return { k: "number", v };
-  }
-  if (Array.isArray(v)) {
-    const list = v.filter((x) => x !== null && x !== undefined && x !== "").map((x) => (typeof x === "object" ? JSON.stringify(x) : String(x)));
-    return list.length ? { k: "list", v: list } : null;
-  }
-  if (typeof v === "object") throw new OpError(`"${name}" is an object; free properties hold text, numbers, true/false, dates or lists. Flatten it (e.g. "${name}.field") or put it in the body.`);
-  const s = String(v);
-  const day = /^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}.*)?$/.test(s.trim()) ? parseDateTime(s, todayISO()) : undefined;
-  if (day) return { k: "date", v: day };
-  if (/^https?:\/\/\S+$/.test(s.trim())) return { k: "url", v: s.trim() };
-  return { k: "text", v: s };
-}
-
 function splitRange(s: string, today: string): string | undefined {
   for (let i = s.indexOf("/"); i >= 0; i = s.indexOf("/", i + 1)) {
     const a = s.slice(0, i).trim();
@@ -1025,21 +1005,6 @@ export class Ops {
     return p;
   }
 
-  /**
-   * Free properties: values without a property of the type. The kind follows the value – true/false,
-   * a number, a list, a date (2026-10-30, optionally with a time), a URL, else text. A name the
-   * type has as a property is refused: set it with properties. null removes one.
-   */
-  private freeValues(schema: TypeSchema | undefined, raw: Record<string, unknown> | undefined): [string, FreeValue | null][] {
-    return Object.entries(raw ?? {}).map(([name, v]) => {
-      const key = name.trim();
-      if (!key) throw new OpError("A free property needs a name.");
-      const p = propByName(schema, key);
-      if (p) throw new OpError(`"${key}" is a property of type ${schema!.name}: set it with properties, not free_properties.`);
-      return [key, freeValue(key, v)];
-    });
-  }
-
   private applyProps(doc: Y.Doc, item: Item | undefined, schema: TypeSchema | undefined, props: Record<string, unknown> | undefined) {
     for (const [name, raw] of Object.entries(props ?? {})) {
       const p = this.prop(schema, name);
@@ -1065,7 +1030,6 @@ export class Ops {
     const schema = type?.schema;
     const parents = (input.parents ?? []).map((p) => this.resolve(p).id);
     const refs = (input.refs ?? []).map((r) => this.resolve(r).id);
-    const free = this.freeValues(schema, input.free_properties);
     const id = newId();
     const body = input.body ? normalizeBlocks(input.body, ix) : (template(schema)?.body ?? "");
     this.noSelfLink(body, id, title);
@@ -1073,7 +1037,6 @@ export class Ops {
       const pinned = input.pin ? nextPinKey(this.store.live()) : undefined;
       initItem(doc, { title, type: type?.id ?? null, body, rules: input.agent_rules, tags: input.tags, refs, parents, pinned, props: initialProps(schema), createdBy: origin });
       this.applyProps(doc, undefined, schema, input.properties);
-      for (const [k, v] of free) setExtra(doc, k, v);
     });
     this.store.flush();
     return this.store.records.get(id)!;
@@ -1105,7 +1068,6 @@ export class Ops {
     const refsAdd = (input.refs_add ?? []).map((r) => this.resolve(r).id);
     if (refsAdd.includes(item.id)) throw new OpError(`"${item.title}" cannot refer to itself.`);
     const refsRem = (input.refs_remove ?? []).map((r) => this.resolve(r).id);
-    const free = this.freeValues(schema, input.free_properties);
     const oldTitle = item.title;
     const ownsTitle = ix.ownsTitle(item);
     this.store.change(item.id, origin, (doc) => {
@@ -1119,7 +1081,6 @@ export class Ops {
         const name = Object.keys(item.extra).find((n) => titleKey(n) === titleKey(k));
         if (name) setExtra(doc, name, null);
       }
-      for (const [k, v] of free) setExtra(doc, Object.keys(item.extra).find((n) => titleKey(n) === titleKey(k)) ?? k, v);
       for (const t of input.tags_add ?? []) setMember(doc, "tags", t, true);
       for (const t of input.tags_remove ?? []) setMember(doc, "tags", t, false);
       for (const r of refsAdd) setMember(doc, "refs", r, true);

@@ -186,7 +186,7 @@ function buildMcpServer(store: Store, origin: string, blobs?: Blobs, lang: Lang 
     "create",
     {
       title: "Create",
-      description: "Create informations. type is a type name (see schema) or omitted; parents (titles/ids) place them; properties by name (only those of the type), other values as free_properties. Without type and parent the item lands in the inbox.",
+      description: "Create informations. type is a type name (see schema) or omitted; parents (titles/ids) place them; properties by name (only those of the type). Without type and parent the item lands in the inbox.",
       inputSchema: { items: z.array(createInput).min(1) },
     },
     write((a, touched) => `Created:\n${ops.written(mark(touched, a.items.map((x) => ops.create(x, origin))))}`),
@@ -195,7 +195,7 @@ function buildMcpServer(store: Store, origin: string, blobs?: Blobs, lang: Lang 
     "update",
     {
       title: "Update",
-      description: "Change one item: title, type (name or null), properties by name (null clears), free_properties (set) and free_properties_remove, tags, refs, body. Body: prefer old_text/new_text or body_mode append|prepend; replacing the whole body (body without body_mode, or replace) needs base_version from get, and a stale one is rejected with what changed since. Renaming rewrites [[links]]. The answer shows the new version.",
+      description: "Change one item: title, type (name or null), properties by name (null clears), free_properties_remove, tags, refs, body. Body: prefer old_text/new_text or body_mode append|prepend; replacing the whole body (body without body_mode, or replace) needs base_version from get, and a stale one is rejected with what changed since. Renaming rewrites [[links]]. The answer shows the new version.",
       inputSchema: updateInput.shape,
     },
     write((a, touched) => {

@@ -1,4 +1,4 @@
-// Format 3: dates with a time, lists in free properties and former property names.
+// Format 3: dates with a time, lists in free properties (a former multiple choice) and former property names.
 import { test, expect, describe } from "bun:test";
 import { MemRepo } from "../support/helpers";
 import { parseDateTime, dateText } from "@obtion/core/input";
