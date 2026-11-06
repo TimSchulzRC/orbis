@@ -247,11 +247,11 @@ export function writeExamples(w: Writer, lang: Lang, files: Partial<Record<Examp
   });
   put("ex-art-en", {
     type: EX_TYPES.article,
-    title: "Why I write offline first",
+    title: ex("articleEn.title"),
     parents: [blog],
     props: { p_ex_lang: "lang_en", p_ex_stage: "stage_draft" },
     rels: { p_ex_tr: [artDe] },
-    body: "Notes belong on my own device first. Then they never get lost, not even on a train without signal.\n",
+    body: ex("articleEn.body"),
   });
 
   put("ex-week", {

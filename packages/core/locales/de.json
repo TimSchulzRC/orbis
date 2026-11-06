@@ -1182,5 +1182,7 @@
  "mail.code.subject": "{code} ist dein Anmeldecode für Obtion",
  "mail.code.body": "Dein Code für die Anmeldung bei {host}:\n\n{code}\n\nEr gilt 10 Minuten. Wenn du dich nicht anmelden wolltest, ignoriere diese E-Mail.",
  "key.ctrl": "Strg",
- "mirror.noPlace": "Ohne Ort"
+ "mirror.noPlace": "Ohne Ort",
+ "sample.articleEn.title": "Why I write offline first",
+ "sample.articleEn.body": "Notes belong on my own device first. Then they never get lost, not even on a train without signal.\n"
 }

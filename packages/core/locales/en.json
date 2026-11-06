@@ -1182,5 +1182,7 @@
  "mail.code.subject": "{code} is your Obtion sign-in code",
  "mail.code.body": "Your code for signing in at {host}:\n\n{code}\n\nIt is valid for 10 minutes. If you did not try to sign in, ignore this email.",
  "key.ctrl": "Ctrl",
- "mirror.noPlace": "No place"
+ "mirror.noPlace": "No place",
+ "sample.articleEn.title": "Why I write offline first",
+ "sample.articleEn.body": "Notes belong on my own device first. Then they never get lost, not even on a train without signal.\n"
 }
