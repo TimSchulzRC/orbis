@@ -3,7 +3,7 @@
 // of the inbox shows, so nothing distracts. The note joins the inbox once something is in it: closed
 // (Esc, ⌘↵, a click beside) it stays there; left empty, it goes without ever showing.
 import { useEffect, useRef } from "react";
-import { ChevronDown, Layers, Plus } from "lucide-react";
+import { ChevronDown, ChevronUp, Layers, Plus } from "lucide-react";
 import { replica, shownSpaces, spaceById, useAccounts } from "../accounts";
 import { openItem, useRepo } from "../hooks";
 import { tr, useT } from "../i18n";
@@ -64,7 +64,10 @@ export function closeQuickNote() {
   });
 }
 
-/** The tray's button. */
+/**
+ * The tray's button. It folds the card out and back in, so it looks like the inbox's button beside it:
+ * no frame of its own, the chevron pointing where the card goes, held down while the card is out.
+ */
 export function QuickNoteButton() {
   const { t } = useT();
   const open = useQuickNote();
@@ -73,10 +76,13 @@ export function QuickNoteButton() {
       variant="plain"
       onClick={open ? closeQuickNote : openQuickNote}
       aria-expanded={open}
-      className={cn("tap-y flex h-11 items-center gap-2 rounded-xl border px-3.5 text-[15px] hover:bg-hover", open ? "border-focus bg-hover" : "border-line")}
+      className={cn("tap-y flex min-h-11 items-center gap-2.5 rounded-xl py-1.5 pl-2.5 pr-2 text-sm font-semibold hover:bg-hover", open && "bg-hover")}
     >
-      <Plus size={17} className="shrink-0" />
+      <span className={cn("flex size-6 shrink-0 items-center justify-center rounded-md transition-colors", open ? "bg-fg text-bg" : "bg-primary text-primary-foreground")} aria-hidden>
+        <Plus size={15} strokeWidth={2.5} className={cn("transition-transform duration-200", open && "rotate-45")} />
+      </span>
       {t("quick.title")}
+      <ChevronUp size={14} className={cn("text-muted-foreground transition-transform duration-200", open && "rotate-180")} aria-hidden />
     </Button>
   );
 }
