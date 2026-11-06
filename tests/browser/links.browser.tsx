@@ -10,11 +10,11 @@ afterEach(() => cleanup());
 
 test("the button counts links both ways and lists them; a ref outside the text can be removed", async () => {
   const repo = await workspace(false);
-  const home = repo.create({ title: "Arbeit", pinned: "a" });
+  const home = repo.create({ title: "Work", pinned: "a" });
   const roadmap = repo.create({ title: "Roadmap 2027", parents: [home] });
-  const relaunch = repo.create({ title: "Website-Relaunch", parents: [home] });
-  const id = repo.create({ title: "Marketing", parents: [home], body: "Stand unter [[Website-Relaunch]]." });
-  repo.create({ title: "So funktioniert Obtion", parents: [home], body: "Siehe [[Marketing]]." });
+  const relaunch = repo.create({ title: "Website relaunch", parents: [home] });
+  const id = repo.create({ title: "Marketing", parents: [home], body: "Status under [[Website relaunch]]." });
+  repo.create({ title: "How Obtion works", parents: [home], body: "See [[Marketing]]." });
   repo.setMember(id, "refs", roadmap, true);
   await render(<ItemPage id={id} isNew={false} />);
 
@@ -28,8 +28,8 @@ test("the button counts links both ways and lists them; a ref outside the text c
   const menu = page.getByRole("dialog");
   await expect.element(menu.getByText(/^Verlinkt von/)).toBeVisible();
   await expect.element(menu.getByText(/^Verweist auf/)).toBeVisible();
-  expect(menu.getByRole("link").elements().map((a) => a.textContent)).toEqual(["So funktioniert Obtion", "Website-Relaunch", "Roadmap 2027"]);
-  await expect.element(menu.getByRole("link", { name: "Website-Relaunch" })).toHaveAttribute("href", expect.stringContaining(relaunch));
+  expect(menu.getByRole("link").elements().map((a) => a.textContent)).toEqual(["How Obtion works", "Website relaunch", "Roadmap 2027"]);
+  await expect.element(menu.getByRole("link", { name: "Website relaunch" })).toHaveAttribute("href", expect.stringContaining(relaunch));
 
   // only the ref outside the text has a remove button
   expect(menu.getByRole("button", { name: "Ref entfernen" }).elements()).toHaveLength(1);
@@ -40,11 +40,11 @@ test("the button counts links both ways and lists them; a ref outside the text c
 
 test("no links, no link button; + after the chips adds a ref, the page menu no longer does", async () => {
   const repo = await workspace(false);
-  const home = repo.create({ title: "Arbeit", pinned: "a" });
+  const home = repo.create({ title: "Work", pinned: "a" });
   const roadmap = repo.create({ title: "Roadmap 2027", parents: [home] });
-  const id = repo.create({ title: "Allein", parents: [home] });
+  const id = repo.create({ title: "Alone", parents: [home] });
   await render(<ItemPage id={id} isNew={false} />);
-  await expect.element(page.getByText("Allein").first()).toBeVisible();
+  await expect.element(page.getByText("Alone").first()).toBeVisible();
   expect(page.getByRole("button", { name: /^Links:/ }).query()).toBeNull();
 
   await page.getByRole("button", { name: "Mehr" }).first().click();
@@ -63,15 +63,15 @@ test("no links, no link button; + after the chips adds a ref, the page menu no l
 
 test("refs show as chips after the link button; a link from the text can be pinned there", async () => {
   const repo = await workspace(false);
-  const home = repo.create({ title: "Arbeit", pinned: "a" });
+  const home = repo.create({ title: "Work", pinned: "a" });
   const roadmap = repo.create({ title: "Roadmap 2027", parents: [home] });
-  const relaunch = repo.create({ title: "Website-Relaunch", parents: [home] });
-  const id = repo.create({ title: "Marketing", parents: [home], body: "Stand unter [[Website-Relaunch]]." });
+  const relaunch = repo.create({ title: "Website relaunch", parents: [home] });
+  const id = repo.create({ title: "Marketing", parents: [home], body: "Status under [[Website relaunch]]." });
   repo.setMember(id, "refs", roadmap, true);
   await render(<ItemPage id={id} isNew={false} />);
 
   // the ref set by hand is a chip; the link in the text is not
-  const chips = () => page.getByRole("link", { name: /Roadmap 2027|Website-Relaunch/ }).elements().filter((a) => !a.closest(".cm-editor"));
+  const chips = () => page.getByRole("link", { name: /Roadmap 2027|Website relaunch/ }).elements().filter((a) => !a.closest(".cm-editor"));
   await expect.poll(() => chips().map((a) => a.textContent)).toEqual(["Roadmap 2027"]);
 
   // pinned from the menu, the link from the text shows as a chip too, in front
@@ -79,21 +79,21 @@ test("refs show as chips after the link button; a link from the text can be pinn
   await page.getByRole("dialog").getByRole("button", { name: "Oben anheften" }).click();
   await expect.poll(() => repo.get(id)!.refs).toEqual([relaunch, roadmap]);
   await page.getByRole("button", { name: "Links: 2" }).click(); // close the menu
-  await expect.poll(() => chips().map((a) => a.textContent)).toEqual(["Website-Relaunch", "Roadmap 2027"]);
+  await expect.poll(() => chips().map((a) => a.textContent)).toEqual(["Website relaunch", "Roadmap 2027"]);
 
   // its × unpins it; the link in the text stays
   await page.getByRole("button", { name: "Nicht mehr oben anheften" }).click();
   await expect.poll(() => repo.get(id)!.refs).toEqual([roadmap]);
-  expect(repo.get(id)!.body).toContain("[[Website-Relaunch]]");
+  expect(repo.get(id)!.body).toContain("[[Website relaunch]]");
 });
 
 test("refs keep their order: a pinned link goes in front, chips can be dragged or moved with Alt+arrows", async () => {
   const repo = await workspace(false);
-  const home = repo.create({ title: "Arbeit", pinned: "a" });
+  const home = repo.create({ title: "Work", pinned: "a" });
   const a = repo.create({ title: "Alpha", parents: [home] });
   const b = repo.create({ title: "Beta", parents: [home] });
   const g = repo.create({ title: "Gamma", parents: [home] });
-  const id = repo.create({ title: "Seite", parents: [home], body: "Siehe [[Gamma]]." });
+  const id = repo.create({ title: "Page", parents: [home], body: "See [[Gamma]]." });
   repo.setMember(id, "refs", a, true);
   repo.setMember(id, "refs", b, true);
   await render(<ItemPage id={id} isNew={false} />);

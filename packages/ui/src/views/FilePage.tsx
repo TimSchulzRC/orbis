@@ -25,7 +25,7 @@ export function FilePage({ item }: { item: Item }) {
   const ix = useIndex();
   const file = item.file!;
   const [picking, setPicking] = useState(false);
-  const isImg = file.filetype === "bild";
+  const isImg = file.filetype === "image";
   const display = useBlobUrl(isImg ? (file.display ?? file.hash) : file.filetype === "pdf" ? undefined : file.thumb, true);
   const usedIn = ix.usedIn(item.id).map((b) => ({ item: ix.get(b.from)!, note: t("file.use." + b.kind) })).filter((x) => x.item);
   const parents = ix.parentsOf(item.id);
@@ -56,7 +56,7 @@ export function FilePage({ item }: { item: Item }) {
     [t("file.added"), `${fmtDate(lang, dateOf(item.created))}${addedBy ? " · " + addedBy : ""}`],
     [t("file.here"), local ? t("file.local") : t("file.online")],
   ];
-  /** "Ersetzen": new content, same document; the old version stays in the history. */
+  /** "Replace…": new content, same document; the old version stays in the history. */
   const replace = async (upload: File) => {
     const meta = await files.prepare(upload, file.name);
     repo.change(item.id, (doc) =>
@@ -104,7 +104,7 @@ export function FilePage({ item }: { item: Item }) {
           <LinksMenu item={item} usedIn={usedIn} />
         </span>
       </div>
-      {/* facts as the property block (no "+ Eigenschaft") */}
+      {/* facts as the property block (no "+ Property") */}
       <div className="mt-[18px] grid grid-cols-[148px_minmax(0,1fr)] gap-x-3 max-md:grid-cols-[124px_minmax(0,1fr)]">
         {[[t("file.name"), file.name] as [string, React.ReactNode], ...facts.slice(1)].map(([label, value]) => (
           <div key={label} className="contents">
@@ -150,7 +150,7 @@ export function FilePage({ item }: { item: Item }) {
       {picking && (
         <ItemPicker
           title={parents.length ? t("place.changeTitle") : t("place.add")}
-          exclude={(x) => x.id === item.id || parents.includes(x.id) || x.kind !== "info"}
+          exclude={(x) => x.id === item.id || parents.includes(x.id) || x.kind !== "note"}
           onPick={(p) => {
             repo.addParent(item.id, p);
             setPicking(false);

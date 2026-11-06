@@ -1,16 +1,16 @@
-// `notify` keeps one look for every notice: a sentence, and "Rückgängig" or one other step.
+// `notify` keeps one look for every notice: a sentence, and "Undo" or one other step.
 import { toast } from "sonner";
 import { Toaster } from "../components/ui/sonner";
 import { tr } from "../i18n";
 
 const PLAIN = 5000;
-const WITH_ACTION = 7000; // a notice with "Rückgängig" or "Öffnen" stays longer
+const WITH_ACTION = 7000; // a notice with "Undo" or "Open" stays longer
 
-/** A short notice; `.undo` offers "Rückgängig", `.action` another step ("Öffnen"), `.error` says what failed. */
+/** A short notice; `.undo` offers "Undo", `.action` another step ("Open"), `.error` says what failed. */
 export function notify(text: string) {
   toast(text, { duration: PLAIN });
 }
-/** "„Titel“ im Papierkorb · Rückgängig" – the same for every undo. `id`: a notice that grows instead of repeating. */
+/** "“Title” moved to the trash · Undo" – the same for every undo. `id`: a notice that grows instead of repeating. */
 notify.undo = (text: string, onUndo: () => void, id?: string) => {
   toast(text, { id, duration: WITH_ACTION, action: { label: tr("activity.undo"), onClick: onUndo } });
 };

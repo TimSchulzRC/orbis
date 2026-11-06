@@ -212,7 +212,7 @@ interface FilterDraft {
   discard: () => void;
 }
 
-/** The look is saved at once; the filter stays a draft until "Speichern". */
+/** The look is saved at once; the filter stays a draft until "Save". */
 export function ViewSettings({ tab, fields, columns, groups = [], onLook, filter, onClose, kinds = TAB_KINDS, part }: { tab: ViewTab; fields: ViewField[]; columns?: string[]; groups?: Group[]; onLook: (patch: Partial<ViewTab>) => void; filter?: FilterDraft; onClose: () => void; kinds?: ViewKind[]; /** one part only, for a popover (a query block's tools): no card, kind switch, filter or close button */ part?: "sort" | "group" | "more" }) {
   const { t } = useT();
   const ix = useIndex();

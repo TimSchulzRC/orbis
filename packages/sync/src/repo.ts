@@ -584,7 +584,7 @@ export class Repo {
   /** Applies the new type's initial values. Files have no type. */
   setType(id: string, type: string | null) {
     const item = this.records.get(id);
-    if (!item || item.kind !== "info" || item.type === type) return;
+    if (!item || item.kind !== "note" || item.type === type) return;
     const schema = type ? this.records.get(type)?.schema : undefined;
     this.change(id, (doc) => {
       setMeta(doc, { type });
@@ -651,7 +651,7 @@ export class Repo {
   setBody(id: string, body: string) {
     this.change(id, (doc) => replaceBody(doc, body));
   }
-  /** "Regeln für Agenten" of an item, or of the workspace (the settings doc). */
+  /** "Rules for agents" of an item, or of the workspace (the settings doc). */
   setRules(id: string, rules: string) {
     this.change(id, (doc) => {
       setRules(doc, rules);

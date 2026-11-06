@@ -16,7 +16,7 @@ import { ItemPicker } from "./Picker";
 type Step = "root" | "type" | "status" | "due" | "tag";
 type Ctx = { ix: Index; t: T; lang: Lang };
 
-/** How a condition reads on its chip: the text form, "nicht …" for a negation. */
+/** How a condition reads on its chip: the text form, "not …" for a negation. */
 function condLabel(c: Cond, { ix, t, lang }: Ctx): string {
   return "not" in c ? `${t("query.not")} ${condLabel(c.not, { ix, t, lang })}` : printQuery({ where: c }, lang, ix);
 }
@@ -128,7 +128,7 @@ function Chip({ cond, ctx, off, onToggle, onNegate, onOr, onRemove, onUnder, con
     </Popover>
   );
   if (!quickRemove) return chip;
-  // in the filter line under the tabs: "status:offen ×"
+  // in the filter line under the tabs: "status:open ×"
   return (
     <span className="inline-flex items-center">
       {chip}
@@ -146,7 +146,7 @@ export function AddFilter({ onAdd, trigger, context }: { onAdd: (c: Cond) => voi
       {picking && (
         <ItemPicker
           title={t("query.cond.under")}
-          filter={(x) => x.kind === "info"}
+          filter={(x) => x.kind === "note"}
           onPick={(id) => (onAdd({ under: { id } }), setPicking(false))}
           onClose={() => setPicking(false)}
         />
@@ -287,7 +287,7 @@ export function QueryEditor({ def, onChange, autoFocus, context, bare }: { def: 
       {picking && (
         <ItemPicker
           title={t("query.cond.under")}
-          filter={(x) => x.kind === "info"}
+          filter={(x) => x.kind === "note"}
           onPick={(id) => {
             picking({ under: { id } });
             setPicking(null);

@@ -13,6 +13,7 @@ import type { Lang } from "@obtion/core/i18n";
 
 afterAll(removeTempDirs);
 
+// German by default: these tests check the German examples
 function world(lang: Lang = "de") {
   const m = new MemRepo();
   runSetup(m.writer, lang);
@@ -61,8 +62,8 @@ test("removing the examples: unchanged ones by default, types only when nothing 
   const m = world();
   // edited by the user, and one with an own entry below it: both marked, not chosen by default
   m.change("ex-b-city", (d) => touch(d, Date.now() + 1000));
-  const own = m.add({ title: "Meine Notiz", parents: ["ex-learn"] });
-  const ownBook = m.add({ title: "Mein Buch", type: EX_TYPES.article, parents: [own] });
+  const own = m.add({ title: "My note", parents: ["ex-learn"] });
+  const ownBook = m.add({ title: "My book", type: EX_TYPES.article, parents: [own] });
   const list = listExamples(m.index());
   const by = (id: string) => list.find((e) => e.id === id)!;
   expect(by("ex-b-city").changed).toBe(true);
@@ -78,7 +79,7 @@ test("removing the examples: unchanged ones by default, types only when nothing 
   expect(ix.get("ex-b-city")).toBeDefined();
   expect(ix.get("ex-learn")).toBeDefined();
   expect(ix.get(own)).toBeDefined();
-  // Person goes (its people went), Buch stays (one book was kept), Artikel stays (an own entry)
+  // Person goes (its people went), Book stays (one book was kept), Article stays (an own entry)
   expect(ix.types.has(EX_TYPES.person)).toBe(false);
   expect(ix.types.has(EX_TYPES.book)).toBe(true);
   expect(ix.types.has(EX_TYPES.article)).toBe(true);
@@ -93,7 +94,7 @@ test("removing the examples: unchanged ones by default, types only when nothing 
 
 test("removeExamples ignores ids that are not examples", () => {
   const m = world();
-  const own = m.add({ title: "Eigenes" });
+  const own = m.add({ title: "My own" });
   expect(removeExamples(m.writer, m.index(), [own, SYS.project])).toEqual([]);
   expect(m.index().get(own)).toBeDefined();
   expect(m.index().types.has(SYS.project)).toBe(true);
@@ -105,7 +106,7 @@ test("on the server: set up with the examples, the files' contents stored", asyn
   const blobs = new Blobs(join(dir, "blobs"), store);
   await setUp(store, blobs, "de", { examples: true });
   const files = store.live().filter((r) => r.source === EXAMPLE && r.file);
-  expect(files.map((f) => f.file!.filetype).sort()).toEqual(["bild", "pdf"]);
+  expect(files.map((f) => f.file!.filetype).sort()).toEqual(["image", "pdf"]);
   for (const f of files) expect(blobs.has(f.file!.hash)).toBe(true);
   expect(files.find((f) => f.file!.filetype === "pdf")!.file!.pages).toBe(1);
   expect(store.records.get(SYS.project)).toBeDefined();

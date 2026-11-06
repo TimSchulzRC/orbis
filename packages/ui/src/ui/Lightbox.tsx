@@ -12,7 +12,7 @@ import { createStore } from "../lib/store";
 const open = createStore<{ ids: string[]; at: number } | null>(null);
 
 export function openLightbox(ids: string[], at: number) {
-  const list = ids.filter((id, i) => ids.indexOf(id) === i && repo.get(id)?.file?.filetype === "bild");
+  const list = ids.filter((id, i) => ids.indexOf(id) === i && repo.get(id)?.file?.filetype === "image");
   if (!list.length) return;
   open.set({ ids: list, at: Math.max(0, list.indexOf(ids[at] ?? "")) });
 }

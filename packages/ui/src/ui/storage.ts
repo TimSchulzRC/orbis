@@ -12,13 +12,13 @@ export const KEYS = {
   device: "obtion.device",
   fileMode: "obtion.fileMode",
   recentPlaces: "obtion.recentPlaces",
-  /** Excalidraw's library ("Bibliothek"): shapes kept for all drawings */
+  /** Excalidraw's library: shapes kept for all drawings */
   drawingLibrary: "obtion.drawing.library",
   captureSpace: "obtion.capture.space",
   timelineScale: "obtion.timeline.scale",
   sidebarTree: "obtion.sidebar.tree",
   sidebarWidth: "obtion.sidebar.width",
-  /** the inbox's "Einsortiert" with each entry's undo, until cleared */
+  /** the inbox's "Sorted" with each entry's undo, until cleared */
   inboxSorted: "obtion.inbox.sorted",
   sidebarSpace: (space: string) => `obtion.sidebar.space.${space}`,
   sidebarTypes: (space: string) => `obtion.sidebar.types.${space}`,

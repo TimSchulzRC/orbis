@@ -82,7 +82,7 @@ export function TypePage({ item }: { item: Item }) {
   );
 }
 
-/** "Typ bearbeiten" while it is open (editType), over the page that is open. Lives once in the app. */
+/** "Edit type" while it is open (editType), over the page that is open. Lives once in the app. */
 export function TypeEditorHost() {
   const editing = useTypeEditing();
   if (!editing) return null;
@@ -98,7 +98,7 @@ function OpenTypeEditor({ id }: { id: string }) {
   return gone ? null : <TypeEditor key={id} item={item} onClose={closeTypeEditor} />;
 }
 
-/** "Typ bearbeiten", as a dialog. */
+/** "Edit type", as a dialog. */
 function TypeEditor({ item, onClose }: { item: Item; onClose: () => void }) {
   const repo = useRepo();
   const { t } = useT();
@@ -312,7 +312,7 @@ function kindLabel(p: PropDef, t: T): string {
 /** How many entries a relation can point to; without a target anything can be chosen. */
 function relationTargets(prop: PropDef, ix: ReturnType<typeof useIndex>): number {
   if (prop.target) return runQuery(parseQuery(prop.target, ix).def, { ix }).total;
-  return ix.live.filter((i) => i.kind === "info").length;
+  return ix.live.filter((i) => i.kind === "note").length;
 }
 
 function PropEditor({ item, prop }: { item: Item; prop: PropDef }) {
@@ -710,7 +710,7 @@ function FromTagDialog({ item, onClose }: { item: Item; onClose: () => void }) {
   );
 }
 
-/** A type, a tag or any query; stored as query text, e.g. "typ:Person" or "#autor". */
+/** A type, a tag or any query; stored as query text, e.g. "type:Person" or "#author". */
 function TargetField({ target, hits, onChange }: { target?: string; hits: number; onChange: (t: string) => void }) {
   const repo = useRepo();
   const { t, lang } = useT();

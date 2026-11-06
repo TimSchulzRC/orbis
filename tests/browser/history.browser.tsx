@@ -15,7 +15,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const TEXTS = ["Ziel\nRechnungen senden\n", "Ziel\nRechnungen senden und empfangen\n", "Ziel\nRechnungen senden und empfangen\n- Testlauf\n"];
+const TEXTS = ["Goal\nSend invoices\n", "Goal\nSend and receive invoices\n", "Goal\nSend and receive invoices\n- Test run\n"];
 
 /** The server's history API for one item with three versions (by an agent, then by Tim). */
 function fakeServer(doc: string) {
@@ -31,7 +31,7 @@ function fakeServer(doc: string) {
 
 test("lists the versions, shows what changed, and restores one as an undoable step", async () => {
   const repo = await workspace(false);
-  const id = repo.create({ title: "Anbindung Musterkunde" });
+  const id = repo.create({ title: "Sample customer integration" });
   repo.change(id, (d) => replaceBody(d, TEXTS[2]!));
   await expect.poll(() => repo.get(id)?.body).toBe(TEXTS[2]);
   fakeServer(id);
@@ -46,7 +46,7 @@ test("lists the versions, shows what changed, and restores one as an undoable st
   await expect.element(page.getByRole("button", { name: /Fassung 3 · aktuell/ })).toBeVisible();
   await expect.element(page.getByRole("button", { name: /Fassung 1.*Claude für Tim/ })).toBeVisible();
   // the newest against the one before: one line added
-  await expect.element(page.getByText("- Testlauf")).toBeVisible();
+  await expect.element(page.getByText("- Test run")).toBeVisible();
   expect(document.querySelectorAll('[data-op="added"]').length).toBe(1);
   expect(document.querySelectorAll('[data-op="removed"]').length).toBe(0);
   expect(page.getByRole("button", { name: "Diese Fassung wiederherstellen" }).query()).toBeNull(); // it is the text now
@@ -65,7 +65,7 @@ test("lists the versions, shows what changed, and restores one as an undoable st
 
 test("without versions or without the server it says so", async () => {
   const repo = await workspace(false);
-  const id = repo.create({ title: "Neu" });
+  const id = repo.create({ title: "New" });
   await expect.poll(() => repo.get(id)).toBeTruthy();
   vi.spyOn(globalThis, "fetch").mockImplementation(async () => Response.json({ versions: [] }));
   await render(

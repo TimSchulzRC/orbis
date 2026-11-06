@@ -1,6 +1,6 @@
 // The inbox panel: the list on the left, the chosen entry on the right to read, edit and sort; on a
 // phone the list, and the entry as a sheet over it. Sorting moves on to the next entry and the sorted
-// one down under "Einsortiert" in the list, with its undo. The entry's card keeps one height, so the
+// one down under "Sorted" in the list, with its undo. The entry's card keeps one height, so the
 // choices below it never move.
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, Check, X } from "lucide-react";
@@ -103,7 +103,7 @@ function Inbox({ at, desktop, pinned, panel }: { at?: string; desktop: boolean; 
   useEffect(() => void (due.length && setSorted((list) => list.filter((s) => !due.includes(s)))), [due.length]);
   const done = (k: string) => sorted.some((s) => s.key === k && !due.includes(s));
   const left = order.current.filter((k) => entries.some((e) => e.key === k) && !done(k));
-  // back tomorrow and not just sent there here (that one is under "Einsortiert")
+  // back tomorrow and not just sent there here (that one is under "Sorted")
   const waitingLater = later.filter((e) => !done(e.key));
   const isLater = (k?: string) => !!k && waitingLater.some((e) => e.key === k);
   // the chosen entry while it still waits (also one back tomorrow), else the next one after its place
@@ -163,7 +163,7 @@ function Inbox({ at, desktop, pinned, panel }: { at?: string; desktop: boolean; 
     if (pressed === "Escape" && document.querySelector(OVERLAY_OPEN)) return;
     if (listOnly && pressed !== "Escape") return;
     e.stopPropagation();
-    const info = entry?.item.kind === "info";
+    const isNote = entry?.item.kind === "note";
     if (pressed === "Escape") {
       if (!desktop && at) openShelf();
       else if (!pinned) dismissShelf();
@@ -171,7 +171,7 @@ function Inbox({ at, desktop, pinned, panel }: { at?: string; desktop: boolean; 
     } else if (pressed === "u" || pressed === "z") undo();
     else if (!entry) return;
     else if (pressed === "e") pick.setPlacing([entry.item]);
-    else if (pressed === "y" && info) pick.setTyping([entry.item]);
+    else if (pressed === "y" && isNote) pick.setTyping([entry.item]);
     else if (pressed === "s") later_();
     else if (pressed === "a") pin();
     else if (pressed === "x" || pressed === "Delete") trash();

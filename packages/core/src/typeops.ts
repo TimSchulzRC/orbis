@@ -48,7 +48,7 @@ export function typeUsage(ix: Index, typeId: string): TypeUsage {
   }
   const relations: TypeUsage["relations"] = [];
   const progress: TypeUsage["progress"] = [];
-  // the type's name in a relation target such as `typ:Aufgabe | typ:Projekt` or `type:"Task"`
+  // the type's name in a relation target such as `type:Task | type:Project` or `typ:"Aufgabe"` (German)
   const namesType = name ? new RegExp(`:\\s*"?${escapeRe(name)}"?(\\s|$|\\))`, "i") : undefined;
   for (const t of ix.types.values()) {
     const s = t.schema;
@@ -247,7 +247,7 @@ export interface TagTakeoverPreview {
 
 export function previewTagToType(ix: Index, tag: string, typeId: string): TagTakeoverPreview {
   const t = normalizeTag(tag);
-  const candidates = ix.live.filter((i) => i.kind === "info" && i.tags.includes(t) && i.type !== META_TYPE);
+  const candidates = ix.live.filter((i) => i.kind === "note" && i.tags.includes(t) && i.type !== META_TYPE);
   return {
     candidates: candidates.map((i) => i.id),
     untyped: candidates.filter((i) => !ix.typeOf(i)).map((i) => i.id),
@@ -256,7 +256,7 @@ export function previewTagToType(ix: Index, tag: string, typeId: string): TagTak
   };
 }
 
-/** "Einträge aus Tag übernehmen": items with the tag get the type. */
+/** "Take over items from a tag": items with the tag get the type. */
 export function tagToType(w: Writer, ix: Index, tag: string, typeId: string, opts: { replaceTypes: boolean; removeTag: boolean }, label: string, origin?: string): string {
   const target = ix.types.get(typeId)?.schema;
   if (!target) throw new Error("Unknown type");

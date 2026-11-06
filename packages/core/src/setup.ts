@@ -24,7 +24,7 @@ export const SYS = {
   task: "sys:task",
 } as const;
 
-/** Property ids of the shipped "Blockiert durch" and "Wartet auf". */
+/** Property ids of the shipped "Blocked by" and "Waiting for". */
 export const BLOCKED_BY = "p_blocked";
 export const WAITING_FOR = "p_waiting";
 
@@ -190,7 +190,7 @@ export function upgradeSetup(w: Writer, lang: Lang) {
   if (settings && (settings.settings?.format ?? 0) < FORMAT) w.change(SETTINGS_ID, (doc) => setSettings(doc, { format: FORMAT }));
 }
 
-/** "Standard wiederherstellen" of the inbox. */
+/** "Restore default" of the inbox. */
 export function resetInbox(w: Writer) {
   w.change(SETTINGS_ID, (doc) => setSettings(doc, { inbox: null }));
 }
@@ -199,7 +199,7 @@ export function resetInbox(w: Writer) {
 export function runSetup(w: Writer, lang: Lang, origin?: string) {
   const fresh = !w.get(SYS.project);
   restoreDefaultTypes(w, lang, origin);
-  // order under "Typen" and in the phone's bar
+  // order under "Types" and in the phone's bar
   if (fresh) {
     const order = [SYS.project, SYS.task, SYS.card];
     const pos = keysFor(order.length);

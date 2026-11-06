@@ -10,7 +10,7 @@ import { workspace } from "./workspace";
 
 type EditorView = NonNullable<Parameters<NonNullable<Parameters<typeof Editor>[0]["onView"]>>[0]>;
 
-const BODY = ["# Überschrift", "Erster Absatz mit [[Kurs Datenbanken|dem Kurs]] darin.", "", "Zweiter mit [Beispiel](https://example.org).", "Dritter Absatz", "Vierter Absatz"].join("\n");
+const BODY = ["# Heading", "First paragraph with [[Kurs Datenbanken|the course]] in it.", "", "Second with [Example](https://example.org).", "Third paragraph", "Fourth paragraph"].join("\n");
 
 let repo: Repo;
 beforeAll(async () => {
@@ -20,7 +20,7 @@ afterEach(() => cleanup());
 
 /** An item with BODY, open in the editor once its text is parsed (CodeMirror parses in slices). */
 async function open(extra: Parameters<typeof Editor>[0]["extra"] = []) {
-  const id = repo.create({ title: "Editor-Test" });
+  const id = repo.create({ title: "Editor test" });
   repo.setBody(id, BODY);
   let view: EditorView | null = null;
   await render(
@@ -69,20 +69,20 @@ describe("headings", () => {
     await commands.mouse("click", h.left + 60, h.top + h.height / 2);
     expect(lines()[0]!.text).not.toContain("#");
     await commands.keys("press", "Home");
-    expect(lines()[0]!.text.startsWith("# Überschrift")).toBe(true);
+    expect(lines()[0]!.text.startsWith("# Heading")).toBe(true);
     await commands.keys("press", "ArrowLeft");
     await commands.keys("type", "#");
-    expect(doc().startsWith("## Überschrift\n")).toBe(true);
+    expect(doc().startsWith("## Heading\n")).toBe(true);
     expect(document.querySelector(".cm-line.cm-h2")).not.toBeNull();
     await commands.keys("press", "End");
     expect(lines()[0]!.text, "at its end they hide again").not.toContain("#");
     await commands.keys("press", "Home");
     await commands.keys("press", "Backspace");
-    expect(doc().startsWith("# Überschrift\n"), "Backspace takes one level away").toBe(true);
+    expect(doc().startsWith("# Heading\n"), "Backspace takes one level away").toBe(true);
     await commands.keys("press", "Backspace");
-    expect(doc().startsWith("Überschrift\n"), "after the last one it is text").toBe(true);
+    expect(doc().startsWith("Heading\n"), "after the last one it is text").toBe(true);
     await commands.keys("type", "# ");
-    expect(doc().startsWith("# Überschrift\n"), '"# " makes it a heading again').toBe(true);
+    expect(doc().startsWith("# Heading\n"), '"# " makes it a heading again').toBe(true);
   });
 });
 
@@ -103,9 +103,9 @@ describe("links", () => {
     await choose("Text ändern");
     const ask = document.querySelector<HTMLInputElement>(".cm-ask-input")!;
     ask.select();
-    await commands.keys("type", "den Kurs DB");
+    await commands.keys("type", "the course DB");
     await commands.keys("press", "Enter");
-    expect(doc()).toContain("[[Kurs Datenbanken|den Kurs DB]]");
+    expect(doc()).toContain("[[Kurs Datenbanken|the course DB]]");
 
     await rightClick(".cm-wikilink");
     await choose("Ziel ändern");
@@ -113,11 +113,11 @@ describe("links", () => {
     await commands.keys("type", "So funktioniert");
     await expect.poll(() => document.querySelector(".cm-toolbar-results .cm-menu-row.active")?.textContent ?? "").toContain("So funktioniert Obtion");
     await commands.keys("press", "Enter");
-    expect(doc(), "the target changes, the text stays").toContain("[[So funktioniert Obtion|den Kurs DB]]");
+    expect(doc(), "the target changes, the text stays").toContain("[[So funktioniert Obtion|the course DB]]");
 
     await rightClick(".cm-mdlink");
     await choose("Link entfernen");
-    expect(doc(), "removing a link keeps its text").toContain("Zweiter mit Beispiel.");
+    expect(doc(), "removing a link keeps its text").toContain("Second with Example.");
   });
 
   test('"/Link" searches a page after an "@" and links it, shown without brackets', async () => {
@@ -140,18 +140,18 @@ describe("links", () => {
     await expect.poll(selected).toContain("So funktioniert Obtion");
     await pastInteractionDelay();
     await commands.keys("press", "Enter");
-    expect(doc().endsWith("Vierter Absatz [[So funktioniert Obtion]]")).toBe(true);
-    expect(lines().at(-1)!.text).toBe("Vierter Absatz So funktioniert Obtion");
+    expect(doc().endsWith("Fourth paragraph [[So funktioniert Obtion]]")).toBe(true);
+    expect(lines().at(-1)!.text).toBe("Fourth paragraph So funktioniert Obtion");
   });
 });
 
 describe("links to entries with one title", () => {
   /** A title of its own per run: a retry finds no pages left from the try before. */
   const fresh = (title: string) => `${title}${Math.random().toString(36).slice(2, 7)}`;
-  /** Two pages with one title, one under "Arbeit", one under "Privat". */
+  /** Two pages with one title, one under "Work", one under "Private". */
   const twins = (title: string) => {
-    const work = repo.create({ title: "Arbeit" });
-    const home = repo.create({ title: "Privat" });
+    const work = repo.create({ title: "Work" });
+    const home = repo.create({ title: "Private" });
     return { work: repo.create({ title, parents: [work] }), home: repo.create({ title, parents: [home] }) };
   };
   const options = () => [...document.querySelectorAll(".cm-tooltip-autocomplete li")];
@@ -169,35 +169,35 @@ describe("links to entries with one title", () => {
   };
 
   test('"[[" lists both with their path and links the chosen one by its id', async () => {
-    const title = fresh("Zwilling");
+    const title = fresh("Twin");
     const t = twins(title);
     const { doc } = await open();
     await clickEnd(lineEls().at(-1)!);
     await commands.keys("press", "End");
     await commands.keys("type", ` [[${title}`);
     // both, each with its path below
-    await expect.poll(() => places(title).sort()).toEqual(["Arbeit", "Privat"]);
-    await pick("Privat");
+    await expect.poll(() => places(title).sort()).toEqual(["Private", "Work"]);
+    await pick("Private");
     await commands.keys("press", "Enter");
-    expect(doc().endsWith(`Vierter Absatz [[${t.home}|${title}]]`)).toBe(true);
-    expect(lines().at(-1)!.text).toBe(`Vierter Absatz ${title}`);
+    expect(doc().endsWith(`Fourth paragraph [[${t.home}|${title}]]`)).toBe(true);
+    expect(lines().at(-1)!.text).toBe(`Fourth paragraph ${title}`);
   });
 
   test('"@" lists both with their path and links the chosen one by its id', async () => {
-    const title = fresh("Zwilling");
+    const title = fresh("Twin");
     const t = twins(title);
     const { doc } = await open();
     await clickEnd(lineEls().at(-1)!);
     await commands.keys("press", "End");
     await commands.keys("type", ` @${title}`);
-    await expect.poll(() => places(title).sort()).toEqual(["Arbeit", "Privat"]);
-    await pick("Arbeit");
+    await expect.poll(() => places(title).sort()).toEqual(["Private", "Work"]);
+    await pick("Work");
     await commands.keys("press", "Enter");
-    expect(doc().endsWith(`Vierter Absatz [[${t.work}|${title}]]`)).toBe(true);
+    expect(doc().endsWith(`Fourth paragraph [[${t.work}|${title}]]`)).toBe(true);
   });
 
   test("the link box shows the path of every page and links a twin by its id", async () => {
-    const title = fresh("Doppelgänger");
+    const title = fresh("Lookalike");
     const t = twins(title);
     const { doc } = await open();
     const r = rect(document.querySelector(".cm-wikilink")!);
@@ -209,20 +209,20 @@ describe("links to entries with one title", () => {
     await commands.keys("type", title);
     const rows = () => [...document.querySelectorAll(".cm-toolbar-results .cm-menu-row")];
     const places = () => rows().filter((x) => x.querySelector(".cm-menu-label")?.textContent === title).map((x) => x.querySelector(".cm-menu-place")?.textContent);
-    await expect.poll(() => places().sort()).toEqual(["Arbeit", "Privat"]);
-    const steps = rows().findIndex((x) => x.querySelector(".cm-menu-place")?.textContent === "Arbeit") - rows().findIndex((x) => x.classList.contains("active"));
+    await expect.poll(() => places().sort()).toEqual(["Private", "Work"]);
+    const steps = rows().findIndex((x) => x.querySelector(".cm-menu-place")?.textContent === "Work") - rows().findIndex((x) => x.classList.contains("active"));
     for (let i = 0; i < steps; i++) await commands.keys("press", "ArrowDown");
-    await expect.poll(() => document.querySelector(".cm-toolbar-results .cm-menu-row.active .cm-menu-place")?.textContent).toBe("Arbeit");
+    await expect.poll(() => document.querySelector(".cm-toolbar-results .cm-menu-row.active .cm-menu-place")?.textContent).toBe("Work");
     await commands.keys("press", "Enter");
-    expect(doc()).toContain(`[[${t.work}|dem Kurs]]`);
+    expect(doc()).toContain(`[[${t.work}|the course]]`);
   });
 
   test("a title with ] links by id, and the ] stays out of the link text", async () => {
-    const title = fresh("Plan ] alt ");
+    const title = fresh("Plan ] old ");
     const id = repo.create({ title });
     const { view, doc } = await open();
-    const at = doc().indexOf("Dritter Absatz");
-    view.dispatch({ changes: { from: at, to: at + "Dritter Absatz".length, insert: title } });
+    const at = doc().indexOf("Third paragraph");
+    view.dispatch({ changes: { from: at, to: at + "Third paragraph".length, insert: title } });
     view.dispatch({ selection: { anchor: at, head: at + title.length } });
     view.focus();
     await commands.keys("press", "ControlOrMeta+k");
@@ -245,10 +245,10 @@ test('"/Trennlinie" right under a line of text draws a line and keeps the text a
   await pastInteractionDelay();
   await commands.keys("press", "Enter");
   await expect.poll(() => document.querySelectorAll(".cm-rule").length).toBe(1);
-  const above = lineEls().find((l) => l.innerText.includes("Vierter"))!;
+  const above = lineEls().find((l) => l.innerText.includes("Fourth"))!;
   expect(above.classList.contains("cm-h"), "the text above stays a paragraph").toBe(false);
-  expect(above.innerText).toBe("Vierter Absatz");
-  expect(doc().split("\n").slice(5, 7)).toEqual(["Vierter Absatz", "***"]);
+  expect(above.innerText).toBe("Fourth paragraph");
+  expect(doc().split("\n").slice(5, 7)).toEqual(["Fourth paragraph", "***"]);
 });
 
 describe("the toolbar over selected text", () => {
@@ -287,7 +287,7 @@ describe("the toolbar over selected text", () => {
     expect(rect(document.querySelector(".cm-menu")!).top, "the menu opens below the bar").toBeGreaterThanOrEqual(bar.bottom);
     const row = [...document.querySelectorAll<HTMLElement>(".cm-menu-row")].find((r) => r.textContent === "Überschrift 2")!;
     await press(row);
-    expect(doc().split("\n").slice(4)).toEqual(["## Dritter Absatz", "## Vierter Absatz"]);
+    expect(doc().split("\n").slice(4)).toEqual(["## Third paragraph", "## Fourth paragraph"]);
     await expect.poll(() => toolbar() && button(".kind").textContent, { message: "the selection and the bar stay" }).toBe("Überschrift 2");
 
     await press(button(".kind"));
@@ -301,7 +301,7 @@ describe("the toolbar over selected text", () => {
     const { doc } = await open();
     await select(3, 5);
     await press(button(".cm-tb[aria-label^='Fett']"));
-    expect(doc().split("\n").slice(3)).toEqual(["**Zweiter mit [Beispiel](https://example.org).**", "**Dritter Absatz**", "**Vierter Absatz**"]);
+    expect(doc().split("\n").slice(3)).toEqual(["**Second with [Example](https://example.org).**", "**Third paragraph**", "**Fourth paragraph**"]);
     await press(button(".cm-tb[aria-label^='Fett']"));
     expect(doc()).toBe(BODY);
   });
@@ -313,45 +313,45 @@ describe("the toolbar over selected text", () => {
     const bold = () => press(button(".cm-tb[aria-label^='Fett']"));
     const strike = () => press(button(".cm-tb[aria-label^='Durch']"));
     await bold();
-    expect(line()).toBe("**Dritter Absatz**");
+    expect(line()).toBe("**Third paragraph**");
     await bold();
-    expect(line(), "a second click takes bold away").toBe("Dritter Absatz");
+    expect(line(), "a second click takes bold away").toBe("Third paragraph");
     await strike();
-    expect(line()).toBe("~~Dritter Absatz~~");
+    expect(line()).toBe("~~Third paragraph~~");
     await strike();
-    expect(line(), "a second click takes strikethrough away").toBe("Dritter Absatz");
-    await bold();
-    await strike();
-    expect(line()).toBe("**~~Dritter Absatz~~**");
-    await bold();
-    expect(line(), "bold goes from under strikethrough").toBe("~~Dritter Absatz~~");
+    expect(line(), "a second click takes strikethrough away").toBe("Third paragraph");
     await bold();
     await strike();
-    expect(line(), "strikethrough goes from under bold").toBe("**Dritter Absatz**");
+    expect(line()).toBe("**~~Third paragraph~~**");
     await bold();
-    expect(line()).toBe("Dritter Absatz");
+    expect(line(), "bold goes from under strikethrough").toBe("~~Third paragraph~~");
+    await bold();
+    await strike();
+    expect(line(), "strikethrough goes from under bold").toBe("**Third paragraph**");
+    await bold();
+    expect(line()).toBe("Third paragraph");
     // italic beside bold: "*" is not one star of "**"
-    view.dispatch({ changes: { from: view.state.doc.line(5).from, to: view.state.doc.line(5).to, insert: "***Dritter Absatz***" } });
+    view.dispatch({ changes: { from: view.state.doc.line(5).from, to: view.state.doc.line(5).to, insert: "***Third paragraph***" } });
     view.dispatch({ selection: { anchor: view.state.doc.line(5).from + 3, head: view.state.doc.line(5).to - 3 } });
     await settled();
     await press(button(".cm-tb[aria-label^='Kursiv']"));
-    expect(line(), "italic goes, bold stays").toBe("**Dritter Absatz**");
+    expect(line(), "italic goes, bold stays").toBe("**Third paragraph**");
     await press(button(".cm-tb[aria-label^='Kursiv']"));
-    expect(line()).toBe("***Dritter Absatz***");
+    expect(line()).toBe("***Third paragraph***");
     await bold();
-    expect(line(), "bold goes, italic stays").toBe("*Dritter Absatz*");
+    expect(line(), "bold goes, italic stays").toBe("*Third paragraph*");
   });
 
   test("over several blocks too, bold toggles under strikethrough", async () => {
     const { view, doc } = await open();
-    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: "~~**eins**~~\n~~zwei~~" } });
+    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: "~~**one**~~\n~~two~~" } });
     view.focus();
     view.dispatch({ selection: { anchor: 4, head: view.state.doc.length } });
     await settled();
     await press(button(".cm-tb[aria-label^='Fett']"));
-    expect(doc(), "one block without bold: bold is added there").toBe("~~**eins**~~\n**~~zwei~~**");
+    expect(doc(), "one block without bold: bold is added there").toBe("~~**one**~~\n**~~two~~**");
     await press(button(".cm-tb[aria-label^='Fett']"));
-    expect(doc()).toBe("~~eins~~\n~~zwei~~");
+    expect(doc()).toBe("~~one~~\n~~two~~");
   });
 
   test("the marks may lie partly inside the selection", async () => {
@@ -407,23 +407,23 @@ describe("the toolbar over selected text", () => {
     await press(button(".cm-tb[aria-label^='Fett']"));
     expect(pressed(), "and releases it").toEqual(["Durch"]);
 
-    await choose("**eins** zwei", 2, 13);
+    await choose("**one** two", 2, 11);
     expect(pressed(), "only part of it bold: not pressed").toEqual([]);
     await press(button(".cm-tb[aria-label^='Fett']"));
-    expect(doc(), "a click makes all of it bold").toBe("**eins zwei**");
+    expect(doc(), "a click makes all of it bold").toBe("**one two**");
     expect(pressed()).toEqual(["Fett"]);
 
-    await choose("**ein Satz in fett**", 6, 10);
+    await choose("**a word in bold**", 4, 8);
     expect(pressed(), "a word in a bold sentence is bold").toEqual(["Fett"]);
     await choose("***x***", 3, 4);
     expect(pressed(), "bold and italic").toEqual(["Fett", "Kursiv"]);
     await choose("**x**", 2, 3);
     expect(pressed(), "bold is not italic").toEqual(["Fett"]);
-    await choose("`code` und ~~weg~~", 0, 18);
+    await choose("`code` and ~~cut~~", 0, 18);
     expect(pressed(), "mixed marks: none pressed").toEqual([]);
-    await choose("**eins**\n**zwei**", 2, 15);
+    await choose("**one**\n**two**", 2, 13);
     expect(pressed(), "over blocks, all bold").toEqual(["Fett"]);
-    await choose("**eins**\nzwei", 2, 13);
+    await choose("**one**\ntwo", 2, 11);
     expect(pressed(), "over blocks, one not bold").toEqual([]);
   });
 
@@ -432,20 +432,20 @@ describe("the toolbar over selected text", () => {
     await clickEnd(lineEls()[5]!);
     await commands.keys("press", "End");
     await commands.keys("press", "Control+b");
-    expect(doc().endsWith("Vierter Absatz****")).toBe(true);
+    expect(doc().endsWith("Fourth paragraph****")).toBe(true);
     await commands.keys("press", "Control+b");
-    expect(doc().endsWith("Vierter Absatz")).toBe(true);
+    expect(doc().endsWith("Fourth paragraph")).toBe(true);
     expect(view.state.selection.main.head).toBe(view.state.doc.length);
   });
 
   test("bold over several bold blocks takes the hidden marks around the selection away", async () => {
     const { view, doc } = await open();
-    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: "**eins**\n**zwei**" } });
+    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: "**one**\n**two**" } });
     view.focus();
-    view.dispatch({ selection: { anchor: 2, head: 15 } });
+    view.dispatch({ selection: { anchor: 2, head: 13 } });
     await settled();
     await press(button(".cm-tb[aria-label^='Fett']"));
-    expect(doc()).toBe("eins\nzwei");
+    expect(doc()).toBe("one\ntwo");
   });
 
   test("on a page, Extract at the right end opens all types below the bar and extracts as the chosen one", async () => {
@@ -465,14 +465,14 @@ describe("the toolbar over selected text", () => {
     expect(icons, "each icon in its type's colour, as in the sidebar").toEqual(repo.index().typesInOrder().map((t) => getComputedStyle(Object.assign(document.body.appendChild(document.createElement("i")), { style: `color: ${pal(t.schema.color)}` })).color));
     const project = repo.index().typeByName("Projekt")!;
     await press([...document.querySelectorAll<HTMLElement>(".cm-menu-row")].find((r) => r.textContent === "Projekt")!);
-    expect(doc().split("\n").slice(4)).toEqual(["[[Dritter Absatz]]"]);
-    const id = repo.index().resolveTitle("Dritter Absatz")!;
+    expect(doc().split("\n").slice(4)).toEqual(["[[Third paragraph]]"]);
+    const id = repo.index().resolveTitle("Third paragraph")!;
     expect(repo.get(id)?.type).toBe(project);
-    expect(repo.get(id)?.body).toBe("Dritter Absatz\nVierter Absatz");
+    expect(repo.get(id)?.body).toBe("Third paragraph\nFourth paragraph");
   });
 
   test("with many types the list scrolls inside the menu after ten", async () => {
-    for (let i = 1; i <= 12; i++) createType(`Typ ${i}`, repo);
+    for (let i = 1; i <= 12; i++) createType(`Type ${i}`, repo);
     await open([toolbarExtract.of(true)]);
     await select(4, 5);
     await press(button(".extract"));
@@ -509,7 +509,7 @@ describe("moving blocks by the grip", () => {
     await commands.mouse("up");
     return { line, r, t };
   }
-  const order = (doc: string) => doc.split("\n").filter((l) => /Absatz/.test(l) && !l.startsWith("Erster"));
+  const order = (doc: string) => doc.split("\n").filter((l) => /paragraph/.test(l) && !l.startsWith("First"));
 
   test("just below itself it stays, onto the next block the two swap", async () => {
     const { doc } = await open();
@@ -534,7 +534,7 @@ describe("handles while typing", () => {
     await commands.keys("press", "Enter");
     await commands.keys("type", "N");
     expect(getComputedStyle(document.querySelector(".cm-handles")!).opacity, "hidden at once, without fading").toBe("0");
-    await commands.keys("type", "eue Zeile");
+    await commands.keys("type", "ew line");
     await expect.poll(shown).toBe(false);
     await commands.mouse("move", tb.left + 40, tb.top + tb.height / 2);
     await expect.poll(shown, { message: "moving the pointer shows them again" }).toBe(true);
@@ -547,6 +547,6 @@ test("select all and typing replaces the whole text, the heading's # too", async
   const { doc } = await open();
   await clickEnd(lineEls()[1]!);
   await commands.keys("press", "Control+a");
-  await commands.keys("type", "Neu");
-  expect(doc()).toBe("Neu");
+  await commands.keys("type", "New");
+  expect(doc()).toBe("New");
 });

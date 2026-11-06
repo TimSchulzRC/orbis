@@ -30,8 +30,8 @@ export interface Look {
 }
 
 export function itemLook(item: Item, ix: Index = repo.index()): Look {
-  if (item.kind === "datei") return { icon: FILE_ICONS[item.file?.filetype ?? "sonstiges"] ?? FILE_ICONS.sonstiges!, color: "var(--t-file)", kind: "file" };
-  if (item.kind === "zeichnung") return { icon: DRAWING_ICON, color: "var(--t-drawing)", kind: "drawing" };
+  if (item.kind === "file") return { icon: FILE_ICONS[item.file?.filetype ?? "other"] ?? FILE_ICONS.other!, color: "var(--t-file)", kind: "file" };
+  if (item.kind === "drawing") return { icon: DRAWING_ICON, color: "var(--t-drawing)", kind: "drawing" };
   if (item.schema && item.type === META_TYPE) return { icon: ICON[item.schema.icon] ?? TYPE_ICON, color: pal(item.schema.color), kind: "type" };
   const schema = ix.schemaOf(item);
   if (schema) return { icon: ICON[schema.icon] ?? ICON.circle!, color: pal(schema.color), kind: "schema", name: schema.name };

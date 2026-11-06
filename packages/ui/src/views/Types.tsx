@@ -1,4 +1,4 @@
-// "Neuer Typ": a name, then the type's page with "Typ bearbeiten" over it.
+// "New type": a name, then the type's page with "Edit type" over it.
 import { Input } from "../components/ui/input";
 import { useState } from "react";
 import { useRepo, useSpaceId } from "../hooks";
@@ -8,7 +8,7 @@ import { createType } from "../actions";
 import { SpaceScope } from "../ui/Spaces";
 import { closeNewType, editType, useNewTypeOpen } from "../ui/type-edit";
 
-/** The "Neuer Typ" dialog, while it is open (openNewType). Lives once in the app. */
+/** The "New type" dialog, while it is open (openNewType). Lives once in the app. */
 export function NewTypeHost() {
   const space = useNewTypeOpen();
   return space ? (
@@ -18,7 +18,7 @@ export function NewTypeHost() {
   ) : null;
 }
 
-/** Without `onCreated` the type's page opens with "Typ bearbeiten". */
+/** Without `onCreated` the type's page opens with "Edit type". */
 export function NewTypeDialog({ title, onClose, onCreated }: { title?: string; onClose: () => void; onCreated?: (id: string) => void }) {
   const { t } = useT();
   const repo = useRepo();

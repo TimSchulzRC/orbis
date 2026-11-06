@@ -22,7 +22,7 @@ let strangerWs = "";
 let strangerAgent = "";
 
 async function signUp(email: string) {
-  const res = await post(base, "/api/account/signup", { name: email.split("@")[0], email, password: "geheim12345" });
+  const res = await post(base, "/api/account/signup", { name: email.split("@")[0], email, password: "secret12345" });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
@@ -31,10 +31,10 @@ beforeAll(async () => {
   data = tempDir("obtion-filesec-");
   ({ url: base, proc } = await bootServer({ OBTION_DATA: data, OBTION_WEB_APP: "off", OBTION_SIGNUP: "open" }));
   owner = await signUp("owner@example.org");
-  ws = (await post(base, "/api/workspaces", { name: "Projekt" }, owner.token).then((r) => r.json())).id;
+  ws = (await post(base, "/api/workspaces", { name: "Project" }, owner.token).then((r) => r.json())).id;
   agent = (await post(base, `/api/workspaces/${ws}/mcp-token`, {}, owner.token).then((r) => r.json())).token;
-  stranger = await signUp("fremd@example.org");
-  strangerWs = (await post(base, "/api/workspaces", { name: "Fremd" }, stranger.token).then((r) => r.json())).id;
+  stranger = await signUp("stranger@example.org");
+  strangerWs = (await post(base, "/api/workspaces", { name: "Stranger" }, stranger.token).then((r) => r.json())).id;
   strangerAgent = (await post(base, `/api/workspaces/${strangerWs}/mcp-token`, {}, stranger.token).then((r) => r.json())).token;
 });
 afterAll(async () => {
@@ -54,26 +54,26 @@ const chunked = (bytes: number) =>
   });
 
 test("routes without a file take small bodies only: 413 by Content-Length and when chunked", async () => {
-  const big = JSON.stringify({ email: "x@example.org", password: "geheim12345", name: "x".repeat(2 * 1024 * 1024) });
+  const big = JSON.stringify({ email: "x@example.org", password: "secret12345", name: "x".repeat(2 * 1024 * 1024) });
   const byLength = await fetch(`${base}/api/account/signup`, { method: "POST", headers: { "content-type": "application/json" }, body: big });
   expect(byLength.status).toBe(413);
   const streamed = await fetch(`${base}/api/account/signup`, { method: "POST", headers: { "content-type": "application/json" }, body: chunked(2 * 1024 * 1024) });
   expect(streamed.status).toBe(413);
   // a small chunked body still arrives
-  const small = await fetch(`${base}/api/account/signup`, { method: "POST", headers: { "content-type": "application/json" }, body: new Blob([JSON.stringify({ email: "klein@example.org", password: "geheim12345", name: "Klein" })]).stream() });
+  const small = await fetch(`${base}/api/account/signup`, { method: "POST", headers: { "content-type": "application/json" }, body: new Blob([JSON.stringify({ email: "small@example.org", password: "secret12345", name: "Small" })]).stream() });
   expect(small.status).toBe(200);
   // a workspace route as well, with a valid token
   const undo = await fetch(`${base}/w/${ws}/api/undo`, { method: "POST", headers: { "content-type": "application/json", ...bearer(owner.token) }, body: chunked(2 * 1024 * 1024) });
   expect(undo.status).toBe(413);
   // the file routes take more than that
-  const file = await fetch(`${base}/w/${ws}/api/files?name=gross.bin`, { method: "POST", headers: bearer(agent), body: chunked(3 * 1024 * 1024) });
+  const file = await fetch(`${base}/w/${ws}/api/files?name=big.bin`, { method: "POST", headers: bearer(agent), body: chunked(3 * 1024 * 1024) });
   expect(file.status).toBe(201);
 });
 
 test("the app's upload by hash streams and checks the hash: a wrong one is 400 and leaves nothing", async () => {
-  const content = "Inhalt nach Hash";
+  const content = "Content by hash";
   const hash = sha256(content);
-  const wrong = sha256("etwas anderes");
+  const wrong = sha256("something else");
   const bad = await fetch(`${base}/w/${ws}/api/blobs/${wrong}`, { method: "PUT", headers: bearer(owner.token), body: content });
   expect(bad.status).toBe(400);
   for (const h of [wrong, hash]) expect((await get(base, `/w/${ws}/api/blobs/${h}`, owner.token)).status).toBe(404);
@@ -94,10 +94,10 @@ function attempts(f: { id: string; hash: string }, headers: Record<string, strin
   return {
     "GET file": () => fetch(`${files()}/${f.id}${q}`, { headers }),
     "HEAD file": () => fetch(`${files()}/${f.id}${q}`, { method: "HEAD", headers }),
-    "POST file": () => fetch(`${files()}?name=neu.txt${q ? "&" + q.slice(1) : ""}`, { method: "POST", headers, body: "neu" }),
-    "PUT file": () => fetch(`${files()}/${f.id}${q}`, { method: "PUT", headers, body: "ersetzt" }),
+    "POST file": () => fetch(`${files()}?name=new.txt${q ? "&" + q.slice(1) : ""}`, { method: "POST", headers, body: "new" }),
+    "PUT file": () => fetch(`${files()}/${f.id}${q}`, { method: "PUT", headers, body: "replaced" }),
     "GET blob": () => fetch(`${blobs(f.hash)}${q}`, { headers }),
-    "PUT blob": () => fetch(`${blobs(sha256("geschrieben"))}${q}`, { method: "PUT", headers, body: "geschrieben" }),
+    "PUT blob": () => fetch(`${blobs(sha256("written"))}${q}`, { method: "PUT", headers, body: "written" }),
     "GET text": () => fetch(`${base}/w/${ws}/api/texts/${f.hash}${q}`, { headers }),
     "GET link": () => fetch(`${base}/w/${ws}/api/links/${f.hash}${q}`, { headers }),
   };
@@ -115,10 +115,10 @@ async function refused(f: { id: string; hash: string }, content: string, headers
 }
 
 test("without a token, with a wrong one, with the token in the query: 401, no data", async () => {
-  const secret = "Geheimer Inhalt 1";
-  const f = await uploaded("geheim.txt", secret);
+  const secret = "Secret content 1";
+  const f = await uploaded("secret.txt", secret);
   await refused(f, secret, {});
-  await refused(f, secret, bearer("obt_falsch"));
+  await refused(f, secret, bearer("obt_wrong"));
   await refused(f, secret, bearer(owner.token.slice(0, -2) + "xx"));
   await refused(f, secret, { authorization: owner.token }); // without "Bearer"
   // tokens never count in the URL, neither the session nor the MCP token, under any name
@@ -127,8 +127,8 @@ test("without a token, with a wrong one, with the token in the query: 401, no da
 });
 
 test("the MCP token of another workspace, or a session of a non-member: 401/403, no data", async () => {
-  const secret = "Geheimer Inhalt 2";
-  const f = await uploaded("geheim2.txt", secret);
+  const secret = "Secret content 2";
+  const f = await uploaded("secret2.txt", secret);
   await refused(f, secret, bearer(strangerAgent));
   await refused(f, secret, bearer(stranger.token));
   // the MCP token opens the file API and /mcp only, not the app's routes
@@ -140,11 +140,11 @@ test("the MCP token of another workspace, or a session of a non-member: 401/403,
 
 test("a former member: session and MCP token refused at once", async () => {
   const { code } = await post(base, `/api/workspaces/${ws}/invites`, {}, owner.token).then((r) => r.json());
-  const member = await signUp("mitglied@example.org");
+  const member = await signUp("member@example.org");
   expect((await post(base, `/api/invites/${code}`, {}, member.token)).status).toBe(200);
   const memberAgent = (await post(base, `/api/workspaces/${ws}/mcp-token`, {}, member.token).then((r) => r.json())).token;
-  const secret = "Geheimer Inhalt 3";
-  const f = await uploaded("geheim3.txt", secret, memberAgent);
+  const secret = "Secret content 3";
+  const f = await uploaded("secret3.txt", secret, memberAgent);
   expect(await (await get(base, `/w/${ws}/api/blobs/${f.hash}`, member.token)).text()).toBe(secret);
 
   expect((await del(base, `/api/workspaces/${ws}/members/${member.user.id}`, owner.token)).status).toBe(200);
@@ -169,8 +169,8 @@ test("a new MCP token ends the one before; a revoked one is refused at once", as
 });
 
 test("no link opens a content without a token: no signed links, no token in the URL", async () => {
-  const secret = "Geheimer Inhalt 4";
-  const f = await uploaded("geheim4.txt", secret);
+  const secret = "Secret content 4";
+  const f = await uploaded("secret4.txt", secret);
   // the app reads with the session in the header and shows the content from a blob: URL
   const ok = await get(base, `/w/${ws}/api/blobs/${f.hash}`, owner.token);
   expect(await ok.text()).toBe(secret);
@@ -187,8 +187,8 @@ test("no link opens a content without a token: no signed links, no token in the 
 });
 
 test("contents by hash: no reading across workspaces, no foreign content under a hash", async () => {
-  const secret = "Geheimer Inhalt 5";
-  const f = await uploaded("geheim5.txt", secret);
+  const secret = "Secret content 5";
+  const f = await uploaded("secret5.txt", secret);
   // the hash is known (X-Obtion-Hash, ETag, get): still nothing from another workspace
   for (const token of [stranger.token, strangerAgent]) {
     for (const path of [blobs(f.hash, strangerWs), `${blobs(f.hash, strangerWs)}?check=1`]) {
@@ -199,7 +199,7 @@ test("contents by hash: no reading across workspaces, no foreign content under a
   }
   // writing another content under that hash fails, here and there
   for (const [w, token] of [[ws, owner.token], [strangerWs, stranger.token]] as const) {
-    const res = await fetch(blobs(f.hash, w), { method: "PUT", headers: bearer(token), body: "untergeschoben" });
+    const res = await fetch(blobs(f.hash, w), { method: "PUT", headers: bearer(token), body: "slipped in" });
     expect(res.status).toBe(400);
   }
   expect(await (await get(base, `/w/${ws}/api/blobs/${f.hash}`, owner.token)).text()).toBe(secret);
@@ -240,7 +240,7 @@ test("HTML and SVG never run in the app's origin, on any route", async () => {
 });
 
 test("answers, instructions, docs and the vault carry no token and no link that opens a content", async () => {
-  const f = await uploaded("Bericht.txt", "Bericht");
+  const f = await uploaded("Report.txt", "Report");
   const tokens = [agent, owner.token];
   const said = [
     JSON.stringify(f),
@@ -255,7 +255,7 @@ test("answers, instructions, docs and the vault carry no token and no link that 
   }
   // the vault (Markdown mirror) names files by path, never by a URL
   const vault = join(data, "workspaces", ws, "vault");
-  for (let i = 0; i < 100 && !readdirSync(vault, { recursive: true }).some((p) => String(p).endsWith("Bericht.txt")); i++) await Bun.sleep(50);
+  for (let i = 0; i < 100 && !readdirSync(vault, { recursive: true }).some((p) => String(p).endsWith("Report.txt")); i++) await Bun.sleep(50);
   const walk = (dir: string): string[] => readdirSync(dir).flatMap((n) => (statSync(join(dir, n)).isDirectory() ? walk(join(dir, n)) : [join(dir, n)]));
   const md = walk(vault).filter((p) => p.endsWith(".md"));
   expect(md.length).toBeGreaterThan(0);

@@ -61,8 +61,8 @@ export function ItemPage({ id, isNew }: { id: string; isNew: boolean }) {
   if (!item || item.kind === "settings")
     return <PagePlaceholder>{scoped.status.synced ? t("item.missing") : t("item.loading")}</PagePlaceholder>;
   if (item.kind === "op") return <PagePlaceholder>{item.title}</PagePlaceholder>;
-  if (item.kind === "datei") return <FilePage key={id} item={item} />;
-  if (item.kind === "zeichnung") return <DrawingInNote key={id} item={item} />;
+  if (item.kind === "file") return <FilePage key={id} item={item} />;
+  if (item.kind === "drawing") return <DrawingInNote key={id} item={item} />;
   if (item.type === META_TYPE) return <TypePage key={id} item={item} />;
   return <InfoView key={id} item={item} isNew={isNew} />;
 }
@@ -75,7 +75,7 @@ function DrawingInNote({ item }: { item: Item }) {
   const scoped = useRepo();
   const { t } = useT();
   const ix = scoped.index();
-  const note = ix.backlinks(item.id).find((b) => b.kind === "embed" && ix.get(b.from)?.kind === "info")?.from ?? ix.parentsOf(item.id)[0];
+  const note = ix.backlinks(item.id).find((b) => b.kind === "embed" && ix.get(b.from)?.kind === "note")?.from ?? ix.parentsOf(item.id)[0];
   useEffect(() => {
     // the drawing opens on its note (a search hit, a link to it)
     if (note) openItem(note, { replace: true, query: "?d=" + encodeURIComponent(item.id) });
@@ -236,7 +236,7 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
   );
 }
 
-/** "2 von 9 Tasks erledigt, alle Ebenen". */
+/** "2 of 9 tasks done, all levels". */
 function progressText(item: Item, ix: Index, done: number, total: number): string {
   const of = progressSpec(ix.schemaOf(item))?.of;
   const name = of ? (ix.typeName(of) ?? "") : "";
@@ -299,7 +299,7 @@ function TypeSwitch({ item }: { item: Item }) {
             <TypeChip schema={schema} onClick={p.onClick} />
           </span>
         ) : (
-          // no type: a plain line, not a chip – "Notiz" is no type
+          // no type: a plain line, not a chip – "Note" is no type
           <Button variant="plain" {...p} className={cn("tap-y inline-flex items-center gap-1 rounded px-0.5 text-[13px] hover:underline", inbox ? "text-warn" : "text-muted-foreground")} title={t("item.giveType")}>
             {inbox ? <INBOX_ICON size={12} /> : <NOTE_ICON size={12} />}
             {inbox ? t("kind.inbox") : t("kind.note")}

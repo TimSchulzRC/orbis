@@ -188,7 +188,7 @@ export function matchOption(p: PropDef, raw: string): OptionDef {
   const w = foldWord(raw);
   if (grouped(p)) {
     if (NOT_A_STATUS.has(w))
-      throw new InputError(`"${raw}" is not a status. Set a property that holds it up (blocks), e.g. "Blockiert durch" (the blocking entry) or "Wartet auf" (what it waits for).`);
+      throw new InputError(`"${raw}" is not a status. Set a property that holds it up (blocks), e.g. "Blocked by" (the blocking entry) or "Waiting for" (what it waits for).`);
     const a = STATUS_ALIASES[w];
     if (a) {
       const inGroup = (x: OptionDef) => groupOf(x) === a.group;
@@ -218,7 +218,7 @@ export function optionMatches(p: PropDef, o: OptionDef, raw: string): boolean {
   }
 }
 
-/** Singular and plural count as the same: Task/Tasks, Projekt/Projekte, Karte/Karten. */
+/** Singular and plural count as the same: Task/Tasks, Project/Projects, and German plurals (-e, -n, -en). */
 export function sameTypeName(name: string, input: string): boolean {
   const a = foldWord(name);
   const b = foldWord(input);

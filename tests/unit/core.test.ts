@@ -27,7 +27,7 @@ describe("sort keys", () => {
   });
 });
 
-describe("Teil von", () => {
+describe("part of", () => {
   test("first parent is home; removing it promotes the oldest remaining one", () => {
     const m = new MemRepo();
     const a = m.add({ title: "A" });
@@ -45,22 +45,22 @@ describe("Teil von", () => {
 
   test("descendants count once over several ways; relative paths", () => {
     const m = new MemRepo();
-    const arbeit = m.add({ title: "Arbeit" });
-    const einv = m.add({ title: "Relaunch", parents: [arbeit] });
-    const fr = m.add({ title: "Frankreich", parents: [einv] });
-    const kunden = m.add({ title: "Kunden", parents: [arbeit] });
-    const nord = m.add({ title: "Nordlicht", parents: [kunden] });
-    const nordFr = m.add({ title: "Nordlicht · Frankreich", parents: [fr, nord] });
-    const task = m.add({ title: "Farben wählen", parents: [nordFr] });
+    const work = m.add({ title: "Work" });
+    const relaunch = m.add({ title: "Relaunch", parents: [work] });
+    const fr = m.add({ title: "France", parents: [relaunch] });
+    const clients = m.add({ title: "Clients", parents: [work] });
+    const nord = m.add({ title: "Nordlicht", parents: [clients] });
+    const nordFr = m.add({ title: "Nordlicht · France", parents: [fr, nord] });
+    const task = m.add({ title: "Pick colours", parents: [nordFr] });
     const ix = m.index();
-    expect(ix.descendants(arbeit).size).toBe(6);
-    expect([...ix.descendants(arbeit)].filter((x) => x === task).length).toBe(1);
-    expect(ix.relPath(einv, task)!.map((id) => ix.get(id)!.title)).toEqual(["Frankreich", "Nordlicht · Frankreich"]);
-    expect(ix.relPath(nord, task)!.map((id) => ix.get(id)!.title)).toEqual(["Nordlicht · Frankreich"]);
+    expect(ix.descendants(work).size).toBe(6);
+    expect([...ix.descendants(work)].filter((x) => x === task).length).toBe(1);
+    expect(ix.relPath(relaunch, task)!.map((id) => ix.get(id)!.title)).toEqual(["France", "Nordlicht · France"]);
+    expect(ix.relPath(nord, task)!.map((id) => ix.get(id)!.title)).toEqual(["Nordlicht · France"]);
     expect(ix.relPath(fr, nordFr)).toEqual([]);
-    expect(ix.relPath(kunden, einv)).toBeUndefined();
-    expect(ix.homePath(task).map((id) => ix.get(id)!.title)).toEqual(["Arbeit", "Relaunch", "Frankreich", "Nordlicht · Frankreich"]);
-    expect(ix.wouldCycle(arbeit, task)).toBe(true);
+    expect(ix.relPath(clients, relaunch)).toBeUndefined();
+    expect(ix.homePath(task).map((id) => ix.get(id)!.title)).toEqual(["Work", "Relaunch", "France", "Nordlicht · France"]);
+    expect(ix.wouldCycle(work, task)).toBe(true);
   });
 
   test("offline cycles resolve deterministically: the edge added last does not count", () => {
@@ -85,10 +85,10 @@ describe("inbox and sidebar", () => {
   test("inbox = no type and no parent; refs, links and tags do not count", () => {
     const m = new MemRepo();
     runSetup(m.writer, "de");
-    const p = m.add({ title: "Nordlicht · Frankreich", type: SYS.project });
-    const loose = m.add({ title: "Idee", body: "siehe [[Nordlicht · Frankreich]]", tags: ["idee"], refs: [p] });
-    const note = m.add({ title: "Notiz", parents: [p] });
-    const card = m.add({ title: "Karte", type: SYS.card });
+    const p = m.add({ title: "Nordlicht · France", type: SYS.project });
+    const loose = m.add({ title: "Idea", body: "see [[Nordlicht · France]]", tags: ["idea"], refs: [p] });
+    const note = m.add({ title: "Note", parents: [p] });
+    const card = m.add({ title: "Card", type: SYS.card });
     const ix = m.index();
     expect(isInInbox(ix.get(loose)!, ix)).toBe(true);
     expect(isInInbox(ix.get(note)!, ix)).toBe(false);
@@ -102,11 +102,11 @@ describe("inbox and sidebar", () => {
 
   test("files are in the inbox only without parent and without use", () => {
     const m = new MemRepo();
-    const f = m.add({ kind: "datei", title: "rechnung.pdf" });
-    m.change(f, (d) => d.getMap("file").set("name", "rechnung.pdf"));
-    const img = m.add({ kind: "datei", title: "skizze.png" });
-    m.change(img, (d) => d.getMap("file").set("name", "skizze.png"));
-    m.add({ title: "Notiz", body: "![[skizze.png]]" });
+    const f = m.add({ kind: "file", title: "invoice.pdf" });
+    m.change(f, (d) => d.getMap("file").set("name", "invoice.pdf"));
+    const img = m.add({ kind: "file", title: "sketch.png" });
+    m.change(img, (d) => d.getMap("file").set("name", "sketch.png"));
+    m.add({ title: "Note", body: "![[sketch.png]]" });
     const ix = m.index();
     expect(isInInbox(ix.get(f)!, ix)).toBe(true);
     expect(isInInbox(ix.get(img)!, ix)).toBe(false);
@@ -116,21 +116,21 @@ describe("inbox and sidebar", () => {
   test("pinned items form the top of the sidebar", () => {
     const m = new MemRepo();
     runSetup(m.writer, "de");
-    const arbeit = m.add({ title: "Arbeit", pinned: "V" });
-    const gewerbe = m.add({ title: "Gewerbe", pinned: "W" }); // empty, pinned: a place, not in the inbox
-    const kunden = m.add({ title: "Kunden", parents: [arbeit] });
-    const open = m.add({ title: "Offen", type: SYS.project, parents: [arbeit], props: { p_status: "st_active" } });
-    const done = m.add({ title: "Fertig", type: SYS.project, parents: [arbeit], props: { p_status: "st_done" } });
-    const card = m.add({ title: "Lose Karte", type: SYS.card, parents: [arbeit] });
-    const steuer = m.add({ title: "Steuererklärung 2025", type: SYS.project, parents: [kunden], pinned: "X" });
+    const work = m.add({ title: "Work", pinned: "V" });
+    const business = m.add({ title: "Business", pinned: "W" }); // empty, pinned: a place, not in the inbox
+    const clients = m.add({ title: "Clients", parents: [work] });
+    const open = m.add({ title: "Open", type: SYS.project, parents: [work], props: { p_status: "st_active" } });
+    const done = m.add({ title: "Done", type: SYS.project, parents: [work], props: { p_status: "st_done" } });
+    const card = m.add({ title: "Loose card", type: SYS.card, parents: [work] });
+    const taxes = m.add({ title: "Tax return 2025", type: SYS.project, parents: [clients], pinned: "X" });
     const ix = m.index();
-    expect(sidebarRoots(ix).map((i) => i.title)).toEqual(["Arbeit", "Gewerbe", "Steuererklärung 2025"]);
-    expect(isInInbox(ix.get(gewerbe)!, ix)).toBe(false);
+    expect(sidebarRoots(ix).map((i) => i.title)).toEqual(["Work", "Business", "Tax return 2025"]);
+    expect(isInInbox(ix.get(business)!, ix)).toBe(false);
     // all children, whatever the type; done ones not, except the open page; pinned items also below their parent
-    expect(sidebarChildren(arbeit, ix).map((i) => i.id).sort()).toEqual([kunden, open, card].sort());
-    expect(sidebarChildren(arbeit, ix, [arbeit, done]).map((i) => i.id)).toContain(done);
-    expect(sidebarChildren(kunden, ix).map((i) => i.id)).toEqual([steuer]);
-    // a type's page can be pinned too: it joins the top level, in its own order
+    expect(sidebarChildren(work, ix).map((i) => i.id).sort()).toEqual([clients, open, card].sort());
+    expect(sidebarChildren(work, ix, [work, done]).map((i) => i.id)).toContain(done);
+    expect(sidebarChildren(clients, ix).map((i) => i.id)).toEqual([taxes]);
+    // a type's page can be pinned too: it joins the top level, in its own order (German setup, so "Projekt")
     m.change(SYS.project, (d) => setMeta(d, { pinned: "Y" }));
     expect(sidebarRoots(m.index()).map((i) => i.title).at(-1)).toBe("Projekt");
   });
@@ -139,7 +139,7 @@ describe("inbox and sidebar", () => {
     const m = new MemRepo();
     runSetup(m.writer, "de");
     const kw = m.add({ title: "Blog-Relaunch" });
-    m.add({ title: "Notiz 1", parents: [kw] });
+    m.add({ title: "Note 1", parents: [kw] });
     let ix = m.index();
     expect(isInInbox(ix.get(kw)!, ix)).toBe(true);
     m.change(kw, (d) => setMeta(d, { pinned: "V" }));
@@ -154,8 +154,8 @@ describe("the inbox", () => {
   test("follows its stored rule; changing it changes membership everywhere", () => {
     const m = new MemRepo();
     runSetup(m.writer, "de");
-    const lone = m.add({ title: "Task ohne Projekt", type: SYS.task });
-    const idea = m.add({ title: "Idee" });
+    const lone = m.add({ title: "Task without project", type: SYS.task });
+    const idea = m.add({ title: "Idea" });
     let ix = m.index();
     expect(inbox(ix).map((i) => i.id)).toEqual([idea]);
     // "| typ:Task ohne:eltern" – tasks without a project land in the inbox too
@@ -183,20 +183,20 @@ describe("set aside", () => {
   test("pinned leaves the inbox, later until its time – whatever the rule says", () => {
     const m = new MemRepo();
     runSetup(m.writer, "de");
-    const pinned = m.add({ title: "Gedanke" });
-    const later = m.add({ title: "Morgen" });
-    const back = m.add({ title: "Wieder da" });
+    const pinned = m.add({ title: "Thought" });
+    const later = m.add({ title: "Tomorrow" });
+    const back = m.add({ title: "Back again" });
     m.change(pinned, (d) => setMeta(d, { pinned: "a0" }));
     m.change(later, (d) => setMeta(d, { later: Date.now() + 60_000 }));
     m.change(back, (d) => setMeta(d, { later: Date.now() - 1 }));
     // a rule that would take them all: set aside still wins
     m.change(SETTINGS_ID, (d) => setSettings(d, { inbox: { or: [{ without: "type" }] } }));
     const ix = m.index();
-    expect(inbox(ix).map((i) => i.title).sort()).toEqual(["Wieder da"]);
-    expect(runQuery(parseQuery("eingang", ix).def, { ix }).items.map((i) => i.title).sort()).toEqual(["Wieder da"]);
+    expect(inbox(ix).map((i) => i.title).sort()).toEqual(["Back again"]);
+    expect(runQuery(parseQuery("eingang", ix).def, { ix }).items.map((i) => i.title).sort()).toEqual(["Back again"]);
     expect(setAside(ix.get(later)!, Date.now() + 120_000)).toBe(false);
-    // "Morgen wieder" in the panel: what the rule takes and waits, not the pinned one
-    expect(laterItems(ix).map((i) => i.title)).toEqual(["Morgen"]);
+    // the "later" list in the panel: what the rule takes and waits, not the pinned one
+    expect(laterItems(ix).map((i) => i.title)).toEqual(["Tomorrow"]);
     // unpinned: back in the inbox
     m.change(pinned, (d) => setMeta(d, { pinned: null }));
     expect(isInInbox(m.index().get(pinned)!, m.index())).toBe(true);
@@ -213,20 +213,20 @@ describe("today", () => {
     const m = new MemRepo();
     runSetup(m.writer, "de");
     const relaunch = m.add({ title: "Relaunch", type: SYS.project, props: { p_status: "st_active" }, updated: 100 });
-    const closed = m.add({ title: "Abgeschlossen", type: SYS.project, props: { p_status: "st_done" } });
-    m.add({ title: "Unterprojekt", type: SYS.project, props: { p_status: "st_active" }, parents: [relaunch] });
-    m.add({ title: "Überfällig", type: SYS.task, props: { p_due: "2026-10-27" }, parents: [relaunch], updated: 500 });
-    m.add({ title: "Heute", type: SYS.task, props: { p_due: "2026-10-29" } });
-    m.add({ title: "Erledigt", type: SYS.task, props: { p_due: "2026-10-28", p_status: "st_done" } });
-    m.add({ title: "Morgen", type: SYS.task, props: { p_due: "2026-10-30" } });
-    m.add({ title: "Im abgeschlossenen", type: SYS.task, props: { p_due: "2026-10-01" }, parents: [closed] });
-    m.add({ title: "Lose Idee", updated: 900 });
+    const closed = m.add({ title: "Closed", type: SYS.project, props: { p_status: "st_done" } });
+    m.add({ title: "Sub-project", type: SYS.project, props: { p_status: "st_active" }, parents: [relaunch] });
+    m.add({ title: "Overdue", type: SYS.task, props: { p_due: "2026-10-27" }, parents: [relaunch], updated: 500 });
+    m.add({ title: "Today", type: SYS.task, props: { p_due: "2026-10-29" } });
+    m.add({ title: "Done", type: SYS.task, props: { p_due: "2026-10-28", p_status: "st_done" } });
+    m.add({ title: "Tomorrow", type: SYS.task, props: { p_due: "2026-10-30" } });
+    m.add({ title: "In the closed one", type: SYS.task, props: { p_due: "2026-10-01" }, parents: [closed] });
+    m.add({ title: "Loose idea", updated: 900 });
     const ix = m.index();
-    expect(dueBy(ix, "2026-10-29").map((x) => x.item.title)).toEqual(["Überfällig", "Heute"]);
+    expect(dueBy(ix, "2026-10-29").map((x) => x.item.title)).toEqual(["Overdue", "Today"]);
     const active = running(ix);
     expect(active.map((x) => x.item.title)).toEqual(["Relaunch"]);
     expect(active[0]!.touched).toBeGreaterThanOrEqual(500);
-    expect(recentlyChanged(ix, 50).some((i) => i.title === "Lose Idee")).toBe(false);
+    expect(recentlyChanged(ix, 50).some((i) => i.title === "Loose idea")).toBe(false);
   });
 });
 
@@ -247,7 +247,7 @@ describe("zero types", () => {
     runSetup(m.writer, "en");
     expect(m.get(SYS.task)!.schema!.name).toBe("Task");
     expect(m.get(SYS.card)!.schema!.name).toBe("Card");
-    expect(m.index().types.size).toBe(3); // Karte, Projekt, Task
+    expect(m.index().types.size).toBe(3); // Card, Project, Task
     m.change(SYS.task, (d) => setMeta(d, { deleted: true }));
     expect(m.index().types.has(SYS.task)).toBe(false);
     expect(restoreDefaultTypes(m.writer, "en")).toEqual([SYS.task]);
@@ -260,11 +260,11 @@ describe("progress", () => {
     const m = new MemRepo();
     runSetup(m.writer, "de");
     const p = m.add({ title: "Relaunch", type: SYS.project, props: { p_status: "st_active" } });
-    const sub = m.add({ title: "Frankreich", type: SYS.project, parents: [p], props: { p_status: "st_active" } });
+    const sub = m.add({ title: "France", type: SYS.project, parents: [p], props: { p_status: "st_active" } });
     m.add({ title: "T1", type: SYS.task, parents: [sub], props: { p_status: "st_done" } });
     const t2 = m.add({ title: "T2", type: SYS.task, parents: [sub], props: { p_status: "st_todo" } });
-    m.add({ title: "Unteraufgabe", type: SYS.task, parents: [t2], props: { p_status: "st_done" } });
-    m.add({ title: "Notiz", parents: [p] });
+    m.add({ title: "Subtask", type: SYS.task, parents: [t2], props: { p_status: "st_done" } });
+    m.add({ title: "Note", parents: [p] });
     let ix = m.index();
     expect(ix.progressOf(ix.get(p)!)).toEqual({ done: 2, total: 3 });
     expect(ix.progress(p)).toEqual({ done: 2, total: 4 }); // without filter the sub-project counts too
@@ -301,11 +301,11 @@ test("typing moves the change time: local text edits touch meta.updated, edits f
   jest.useFakeTimers();
   try {
     const doc = new Y.Doc();
-    initItem(doc, { title: "Notiz", body: "Alt", created: 1000, updated: 1000 });
+    initItem(doc, { title: "Note", body: "Old", created: 1000, updated: 1000 });
     let now = 50_000;
     const stop = touchOnTextEdit(doc, 3000, () => now);
     const updated = () => doc.getMap<any>("meta").get("updated");
-    doc.getText("body").insert(3, " und neu"); // typed here
+    doc.getText("body").insert(3, " and new"); // typed here
     jest.advanceTimersByTime(0);
     expect(updated()).toBe(50_000);
     // a burst: the next stamp waits for the window, then the last edit counts
@@ -334,14 +334,14 @@ describe("selects", () => {
   test("a type has one status: a second one (added at once on another device) reads as a select; the status is never empty", () => {
     const d = new Y.Doc();
     initSchema(d, {
-      name: "Zwei",
+      name: "Two",
       icon: "box",
       color: "gray",
       description: "",
       capabilities: {},
       properties: [
-        { id: "p_st", name: "Status", kind: "status", options: [{ id: "a", name: "Offen", group: "todo" }, { id: "b", name: "Fertig", group: "done" }] },
-        { id: "p_two", name: "Zweiter Status", kind: "status", options: [{ id: "c", name: "C", group: "todo" }] },
+        { id: "p_st", name: "Status", kind: "status", options: [{ id: "a", name: "Open", group: "todo" }, { id: "b", name: "Done", group: "done" }] },
+        { id: "p_two", name: "Second status", kind: "status", options: [{ id: "c", name: "C", group: "todo" }] },
       ],
     });
     const s = readSchema(d);
@@ -355,10 +355,10 @@ describe("selects", () => {
 
   test("a select with a default fills new items; the status always starts filled", () => {
     const s = { name: "T", icon: "box", color: "gray", description: "", capabilities: {}, removedProperties: [], properties: [
-      { id: "p_st", name: "Status", kind: "status", options: [{ id: "a", name: "Offen", group: "todo" }] },
-      { id: "p_pr", name: "Prio", kind: "select", default: "m", options: [{ id: "h", name: "Hoch" }, { id: "m", name: "Mittel" }] },
-      { id: "p_x", name: "Leer", kind: "select", options: [{ id: "q", name: "Q" }] },
-      { id: "p_many", name: "Viele", kind: "select", multiple: true, default: "z", options: [{ id: "z", name: "Z" }], sort: "D" },
+      { id: "p_st", name: "Status", kind: "status", options: [{ id: "a", name: "Open", group: "todo" }] },
+      { id: "p_pr", name: "Prio", kind: "select", default: "m", options: [{ id: "h", name: "High" }, { id: "m", name: "Medium" }] },
+      { id: "p_x", name: "Empty", kind: "select", options: [{ id: "q", name: "Q" }] },
+      { id: "p_many", name: "Many", kind: "select", multiple: true, default: "z", options: [{ id: "z", name: "Z" }], sort: "D" },
     ] } as TypeSchema;
     expect(initialProps(s)).toEqual({ p_st: "a", p_pr: "m" });
     expect(optionIds("a")).toEqual(["a"]);
@@ -367,10 +367,10 @@ describe("selects", () => {
   });
 
   test("changing a property's kind into and out of the status", () => {
-    const sel: PropDef = { id: "p", name: "Phase", kind: "select", sort: "V", options: [{ id: "a", name: "Idee" }, { id: "b", name: "Fertig" }] };
+    const sel: PropDef = { id: "p", name: "Phase", kind: "select", sort: "V", options: [{ id: "a", name: "Idea" }, { id: "b", name: "Done" }] };
     const toStatus = kindPatch(sel, "status");
-    expect(toStatus).toEqual({ kind: "status", multiple: null, options: [{ id: "a", name: "Idee", group: "todo" }, { id: "b", name: "Fertig", group: "todo" }], default: "a" });
-    expect(kindPatch({ options: [] }, "status", [{ id: "f", name: "Offen", group: "todo" }]).options).toEqual([{ id: "f", name: "Offen", group: "todo" }]);
+    expect(toStatus).toEqual({ kind: "status", multiple: null, options: [{ id: "a", name: "Idea", group: "todo" }, { id: "b", name: "Done", group: "todo" }], default: "a" });
+    expect(kindPatch({ options: [] }, "status", [{ id: "f", name: "Open", group: "todo" }]).options).toEqual([{ id: "f", name: "Open", group: "todo" }]);
     expect(kindPatch({ options: toStatus.options! }, "select").options).toEqual(sel.options);
   });
 });
@@ -378,14 +378,14 @@ describe("selects", () => {
 describe("link targets", () => {
   test("a link is written by title only when the title leads to that entry alone", () => {
     const m = new MemRepo();
-    const work = m.add({ title: "Arbeit" });
-    const home = m.add({ title: "Privat" });
-    const a = m.add({ title: "Notizen", parents: [work] });
-    const b = m.add({ title: "notizen ", parents: [home] });
-    const single = m.add({ title: "Einzeln" });
-    const odd = m.add({ title: "C# Tipps" });
+    const work = m.add({ title: "Work" });
+    const home = m.add({ title: "Private" });
+    const a = m.add({ title: "Notes", parents: [work] });
+    const b = m.add({ title: "notes ", parents: [home] });
+    const single = m.add({ title: "Single" });
+    const odd = m.add({ title: "C# tips" });
     const ix = m.index();
-    expect(ix.linkTarget(ix.get(single)!)).toBe("Einzeln");
+    expect(ix.linkTarget(ix.get(single)!)).toBe("Single");
     expect(ix.linkTarget(ix.get(a)!), "two entries with one title: by id").toBe(a);
     expect(ix.linkTarget(ix.get(b)!)).toBe(b);
     expect(ix.linkTarget(ix.get(odd)!), "a # can't be in a link by name").toBe(odd);

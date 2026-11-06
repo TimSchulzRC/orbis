@@ -229,7 +229,7 @@ export class Store {
   }
 
   /**
-   * Devices with a wrong clock: timestamps too far ahead are set back to now, so "geändert",
+   * Devices with a wrong clock: timestamps too far ahead are set back to now, so "updated",
    * sorting and the activity don't jump. The fix syncs like any change.
    */
   private capFuture(docId: string) {
@@ -615,7 +615,7 @@ export class Store {
 // ---------- helpers ----------
 
 /** Items whose text has versions: informations and files (not settings, not operations). */
-const hasBody = (i: Item) => i.kind === "info" || i.kind === "datei" || i.kind === "zeichnung";
+const hasBody = (i: Item) => i.kind === "note" || i.kind === "file" || i.kind === "drawing";
 
 const utf8 = new TextEncoder();
 const fromUtf8 = new TextDecoder();
@@ -675,7 +675,7 @@ function moved(c: FieldChange): boolean {
 }
 
 function typeTag(i: Item): string {
-  return i.kind === "info" ? (i.type ?? "") : i.kind;
+  return i.kind === "note" ? (i.type ?? "") : i.kind;
 }
 
 function setDiff(field: string, a: string[], b: string[], out: FieldChange[]) {

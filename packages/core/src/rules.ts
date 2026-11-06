@@ -1,4 +1,4 @@
-// "Regeln für Agenten": Markdown on an item (its `rules` text) or on the workspace (the settings
+// "Rules for agents": Markdown on an item (its `rules` text) or on the workspace (the settings
 // doc's). They bind agents for the item and everything below it over "Teil von" – all parents,
 // not only the home. The MCP server hands them out with every answer that touches items.
 import { type Item, SETTINGS_ID } from "./model";

@@ -61,7 +61,7 @@ export function useAccounts() {
     (l) => (listeners.add(l), () => listeners.delete(l)),
     () => version,
   );
-  // no choice made ("Alle"), as opposed to every workspace picked one by one
+  // no choice made ("All"), as opposed to every workspace picked one by one
   const allSeen = !shown || !spaces.some((s) => shown!.includes(s.id));
   return { account, spaces, active: spaces.find((s) => s.id === active), shown: shownSpaces(), allSeen };
 }

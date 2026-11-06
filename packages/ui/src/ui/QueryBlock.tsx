@@ -1,4 +1,4 @@
-// Live query blocks inside a text: ```abfrage … ``` is stored as JSON with ids and shown
+// Live query blocks inside a text: ```query … ``` is stored as JSON with ids and shown
 // as its results. Text-form blocks (typed by hand or by an agent) are normalised to JSON.
 import { StrictMode, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -38,7 +38,7 @@ function QueryBlockView({ src, thisId, n = 0, onChange, onDelete, readOnly }: { 
   // the tools beside the tabs open one popover at a time; a new block starts with its filter
   const [panel, setPanel] = useState<"filter" | "sort" | "group" | "more" | null>(!stored.where && !readOnly ? "filter" : null);
   const [addingTitle, setAddingTitle] = useState(false);
-  // the conditions are a draft until "Speichern" or until the filter closes: trying a filter
+  // the conditions are a draft until "Save" or until the filter closes: trying a filter
   // changes nothing. Title, view and "hide when empty" apply at once, like everywhere.
   type Draft = { scope: string; where: QueryDef["where"] } | null; // scope: "base" or a tab id
   const [draft, setDraftState] = useState<Draft>(null);
@@ -297,7 +297,7 @@ function decos(state: EditorState, thisId?: string): DecorationSet {
 }
 
 // A heading whose section holds only query blocks that hide when empty disappears with them
-// when none of them has results ("Kürzlich erledigt" on a quiet week). It comes back as soon
+// when none of them has results ("Recently done" on a quiet week). It comes back as soon
 // as one of them finds something.
 
 const refresh = StateEffect.define<null>();

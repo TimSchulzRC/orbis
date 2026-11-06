@@ -30,7 +30,7 @@ async function checkTarget(dst: Repo) {
 
 type Replica = ReturnType<typeof replica>;
 
-/** Before the items, or the copy would show "Datei fehlt". */
+/** Before the items, or the copy would show "file missing". */
 async function copyContents(items: ReturnType<typeof movedItems>, src: Replica, dst: Replica) {
   for (const it of items) {
     const f = it.file;

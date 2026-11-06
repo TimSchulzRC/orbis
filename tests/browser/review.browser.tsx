@@ -78,7 +78,7 @@ describe("editing in the card", () => {
     const title = titleNow();
     await card().click();
     await commands.keys("press", "Control+End");
-    await commands.keys("type", " Xs"); // "s" is a letter here, not "später"
+    await commands.keys("type", " Xs"); // "s" is a letter here, not "später" (later)
     await page.getByRole("heading", { level: 2, name: "Einsortieren" }).click();
     await expect.poll(titleNow).toBe(title + " Xs");
     expect(page.getByRole("button", { name: "Bearbeiten" }).query()).toBeNull();

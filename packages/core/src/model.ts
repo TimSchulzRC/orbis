@@ -1,6 +1,6 @@
 // The data model shared by server, devices and agents. Every item is one Yjs document (guid = item id).
-// Kinds: "info" (a type is an info of type META_TYPE plus a `schema` map), "datei" (metadata only,
-// content on the server by SHA-256), "zeichnung" (a drawing: a block in a note, kept as a document
+// Kinds: "note" (a type is a note of type META_TYPE plus a `schema` map), "file" (metadata only,
+// content on the server by SHA-256), "drawing" (a block in a note, kept as a document
 // of its own below that note, its content an Excalidraw scene, see drawing.ts), "op" (a reversible
 // bulk operation), "settings" (the one shared settings doc).
 //
@@ -13,8 +13,8 @@
 //   rels     Y.Map   propId -> Y.Map<targetId, true>
 //   tags     Y.Map   tag -> true
 //   refs     Y.Map   targetId -> sort key      (explicit only; links in the text are derived)
-//   body     Y.Text  Markdown with [[links]] and ```abfrage blocks
-//   rules    Y.Text  "Regeln für Agenten": Markdown, binding for agents on this item and all below it
+//   body     Y.Text  Markdown with [[links]] and ```query blocks
+//   rules    Y.Text  "Rules for agents": Markdown, binding for agents on this item and all below it
 //                    (see rules.ts); in the settings doc: the rules of the whole workspace
 //   updates  Y.Array { id, at, text, by, status? }
 //   schema   Y.Map   types only; capabilities and each property are nested Y.Maps
@@ -29,13 +29,13 @@ import type { Cond } from "./query";
 import { escapeRe } from "./text";
 import { DRAWING, DRAWING_FILES, DRAWING_STATE, type DrawingInfo, drawingInfo } from "./drawing";
 
-/** The type of every type document ("Typ"). Not a document itself, so it cannot be deleted. */
+/** The type of every type document ("Type"). Not a document itself, so it cannot be deleted. */
 export const META_TYPE = "sys:type";
 export const SETTINGS_ID = "sys:settings";
 
-export type Kind = "info" | "datei" | "zeichnung" | "op" | "settings";
-export type FileType = "bild" | "pdf" | "audio" | "video" | "dokument" | "sonstiges";
-export const FILE_TYPES: FileType[] = ["bild", "pdf", "audio", "video", "dokument", "sonstiges"];
+export type Kind = "note" | "file" | "drawing" | "op" | "settings";
+export type FileType = "image" | "pdf" | "audio" | "video" | "document" | "other";
+export const FILE_TYPES: FileType[] = ["image", "pdf", "audio", "video", "document", "other"];
 
 export type StatusGroup = "todo" | "active" | "done";
 export const STATUS_GROUPS: StatusGroup[] = ["todo", "active", "done"];
@@ -69,7 +69,7 @@ export interface PropDef {
   options?: OptionDef[];
   multiple?: boolean; // relation: several targets; select: several options
   default?: string; // select with one value: the option new items get – then it is never empty
-  target?: string; // relation: query in text form (e.g. "typ:Person"), only a hint
+  target?: string; // relation: query in text form (e.g. "type:Person"), only a hint
   inverseName?: string;
   symmetric?: boolean;
   range?: boolean; // date: start/end
@@ -87,14 +87,14 @@ export interface PropDef {
 
 /** Read only through traits.ts. */
 export interface Capabilities {
-  due?: string; // propId of the due date property ("Termin")
+  due?: string; // propId of the due date property ("Due date")
   updates?: boolean;
   template?: { body?: string; values?: Record<string, Value> };
 }
 
 export interface TypeSchema {
   name: string;
-  plural?: string; // the list name ("Bücher"); unset: guessed by typePlural
+  plural?: string; // the list name ("Books"); unset: guessed by typePlural
   pos?: string; // order among the types in the sidebar; unset: at the end
   views?: ViewTab[]; // unset: the default views
   icon: string;
@@ -171,15 +171,17 @@ export const PERSONAL = "personal";
  * 2: the status is a property kind, no longer the capability `status` on a select.
  * 3: dates may carry a time (2026-10-30T14:30), free properties may hold lists, properties
  *    keep their former names; an older app would drop times and lists on edit.
+ * 4: stored names in English: kinds note, file, drawing; file types image, document, other;
+ *    query fences ```query. An older app would write the old names, which this one no longer reads.
  */
-export const FORMAT = 3;
+export const FORMAT = 4;
 
 export interface SettingsRecord {
   setupLang?: string;
   format?: number; // unset means 0 (data from before format versions)
   captureTypes: string[]; // pinned types in the capture type picker
   inbox?: Cond; // what lands in the inbox; unset: the default
-  filesPos?: string; // where "Dateien" stands among the types in the sidebar
+  filesPos?: string; // where "Files" stands among the types in the sidebar
 }
 
 /**
@@ -227,7 +229,7 @@ export interface Item {
   tags: string[];
   refs: string[];
   body: string;
-  /** "Regeln für Agenten" (see rules.ts); "" when there are none. */
+  /** "Rules for agents" (see rules.ts); "" when there are none. */
   rules: string;
   updates: UpdateEntry[];
   schema?: TypeSchema;
@@ -236,7 +238,7 @@ export interface Item {
   op?: OpRecord;
   settings?: SettingsRecord;
   suggestion?: Suggestion;
-  /** Out of the inbox until then ("Morgen wieder"). */
+  /** Out of the inbox until then ("Back tomorrow"). */
   later?: number;
   created: number;
   updated: number;
@@ -371,8 +373,8 @@ export function readItem(id: string, doc: Y.Doc): Item | null {
     item.schema = readSchema(doc);
     if (doc.getMap("tabs").size) item.schema.views = readTabs(doc);
   }
-  if (kind === "datei") item.file = doc.getMap("file").toJSON() as FileMeta;
-  if (kind === "zeichnung") item.drawing = drawingInfo(doc);
+  if (kind === "file") item.file = doc.getMap("file").toJSON() as FileMeta;
+  if (kind === "drawing") item.drawing = drawingInfo(doc);
   if (kind === "op") item.op = doc.getMap("op").toJSON() as OpRecord;
   if (kind === "settings") {
     const s: Partial<SettingsRecord> = doc.getMap("settings").toJSON();
@@ -423,7 +425,7 @@ export interface ItemInit {
 
 export function initItem(doc: Y.Doc, init: ItemInit, now = Date.now()) {
   const meta = metaMap(doc);
-  meta.set("kind", init.kind ?? "info");
+  meta.set("kind", init.kind ?? "note");
   meta.set("area", init.area ?? PERSONAL);
   meta.set("title", init.title ?? "");
   if (init.type) meta.set("type", init.type);
@@ -497,7 +499,7 @@ export function addParent(doc: Y.Doc, parentId: string, sort?: string, at = Date
   if (parents.has(parentId)) return;
   // a file has exactly one parent (other uses show under "Verwendet in"), so a new place replaces the old one
   const meta = metaMap(doc);
-  if (meta.get("kind") === "datei") for (const k of [...parents.keys()]) parents.delete(k);
+  if (meta.get("kind") === "file") for (const k of [...parents.keys()]) parents.delete(k);
   parents.set(parentId, { sort: sort ?? keyBetween(null, null), at });
   const home = meta.get("home");
   if (typeof home !== "string" || !home || !parents.has(home)) meta.set("home", parentId);
@@ -612,7 +614,7 @@ export function replaceBody(doc: Y.Doc, next: string) {
   replaceText(doc, "body", next);
 }
 
-/** "Regeln für Agenten": only blank lines or spaces count as none. */
+/** "Rules for agents": only blank lines or spaces count as none. */
 export function setRules(doc: Y.Doc, next: string | null) {
   replaceText(doc, "rules", next?.trim() ? next : "");
 }
@@ -653,7 +655,7 @@ export function initSchema(doc: Y.Doc, s: Partial<Omit<TypeSchema, "properties" 
 }
 
 export function initType(doc: Y.Doc, s: Parameters<typeof initSchema>[1] & { name: string }, init: Pick<ItemInit, "createdBy" | "created" | "source"> = {}, now = Date.now()) {
-  initItem(doc, { kind: "info", type: META_TYPE, title: s.name, ...init }, now);
+  initItem(doc, { kind: "note", type: META_TYPE, title: s.name, ...init }, now);
   initSchema(doc, { ...s, icon: s.icon ?? "box", description: s.description ?? "" });
 }
 
@@ -829,9 +831,9 @@ export function optionNames(p: PropDef, v: Value): string[] {
   return (Array.isArray(v) ? v : [v]).map((id) => p.options?.find((o) => o.id === id)?.name ?? String(id));
 }
 
-/** Not deleted, and an information, file or drawing rather than an op or the settings. */
+/** Not deleted, and a note, file or drawing rather than an op or the settings. */
 export function isContent(i: Item) {
-  return !i.deleted && (i.kind === "info" || i.kind === "datei" || i.kind === "zeichnung");
+  return !i.deleted && (i.kind === "note" || i.kind === "file" || i.kind === "drawing");
 }
 
 /**
@@ -873,7 +875,7 @@ export interface WikiLink {
   alias?: string;
 }
 
-/** Wikilinks outside of ```abfrage blocks. */
+/** Wikilinks outside of ```query blocks. */
 export function parseWikiLinks(body: string): WikiLink[] {
   const out: WikiLink[] = [];
   if (!body.includes("[[")) return out;
@@ -887,7 +889,7 @@ export function parseWikiLinks(body: string): WikiLink[] {
   return out;
 }
 
-export const QUERY_FENCE = /^```(?:abfrage|query)[ \t]*(.*)\n([\s\S]*?)^```[ \t]*$/gm;
+export const QUERY_FENCE = /^```query[ \t]*(.*)\n([\s\S]*?)^```[ \t]*$/gm;
 
 export function stripQueryBlocks(body: string) {
   return body.includes("```") ? body.replace(QUERY_FENCE, "") : body;
@@ -901,12 +903,12 @@ export function looksLikeFileName(name: string) {
 
 export function fileTypeOf(name: string, mime = ""): FileType {
   const n = name.toLowerCase();
-  if (mime.startsWith("image/") || IMAGE_EXT.test(n)) return "bild";
+  if (mime.startsWith("image/") || IMAGE_EXT.test(n)) return "image";
   if (mime === "application/pdf" || n.endsWith(".pdf")) return "pdf";
   if (mime.startsWith("audio/") || /\.(mp3|m4a|wav|ogg|oga|flac|aac|opus)$/.test(n)) return "audio";
   if (mime.startsWith("video/") || /\.(mp4|mov|webm|mkv|m4v)$/.test(n)) return "video";
-  if (/\.(docx?|xlsx?|pptx?|odt|ods|odp|txt|md|csv|rtf|pages|numbers|key|excalidraw)$/.test(n)) return "dokument";
-  return "sonstiges";
+  if (/\.(docx?|xlsx?|pptx?|odt|ods|odp|txt|md|csv|rtf|pages|numbers|key|excalidraw)$/.test(n)) return "document";
+  return "other";
 }
 
 const MIME_BY_EXT: Record<string, string> = {

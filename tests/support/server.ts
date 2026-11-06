@@ -54,7 +54,7 @@ export async function mcpTool(base: string, token: string, name: string, args: u
 
 /** With `workspace`, creates one if the account has none, as the app would. */
 export async function firstAccount(url: string, workspace = true) {
-  const signup = (await post(url, "/api/account/signup", { name: "E2E", email: "e2e@example.org", password: "geheim12345" }).then((r) => r.json())) as { token: string };
+  const signup = (await post(url, "/api/account/signup", { name: "E2E", email: "e2e@example.org", password: "secret12345" }).then((r) => r.json())) as { token: string };
   const own = (await get(url, "/api/account", signup.token).then((r) => r.json())) as { workspaces: unknown[] };
   if (workspace && !own.workspaces.length) await post(url, "/api/workspaces", { name: "Persönlich" }, signup.token);
   const me = (await get(url, "/api/account", signup.token).then((r) => r.json())) as { user: unknown; workspaces: { id: string }[] };

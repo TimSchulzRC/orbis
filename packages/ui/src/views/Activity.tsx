@@ -128,13 +128,13 @@ function Entry({ e, compact, noVerb, space }: { e: ActivityEvent; compact?: bool
   return (
     <>
       <div className="leading-snug">
-        {/* in an undo the head says what happened ("hat rückgängig gemacht"): one verb, not two */}
+        {/* in an undo the head says what happened ("undid"): one verb, not two */}
         {!op && !noVerb && <span className="text-muted-foreground">{e.doc ? verb : ""}</span>}{" "}
         {op ? (
           <span className="font-medium">{op.title}</span>
         ) : item?.kind === "settings" ? (
           <span className="font-medium">{t("activity.workspaceSettings")}</span>
-        ) : e.doc && item && (item.kind === "info" || item.kind === "datei" || item.kind === "zeichnung") ? (
+        ) : e.doc && item && (item.kind === "note" || item.kind === "file" || item.kind === "drawing") ? (
           <a href={itemHref(item.id)} className="inline-flex items-center gap-1 font-medium hover:underline">
             <ItemIcon item={item} size={13} />
             {/* a type is named as one: its title alone reads like an entry */}

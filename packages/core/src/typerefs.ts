@@ -164,7 +164,7 @@ function followInItem(w: Writer, ix: Index, item: Item, c: PropChange) {
   });
 }
 
-// The words for "type" in every language: `typ:Aufgabe`, `type:Task`.
+// The words for "type" in every language: `type:Task`, German `typ:Aufgabe`.
 let typeKeys: Set<string> | null = null;
 function isTypeKey(word: string): boolean {
   typeKeys ??= new Set(["type", ...LANGS.flatMap((l) => words(l, "q.key.type"))].map(fold));

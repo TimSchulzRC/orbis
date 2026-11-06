@@ -94,9 +94,9 @@ const blobs = new Blobs(join(DIR, "blobs"), store);
 const lang = (opts.lang as Lang | undefined) ?? store.lang();
 
 function statsKey(r: Item): string {
-  if (r.kind !== "info") return r.kind;
-  if (r.type === META_TYPE) return "typ";
-  return store.index().typeName(r.type) ?? (r.type ? "?" : "ohne Typ");
+  if (r.kind !== "note") return r.kind;
+  if (r.type === META_TYPE) return "type";
+  return store.index().typeName(r.type) ?? (r.type ? "?" : "no type");
 }
 
 if (cmd === "stats") {

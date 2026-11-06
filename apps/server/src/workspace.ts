@@ -246,7 +246,7 @@ export class Workspace {
     const id = sub.replace(/^\//, "");
     if (id && !/^[\w-]{1,64}$/.test(id)) return fail(404, "not found");
     const item = id ? this.store.records.get(id) : undefined;
-    if (id && (item?.kind !== "datei" || !item.file)) return fail(404, "no such file");
+    if (id && (item?.kind !== "file" || !item.file)) return fail(404, "no such file");
 
     if (req.method === "GET" || req.method === "HEAD") {
       if (!item) return fail(405, "POST a file, or GET /api/files/<file id>");

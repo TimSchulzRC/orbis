@@ -1,6 +1,8 @@
 // The built app against real servers: every route and one page per kind opens without errors or a
 // blank page on desktop and phone, plus the flows that need a server. Accounts come from the API
 // and the browser holds them as if signed in; the sign-in page is checked once.
+// It runs in German (locale de-DE, German examples): the UI labels and example titles below are
+// German on purpose.
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -34,7 +36,7 @@ async function startServer(seeded: boolean, noTypes = false, workspace = true) {
     const mcp = async (name: string, args: unknown) => /\[([\w-]+)\]/.exec(await mcpTool(url, token, name, args, `/w/${ws}/mcp`))?.[1] ?? "";
     // a 1×1 PNG below the course
     const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
-    server.file = await mcp("attach", { name: "skizze.png", base64: png, parent: "Kurs Datenbanken", description: "Eine Skizze" });
+    server.file = await mcp("attach", { name: "sketch.png", base64: png, parent: "Kurs Datenbanken", description: "A sketch" });
     server.trashed = "ex-i-bike";
     await mcp("delete", { ref: server.trashed });
   }
@@ -87,7 +89,7 @@ async function check(page: Page, label: string, path: string, errors: string[], 
       });
       if (wide > 1) failures.push(`${label} ${path}: ${wide}px wider than the screen`);
     }
-    // an information page: one column (no right column), at most one primary button
+    // a note page: one column (no right column), at most one primary button
     if (opts.page) {
       if (await page.locator("main aside").count()) failures.push(`${label} ${path}: has a right column`);
       const primary = await page.locator("main button.bg-ink:visible, main a.bg-ink:visible").count();
@@ -99,7 +101,7 @@ async function check(page: Page, label: string, path: string, errors: string[], 
   for (const e of errors) failures.push(`${label} ${path}: ${e}`);
 }
 
-const ROUTES = ["/", "/#/inbox", "/#/review", "/#/graph", "/#/activity", "/#/trash", "/#/settings", "/#/nope", "/#/i/sys%3Aproject", "/#/i/sys%3Atask", "/#/i/sys%3Acard", "/#/i/ex-type-book", "/#/files", "/#/files?kind=bild"];
+const ROUTES = ["/", "/#/inbox", "/#/review", "/#/graph", "/#/activity", "/#/trash", "/#/settings", "/#/nope", "/#/i/sys%3Aproject", "/#/i/sys%3Atask", "/#/i/sys%3Acard", "/#/i/ex-type-book", "/#/files", "/#/files?kind=image"];
 // one page per kind: note with entries below, article with translation, project, sub-project, task, card, note,
 // inbox item, inbox bundle, course, book, image, PDF, query page, welcome note
 const ITEMS = ["ex-work", "ex-art-de", "ex-relaunch", "ex-design", "ex-t-pages", "ex-k-nf", "ex-n-lecture", "ex-i-podcast", "ex-i-trip", "ex-course", "ex-b-moor", "ex-f-diagram", "ex-f-sheet", "ex-week", "ex-welcome"];
@@ -240,7 +242,7 @@ async function signInPage(browser: import("playwright").Browser, server: { url: 
   page.on("pageerror", (e) => errors.push(`page error: ${e.message}`));
   await check(page, "sign-in", "/", errors, async (p) => {
     await p.getByLabel("E-Mail").fill("e2e@example.org");
-    await p.getByLabel("Passwort").fill("geheim12345");
+    await p.getByLabel("Passwort").fill("secret12345");
     await p.getByRole("button", { name: "Anmelden" }).click();
     // the account's workspace was not set up yet: the app does it, without asking
     if (!(await p.locator("aside section[aria-label='Persönlich']").getByRole("button", { name: "Typen", exact: true }).waitFor({ timeout: 8000 }).then(() => true, () => false))) failures.push("sign-in: the workspace was not set up after signing in");
@@ -395,7 +397,7 @@ async function membersOnSettings(browser: import("playwright").Browser, server: 
   // the first workspace, not "Firma" from before
   const ws = ((await api("/api/account")).workspaces as { id: string; name: string }[]).find((w) => w.name === "Persönlich")!.id;
   const invite = async () => (await api(`/api/workspaces/${ws}/invites`, { method: "POST", body: "{}" })).code as string;
-  const { token: bea } = await api("/api/account/signup", { method: "POST", body: JSON.stringify({ name: "Bea", email: "bea@example.org", password: "geheim12345", invite: await invite() }) });
+  const { token: bea } = await api("/api/account/signup", { method: "POST", body: JSON.stringify({ name: "Bea", email: "bea@example.org", password: "secret12345", invite: await invite() }) });
   const old = await invite();
   // a link Bea made while an owner: it goes when Bea is removed
   const setBea = async (r: string) => {
@@ -427,7 +429,7 @@ async function membersOnSettings(browser: import("playwright").Browser, server: 
     const made = await links.first().innerText();
     if (!made.includes("Besitzer · Von E2E am")) failures.push(`${label}: the new link does not say its role and who made it: ${made}`);
     const code = (await links.first().locator("code").innerText()).split("/join/")[1]!;
-    const signup = (email: string) => api("/api/account/signup", { method: "POST", body: JSON.stringify({ name: email.split("@")[0], email, password: "geheim12345", invite: code }) });
+    const signup = (email: string) => api("/api/account/signup", { method: "POST", body: JSON.stringify({ name: email.split("@")[0], email, password: "secret12345", invite: code }) });
     cem = (await signup("cem@example.org")).token;
     if ((await role("cem")) !== "owner") failures.push(`${label}: who joined with the owner link is no owner`);
     if ((await fetch(`${server.url}/api/invites/${code}`)).status !== 404) failures.push(`${label}: the single-use link still works after its first use`);
@@ -460,7 +462,7 @@ async function membersOnSettings(browser: import("playwright").Browser, server: 
   });
   await context.close();
   // the server's only account again: deleting it later leaves the server as new
-  for (const token of [bea, cem]) if (token) await api("/api/account", { method: "DELETE", body: JSON.stringify({ password: "geheim12345" }) }, token);
+  for (const token of [bea, cem]) if (token) await api("/api/account", { method: "DELETE", body: JSON.stringify({ password: "secret12345" }) }, token);
 }
 
 async function deleteAccountOnSettings(browser: import("playwright").Browser, server: Server) {
@@ -476,7 +478,7 @@ async function deleteAccountOnSettings(browser: import("playwright").Browser, se
     await dialog.getByLabel("Passwort").fill("wrong");
     await dialog.getByRole("button", { name: "Konto endgültig löschen", exact: true }).click();
     await dialog.getByRole("alert").filter({ hasText: "Das Passwort stimmt nicht." }).waitFor();
-    await dialog.getByLabel("Passwort").fill("geheim12345");
+    await dialog.getByLabel("Passwort").fill("secret12345");
     await dialog.getByRole("button", { name: "Konto endgültig löschen", exact: true }).click();
     await dialog.getByRole("alert").filter({ hasText: "letzter Owner" }).waitFor();
     await dialog.getByRole("button", { name: "Abbrechen", exact: true }).click();
@@ -487,7 +489,7 @@ async function deleteAccountOnSettings(browser: import("playwright").Browser, se
       if (!response.ok) throw new Error("could not delete test workspace");
     }
     await p.getByRole("button", { name: "Konto endgültig löschen", exact: true }).click();
-    await dialog.getByLabel("Passwort").fill("geheim12345");
+    await dialog.getByLabel("Passwort").fill("secret12345");
     await dialog.getByRole("button", { name: "Konto endgültig löschen", exact: true }).click();
     await p.getByRole("button", { name: "Konto anlegen", exact: true }).waitFor();
     const stored = await p.evaluate(() => ({ account: JSON.parse(localStorage.getItem("obtion.account") ?? "null"), spaces: JSON.parse(localStorage.getItem("obtion.spaces") ?? "[]") }));

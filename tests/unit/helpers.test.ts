@@ -66,17 +66,17 @@ test("nextPinKey sorts after everything pinned; cmpKey orders keys", () => {
 });
 
 test("optionNames and displayTitle", () => {
-  const p: PropDef = { id: "p", name: "Tags", kind: "select", multiple: true, sort: "V", options: [{ id: "o1", name: "Eins" }, { id: "o2", name: "Zwei" }] };
-  expect(optionNames(p, ["o2", "gone"])).toEqual(["Zwei", "gone"]);
-  expect(optionNames(p, "o1")).toEqual(["Eins"]);
-  expect(displayTitle({ title: "Notiz" })).toBe("Notiz");
+  const p: PropDef = { id: "p", name: "Tags", kind: "select", multiple: true, sort: "V", options: [{ id: "o1", name: "One" }, { id: "o2", name: "Two" }] };
+  expect(optionNames(p, ["o2", "gone"])).toEqual(["Two", "gone"]);
+  expect(optionNames(p, "o1")).toEqual(["One"]);
+  expect(displayTitle({ title: "Note" })).toBe("Note");
   expect(displayTitle({ title: "", file: { name: "scan.pdf" } as never })).toBe("scan.pdf");
   expect(displayTitle({ title: "" })).toBe("");
 });
 
 test("mapValue: by name with a status group fallback, or (moving) by id and only whole", () => {
   const from: PropDef = { id: "s", name: "Status", kind: "select", sort: "V", options: [{ id: "a", name: "Review", group: "active" }, { id: "d", name: "Done", group: "done" }] };
-  const to: PropDef = { id: "s", name: "Status", kind: "select", sort: "V", options: [{ id: "x", name: "Läuft", group: "active" }, { id: "d", name: "Fertig", group: "done" }, { id: "y", name: "review", group: "todo" }] };
+  const to: PropDef = { id: "s", name: "Status", kind: "select", sort: "V", options: [{ id: "x", name: "Running", group: "active" }, { id: "d", name: "Finished", group: "done" }, { id: "y", name: "review", group: "todo" }] };
   expect(mapValue(from, to, "a")).toBe("y"); // by name
   expect(mapValue(from, to, "d")).toBe("d"); // no name: the group
   expect(mapValue(from, to, "d", { byId: true })).toBe("d"); // the same id

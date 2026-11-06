@@ -15,7 +15,7 @@ import { ItemIcon, RelTime } from "../ui/item-look";
 /** Items deleted together with a root are listed with it and come back with it. */
 function trashed(repo: Repo): Item[] {
   const withRoot = (i: Item) => !!i.deletedVia && !!repo.records.get(i.deletedVia)?.deleted;
-  return [...repo.records.values()].filter((i) => i.deleted && !withRoot(i) && (i.kind === "info" || i.kind === "datei" || i.kind === "zeichnung"));
+  return [...repo.records.values()].filter((i) => i.deleted && !withRoot(i) && (i.kind === "note" || i.kind === "file" || i.kind === "drawing"));
 }
 
 export function TrashView() {

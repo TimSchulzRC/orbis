@@ -10,11 +10,11 @@ afterEach(() => cleanup());
 
 test("+N in the path lists the places; make home and remove work from there", async () => {
   const repo = await workspace(false);
-  const kunden = repo.create({ title: "Kunden", pinned: "a" });
-  const nord = repo.create({ title: "Kunde Nord", parents: [kunden] });
-  const intern = repo.create({ title: "Intern", pinned: "b" });
-  const vertrieb = repo.create({ title: "Vertrieb", parents: [intern] });
-  const page1 = repo.create({ title: "Marketing", parents: [nord, vertrieb] });
+  const customers = repo.create({ title: "Customers", pinned: "a" });
+  const nord = repo.create({ title: "Customer North", parents: [customers] });
+  const internal = repo.create({ title: "Internal", pinned: "b" });
+  const sales = repo.create({ title: "Sales", parents: [internal] });
+  const page1 = repo.create({ title: "Marketing", parents: [nord, sales] });
   await render(<ItemPage id={page1} isNew={false} />);
 
   // the places are no longer a section at the end of the page
@@ -24,27 +24,27 @@ test("+N in the path lists the places; make home and remove work from there", as
   await page.getByRole("button", { name: "+1" }).click();
   const places = page.getByRole("dialog").first();
   const links = places.getByRole("link");
-  await expect.poll(() => links.elements().map((a) => a.textContent)).toEqual(["Kunde NordKunden", "VertriebIntern"]);
+  await expect.poll(() => links.elements().map((a) => a.textContent)).toEqual(["Customer NorthCustomers", "SalesInternal"]);
   await expect.element(places.getByText("Hauptort")).toBeVisible();
 
   // the second place becomes the home; the menu stays open and lists it first
   await places.getByRole("button", { name: "Mehr" }).nth(1).click();
   await page.getByRole("button", { name: "Als Hauptort" }).click();
-  await expect.poll(() => repo.get(page1)!.home).toBe(vertrieb);
-  await expect.poll(() => links.elements().map((a) => a.textContent)).toEqual(["VertriebIntern", "Kunde NordKunden"]);
+  await expect.poll(() => repo.get(page1)!.home).toBe(sales);
+  await expect.poll(() => links.elements().map((a) => a.textContent)).toEqual(["SalesInternal", "Customer NorthCustomers"]);
 
   // removed from one place, the page has one left and "+N" is gone
   await places.getByRole("button", { name: "Mehr" }).nth(1).click();
   await page.getByRole("button", { name: "Hier entfernen" }).click();
-  await expect.poll(() => Object.keys(repo.get(page1)!.parents)).toEqual([vertrieb]);
+  await expect.poll(() => Object.keys(repo.get(page1)!.parents)).toEqual([sales]);
   expect(page.getByRole("button", { name: "+1" }).query()).toBeNull();
 });
 
 test("adding another place opens the place picker", async () => {
   const repo = await workspace(false);
-  const a = repo.create({ title: "Arbeit", pinned: "a" });
-  const b = repo.create({ title: "Privat", pinned: "b" });
-  const id = repo.create({ title: "Notiz", parents: [a, b] });
+  const a = repo.create({ title: "Work", pinned: "a" });
+  const b = repo.create({ title: "Private", pinned: "b" });
+  const id = repo.create({ title: "Note", parents: [a, b] });
   await render(<ItemPage id={id} isNew={false} />);
   await page.getByRole("button", { name: "+1" }).click();
   await page.getByRole("button", { name: "Weiteren Ort hinzufügen" }).click();

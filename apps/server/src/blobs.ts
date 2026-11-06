@@ -169,7 +169,7 @@ export class Blobs {
   needsWork(r: Item): boolean {
     const f = r.file;
     if (!f?.hash || !this.has(f.hash)) return false;
-    if (f.filetype === "bild") return (!f.display || !f.thumb || !f.width) && !/svg/.test(f.mime) && !!FFMPEG;
+    if (f.filetype === "image") return (!f.display || !f.thumb || !f.width) && !/svg/.test(f.mime) && !!FFMPEG;
     if (f.filetype === "audio" || f.filetype === "video") return f.duration === undefined && !!FFPROBE;
     return f.extracted !== extractMark(f.hash);
   }
@@ -207,7 +207,7 @@ export class Blobs {
     if (!f || !this.needsWork(record!)) return;
     const src = this.path(f.hash);
     const patch: Partial<FileMeta> = {};
-    if (f.filetype === "bild") {
+    if (f.filetype === "image") {
       const dim = await probe(src);
       if (dim.width) Object.assign(patch, { width: dim.width, height: dim.height });
       if (!f.display) patch.display = await this.derive(src, DISPLAY_WIDTH);

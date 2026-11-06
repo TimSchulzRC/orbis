@@ -50,7 +50,7 @@ function openBelow(item: Item, repo: Repo = current): Item[] {
 
 /**
  * Set a status the careful way: closing something with open entries below asks first, and
- * closing says "Erledigt · Rückgängig". Returns false if the user said no.
+ * closing says "Done · Undo". Returns false if the user said no.
  */
 export async function setStatus(item: Item, optionId: string, repo: Repo = current): Promise<boolean> {
   const ix = repo.index();

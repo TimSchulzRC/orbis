@@ -27,11 +27,11 @@ test("handles multi-word German queries with spelling variants", () => {
 });
 
 test("matches hyphenated words and ignores punctuation-only queries", () => {
-  const find = search([{ title: "eMarketing France" }, { title: "E-Rechnung Pflicht" }, { title: "Invoicing basics" }]);
+  const find = search([{ title: "eMarketing France" }, { title: "E-Ticket required" }, { title: "Invoicing basics" }]);
   expect(find("e-marketing")[0]).toBe("eMarketing France"); // "Invoicing basics" follows as a fuzzy match
-  expect(find("E-Rechnung")).toEqual(["E-Rechnung Pflicht"]);
-  expect(find("erechnung")).toEqual(["E-Rechnung Pflicht"]);
-  expect(find("Rechnung")).toEqual(["E-Rechnung Pflicht"]);
+  expect(find("E-Ticket")).toEqual(["E-Ticket required"]);
+  expect(find("eticket")).toEqual(["E-Ticket required"]);
+  expect(find("Ticket")).toEqual(["E-Ticket required"]);
   expect(find("!!!")).toEqual([]);
 });
 
@@ -49,97 +49,97 @@ test("snippets find the spot across spellings", () => {
 
 test("identifiers with underscores are found whole, by their parts and by a prefix", () => {
   const find = search([
-    { title: "Lieferschein_Muster_4711_2026-01-15.pdf" },
-    { title: "Fehlerjob", body: "Job DEMO_EXPORT_PDF_MAIL_DUPLICATES läuft auf SRV-TEST-01." },
-    { title: "Andere Rechnung", body: "Rechnung 4712 an Kunde" },
+    { title: "Delivery_Sample_4711_2026-01-15.pdf" },
+    { title: "Failed job", body: "Job DEMO_EXPORT_PDF_MAIL_DUPLICATES runs on SRV-TEST-01." },
+    { title: "Other invoice", body: "Invoice 4712 to client" },
   ]);
-  expect(find("4711")).toEqual(["Lieferschein_Muster_4711_2026-01-15.pdf"]);
-  expect(find("Muster")).toEqual(["Lieferschein_Muster_4711_2026-01-15.pdf"]);
-  expect(find("DEMO_EXPORT_PDF_MAIL_DUPLICATES")).toEqual(["Fehlerjob"]);
-  expect(find("EXPORT_PDF")).toEqual(["Fehlerjob"]);
-  expect(find("demo")).toEqual(["Fehlerjob"]);
-  expect(find("DUPLICATES")).toEqual(["Fehlerjob"]);
-  expect(find("SRV-TEST-01")).toEqual(["Fehlerjob"]);
+  expect(find("4711")).toEqual(["Delivery_Sample_4711_2026-01-15.pdf"]);
+  expect(find("Sample")).toEqual(["Delivery_Sample_4711_2026-01-15.pdf"]);
+  expect(find("DEMO_EXPORT_PDF_MAIL_DUPLICATES")).toEqual(["Failed job"]);
+  expect(find("EXPORT_PDF")).toEqual(["Failed job"]);
+  expect(find("demo")).toEqual(["Failed job"]);
+  expect(find("DUPLICATES")).toEqual(["Failed job"]);
+  expect(find("SRV-TEST-01")).toEqual(["Failed job"]);
   // numbers are never fuzzy: the neighbouring invoice does not come up
-  expect(find("4712")).toEqual(["Andere Rechnung"]);
+  expect(find("4712")).toEqual(["Other invoice"]);
 });
 
 test("plain text keeps underscores inside words and drops emphasis", () => {
-  expect(plainText("Datei STATUS_2026-10-30.md und _kursiv_ und __fett__")).toBe("Datei STATUS_2026-10-30.md und kursiv und fett");
-  expect(plainText("**DEMO_EXPORT** läuft")).toBe("DEMO_EXPORT läuft");
+  expect(plainText("File STATUS_2026-10-30.md and _italic_ and __bold__")).toBe("File STATUS_2026-10-30.md and italic and bold");
+  expect(plainText("**DEMO_EXPORT** runs")).toBe("DEMO_EXPORT runs");
 });
 
 test("the excerpt is centred on the hit, keeps underscores and names its heading", () => {
-  const body = ["# Status", "", "Alles ruhig. ".repeat(40), "", "## Offene Punkte", "", "Filler. ".repeat(30) + "Der Job DEMO_EXPORT_PDF_MAIL_DUPLICATES bricht ab. " + "Mehr Text. ".repeat(30), "", "## Erledigt", "Nichts."].join("\n");
+  const body = ["# Status", "", "All quiet. ".repeat(40), "", "## Open points", "", "Filler. ".repeat(30) + "The job DEMO_EXPORT_PDF_MAIL_DUPLICATES aborts. " + "More text. ".repeat(30), "", "## Done", "Nothing."].join("\n");
   const e = excerpt(body, "duplicates");
   expect(e.text).toContain("DEMO_EXPORT_PDF_MAIL_DUPLICATES");
   expect(e.text.startsWith("…")).toBe(true);
   expect(e.text.length).toBeLessThan(170);
-  expect(e.heading).toBe("Status > Offene Punkte");
+  expect(e.heading).toBe("Status > Open points");
   // the whole identifier and a part of it land on the same spot
-  expect(excerpt(body, "DEMO_EXPORT_PDF_MAIL_DUPLICATES").heading).toBe("Status > Offene Punkte");
+  expect(excerpt(body, "DEMO_EXPORT_PDF_MAIL_DUPLICATES").heading).toBe("Status > Open points");
   expect(excerpt(body, "4711").heading).toBeUndefined(); // not in it: the start, no heading
   expect(excerpt(body, "4711").text.startsWith("Status")).toBe(true);
   // several words: the occurrence near the others
-  const two = "Mapping ist fertig. " + "x ".repeat(200) + "Mapping Review am Freitag.";
-  expect(excerpt(two, "mapping freitag").text).toContain("Review am Freitag");
+  const two = "Mapping is done. " + "x ".repeat(200) + "Mapping review on Friday.";
+  expect(excerpt(two, "mapping friday").text).toContain("review on Friday");
   // hyphenated query words are found as written
-  expect(snippet("x ".repeat(100) + "Pflicht zur E-Rechnung ab 2025", "e-rechnung")).toContain("E-Rechnung");
+  expect(snippet("x ".repeat(100) + "Required: the E-Invoice from 2025", "e-invoice")).toContain("E-Invoice");
 });
 
 test("outline: headings with level, path, offset and size, none in code blocks", () => {
-  const text = "Intro\n# Status\nA\n## Offene Punkte ##\nB\n```\n# kein Heading\n```\n### Details\nC\n## Erledigt\nD\n# Anhang\nE";
+  const text = "Intro\n# Status\nA\n## Open points ##\nB\n```\n# no heading\n```\n### Details\nC\n## Done\nD\n# Appendix\nE";
   const h = outline(text);
   expect(h.map((x) => [x.level, x.path])).toEqual([
     [1, "Status"],
-    [2, "Status > Offene Punkte"],
-    [3, "Status > Offene Punkte > Details"],
-    [2, "Status > Erledigt"],
-    [1, "Anhang"],
+    [2, "Status > Open points"],
+    [3, "Status > Open points > Details"],
+    [2, "Status > Done"],
+    [1, "Appendix"],
   ]);
   const open = h[1]!;
-  expect(text.slice(open.offset, open.offset + open.size)).toBe("## Offene Punkte ##\nB\n```\n# kein Heading\n```\n### Details\nC\n");
-  expect(text.slice(h[4]!.offset, h[4]!.offset + h[4]!.size)).toBe("# Anhang\nE");
-  expect(headingAt(h, text.indexOf("C"))?.path).toBe("Status > Offene Punkte > Details");
+  expect(text.slice(open.offset, open.offset + open.size)).toBe("## Open points ##\nB\n```\n# no heading\n```\n### Details\nC\n");
+  expect(text.slice(h[4]!.offset, h[4]!.offset + h[4]!.size)).toBe("# Appendix\nE");
+  expect(headingAt(h, text.indexOf("C"))?.path).toBe("Status > Open points > Details");
   expect(headingAt(h, 2)).toBeUndefined();
   // \r\n line ends
   expect(outline("# A\r\ntext\r\n## B\r\n").map((x) => x.text)).toEqual(["A", "B"]);
 });
 
 test("sections by heading or path, case-insensitive; ambiguous ones give the candidates", () => {
-  const h = outline("# Projekt A\n## Offene Punkte\nx\n# Projekt B\n## Offene Punkte\ny\n## **Risiken** und Kosten\nz");
-  expect("candidates" in findSection(h, "offene punkte") && findSection(h, "offene punkte")).toMatchObject({ candidates: [{ path: "Projekt A > Offene Punkte" }, { path: "Projekt B > Offene Punkte" }] });
-  expect(findSection(h, "Projekt B > Offene Punkte")).toMatchObject({ heading: { path: "Projekt B > Offene Punkte" } });
-  expect(findSection(h, "projekt b › offene punkte")).toMatchObject({ heading: { path: "Projekt B > Offene Punkte" } });
-  expect(findSection(h, "Risiken und Kosten")).toMatchObject({ heading: { level: 2 } });
-  expect(findSection(h, "risiken")).toMatchObject({ heading: { level: 2 } }); // contained, unique
-  expect(findSection(h, "Gibt es nicht")).toEqual({ candidates: [] });
+  const h = outline("# Project A\n## Open points\nx\n# Project B\n## Open points\ny\n## **Risks** and costs\nz");
+  expect("candidates" in findSection(h, "open points") && findSection(h, "open points")).toMatchObject({ candidates: [{ path: "Project A > Open points" }, { path: "Project B > Open points" }] });
+  expect(findSection(h, "Project B > Open points")).toMatchObject({ heading: { path: "Project B > Open points" } });
+  expect(findSection(h, "project b › open points")).toMatchObject({ heading: { path: "Project B > Open points" } });
+  expect(findSection(h, "Risks and costs")).toMatchObject({ heading: { level: 2 } });
+  expect(findSection(h, "risks")).toMatchObject({ heading: { level: 2 } }); // contained, unique
+  expect(findSection(h, "Does not exist")).toEqual({ candidates: [] });
 });
 
 test("pages end at a line break near their end and say where the next starts", () => {
-  const text = Array.from({ length: 100 }, (_, n) => `Zeile ${n}`).join("\n");
+  const text = Array.from({ length: 100 }, (_, n) => `Line ${n}`).join("\n");
   const p = page(text, 0, 100);
   expect(p.text.endsWith("\n")).toBe(true);
   expect(p.next).toBe(p.to);
   const q = page(text, p.next!, 100);
-  expect(q.text.startsWith("Zeile")).toBe(true);
+  expect(q.text.startsWith("Line")).toBe(true);
   expect(page(text, text.length - 5, 100)).toMatchObject({ next: undefined, to: text.length });
 });
 
 test("excerpts look for words where they start, and for what a prefix or fuzzy search matched", () => {
-  const body = "# Einleitung\nEine concatenation von Werten.\n# Tiere\nDie cat schläft.";
-  expect(excerpt(body, "cat").heading).toBe("Tiere");
-  // two letters are no prefix: "an" is the word, not the start of "Anleitung"
-  expect(excerpt("# Anleitung\n" + "Text. ".repeat(60) + "\n# Ziel\nWir arbeiten an Obtion.", "an").heading).toBe("Ziel");
-  // a whole word in the other spelling comes before a part of a word
+  const body = "# Introduction\nA concatenation of values.\n# Animals\nThe cat sleeps.";
+  expect(excerpt(body, "cat").heading).toBe("Animals");
+  // two letters are no prefix: "an" is the word, not the start of "Answers"
+  expect(excerpt("# Answers\n" + "Text. ".repeat(60) + "\n# Goal\nWe work on an idea.", "an").heading).toBe("Goal");
+  // a whole word in the other spelling comes before a part of a word (German umlaut on purpose)
   expect(excerpt("# Oldtimer\nText.\n# Wartung\nDas Öl ist neu.", "ol").heading).toBe("Wartung");
   const m = new MemRepo();
   const idx = createIndex();
-  const id = m.add({ title: "Notiz", body: "# Vorspann\n" + "Text. ".repeat(60) + "\n# Arbeit\nDas mapping ist fertig." });
+  const id = m.add({ title: "Note", body: "# Preamble\n" + "Text. ".repeat(60) + "\n# Work\nThe mapping is done." });
   indexRecord(idx, m.get(id)!);
   const [hit] = searchHits(idx, "maping");
   expect(hit!.id).toBe(id);
   const e = excerpt(m.get(id)!.body, "maping", 160, hit!.terms);
-  expect(e.heading).toBe("Arbeit");
-  expect(e.text).toContain("mapping ist fertig");
+  expect(e.heading).toBe("Work");
+  expect(e.text).toContain("mapping is done");
 });

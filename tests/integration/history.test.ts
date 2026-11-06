@@ -39,31 +39,31 @@ function typing(origin: string, id: string, texts: string[]) {
 }
 
 test("every change of the text keeps a version; typing in one step folds into one", () => {
-  ops.call(AG, () => (ops.create({ title: "Mapping-Konzept", body: "Zeile eins\n" }, AG), "ok"));
-  const id = idOf("Mapping-Konzept");
+  ops.call(AG, () => (ops.create({ title: "Mapping concept", body: "Line one\n" }, AG), "ok"));
+  const id = idOf("Mapping concept");
   expect(s.versions(id)).toEqual([]); // created: nothing to keep yet, the first change keeps it
-  typing(TIM, id, ["Zeile eins\nZ", "Zeile eins\nZeile zw", "Zeile eins\nZeile zwei\n"]);
+  typing(TIM, id, ["Line one\nL", "Line one\nLine tw", "Line one\nLine two\n"]);
   const v = s.versions(id);
   expect(v.map((x) => [x.n, x.origin])).toEqual([
     [1, AG], // the text it was created with, by whoever created it
     [2, TIM], // three flushes of typing: one version
   ]);
-  expect(s.versionText(v[0]!.id)).toBe("Zeile eins\n");
-  expect(s.versionText(v[1]!.id)).toBe("Zeile eins\nZeile zwei\n");
+  expect(s.versionText(v[0]!.id)).toBe("Line one\n");
+  expect(s.versionText(v[1]!.id)).toBe("Line one\nLine two\n");
   // another step (or another person) is a version of its own
-  edit(ANNA, id, "Zeile eins\nZeile zwei\nZeile drei\n");
-  ops.call(AG, () => (ops.update("Mapping-Konzept", { body: "Zeile null\n", body_mode: "prepend" }, AG), "ok"));
+  edit(ANNA, id, "Line one\nLine two\nLine three\n");
+  ops.call(AG, () => (ops.update("Mapping concept", { body: "Line zero\n", body_mode: "prepend" }, AG), "ok"));
   expect(s.versions(id).map((x) => x.origin)).toEqual([AG, TIM, ANNA, AG]);
   expect(s.versionText(s.versions(id).at(-1)!.id)).toBe(s.records.get(id)!.body);
   // only changes of the text make versions
-  ops.call(AG, () => (ops.update("Mapping-Konzept", { tags_add: ["konzept"] }, AG), "ok"));
+  ops.call(AG, () => (ops.update("Mapping concept", { tags_add: ["concept"] }, AG), "ok"));
   expect(s.versions(id).length).toBe(4);
 });
 
 test("versions are stored compressed and travel with the daily backup", () => {
-  const long = "Ein langer Absatz über die Anbindung, der sich oft wiederholt. ".repeat(400);
-  ops.call(AG, () => (ops.create({ title: "Lang" }, AG), "ok"));
-  const id = idOf("Lang");
+  const long = "A long paragraph about the integration that repeats a lot. ".repeat(400);
+  ops.call(AG, () => (ops.create({ title: "Long" }, AG), "ok"));
+  const id = idOf("Long");
   edit(TIM, id, long);
   const row = s.db.query("SELECT length(data) AS size, len FROM versions WHERE doc = ?").get(id) as { size: number; len: number };
   expect(row.len).toBe(long.length);
@@ -75,95 +75,95 @@ test("versions are stored compressed and travel with the daily backup", () => {
 });
 
 test("activity: text changes as a diff, properties and options by name, updates with their text", async () => {
-  await tool("create", { items: [{ title: "Kunde Nord", type: "Projekt", body: "# Ziel\nRechnungen senden\n\n# Offen\n- Mapping\n" }] });
-  await tool("create", { items: [{ title: "Mapping prüfen", type: "Task", parents: ["Kunde Nord"] }] });
-  const id = idOf("Kunde Nord");
-  edit(TIM, id, "# Ziel\nRechnungen senden und empfangen\n\n# Offen\n- Mapping\n- Testlauf\n");
-  await tool("update", { ref: "Mapping prüfen", properties: { Status: "erledigt" } });
-  await tool("add_update", { ref: "Kunde Nord", text: "Testlauf mit drei Belegen ok" });
+  await tool("create", { items: [{ title: "Client North", type: "Projekt", body: "# Goal\nSend invoices\n\n# Open\n- Mapping\n" }] });
+  await tool("create", { items: [{ title: "Check mapping", type: "Task", parents: ["Client North"] }] });
+  const id = idOf("Client North");
+  edit(TIM, id, "# Goal\nSend and receive invoices\n\n# Open\n- Mapping\n- Test run\n");
+  await tool("update", { ref: "Check mapping", properties: { Status: "erledigt" } });
+  await tool("add_update", { ref: "Client North", text: "Test run with three receipts ok" });
   const out = (await tool("activity", { days: 1 })).text;
-  expect(out).toContain(`· Tim · updated "Kunde Nord" [${id}] · Projekt`);
-  expect(out).toContain("    -Rechnungen senden");
-  expect(out).toContain("    +Rechnungen senden und empfangen");
-  expect(out).toContain("    +- Testlauf");
+  expect(out).toContain(`· Tim · updated "Client North" [${id}] · Projekt`);
+  expect(out).toContain("    -Send invoices");
+  expect(out).toContain("    +Send and receive invoices");
+  expect(out).toContain("    +- Test run");
   expect(out).toMatch(/text: \d+ → \d+ characters/);
   expect(out).toContain("Status: Nicht begonnen → Erledigt");
   expect(out).not.toContain("p:p_status");
-  expect(out).toContain('update posted: "Testlauf mit drei Belegen ok"');
+  expect(out).toContain('update posted: "Test run with three receipts ok"');
   expect(out).toMatch(/cursor: \d+-0/);
 });
 
 test("activity: a long diff is cut, with the call that shows all of it", async () => {
-  await tool("create", { items: [{ title: "Viel Text" }] });
-  const id = idOf("Viel Text");
-  edit(TIM, id, Array.from({ length: 120 }, (_, i) => `Zeile ${i}`).join("\n") + "\n");
-  const out = (await tool("activity", { days: 1, ref: "Viel Text" })).text;
+  await tool("create", { items: [{ title: "Much text" }] });
+  const id = idOf("Much text");
+  edit(TIM, id, Array.from({ length: 120 }, (_, i) => `Line ${i}`).join("\n") + "\n");
+  const out = (await tool("activity", { days: 1, ref: "Much text" })).text;
   expect(out).toContain(`more line(s): history ref=${id} from=0 to=1`);
   const full = (await tool("history", { ref: id, from: 0, to: 1 })).text;
   expect(full).toContain("+120 −0 line(s)");
-  expect(full).toContain("+Zeile 119");
+  expect(full).toContain("+Line 119");
 });
 
 test("activity since a cursor: only what changed after it, also later edits folded into an earlier entry", async () => {
-  await tool("create", { items: [{ title: "Notiz A", body: "a\n" }, { title: "Notiz B", body: "b\n" }] });
+  await tool("create", { items: [{ title: "Note A", body: "a\n" }, { title: "Note B", body: "b\n" }] });
   const first = (await tool("activity", { since: "2020-01-01T00:00" })).text;
-  expect(first).toContain('created "Notiz A"');
+  expect(first).toContain('created "Note A"');
   const cursor = /cursor: (\d+-\d+)/.exec(first)![1]!;
   expect((await tool("activity", { since: cursor })).text).toStartWith("0 change(s)");
   await Bun.sleep(2);
-  typing(TIM, idOf("Notiz A"), ["a\nzwei\n"]);
+  typing(TIM, idOf("Note A"), ["a\ntwo\n"]);
   const second = (await tool("activity", { since: cursor })).text;
   expect(second).toStartWith("1 change(s)");
-  expect(second).toContain('updated "Notiz A"');
+  expect(second).toContain('updated "Note A"');
   const cursor2 = /cursor: (\d+-\d+)/.exec(second)![1]!;
   // Tim types on in the same step: the same activity entry grows – and shows up again
   await Bun.sleep(2);
-  s.step(TIM, () => s.change(idOf("Notiz A"), TIM, (d) => replaceBody(d, "a\nzwei\ndrei\n")));
+  s.step(TIM, () => s.change(idOf("Note A"), TIM, (d) => replaceBody(d, "a\ntwo\nthree\n")));
   s.flush();
   const third = (await tool("activity", { since: cursor2 })).text;
   expect(third).toStartWith("1 change(s)");
-  expect(third).toContain("+drei");
+  expect(third).toContain("+three");
   // an entry id and an ISO time work as since too; nonsense is refused with the reason
   expect((await tool("activity", { since: new Date(Date.now() + 60_000).toISOString() })).text).toStartWith("0 change(s)");
-  expect((await tool("activity", { since: "gestern" })).error).toBe(true);
+  expect((await tool("activity", { since: "yesterday" })).error).toBe(true);
 });
 
 test("activity since: in pages with limit, the cursor continues where the page ended", async () => {
   const start = new Date(Date.now() - 1000).toISOString();
-  await tool("create", { items: Array.from({ length: 7 }, (_, i) => ({ title: `Punkt ${i}` })) });
+  await tool("create", { items: Array.from({ length: 7 }, (_, i) => ({ title: `Point ${i}` })) });
   const seen: string[] = [];
   let since = start;
   for (let round = 0; round < 5; round++) {
     const out = (await tool("activity", { since, limit: 3 })).text;
-    seen.push(...[...out.matchAll(/created "(Punkt \d)"/g)].map((m) => m[1]!));
+    seen.push(...[...out.matchAll(/created "(Point \d)"/g)].map((m) => m[1]!));
     const more = /since="(\d+-\d+)"/.exec(out);
     if (!more) break;
     since = more[1]!;
   }
-  expect(seen).toEqual(Array.from({ length: 7 }, (_, i) => `Punkt ${i}`));
+  expect(seen).toEqual(Array.from({ length: 7 }, (_, i) => `Point ${i}`));
 });
 
 test("activity under: an item and everything below it, deleted items included", async () => {
-  await tool("create", { items: [{ title: "Kunde Ost", type: "Projekt" }, { title: "Kunde West", type: "Projekt" }] });
-  await tool("create", { items: [{ title: "Spezifikation", parents: ["Kunde Ost"] }, { title: "Westnotiz", parents: ["Kunde West"] }] });
-  await tool("create", { items: [{ title: "Detail", parents: ["Spezifikation"] }, { title: "Alt", parents: ["Kunde Ost"] }] });
+  await tool("create", { items: [{ title: "Client East", type: "Projekt" }, { title: "Client West", type: "Projekt" }] });
+  await tool("create", { items: [{ title: "Specification", parents: ["Client East"] }, { title: "West note", parents: ["Client West"] }] });
+  await tool("create", { items: [{ title: "Detail", parents: ["Specification"] }, { title: "Old", parents: ["Client East"] }] });
   const cursor = /cursor: (\d+-\d+)/.exec((await tool("activity", { days: 1 })).text)![1]!;
   await Bun.sleep(2);
-  edit(TIM, idOf("Detail"), "tief unten\n");
-  edit(TIM, idOf("Westnotiz"), "woanders\n");
-  await tool("delete", { ref: "Alt" });
-  const out = (await tool("activity", { since: cursor, under: "Kunde Ost" })).text;
+  edit(TIM, idOf("Detail"), "deep down\n");
+  edit(TIM, idOf("West note"), "elsewhere\n");
+  await tool("delete", { ref: "Old" });
+  const out = (await tool("activity", { since: cursor, under: "Client East" })).text;
   expect(out).toContain('updated "Detail"');
-  expect(out).toContain('deleted "Alt"');
-  expect(out).not.toContain("Westnotiz");
-  expect(out).toContain('under "Kunde Ost"');
+  expect(out).toContain('deleted "Old"');
+  expect(out).not.toContain("West note");
+  expect(out).toContain('under "Client East"');
 });
 
 test("activity by: people, agents, others, a name", async () => {
-  await tool("create", { items: [{ title: "Gemeinsam", body: "x\n" }] });
-  const id = idOf("Gemeinsam");
-  edit(TIM, id, "x\nvon Tim\n");
-  edit(ANNA, id, "x\nvon Tim\nvon Anna\n");
+  await tool("create", { items: [{ title: "Shared", body: "x\n" }] });
+  const id = idOf("Shared");
+  edit(TIM, id, "x\nby Tim\n");
+  edit(ANNA, id, "x\nby Tim\nby Anna\n");
   const by = async (who: string) => (await tool("activity", { days: 1, by: who, diff: false })).text;
   const people = await by("people");
   expect(people).toContain("· Tim ·");
@@ -183,68 +183,68 @@ test("activity by: people, agents, others, a name", async () => {
 });
 
 test("history: the list, one version, and diffs between versions or to now", async () => {
-  await tool("create", { items: [{ title: "Leitfaden", body: "Schritt 1\n" }] });
-  const id = idOf("Leitfaden");
-  edit(TIM, id, "Schritt 1\nSchritt 2\n");
-  edit(ANNA, id, "Schritt 1\nSchritt 2 genauer\n");
-  const list = (await tool("history", { ref: "Leitfaden" })).text;
-  expect(list).toContain('3 version(s) of the text of "Leitfaden"');
+  await tool("create", { items: [{ title: "Guide", body: "Step 1\n" }] });
+  const id = idOf("Guide");
+  edit(TIM, id, "Step 1\nStep 2\n");
+  edit(ANNA, id, "Step 1\nStep 2 in detail\n");
+  const list = (await tool("history", { ref: "Guide" })).text;
+  expect(list).toContain('3 version(s) of the text of "Guide"');
   expect(list).toMatch(/#3 · .* · Anna · \d+ characters · \+1 −1 line\(s\)/);
   expect(list).toMatch(/#1 · .* · mcp for Kai · /);
   expect(list).toContain("The text now is version 3.");
-  expect((await tool("history", { ref: id, version: 1 })).text).toEndWith("\n\nSchritt 1\n");
+  expect((await tool("history", { ref: id, version: 1 })).text).toEndWith("\n\nStep 1\n");
   const d = (await tool("history", { ref: id, from: 1, to: 2 })).text;
   expect(d).toContain("#1 → #2, +1 −0 line(s)");
-  expect(d).toContain("+Schritt 2");
+  expect(d).toContain("+Step 2");
   const toNow = (await tool("history", { ref: id, from: 2 })).text;
   expect(toNow).toContain("#2 → the text now");
-  expect(toNow).toContain("-Schritt 2\n+Schritt 2 genauer");
+  expect(toNow).toContain("-Step 2\n+Step 2 in detail");
   expect((await tool("history", { ref: id, version: 9 })).error).toBe(true);
   // an item whose text never changed
-  await tool("create", { items: [{ title: "Ruhig", body: "bleibt\n" }] });
-  expect((await tool("history", { ref: "Ruhig" })).text).toContain("has no versions yet");
+  await tool("create", { items: [{ title: "Quiet", body: "stays\n" }] });
+  expect((await tool("history", { ref: "Quiet" })).text).toContain("has no versions yet");
 });
 
 test("restoring a version is a change of its own: a new version, in the activity, undoable", async () => {
-  await tool("create", { items: [{ title: "Vertragsnotiz", body: "Fassung A\n" }] });
-  const id = idOf("Vertragsnotiz");
-  edit(ANNA, id, "Fassung B\n");
+  await tool("create", { items: [{ title: "Contract note", body: "Version A\n" }] });
+  const id = idOf("Contract note");
+  edit(ANNA, id, "Version B\n");
   const [a] = s.versions(id);
   // what the app does: write the old text as a new change, in its own step
   const step = s.step(TIM, (st) => (s.change(id, TIM, (d) => (replaceBody(d, s.versionText(a!.id)!), touch(d))), st));
   s.flush();
-  expect(s.records.get(id)!.body).toBe("Fassung A\n");
+  expect(s.records.get(id)!.body).toBe("Version A\n");
   expect(s.versions(id).map((v) => v.origin)).toEqual(["agent:mcp;u=u0;n=Kai", ANNA, TIM]);
   const restored = s.events({ doc: id, limit: 1 })[0]!;
   expect(restored).toMatchObject({ origin: TIM, step });
   expect(restored.changes.find((c) => c.field === "body")).toMatchObject({ diff: true });
-  expect(s.eventText(restored.id)).toMatchObject({ before: "Fassung B\n", after: "Fassung A\n", from: 2, to: 3 });
+  expect(s.eventText(restored.id)).toMatchObject({ before: "Version B\n", after: "Version A\n", from: 2, to: 3 });
   // undo brings B back, as one more version
   const r = undoStep(s, step, TIM);
   expect(r.changed).toEqual([id]);
-  expect(s.records.get(id)!.body).toBe("Fassung B\n");
+  expect(s.records.get(id)!.body).toBe("Version B\n");
   expect(s.versions(id).length).toBe(4);
-  expect(s.versionText(s.versions(id).at(-1)!.id)).toBe("Fassung B\n");
+  expect(s.versionText(s.versions(id).at(-1)!.id)).toBe("Version B\n");
   const out = (await tool("activity", { days: 1, ref: id })).text;
   expect(out).toContain("undid a step");
 });
 
 test("what an activity entry changed: the versions before and after it", async () => {
-  await tool("create", { items: [{ title: "Über HTTP", body: "eins\n" }] });
-  const id = idOf("Über HTTP");
-  edit(TIM, id, "eins\nzwei\n");
+  await tool("create", { items: [{ title: "About HTTP", body: "one\n" }] });
+  const id = idOf("About HTTP");
+  edit(TIM, id, "one\ntwo\n");
   const ev = s.events({ doc: id, limit: 1 })[0]!;
-  expect(s.eventText(ev.id)).toEqual({ doc: id, before: "eins\n", after: "eins\nzwei\n", from: 1, to: 2 });
+  expect(s.eventText(ev.id)).toEqual({ doc: id, before: "one\n", after: "one\ntwo\n", from: 1, to: 2 });
   const [v1] = s.versions(id);
-  expect(s.versionText(v1!.id, "andere-id")).toBeUndefined();
+  expect(s.versionText(v1!.id, "other-id")).toBeUndefined();
   // an entry that kept no version (the creation) has nothing to show
   const created = s.events({ doc: id, limit: 5 }).find((e) => e.kind === "created")!;
   expect(s.eventText(created.id)).toBeUndefined();
 });
 
 test("edits that keep the length still show their diff when folded into one entry", async () => {
-  await tool("create", { items: [{ title: "Tier", body: "cat\n" }] });
-  const id = idOf("Tier");
+  await tool("create", { items: [{ title: "Animal", body: "cat\n" }] });
+  const id = idOf("Animal");
   typing(TIM, id, ["bat\n", "bar\n"]);
   const ev = s.events({ doc: id, limit: 1 })[0]!;
   expect(ev.changes.find((c) => c.field === "body")).toMatchObject({ diff: true });
@@ -252,18 +252,18 @@ test("edits that keep the length still show their diff when folded into one entr
 });
 
 test("activity without since says how to get the older entries a limit cut off", async () => {
-  await tool("create", { items: Array.from({ length: 4 }, (_, i) => ({ title: `Eintrag ${i}` })) });
+  await tool("create", { items: Array.from({ length: 4 }, (_, i) => ({ title: `Entry ${i}` })) });
   const out = (await tool("activity", { days: 1, limit: 2 })).text;
   expect(out).toMatch(/More, older changes than these: raise limit, or go through all of them oldest first with since="\d{4}-/);
 });
 
 test("a deleted item's activity and subtree stay readable by id", async () => {
-  await tool("create", { items: [{ title: "Altprojekt", type: "Projekt" }] });
-  await tool("create", { items: [{ title: "Unterpunkt", parents: ["Altprojekt"] }] });
-  const id = idOf("Altprojekt");
-  await tool("delete", { ref: "Altprojekt", children: "trash" });
+  await tool("create", { items: [{ title: "Old project", type: "Projekt" }] });
+  await tool("create", { items: [{ title: "Subitem", parents: ["Old project"] }] });
+  const id = idOf("Old project");
+  await tool("delete", { ref: "Old project", children: "trash" });
   const out = await tool("activity", { days: 1, under: id });
   expect(out.error).toBe(false);
-  expect(out.text).toContain('created "Unterpunkt"');
-  expect(out.text).toContain('deleted "Altprojekt"');
+  expect(out.text).toContain('created "Subitem"');
+  expect(out.text).toContain('deleted "Old project"');
 });

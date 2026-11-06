@@ -74,7 +74,7 @@ test("sign-up by code follows the policy: no code for a stranger, the invite joi
   const { accounts, withCode } = await setUp("invite");
   try {
     const first = (await (await withCode("owner@example.org"))!.json()) as { user: { id: string } };
-    const space = accounts.createWorkspace(first.user.id, "Persönlich");
+    const space = accounts.createWorkspace(first.user.id, "Personal");
     // without an invite no code is sent to an address without an account
     expect(await withCode("stranger@example.org")).toBeUndefined();
     expect(accounts.userCount()).toBe(1);
@@ -98,7 +98,7 @@ test("a user Better Auth would create without the right is refused (OAuth, codes
 test("an existing password account signs in by code too", async () => {
   const { accounts, withCode } = await setUp("open");
   try {
-    const signed = await accounts.signUp({ name: "Pw", email: "pw@example.org", password: "geheim12345" });
+    const signed = await accounts.signUp({ name: "Pw", email: "pw@example.org", password: "secret12345" });
     const res = await withCode("pw@example.org");
     expect(((await res!.json()) as { user: { id: string } }).user.id).toBe(signed.user.id);
   } finally { accounts.db.close(); }
@@ -107,8 +107,8 @@ test("an existing password account signs in by code too", async () => {
 test("with passwords off there is no password sign-up", async () => {
   const { accounts, call } = await setUp("open", { password: false });
   try {
-    await expect(accounts.signUp({ name: "Pw", email: "pw@example.org", password: "geheim12345" })).rejects.toThrow("passwords off");
-    expect((await call("/sign-in/email", { email: "pw@example.org", password: "geheim12345" })).status).toBeGreaterThanOrEqual(400);
+    await expect(accounts.signUp({ name: "Pw", email: "pw@example.org", password: "secret12345" })).rejects.toThrow("passwords off");
+    expect((await call("/sign-in/email", { email: "pw@example.org", password: "secret12345" })).status).toBeGreaterThanOrEqual(400);
   } finally { accounts.db.close(); }
 });
 
@@ -118,7 +118,7 @@ test("an account without a password is deleted after a recent sign-in only", asy
     const { token, user } = (await (await withCode("me@example.org"))!.json()) as { token: string; user: { id: string } };
     const session = (await accounts.session(token))!;
     await expect(accounts.deleteAccount(user.id, undefined, session.created - 11 * 60_000)).rejects.toThrow("sign in again");
-    await expect(accounts.deleteAccount(user.id, "geheim12345", session.created)).rejects.toThrow("invalid password");
+    await expect(accounts.deleteAccount(user.id, "secret12345", session.created)).rejects.toThrow("invalid password");
     await accounts.deleteAccount(user.id, undefined, session.created);
     expect(accounts.userCount()).toBe(0);
   } finally { accounts.db.close(); }
@@ -142,15 +142,15 @@ test("the CLI gives an account a new password, also one that never had one", asy
   try {
     await withCode("me@example.org");
   } finally { accounts.db.close(); }
-  await setPassword(dir, "Me@example.org", "neues-passwort");
+  await setPassword(dir, "Me@example.org", "new-password");
   const again = new Accounts(dir, { secret: SECRET, baseURL: "http://localhost:8480", policy: "open" });
   try {
-    const ok = await again.auth.api.signInEmail({ body: { email: "me@example.org", password: "neues-passwort" } });
+    const ok = await again.auth.api.signInEmail({ body: { email: "me@example.org", password: "new-password" } });
     expect(ok.user.email).toBe("me@example.org");
     expect(await again.hasPassword(ok.user.id)).toBe(true);
   } finally { again.db.close(); }
-  await expect(setPassword(dir, "nobody@example.org", "neues-passwort")).rejects.toThrow("No account");
-  await expect(setPassword(dir, "me@example.org", "kurz")).rejects.toThrow("8 to 128");
+  await expect(setPassword(dir, "nobody@example.org", "new-password")).rejects.toThrow("No account");
+  await expect(setPassword(dir, "me@example.org", "short")).rejects.toThrow("8 to 128");
 });
 
 test("a code proving an unproven address drops the passkeys, agent tokens, invite links and connections someone else may have made; a proven account keeps its own", async () => {
@@ -160,9 +160,9 @@ test("a code proving an unproven address drops the passkeys, agent tokens, invit
   const keys = (userId: string) => (accounts.db.query("SELECT id FROM passkey WHERE userId = ?").all(userId) as { id: string }[]).map((r) => r.id);
   try {
     // someone signs up with the victim's address and a password, and adds a passkey
-    const squatter = await accounts.signUp({ name: "Eve", email: "victim@example.org", password: "geheim12345" });
+    const squatter = await accounts.signUp({ name: "Eve", email: "victim@example.org", password: "secret12345" });
     addPasskey(squatter.user.id, "eve-key");
-    const space = accounts.createWorkspace(squatter.user.id, "Persönlich").id;
+    const space = accounts.createWorkspace(squatter.user.id, "Personal").id;
     accounts.mcpToken(space, squatter.user.id);
     accounts.createInvite(space, squatter.user.id);
     const revoked: string[] = [];
@@ -184,7 +184,7 @@ test("a code proving an unproven address drops the passkeys, agent tokens, invit
 
 test("where codes are on, an account with a password proves its address before it exists", async () => {
   const { accounts, call, codes } = await setUp("open");
-  const me = { name: "Me", email: "me@example.org", password: "geheim12345" };
+  const me = { name: "Me", email: "me@example.org", password: "secret12345" };
   try {
     // the details first: nothing is made yet, the page has a code sent
     expect(await accounts.signUpWithCode(me)).toEqual({ verify: true });
@@ -199,7 +199,7 @@ test("where codes are on, an account with a password proves its address before i
     expect((await call("/sign-in/email", { email: me.email, password: me.password })).status).toBe(200);
     // the address is taken now; too short a password is said before any code
     await expect(accounts.signUpWithCode(me)).rejects.toThrow("exists");
-    await expect(accounts.signUpWithCode({ ...me, email: "other@example.org", password: "kurz" })).rejects.toThrow("password too short");
+    await expect(accounts.signUpWithCode({ ...me, email: "other@example.org", password: "short" })).rejects.toThrow("password too short");
   } finally { accounts.db.close(); }
 });
 
@@ -207,7 +207,7 @@ test("trust-emails: accounts from before codes keep their password through their
   const { accounts, withCode } = await setUp("open");
   const dir = accounts.dataDir;
   try {
-    const old = await accounts.signUp({ name: "Old", email: "old@example.org", password: "geheim12345" });
+    const old = await accounts.signUp({ name: "Old", email: "old@example.org", password: "secret12345" });
     expect(trustEmails(dir)).toBe(1);
     expect(trustEmails(dir)).toBe(0);
     expect((await withCode("old@example.org"))!.status).toBe(200);

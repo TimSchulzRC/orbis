@@ -12,13 +12,14 @@ afterAll(removeTempDirs);
 let s: Store;
 let ops: Ops;
 const A = "agent:test";
+// the store is set up in German: shipped names ("Projekt", "Priorität", "Hoch") and query words stay German
 beforeEach(() => ({ s, ops } = setupStore("obtion-typerefs-")));
 const tabsOf = (id: string) => typeTabs(s.records.get(id)!, "de");
 const prio = () => s.index().types.get(SYS.project)!.schema.properties.find((p) => p.name === "Priorität")!;
 
 /** A page with a query block; returns its id. */
 function page(where: object, columns: string[]): string {
-  const id = ops.create({ title: "Übersicht " + JSON.stringify(where) }, A).id;
+  const id = ops.create({ title: "Overview " + JSON.stringify(where) }, A).id;
   const def = { where, columns, sort: [{ key: "Priorität" }] };
   s.change(id, A, (d) => replaceBody(d, "Text\n\n" + queryFence(blockSource(def as never)) + "\n"));
   s.flush();
@@ -30,14 +31,14 @@ test("renaming a property: the type's default views, pages on the type and its f
   expect(s.records.get(SYS.project)!.schema!.views).toBeDefined(); // setup writes the shipped views into the type
   const onType = page({ type: SYS.project }, ["Status", "Priorität"]);
   const anyType = page({ tag: "x" }, ["Priorität"]); // the task's "Priorität" may be meant
-  ops.updateType("Projekt", { change_properties: [{ property: "Priorität", name: "Wichtigkeit" }] }, A);
+  ops.updateType("Projekt", { change_properties: [{ property: "Priorität", name: "Importance" }] }, A);
   s.flush();
   const tabs = tabsOf(SYS.project);
-  expect(tabs.find((t) => t.id === "v_all")!.columns).toContain("Wichtigkeit");
+  expect(tabs.find((t) => t.id === "v_all")!.columns).toContain("Importance");
   expect(tabs.flatMap((t) => t.columns ?? [])).not.toContain("Priorität");
-  expect(blockOf(onType)).toMatchObject({ columns: ["Status", "Wichtigkeit"], sort: [{ key: "Wichtigkeit" }] });
+  expect(blockOf(onType)).toMatchObject({ columns: ["Status", "Importance"], sort: [{ key: "Importance" }] });
   expect(blockOf(anyType).columns).toEqual(["Priorität"]);
-  expect(s.records.get(anyType)!.body.startsWith("Text\n\n```abfrage")).toBe(true);
+  expect(s.records.get(anyType)!.body.startsWith("Text\n\n```query")).toBe(true);
   // the task's views name its own "Priorität" and stay
   expect(tabsOf(SYS.task).find((t) => t.id === "v_priority")!.group).toBe("Priorität");
 });
@@ -58,17 +59,17 @@ test("removing a property: it leaves views, filters, grouping, the template and 
 test("stored views change tab by tab", () => {
   ops.updateType("Projekt", { views: [{ name: "A", query: "spalten:Priorität,Status" }, { name: "B", query: "spalten:Status" }] }, A);
   s.flush();
-  ops.updateType("Projekt", { change_properties: [{ property: "Priorität", name: "Wichtigkeit" }] }, A);
+  ops.updateType("Projekt", { change_properties: [{ property: "Priorität", name: "Importance" }] }, A);
   s.flush();
-  expect(tabsOf(SYS.project).map((t) => [t.name, t.columns])).toEqual([["A", ["Wichtigkeit", "Status"]], ["B", ["Status"]]]);
+  expect(tabsOf(SYS.project).map((t) => [t.name, t.columns])).toEqual([["A", ["Importance", "Status"]], ["B", ["Status"]]]);
 });
 
 test("renaming a type: relation targets that name it follow", () => {
   const blocked = () => s.index().types.get(SYS.task)!.schema.properties.find((p) => p.id === BLOCKED_BY)!.target;
   expect(blocked()).toBe("typ:Task | typ:Projekt");
-  ops.updateType("Projekt", { name: "Vorhaben" }, A);
+  ops.updateType("Projekt", { name: "Venture" }, A);
   s.flush();
-  expect(blocked()).toBe("typ:Task | typ:Vorhaben");
+  expect(blocked()).toBe("typ:Task | typ:Venture");
 });
 
 test("changing a property's kind: an option becomes its name as text and back", () => {
