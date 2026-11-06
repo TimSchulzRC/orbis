@@ -1,7 +1,7 @@
 // One page for every information. Types change the properties and which sections appear, never
 // the layout.
 import { Input } from "../components/ui/input";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { EditorView } from "@codemirror/view";
 import { Trash2, Plus, AlertTriangle, ImagePlus, ListFilter, Pin, PinOff, FilePlus, FolderInput, ArrowRightLeft, History, Bot } from "lucide-react";
 import { type Item, META_TYPE, titleKey } from "@obtion/core/model";
@@ -12,7 +12,8 @@ import { hasUpdates, progressSpec } from "@obtion/core/traits";
 import { useRepo, useIndex, itemHref, leavePage, openItem, setParams, showTitle, useDocumentTitle } from "../hooks";
 import { repo } from "../repo";
 import { useT, tr, getLang, titleOf } from "../i18n";
-import { Editor, insertFilesAtCursor } from "../ui/Editor";
+import { insertFilesAtCursor } from "../ui/Editor";
+import { NoteEditor } from "../ui/NoteEditor";
 import { Button, Dialog, MenuItem, Popover, MoreMenu, PagePlaceholder } from "../ui/primitives";
 import { Tip } from "../components/ui/tooltip";
 import { ItemIcon, TypeChip, TypeGlyph } from "../ui/item-look";
@@ -23,16 +24,15 @@ import { Below, Updates } from "../ui/Sections";
 import { AddRef, Crumbs, LinksMenu, LinksRow, PageFooter, TrashBanner, pinnedRefs } from "../ui/PageParts";
 import { PlacePicker } from "../ui/Picker";
 import { pluralOf } from "@obtion/core/plural";
-import { queryBlocks, insertQueryBlock } from "../ui/QueryBlock";
+import { insertQueryBlock } from "../ui/QueryBlock";
 import { FilePage } from "./FilePage";
 import { insertDrawing } from "../ui/editor/slash";
 import { DRAWING_ICON } from "../ui/icons";
 import { TitleField } from "../ui/TitleField";
 import { HistoryDialog } from "../ui/History";
 import { TypePage } from "./TypePage";
-import { createAndOpen, rememberPlace } from "../actions";
+import { createAndOpen, isBlank, rememberPlace } from "../actions";
 import { INBOX_ICON, NOTE_ICON } from "../ui/icons";
-import { toolbarExtract } from "../ui/editor/toolbar";
 import { movedItems } from "@obtion/core/transfer";
 import { useAccounts } from "../accounts";
 import { moveTo } from "../ui/Spaces";
@@ -86,11 +86,6 @@ function DrawingInNote({ item }: { item: Item }) {
 
 const openItems = new Set<string>();
 
-function isBlank(item: Item) {
-  const ix = repo.index();
-  return !item.title.trim() && !item.body.trim() && !item.rules.trim() && !item.tags.length && !item.refs.length && !item.updates.length && !ix.childrenOf(item.id).length && !ix.backlinks(item.id).length && !Object.keys(item.extra).length;
-}
-
 function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
   const repo = useRepo();
   // "?new=1" is for opening it once: gone from the address, so a reload or Back later does not take it as new
@@ -99,7 +94,6 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
   const ix = useIndex();
   const { t } = useT();
   useDocumentTitle(titleOf(item, t));
-  const doc = useMemo(() => repo.getDoc(item.id), [item.id]);
   const schema = ix.schemaOf(item);
   const [view, setView] = useState<EditorView | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -119,7 +113,7 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
       setTimeout(() => {
         if (openItems.has(item.id)) return;
         const current = repo.get(item.id);
-        if (current && !current.deleted && isBlank(current)) repo.remove(item.id);
+        if (current && !current.deleted && isBlank(current, repo.index())) repo.remove(item.id);
       }, 50);
     };
   }, [item.id, isNew]);
@@ -218,7 +212,7 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
       />
 
       {/* 2 · text */}
-      <PageText item={item} doc={doc} long={typeArea} isNew={isNew} onView={setView} hasMore={typeArea || ix.childrenOf(item.id).length > 0} />
+      <PageText item={item} long={typeArea} isNew={isNew} onView={setView} hasMore={typeArea || ix.childrenOf(item.id).length > 0} />
       <Input variant="bare" ref={fileInput} type="file" multiple className="hidden" onChange={(e) => view && insertFilesAtCursor(view, [...(e.target.files ?? [])])} />
 
       {/* a line between the text one writes and what the page adds below it;
@@ -253,9 +247,8 @@ function progressText(item: Item, ix: Index, done: number, total: number): strin
 const TALL_TEXT = 12 * 25 + 8;
 
 /** Zone 2. Long text on a page with its own list is cut to 8 lines until clicked. */
-function PageText({ item, doc, long, isNew, onView, hasMore }: { item: Item; doc: ReturnType<typeof repo.getDoc>; long: boolean; isNew: boolean; onView: (v: EditorView | null) => void; hasMore: boolean }) {
+function PageText({ item, long, isNew, onView, hasMore }: { item: Item; long: boolean; isNew: boolean; onView: (v: EditorView | null) => void; hasMore: boolean }) {
   const { t } = useT();
-  const schema = useIndex().schemaOf(item);
   const [expanded, setExpanded] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   const [tall, setTall] = useState(false);
@@ -271,15 +264,12 @@ function PageText({ item, doc, long, isNew, onView, hasMore }: { item: Item; doc
   return (
     <div className="relative mt-6" onFocus={() => setExpanded(true)}>
       <div ref={box} className={cut ? "max-h-[200px] overflow-hidden" : undefined}>
-        <Editor
-          doc={doc}
-          nodeId={item.id}
+        <NoteEditor
+          item={item}
           autoFocus={isNew && !!item.title}
           onView={onView}
-          extra={[queryBlocks(item.id), toolbarExtract.of(true)]}
           // room to start writing only while the text is empty and nothing else follows
           minHeight={item.body.trim() || hasMore ? "min-h-6" : "min-h-[30vh]"}
-          placeholder={t(schema ? "editor.placeholderTyped" : "editor.placeholder")}
         />
       </div>
       {cut && (

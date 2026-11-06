@@ -17,7 +17,6 @@ import { PageBoundary } from "./ui/ErrorBoundary";
 import { Sidebar, SpaceTree } from "./ui/Sidebar";
 import { StatusButton } from "./ui/StatusButton";
 import { CommandPalette } from "./ui/CommandPalette";
-import { CaptureSheet } from "./ui/Capture";
 import { ItemPage } from "./views/ItemPage";
 import { FilesPage } from "./views/Lists";
 import { Today } from "./views/Today";
@@ -84,7 +83,6 @@ function Main() {
   const wide = useDesktop();
   const [palette, setPalette] = useState<string | null>(null); // the query it opens with; null: closed
   const [menu, setMenu] = useState(false);
-  const [captureOpen, setCaptureOpen] = useState(false);
   useEffect(() => setMenu(false), [route.path]);
   // leaving the page closes the tray's panel, except for "#/inbox" and pages it was open at
   useEffect(syncShelf, [route.path]);
@@ -186,11 +184,11 @@ function Main() {
         <SignedOut />
         <TooNew />
         {/* pinned: main is only as tall as Today, the panel takes the rest */}
-        <main ref={main} tabIndex={-1} className={cn("@container min-h-0 outline-none", pinned ? "flex-initial" : "flex-1", isGraph ? "overflow-hidden" : "overflow-y-auto")}>
+        <main ref={main} tabIndex={-1} className={cn("@container min-h-0 outline-none", pinned ? "flex-initial" : "flex-1", isGraph ? "overflow-hidden" : "overflow-y-auto", tray && wide && !pinned && !isGraph && "pb-24")}>
           {/* keyed by workspace so a switch remounts the page on the other replica */}
           <PageBoundary key={`${global ? "" : active?.id}${route.path === "/inbox" || route.path === "/review" ? "/" : route.path}`}>{page}</PageBoundary>
         </main>
-        {tray && <Tray desktop={wide} pinned={pinned} onCapture={() => setCaptureOpen(true)} />}
+        {tray && <Tray desktop={wide} pinned={pinned} />}
         {!wide && <MobileNav />}
       </div>
 
@@ -203,7 +201,6 @@ function Main() {
           </MenuSheet>
         </Backdrop>
       )}
-      {captureOpen && <CaptureSheet onClose={() => setCaptureOpen(false)} />}
       <SettingsHost />
       <NewTypeHost />
       <TypeEditorHost />

@@ -1,4 +1,5 @@
-import { type ItemInit, initType, newId, titleKey } from "@obtion/core/model";
+import { type Item, type ItemInit, initType, newId } from "@obtion/core/model";
+import type { Index } from "@obtion/core/graph";
 import type { Repo } from "@obtion/sync";
 import { repo as current } from "./repo";
 import { freshColor } from "@obtion/core/palette";
@@ -11,31 +12,9 @@ export function createAndOpen(init: ItemInit, repo: Repo = current, space?: stri
   return id;
 }
 
-const MAX_TITLE = 100;
-
-/** "/buch Der Termin" picks the type by name prefix. Without type and parent it lands in the inbox. */
-export function capture(text: string, opts: { type?: string | null; parent?: string } = {}, repo: Repo = current): string | undefined {
-  let input = text.trim();
-  if (!input) return;
-  let type = opts.type ?? null;
-  const slash = /^\/(\S+)\s+/.exec(input);
-  if (slash) {
-    const ix = repo.index();
-    const want = titleKey(slash[1]!);
-    const hit = [...ix.types.values()].find((candidate) => titleKey(candidate.schema.name).startsWith(want));
-    if (hit) {
-      type = hit.id;
-      input = input.slice(slash[0].length);
-    }
-  }
-  const lines = input.split("\n");
-  const { text: firstLine, mentions } = extractMentions(lines[0]!.replace(/^#+\s*/, ""), repo);
-  const tooLong = firstLine.length > MAX_TITLE;
-  const title = tooLong ? firstLine.slice(0, MAX_TITLE - 3) + "…" : firstLine;
-  let body = lines.length > 1 || tooLong ? [firstLine, ...lines.slice(1)].join("\n") : "";
-  // mentions become [[links]], not parents, so the item stays in the inbox
-  if (mentions.length) body = (body ? body + "\n\n" : "") + mentions.map((m) => `[[${m}]]`).join(" · ");
-  return repo.create({ title, body, type, parents: opts.parent ? [opts.parent] : [] });
+/** Nothing written and nothing hangs on it: an item opened new and left so is discarded. */
+export function isBlank(item: Item, ix: Index): boolean {
+  return !item.title.trim() && !item.body.trim() && !item.rules.trim() && !item.tags.length && !item.refs.length && !item.updates.length && !ix.childrenOf(item.id).length && !ix.backlinks(item.id).length && !Object.keys(item.extra).length;
 }
 
 const RECENT = KEYS.recentPlaces;
@@ -60,28 +39,6 @@ export function recentPlaces(repo: Repo = current): string[] {
 export function rememberPlace(id: string) {
   const ids = [id, ...storedPlaces().filter((x) => x !== id)].slice(0, RECENT_KEPT);
   localStorage.setItem(RECENT, JSON.stringify(ids));
-}
-
-/** Only mentions of existing items count; one at the end of the line is removed from the text. */
-export function extractMentions(line: string, repo: Repo = current): { text: string; mentions: string[] } {
-  const ix = repo.index();
-  const mentions: string[] = [];
-  const text = line
-    .replace(/@([^@\n]+)/g, (m, name: string, offset: number) => {
-      const words = name.trim().split(/\s+/);
-      for (let n = words.length; n > 0; n--) {
-        const cand = words.slice(0, n).join(" ").replace(/[.,;:!?]+$/, "");
-        if (!ix.resolveTitle(cand)) continue;
-        mentions.push(cand);
-        const restWords = words.slice(n).join(" ");
-        const atEnd = !restWords && offset + m.length >= line.trimEnd().length;
-        return (atEnd ? "" : cand) + (restWords ? " " + restWords : "");
-      }
-      return m;
-    })
-    .replace(/\s+/g, " ")
-    .trim();
-  return { text: text || line.trim(), mentions };
 }
 
 export function createType(name: string, repo: Repo = current): string {

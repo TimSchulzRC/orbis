@@ -6,6 +6,7 @@ import { cleanup, render } from "vitest-browser-react";
 import { InboxPanel } from "../../packages/ui/src/views/Review";
 import type { Repo } from "@obtion/sync";
 import { setMeta } from "@obtion/core/model";
+import { queryFence } from "@obtion/core/query";
 import { workspace } from "./workspace";
 
 const panel = () =>
@@ -22,8 +23,8 @@ beforeEach(async () => {
 });
 afterEach(() => cleanup());
 
-const card = () => page.getByRole("article").getByRole("heading", { level: 2 });
-const titleNow = () => document.querySelector("main article h2")?.textContent?.trim() ?? "";
+const card = () => page.getByRole("article").getByRole("textbox", { name: "Titel" });
+const titleNow = () => document.querySelector<HTMLTextAreaElement>("main article textarea")?.value.trim() ?? "";
 /** Whether the list shows the entry under "Einsortiert" (and no longer among those waiting). */
 const sortedBelow = (title: string) => {
   const done = [...document.querySelectorAll("main section[aria-label=Einsortiert] li")].some((li) => li.textContent?.trim().startsWith(title));
@@ -72,38 +73,40 @@ describe('"Einsortiert"', () => {
 });
 
 describe("editing in the card", () => {
-  test('a click on the title edits it, the keys rest, "Fertig" ends it', async () => {
+  test("title and text are edited in place, no mode; typed there, a letter is no key of the panel", async () => {
     await expect.element(card()).toBeVisible();
     const title = titleNow();
-    await card().click({ position: { x: 3, y: 12 } });
-    const field = page.getByRole("article").getByRole("textbox").first();
-    await expect.element(field).toHaveFocus();
-    const hints = () => [...document.querySelectorAll<HTMLElement>("main kbd")].filter((k) => k.checkVisibility({ opacityProperty: true, visibilityProperty: true }));
-    expect(hints(), "the keys' hints hide").toHaveLength(0);
+    await card().click();
     await commands.keys("press", "Control+End");
     await commands.keys("type", " Xs"); // "s" is a letter here, not "später"
-    await page.getByRole("button", { name: "Fertig" }).click();
-    await expect.poll(titleNow).toBe(title + " Xs");
-    await expect.poll(() => hints().length, { message: "and come back after it" }).toBeGreaterThan(0);
-  });
-
-  test("a click elsewhere in the panel (its head) ends editing", async () => {
-    await expect.element(card()).toBeVisible();
-    await page.getByRole("button", { name: "Bearbeiten" }).click();
-    await expect.poll(() => document.querySelector("main article textarea")).not.toBeNull();
     await page.getByRole("heading", { level: 2, name: "Einsortieren" }).click();
-    await expect.poll(() => document.querySelector("main article textarea")).toBeNull();
+    await expect.poll(titleNow).toBe(title + " Xs");
+    expect(page.getByRole("button", { name: "Bearbeiten" }).query()).toBeNull();
+    expect(document.querySelector("main section[aria-label=Einsortiert]"), "nothing sorted").toBeNull();
   });
 
-  test('"Bearbeiten" puts the caret into the text; Esc ends it and keeps what was typed', async () => {
+  test("Esc leaves the text and keeps what was typed; the keys are the panel's again", async () => {
     await expect.element(card()).toBeVisible();
-    await page.getByRole("button", { name: "Bearbeiten" }).click();
+    const title = titleNow();
+    await page.getByRole("article").getByRole("textbox").nth(1).click();
     await expect.poll(() => document.querySelector("main article .cm-editor.cm-focused")).not.toBeNull();
+    await commands.keys("press", "Control+End");
     await commands.keys("type", " Ys");
     await new Promise((r) => setTimeout(r, 300)); // the completions looked and found nothing (else Esc closes them first)
     await commands.keys("press", "Escape");
-    await expect.poll(() => document.querySelector("main article textarea")).toBeNull();
+    await expect.poll(() => document.querySelector("main article .cm-editor.cm-focused")).toBeNull();
     await expect.element(page.getByRole("article").getByText(/ Ys$/)).toBeVisible();
+    await commands.keys("press", "s");
+    await expect.poll(() => sortedBelow(title)).toBe(true);
+  });
+});
+
+describe("the card's text", () => {
+  test("a query shows its results, as on the note's page", async () => {
+    await expect.element(card()).toBeVisible();
+    const id = repo.index().live.find((i) => i.title === titleNow())!.id;
+    repo.getDoc(id).getText("body").insert(0, queryFence('{"where":{"type":"task"}}') + "\n");
+    await expect.poll(() => document.querySelector("main article .cm-queryblock")).not.toBeNull();
   });
 });
 

@@ -31,7 +31,7 @@ beforeEach(async () => {
 afterEach(() => cleanup());
 
 const rows = () => page.getByRole("listitem").filter({ has: page.getByRole("button", { name: /.+/ }) });
-const titleNow = () => document.querySelector("article h2")?.textContent?.trim() ?? "";
+const titleNow = () => document.querySelector<HTMLTextAreaElement>("article textarea")?.value.trim() ?? "";
 
 test("a row: workspace, title, text; on hover its buttons take the corner from the age", async () => {
   const row = rows().first();
@@ -75,6 +75,15 @@ test("pinned, the keys are the panel's only while the focus is in it", async () 
   page.getByRole("article").element().closest<HTMLElement>("[data-shelf-panel]")!.focus();
   await commands.keys("press", "a");
   await expect.poll(titleNow, { message: "in the panel it does" }).not.toBe(first);
+});
+
+test("pinned, Esc in the title leaves it and the keys are the panel's again", async () => {
+  await expect.poll(titleNow).not.toBe("");
+  const first = titleNow();
+  await page.getByRole("article").getByRole("textbox", { name: "Titel" }).click();
+  await commands.keys("press", "Escape");
+  await commands.keys("press", "a");
+  await expect.poll(titleNow).not.toBe(first);
 });
 
 test("a button's label shows quickly, centred above it", async () => {
