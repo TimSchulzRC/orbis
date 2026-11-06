@@ -354,6 +354,12 @@ export function readSchema(doc: Y.Doc): TypeSchema {
   };
 }
 
+/**
+ * Bump when readItem returns something else for the same document. Server and devices store
+ * readItem's result next to each document's state, and read every document again once this changes.
+ */
+export const RECORD_VERSION = 1;
+
 export function readItem(id: string, doc: Y.Doc): Item | null {
   const meta = metaMap(doc);
   const kind = meta.get("kind");
