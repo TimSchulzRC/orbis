@@ -26,6 +26,12 @@ export const KEYS = {
   tab: (key: string) => `obtion.tab.${key}`,
   /** folded groups of a table */
   fold: (key: string) => `obtion.fold.${key}`,
+  /** when a page's updates were last read on this device (not synced): newer ones by agents count as new */
+  updatesSeen: (item: string) => `obtion.updates.seen.${item}`,
+  /** an update being written on a page, until it is posted */
+  updatesDraft: (item: string) => `obtion.updates.draft.${item}`,
+  /** whether the updates panel shows those of the pages below too (this device) */
+  updatesWithBelow: "obtion.updates.withBelow",
   /** opened rows: sub-items of a table, parts of a page */
   open: (key: string) => `obtion.open.${key}`,
 };

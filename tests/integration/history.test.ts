@@ -6,7 +6,7 @@ import type { Ops } from "@obtion/server/ops";
 import { undoStep } from "@obtion/server/undo";
 import { Backups } from "@obtion/server/backup";
 import { Database } from "bun:sqlite";
-import { replaceBody, touch } from "@obtion/core/model";
+import { putBackUpdate, removeUpdate, replaceBody, touch } from "@obtion/core/model";
 import { personOrigin, agentOrigin } from "@obtion/core/origin";
 import { join } from "node:path";
 
@@ -266,4 +266,34 @@ test("a deleted item's activity and subtree stay readable by id", async () => {
   expect(out.error).toBe(false);
   expect(out.text).toContain('created "Unterpunkt"');
   expect(out.text).toContain('deleted "Altprojekt"');
+});
+
+test("an update in the activity carries its id, so the app can show that one", async () => {
+  await tool("create", { items: [{ title: "Relaunch", type: "Projekt" }] });
+  const id = idOf("Relaunch");
+  expect((await tool("add_update", { ref: id, text: "Kickoff war gut." })).error).toBe(false);
+  const update = s.index().get(id)!.updates[0]!;
+  const ev = s.events({ doc: id, limit: 1 })[0]!;
+  expect(ev.changes.find((c) => c.field === "update")).toEqual({ field: "update", to: "Kickoff war gut.", id: update.id });
+});
+
+test("a deleted update leaves the list but stays in the activity, and comes back on undo", async () => {
+  await tool("create", { items: [{ title: "Relaunch", type: "Projekt" }] });
+  const id = idOf("Relaunch");
+  await tool("add_update", { ref: id, text: "Erstes." });
+  await tool("add_update", { ref: id, text: "Zweites." });
+  const [first] = s.index().get(id)!.updates;
+  let gone: ReturnType<typeof removeUpdate>;
+  s.step(TIM, () => s.change(id, TIM, (d) => void (gone = removeUpdate(d, first!.id))));
+  s.flush();
+  expect(s.index().get(id)!.updates.map((u) => u.text)).toEqual(["Zweites."]);
+  const deleted = s.events({ doc: id, limit: 1 })[0]!;
+  expect(deleted.changes).toEqual([{ field: "update", from: "Erstes.", id: first!.id }]);
+  // the entries that wrote it are still there
+  expect(s.events({ doc: id, limit: 10 }).some((e) => e.changes.some((c) => c.field === "update" && c.to === "Erstes."))).toBe(true);
+  // put back at its place, with its id
+  s.step(TIM, () => s.change(id, TIM, (d) => putBackUpdate(d, gone!.entry, gone!.at)));
+  s.flush();
+  expect(s.index().get(id)!.updates.map((u) => u.id)).toEqual([first!.id, s.index().get(id)!.updates[1]!.id]);
+  expect(s.index().get(id)!.updates[0]!.text).toBe("Erstes.");
 });

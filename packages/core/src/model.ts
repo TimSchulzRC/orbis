@@ -676,6 +676,23 @@ export function appendUpdate(doc: Y.Doc, entry: Omit<UpdateEntry, "id"> & { id?:
   doc.getArray<UpdateEntry>("updates").push([{ ...entry, id: entry.id ?? newId() } as UpdateEntry]);
 }
 
+/** Takes an update out; returns it and where it was, to put it back. */
+export function removeUpdate(doc: Y.Doc, id: string): { entry: UpdateEntry; at: number } | undefined {
+  const arr = doc.getArray<UpdateEntry>("updates");
+  const at = arr.toArray().findIndex((u) => u?.id === id);
+  if (at < 0) return undefined;
+  const entry = arr.get(at);
+  arr.delete(at, 1);
+  return { entry, at };
+}
+
+/** Puts a removed update back where it was (or at the end, if the list got shorter). */
+export function putBackUpdate(doc: Y.Doc, entry: UpdateEntry, at: number) {
+  const arr = doc.getArray<UpdateEntry>("updates");
+  if (arr.toArray().some((u) => u?.id === entry.id)) return;
+  arr.insert(Math.min(at, arr.length), [entry]);
+}
+
 export function setView(doc: Y.Doc, viewId: string, def: ViewDef | null) {
   const views = doc.getMap<ViewDef>("views");
   if (def) views.set(viewId, def);

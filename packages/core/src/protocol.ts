@@ -44,6 +44,8 @@ export interface FieldChange {
   to?: unknown;
   /** a body change whose text versions are kept: GET /api/history?event=<id> shows the diff */
   diff?: boolean;
+  /** "update": the update's id (older entries have none); `to` its text when written, `from` when deleted */
+  id?: string;
 }
 
 export interface ActivityEvent {

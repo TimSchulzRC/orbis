@@ -1,17 +1,12 @@
 // One log for all workspaces, with its own workspace choice independent of the sidebar's.
-import { useEffect, useMemo, useState } from "react";
-import { ChevronRight } from "lucide-react";
-import type { EventText } from "@obtion/core/api";
-import { textDiff } from "@obtion/core/diff";
-import { DiffView, LineCount } from "../ui/DiffView";
+import { useEffect, useState } from "react";
 import { spaceCall, useAccounts } from "../accounts";
 import { SpaceFilter, SpaceScope, useReplicas } from "../ui/Spaces";
-import type { ActivityEvent, FieldChange } from "@obtion/core/protocol";
-import { type Item, META_TYPE, optionNames, type Value } from "@obtion/core/model";
-import type { Index } from "@obtion/core/graph";
+import type { ActivityEvent } from "@obtion/core/protocol";
+import { META_TYPE } from "@obtion/core/model";
 import { useRepo, useItemHref, useDocumentTitle } from "../hooks";
 import { useT, titleOf } from "../i18n";
-import type { T } from "@obtion/core/i18n";
+import { BodyDiff, describe } from "../ui/changes";
 import { Button, Empty, Seg } from "../ui/primitives";
 import { ItemIcon, RelTime } from "../ui/item-look";
 import { cn } from "../lib/utils";
@@ -19,102 +14,6 @@ import { byMe, who } from "../ui/actor";
 
 /** Rows fetched per page of the log. */
 const PAGE = 60;
-
-/** The property `id` of the item's type, also when it was removed since. */
-function propDef(ix: Index, item: Item | undefined, id: string) {
-  const schema = ix.schemaOf(item);
-  return schema?.properties.find((p) => p.id === id) ?? schema?.removedProperties.find((p) => p.id === id);
-}
-
-function describe(c: FieldChange, item: Item | undefined, ix: Index, t: T): string {
-  const title = (id: string) => ix.get(id)?.title ?? ix.all.get(id)?.title ?? "?";
-  const list = (x: unknown) => ((x as string[]) ?? []).map(title).join(", ");
-  const added = (c.to as string[]) ?? [];
-  const removed = (c.from as string[]) ?? [];
-  // what was added, what was removed (each only if any)
-  const addedRemoved = (plus: string, minus: string) => [added.length && plus, removed.length && minus].filter(Boolean).join(", ");
-  if (c.field.startsWith("p:")) {
-    const prop = propDef(ix, item, c.field.slice(2));
-    const show = (x: unknown) => {
-      if (x === undefined || x === null || x === "") return "–";
-      if (prop?.options) return optionNames(prop, x as Value).join(", ");
-      return String(x);
-    };
-    return `${prop?.name ?? c.field.slice(2)}: ${show(c.from)} → ${show(c.to)}`;
-  }
-  if (c.field.startsWith("x:")) {
-    const show = (x: unknown) => (x === undefined ? "–" : Array.isArray(x) ? x.join(", ") : String(x));
-    return `${c.field.slice(2)}: ${show(c.from)} → ${show(c.to)}`;
-  }
-  if (c.field.startsWith("r:")) {
-    const name = propDef(ix, item, c.field.slice(2))?.name ?? "?";
-    return addedRemoved(`${name} +${list(added)}`, `${name} −${list(removed)}`);
-  }
-  switch (c.field) {
-    case "body":
-      return t("activity.editedText");
-    case "rules":
-      return t("activity.rules");
-    case "update":
-      return t("activity.update", { text: String(c.to).slice(0, 140) });
-    case "tags":
-      return addedRemoved(t("activity.tagged", { tags: added.map((x) => "#" + x).join(" ") }), t("activity.untagged", { tags: removed.map((x) => "#" + x).join(" ") }));
-    case "refs":
-      return addedRemoved(`${t("item.refs")} +${list(added)}`, `${t("item.refs")} −${list(removed)}`);
-    case "parents":
-      return addedRemoved(t("activity.placed", { list: list(added) }), t("activity.unplaced", { list: list(removed) }));
-    case "type":
-      return c.to ? t("activity.typed", { name: ix.typeName(String(c.to)) ?? "?" }) : t("activity.untyped");
-    case "home":
-      return t("activity.home", { title: c.to ? title(String(c.to)) : "–" });
-    case "title":
-      return c.from ? t("activity.renamed", { from: String(c.from) }) : t("activity.named");
-    case "views":
-      return t("activity.views");
-    case "schema":
-      return t("activity.schema");
-    case "file":
-      return t("activity.fileReplaced");
-    case "suggestion":
-      return c.to ? t("activity.suggested") : t("activity.suggestionDone");
-    case "op":
-      return c.to === "undone" ? t("activity.undone") : "";
-    default:
-      return c.field;
-  }
-}
-
-/** What an entry did to a text, fetched when asked for: the lines removed and added. */
-function BodyDiff({ e, space }: { e: ActivityEvent; space: string }) {
-  const { t } = useT();
-  const [open, setOpen] = useState(false);
-  const [got, setGot] = useState<EventText | null | undefined>(undefined);
-  // an entry still growing (typing) changes its time: fetch again then
-  useEffect(() => {
-    if (!open) return;
-    let gone = false;
-    spaceCall<EventText>(space, `/api/history?event=${e.id}`).then(
-      (x) => !gone && setGot(x),
-      () => !gone && setGot(null),
-    );
-    return () => void (gone = true);
-  }, [open, e.id, e.ts]);
-  const diff = useMemo(() => (got ? textDiff(got.before, got.after) : undefined), [got]);
-  return (
-    <div>
-      <Button variant="plain" aria-expanded={open} onClick={() => setOpen(!open)} className="inline-flex items-center gap-0.5 text-xs text-muted-foreground hover:text-fg">
-        <ChevronRight size={12} className={cn("transition-transform", open && "rotate-90")} />
-        {t(open ? "activity.hideDiff" : "activity.showDiff")}
-        {diff && (
-          <span className="ml-1">
-            <LineCount diff={diff} />
-          </span>
-        )}
-      </Button>
-      {open && (got === null ? <p className="text-xs text-muted-foreground">{t("activity.diffMissing")}</p> : diff ? <DiffView diff={diff} className="mt-1 max-h-80 overflow-y-auto" /> : null)}
-    </div>
-  );
-}
 
 function Entry({ e, compact, noVerb, space }: { e: ActivityEvent; compact?: boolean; noVerb?: boolean; space?: string }) {
   const repo = useRepo();

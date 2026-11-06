@@ -13,6 +13,8 @@ import {
   type ViewDef,
   addParent,
   appendUpdate,
+  putBackUpdate,
+  removeUpdate,
   initItem,
   isContent,
   metaMap,
@@ -673,6 +675,17 @@ export class Repo {
       if (status) writeProp(doc, schema, status.prop, status.option, at);
       touch(doc);
     });
+  }
+
+  /** Deletes an update; the activity log keeps that it was there. Returns a way to put it back. */
+  removeUpdate(id: string, updateId: string): (() => void) | undefined {
+    let gone: ReturnType<typeof removeUpdate>;
+    this.change(id, (doc) => {
+      gone = removeUpdate(doc, updateId);
+    });
+    if (!gone) return undefined;
+    const { entry, at } = gone;
+    return () => this.change(id, (doc) => putBackUpdate(doc, entry, at));
   }
 
   /** Children that hang only here go along, or with "inbox" lose this parent. */

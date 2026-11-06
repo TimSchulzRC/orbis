@@ -697,7 +697,11 @@ function diffRecords(prev: Item | undefined, next: Item): { kind: ActivityEvent[
   for (const k of new Set([...Object.keys(prev.rels), ...Object.keys(next.rels)])) setDiff("r:" + k, prev.rels[k] ?? [], next.rels[k] ?? [], changes);
   if (prev.body !== next.body) changes.push({ field: "body", from: prev.body.length, to: next.body.length });
   if (prev.rules !== next.rules) changes.push({ field: "rules", from: prev.rules.length, to: next.rules.length });
-  if (next.updates.length > prev.updates.length) for (const e of next.updates.slice(prev.updates.length)) changes.push({ field: "update", to: e.text });
+  // by id: an update written has only `to`, one deleted only `from`
+  const had = new Set(prev.updates.map((u) => u?.id));
+  const has = new Set(next.updates.map((u) => u?.id));
+  for (const e of next.updates) if (e && !had.has(e.id)) changes.push({ field: "update", to: e.text, id: e.id });
+  for (const e of prev.updates) if (e && !has.has(e.id)) changes.push({ field: "update", from: e.text, id: e.id });
   // views count separately from the schema so their changes show in the activity and can be undone
   if (prev.schema || next.schema) {
     const { views: va, ...sa } = prev.schema ?? ({} as NonNullable<Item["schema"]>);
