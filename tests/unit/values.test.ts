@@ -17,6 +17,8 @@ describe("dates with a time", () => {
   test("parseDateTime keeps the time, drops a zone, and stays a day without one", () => {
     expect(parseDateTime("2026-10-30", TODAY)).toBe("2026-10-30");
     expect(parseDateTime("2026-10-30T14:30", TODAY)).toBe("2026-10-30T14:30");
+    expect(parseDateTime("2026-10-30 9:30", TODAY)).toBe("2026-10-30T09:30");
+    expect(parseDateTime("2026-10-30 9.30 Uhr", TODAY)).toBe("2026-10-30T09:30");
     expect(parseDateTime("2026-10-30T09:00:00.000+02:00", TODAY)).toBe("2026-10-30T09:00");
     expect(parseDateTime("2026-10-30 14:30:15Z", TODAY)).toBe("2026-10-30T14:30");
     expect(parseDateTime("30.10.2026 9:30", TODAY)).toBe("2026-10-30T09:30");

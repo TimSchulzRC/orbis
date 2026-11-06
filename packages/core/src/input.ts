@@ -104,13 +104,13 @@ export function parseDateTime(input: string, today: string): string | undefined 
     const t = clock(+iso[1]!, +iso[2]!);
     return t ? withTime(whole, t) : undefined;
   }
-  if (whole) return whole;
   const m = TIME_TAIL.exec(v);
   // a bare hour needs a mark ("14 Uhr", "2 pm"), so "30.10. 2026" is not read as 20:26
-  if (!m || (m[3] === undefined && !m[4])) return undefined;
+  if (!m || (m[3] === undefined && !m[4])) return whole;
+  // parseDate also takes "2026-10-30 9:30" as the day alone, so the time is looked at first
   const day = parseDate(m[1]!, today);
   const t = clock(+m[2]!, +(m[3] ?? 0), m[4] && /^(am|pm)$/i.test(m[4]) ? m[4] : undefined);
-  return day && t ? withTime(day, t) : undefined;
+  return day && t ? withTime(day, t) : whole;
 }
 
 /** 30.10.2026 (de) or 10/30/2026 (en), with " 14:30" when the value has a time; parseDateTime reads both back. */
