@@ -67,6 +67,7 @@ const AREAS = new Set([PERSONAL]);
 const SYNC_BATCH = 150;
 const BLOBS = "/api/blobs/";
 const TEXTS = "/api/texts/";
+const COMPACT_EVERY_MS = 60 * 60 * 1000;
 
 const clientMsg: z.ZodType<ClientMsg> = z.discriminatedUnion("t", [
   z.object({ t: z.literal("hello"), area: z.string(), since: z.number(), sinceId: z.string().optional(), device: z.string().optional() }),
@@ -88,6 +89,7 @@ export class Workspace {
   blobs: Blobs;
   conns = new Set<ServerWebSocket<Conn>>();
   private mirror: Mirror;
+  private compactTimer: ReturnType<typeof setInterval>;
 
   constructor(dir: string) {
     this.store = new Store(dir);
@@ -117,9 +119,12 @@ export class Workspace {
     };
     this.blobs.scan();
     this.mirror.start();
+    this.store.compact();
+    this.compactTimer = setInterval(() => this.store.compact(), COMPACT_EVERY_MS);
   }
 
   close() {
+    clearInterval(this.compactTimer);
     this.mirror.stop();
     this.store.flush();
   }

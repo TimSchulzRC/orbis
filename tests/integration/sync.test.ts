@@ -88,3 +88,45 @@ test("timestamps from a device clock far in the future are capped by the server"
   s.flush();
   expect(s.records.get("b")!.created).toBe(soon);
 });
+
+test("old log rows fold into one row per document; sync and loading still see everything", () => {
+  const dir = tmp();
+  const s = new Store(dir);
+  s.applyRemote("a", docUpdate({ id: "a", title: "A" }), "web:x");
+  for (let i = 0; i < 5; i++) s.change("a", "web:x", (d) => d.getText("body").insert(0, `${i}`));
+  const folded = { since: s.seq, sinceId: s.lastUid };
+  s.change("a", "web:x", (d) => d.getText("body").insert(0, "x"));
+  const kept = { since: s.seq, sinceId: s.lastUid }; // a's newest old row: its seq and uid stay
+  s.applyRemote("b", docUpdate({ id: "b", title: "B" }), "web:x");
+  s.change("a", "web:x", (d) => d.getText("body").insert(0, "y"));
+  s.flush();
+  const last = s.last(P);
+  const old = s.db.query("SELECT seq FROM updates WHERE seq <= ?").all(kept.since).length;
+  s.db.query("UPDATE updates SET ts = 0 WHERE seq <= ?").run(kept.since);
+
+  expect(s.compact()).toBe(old - 1);
+  expect(s.db.query("SELECT COUNT(*) AS n FROM updates").get()).toEqual({ n: 3 });
+  expect(s.last(P)).toEqual(last);
+  expect(s.knowsCursor(P, kept.since, kept.sinceId)).toBe(true);
+  expect(s.knowsCursor(P, folded.since, folded.sinceId)).toBe(false); // gone: the replica resets
+  expect(s.docsSince(P, kept.since).sort()).toEqual(["a", "b"]);
+  expect(s.compact()).toBe(0);
+  s.db.close();
+  const again = new Store(dir);
+  expect(again.getDoc("a").getText("body").toString()).toBe("yx43210");
+  expect(again.records.get("b")?.title).toBe("B");
+});
+
+test("compaction never splits a step, even where steps interleave", () => {
+  const s = new Store(tmp());
+  s.applyRemote("a", docUpdate({ id: "a", title: "A" }), "web:x");
+  s.applyRemote("b", docUpdate({ id: "b", title: "B" }), "web:x");
+  // rows: B A B | A  – keeping A whole moves the cut before its first row, which splits B
+  for (const [doc, step] of [["b", "sB"], ["a", "sA"], ["b", "sB"], ["a", "sA"]] as const)
+    s.applyRemote(doc, docUpdate({ id: doc, title: doc + Math.random() }), "web:x", undefined, step);
+  const lastOld = s.seq - 1;
+  s.db.query("UPDATE updates SET ts = 0 WHERE seq <= ?").run(lastOld);
+  s.compact();
+  const steps = s.db.query("SELECT step, COUNT(*) AS n FROM updates WHERE step IS NOT NULL GROUP BY step ORDER BY step").all();
+  expect(steps).toEqual([{ step: "sA", n: 2 }, { step: "sB", n: 2 }]);
+});

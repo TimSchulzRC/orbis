@@ -88,7 +88,8 @@ function replay(rows: { data: Uint8Array }[], id: string): Y.Doc {
 
 /** Takes back what `stepId` did to one document and notes it in `res`. */
 function undoInDoc(store: Store, id: string, stepId: string, actor: string, res: UndoResult) {
-  const rows = store.db.query("SELECT seq, data, step FROM updates WHERE doc = ? ORDER BY seq").all(id) as { seq: number; data: Uint8Array; step: string | null }[];
+  // the log reaches back LOG_WINDOW_MS at most (Store.compact), and rows after the step don't matter
+  const rows = store.db.query("SELECT seq, data, step FROM updates WHERE doc = ?1 AND seq <= (SELECT MAX(seq) FROM updates WHERE doc = ?1 AND step = ?2) ORDER BY seq").all(id, stepId) as { seq: number; data: Uint8Array; step: string | null }[];
   const first = rows.find((r) => r.step === stepId)!.seq;
   const beforeRows = rows.filter((r) => r.seq < first);
   const before = fields(replay(beforeRows, id));
@@ -124,7 +125,7 @@ function undoInDoc(store: Store, id: string, stepId: string, actor: string, res:
 export function undoStep(store: Store, stepId: string, actor: string): UndoResult {
   store.flush();
   const docs = store.db.query("SELECT DISTINCT doc FROM updates WHERE step = ?").all(stepId) as { doc: string }[];
-  if (!docs.length) throw new UndoError(`Unknown step "${stepId}".`);
+  if (!docs.length) throw new UndoError(`Unknown step "${stepId}", or too old to undo.`);
   if (store.activeUndo(stepId)) throw new UndoError(`Step "${stepId}" is already undone.`);
   const res: UndoResult = { step: "", undid: stepId, changed: [], trashed: [], kept: [] };
   res.step = store.step(

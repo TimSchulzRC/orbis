@@ -137,3 +137,20 @@ test("a saved filter in a type's view shows in the activity and can be undone", 
   undoStep(s, step, "web:tim@laptop");
   expect(typeTabs(s.records.get(SYS.card)!, "de")).toEqual(before);
 });
+
+test("after old rows fold, recent steps still undo and older ones are too old", () => {
+  ops.call(AG, () => (ops.create({ title: "Website", type: "Projekt" }, AG), "ok"));
+  const old = stepOf(ops.call(AG, () => (ops.update("Website", { properties: { Status: "aktiv" } }, AG), "ok")));
+  ops.call(AG, () => (ops.create({ title: "Shop", type: "Projekt" }, AG), "ok"));
+  const recent = stepOf(ops.call(AG, () => (ops.update("Website", { title: "Website 2027" }, AG), ops.update("Shop", { title: "Shop 2027" }, AG), "ok")));
+  const first = (s.db.query("SELECT MIN(seq) AS seq FROM updates WHERE step = ?").get(recent) as { seq: number }).seq;
+  // the recent step's first row looks old too: the step must not be split
+  s.db.query("UPDATE updates SET ts = 0 WHERE seq <= ?").run(first);
+  s.compact();
+  expect(() => undoStep(s, old, AG)).toThrow(UndoError);
+  expect(s.db.query("SELECT 1 FROM steps WHERE id = ?").get(old)).toBeNull();
+  expect(s.db.query("SELECT COUNT(*) AS n FROM updates WHERE step = ?").get(recent)).toEqual({ n: 2 });
+  undoStep(s, recent, AG);
+  expect(byTitle("Website").props.p_status).toBe("st_active");
+  expect(byTitle("Shop").title).toBe("Shop");
+});

@@ -1,7 +1,8 @@
-// The server's replica: an append-only update log in SQLite plus plain-object records for queries,
-// search, activity and the mirror. Only the records stay in memory for all documents; a Y.Doc is
-// loaded from its snapshot and later log rows on use, and dropped again by trim(). Each flush also
-// stores the record next to the snapshot, so a start reads records without decoding any Y.Doc.
+// The server's replica: an update log in SQLite plus plain-object records for queries, search,
+// activity and the mirror. Rows older than two weeks fold into one per document (compact()). Only
+// the records stay in memory for all documents; a Y.Doc is loaded from its snapshot and later log
+// rows on use, and dropped again by trim(). Each flush also stores the record next to the
+// snapshot, so a start reads records without decoding any Y.Doc.
 import { Database } from "bun:sqlite";
 import * as Y from "yjs";
 import { mkdirSync } from "node:fs";
@@ -44,6 +45,12 @@ const FLUSH_DELAY_MS = 250;
 const EVENT_MERGE_WINDOW_MS = 5 * 60_000;
 const MAX_CLOCK_SKEW_MS = 10 * 60_000;
 const MAX_UNDO_CHAIN = 20;
+/**
+ * How long log rows stay as written. Older rows fold into one row per document, and their steps
+ * can no longer be undone. Two weeks: a device offline longer than that resyncs in full (reset),
+ * and fields a step changed have mostly been changed again by then anyway.
+ */
+export const LOG_WINDOW_MS = 14 * 24 * 60 * 60_000;
 
 const SCHEMA = `CREATE TABLE IF NOT EXISTS updates (seq INTEGER PRIMARY KEY AUTOINCREMENT, doc TEXT NOT NULL, data BLOB NOT NULL, origin TEXT NOT NULL, ts INTEGER NOT NULL, uid TEXT NOT NULL, step TEXT, area TEXT NOT NULL);
   CREATE INDEX IF NOT EXISTS updates_doc ON updates(doc, seq);
@@ -585,6 +592,41 @@ export class Store {
   /** Documents purged while a replica's cursor was at `since` or later: it may still have them. */
   purgedSince(area: string, since: number): string[] {
     return (this.db.query("SELECT id FROM purged WHERE area = ? AND seq >= ?").all(area, since) as { id: string }[]).map((r) => r.id);
+  }
+
+  /**
+   * Folds each document's rows older than LOG_WINDOW_MS into one row and forgets their steps. The
+   * folded row keeps the seq and uid of the newest row it replaces, so `docsSince` stays right for
+   * every cursor and a replica whose cursor was folded away gets a reset. Returns the rows removed.
+   */
+  compact(now = Date.now()): number {
+    if (this.held) return 0;
+    this.flush();
+    const below = this.db.query("SELECT MAX(seq) AS seq FROM updates WHERE ts < ?").get(now - LOG_WINDOW_MS) as { seq: number | null };
+    // never split a step: its rows would be half folded, half undoable. Steps can interleave
+    // (several devices), so moving the cut may split another one.
+    const split = this.db.query("SELECT MIN(seq) AS seq FROM updates WHERE seq <= ?1 AND step IN (SELECT step FROM updates WHERE seq > ?1)");
+    let cut = below.seq ?? 0;
+    for (let s = split.get(cut) as { seq: number | null }; s.seq; s = split.get(cut) as { seq: number | null }) cut = s.seq - 1;
+    if (cut <= 0) return 0;
+    const docs = this.db.query("SELECT doc FROM updates WHERE seq <= ? GROUP BY doc HAVING COUNT(*) > 1").all(cut) as { doc: string }[];
+    const rowsOf = this.db.query("SELECT seq, data FROM updates WHERE doc = ? AND seq <= ? ORDER BY seq");
+    const replace = this.db.query("UPDATE updates SET data = ? WHERE seq = ?");
+    const drop = this.db.query("DELETE FROM updates WHERE doc = ? AND seq < ?");
+    let removed = 0;
+    this.db.transaction(() => {
+      for (const { doc: id } of docs) {
+        const rows = rowsOf.all(id, cut) as { seq: number; data: Uint8Array }[];
+        const doc = new Y.Doc({ guid: id, gc: true });
+        for (const r of rows) Y.applyUpdate(doc, r.data); // Y.mergeUpdates grows quadratically with the rows
+        const last = rows.at(-1)!.seq;
+        replace.run(Y.encodeStateAsUpdate(doc), last);
+        removed += drop.run(id, last).changes;
+      }
+      this.db.query("UPDATE updates SET step = NULL WHERE seq <= ? AND step IS NOT NULL").run(cut);
+      this.db.query("DELETE FROM steps WHERE id NOT IN (SELECT step FROM updates WHERE step IS NOT NULL)").run();
+    })();
+    return removed;
   }
 
   // ---------- reading ----------
