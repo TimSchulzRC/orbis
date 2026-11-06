@@ -1,6 +1,6 @@
 // The server keeps only documents in use in memory. A document let go is reloaded from snapshot + log
 // and must behave as before.
-import { test, expect, afterAll } from "bun:test";
+import { test, expect, afterAll, spyOn } from "bun:test";
 import { tempDir, removeTempDirs } from "../support/helpers";
 import { setupStore, stepOf, tool } from "../support/store";
 import * as Y from "yjs";
@@ -23,7 +23,7 @@ function seeded(n: number, cacheSize = 3) {
   return { dir, s, ops, ids };
 }
 
-test("a start reads every document once, but keeps none of them in memory", () => {
+test("a start keeps no document in memory", () => {
   const { dir, s, ids } = seeded(12);
   const total = s.records.size;
   s.db.close();
@@ -38,6 +38,50 @@ test("a start reads every document once, but keeps none of them in memory", () =
   Y.applyUpdate(d, again.stateOf(ids[7]!));
   expect(readItem(ids[7]!, d)?.body).toBe("Neu 7 Text 7");
   expect(again.loaded.size).toBe(0);
+});
+
+test("a start takes the records stored with the snapshots and decodes no document", () => {
+  const { dir, s, ids } = seeded(12);
+  s.change(ids[0]!, "seed", (d) => d.getMap("meta").set("deleted", "via:" + ids[1]));
+  s.flush();
+  s.db.close();
+  const read = spyOn(Store.prototype as any, "read");
+  const again = new Store(dir, 3);
+  expect(read).not.toHaveBeenCalled();
+  read.mockRestore();
+  // the same records as reading every document
+  again.db.exec("DELETE FROM records");
+  again.db.close();
+  const full = new Store(dir, 3);
+  expect(again.records).toEqual(full.records);
+  expect(again.records.size).toBe(full.records.size);
+  expect(again.records.get(ids[0]!)?.deleted).toBe(false); // its root is not deleted
+});
+
+test("stored records from another RECORD_VERSION are read anew", () => {
+  const { dir, s, ids } = seeded(4);
+  s.db.query("UPDATE records SET data = json_set(data, '$.title', 'old') WHERE id = ?").run(ids[2]!);
+  s.kvSet("recordVersion", "0");
+  s.db.close();
+  const again = new Store(dir, 3);
+  expect(again.records.get(ids[2]!)?.title).toBe("Notiz 2");
+});
+
+test("a failed atomic call keeps an earlier change of the same document pending until the flush", () => {
+  const { dir, s, ids } = seeded(2);
+  const [a, b] = ids as [string, string];
+  s.change(a, "web:tim", (d) => d.getMap("meta").set("title", "committed"));
+  expect(() =>
+    s.atomic(() => {
+      s.change(a, "agent:test", (d) => d.getMap("meta").set("title", "rolled back"));
+      throw new Error("fails");
+    }),
+  ).toThrow();
+  s.change(b, "web:tim", (d) => d.getMap("meta").set("title", "B"));
+  s.flush();
+  s.db.close();
+  const again = new Store(dir, 3);
+  expect(again.records.get(a)?.title).toBe("committed");
 });
 
 test("only the most recently used documents stay; the ones with unsaved changes always", () => {

@@ -1,11 +1,12 @@
 // The server's replica: an append-only update log in SQLite plus plain-object records for queries,
 // search, activity and the mirror. Only the records stay in memory for all documents; a Y.Doc is
-// loaded from its snapshot and later log rows on use, and dropped again by trim().
+// loaded from its snapshot and later log rows on use, and dropped again by trim(). Each flush also
+// stores the record next to the snapshot, so a start reads records without decoding any Y.Doc.
 import { Database } from "bun:sqlite";
 import * as Y from "yjs";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { type FileMeta, type Item, type ItemInit, type UpdateEntry, PERSONAL, SETTINGS_ID, areaOf, initItem, isContent, metaMap, newId, readItem } from "@obtion/core/model";
+import { type FileMeta, type Item, type ItemInit, type UpdateEntry, PERSONAL, RECORD_VERSION, SETTINGS_ID, areaOf, initItem, isContent, metaMap, newId, readItem } from "@obtion/core/model";
 import { sameValue } from "@obtion/core/equal";
 import type { Lang } from "@obtion/core/i18n";
 import { Index } from "@obtion/core/graph";
@@ -78,6 +79,7 @@ export class Store {
       CREATE INDEX IF NOT EXISTS updates_step ON updates(step);
       CREATE INDEX IF NOT EXISTS updates_area ON updates(area, seq);
       CREATE TABLE IF NOT EXISTS docstate (id TEXT PRIMARY KEY, state BLOB NOT NULL, seq INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS records (id TEXT PRIMARY KEY, area TEXT, data TEXT);
       CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, doc TEXT NOT NULL, title TEXT, type TEXT, kind TEXT, origin TEXT, changes TEXT, step TEXT, area TEXT NOT NULL DEFAULT '${PERSONAL}');
       CREATE INDEX IF NOT EXISTS events_doc ON events(doc, id);
       CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT);
@@ -97,17 +99,47 @@ export class Store {
     return this.kvGet("hubId")!;
   }
 
+  /**
+   * Records come from the records table. Only documents whose record may miss changes are read as
+   * Y.Docs: those without a record (new database, RECORD_VERSION changed) and those with log rows
+   * after the last complete flush (the server stopped before it).
+   */
   private load() {
     const last = this.db.query("SELECT seq, uid FROM updates ORDER BY seq DESC LIMIT 1").get() as { seq: number; uid: string } | null;
     this.seq = last?.seq ?? 0;
     this.lastUid = last?.uid ?? "";
-    for (const [id, doc] of this.eachDoc()) {
-      this.noteArea(id, doc);
-      const rec = readItem(id, doc);
-      if (rec) this.records.set(id, rec);
+    if (this.kvGet("recordVersion") !== String(RECORD_VERSION)) {
+      this.db.exec("DELETE FROM records");
+      this.kvSet("recordVersion", String(RECORD_VERSION));
+    }
+    for (const r of this.db.query("SELECT id, area, data FROM records").all() as { id: string; area: string | null; data: string | null }[]) {
+      if (r.area) this.areas.set(r.id, r.area);
+      if (r.data) this.records.set(r.id, JSON.parse(r.data) as Item);
+    }
+    const stale = this.db
+      .query("SELECT id FROM docstate WHERE id NOT IN (SELECT id FROM records) UNION SELECT doc FROM updates WHERE seq > ?")
+      .all(Number(this.kvGet("flushed") ?? 0)) as { id: string }[];
+    if (stale.length) {
+      const saveSnap = this.db.prepare("INSERT OR REPLACE INTO docstate (id, state, seq) VALUES (?, ?, ?)");
+      this.db.transaction(() => {
+        for (const { id } of stale) {
+          const doc = this.read(id)!;
+          this.noteArea(id, doc);
+          const rec = readItem(id, doc);
+          if (rec) this.records.set(id, rec);
+          saveSnap.run(id, Y.encodeStateAsUpdate(doc), this.seq);
+          this.saveRecord(id, rec);
+        }
+        this.kvSet("flushed", String(this.seq));
+      })();
     }
     resolveCascade(this.records);
     for (const rec of this.records.values()) this.indexForSearch(rec);
+  }
+
+  /** `rec` as readItem returned it, before resolveCascade. */
+  private saveRecord(id: string, rec: Item | null) {
+    this.db.query("INSERT OR REPLACE INTO records (id, area, data) VALUES (?, ?, ?)").run(id, this.areas.get(id) ?? null, rec && JSON.stringify(rec));
   }
 
   private indexForSearch(rec: Item) {
@@ -118,16 +150,6 @@ export class Store {
   /** After `fileText` is set: files are searched by their whole text. */
   reindexFiles() {
     for (const rec of this.records.values()) if (rec.file) this.indexForSearch(rec);
-  }
-
-  /** For passes over all documents. Docs not in memory are read for the caller and not kept. */
-  *eachDoc(): Generator<[string, Y.Doc]> {
-    // a doc without snapshot has only log rows (a crash before its first flush)
-    const ids = this.db.query("SELECT id FROM docstate UNION SELECT doc FROM updates").all() as { id: string }[];
-    for (const { id } of ids) {
-      const doc = this.loaded.get(id) ?? this.read(id);
-      if (doc) yield [id, doc];
-    }
   }
 
   private stored(id: string): Uint8Array[] {
@@ -315,10 +337,9 @@ export class Store {
     }
   }
 
-  /** Drops changes that never reached the log. */
+  /** Drops changes that never reached the log. Changes logged before stay pending, so the next flush saves them. */
   private reload(ids: string[]) {
     for (const id of ids) {
-      this.pending.delete(id);
       this.loaded.delete(id);
       const doc = this.read(id);
       const rec = doc && readItem(id, doc);
@@ -386,8 +407,10 @@ export class Store {
     const events: ActivityEvent[] = [];
     const changed: Item[] = [];
     const prevs = new Map<string, Item | undefined>();
+    const read = new Map<string, Item | null>();
     for (const [id] of pending) {
       const next = readItem(id, this.getDoc(id));
+      read.set(id, next);
       if (!next) continue;
       prevs.set(id, this.records.get(id));
       this.records.set(id, next);
@@ -405,6 +428,7 @@ export class Store {
       for (const [id, p] of pending) {
         const doc = this.getDoc(id);
         saveSnap.run(id, Y.encodeStateAsUpdate(doc), this.seq);
+        this.saveRecord(id, read.get(id)!);
         if (!prevs.has(id)) continue;
         const prev = prevs.get(id);
         const next = this.records.get(id)!;
@@ -417,6 +441,8 @@ export class Store {
         const event = p.quiet || (next.kind === "settings" && (!prev || prev.rules === next.rules)) ? undefined : this.saveEvent(id, prev, next, origin, step, ts, events);
         if (prev && prev.body !== next.body && hasBody(next)) this.saveVersion(id, prev, next, origin, step, ts, event);
       }
+      // every log row so far is in a snapshot and a record (rows come only through append, which marks the doc pending)
+      this.kvSet("flushed", String(this.seq));
     })();
     this._ix = null;
     this.scheduleTrim();

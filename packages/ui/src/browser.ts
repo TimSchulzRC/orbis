@@ -1,7 +1,7 @@
 // The replica's host in a browser: IndexedDB storage, the serving server's workspace, other tabs
 // over BroadcastChannel, UI dialogs.
 import { openDB, type IDBPDatabase } from "idb";
-import type { OutItem, RepoHost, ReplicaStorage, SyncSocket, TabMsg } from "@obtion/sync";
+import type { OutItem, RepoHost, ReplicaStorage, StoredRow, SyncSocket, TabMsg } from "@obtion/sync";
 import type { Person } from "@obtion/core/origin";
 import { tr } from "./i18n";
 import { KEYS, readJSON, writeJSON } from "./ui/storage";
@@ -49,14 +49,14 @@ function idbStorage(name: string): ReplicaStorage {
         tx.objectStore("meta").get("lastSeq"),
         tx.objectStore("meta").get("lastId"),
       ]);
-      const rows = values.map((v: { d: string; u: Uint8Array }, i) => ({ key: keys[i], d: v.d, u: v.u }));
+      const rows = values.map((v: StoredRow, i) => ({ ...v, key: keys[i] }));
       return { rows, outbox: outbox as OutItem[], lastSeq: lastSeq as number | undefined, lastId: lastId as string | undefined };
     },
     async compact(docs) {
       const tx = db.transaction("updates", "readwrite");
       for (const { keys, row } of docs) {
         for (const k of keys) tx.store.delete(k as IDBValidKey);
-        tx.store.add({ d: row.d, u: row.u });
+        tx.store.add({ d: row.d, u: row.u, r: row.r });
       }
       await tx.done;
     },

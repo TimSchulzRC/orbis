@@ -4,6 +4,7 @@ import * as Y from "yjs";
 import {
   FORMAT,
   PERSONAL,
+  RECORD_VERSION,
   areaOf,
   SETTINGS_ID,
   type Item,
@@ -54,7 +55,6 @@ export type OutItem = PushItem & { a?: string };
 const LOAD = Symbol("load");
 const TAB = Symbol("tab");
 
-const COMPACT_AFTER_ROWS = 8;
 const SEARCH_DEBOUNCE_MS = 400;
 /** Typing into the same text continues its undo step while pauses stay shorter than this. */
 const TYPING_STEP_GAP_MS = 120_000;
@@ -64,11 +64,15 @@ const MAX_RETRY_MS = 30_000;
 const PUSH_BATCH = 200;
 const MAX_EVENTS = 100;
 
-/** `key` is the storage's own, used for compaction. */
+/**
+ * `key` is the storage's own, used for compaction. A compacted row carries readItem's result for
+ * its state (`r`), so a start can skip decoding the document while it has no other rows.
+ */
 export interface StoredRow {
   key?: unknown;
   d: string;
   u: Uint8Array;
+  r?: { v: number; item: Item | null };
 }
 
 /** Every write must be atomic, so a reload in between loses nothing. */
@@ -131,7 +135,9 @@ export interface SyncStatus {
 type Listener = () => void;
 
 export class Repo {
+  /** Decoded documents. The others wait in `stored` until first use (getDoc). */
   docs = new Map<string, Y.Doc>();
+  private stored = new Map<string, Uint8Array>();
   records = new Map<string, Item>();
   version = 0;
   status: SyncStatus = { loaded: false, online: false, synced: false, pending: 0, lastSeq: 0 };
@@ -169,27 +175,38 @@ export class Repo {
     await this.db.open();
     this.host.persist?.();
     const { rows, outbox, lastSeq, lastId } = await this.db.load();
-    const byDoc = new Map<string, { keys: unknown[]; updates: Uint8Array[] }>();
+    const byDoc = new Map<string, { keys: unknown[]; updates: Uint8Array[]; r?: StoredRow["r"] }>();
     for (const row of rows) {
       const e = byDoc.get(row.d) ?? { keys: [], updates: [] };
       e.keys.push(row.key);
       e.updates.push(row.u);
+      e.r = row.r;
       byDoc.set(row.d, e);
     }
+    const toCompact: [string, unknown[]][] = [];
     for (const [id, e] of byDoc) {
+      // one compacted row with a current record: no need to decode the document now
+      if (e.updates.length === 1 && e.r?.v === RECORD_VERSION) {
+        this.stored.set(id, e.updates[0]!);
+        if (e.r.item) this.records.set(id, e.r.item);
+        this.searchDirty.add(id);
+        continue;
+      }
       const doc = this.getDoc(id);
       Y.applyUpdate(doc, e.updates.length === 1 ? e.updates[0]! : Y.mergeUpdates(e.updates), LOAD);
+      this.dirty.add(id);
+      this.searchDirty.add(id);
+      toCompact.push([id, e.keys]);
     }
     for (const o of outbox) this.outbox.set(o.k, o);
     this.status.lastSeq = lastSeq ?? 0;
     this.lastId = lastId;
     this.status.pending = this.outbox.size;
-    for (const id of this.docs.keys()) this.dirty.add(id), this.searchDirty.add(id);
     this.materialize();
     this.reindex();
     this.status.loaded = true;
     this.emit();
-    this.compact(byDoc).catch((e) => console.warn("compact failed", e));
+    this.compact(toCompact).catch((e) => console.warn("compact failed", e));
 
     this.host.tabs?.listen((msg) => this.applyFromTab(msg));
     this.connect();
@@ -198,11 +215,15 @@ export class Repo {
     });
   }
 
-  /** Merges many small stored updates per doc into one. */
-  private async compact(byDoc: Map<string, { keys: unknown[]; updates: Uint8Array[] }>) {
-    const heavy = [...byDoc].filter(([, e]) => e.keys.length > COMPACT_AFTER_ROWS);
-    if (!heavy.length) return;
-    await this.db.compact(heavy.map(([id, e]) => ({ keys: e.keys, row: { d: id, u: Y.encodeStateAsUpdate(this.docs.get(id)!) } })));
+  /** Replaces the stored rows of each decoded document by one row with its record. */
+  private async compact(docs: [string, unknown[]][]) {
+    if (!docs.length) return;
+    await this.db.compact(
+      docs.map(([id, keys]) => {
+        const doc = this.docs.get(id)!;
+        return { keys, row: { d: id, u: Y.encodeStateAsUpdate(doc), r: { v: RECORD_VERSION, item: readItem(id, doc) } } };
+      }),
+    );
   }
 
   subscribe = (l: Listener) => {
@@ -221,11 +242,21 @@ export class Repo {
     for (const l of this.listeners) l();
   }
 
+  /** Has this device any data? */
+  get hasData(): boolean {
+    return this.docs.size > 0 || this.stored.size > 0;
+  }
+
   getDoc(id: string): Y.Doc {
     let doc = this.docs.get(id);
     if (doc) return doc;
     doc = new Y.Doc({ guid: id });
     this.docs.set(id, doc);
+    const stored = this.stored.get(id);
+    if (stored) {
+      this.stored.delete(id);
+      Y.applyUpdate(doc, stored, LOAD);
+    }
     doc.on("update", (update: Uint8Array, origin: unknown, _doc: Y.Doc, tr: Y.Transaction) => {
       if (origin === LOAD) return;
       if (origin === TAB) {
@@ -395,6 +426,7 @@ export class Repo {
 
   /** Goes through the durable outbox, so it survives disconnects. */
   private async enqueueFullUpload() {
+    for (const id of [...this.stored.keys()]) this.getDoc(id);
     const items: OutItem[] = [...this.docs].map(([d, doc]) => ({ k: newId(), d, u: toB64(Y.encodeStateAsUpdate(doc)), a: areaOf(doc) }));
     await this.db.write({ outbox: items });
     for (const it of items) this.outbox.set(it.k, it);
@@ -433,7 +465,7 @@ export class Repo {
   private async onWelcome(msg: Extract<ServerMsg, { t: "welcome" }>) {
     this.serverFormat = msg.format;
     const known = this.serverId ?? (await this.db.serverId());
-    if (known && known !== msg.hub && this.docs.size > 0) {
+    if (known && known !== msg.hub && this.hasData) {
       // Usually the server was set up anew and this copy is stale (replace, recommended); rarely it
       // was restored from a backup and misses what only this device has (upload). Only the user knows.
       const answer = await this.host.askOtherServer();
