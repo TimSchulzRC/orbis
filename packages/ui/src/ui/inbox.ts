@@ -6,6 +6,7 @@ import type { Index } from "@obtion/core/graph";
 import { useAccounts } from "../accounts";
 import { useReplicas } from "./Spaces";
 import { createStore } from "../lib/store";
+import { isBlank } from "../actions";
 
 export interface InboxEntry {
   key: string;
@@ -24,15 +25,23 @@ export function useLaterItems(): InboxEntry[] {
   return useEntries((ix) => laterItems(ix));
 }
 
+/** The quick note being written (an entry key): it counts as an entry only once something is in it. */
+const draft = createStore<{ key?: string }>({});
+export const setDraft = (key?: string) => draft.set({ key });
+
 /** `pick`'s items across the shown workspaces, newest first. A workspace without its settings item is skipped. */
 function useEntries(pick: (ix: Index) => Item[]): InboxEntry[] {
   const { shown } = useAccounts();
   const repos = useReplicas(shown.map((s) => s.id));
+  const { key: drafting } = draft.use();
   return shown
     .flatMap((s, n) => {
       const spaceRepo = repos[n]!;
       if (!spaceRepo.get(SETTINGS_ID)) return [];
-      return pick(spaceRepo.index()).map((item) => ({ key: entryKey(s.id, item.id), space: s.id, item }));
+      const ix = spaceRepo.index();
+      return pick(ix)
+        .map((item) => ({ key: entryKey(s.id, item.id), space: s.id, item }))
+        .filter((e) => e.key !== drafting || !isBlank(e.item, ix));
     })
     .sort((a, b) => b.item.created - a.item.created);
 }

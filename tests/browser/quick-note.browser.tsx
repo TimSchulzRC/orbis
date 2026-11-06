@@ -1,5 +1,5 @@
 // The quick note: the tray's button opens one new note as a card, written with the page's editor and
-// sorted at once with the inbox's choices. Closed, the note lies in the inbox; left empty, it goes.
+// sorted at once with the inbox's choices. It joins the inbox once something is in it; left empty, it goes.
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { commands, page } from "vitest/browser";
 import { cleanup, render } from "vitest-browser-react";
@@ -61,6 +61,18 @@ test("left empty, the note goes", async () => {
   await expect.poll(() => document.querySelector("[data-quick-note]")).toBeNull();
   await expect.poll(() => repo.live().length).toBe(before);
   await expect.element(page.getByRole("button", { name: "Neue Notiz" })).toBeVisible();
+});
+
+test("the inbox counts the note only once something is in it", async () => {
+  const count = () => Number(document.querySelector("[aria-label^='Eingang: ']")?.getAttribute("aria-label")?.match(/\d+/)?.[0]);
+  const before = count();
+  await open();
+  await new Promise((r) => setTimeout(r, 300));
+  expect(count()).toBe(before);
+  await commands.keys("type", "Erster Gedanke");
+  await commands.keys("press", "Enter");
+  await commands.keys("type", "und mehr");
+  await expect.poll(count).toBe(before + 1);
 });
 
 test('the inbox\'s choices are there but "Löschen"; "Anheften" sorts the note and closes the card', async () => {

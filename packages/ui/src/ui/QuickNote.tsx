@@ -1,7 +1,7 @@
 // The quick note: the tray's button opens one new note as a card above the tray (on a phone as a
 // sheet), written with the page's editor and sorted at once with the inbox's choices. Nothing else
-// of the inbox shows, so nothing distracts. The note lies in the inbox from the start: closed (Esc,
-// ⌘↵, a click beside) it stays there; left empty, it goes.
+// of the inbox shows, so nothing distracts. The note joins the inbox once something is in it: closed
+// (Esc, ⌘↵, a click beside) it stays there; left empty, it goes without ever showing.
 import { useEffect, useRef } from "react";
 import { ChevronDown, Layers, Plus } from "lucide-react";
 import { replica, shownSpaces, spaceById, useAccounts } from "../accounts";
@@ -15,7 +15,7 @@ import { NoteCard } from "./NoteCard";
 import { SortChoices } from "./SortChoices";
 import { SpaceScope, moveTo } from "./Spaces";
 import { usePickers, useTriageActions } from "./TriageActions";
-import { dismissShelf } from "./inbox";
+import { dismissShelf, entryKey, setDraft } from "./inbox";
 import { notify } from "./feedback";
 import { KEYS, readJSON, writeJSON } from "./storage";
 
@@ -30,12 +30,18 @@ export function captureSpace(): string | undefined {
 /** The note being written, in workspace `space`, while the card is open. */
 const quick = createStore<{ space?: string; id?: string }>({});
 export const useQuickNote = () => !!quick.use().id;
+/** Opens the card on note `id` (none: closes it); `keep` holds the old note back from the inbox until it is settled. */
+function setQuick(space?: string, id?: string, keep = false) {
+  quick.set({ space, id });
+  if (!keep) setDraft(space && id ? entryKey(space, id) : undefined);
+}
+const newNote = (space: string) => setQuick(space, replica(space).repo.create({ title: "", type: null, parents: [] }));
 
 export function openQuickNote() {
   const space = captureSpace();
   if (quick.get().id || !space) return;
   dismissShelf();
-  quick.set({ space, id: replica(space).repo.create({ title: "", type: null, parents: [] }) });
+  newNote(space);
 }
 
 /**
@@ -45,14 +51,16 @@ export function openQuickNote() {
 export function closeQuickNote() {
   (document.activeElement as HTMLElement | null)?.blur();
   const { space, id } = quick.get();
-  quick.set({});
+  setQuick(undefined, undefined, true);
   if (!space || !id) return;
   setTimeout(() => {
     const repo = replica(space).repo;
     const item = repo.get(id);
-    if (!item || item.deleted) return;
-    if (isBlank(item, repo.index())) repo.remove(id);
-    else notify.action(tr("capture.notifyInbox"), tr("capture.open"), () => openItem(item.id, { space }));
+    if (item && !item.deleted) {
+      if (isBlank(item, repo.index())) repo.remove(id);
+      else notify.action(tr("capture.notifyInbox"), tr("capture.open"), () => openItem(item.id, { space }));
+    }
+    if (!quick.get().id) setDraft();
   });
 }
 
@@ -94,7 +102,7 @@ function QuickCard({ id, space, desktop }: { id: string; space: string; desktop:
   const spaceOf = () => space;
   const act = useTriageActions(spaceOf);
   // sorted, the note is done: the card closes, the notice offers its undo
-  const sorted = () => quick.set({});
+  const sorted = () => setQuick();
   const pick = usePickers(spaceOf, (list, place) => (act.place(list, place), sorted()), (list, type) => (act.giveType(list, type), sorted()));
   // Esc anywhere else, after the editor, which closes its own completions first
   const picking = useRef(false);
@@ -112,7 +120,7 @@ function QuickCard({ id, space, desktop }: { id: string; space: string; desktop:
       aria-label={t("quick.title")}
       data-quick-note
       // a link inside leads away (the open-full corner, a link in the text): the note stays in the inbox
-      onClickCapture={(e) => (e.target as HTMLElement).closest("a[href]") && quick.set({})}
+      onClickCapture={(e) => (e.target as HTMLElement).closest("a[href]") && setQuick()}
       onKeyDownCapture={(e) => {
         if (pick.placing || pick.typing) return;
         // Esc in the title: before the title field takes it back to what it was
@@ -150,11 +158,11 @@ function SpaceChoice({ space, id }: { space: string; id: string }) {
     const item = from.get(id);
     if (!item || isBlank(item, from.index())) {
       if (item) from.remove(id);
-      return quick.set({ space: to, id: replica(to).repo.create({ title: "", type: null, parents: [] }) });
+      return newNote(to);
     }
     (document.activeElement as HTMLElement | null)?.blur();
     const moved = await moveTo(id, space, to);
-    if (moved && quick.get().id === id) quick.set({ space: to, id: moved });
+    if (moved && quick.get().id === id) setQuick(to, moved);
   };
   return (
     <Popover

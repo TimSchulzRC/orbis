@@ -166,7 +166,7 @@ function Main() {
       </Button>
       {wide && <Sidebar onSearch={() => setPalette("")} />}
 
-      <div ref={column} className="relative flex min-w-0 flex-1 flex-col">
+      <div ref={column} className="flex min-w-0 flex-1 flex-col">
         {!wide && (
           <header className="flex items-center gap-2 border-b border-line bg-bg/90 px-3 py-2 backdrop-blur pt-safe">
             <a href="#/" className="tap flex items-center justify-center gap-2" aria-label={t("nav.today")}>

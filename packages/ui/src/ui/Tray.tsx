@@ -1,6 +1,6 @@
-// The inbox tray below every page, centred; on a desktop it floats over the page. The tray opens its
-// panel, the list and an entry to sort; the button beside it (on a phone the "+") a quick note. On
-// Heute on a desktop with room, the panel is pinned open as part of the page.
+// The inbox tray below every page; on a desktop it floats over the page, centred in the window. The
+// tray opens its panel, the list and an entry to sort; the button beside it (on a phone the "+") a
+// quick note. On Heute on a desktop with room, the panel is pinned open as part of the page.
 import { useRef } from "react";
 import { Check, ChevronDown, ChevronUp, Inbox, Plus } from "lucide-react";
 import { useT } from "../i18n";
@@ -69,7 +69,7 @@ export function Tray({ desktop, pinned }: { desktop: boolean; pinned?: boolean }
       {writing && <Backdrop className="z-30" onClick={closeQuickNote} aria-hidden />}
       <div
         // floating, only the bar and its panel take clicks; the page below shows through
-        className={cn("z-40", pinned ? "relative flex min-h-[308px] flex-1 flex-col px-8 pb-4 pt-2" : desktop ? "pointer-events-none absolute inset-x-0 bottom-0 px-6 pb-4" : "relative shrink-0 px-3 pb-2 pt-1")}
+        className={cn("z-40", pinned ? "relative flex min-h-[308px] flex-1 flex-col px-8 pb-4 pt-2" : desktop ? "pointer-events-none fixed inset-x-0 bottom-0 px-6 pb-4" : "relative shrink-0 px-3 pb-2 pt-1")}
         role="region"
         aria-label={t("tray.title")}
       >
