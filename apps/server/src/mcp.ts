@@ -18,14 +18,14 @@ import { workspaceRules } from "@obtion/core/rules";
 const INSTRUCTIONS = `Obtion is the user's personal system for knowledge and work: informations linked like Obsidian, projects and tasks like Notion, all in one graph. You are their interface: they tell you what happened, you record it; they ask, you answer from the data.
 
 The model:
-- Everything is an information (title, Markdown body, tags, refs) or a file. An information has at most one type. Types are data: call \`schema\` first – it lists every type with its description, properties (with options) and capabilities. Follow the descriptions. Never assume a type exists because of its name.
+- Everything is an information (title, Markdown body, tags, aliases, refs) or a file. An information has at most one type. Types are data: call \`schema\` first – it lists every type with its description, properties (with options) and capabilities. Follow the descriptions. Never assume a type exists because of its name.
 - "Part of" (place) builds the tree: an item can have several parents, one is its home. Links ([[Title]]) and refs are mentions; they connect without sorting. Relations are typed properties.
 - Pinned items form the top of the sidebar (place with pin:true); pinning counts as a place.
 - An information without a type, without a parent and not pinned is in the inbox (precisely: whatever the inbox query matches, see \`schema\`). Without a type but with a parent it is a note.
 - A type can have one property of kind "status": its options sit in the groups todo, active and done. Done counts as finished in progress, is never overdue and no longer blocks; active entries show on Today. Capabilities say what else a type can do: a due date ("Termin"), dated updates. Progress is a computed property ("progress" or "progress:Type"): the first one is the bar on the page. The app gives no type a special role: what a project or a task is comes from the types the user made.
 - Every type has a page: the list of its entries with views as tabs (\`update_type\` views). Mixed lists are pages with query blocks. Query syntax: ${QUERY_HELP} In bodies, \`\`\`query <text>\`\`\` blocks are live lists.
 
-Values are read tolerantly: a status as option name or group (open, active, done) in German or English, also synonyms like "in Arbeit" or "fertig"; dates as 2026-10-30, 30.10.2026, 10/30/2026, today/heute, tomorrow/morgen, a weekday or +3d; type names in singular or plural. "blocked" is not a status: set a property that holds it up (blocks: true in its type, e.g. "Blockiert durch" or "Wartet auf"). What can't be read is rejected with the reason – nothing is guessed.
+Values are read tolerantly: a status as option name or group (open, active, done) in German or English, also synonyms like "in Arbeit" or "fertig"; dates as 2026-10-30, 30.10.2026, 10/30/2026, today/heute, tomorrow/morgen, a weekday or +3d, optionally with a time (2026-10-30 14:30); type names in singular or plural. "blocked" is not a status: set a property that holds it up (blocks: true in its type, e.g. "Blockiert durch" or "Wartet auf"). What can't be read is rejected with the reason – nothing is guessed.
 
 How to work:
 - At the start of a session: call \`activity\` with since = the cursor you got at the end of your last session (keep it in your notes), or an ISO time, and under = the project you work on. It shows what changed since then – especially what people changed by hand in the app (by: "people") – with property changes and text diffs. Use \`history\` for a whole text diff or an older version. Note the new cursor for next time.
@@ -42,13 +42,6 @@ How to work:
 - Link exactly with [[id|Label]], always for titles with # | [ ] ^. Never link an item to itself.
 - Files: \`get\` on a file shows its facts, the extracted text (PDF incl. embedded invoice XML, Word, Excel, PowerPoint, text and code files, a ZIP's entries) and, where the server offers it, a download command. Every file type is accepted. Small things: \`attach\` with base64 or a public url. A file on your disk: upload it over HTTP (below) – don't push large files through base64. Always give a parent when you add a file: one without lands in the inbox, which you may not sort afterwards (only \`suggest\`).
 - Never delete unless asked; deletes go to the trash. Today is in \`schema\`. Reply in the language of the user's message.
-
-Bringing data over from Notion, Obsidian or elsewhere (only when the user asks):
-- Give every item its \`source\` ("notion:<page id>", "obsidian:<path in the vault>"). A second create with the same source is refused and names the item, so an interrupted run can simply go on; any ref accepts the source too. Pass the original \`created\`/\`updated\` times.
-- Types first (\`define_type\` for each Notion database or kind of note), then the items, top-down so parents exist; Obsidian folders become items that the notes are part of. Relations and [[links]] to items not there yet: create everything first, then set them with \`update\`.
-- Database columns become type properties. Frontmatter or columns without a fitting property go to \`free_properties\` (text, number, true/false, date, list). Obsidian \`aliases\` go to \`aliases\`: [[Alias]] links then lead to the item. [[Folder/Note]] resolves by its last part.
-- Dates keep their time of day: 2026-10-30T14:30 (wall clock, the zone is dropped). Formulas and rollups have no equivalent: store their current value as text or number, and say so.
-- Attachments: upload them (below) with the parent they belong to and keep ![[name]] embeds as they are. Excalidraw drawings (.excalidraw) stay files: agents cannot create drawings yet.
 
 Rules for agents:
 - The workspace and any item can carry rules for agents (Markdown). They are binding: an item's rules apply to it and to everything below it (over all its parents), the workspace's apply everywhere. Answers about items end with a "Rules for agents" block with the ones that apply; \`schema\` lists every item that has rules.
@@ -193,7 +186,7 @@ function buildMcpServer(store: Store, origin: string, blobs?: Blobs, lang: Lang 
     "create",
     {
       title: "Create",
-      description: "Create informations. type is a type name (see schema) or omitted; parents (titles/ids) place them; properties by name (only those of the type), anything else as free_properties. Without type and parent the item lands in the inbox. source, created, updated and aliases are for bringing data over from elsewhere.",
+      description: "Create informations. type is a type name (see schema) or omitted; parents (titles/ids) place them; properties by name (only those of the type), other values as free_properties; aliases are further names that [[links]] resolve. Without type and parent the item lands in the inbox.",
       inputSchema: { items: z.array(createInput).min(1) },
     },
     write((a, touched) => `Created:\n${ops.written(mark(touched, a.items.map((x) => ops.create(x, origin))))}`),
@@ -202,7 +195,7 @@ function buildMcpServer(store: Store, origin: string, blobs?: Blobs, lang: Lang 
     "update",
     {
       title: "Update",
-      description: "Change one item: title, type (name or null), properties by name (null clears), free_properties (set) and free_properties_remove, tags, aliases, refs, source, body. Body: prefer old_text/new_text or body_mode append|prepend; replacing the whole body (body without body_mode, or replace) needs base_version from get, and a stale one is rejected with what changed since. Renaming rewrites [[links]]. The answer shows the new version.",
+      description: "Change one item: title, type (name or null), properties by name (null clears), free_properties (set) and free_properties_remove, tags, aliases, refs, body. Body: prefer old_text/new_text or body_mode append|prepend; replacing the whole body (body without body_mode, or replace) needs base_version from get, and a stale one is rejected with what changed since. Renaming rewrites [[links]]. The answer shows the new version.",
       inputSchema: updateInput.shape,
     },
     write((a, touched) => {

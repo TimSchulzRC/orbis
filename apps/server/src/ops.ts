@@ -28,7 +28,6 @@ import {
   removeParent,
   replaceBody,
   setCapability,
-  metaMap,
   propByName,
   setExtra,
   setFileMeta,
@@ -193,13 +192,6 @@ function firstLine(text: string): string {
 }
 
 /** "start/end", either side may be empty. Tries every slash, since a date itself may contain one. */
-/** A time given as epoch milliseconds or an ISO date or date-time. */
-function when(v: string | number, field: string): number {
-  const ms = typeof v === "number" ? v : Date.parse(/^\d{4}-\d{2}-\d{2}$/.test(v.trim()) ? v.trim() + "T00:00:00" : v);
-  if (!Number.isFinite(ms)) throw new OpError(`${field} needs an ISO time (2024-03-01T09:30:00Z) or epoch milliseconds; got "${v}".`);
-  return ms;
-}
-
 function freeValue(name: string, v: unknown): FreeValue | null {
   if (v === null || v === undefined || v === "") return null;
   if (typeof v === "boolean") return { k: "checkbox", v };
@@ -277,9 +269,6 @@ export class Ops {
     const r = ref.trim().replace(/^\[\[|\]\]$/g, "");
     const direct = ix.get(r);
     if (direct) return direct;
-    // where it came from ("notion:…", "obsidian:…"), as set on create
-    const bySource = this.bySource(r);
-    if (bySource) return bySource;
     const pool = ix.live.filter((i) => i.type !== META_TYPE && (opts.files !== false || i.kind !== "datei"));
     const key = titleKey(r);
     const exact = pool.filter((i) => titleKey(i.title) === key || titleKey(i.file?.name ?? "") === key);
@@ -291,12 +280,6 @@ export class Ops {
     const sugg = (contains.length ? contains : ix.items(searchIds(this.store.searchIndex, r, 8))).slice(0, 8);
     if (!sugg.length) throw new OpError(`Nothing matches "${r}".`);
     throw new OpError(`${contains.length ? `"${r}" matches several items` : `No item is titled "${r}"`}. Use one of these ids:\n` + candidates(sugg));
-  }
-
-  /** The live item that was brought over from `source`. */
-  bySource(source: string): Item | undefined {
-    const s = source.trim();
-    return s ? this.ix.live.find((i) => i.source === s) : undefined;
   }
 
   /** Refuses types: they change only through update_type and are deleted only in the app. */
@@ -563,7 +546,6 @@ export class Ops {
     const out: Record<string, unknown> = { ...this.brief(i), version: versionOf(i) };
     delete out.path;
     if (i.aliases.length) out.aliases = i.aliases;
-    if (i.source) out.source = i.source;
     const parents = ix.parentsOf(i.id);
     if (parents.length) out.part_of = parents.map((p) => `${ix.get(p)?.title}${p === ix.home(i.id) && parents.length > 1 ? " (home)" : ""}`);
     out.path = ix.pathText(ix.homePath(i.id)) || undefined;
@@ -1045,7 +1027,7 @@ export class Ops {
   }
 
   /**
-   * Free properties as given (frontmatter brought along): the kind follows the value – true/false,
+   * Free properties: values without a property of the type. The kind follows the value – true/false,
    * a number, a list, a date (2026-10-30, optionally with a time), a URL, else text. A name the
    * type has as a property is refused: set it with properties. null removes one.
    */
@@ -1084,22 +1066,15 @@ export class Ops {
     const schema = type?.schema;
     const parents = (input.parents ?? []).map((p) => this.resolve(p).id);
     const refs = (input.refs ?? []).map((r) => this.resolve(r).id);
-    const source = input.source?.trim() || undefined;
-    const twin = source && this.bySource(source);
-    if (twin) throw new OpError(`"${source}" was brought over already: ${this.label(twin)} (id ${twin.id}). Change it with update (ref "${source}" works too).`);
-    const created = input.created !== undefined ? when(input.created, "created") : undefined;
-    const updated = input.updated !== undefined ? when(input.updated, "updated") : undefined;
     const free = this.freeValues(schema, input.free_properties);
     const id = newId();
     const body = input.body ? normalizeBlocks(input.body, ix) : (template(schema)?.body ?? "");
     this.noSelfLink(body, id, title);
     this.store.change(id, origin, (doc) => {
       const pinned = input.pin ? nextPinKey(this.store.live()) : undefined;
-      initItem(doc, { title, type: type?.id ?? null, body, rules: input.agent_rules, tags: input.tags, aliases: input.aliases, refs, parents, pinned, props: initialProps(schema), createdBy: origin, source, created, updated: updated ?? created });
+      initItem(doc, { title, type: type?.id ?? null, body, rules: input.agent_rules, tags: input.tags, aliases: input.aliases, refs, parents, pinned, props: initialProps(schema), createdBy: origin });
       this.applyProps(doc, undefined, schema, input.properties);
       for (const [k, v] of free) setExtra(doc, k, v);
-      // applyProps stamps the time of the write; the original one wins
-      if (created !== undefined || updated !== undefined) metaMap(doc).set("updated", updated ?? created!);
     });
     this.store.flush();
     return this.store.records.get(id)!;
@@ -1132,9 +1107,6 @@ export class Ops {
     if (refsAdd.includes(item.id)) throw new OpError(`"${item.title}" cannot refer to itself.`);
     const refsRem = (input.refs_remove ?? []).map((r) => this.resolve(r).id);
     const free = this.freeValues(schema, input.free_properties);
-    const source = input.source === undefined ? undefined : (input.source?.trim() ?? "");
-    const twin = source ? this.bySource(source) : undefined;
-    if (twin && twin.id !== item.id) throw new OpError(`"${source}" is the source of ${this.label(twin)} (id ${twin.id}) already.`);
     const oldTitle = item.title;
     const ownsTitle = ix.ownsTitle(item);
     this.store.change(item.id, origin, (doc) => {
@@ -1156,7 +1128,6 @@ export class Ops {
         const name = item.aliases.find((x) => titleKey(x) === titleKey(a));
         if (name) setMember(doc, "aliases", name, false);
       }
-      if (source !== undefined) setMeta(doc, { source: source || null });
       for (const r of refsAdd) setMember(doc, "refs", r, true);
       for (const r of refsRem) setMember(doc, "refs", r, false);
       if (body !== undefined) replaceBody(doc, body);

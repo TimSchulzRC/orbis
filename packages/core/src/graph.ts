@@ -162,20 +162,14 @@ export class Index {
     return this._titles;
   }
 
-  /**
-   * File names resolve too, so ![[name.png]] keeps working after a rename. Then aliases, then an
-   * id, then a path as Obsidian writes it ([[Folder/Note]]) by its last part.
-   */
+  /** File names resolve too, so ![[name.png]] keeps working after a rename. Then aliases, then an id. */
   resolveTitle = (title: string): string | undefined => {
     const k = titleKey(title);
     const byTitle = this.titles();
     const file = this._files!.get(k);
     if (looksLikeFileName(title) && file) return file;
     // [[id|Label]] links exactly, also to titles that can't be linked by name
-    const hit = byTitle.get(k) ?? file ?? this._aliases!.get(k) ?? (this.byId.has(title.trim()) ? title.trim() : undefined);
-    if (hit || !k.includes("/")) return hit;
-    const last = k.slice(k.lastIndexOf("/") + 1).replace(/\.md$/, "");
-    return last ? (byTitle.get(last) ?? this._aliases!.get(last)) : undefined;
+    return byTitle.get(k) ?? file ?? this._aliases!.get(k) ?? (this.byId.has(title.trim()) ? title.trim() : undefined);
   };
 
   /**

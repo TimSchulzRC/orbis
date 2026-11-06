@@ -10,7 +10,7 @@
 //   parents  Y.Map   parentId -> { sort, at }  (sort is per parent, at = when added)
 //   props    Y.Map   propId -> value
 //   extra    Y.Map   name -> { k, v }          (free properties: left over from a removed type or
-//                                              property, or brought along from elsewhere; k "list": v is string[])
+//                                              property, or set by an agent; k "list": v is string[])
 //   rels     Y.Map   propId -> Y.Map<targetId, true>
 //   tags     Y.Map   tag -> true
 //   aliases  Y.Map   alias -> true            (further names: [[Alias]] links lead here too)
@@ -51,8 +51,8 @@ export type PropKind = "text" | "number" | "date" | "checkbox" | "url" | "select
 export const PROP_KINDS: PropKind[] = ["text", "number", "date", "checkbox", "url", "select", "status", "relation", "computed"];
 /**
  * Free properties hold values without a property of the item's type: left over when a type or
- * property goes, or brought along by an agent (frontmatter from elsewhere). Never added by hand.
- * "list" holds several texts (former multiple choices, frontmatter lists).
+ * property goes, or set by an agent. Never added by hand in the app.
+ * "list" holds several texts (e.g. a former multiple choice).
  */
 export type FreeKind = "text" | "number" | "date" | "checkbox" | "url" | "select" | "list";
 

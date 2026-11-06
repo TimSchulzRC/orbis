@@ -5,8 +5,8 @@ import { PROP_KINDS, VIEW_KINDS } from "@obtion/core/model";
 const values = z.record(z.string(), z.any());
 const freeValues = z
   .record(z.string(), z.any())
-  .describe("values without a property of the type (e.g. frontmatter from elsewhere), by name: text, number, true/false, a date (2026-10-30 or 2026-10-30T14:30) or a list of texts; null removes one");
-const time = z.union([z.string(), z.number()]);
+  .describe("values without a property of the type, by name: text, number, true/false, a date (2026-10-30 or 2026-10-30T14:30) or a list of texts; null removes one");
+
 
 export const viewInput = z.object({
   name: z.string().optional(),
@@ -68,10 +68,7 @@ export const createInput = z.object({
   pin: z.boolean().optional().describe("pin to the top of the sidebar (a place of its own)"),
   properties: values.optional(),
   free_properties: freeValues.optional(),
-  aliases: z.array(z.string()).optional().describe("further names: [[Alias]] links lead here too (Obsidian aliases)"),
-  source: z.string().optional().describe('where it comes from, unique per item, e.g. "notion:<page id>" or "obsidian:<path in the vault>". A second create with the same source is refused; ref accepts it everywhere'),
-  created: time.optional().describe("original creation time (ISO or epoch ms) when bringing it over"),
-  updated: time.optional().describe("original last-edit time (ISO or epoch ms); default: created"),
+  aliases: z.array(z.string()).optional().describe("further names of the item: [[Alias]] links lead here too"),
   agent_rules: z.string().optional().describe("rules for agents (Markdown), binding for this item and everything below it; only when the user asks"),
 });
 export type CreateInput = z.infer<typeof createInput>;
@@ -85,7 +82,6 @@ export const updateInput = z.object({
   free_properties_remove: z.array(z.string()).optional().describe("names of free properties to remove"),
   aliases_add: z.array(z.string()).optional(),
   aliases_remove: z.array(z.string()).optional(),
-  source: z.string().nullable().optional().describe('where it comes from ("notion:<page id>", "obsidian:<path>"); null clears'),
   tags_add: z.array(z.string()).optional(),
   tags_remove: z.array(z.string()).optional(),
   refs_add: z.array(z.string()).optional(),

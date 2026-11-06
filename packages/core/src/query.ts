@@ -588,7 +588,7 @@ function matchField(item: Item, c: { prop: string; op: Op; value?: FieldValue },
       return names.some((n) => cmp(titleKey(n), titleKey(want), c.op));
     }
     case "list": {
-      // a free list (frontmatter brought along): ":" and "!=" test whether one entry is the value
+      // a free list: ":" and "!=" test whether one entry is the value
       const has = asIds(hit.value).some((x) => titleKey(x) === titleKey(want));
       return membership(has, c.op);
     }

@@ -1,5 +1,4 @@
-// The model additions for bringing data over from Notion and Obsidian: dates with a time, lists
-// in free properties, aliases, and former property names.
+// Format 3: dates with a time, lists in free properties, aliases, and former property names.
 import { test, expect, describe } from "bun:test";
 import { MemRepo } from "../support/helpers";
 import { parseDateTime, dateText } from "@obtion/core/input";
@@ -71,7 +70,7 @@ describe("free properties hold lists", () => {
 });
 
 describe("aliases", () => {
-  test("[[Alias]] and [[Folder/Note]] lead to the item; titles come first", () => {
+  test("[[Alias]] leads to the item; titles come first", () => {
     const m = new MemRepo();
     const note = m.add({ title: "Künstliche Intelligenz", aliases: ["KI", "AI"] });
     const other = m.add({ title: "AI" });
@@ -79,9 +78,7 @@ describe("aliases", () => {
     expect(m.get(note)!.aliases).toEqual(["AI", "KI"]);
     expect(ix.resolveTitle("ki")).toBe(note);
     expect(ix.resolveTitle("AI")).toBe(other);
-    expect(ix.resolveTitle("Themen/Künstliche Intelligenz")).toBe(note);
-    expect(ix.resolveTitle("Themen/Künstliche Intelligenz.md")).toBe(note);
-    expect(ix.resolveTitle("Themen/Nichts")).toBeUndefined();
+    expect(ix.resolveTitle("Themen/KI")).toBeUndefined();
   });
 
   test("aliases can't hold link syntax and are trimmed", () => {
