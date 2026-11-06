@@ -67,6 +67,23 @@ test("stored records from another RECORD_VERSION are read anew", () => {
   expect(again.records.get(ids[2]!)?.title).toBe("Notiz 2");
 });
 
+test("a failed atomic call keeps an earlier change of the same document pending until the flush", () => {
+  const { dir, s, ids } = seeded(2);
+  const [a, b] = ids as [string, string];
+  s.change(a, "web:tim", (d) => d.getMap("meta").set("title", "committed"));
+  expect(() =>
+    s.atomic(() => {
+      s.change(a, "agent:test", (d) => d.getMap("meta").set("title", "rolled back"));
+      throw new Error("fails");
+    }),
+  ).toThrow();
+  s.change(b, "web:tim", (d) => d.getMap("meta").set("title", "B"));
+  s.flush();
+  s.db.close();
+  const again = new Store(dir, 3);
+  expect(again.records.get(a)?.title).toBe("committed");
+});
+
 test("only the most recently used documents stay; the ones with unsaved changes always", () => {
   const { s, ids } = seeded(10);
   expect(s.loaded.size).toBe(3);

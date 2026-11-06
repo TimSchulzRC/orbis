@@ -337,10 +337,9 @@ export class Store {
     }
   }
 
-  /** Drops changes that never reached the log. */
+  /** Drops changes that never reached the log. Changes logged before stay pending, so the next flush saves them. */
   private reload(ids: string[]) {
     for (const id of ids) {
-      this.pending.delete(id);
       this.loaded.delete(id);
       const doc = this.read(id);
       const rec = doc && readItem(id, doc);
