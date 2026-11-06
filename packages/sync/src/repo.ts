@@ -162,7 +162,7 @@ export class Repo {
   private persistFailed = false;
   private ix: { v: number; index: Index } | null = null;
   private blobListeners = new Set<(hash: string) => void>();
-  private purgeListeners = new Set<() => void>();
+  private purgeListeners = new Set<(items: Item[]) => void>();
   /** Documents the server deleted for good: never applied or sent again. */
   private purged = new Set<string>();
 
@@ -571,6 +571,7 @@ export class Repo {
   /** Forgets documents the server deleted for good, here and in the storage. */
   private async drop(ids: string[]) {
     const gone = new Set(ids);
+    const items = ids.flatMap((id) => this.records.get(id) ?? []);
     for (const id of ids) {
       this.purged.add(id);
       this.docs.get(id)?.destroy();
@@ -585,12 +586,12 @@ export class Repo {
     this.events = this.events.filter((e) => !gone.has(e.doc));
     resolveCascade(this.records);
     await this.db.drop(ids);
-    for (const l of this.purgeListeners) l();
+    for (const l of this.purgeListeners) l(items);
     this.emit();
   }
 
-  /** After documents were purged, e.g. to drop file contents only they used. */
-  onPurge(l: () => void) {
+  /** After documents were purged (their last records), e.g. to drop file contents only they used. */
+  onPurge(l: (items: Item[]) => void) {
     this.purgeListeners.add(l);
     return () => this.purgeListeners.delete(l);
   }

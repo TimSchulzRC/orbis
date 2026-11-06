@@ -112,7 +112,9 @@ export class Store {
    */
   private load() {
     const last = this.db.query("SELECT seq, uid FROM updates ORDER BY seq DESC LIMIT 1").get() as { seq: number; uid: string } | null;
-    this.seq = last?.seq ?? 0;
+    // purged rows may have been the newest: AUTOINCREMENT remembers the highest seq handed out
+    const top = this.db.query("SELECT seq FROM sqlite_sequence WHERE name = 'updates'").get() as { seq: number } | null;
+    this.seq = Math.max(last?.seq ?? 0, top?.seq ?? 0);
     this.lastUid = last?.uid ?? "";
     for (const r of this.db.query("SELECT id FROM purged").all() as { id: string }[]) this.purged.add(r.id);
     if (this.kvGet("recordVersion") !== String(RECORD_VERSION)) {

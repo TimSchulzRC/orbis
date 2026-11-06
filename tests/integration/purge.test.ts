@@ -177,3 +177,16 @@ test("agents delete for good only from the trash, one item or all of it", async 
   expect([...s.records.values()].map((r) => r.title)).not.toContain("Auch alt");
   expect(s.index().resolveTitle("Bleibt")).toBeDefined();
 });
+
+test("a purge after a restart still reaches a device whose cursor sat on purged rows", () => {
+  const dir = tempDir("obtion-purge-seq-");
+  const s = new Store(dir);
+  for (const id of ["a", "b", "c"]) s.applyRemote(id, docUpdate({ id, title: id }), "web:x");
+  const cursor = s.last(PERSONAL); // on c's row, the newest
+  s.purge(["c"]);
+  s.db.close();
+  const again = new Store(dir);
+  again.purge(["b"]);
+  expect(again.knowsCursor(PERSONAL, cursor.seq, cursor.uid)).toBe(true);
+  expect(again.purgedSince(PERSONAL, cursor.seq).sort()).toEqual(["b", "c"]);
+});
