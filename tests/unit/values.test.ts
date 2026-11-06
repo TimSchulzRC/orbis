@@ -1,12 +1,12 @@
-// Format 3: dates with a time, lists in free properties, aliases, and former property names.
+// Format 3: dates with a time, lists in free properties and former property names.
 import { test, expect, describe } from "bun:test";
 import { MemRepo } from "../support/helpers";
 import { parseDateTime, dateText } from "@obtion/core/input";
 import { dayOf, timeOf } from "@obtion/core/date";
-import { propByName, readSchema, setExtra, setMember, upsertProp } from "@obtion/core/model";
+import { propByName, readSchema, setExtra, upsertProp } from "@obtion/core/model";
 import { dateEnd, dueOf } from "@obtion/core/traits";
 import { freeDef, mapValue, toFree } from "@obtion/core/typeops";
-import { parseQuery, runQuery as run } from "@obtion/core/query";
+import { groupItems, parseQuery, runQuery as run } from "@obtion/core/query";
 import type { Index } from "@obtion/core/graph";
 
 const runQuery = (q: string, ix: Index, ctx: { today?: string }) => run(parseQuery(q, ix).def, { ix, ...ctx });
@@ -64,31 +64,9 @@ describe("free properties hold lists", () => {
     expect(m.get(x)!.extra.Autoren).toEqual({ k: "list", v: ["Ada", "Grace"] });
     expect(runQuery("Autoren:grace", m.index(), {}).items.map((i) => i.id)).toEqual([x]);
     expect(runQuery("Autoren:Lin", m.index(), {}).items).toEqual([]);
+    expect(groupItems([m.get(x)!], "Autoren", { ix: m.index() }).map((g) => g.label)).toEqual(["Ada, Grace"]);
     m.change(x, (d) => setExtra(d, "Autoren", { k: "list", v: [] }));
     expect(m.get(x)!.extra.Autoren).toBeUndefined();
-  });
-});
-
-describe("aliases", () => {
-  test("[[Alias]] leads to the item; titles come first", () => {
-    const m = new MemRepo();
-    const note = m.add({ title: "Künstliche Intelligenz", aliases: ["KI", "AI"] });
-    const other = m.add({ title: "AI" });
-    const ix = m.index();
-    expect(m.get(note)!.aliases).toEqual(["AI", "KI"]);
-    expect(ix.resolveTitle("ki")).toBe(note);
-    expect(ix.resolveTitle("AI")).toBe(other);
-    expect(ix.resolveTitle("Themen/KI")).toBeUndefined();
-  });
-
-  test("aliases can't hold link syntax and are trimmed", () => {
-    const m = new MemRepo();
-    const x = m.add({ title: "X" });
-    m.change(x, (d) => {
-      setMember(d, "aliases", "  Ein   Name ", true);
-      setMember(d, "aliases", "a|b", true);
-    });
-    expect(m.get(x)!.aliases).toEqual(["Ein Name"]);
   });
 });
 

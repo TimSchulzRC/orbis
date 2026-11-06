@@ -851,7 +851,10 @@ export function groupItems(items: Item[], by: string | undefined, ctx: EvalCtx, 
       } else if (hit.kind === "relation") {
         const ids = hit.value as string[];
         add(ids.join(","), { label: ids.map((id) => ix.get(id)?.title ?? "").join(", "), ref: ids.length === 1 ? ids[0] : undefined }, i);
-      } else add(String(hit.value), { label: String(hit.value) }, i);
+      } else {
+        const label = Array.isArray(hit.value) ? hit.value.join(", ") : String(hit.value);
+        add(label, { label }, i);
+      }
     }
   }
   // empty option groups give a drop target and a "+ Neu" button

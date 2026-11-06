@@ -68,7 +68,6 @@ export const createInput = z.object({
   pin: z.boolean().optional().describe("pin to the top of the sidebar (a place of its own)"),
   properties: values.optional(),
   free_properties: freeValues.optional(),
-  aliases: z.array(z.string()).optional().describe("further names of the item: [[Alias]] links lead here too"),
   agent_rules: z.string().optional().describe("rules for agents (Markdown), binding for this item and everything below it; only when the user asks"),
 });
 export type CreateInput = z.infer<typeof createInput>;
@@ -80,8 +79,6 @@ export const updateInput = z.object({
   properties: values.optional(),
   free_properties: freeValues.optional(),
   free_properties_remove: z.array(z.string()).optional().describe("names of free properties to remove"),
-  aliases_add: z.array(z.string()).optional(),
-  aliases_remove: z.array(z.string()).optional(),
   tags_add: z.array(z.string()).optional(),
   tags_remove: z.array(z.string()).optional(),
   refs_add: z.array(z.string()).optional(),

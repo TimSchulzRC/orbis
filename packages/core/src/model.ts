@@ -13,7 +13,6 @@
 //                                              property, or set by an agent; k "list": v is string[])
 //   rels     Y.Map   propId -> Y.Map<targetId, true>
 //   tags     Y.Map   tag -> true
-//   aliases  Y.Map   alias -> true            (further names: [[Alias]] links lead here too)
 //   refs     Y.Map   targetId -> sort key      (explicit only; links in the text are derived; older: true)
 //   body     Y.Text  Markdown with [[links]] and ```abfrage blocks
 //   rules    Y.Text  "Regeln für Agenten": Markdown, binding for agents on this item and all below it
@@ -186,8 +185,8 @@ export const PERSONAL = "personal";
 /**
  * An older app that meets newer data still reads it but asks for an update before it writes.
  * 2: the status is a property kind, no longer the capability `status` on a select.
- * 3: dates may carry a time (2026-10-30T14:30), free properties may hold lists, items have
- *    aliases and properties their former names; an older app would drop times and lists on edit.
+ * 3: dates may carry a time (2026-10-30T14:30), free properties may hold lists, properties
+ *    keep their former names; an older app would drop times and lists on edit.
  */
 export const FORMAT = 3;
 
@@ -242,8 +241,6 @@ export interface Item {
   extra: Record<string, FreeValue>;
   rels: Record<string, string[]>;
   tags: string[];
-  /** Further names of the item: [[Alias]] links and title lookups lead to it (after titles). */
-  aliases: string[];
   refs: string[];
   body: string;
   /** "Regeln für Agenten" (see rules.ts); "" when there are none. */
@@ -291,7 +288,7 @@ function withoutStatus({ status: _, ...caps }: Capabilities & { status?: unknown
 }
 
 /** The top-level maps of a document; query, view and pin belong to former collections. */
-export const DOC_MAPS = ["meta", "parents", "props", "extra", "rels", "tags", "aliases", "refs", "views", "schema", "tabs", "file", "op", "settings", "query", "view", "pin", DRAWING, DRAWING_FILES, DRAWING_STATE] as const;
+export const DOC_MAPS = ["meta", "parents", "props", "extra", "rels", "tags", "refs", "views", "schema", "tabs", "file", "op", "settings", "query", "view", "pin", DRAWING, DRAWING_FILES, DRAWING_STATE] as const;
 
 /** Narrow on reading: the data comes from other devices. */
 export type MetaValue = string | number | boolean | Suggestion;
@@ -391,7 +388,6 @@ export function readItem(id: string, doc: Y.Doc): Item | null {
     extra: doc.getMap<FreeValue>("extra").toJSON() as Record<string, FreeValue>,
     rels,
     tags: [...doc.getMap("tags").keys()].sort(),
-    aliases: [...doc.getMap("aliases").keys()].sort(),
     refs: refOrder(doc),
     body: doc.getText("body").toString(),
     rules: doc.getText("rules").toString(),
@@ -452,7 +448,6 @@ export interface ItemInit {
   body?: string;
   rules?: string;
   tags?: string[];
-  aliases?: string[];
   refs?: string[];
   parents?: string[]; // first one becomes the home
   props?: Record<string, Value>;
@@ -479,7 +474,6 @@ export function initItem(doc: Y.Doc, init: ItemInit, now = Date.now()) {
   if (init.body) doc.getText("body").insert(0, init.body);
   if (init.rules?.trim()) doc.getText("rules").insert(0, init.rules);
   for (const t of init.tags ?? []) setMember(doc, "tags", t, true);
-  for (const a of init.aliases ?? []) setMember(doc, "aliases", a, true);
   for (const r of init.refs ?? []) setMember(doc, "refs", r, true);
   (init.parents ?? []).forEach((p, i) => addParent(doc, p, undefined, (init.created ?? now) + i));
   for (const [k, v] of Object.entries(init.props ?? {})) setProp(doc, k, v);
@@ -599,9 +593,9 @@ export function setRel(doc: Y.Doc, propId: string, target: string, on: boolean) 
   else m.delete(target);
 }
 
-export function setMember(doc: Y.Doc, set: "tags" | "aliases" | "refs", key: string, on: boolean) {
+export function setMember(doc: Y.Doc, set: "tags" | "refs", key: string, on: boolean) {
   const m = doc.getMap(set);
-  const k = set === "tags" ? normalizeTag(key) : set === "aliases" ? normalizeAlias(key) : key;
+  const k = set === "tags" ? normalizeTag(key) : key;
   if (!k) return;
   if (on && set === "refs") addRef(doc, k);
   else if (on) m.set(k, true);
@@ -859,12 +853,6 @@ export function setSettings(doc: Y.Doc, patch: Patch<SettingsRecord>) {
     if (v === null) s.delete(k);
     else if (v !== undefined) s.set(k, v);
   }
-}
-
-/** An alias as written, trimmed and on one line; "" when it could not be a [[link]] target. */
-export function normalizeAlias(a: string): string {
-  const s = a.replace(/\s+/g, " ").trim();
-  return /[\[\]|#]/.test(s) ? "" : s;
 }
 
 export function normalizeTag(t: string): string {

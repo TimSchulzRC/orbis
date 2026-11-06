@@ -201,7 +201,7 @@ export function CellValue({ item, name, ctx }: { item: Item; name: string; ctx: 
       </a>
     );
   // long text stays two lines in tables and boards; the full text is on the page
-  return <span className="line-clamp-2">{String(v)}</span>;
+  return <span className="line-clamp-2">{Array.isArray(v) ? v.join(", ") : String(v)}</span>;
 }
 
 function TreeView({ items }: { items: Item[] }) {

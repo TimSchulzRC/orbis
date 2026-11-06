@@ -18,7 +18,7 @@ import { workspaceRules } from "@obtion/core/rules";
 const INSTRUCTIONS = `Obtion is the user's personal system for knowledge and work: informations linked like Obsidian, projects and tasks like Notion, all in one graph. You are their interface: they tell you what happened, you record it; they ask, you answer from the data.
 
 The model:
-- Everything is an information (title, Markdown body, tags, aliases, refs) or a file. An information has at most one type. Types are data: call \`schema\` first – it lists every type with its description, properties (with options) and capabilities. Follow the descriptions. Never assume a type exists because of its name.
+- Everything is an information (title, Markdown body, tags, refs) or a file. An information has at most one type. Types are data: call \`schema\` first – it lists every type with its description, properties (with options) and capabilities. Follow the descriptions. Never assume a type exists because of its name.
 - "Part of" (place) builds the tree: an item can have several parents, one is its home. Links ([[Title]]) and refs are mentions; they connect without sorting. Relations are typed properties.
 - Pinned items form the top of the sidebar (place with pin:true); pinning counts as a place.
 - An information without a type, without a parent and not pinned is in the inbox (precisely: whatever the inbox query matches, see \`schema\`). Without a type but with a parent it is a note.
@@ -186,7 +186,7 @@ function buildMcpServer(store: Store, origin: string, blobs?: Blobs, lang: Lang 
     "create",
     {
       title: "Create",
-      description: "Create informations. type is a type name (see schema) or omitted; parents (titles/ids) place them; properties by name (only those of the type), other values as free_properties; aliases are further names that [[links]] resolve. Without type and parent the item lands in the inbox.",
+      description: "Create informations. type is a type name (see schema) or omitted; parents (titles/ids) place them; properties by name (only those of the type), other values as free_properties. Without type and parent the item lands in the inbox.",
       inputSchema: { items: z.array(createInput).min(1) },
     },
     write((a, touched) => `Created:\n${ops.written(mark(touched, a.items.map((x) => ops.create(x, origin))))}`),
@@ -195,7 +195,7 @@ function buildMcpServer(store: Store, origin: string, blobs?: Blobs, lang: Lang 
     "update",
     {
       title: "Update",
-      description: "Change one item: title, type (name or null), properties by name (null clears), free_properties (set) and free_properties_remove, tags, aliases, refs, body. Body: prefer old_text/new_text or body_mode append|prepend; replacing the whole body (body without body_mode, or replace) needs base_version from get, and a stale one is rejected with what changed since. Renaming rewrites [[links]]. The answer shows the new version.",
+      description: "Change one item: title, type (name or null), properties by name (null clears), free_properties (set) and free_properties_remove, tags, refs, body. Body: prefer old_text/new_text or body_mode append|prepend; replacing the whole body (body without body_mode, or replace) needs base_version from get, and a stale one is rejected with what changed since. Renaming rewrites [[links]]. The answer shows the new version.",
       inputSchema: updateInput.shape,
     },
     write((a, touched) => {

@@ -140,7 +140,7 @@ const canonical = (x: unknown): unknown =>
  * copy stale. `update` takes it as base_version.
  */
 export function versionOf(i: Item): string {
-  const content = canonical([i.title, i.type, i.body, i.rules, i.props, i.rels, i.extra, i.tags, i.refs, ...(i.aliases.length ? [i.aliases] : [])]);
+  const content = canonical([i.title, i.type, i.body, i.rules, i.props, i.rels, i.extra, i.tags, i.refs]);
   return createHash("sha256").update(JSON.stringify(content)).digest("hex").slice(0, 12);
 }
 
@@ -545,7 +545,6 @@ export class Ops {
     const ix = this.store.index();
     const out: Record<string, unknown> = { ...this.brief(i), version: versionOf(i) };
     delete out.path;
-    if (i.aliases.length) out.aliases = i.aliases;
     const parents = ix.parentsOf(i.id);
     if (parents.length) out.part_of = parents.map((p) => `${ix.get(p)?.title}${p === ix.home(i.id) && parents.length > 1 ? " (home)" : ""}`);
     out.path = ix.pathText(ix.homePath(i.id)) || undefined;
@@ -1072,7 +1071,7 @@ export class Ops {
     this.noSelfLink(body, id, title);
     this.store.change(id, origin, (doc) => {
       const pinned = input.pin ? nextPinKey(this.store.live()) : undefined;
-      initItem(doc, { title, type: type?.id ?? null, body, rules: input.agent_rules, tags: input.tags, aliases: input.aliases, refs, parents, pinned, props: initialProps(schema), createdBy: origin });
+      initItem(doc, { title, type: type?.id ?? null, body, rules: input.agent_rules, tags: input.tags, refs, parents, pinned, props: initialProps(schema), createdBy: origin });
       this.applyProps(doc, undefined, schema, input.properties);
       for (const [k, v] of free) setExtra(doc, k, v);
     });
@@ -1123,11 +1122,6 @@ export class Ops {
       for (const [k, v] of free) setExtra(doc, Object.keys(item.extra).find((n) => titleKey(n) === titleKey(k)) ?? k, v);
       for (const t of input.tags_add ?? []) setMember(doc, "tags", t, true);
       for (const t of input.tags_remove ?? []) setMember(doc, "tags", t, false);
-      for (const a of input.aliases_add ?? []) setMember(doc, "aliases", a, true);
-      for (const a of input.aliases_remove ?? []) {
-        const name = item.aliases.find((x) => titleKey(x) === titleKey(a));
-        if (name) setMember(doc, "aliases", name, false);
-      }
       for (const r of refsAdd) setMember(doc, "refs", r, true);
       for (const r of refsRem) setMember(doc, "refs", r, false);
       if (body !== undefined) replaceBody(doc, body);
