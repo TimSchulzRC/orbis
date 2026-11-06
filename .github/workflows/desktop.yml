@@ -45,16 +45,19 @@ jobs:
         # the Mac's ad-hoc signature uses no secret: also for pull requests (else the app does not start on Apple Silicon)
         env:
           CSC_FOR_PULL_REQUEST: true
+      # the check is the build: a full artifact storage (it counts for the whole account) only
+      # leaves this run without installers, as a warning
       - uses: actions/upload-artifact@v7
+        continue-on-error: true
         with:
           name: obtion-desktop-${{ matrix.platform }}
+          # the Mac's zips are for updates, which the app does not do yet: the DMGs are enough to try it
           path: |
             apps/desktop/release/*.dmg
-            apps/desktop/release/*.zip
             apps/desktop/release/*.exe
             apps/desktop/release/*.AppImage
             apps/desktop/release/*.deb
           if-no-files-found: error
-          # installers are large (about 1 GB per run): a week is enough to try one, and the
+          # installers are large (several hundred MB per run): a week is enough to try one, and the
           # account's artifact storage stays free for the next runs
           retention-days: 7
