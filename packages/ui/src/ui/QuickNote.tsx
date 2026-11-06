@@ -80,9 +80,7 @@ export function QuickNoteButton() {
       className={cn("tap-y flex min-h-11 items-center gap-2.5 rounded-xl py-1.5 pl-3 pr-2 text-sm font-semibold hover:bg-hover", open && "bg-hover")}
     >
       {t("quick.title")}
-      <span className={cn("flex size-6 shrink-0 items-center justify-center rounded-md transition-colors", open ? "bg-fg text-bg" : "bg-primary text-primary-foreground")} aria-hidden>
-        <Plus size={15} strokeWidth={2.5} className={cn("transition-transform duration-200", open && "rotate-45")} />
-      </span>
+      <Plus size={16} className={cn("shrink-0 text-muted-foreground transition-transform duration-200", open && "rotate-45")} aria-hidden />
     </Button>
   );
 }
