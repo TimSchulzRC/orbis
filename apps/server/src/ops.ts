@@ -27,6 +27,7 @@ import {
   removeParent,
   replaceBody,
   setCapability,
+  propByName,
   setExtra,
   setFileMeta,
   setHome,
@@ -55,7 +56,7 @@ import { type Heading, findSection, outline, page } from "@obtion/core/outline";
 import { keyBetween, nextPinKey } from "@obtion/core/sortkey";
 import { DAY_MS, dateOf } from "@obtion/core/date";
 import { freshColor } from "@obtion/core/palette";
-import { DATE_HELP, InputError, matchOption, parseDate, parseNumber, statusGroupOf } from "@obtion/core/input";
+import { DATE_HELP, InputError, matchOption, parseDateTime, parseNumber, statusGroupOf } from "@obtion/core/input";
 import { type Writer, runSetup, typeTabs } from "@obtion/core/setup";
 import { type PropChange, followKindChange, followPropChange, followTypeRename } from "@obtion/core/typerefs";
 import { running } from "@obtion/core/today";
@@ -194,8 +195,8 @@ function splitRange(s: string, today: string): string | undefined {
   for (let i = s.indexOf("/"); i >= 0; i = s.indexOf("/", i + 1)) {
     const a = s.slice(0, i).trim();
     const b = s.slice(i + 1).trim();
-    const da = a ? parseDate(a, today) : "";
-    const db = b ? parseDate(b, today) : "";
+    const da = a ? parseDateTime(a, today) : "";
+    const db = b ? parseDateTime(b, today) : "";
     if (da !== undefined && db !== undefined && (da || db)) return `${da}/${db}`;
   }
   return undefined;
@@ -965,7 +966,7 @@ export class Ops {
       case "date": {
         const s = String(raw).trim();
         const today = todayISO();
-        const whole = parseDate(s, today);
+        const whole = parseDateTime(s, today);
         if (whole) return { value: whole };
         const range = p.range ? splitRange(s, today) : undefined;
         if (range) return { value: range };
@@ -999,7 +1000,7 @@ export class Ops {
   }
 
   private prop(schema: TypeSchema | undefined, name: string): PropDef {
-    const p = schema?.properties.find((x) => titleKey(x.name) === titleKey(name) || x.id === name);
+    const p = propByName(schema, name);
     if (!p) throw new OpError(`Unknown property "${name}"${schema ? ` on type ${schema.name}. Properties: ${schema.properties.map((x) => x.name).join(", ") || "none"}` : " (no type)"}. Properties belong to a type: add it to the type with update_type, or give the item a type that has it.`);
     return p;
   }
@@ -1397,7 +1398,7 @@ export class Ops {
     if (by === "statusGroup") return statusGroupOf(name) ?? name;
     const types = typesIn(where).map((id) => ix.types.get(id)?.schema).filter(Boolean);
     for (const sc of types.length ? types : [...ix.types.values()].map((x) => x.schema)) {
-      const p = by === "status" ? statusProp(sc) : sc?.properties.find((x) => titleKey(x.name) === titleKey(by ?? ""));
+      const p = by === "status" ? statusProp(sc) : propByName(sc, by ?? "");
       const o = p?.options?.find((x) => titleKey(x.name) === k);
       if (o) return o.id;
     }

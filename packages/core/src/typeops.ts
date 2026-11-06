@@ -85,11 +85,17 @@ export function toFree(p: PropDef, v: Value | undefined): FreeValue | undefined 
     case "select":
     case "status": {
       const names = optionIds(v).map((id) => p.options?.find((o) => o.id === id)?.name ?? id);
-      return p.multiple ? { k: "text", v: names.join(", ") } : { k: "select", v: names[0] ?? String(v) };
+      return p.multiple ? { k: "list", v: names } : { k: "select", v: names[0] ?? String(v) };
     }
     default:
       return undefined;
   }
+}
+
+/** A free value read as a property, for mapValue: a list is a multiple choice whose options are its texts. */
+export function freeDef(name: string, fv: FreeValue): PropDef {
+  if (fv.k === "list") return { id: "", name, kind: "select", multiple: true, options: [], sort: "" };
+  return { id: "", name, kind: fv.k === "select" ? "text" : fv.k, sort: "" };
 }
 
 /**
@@ -123,7 +129,7 @@ export function mapValue(from: PropDef, to: PropDef, v: Value, opts: { byId?: bo
     const out = ids.filter(Boolean) as string[];
     return out.length ? out : undefined;
   }
-  if (["text", "url"].includes(to.kind)) return typeof v === "string" ? (optName(v) ?? v) : String(v);
+  if (["text", "url"].includes(to.kind)) return Array.isArray(v) ? v.map((x) => optName(x) ?? x).join(", ") : typeof v === "string" ? (optName(v) ?? v) : String(v);
   if (to.kind === "number" && typeof v === "number") return v;
   if (to.kind === "date" && typeof v === "string" && /^\d{4}-/.test(v)) return v;
   if (to.kind === "checkbox" && typeof v === "boolean") return v;
@@ -197,7 +203,7 @@ function convertItem(doc: Y.Doc, item: Item, from: TypeSchema | undefined, ix: I
     for (const [name, fv] of Object.entries(item.extra)) {
       const q = target.properties.find((x) => titleKey(x.name) === titleKey(name));
       if (!q || q.kind === "computed" || q.kind === "relation") continue;
-      const v = mapValue({ id: "", name, kind: fv.k === "select" ? "text" : fv.k, sort: "" }, q, fv.v as Value);
+      const v = mapValue(freeDef(name, fv), q, fv.v as Value);
       if (v === undefined) continue;
       setTyped(q.id, v);
       setFree(name, null);

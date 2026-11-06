@@ -3,7 +3,8 @@ import { Textarea } from "../components/ui/textarea";
 import { useRef, useState } from "react";
 import { CalendarDays } from "lucide-react";
 import { todayISO } from "@obtion/core/model";
-import { dateText, parseDate } from "@obtion/core/input";
+import { dateText, parseDateTime } from "@obtion/core/input";
+import { dayOf, timeOf, withTime } from "@obtion/core/date";
 import { useFocusDraft } from "../hooks";
 import { useT } from "../i18n";
 import { cn } from "../lib/utils";
@@ -53,7 +54,8 @@ export function InlineText({
 
 /**
  * Commits only complete, plausible dates. Parses in the app language, not the browser's
- * (30.10.2026, 10/30/2026, morgen, Freitag …), the same way as the agent's input.
+ * (30.10.2026, 10/30/2026, morgen, Freitag …), the same way as the agent's input. A time is
+ * optional (30.10.2026 14:30); the calendar picker changes the day and keeps the time.
  */
 export function DateField({ value, onChange, label, className, autoFocus }: { value?: string; onChange: (v: string) => void; label: string; className?: string; autoFocus?: boolean }) {
   const { t, lang } = useT();
@@ -71,7 +73,7 @@ export function DateField({ value, onChange, label, className, autoFocus }: { va
       if (value) onChange("");
       return;
     }
-    const iso = parseDate(raw, todayISO());
+    const iso = parseDateTime(raw, todayISO());
     if (!iso) {
       setBad(true);
       setTimeout(() => (setBad(false), setText(shown)), 1500);
@@ -96,7 +98,7 @@ export function DateField({ value, onChange, label, className, autoFocus }: { va
         onChange={(e) => setText(e.target.value)}
         onBlur={commit}
         onKeyDown={onKeyDown}
-        className={cn("w-[6.6rem] bg-transparent px-1 py-0.5 tabular-nums outline-none placeholder:text-muted-foreground", bad && "text-danger")}
+        className={cn(text.length > 10 ? "w-[9.2rem]" : "w-[6.6rem]", "bg-transparent px-1 py-0.5 tabular-nums outline-none placeholder:text-muted-foreground", bad && "text-danger")}
       />
       <Button variant="plain" type="button" onClick={() => picker.current?.showPicker?.()} className="tap relative rounded p-0.5 text-muted-foreground opacity-60 hover:text-fg focus-visible:opacity-100 group-hover/date:opacity-100" aria-label={t("date.calendar")}>
         <CalendarDays size={13} />
@@ -106,8 +108,8 @@ export function DateField({ value, onChange, label, className, autoFocus }: { va
           type="date"
           tabIndex={-1}
           aria-hidden
-          value={value ?? ""}
-          onChange={(e) => e.target.value && onChange(e.target.value)}
+          value={value ? dayOf(value) : ""}
+          onChange={(e) => e.target.value && onChange(withTime(e.target.value, value ? timeOf(value) : undefined))}
           className="pointer-events-none absolute inset-0 opacity-0"
         />
       </Button>

@@ -1,4 +1,6 @@
-// Dates are stored as YYYY-MM-DD of the local calendar. Arithmetic runs in UTC so adding a day
+// Dates are stored as YYYY-MM-DD of the local calendar, optionally with a wall-clock time:
+// YYYY-MM-DDTHH:MM (no zone, like the date itself). Plain string order stays chronological, and a
+// day without a time sorts before the same day with one. Arithmetic runs in UTC so adding a day
 // stays one day across a daylight saving change.
 
 /** For durations between timestamps, not for calendar dates. */
@@ -30,4 +32,19 @@ export function diffDays(a: string, b: string) {
 
 export function addDaysISO(days: number, from = new Date()) {
   return addDays(todayISO(from), days);
+}
+
+/** The calendar day of a stored date value, with or without a time. */
+export function dayOf(v: string): string {
+  return v.slice(0, 10);
+}
+
+/** "HH:MM" of a stored date value, undefined for a whole day. */
+export function timeOf(v: string): string | undefined {
+  return /^\d{4}-\d{2}-\d{2}T(\d{2}:\d{2})/.exec(v)?.[1];
+}
+
+/** A stored date value from a day and an optional time. */
+export function withTime(day: string, time?: string): string {
+  return time ? `${day}T${time}` : day;
 }

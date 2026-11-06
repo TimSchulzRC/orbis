@@ -6,7 +6,7 @@
 //
 // Space = AND, | = OR, - = NOT, parentheses group. Properties match by name across all types and
 // free properties.
-import { type ViewTab, type ComputedDef, type FileType, type Item, type OptionDef, type PropDef, type ViewKind, FILE_TYPES, META_TYPE, QUERY_FENCE, STATUS_GROUPS, VIEW_KINDS, optionNames, titleKey } from "./model";
+import { type ViewTab, type ComputedDef, type FileType, type Item, type OptionDef, type PropDef, type ViewKind, FILE_TYPES, META_TYPE, QUERY_FENCE, STATUS_GROUPS, VIEW_KINDS, optionNames, propByName, titleKey } from "./model";
 import { dateOf, todayISO } from "./date";
 import { foldUmlauts as fold } from "./text";
 import type { Index } from "./graph";
@@ -463,7 +463,7 @@ export function fieldOf(item: Item, name: string, ix: Index): FieldHit | undefin
     const sp = statusProp(schema);
     if (sp) return { kind: "select", value: statusOf(item, schema)?.option.id, prop: sp };
   }
-  const p = schema?.properties.find((x) => titleKey(x.name) === key);
+  const p = propByName(schema, name);
   if (p) {
     if (p.kind === "relation") return { kind: "relation", value: ix.relValues(item, p.id, p.symmetric), prop: p };
     if (p.kind === "computed") return { kind: "number", value: computedValue(item, p.computed, ix), prop: p };
@@ -586,6 +586,11 @@ function matchField(item: Item, c: { prop: string; op: Op; value?: FieldValue },
       if (c.op === ":") return has;
       if (c.op === "!=") return !has;
       return names.some((n) => cmp(titleKey(n), titleKey(want), c.op));
+    }
+    case "list": {
+      // a free list: ":" and "!=" test whether one entry is the value
+      const has = asIds(hit.value).some((x) => titleKey(x) === titleKey(want));
+      return membership(has, c.op);
     }
     case "relation": {
       const ids = hit.value as string[];
@@ -846,7 +851,10 @@ export function groupItems(items: Item[], by: string | undefined, ctx: EvalCtx, 
       } else if (hit.kind === "relation") {
         const ids = hit.value as string[];
         add(ids.join(","), { label: ids.map((id) => ix.get(id)?.title ?? "").join(", "), ref: ids.length === 1 ? ids[0] : undefined }, i);
-      } else add(String(hit.value), { label: String(hit.value) }, i);
+      } else {
+        const label = Array.isArray(hit.value) ? hit.value.join(", ") : String(hit.value);
+        add(label, { label }, i);
+      }
     }
   }
   // empty option groups give a drop target and a "+ Neu" button
@@ -856,7 +864,7 @@ export function groupItems(items: Item[], by: string | undefined, ctx: EvalCtx, 
       if (schemas.some((sc) => statusProp(sc))) for (const g of STATUS_GROUPS) add(g, { statusGroup: g });
     } else
       for (const sc of schemas) {
-        const p = by === "status" ? statusProp(sc) : sc!.properties.find((x) => titleKey(x.name) === titleKey(by) && hasOptions(x));
+        const p = by === "status" ? statusProp(sc) : propByName(sc, by, hasOptions);
         ranked(p);
         for (const o of p?.options ?? []) add(o.name, { label: o.name, statusGroup: by === "status" ? (o.group ?? "todo") : undefined, option: o });
       }

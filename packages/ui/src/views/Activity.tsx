@@ -42,7 +42,10 @@ function describe(c: FieldChange, item: Item | undefined, ix: Index, t: T): stri
     };
     return `${prop?.name ?? c.field.slice(2)}: ${show(c.from)} → ${show(c.to)}`;
   }
-  if (c.field.startsWith("x:")) return `${c.field.slice(2)}: ${c.from ?? "–"} → ${c.to ?? "–"}`;
+  if (c.field.startsWith("x:")) {
+    const show = (x: unknown) => (x === undefined ? "–" : Array.isArray(x) ? x.join(", ") : String(x));
+    return `${c.field.slice(2)}: ${show(c.from)} → ${show(c.to)}`;
+  }
   if (c.field.startsWith("r:")) {
     const name = propDef(ix, item, c.field.slice(2))?.name ?? "?";
     return addedRemoved(`${name} +${list(added)}`, `${name} −${list(removed)}`);
