@@ -9,6 +9,7 @@ import { isInInbox } from "@obtion/core/placement";
 import { wouldBeInInbox } from "@obtion/core/typeops";
 import { onlyBelow } from "@obtion/core/trash";
 import { hasUpdates, progressSpec } from "@obtion/core/traits";
+import { updateFeed } from "@obtion/core/updates";
 import { useRepo, useIndex, itemHref, leavePage, openItem, setParams, showTitle, useDocumentTitle } from "../hooks";
 import { repo } from "../repo";
 import { useT, tr, getLang, titleOf } from "../i18n";
@@ -122,7 +123,14 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
   const cycles = ix.cycleEdgesOf(item.id);
   const progress = progressSpec(schema) ? ix.progressOf(item) : undefined;
 
+  // the top bar's place for the updates button, left of "…"
+  const [updatesSlot, setUpdatesSlot] = useState<HTMLElement | null>(null);
+  const updatable = hasUpdates(schema) && !item.deleted;
+  // with an update the card follows the properties and needs no line above it
+  const updateCard = updatable && updateFeed(ix, item.id).length > 0;
   const tools = (
+    <>
+    {updatable && <span ref={setUpdatesSlot} className="contents" />}
     <MoreMenu>
       {(close) => (
         <>
@@ -164,6 +172,7 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
         </>
       )}
     </MoreMenu>
+    </>
   );
 
   return (
@@ -206,11 +215,12 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
             </>
           ),
           links: <LinksRow item={item} />,
+          noEndLine: updateCard,
           progress: progress && <ProgressBand done={progress.done} total={progress.total} desc={progressText(item, ix, progress.done, progress.total)} />,
         }}
       />
       {/* the newest update and, on a click, all of them in a panel */}
-      {hasUpdates(schema) && !item.deleted && <PageUpdates item={item} />}
+      {updatable && <PageUpdates item={item} bar={updatesSlot} />}
 
       {/* 2 · text */}
       <PageText item={item} isNew={isNew} onView={setView} hasMore={ix.childrenOf(item.id).length > 0} />

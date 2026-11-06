@@ -1,7 +1,7 @@
 // Line diffs between two versions of a text, for the history of an item's body: hunks for the
 // app (lines marked as kept, added or removed) and a compact unified diff for agents. The diff
 // itself comes from jsdiff (Myers); here only the shape the app and the tools need.
-import { structuredPatch } from "diff";
+import { diffWordsWithSpace, structuredPatch } from "diff";
 
 export interface DiffLine {
   op: " " | "+" | "-";
@@ -92,3 +92,17 @@ export function unifiedDiff(d: TextDiff, opts: { maxLines?: number; maxWidth?: n
 }
 
 const range = (start: number, lines: number) => (lines === 1 ? `${start}` : `${start},${lines}`);
+
+/** A part of a changed line: kept, or only in the old (`-`) or the new (`+`) one. */
+export type WordPart = { op: DiffLine["op"]; text: string };
+
+/** Which words of a line changed: the old line's parts (kept and removed) and the new one's (kept and added). */
+export function wordDiff(a: string, b: string): { old: WordPart[]; now: WordPart[] } {
+  const old: WordPart[] = [];
+  const now: WordPart[] = [];
+  for (const p of diffWordsWithSpace(a, b)) {
+    if (!p.added) old.push({ op: p.removed ? "-" : " ", text: p.value });
+    if (!p.removed) now.push({ op: p.added ? "+" : " ", text: p.value });
+  }
+  return { old, now };
+}

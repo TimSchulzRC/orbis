@@ -30,6 +30,8 @@ export const KEYS = {
   updatesSeen: (item: string) => `obtion.updates.seen.${item}`,
   /** an update being written on a page, until it is posted */
   updatesDraft: (item: string) => `obtion.updates.draft.${item}`,
+  /** whether the updates panel shows those of the pages below too (this device) */
+  updatesWithBelow: "obtion.updates.withBelow",
   /** opened rows: sub-items of a table, parts of a page */
   open: (key: string) => `obtion.open.${key}`,
 };

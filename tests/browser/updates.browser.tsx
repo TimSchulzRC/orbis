@@ -8,6 +8,8 @@ import { useState } from "react";
 import { appendUpdate } from "@obtion/core/model";
 import { SYS } from "@obtion/core/setup";
 import { ItemPage } from "../../packages/ui/src/views/ItemPage";
+import { AppToaster } from "../../packages/ui/src/ui/toasts";
+import { ConfirmHost } from "../../packages/ui/src/ui/feedback";
 import { workspace } from "./workspace";
 
 afterEach(() => {
@@ -31,7 +33,7 @@ test("the line opens the panel; a draft survives closing; Ctrl+Enter posts; the 
 
   // reading: the focus is on the panel, not in the text box; the new one is marked
   await line.click();
-  const panel = page.getByRole("dialog", { name: "Updates" });
+  const panel = page.getByRole("dialog", { name: /^Updates zu / });
   await expect.element(panel).toHaveFocus();
   await expect.element(panel.getByText("neu", { exact: true })).toBeVisible();
 
@@ -56,8 +58,8 @@ test("the line opens the panel; a draft survives closing; Ctrl+Enter posts; the 
   await expect.poll(() => repo.get(project)!.updates.map((u) => u.text)).toContain("Mockups sind fertig.");
   await expect.element(box).toHaveValue("");
 
-  // "Nur diese Seite" leaves out the page below
-  await panel.getByRole("radio", { name: "Nur diese Seite" }).click();
+  // without "Mit Unterseiten", the page below is left out
+  await panel.getByRole("checkbox", { name: "Mit Unterseiten" }).click();
   await expect.element(panel.getByText("Entscheidung hängt.")).not.toBeInTheDocument();
   await expect.element(panel.getByText("Kickoff war gut.")).toBeVisible();
   await panel.getByRole("button", { name: "Schließen" }).click();
@@ -68,7 +70,7 @@ test("a page without updates offers to write the first, with the focus in the bo
   const project = repo.create({ title: "Newsletter", type: SYS.project, pinned: "a" });
   await render(<ItemPage id={project} isNew={false} />);
   await page.getByRole("button", { name: "Erstes Update schreiben" }).click();
-  const box = page.getByRole("dialog", { name: "Updates" }).getByRole("textbox", { name: "Update zu Newsletter schreiben" });
+  const box = page.getByRole("dialog", { name: /^Updates zu / }).getByRole("textbox", { name: "Update zu Newsletter schreiben" });
   await expect.element(box).toHaveFocus();
   await expect.element(page.getByRole("dialog").getByText("Noch keine Updates.")).toBeVisible();
   await commands.keys("press", "Escape");
@@ -89,7 +91,7 @@ test("wide: the panel docks beside the page, which stays in use; only what was o
   await render(<Shown />);
 
   await page.getByRole("button", { name: /^Neu, .*40 neu/ }).click();
-  const panel = page.getByRole("dialog", { name: "Updates" });
+  const panel = page.getByRole("dialog", { name: /^Updates zu / });
   await expect.element(panel).toBeVisible();
   // beside the page: no backdrop, the page makes room
   expect(document.querySelector("[data-slot=dialog-overlay]")).toBeNull();
@@ -117,4 +119,48 @@ test("wide: the panel docks beside the page, which stays in use; only what was o
   expect(left).toBeGreaterThan(0);
   expect(left).toBeLessThan(40);
   await page.viewport(1280, 900);
+});
+
+test("the button in the top bar opens the panel too, says what is new, and gets the focus back", async () => {
+  const repo = await workspace(false);
+  const project = repo.create({ title: "Relaunch", type: SYS.project, pinned: "a" });
+  repo.change(project, (d) => appendUpdate(d, { at: Date.now() - 60_000, text: "Entscheidung hängt.", by: "agent:claude" }));
+  await render(<ItemPage id={project} isNew={false} />);
+  const button = page.getByRole("button", { name: "Updates, 1 neu" });
+  await button.click();
+  const panel = page.getByRole("dialog", { name: /^Updates zu / });
+  await expect.element(panel.getByText("Entscheidung hängt.")).toBeVisible();
+  await commands.keys("press", "Escape");
+  await expect.element(page.getByRole("dialog")).not.toBeInTheDocument();
+  await expect.element(page.getByRole("button", { name: "Updates", exact: true })).toHaveFocus();
+});
+
+test("an update can be deleted, and put back with Rückgängig", async () => {
+  const repo = await workspace(false);
+  const project = repo.create({ title: "Relaunch", type: SYS.project, pinned: "a" });
+  repo.change(project, (d) => appendUpdate(d, { at: Date.now() - 7200_000, text: "Erstes.", by: "you" }));
+  repo.change(project, (d) => appendUpdate(d, { at: Date.now() - 60_000, text: "Vertippt.", by: "you" }));
+  await render(
+    <>
+      <ItemPage id={project} isNew={false} />
+      <AppToaster />
+      <ConfirmHost />
+    </>,
+  );
+  await page.getByRole("button", { name: /Letztes Update/ }).click();
+  const panel = page.getByRole("dialog", { name: /^Updates zu / });
+  // asked first: cancelling keeps it
+  await panel.getByRole("button", { name: "Update löschen" }).first().click();
+  const ask = page.getByRole("dialog", { name: "Update löschen?" });
+  await expect.element(ask.getByText("„Vertippt.“", { exact: false })).toBeVisible();
+  await ask.getByRole("button", { name: "Abbrechen" }).click();
+  expect(repo.get(project)!.updates).toHaveLength(2);
+  await panel.getByRole("button", { name: "Update löschen" }).first().click();
+  await page.getByRole("dialog", { name: "Update löschen?" }).getByRole("button", { name: "Löschen" }).click();
+  await expect.poll(() => repo.get(project)!.updates.map((u) => u.text)).toEqual(["Erstes."]);
+  await expect.element(panel.getByText("Vertippt.")).not.toBeInTheDocument();
+  await page.getByRole("button", { name: "Rückgängig" }).click();
+  await expect.poll(() => repo.get(project)!.updates.map((u) => u.text)).toEqual(["Erstes.", "Vertippt."]);
+  await expect.element(panel.getByText("Vertippt.")).toBeVisible();
+  await panel.getByRole("button", { name: "Schließen" }).click();
 });

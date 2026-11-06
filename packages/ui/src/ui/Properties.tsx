@@ -276,7 +276,8 @@ function BlockRow({ label, title, children }: { label: React.ReactNode; title?: 
 
 /**
  * `first` goes before the badges, `afterTags` right after the tags, `end` at the right edge, `links`
- * in a row of its own below them (a divider follows), `progress` under the dates.
+ * in a row of its own below them (a divider follows), `progress` under the dates. `noEndLine`: what
+ * follows sets itself apart (the update card), so the block ends without a line.
  */
 interface PageHead {
   first?: React.ReactNode;
@@ -284,6 +285,7 @@ interface PageHead {
   end?: React.ReactNode;
   links?: React.ReactNode;
   progress?: React.ReactNode;
+  noEndLine?: boolean;
 }
 
 /** Status and selections read as badges by themselves, so they need no label. */
@@ -362,7 +364,7 @@ export function PropertyBlock({ item, schema, head = {} }: { item: Item; schema?
       ))}
       </div>
       )}
-      {(dates.length > 0 || !!head.progress || rows > 0) && <div className="mt-4 border-t border-line" />}
+      {!head.noEndLine && (dates.length > 0 || !!head.progress || rows > 0) && <div className="mt-4 border-t border-line" />}
     </div>
   );
 }
