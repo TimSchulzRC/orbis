@@ -9,9 +9,11 @@
 //                    No inbox field, the inbox is computed. An old "kept" is ignored since 01.11.
 //   parents  Y.Map   parentId -> { sort, at }  (sort is per parent, at = when added)
 //   props    Y.Map   propId -> value
-//   extra    Y.Map   name -> { k, v }          (left over from a removed type or property)
+//   extra    Y.Map   name -> { k, v }          (free properties: left over from a removed type or
+//                                              property, or brought along from elsewhere; k "list": v is string[])
 //   rels     Y.Map   propId -> Y.Map<targetId, true>
 //   tags     Y.Map   tag -> true
+//   aliases  Y.Map   alias -> true            (further names: [[Alias]] links lead here too)
 //   refs     Y.Map   targetId -> sort key      (explicit only; links in the text are derived; older: true)
 //   body     Y.Text  Markdown with [[links]] and ```abfrage blocks
 //   rules    Y.Text  "Regeln für Agenten": Markdown, binding for agents on this item and all below it
@@ -47,8 +49,12 @@ export const STATUS_GROUPS: StatusGroup[] = ["todo", "active", "done"];
  */
 export type PropKind = "text" | "number" | "date" | "checkbox" | "url" | "select" | "status" | "relation" | "computed";
 export const PROP_KINDS: PropKind[] = ["text", "number", "date", "checkbox", "url", "select", "status", "relation", "computed"];
-/** Free properties hold values left over when a type or property goes. Never added by hand. */
-export type FreeKind = "text" | "number" | "date" | "checkbox" | "url" | "select";
+/**
+ * Free properties hold values without a property of the item's type: left over when a type or
+ * property goes, or brought along by an agent (frontmatter from elsewhere). Never added by hand.
+ * "list" holds several texts (former multiple choices, frontmatter lists).
+ */
+export type FreeKind = "text" | "number" | "date" | "checkbox" | "url" | "select" | "list";
 
 export interface OptionDef {
   id: string;
@@ -78,6 +84,12 @@ export interface PropDef {
   hideEmpty?: boolean; // no longer read: pages show every property; kept so older data stays valid
   blocks?: boolean; // relation and text: holds the item up while set (a relation: while a target is open)
   removed?: boolean; // removed from the type; kept so its values still have a name
+  /**
+   * Names it had before, newest last. Views and queries name properties by text (so one column can
+   * mean the same name across types); a view written with an old name on a device that missed the
+   * rename still finds the property (see propByName).
+   */
+  formerNames?: string[];
   sort: string;
 }
 
@@ -106,7 +118,7 @@ export interface TypeSchema {
 export type Value = string | number | boolean | string[];
 export interface FreeValue {
   k: FreeKind;
-  v: string | number | boolean;
+  v: string | number | boolean | string[];
 }
 
 export interface ParentLink {
@@ -174,8 +186,10 @@ export const PERSONAL = "personal";
 /**
  * An older app that meets newer data still reads it but asks for an update before it writes.
  * 2: the status is a property kind, no longer the capability `status` on a select.
+ * 3: dates may carry a time (2026-10-30T14:30), free properties may hold lists, items have
+ *    aliases and properties their former names; an older app would drop times and lists on edit.
  */
-export const FORMAT = 2;
+export const FORMAT = 3;
 
 export interface SettingsRecord {
   setupLang?: string;
@@ -228,6 +242,8 @@ export interface Item {
   extra: Record<string, FreeValue>;
   rels: Record<string, string[]>;
   tags: string[];
+  /** Further names of the item: [[Alias]] links and title lookups lead to it (after titles). */
+  aliases: string[];
   refs: string[];
   body: string;
   /** "Regeln für Agenten" (see rules.ts); "" when there are none. */
@@ -275,7 +291,7 @@ function withoutStatus({ status: _, ...caps }: Capabilities & { status?: unknown
 }
 
 /** The top-level maps of a document; query, view and pin belong to former collections. */
-export const DOC_MAPS = ["meta", "parents", "props", "extra", "rels", "tags", "refs", "views", "schema", "tabs", "file", "op", "settings", "query", "view", "pin", DRAWING, DRAWING_FILES, DRAWING_STATE] as const;
+export const DOC_MAPS = ["meta", "parents", "props", "extra", "rels", "tags", "aliases", "refs", "views", "schema", "tabs", "file", "op", "settings", "query", "view", "pin", DRAWING, DRAWING_FILES, DRAWING_STATE] as const;
 
 /** Narrow on reading: the data comes from other devices. */
 export type MetaValue = string | number | boolean | Suggestion;
@@ -375,6 +391,7 @@ export function readItem(id: string, doc: Y.Doc): Item | null {
     extra: doc.getMap<FreeValue>("extra").toJSON() as Record<string, FreeValue>,
     rels,
     tags: [...doc.getMap("tags").keys()].sort(),
+    aliases: [...doc.getMap("aliases").keys()].sort(),
     refs: refOrder(doc),
     body: doc.getText("body").toString(),
     rules: doc.getText("rules").toString(),
@@ -435,6 +452,7 @@ export interface ItemInit {
   body?: string;
   rules?: string;
   tags?: string[];
+  aliases?: string[];
   refs?: string[];
   parents?: string[]; // first one becomes the home
   props?: Record<string, Value>;
@@ -461,6 +479,7 @@ export function initItem(doc: Y.Doc, init: ItemInit, now = Date.now()) {
   if (init.body) doc.getText("body").insert(0, init.body);
   if (init.rules?.trim()) doc.getText("rules").insert(0, init.rules);
   for (const t of init.tags ?? []) setMember(doc, "tags", t, true);
+  for (const a of init.aliases ?? []) setMember(doc, "aliases", a, true);
   for (const r of init.refs ?? []) setMember(doc, "refs", r, true);
   (init.parents ?? []).forEach((p, i) => addParent(doc, p, undefined, (init.created ?? now) + i));
   for (const [k, v] of Object.entries(init.props ?? {})) setProp(doc, k, v);
@@ -562,7 +581,7 @@ export function setExtra(doc: Y.Doc, name: string, value: FreeValue | null | und
   const extra = doc.getMap<FreeValue>("extra");
   const key = name.trim();
   if (!key) return;
-  if (!value || value.v === "" || value.v === null) extra.delete(key);
+  if (!value || value.v === "" || value.v === null || (Array.isArray(value.v) && !value.v.length)) extra.delete(key);
   else extra.set(key, value);
 }
 
@@ -580,9 +599,9 @@ export function setRel(doc: Y.Doc, propId: string, target: string, on: boolean) 
   else m.delete(target);
 }
 
-export function setMember(doc: Y.Doc, set: "tags" | "refs", key: string, on: boolean) {
+export function setMember(doc: Y.Doc, set: "tags" | "aliases" | "refs", key: string, on: boolean) {
   const m = doc.getMap(set);
-  const k = set === "tags" ? normalizeTag(key) : key;
+  const k = set === "tags" ? normalizeTag(key) : set === "aliases" ? normalizeAlias(key) : key;
   if (!k) return;
   if (on && set === "refs") addRef(doc, k);
   else if (on) m.set(k, true);
@@ -738,11 +757,28 @@ export function upsertProp(doc: Y.Doc, propId: string, patch: Patch<Omit<PropDef
     props.set(propId, prop);
     if (!patch.sort) prop.set("sort", keyBetween(lastSortKey(props), null));
   }
+  // a rename keeps the old name, so views that still name it keep working (see propByName)
+  const was = prop.get("name");
+  if (typeof patch.name === "string" && typeof was === "string" && was.trim() && titleKey(was) !== titleKey(patch.name) && patch.formerNames === undefined) {
+    const former = (prop.get("formerNames") as string[] | undefined) ?? [];
+    const next = [...former.filter((n) => titleKey(n) !== titleKey(was) && titleKey(n) !== titleKey(patch.name!)), was].slice(-5);
+    prop.set("formerNames", next);
+  }
   for (const [k, v] of Object.entries(patch)) {
     if (v === undefined) continue;
     if (v === null || v === "") prop.delete(k);
     else prop.set(k, v);
   }
+}
+
+/**
+ * The property a view or query means by `name`: the current name first, then the id, then a
+ * former name (a view written on a device that missed a rename). Removed properties don't count.
+ */
+export function propByName(schema: Pick<TypeSchema, "properties"> | undefined, name: string, ok: (p: PropDef) => boolean = () => true): PropDef | undefined {
+  const props = schema?.properties.filter(ok) ?? [];
+  const key = titleKey(name);
+  return props.find((p) => titleKey(p.name) === key) ?? props.find((p) => p.id === name) ?? props.find((p) => p.formerNames?.some((n) => titleKey(n) === key));
 }
 
 /** The highest sort key among the properties, null when none has one. */
@@ -823,6 +859,12 @@ export function setSettings(doc: Y.Doc, patch: Patch<SettingsRecord>) {
     if (v === null) s.delete(k);
     else if (v !== undefined) s.set(k, v);
   }
+}
+
+/** An alias as written, trimmed and on one line; "" when it could not be a [[link]] target. */
+export function normalizeAlias(a: string): string {
+  const s = a.replace(/\s+/g, " ").trim();
+  return /[\[\]|#]/.test(s) ? "" : s;
 }
 
 export function normalizeTag(t: string): string {

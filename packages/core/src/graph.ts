@@ -52,6 +52,7 @@ export class Index {
 
   private _titles?: Map<string, string>;
   private _files?: Map<string, string>;
+  private _aliases?: Map<string, string>;
   /** Title and file name keys that more than one entry answers to. */
   private _shared?: Set<string>;
   private _parents?: Map<string, string[]>;
@@ -142,6 +143,7 @@ export class Index {
     if (!this._titles) {
       const byTitle = new Map<string, string>();
       const byFileName = new Map<string, string>();
+      const byAlias = new Map<string, string>();
       const seen = new Set<string>();
       const shared = new Set<string>();
       // Older first so the most recently edited wins on duplicate titles.
@@ -150,22 +152,30 @@ export class Index {
         for (const k of keys) if (k) (seen.has(k) ? shared : seen).add(k);
         if (r.title.trim()) byTitle.set(titleKey(r.title), r.id);
         if (r.file?.name) byFileName.set(titleKey(r.file.name), r.id);
+        for (const a of r.aliases ?? []) byAlias.set(titleKey(a), r.id);
       }
       this._titles = byTitle;
       this._files = byFileName;
+      this._aliases = byAlias;
       this._shared = shared;
     }
     return this._titles;
   }
 
-  /** File names resolve too, so ![[name.png]] keeps working after a rename. */
+  /**
+   * File names resolve too, so ![[name.png]] keeps working after a rename. Then aliases, then an
+   * id, then a path as Obsidian writes it ([[Folder/Note]]) by its last part.
+   */
   resolveTitle = (title: string): string | undefined => {
     const k = titleKey(title);
     const byTitle = this.titles();
     const file = this._files!.get(k);
     if (looksLikeFileName(title) && file) return file;
     // [[id|Label]] links exactly, also to titles that can't be linked by name
-    return byTitle.get(k) ?? file ?? (this.byId.has(title.trim()) ? title.trim() : undefined);
+    const hit = byTitle.get(k) ?? file ?? this._aliases!.get(k) ?? (this.byId.has(title.trim()) ? title.trim() : undefined);
+    if (hit || !k.includes("/")) return hit;
+    const last = k.slice(k.lastIndexOf("/") + 1).replace(/\.md$/, "");
+    return last ? (byTitle.get(last) ?? this._aliases!.get(last)) : undefined;
   };
 
   /**

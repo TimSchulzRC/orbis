@@ -1,6 +1,7 @@
 // Tolerant input for agents and queries, in German and English. Unclear input throws an
 // InputError with an explanation instead of being guessed.
 import { type OptionDef, type PropDef, type StatusGroup, addDaysISO } from "./model";
+import { dayOf, timeOf, withTime } from "./date";
 import { defaultTypes } from "./setup";
 import { type Lang, LANGS } from "./i18n";
 import { foldUmlauts } from "./text";
@@ -72,14 +73,56 @@ export function parseDate(input: string, today: string): string | undefined {
   return undefined;
 }
 
-/** 30.10.2026 (de) or 10/30/2026 (en); parseDate reads both back. */
-export function dateText(lang: Lang, iso?: string): string {
-  const m = iso && /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
-  if (!m) return "";
-  return lang === "de" ? `${m[3]}.${m[2]}.${m[1]}` : `${m[2]}/${m[3]}/${m[1]}`;
+/**
+ * A time at the end of a date ("… 14:30", "… 9.30 Uhr", "… 2:30 pm", ISO "…T14:30:00.000+02:00").
+ * A zone is dropped: the wall-clock time is kept as written, like the date.
+ */
+const TIME_TAIL = /^(.*?)(?:T|[\s,]+(?:um\s+|at\s+)?)(\d{1,2})(?:[:.](\d{2}))?(?::\d{2}(?:\.\d+)?)?\s*(?:Z|[+-]\d{2}:?\d{2})?\s*(uhr|h|am|pm)?$/i;
+
+/** "HH:MM" from hours, minutes and an am/pm mark; undefined when it is no time of day. */
+function clock(h: number, m: number, mark?: string): string | undefined {
+  const k = mark?.toLowerCase();
+  if (k === "am" || k === "pm") {
+    if (h < 1 || h > 12) return undefined;
+    h = (h % 12) + (k === "pm" ? 12 : 0);
+  }
+  if (h > 23 || m > 59) return undefined;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
-export const DATE_HELP = "a date like 2026-10-30, 30.10.2026, 10/30/2026, today/heute, tomorrow/morgen, a weekday or +3d";
+/**
+ * Like parseDate, and keeps a time when one is given: 2026-10-30 14:30, 30.10.2026 9:30,
+ * 30.10.2026 14 Uhr, 10/30/2026 2:30 pm, morgen 9:00, 2026-10-30T14:30:00+02:00. Without a time
+ * the result is the day alone.
+ */
+export function parseDateTime(input: string, today: string): string | undefined {
+  const v = input.trim();
+  const whole = parseDate(v, today);
+  // an ISO date with a time: parseDate already took the day
+  const iso = /^\d{4}-\d{2}-\d{2}[T ](\d{2}):(\d{2})/.exec(v);
+  if (whole && iso) {
+    const t = clock(+iso[1]!, +iso[2]!);
+    return t ? withTime(whole, t) : undefined;
+  }
+  if (whole) return whole;
+  const m = TIME_TAIL.exec(v);
+  // a bare hour needs a mark ("14 Uhr", "2 pm"), so "30.10. 2026" is not read as 20:26
+  if (!m || (m[3] === undefined && !m[4])) return undefined;
+  const day = parseDate(m[1]!, today);
+  const t = clock(+m[2]!, +(m[3] ?? 0), m[4] && /^(am|pm)$/i.test(m[4]) ? m[4] : undefined);
+  return day && t ? withTime(day, t) : undefined;
+}
+
+/** 30.10.2026 (de) or 10/30/2026 (en), with " 14:30" when the value has a time; parseDateTime reads both back. */
+export function dateText(lang: Lang, iso?: string): string {
+  const m = iso && /^(\d{4})-(\d{2})-(\d{2})$/.exec(dayOf(iso));
+  if (!m) return "";
+  const day = lang === "de" ? `${m[3]}.${m[2]}.${m[1]}` : `${m[2]}/${m[3]}/${m[1]}`;
+  const time = timeOf(iso!);
+  return time ? `${day} ${time}` : day;
+}
+
+export const DATE_HELP = "a date like 2026-10-30, 30.10.2026, 10/30/2026, today/heute, tomorrow/morgen, a weekday or +3d, optionally with a time (2026-10-30 14:30, 30.10.2026 9:30)";
 
 /** Without grouping: 1234,5 (de) or 1234.5 (en). */
 export function numberText(lang: Lang, n: number): string {

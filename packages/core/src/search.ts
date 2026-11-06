@@ -63,7 +63,9 @@ export function createIndex() {
       if (field === "tagText") return doc.tags.join(" ");
       if (field === "body") return bodyText(doc);
       if (field === "props") return propsText(doc);
-      return field === "title" || field === "id" ? doc[field] : "";
+      // aliases count as further titles
+      if (field === "title") return [doc.title, ...(doc.aliases ?? [])].join(" ");
+      return field === "id" ? doc[field] : "";
     },
     searchOptions: {
       tokenize: tokenizeForSearch,

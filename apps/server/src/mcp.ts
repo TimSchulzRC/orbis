@@ -43,6 +43,13 @@ How to work:
 - Files: \`get\` on a file shows its facts, the extracted text (PDF incl. embedded invoice XML, Word, Excel, PowerPoint, text and code files, a ZIP's entries) and, where the server offers it, a download command. Every file type is accepted. Small things: \`attach\` with base64 or a public url. A file on your disk: upload it over HTTP (below) – don't push large files through base64. Always give a parent when you add a file: one without lands in the inbox, which you may not sort afterwards (only \`suggest\`).
 - Never delete unless asked; deletes go to the trash. Today is in \`schema\`. Reply in the language of the user's message.
 
+Bringing data over from Notion, Obsidian or elsewhere (only when the user asks):
+- Give every item its \`source\` ("notion:<page id>", "obsidian:<path in the vault>"). A second create with the same source is refused and names the item, so an interrupted run can simply go on; any ref accepts the source too. Pass the original \`created\`/\`updated\` times.
+- Types first (\`define_type\` for each Notion database or kind of note), then the items, top-down so parents exist; Obsidian folders become items that the notes are part of. Relations and [[links]] to items not there yet: create everything first, then set them with \`update\`.
+- Database columns become type properties. Frontmatter or columns without a fitting property go to \`free_properties\` (text, number, true/false, date, list). Obsidian \`aliases\` go to \`aliases\`: [[Alias]] links then lead to the item. [[Folder/Note]] resolves by its last part.
+- Dates keep their time of day: 2026-10-30T14:30 (wall clock, the zone is dropped). Formulas and rollups have no equivalent: store their current value as text or number, and say so.
+- Attachments: upload them (below) with the parent they belong to and keep ![[name]] embeds as they are. Excalidraw drawings (.excalidraw) stay files: agents cannot create drawings yet.
+
 Rules for agents:
 - The workspace and any item can carry rules for agents (Markdown). They are binding: an item's rules apply to it and to everything below it (over all its parents), the workspace's apply everywhere. Answers about items end with a "Rules for agents" block with the ones that apply; \`schema\` lists every item that has rules.
 - Read the rules that apply before you act outside Obtion – in other systems, by e-mail or any message to people – and follow them. When a rule asks you to ask first, ask.
@@ -186,7 +193,7 @@ function buildMcpServer(store: Store, origin: string, blobs?: Blobs, lang: Lang 
     "create",
     {
       title: "Create",
-      description: "Create informations. type is a type name (see schema) or omitted; parents (titles/ids) place them; properties by name (only those of the type). Without type and parent the item lands in the inbox.",
+      description: "Create informations. type is a type name (see schema) or omitted; parents (titles/ids) place them; properties by name (only those of the type), anything else as free_properties. Without type and parent the item lands in the inbox. source, created, updated and aliases are for bringing data over from elsewhere.",
       inputSchema: { items: z.array(createInput).min(1) },
     },
     write((a, touched) => `Created:\n${ops.written(mark(touched, a.items.map((x) => ops.create(x, origin))))}`),
@@ -195,7 +202,7 @@ function buildMcpServer(store: Store, origin: string, blobs?: Blobs, lang: Lang 
     "update",
     {
       title: "Update",
-      description: "Change one item: title, type (name or null), properties by name (null clears), free_properties_remove, tags, refs, body. Body: prefer old_text/new_text or body_mode append|prepend; replacing the whole body (body without body_mode, or replace) needs base_version from get, and a stale one is rejected with what changed since. Renaming rewrites [[links]]. The answer shows the new version.",
+      description: "Change one item: title, type (name or null), properties by name (null clears), free_properties (set) and free_properties_remove, tags, aliases, refs, source, body. Body: prefer old_text/new_text or body_mode append|prepend; replacing the whole body (body without body_mode, or replace) needs base_version from get, and a stale one is rejected with what changed since. Renaming rewrites [[links]]. The answer shows the new version.",
       inputSchema: updateInput.shape,
     },
     write((a, touched) => {

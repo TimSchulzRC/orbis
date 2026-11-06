@@ -323,7 +323,7 @@ test.each([["fertig", "st_done"], ["Paused", "st_paused"], ["planning", "st_plan
   expect(s.records.get(p.id)!.props.p_status).toBe(opt);
 });
 
-test.each([["10/30/2026", "2026-10-30"], ["30.10.2026", "2026-10-30"], ["2026-10-30T09:00", "2026-10-30"], ["morgen", addDaysISO(1)], ["tomorrow", addDaysISO(1)], ["heute", todayISO()], ["+3d", addDaysISO(3)], ["in 2 Wochen", addDaysISO(14)]])("tolerant input: due date %p is %p", (raw, want) => {
+test.each([["10/30/2026", "2026-10-30"], ["30.10.2026", "2026-10-30"], ["2026-10-30T09:00", "2026-10-30T09:00"], ["30.10.2026 9:30", "2026-10-30T09:30"], ["morgen", addDaysISO(1)], ["tomorrow", addDaysISO(1)], ["heute", todayISO()], ["+3d", addDaysISO(3)], ["in 2 Wochen", addDaysISO(14)]])("tolerant input: due date %p is %p", (raw, want) => {
   const t = ops.create({ title: "Review", type: "tasks" }, A);
   ops.update(t.id, { properties: { Fällig: raw } }, A);
   expect(s.records.get(t.id)!.props.p_due).toBe(want);

@@ -156,6 +156,8 @@ export class Mirror {
     }
     for (const [k, v] of Object.entries(i.extra)) fm[k] = v.v;
     if (i.tags.length) fm.tags = i.tags;
+    if (i.aliases.length) fm.aliases = i.aliases;
+    if (i.source) fm.source = i.source;
     if (i.refs.length) fm.refs = i.refs.map((r) => `[[${ix.get(r)?.title ?? r}]]`);
     fm.created = new Date(i.created).toISOString();
     fm.updated = new Date(i.updated).toISOString();

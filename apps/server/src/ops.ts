@@ -3,6 +3,7 @@
 import * as Y from "yjs";
 import {
   type ViewTab,
+  type FreeValue,
   type Item,
   type OptionDef,
   type Patch,
@@ -27,6 +28,8 @@ import {
   removeParent,
   replaceBody,
   setCapability,
+  metaMap,
+  propByName,
   setExtra,
   setFileMeta,
   setHome,
@@ -55,7 +58,7 @@ import { type Heading, findSection, outline, page } from "@obtion/core/outline";
 import { keyBetween, nextPinKey } from "@obtion/core/sortkey";
 import { DAY_MS, dateOf } from "@obtion/core/date";
 import { freshColor } from "@obtion/core/palette";
-import { DATE_HELP, InputError, matchOption, parseDate, parseNumber, statusGroupOf } from "@obtion/core/input";
+import { DATE_HELP, InputError, matchOption, parseDateTime, parseNumber, statusGroupOf } from "@obtion/core/input";
 import { type Writer, runSetup, typeTabs } from "@obtion/core/setup";
 import { type PropChange, followKindChange, followPropChange, followTypeRename } from "@obtion/core/typerefs";
 import { running } from "@obtion/core/today";
@@ -138,7 +141,7 @@ const canonical = (x: unknown): unknown =>
  * copy stale. `update` takes it as base_version.
  */
 export function versionOf(i: Item): string {
-  const content = canonical([i.title, i.type, i.body, i.rules, i.props, i.rels, i.extra, i.tags, i.refs]);
+  const content = canonical([i.title, i.type, i.body, i.rules, i.props, i.rels, i.extra, i.tags, i.refs, ...(i.aliases.length ? [i.aliases] : [])]);
   return createHash("sha256").update(JSON.stringify(content)).digest("hex").slice(0, 12);
 }
 
@@ -190,12 +193,38 @@ function firstLine(text: string): string {
 }
 
 /** "start/end", either side may be empty. Tries every slash, since a date itself may contain one. */
+/** A time given as epoch milliseconds or an ISO date or date-time. */
+function when(v: string | number, field: string): number {
+  const ms = typeof v === "number" ? v : Date.parse(/^\d{4}-\d{2}-\d{2}$/.test(v.trim()) ? v.trim() + "T00:00:00" : v);
+  if (!Number.isFinite(ms)) throw new OpError(`${field} needs an ISO time (2024-03-01T09:30:00Z) or epoch milliseconds; got "${v}".`);
+  return ms;
+}
+
+function freeValue(name: string, v: unknown): FreeValue | null {
+  if (v === null || v === undefined || v === "") return null;
+  if (typeof v === "boolean") return { k: "checkbox", v };
+  if (typeof v === "number") {
+    if (!Number.isFinite(v)) throw new OpError(`"${name}" is not a finite number.`);
+    return { k: "number", v };
+  }
+  if (Array.isArray(v)) {
+    const list = v.filter((x) => x !== null && x !== undefined && x !== "").map((x) => (typeof x === "object" ? JSON.stringify(x) : String(x)));
+    return list.length ? { k: "list", v: list } : null;
+  }
+  if (typeof v === "object") throw new OpError(`"${name}" is an object; free properties hold text, numbers, true/false, dates or lists. Flatten it (e.g. "${name}.field") or put it in the body.`);
+  const s = String(v);
+  const day = /^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}.*)?$/.test(s.trim()) ? parseDateTime(s, todayISO()) : undefined;
+  if (day) return { k: "date", v: day };
+  if (/^https?:\/\/\S+$/.test(s.trim())) return { k: "url", v: s.trim() };
+  return { k: "text", v: s };
+}
+
 function splitRange(s: string, today: string): string | undefined {
   for (let i = s.indexOf("/"); i >= 0; i = s.indexOf("/", i + 1)) {
     const a = s.slice(0, i).trim();
     const b = s.slice(i + 1).trim();
-    const da = a ? parseDate(a, today) : "";
-    const db = b ? parseDate(b, today) : "";
+    const da = a ? parseDateTime(a, today) : "";
+    const db = b ? parseDateTime(b, today) : "";
     if (da !== undefined && db !== undefined && (da || db)) return `${da}/${db}`;
   }
   return undefined;
@@ -248,6 +277,9 @@ export class Ops {
     const r = ref.trim().replace(/^\[\[|\]\]$/g, "");
     const direct = ix.get(r);
     if (direct) return direct;
+    // where it came from ("notion:…", "obsidian:…"), as set on create
+    const bySource = this.bySource(r);
+    if (bySource) return bySource;
     const pool = ix.live.filter((i) => i.type !== META_TYPE && (opts.files !== false || i.kind !== "datei"));
     const key = titleKey(r);
     const exact = pool.filter((i) => titleKey(i.title) === key || titleKey(i.file?.name ?? "") === key);
@@ -259,6 +291,12 @@ export class Ops {
     const sugg = (contains.length ? contains : ix.items(searchIds(this.store.searchIndex, r, 8))).slice(0, 8);
     if (!sugg.length) throw new OpError(`Nothing matches "${r}".`);
     throw new OpError(`${contains.length ? `"${r}" matches several items` : `No item is titled "${r}"`}. Use one of these ids:\n` + candidates(sugg));
+  }
+
+  /** The live item that was brought over from `source`. */
+  bySource(source: string): Item | undefined {
+    const s = source.trim();
+    return s ? this.ix.live.find((i) => i.source === s) : undefined;
   }
 
   /** Refuses types: they change only through update_type and are deleted only in the app. */
@@ -524,6 +562,8 @@ export class Ops {
     const ix = this.store.index();
     const out: Record<string, unknown> = { ...this.brief(i), version: versionOf(i) };
     delete out.path;
+    if (i.aliases.length) out.aliases = i.aliases;
+    if (i.source) out.source = i.source;
     const parents = ix.parentsOf(i.id);
     if (parents.length) out.part_of = parents.map((p) => `${ix.get(p)?.title}${p === ix.home(i.id) && parents.length > 1 ? " (home)" : ""}`);
     out.path = ix.pathText(ix.homePath(i.id)) || undefined;
@@ -965,7 +1005,7 @@ export class Ops {
       case "date": {
         const s = String(raw).trim();
         const today = todayISO();
-        const whole = parseDate(s, today);
+        const whole = parseDateTime(s, today);
         if (whole) return { value: whole };
         const range = p.range ? splitRange(s, today) : undefined;
         if (range) return { value: range };
@@ -999,9 +1039,24 @@ export class Ops {
   }
 
   private prop(schema: TypeSchema | undefined, name: string): PropDef {
-    const p = schema?.properties.find((x) => titleKey(x.name) === titleKey(name) || x.id === name);
+    const p = propByName(schema, name);
     if (!p) throw new OpError(`Unknown property "${name}"${schema ? ` on type ${schema.name}. Properties: ${schema.properties.map((x) => x.name).join(", ") || "none"}` : " (no type)"}. Properties belong to a type: add it to the type with update_type, or give the item a type that has it.`);
     return p;
+  }
+
+  /**
+   * Free properties as given (frontmatter brought along): the kind follows the value – true/false,
+   * a number, a list, a date (2026-10-30, optionally with a time), a URL, else text. A name the
+   * type has as a property is refused: set it with properties. null removes one.
+   */
+  private freeValues(schema: TypeSchema | undefined, raw: Record<string, unknown> | undefined): [string, FreeValue | null][] {
+    return Object.entries(raw ?? {}).map(([name, v]) => {
+      const key = name.trim();
+      if (!key) throw new OpError("A free property needs a name.");
+      const p = propByName(schema, key);
+      if (p) throw new OpError(`"${key}" is a property of type ${schema!.name}: set it with properties, not free_properties.`);
+      return [key, freeValue(key, v)];
+    });
   }
 
   private applyProps(doc: Y.Doc, item: Item | undefined, schema: TypeSchema | undefined, props: Record<string, unknown> | undefined) {
@@ -1029,13 +1084,22 @@ export class Ops {
     const schema = type?.schema;
     const parents = (input.parents ?? []).map((p) => this.resolve(p).id);
     const refs = (input.refs ?? []).map((r) => this.resolve(r).id);
+    const source = input.source?.trim() || undefined;
+    const twin = source && this.bySource(source);
+    if (twin) throw new OpError(`"${source}" was brought over already: ${this.label(twin)} (id ${twin.id}). Change it with update (ref "${source}" works too).`);
+    const created = input.created !== undefined ? when(input.created, "created") : undefined;
+    const updated = input.updated !== undefined ? when(input.updated, "updated") : undefined;
+    const free = this.freeValues(schema, input.free_properties);
     const id = newId();
     const body = input.body ? normalizeBlocks(input.body, ix) : (template(schema)?.body ?? "");
     this.noSelfLink(body, id, title);
     this.store.change(id, origin, (doc) => {
       const pinned = input.pin ? nextPinKey(this.store.live()) : undefined;
-      initItem(doc, { title, type: type?.id ?? null, body, rules: input.agent_rules, tags: input.tags, refs, parents, pinned, props: initialProps(schema), createdBy: origin });
+      initItem(doc, { title, type: type?.id ?? null, body, rules: input.agent_rules, tags: input.tags, aliases: input.aliases, refs, parents, pinned, props: initialProps(schema), createdBy: origin, source, created, updated: updated ?? created });
       this.applyProps(doc, undefined, schema, input.properties);
+      for (const [k, v] of free) setExtra(doc, k, v);
+      // applyProps stamps the time of the write; the original one wins
+      if (created !== undefined || updated !== undefined) metaMap(doc).set("updated", updated ?? created!);
     });
     this.store.flush();
     return this.store.records.get(id)!;
@@ -1067,6 +1131,10 @@ export class Ops {
     const refsAdd = (input.refs_add ?? []).map((r) => this.resolve(r).id);
     if (refsAdd.includes(item.id)) throw new OpError(`"${item.title}" cannot refer to itself.`);
     const refsRem = (input.refs_remove ?? []).map((r) => this.resolve(r).id);
+    const free = this.freeValues(schema, input.free_properties);
+    const source = input.source === undefined ? undefined : (input.source?.trim() ?? "");
+    const twin = source ? this.bySource(source) : undefined;
+    if (twin && twin.id !== item.id) throw new OpError(`"${source}" is the source of ${this.label(twin)} (id ${twin.id}) already.`);
     const oldTitle = item.title;
     const ownsTitle = ix.ownsTitle(item);
     this.store.change(item.id, origin, (doc) => {
@@ -1080,8 +1148,15 @@ export class Ops {
         const name = Object.keys(item.extra).find((n) => titleKey(n) === titleKey(k));
         if (name) setExtra(doc, name, null);
       }
+      for (const [k, v] of free) setExtra(doc, Object.keys(item.extra).find((n) => titleKey(n) === titleKey(k)) ?? k, v);
       for (const t of input.tags_add ?? []) setMember(doc, "tags", t, true);
       for (const t of input.tags_remove ?? []) setMember(doc, "tags", t, false);
+      for (const a of input.aliases_add ?? []) setMember(doc, "aliases", a, true);
+      for (const a of input.aliases_remove ?? []) {
+        const name = item.aliases.find((x) => titleKey(x) === titleKey(a));
+        if (name) setMember(doc, "aliases", name, false);
+      }
+      if (source !== undefined) setMeta(doc, { source: source || null });
       for (const r of refsAdd) setMember(doc, "refs", r, true);
       for (const r of refsRem) setMember(doc, "refs", r, false);
       if (body !== undefined) replaceBody(doc, body);
@@ -1397,7 +1472,7 @@ export class Ops {
     if (by === "statusGroup") return statusGroupOf(name) ?? name;
     const types = typesIn(where).map((id) => ix.types.get(id)?.schema).filter(Boolean);
     for (const sc of types.length ? types : [...ix.types.values()].map((x) => x.schema)) {
-      const p = by === "status" ? statusProp(sc) : sc?.properties.find((x) => titleKey(x.name) === titleKey(by ?? ""));
+      const p = by === "status" ? statusProp(sc) : propByName(sc, by ?? "");
       const o = p?.options?.find((x) => titleKey(x.name) === k);
       if (o) return o.id;
     }

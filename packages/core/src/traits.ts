@@ -4,6 +4,7 @@ import type * as Y from "yjs";
 import { type Capabilities, type Item, type OptionDef, type Patch, type PropDef, type PropKind, type StatusGroup, type TypeSchema, type Value, metaMap, setProp, shortId } from "./model";
 import type { Index } from "./graph";
 import type { T } from "./i18n";
+import { dayOf } from "./date";
 
 export function caps(schema?: TypeSchema): Capabilities {
   return schema?.capabilities ?? {};
@@ -141,11 +142,13 @@ export function dueOf(item: Item, schema?: TypeSchema): string | undefined {
   return typeof v === "string" && v ? dateEnd(v) : undefined;
 }
 
+/** The first day of a date value or range, without its time. */
 export function dateStart(v: string) {
-  return v.split("/")[0]!;
+  return dayOf(v.split("/")[0]!);
 }
+/** The last day of a date value or range, without its time. */
 export function dateEnd(v: string) {
-  return v.split("/").at(-1)!;
+  return dayOf(v.split("/").at(-1)!);
 }
 
 export function hasUpdates(schema?: TypeSchema): boolean {

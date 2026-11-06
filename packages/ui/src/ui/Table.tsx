@@ -2,7 +2,7 @@ import { Table as ShadcnTable, TableHeader, TableBody, TableRow, TableHead, Tabl
 import { Input } from "../components/ui/input";
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronRight, Plus } from "lucide-react";
-import { type ViewTab, type Item, type ItemInit, type PropDef, type StatusGroup, type TypeSchema, parseRange, titleKey } from "@obtion/core/model";
+import { type ViewTab, type Item, type ItemInit, type PropDef, type StatusGroup, type TypeSchema, parseRange, propByName, titleKey } from "@obtion/core/model";
 import { type EvalCtx, type Group, type QueryDef, FIELDS, fieldOf, groupItems, pathBase, viewTypeIds } from "@obtion/core/query";
 import { fmtDate } from "@obtion/core/i18n";
 import { firstOfGroup, statusProp } from "@obtion/core/traits";
@@ -267,11 +267,11 @@ export function GroupedTable({ items, def, ctx, look }: { items: Item[]; def: Qu
     } else if (by === "type") init.type = g.key;
     else if (by === "path" && g.path?.length) init.parents = [g.path.at(-1)!];
     else if (g.option) {
-      const prop = schema?.properties.find((x) => titleKey(x.name) === titleKey(by));
+      const prop = propByName(schema, by);
       if (prop) init.props![prop.id] = prop.multiple ? [g.option.id] : g.option.id;
     } else if (g.ref && (by === "project" || by === "area")) init.parents = [g.ref];
     else if (g.ref) {
-      const prop = schema?.properties.find((x) => titleKey(x.name) === titleKey(by) && x.kind === "relation");
+      const prop = propByName(schema, by, (x) => x.kind === "relation");
       if (prop) init.rels = { [prop.id]: [g.ref] };
     }
     return init;
