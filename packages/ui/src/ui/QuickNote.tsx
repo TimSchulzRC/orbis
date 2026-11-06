@@ -3,6 +3,7 @@
 // of the inbox shows, so nothing distracts. The note joins the inbox once something is in it: closed
 // (Esc, ⌘↵, a click beside) it stays there; left empty, it goes without ever showing.
 import { useEffect, useRef } from "react";
+import type { Item } from "@obtion/core/model";
 import { ChevronDown, Layers, Plus } from "lucide-react";
 import { replica, shownSpaces, spaceById, useAccounts } from "../accounts";
 import { openItem, useRepo } from "../hooks";
@@ -117,7 +118,13 @@ function QuickCard({ id, space, desktop }: { id: string; space: string; desktop:
     return () => removeEventListener("keydown", onKey);
   }, []);
   if (!item) return null;
-  const now = () => ((document.activeElement as HTMLElement | null)?.blur(), repo.get(id) ?? item);
+  // an empty note is not sorted: it goes, as when closed
+  const sort = (fn: (it: Item) => void) => () => {
+    (document.activeElement as HTMLElement | null)?.blur();
+    const it = repo.get(id) ?? item;
+    if (isBlank(it, repo.index())) (repo.remove(id), sorted());
+    else fn(it);
+  };
   return (
     <div
       role="dialog"
@@ -134,13 +141,13 @@ function QuickCard({ id, space, desktop }: { id: string; space: string; desktop:
       className={cn("flex flex-col border border-line bg-surface shadow-[0_18px_50px_-12px_rgb(0_0_0/0.45)]", desktop ? "h-[min(620px,calc(100dvh-150px))] rounded-2xl p-5" : "h-full rounded-t-2xl px-4 pb-4 pt-2")}
     >
       {!desktop && <div className="mx-auto mb-2 h-1 w-10 shrink-0 rounded-full bg-line" aria-hidden />}
-      <NoteCard item={item} meta={<SpaceChoice space={space} id={id} />} autoFocus className="min-h-0 flex-1" />
+      <NoteCard item={item} meta={<SpaceChoice space={space} id={id} />} autoFocus live className="min-h-0 flex-1" />
       <SortChoices
         item={item}
-        onPick={() => pick.setPlacing([now()])}
-        onTypes={() => pick.setTyping([now()])}
-        onLater={() => (act.later([now()]), sorted())}
-        onPin={() => (act.pin([now()]), sorted())}
+        onPick={sort((it) => pick.setPlacing([it]))}
+        onTypes={sort((it) => pick.setTyping([it]))}
+        onLater={sort((it) => (act.later([it]), sorted()))}
+        onPin={sort((it) => (act.pin([it]), sorted()))}
         keys={false}
         className="mt-4"
       />

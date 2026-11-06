@@ -69,10 +69,20 @@ test("the inbox counts the note only once something is in it", async () => {
   await open();
   await new Promise((r) => setTimeout(r, 300));
   expect(count()).toBe(before);
-  await commands.keys("type", "Erster Gedanke");
-  await commands.keys("press", "Enter");
-  await commands.keys("type", "und mehr");
+  // the title counts as typed, without leaving the field
+  await commands.keys("type", "E");
   await expect.poll(count).toBe(before + 1);
+  await expect.element(titleField()).toHaveFocus();
+  await commands.keys("press", "Backspace");
+  await expect.poll(count).toBe(before);
+});
+
+test("an empty note is not sorted: a sort choice discards it and closes the card", async () => {
+  const before = repo.live().length;
+  await open();
+  await card().getByRole("button", { name: "Anheften" }).click();
+  await expect.poll(() => document.querySelector("[data-quick-note]")).toBeNull();
+  await expect.poll(() => repo.live().length).toBe(before);
 });
 
 test('the inbox\'s choices are there but "Löschen"; "Anheften" sorts the note and closes the card', async () => {

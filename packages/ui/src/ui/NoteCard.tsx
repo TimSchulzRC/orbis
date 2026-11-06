@@ -19,8 +19,8 @@ import { TitleField } from "./TitleField";
 /** Characters of a file's text shown in place of a body. */
 const FILE_TEXT_PREVIEW = 1200;
 
-/** `meta`: after the kind, as the workspace. `autoFocus`: the caret into the title. */
-export function NoteCard({ item, meta, autoFocus = false, scroller, className }: { item: Item; meta?: ReactNode; autoFocus?: boolean; scroller?: RefObject<HTMLDivElement | null>; className?: string }) {
+/** `meta`: after the kind, as the workspace. `autoFocus`: the caret into the title. `live`: the title commits as typed. */
+export function NoteCard({ item, meta, autoFocus = false, live, scroller, className }: { item: Item; meta?: ReactNode; autoFocus?: boolean; live?: boolean; scroller?: RefObject<HTMLDivElement | null>; className?: string }) {
   const { t } = useT();
   const hrefOf = useItemHref();
   const ix = useRepo().index();
@@ -68,7 +68,7 @@ export function NoteCard({ item, meta, autoFocus = false, scroller, className }:
             </div>
             {/* the card's title size, over the field's own */}
             <div className="mt-4 [&_textarea]:text-[28px]! [&_textarea]:leading-[34px]! [&_textarea]:tracking-[-0.015em]! max-lg:[&_textarea]:text-2xl!">
-              <TitleField item={item} autoFocus={autoFocus} placeholder={item.file?.name} onEnter={hasText ? intoText : undefined} />
+              <TitleField item={item} autoFocus={autoFocus} live={live} placeholder={item.file?.name} onEnter={hasText ? intoText : undefined} />
             </div>
             {hasText ? (
               <div className="mt-3 max-w-[68ch] text-[15px] leading-[1.65]">
