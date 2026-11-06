@@ -342,7 +342,7 @@
  "updates.statusTo": "status → {name}",
  "updates.openAll": "{count, plural, one {Open update} other {Open all # updates}}",
  "updates.latest": "Latest update",
- "updates.newOne": "New",
+ "updates.newOne": "New update",
  "updates.newCount": "{count} new",
  "updates.new": "new",
  "updates.first": "Write the first update",

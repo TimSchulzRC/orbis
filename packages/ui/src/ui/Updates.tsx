@@ -198,8 +198,8 @@ export function PageUpdates({ item, bar }: { item: Item; bar?: HTMLElement | nul
     };
   }, [room]);
 
-  // the line shows the newest unread update, else the newest; while the panel is open, the panel
-  // shows what is new
+  // the card shows the newest unread update, else the newest, and says which of the two it is;
+  // while the panel is open, the panel shows what is new
   const fresh = open ? [] : news;
   const tone = useStatusTone();
   const latest = fresh[0] ?? feed[0];
@@ -223,7 +223,7 @@ export function PageUpdates({ item, bar }: { item: Item; bar?: HTMLElement | nul
             {/* what it is, in the colour of the status it set; a new one says so in green */}
             <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
               <MessageSquareText size={13} style={{ color: tone(latest) }} aria-hidden />
-              {t("updates.latest")}
+              {fresh.length ? t("updates.newOne") : t("updates.latest")}
               {fresh.length > 0 && <span className="normal-case tracking-normal text-ok">· {t("updates.newCount", { count: fresh.length })}</span>}
             </span>
             <span className={cn(META, "mt-1")}>

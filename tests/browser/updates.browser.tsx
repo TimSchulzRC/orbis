@@ -26,9 +26,11 @@ test("the line opens the panel; a draft survives closing; Ctrl+Enter posts; the 
   await render(<ItemPage id={project} isNew={false} />);
 
   // the newest update is in the head, from the page below, with the count of new ones
-  const line = page.getByRole("button", { name: /^Neu, .*Claude, CMS\. 1 neu\. Alle 2 Updates öffnen/ });
+  const line = page.getByRole("button", { name: /^Neues Update, .*Claude, CMS\. 1 neu\. Alle 2 Updates öffnen/ });
   await expect.element(line).toBeVisible();
   await expect.element(line.getByText("Entscheidung hängt.")).toBeVisible();
+  // an unread one is not called the latest
+  expect(line.element().textContent).toMatch(/^Neues Update/);
   await expect.element(line.getByText("CMS").first()).toBeVisible();
 
   // reading: the focus is on the panel, not in the text box; the new one is marked
@@ -90,7 +92,7 @@ test("wide: the panel docks beside the page, which stays in use; only what was o
   }
   await render(<Shown />);
 
-  await page.getByRole("button", { name: /^Neu, .*40 neu/ }).click();
+  await page.getByRole("button", { name: /^Neues Update, .*40 neu/ }).click();
   const panel = page.getByRole("dialog", { name: /^Updates zu / });
   await expect.element(panel).toBeVisible();
   // beside the page: no backdrop, the page makes room
@@ -115,7 +117,7 @@ test("wide: the panel docks beside the page, which stays in use; only what was o
   await expect.element(page.getByRole("dialog")).not.toBeInTheDocument();
   expect(document.documentElement.hasAttribute("data-side-panel")).toBe(false);
   // the ones on screen are read, one by one: fewer are new, but not none
-  const left = Number(/(\d+) neu/.exec(page.getByRole("button", { name: /^Neu, / }).element().getAttribute("aria-label")!)![1]);
+  const left = Number(/(\d+) neu/.exec(page.getByRole("button", { name: /^Neues Update, / }).element().getAttribute("aria-label")!)![1]);
   expect(left).toBeGreaterThan(0);
   expect(left).toBeLessThan(40);
   await page.viewport(1280, 900);
