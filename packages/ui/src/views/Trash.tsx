@@ -1,22 +1,15 @@
 import { useState } from "react";
-import { RotateCcw } from "lucide-react";
+import { RotateCcw, Trash2 } from "lucide-react";
 import type { Item } from "@obtion/core/model";
-import type { Repo } from "@obtion/sync";
-import { cascadeCount } from "@obtion/core/trash";
+import { cascadeCount, trashRoots } from "@obtion/core/trash";
 import { isInInbox } from "@obtion/core/placement";
-import { notify } from "../ui/feedback";
+import { confirmAction, notify } from "../ui/feedback";
 import { useItemHref, useRepo, useDocumentTitle } from "../hooks";
 import { useAccounts } from "../accounts";
 import { SpaceFilter, SpaceScope, useReplicas } from "../ui/Spaces";
 import { useT, titleOf } from "../i18n";
 import { Button, Empty } from "../ui/primitives";
 import { ItemIcon, RelTime } from "../ui/item-look";
-
-/** Items deleted together with a root are listed with it and come back with it. */
-function trashed(repo: Repo): Item[] {
-  const withRoot = (i: Item) => !!i.deletedVia && !!repo.records.get(i.deletedVia)?.deleted;
-  return [...repo.records.values()].filter((i) => i.deleted && !withRoot(i) && (i.kind === "info" || i.kind === "datei" || i.kind === "zeichnung"));
-}
 
 export function TrashView() {
   const { t } = useT();
@@ -26,10 +19,22 @@ export function TrashView() {
   const [only, setOnly] = useState<string[] | null>(null);
   const chosen = spaces.filter((s) => !only || only.includes(s.id));
   const repos = useReplicas(chosen.map((s) => s.id));
-  const items = chosen.flatMap((s, n) => trashed(repos[n]!).map((item) => ({ item, space: s }))).sort((a, b) => b.item.updated - a.item.updated);
+  const items = chosen.flatMap((s, n) => trashRoots(repos[n]!.records).map((item) => ({ item, space: s }))).sort((a, b) => b.item.updated - a.item.updated);
+  const emptyAll = async () => {
+    if (!(await confirmAction({ title: t("trash.emptyConfirm"), body: t("trash.emptyHint", { count: items.length }), yes: t("trash.emptyAll"), danger: true }))) return;
+    const done = await Promise.all(repos.map((r) => r.purge({ all: true })));
+    if (done.includes(false)) notify(t("trash.purgeFailed"));
+  };
   return (
     <div className="page-read">
-      <h1 className="mb-1 page-title">{t("nav.trash")}</h1>
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="mb-1 page-title">{t("nav.trash")}</h1>
+        {items.length > 0 && (
+          <Button variant="danger" onClick={emptyAll}>
+            <Trash2 size={14} /> {t("trash.emptyAll")}
+          </Button>
+        )}
+      </div>
       <p className="mb-5 text-sm text-muted-foreground">{t("trash.intro")}</p>
       <SpaceFilter value={only} onChange={setOnly} />
       {items.length ? (
@@ -77,6 +82,10 @@ function TrashRow({ item, space }: { item: Item; space?: string }) {
       else notify(now && isInInbox(now, ix) ? t("trash.restoredInbox", { title }) : t("trash.restored", { title }));
     }, 50);
   };
+  const purge = async () => {
+    if (!(await confirmAction({ title: t("trash.purgeConfirm", { title: titleOf(item, t) }), body: t("trash.purgeHint"), yes: t("trash.purge"), danger: true }))) return;
+    if (!(await repo.purge({ id: item.id }))) notify(t("trash.purgeFailed"));
+  };
   return (
     <>
       <ItemIcon item={item} size={15} />
@@ -92,6 +101,9 @@ function TrashRow({ item, space }: { item: Item; space?: string }) {
       </span>
       <Button onClick={restore}>
         <RotateCcw size={14} /> {t("item.restore")}
+      </Button>
+      <Button variant="danger" onClick={purge} aria-label={t("trash.purge")} title={t("trash.purge")} className="px-2">
+        <Trash2 size={14} />
       </Button>
     </>
   );

@@ -219,6 +219,8 @@ export class DeviceFiles {
     this.store = (await opfsStore(this.link.storage.blobs)) ?? idbStore(this.db);
     for (const b of await this.store.list()) this.local.add(b.hash);
     this.repo.subscribe(() => this.scheduleSync());
+    // contents only purged items used go, once the records are gone
+    this.repo.onPurge(() => void this.collect());
     this.repo.onBlob((hash) => {
       if (this.missing.delete(hash)) this.emit();
       this.scheduleSync(50);

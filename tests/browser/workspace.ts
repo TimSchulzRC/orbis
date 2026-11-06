@@ -12,6 +12,7 @@ const storage: ReplicaStorage = {
   compact: async () => {},
   write: async () => {},
   outbox: async () => [],
+  drop: async () => {},
   serverId: async () => undefined,
   destroy: async () => {},
 };

@@ -36,6 +36,7 @@ export type ServerMsg =
   | { t: "ack"; area: string; keys: string[]; last: number; lastId?: string }
   | { t: "event"; event: ActivityEvent }
   | { t: "blob"; hash: string } // a file content arrived on the server
+  | { t: "purged"; area: string; ids: string[] } // documents deleted for good: drop them, never send them again
   | { t: "pong" };
 
 export interface FieldChange {

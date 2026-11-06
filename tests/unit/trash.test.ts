@@ -2,7 +2,7 @@ import { test, expect } from "bun:test";
 import { MemRepo, fork, sync } from "../support/helpers";
 import { runSetup, SYS } from "@obtion/core/setup";
 import { addParent, removeParent, setMeta } from "@obtion/core/model";
-import { deleteItem, restoreItem, cascadeCount } from "@obtion/core/trash";
+import { deleteItem, restoreItem, cascadeCount, purgeSet, trashRoots } from "@obtion/core/trash";
 import { isInInbox } from "@obtion/core/placement";
 
 function repo() {
@@ -149,4 +149,18 @@ test("restoring a single cascaded item brings back only that item", () => {
   expect(alive(m, t1)).toBe(false);
   // its parent is still in the trash, so it has no place: untyped, it is in the inbox
   expect(isInInbox(m.index().get(note)!, m.index())).toBe(true);
+});
+
+test("purging takes what was deleted with the item, never what was deleted on its own or moved away", () => {
+  const m = repo();
+  const { arbeit, p, t1, sub, note } = project(m);
+  const earlier = m.add({ title: "Schon gelöscht", type: SYS.task, parents: [p] });
+  m.change(earlier, (d) => setMeta(d, { deleted: true }));
+  del(m, p);
+  // moved out of the trash by another device: alive again, stays alive
+  m.change(note, (d) => (addParent(d, arbeit), removeParent(d, p)));
+  expect(trashRoots(m.records()).map((r) => r.id).sort()).toEqual([p, earlier].sort());
+  expect(purgeSet(m.records(), p).sort()).toEqual([p, t1, sub].sort());
+  // a cascaded item on its own: takes what hangs only below it
+  expect(purgeSet(m.records(), t1).sort()).toEqual([t1, sub].sort());
 });

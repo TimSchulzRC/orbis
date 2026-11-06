@@ -34,6 +34,7 @@ type Listener = {
   update?: (u: StoredUpdate, conn?: unknown) => void;
   event?: (e: ActivityEvent) => void;
   record?: (r: Item) => void;
+  purge?: (ids: string[], area: string) => void;
 };
 
 /** How many documents stay in memory when not in use (least recently used go first). */
@@ -64,6 +65,8 @@ export class Store {
   /** While an atomic call runs: its updates, written only if the whole call succeeds. */
   private held: { docId: string; data: Uint8Array; origin: string; quiet: boolean; step?: string }[] | null = null;
   private heldPrev = new Map<string, Item | undefined>();
+  /** Documents deleted for good: updates for them are dropped. */
+  private purged = new Set<string>();
 
   constructor(
     public dir: string,
@@ -74,6 +77,7 @@ export class Store {
     this.db.exec(`
       PRAGMA journal_mode = WAL;
       PRAGMA synchronous = NORMAL;
+      PRAGMA secure_delete = ON;
       CREATE TABLE IF NOT EXISTS updates (seq INTEGER PRIMARY KEY AUTOINCREMENT, doc TEXT NOT NULL, data BLOB NOT NULL, origin TEXT NOT NULL, ts INTEGER NOT NULL, uid TEXT, step TEXT, area TEXT NOT NULL DEFAULT '${PERSONAL}');
       CREATE INDEX IF NOT EXISTS updates_doc ON updates(doc, seq);
       CREATE INDEX IF NOT EXISTS updates_step ON updates(step);
@@ -88,6 +92,8 @@ export class Store {
       CREATE TABLE IF NOT EXISTS versions (id INTEGER PRIMARY KEY AUTOINCREMENT, doc TEXT NOT NULL, ts INTEGER NOT NULL, origin TEXT NOT NULL, step TEXT, event INTEGER, len INTEGER NOT NULL, data BLOB NOT NULL);
       CREATE INDEX IF NOT EXISTS versions_doc ON versions(doc, id);
       CREATE INDEX IF NOT EXISTS versions_event ON versions(event);
+      CREATE TABLE IF NOT EXISTS purged (id TEXT PRIMARY KEY, area TEXT NOT NULL, seq INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS purged_rows (uid TEXT PRIMARY KEY);
     `);
     this.load();
     // the server was called hub before; renaming the key would look like a new server to devices
@@ -108,6 +114,7 @@ export class Store {
     const last = this.db.query("SELECT seq, uid FROM updates ORDER BY seq DESC LIMIT 1").get() as { seq: number; uid: string } | null;
     this.seq = last?.seq ?? 0;
     this.lastUid = last?.uid ?? "";
+    for (const r of this.db.query("SELECT id FROM purged").all() as { id: string }[]) this.purged.add(r.id);
     if (this.kvGet("recordVersion") !== String(RECORD_VERSION)) {
       this.db.exec("DELETE FROM records");
       this.kvSet("recordVersion", String(RECORD_VERSION));
@@ -231,6 +238,7 @@ export class Store {
 
   /** Returns the sequence number. Throws AreaError for a document of another area: areas never mix through sync. */
   applyRemote(docId: string, data: Uint8Array, origin: string, conn?: unknown, step?: string, area = PERSONAL): number {
+    if (this.purged.has(docId)) return this.seq; // a device that missed the purge
     const known = this.areaOf(docId);
     if (known && known !== area) throw new AreaError(`${docId} belongs to the area ${known}, not ${area}`);
     const doc = this.getDoc(docId);
@@ -293,6 +301,7 @@ export class Store {
 
   /** For changes made on the server itself (tools, imports). */
   change(docId: string, origin: string, fn: (doc: Y.Doc) => void, opts: { quiet?: boolean } = {}): void {
+    if (this.purged.has(docId)) return;
     const doc = this.getDoc(docId);
     const sv = Y.encodeStateVector(doc);
     doc.transact(() => fn(doc), this.stepCtx ? { actor: origin, step: this.stepCtx.id } : origin);
@@ -535,6 +544,48 @@ export class Store {
     return { doc, before: before ? this.versionText(before.id)! : "", after: this.versionText(last.id)!, from: before?.n, to: last.n };
   }
 
+  /**
+   * Deletes documents for good: log rows, snapshots, activity entries, text versions and steps
+   * left without rows. Updates for them are dropped from now on, and devices are told to drop theirs.
+   * The database overwrites freed pages (secure_delete), and the WAL is emptied.
+   */
+  purge(ids: string[]) {
+    if (this.held) throw new Error("purge inside an atomic call");
+    this.flush();
+    const byArea = new Map<string, string[]>();
+    for (const id of ids) {
+      const area = this.areaOf(id) ?? PERSONAL;
+      byArea.set(area, [...(byArea.get(area) ?? []), id]);
+    }
+    const list = JSON.stringify(ids);
+    const IN = "IN (SELECT value FROM json_each(?))";
+    this.db.transaction(() => {
+      // a device whose cursor sits on one of these rows still knows where it is (knowsCursor)
+      this.db.query(`INSERT OR IGNORE INTO purged_rows (uid) SELECT uid FROM updates WHERE uid IS NOT NULL AND doc ${IN}`).run(list);
+      for (const table of ["updates", "events", "versions"]) this.db.query(`DELETE FROM ${table} WHERE doc ${IN}`).run(list);
+      for (const table of ["docstate", "records"]) this.db.query(`DELETE FROM ${table} WHERE id ${IN}`).run(list);
+      this.db.query("DELETE FROM steps WHERE id NOT IN (SELECT step FROM updates WHERE step IS NOT NULL)").run();
+      const add = this.db.query("INSERT OR REPLACE INTO purged (id, area, seq) VALUES (?, ?, ?)");
+      for (const [area, of] of byArea) for (const id of of) add.run(id, area, this.seq);
+    })();
+    this.db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+    for (const id of ids) {
+      this.purged.add(id);
+      this.loaded.delete(id);
+      this.areas.delete(id);
+      this.records.delete(id);
+      if (this.searchIndex.has(id)) this.searchIndex.discard(id);
+    }
+    resolveCascade(this.records);
+    this._ix = null;
+    for (const [area, of] of byArea) for (const l of this.listeners) l.purge?.(of, area);
+  }
+
+  /** Documents purged while a replica's cursor was at `since` or later: it may still have them. */
+  purgedSince(area: string, since: number): string[] {
+    return (this.db.query("SELECT id FROM purged WHERE area = ? AND seq >= ?").all(area, since) as { id: string }[]).map((r) => r.id);
+  }
+
   // ---------- reading ----------
 
   /**
@@ -543,6 +594,7 @@ export class Store {
    */
   knowsCursor(area: string, since: number, sinceId?: string): boolean {
     if (since <= 0) return true;
+    if (sinceId && this.db.query("SELECT 1 FROM purged_rows WHERE uid = ?").get(sinceId)) return true;
     if (since > this.last(area).seq) return false;
     if (!sinceId) return true; // replica from before cursor ids: seq is all we can check
     const row = this.db.query("SELECT uid, area FROM updates WHERE seq = ?").get(since) as { uid: string; area: string } | null;

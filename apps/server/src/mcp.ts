@@ -41,7 +41,7 @@ How to work:
 - Answers list one line per entry: title [id] · type · status · due · path · ⚠ blocked by / waiting for; after a write it ends with · version <hash> (its base_version from now on). A writing call is all or nothing: "Nothing changed" means no part of it was applied – fix the reason and call again. Read the Hints after a write (unresolved links, duplicate titles, open items below something done …).
 - Link exactly with [[id|Label]], always for titles with # | [ ] ^. Never link an item to itself.
 - Files: \`get\` on a file shows its facts, the extracted text (PDF incl. embedded invoice XML, Word, Excel, PowerPoint, text and code files, a ZIP's entries) and, where the server offers it, a download command. Every file type is accepted. Small things: \`attach\` with base64 or a public url. A file on your disk: upload it over HTTP (below) – don't push large files through base64. Always give a parent when you add a file: one without lands in the inbox, which you may not sort afterwards (only \`suggest\`).
-- Never delete unless asked; deletes go to the trash. Today is in \`schema\`. Reply in the language of the user's message.
+- Never delete unless asked; deletes go to the trash. Delete for good (\`purge\`) only when the user explicitly asks. Today is in \`schema\`. Reply in the language of the user's message.
 
 Rules for agents:
 - The workspace and any item can carry rules for agents (Markdown). They are binding: an item's rules apply to it and to everything below it (over all its parents), the workspace's apply everywhere. Answers about items end with a "Rules for agents" block with the ones that apply; \`schema\` lists every item that has rules.
@@ -274,6 +274,21 @@ function buildMcpServer(store: Store, origin: string, blobs?: Blobs, lang: Lang 
     touched.add(r.item.id);
     return `Restored "${r.item.title}"${r.back ? ` with ${r.back} item(s) below it` : ""}.`;
   }));
+  server.registerTool(
+    "purge",
+    {
+      title: "Delete for good",
+      description: "Delete an item that is in the trash for good, with what was deleted with it, its history and its file contents (cannot be undone or restored). empty_trash: true deletes everything in the trash. Only when the user explicitly asks for it.",
+      inputSchema: { ref: z.string().optional(), empty_trash: z.boolean().optional() },
+      annotations: { destructiveHint: true },
+    },
+    wrap((a: { ref?: string; empty_trash?: boolean }) => {
+      if (!a.ref && !a.empty_trash) throw new OpError("Give ref (an item in the trash) or empty_trash: true.");
+      const title = a.ref && store.records.get(a.ref)?.title;
+      const n = ops.purge(a.empty_trash ? undefined : a.ref).length;
+      return a.empty_trash ? `Emptied the trash: deleted ${n} item(s) for good.` : `Deleted "${title ?? a.ref}"${n > 1 ? ` with ${n - 1} item(s) below it` : ""} for good.`;
+    }, true),
+  );
   server.registerTool(
     "undo",
     {

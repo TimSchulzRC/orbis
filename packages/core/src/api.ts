@@ -139,6 +139,13 @@ export interface UndoResult {
   kept: { doc: string; field: string }[]; // changed again later: newer value kept
 }
 
+/** POST /w/<id>/api/purge: one item from the trash, or everything in it (`all`). */
+export type PurgeRequest = { id: string } | { all: true };
+
+export interface PurgeResult {
+  purged: string[]; // every document deleted for good
+}
+
 /** One kept version of an item's text (GET /w/<id>/api/history?doc=<doc>). */
 export interface TextVersion {
   id: number;
