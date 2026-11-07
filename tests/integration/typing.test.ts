@@ -24,6 +24,7 @@ function memStorage() {
       for (const k of w.acked ?? []) outbox.delete(k);
     },
     outbox: async () => [...outbox.values()],
+    drop: async () => {},
     serverId: async () => undefined,
     destroy: async () => {},
   };

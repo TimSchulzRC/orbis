@@ -12,7 +12,7 @@ import { storeWriter } from "@obtion/server/setup";
 import { PERSONAL, replaceBody, setFileMeta } from "@obtion/core/model";
 import { deleteItem } from "@obtion/core/trash";
 import { type ServerMsg, toB64 } from "@obtion/core/protocol";
-import { Repo, type OutItem, type ReplicaStorage, type StoredRow, type SyncSocket } from "@obtion/sync";
+import { PUSH_DELAY, Repo, type OutItem, type ReplicaStorage, type StoredRow, type SyncSocket } from "@obtion/sync";
 
 afterAll(removeTempDirs);
 
@@ -151,6 +151,7 @@ test("a device drops purged documents from memory and storage and ignores them a
   expect(repo.get(project)?.title).toBe("Secret project");
 
   repo.remove(project);
+  await Bun.sleep(PUSH_DELAY + 50); // local changes go to the server after a moment
   s.flush();
   expect(s.records.get(project)?.deleted).toBe(true);
   expect(await repo.purge({ id: project })).toBe(true);
