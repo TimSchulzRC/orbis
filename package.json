@@ -37,8 +37,6 @@
     "test:unit": "bun test tests/unit",
     "test:integration": "bun test tests/integration",
     "test:browser": "vitest run",
-    "test:e2e": "bun run build && bun tests/e2e/smoke.ts",
-    "setup": "bun apps/server/src/cli.ts setup",
-    "stats": "bun apps/server/src/cli.ts stats"
+    "test:e2e": "bun run build && bun tests/e2e/smoke.ts"
   }
 }
