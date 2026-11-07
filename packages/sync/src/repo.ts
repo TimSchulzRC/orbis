@@ -53,9 +53,10 @@ export type OutItem = PushItem & { a: string };
 const LOAD = Symbol("load");
 const TAB = Symbol("tab");
 /**
- * How long local changes collect before they go to the server. Typing is one update per
- * keystroke; collected, a document's updates of one step go as one push item (one log row on the
- * server) instead of one each. Other tabs get every update at once.
+ * How long typing collects before it goes to the server. It is one update per keystroke;
+ * collected, a document's updates of one step go as one push item (one log row on the server)
+ * instead of one each. Other changes go after the tick that made them, other tabs get every
+ * update at once.
  */
 export const PUSH_DELAY = 300;
 /** At most this many updates are merged into one item (Y.mergeUpdates grows quadratically). */
@@ -362,12 +363,21 @@ export class Repo {
     this.status.pending = this.outbox.size;
     this.store({ rows: [{ d: docId, u: update }], outbox: [item] });
     this.host.tabs?.post({ d: docId, u: update });
-    this.pushTimer ??= setTimeout(() => this.queuePush(() => this.send(...this.takeUnsent())), PUSH_DELAY);
+    const push = () => this.queuePush(() => this.send(...this.takeUnsent()));
+    if (this.curStep?.typing) this.pushTimer ??= setTimeout(push, PUSH_DELAY);
+    else if (!this.pushSoon) {
+      this.pushSoon = true;
+      queueMicrotask(() => {
+        this.pushSoon = false;
+        void push();
+      });
+    }
   }
 
   /** Outbox keys of this tab not pushed yet, in order. */
   private unsent: string[] = [];
   private pushTimer: ReturnType<typeof setTimeout> | null = null;
+  private pushSoon = false;
   /** Pushes run one after the other: a flush reads the stored outbox, which a merge changes. */
   private pushing: Promise<void> = Promise.resolve();
 

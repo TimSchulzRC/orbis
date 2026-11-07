@@ -170,6 +170,17 @@ test("a flush before the push delay keeps a later step behind the typing it buil
   expect(store.records.get(id)!.body).toBe("xy");
 });
 
+test("changes other than typing go to the server without the delay", async () => {
+  const store = new Store(tempDir("obtion-typing-"));
+  const { repo } = await device(store);
+  const id = repo.create({ title: "A" });
+  await sleep(5);
+  repo.setTitle(id, "B");
+  await sleep(5);
+  store.flush();
+  expect(store.records.get(id)!.title).toBe("B");
+});
+
 test("a reload before the push finds every keystroke in the stored outbox", async () => {
   const store = new Store(tempDir("obtion-typing-"));
   const first = await device(store);
