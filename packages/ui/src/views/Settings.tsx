@@ -16,6 +16,7 @@ import { Button, Dialog, IconButton, MenuItem, MoreMenu, Popover, Seg, SectionAc
 import { ItemIcon, TypeGlyph } from "../ui/item-look";
 import { cn, toggled } from "../lib/utils";
 import { confirmAction, notify } from "../ui/feedback";
+import { SettingRow, SettingsGroup } from "../ui/SettingRows";
 import { setTheme, useTheme } from "../theme";
 import { type Space, ApiError, activeUser, addPasskey, changePassword, linkFailed, linkOAuth, linkedProviders, deleteAccount, deleteSpace, errorText, inviteLink, inviteLinks, joinUrl, leaveSpace, loginOf, mcpToken, members, passkeys, removeMember, removePasskey, renameSpace, replica, revokeInvite, serverInfo, setRole, signOut, spaceById, useAccounts } from "../accounts";
 import { SignIn } from "./Account";
@@ -554,34 +555,6 @@ function Version() {
   }, []);
   if (!info?.version) return null;
   return <p className="text-center text-xs text-muted-foreground">{t("settings.version", { version: info.version + (info.commit ? ` (${info.commit})` : "") })}</p>;
-}
-
-function SettingsGroup({ title, hint, action, children }: { title: string; hint?: string; action?: ReactNode; children: ReactNode }) {
-  return (
-    <section>
-      <div className="mb-2 flex min-h-7 items-end gap-2 px-1">
-        <h3 className="flex-1 pb-0.5 text-xs font-medium text-muted-foreground">{title}</h3>
-        {action}
-      </div>
-      <div className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">{children}</div>
-      {hint && <p className="mt-2 px-1 text-xs text-muted-foreground">{hint}</p>}
-    </section>
-  );
-}
-
-function SettingRow({ title, hint, control, children }: { title: ReactNode; hint?: ReactNode; control?: ReactNode; children?: ReactNode }) {
-  return (
-    <div className="space-y-3 px-4 py-3">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <div className="min-w-0 flex-1 basis-56">
-          <p className="truncate text-sm font-medium">{title}</p>
-          {hint && <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p>}
-        </div>
-        {control && <div className="flex shrink-0 items-center gap-2">{control}</div>}
-      </div>
-      {children}
-    </div>
-  );
 }
 
 /** Mounted once in the app. */
