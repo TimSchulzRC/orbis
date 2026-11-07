@@ -755,8 +755,9 @@ export class Ops {
     if (cur) return { ts: Number(cur[1]), id: Number(cur[2]) };
     if (/^\d+$/.test(s)) {
       const row = this.store.db.query("SELECT ts FROM events WHERE id = ?").get(Number(s)) as { ts: number } | null;
-      // older than every kept entry: it went with the activity older than a year, so all kept entries came after it
-      if (!row && Number(s) < ((this.store.db.query("SELECT min(id) AS id FROM events").get() as { id: number | null }).id ?? 0)) return { ts: 0, id: 0 };
+      // older than every kept entry (or any, when none is left): it went with the activity older than a year, so all kept entries came after it
+      const oldest = this.store.db.query("SELECT coalesce((SELECT min(id) FROM events), (SELECT seq + 1 FROM sqlite_sequence WHERE name = 'events'), 0) AS id").get() as { id: number };
+      if (!row && Number(s) < oldest.id) return { ts: 0, id: 0 };
       if (!row) throw new OpError(`No activity entry has the id ${s}. since takes the cursor of the last call, an entry id or an ISO time.`);
       return { ts: row.ts, id: Number(s) };
     }

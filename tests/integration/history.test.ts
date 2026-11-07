@@ -355,6 +355,11 @@ test("thin drops activity older than a year; an agent's old entry id still reads
   expect((await tool("activity", { since: String(old!.id) })).text).toMatch(/^1 change\(s\)[\s\S]*Heute/);
   expect((await tool("activity", { since: cursor })).text).toStartWith("0 change(s)");
   expect((await tool("activity", { since: "999999" })).error).toBe(true);
+  // all activity expired: the old id still reads, as nothing changed since
+  s.db.query("UPDATE events SET ts = 0").run();
+  s.thin();
+  expect((await tool("activity", { since: String(old!.id) })).text).toStartWith("0 change(s)");
+  expect((await tool("activity", { since: "999999" })).error).toBe(true);
 });
 
 test("the hourly backup check thins", () => {
