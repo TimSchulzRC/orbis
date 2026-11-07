@@ -1,9 +1,11 @@
 // The server keeps only documents in use in memory. A document let go is reloaded from snapshot + log
 // and must behave as before.
 import { test, expect, afterAll, spyOn } from "bun:test";
-import { tempDir, removeTempDirs } from "../support/helpers";
+import { docUpdate, tempDir, removeTempDirs } from "../support/helpers";
 import { setupStore, stepOf, tool } from "../support/store";
 import * as Y from "yjs";
+import { statSync } from "node:fs";
+import { join } from "node:path";
 import { AreaError, Store } from "@obtion/server/store";
 import { undoStep } from "@obtion/server/undo";
 import { versionOf } from "@obtion/server/ops";
@@ -205,4 +207,16 @@ test("after a crash before the flush, the log rows after the snapshot are not lo
     Y.applyUpdate(d, again.stateOf(id)); // snapshot + rows, or rows only
     expect(readItem(id, d)).toEqual(again.records.get(id)!);
   }
+});
+
+test("the WAL file shrinks back after a large write instead of staying that large", () => {
+  const dir = tempDir("obtion-lazy-");
+  const s = new Store(dir);
+  const wal = () => statSync(join(dir, "obtion.db-wal")).size;
+  // one large transaction, like an import or a rebuild of all records
+  s.db.exec("WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 2000) INSERT INTO kv SELECT 'big' || i, hex(randomblob(5000)) FROM n");
+  expect(wal()).toBeGreaterThan(16 * 1024 * 1024);
+  s.applyRemote("n0", docUpdate({ title: "Danach" }), "web:laptop");
+  s.flush(); // the first commit after the checkpoint cuts the file back
+  expect(wal()).toBeLessThanOrEqual(8 * 1024 * 1024);
 });
