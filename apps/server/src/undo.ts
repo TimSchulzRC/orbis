@@ -80,20 +80,17 @@ function writeField(doc: Y.Doc, key: string, value: unknown) {
   else map.set(k, area === "tabs" ? toY(value) : value); // a tab is a map of its own
 }
 
-function replay(rows: { data: Uint8Array }[], id: string): Y.Doc {
-  const doc = new Y.Doc({ guid: id, gc: false });
-  for (const r of rows) Y.applyUpdate(doc, r.data);
-  return doc;
-}
-
 /** Takes back what `stepId` did to one document and notes it in `res`. */
 function undoInDoc(store: Store, id: string, stepId: string, actor: string, res: UndoResult) {
   // the log reaches back LOG_WINDOW_MS at most (Store.compact), and rows after the step don't matter
   const rows = store.db.query("SELECT seq, data, step FROM updates WHERE doc = ?1 AND seq <= (SELECT MAX(seq) FROM updates WHERE doc = ?1 AND step = ?2) ORDER BY seq").all(id, stepId) as { seq: number; data: Uint8Array; step: string | null }[];
   const first = rows.find((r) => r.step === stepId)!.seq;
-  const beforeRows = rows.filter((r) => r.seq < first);
-  const before = fields(replay(beforeRows, id));
-  const after = fields(replay([...beforeRows, ...rows.filter((r) => r.step === stepId)], id));
+  // one replay: the rows before the step, then the step's own (other steps' rows in between stay out)
+  const doc = new Y.Doc({ guid: id, gc: false });
+  for (const r of rows) if (r.seq < first) Y.applyUpdate(doc, r.data);
+  const before = fields(doc);
+  for (const r of rows) if (r.step === stepId) Y.applyUpdate(doc, r.data);
+  const after = fields(doc);
   const current = fields(store.getDoc(id));
   const createdByStep = !before.has("meta:kind");
   if (createdByStep) {
