@@ -14,7 +14,7 @@ import { excalidrawFile, readScene } from "@obtion/core/drawing";
 
 /** Records change in bursts (typing, imports): the first change starts the timer, and one write covers everything until it fires. */
 const SYNC_DELAY_MS = 1500;
-const README = "# Obtion mirror\n\nGenerated from the Obtion database: every information as Markdown below its home. Read freely; changes made here are overwritten. To change data, use the app or the MCP tools.\n";
+const README = "# Obtion mirror\n\nGenerated from the Obtion database: every note as Markdown below its home. Read freely; changes made here are overwritten. To change data, use the app or the MCP tools.\n";
 
 export class Mirror {
   private files = new Map<string, string>(); // relative path -> content signature
@@ -76,20 +76,20 @@ export class Mirror {
       const path = ix.homePath(i.id).map((id) => safe(ix.get(id)!.title));
       if (path.length) return path.join("/");
       if (i.pinned) return "."; // pinned items without a parent sit at the top of the mirror
-      if (i.type === META_TYPE) return lang === "de" ? "_Typen" : "_Types";
+      if (i.type === META_TYPE) return "_" + translate(lang, "nav.types");
       if (isInInbox(i, ix)) return translate(lang, "nav.inbox");
       const tn = ix.typeName(i.type);
       if (tn) return safe(tn);
-      return lang === "de" ? "Ohne Ort" : "No place";
+      return translate(lang, "mirror.noPlace");
     };
     const pathOf = (i: Item, name: string) => unique(`${folderOf(i)}/${name}`.replace(/^\.\//, ""), i.id);
     for (const i of ix.live) {
-      if (i.kind === "datei" && i.file) {
+      if (i.kind === "file" && i.file) {
         want.set(pathOf(i, safe(i.file.name)), { blob: i.file.hash });
         continue;
       }
       // a drawing as a file Excalidraw opens (its images are blobs and stay out)
-      if (i.kind === "zeichnung") {
+      if (i.kind === "drawing") {
         want.set(pathOf(i, `${translate(lang, "kind.drawing")}.excalidraw`), { content: excalidrawFile(readScene(this.store.getDoc(i.id))) });
         continue;
       }

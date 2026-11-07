@@ -14,7 +14,7 @@ function propById(schema: TypeSchema | undefined, id?: string): PropDef | undefi
   return id ? schema?.properties.find((p) => p.id === id) : undefined;
 }
 
-/** Drives "open" in queries, boards, progress and "Läuft gerade". readSchema leaves at most one. */
+/** Drives "open" in queries, boards, progress and "In progress". readSchema leaves at most one. */
 export function statusProp(schema?: TypeSchema): PropDef | undefined {
   return schema?.properties.find((p) => p.kind === "status");
 }
@@ -74,7 +74,7 @@ export function defaultOption(p: PropDef, schema?: TypeSchema): string | undefin
   return d ?? (p.kind === "status" ? p.options?.[0]?.id : undefined);
 }
 
-/** "Termin": lets "overdue" and "this week" work for any type. */
+/** "Due date": lets "overdue" and "this week" work for any type. */
 export function dueProp(schema?: TypeSchema): PropDef | undefined {
   const p = propById(schema, caps(schema).due);
   return p?.kind === "date" ? p : undefined;
@@ -124,7 +124,7 @@ export function writeProp(doc: Y.Doc, schema: TypeSchema | undefined, propId: st
   } else if (meta.has("done")) meta.delete("done");
 }
 
-/** Properties that block the item while set ("Blockiert durch", "Wartet auf"). */
+/** Properties that block the item while set ("Blocked by", "Waiting for"). */
 export function blockingProps(schema?: TypeSchema): PropDef[] {
   return schema?.properties.filter((p) => p.blocks && (p.kind === "relation" || p.kind === "text")) ?? [];
 }
@@ -164,16 +164,10 @@ export function isProgressProp(p: PropDef): boolean {
   return p.kind === "computed" && p.computed?.fn !== "count";
 }
 
-/**
- * What the progress counts: the bar in the page's head, `fortschritt` in queries, a project's
- * next task. Types from before the property read the old capability until they have one (a removed
- * one too, so removing it turns the bar off).
- */
+/** What the progress counts: the bar in the page's head, `progress` in queries, a project's next task. */
 export function progressSpec(schema?: TypeSchema): { of?: string } | undefined {
   const p = progressProp(schema);
-  if (p) return { of: p.computed?.of };
-  if (schema?.removedProperties?.some(isProgressProp)) return undefined;
-  return caps(schema).progress;
+  return p ? { of: p.computed?.of } : undefined;
 }
 
 export function template(schema?: TypeSchema): { body?: string; values?: Record<string, Value> } | undefined {

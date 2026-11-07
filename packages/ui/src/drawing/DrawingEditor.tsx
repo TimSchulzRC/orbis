@@ -48,7 +48,7 @@ export default memo(function DrawingEditor({ id, onClose }: { id: string; onClos
   const { t, lang } = useT();
   const dark = useTheme().resolved === "dark";
   const doc = useMemo(() => repo.getDoc(id), [repo, id]);
-  // a diagram has no name of its own: an export ("Bild exportieren", "Speichern") is named after its note
+  // a diagram has no name of its own: an export ("Export image", "Save") is named after its note
   const note = useSyncExternalStore(repo.subscribe, () => {
     const parent = repo.get(id)?.parents;
     return (parent && repo.get(Object.keys(parent)[0])?.title) || "";
@@ -110,7 +110,7 @@ export default memo(function DrawingEditor({ id, onClose }: { id: string; onClos
     const elements = last.elements as unknown as SceneElement[];
     const state = last.state as unknown as Record<string, unknown>;
     write((d) => {
-      // an element gone from the scene (another file opened) is deleted on every device; "Leeren" marks
+      // an element gone from the scene (another file opened) is deleted on every device; "Reset the canvas" marks
       // them deleted instead, so an empty scene is never one to delete everything by
       const here = new Set(elements.map((e) => e.id));
       const gone = (elements.length ? readElements(d) : [])

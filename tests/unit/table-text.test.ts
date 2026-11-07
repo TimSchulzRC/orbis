@@ -10,14 +10,14 @@ const cells = (text: string) => parseRow(text).cells.map((c) => text.slice(c.fro
 
 describe("parseRow", () => {
   test("cells with and without pipes at the ends", () => {
-    expect(cells("| Feld | Wert |")).toEqual(["Feld", "Wert"]);
-    expect(cells("Feld | Wert")).toEqual(["Feld", "Wert"]);
-    expect(cells("| Feld | Wert")).toEqual(["Feld", "Wert"]);
-    expect(cells("Feld | Wert |")).toEqual(["Feld", "Wert"]);
+    expect(cells("| Field | Value |")).toEqual(["Field", "Value"]);
+    expect(cells("Field | Value")).toEqual(["Field", "Value"]);
+    expect(cells("| Field | Value")).toEqual(["Field", "Value"]);
+    expect(cells("Field | Value |")).toEqual(["Field", "Value"]);
     expect(cells("|a|b|")).toEqual(["a", "b"]);
   });
   test("an escaped pipe stays in its cell", () => {
-    expect(cells("| [[Seite\\|Alias]] | `a \\| b` |")).toEqual(["[[Seite\\|Alias]]", "`a \\| b`"]);
+    expect(cells("| [[Topic\\|Alias]] | `a \\| b` |")).toEqual(["[[Topic\\|Alias]]", "`a \\| b`"]);
   });
   test("empty cells sit after the first space", () => {
     const row = parseRow("|  | x |");
@@ -33,7 +33,7 @@ describe("parseRow", () => {
 test("delimiter rows and alignment", () => {
   expect(DELIMITER.test("| --- | :-: | --: |")).toBe(true);
   expect(DELIMITER.test("---|---")).toBe(true);
-  expect(DELIMITER.test("| Feld | Wert |")).toBe(false);
+  expect(DELIMITER.test("| Field | Value |")).toBe(false);
   expect(alignments("| :--- | :-: | --: | --- |")).toEqual(["left", "center", "right", null]);
 });
 
@@ -74,24 +74,24 @@ describe("deleteCell", () => {
 });
 
 test("a place in the shown text maps into the Markdown", () => {
-  expect(sourceOffset("**fett** und `code`", "fett und code", 4)).toBe(6);
-  expect(sourceOffset("**fett** und `code`", "fett und code", 0)).toBe(0);
+  expect(sourceOffset("**bold** and `code`", "bold and code", 4)).toBe(6);
+  expect(sourceOffset("**bold** and `code`", "bold and code", 0)).toBe(0);
   expect(sourceOffset("a ~~b~~ c", "a b c", 5)).toBe(9);
-  expect(sourceOffset("[[Seite|Alias]]", "Alias", 5)).toBeLessThanOrEqual(15);
+  expect(sourceOffset("[[Topic|Alias]]", "Alias", 5)).toBeLessThanOrEqual(15);
 });
 
 describe("tables in the rest of the app", () => {
   test("a link in a table cell escapes its | and still links", () => {
-    expect(parseWikiLinks("| [[Seite\\|Alias]] | [[Andere#Teil\\|mehr]] |")).toEqual([
-      { target: "Seite", embed: false, size: undefined, alias: "Alias" },
-      { target: "Andere", embed: false, size: undefined, alias: "mehr" },
+    expect(parseWikiLinks("| [[Topic\\|Alias]] | [[Other#Part\\|more]] |")).toEqual([
+      { target: "Topic", embed: false, size: undefined, alias: "Alias" },
+      { target: "Other", embed: false, size: undefined, alias: "more" },
     ]);
-    expect(renameLinksIn("| [[Seite\\|Alias]] |", "Seite", "Neu")).toBe("| [[Neu\\|Alias]] |");
-    expect(parseWikiLinks("[[Seite|Alias]] [[Nur]]").map((l) => [l.target, l.alias])).toEqual([["Seite", "Alias"], ["Nur", undefined]]);
+    expect(renameLinksIn("| [[Topic\\|Alias]] |", "Topic", "New")).toBe("| [[New\\|Alias]] |");
+    expect(parseWikiLinks("[[Topic|Alias]] [[Just]]").map((l) => [l.target, l.alias])).toEqual([["Topic", "Alias"], ["Just", undefined]]);
   });
   test("previews show a table's cells, not its pipes and dashes", () => {
-    const body = "Vorweg.\n\n| Feld | Wert |\n| :--- | ---: |\n| **Typ** | [[Seite\\|Alias]] |\n| Zeile<br>zwei | `a \\| b` |";
-    expect(plainText(body)).toBe("Vorweg. Feld · Wert Typ · Alias Zeile zwei · a | b");
+    const body = "First.\n\n| Field | Value |\n| :--- | ---: |\n| **Type** | [[Topic\\|Alias]] |\n| Line<br>two | `a \\| b` |";
+    expect(plainText(body)).toBe("First. Field · Value Type · Alias Line two · a | b");
   });
 });
 
@@ -110,7 +110,7 @@ describe("tables without pipes at the ends", () => {
     expect(apply("one", deleteCell("one", 0))).toBe("|  |");
   });
   test("previews", () => {
-    expect(plainText("Name | Wert\n--- | ---\neins | zwei\n\nDanach a | b.")).toBe("Name · Wert eins · zwei Danach a | b.");
+    expect(plainText("Name | Value\n--- | ---\none | two\n\nAfter a | b.")).toBe("Name · Value one · two After a | b.");
   });
 });
 

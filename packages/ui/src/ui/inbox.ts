@@ -20,7 +20,7 @@ export function useInboxItems(): InboxEntry[] {
   return useEntries((ix) => runQuery({ where: { inbox: true } }, { ix }).items);
 }
 
-/** Set aside with "Morgen wieder", out of the inbox until tomorrow. */
+/** Set aside with "Back tomorrow", out of the inbox until tomorrow. */
 export function useLaterItems(): InboxEntry[] {
   return useEntries((ix) => laterItems(ix));
 }

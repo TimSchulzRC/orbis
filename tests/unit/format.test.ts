@@ -1,14 +1,15 @@
-// Stored data must stay readable by every later version. The fixture is format 1 as written then:
-// never regenerate it, add one per new format instead.
+// Stored data must stay readable by every later version. The fixture is format 4 as written then:
+// never regenerate it, add one per new format instead. Formats 1 to 3 were dropped with the
+// English stored names, before there was data to keep.
 import { test, expect } from "bun:test";
 import * as Y from "yjs";
 import { FORMAT, PERSONAL, SETTINGS_ID, type Item, readItem } from "@obtion/core/model";
 import { Index } from "@obtion/core/graph";
 import { fromB64 } from "@obtion/core/protocol";
-import fixture from "../support/format-1.json";
+import fixture from "../support/format-4.json";
 
-test("data of format 1 (27.10.2026) are read by this version", () => {
-  expect(fixture.format).toBe(1);
+test("data of format 4 (6.11.2026) are read by this version", () => {
+  expect(fixture.format).toBe(4);
   expect(FORMAT).toBeGreaterThanOrEqual(fixture.format);
   const records = new Map<string, Item>();
   for (const [id, u] of Object.entries(fixture.docs as Record<string, string>)) {
@@ -18,11 +19,13 @@ test("data of format 1 (27.10.2026) are read by this version", () => {
     if (r) records.set(id, r);
   }
   const ix = new Index(records);
-  expect(records.get(SETTINGS_ID)!.settings!.format).toBe(1);
+  expect(records.get(SETTINGS_ID)!.settings!.format).toBe(4);
   expect(ix.live.length).toBeGreaterThanOrEqual(40);
-  expect(ix.get("ex-relaunch")!.title).toBe("Website-Relaunch");
+  expect(ix.get("ex-relaunch")!.title).toBe("Website relaunch");
   expect(ix.get("ex-relaunch")!.area).toBe(PERSONAL);
   expect(ix.parentsOf("ex-relaunch")).toEqual(["ex-work", "ex-nordlicht"]);
-  expect(ix.types.get("ex-type-book")!.schema.plural).toBe("Bücher");
-  expect(ix.get("ex-f-diagram")!.file!.filetype).toBe("bild");
+  expect(ix.types.get("ex-type-book")!.schema.plural).toBe("Books");
+  expect(ix.get("ex-f-diagram")!.file!.filetype).toBe("image");
+  expect(ix.get("ex-f-sheet")!.kind).toBe("file");
+  expect(ix.get("ex-week")!.body).toContain("```query\n");
 });

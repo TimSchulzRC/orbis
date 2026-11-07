@@ -1,4 +1,4 @@
-// A drawing ("Zeichnung") is an item of its own kind whose content is an Excalidraw scene instead of
+// A drawing is an item of its own kind whose content is an Excalidraw scene instead of
 // Markdown. It is placed, linked and nested like a note. The scene lives in three maps of its
 // document, so edits from two devices merge per element (the newer `version` of an element wins):
 //

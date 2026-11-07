@@ -392,7 +392,7 @@ export class DeviceFiles {
     const meta = await this.prepare(file, unique, hash);
     const id = newId();
     this.repo.change(id, (doc) => {
-      initItem(doc, { kind: "datei", title: unique, parents: opts.parent ? [opts.parent] : [], createdBy: this.repo.origin });
+      initItem(doc, { kind: "file", title: unique, parents: opts.parent ? [opts.parent] : [], createdBy: this.repo.origin });
       setFileMeta(doc, meta);
     });
     this.scheduleSync(10);
@@ -406,7 +406,7 @@ export class DeviceFiles {
     const meta: FileMeta = { hash, name, mime, filetype: fileTypeOf(name, mime), size: file.size };
     await this.save(hash, file);
     await this.enqueueUpload({ hash, name });
-    if (meta.filetype === "bild" && !/svg/.test(mime)) {
+    if (meta.filetype === "image" && !/svg/.test(mime)) {
       const display = await scaled(file, DISPLAY_WIDTH);
       const thumb = await scaled(file, THUMB_WIDTH);
       if (display) {
@@ -472,7 +472,7 @@ export class DeviceFiles {
   }
 
   private liveFiles(): Item[] {
-    return this.repo.live().filter((r) => r.kind === "datei" && r.file?.hash);
+    return this.repo.live().filter((r) => r.kind === "file" && r.file?.hash);
   }
 
   private async pendingUploads(): Promise<Set<string>> {
@@ -607,7 +607,7 @@ function keptOnline(repo: Repo): Set<string> {
 
 /** Images without a display version (SVGs) show their original, and so do images in drawings. */
 function shownItself(repo: Repo): Set<string> {
-  return new Set(repo.live().flatMap((r) => (r.file?.filetype === "bild" && !r.file.display ? [r.file.hash] : (r.drawing?.files ?? []))));
+  return new Set(repo.live().flatMap((r) => (r.file?.filetype === "image" && !r.file.display ? [r.file.hash] : (r.drawing?.files ?? []))));
 }
 
 export let files: DeviceFiles;

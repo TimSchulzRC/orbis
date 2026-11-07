@@ -19,7 +19,7 @@ import { DiffView, LineCount } from "./DiffView";
 /** Meta parts in a row, "·" between them, never at the start of a wrapped line. */
 export const META = "flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground [&>*+*]:before:mr-1.5 [&>*+*]:before:content-['·']";
 
-/** "Heute", "Gestern", else the weekday and date (with the year when it is another one). */
+/** "Today", "Yesterday", else the weekday and date (with the year when it is another one). */
 export function useDayLabel() {
   const { t, lang } = useT();
   const today = todayISO();

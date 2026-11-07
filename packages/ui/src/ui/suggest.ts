@@ -20,6 +20,6 @@ export function placeSuggestions(item: Item, repo: Repo = current): { id: string
   const words = item.title.split(/\s+/).filter((w) => w.length > 3).slice(0, 6).join(" ");
   if (words)
     for (const hit of repo.search(words, 20))
-      if (hit.kind === "info" && ix.childrenOf(hit.id).length > 0 && out.filter((o) => o.reason === "similar").length < 2) add(hit.id, "similar");
+      if (hit.kind === "note" && ix.childrenOf(hit.id).length > 0 && out.filter((o) => o.reason === "similar").length < 2) add(hit.id, "similar");
   return out.slice(0, 8);
 }

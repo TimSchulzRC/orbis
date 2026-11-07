@@ -27,7 +27,7 @@ import { Checkbox } from "../components/ui/checkbox";
 import { DayList, META } from "./changes";
 import { PageChanges } from "./PageChanges";
 
-/** Entries shown in the panel at first, and added with "Ältere zeigen". */
+/** Entries shown in the panel at first, and added with "Show older". */
 const PAGE = 30;
 
 /** From this width the panel docks beside the page instead of covering it. */
@@ -391,7 +391,7 @@ function UpdatesSheet({ open, docked, item, feed, session, write, draft, onDraft
     const off = setTimeout(() => setFlash(null), 1500);
     return () => clearTimeout(off);
   }, [flash]);
-  // asked first; deleted, it is gone from the list and kept in the page's changes, and "Rückgängig"
+  // asked first; deleted, it is gone from the list and kept in the page's changes, and "Undo"
   // puts it back where it was
   const remove = async (e: FeedEntry) => {
     const text = e.u.text.length > 120 ? `${e.u.text.slice(0, 120)}…` : e.u.text;

@@ -27,7 +27,7 @@ export function NoteCard({ item, meta, autoFocus = false, live, scroller, classN
   // in the inbox, a loose note is just a note
   const kind = kindLabel(itemLook(item, ix), t, { inboxAsNote: true });
   const children = belowOf(item.id, ix);
-  const image = useBlobUrl(item.file?.filetype === "bild" ? (item.file.display ?? item.file.hash) : item.file?.thumb, true);
+  const image = useBlobUrl(item.file?.filetype === "image" ? (item.file.display ?? item.file.hash) : item.file?.thumb, true);
   const own = useRef<HTMLDivElement>(null);
   const scroll = scroller ?? own;
   const [view, setView] = useState<EditorView | null>(null);

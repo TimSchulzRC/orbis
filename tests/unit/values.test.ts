@@ -45,6 +45,7 @@ describe("dates with a time", () => {
     const x = m.add({ title: "Call", type, props: { p_due: `${TODAY}T15:00` } });
     expect(dueOf(m.get(x)!, m.index().types.get(type)!.schema)).toBe(TODAY);
     const hits = (q: string) => runQuery(q, m.index(), { today: TODAY }).items.map((i) => i.id);
+    // German keywords, and the German property name used as a key
     expect(hits("typ:Task fällig<=heute")).toEqual([x]);
     expect(hits("typ:Task Fällig:heute")).toEqual([x]);
   });
@@ -52,23 +53,23 @@ describe("dates with a time", () => {
 
 describe("free properties hold lists", () => {
   test("a multiple choice becomes a list and goes back to options by name", () => {
-    const from = { id: "p", name: "Themen", kind: "select" as const, multiple: true, sort: "V", options: [{ id: "o1", name: "Kunst" }, { id: "o2", name: "Musik" }] };
+    const from = { id: "p", name: "Topics", kind: "select" as const, multiple: true, sort: "V", options: [{ id: "o1", name: "Art" }, { id: "o2", name: "Music" }] };
     const free = toFree(from, ["o1", "o2"])!;
-    expect(free).toEqual({ k: "list", v: ["Kunst", "Musik"] });
-    const to = { ...from, id: "q", options: [{ id: "x2", name: "musik" }, { id: "x1", name: "Kunst" }] };
-    expect(mapValue(freeDef("Themen", free), to, free.v as string[])).toEqual(["x1", "x2"]);
-    expect(mapValue(freeDef("Themen", free), { id: "t", name: "Themen", kind: "text", sort: "V" }, free.v as string[])).toBe("Kunst, Musik");
+    expect(free).toEqual({ k: "list", v: ["Art", "Music"] });
+    const to = { ...from, id: "q", options: [{ id: "x2", name: "music" }, { id: "x1", name: "Art" }] };
+    expect(mapValue(freeDef("Topics", free), to, free.v as string[])).toEqual(["x1", "x2"]);
+    expect(mapValue(freeDef("Topics", free), { id: "t", name: "Topics", kind: "text", sort: "V" }, free.v as string[])).toBe("Art, Music");
   });
 
   test("an empty list removes it; queries look for one entry", () => {
     const m = new MemRepo();
-    const x = m.add({ title: "Note", extra: { Autoren: { k: "list", v: ["Ada", "Grace"] } } });
-    expect(m.get(x)!.extra.Autoren).toEqual({ k: "list", v: ["Ada", "Grace"] });
-    expect(runQuery("Autoren:grace", m.index(), {}).items.map((i) => i.id)).toEqual([x]);
-    expect(runQuery("Autoren:Lin", m.index(), {}).items).toEqual([]);
-    expect(groupItems([m.get(x)!], "Autoren", { ix: m.index() }).map((g) => g.label)).toEqual(["Ada, Grace"]);
-    m.change(x, (d) => setExtra(d, "Autoren", { k: "list", v: [] }));
-    expect(m.get(x)!.extra.Autoren).toBeUndefined();
+    const x = m.add({ title: "Note", extra: { Authors: { k: "list", v: ["Ada", "Grace"] } } });
+    expect(m.get(x)!.extra.Authors).toEqual({ k: "list", v: ["Ada", "Grace"] });
+    expect(runQuery("Authors:grace", m.index(), {}).items.map((i) => i.id)).toEqual([x]);
+    expect(runQuery("Authors:Lin", m.index(), {}).items).toEqual([]);
+    expect(groupItems([m.get(x)!], "Authors", { ix: m.index() }).map((g) => g.label)).toEqual(["Ada, Grace"]);
+    m.change(x, (d) => setExtra(d, "Authors", { k: "list", v: [] }));
+    expect(m.get(x)!.extra.Authors).toBeUndefined();
   });
 });
 
@@ -76,23 +77,23 @@ describe("former property names", () => {
   test("a rename keeps the old name, and views that still use it find the property", () => {
     const m = new MemRepo();
     const type = m.addType("t-task", { name: "Task", properties: [{ id: "p_prio", name: "Prio", kind: "number" }] });
-    m.change(type, (d) => upsertProp(d, "p_prio", { name: "Priorität" }));
-    m.change(type, (d) => upsertProp(d, "p_prio", { name: "Wichtigkeit" }));
+    m.change(type, (d) => upsertProp(d, "p_prio", { name: "Priority" }));
+    m.change(type, (d) => upsertProp(d, "p_prio", { name: "Importance" }));
     const schema = m.get(type)!.schema!;
-    expect(schema.properties[0]!.formerNames).toEqual(["Prio", "Priorität"]);
+    expect(schema.properties[0]!.formerNames).toEqual(["Prio", "Priority"]);
     expect(propByName(schema, "prio")?.id).toBe("p_prio");
     expect(propByName(schema, "p_prio")?.id).toBe("p_prio");
     // a sort key or filter written on a device that missed the renames
     const x = m.add({ title: "A", type, props: { p_prio: 3 } });
-    expect(runQuery("typ:Task Prio>2", m.index(), {}).items.map((i) => i.id)).toEqual([x]);
+    expect(runQuery("type:Task Prio>2", m.index(), {}).items.map((i) => i.id)).toEqual([x]);
   });
 
   test("a current name wins over another property's former name", () => {
     const m = new MemRepo();
-    const type = m.addType("t", { name: "T", properties: [{ id: "a", name: "Alt", kind: "text" }, { id: "b", name: "Neu", kind: "text" }] });
-    m.change(type, (d) => upsertProp(d, "a", { name: "Erst" }));
-    m.change(type, (d) => upsertProp(d, "b", { name: "Alt" }));
+    const type = m.addType("t", { name: "T", properties: [{ id: "a", name: "Old", kind: "text" }, { id: "b", name: "New", kind: "text" }] });
+    m.change(type, (d) => upsertProp(d, "a", { name: "First" }));
+    m.change(type, (d) => upsertProp(d, "b", { name: "Old" }));
     const schema = readSchema(m.doc(type));
-    expect(propByName(schema, "Alt")?.id).toBe("b");
+    expect(propByName(schema, "Old")?.id).toBe("b");
   });
 });

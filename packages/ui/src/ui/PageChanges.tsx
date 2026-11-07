@@ -1,4 +1,4 @@
-// "Änderungen" in the updates panel: every change to this one page from the server's activity log
+// "Changes" in the updates panel: every change to this one page from the server's activity log
 // (its text, properties, updates, when it was made), by day like the updates beside it. The rows say
 // what changed, not which page: that is the page beside the panel.
 import { useEffect, useMemo, useRef, useState } from "react";

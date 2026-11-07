@@ -88,7 +88,7 @@ const ITEMS: SlashItem[] = [
  */
 export function insertDrawing(view: EditorView, pos = view.state.selection.main.head) {
   const parent = view.state.facet(editorNode);
-  const id = repo.create({ kind: "zeichnung", title: "", parents: parent ? [parent] : [] });
+  const id = repo.create({ kind: "drawing", title: "", parents: parent ? [parent] : [] });
   const embed = `![[${id}]]`;
   // after the index has the new drawing (next microtask), so the embed shows at once
   queueMicrotask(() => insertBlock(view, pos, embed + "\n", embed.length + 1));
@@ -96,7 +96,7 @@ export function insertDrawing(view: EditorView, pos = view.state.selection.main.
 
 const SECTIONS = { basic: { name: "editor.section.basic", rank: 0 }, insert: { name: "editor.section.insert", rank: 1 } };
 
-/** Umlauts match typed either way: "ueber", "über" and "uber" all find "Überschrift". */
+/** Umlauts match typed either way: "ueber", "über" and "uber" all find the German "Überschrift". */
 const hasWord = (words: string, query: string) => [foldUmlauts, plainVowels].some((f) => f(words).includes(f(query)));
 
 export function slashCompletion(ctx: CompletionContext): CompletionResult | null {

@@ -32,24 +32,24 @@ const open = async () => {
 
 test("a title, Enter into the text, ⌘↵: the note lies in the inbox, the card closes", async () => {
   await open();
-  await commands.keys("type", "Gespräch mit Lena");
+  await commands.keys("type", "Call with Lena");
   await commands.keys("press", "Enter");
   await expect.poll(() => document.querySelector("[data-quick-note] .cm-editor.cm-focused")).not.toBeNull();
-  await commands.keys("type", "Termin verschiebt sich");
+  await commands.keys("type", "The meeting moves");
   await commands.keys("press", "Control+Enter");
   await expect.poll(() => document.querySelector("[data-quick-note]")).toBeNull();
-  const note = found("Gespräch mit Lena")!;
-  expect(note.body).toBe("Termin verschiebt sich");
+  const note = found("Call with Lena")!;
+  expect(note.body).toBe("The meeting moves");
   expect(Object.keys(note.parents)).toEqual([]);
   expect(note.type).toBeNull();
 });
 
 test("Esc closes the card; the note lies in the inbox, the button starts a new one", async () => {
   await open();
-  await commands.keys("type", "Halber Gedanke");
+  await commands.keys("type", "Half a thought");
   await commands.keys("press", "Escape");
   await expect.poll(() => document.querySelector("[data-quick-note]")).toBeNull();
-  await expect.poll(() => found("Halber Gedanke")).toBeTruthy();
+  await expect.poll(() => found("Half a thought")).toBeTruthy();
   await field().click();
   await expect.element(titleField()).toHaveValue("");
 });
@@ -89,10 +89,10 @@ test('the inbox\'s choices are there but "Löschen"; "Anheften" sorts the note a
   await open();
   for (const name of ["Einsortieren", "Typ", "Morgen", "Anheften"]) await expect.element(card().getByRole("button", { name })).toBeVisible();
   expect(card().getByRole("button", { name: "Löschen" }).query()).toBeNull();
-  await commands.keys("type", "Wichtig");
+  await commands.keys("type", "Important");
   await card().getByRole("button", { name: "Anheften" }).click();
   await expect.poll(() => document.querySelector("[data-quick-note]")).toBeNull();
-  expect(found("Wichtig")?.pinned).toBeTruthy();
+  expect(found("Important")?.pinned).toBeTruthy();
 });
 
 test("a query in the text shows its results, as on the note's page", async () => {
@@ -110,9 +110,9 @@ test("on the pinned inbox (Heute), a click on the dimmed inbox beside the card c
     </div>,
   );
   await open();
-  await commands.keys("type", "Neben der Karte");
+  await commands.keys("type", "Beside the card");
   const beside = document.querySelector<HTMLElement>("[data-quick-beside]")!.getBoundingClientRect();
   await commands.mouse("click", beside.left + 20, beside.top + 20);
   await expect.poll(() => document.querySelector("[data-quick-note]")).toBeNull();
-  await expect.poll(() => found("Neben der Karte")).toBeTruthy();
+  await expect.poll(() => found("Beside the card")).toBeTruthy();
 });

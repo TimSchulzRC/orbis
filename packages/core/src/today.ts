@@ -1,4 +1,4 @@
-// Data for the "Heute" page. Dormant entries (done above them) are left out, as the
+// Data for the "Today" page. Dormant entries (done above them) are left out, as the
 // focus lists do.
 import { type Item, META_TYPE } from "./model";
 import type { Index } from "./graph";
@@ -9,7 +9,7 @@ import { cmpKey } from "./sortkey";
 export function dueBy(ix: Index, today: string): { item: Item; due: string }[] {
   const out: { item: Item; due: string }[] = [];
   for (const item of ix.live) {
-    if (item.kind !== "info") continue;
+    if (item.kind !== "note") continue;
     const schema = ix.schemaOf(item);
     const due = dueOf(item, schema)?.slice(0, 10);
     if (!due || due > today || isDone(item, schema) || ix.isDormant(item)) continue;

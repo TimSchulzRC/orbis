@@ -13,7 +13,7 @@ export function loadExcalidraw() {
   return (loading ??= import("@excalidraw/excalidraw"));
 }
 
-/** The library ("Bibliothek") belongs to the person, not the drawing: kept on this device like on excalidraw.com. */
+/** The library belongs to the person, not the drawing: kept on this device like on excalidraw.com. */
 export function readLibrary(): LibraryItems {
   try {
     const items = JSON.parse(localStorage.getItem(KEYS.drawingLibrary) ?? "null") as LibraryItems | null;

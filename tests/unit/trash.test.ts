@@ -15,18 +15,18 @@ const restore = (m: MemRepo, id: string) => restoreItem(m.writer, m.records(), i
 const alive = (m: MemRepo, id: string) => !!m.index().get(id);
 
 function project(m: MemRepo) {
-  const arbeit = m.add({ title: "Arbeit", pinned: "a" });
-  const p = m.add({ title: "Relaunch", type: SYS.project, parents: [arbeit] });
+  const work = m.add({ title: "Work", pinned: "a" });
+  const p = m.add({ title: "Relaunch", type: SYS.project, parents: [work] });
   const t1 = m.add({ title: "Mapping", type: SYS.task, parents: [p] });
-  const sub = m.add({ title: "Pflichtfelder", type: SYS.task, parents: [t1] });
-  const note = m.add({ title: "Notiz", parents: [p] });
-  return { arbeit, p, t1, sub, note };
+  const sub = m.add({ title: "Required fields", type: SYS.task, parents: [t1] });
+  const note = m.add({ title: "Note", parents: [p] });
+  return { work, p, t1, sub, note };
 }
 
 test("deleting a project trashes what hangs only below it; restoring brings exactly that back", () => {
   const m = repo();
   const { p, t1, sub, note } = project(m);
-  const earlier = m.add({ title: "Schon gelöscht", type: SYS.task, parents: [p] });
+  const earlier = m.add({ title: "Already deleted", type: SYS.task, parents: [p] });
   m.change(earlier, (d) => setMeta(d, { deleted: true }));
   expect(del(m, p).sort()).toEqual([t1, sub, note].sort());
   for (const id of [p, t1, sub, note]) expect(alive(m, id)).toBe(false);
@@ -42,15 +42,15 @@ test("deleting a project trashes what hangs only below it; restoring brings exac
 test("a child with another living parent is never deleted along", () => {
   const m = repo();
   const { p } = project(m);
-  const kunde = m.add({ title: "Nordlicht", pinned: "b" });
-  const both = m.add({ title: "Nordlicht · Frankreich", type: SYS.project, parents: [p, kunde] });
-  const below = m.add({ title: "Task darunter", type: SYS.task, parents: [both] });
+  const client = m.add({ title: "Nordlicht", pinned: "b" });
+  const both = m.add({ title: "Nordlicht · France", type: SYS.project, parents: [p, client] });
+  const below = m.add({ title: "Task below", type: SYS.task, parents: [both] });
   const only = del(m, p);
   expect(only).not.toContain(both);
   expect(only).not.toContain(below);
   expect(alive(m, both)).toBe(true);
   expect(alive(m, below)).toBe(true);
-  expect(m.index().parentsOf(both)).toEqual([kunde]);
+  expect(m.index().parentsOf(both)).toEqual([client]);
 });
 
 test("\"back to the inbox\" removes the parent instead of deleting the children", () => {
@@ -71,7 +71,7 @@ test("\"back to the inbox\" removes the parent instead of deleting the children"
 test("a task another device moved away while the project was deleted stays alive", () => {
   const laptop = repo();
   const { p, t1, sub } = project(laptop);
-  const other = laptop.add({ title: "Anderes Projekt", type: SYS.project, pinned: "c" });
+  const other = laptop.add({ title: "Other project", type: SYS.project, pinned: "c" });
   const phone = fork(laptop);
   del(laptop, p);
   phone.change(t1, (d) => {
@@ -90,10 +90,10 @@ test("a task another device moved away while the project was deleted stays alive
 test("a task that got a second, living parent on another device stays alive", () => {
   const laptop = repo();
   const { p, t1 } = project(laptop);
-  const kunde = laptop.add({ title: "Nordlicht", pinned: "b" });
+  const client = laptop.add({ title: "Nordlicht", pinned: "b" });
   const phone = fork(laptop);
   del(laptop, p);
-  phone.change(t1, (d) => addParent(d, kunde));
+  phone.change(t1, (d) => addParent(d, client));
   sync(laptop, phone);
   expect(alive(laptop, t1)).toBe(true);
   expect(alive(phone, t1)).toBe(true);
@@ -101,9 +101,9 @@ test("a task that got a second, living parent on another device stays alive", ()
 
 test("nested projects deleted on two devices: everything stays hidden, restoring leaves no orphan", () => {
   const laptop = repo();
-  const arbeit = laptop.add({ title: "Arbeit", pinned: "a" });
-  const p = laptop.add({ title: "Relaunch", type: SYS.project, parents: [arbeit] });
-  const s = laptop.add({ title: "Frankreich", type: SYS.project, parents: [p] });
+  const work = laptop.add({ title: "Work", pinned: "a" });
+  const p = laptop.add({ title: "Relaunch", type: SYS.project, parents: [work] });
+  const s = laptop.add({ title: "France", type: SYS.project, parents: [p] });
   const t = laptop.add({ title: "Mapping", type: SYS.task, parents: [s] });
   const phone = fork(laptop);
   del(laptop, p); // marks s and t via p
@@ -122,9 +122,9 @@ test("nested projects deleted on two devices: everything stays hidden, restoring
 
 test("restoring an outer root keeps a subtree whose own root is still deleted", () => {
   const m = repo();
-  const arbeit = m.add({ title: "Arbeit", pinned: "a" });
-  const p = m.add({ title: "Relaunch", type: SYS.project, parents: [arbeit] });
-  const s = m.add({ title: "Frankreich", type: SYS.project, parents: [p] });
+  const work = m.add({ title: "Work", pinned: "a" });
+  const p = m.add({ title: "Relaunch", type: SYS.project, parents: [work] });
+  const s = m.add({ title: "France", type: SYS.project, parents: [p] });
   const t = m.add({ title: "Mapping", type: SYS.task, parents: [s] });
   // the merged state of two concurrent deletes: s deleted itself, t marked via the outer root
   m.change(p, (d) => setMeta(d, { deleted: true }));
@@ -153,12 +153,12 @@ test("restoring a single cascaded item brings back only that item", () => {
 
 test("purging takes what was deleted with the item, never what was deleted on its own or moved away", () => {
   const m = repo();
-  const { arbeit, p, t1, sub, note } = project(m);
-  const earlier = m.add({ title: "Schon gelöscht", type: SYS.task, parents: [p] });
+  const { work, p, t1, sub, note } = project(m);
+  const earlier = m.add({ title: "Already deleted", type: SYS.task, parents: [p] });
   m.change(earlier, (d) => setMeta(d, { deleted: true }));
   del(m, p);
   // moved out of the trash by another device: alive again, stays alive
-  m.change(note, (d) => (addParent(d, arbeit), removeParent(d, p)));
+  m.change(note, (d) => (addParent(d, work), removeParent(d, p)));
   expect(trashRoots(m.records()).map((r) => r.id).sort()).toEqual([p, earlier].sort());
   expect(purgeSet(m.records(), p).sort()).toEqual([p, t1, sub].sort());
   // a cascaded item on its own: takes what hangs only below it

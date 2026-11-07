@@ -19,7 +19,7 @@ export function BoardView({ items, def, ctx, look }: { items: Item[]; def: Query
   const ix = ctx.ix;
   const by = def.group && def.group !== "path" ? def.group : "status";
   const tab = look?.tab;
-  // empty options stay as columns so there is somewhere to drag to ("Erledigt" before anything is done)
+  // empty options stay as columns so there is somewhere to drag to ("Done" before anything is done)
   const typeIds = viewTypeIds(def.where, items, ix, items.length);
   const [columns, hiddenCols] = splitHidden(groupItems(items, by, ctx, undefined, tab?.hideEmpty ? undefined : { types: typeIds, where: def.where }).filter((g) => !tab?.hideEmpty || g.items.length), tab);
   const lanes = tab?.subgroup ? groupItems(items, tab.subgroup, ctx).filter((g) => g.items.length) : [{ key: "", items } as QGroup];

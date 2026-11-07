@@ -46,28 +46,28 @@ async function start(storage: ReplicaStorage) {
 test("a start decodes only documents changed since the last one", async () => {
   const mem = memoryStorage();
   const first = await start(mem.storage);
-  const a = first.create({ title: "A", body: "eins" });
-  const b = first.create({ title: "B", body: "zwei" });
+  const a = first.create({ title: "A", body: "one" });
+  const b = first.create({ title: "B", body: "two" });
   await first.saved();
 
   const second = await start(mem.storage); // rows without records: every document is read once
   expect(second.docs.size).toBe(2);
   expect(mem.rows.every((r) => r.r?.v === RECORD_VERSION)).toBe(true);
-  second.setBody(b, "zwei, geändert");
+  second.setBody(b, "two, changed");
   await second.saved();
 
   const third = await start(mem.storage);
   expect([...third.docs.keys()]).toEqual([b]);
-  expect(third.get(a)?.body).toBe("eins");
-  expect(third.get(b)?.body).toBe("zwei, geändert");
-  expect(third.search("eins").map((r) => r.id)).toEqual([a]);
+  expect(third.get(a)?.body).toBe("one");
+  expect(third.get(b)?.body).toBe("two, changed");
+  expect(third.search("one").map((r) => r.id)).toEqual([a]);
   // the document is read on first use, and changes to it are kept
-  third.setBody(a, "eins, geändert");
-  expect(third.getDoc(a).getText("body").toString()).toBe("eins, geändert");
+  third.setBody(a, "one, changed");
+  expect(third.getDoc(a).getText("body").toString()).toBe("one, changed");
   expect(third.get(a)?.title).toBe("A");
   await third.saved();
   const fourth = await start(mem.storage);
-  expect(fourth.get(a)?.body).toBe("eins, geändert");
+  expect(fourth.get(a)?.body).toBe("one, changed");
 });
 
 test("records from another RECORD_VERSION are read anew", async () => {

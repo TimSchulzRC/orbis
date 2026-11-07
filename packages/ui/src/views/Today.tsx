@@ -1,4 +1,4 @@
-// "Heute", the start page, across every workspace seen. Empty sections are left out.
+// "Today", the start page, across every workspace seen. Empty sections are left out.
 import { Sun } from "lucide-react";
 import { type Item, SETTINGS_ID, todayISO } from "@obtion/core/model";
 import { fmtDate } from "@obtion/core/i18n";

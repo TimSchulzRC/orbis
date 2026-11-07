@@ -15,14 +15,14 @@ import { MAX_ATTACH } from "./config";
 import { type Person, agentOrigin, parseOrigin } from "@obtion/core/origin";
 import { workspaceRules } from "@obtion/core/rules";
 
-const INSTRUCTIONS = `Obtion is the user's personal system for knowledge and work: informations linked like Obsidian, projects and tasks like Notion, all in one graph. You are their interface: they tell you what happened, you record it; they ask, you answer from the data.
+const INSTRUCTIONS = `Obtion is the user's personal system for knowledge and work: notes linked like Obsidian, projects and tasks like Notion, all in one graph. You are their interface: they tell you what happened, you record it; they ask, you answer from the data.
 
 The model:
-- Everything is an information (title, Markdown body, tags, refs) or a file. An information has at most one type. Types are data: call \`schema\` first – it lists every type with its description, properties (with options) and capabilities. Follow the descriptions. Never assume a type exists because of its name.
+- Everything is a note (title, Markdown body, tags, refs) or a file. A note has at most one type. Types are data: call \`schema\` first – it lists every type with its description, properties (with options) and capabilities. Follow the descriptions. Never assume a type exists because of its name.
 - "Part of" (place) builds the tree: an item can have several parents, one is its home. Links ([[Title]]) and refs are mentions; they connect without sorting. Relations are typed properties.
 - Pinned items form the top of the sidebar (place with pin:true); pinning counts as a place.
-- An information without a type, without a parent and not pinned is in the inbox (precisely: whatever the inbox query matches, see \`schema\`). Without a type but with a parent it is a note.
-- A type can have one property of kind "status": its options sit in the groups todo, active and done. Done counts as finished in progress, is never overdue and no longer blocks; active entries show on Today. Capabilities say what else a type can do: a due date ("Termin"), dated updates. Progress is a computed property ("progress" or "progress:Type"): the first one is the bar on the page. The app gives no type a special role: what a project or a task is comes from the types the user made.
+- A note without a type, without a parent and not pinned is in the inbox (precisely: whatever the inbox query matches, see \`schema\`). Giving it a type or a parent sorts it out of the inbox.
+- A type can have one property of kind "status": its options sit in the groups todo, active and done. Done counts as finished in progress, is never overdue and no longer blocks; active entries show on Today. Capabilities say what else a type can do: a due date (\`due_date\`), dated updates (\`updates\`), a template for new entries (\`template\`). Progress is a computed property ("progress" or "progress:Type"): the first one is the bar on the page. The app gives no type a special role: what a project or a task is comes from the types the user made.
 - Every type has a page: the list of its entries with views as tabs (\`update_type\` views). Mixed lists are pages with query blocks. Query syntax: ${QUERY_HELP} In bodies, \`\`\`query <text>\`\`\` blocks are live lists.
 
 Values are read tolerantly: a status as option name or group (open, active, done) in German or English, also synonyms like "in Arbeit" or "fertig"; dates as 2026-10-30, 30.10.2026, 10/30/2026, today/heute, tomorrow/morgen, a weekday or +3d, optionally with a time (2026-10-30 14:30); type names in singular or plural. "blocked" is not a status: set a property that holds it up (blocks: true in its type, e.g. "Blockiert durch" or "Wartet auf"). What can't be read is rejected with the reason – nothing is guessed.
@@ -186,7 +186,7 @@ function buildMcpServer(store: Store, origin: string, blobs?: Blobs, lang: Lang 
     "create",
     {
       title: "Create",
-      description: "Create informations. type is a type name (see schema) or omitted; parents (titles/ids) place them; properties by name (only those of the type). Without type and parent the item lands in the inbox.",
+      description: "Create notes. type is a type name (see schema) or omitted; parents (titles/ids) place them; properties by name (only those of the type). Without type and parent the item lands in the inbox.",
       inputSchema: { items: z.array(createInput).min(1) },
     },
     write((a, touched) => `Created:\n${ops.written(mark(touched, a.items.map((x) => ops.create(x, origin))))}`),
@@ -363,7 +363,7 @@ Then ask what I want to change. Don't change anything before I answer.`),
 }
 
 /** `filesUrl`: the workspace's HTTP file API (…/w/<id>/api/files), named in answers and instructions. */
-export async function handleMcp(store: Store, req: Request, blobs?: Blobs, person?: Person, filesUrl?: string): Promise<Response> {
+export async function handleMcp(store: Store, req: Request, blobs: Blobs | undefined, person: Person, filesUrl?: string): Promise<Response> {
   store.flush();
   const server = buildMcpServer(store, agentOrigin(agentName(req), person), blobs, acceptLang(req.headers.get("accept-language")), filesUrl);
   const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });

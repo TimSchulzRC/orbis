@@ -8,21 +8,21 @@ test("same text: no hunks", () => {
 });
 
 test("a changed line with context, counted", () => {
-  const d = textDiff("eins\nzwei\ndrei\nvier\nfünf\nsechs\nsieben\nacht\n", "eins\nzwei\ndrei\nVIER\nfünf\nsechs\nsieben\nacht\n");
+  const d = textDiff("one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\n", "one\ntwo\nthree\nFOUR\nfive\nsix\nseven\neight\n");
   expect(d.added).toBe(1);
   expect(d.removed).toBe(1);
   expect(d.hunks.length).toBe(1);
-  expect(unifiedDiff(d).text).toBe(["@@ -1,7 +1,7 @@", " eins", " zwei", " drei", "-vier", "+VIER", " fünf", " sechs", " sieben"].join("\n"));
+  expect(unifiedDiff(d).text).toBe(["@@ -1,7 +1,7 @@", " one", " two", " three", "-four", "+FOUR", " five", " six", " seven"].join("\n"));
 });
 
 test("changes far apart are separate hunks; context can be narrowed", () => {
-  const a = Array.from({ length: 30 }, (_, i) => `Zeile ${i}`).join("\n");
-  const b = a.replace("Zeile 2\n", "Zeile zwei\n").replace("Zeile 27\n", "Zeile siebenundzwanzig\n");
+  const a = Array.from({ length: 30 }, (_, i) => `Line ${i}`).join("\n");
+  const b = a.replace("Line 2\n", "Line two\n").replace("Line 27\n", "Line twenty-seven\n");
   expect(textDiff(a, b).hunks.length).toBe(2);
   const tight = textDiff(a, b, 0);
   expect(tight.hunks.map((h) => h.lines.map((l) => l.op + l.text))).toEqual([
-    ["-Zeile 2", "+Zeile zwei"],
-    ["-Zeile 27", "+Zeile siebenundzwanzig"],
+    ["-Line 2", "+Line two"],
+    ["-Line 27", "+Line twenty-seven"],
   ]);
   expect(tight.hunks.map((h) => [h.oldStart, h.newStart])).toEqual([
     [3, 3],
@@ -31,8 +31,8 @@ test("changes far apart are separate hunks; context can be narrowed", () => {
 });
 
 test("from and to the empty text", () => {
-  expect(unifiedDiff(textDiff("", "neu\nzwei\n")).text).toBe("@@ -1,0 +1,2 @@\n+neu\n+zwei");
-  const gone = textDiff("weg\n", "");
+  expect(unifiedDiff(textDiff("", "new\ntwo\n")).text).toBe("@@ -1,0 +1,2 @@\n+new\n+two");
+  const gone = textDiff("gone\n", "");
   expect([gone.added, gone.removed]).toEqual([0, 1]);
 });
 
@@ -47,10 +47,10 @@ test("unified text is capped by lines and width, and says how much there was", (
 });
 
 test("a rewrite too big to diff closely shows as replaced, still counted right", () => {
-  const a = Array.from({ length: 6000 }, (_, i) => `alt ${i}`).join("\n");
-  const b = Array.from({ length: 6000 }, (_, i) => `neu ${i}`).join("\n");
+  const a = Array.from({ length: 6000 }, (_, i) => `old ${i}`).join("\n");
+  const b = Array.from({ length: 6000 }, (_, i) => `new ${i}`).join("\n");
   const d = textDiff(a, b);
   expect([d.added, d.removed]).toEqual([6000, 6000]);
   expect(d.hunks.length).toBe(1);
-  expect(d.hunks[0]!.lines[0]).toEqual({ op: "-", text: "alt 0" });
+  expect(d.hunks[0]!.lines[0]).toEqual({ op: "-", text: "old 0" });
 });

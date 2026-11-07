@@ -61,7 +61,7 @@ export function useAccounts() {
     (l) => (listeners.add(l), () => listeners.delete(l)),
     () => version,
   );
-  // no choice made ("Alle"), as opposed to every workspace picked one by one
+  // no choice made ("All"), as opposed to every workspace picked one by one
   const allSeen = !shown || !spaces.some((s) => shown!.includes(s.id));
   return { account, spaces, active: spaces.find((s) => s.id === active), shown: shownSpaces(), allSeen };
 }
@@ -236,7 +236,7 @@ async function keep(token: string) {
   await refresh();
 }
 
-/** Older servers send no `login`: password only. */
+/** Before the server answered: password only. */
 export const loginOf = (info: ServerInfo | null): LoginMethods => info?.login ?? { password: true, emailCode: false, passkey: false, oauth: [] };
 
 /** The server reads this cookie when a code or OAuth sign-in creates the user. */

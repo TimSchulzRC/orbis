@@ -145,14 +145,6 @@ export class Blobs {
   }
 
   scan() {
-    // texts from before they were kept here: the whole one moves here, the facts keep the start
-    for (const r of this.store.records.values()) {
-      const f = r.file;
-      if (!f?.text || f.text.length <= FACTS_TEXT + 2 || f.extracted !== extractMark(f.hash) || !HASH.test(f.hash)) continue;
-      // there already when another file has the same content, or after a stop between the two steps
-      if (!existsSync(this.textPath(f.hash))) this.keepText(f.hash, f.text);
-      this.store.change(r.id, "system:files", (doc) => setFileMeta(doc, { text: factsText(f.text!) }), { quiet: true });
-    }
     for (const r of this.store.live()) if (this.needsWork(r)) this.schedule(r.id);
     // PDF previews a device announced but never uploaded: drop them so a device renders them again
     for (const r of this.store.live()) {
@@ -164,7 +156,7 @@ export class Blobs {
   needsWork(r: Item): boolean {
     const f = r.file;
     if (!f?.hash || !this.has(f.hash)) return false;
-    if (f.filetype === "bild") return (!f.display || !f.thumb || !f.width) && !/svg/.test(f.mime) && !!FFMPEG;
+    if (f.filetype === "image") return (!f.display || !f.thumb || !f.width) && !/svg/.test(f.mime) && !!FFMPEG;
     if (f.filetype === "audio" || f.filetype === "video") return f.duration === undefined && !!FFPROBE;
     return f.extracted !== extractMark(f.hash);
   }
@@ -202,7 +194,7 @@ export class Blobs {
     if (!f || !this.needsWork(record!)) return;
     const src = this.path(f.hash);
     const patch: Partial<FileMeta> = {};
-    if (f.filetype === "bild") {
+    if (f.filetype === "image") {
       const dim = await probe(src);
       if (dim.width) Object.assign(patch, { width: dim.width, height: dim.height });
       if (!f.display) patch.display = await this.derive(src, DISPLAY_WIDTH);

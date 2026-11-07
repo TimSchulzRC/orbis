@@ -11,7 +11,7 @@ const text = (id: string, t: string, index: string): SceneElement => el(id, { ty
 
 test("a drawing stores its elements, files and canvas, and reads them back in drawing order", () => {
   const m = new MemRepo();
-  const id = m.add({ kind: "zeichnung", title: "Architektur" });
+  const id = m.add({ kind: "drawing", title: "Architektur" });
   m.change(id, (d) => {
     writeElements(d, [text("t2", "Datenbank", "a2"), el("r1", { index: "a1" }), text("t1", "Server", "a0")]);
     setDrawingFile(d, "img", { hash: "abc", mimeType: "image/png", created: 1 });
@@ -23,14 +23,14 @@ test("a drawing stores its elements, files and canvas, and reads them back in dr
   // only the canvas settings, not the device's view (zoom, scroll)
   expect(scene.state).toEqual({ viewBackgroundColor: "#fafafa", gridModeEnabled: true });
   const item = m.get(id)!;
-  expect(item.kind).toBe("zeichnung");
+  expect(item.kind).toBe("drawing");
   expect(item.drawing).toEqual({ text: "Server\nDatenbank", files: ["abc"], count: 3 });
   expect(JSON.parse(excalidrawFile(scene))).toMatchObject({ type: "excalidraw", elements: [{ id: "t1" }, { id: "r1" }, { id: "t2" }], appState: { viewBackgroundColor: "#fafafa" } });
 });
 
 test("only newer versions of an element are written", () => {
   const m = new MemRepo();
-  const id = m.add({ kind: "zeichnung", title: "Skizze" });
+  const id = m.add({ kind: "drawing", title: "Skizze" });
   m.change(id, (d) => writeElements(d, [el("a", { version: 3, versionNonce: 5, x: 30 })]));
   let n = 0;
   m.change(id, (d) => (n = writeElements(d, [el("a", { version: 2, x: 20 })])));
@@ -45,7 +45,7 @@ test("only newer versions of an element are written", () => {
 
 test("edits from two devices merge per element", () => {
   const a = new MemRepo();
-  const id = a.add({ kind: "zeichnung", title: "Board" });
+  const id = a.add({ kind: "drawing", title: "Board" });
   a.change(id, (d) => writeElements(d, [el("x"), el("y", { index: "a1" })]));
   const b = fork(a);
   a.change(id, (d) => writeElements(d, [el("x", { version: 2, x: 100 })]));
@@ -65,7 +65,7 @@ test("edits from two devices merge per element", () => {
 test("two devices changing one element at once: the newer version wins on both, whatever Yjs picks", () => {
   for (let run = 0; run < 12; run++) {
     const a = new MemRepo();
-    const id = a.add({ kind: "zeichnung", title: "Board" });
+    const id = a.add({ kind: "drawing", title: "Board" });
     a.change(id, (d) => writeElements(d, [el("x", { version: 1 })]));
     const b = fork(a);
     a.change(id, (d) => writeElements(d, [el("x", { version: 5, x: 50 })]));
@@ -86,11 +86,11 @@ test("two devices changing one element at once: the newer version wins on both, 
 test("a drawing is a block of its note: kept below it, never sorted or listed on its own, found by its text", () => {
   const m = new MemRepo();
   const note = m.add({ title: "Architektur", pinned: "V" });
-  const drawing = m.add({ kind: "zeichnung", title: "", parents: [note] });
-  m.change(note, (d) => d.getText("body").insert(0, `Überblick\n![[${drawing}]]\n`));
-  m.change(drawing, (d) => writeElements(d, [text("t", "Freigabe durch Kunde", "a0")]));
-  const loose = m.add({ kind: "zeichnung", title: "", pinned: "W" }); // pinned while drawings were entries
-  const other = m.add({ title: "Notiz" });
+  const drawing = m.add({ kind: "drawing", title: "", parents: [note] });
+  m.change(note, (d) => d.getText("body").insert(0, `Overview\n![[${drawing}]]\n`));
+  m.change(drawing, (d) => writeElements(d, [text("t", "Approval by client", "a0")]));
+  const loose = m.add({ kind: "drawing", title: "", pinned: "W" }); // pinned while drawings were entries
+  const other = m.add({ title: "Note" });
   const ix = m.index();
   expect(isContent(ix.get(drawing)!)).toBe(true);
   // kept below the note, so it goes to the trash with it
@@ -98,7 +98,7 @@ test("a drawing is a block of its note: kept below it, never sorted or listed on
   // not in the inbox, not in the sidebar, not in lists, nothing goes below it
   for (const d of [drawing, loose]) expect(isInInbox(ix.get(d)!, ix)).toBe(false);
   expect(sidebarChildren(note, ix)).toEqual([]);
-  // nor in "Darunter" (the note page, the inbox, the review)
+  // nor in "Below" (the note page, the inbox, the review)
   expect(belowOf(note, ix)).toEqual([]);
   expect(sidebarRoots(ix).map((i) => i.id)).toEqual([note]);
   expect(runQuery(parseQuery("", ix).def, { ix }).items.map((i) => i.id)).not.toContain(drawing);
@@ -106,5 +106,5 @@ test("a drawing is a block of its note: kept below it, never sorted or listed on
   // its text is searchable
   const search = createIndex();
   for (const i of ix.live) indexRecord(search, i);
-  expect(searchIds(search, "freigabe", 5)).toEqual([drawing]);
+  expect(searchIds(search, "approval", 5)).toEqual([drawing]);
 });

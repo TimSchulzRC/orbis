@@ -10,10 +10,9 @@ test("a person in the app: name, account and device; the device is kept, not sho
   expect(originText(o)).toBe("Tim");
 });
 
-test("an agent with the access of a person; without one (the MCP address from before accounts)", () => {
+test("an agent with the access of a person", () => {
   expect(parseOrigin(agentOrigin("claude-code", tim))).toEqual({ kind: "agent", name: "claude-code", person: { id: "u1", name: "Tim" }, device: undefined });
   expect(originText(agentOrigin("claude-code", tim))).toBe("claude-code for Tim");
-  expect(parseOrigin(agentOrigin("claude"))).toMatchObject({ kind: "agent", name: "claude", person: undefined });
 });
 
 test("separators in a name cannot break the format", () => {

@@ -1,7 +1,7 @@
 // Views, query blocks and relation targets name properties and types by their text, not by id.
 // When a type changes, these functions carry the change over to every place that names it, so a
 // removed property leaves the table and a renamed one keeps its column, sort and filter.
-import { type Item, type PropDef, type ViewDef, type ViewTab, SETTINGS_ID, replaceBody, setCapability, setProp, setSettings, setTab, setTabs, setView, titleKey, upsertProp } from "./model";
+import { type Item, type PropDef, type ViewTab, SETTINGS_ID, replaceBody, setCapability, setProp, setSettings, setTab, setTabs, titleKey, upsertProp } from "./model";
 import { mapValue } from "./typeops";
 import type { Index } from "./graph";
 import { type Cond, type QueryDef, FIELDS, blockSource, findBlocks, queryFence, readBlock, typesIn } from "./query";
@@ -138,14 +138,6 @@ function fill(t: Omit<ViewTab, "id" | "pos">) {
 }
 
 function followInItem(w: Writer, ix: Index, item: Item, c: PropChange) {
-  const views: [string, ViewDef][] = [];
-  for (const [id, v] of Object.entries(item.views)) {
-    if (!v.query || !belongs(v.query.where, c, ix)) continue;
-    const query = mapQuery(v.query, c);
-    const group = v.group ? (mapName(v.group, c) ?? undefined) : undefined;
-    const next = dropEmpty({ ...v, query, group });
-    if (!same(v, next)) views.push([id, next]);
-  }
   let body: string | null = null;
   const blocks = findBlocks(item.body);
   if (blocks.length) {
@@ -165,15 +157,14 @@ function followInItem(w: Writer, ix: Index, item: Item, c: PropChange) {
   const rule = item.id === SETTINGS_ID ? item.settings?.inbox : undefined;
   const inbox = rule && belongs(rule, c, ix) ? mapCond(rule, c) : undefined;
   const inboxChanged = inbox !== undefined && !same(inbox, rule);
-  if (!views.length && body === null && !inboxChanged) return;
+  if (body === null && !inboxChanged) return;
   w.change(item.id, (doc) => {
-    for (const [id, v] of views) setView(doc, id, v);
     if (body !== null) replaceBody(doc, body);
     if (inboxChanged) setSettings(doc, { inbox });
   });
 }
 
-// The words for "type" in every language: `typ:Aufgabe`, `type:Task`.
+// The words for "type" in every language: `type:Task`, German `typ:Aufgabe`.
 let typeKeys: Set<string> | null = null;
 function isTypeKey(word: string): boolean {
   typeKeys ??= new Set(["type", ...LANGS.flatMap((l) => words(l, "q.key.type"))].map(fold));

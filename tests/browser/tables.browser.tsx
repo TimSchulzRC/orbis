@@ -13,13 +13,13 @@ import { workspace } from "./workspace";
 type EditorView = NonNullable<Parameters<NonNullable<Parameters<typeof Editor>[0]["onView"]>>[0]>;
 
 const TABLE = [
-  "| Feld | Pflicht | Beschreibung |",
+  "| Field | Required | Description |",
   "| :--- | :-: | ---: |",
-  "| **Rechnungsnummer** | ja | Eindeutig je `Absender`, siehe [[Kurs Datenbanken\\|den Kurs]] |",
-  "| Zahlungsziel | ~~nein~~ | Tage nach [Beispiel](https://example.org)<br>oder ein Datum |",
-  "| Trenner | nein | a \\| b |",
+  "| **Invoice number** | yes | Unique per `Sender`, see [[Kurs Datenbanken\\|the course]] |",
+  "| Payment term | ~~no~~ | Days after [Example](https://example.org)<br>or a date |",
+  "| Separator | no | a \\| b |",
 ].join("\n");
-const BODY = ["# Schnittstelle", "Vorweg ein Absatz.", "", TABLE, "", "Danach ein Absatz."].join("\n");
+const BODY = ["# Interface", "A paragraph first.", "", TABLE, "", "A paragraph after."].join("\n");
 
 let repo: Repo;
 beforeAll(async () => {
@@ -28,7 +28,7 @@ beforeAll(async () => {
 afterEach(() => cleanup());
 
 async function open(body = BODY, width = 900) {
-  const id = repo.create({ title: "Tabellen-Test" });
+  const id = repo.create({ title: "Table test" });
   repo.setBody(id, body);
   let view: EditorView | null = null;
   await render(
@@ -58,13 +58,13 @@ describe("a table reads as a table", () => {
   test("header, alignment, formatting and links in cells, line breaks, an escaped pipe", async () => {
     await open();
     const table = document.querySelector(".cm-table table")!;
-    expect([...table.querySelectorAll("th")].map((c) => c.textContent)).toEqual(["Feld", "Pflicht", "Beschreibung"]);
+    expect([...table.querySelectorAll("th")].map((c) => c.textContent)).toEqual(["Field", "Required", "Description"]);
     expect(table.querySelectorAll("tbody tr").length).toBe(3);
-    expect(table.querySelector("td strong")?.textContent).toBe("Rechnungsnummer");
-    expect(table.querySelector("td code")?.textContent).toBe("Absender");
-    expect(table.querySelector("td del")?.textContent).toBe("nein");
-    expect(table.querySelector("td a.wikilink")?.textContent, "a page link with its own text, its | escaped").toBe("den Kurs");
-    expect(table.querySelector("td a[href='https://example.org']")?.textContent).toBe("Beispiel");
+    expect(table.querySelector("td strong")?.textContent).toBe("Invoice number");
+    expect(table.querySelector("td code")?.textContent).toBe("Sender");
+    expect(table.querySelector("td del")?.textContent).toBe("no");
+    expect(table.querySelector("td a.wikilink")?.textContent, "a page link with its own text, its | escaped").toBe("the course");
+    expect(table.querySelector("td a[href='https://example.org']")?.textContent).toBe("Example");
     expect(table.querySelector("td br"), "<br> breaks the line in a cell").not.toBeNull();
     expect(cell("a | b"), "an escaped pipe is one in the cell").toBeTruthy();
     expect(getComputedStyle(table.querySelectorAll("th")[1]!).textAlign).toBe("center");
@@ -74,7 +74,7 @@ describe("a table reads as a table", () => {
 
   test("a wide table scrolls in its own box, the page stays as wide as before", async () => {
     const cols = 12;
-    const wide = [`| ${Array.from({ length: cols }, (_, i) => `Spalte ${i + 1}`).join(" | ")} |`, `|${" --- |".repeat(cols)}`, `| ${Array.from({ length: cols }, () => "ein recht langer Zelleninhalt").join(" | ")} |`].join("\n");
+    const wide = [`| ${Array.from({ length: cols }, (_, i) => `Column ${i + 1}`).join(" | ")} |`, `|${" --- |".repeat(cols)}`, `| ${Array.from({ length: cols }, () => "a fairly long cell content").join(" | ")} |`].join("\n");
     await open(`Text\n\n${wide}\n`, 420);
     const box = document.querySelector<HTMLElement>(".cm-table .md-table")!;
     expect(box.scrollWidth).toBeGreaterThan(box.clientWidth);
@@ -85,15 +85,15 @@ describe("a table reads as a table", () => {
 describe("editing", () => {
   test("a click into a cell shows the Markdown with the cursor in that cell", async () => {
     const { view } = await open();
-    await clickIn(cell("Zahlungsziel"), 0.3);
+    await clickIn(cell("Payment term"), 0.3);
     await expect.poll(() => srcLines().length).toBe(5);
-    expect(cursorCell(view)).toBe("7:Zahlungsziel");
+    expect(cursorCell(view)).toBe("7:Payment term");
     // a click into formatted text lands in it too
     await commands.keys("press", "Control+End");
     await expect.poll(() => document.querySelector(".cm-table table")).not.toBeNull();
-    await clickIn(cell("Rechnungsnummer"), 0.5);
+    await clickIn(cell("Invoice number"), 0.5);
     await expect.poll(() => srcLines().length).toBe(5);
-    expect(cursorCell(view)).toBe("6:**Rechnungsnummer**");
+    expect(cursorCell(view)).toBe("6:**Invoice number**");
     // leaving the table draws it again
     await commands.keys("press", "Control+End");
     await expect.poll(() => srcLines().length).toBe(0);
@@ -112,50 +112,50 @@ describe("editing", () => {
 
   test("Tab and Shift-Tab go from cell to cell, Tab in the last cell and Enter add rows, Enter in an empty last row ends the table", async () => {
     const { view, doc } = await open();
-    await clickIn(cell("Feld"));
+    await clickIn(cell("Field"));
     await expect.poll(() => srcLines().length).toBe(5);
     await commands.keys("press", "Tab");
-    expect(cursorCell(view)).toBe("4:Pflicht");
+    expect(cursorCell(view)).toBe("4:Required");
     await commands.keys("press", "Tab");
     await commands.keys("press", "Tab");
-    expect(cursorCell(view), "past the header row: the first row below the delimiter").toBe("6:**Rechnungsnummer**");
+    expect(cursorCell(view), "past the header row: the first row below the delimiter").toBe("6:**Invoice number**");
     await commands.keys("press", "Shift+Tab");
-    expect(cursorCell(view)).toBe("4:Beschreibung");
+    expect(cursorCell(view)).toBe("4:Description");
     // to the last cell, then on: a new row
     for (let i = 0; i < 9; i++) await commands.keys("press", "Tab");
     expect(cursorCell(view)).toBe("8:a | b".replace("a | b", "a    b"));
     await commands.keys("press", "Tab");
     expect(doc().split("\n")[8]).toBe("|  |  |  |");
-    await commands.keys("type", "neu");
-    expect(doc().split("\n")[8]).toBe("| neu |  |  |");
+    await commands.keys("type", "new");
+    expect(doc().split("\n")[8]).toBe("| new |  |  |");
     await commands.keys("press", "Enter");
     expect(doc().split("\n")[9]).toBe("|  |  |  |");
     await commands.keys("press", "Enter");
-    expect(doc()).toBe(BODY.replace(TABLE, TABLE + "\n| neu |  |  |\n\n"));
+    expect(doc()).toBe(BODY.replace(TABLE, TABLE + "\n| new |  |  |\n\n"));
     expect(view.state.doc.lineAt(view.state.selection.main.head).number).toBe(11);
   });
 
   test("Shift-Enter breaks the line within a cell", async () => {
     const { doc } = await open();
-    await clickIn(cell("ja"), 0.9);
+    await clickIn(cell("yes"), 0.9);
     await expect.poll(() => srcLines().length).toBe(5);
     await commands.keys("press", "End");
     await commands.keys("press", "Home");
     await commands.keys("press", "Tab");
     await commands.keys("press", "Shift+Enter");
     await commands.keys("type", "x");
-    expect(doc().split("\n")[5]).toBe("| **Rechnungsnummer** | ja<br>x | Eindeutig je `Absender`, siehe [[Kurs Datenbanken\\|den Kurs]] |");
+    expect(doc().split("\n")[5]).toBe("| **Invoice number** | yes<br>x | Unique per `Sender`, see [[Kurs Datenbanken\\|the course]] |");
   });
 
   test('"/Tabelle" inserts a table, its first header cell selected', async () => {
-    const { view, doc } = await open("Absatz\n\n");
+    const { view, doc } = await open("Paragraph\n\n");
     view.dispatch({ selection: { anchor: view.state.doc.length } });
     view.focus();
     await commands.keys("type", "/Tabelle");
     await expect.poll(() => document.querySelector(".cm-tooltip-autocomplete [aria-selected]")?.textContent ?? "").toContain("Tabelle");
     await new Promise((r) => setTimeout(r, 300));
     await commands.keys("press", "Enter");
-    expect(doc()).toBe("Absatz\n\n| Spalte 1 | Spalte 2 | Spalte 3 |\n| --- | --- | --- |\n|  |  |  |\n|  |  |  |\n");
+    expect(doc()).toBe("Paragraph\n\n| Spalte 1 | Spalte 2 | Spalte 3 |\n| --- | --- | --- |\n|  |  |  |\n|  |  |  |\n");
     const s = view.state.selection.main;
     expect(view.state.sliceDoc(s.from, s.to)).toBe("Spalte 1");
     await commands.keys("type", "Name");
@@ -165,7 +165,7 @@ describe("editing", () => {
 
   test("the right-click menu adds and takes away columns and rows, the other cells keep their spacing", async () => {
     const odd = ["| a   | b |", "|-----|---|", "| 1   | 2 |", "| 3   | 4 |"].join("\n");
-    const { doc } = await open(`Text\n\n${odd}\n\nEnde`);
+    const { doc } = await open(`Text\n\n${odd}\n\nEnd`);
     const menu = async (text: string, entry: string) => {
       const c = rect(cell(text));
       await commands.mouse("click", c.left + c.width / 2, c.top + c.height / 2, { button: "right" });
@@ -176,26 +176,26 @@ describe("editing", () => {
       await expect.poll(() => srcLines().length).toBe(0);
     };
     await menu("1", "Spalte rechts einfügen");
-    expect(doc()).toBe(`Text\n\n${["| a   |  | b |", "|-----| --- |---|", "| 1   |  | 2 |", "| 3   |  | 4 |"].join("\n")}\n\nEnde`);
+    expect(doc()).toBe(`Text\n\n${["| a   |  | b |", "|-----| --- |---|", "| 1   |  | 2 |", "| 3   |  | 4 |"].join("\n")}\n\nEnd`);
     await menu("b", "Spalte löschen");
-    expect(doc()).toBe(`Text\n\n${["| a   |  |", "|-----| --- |", "| 1   |  |", "| 3   |  |"].join("\n")}\n\nEnde`);
+    expect(doc()).toBe(`Text\n\n${["| a   |  |", "|-----| --- |", "| 1   |  |", "| 3   |  |"].join("\n")}\n\nEnd`);
     await menu("1", "Zeile darüber einfügen");
-    expect(doc()).toBe(`Text\n\n${["| a   |  |", "|-----| --- |", "|  |  |", "| 1   |  |", "| 3   |  |"].join("\n")}\n\nEnde`);
+    expect(doc()).toBe(`Text\n\n${["| a   |  |", "|-----| --- |", "|  |  |", "| 1   |  |", "| 3   |  |"].join("\n")}\n\nEnd`);
     await menu("3", "Zeile löschen");
-    expect(doc()).toBe(`Text\n\n${["| a   |  |", "|-----| --- |", "|  |  |", "| 1   |  |"].join("\n")}\n\nEnde`);
+    expect(doc()).toBe(`Text\n\n${["| a   |  |", "|-----| --- |", "|  |  |", "| 1   |  |"].join("\n")}\n\nEnd`);
   });
 
   test("the grip moves the whole table as one block", async () => {
     const { view, doc } = await open();
     const { moveBy } = await import("../../packages/ui/src/ui/editor/blocks");
     moveBy(view, view.state.doc.line(4).from, 1);
-    expect(doc()).toBe(["# Schnittstelle", "Vorweg ein Absatz.", "", "", TABLE, "Danach ein Absatz."].join("\n"));
+    expect(doc()).toBe(["# Interface", "A paragraph first.", "", "", TABLE, "A paragraph after."].join("\n"));
   });
 });
 
 describe("long texts", () => {
   test("40 KB with dozens of tables: only those on the screen are drawn, typing stays quick", async () => {
-    const section = (i: number) => [`## Abschnitt ${i}`, "", `Ein Absatz über Feld ${i}, mit etwas Text davor und danach.`, "", "| Feld | Typ | Pflicht | Beschreibung |", "| --- | --- | :-: | --- |", ...Array.from({ length: 6 }, (_, r) => `| Feld${i}_${r} | \`string\` | ja | Ein **längerer** Text für Zeile ${r}, mit [[Kurs Datenbanken]] und mehr |`), ""].join("\n");
+    const section = (i: number) => [`## Section ${i}`, "", `A paragraph about field ${i}, with some text before and after.`, "", "| Field | Type | Required | Description |", "| --- | --- | :-: | --- |", ...Array.from({ length: 6 }, (_, r) => `| Field${i}_${r} | \`string\` | yes | A **longer** text for row ${r}, with [[Kurs Datenbanken]] and more |`), ""].join("\n");
     const body = Array.from({ length: 60 }, (_, i) => section(i)).join("\n");
     expect(body.length).toBeGreaterThan(40_000);
     const { view } = await open(body);
@@ -215,8 +215,8 @@ test("read-only text renders tables the same way, in a box that scrolls sideways
   div.className = "md";
   div.innerHTML = renderMarkdown(TABLE);
   expect(div.querySelector(".md-table > table")).not.toBeNull();
-  expect(div.querySelector("td a.wikilink")?.textContent).toBe("den Kurs");
+  expect(div.querySelector("td a.wikilink")?.textContent).toBe("the course");
   expect(div.querySelector("td br")).not.toBeNull();
   expect(div.innerHTML).not.toContain("&lt;br&gt;");
-  expect(renderMarkdown("<b>nein</b><br><script>x</script>")).not.toContain("<b>");
+  expect(renderMarkdown("<b>no</b><br><script>x</script>")).not.toContain("<b>");
 });

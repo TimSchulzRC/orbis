@@ -8,6 +8,7 @@ afterAll(removeTempDirs);
 
 let ops: Ops;
 const A = "agent:test";
+// set up in German: the due property is "Fällig"
 beforeEach(() => ({ ops } = setupStore("obtion-dates-")));
 
 test("a date property keeps its time", () => {

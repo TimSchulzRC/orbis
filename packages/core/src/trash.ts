@@ -2,7 +2,7 @@
 // item only counts as deleted while the root is deleted, the root is still above it at any
 // depth, and every parent of it is deleted. Every device computes this from the same data, so
 // concurrent moves and deletes need no coordination: an item moved away from the root stays alive.
-import { type Item, META_TYPE, VIA, setMeta, removeParent } from "./model";
+import { type Item, META_TYPE, VIA, isContentKind, setMeta, removeParent } from "./model";
 import type { Index } from "./graph";
 import type { Writer } from "./setup";
 
@@ -118,7 +118,7 @@ export function cascadeCount(records: Map<string, Item>, id: string): number {
 /** What the trash lists: deleted items, except those deleted with a root that is still in the trash (they show with it). */
 export function trashRoots(records: Map<string, Item>): Item[] {
   const withRoot = (i: Item) => !!i.deletedVia && !!records.get(i.deletedVia)?.deleted;
-  return [...records.values()].filter((i) => i.deleted && !withRoot(i) && (i.kind === "info" || i.kind === "datei" || i.kind === "zeichnung"));
+  return [...records.values()].filter((i) => i.deleted && !withRoot(i) && isContentKind(i.kind));
 }
 
 /**

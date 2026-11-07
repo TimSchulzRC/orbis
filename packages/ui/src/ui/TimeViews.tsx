@@ -57,7 +57,7 @@ function spanOf(item: Item, key: string, ctx: EvalCtx): Span | undefined {
   return ms(end) < ms(start) ? { start: end, end: start } : { start, end };
 }
 
-/** The property behind a date key on this entry, if it can be written (not "Erstellt", not "Geändert"). */
+/** The property behind a date key on this entry, if it can be written (not "Created", not "Updated"). */
 function writable(item: Item, key: string, ctx: EvalCtx): PropDef | undefined {
   const schema = ctx.ix.schemaOf(item);
   if (key === "due") return dueProp(schema);

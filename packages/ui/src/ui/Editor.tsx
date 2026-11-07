@@ -83,7 +83,7 @@ function embeddedImages(state: EditorState): string[] {
   const out: string[] = [];
   for (const link of parseWikiLinks(state.doc.toString())) {
     const id = link.embed ? repo.resolveTitle(link.target) : undefined;
-    if (id && repo.get(id)?.file?.filetype === "bild") out.push(id);
+    if (id && repo.get(id)?.file?.filetype === "image") out.push(id);
   }
   return out;
 }
@@ -99,9 +99,9 @@ function imageDecos(state: EditorState): DecorationSet {
       const item = id ? repo.get(id) : undefined;
       if (!item || item.deleted) continue;
       // a drawing on a line of its own is that line: a block with no text around it
-      if (item.kind === "zeichnung" && isDrawingLine(line.text)) builder.add(line.from, line.to, Decoration.replace({ widget: new EmbedWidget(drawingEmbedHTML(item)), block: true }));
+      if (item.kind === "drawing" && isDrawingLine(line.text)) builder.add(line.from, line.to, Decoration.replace({ widget: new EmbedWidget(drawingEmbedHTML(item)), block: true }));
       else {
-        const html = item.file ? embedHTML(item, link.size) : item.kind === "zeichnung" ? drawingEmbedHTML(item) : undefined;
+        const html = item.file ? embedHTML(item, link.size) : item.kind === "drawing" ? drawingEmbedHTML(item) : undefined;
         if (html) builder.add(line.to, line.to, Decoration.widget({ widget: new EmbedWidget(html), block: true, side: 1 }));
       }
     }
@@ -125,7 +125,7 @@ function embedsKey(state: EditorState): string {
     .filter((l) => l.embed)
     .map((l) => {
       const item = repo.get(repo.resolveTitle(l.target));
-      return item?.kind === "zeichnung" ? `${item.id}:${item.updated}:${item.deleted}` : "";
+      return item?.kind === "drawing" ? `${item.id}:${item.updated}:${item.deleted}` : "";
     })
     .join("|");
 }
@@ -255,7 +255,7 @@ export function Editor({
   useEffect(() => {
     const ytext = doc.getText("body");
     const undoManager = new Y.UndoManager(ytext);
-    const stopTouch = touchOnTextEdit(doc); // typing moves "geändert"
+    const stopTouch = touchOnTextEdit(doc); // typing moves "updated"
     const extensions: Extension[] = [
       yCollab(ytext, null, { undoManager }),
       formatKeymap,

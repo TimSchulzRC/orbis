@@ -41,7 +41,7 @@ function DialogOverlay({
   )
 }
 
-/** A notice at the bottom ("Rückgängig") stays usable over a dialog: a click on it does not close the dialog. */
+/** A notice at the bottom ("Undo") stays usable over a dialog: a click on it does not close the dialog. */
 const onToast = (e: Event) => !!(e.target as Element | null)?.closest?.("[data-sonner-toaster]")
 
 function DialogContent({

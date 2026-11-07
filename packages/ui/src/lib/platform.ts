@@ -1,11 +1,13 @@
+import { type Lang, translate } from "@obtion/core/i18n";
+
 export const MOD = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? "⌘" : "Ctrl";
 
-/** "⌘J" on Apple devices, "Strg J" / "Ctrl J" elsewhere. */
-export function shortcut(key: string, lang: string): string {
+/** "⌘J" on Apple devices, "Ctrl J" elsewhere (in the language's own name for the key). */
+export function shortcut(key: string, lang: Lang): string {
   return MOD === "⌘" ? `⌘${key}` : `${modName(lang)} ${key}`;
 }
-export function modName(lang: string): string {
-  return MOD === "⌘" ? "⌘" : lang === "de" ? "Strg" : "Ctrl";
+export function modName(lang: Lang): string {
+  return MOD === "⌘" ? "⌘" : translate(lang, "key.ctrl");
 }
 
 /** Below Tailwind `md`. */

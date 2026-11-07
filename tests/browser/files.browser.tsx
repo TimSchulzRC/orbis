@@ -57,7 +57,7 @@ function deviceFiles(repo: Repo, name = `t${++n}-${Date.now()}`) {
 function addFile(repo: Repo, name: string, f: { hash: string; size: number }) {
   const id = newId();
   repo.change(id, (doc) => {
-    initItem(doc, { kind: "datei", title: name, parents: [], createdBy: repo.origin });
+    initItem(doc, { kind: "file", title: name, parents: [], createdBy: repo.origin });
     setFileMeta(doc, { hash: f.hash, name, mime: "application/pdf", filetype: "pdf", size: f.size, pages: 1 });
   });
   return id;
@@ -187,7 +187,7 @@ test("contents from the server: loaded with the token in the header, shown from 
   const srv = server();
   const repo = await workspace(false);
   const { files } = deviceFiles(repo);
-  const pdf = await srv.add("%PDF-1.4 inhalt");
+  const pdf = await srv.add("%PDF-1.4 content");
   const svg = await srv.add('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>');
   const last = () => vi.mocked(fetch).mock.calls.at(-1)!;
 

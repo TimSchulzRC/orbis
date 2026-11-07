@@ -108,7 +108,7 @@ export default defineConfig({
       workbox: {
         navigateFallback: "/index.html",
         // app routes live in the hash (#/w/<id>/…): every /w/ path is the server's (files, sync, MCP)
-        navigateFallbackDenylist: [/^\/api/, /^\/mcp/, /^\/w\//],
+        navigateFallbackDenylist: [/^\/api/, /^\/w\//],
         globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
         // the Chinese handwriting font is 200 parts (13 MB): kept once a drawing needed them
         globIgnores: ["excalidraw/fonts/Xiaolai/**"],
@@ -127,7 +127,6 @@ export default defineConfig({
     hmr: devPublic ? { protocol: "wss", host: devPublic.hostname, clientPort: Number(devPublic.port || 443) } : undefined,
     proxy: {
       "/api": toServer(),
-      "/mcp": toServer(),
       "/w/": toServer(true),
     },
   },
