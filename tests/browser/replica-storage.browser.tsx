@@ -2,10 +2,21 @@
 // start can skip decoding that document.
 
 import { RECORD_VERSION } from "@obtion/core/model";
-import { Repo } from "@obtion/sync";
+import { Repo, type SyncSocket } from "@obtion/sync";
 import { expect, test } from "vitest";
 import * as Y from "yjs";
 import { browserHost } from "../../packages/ui/src/browser";
+
+const noop = () => undefined;
+const offline = (): SyncSocket => ({
+	readyState: 0,
+	send: noop,
+	close: noop,
+	onopen: null,
+	onmessage: null,
+	onclose: null,
+	onerror: null,
+});
 
 // a new database each run: the browser profile is thrown away afterwards (destroy() would reload the page)
 const link = (replica: string) => ({
@@ -26,15 +37,7 @@ test("a compacted row keeps its record in IndexedDB", async () => {
 
 	const repo = new Repo({
 		...host,
-		connect: () => ({
-			readyState: 0,
-			send() {},
-			close() {},
-			onopen: null,
-			onmessage: null,
-			onclose: null,
-			onerror: null,
-		}),
+		connect: offline,
 	});
 	await repo.init();
 	await new Promise((r) => setTimeout(r, 50)); // compaction
@@ -45,15 +48,7 @@ test("a compacted row keeps its record in IndexedDB", async () => {
 
 	const again = new Repo({
 		...host,
-		connect: () => ({
-			readyState: 0,
-			send() {},
-			close() {},
-			onopen: null,
-			onmessage: null,
-			onclose: null,
-			onerror: null,
-		}),
+		connect: offline,
 	});
 	await again.init();
 	expect(again.docs.size).toBe(0);

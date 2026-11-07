@@ -12,11 +12,11 @@ import { andWhere, type QueryDef, tabDef } from "@obtion/core/query";
 import { typeTabs } from "@obtion/core/setup";
 import { keyBetween } from "@obtion/core/sortkey";
 import { ListFilter, Plus, SlidersHorizontal, Upload } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { createAndOpen } from "../actions";
 import { Input } from "../components/ui/input";
 import { setParams, useDocumentTitle, useFiles, useRepo, useRoute } from "../hooks";
-import { useT } from "../i18n";
+import { tr, useT } from "../i18n";
 import { cn } from "../lib/utils";
 import { notify } from "../ui/feedback";
 import { viewGroups } from "../ui/groups";
@@ -64,9 +64,17 @@ export function TypeList({ type }: { type: Item }) {
 	// leaving with an unsaved filter: say that it was not kept
 	const dirtyRef = useRef(false);
 	dirtyRef.current = dirty;
-	useEffect(() => () => void (dirtyRef.current && notify(t("view.draftDropped"))), []);
+	useEffect(
+		() => () => {
+			if (dirtyRef.current) notify(tr("view.draftDropped"));
+		},
+		[],
+	);
 	const pick = (id: string) => {
-		if (dirty) notify(t("view.draftDropped")), setDraft(null);
+		if (dirty) {
+			notify(t("view.draftDropped"));
+			setDraft(null);
+		}
 		pickTab(id);
 	};
 	const tabEdit: TabEdit = {
@@ -193,6 +201,7 @@ export function TypeList({ type }: { type: Item }) {
 const kindOf = (param: string | null) => FILE_TYPES.find((k) => k === param) ?? null;
 
 export function FilesPage() {
+	const uploadId = useId();
 	const files = useFiles();
 	const { t } = useT();
 	const kind = kindOf(useRoute().query.get("kind"));
@@ -213,10 +222,14 @@ export function FilesPage() {
 			<div className="mb-4 flex items-center gap-3">
 				<h1 className="page-title">{t("nav.files")}</h1>
 				<span className="flex-1 text-[15px] tabular-nums text-muted-foreground">{all.length}</span>
-				<label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm font-medium hover:bg-hover">
+				<label
+					className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm font-medium hover:bg-hover"
+					htmlFor={uploadId}
+				>
 					<Upload size={14} /> <span className="hidden sm:inline">{t("files.add")}</span>
 					<Input
 						className="hidden"
+						id={uploadId}
 						multiple
 						onChange={async (e) => {
 							for (const f of [...(e.target.files ?? [])]) await files.add(f, f.name);
@@ -227,10 +240,9 @@ export function FilesPage() {
 				</label>
 			</div>
 			{kinds.length > 1 && (
-				<div
+				<fieldset
 					aria-label={t("files.filter")}
-					className="-mx-4 mb-3 flex gap-1 overflow-x-auto px-4 text-sm [scrollbar-width:none] md:mx-0 md:px-0"
-					role="group"
+					className="-mx-4 mb-3 flex min-w-0 gap-1 overflow-x-auto px-4 text-sm [scrollbar-width:none] md:mx-0 md:px-0"
 				>
 					{[{ type: null, count: all.length }, ...kinds].map(({ type, count }) => (
 						<Button
@@ -249,7 +261,7 @@ export function FilesPage() {
 							<span className="tabular-nums text-muted-foreground">{count}</span>
 						</Button>
 					))}
-				</div>
+				</fieldset>
 			)}
 			<Results
 				def={def}

@@ -36,6 +36,7 @@ import {
 	showTitle,
 	useDocumentTitle,
 	useIndex,
+	useOnChange,
 	useRepo,
 } from "../hooks";
 import { getLang, titleOf, tr, useT } from "../i18n";
@@ -115,11 +116,11 @@ function DrawingInNote({ item }: { item: Item }) {
 	const note =
 		ix.backlinks(item.id).find((b) => b.kind === "embed" && ix.get(b.from)?.kind === "note")
 			?.from ?? ix.parentsOf(item.id)[0];
-	useEffect(() => {
-		// the drawing opens on its note (a search hit, a link to it)
+	// the drawing opens on its note (a search hit, a link to it)
+	useOnChange(item.id, () => {
 		if (note) openItem(note, { replace: true, query: `?d=${encodeURIComponent(item.id)}` });
 		else setParams({ d: item.id });
-	}, [item.id]);
+	});
 	return <PagePlaceholder>{note ? t("drawing.loading") : titleOf(item, t)}</PagePlaceholder>;
 }
 
@@ -154,7 +155,7 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
 				if (current && !current.deleted && isBlank(current, repo.index())) repo.remove(item.id);
 			}, 50);
 		};
-	}, [item.id, isNew]);
+	}, [repo, item.id, isNew]);
 
 	const cycles = ix.cycleEdgesOf(item.id);
 	const progress = progressSpec(schema) ? ix.progressOf(item) : undefined;
@@ -170,19 +171,31 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
 			<MoreMenu>
 				{(close) => (
 					<>
-						<MenuItem icon={<FolderInput size={14} />} onClick={() => (close(), setPlacing(true))}>
+						<MenuItem
+							icon={<FolderInput size={14} />}
+							onClick={() => {
+								close();
+								setPlacing(true);
+							}}
+						>
 							{ix.parentsOf(item.id).length ? t("place.addAnother") : t("place.place")}
 						</MenuItem>
 						<MenuItem
 							icon={<ImagePlus size={14} />}
-							onClick={() => (close(), fileInput.current?.click())}
+							onClick={() => {
+								close();
+								fileInput.current?.click();
+							}}
 						>
 							{t("editor.addFile")}
 						</MenuItem>
 						{view && (
 							<MenuItem
 								icon={<DRAWING_ICON size={14} />}
-								onClick={() => (close(), insertDrawing(view))}
+								onClick={() => {
+									close();
+									insertDrawing(view);
+								}}
 							>
 								{t("drawing.insert")}
 							</MenuItem>
@@ -190,27 +203,39 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
 						{view && (
 							<MenuItem
 								icon={<ListFilter size={14} />}
-								onClick={() => (close(), insertQueryBlock(view))}
+								onClick={() => {
+									close();
+									insertQueryBlock(view);
+								}}
 							>
 								{t("item.insertQuery")}
 							</MenuItem>
 						)}
 						<MenuItem
 							icon={item.pinned ? <PinOff size={14} /> : <Pin size={14} />}
-							onClick={() => (close(), repo.pin(item.id, !item.pinned))}
+							onClick={() => {
+								close();
+								repo.pin(item.id, !item.pinned);
+							}}
 						>
 							{item.pinned ? t("item.unpin") : t("item.pin")}
 						</MenuItem>
 						<MenuItem
 							icon={<FilePlus size={14} />}
-							onClick={() => (close(), createAndOpen({ parents: [item.id] }))}
+							onClick={() => {
+								close();
+								createAndOpen({ parents: [item.id] });
+							}}
 						>
 							{t("item.newBelow")}
 						</MenuItem>
 						{others && !item.deleted && item.type !== META_TYPE && (
 							<MenuItem
 								icon={<ArrowRightLeft size={14} />}
-								onClick={() => (close(), setMoving(true))}
+								onClick={() => {
+									close();
+									setMoving(true);
+								}}
 							>
 								{t("move.menu")}
 							</MenuItem>
@@ -219,7 +244,10 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
 							<MenuItem
 								danger
 								icon={<Trash2 size={14} />}
-								onClick={() => (close(), deleteOrAsk(repo, item.id, () => setDeleting(true)))}
+								onClick={() => {
+									close();
+									deleteOrAsk(repo, item.id, () => setDeleting(true));
+								}}
 							>
 								{t("item.delete")}
 							</MenuItem>
@@ -323,7 +351,11 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
 				<PlacePicker
 					list={[item]}
 					onClose={() => setPlacing(false)}
-					onPick={(pid) => (repo.addParent(item.id, pid), rememberPlace(pid), setPlacing(false))}
+					onPick={(pid) => {
+						repo.addParent(item.id, pid);
+						rememberPlace(pid);
+						setPlacing(false);
+					}}
 					title={t("place.add")}
 				/>
 			)}
@@ -413,7 +445,10 @@ function TypeSwitch({ item }: { item: Item }) {
 					<MenuItem
 						active={!item.type}
 						icon={<NOTE_ICON size={14} style={{ color: "var(--t-note)" }} />}
-						onClick={() => (repo.setType(item.id, null), close())}
+						onClick={() => {
+							repo.setType(item.id, null);
+							close();
+						}}
 					>
 						{t("kind.note")}
 					</MenuItem>
@@ -422,7 +457,10 @@ function TypeSwitch({ item }: { item: Item }) {
 							active={type.id === item.type}
 							icon={<TypeGlyph schema={type.schema} size={14} />}
 							key={type.id}
-							onClick={() => (repo.setType(item.id, type.id), close())}
+							onClick={() => {
+								repo.setType(item.id, type.id);
+								close();
+							}}
 						>
 							{type.schema.name}
 						</MenuItem>
@@ -466,7 +504,10 @@ export function deleteOrAsk(
 	ask: () => void,
 	leave = true,
 ): boolean {
-	if (onlyBelow(inRepo.index(), id).length) return (ask(), false);
+	if (onlyBelow(inRepo.index(), id).length) {
+		ask();
+		return false;
+	}
 	removeAndLeave(inRepo, id, false, leave);
 	return true;
 }
@@ -536,7 +577,10 @@ function MoveDialog({ item, onClose }: { item: Item; onClose: () => void }) {
 						<li key={s.id}>
 							<Button
 								className="tap-row flex w-full items-center gap-2 rounded-lg border border-line px-3 py-2 text-left text-sm hover:bg-hover"
-								onClick={() => (onClose(), void moveTo(item.id, active!.id, s.id))}
+								onClick={() => {
+									onClose();
+									void moveTo(item.id, active!.id, s.id);
+								}}
 								variant="plain"
 							>
 								<span className="min-w-0 flex-1 truncate font-medium">{s.name}</span>

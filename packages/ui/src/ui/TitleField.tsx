@@ -26,6 +26,7 @@ export function TitleField({
 	const repo = useRepo();
 	const { draft, setDraft, focused, onKeyDown } = useFocusDraft(item.title);
 	const ref = useRef<HTMLTextAreaElement>(null);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: the textarea grows with the text, so the draft is the trigger
 	useLayoutEffect(() => {
 		const el = ref.current!;
 		el.style.height = "auto";
@@ -37,8 +38,16 @@ export function TitleField({
 		const title = text.replace(/\s+/g, " ").trim();
 		if (title !== (repo.get(item.id)?.title ?? "")) repo.setTitle(item.id, title);
 	};
-	const commit = () => ((focused.current = false), save(latest.current));
-	useEffect(() => () => void (focused.current && commit()), []);
+	const commit = () => {
+		focused.current = false;
+		save(latest.current);
+	};
+	// leaving while typing keeps what was typed
+	const commitIfFocused = useRef(commit);
+	commitIfFocused.current = () => {
+		if (focused.current) commit();
+	};
+	useEffect(() => () => commitIfFocused.current(), []);
 	return (
 		<Textarea
 			aria-label={t("item.title")}
@@ -52,9 +61,10 @@ export function TitleField({
 				if (live) save(text);
 			}}
 			onFocus={() => (focused.current = true)}
-			onKeyDown={(e) => (
-				onKeyDown(e), e.key === "Enter" && !e.nativeEvent.isComposing && onEnter?.()
-			)}
+			onKeyDown={(e) => {
+				onKeyDown(e);
+				if (e.key === "Enter" && !e.nativeEvent.isComposing) onEnter?.();
+			}}
 			placeholder={placeholder ?? t("untitled")}
 			ref={ref}
 			rows={1}

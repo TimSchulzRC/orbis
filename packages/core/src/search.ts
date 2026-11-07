@@ -185,7 +185,8 @@ function foldWithMap(
 	for (let i = 0; i < text.length; i++) {
 		const f = fold(text[i]!);
 		folded += f;
-		for (let k = 0; k < f.length; k++) from.push(i);
+		// one entry per code unit of the folded text
+		from.push(...new Array<number>(f.length).fill(i));
 	}
 	return { folded, from };
 }

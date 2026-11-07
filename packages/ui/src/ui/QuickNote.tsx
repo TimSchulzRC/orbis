@@ -126,19 +126,30 @@ function QuickCard({ id, space, desktop }: { id: string; space: string; desktop:
 	const sorted = () => setQuick();
 	const pick = usePickers(
 		spaceOf,
-		(list, place) => (act.place(list, place), sorted()),
-		(list, type) => (act.giveType(list, type), sorted()),
+		(list, place) => {
+			act.place(list, place);
+			sorted();
+		},
+		(list, type) => {
+			act.giveType(list, type);
+			sorted();
+		},
 	);
 	// Esc anywhere else, after the editor, which closes its own completions first
 	const picking = useRef(false);
 	picking.current = !!(pick.placing || pick.typing);
 	useEffect(() => {
-		const onKey = (e: KeyboardEvent) =>
-			e.key === "Escape" &&
-			!e.defaultPrevented &&
-			!picking.current &&
-			!document.querySelector(OVERLAY_OPEN) &&
-			(e.preventDefault(), closeQuickNote());
+		const onKey = (e: KeyboardEvent) => {
+			if (
+				e.key !== "Escape" ||
+				e.defaultPrevented ||
+				picking.current ||
+				document.querySelector(OVERLAY_OPEN)
+			)
+				return;
+			e.preventDefault();
+			closeQuickNote();
+		};
 		addEventListener("keydown", onKey);
 		return () => removeEventListener("keydown", onKey);
 	}, []);
@@ -147,8 +158,10 @@ function QuickCard({ id, space, desktop }: { id: string; space: string; desktop:
 	const sort = (fn: (it: Item) => void) => () => {
 		(document.activeElement as HTMLElement | null)?.blur();
 		const it = repo.get(id) ?? item;
-		if (isBlank(it, repo.index())) repo.remove(id), sorted();
-		else fn(it);
+		if (isBlank(it, repo.index())) {
+			repo.remove(id);
+			sorted();
+		} else fn(it);
 	};
 	return (
 		<div
@@ -170,7 +183,11 @@ function QuickCard({ id, space, desktop }: { id: string; space: string; desktop:
 					(e.key === "Escape" &&
 						(e.target as HTMLElement).matches("textarea") &&
 						!document.querySelector(OVERLAY_OPEN));
-				if (close) e.preventDefault(), e.stopPropagation(), closeQuickNote();
+				if (close) {
+					e.preventDefault();
+					e.stopPropagation();
+					closeQuickNote();
+				}
 			}}
 			role="dialog"
 		>
@@ -188,9 +205,15 @@ function QuickCard({ id, space, desktop }: { id: string; space: string; desktop:
 				className="mt-4"
 				item={item}
 				keys={false}
-				onLater={sort((it) => (act.later([it]), sorted()))}
+				onLater={sort((it) => {
+					act.later([it]);
+					sorted();
+				})}
 				onPick={sort((it) => pick.setPlacing([it]))}
-				onPin={sort((it) => (act.pin([it]), sorted()))}
+				onPin={sort((it) => {
+					act.pin([it]);
+					sorted();
+				})}
 				onTypes={sort((it) => pick.setTyping([it]))}
 			/>
 			{pick.node}
@@ -234,7 +257,14 @@ function SpaceChoice({ space, id }: { space: string; id: string }) {
 		>
 			{(close) =>
 				spaces.map((s) => (
-					<MenuItem active={s.id === space} key={s.id} onClick={() => (close(), void choose(s.id))}>
+					<MenuItem
+						active={s.id === space}
+						key={s.id}
+						onClick={() => {
+							close();
+							void choose(s.id);
+						}}
+					>
 						{s.name}
 					</MenuItem>
 				))

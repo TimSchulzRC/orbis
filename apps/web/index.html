@@ -11,7 +11,9 @@
         const d = c === "dark" || (c !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
         document.documentElement.dataset.theme = d ? "dark" : "light";
         document.querySelector('meta[name="theme-color"]').setAttribute("content", d ? "#191919" : "#f7f6f3");
-      } catch (e) {}
+      } catch {
+        // no storage or no matchMedia: the CSS default theme applies
+      }
     </script>
     <meta content="yes" name="apple-mobile-web-app-capable" />
     <meta content="black-translucent" name="apple-mobile-web-app-status-bar-style" />

@@ -120,9 +120,9 @@ export function renderMarkdown(src: string, source?: Repo, space?: string): stri
 
 export function hydrateFiles(root: HTMLElement | null, files: DeviceFiles = current) {
 	if (!root) return;
-	root.querySelectorAll<HTMLElement>("[data-hash]").forEach((el) => {
+	for (const el of root.querySelectorAll<HTMLElement>("[data-hash]")) {
 		const hash = el.dataset.hash!;
-		if (el.dataset.done) return;
+		if (el.dataset.done) continue;
 		el.dataset.done = "1";
 		const keep = el.tagName === "IMG";
 		files.url(hash, { keep }).then((url) => {
@@ -135,7 +135,7 @@ export function hydrateFiles(root: HTMLElement | null, files: DeviceFiles = curr
 				el.replaceWith(note);
 			}
 		});
-	});
+	}
 }
 
 export function Markdown({ src, className }: { src: string; className?: string }) {
@@ -147,10 +147,11 @@ export function Markdown({ src, className }: { src: string; className?: string }
 		() => renderMarkdown(src, spaceRepo, space),
 		[src, spaceRepo, space, spaceRepo.version],
 	);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: html is the trigger, each new html replaces the DOM that needs its files and drawings
 	useEffect(() => {
 		hydrateFiles(ref.current, files);
 		if (ref.current) hydrateDrawings(ref.current, spaceRepo, files);
-	}, [html]);
+	}, [html, files, spaceRepo]);
 	const onClick = (e: React.MouseEvent) => {
 		const img = (e.target as HTMLElement).closest<HTMLImageElement>(".embed-img img");
 		if (!img || !ref.current) return;
@@ -160,8 +161,10 @@ export function Markdown({ src, className }: { src: string; className?: string }
 		openLightbox(ids, ids.indexOf(img.dataset.id!));
 	};
 	return (
+		// biome-ignore lint/a11y/noStaticElementInteractions lint/a11y/useKeyWithClickEvents: the click is delegated to the rendered images, which only zoom in; links and text stay usable by keyboard
 		<div
 			className={`md ${className ?? ""}`}
+			// biome-ignore lint/security/noDangerouslySetInnerHtml: marked renders it with raw HTML and item text escaped (see the renderers above)
 			dangerouslySetInnerHTML={{ __html: html }}
 			onClick={onClick}
 			ref={ref}

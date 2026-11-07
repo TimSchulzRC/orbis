@@ -29,7 +29,9 @@ export function StatusButton({ className }: { className?: string }) {
 	const pending = statuses.reduce((n, s) => n + s.pending, 0);
 	const synced = statuses.every((s) => s.synced);
 	const [busy, setBusy] = useState<"checking" | "connecting" | null>(null);
-	useEffect(() => void (online && busy === "connecting" && setBusy(null)), [online]);
+	useEffect(() => {
+		if (online) setBusy((b) => (b === "connecting" ? null : b));
+	}, [online]);
 
 	const reconnect = async () => {
 		setBusy("connecting");
@@ -142,14 +144,18 @@ function SwapIcon({ look }: { look: IconLook }) {
 	if (look.turn && look.key !== shown.key) asked.current = look;
 	// since when the shown icon turns: it goes only after whole turns, upright
 	const turning = useRef(0);
-	useEffect(
-		() => void (turning.current = shown.turn ? performance.now() : 0),
-		[shown.key, shown.turn],
-	);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: a new icon that turns starts its turn now, so its key is the trigger
+	useEffect(() => {
+		turning.current = shown.turn ? performance.now() : 0;
+	}, [shown.key, shown.turn]);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: `look` is a new object on every render; only its key and turning matter
 	useEffect(() => {
 		if (look.key === shown.key) return setShown(look); // same icon (it may turn or not)
 		if (still()) return setShown(look);
-		const go = () => (setLeaving(true), setChanged(true));
+		const go = () => {
+			setLeaving(true);
+			setChanged(true);
+		};
 		if (!turning.current) return go();
 		const turned = performance.now() - turning.current;
 		const timer = setTimeout(go, Math.max(1, Math.ceil(turned / TURN)) * TURN - turned);

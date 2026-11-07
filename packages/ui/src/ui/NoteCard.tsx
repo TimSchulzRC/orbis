@@ -52,7 +52,11 @@ export function NoteCard({
 	const [overflows, setOverflows] = useState(false);
 	const hasText = !item.file;
 	// Enter in the title goes on to the text, at its start
-	const intoText = () => view && (view.focus(), view.dispatch({ selection: { anchor: 0 } }));
+	const intoText = () => {
+		if (!view) return;
+		view.focus();
+		view.dispatch({ selection: { anchor: 0 } });
+	};
 
 	useEffect(() => {
 		const el = scroll.current;
@@ -62,8 +66,11 @@ export function NoteCard({
 		observer.observe(el);
 		for (const child of el.children) observer.observe(child);
 		el.addEventListener("scroll", measure, { passive: true });
-		return () => (observer.disconnect(), el.removeEventListener("scroll", measure));
-	}, []);
+		return () => {
+			observer.disconnect();
+			el.removeEventListener("scroll", measure);
+		};
+	}, [scroll]);
 
 	return (
 		<div className={cn("min-h-[180px]", className)}>

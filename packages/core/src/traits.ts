@@ -88,7 +88,7 @@ export function kindPatch(
 }
 
 /** The status always gets one, even without a default. */
-export function defaultOption(p: PropDef, schema?: TypeSchema): string | undefined {
+export function defaultOption(p: PropDef): string | undefined {
 	if (!isSingle(p)) return undefined;
 	const d = p.default && p.options?.some((o) => o.id === p.default) ? p.default : undefined;
 	return d ?? (p.kind === "status" ? p.options?.[0]?.id : undefined);
@@ -213,7 +213,7 @@ export function template(
 export function initialProps(schema?: TypeSchema): Record<string, Value> {
 	const out: Record<string, Value> = { ...(template(schema)?.values ?? {}) };
 	for (const p of schema?.properties ?? []) {
-		const d = defaultOption(p, schema);
+		const d = defaultOption(p);
 		if (d && out[p.id] === undefined) out[p.id] = d;
 	}
 	return out;

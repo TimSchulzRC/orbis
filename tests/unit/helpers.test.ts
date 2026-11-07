@@ -24,10 +24,10 @@ test("escapeRe makes any text a literal pattern", () => {
 
 test("mapWikiLinks hands over embed, target, section and label", () => {
 	const seen: unknown[] = [];
-	const out = mapWikiLinks(
-		"a [[Page#Part|text]] b ![[x.png|320]] [[Plain]]",
-		(l) => (seen.push({ ...l }), `<${l.target}>`),
-	);
+	const out = mapWikiLinks("a [[Page#Part|text]] b ![[x.png|320]] [[Plain]]", (l) => {
+		seen.push({ ...l });
+		return `<${l.target}>`;
+	});
 	expect(out).toBe("a <Page> b <x.png> <Plain>");
 	expect(seen).toEqual([
 		{ raw: "[[Page#Part|text]]", embed: false, target: "Page", section: "#Part", label: "text" },

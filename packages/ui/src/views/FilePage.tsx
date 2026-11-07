@@ -38,24 +38,28 @@ export function FilePage({ item }: { item: Item }) {
 		.filter((x) => x.item);
 	const parents = ix.parentsOf(item.id);
 	const local = files.hasLocal(file.hash);
-	useEffect(() => void files.check(file.hash), [file.hash]);
+	useEffect(() => void files.check(file.hash), [files, file.hash]);
 	// PDF, audio and video from a blob: URL – the original here, or loaded with the token in the header
 	const viewed = file.filetype === "pdf" || file.filetype === "audio" || file.filetype === "video";
 	const [src, setSrc] = useState<{ hash: string; url: string }>();
+	// biome-ignore lint/correctness/useExhaustiveDependencies: once the original is `local`, its URL replaces the downloaded one
 	useEffect(() => {
 		if (!viewed) return;
 		let url: string | undefined;
 		let gone = false;
-		void files
-			.viewUrl(file.hash, file.mime)
-			.then((u) =>
-				gone ? u && URL.revokeObjectURL(u) : u && setSrc({ hash: file.hash, url: (url = u) }),
-			);
+		void files.viewUrl(file.hash, file.mime).then((u) => {
+			if (!u) return;
+			if (gone) URL.revokeObjectURL(u);
+			else {
+				url = u;
+				setSrc({ hash: file.hash, url: u });
+			}
+		});
 		return () => {
 			gone = true;
 			if (url) URL.revokeObjectURL(url);
 		};
-	}, [file.hash, local, viewed]);
+	}, [files, file.hash, file.mime, local, viewed]);
 	const media = src?.hash === file.hash ? src.url : undefined;
 	const missing = files.isMissing(file.hash);
 	// only a person or an agent is named: examples, imports and the system add files without one
@@ -104,7 +108,10 @@ export function FilePage({ item }: { item: Item }) {
 					<>
 						<MenuItem
 							icon={<ArrowRightLeft size={14} />}
-							onClick={() => (close(), setPicking(true))}
+							onClick={() => {
+								close();
+								setPicking(true);
+							}}
 						>
 							{parents.length ? t("place.change") : t("place.place")}
 						</MenuItem>
@@ -112,7 +119,11 @@ export function FilePage({ item }: { item: Item }) {
 							<Replace className="text-muted-foreground" size={14} /> {t("file.replace")}
 							<Input
 								className="hidden"
-								onChange={(e) => (close(), e.target.files?.[0] && replace(e.target.files[0]))}
+								onChange={(e) => {
+									close();
+									const f = e.target.files?.[0];
+									if (f) replace(f);
+								}}
 								type="file"
 								variant="bare"
 							/>
@@ -121,7 +132,11 @@ export function FilePage({ item }: { item: Item }) {
 							<MenuItem
 								danger
 								icon={<Trash2 size={14} />}
-								onClick={() => (close(), repo.remove(item.id), leavePage())}
+								onClick={() => {
+									close();
+									repo.remove(item.id);
+									leavePage();
+								}}
 							>
 								{t("item.delete")}
 							</MenuItem>
@@ -153,9 +168,11 @@ export function FilePage({ item }: { item: Item }) {
 					className="inline-flex cursor-pointer h-8 shrink-0 items-center gap-1.5 rounded-lg border border-line bg-surface px-3 text-sm font-medium text-fg hover:bg-hover"
 					download={file.name}
 					href={media ?? "#"}
-					onClick={(e) =>
-						!media && (e.preventDefault(), void files.download(file.hash, file.name, file.mime))
-					}
+					onClick={(e) => {
+						if (media) return;
+						e.preventDefault();
+						void files.download(file.hash, file.name, file.mime);
+					}}
 				>
 					<Download size={15} /> <span className="max-md:hidden">{t("file.download")}</span>
 				</a>
@@ -204,9 +221,13 @@ export function FilePage({ item }: { item: Item }) {
 					<iframe className="h-[75vh] w-full bg-white" src={media} title={item.title} />
 				)}
 				{file.filetype === "audio" && media && (
+					// biome-ignore lint/a11y/useMediaCaption: an uploaded file comes without a caption track
 					<audio className="w-full p-4" controls src={media} />
 				)}
-				{file.filetype === "video" && media && <video className="w-full" controls src={media} />}
+				{file.filetype === "video" && media && (
+					// biome-ignore lint/a11y/useMediaCaption: an uploaded file comes without a caption track
+					<video className="w-full" controls src={media} />
+				)}
 				{!isImg &&
 					file.filetype !== "pdf" &&
 					file.filetype !== "audio" &&
@@ -293,7 +314,7 @@ function useWholeText(text: string, hash: string): string {
 		return () => {
 			alive = false;
 		};
-	}, [hash, cut]);
+	}, [files, hash, cut]);
 	return whole?.hash === hash ? whole.text : text;
 }
 
@@ -306,6 +327,7 @@ function TextBlock({ text: start, hash, mono }: { text: string; hash: string; mo
 			<pre
 				className={`max-h-[70vh] overflow-auto px-4 py-3 text-[13px] leading-[1.55] whitespace-pre-wrap break-words ${mono ? "font-mono" : "font-sans"}`}
 				data-testid="file-text"
+				// biome-ignore lint/a11y/noNoninteractiveTabindex: a scrolling block must take the focus so the keyboard can scroll it
 				tabIndex={0}
 			>
 				{cut ? text.slice(0, -2) : text}

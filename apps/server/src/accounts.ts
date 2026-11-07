@@ -108,7 +108,11 @@ export class Accounts {
 		this.db.exec("PRAGMA journal_mode = WAL;");
 		this.policy = opts.policy;
 		this.login = opts.login ?? { password: true, oauth: [] };
-		this.onRevoke = opts.onRevoke ?? (() => {});
+		this.onRevoke =
+			opts.onRevoke ??
+			(() => {
+				// nobody to tell
+			});
 		this.auth = makeAuth(this, opts.secret, opts.baseURL);
 		// Better Auth's own tables come from its migrations (init); these are ours
 		migrate(this.db, [
@@ -234,6 +238,21 @@ export class Accounts {
 			this.release(invite, email);
 			this.join(invite, id);
 		}
+	}
+
+	/** Better Auth hook before it updates a user, see the call in makeAuth. */
+	clearUnverified(verifies: boolean, email: unknown) {
+		if (!verifies || typeof email !== "string") return;
+		const user = this.db
+			.query<{ id: string }, [string]>(
+				'SELECT id FROM "user" WHERE email = ? AND emailVerified = 0',
+			)
+			.get(email.toLowerCase());
+		if (!user) return;
+		this.db.query("DELETE FROM passkey WHERE userId = ?").run(user.id);
+		this.db.query("DELETE FROM tokens WHERE user = ?").run(user.id);
+		this.db.query('DELETE FROM invites WHERE "by" = ?').run(user.id);
+		this.onRevoke(user.id);
 	}
 
 	async signUp(body: {
@@ -431,7 +450,9 @@ export class Accounts {
 			...ids.filter((id) => current.includes(id)),
 		];
 		const set = this.db.query("UPDATE members SET pos = ? WHERE workspace = ? AND user = ?");
-		this.db.transaction(() => order.forEach((id, i) => set.run(i, id, user)))();
+		this.db.transaction(() => {
+			for (const [i, id] of order.entries()) set.run(i, id, user);
+		})();
 	}
 
 	/** A new member; the workspace comes first in their order. */
@@ -614,20 +635,11 @@ function makeAuth(accounts: Accounts, secret: string, baseURL: string) {
 					// A code proves the address of a password account nobody had verified. Better Auth drops
 					// its password and sessions; here goes everything else whoever signed up with that
 					// address may have made to get in.
-					before: async (data, ctx) => {
-						const email = (ctx?.body as { email?: unknown } | undefined)?.email;
-						if (data.emailVerified !== true || typeof email !== "string") return;
-						const user = accounts.db
-							.query<{ id: string }, [string]>(
-								'SELECT id FROM "user" WHERE email = ? AND emailVerified = 0',
-							)
-							.get(email.toLowerCase());
-						if (!user) return;
-						accounts.db.query("DELETE FROM passkey WHERE userId = ?").run(user.id);
-						accounts.db.query("DELETE FROM tokens WHERE user = ?").run(user.id);
-						accounts.db.query('DELETE FROM invites WHERE "by" = ?').run(user.id);
-						accounts.onRevoke(user.id);
-					},
+					before: async (data, ctx) =>
+						accounts.clearUnverified(
+							data.emailVerified === true,
+							(ctx?.body as { email?: unknown } | undefined)?.email,
+						),
 				},
 			},
 		},

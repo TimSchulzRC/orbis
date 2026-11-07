@@ -50,18 +50,18 @@ export function DiffView({
 			<p className={cn("text-sm text-muted-foreground", className)}>{t("history.noChange")}</p>
 		);
 	return (
-		<div
+		// a section with a label is a region, without one it stays a plain container
+		<section
 			aria-label={label}
 			className={cn(
 				"overflow-hidden rounded-lg border border-line font-mono text-xs leading-5",
 				className,
 			)}
 			data-diff
-			role={label ? "region" : undefined}
 			tabIndex={tabIndex}
 		>
 			{diff.hunks.map((h, i) => (
-				<div key={i}>
+				<div key={`${h.oldStart}:${h.newStart}`}>
 					{i > 0 && (
 						<div className="select-none border-y border-line bg-surface-2 px-2 text-center text-muted-foreground">
 							⋯
@@ -75,6 +75,7 @@ export function DiffView({
 								l.op === "-" && "bg-[color-mix(in_srgb,var(--danger)_12%,transparent)]",
 							)}
 							data-op={l.op === " " ? "same" : l.op === "+" ? "added" : "removed"}
+							// biome-ignore lint/suspicious/noArrayIndexKey: a diff line has no identity but its place; the list is rebuilt, never reordered
 							key={j}
 						>
 							<span
@@ -102,6 +103,7 @@ export function DiffView({
 															? "bg-[color-mix(in_srgb,var(--ok)_32%,transparent)]"
 															: "bg-[color-mix(in_srgb,var(--danger)_30%,transparent)] line-through decoration-danger/60",
 													)}
+													// biome-ignore lint/suspicious/noArrayIndexKey: changed words have no identity but their place in the line
 													key={k}
 												>
 													{p.text}
@@ -114,7 +116,7 @@ export function DiffView({
 					))}
 				</div>
 			))}
-		</div>
+		</section>
 	);
 }
 

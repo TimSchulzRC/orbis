@@ -37,21 +37,29 @@ export function TypePage({ item }: { item: Item }) {
 						<>
 							<MenuItem
 								icon={<Pencil size={14} />}
-								onClick={() => (close(), editType(item.id, space))}
+								onClick={() => {
+									close();
+									editType(item.id, space);
+								}}
 							>
 								{t("type.edit")}
 							</MenuItem>
 							<MenuItem
 								icon={<Pin size={14} />}
-								onClick={() => (close(), repo.pin(item.id, !item.pinned))}
+								onClick={() => {
+									close();
+									repo.pin(item.id, !item.pinned);
+								}}
 							>
 								{item.pinned ? t("item.unpin") : t("item.pin")}
 							</MenuItem>
 							<MenuItem
 								icon={<RotateCcw size={14} />}
-								onClick={() => (
-									close(), repo.change(item.id, (d) => setTabs(d, [])), notify(t("type.viewsReset"))
-								)}
+								onClick={() => {
+									close();
+									repo.change(item.id, (d) => setTabs(d, []));
+									notify(t("type.viewsReset"));
+								}}
 							>
 								{t("type.resetViews")}
 							</MenuItem>

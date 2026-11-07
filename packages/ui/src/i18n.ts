@@ -24,7 +24,7 @@ export function setLang(l: Lang) {
 	t = makeT(l);
 	localStorage.setItem(KEY, l);
 	document.documentElement.lang = l;
-	listeners.forEach((f) => f());
+	for (const f of listeners) f();
 }
 /** For use outside React (confirm dialogs, editor widgets). */
 export function tr(key: string, values?: Values) {
@@ -42,7 +42,10 @@ export function titleOf(
 
 export function useT(): { t: T; lang: Lang } {
 	const l = useSyncExternalStore(
-		(f) => (listeners.add(f), () => listeners.delete(f)),
+		(f) => {
+			listeners.add(f);
+			return () => listeners.delete(f);
+		},
 		() => lang,
 	);
 	return { t: makeTCached(l), lang: l };
@@ -51,6 +54,9 @@ export function useT(): { t: T; lang: Lang } {
 const cache = new Map<Lang, T>();
 function makeTCached(l: Lang) {
 	let cached = cache.get(l);
-	if (!cached) cache.set(l, (cached = makeT(l)));
+	if (!cached) {
+		cached = makeT(l);
+		cache.set(l, cached);
+	}
 	return cached;
 }

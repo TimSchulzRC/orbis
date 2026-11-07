@@ -36,7 +36,10 @@ beforeAll(async () => {
 	]);
 });
 afterAll(async () => {
-	for (const p of procs) p.kill(), await p.exited;
+	for (const p of procs) {
+		p.kill();
+		await p.exited;
+	}
 	removeTempDirs();
 });
 
@@ -108,7 +111,7 @@ test("the first account is the admin, without a workspace until it creates one; 
 	expect((await account(plain, bob.token)).admin).toBe(false);
 	expect(
 		(await get(plain, `/api/workspaces/${ws}/members`, bob.token).then((r) => r.json())).map(
-			(m: any) => m.role,
+			(m: { role: string }) => m.role,
 		),
 	).toEqual(["owner", "member"]);
 	// the last owner cannot leave; a member can
@@ -121,7 +124,7 @@ test("the first account is the admin, without a workspace until it creates one; 
 	expect((await account(plain, bob.token)).workspaces).toEqual([]);
 	expect(
 		(await get(plain, `/api/workspaces/${ws}/members`, ada.token).then((r) => r.json())).map(
-			(m: any) => m.role,
+			(m: { role: string }) => m.role,
 		),
 	).toEqual(["owner"]);
 });
@@ -387,7 +390,11 @@ async function connect(base: string, workspace: string, token: string) {
 	]);
 	const msgs: ServerMsg[] = [];
 	ws.onmessage = (e) => msgs.push(JSON.parse(String(e.data)));
-	await new Promise((r, j) => ((ws.onopen = r), (ws.onerror = j), (ws.onclose = j)));
+	await new Promise((r, j) => {
+		ws.onopen = r;
+		ws.onerror = j;
+		ws.onclose = j;
+	});
 	const until = async (pred: (m: ServerMsg) => boolean) => {
 		for (let i = 0; i < 100; i++) {
 			const m = msgs.find(pred);
@@ -570,7 +577,7 @@ test("owners manage members and invite links: list, revoke, roles, remove; membe
 	// the owner sees every open link (newest first, who made it, until when) and revokes one
 	const second = await post(bare, `${api}/invites`, {}, olga.token).then((r) => r.json());
 	const links = await get(bare, `${api}/invites`, olga.token).then((r) => r.json());
-	expect(links.map((l: any) => l.code)).toEqual([second.code, first.code]);
+	expect(links.map((l: { code: string }) => l.code)).toEqual([second.code, first.code]);
 	expect(links[0]).toEqual({
 		code: second.code,
 		by: "manage-olga",
@@ -585,7 +592,9 @@ test("owners manage members and invite links: list, revoke, roles, remove; membe
 	const late = await signUp(bare, "manage-late@example.org");
 	expect((await post(bare, `/api/invites/${first.code}`, {}, late.token)).status).toBe(404);
 	expect(
-		(await get(bare, `${api}/invites`, olga.token).then((r) => r.json())).map((l: any) => l.code),
+		(await get(bare, `${api}/invites`, olga.token).then((r) => r.json())).map(
+			(l: { code: string }) => l.code,
+		),
 	).toEqual([second.code]);
 
 	// roles: only "owner" or "member"; a new owner may invite
@@ -608,7 +617,10 @@ test("owners manage members and invite links: list, revoke, roles, remove; membe
 			() => reject(new Error("the removed member's sync remained open")),
 			3000,
 		);
-		live.ws.onclose = (e) => (clearTimeout(timeout), resolve(e.code));
+		live.ws.onclose = (e) => {
+			clearTimeout(timeout);
+			resolve(e.code);
+		};
 	});
 	expect((await del(bare, `${api}/members/${max.user.id}`, olga.token)).status).toBe(200);
 	expect(await closed).toBe(4401);
@@ -619,7 +631,9 @@ test("owners manage members and invite links: list, revoke, roles, remove; membe
 	expect((await get(bare, `/w/${w.id}/api/activity`, max.token)).status).toBe(403);
 	expect((await del(bare, `${api}/members/${max.user.id}`, olga.token)).status).toBe(404);
 	expect(
-		(await get(bare, `${api}/members`, olga.token).then((r) => r.json())).map((m: any) => m.role),
+		(await get(bare, `${api}/members`, olga.token).then((r) => r.json())).map(
+			(m: { role: string }) => m.role,
+		),
 	).toEqual(["owner"]);
 	expect((await role(olga, "member", olga.token)).status).toBe(409);
 });
@@ -631,7 +645,7 @@ test("invite links give their role and work for one person, also when two sign u
 	const link = (b: object) => post(bare, `${api}/invites`, b, otto.token).then((r) => r.json());
 	const listed = () => get(bare, `${api}/invites`, otto.token).then((r) => r.json());
 	const roleIn = async (token: string) =>
-		(await account(bare, token)).workspaces.find((x: any) => x.id === w.id)?.role;
+		(await account(bare, token)).workspaces.find((x: { id: string }) => x.id === w.id)?.role;
 
 	// only "owner" or "member"
 	expect((await post(bare, `${api}/invites`, { role: "admin" }, otto.token)).status).toBe(400);
@@ -648,7 +662,9 @@ test("invite links give their role and work for one person, also when two sign u
 	// a link for a member (the default): someone already in keeps their role and does not use it up;
 	// the first one new gets in, nobody after
 	const once = await link({});
-	expect((await listed()).find((l: any) => l.code === once.code)).toMatchObject({ role: "member" });
+	expect((await listed()).find((l: { code: string }) => l.code === once.code)).toMatchObject({
+		role: "member",
+	});
 	expect((await post(bare, `/api/invites/${once.code}`, {}, pia.token)).status).toBe(200);
 	expect(await roleIn(pia.token)).toBe("owner");
 	const quinn = await signUp(bare, "links-quinn@example.org");
@@ -657,7 +673,7 @@ test("invite links give their role and work for one person, also when two sign u
 	expect(await roleIn(quinn.token)).toBe("member");
 	expect((await post(bare, `/api/invites/${once.code}`, {}, rosa.token)).status).toBe(404);
 	expect(await roleIn(rosa.token)).toBeUndefined();
-	expect((await listed()).map((l: any) => l.code)).not.toContain(once.code);
+	expect((await listed()).map((l: { code: string }) => l.code)).not.toContain(once.code);
 
 	// two people at the same moment with one link: one gets in
 	const race = await link({});

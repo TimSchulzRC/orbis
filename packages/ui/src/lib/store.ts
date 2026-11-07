@@ -4,12 +4,15 @@ import { useSyncExternalStore } from "react";
 export function createStore<T>(initial: T) {
 	let value = initial;
 	const listeners = new Set<() => void>();
-	const subscribe = (l: () => void) => (listeners.add(l), () => void listeners.delete(l));
+	const subscribe = (l: () => void) => {
+		listeners.add(l);
+		return () => void listeners.delete(l);
+	};
 	return {
 		get: () => value,
 		set(next: T) {
 			value = next;
-			listeners.forEach((l) => l());
+			for (const l of listeners) l();
 		},
 		use: () => useSyncExternalStore(subscribe, () => value),
 	};

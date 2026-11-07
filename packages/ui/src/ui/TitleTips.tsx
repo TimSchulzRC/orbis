@@ -47,7 +47,10 @@ export function TitleTips() {
 			if (el && !(e.relatedTarget instanceof Node && el.contains(e.relatedTarget))) restore();
 		};
 		// a click, a key or scrolling: the tooltip goes (the title comes back on leaving)
-		const hide = () => (clearTimeout(timer), setTip(null));
+		const hide = () => {
+			clearTimeout(timer);
+			setTip(null);
+		};
 		addEventListener("pointerover", over, true);
 		addEventListener("pointerout", out, true);
 		addEventListener("pointerdown", hide, true);

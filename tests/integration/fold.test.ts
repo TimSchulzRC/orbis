@@ -35,18 +35,24 @@ function wait(ms: number) {
 }
 /** One keystroke in the title field: a step of its own, as the app sends it. Returns the step. */
 function rename(origin: string, id: string, title: string): string {
-	const step = s.step(
-		origin,
-		(step) => (s.change(id, origin, (d) => (setMeta(d, { title }), touch(d))), step),
-	);
+	const step = s.step(origin, (step) => {
+		s.change(id, origin, (d) => {
+			setMeta(d, { title });
+			touch(d);
+		});
+		return step;
+	});
 	s.flush();
 	return step;
 }
 function write(origin: string, id: string, body: string): string {
-	const step = s.step(
-		origin,
-		(step) => (s.change(id, origin, (d) => (replaceBody(d, body), touch(d))), step),
-	);
+	const step = s.step(origin, (step) => {
+		s.change(id, origin, (d) => {
+			replaceBody(d, body);
+			touch(d);
+		});
+		return step;
+	});
 	s.flush();
 	return step;
 }
@@ -110,7 +116,8 @@ test("an entry that changed about a page of text is full: writing a lot leaves s
 	// twelve paragraphs, one every half minute: 6000 characters without a pause
 	for (let n = 0; n < 12; n++) {
 		wait(MIN / 2);
-		write(TIM, id, (text += para));
+		text += para;
+		write(TIM, id, text);
 	}
 	const mine = entries(id).slice(1);
 	expect(mine.map((e) => e.changes.map((c) => `${c.from}→${c.to}`).join())).toEqual([
@@ -122,7 +129,8 @@ test("an entry that changed about a page of text is full: writing a lot leaves s
 	expect(s.eventText(mine[1]!.id)).toMatchObject({ from: 2, to: 3 });
 	// polishing: many small edits add up slowly and stay in the entry
 	wait(MIN);
-	write(TIM, id, (text += "The end.\n"));
+	text += "The end.\n";
+	write(TIM, id, text);
 	for (let n = 0; n < 30; n++) {
 		wait(MIN);
 		write(TIM, id, text.replace("Intro", `Intro ${n}`));
@@ -164,8 +172,14 @@ test("different kinds of edits in one sitting are one entry", async () => {
 test("agents, other people and undos keep entries of their own", () => {
 	const id = note("Plan", "one\n");
 	rename(TIM, id, "Plan A");
-	ops.call(AG, () => (ops.update("Plan A", { title: "Plan B" }, AG), "ok"));
-	ops.call(AG, () => (ops.update("Plan B", { title: "Plan C" }, AG), "ok"));
+	ops.call(AG, () => {
+		ops.update("Plan A", { title: "Plan B" }, AG);
+		return "ok";
+	});
+	ops.call(AG, () => {
+		ops.update("Plan B", { title: "Plan C" }, AG);
+		return "ok";
+	});
 	rename(ANNA, id, "Plan D");
 	rename(TIM, id, "Plan E");
 	const last = rename(TIM, id, "Plan F");

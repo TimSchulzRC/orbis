@@ -19,7 +19,10 @@ export function translate(lang: Lang, key: string, values?: Values): string {
 	if (!values && !msg.includes("{")) return msg;
 	const cacheKey = `${lang}\u0000${key}`;
 	let formatter = cache.get(cacheKey);
-	if (!formatter) cache.set(cacheKey, (formatter = new IntlMessageFormat(msg, lang)));
+	if (!formatter) {
+		formatter = new IntlMessageFormat(msg, lang);
+		cache.set(cacheKey, formatter);
+	}
 	try {
 		return String(formatter.format(values));
 	} catch (e) {
@@ -145,8 +148,9 @@ export function fmtDuration(s: number) {
 	return `${m}:${String(Math.round(s % 60)).padStart(2, "0")}`;
 }
 
-export function fmtBytes(lang: Lang, n: number) {
+export function fmtBytes(lang: Lang, bytes: number) {
 	const units = ["B", "KB", "MB", "GB"];
+	let n = bytes;
 	let i = 0;
 	for (; n >= 1024 && i < units.length - 1; i++) n /= 1024;
 	return `${n.toLocaleString(locale(lang), { maximumFractionDigits: i ? 1 : 0 })} ${units[i]}`;

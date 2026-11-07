@@ -154,9 +154,8 @@ export function followPropChange(w: Writer, ix: Index, c: PropChange, lang: Lang
 			w.change(type.id, (doc) => {
 				// the default views are not stored yet; stored ones change tab by tab, so an edit to another tab on another device survives
 				if (!type.schema.views) return setTabs(doc, next);
-				next.forEach(
-					({ id, pos: _pos, ...t }, i) => same(tabs[i], next[i]) || setTab(doc, id, fill(t)),
-				);
+				for (const [i, { id, pos: _pos, ...t }] of next.entries())
+					if (!same(tabs[i], next[i])) setTab(doc, id, fill(t));
 			});
 		if (c.to === null) {
 			const caps = type.schema.capabilities;
@@ -256,7 +255,9 @@ export function followTypeRename(w: Writer, ix: Index, oldName: string, newName:
 			if (next !== null) changes.push([p.id, next]);
 		}
 		if (changes.length)
-			w.change(t.id, (doc) => changes.forEach(([id, target]) => upsertProp(doc, id, { target })));
+			w.change(t.id, (doc) => {
+				for (const [id, target] of changes) upsertProp(doc, id, { target });
+			});
 	}
 }
 

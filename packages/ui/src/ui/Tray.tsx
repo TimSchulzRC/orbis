@@ -32,7 +32,10 @@ export function Tray({ desktop, pinned }: { desktop: boolean; pinned?: boolean }
 	// the panel over the page (pinned it is part of the page and stays)
 	const looking = open && !pinned;
 	const writing = useQuickNote();
-	const openPanel = () => (writing && closeQuickNote(), openShelf());
+	const openPanel = () => {
+		if (writing) closeQuickNote();
+		openShelf();
+	};
 	const touch = useRef<number | null>(null);
 	const ages = entries.map((e) => age(e.item.created)).sort((a, b) => b - a);
 	const tray = (
@@ -59,8 +62,10 @@ export function Tray({ desktop, pinned }: { desktop: boolean; pinned?: boolean }
 						if (
 							touch.current !== null &&
 							touch.current - (e.changedTouches[0]?.clientY ?? 0) > SWIPE_UP
-						)
-							e.preventDefault(), openPanel();
+						) {
+							e.preventDefault();
+							openPanel();
+						}
 						touch.current = null;
 					}}
 					onTouchStart={(e) => (touch.current = e.touches[0]!.clientY)}
@@ -96,7 +101,7 @@ export function Tray({ desktop, pinned }: { desktop: boolean; pinned?: boolean }
 		<>
 			{looking && <Backdrop aria-hidden className="z-30" onClick={dismissShelf} />}
 			{writing && <Backdrop aria-hidden className="z-30" onClick={closeQuickNote} />}
-			<div
+			<section
 				aria-label={t("tray.title")}
 				// floating, only the bar and its panel take clicks; the page below shows through
 				className={cn(
@@ -107,7 +112,6 @@ export function Tray({ desktop, pinned }: { desktop: boolean; pinned?: boolean }
 							? "pointer-events-none fixed inset-x-0 bottom-0 px-6 pb-4"
 							: "relative shrink-0 px-3 pb-2 pt-1",
 				)}
-				role="region"
 			>
 				<div
 					className={cn(
@@ -118,6 +122,7 @@ export function Tray({ desktop, pinned }: { desktop: boolean; pinned?: boolean }
 				>
 					{pinned ? (
 						// with the quick note open the inbox steps back; a click on it is a click beside the card (it lies above the backdrop)
+						// biome-ignore lint/a11y/noStaticElementInteractions lint/a11y/useKeyWithClickEvents: a click beside the card, like its backdrop; Esc closes it from the keyboard
 						<div
 							className="flex min-h-0 flex-1 flex-col"
 							data-quick-beside
@@ -178,7 +183,7 @@ export function Tray({ desktop, pinned }: { desktop: boolean; pinned?: boolean }
 						</div>
 					)}
 				</div>
-			</div>
+			</section>
 		</>
 	);
 }
@@ -199,6 +204,7 @@ function Fill({ ages }: { ages: Age[] }) {
 			{Array.from({ length: FILL }, (_, n) => (
 				<span
 					className={cn("h-1 w-2.5 rounded-full", n < ages.length ? AGE_LOOK[ages[n]!] : "bg-line")}
+					// biome-ignore lint/suspicious/noArrayIndexKey: a fixed track of ten slots, never reordered
 					key={n}
 				/>
 			))}
@@ -219,7 +225,7 @@ function Legend({ ages }: { ages: Age[] }) {
 			<p className="mb-2 font-semibold">{t("tray.age.title")}</p>
 			<ul className="space-y-1.5">
 				{AGE_LOOK.map((look, a) => (
-					<li className="flex items-center gap-2" key={a}>
+					<li className="flex items-center gap-2" key={look}>
 						<span className={cn("h-1 w-2.5 shrink-0 rounded-full", look)} />
 						<span className="flex-1 text-muted-foreground">{t(AGE_TEXT[a]!)}</span>
 						<span className="tabular-nums">{ages.filter((x) => x === a).length}</span>

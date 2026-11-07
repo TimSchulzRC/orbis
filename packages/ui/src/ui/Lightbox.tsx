@@ -10,6 +10,9 @@ import { createStore } from "../lib/store";
 import { repo } from "../repo";
 import { Button } from "./primitives";
 
+/** The index `delta` steps away in a list of `count`, wrapping around at both ends. */
+const cycle = (delta: number, count: number) => (a: number) => (a + delta + count) % count;
+
 const open = createStore<{ ids: string[]; at: number } | null>(null);
 
 export function openLightbox(ids: string[], at: number) {
@@ -32,41 +35,48 @@ function Lightbox({ ids, start }: { ids: string[]; start: number }) {
 	const item = repo.get(ids[at]!);
 	const file = item?.file;
 	const close = () => open.set(null);
-	const step = (delta: number) => setAt((a) => (a + delta + ids.length) % ids.length);
+	const step = (delta: number) => setAt(cycle(delta, ids.length));
+	const hash = file?.hash;
+	const display = file?.display;
 	useEffect(() => {
-		if (!file) return;
+		if (!hash) return;
 		let live = true;
 		setSrc(undefined);
 		void files
-			.url(file.display ?? file.hash, { keep: true })
+			.url(display ?? hash, { keep: true })
 			.then((url) => live && url && setSrc((s) => s ?? url));
-		if (file.display) void files.url(file.hash).then((url) => live && url && setSrc(url));
-		return () => void (live = false);
-	}, [file?.hash]);
+		if (display) void files.url(hash).then((url) => live && url && setSrc(url));
+		return () => {
+			live = false;
+		};
+	}, [hash, display]);
+	const count = ids.length;
 	useEffect(() => {
 		const onKey = (e: KeyboardEvent) => {
-			if (e.key === "ArrowRight") step(1);
-			else if (e.key === "ArrowLeft") step(-1);
+			if (e.key === "ArrowRight") setAt(cycle(1, count));
+			else if (e.key === "ArrowLeft") setAt(cycle(-1, count));
 			else return;
 			e.preventDefault();
 			e.stopPropagation();
 		};
 		window.addEventListener("keydown", onKey, true);
 		return () => window.removeEventListener("keydown", onKey, true);
-	}, [ids.length]);
+	}, [count]);
 	if (!item || !file) return null;
 	const nav =
 		"absolute top-1/2 -translate-y-1/2 rounded-full bg-black/40 p-2 text-white hover:bg-black/60";
 	return (
 		<ModalSurface onClose={close} title={item.title}>
-			<div
-				className="fixed inset-0 z-50 flex flex-col bg-black/95 backdrop-blur-sm"
-				onClick={close}
-			>
-				<div
-					className="flex items-center gap-3 px-4 py-3 text-sm text-white/80 pt-safe"
-					onClick={(e) => e.stopPropagation()}
-				>
+			<div className="fixed inset-0 z-50 flex flex-col bg-black/95 backdrop-blur-sm">
+				{/* a click beside the picture closes it; keys have Escape and the X */}
+				<button
+					aria-hidden
+					className="absolute inset-0 cursor-default"
+					onClick={close}
+					tabIndex={-1}
+					type="button"
+				/>
+				<div className="relative flex items-center gap-3 px-4 py-3 text-sm text-white/80 pt-safe">
 					<a
 						className="min-w-0 truncate font-medium text-white hover:underline"
 						href={itemHref(item.id)}
@@ -88,12 +98,12 @@ function Lightbox({ ids, start }: { ids: string[]; start: number }) {
 						<X size={18} />
 					</Button>
 				</div>
-				<div className="relative flex min-h-0 flex-1 items-center justify-center px-4">
+				{/* the stage lets clicks through to the backdrop, only the picture and arrows take them */}
+				<div className="pointer-events-none relative flex min-h-0 flex-1 items-center justify-center px-4">
 					{src && (
 						<img
 							alt={item.body || item.title}
-							className="max-h-full max-w-full object-contain"
-							onClick={(e) => e.stopPropagation()}
+							className="pointer-events-auto max-h-full max-w-full object-contain"
 							src={src}
 						/>
 					)}
@@ -101,16 +111,16 @@ function Lightbox({ ids, start }: { ids: string[]; start: number }) {
 						<>
 							<Button
 								aria-label={t("lightbox.prev")}
-								className={`${nav} left-3`}
-								onClick={(e) => (e.stopPropagation(), step(-1))}
+								className={`${nav} pointer-events-auto left-3`}
+								onClick={() => step(-1)}
 								variant="plain"
 							>
 								<ChevronLeft size={22} />
 							</Button>
 							<Button
 								aria-label={t("lightbox.next")}
-								className={`${nav} right-3`}
-								onClick={(e) => (e.stopPropagation(), step(1))}
+								className={`${nav} pointer-events-auto right-3`}
+								onClick={() => step(1)}
 								variant="plain"
 							>
 								<ChevronRight size={22} />
@@ -118,10 +128,7 @@ function Lightbox({ ids, start }: { ids: string[]; start: number }) {
 						</>
 					)}
 				</div>
-				<p
-					className="min-h-10 px-4 py-3 text-center text-sm text-white/80 pb-safe"
-					onClick={(e) => e.stopPropagation()}
-				>
+				<p className="relative min-h-10 px-4 py-3 text-center text-sm text-white/80 pb-safe">
 					{item.body}
 				</p>
 			</div>

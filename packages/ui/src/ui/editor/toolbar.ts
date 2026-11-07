@@ -107,12 +107,8 @@ class Toolbar {
 			this.marks.push({ button, mark: chars });
 			return button;
 		};
-		const linkBtn = (this.linkBtn = iconButton(
-			Link2,
-			tr("editor.fmt.link") + key("K"),
-			"cm-tb wide",
-			16,
-		));
+		const linkBtn = iconButton(Link2, tr("editor.fmt.link") + key("K"), "cm-tb wide", 16);
+		this.linkBtn = linkBtn;
 		linkBtn.insertAdjacentHTML("beforeend", `<span>${tr("editor.fmt.linkShort")}</span>`);
 		linkBtn.addEventListener("click", () => this.openLink());
 		this.extractBtn = iconButton(Scissors, tr("editor.fmt.extract"), "cm-tb wide extract", 16);
@@ -256,7 +252,10 @@ class Toolbar {
 		this.input.value = relink?.target ?? "";
 		this.search();
 		this.place();
-		setTimeout(() => (this.input.focus(), this.input.select()));
+		setTimeout(() => {
+			this.input.focus();
+			this.input.select();
+		});
 	}
 	choose(target: { page?: string; url?: string }) {
 		const text = this.relinkText ?? undefined;
@@ -341,12 +340,14 @@ class Toolbar {
 	}
 	key(e: KeyboardEvent) {
 		const rows = [...this.results.querySelectorAll<HTMLButtonElement>("button")];
-		if (e.key === "Escape") e.preventDefault(), this.closeLink();
-		else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+		if (e.key === "Escape") {
+			e.preventDefault();
+			this.closeLink();
+		} else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
 			e.preventDefault();
 			if (!rows.length) return;
 			this.picked = (this.picked + (e.key === "ArrowDown" ? 1 : -1) + rows.length) % rows.length;
-			rows.forEach((row, i) => row.classList.toggle("active", i === this.picked));
+			for (const [i, row] of rows.entries()) row.classList.toggle("active", i === this.picked);
 		} else if (e.key === "Enter") {
 			e.preventDefault();
 			rows[this.picked]?.click();

@@ -17,8 +17,8 @@ const tool = (name: string, args: unknown) => storeTool(s, name, args);
 const count = () => s.live().length;
 
 const weeklyReview = async (store: Store) =>
-	(await storeRpc(store, "prompts/get", { name: "weekly_review" })).result.messages[0].content
-		.text as string;
+	(await storeRpc(store, "prompts/get", { name: "weekly_review" })).result.messages![0]!.content
+		.text;
 /** The queries the weekly review tells the agent to run, as written in its prompt. */
 const reviewQueries = [
 	...(await weeklyReview(setupStore("obtion-mcp-").s)).matchAll(/query "([^"]+)"/g),
@@ -149,10 +149,7 @@ test("a link to the item itself is refused", async () => {
 
 test("prompts process_inbox and weekly_review", async () => {
 	const r = await rpc("prompts/list", {});
-	expect(r.result.prompts.map((p: { name: string }) => p.name).sort()).toEqual([
-		"process_inbox",
-		"weekly_review",
-	]);
+	expect(r.result.prompts!.map((p) => p.name).sort()).toEqual(["process_inbox", "weekly_review"]);
 	const text = await weeklyReview(s);
 	for (const part of ["done>-7d", "blocked", "14 days", "inbox"]) expect(text).toContain(part);
 	expect(reviewQueries).toHaveLength(4);

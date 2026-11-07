@@ -139,7 +139,8 @@ function tables(): Record<string, KwTable> {
 		for (const k of keys) m.set(fold(k), k);
 		out[cat] = m;
 	}
-	return (kwCache = out);
+	kwCache = out;
+	return out;
 }
 
 const kw = (cat: keyof typeof KW_KEYS, word: string) => tables()[cat]!.get(fold(word));
@@ -775,8 +776,8 @@ export function matches(item: Item, c: Cond, ctx: EvalCtx): boolean {
 
 function leaves(c: Cond | undefined, out: Cond[] = []): Cond[] {
 	if (!c) return out;
-	if ("and" in c) c.and.forEach((x) => leaves(x, out));
-	else if ("or" in c) c.or.forEach((x) => leaves(x, out));
+	if ("and" in c) for (const x of c.and) leaves(x, out);
+	else if ("or" in c) for (const x of c.or) leaves(x, out);
 	else if ("not" in c) leaves(c.not, out);
 	else out.push(c);
 	return out;
@@ -939,7 +940,10 @@ export function groupItems(
 	const groups = new Map<string, Group>();
 	const add = (key: string, g: Omit<Group, "items" | "key">, item?: Item) => {
 		let x = groups.get(key);
-		if (!x) groups.set(key, (x = { key, ...g, items: [] }));
+		if (!x) {
+			x = { key, ...g, items: [] };
+			groups.set(key, x);
+		}
 		if (item) x.items.push(item);
 	};
 	const rank = new Map<string, number>(); // option order, for status and select groups

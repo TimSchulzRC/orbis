@@ -144,6 +144,7 @@ export function BodyDiff({
 	const [got, setGot] = useState<EventText | null | undefined>(undefined);
 	const [tries, setTries] = useState(0);
 	// an entry still growing (typing) changes its time: fetch again then; the one shown stays meanwhile
+	// biome-ignore lint/correctness/useExhaustiveDependencies: a new time (`e.ts`) or a retry (`tries`) fetches again
 	useEffect(() => {
 		if (!open) return;
 		let gone = false;
@@ -151,7 +152,9 @@ export function BodyDiff({
 			(x) => !gone && setGot(x),
 			() => !gone && setGot(null),
 		);
-		return () => void (gone = true);
+		return () => {
+			gone = true;
+		};
 	}, [open, space, e.id, e.ts, tries]);
 	const diff = useMemo(() => (got ? textDiff(got.before, got.after) : undefined), [got]);
 	const region = useId();

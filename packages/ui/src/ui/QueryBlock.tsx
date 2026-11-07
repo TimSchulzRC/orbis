@@ -93,7 +93,10 @@ function QueryBlockView({
 	const [draft, setDraftState] = useState<Draft>(null);
 	// the latest draft at once: closing the filter commits typed text and saves in one go
 	const draftRef = useRef<Draft>(null);
-	const setDraft = (d: Draft) => ((draftRef.current = d), setDraftState(d));
+	const setDraft = (d: Draft) => {
+		draftRef.current = d;
+		setDraftState(d);
+	};
 	const tabs = blockTabs(stored);
 	const [tab, pickTab] = useTabChoice(`block:${thisId}:${n}`, tabs);
 	const baseWhere = draft?.scope === "base" ? draft.where : stored.where;
@@ -300,7 +303,10 @@ function QueryBlockView({
 						{!def.title && (
 							<MenuItem
 								icon={<Heading size={14} />}
-								onClick={() => (close(), setAddingTitle(true))}
+								onClick={() => {
+									close();
+									setAddingTitle(true);
+								}}
 							>
 								{t("block.addTitle")}
 							</MenuItem>
@@ -312,7 +318,14 @@ function QueryBlockView({
 						>
 							{t("block.hideEmpty")}
 						</MenuItem>
-						<MenuItem danger icon={<Trash2 size={14} />} onClick={() => (close(), onDelete?.())}>
+						<MenuItem
+							danger
+							icon={<Trash2 size={14} />}
+							onClick={() => {
+								close();
+								onDelete?.();
+							}}
+						>
 							{t("block.delete")}
 						</MenuItem>
 					</div>
@@ -484,7 +497,7 @@ function decos(state: EditorState, thisId?: string): DecorationSet {
 const refresh = StateEffect.define<null>();
 
 /** The level of a Markdown heading line (1–6), or undefined. */
-const headingLevel = (text: string) => /^(#{1,6})\s/.exec(text)?.[1]!.length;
+const headingLevel = (text: string) => /^(#{1,6})\s/.exec(text)?.[1]?.length;
 
 function emptySections(state: EditorState, thisId?: string): DecorationSet {
 	const text = state.doc.toString();
@@ -564,7 +577,12 @@ export function queryBlocks(thisId?: string): Extension {
 			clearTimeout(timer);
 			timer = setTimeout(() => view.dispatch({ effects: refresh.of(null) }), 50);
 		});
-		return { destroy: () => (clearTimeout(timer), off()) };
+		return {
+			destroy: () => {
+				clearTimeout(timer);
+				off();
+			},
+		};
 	});
 	return [field, sections, watch];
 }

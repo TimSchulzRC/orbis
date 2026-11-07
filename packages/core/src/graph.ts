@@ -33,7 +33,10 @@ const linkCache = new WeakMap<Item, { target: string; embed: boolean; size?: num
 
 function linksOf(i: Item) {
 	let links = linkCache.get(i);
-	if (!links) linkCache.set(i, (links = parseWikiLinks(i.body)));
+	if (!links) {
+		links = parseWikiLinks(i.body);
+		linkCache.set(i, links);
+	}
 	return links;
 }
 

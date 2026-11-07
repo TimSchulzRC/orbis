@@ -9,6 +9,7 @@ const onTrash = vi.fn();
 function Row({ title = "Website relaunch", extra }: { title?: string; extra?: string }) {
 	const menu = useContextMenu();
 	return (
+		// biome-ignore lint/a11y/noStaticElementInteractions: the right click is a mouse shortcut; the "…" button in the row is the way for keyboards
 		<div
 			onContextMenu={menu.onContextMenu}
 			style={{ display: "flex", gap: 8, width: 320, padding: "0 40px" }}
@@ -18,7 +19,13 @@ function Row({ title = "Website relaunch", extra }: { title?: string; extra?: st
 				{(close) => (
 					<>
 						{extra && <MenuItem onClick={close}>{extra}</MenuItem>}
-						<MenuItem danger onClick={() => (close(), onTrash())}>
+						<MenuItem
+							danger
+							onClick={() => {
+								close();
+								onTrash();
+							}}
+						>
 							Move to trash
 						</MenuItem>
 					</>
@@ -27,7 +34,10 @@ function Row({ title = "Website relaunch", extra }: { title?: string; extra?: st
 		</div>
 	);
 }
-afterEach(() => (cleanup(), onTrash.mockClear()));
+afterEach(() => {
+	cleanup();
+	onTrash.mockClear();
+});
 
 test("a right click opens the menu at the mouse, its entries work", async () => {
 	await render(<Row />);

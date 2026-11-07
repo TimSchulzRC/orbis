@@ -126,13 +126,23 @@ export async function fetchPublic(
 			url = new URL(next, url);
 			continue;
 		}
-		if (status < 200 || status >= 300) return (res.destroy(), { status });
-		if (Number(res.headers["content-length"] ?? 0) > opts.max) return (res.destroy(), "too large");
+		if (status < 200 || status >= 300) {
+			res.destroy();
+			return { status };
+		}
+		if (Number(res.headers["content-length"] ?? 0) > opts.max) {
+			res.destroy();
+			return "too large";
+		}
 		const chunks: Buffer[] = [];
 		let size = 0;
 		try {
 			for await (const chunk of res as AsyncIterable<Buffer>) {
-				if ((size += chunk.length) > opts.max) return (res.destroy(), "too large");
+				size += chunk.length;
+				if (size > opts.max) {
+					res.destroy();
+					return "too large";
+				}
 				chunks.push(chunk);
 			}
 		} catch (e) {

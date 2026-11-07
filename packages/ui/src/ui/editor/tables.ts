@@ -171,7 +171,10 @@ export function deleteColumn(view: EditorView, t: TableBlock, col: number) {
 /** The table's entries for a menu: rows and columns around the cell in line `n`, column `col`. */
 export function tableEntries(view: EditorView, t: TableBlock, n: number, col: number): MenuEntry[] {
 	const body = n >= t.first + 2;
-	const run = (f: () => void) => () => (f(), view.focus());
+	const run = (f: () => void) => () => {
+		f();
+		view.focus();
+	};
 	// what to do is said of the table as it is when chosen, not when the menu opened
 	const now = () => tableAt(view.state, t.from) ?? t;
 	return [

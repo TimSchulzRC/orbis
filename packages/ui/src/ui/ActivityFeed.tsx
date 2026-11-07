@@ -37,7 +37,12 @@ function Entry({
 	const own = !!here && e.doc === here;
 	// as a change of its own step, so its toast can take it back again
 	const restore = (text: string) => {
-		const step = repo.ownStep(() => repo.change(e.doc, (d) => (replaceBody(d, text), touch(d))));
+		const step = repo.ownStep(() =>
+			repo.change(e.doc, (d) => {
+				replaceBody(d, text);
+				touch(d);
+			}),
+		);
 		if (step) notify.undo(t("history.restored"), () => void repo.undo(step));
 	};
 	return (

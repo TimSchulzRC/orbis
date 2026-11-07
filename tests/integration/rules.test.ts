@@ -23,9 +23,10 @@ beforeEach(() => ({ dir, s, ops } = setupStore("obtion-rules-")));
 
 const tool = (name: string, args: unknown) => storeTool(s, name, args);
 const count = (text: string, part: string) => text.split(part).length - 1;
-const setWorkspaceRules = (text: string) => (
-	s.change(SETTINGS_ID, "web:tim", (d) => setRules(d, text)), s.flush()
-);
+const setWorkspaceRules = (text: string) => {
+	s.change(SETTINGS_ID, "web:tim", (d) => setRules(d, text));
+	s.flush();
+};
 
 /** Root › (Country A, Country B) › Client (below both) › Todo, with rules on all but the task. */
 function tree() {
@@ -189,7 +190,7 @@ test("the workspace's rules: in the instructions of every connection, in schema,
 			capabilities: {},
 			clientInfo: { name: "t", version: "1" },
 		})
-	).result.instructions as string;
+	).result.instructions!;
 	expect(before).toContain("Rules for agents:");
 	expect(before).not.toContain("Rules for agents of this workspace");
 	setWorkspaceRules("No e-mails without approval.");
@@ -199,7 +200,7 @@ test("the workspace's rules: in the instructions of every connection, in schema,
 			capabilities: {},
 			clientInfo: { name: "t", version: "1" },
 		})
-	).result.instructions as string;
+	).result.instructions!;
 	expect(after).toContain(
 		"Rules for agents of this workspace (binding everywhere, as of now):\nNo e-mails without approval.",
 	);

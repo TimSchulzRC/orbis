@@ -1,5 +1,5 @@
 import { normalizeTag } from "@obtion/core/model";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Input } from "../components/ui/input";
 import { useRepo } from "../hooks";
 import { tr } from "../i18n";
@@ -23,19 +23,19 @@ export function TagInput({
 	const [text, setText] = useState("");
 	const [sel, setSel] = useState(0);
 	const q = normalizeTag(text);
-	const suggestions = useMemo(() => {
-		if (!editing || !q) return [];
-		const all = repo
-			.index()
-			.tags()
-			.filter((t) => !exclude.includes(t.tag) && t.tag.includes(q));
-		// Prefix matches first, then by usage.
-		return all
-			.sort(
-				(a, b) => Number(b.tag.startsWith(q)) - Number(a.tag.startsWith(q)) || b.count - a.count,
-			)
-			.slice(0, 8);
-	}, [q, editing]);
+	// Prefix matches first, then by usage.
+	const suggestions =
+		editing && q
+			? repo
+					.index()
+					.tags()
+					.filter((t) => !exclude.includes(t.tag) && t.tag.includes(q))
+					.sort(
+						(a, b) =>
+							Number(b.tag.startsWith(q)) - Number(a.tag.startsWith(q)) || b.count - a.count,
+					)
+					.slice(0, 8)
+			: [];
 	// Option list: existing tags, plus "create" for a new one when typed text isn't an exact match.
 	const options = suggestions.map((s) => ({ tag: s.tag, count: s.count as number | null }));
 	if (q && !suggestions.some((s) => s.tag === q)) options.push({ tag: q, count: null });
@@ -52,15 +52,30 @@ export function TagInput({
 				aria-label={tr("tag.add")}
 				autoFocus
 				className="w-28 px-1.5 py-0.5 text-xs"
-				onBlur={() => setTimeout(() => (setEditing(false), setText(""), onCancel?.()), 150)}
-				onChange={(e) => (setText(e.target.value), setSel(0))}
+				onBlur={() =>
+					setTimeout(() => {
+						setEditing(false);
+						setText("");
+						onCancel?.();
+					}, 150)
+				}
+				onChange={(e) => {
+					setText(e.target.value);
+					setSel(0);
+				}}
 				onKeyDown={(e) => {
-					if (e.key === "ArrowDown")
-						e.preventDefault(), setSel((s) => Math.min(options.length - 1, s + 1));
-					else if (e.key === "ArrowUp") e.preventDefault(), setSel((s) => Math.max(0, s - 1));
-					else if (e.key === "Enter" || e.key === "Tab") {
+					if (e.key === "ArrowDown") {
+						e.preventDefault();
+						setSel((s) => Math.min(options.length - 1, s + 1));
+					} else if (e.key === "ArrowUp") {
+						e.preventDefault();
+						setSel((s) => Math.max(0, s - 1));
+					} else if (e.key === "Enter" || e.key === "Tab") {
 						if (!q) {
-							if (e.key === "Enter") e.preventDefault(), setEditing(false);
+							if (e.key === "Enter") {
+								e.preventDefault();
+								setEditing(false);
+							}
 							return;
 						}
 						e.preventDefault();

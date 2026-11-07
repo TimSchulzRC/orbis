@@ -29,7 +29,15 @@ import {
 	UserRound,
 	X,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import {
+	useCallback,
+	useEffect,
+	useId,
+	useMemo,
+	useRef,
+	useState,
+	useSyncExternalStore,
+} from "react";
 import {
 	ApiError,
 	activeUser,
@@ -72,7 +80,7 @@ import {
 } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
 import { NativeSelect } from "../components/ui/native-select";
-import { navigate, useRepo } from "../hooks";
+import { navigate, useOnChange, useRepo } from "../hooks";
 import { setLang, useT } from "../i18n";
 import { cn, toggled } from "../lib/utils";
 import { setTheme, useTheme } from "../theme";
@@ -137,11 +145,8 @@ function CopyBox({ text, secret, label }: { text: string; secret?: string; label
 	const [revealed, setRevealed] = useState(false);
 	const shown = secret && !revealed ? text.replaceAll(secret, "•".repeat(12)) : text;
 	return (
-		<div className="relative rounded-lg border border-line bg-surface-2">
-			<pre
-				aria-label={label}
-				className="overflow-x-auto whitespace-pre-wrap break-all p-3 pr-20 font-mono text-xs leading-relaxed"
-			>
+		<figure aria-label={label} className="relative rounded-lg border border-line bg-surface-2">
+			<pre className="overflow-x-auto whitespace-pre-wrap break-all p-3 pr-20 font-mono text-xs leading-relaxed">
 				{shown}
 			</pre>
 			<div className="absolute right-1.5 top-1.5 flex">
@@ -156,7 +161,7 @@ function CopyBox({ text, secret, label }: { text: string; secret?: string; label
 				)}
 				<CopyButton text={text} />
 			</div>
-		</div>
+		</figure>
 	);
 }
 
@@ -190,7 +195,10 @@ function SpaceGroup({ space }: { space: Space }) {
 					owner ? (
 						<form
 							className="flex items-center gap-2"
-							onSubmit={(e) => (e.preventDefault(), void renameSpace(space, name).catch(fail))}
+							onSubmit={(e) => {
+								e.preventDefault();
+								void renameSpace(space, name).catch(fail);
+							}}
 						>
 							<Input
 								aria-label={t("space.name")}
@@ -242,8 +250,11 @@ function MembersGroup({ space, onRemoved }: { space: Space; onRemoved: () => voi
 	const { t } = useT();
 	const [list, setList] = useState<Member[]>([]);
 	const [error, setError] = useState("");
-	const load = () => members(space).then(setList, () => {});
-	useEffect(() => void load(), [space.id]);
+	const load = () =>
+		members(space).then(setList, () => {
+			// offline: the list stays as it was
+		});
+	useOnChange(space.id, () => void load());
 	const owner = space.role === "owner";
 	const me = activeUser();
 	const fail = (e: unknown) => setError(errorText(e, t, "space"));
@@ -265,7 +276,11 @@ function MembersGroup({ space, onRemoved }: { space: Space; onRemoved: () => voi
 			danger: true,
 		});
 		// their invite links went with them
-		if (yes) await removeMember(space, member.id).then(() => (void load(), onRemoved()), fail);
+		if (yes)
+			await removeMember(space, member.id).then(() => {
+				void load();
+				onRemoved();
+			}, fail);
 	};
 	return (
 		<SettingsGroup hint={owner ? undefined : t("space.inviteOwners")} title={t("space.memberList")}>
@@ -291,14 +306,20 @@ function MembersGroup({ space, onRemoved }: { space: Space; onRemoved: () => voi
 									<>
 										<MenuItem
 											icon={member.role === "owner" ? <UserRound size={14} /> : <Crown size={14} />}
-											onClick={() => (close(), void changeRole(member))}
+											onClick={() => {
+												close();
+												void changeRole(member);
+											}}
 										>
 											{t(`space.make.${member.role === "owner" ? "member" : "owner"}`)}
 										</MenuItem>
 										<MenuItem
 											danger
 											icon={<UserMinus size={14} />}
-											onClick={() => (close(), void remove(member))}
+											onClick={() => {
+												close();
+												void remove(member);
+											}}
 										>
 											{t("space.remove")}
 										</MenuItem>
@@ -322,7 +343,7 @@ function InviteLinksGroup({ space, version }: { space: Space; version: number })
 	const [error, setError] = useState("");
 	const fail = (e: unknown) => setError(errorText(e, t, "space"));
 	const load = () => inviteLinks(space).then(setLinks, fail);
-	useEffect(() => void load(), [space.id, version]);
+	useOnChange(`${space.id} ${version}`, () => void load());
 	const day = (ts: number) => fmtDate(lang, new Date(ts).toISOString());
 	const create = (opts: InviteRequest) => inviteLink(space, opts).then(load, fail);
 	const revoke = async (link: InviteLink) => {
@@ -350,13 +371,19 @@ function InviteLinksGroup({ space, version }: { space: Space; version: number })
 				<>
 					<MenuItem
 						icon={<UserRound size={14} />}
-						onClick={() => (close(), void create({ role: "member" }))}
+						onClick={() => {
+							close();
+							void create({ role: "member" });
+						}}
 					>
 						{t("space.inviteNew.member")}
 					</MenuItem>
 					<MenuItem
 						icon={<Crown size={14} />}
-						onClick={() => (close(), void create({ role: "owner" }))}
+						onClick={() => {
+							close();
+							void create({ role: "owner" });
+						}}
 					>
 						{t("space.inviteNew.owner")}
 					</MenuItem>
@@ -402,7 +429,11 @@ function AccountGroup() {
 	const [deleting, setDeleting] = useState(false);
 	const [changing, setChanging] = useState(false);
 	const [info, setInfo] = useState<ServerInfo | null>(null);
-	useEffect(() => void serverInfo().then(setInfo, () => {}), []);
+	useEffect(() => {
+		serverInfo().then(setInfo, () => {
+			// offline: no sign-in methods to show
+		});
+	}, []);
 	if (!account) return null;
 	const login = loginOf(info);
 	return (
@@ -451,6 +482,9 @@ function AccountGroup() {
 const MIN_PASSWORD = 8;
 
 function ChangePasswordDialog({ onClose }: { onClose: () => void }) {
+	const currentId = useId();
+	const nextId = useId();
+	const repeatId = useId();
 	const { t } = useT();
 	const [current, setCurrent] = useState("");
 	const [next, setNext] = useState("");
@@ -493,24 +527,26 @@ function ChangePasswordDialog({ onClose }: { onClose: () => void }) {
 				}}
 			>
 				<p className="mb-4 text-sm text-muted-foreground">{t("account.changePasswordHint")}</p>
-				<label className="block text-sm">
+				<label className="block text-sm" htmlFor={currentId}>
 					{t("account.currentPassword")}
 					<Input
 						autoComplete="current-password"
 						className="mt-1 block"
 						disabled={busy}
+						id={currentId}
 						onChange={(e) => setCurrent(e.target.value)}
 						required
 						type="password"
 						value={current}
 					/>
 				</label>
-				<label className="mt-3 block text-sm">
+				<label className="mt-3 block text-sm" htmlFor={nextId}>
 					{t("account.newPassword")}
 					<Input
 						autoComplete="new-password"
 						className="mt-1 block"
 						disabled={busy}
+						id={nextId}
 						minLength={MIN_PASSWORD}
 						onChange={(e) => setNext(e.target.value)}
 						required
@@ -518,12 +554,13 @@ function ChangePasswordDialog({ onClose }: { onClose: () => void }) {
 						value={next}
 					/>
 				</label>
-				<label className="mt-3 block text-sm">
+				<label className="mt-3 block text-sm" htmlFor={repeatId}>
 					{t("account.repeatPassword")}
 					<Input
 						autoComplete="new-password"
 						className="mt-1 block"
 						disabled={busy}
+						id={repeatId}
 						minLength={MIN_PASSWORD}
 						onChange={(e) => setRepeat(e.target.value)}
 						required
@@ -590,8 +627,8 @@ function Passkeys() {
 	const [error, setError] = useState("");
 	const [busy, setBusy] = useState(false);
 	const [reauth, setReauth] = useState(false);
-	const load = () => passkeys().then(setList, () => setList([]));
-	useEffect(() => void load(), []);
+	const load = useCallback(() => passkeys().then(setList, () => setList([])), []);
+	useEffect(() => void load(), [load]);
 	const add = async () => {
 		setBusy(true);
 		setError("");
@@ -650,7 +687,13 @@ function Passkeys() {
 				</p>
 			)}
 			{reauth && (
-				<Reauth onClose={() => setReauth(false)} onDone={() => (setReauth(false), void add())} />
+				<Reauth
+					onClose={() => setReauth(false)}
+					onDone={() => {
+						setReauth(false);
+						void add();
+					}}
+				/>
 			)}
 		</SettingRow>
 	);
@@ -691,13 +734,20 @@ function Providers({ providers }: { providers: { id: string; name: string }[] })
 			))}
 			<GroupError error={error} />
 			{reauth && (
-				<Reauth onClose={() => setReauth(null)} onDone={() => (setReauth(null), link(reauth))} />
+				<Reauth
+					onClose={() => setReauth(null)}
+					onDone={() => {
+						setReauth(null);
+						link(reauth);
+					}}
+				/>
 			)}
 		</>
 	);
 }
 
 function DeleteAccountDialog({ onClose }: { onClose: () => void }) {
+	const passwordId = useId();
 	const { t } = useT();
 	const { account } = useAccounts();
 	// without a password: a recent sign-in is the proof
@@ -724,7 +774,16 @@ function DeleteAccountDialog({ onClose }: { onClose: () => void }) {
 			setBusy(false);
 		}
 	};
-	if (reauth) return <Reauth onClose={onClose} onDone={() => (setReauth(false), void remove())} />;
+	if (reauth)
+		return (
+			<Reauth
+				onClose={onClose}
+				onDone={() => {
+					setReauth(false);
+					void remove();
+				}}
+			/>
+		);
 	return (
 		<Dialog
 			onClose={() => {
@@ -732,15 +791,21 @@ function DeleteAccountDialog({ onClose }: { onClose: () => void }) {
 			}}
 			title={t("account.delete")}
 		>
-			<form onSubmit={(e) => (e.preventDefault(), void remove())}>
+			<form
+				onSubmit={(e) => {
+					e.preventDefault();
+					void remove();
+				}}
+			>
 				<p className="mb-4 text-sm text-muted-foreground">{t("account.deleteHint")}</p>
 				{withPassword && (
-					<label className="block text-sm">
+					<label className="block text-sm" htmlFor={passwordId}>
 						{t("account.password")}
 						<Input
 							autoComplete="current-password"
 							className="mt-1 block"
 							disabled={busy}
+							id={passwordId}
 							onChange={(e) => setPassword(e.target.value)}
 							required
 							type="password"
@@ -802,11 +867,20 @@ function WorkspacesGroup() {
 function useAllFiles() {
 	const { spaces } = useAccounts();
 	const ids = spaces.map((space) => space.id).join();
-	const list = useMemo(() => spaces.map((space) => replica(space.id).files), [ids]);
+	const list = useMemo(
+		() =>
+			ids
+				.split(",")
+				.filter(Boolean)
+				.map((id) => replica(id).files),
+		[ids],
+	);
 	const subscribe = useMemo(
 		() => (onChange: () => void) => {
 			const offs = list.map((files) => files.subscribe(onChange));
-			return () => offs.forEach((off) => off());
+			return () => {
+				for (const off of offs) off();
+			};
 		},
 		[list],
 	);
@@ -822,7 +896,10 @@ function DeviceFilesGroup() {
 		all.reduce((n, files) => n + files.status[field], 0);
 	// one choice for all workspaces
 	const setMode = (next: "online" | "local") => {
-		for (const files of all) files.setMode(next), next === "online" && void files.dropOriginals();
+		for (const files of all) {
+			files.setMode(next);
+			if (next === "online") void files.dropOriginals();
+		}
 	};
 	const status = [
 		t("settings.filesStatus", {
@@ -897,7 +974,9 @@ function Version() {
 	const { t } = useT();
 	const [info, setInfo] = useState<{ version: string; commit: string }>();
 	useEffect(() => {
-		serverInfo().then(setInfo, () => {});
+		serverInfo().then(setInfo, () => {
+			// offline: no version to show
+		});
 	}, []);
 	if (!info?.version) return null;
 	return (
@@ -1034,17 +1113,21 @@ function SpaceSettings({ space }: { space: Space }) {
 	const [tokenCreated, setTokenCreated] = useState<number | null>();
 	const [tokenError, setTokenError] = useState("");
 	const [removed, setRemoved] = useState(0);
-	useEffect(
-		() =>
-			void mcpTokenInfo(space).then(
-				(info) => setTokenCreated(info.created),
-				() => {},
-			),
-		[space.id],
-	);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: once per workspace, not on every new `space` object
+	useEffect(() => {
+		// offline: stays unknown
+		mcpTokenInfo(space).then(
+			(info) => setTokenCreated(info.created),
+			() => undefined,
+		);
+	}, [space.id]);
 	const newToken = () =>
 		mcpToken(space).then(
-			(c) => (setConnect(c), setTokenCreated(Date.now()), setTokenError("")),
+			(c) => {
+				setConnect(c);
+				setTokenCreated(Date.now());
+				setTokenError("");
+			},
 			() => setTokenFailed(true),
 		);
 	const removeToken = async () => {
@@ -1056,7 +1139,11 @@ function SpaceSettings({ space }: { space: Space }) {
 		});
 		if (!yes) return;
 		await revokeMcpToken(space).then(
-			() => (setConnect(null), setTokenCreated(null), setTokenError("")),
+			() => {
+				setConnect(null);
+				setTokenCreated(null);
+				setTokenError("");
+			},
 			(e) => setTokenError(errorText(e, t, "space")),
 		);
 	};
@@ -1232,6 +1319,7 @@ function SpaceSettings({ space }: { space: Space }) {
 
 /** Examples someone changed or uses are not preselected. */
 function ExamplesGroup() {
+	const listId = useId();
 	const repo = useRepo();
 	const { t } = useT();
 	const ix = repo.index();
@@ -1288,11 +1376,13 @@ function ExamplesGroup() {
 											"tap-row flex items-center gap-2 rounded-md px-2 py-1 text-sm",
 											example.inUse ? "text-muted-foreground" : "cursor-pointer hover:bg-hover",
 										)}
+										htmlFor={`${listId}-${example.id}`}
 									>
 										<Checkbox
 											checked={chosen.has(example.id)}
 											className="size-4 shrink-0"
 											disabled={example.inUse}
+											id={`${listId}-${example.id}`}
 											onCheckedChange={() => toggle(example.id)}
 										/>
 										{example.isType ? (

@@ -24,7 +24,7 @@ import {
 	Trash2,
 	Waypoints,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 import { moveSpace, type Space, useAccounts } from "../accounts";
 import { createAndOpen } from "../actions";
 import { Tip } from "../components/ui/tooltip";
@@ -110,13 +110,13 @@ function ResizeHandle({
 }) {
 	const { t } = useT();
 	return (
-		<div
+		<hr
 			aria-label={t("nav.resize")}
 			aria-orientation="vertical"
 			aria-valuemax={SIDEBAR_WIDTH.max}
 			aria-valuemin={SIDEBAR_WIDTH.min}
 			aria-valuenow={width}
-			className="absolute inset-y-0 -right-1 z-20 w-2 cursor-col-resize touch-none outline-none hover:bg-focus/40 focus-visible:bg-focus/40"
+			className="absolute inset-y-0 -right-1 z-20 h-auto w-2 cursor-col-resize touch-none border-0 outline-none hover:bg-focus/40 focus-visible:bg-focus/40"
 			onDoubleClick={() => onDone(SIDEBAR_WIDTH.initial)}
 			onKeyDown={(e) => {
 				const step = e.key === "ArrowLeft" ? -16 : e.key === "ArrowRight" ? 16 : 0;
@@ -131,11 +131,16 @@ function ResizeHandle({
 				let w = width;
 				document.body.style.cursor = "col-resize";
 				startPointerDrag(
-					(ev) => onWidth((w = clampWidth(width + ev.clientX - x0))),
-					() => ((document.body.style.cursor = ""), onDone(w)),
+					(ev) => {
+						w = clampWidth(width + ev.clientX - x0);
+						onWidth(w);
+					},
+					() => {
+						document.body.style.cursor = "";
+						onDone(w);
+					},
 				);
 			}}
-			role="separator"
 			tabIndex={0}
 		/>
 	);
@@ -192,6 +197,7 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
 			<div className="flex items-center px-2 pb-px pt-2">
 				<SpaceSelector className="flex-1" onNew={() => setCreating(true)} />
 			</div>
+			{/* biome-ignore lint/a11y/noStaticElementInteractions: dropping a dragged workspace between the others; the workspace menu moves them by keyboard */}
 			<div
 				className="relative min-h-0 flex-1 overflow-y-auto pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
 				onDragLeave={(e) =>
@@ -282,7 +288,10 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
 				<StatusButton className="ml-auto" />
 			</div>
 			<ResizeHandle
-				onDone={(w) => (setStoredWidth(w), setLiveWidth(null))}
+				onDone={(w) => {
+					setStoredWidth(w);
+					setLiveWidth(null);
+				}}
 				onWidth={setLiveWidth}
 				width={width}
 			/>
@@ -323,6 +332,7 @@ export function SpaceTree({ space, touch }: { space: Space; touch?: boolean }) {
 	const go = (path: string) => navigate(path, { space: space.id });
 	return (
 		<section aria-label={space.name} className="mt-3" data-space-block={space.id}>
+			{/* biome-ignore lint/a11y/noStaticElementInteractions: pointer shortcuts (drag, right-click); the row's buttons and "…" menu serve the keyboard */}
 			<div
 				className={cn(
 					"group/space flex h-7 items-center gap-0.5 rounded-lg",
@@ -401,11 +411,20 @@ export function SpaceTree({ space, touch }: { space: Space; touch?: boolean }) {
 						<>
 							<MenuItem
 								icon={<Settings size={14} />}
-								onClick={() => (close(), openSpaceSettings(space.id))}
+								onClick={() => {
+									close();
+									openSpaceSettings(space.id);
+								}}
 							>
 								{t("space.settings")}
 							</MenuItem>
-							<MenuItem icon={<Waypoints size={14} />} onClick={() => (close(), go("/graph"))}>
+							<MenuItem
+								icon={<Waypoints size={14} />}
+								onClick={() => {
+									close();
+									go("/graph");
+								}}
+							>
 								{t("nav.graph")}
 							</MenuItem>
 							{shown.length > 1 && (
@@ -414,7 +433,10 @@ export function SpaceTree({ space, touch }: { space: Space; touch?: boolean }) {
 									{at > 0 && (
 										<MenuItem
 											icon={<ArrowUp size={14} />}
-											onClick={() => (close(), reorder(shown[at - 1]?.id, true))}
+											onClick={() => {
+												close();
+												reorder(shown[at - 1]?.id, true);
+											}}
 										>
 											{t("space.moveUp")}
 										</MenuItem>
@@ -422,7 +444,10 @@ export function SpaceTree({ space, touch }: { space: Space; touch?: boolean }) {
 									{at < shown.length - 1 && (
 										<MenuItem
 											icon={<ArrowDown size={14} />}
-											onClick={() => (close(), reorder(shown[at + 1]?.id, false))}
+											onClick={() => {
+												close();
+												reorder(shown[at + 1]?.id, false);
+											}}
 										>
 											{t("space.moveDown")}
 										</MenuItem>
@@ -444,6 +469,7 @@ export function SpaceTree({ space, touch }: { space: Space; touch?: boolean }) {
 					<PinnedTree here={here} touch={touch} />
 					{/* a label over the types, not a row like the pinned: smaller, no hover; its "…" makes
               a new type or brings the default ones back */}
+					{/* biome-ignore lint/a11y/noStaticElementInteractions: right-click opens the menu that the "…" button beside it opens too */}
 					<div
 						className="group/types mt-2 flex items-center pr-1"
 						onContextMenu={touch ? undefined : typesMenu.onContextMenu}
@@ -479,13 +505,19 @@ export function SpaceTree({ space, touch }: { space: Space; touch?: boolean }) {
 								<>
 									<MenuItem
 										icon={<Plus size={14} />}
-										onClick={() => (close(), openNewType(space.id))}
+										onClick={() => {
+											close();
+											openNewType(space.id);
+										}}
 									>
 										{t("types.new")}
 									</MenuItem>
 									<MenuItem
 										icon={<RotateCcw size={14} />}
-										onClick={() => (close(), restoreTypes())}
+										onClick={() => {
+											close();
+											restoreTypes();
+										}}
 									>
 										{t("types.restore")}
 									</MenuItem>
@@ -508,8 +540,8 @@ function PinnedTree({ touch, here }: { touch?: boolean; here: boolean }) {
 	const route = useRoute();
 	const [open, setOpen] = useLocalStorage<Record<string, boolean>>(KEYS.sidebarTree, {});
 	const activeId = here && route.parts[0] === "i" ? route.parts[1] : undefined;
-	useEffect(() => {
-		if (!activeId) return;
+	// unfolds when the open page changes, with the tree as it is then
+	const unfold = useEffectEvent((activeId: string) => {
 		const chain = [...ix.homePath(activeId), activeId];
 		const root = chain.findIndex((id) => !!ix.get(id)?.pinned);
 		if (root < 0) return;
@@ -518,6 +550,9 @@ function PinnedTree({ touch, here }: { touch?: boolean; here: boolean }) {
 			.map((id, i) => `${i === 0 ? "" : chain[root + i - 1]}>${id}`);
 		if (keys.some((k) => !open[k]))
 			setOpen({ ...open, ...Object.fromEntries(keys.map((k) => [k, true])) });
+	});
+	useEffect(() => {
+		if (activeId) unfold(activeId);
 	}, [activeId]);
 	const roots = sidebarRoots(ix);
 	const isOpen = (key: string, depth: number) => open[key] ?? depth === 0;
@@ -526,6 +561,7 @@ function PinnedTree({ touch, here }: { touch?: boolean; here: boolean }) {
 	const keep = activeId ? [...ix.homePath(activeId), activeId] : [];
 	const tree = { isOpen, toggle, activeId, keep, touch };
 	return (
+		// biome-ignore lint/a11y/noStaticElementInteractions: drop target for dragging pages to the top level; pinning works from each page's menu
 		<div
 			className="min-h-1"
 			onDragOver={(e) => dragging && dragging.from !== "types" && e.preventDefault()}
@@ -801,6 +837,7 @@ function TreeNode({
 
 	return (
 		<div>
+			{/* biome-ignore lint/a11y/noStaticElementInteractions: dragging and the right-click menu; the link and the "…" button carry the same for keys */}
 			<div
 				className={cn(
 					"group/row relative flex items-center gap-1 rounded-lg pr-1",
@@ -909,21 +946,42 @@ function TreeNode({
 						{(close) => (
 							<>
 								{isType && (
-									<MenuItem onClick={() => (close(), editType(item.id, space))}>
+									<MenuItem
+										onClick={() => {
+											close();
+											editType(item.id, space);
+										}}
+									>
 										{t("type.edit")}
 									</MenuItem>
 								)}
-								<MenuItem onClick={() => (close(), repo.pin(item.id, !item.pinned))}>
+								<MenuItem
+									onClick={() => {
+										close();
+										repo.pin(item.id, !item.pinned);
+									}}
+								>
 									{item.pinned ? t("item.unpin") : t("item.pin")}
 								</MenuItem>
 								{parent && secondary && (
-									<MenuItem onClick={() => (close(), repo.setHome(item.id, parent))}>
+									<MenuItem
+										onClick={() => {
+											close();
+											repo.setHome(item.id, parent);
+										}}
+									>
 										{t("place.makeHome")}
 									</MenuItem>
 								)}
 								{/* types are deleted on their page, with the preview of what becomes of the values */}
 								{!isType && (
-									<MenuItem danger onClick={() => (close(), toTrash())}>
+									<MenuItem
+										danger
+										onClick={() => {
+											close();
+											toTrash();
+										}}
+									>
 										{t("item.delete")}
 									</MenuItem>
 								)}

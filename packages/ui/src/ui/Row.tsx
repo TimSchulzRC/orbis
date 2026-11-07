@@ -38,7 +38,10 @@ export function StatusMenu({
 									active={o.id === selected}
 									icon={<StatusGlyph option={o} size={14} />}
 									key={o.id}
-									onClick={() => (close(), void setStatus(item, o.id, repo))}
+									onClick={() => {
+										close();
+										void setStatus(item, o.id, repo);
+									}}
 								>
 									{o.name}
 								</MenuItem>

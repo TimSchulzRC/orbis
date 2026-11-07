@@ -21,6 +21,9 @@ import { setupStore, tool as storeTool } from "../support/store";
 
 afterAll(removeTempDirs);
 
+const noop = () => undefined;
+const done = () => Promise.resolve();
+
 /** A device's connection as the workspace sees it; what the server sends lands in `got`. */
 function serverSide(w: Workspace) {
 	const got: ServerMsg[] = [];
@@ -33,7 +36,7 @@ function serverSide(w: Workspace) {
 			user: { id: "u", name: "Tim" },
 		} satisfies Conn,
 		send: (s: string) => got.push(JSON.parse(s)),
-		close() {},
+		close: noop,
 	};
 	w.conns.add(ws as never);
 	return { ws: ws as never, got };
@@ -174,21 +177,25 @@ test("a device drops purged documents from memory and storage and ignores them a
 	const rows: StoredRow[] = [];
 	const outbox: OutItem[] = [];
 	const storage: ReplicaStorage = {
-		open: async () => {},
+		open: done,
 		load: async () => ({ rows: [], outbox: [] }),
-		compact: async () => {},
-		write: async (x) => void (rows.push(...(x.rows ?? [])), outbox.push(...(x.outbox ?? []))),
+		compact: done,
+		write: (x) => {
+			rows.push(...(x.rows ?? []));
+			outbox.push(...(x.outbox ?? []));
+			return done();
+		},
 		outbox: async () => outbox,
 		drop: async (ids) => void dropped.push(ids),
 		serverId: async () => undefined,
-		destroy: async () => {},
+		destroy: done,
 	};
 	// the device talks to the workspace in this process
 	const conn = serverSide(w);
 	const socket: SyncSocket = {
 		readyState: 1,
 		send: (m) => w.message(conn.ws, JSON.parse(m)),
-		close() {},
+		close: noop,
 		onopen: null,
 		onmessage: null,
 		onclose: null,
@@ -198,7 +205,10 @@ test("a device drops purged documents from memory and storage and ignores them a
 	const repo = new Repo({
 		storage,
 		device: "test",
-		connect: () => (queueMicrotask(() => socket.onopen?.()), socket),
+		connect: () => {
+			queueMicrotask(() => socket.onopen?.());
+			return socket;
+		},
 		post: async (path, body) => {
 			const res = await w.handle(
 				new Request(`http://x/w/w${path}`, {
@@ -213,8 +223,8 @@ test("a device drops purged documents from memory and storage and ignores them a
 		},
 		askOtherServer: async () => null,
 		confirmDiscard: async () => false,
-		tooNew() {},
-		reload() {},
+		tooNew: noop,
+		reload: noop,
 	});
 	await repo.init();
 	for (let i = 0; i < 50 && !repo.status.synced; i++) await Bun.sleep(5);

@@ -853,7 +853,10 @@ export class Ops {
 			return;
 		}
 		if (opts.outline) out.outline = heads.map(fmt);
-		if (opts.full) return void (out[key] = text.slice(start, end));
+		if (opts.full) {
+			out[key] = text.slice(start, end);
+			return;
+		}
 		const from = opts.offset ?? start;
 		if (from < start || from >= end)
 			throw new OpError(
@@ -924,7 +927,10 @@ export class Ops {
 	/** Mirrors the focus section of the start page. */
 	focus(touched?: Set<string>) {
 		const ix = this.ix;
-		const line = (i: Item) => (touched?.add(i.id), this.line(i));
+		const line = (i: Item) => {
+			touched?.add(i.id);
+			return this.line(i);
+		};
 		const today = todayISO();
 		const in7 = relDate("+7d", today)!;
 		// nothing from finished projects in the urgent lists
@@ -952,12 +958,10 @@ export class Ops {
 				.map((i) => line(i)),
 			inbox: runQuery({ where: { inbox: true } }, { ix }).total,
 			changed_by_people_last_3_days: this.peopleChanged(touched),
-			recent_activity: this.activityFeed({ days: 3, limit: 10 }).entries.map(
-				(e) => (
-					e.doc && touched?.add(e.doc),
-					`${this.entryHead(e)}${e.changes.length ? `: ${this.changeTexts(e).join("; ")}` : ""}`
-				),
-			),
+			recent_activity: this.activityFeed({ days: 3, limit: 10 }).entries.map((e) => {
+				if (e.doc) touched?.add(e.doc);
+				return `${this.entryHead(e)}${e.changes.length ? `: ${this.changeTexts(e).join("; ")}` : ""}`;
+			}),
 		};
 	}
 
@@ -2144,6 +2148,7 @@ const shq = (s: string) => `'${s.replace(/'/g, "'\\''")}'`;
 /** A file's name as given by an agent or a script: no folders, no control characters. */
 export function fileName(raw: string): string {
 	const name = (raw.split(/[\\/]/).pop() ?? "")
+		// biome-ignore lint/suspicious/noControlCharactersInRegex: stripping control characters is what this regex is for
 		.replace(/[\u0000-\u001f\u007f]/g, "")
 		.trim()
 		.slice(0, 200);

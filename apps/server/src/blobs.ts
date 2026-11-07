@@ -114,7 +114,9 @@ export class Blobs {
 				}
 			await sink.end();
 		} catch (e) {
-			await Promise.resolve(sink.end()).catch(() => {});
+			await Promise.resolve(sink.end()).catch(() => {
+				// the write failed already; that error is the one to throw
+			});
 			if (existsSync(tmp)) unlinkSync(tmp);
 			throw e;
 		}
@@ -224,9 +226,10 @@ export class Blobs {
 			}
 		} else {
 			// a content that can't be read is marked as read too, so it isn't tried at every start
-			const got = await extractText(src, f.name).catch(
-				(e) => (console.warn("[blobs] no text from", f.name, e?.message ?? e), undefined),
-			);
+			const got = await extractText(src, f.name).catch((e) => {
+				console.warn("[blobs] no text from", f.name, e?.message ?? e);
+				return;
+			});
 			if (got?.pages) patch.pages = got.pages;
 			// the whole text first, so the search finds it once the facts change
 			if (got?.text && got.text.length > FACTS_TEXT) this.keepText(f.hash, got.text);

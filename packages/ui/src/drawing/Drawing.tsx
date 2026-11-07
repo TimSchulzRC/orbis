@@ -12,6 +12,7 @@ import { repo as current } from "../repo";
 import { notify } from "../ui/feedback";
 import { escapeHtml } from "../ui/text";
 import { onLibraryLink } from "./library-link";
+import { getLiveLibrary } from "./live-library";
 import { drawingSvg, forgetDrawingSvg, loadExcalidraw, readLibrary, saveLibrary } from "./scene";
 
 /**
@@ -22,14 +23,21 @@ type EditorModule = typeof import("./DrawingEditor");
 let editorModule: Promise<EditorModule> | undefined;
 let Editor: EditorModule["default"] | null = null;
 export function loadEditor(): Promise<EditorModule> {
-	return (editorModule ??= import("./DrawingEditor").then(
-		(m) => ((Editor = m.default), m),
+	editorModule ??= import("./DrawingEditor").then(
+		(m) => {
+			Editor = m.default;
+			return m;
+		},
 		(e) => {
 			editorModule = undefined;
 			throw e;
 		},
-	));
+	);
+	return editorModule;
 }
+
+// fetching ahead may fail quietly: opening the drawing tries again and reports it
+const ignoreLoadError = () => undefined;
 
 const OPEN = "d";
 const openId = () => new URLSearchParams(location.hash.split("?")[1] ?? "").get(OPEN);
@@ -37,7 +45,7 @@ const openId = () => new URLSearchParams(location.hash.split("?")[1] ?? "").get(
 export function openDrawing(id: string) {
 	// keys go to the drawing, not to the note's text the click came from
 	if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
-	void loadEditor().catch(() => {});
+	void loadEditor().catch(ignoreLoadError);
 	const [path, qs] = location.hash.replace(/^#/, "").split("?");
 	const query = new URLSearchParams(qs ?? "");
 	query.set(OPEN, id);
@@ -50,13 +58,6 @@ function closeDrawing() {
 	const id = openId();
 	if (id && history.state?.drawing === id) history.back();
 	else setParams({ [OPEN]: null });
-}
-
-/** The open drawing takes a library itself (it shows it at once); returns the way to let go. */
-let liveLibrary: ((blob: Blob) => Promise<void>) | null = null;
-export function setLiveLibrary(fn: (blob: Blob) => Promise<void>) {
-	liveLibrary = fn;
-	return () => void (liveLibrary === fn && (liveLibrary = null));
 }
 
 /** Only libraries from Excalidraw's own collection come in this way. */
@@ -74,7 +75,11 @@ onLibraryLink(async (raw) => {
 	if (!url) return notify(tr("drawing.libraryFailed"));
 	try {
 		const blob = await (await fetch(url)).blob();
-		if (liveLibrary) return void (await liveLibrary(blob));
+		const liveLibrary = getLiveLibrary();
+		if (liveLibrary) {
+			await liveLibrary(blob);
+			return;
+		}
 		// no drawing open (the link came to a tab of its own): into the library for the next one
 		const { loadLibraryFromBlob, mergeLibraryItems } = await loadExcalidraw();
 		saveLibrary(mergeLibraryItems(readLibrary(), await loadLibraryFromBlob(blob, "published")));
@@ -101,14 +106,17 @@ export const DrawingHost = memo(function DrawingHost() {
 		if (id && !Editor)
 			loadEditor().then(
 				() => loaded((n) => n + 1),
-				(e) => (console.warn("drawing editor not loaded", e), closeDrawing()),
+				(e) => {
+					console.warn("drawing editor not loaded", e);
+					closeDrawing();
+				},
 			);
 	}, [id]);
 	const shown = useRef<string | null>(null);
 	useEffect(() => {
 		const was = shown.current;
 		shown.current = id;
-		if (was && was !== id) closedListeners.forEach((l) => l(was));
+		if (was && was !== id) for (const l of closedListeners) l(was);
 	}, [id]);
 	if (!id) return null;
 	if (!Editor) return <Loading />;
@@ -135,56 +143,59 @@ export function hydrateDrawings(root: HTMLElement, repo: Repo = current, files =
 	// a drawing on the page: its editor is fetched while nothing else happens, so a tap opens it at once
 	if (!editorModule && root.querySelector("[data-drawing]")) {
 		const idle = window.requestIdleCallback ?? ((f: () => void) => setTimeout(f, 200));
-		idle(() => void loadEditor().catch(() => {}), { timeout: 3000 });
+		idle(() => void loadEditor().catch(ignoreLoadError), { timeout: 3000 });
 	}
-	root.querySelectorAll<HTMLElement>("[data-drawing]").forEach((fig) => {
-		if (fig.dataset.drawn) return;
-		fig.dataset.drawn = "1";
-		const id = fig.dataset.drawing!;
-		const item = repo.get(id);
-		const box = fig.querySelector<HTMLElement>(".embed-drawing-svg")!;
-		const show = (e: Event) => {
-			e.preventDefault();
-			e.stopPropagation();
-			openDrawing(id);
-		};
-		box.addEventListener("click", show);
-		box.addEventListener("pointerenter", () => void loadEditor().catch(() => {}), { once: true });
-		box.addEventListener("keydown", (e) => (e.key === "Enter" || e.key === " ") && show(e));
-		if (!item?.drawing?.count) return;
-		let waiting = false;
-		const draw = (): void => {
-			// drawn on full screen right now: once it closes, with what it has then
-			if (isOpen(id)) {
-				if (waiting) return;
-				waiting = true;
-				const stop = onDrawingClosed((closed) => {
-					if (closed !== id) return;
-					stop();
-					waiting = false;
-					if (fig.isConnected) draw();
-				});
-				return;
-			}
-			const now = repo.get(id);
-			void drawingSvg(id, repo.getDoc(id), now?.updated ?? item.updated, dark, files).then(
-				(svg) => {
-					if (!svg) return;
-					// full width; the height follows the drawing's proportions within the block's limits (styles.css)
-					const [, , w, h] = (svg.getAttribute("viewBox") ?? "").split(/\s+/).map(Number);
-					if (w && h) box.style.aspectRatio = `${w} / ${h}`;
-					box.replaceChildren(svg);
-				},
-			);
-		};
-		draw();
-		if (!item.drawing.files.length) return;
-		// an image still uploading elsewhere: drawn again once it is here; a removed embed stops listening
-		const stop = repo.onBlob((hash) => {
-			if (!fig.isConnected) return void stop();
-			if (!item.drawing!.files.includes(hash)) return;
-			forgetDrawingSvg(id);
-			draw();
+	for (const fig of root.querySelectorAll<HTMLElement>("[data-drawing]"))
+		hydrateDrawing(fig, repo, files, dark);
+}
+
+function hydrateDrawing(fig: HTMLElement, repo: Repo, files: typeof currentFiles, dark: boolean) {
+	if (fig.dataset.drawn) return;
+	fig.dataset.drawn = "1";
+	const id = fig.dataset.drawing!;
+	const item = repo.get(id);
+	const box = fig.querySelector<HTMLElement>(".embed-drawing-svg")!;
+	const show = (e: Event) => {
+		e.preventDefault();
+		e.stopPropagation();
+		openDrawing(id);
+	};
+	box.addEventListener("click", show);
+	box.addEventListener("pointerenter", () => void loadEditor().catch(ignoreLoadError), {
+		once: true,
+	});
+	box.addEventListener("keydown", (e) => (e.key === "Enter" || e.key === " ") && show(e));
+	if (!item?.drawing?.count) return;
+	let waiting = false;
+	const draw = (): void => {
+		// drawn on full screen right now: once it closes, with what it has then
+		if (isOpen(id)) {
+			if (waiting) return;
+			waiting = true;
+			const stop = onDrawingClosed((closed) => {
+				if (closed !== id) return;
+				stop();
+				waiting = false;
+				if (fig.isConnected) draw();
+			});
+			return;
+		}
+		const now = repo.get(id);
+		void drawingSvg(id, repo.getDoc(id), now?.updated ?? item.updated, dark, files).then((svg) => {
+			if (!svg) return;
+			// full width; the height follows the drawing's proportions within the block's limits (styles.css)
+			const [, , w, h] = (svg.getAttribute("viewBox") ?? "").split(/\s+/).map(Number);
+			if (w && h) box.style.aspectRatio = `${w} / ${h}`;
+			box.replaceChildren(svg);
 		});
+	};
+	draw();
+	if (!item.drawing.files.length) return;
+	// an image still uploading elsewhere: drawn again once it is here; a removed embed stops listening
+	const stop = repo.onBlob((hash) => {
+		if (!fig.isConnected) return void stop();
+		if (!item.drawing!.files.includes(hash)) return;
+		forgetDrawingSvg(id);
+		draw();
 	});
 }

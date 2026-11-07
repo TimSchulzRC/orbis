@@ -108,7 +108,11 @@ export function TypeEditor({ item, onClose }: { item: Item; onClose: () => void 
 	const previous = useRef<HTMLElement | null>(document.activeElement as HTMLElement);
 	// a property that is gone (removed here or on another device) shows the list again
 	const prop = page === "props" ? schema.properties.find((p) => p.id === open) : undefined;
-	const go = (next: Page) => (setPage(next), setOpen(undefined), setLeft(undefined));
+	const go = (next: Page) => {
+		setPage(next);
+		setOpen(undefined);
+		setLeft(undefined);
+	};
 	const pages: {
 		id: Page;
 		label: string;
@@ -120,8 +124,14 @@ export function TypeEditor({ item, onClose }: { item: Item; onClose: () => void 
 		{ id: "caps", label: t("caps.title"), icon: Sparkles },
 	];
 	const label = pages.find((p) => p.id === page)!.label;
-	const back = () => (open && setLeft({ id: open, added: open === added }), setOpen(undefined));
-	const onAdded = (id: string) => (setAdded(id), setOpen(id));
+	const back = () => {
+		if (open) setLeft({ id: open, added: open === added });
+		setOpen(undefined);
+	};
+	const onAdded = (id: string) => {
+		setAdded(id);
+		setOpen(id);
+	};
 
 	return (
 		<DialogRoot
@@ -232,7 +242,10 @@ function GeneralPage({ item, setDialog }: { item: Item; setDialog: (m: Modal) =>
 	const change = (fn: (doc: Y.Doc) => void) => repo.change(item.id, fn);
 	const rename = (v: string) => {
 		if (!v || v === schema.name) return;
-		change((d) => (setSchemaField(d, "name", v), setMeta(d, { title: v })));
+		change((d) => {
+			setSchemaField(d, "name", v);
+			setMeta(d, { title: v });
+		});
 		followTypeRename(repo.writer, ix, schema.name, v);
 	};
 	const plural = ix.typePlural(item.id);
@@ -346,7 +359,10 @@ function LookPicker({ item }: { item: Item }) {
 										schema.icon === n && "bg-hover",
 									)}
 									key={n}
-									onClick={() => (set("icon", n), close())}
+									onClick={() => {
+										set("icon", n);
+										close();
+									}}
 									variant="plain"
 								>
 									<Icon size={16} style={{ color: pal(schema.color) }} />
@@ -456,18 +472,29 @@ function CapsPage({ item }: { item: Item }) {
 function useDragRows(onDrop: (from: string, to: string) => void) {
 	const [drag, setDrag] = useState<string | null>(null);
 	const [over, setOver] = useState<string | null>(null);
-	const end = () => (setDrag(null), setOver(null));
+	const end = () => {
+		setDrag(null);
+		setOver(null);
+	};
 	const row = (id: string) => ({
 		draggable: true,
-		onDragStart: (e: React.DragEvent) => (
-			e.dataTransfer.setData("text/plain", id), (e.dataTransfer.effectAllowed = "move"), setDrag(id)
-		),
+		onDragStart: (e: React.DragEvent) => {
+			e.dataTransfer.setData("text/plain", id);
+			e.dataTransfer.effectAllowed = "move";
+			setDrag(id);
+		},
 		onDragEnd: end,
-		onDragOver: (e: React.DragEvent) => drag && drag !== id && (e.preventDefault(), setOver(id)),
+		onDragOver: (e: React.DragEvent) => {
+			if (!drag || drag === id) return;
+			e.preventDefault();
+			setOver(id);
+		},
 		onDragLeave: () => setOver((o) => (o === id ? null : o)),
-		onDrop: (e: React.DragEvent) => (
-			e.preventDefault(), drag && drag !== id && onDrop(drag, id), end()
-		),
+		onDrop: (e: React.DragEvent) => {
+			e.preventDefault();
+			if (drag && drag !== id) onDrop(drag, id);
+			end();
+		},
 	});
 	return { row, over, drag };
 }
@@ -566,7 +593,9 @@ function PropGroup({
 	const buttons = useRef(new Map<string, HTMLButtonElement>());
 	useEffect(() => {
 		const el = left && buttons.current.get(left.id);
-		if (el) el.scrollIntoView({ block: "nearest" }), el.focus({ preventScroll: true });
+		if (!el) return;
+		el.scrollIntoView({ block: "nearest" });
+		el.focus({ preventScroll: true });
 	}, [left]);
 	return (
 		<SettingsGroup hint={hint} title={title}>
@@ -694,31 +723,31 @@ function PropPage({ item, prop }: { item: Item; prop: PropDef }) {
 			...next,
 		});
 	};
-	const rename = (v: string) =>
-		v &&
-		v !== prop.name &&
-		(set({ name: v }),
+	const rename = (v: string) => {
+		if (!v || v === prop.name) return;
+		set({ name: v });
 		followPropChange(
 			repo.writer,
 			ix,
 			{ type: item.id, prop: prop.id, from: prop.name, to: v },
 			lang,
-		));
-	const remove = () => (
-		repo.change(item.id, (d) => removeProp(d, prop.id)),
+		);
+	};
+	const remove = () => {
+		repo.change(item.id, (d) => removeProp(d, prop.id));
 		followPropChange(
 			repo.writer,
 			ix,
 			{ type: item.id, prop: prop.id, from: prop.name, to: null },
 			lang,
-		)
-	);
+		);
+	};
 	const options = prop.options ?? [];
 	const setOptions = (next: OptionDef[]) =>
 		set({
 			options: next,
 			...(prop.default && !next.some((o) => o.id === prop.default)
-				? { default: isStatus ? next[0]?.id : (null as any) }
+				? { default: isStatus ? next[0]?.id : null }
 				: {}),
 		});
 	const types = [...ix.types.values()];
@@ -801,7 +830,7 @@ function PropPage({ item, prop }: { item: Item; prop: PropDef }) {
 							<NativeSelect
 								aria-label={t("type.default")}
 								className={SELECT}
-								onChange={(e) => set({ default: e.target.value || (null as any) })}
+								onChange={(e) => set({ default: e.target.value || null })}
 								value={prop.default ?? ""}
 							>
 								{!isStatus && <option value="">{t("type.defaultNone")}</option>}
@@ -1041,7 +1070,10 @@ function OptionGroups({
 										o.color === c ? "border-fg" : "border-transparent",
 									)}
 									key={c}
-									onClick={() => (patch(o.id, { color: c }), close())}
+									onClick={() => {
+										patch(o.id, { color: c });
+										close();
+									}}
 									style={{ background: pal(c) }}
 									variant="plain"
 								/>
@@ -1053,7 +1085,10 @@ function OptionGroups({
 								<p className="px-1 pb-1 text-xs text-muted-foreground">{t("type.group")}</p>
 								<Seg
 									label={t("type.group")}
-									onChange={(g) => (moveTo(o, g), close())}
+									onChange={(g) => {
+										moveTo(o, g);
+										close();
+									}}
 									options={STATUS_GROUPS.map((g) => ({ value: g, label: t(`group.${g}`) }))}
 									value={groupOf(o)}
 								/>
@@ -1524,9 +1559,10 @@ function TargetField({
 			{creating && (
 				<NewTypeDialog
 					onClose={() => setCreating(false)}
-					onCreated={(id) => (
-						setMode("type"), onChange(printQuery({ where: { type: id } }, lang, repo.index()))
-					)}
+					onCreated={(id) => {
+						setMode("type");
+						onChange(printQuery({ where: { type: id } }, lang, repo.index()));
+					}}
 					title={t("type.targetNewTitle")}
 				/>
 			)}

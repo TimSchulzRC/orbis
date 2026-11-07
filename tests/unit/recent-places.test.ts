@@ -2,12 +2,13 @@
 import { afterAll, expect, test } from "bun:test";
 
 // actions.ts belongs to the web app: just enough browser for it to load
-const g = globalThis as any;
+const noop = () => undefined;
+const g = globalThis as unknown as Record<string, unknown>;
 const stubs: Record<string, unknown> = {
 	window: g,
 	document: { documentElement: {} },
 	location: { hash: "", origin: "http://localhost" },
-	matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }),
+	matchMedia: () => ({ matches: false, addEventListener: noop, removeEventListener: noop }),
 	localStorage: (() => {
 		const m = new Map<string, string>();
 		return {
@@ -26,7 +27,10 @@ const {
 }: { recentPlaces: (repo: unknown) => string[]; rememberPlace: (id: string) => void } =
 	await import(actions);
 afterAll(() => {
-	for (const [k, v] of Object.entries(before)) v === undefined ? delete g[k] : (g[k] = v);
+	for (const [k, v] of Object.entries(before)) {
+		if (v === undefined) delete g[k];
+		else g[k] = v;
+	}
 });
 
 const space = (...ids: string[]) => ({

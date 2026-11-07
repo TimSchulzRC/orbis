@@ -129,6 +129,7 @@ body {
 	input:not([data-large]),
 	textarea:not([data-large]),
 	select {
+		/* biome-ignore lint/complexity/noImportantStyles: a smaller size anywhere, inline or utility, brings the zoom back */
 		font-size: 16px !important;
 	}
 }
@@ -210,6 +211,13 @@ body {
 	max-width: 100%;
 	border-radius: 6px;
 }
+/* so numbers line up in lists and tables */
+table,
+time,
+[data-id] {
+	font-variant-numeric: tabular-nums;
+}
+
 /* A table: wider than the text it scrolls sideways in its own box; long cells wrap at words. */
 .md-table {
 	max-width: 100%;
@@ -251,7 +259,7 @@ body {
 
 .cm-editor {
 	font-size: 16px;
-	background: transparent !important;
+	background: transparent;
 }
 /* reading line length on larger screens; blocks and embeds keep the full width */
 @media (min-width: 768px) {
@@ -259,6 +267,7 @@ body {
 		max-width: 72ch;
 	}
 }
+/* biome-ignore-start lint/complexity/noImportantStyles: CodeMirror injects its base theme at runtime, after this sheet and with higher specificity */
 .cm-editor.cm-focused {
 	outline: none !important;
 }
@@ -281,6 +290,25 @@ body {
 .cm-focused .cm-selectionBackground {
 	background: color-mix(in srgb, var(--focus) 25%, transparent) !important;
 }
+/* biome-ignore-end lint/complexity/noImportantStyles: CodeMirror injects its base theme at runtime, after this sheet and with higher specificity */
+/* A table in the editor: drawn like in read-only text; a click into it shows its Markdown. */
+.cm-table {
+	min-width: 0;
+	max-width: 100%;
+	padding: 4px 0 6px;
+	line-height: 1.5;
+	cursor: text;
+}
+.cm-table a {
+	cursor: pointer;
+}
+/* its Markdown while editing: the same width for every letter, so the columns read as columns */
+.cm-line.cm-tablesrc {
+	font-family: var(--font-mono);
+	font-size: 0.84em;
+	line-height: 1.6;
+}
+
 .cm-wikilink {
 	font-weight: 500;
 	color: var(--link);
@@ -315,12 +343,13 @@ body {
 .cm-embed .embed-media {
 	max-width: 560px;
 }
+/* biome-ignore-start lint/complexity/noImportantStyles: CodeMirror injects its base theme at runtime, after this sheet and with higher specificity */
 .cm-tooltip-autocomplete {
 	padding: 4px 0;
 	overflow: hidden;
 	background: var(--surface) !important;
 	border: none !important;
-	border-radius: 10px !important;
+	border-radius: 10px;
 	box-shadow: var(--shadow-pop);
 }
 .cm-tooltip-autocomplete > ul {
@@ -356,6 +385,15 @@ body {
 	align-items: center;
 	min-width: 0;
 }
+.cm-completionLabel {
+	font-family: var(--font-sans);
+}
+.cm-completionDetail {
+	margin-left: 0.6em;
+	font-style: normal !important;
+	color: var(--muted-foreground);
+}
+/* biome-ignore-end lint/complexity/noImportantStyles: CodeMirror injects its base theme at runtime, after this sheet and with higher specificity */
 .cm-slash ~ .cm-completionLabel,
 .cm-slash ~ .cm-completionDetail {
 	display: none;
@@ -426,15 +464,8 @@ body {
 	flex-direction: column;
 	min-width: 0;
 }
-.cm-completionLabel {
-	font-family: var(--font-sans);
-}
-.cm-completionDetail {
-	margin-left: 0.6em;
-	font-style: normal !important;
-	color: var(--muted-foreground);
-}
 .cm-placeholder {
+	/* biome-ignore lint/complexity/noImportantStyles: CodeMirror injects its base theme at runtime, after this sheet and with higher specificity */
 	color: var(--faint) !important; /* placeholders may be faint (design rules § 1.1) */
 }
 
@@ -531,13 +562,6 @@ body {
 	}
 }
 
-/* so numbers line up in lists and tables */
-table,
-time,
-[data-id] {
-	font-variant-numeric: tabular-nums;
-}
-
 /* Query blocks must not make the text wider than the screen; lists truncate instead. */
 .cm-lineWrapping {
 	min-width: 0;
@@ -545,24 +569,6 @@ time,
 .cm-queryblock {
 	min-width: 0;
 	max-width: 100%;
-}
-
-/* A table in the editor: drawn like in read-only text; a click into it shows its Markdown. */
-.cm-table {
-	min-width: 0;
-	max-width: 100%;
-	padding: 4px 0 6px;
-	line-height: 1.5;
-	cursor: text;
-}
-.cm-table a {
-	cursor: pointer;
-}
-/* its Markdown while editing: the same width for every letter, so the columns read as columns */
-.cm-line.cm-tablesrc {
-	font-family: var(--font-mono);
-	font-size: 0.84em;
-	line-height: 1.6;
 }
 
 /* read-only text (the start page) */
@@ -583,8 +589,10 @@ time,
 .cell-tools button:not(.tap-y) {
 	opacity: 0;
 }
-tr:hover .cell-tools button:not(.tap-y),
 .cell-tools:focus-within button:not(.tap-y) {
+	opacity: 0.7;
+}
+tr:hover .cell-tools button:not(.tap-y) {
 	opacity: 0.7;
 }
 @media (pointer: coarse) {
@@ -661,10 +669,12 @@ tr:hover .cell-tools button:not(.tap-y),
 	}
 }
 @media (prefers-reduced-motion: reduce) {
+	/* biome-ignore-start lint/complexity/noImportantStyles: reduced motion has to win over every component's own timing */
 	[data-slot] {
 		transition-duration: 0.01ms !important;
 		animation-duration: 0.01ms !important;
 	}
+	/* biome-ignore-end lint/complexity/noImportantStyles: reduced motion has to win over every component's own timing */
 }
 /* the title is edited in place like body text: no ring */
 textarea.page-title.field:focus {
@@ -672,6 +682,7 @@ textarea.page-title.field:focus {
 }
 
 /* the size sits on the line, so an empty heading is as high as a written one */
+/* biome-ignore-start lint/complexity/noImportantStyles: the line padding has to beat CodeMirror's base theme and the !important .cm-line rule above */
 .cm-line.cm-h {
 	padding-bottom: 1px !important;
 	font-weight: 650;
@@ -699,6 +710,7 @@ textarea.page-title.field:focus {
 .cm-content > .cm-line.cm-h:first-child {
 	padding-top: 3px !important;
 }
+/* biome-ignore-end lint/complexity/noImportantStyles: the line padding has to beat CodeMirror's base theme and the !important .cm-line rule above */
 .cm-bullet {
 	display: inline-block;
 	width: 1.5em;
@@ -747,6 +759,7 @@ textarea.page-title.field:focus {
 	text-decoration: line-through;
 	text-decoration-color: color-mix(in srgb, var(--muted-foreground) 60%, transparent);
 }
+/* biome-ignore-start lint/complexity/noImportantStyles: the line padding has to beat CodeMirror's base theme and the !important .cm-line rule; code spans drop the syntax highlight styles */
 .cm-line.cm-quote {
 	padding-left: 14px !important;
 	border-left: 3px solid var(--text);
@@ -782,6 +795,7 @@ textarea.page-title.field:focus {
 	color: inherit !important;
 	background: none !important;
 }
+/* biome-ignore-end lint/complexity/noImportantStyles: the line padding has to beat CodeMirror's base theme and the !important .cm-line rule; code spans drop the syntax highlight styles */
 .cm-mdlink {
 	color: var(--link);
 	text-decoration: underline;
@@ -848,7 +862,9 @@ textarea.page-title.field:focus {
 	display: block;
 }
 body.cm-dragging,
+/* biome-ignore lint/style/noDescendingSpecificity: belongs with the drag handles; it shares no property with .cm-line.cm-codeblock *, so the order does not matter */
 body.cm-dragging * {
+	/* biome-ignore lint/complexity/noImportantStyles: while dragging, the grab cursor wins over every element's own cursor */
 	cursor: grabbing !important;
 	user-select: none;
 }

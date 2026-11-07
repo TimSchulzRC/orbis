@@ -505,7 +505,8 @@ export function initItem(doc: Y.Doc, init: ItemInit, now = Date.now()) {
 	if (init.rules?.trim()) doc.getText("rules").insert(0, init.rules);
 	for (const t of init.tags ?? []) setMember(doc, "tags", t, true);
 	for (const r of init.refs ?? []) setMember(doc, "refs", r, true);
-	(init.parents ?? []).forEach((p, i) => addParent(doc, p, undefined, (init.created ?? now) + i));
+	for (const [i, p] of (init.parents ?? []).entries())
+		addParent(doc, p, undefined, (init.created ?? now) + i);
 	for (const [k, v] of Object.entries(init.props ?? {})) setProp(doc, k, v);
 	for (const [k, v] of Object.entries(init.extra ?? {})) setExtra(doc, k, v);
 	for (const [p, ids] of Object.entries(init.rels ?? {}))
@@ -674,7 +675,10 @@ function keyedRefs(doc: Y.Doc): Y.Map<string> {
 	for (const k of refOrder(doc)) {
 		const v = m.get(k)!;
 		if (prev === null || cmpKey(v, prev) > 0) prev = v;
-		else m.set(k, (prev = keyBetween(prev, null)));
+		else {
+			prev = keyBetween(prev, null);
+			m.set(k, prev);
+		}
 	}
 	return m;
 }
@@ -900,7 +904,8 @@ export function setTab(doc: Y.Doc, id: string, patch: Patch<Omit<ViewTab, "id">>
 		if (found instanceof Y.Map) m = found;
 		else {
 			const o = plain(found);
-			tabs.set(id, (m = toMap(isObject(o) ? o : {})));
+			m = toMap(isObject(o) ? o : {});
+			tabs.set(id, m);
 		}
 		for (const [k, v] of Object.entries(patch)) {
 			if (v === undefined) continue;

@@ -6,7 +6,7 @@ import type { Store } from "@obtion/server/store";
 import { redoStep, UndoError, undoStep } from "@obtion/server/undo";
 import * as Y from "yjs";
 import { removeTempDirs } from "../support/helpers";
-import { setupStore, stepOf } from "../support/store";
+import { ok, setupStore, stepOf } from "../support/store";
 
 afterAll(removeTempDirs);
 
@@ -23,19 +23,16 @@ const byTitle = (t: string) =>
 test("one agent step with several changes is taken back as a whole, across items", () => {
 	ops.call(
 		AG,
-		() => (
+		ok(() =>
 			ops.create(
 				{ title: "Nordlicht · France", type: "Projekt", properties: { Status: "Planung" } },
 				AG,
 			),
-			"ok"
 		),
 	);
 	ops.call(
 		AG,
-		() => (
-			ops.create({ title: "Mapping", type: "Task", parents: ["Nordlicht · France"] }, AG), "ok"
-		),
+		ok(() => ops.create({ title: "Mapping", type: "Task", parents: ["Nordlicht · France"] }, AG)),
 	);
 	// "Nordlicht: mapping done, review on Friday" (the German workspace takes "erledigt" and "Freitag")
 	const out = ops.call(AG, () => {
@@ -76,23 +73,25 @@ test("one agent step with several changes is taken back as a whole, across items
 });
 
 test("fields changed again later keep their newer value", () => {
-	ops.call(AG, () => (ops.create({ title: "Website", type: "Projekt" }, AG), "ok"));
+	ops.call(
+		AG,
+		ok(() => ops.create({ title: "Website", type: "Projekt" }, AG)),
+	);
 	const step = stepOf(
 		ops.call(
 			AG,
-			() => (
+			ok(() =>
 				ops.update(
 					"Website",
 					{ title: "Website new", properties: { Status: "aktiv" }, tags_add: ["web"] },
 					AG,
 				),
-				"ok"
 			),
 		),
 	);
 	ops.call(
 		"web:tim@phone",
-		() => (ops.update("Website new", { title: "Website 2027" }, "web:tim@phone"), "ok"),
+		ok(() => ops.update("Website new", { title: "Website 2027" }, "web:tim@phone")),
 	);
 	const r = undoStep(s, step, AG);
 	const w = byTitle("Website 2027");
@@ -103,8 +102,14 @@ test("fields changed again later keep their newer value", () => {
 });
 
 test("a step pushed by a device (delete with cascade over two documents) can be undone", () => {
-	ops.call(AG, () => (ops.create({ title: "Project", type: "Projekt", pin: true }, AG), "ok"));
-	ops.call(AG, () => (ops.create({ title: "Task", type: "Task", parents: ["Project"] }, AG), "ok"));
+	ops.call(
+		AG,
+		ok(() => ops.create({ title: "Project", type: "Projekt", pin: true }, AG)),
+	);
+	ops.call(
+		AG,
+		ok(() => ops.create({ title: "Task", type: "Task", parents: ["Project"] }, AG)),
+	);
 	const p = byTitle("Project").id;
 	const t = byTitle("Task").id;
 	// the device: its own copy, one user action marks both
@@ -136,10 +141,15 @@ test("a step pushed by a device (delete with cascade over two documents) can be 
 });
 
 test("undoing a creation sends the new item to the trash; text typed later stays there", () => {
-	const step = stepOf(ops.call(AG, () => (ops.create({ title: "Idea" }, AG), "ok")));
+	const step = stepOf(
+		ops.call(
+			AG,
+			ok(() => ops.create({ title: "Idea" }, AG)),
+		),
+	);
 	ops.call(
 		"web:x",
-		() => (ops.update("Idea", { body: "More text", body_mode: "append" }, "web:x"), "ok"),
+		ok(() => ops.update("Idea", { body: "More text", body_mode: "append" }, "web:x")),
 	);
 	undoStep(s, step, "web:x");
 	const it = [...s.records.values()].find((r) => r.title === "Idea")!;
@@ -148,8 +158,14 @@ test("undoing a creation sends the new item to the trash; text typed later stays
 });
 
 test("the undo tool takes back the agent's own last step", () => {
-	ops.call(AG, () => (ops.create({ title: "One" }, AG), "ok"));
-	ops.call(AG, () => (ops.create({ title: "Two" }, AG), "ok"));
+	ops.call(
+		AG,
+		ok(() => ops.create({ title: "One" }, AG)),
+	);
+	ops.call(
+		AG,
+		ok(() => ops.create({ title: "Two" }, AG)),
+	);
 	expect(ops.lastStep(AG, false)).toBeDefined();
 	undoStep(s, ops.lastStep(AG, false), AG);
 	expect(s.index().resolveTitle("Two")).toBeUndefined();
@@ -173,11 +189,10 @@ test("a saved filter in a type's view shows in the activity and can be undone", 
 	const before = typeTabs(s.records.get(SYS.card)!, "de");
 	// what "Save" writes after trying a filter in the cards' view "Alle" (the defaults go along)
 	const out = ops.call("web:tim@laptop", () => {
-		s.change(
-			SYS.card,
-			"web:tim@laptop",
-			(d) => (setTabs(d, before), setTab(d, before[0]!.id, { where: { under: { id: "demo-x" } } })),
-		);
+		s.change(SYS.card, "web:tim@laptop", (d) => {
+			setTabs(d, before);
+			setTab(d, before[0]!.id, { where: { under: { id: "demo-x" } } });
+		});
 		return "ok";
 	});
 	const step = stepOf(out);
@@ -189,20 +204,26 @@ test("a saved filter in a type's view shows in the activity and can be undone", 
 });
 
 test("after old rows fold, recent steps still undo and older ones are too old", () => {
-	ops.call(AG, () => (ops.create({ title: "Website", type: "Projekt" }, AG), "ok"));
+	ops.call(AG, () => {
+		ops.create({ title: "Website", type: "Projekt" }, AG);
+		return "ok";
+	});
 	const old = stepOf(
-		ops.call(AG, () => (ops.update("Website", { properties: { Status: "aktiv" } }, AG), "ok")),
+		ops.call(AG, () => {
+			ops.update("Website", { properties: { Status: "aktiv" } }, AG);
+			return "ok";
+		}),
 	);
-	ops.call(AG, () => (ops.create({ title: "Shop", type: "Projekt" }, AG), "ok"));
+	ops.call(AG, () => {
+		ops.create({ title: "Shop", type: "Projekt" }, AG);
+		return "ok";
+	});
 	const recent = stepOf(
-		ops.call(
-			AG,
-			() => (
-				ops.update("Website", { title: "Website 2027" }, AG),
-				ops.update("Shop", { title: "Shop 2027" }, AG),
-				"ok"
-			),
-		),
+		ops.call(AG, () => {
+			ops.update("Website", { title: "Website 2027" }, AG);
+			ops.update("Shop", { title: "Shop 2027" }, AG);
+			return "ok";
+		}),
 	);
 	const first = (
 		s.db.query("SELECT MIN(seq) AS seq FROM updates WHERE step = ?").get(recent) as { seq: number }

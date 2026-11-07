@@ -13,11 +13,11 @@ import { useState } from "react";
 import { itemHref, openItem, useRepo } from "../hooks";
 import { titleOf, useT } from "../i18n";
 import { cn } from "../lib/utils";
+import { CellValue } from "./cells";
 import { AreaChip, fieldLabel, GroupChip, HiddenGroups, hiddenPatch, splitHidden } from "./groups";
 import { ItemIcon } from "./item-look";
 import { Button, IconButton } from "./primitives";
 import { PercentBar, ProgressCount } from "./progress";
-import { CellValue } from "./Results";
 import { setStatus } from "./Row";
 import type { Look } from "./Table";
 
@@ -112,12 +112,12 @@ export function BoardView({
 							</div>
 						)}
 						{!isFolded && (
-							<div className="flex gap-3 px-2">
+							<ul className="flex gap-3 px-2">
 								{columns.map((col) => {
 									const cards = col.items.filter((i) => inLane.has(i.id));
 									const k = `${lane.key}|${col.key}`;
 									return (
-										<div
+										<li
 											className={cn(
 												"flex w-64 shrink-0 flex-col gap-1.5 rounded-xl bg-surface-2/60 p-2",
 												!cards.length && !tab?.subgroup && "w-44",
@@ -125,7 +125,10 @@ export function BoardView({
 											)}
 											key={col.key || "_"}
 											onDragLeave={() => setOver(null)}
-											onDragOver={(e) => (e.preventDefault(), setOver(k))}
+											onDragOver={(e) => {
+												e.preventDefault();
+												setOver(k);
+											}}
 											onDrop={(e) => {
 												setOver(null);
 												drop(e.dataTransfer.getData("obtion/item"), col);
@@ -156,10 +159,10 @@ export function BoardView({
 											{cards.map((i) => (
 												<BoardCard cols={def.columns ?? []} ctx={ctx} item={i} key={i.id} />
 											))}
-										</div>
+										</li>
 									);
 								})}
-							</div>
+							</ul>
 						)}
 					</section>
 				);
@@ -183,11 +186,14 @@ function BoardCard({ item: i, cols, ctx }: { item: Item; cols: string[]; ctx: Ev
 	});
 	const pr = !cols.length ? ctx.ix.progressOf(i) : undefined;
 	return (
+		// biome-ignore lint/a11y/noStaticElementInteractions lint/a11y/useKeyWithClickEvents: the click only widens the title link to the whole card; that link is the way for keyboards
 		<div
 			className="flex cursor-pointer flex-col gap-1.5 rounded-lg border border-line bg-surface p-2.5 text-sm shadow-sm hover:shadow"
 			data-id={i.id}
 			draggable
-			onClick={(e) => !(e.target as HTMLElement).closest("a,button,select,input") && openItem(i.id)}
+			onClick={(e) => {
+				if (!(e.target as HTMLElement).closest("a,button,select,input")) openItem(i.id);
+			}}
 			onDragStart={(e) => e.dataTransfer.setData("obtion/item", i.id)}
 		>
 			<a className="flex items-start gap-2" draggable={false} href={itemHref(i.id)}>

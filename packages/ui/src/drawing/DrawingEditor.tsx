@@ -48,8 +48,8 @@ import { repo as current } from "../repo";
 import { ScopeContext } from "../scope";
 import { useTheme } from "../theme";
 import { DRAWING_ICON } from "../ui/icons";
-import { setLiveLibrary } from "./Drawing";
 import { LibraryBrowser } from "./LibraryBrowser";
+import { setLiveLibrary } from "./live-library";
 import { dataURLToBlob, imageName, loadImages, readLibrary, saveLibrary } from "./scene";
 
 (window as { EXCALIDRAW_ASSET_PATH?: string }).EXCALIDRAW_ASSET_PATH ??= "/excalidraw/";
@@ -265,7 +265,7 @@ export default memo(function DrawingEditor({ id, onClose }: { id: string; onClos
 			maps[1].unobserve(onFiles);
 			maps[2].unobserve(onState);
 		};
-	}, [api, doc, repo]);
+	}, [api, doc, repo, files]);
 
 	useHandleLibrary({ excalidrawAPI: api, adapter: library });
 
@@ -359,7 +359,7 @@ export default memo(function DrawingEditor({ id, onClose }: { id: string; onClos
 			flushRef.current();
 			location.replace(url.hash);
 		},
-		[close],
+		[],
 	);
 
 	/**

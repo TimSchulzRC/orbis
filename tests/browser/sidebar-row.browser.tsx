@@ -19,7 +19,10 @@ import {
 } from "../../packages/ui/src/ui/type-edit";
 import { noFiles, workspace } from "./workspace";
 
-afterEach(() => (cleanup(), (location.hash = "")));
+afterEach(() => {
+	cleanup();
+	location.hash = "";
+});
 
 async function setup() {
 	const repo = await workspace();

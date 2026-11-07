@@ -314,10 +314,15 @@ export function Editor({
 	const host = useRef<HTMLDivElement>(null);
 	const viewRef = useRef<EditorView | null>(null);
 	const editable = useRef(new Compartment());
+	// the editor is built once per doc; the other props only set it up (readOnly then follows
+	// through its compartment), so the effect reads them as they were at that render
+	const setup = useRef({ nodeId, placeholder, autoFocus, onView, extra, readOnly });
+	setup.current = { nodeId, placeholder, autoFocus, onView, extra, readOnly };
 	useEffect(() => {
 		viewRef.current?.dispatch({ effects: editable.current.reconfigure(editableState(readOnly)) });
 	}, [readOnly]);
 	useEffect(() => {
+		const { nodeId, placeholder, autoFocus, onView, extra, readOnly } = setup.current;
 		const ytext = doc.getText("body");
 		const undoManager = new Y.UndoManager(ytext);
 		const stopTouch = touchOnTextEdit(doc); // typing moves "updated"
@@ -331,11 +336,17 @@ export function Editor({
 				// ⌘⇧↑/↓ move the block as in Notion, ⌥↑/↓ (default keymap) the line
 				{
 					key: "Mod-Shift-ArrowUp",
-					run: (v) => (moveBy(v, v.state.selection.main.head, -1), true),
+					run: (v) => {
+						moveBy(v, v.state.selection.main.head, -1);
+						return true;
+					},
 				},
 				{
 					key: "Mod-Shift-ArrowDown",
-					run: (v) => (moveBy(v, v.state.selection.main.head, 1), true),
+					run: (v) => {
+						moveBy(v, v.state.selection.main.head, 1);
+						return true;
+					},
 				},
 				...defaultKeymap,
 				...searchKeymap,

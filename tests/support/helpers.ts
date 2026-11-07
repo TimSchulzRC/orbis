@@ -35,7 +35,10 @@ export class MemRepo {
 	};
 	doc(id: string) {
 		let d = this.docs.get(id);
-		if (!d) this.docs.set(id, (d = new Y.Doc({ guid: id })));
+		if (!d) {
+			d = new Y.Doc({ guid: id });
+			this.docs.set(id, d);
+		}
 		return d;
 	}
 	change(id: string, fn: (doc: Y.Doc) => void) {

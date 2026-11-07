@@ -41,6 +41,7 @@ function fixture(
 	);
 	mock(
 		"systemctl",
+		// biome-ignore lint/suspicious/noTemplateCurlyInString: a bash script; ${FAIL:-} is its default for an unset variable under set -u
 		'echo "$*" >> "$LOG"\ncase "$2" in\nlist-units) echo "obtion-dev-aaaaaaaaaaaaaaaa-backend.service loaded active running"; echo "unrelated.service loaded active running";;\nstop) [[ ${FAIL:-} != yes ]];;\nis-active) exit 1;;\nesac\n',
 	);
 	mock(

@@ -67,7 +67,9 @@ async function opfsStore(name: string): Promise<BlobStore | null> {
 				await w.close();
 			},
 			async delete(h) {
-				await dir.removeEntry(h).catch(() => {});
+				await dir.removeEntry(h).catch(() => {
+					// already gone
+				});
 			},
 			async list() {
 				const out: { hash: string; size: number }[] = [];
@@ -273,7 +275,7 @@ export class DeviceFiles {
 	getVersion = () => this.version;
 	private emit() {
 		this.version++;
-		this.listeners.forEach((l) => l());
+		for (const l of this.listeners) l();
 	}
 
 	setMode(m: FileMode) {
@@ -285,9 +287,9 @@ export class DeviceFiles {
 		this.emit();
 	}
 
-	async url(hash: string, opts: { keep?: boolean } = {}): Promise<string | undefined> {
+	url(hash: string, opts: { keep?: boolean } = {}): Promise<string | undefined> {
 		const cached = this.urls.get(hash);
-		if (cached) return cached;
+		if (cached) return Promise.resolve(cached);
 		let loading = this.loading.get(hash);
 		if (!loading) {
 			loading = this.loadUrl(hash, opts).finally(() => this.loading.delete(hash));
@@ -392,7 +394,9 @@ export class DeviceFiles {
 	private pending = new Map<string, Promise<void>>();
 	private inTurn(hash: string, fn: () => Promise<void>): Promise<void> {
 		const next = (this.pending.get(hash) ?? Promise.resolve()).then(fn, fn);
-		const settled = next.catch(() => {});
+		const settled = next.catch(() => {
+			// the caller gets the error from `next`; the queue only waits for it
+		});
 		this.pending.set(hash, settled);
 		void settled.then(() => this.pending.get(hash) === settled && this.pending.delete(hash));
 		return next;
@@ -456,9 +460,9 @@ export class DeviceFiles {
 		return { id, name: unique };
 	}
 
-	async prepare(file: File | Blob, name: string, hash?: string): Promise<FileMeta> {
+	async prepare(file: File | Blob, name: string, knownHash?: string): Promise<FileMeta> {
 		await this.ready;
-		hash ??= await sha256(file);
+		const hash = knownHash ?? (await sha256(file));
 		const mime = file.type || mimeOf(name);
 		const meta: FileMeta = { hash, name, mime, filetype: fileTypeOf(name, mime), size: file.size };
 		await this.save(hash, file);
@@ -522,7 +526,10 @@ export class DeviceFiles {
 		if (this.repo.status.online)
 			for (const h of want) if (!this.queue.includes(h) && !this.missing.has(h)) this.queue.push(h);
 		this.pump();
-		if (this.repo.status.online) this.makePdfPreviews(files).catch(() => {});
+		if (this.repo.status.online)
+			this.makePdfPreviews(files).catch(() => {
+				// previews are retried on the next sync
+			});
 		if (this.repo.status.synced && !this.collected) {
 			this.collected = true;
 			await this.collect();
@@ -705,6 +712,9 @@ export function useBlobUrl(hash?: string, keep = false): string | undefined {
 	const f = useContext(ScopeContext)?.files ?? files;
 	const [url, setUrl] = useState<string | undefined>();
 	useSyncExternalStore(f.subscribe, f.getVersion);
+	// a content saved on this device meanwhile gets a local URL
+	const local = f.hasLocal(hash ?? "");
+	// biome-ignore lint/correctness/useExhaustiveDependencies: `local` is the trigger to load the URL again
 	useEffect(() => {
 		let alive = true;
 		setUrl(undefined);
@@ -712,6 +722,6 @@ export function useBlobUrl(hash?: string, keep = false): string | undefined {
 		return () => {
 			alive = false;
 		};
-	}, [f, hash, f.hasLocal(hash ?? "")]);
+	}, [f, hash, keep, local]);
 	return url;
 }

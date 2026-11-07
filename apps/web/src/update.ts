@@ -37,8 +37,9 @@ export function initUpdates() {
 	if (!("serviceWorker" in navigator) || import.meta.env.DEV) return;
 	import("virtual:pwa-register").then(({ registerSW }) => {
 		registerSW({
-			// we reload ourselves, once and after the outbox has drained
-			onNeedReload: () => {},
+			onNeedReload: () => {
+				// we reload ourselves, once and after the outbox has drained
+			},
 			onNeedRefresh: ready,
 			onRegisteredSW: (_url, registration) => {
 				if (!registration) return;
@@ -52,7 +53,10 @@ export function initUpdates() {
 					await registration.update();
 					return !!(registration.installing || registration.waiting);
 				});
-				const recheck = () => void registration.update().catch(() => {});
+				const recheck = () =>
+					void registration.update().catch(() => {
+						// offline or the server is down; the next check tries again
+					});
 				// tabs left open for days still notice rollouts
 				setInterval(recheck, RECHECK_MS);
 				document.addEventListener("visibilitychange", () => {

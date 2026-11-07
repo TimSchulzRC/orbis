@@ -7,7 +7,7 @@ import type { T } from "@obtion/core/i18n";
 import { type Item, setMeta } from "@obtion/core/model";
 import { belowOf } from "@obtion/core/placement";
 import { ArrowRight, Check, FolderInput, Shapes, Sparkles, Trash2, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { recentPlaces } from "../actions";
 import { Checkbox } from "../components/ui/checkbox";
 import {
@@ -68,15 +68,19 @@ function rowHint(item: Item, ix: Index, t: T): { icon: React.ReactNode; text: st
 /** The mark box: always in the same place, 16 in a 24 area (44 on touch). */
 function MarkBox({ on, onToggle, title }: { on: boolean; onToggle: () => void; title: string }) {
 	const { t } = useT();
+	const id = useId();
+	// a click here marks the entry, it does not select or open it (the row skips clicks from [data-mark])
 	return (
 		<label
 			className="tap-edge relative flex size-6 shrink-0 cursor-pointer items-center justify-center"
-			onClick={(e) => e.stopPropagation()}
+			data-mark
+			htmlFor={id}
 		>
 			<Checkbox
 				aria-label={t("triage.markNamed", { title })}
 				checked={on}
 				className="size-4 cursor-pointer pointer-coarse:size-[18px]"
+				id={id}
 				onCheckedChange={onToggle}
 			/>
 		</label>
@@ -86,12 +90,13 @@ function MarkBox({ on, onToggle, title }: { on: boolean; onToggle: () => void; t
 /** The keys go to one list only (a page may show several): the one used last, else the first. */
 let keyOwner: symbol | null = null;
 
+const keyOf = (i: Item) => i.id;
+
 export function Triage({ items }: { items: Item[] }) {
 	const { t } = useT();
 	const here = useSpaceId()!;
 	const ix = useIndex();
 	const spaceOf = (_: Item) => here;
-	const keyOf = (i: Item) => i.id;
 	const phone = !useDesktop();
 	const [sel, setSel] = useState(0);
 	const [marked, setMarked] = useState<Set<string>>(new Set());
@@ -100,11 +105,15 @@ export function Triage({ items }: { items: Item[] }) {
 	const pick = usePickers(spaceOf, act.place, act.giveType, () => setMarked(new Set()));
 	const list = useRef<HTMLDivElement>(null);
 	const me = useRef(Symbol()).current;
-	const claim = () => void (keyOwner = me);
+	const claim = () => {
+		keyOwner = me;
+	};
 	useEffect(() => {
 		keyOwner ??= me;
-		return () => void (keyOwner === me && (keyOwner = null));
-	}, []);
+		return () => {
+			if (keyOwner === me) keyOwner = null;
+		};
+	}, [me]);
 
 	// what an action applies to: the marked entries, else the selected one
 	const targets = (): Item[] => {
@@ -143,9 +152,10 @@ export function Triage({ items }: { items: Item[] }) {
 		else if (k === " " && cur) toggle(keyOf(cur));
 		else if (k === "Escape" && marked.size) setMarked(new Set());
 		else if (k === "e" && cur) pick.setPlacing(targets());
-		else if (k === "c" && act.firstType(cur) && cur && new Set(targets().map(spaceOf)).size === 1)
-			act.giveType(targets(), act.firstType(cur)!), setMarked(new Set());
-		else if (k === "y" && cur) pick.setTyping(targets().filter((i) => i.kind === "note"));
+		else if (k === "c" && act.firstType(cur) && cur && new Set(targets().map(spaceOf)).size === 1) {
+			act.giveType(targets(), act.firstType(cur)!);
+			setMarked(new Set());
+		} else if (k === "y" && cur) pick.setTyping(targets().filter((i) => i.kind === "note"));
 		else if ((k === "x" || k === "Delete") && cur) trash(targets());
 		else if (k === "u" || k === "z") act.undo();
 		else if ((k === "Enter" || k === "o") && cur) openItem(cur.id, { space: spaceOf(cur) });
@@ -160,8 +170,11 @@ export function Triage({ items }: { items: Item[] }) {
 	// marks of entries that left the list go with them
 	useEffect(() => {
 		const listed = (id: string) => items.some((i) => keyOf(i) === id);
-		if (marked.size && [...marked].some((id) => !listed(id)))
-			setMarked(new Set([...marked].filter(listed)));
+		setMarked((marked) =>
+			marked.size && [...marked].some((id) => !listed(id))
+				? new Set([...marked].filter(listed))
+				: marked,
+		);
 	}, [items]);
 
 	const shown = items.slice(0, limit);
@@ -189,6 +202,7 @@ export function Triage({ items }: { items: Item[] }) {
 								{t(`triage.age.${g}`)} <span className="font-normal tabular-nums">{count}</span>
 							</p>
 						)}
+						{/* biome-ignore lint/a11y/useKeyWithClickEvents: the list's keys work at window level (useWindowKeys above), arrows and Enter included */}
 						<div
 							aria-selected={on}
 							className={cn(
@@ -200,8 +214,13 @@ export function Triage({ items }: { items: Item[] }) {
 									"bg-selected before:absolute before:inset-y-1.5 before:left-0 before:w-[3px] before:rounded-r before:bg-focus",
 							)}
 							data-triage={n}
-							onClick={() => (phone ? openItem(i.id, { space: here }) : setSel(n))}
+							onClick={(e) => {
+								if ((e.target as Element).closest("[data-mark]")) return;
+								if (phone) openItem(i.id, { space: here });
+								else setSel(n);
+							}}
 							role="option"
+							tabIndex={-1}
 						>
 							<MarkBox
 								on={marked.has(keyOf(i))}

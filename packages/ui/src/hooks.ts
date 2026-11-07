@@ -2,11 +2,13 @@ import {
 	type KeyboardEvent as ReactKeyboardEvent,
 	useContext,
 	useEffect,
+	useEffectEvent,
 	useRef,
 	useState,
 	useSyncExternalStore,
 } from "react";
 import { activeSpace } from "./accounts";
+import { navigate, parseHash, spaceHref } from "./address";
 import { files } from "./files";
 import { PHONE } from "./lib/platform";
 import { repo } from "./repo";
@@ -20,6 +22,8 @@ export function useRepo() {
 	return scoped;
 }
 
+export { navigate, parseHash, spaceHref };
+
 export function useIndex() {
 	return useRepo().index();
 }
@@ -32,13 +36,6 @@ interface Route {
 	parts: string[];
 	query: URLSearchParams;
 	space?: string;
-}
-
-/** "#/w/<workspace>/i/<id>?x" → { space, rest: "/i/<id>?x" } */
-export function parseHash(hash = location.hash): { space?: string; rest: string } {
-	const raw = hash.replace(/^#/, "");
-	const named = /^\/w\/([^/?]+)/.exec(raw);
-	return { space: named?.[1], rest: (named ? raw.slice(named[0].length) : raw) || "/" };
 }
 
 // The title after an item's id ("/i/<id>/<title>") is only for people reading the address.
@@ -66,21 +63,18 @@ let route = parse();
 const routeListeners = new Set<() => void>();
 const reroute = () => {
 	route = parse();
-	routeListeners.forEach((f) => f());
+	for (const f of routeListeners) f();
 };
 window.addEventListener("hashchange", reroute);
 
 export function useRoute(): Route {
 	return useSyncExternalStore(
-		(f) => (routeListeners.add(f), () => routeListeners.delete(f)),
+		(f) => {
+			routeListeners.add(f);
+			return () => routeListeners.delete(f);
+		},
 		() => route,
 	);
-}
-
-export function navigate(path: string, opts: { space?: string; replace?: boolean } = {}) {
-	const href = spaceHref(opts.space, path);
-	if (opts.replace) location.replace(href);
-	else location.hash = href;
 }
 
 function replaceHash(hash: string) {
@@ -136,11 +130,6 @@ export const openItem = (
 /** For a page that is gone (deleted, left). */
 export const leavePage = () => (history.length > 1 ? history.back() : navigate("/"));
 
-// A function declaration (hoisted), like parseHash: accounts.ts calls both while hooks.ts is still loading.
-export function spaceHref(space: string | undefined, path: string) {
-	return space ? `#/w/${space}${path}` : `#${path}`;
-}
-
 /** Names the workspace, so a link opened in a new tab lands there too. */
 export function useItemHref() {
 	const space = useSpaceId();
@@ -165,7 +154,19 @@ export const usePhone = () => useMediaQuery(PHONE);
 export const useNarrow = () => useMediaQuery("(max-width: 640px)");
 
 export function useDocumentTitle(title: string | undefined) {
-	useEffect(() => void (title && (document.title = title)), [title]);
+	useEffect(() => {
+		if (title) document.title = title;
+	}, [title]);
+}
+
+/**
+ * Runs `fn` after mounting and after each render in which `key` changed (to reset state when the
+ * page changes, say). `fn` sees the latest render's values but does not re-run for them.
+ */
+export function useOnChange(key: unknown, fn: () => void) {
+	const run = useEffectEvent(fn);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: `key` is the one value the caller reacts to
+	useEffect(() => run(), [key]);
 }
 
 /** One listener for the component's lifetime; `on` still sees the latest render's state. */

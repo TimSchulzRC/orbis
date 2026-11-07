@@ -3,9 +3,9 @@
 
 import type { Item } from "@obtion/core/model";
 import type { ActivityEvent } from "@obtion/core/protocol";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { spaceCall, useAccounts } from "../accounts";
-import { useRepo } from "../hooks";
+import { useOnChange, useRepo } from "../hooks";
 import { useT } from "../i18n";
 import { groupBySteps, mergeEvents, StepGroup } from "./ActivityFeed";
 import { Button } from "./primitives";
@@ -96,9 +96,9 @@ export function PageHistory({ item, space }: { item: Item; space: string }) {
 		);
 	};
 	// again when the page changes, and when back online (going offline changes nothing there)
-	useEffect(() => {
+	useOnChange(`${key} ${r.status.online}`, () => {
 		if (r.status.online || got.key !== key || !got.events.length) load();
-	}, [key, r.status.online]);
+	});
 
 	// the fetched rows and the live ones that came since, of this page only
 	const fetched = got.key === key ? got.events : [];

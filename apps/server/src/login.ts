@@ -32,8 +32,9 @@ function mailer(env: Record<string, string | undefined>, host: string): SendCode
 	const url = env.OBTION_SMTP_URL?.trim();
 	if (!url) return undefined;
 	if (url === "log")
-		return async (to, code) => {
+		return (to, code) => {
 			console.log(`[obtion] sign-in code for ${to}: ${code}`);
+			return Promise.resolve();
 		};
 	const from = env.OBTION_MAIL_FROM?.trim() || `Obtion <obtion@${host.replace(/:\d+$/, "")}>`;
 	const transport = createTransport(url);

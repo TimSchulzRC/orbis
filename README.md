@@ -52,7 +52,12 @@ bun test            # unit and integration tests
 bun run test:browser  # parts of the interface on their own, in Chromium
 bun run test:e2e    # the built app against real servers
 bun run typecheck
+bun run lint        # Biome: format, lint rules, sorted imports (read-only)
+bun run fix         # Biome: apply the safe fixes and format
+bun run check       # everything CI runs for a pull request, side by side
 ```
+
+A pull request is ready to merge when `bun run check` passes: Biome counts warnings as failures too. The rules are in [`biome.jsonc`](biome.jsonc); for VS Code the repository recommends the Biome extension and formats on save.
 
 The browser tests need Chromium once: `bunx playwright install chromium`.
 

@@ -40,11 +40,10 @@ test("a type's views: the defaults until one is changed, then each a map of its 
 	).toEqual([SYS.project, SYS.task, SYS.card]);
 	expect(s.records.get(SYS.card)!.schema!.views).toBeUndefined();
 	const before = tabsOf(SYS.card);
-	s.change(
-		SYS.card,
-		"web:x",
-		(d) => (setTabs(d, before), setTab(d, "b", { kind: "board", group: "status", pos: "A" })),
-	);
+	s.change(SYS.card, "web:x", (d) => {
+		setTabs(d, before);
+		setTab(d, "b", { kind: "board", group: "status", pos: "A" });
+	});
 	s.flush();
 	expect(tabsOf(SYS.card).map((t) => t.id)).toEqual(["b", "v_all"]); // "b" sorts before
 	s.change(SYS.card, "web:x", (d) =>

@@ -21,7 +21,8 @@ async function startServer(seeded: boolean, noTypes = false, workspace = true) {
 	const { token: session, me } = await firstAccount(url, workspace);
 	if (seeded) {
 		// the examples go into that workspace while no server runs
-		proc.kill(), await proc.exited;
+		proc.kill();
+		await proc.exited;
 		await seedExamples(dir);
 		if (noTypes) {
 			const del = Bun.spawnSync(["bun", "tests/support/no-types.ts"], { cwd: ROOT, env });
@@ -79,12 +80,14 @@ async function settle(page: Page) {
 	await page
 		.waitForFunction(
 			() =>
-				!document.body.innerText.includes("Syncing") &&
-				!document.body.innerText.includes("Synchronisiere"),
+				!document.body.textContent.includes("Syncing") &&
+				!document.body.textContent.includes("Synchronisiere"),
 			null,
 			{ timeout: 10000 },
 		)
-		.catch(() => {});
+		.catch(() => {
+			// still syncing after 10 s: check the page as it is
+		});
 	await page.waitForTimeout(350); // errors that come a moment after the first render count too
 }
 
@@ -103,16 +106,18 @@ async function check(
 		await settle(page);
 		if (extra) await extra(page);
 		if (path.includes("graph"))
-			await page.waitForSelector("canvas", { timeout: 3000 }).catch(() => {});
+			await page.waitForSelector("canvas", { timeout: 3000 }).catch(() => {
+				// no canvas: the check below reports a graph that rendered nothing
+			});
 		const boundary = page.locator("[data-error-boundary]");
 		if (await boundary.count())
 			failures.push(
-				`${label} ${path}: error boundary: ${(await boundary.first().innerText()).replace(/\s+/g, " ")}`,
+				`${label} ${path}: error boundary: ${(await boundary.first().textContent())?.replace(/\s+/g, " ")}`,
 			);
 		const main = page.locator("main");
-		const text = (await main.count())
-			? (await main.innerText()).trim()
-			: (await page.locator("#root").innerText()).trim();
+		const shown = (await main.count()) ? main : page.locator("#root");
+		// biome-ignore lint/performance/useDomNodeTextContent: a blank page is about what shows; textContent would count hidden text
+		const text = (await shown.innerText()).trim();
 		if (path.includes("graph")) {
 			if (!(await page.locator("canvas").count()) && text.length < 5)
 				failures.push(`${label} ${path}: graph rendered nothing`);
@@ -413,7 +418,9 @@ async function pages(
 					return void failures.push(`${label}: the tray does not open its panel`);
 				// another page and Back: the panel as it was
 				await p.evaluate(() => (location.hash = "#/activity"));
-				await panel.waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
+				await panel.waitFor({ state: "detached", timeout: 3000 }).catch(() => {
+					// still there: Back below checks the panel either way
+				});
 				await p.goBack();
 				if (
 					!(await panel.waitFor({ timeout: 3000 }).then(
@@ -629,7 +636,7 @@ async function twoWorkspaces(browser: import("playwright").Browser, server: Serv
 	});
 	await check(page, label, "/#/inbox", errors, async (p) => {
 		const panel = p.locator("[data-shelf-panel]");
-		const chips = panel.locator("[role=group] button");
+		const chips = panel.getByRole("group").getByRole("button");
 		if (
 			(await chips.allInnerTexts()).map((x) => x.replace(/\s*\d+$/, "")).join(",") !==
 			"Alle,Firma,Persönlich"
@@ -640,7 +647,9 @@ async function twoWorkspaces(browser: import("playwright").Browser, server: Serv
 		await settle(p);
 		await p.evaluate(() => (location.hash = "#/inbox"));
 		await panel.waitFor({ timeout: 3000 });
-		if ((await panel.locator("[aria-pressed=true]").innerText()).replace(/\s*\d+$/, "") !== "Firma")
+		if (
+			(await panel.locator("[aria-pressed=true]").textContent())?.replace(/\s*\d+$/, "") !== "Firma"
+		)
 			failures.push(`${label}: the inbox filter is not remembered`);
 		if (await p.locator("aside section[aria-label='Persönlich']").count())
 			failures.push(`${label}: the sidebar still shows the workspace left out`);
@@ -718,7 +727,9 @@ async function twoWorkspaces(browser: import("playwright").Browser, server: Serv
 				undefined,
 				{ timeout: 3000 },
 			)
-			.catch(() => {});
+			.catch(() => {
+				// not in that order in time: the check below reports it
+			});
 		if ((await blocks()) !== "Persönlich,Firma")
 			failures.push(`${label}: "Nach unten" did not move "Firma" down: ${await blocks()}`);
 		if ((await order()) !== "Persönlich,Firma")
@@ -738,7 +749,9 @@ async function twoWorkspaces(browser: import("playwright").Browser, server: Serv
 				undefined,
 				{ timeout: 3000 },
 			)
-			.catch(() => {});
+			.catch(() => {
+				// not in that order in time: the check below reports it
+			});
 		if ((await blocks()) !== "Firma,Persönlich")
 			failures.push(`${label}: dragging "Firma" above did not move it: ${await blocks()}`);
 		await p.reload();
@@ -761,7 +774,9 @@ async function twoWorkspaces(browser: import("playwright").Browser, server: Serv
 				undefined,
 				{ timeout: 3000 },
 			)
-			.catch(() => {});
+			.catch(() => {
+				// not in that order in time: the check below reports it
+			});
 		if ((await blocks()) !== "Persönlich,Firma")
 			failures.push(
 				`${label}: dragged into the empty space below, "Firma" did not go last: ${await blocks()}`,
@@ -833,18 +848,17 @@ async function membersOnSettings(browser: import("playwright").Browser, server: 
 			failures.push(
 				`${label}: ${await links.count()} open links instead of the two made by the API`,
 			);
-		if (!(await links.filter({ hasText: old }).innerText()).includes("Mitglied · Von E2E am"))
-			failures.push(
-				`${label}: the link for a member does not say so: ${await links.filter({ hasText: old }).innerText()}`,
-			);
+		const member = (await links.filter({ hasText: old }).textContent()) ?? "";
+		if (!member.includes("Mitglied · Von E2E am"))
+			failures.push(`${label}: the link for a member does not say so: ${member}`);
 		// a link for an owner, from the menu: whoever joins with it is one, and only one person can
 		await p.getByRole("button", { name: "Neuer Link" }).click();
 		await p.locator("[data-popover]").getByRole("button", { name: "Für einen Besitzer" }).click();
 		await links.nth(2).waitFor({ timeout: 3000 });
-		const made = await links.first().innerText();
+		const made = (await links.first().textContent()) ?? "";
 		if (!made.includes("Besitzer · Von E2E am"))
 			failures.push(`${label}: the new link does not say its role and who made it: ${made}`);
-		const code = (await links.first().locator("code").innerText()).split("/join/")[1]!;
+		const code = ((await links.first().locator("code").textContent()) ?? "").split("/join/")[1]!;
 		const signup = (email: string) =>
 			api("/api/account/signup", {
 				method: "POST",

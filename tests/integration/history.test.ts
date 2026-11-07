@@ -5,7 +5,7 @@ import type { Ops } from "@obtion/server/ops";
 import type { Store } from "@obtion/server/store";
 import { undoStep } from "@obtion/server/undo";
 import { removeTempDirs } from "../support/helpers";
-import { setupStore, tool as storeTool } from "../support/store";
+import { ok, setupStore, tool as storeTool } from "../support/store";
 
 afterAll(removeTempDirs);
 
@@ -21,7 +21,12 @@ const idOf = (title: string) => s.index().resolveTitle(title)!;
 
 /** A person's edit in the app: one step of its own. */
 function edit(origin: string, id: string, body: string) {
-	s.step(origin, () => s.change(id, origin, (d) => (replaceBody(d, body), touch(d))));
+	s.step(origin, () =>
+		s.change(id, origin, (d) => {
+			replaceBody(d, body);
+			touch(d);
+		}),
+	);
 	s.flush();
 }
 /** Typing in the app: several flushes of one step by one person. */
@@ -35,7 +40,10 @@ function typing(origin: string, id: string, texts: string[]) {
 }
 
 test("every change of the text keeps a version; typing in one step folds into one", () => {
-	ops.call(AG, () => (ops.create({ title: "Mapping concept", body: "Line one\n" }, AG), "ok"));
+	ops.call(
+		AG,
+		ok(() => ops.create({ title: "Mapping concept", body: "Line one\n" }, AG)),
+	);
 	const id = idOf("Mapping concept");
 	expect(s.versions(id)).toEqual([]); // created: nothing to keep yet, the first change keeps it
 	typing(TIM, id, ["Line one\nL", "Line one\nLine tw", "Line one\nLine two\n"]);
@@ -50,18 +58,24 @@ test("every change of the text keeps a version; typing in one step folds into on
 	edit(ANNA, id, "Line one\nLine two\nLine three\n");
 	ops.call(
 		AG,
-		() => (ops.update("Mapping concept", { body: "Line zero\n", body_mode: "prepend" }, AG), "ok"),
+		ok(() => ops.update("Mapping concept", { body: "Line zero\n", body_mode: "prepend" }, AG)),
 	);
 	expect(s.versions(id).map((x) => x.origin)).toEqual([AG, TIM, ANNA, AG]);
 	expect(s.versionText(s.versions(id).at(-1)!.id)).toBe(s.records.get(id)!.body);
 	// only changes of the text make versions
-	ops.call(AG, () => (ops.update("Mapping concept", { tags_add: ["concept"] }, AG), "ok"));
+	ops.call(
+		AG,
+		ok(() => ops.update("Mapping concept", { tags_add: ["concept"] }, AG)),
+	);
 	expect(s.versions(id).length).toBe(4);
 });
 
 test("versions are stored compressed", () => {
 	const long = "A long paragraph about the integration that repeats a lot. ".repeat(400);
-	ops.call(AG, () => (ops.create({ title: "Long" }, AG), "ok"));
+	ops.call(
+		AG,
+		ok(() => ops.create({ title: "Long" }, AG)),
+	);
 	const id = idOf("Long");
 	edit(TIM, id, long);
 	const row = s.db
@@ -241,10 +255,13 @@ test("restoring a version is a change of its own: a new version, in the activity
 	edit(ANNA, id, "Version B\n");
 	const [a] = s.versions(id);
 	// what the app does: write the old text as a new change, in its own step
-	const step = s.step(
-		TIM,
-		(st) => (s.change(id, TIM, (d) => (replaceBody(d, s.versionText(a!.id)!), touch(d))), st),
-	);
+	const step = s.step(TIM, (st) => {
+		s.change(id, TIM, (d) => {
+			replaceBody(d, s.versionText(a!.id)!);
+			touch(d);
+		});
+		return st;
+	});
 	s.flush();
 	expect(s.records.get(id)!.body).toBe("Version A\n");
 	expect(s.versions(id).map((v) => v.origin)).toEqual(["agent:mcp;u=u0;n=Kai", ANNA, TIM]);
@@ -332,7 +349,11 @@ test("a deleted update leaves the list but stays in the activity, and comes back
 	await tool("add_update", { ref: id, text: "Zweites." });
 	const [first] = s.index().get(id)!.updates;
 	let gone: ReturnType<typeof removeUpdate>;
-	s.step(TIM, () => s.change(id, TIM, (d) => void (gone = removeUpdate(d, first!.id))));
+	s.step(TIM, () =>
+		s.change(id, TIM, (d) => {
+			gone = removeUpdate(d, first!.id);
+		}),
+	);
 	s.flush();
 	expect(
 		s

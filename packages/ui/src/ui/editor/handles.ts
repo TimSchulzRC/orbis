@@ -70,13 +70,19 @@ function blockMenu(view: EditorView, pos: number, at: { left: number; top: numbe
 					label: tr("editor.moveUp"),
 					icon: ArrowUp,
 					hint: `${ALT}↑`,
-					run: () => (moveBy(view, pos, -1), view.focus()),
+					run: () => {
+						moveBy(view, pos, -1);
+						view.focus();
+					},
 				},
 				{
 					label: tr("editor.moveDown"),
 					icon: ArrowDown,
 					hint: `${ALT}↓`,
-					run: () => (moveBy(view, pos, 1), view.focus()),
+					run: () => {
+						moveBy(view, pos, 1);
+						view.focus();
+					},
 				},
 				{
 					label: tr("editor.deleteBlock"),

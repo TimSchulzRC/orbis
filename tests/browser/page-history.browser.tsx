@@ -12,13 +12,21 @@ import { cleanup, render } from "vitest-browser-react";
 import * as accounts from "../../packages/ui/src/accounts";
 import { AppToaster } from "../../packages/ui/src/ui/toasts";
 import { ItemPage } from "../../packages/ui/src/views/ItemPage";
-import { workspace } from "./workspace";
+import { noop, workspace } from "./workspace";
 
 afterEach(() => {
 	cleanup();
 	localStorage.clear();
 	vi.mocked(accounts.spaceCall).mockReset();
 });
+
+/** The item page; `go` switches it to another item, as navigating does. */
+let go: (id: string) => void = noop;
+function Shown({ start }: { start: string }) {
+	const [id, setId] = useState(start);
+	go = setId;
+	return <ItemPage id={id} isNew={false} />;
+}
 
 const event = (id: number, doc: string, e: Partial<ActivityEvent>): ActivityEvent => ({
 	id,
@@ -36,9 +44,9 @@ test("the history of this page: rows as on the activity page, live ones join at 
 	const repo = await workspace(false);
 	const project = repo.create({ title: "Relaunch", type: SYS.project, pinned: "a" });
 	const asked: string[] = [];
-	vi.mocked(accounts.spaceCall).mockImplementation(async (_space, path) => {
+	vi.mocked(accounts.spaceCall).mockImplementation((_space, path) => {
 		asked.push(path);
-		return [
+		return Promise.resolve([
 			event(3, project, { changes: [{ field: "update", to: "Kickoff war gut.", id: "u1" }] }),
 			event(2, project, {
 				origin: "agent:claude-code;u=u-test;n=Test",
@@ -48,7 +56,7 @@ test("the history of this page: rows as on the activity page, live ones join at 
 			event(1, project, { kind: "created" }),
 			// another page's: never shown here
 			event(0, "other", { kind: "created" }),
-		] as never;
+		] as never);
 	});
 	await render(<ItemPage id={project} isNew={false} />);
 	await page.getByRole("button", { name: "Verlauf" }).click();
@@ -148,16 +156,17 @@ test("older changes load below, until the log ends; a failed load is asked for a
 		event(200 - n, project, { changes: [{ field: "tags", to: [`t${200 - n}`], from: [] }] }),
 	);
 	const asked: string[] = [];
-	vi.mocked(accounts.spaceCall).mockImplementation(async (_space, path) => {
+	vi.mocked(accounts.spaceCall).mockImplementation((_space, path) => {
 		asked.push(path);
 		// the first try below fails, the second answers
 		if (path.includes("before=151") && asked.filter((p) => p.includes("before=151")).length > 1)
-			return [event(10, project, { kind: "created" })] as never;
-		throw new Error("down");
+			return Promise.resolve([event(10, project, { kind: "created" })] as never);
+		return Promise.reject(new Error("down"));
 	});
-	vi.mocked(accounts.spaceCall).mockImplementationOnce(
-		async (_s, path) => (asked.push(path), page1 as never),
-	);
+	vi.mocked(accounts.spaceCall).mockImplementationOnce((_s, path) => {
+		asked.push(path);
+		return Promise.resolve(page1 as never);
+	});
 	await render(<ItemPage id={project} isNew={false} />);
 	await page.getByRole("button", { name: "Erstes Update schreiben" }).click();
 	const panel = page.getByRole("dialog", { name: /^Updates zu / });
@@ -230,7 +239,7 @@ test("a late answer for the page before never shows on the next one", async () =
 	const first = repo.create({ title: "Relaunch", type: SYS.project, pinned: "a" });
 	const second = repo.create({ title: "Website", type: SYS.project, pinned: "b" });
 	// the first page's answer comes only when let go
-	let release: () => void = () => {};
+	let release: () => void = noop;
 	vi.mocked(accounts.spaceCall).mockImplementation((_s, path) =>
 		path.includes(first)
 			? new Promise(
@@ -242,13 +251,7 @@ test("a late answer for the page before never shows on the next one", async () =
 				)
 			: Promise.resolve([event(2, second, { kind: "created" })] as never),
 	);
-	let go: (id: string) => void = () => {};
-	function Shown() {
-		const [id, setId] = useState(first);
-		go = setId;
-		return <ItemPage id={id} isNew={false} />;
-	}
-	await render(<Shown />);
+	await render(<Shown start={first} />);
 	await page.getByRole("button", { name: "Erstes Update schreiben" }).click();
 	await page.getByRole("dialog").getByRole("radio", { name: "Verlauf" }).click();
 	// docked, the panel stays open on the next page; the first answer arrives after

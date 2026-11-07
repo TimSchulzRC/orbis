@@ -32,6 +32,15 @@ function openWorkspaceRules(space: string) {
 /** A hint of a rule's text: its first lines. */
 const preview = (text: string) => (text.length > 300 ? `${text.slice(0, 299)}…` : text);
 
+/** Stores typed rules unless nothing changed (or only blank text replaced blank text). */
+function saveRules(
+	repo: ReturnType<typeof useRepo>,
+	id: string,
+	{ draft, value }: { draft: string; value: string },
+) {
+	if (draft !== value && (draft.trim() || value.trim())) repo.setRules(id, draft);
+}
+
 /**
  * The text of rules (an item's or, with the settings id, the workspace's). Saved when it loses
  * focus – one step to undo –, and following changes from elsewhere while it has no focus.
@@ -59,12 +68,14 @@ export function RulesField({
 	useEffect(() => {
 		if (!focused.current) setDraft(value);
 	}, [value]);
-	const save = () => {
-		const { draft: d, value: v } = latest.current;
-		if (d !== v && (d.trim() || v.trim())) repo.setRules(id, d);
-	};
-	// leaving the page while typing keeps what was typed
-	useEffect(() => () => void (focused.current && save()), [id]);
+	const save = () => saveRules(repo, id, latest.current);
+	// leaving the page while typing keeps what was typed (under the id it was typed for)
+	useEffect(
+		() => () => {
+			if (focused.current) saveRules(repo, id, latest.current);
+		},
+		[repo, id],
+	);
 	return (
 		<Textarea
 			aria-label={label}
@@ -76,7 +87,9 @@ export function RulesField({
 				onBlur?.(latest.current.draft);
 			}}
 			onChange={(e) => setDraft(e.target.value)}
-			onFocus={() => (focused.current = true)}
+			onFocus={() => {
+				focused.current = true;
+			}}
 			placeholder={placeholder}
 			rows={3}
 			value={draft}
@@ -114,7 +127,10 @@ export function AgentRulesDialog({ item, onClose }: { item: Item; onClose: () =>
 				className="min-h-20 w-full resize-y rounded-lg border-line bg-bg text-sm"
 				onChange={(e) => setDraft(e.target.value)}
 				onKeyDown={(e) => {
-					if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) e.preventDefault(), save();
+					if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+						e.preventDefault();
+						save();
+					}
 				}}
 				placeholder={t("rules.placeholder")}
 				rows={3}
@@ -128,7 +144,10 @@ export function AgentRulesDialog({ item, onClose }: { item: Item; onClose: () =>
 					{ws && active && (
 						<Button
 							className="tap-y text-link hover:underline"
-							onClick={() => (onClose(), openWorkspaceRules(active.id))}
+							onClick={() => {
+								onClose();
+								openWorkspaceRules(active.id);
+							}}
 							title={preview(ws.text)}
 							variant="plain"
 						>

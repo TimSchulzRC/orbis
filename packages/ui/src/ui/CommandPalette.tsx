@@ -32,6 +32,13 @@ type Entry =
 	| { kind: "nav"; label: string; path: string }
 	| { kind: "cmd"; label: string; run: () => void };
 
+const keyOf = (it: Entry) => {
+	if (it.kind === "item") return `item:${it.space}:${it.id}`;
+	if (it.kind === "create") return `create:${it.type ?? ""}`;
+	if (it.kind === "nav") return `nav:${it.path}`;
+	return `cmd:${it.label}`;
+};
+
 export function CommandPalette({
 	query: initial = "",
 	onClose,
@@ -147,22 +154,35 @@ export function CommandPalette({
 
 	return (
 		<ModalSurface onClose={onClose} title={t("palette.label")}>
-			<Backdrop className="flex items-start justify-center p-3 pt-[10vh]" onMouseDown={onClose}>
-				<div
-					className="flex max-h-[70vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-2xl"
-					onMouseDown={(e) => e.stopPropagation()}
-				>
+			<Backdrop
+				className="flex items-start justify-center p-3 pt-[10vh]"
+				onMouseDown={(e) => {
+					// only a press beside the panel closes it
+					if (e.target === e.currentTarget) onClose();
+				}}
+			>
+				<div className="flex max-h-[70vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-2xl">
 					<Input
 						autoFocus
 						className="border-b border-line bg-transparent px-4 py-3.5 text-base outline-none placeholder:text-muted-foreground"
-						onChange={(e) => (setQ(e.target.value), setSel(0))}
+						onChange={(e) => {
+							setQ(e.target.value);
+							setSel(0);
+						}}
 						onKeyDown={(e) => {
-							if (e.key === "ArrowDown")
-								e.preventDefault(), setSel((s) => Math.min(items.length - 1, s + 1));
-							else if (e.key === "ArrowUp") e.preventDefault(), setSel((s) => Math.max(0, s - 1));
-							else if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && q.trim())
-								e.preventDefault(), run({ kind: "create", type: null, title: q.trim() });
-							else if (e.key === "Enter" && items[sel]) e.preventDefault(), run(items[sel]!);
+							if (e.key === "ArrowDown") {
+								e.preventDefault();
+								setSel((s) => Math.min(items.length - 1, s + 1));
+							} else if (e.key === "ArrowUp") {
+								e.preventDefault();
+								setSel((s) => Math.max(0, s - 1));
+							} else if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && q.trim()) {
+								e.preventDefault();
+								run({ kind: "create", type: null, title: q.trim() });
+							} else if (e.key === "Enter" && items[sel]) {
+								e.preventDefault();
+								run(items[sel]!);
+							}
 						}}
 						placeholder={t("palette.placeholder")}
 						value={q}
@@ -179,15 +199,15 @@ export function CommandPalette({
 									"flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm",
 									active && "bg-selected",
 								),
-								key: i,
 							};
+							const key = keyOf(it);
 							if (it.kind === "item") {
 								const ix = repoOf(it.space).index();
 								const item = ix.get(it.id)!;
 								const status = statusOf(item, ix.schemaOf(item));
 								const home = ix.homePath(item.id);
 								return (
-									<Button variant="plain" {...common}>
+									<Button key={key} variant="plain" {...common}>
 										<ItemIcon item={item} />
 										<span className="min-w-0 flex-1">
 											<span className="block truncate">{titleOf(item, t)}</span>
@@ -217,7 +237,7 @@ export function CommandPalette({
 							}
 							if (it.kind === "create")
 								return (
-									<Button variant="plain" {...common}>
+									<Button key={key} variant="plain" {...common}>
 										<Plus className="text-muted-foreground" size={16} />
 										<span className="flex-1 truncate">
 											{it.type
@@ -235,13 +255,13 @@ export function CommandPalette({
 								);
 							if (it.kind === "cmd")
 								return (
-									<Button variant="plain" {...common}>
+									<Button key={key} variant="plain" {...common}>
 										<ChevronRight className="text-muted-foreground" size={16} />
 										<span className="flex-1">{it.label}</span>
 									</Button>
 								);
 							return (
-								<Button variant="plain" {...common}>
+								<Button key={key} variant="plain" {...common}>
 									<span className="w-4" />
 									<span className="flex-1 text-muted-foreground">
 										{t("palette.goTo", { label: it.label })}

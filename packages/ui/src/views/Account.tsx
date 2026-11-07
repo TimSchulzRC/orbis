@@ -3,7 +3,7 @@
 
 import type { InviteInfo, ServerInfo } from "@obtion/core/api";
 import { KeyRound } from "lucide-react";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useEffectEvent, useId, useState } from "react";
 import {
 	ApiError,
 	errorText,
@@ -51,10 +51,11 @@ export function AuthCard({
 const input = "mt-1 block bg-surface";
 
 function Field({ label, ...p }: { label: string } & React.InputHTMLAttributes<HTMLInputElement>) {
+	const inputId = useId();
 	return (
-		<label className="mt-4 block text-sm font-medium">
+		<label className="mt-4 block text-sm font-medium" htmlFor={inputId}>
 			{label}
-			<Input {...p} className={input} />
+			<Input id={inputId} {...p} className={input} />
 		</label>
 	);
 }
@@ -100,16 +101,19 @@ export function SignIn({
 	const [code, setCode] = useState("");
 	const [error, setError] = useState(oauthFailed ? t(oauthErrorKey(oauthFailed)) : "");
 	const [busy, setBusy] = useState(false);
+	// asked once, when the form opens
+	const gotServer = useEffectEvent((server: ServerInfo) => {
+		setInfo(server);
+		if (!fixedEmail && (server.firstAccount || inviteCode)) setMode("up");
+		// confirming an account with a password: with that, as the password manager knows it
+		if (!loginOf(server).emailCode || (fixedEmail && hasPassword && loginOf(server).password))
+			setWithPassword(true);
+	});
+	const offline = useEffectEvent(() => setError(t("account.offline")));
 	useEffect(() => {
 		serverInfo()
-			.then((server) => {
-				setInfo(server);
-				if (!fixedEmail && (server.firstAccount || inviteCode)) setMode("up");
-				// confirming an account with a password: with that, as the password manager knows it
-				if (!loginOf(server).emailCode || (fixedEmail && hasPassword && loginOf(server).password))
-					setWithPassword(true);
-			})
-			.catch(() => setError(t("account.offline")));
+			.then((server) => gotServer(server))
+			.catch(() => offline());
 	}, []);
 	const login = loginOf(info);
 	// confirming an account without a password: no password to ask for
@@ -209,7 +213,11 @@ export function SignIn({
 				<div className="mt-3 flex justify-between text-sm">
 					<Button
 						className="text-link hover:underline"
-						onClick={() => (setCodeSent(false), setCode(""), setError(""))}
+						onClick={() => {
+							setCodeSent(false);
+							setCode("");
+							setError("");
+						}}
 						type="button"
 						variant="plain"
 					>
@@ -325,7 +333,10 @@ export function SignIn({
 			{login.emailCode && byPassword && (
 				<Button
 					className="mt-3 w-full text-center text-sm text-link hover:underline"
-					onClick={() => (setWithPassword(!withPassword), setError(""))}
+					onClick={() => {
+						setWithPassword(!withPassword);
+						setError("");
+					}}
 					type="button"
 					variant="plain"
 				>
@@ -335,7 +346,10 @@ export function SignIn({
 			{canSignUp && !info?.firstAccount && (
 				<Button
 					className="mt-3 w-full text-center text-sm text-link hover:underline"
-					onClick={() => (setMode(mode === "up" ? "in" : "up"), setError(""))}
+					onClick={() => {
+						setMode(mode === "up" ? "in" : "up");
+						setError("");
+					}}
 					type="button"
 					variant="plain"
 				>

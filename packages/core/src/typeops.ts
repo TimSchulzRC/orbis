@@ -179,7 +179,6 @@ function convertItem(
 	doc: Y.Doc,
 	item: Item,
 	from: TypeSchema | undefined,
-	ix: Index,
 	to: { type: string | null; schema?: TypeSchema; tag?: string; removeTag?: string },
 ): Undo {
 	const undo: Undo = {
@@ -285,7 +284,7 @@ export function deleteType(
 	for (const item of ix.live.filter((i) => i.type === typeId)) {
 		w.change(item.id, (doc) => {
 			items.push(
-				convertItem(doc, item, from, ix, {
+				convertItem(doc, item, from, {
 					type: m.mode === "type" ? m.target : null,
 					schema: target,
 					tag: m.mode === "tag" ? m.tag : undefined,
@@ -340,7 +339,7 @@ export function tagToType(
 		const item = ix.get(id)!;
 		w.change(id, (doc) => {
 			items.push(
-				convertItem(doc, item, ix.schemaOf(item), ix, {
+				convertItem(doc, item, ix.schemaOf(item), {
 					type: typeId,
 					schema: item.type === typeId ? undefined : target,
 					removeTag: opts.removeTag ? normalizeTag(tag) : undefined,

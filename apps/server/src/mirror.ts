@@ -44,7 +44,10 @@ export class Mirror {
 		this.store.on({ record: () => this.schedule() });
 		if (this.blobs) {
 			const prev = this.blobs.onStored;
-			this.blobs.onStored = (h) => (prev?.(h), this.schedule());
+			this.blobs.onStored = (h) => {
+				prev?.(h);
+				this.schedule();
+			};
 		}
 	}
 
@@ -235,14 +238,13 @@ function yaml(s: string) {
 	return /^[\w ./@()&+,–-]*$/.test(s) && !/^\s|\s$/.test(s) && s !== "" ? s : JSON.stringify(s);
 }
 
-function pruneEmpty(dir: string, root: string) {
-	while (dir.startsWith(root) && dir !== root) {
+function pruneEmpty(start: string, root: string) {
+	for (let dir = start; dir.startsWith(root) && dir !== root; dir = dirname(dir)) {
 		try {
 			if (readdirSync(dir).length) return;
 			rmdirSync(dir);
 		} catch {
 			return;
 		}
-		dir = dirname(dir);
 	}
 }

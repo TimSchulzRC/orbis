@@ -9,8 +9,17 @@ export const MCP_ACCEPT = "application/json, text/event-stream";
 let rpcId = 0;
 export const rpcBody = (method: string, params?: unknown) =>
 	JSON.stringify({ jsonrpc: "2.0", id: ++rpcId, method, params });
-export const toolText = (r: any) =>
-	(r.result.content as { text: string }[]).map((c) => c.text).join("\n");
+/** The parts of an MCP JSON-RPC answer the tests read. */
+export interface RpcAnswer {
+	result: {
+		content?: { text: string }[];
+		isError?: boolean;
+		prompts?: { name: string }[];
+		messages?: { content: { text: string } }[];
+		instructions?: string;
+	};
+}
+export const toolText = (r: RpcAnswer) => r.result.content!.map((c) => c.text).join("\n");
 
 export const ROOT = resolve(import.meta.dir, "../..");
 

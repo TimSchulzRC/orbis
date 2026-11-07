@@ -49,7 +49,11 @@ function AddRow({
 				className="flex-1 bg-transparent text-sm text-fg outline-none placeholder:text-faint max-md:text-[15px]"
 				onBlur={() => !text.trim() && onDone?.()}
 				onChange={(e) => setText(e.target.value)}
-				onKeyDown={(e) => e.key === "Escape" && (setText(""), onDone?.())}
+				onKeyDown={(e) => {
+					if (e.key !== "Escape") return;
+					setText("");
+					onDone?.();
+				}}
 				placeholder={label}
 				value={text}
 				variant="bare"
@@ -187,7 +191,10 @@ export function Below({ item }: { item: Item }) {
 				<>
 					<MenuItem
 						icon={<NOTE_ICON size={14} style={{ color: "var(--t-note)" }} />}
-						onClick={() => (setAdding(null), close())}
+						onClick={() => {
+							setAdding(null);
+							close();
+						}}
 					>
 						{t("kind.note")}
 					</MenuItem>
@@ -195,7 +202,10 @@ export function Below({ item }: { item: Item }) {
 						<MenuItem
 							icon={<TypeGlyph schema={x.schema} size={14} />}
 							key={x.id}
-							onClick={() => (setAdding(x.id), close())}
+							onClick={() => {
+								setAdding(x.id);
+								close();
+							}}
 						>
 							{x.schema.name}
 						</MenuItem>

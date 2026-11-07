@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { signOut, useAccounts } from "./accounts";
 import { Backdrop, ModalSurface } from "./components/ui/dialog";
 import { DrawingHost } from "./drawing/Drawing";
-import { itemPath, openItem, spaceHref, useDesktop, useRepo, useRoute } from "./hooks";
+import { itemPath, openItem, spaceHref, useDesktop, useOnChange, useRepo, useRoute } from "./hooks";
 import { useT } from "./i18n";
 import { cn } from "./lib/utils";
 import { globalPage } from "./scope";
@@ -104,9 +104,9 @@ function Main() {
 	const wide = useDesktop();
 	const [palette, setPalette] = useState<string | null>(null); // the query it opens with; null: closed
 	const [menu, setMenu] = useState(false);
-	useEffect(() => setMenu(false), [route.path]);
+	useOnChange(route.path, () => setMenu(false));
 	// leaving the page closes the tray's panel, except for "#/inbox" and pages it was open at
-	useEffect(syncShelf, [route.path]);
+	useOnChange(route.path, syncShelf);
 	useEffect(() => {
 		const on = (e: KeyboardEvent) => {
 			const mod = e.metaKey || e.ctrlKey;
@@ -128,7 +128,7 @@ function Main() {
 	}, []);
 
 	// "#/create?title=…": links to items that don't exist yet
-	useEffect(() => {
+	useOnChange(route.path, () => {
 		if (route.parts[0] !== "create") return;
 		const title = route.query.get("title") ?? "";
 		const existing = title ? repo.resolveTitle(title) : undefined;
@@ -137,7 +137,7 @@ function Main() {
 			const id = repo.create({ title });
 			openItem(id, { replace: true, query: "?new=1" });
 		}
-	}, [route.path]);
+	});
 
 	// workspace pages wait until it is set up; global pages show whatever every workspace has
 	const settings = repo.get(SETTINGS_ID);
@@ -255,10 +255,20 @@ function Main() {
 
 			{palette !== null && <CommandPalette onClose={() => setPalette(null)} query={palette} />}
 			{menu && (
-				<Backdrop onClick={() => setMenu(false)}>
+				<Backdrop
+					onClick={(e) => {
+						// only a click beside the menu closes it
+						if (e.target === e.currentTarget) setMenu(false);
+					}}
+				>
 					<MenuSheet onClose={() => setMenu(false)}>
 						<div className="mx-auto mb-2 h-1 w-10 rounded-full bg-line" />
-						<MobileMenu onSettings={() => (setMenu(false), openSettings())} />
+						<MobileMenu
+							onSettings={() => {
+								setMenu(false);
+								openSettings();
+							}}
+						/>
 					</MenuSheet>
 				</Backdrop>
 			)}
@@ -287,6 +297,7 @@ function useRoom(
 	path: string,
 ) {
 	const [room, setRoom] = useState(true);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: a new `path` renders a new page element to observe
 	useLayoutEffect(() => {
 		const page = main.current?.firstElementChild as HTMLElement | null | undefined;
 		if (!on || !column.current || !page) return;
@@ -301,7 +312,7 @@ function useRoom(
 		ro.observe(column.current);
 		ro.observe(page);
 		return () => ro.disconnect();
-	}, [on, path]);
+	}, [on, column, main, path]);
 	return on && room;
 }
 
@@ -313,7 +324,6 @@ function MenuSheet({ onClose, children }: { onClose: () => void; children: React
 				aria-label={t("nav.menu")}
 				aria-modal="true"
 				className="fixed inset-x-0 bottom-0 z-50 max-h-[85vh] overflow-y-auto rounded-t-2xl border-t border-line bg-surface p-3 pb-safe shadow-2xl"
-				onClick={(e) => e.stopPropagation()}
 				role="dialog"
 			>
 				<IconButton

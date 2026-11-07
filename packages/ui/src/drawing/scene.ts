@@ -11,7 +11,8 @@ let loading: Promise<typeof import("@excalidraw/excalidraw")> | undefined;
 export function loadExcalidraw() {
 	// fonts come from this app (copied by the build), so drawings also work offline
 	(window as { EXCALIDRAW_ASSET_PATH?: string }).EXCALIDRAW_ASSET_PATH ??= "/excalidraw/";
-	return (loading ??= import("@excalidraw/excalidraw"));
+	loading ??= import("@excalidraw/excalidraw");
+	return loading;
 }
 
 /** The library belongs to the person, not the drawing: kept on this device like on excalidraw.com. */

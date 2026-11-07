@@ -63,7 +63,11 @@ export function useTriageActions(spaceOf: (i: Item) => string, opts: { quiet?: b
 	const firstType = (i?: Item) => (i ? captureTypes(spaceOf(i))[0] : undefined);
 	const done = (u: Undo) => {
 		last.current = u;
-		if (!opts.quiet) notify.undo(u.label, () => (revert(u), (last.current = null)));
+		if (!opts.quiet)
+			notify.undo(u.label, () => {
+				revert(u);
+				last.current = null;
+			});
 		return u;
 	};
 	const short = (i?: Item) => {
@@ -178,8 +182,11 @@ export function usePickers(
 	const [placing, setPlacingRaw] = useState<Item[] | null>(null);
 	const [typing, setTypingRaw] = useState<Item[] | null>(null);
 	// a place or a type is one workspace's: entries of several are sorted one workspace at a time
-	const one = (list: Item[]) =>
-		new Set(list.map(spaceOf)).size <= 1 || (notify(t("triage.oneSpace")), false);
+	const one = (list: Item[]) => {
+		if (new Set(list.map(spaceOf)).size <= 1) return true;
+		notify(t("triage.oneSpace"));
+		return false;
+	};
 	const setPlacing = (list: Item[] | null) => (!list || one(list)) && setPlacingRaw(list);
 	const setTyping = (list: Item[] | null) => (!list || one(list)) && setTypingRaw(list);
 	const node = (
@@ -189,7 +196,11 @@ export function usePickers(
 					<PlacePicker
 						list={placing}
 						onClose={() => setPlacingRaw(null)}
-						onPick={(p) => (place(placing, p), setPlacingRaw(null), after?.())}
+						onPick={(p) => {
+							place(placing, p);
+							setPlacingRaw(null);
+							after?.();
+						}}
 					/>
 				</SpaceScope>
 			)}
@@ -198,7 +209,11 @@ export function usePickers(
 					<TypePicker
 						current={typing.length === 1 ? typing[0]!.type : null}
 						onClose={() => setTypingRaw(null)}
-						onPick={(type) => (giveType(typing, type), setTypingRaw(null), after?.())}
+						onPick={(type) => {
+							giveType(typing, type);
+							setTypingRaw(null);
+							after?.();
+						}}
 					/>
 				</SpaceScope>
 			)}
@@ -238,22 +253,34 @@ function TypePicker({
 		if (row.id) return onPick(row.id);
 		const name = row.create?.trim();
 		if (name) onPick(createType(name, repo));
-		else setNaming(true), field.current?.focus();
+		else {
+			setNaming(true);
+			field.current?.focus();
+		}
 	};
 	return (
 		<Dialog onClose={onClose} title={t("triage.chooseType")}>
 			<Input
 				autoFocus
 				className="mb-2 focus:border-focus"
-				onChange={(e) => (setQ(e.target.value), setSel(0))}
+				onChange={(e) => {
+					setQ(e.target.value);
+					setSel(0);
+				}}
 				onKeyDown={(e) => {
-					if (e.key === "ArrowDown")
-						e.preventDefault(), setSel((s) => Math.min(rows.length - 1, s + 1));
-					else if (e.key === "ArrowUp") e.preventDefault(), setSel((s) => Math.max(0, s - 1));
-					else if (e.key === "Enter")
-						e.preventDefault(), pick(naming && q.trim() ? { create: q } : rows[sel]);
-					else if (!q && /^[1-9]$/.test(e.key) && rows[Number(e.key) - 1]?.id)
-						e.preventDefault(), pick(rows[Number(e.key) - 1]);
+					if (e.key === "ArrowDown") {
+						e.preventDefault();
+						setSel((s) => Math.min(rows.length - 1, s + 1));
+					} else if (e.key === "ArrowUp") {
+						e.preventDefault();
+						setSel((s) => Math.max(0, s - 1));
+					} else if (e.key === "Enter") {
+						e.preventDefault();
+						pick(naming && q.trim() ? { create: q } : rows[sel]);
+					} else if (!q && /^[1-9]$/.test(e.key) && rows[Number(e.key) - 1]?.id) {
+						e.preventDefault();
+						pick(rows[Number(e.key) - 1]);
+					}
 				}}
 				placeholder={naming ? t("types.new") : t("triage.typeFilter")}
 				ref={field}

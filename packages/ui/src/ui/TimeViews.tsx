@@ -194,7 +194,10 @@ export function CalendarView({
 							const s = Math.max(0, diffDays(w, p.span.start));
 							const e = Math.min(6, diffDays(w, p.span.end));
 							let lane = lanes.findIndex((l) => l.slice(s, e + 1).every((x) => !x));
-							if (lane < 0) lanes.push(new Array(7).fill("")), (lane = lanes.length - 1);
+							if (lane < 0) {
+								lanes.push(new Array(7).fill(""));
+								lane = lanes.length - 1;
+							}
 							for (let n = s; n <= e; n++) lanes[lane]![n] = p.item.id;
 							return { ...p, s, e, lane };
 						});
@@ -208,6 +211,7 @@ export function CalendarView({
 								}}
 							>
 								{days.map((d, n) => (
+									// biome-ignore lint/a11y/noStaticElementInteractions: a drop target for dragging an entry to another day; its date field changes the day by keyboard
 									<div
 										className={cn(
 											"border-l border-line first:border-l-0",
@@ -216,8 +220,17 @@ export function CalendarView({
 										)}
 										key={d}
 										onDragLeave={() => setOver(null)}
-										onDragOver={(e) => drag && (e.preventDefault(), setOver(d))}
-										onDrop={(e) => (e.preventDefault(), drop(d), setDrag(null), setOver(null))}
+										onDragOver={(e) => {
+											if (!drag) return;
+											e.preventDefault();
+											setOver(d);
+										}}
+										onDrop={(e) => {
+											e.preventDefault();
+											drop(d);
+											setDrag(null);
+											setOver(null);
+										}}
 										style={{ gridColumn: n + 1, gridRow: `1 / span ${shownLanes + 2}` }}
 									>
 										<span
@@ -246,10 +259,10 @@ export function CalendarView({
 											href={itemHref(p.item.id)}
 											key={p.item.id}
 											onDragEnd={() => setDrag(null)}
-											onDragStart={(e) => (
-												e.dataTransfer.setData("obtion/item", p.item.id),
-												setDrag({ id: p.item.id, from: days[p.s]! })
-											)}
+											onDragStart={(e) => {
+												e.dataTransfer.setData("obtion/item", p.item.id);
+												setDrag({ id: p.item.id, from: days[p.s]! });
+											}}
 											style={{ gridColumn: `${p.s + 1} / ${p.e + 2}`, gridRow: p.lane + 2 }}
 											title={p.item.title}
 										>
@@ -352,6 +365,7 @@ export function TimelineView({
 	const narrow = useNarrow();
 	// today in view, a bit from the left
 	const todayScroll = Math.max(0, diffDays(from, today) * px - 160);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: jumps to today when the scale or the date field changes, not when moved bars shift today's offset
 	useEffect(() => {
 		const el = scroller.current;
 		if (el) el.scrollLeft = todayScroll;
@@ -478,7 +492,9 @@ export function TimelineView({
 				/>
 				<Button
 					className="tap rounded-md px-2 py-0.5 text-xs text-muted-foreground hover:bg-hover hover:text-fg"
-					onClick={() => scroller.current && (scroller.current.scrollLeft = todayScroll)}
+					onClick={() => {
+						if (scroller.current) scroller.current.scrollLeft = todayScroll;
+					}}
 					variant="plain"
 				>
 					{t("time.today")}

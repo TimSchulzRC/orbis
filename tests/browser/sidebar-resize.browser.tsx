@@ -6,16 +6,19 @@ import { cleanup, render } from "vitest-browser-react";
 import { ScopeContext } from "../../packages/ui/src/scope";
 import { SIDEBAR_WIDTH, Sidebar } from "../../packages/ui/src/ui/Sidebar";
 import { KEYS } from "../../packages/ui/src/ui/storage";
-import { noFiles, workspace } from "./workspace";
+import { noFiles, noop, workspace } from "./workspace";
 
-afterEach(() => (cleanup(), localStorage.removeItem(KEYS.sidebarWidth)));
+afterEach(() => {
+	cleanup();
+	localStorage.removeItem(KEYS.sidebarWidth);
+});
 
 async function setup() {
 	const repo = await workspace();
 	await render(
 		<ScopeContext.Provider value={{ id: "w1", repo, files: noFiles }}>
 			<div style={{ display: "flex", height: 400 }}>
-				<Sidebar onSearch={() => {}} />
+				<Sidebar onSearch={noop} />
 			</div>
 		</ScopeContext.Provider>,
 	);

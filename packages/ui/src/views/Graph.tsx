@@ -2,7 +2,7 @@ import type { Index } from "@obtion/core/graph";
 import { type Item, META_TYPE } from "@obtion/core/model";
 import { isDone, statusProp } from "@obtion/core/traits";
 import ForceGraph from "force-graph";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Checkbox } from "../components/ui/checkbox";
 import { Input } from "../components/ui/input";
 import { NativeSelect } from "../components/ui/native-select";
@@ -89,13 +89,15 @@ function GraphCanvas({
 	const links = useRef(new Map<string, Set<string>>()); // id -> its neighbours
 	const fitted = useRef(false);
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies: colours are read once, so a new `theme` draws the graph again
 	useEffect(() => {
 		const el = host.current!;
 		const colorOf = (c: string) => cssVar(c.startsWith("--") ? c : `--pal-${c}`);
 		const text = cssVar("--text");
 		const faint = cssVar("--muted"); // labels are text: muted keeps 4.5:1
 		const line = cssVar("--border");
-		const neighbours = (links.current = new Map());
+		const neighbours = new Map<string, Set<string>>();
+		links.current = neighbours;
 		fitted.current = false;
 		const g = new ForceGraph<GNode, GLink>(el)
 			.backgroundColor("rgba(0,0,0,0)")
@@ -178,7 +180,7 @@ function GraphCanvas({
 			resize.disconnect();
 			g._destructor();
 		};
-	}, [theme]); // colours are read once: drawn again when light/dark changes
+	}, [theme]);
 
 	useEffect(() => {
 		const g = graph.current!;
@@ -216,6 +218,8 @@ function GraphCanvas({
 }
 
 export function GraphView() {
+	const orphansId = useId();
+	const doneId = useId();
 	const repo = useRepo();
 	const { t } = useT();
 	useDocumentTitle(t("nav.graph"));
@@ -244,14 +248,14 @@ export function GraphView() {
 		const graph = buildGraph(ix, items, kinds);
 		if (!hideOrphans) return graph;
 		return { nodes: graph.nodes.filter((n) => n.deg > 0), links: graph.links };
-	}, [repo.version, hidden, kinds, hideOrphans, hideDone, tag]);
+	}, [ix, hidden, kinds, hideOrphans, hideDone, tag]);
 	const highlight = useMemo(() => {
 		const needle = q.trim().toLowerCase();
 		if (!needle) return;
 		const byTitle = ix.live.filter((n) => n.title.toLowerCase().includes(needle));
 		return new Set((byTitle.length ? byTitle : repo.search(q, 15)).map((n) => n.id));
-	}, [q, repo.version]);
-	const tags = useMemo(() => ix.tags().slice(0, 80), [repo.version]);
+	}, [q, ix, repo]);
+	const tags = useMemo(() => ix.tags().slice(0, 80), [ix]);
 	const chip = (on: boolean) =>
 		cn(
 			"flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs",
@@ -325,16 +329,21 @@ export function GraphView() {
 							</option>
 						))}
 					</NativeSelect>
-					<label className="flex items-center gap-1 text-xs text-muted-foreground">
+					<label
+						className="flex items-center gap-1 text-xs text-muted-foreground"
+						htmlFor={orphansId}
+					>
 						<Checkbox
 							checked={hideOrphans}
+							id={orphansId}
 							onCheckedChange={(checked) => setHideOrphans(checked === true)}
 						/>{" "}
 						{t("graph.hideUnlinked")}
 					</label>
-					<label className="flex items-center gap-1 text-xs text-muted-foreground">
+					<label className="flex items-center gap-1 text-xs text-muted-foreground" htmlFor={doneId}>
 						<Checkbox
 							checked={hideDone}
+							id={doneId}
 							onCheckedChange={(checked) => setHideDone(checked === true)}
 						/>{" "}
 						{t("graph.hideDone")}

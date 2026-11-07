@@ -56,7 +56,10 @@ export function zip(entries: Record<string, string | Uint8Array>): Uint8Array {
 function concat(parts: Uint8Array[]): Uint8Array {
 	const out = new Uint8Array(parts.reduce((a, b) => a + b.length, 0));
 	let p = 0;
-	for (const x of parts) out.set(x, p), (p += x.length);
+	for (const x of parts) {
+		out.set(x, p);
+		p += x.length;
+	}
 	return out;
 }
 

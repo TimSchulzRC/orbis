@@ -107,8 +107,9 @@ const TIME_TAIL =
 	/^(.*?)(?:T|[\s,]+(?:um\s+|at\s+)?)(\d{1,2})(?:[:.](\d{2}))?(?::\d{2}(?:\.\d+)?)?\s*(?:Z|[+-]\d{2}:?\d{2})?\s*(uhr|h|am|pm)?$/i;
 
 /** "HH:MM" from hours, minutes and an am/pm mark; undefined when it is no time of day. */
-function clock(h: number, m: number, mark?: string): string | undefined {
+function clock(hour: number, m: number, mark?: string): string | undefined {
 	const k = mark?.toLowerCase();
+	let h = hour;
 	if (k === "am" || k === "pm") {
 		if (h < 1 || h > 12) return undefined;
 		h = (h % 12) + (k === "pm" ? 12 : 0);
@@ -175,8 +176,9 @@ export function parseNumber(lang: Lang, input: string): number | undefined {
 type Alias = { group: StatusGroup; names?: string[] };
 /** Synonym → status group, plus option names to prefer within it. */
 const STATUS_ALIASES: Record<string, Alias> = {};
-const alias = (words: string, a: Alias) =>
-	words.split(",").forEach((w) => (STATUS_ALIASES[foldWord(w)] = a));
+const alias = (words: string, a: Alias) => {
+	for (const w of words.split(",")) STATUS_ALIASES[foldWord(w)] = a;
+};
 alias("open,offen,todo,to do,new,neu,not started,nicht begonnen,noch nicht begonnen", {
 	group: "todo",
 });

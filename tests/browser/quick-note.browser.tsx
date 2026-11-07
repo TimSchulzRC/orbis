@@ -20,7 +20,10 @@ beforeEach(async () => {
 		</div>,
 	);
 });
-afterEach(() => (closeQuickNote(), cleanup()));
+afterEach(() => {
+	closeQuickNote();
+	return cleanup();
+});
 
 const field = () => page.getByRole("button", { name: "Neue Notiz" });
 const card = () => page.getByRole("dialog", { name: "Neue Notiz" });

@@ -438,7 +438,11 @@ export class Repo {
 			if (!o) continue;
 			const g = lastOf.get(o.d);
 			if (g && o.s && g[0]!.s === o.s && g[0]!.a === o.a && g.length < MERGE_MAX) g.push(o);
-			else groups.push([o]), lastOf.set(o.d, groups.at(-1)!);
+			else {
+				const group = [o];
+				groups.push(group);
+				lastOf.set(o.d, group);
+			}
 		}
 		const items: OutItem[] = [];
 		const merged: OutItem[] = [];
@@ -451,9 +455,13 @@ export class Repo {
 			// the first item's key keeps the merged one in its place, in memory and in the storage (keys
 			// sort by time): a later step of the document may depend on it
 			const m: OutItem = { ...g[0]!, u: toB64(Y.mergeUpdates(g.map((o) => fromB64(o.u)))) };
-			for (const o of g.slice(1)) this.outbox.delete(o.k), replaced.push(o.k);
+			for (const o of g.slice(1)) {
+				this.outbox.delete(o.k);
+				replaced.push(o.k);
+			}
 			this.outbox.set(m.k, m);
-			items.push(m), merged.push(m);
+			items.push(m);
+			merged.push(m);
 		}
 		if (merged.length) this.store({ outbox: merged, acked: replaced });
 		this.status.pending = this.outbox.size;

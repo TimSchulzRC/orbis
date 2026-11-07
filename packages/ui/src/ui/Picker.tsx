@@ -64,12 +64,21 @@ export function ItemPicker({
 			<Input
 				autoFocus
 				className="mb-2 focus:border-focus"
-				onChange={(e) => (setQ(e.target.value), setSel(0))}
+				onChange={(e) => {
+					setQ(e.target.value);
+					setSel(0);
+				}}
 				onKeyDown={(e) => {
-					if (e.key === "ArrowDown")
-						e.preventDefault(), setSel((s) => Math.min(rows.length - 1, s + 1));
-					else if (e.key === "ArrowUp") e.preventDefault(), setSel((s) => Math.max(0, s - 1));
-					else if (e.key === "Enter") e.preventDefault(), pick(rows[sel]);
+					if (e.key === "ArrowDown") {
+						e.preventDefault();
+						setSel((s) => Math.min(rows.length - 1, s + 1));
+					} else if (e.key === "ArrowUp") {
+						e.preventDefault();
+						setSel((s) => Math.max(0, s - 1));
+					} else if (e.key === "Enter") {
+						e.preventDefault();
+						pick(rows[sel]);
+					}
 				}}
 				placeholder={t("picker.search")}
 				value={q}

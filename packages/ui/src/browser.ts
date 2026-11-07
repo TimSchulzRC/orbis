@@ -146,7 +146,10 @@ export function browserHost(link: SpaceLink): RepoHost {
 			);
 		},
 		persist() {
-			if (navigator.storage?.persist) navigator.storage.persist().catch(() => {});
+			if (navigator.storage?.persist)
+				navigator.storage.persist().catch(() => {
+					// storage stays best-effort
+				});
 		},
 		async askOtherServer() {
 			const { chooseAction } = await import("./ui/feedback");

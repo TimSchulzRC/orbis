@@ -91,7 +91,10 @@ export function InboxList({
 							<MenuItem
 								icon={<SlidersHorizontal size={14} />}
 								key={s.id}
-								onClick={() => (close(), setRule(s.id))}
+								onClick={() => {
+									close();
+									setRule(s.id);
+								}}
 							>
 								{shown.length > 1 ? t("inbox.whatLandsIn", { name: s.name }) : t("inbox.whatLands")}
 							</MenuItem>
@@ -100,10 +103,10 @@ export function InboxList({
 				</MoreMenu>
 			</div>
 			{/* several workspaces: which of them, as in the sidebar's selector */}
-			<div className="shrink-0 px-5 pt-3 empty:hidden [&>div]:mb-1">
+			<div className="shrink-0 px-5 pt-3 empty:hidden [&>fieldset]:mb-1">
 				<SpaceFilter />
 			</div>
-			<div aria-label={t("triage.list")} className="min-h-0 flex-1 overflow-y-auto p-1.5">
+			<section aria-label={t("triage.list")} className="min-h-0 flex-1 overflow-y-auto p-1.5">
 				{waiting.length ? (
 					<ul>
 						{waiting.map((e) => (
@@ -133,7 +136,10 @@ export function InboxList({
 								icon={ListX}
 								iconSize={14}
 								label={t("review.clearSorted")}
-								onClick={() => (onClear(), setAllSorted(false))}
+								onClick={() => {
+									onClear();
+									setAllSorted(false);
+								}}
 								size="sm"
 								title={t("review.clearSorted")}
 							/>
@@ -207,7 +213,7 @@ export function InboxList({
 						)}
 					</section>
 				)}
-			</div>
+			</section>
 			{rule && shown.some((s) => s.id === rule) && (
 				<SpaceScope id={rule}>
 					<InboxRule
@@ -366,7 +372,11 @@ function InboxRule({ name, onClose }: { name?: string; onClose: () => void }) {
 	const repo = useRepo();
 	const where = inboxWhere(repo.index());
 	const [draft, setDraft] = useState<QueryDef["where"] | null>(null);
-	const restore = () => (setDraft(null), resetInbox(repo.writer), notify(t("inbox.restored")));
+	const restore = () => {
+		setDraft(null);
+		resetInbox(repo.writer);
+		notify(t("inbox.restored"));
+	};
 	return (
 		<Dialog
 			onClose={onClose}
@@ -389,11 +399,11 @@ function InboxRule({ name, onClose }: { name?: string; onClose: () => void }) {
 					<DraftBar
 						className="sticky top-0 z-10 mb-3 rounded-xl bg-surface px-3 py-2"
 						onDiscard={() => setDraft(null)}
-						onSave={() => (
-							repo.change(SETTINGS_ID, (d) => setSettings(d, { inbox: draft })),
-							setDraft(null),
-							notify(t("view.saved"))
-						)}
+						onSave={() => {
+							repo.change(SETTINGS_ID, (d) => setSettings(d, { inbox: draft }));
+							setDraft(null);
+							notify(t("view.saved"));
+						}}
 					/>
 				)}
 			</div>

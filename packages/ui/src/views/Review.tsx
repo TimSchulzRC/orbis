@@ -5,9 +5,9 @@
 
 import type { Item } from "@obtion/core/model";
 import { ArrowLeft, Check, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { replica, spaceById, useAccounts } from "../accounts";
-import { openItem, useRepo } from "../hooks";
+import { openItem, useOnChange, useRepo } from "../hooks";
 import { titleOf, useT } from "../i18n";
 import { cn } from "../lib/utils";
 import {
@@ -54,18 +54,22 @@ export function InboxPanel({ desktop, pinned }: { desktop: boolean; pinned?: boo
 	const { at } = useShelf();
 	const self = useRef<HTMLDivElement>(null);
 	// take the keys from the button that opened the panel
-	useEffect(() => void (!pinned && self.current?.focus()), []);
+	const focusOnOpen = useEffectEvent(() => {
+		if (!pinned) self.current?.focus();
+	});
+	useEffect(() => focusOnOpen(), []);
 	useEffect(() => {
 		if (pinned) return;
 		const was = document.title;
 		document.title = t("review.title");
-		return () => void (document.title = was);
-	}, [pinned]);
+		return () => {
+			document.title = was;
+		};
+	}, [pinned, t]);
 	// on a phone the list, an entry over it as a sheet
 	const sheet = !desktop && !!at;
 	return (
 		<div
-			aria-label={pinned ? undefined : t("review.title")}
 			className={cn(
 				"flex flex-col overflow-hidden border border-line bg-surface outline-none",
 				pinned
@@ -84,7 +88,7 @@ export function InboxPanel({ desktop, pinned }: { desktop: boolean; pinned?: boo
 			onClickCapture={(e) => (e.target as HTMLElement).closest("a[href]") && closeShelf()}
 			ref={self}
 			// pinned it is part of the tray's region, else a dialog over the page
-			role={pinned ? undefined : "dialog"}
+			{...(pinned ? {} : { "aria-label": t("review.title"), role: "dialog" })}
 			tabIndex={-1}
 		>
 			{!desktop && (
@@ -124,7 +128,9 @@ function Inbox({
 	const [sorted, setSorted] = useState<Sorted[]>(storedSorted);
 	const [chosen, setChosen] = useState<string | undefined>(at ?? session?.at);
 	// another entry asked for while open
-	useEffect(() => void (at && setChosen(at)), [at]);
+	useEffect(() => {
+		if (at) setChosen(at);
+	}, [at]);
 	const card = useRef<HTMLDivElement>(null);
 	const byKey = new Map([...entries, ...later].map((e) => [e.key, e]));
 	// set aside till tomorrow and back in the inbox now: waiting again, no longer sorted
@@ -132,10 +138,9 @@ function Inbox({
 		(s) =>
 			s.undo.steps.some((step) => step.later !== undefined) && entries.some((e) => e.key === s.key),
 	);
-	useEffect(
-		() => void (due.length && setSorted((list) => list.filter((s) => !due.includes(s)))),
-		[due.length],
-	);
+	useOnChange(due.length, () => {
+		if (due.length) setSorted((list) => list.filter((s) => !due.includes(s)));
+	});
 	const done = (k: string) => sorted.some((s) => s.key === k && !due.includes(s));
 	const left = order.current.filter((k) => entries.some((e) => e.key === k) && !done(k));
 	// back tomorrow and not just sent there here (that one is under "Sorted")
@@ -153,7 +158,9 @@ function Inbox({
 	const waiting = isLater(key);
 	// a phone shows the entry only when one was asked for
 	const listOnly = !desktop && !at;
-	useEffect(() => void (session = { order: order.current, at: key }), [key]);
+	useEffect(() => {
+		session = { order: order.current, at: key };
+	}, [key]);
 	useEffect(() => writeJSON(KEYS.inboxSorted, sorted), [sorted]);
 
 	const act = useTriageActions(() => entry!.space, { quiet: true });
@@ -192,7 +199,10 @@ function Inbox({
 		setSorted((list) => list.filter((s) => s !== target));
 		setChosen(target.key);
 	};
-	const choose = (k: string) => (desktop ? setChosen(k) : (setChosen(k), openShelf(k)));
+	const choose = (k: string) => {
+		setChosen(k);
+		if (!desktop) openShelf(k);
+	};
 	const step = (direction: 1 | -1) => {
 		const index = key ? left.indexOf(key) : -1;
 		const next = left[index + direction];
@@ -236,14 +246,15 @@ function Inbox({
 			card.current?.scrollBy({ top: pressed === "ArrowDown" ? ARROW_SCROLL : -ARROW_SCROLL });
 		else if (pressed === "j" || pressed === "ArrowRight") step(1);
 		else if (pressed === "k" || pressed === "ArrowLeft") step(-1);
-		else if (pressed === "Enter" || pressed === "o")
-			closeShelf(), openItem(entry.item.id, { space: entry.space });
-		else return;
+		else if (pressed === "Enter" || pressed === "o") {
+			closeShelf();
+			openItem(entry.item.id, { space: entry.space });
+		} else return;
 		e.preventDefault();
 	};
 	// Esc leaves the title or the text, unless the editor used it (its completions close first); the keys are the panel's again (pinned: only with the focus in it)
-	const escape = useRef<(e: KeyboardEvent) => void>(null);
-	escape.current = (e) => {
+	const onEscapeKey = useRef<(e: KeyboardEvent) => void>(null);
+	onEscapeKey.current = (e) => {
 		const el = document.activeElement as HTMLElement | null;
 		if (
 			e.key === "Escape" &&
@@ -252,17 +263,21 @@ function Inbox({
 			!pick.typing &&
 			el &&
 			card.current?.contains(el)
-		)
-			e.preventDefault(), el.blur(), panel.current?.focus();
+		) {
+			e.preventDefault();
+			el.blur();
+			panel.current?.focus();
+		}
 	};
 	useEffect(() => {
 		const onKey = (e: KeyboardEvent) => keys.current?.(e);
-		const onEscape = (e: KeyboardEvent) => escape.current?.(e);
+		const onEscape = (e: KeyboardEvent) => onEscapeKey.current?.(e);
 		addEventListener("keydown", onKey, true);
 		addEventListener("keydown", onEscape);
-		return () => (
-			removeEventListener("keydown", onKey, true), removeEventListener("keydown", onEscape)
-		);
+		return () => {
+			removeEventListener("keydown", onKey, true);
+			removeEventListener("keydown", onEscape);
+		};
 	}, []);
 
 	const total = sorted.length + left.length;
@@ -435,6 +450,7 @@ function Steps({ total, done }: { total: number; done: number }) {
 						"h-1 flex-1 rounded-full",
 						n < done ? "bg-[var(--ok)]" : n === done ? "bg-inbox" : "bg-line",
 					)}
+					// biome-ignore lint/suspicious/noArrayIndexKey: a segment is its position in the bar
 					key={n}
 				/>
 			))}

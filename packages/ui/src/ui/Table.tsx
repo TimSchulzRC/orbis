@@ -35,13 +35,13 @@ import { titleOf, useT } from "../i18n";
 import { startPointerDrag } from "../lib/drag";
 import { cn, moveInArray } from "../lib/utils";
 import { repo } from "../repo";
+import { CellValue, defaultColumns } from "./cells";
 import { DateField, InlineText } from "./fields";
 import { AreaChip, fieldLabel, GroupChip, HiddenGroups, hiddenPatch, splitHidden } from "./groups";
 import { EmptyDash, ItemIcon } from "./item-look";
 import { OptionSelect, PropertyField, RangeEditor } from "./Properties";
 import { Button, IconButton, MenuItem, MoreMenu, Popover } from "./primitives";
 import { PercentBar } from "./progress";
-import { CellValue, defaultColumns } from "./Results";
 import { treeOrder } from "./Row";
 import { KEYS } from "./storage";
 
@@ -251,10 +251,10 @@ export function GroupedTable({
 		const w0 = width(c);
 		let w = w0;
 		startPointerDrag(
-			(ev) => (
-				(w = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, Math.round(w0 + ev.clientX - x0)))),
-				setLive((l) => ({ ...l, [c]: w }))
-			),
+			(ev) => {
+				w = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, Math.round(w0 + ev.clientX - x0)));
+				setLive((l) => ({ ...l, [c]: w }));
+			},
 			() => {
 				if (w !== w0) look?.onLook?.({ widths: { ...(tab?.widths ?? {}), [c]: w } });
 				setTimeout(
@@ -422,25 +422,37 @@ export function GroupedTable({
 											<>
 												{look?.onLook && (
 													<MenuItem
-														onClick={() => (close(), look.onLook!(hiddenPatch(tab, g, true)))}
+														onClick={() => {
+															close();
+															look.onLook!(hiddenPatch(tab, g, true));
+														}}
 													>
 														{t("view.hideGroup")}
 													</MenuItem>
 												)}
 												<MenuItem
-													onClick={() => (close(), setFolded(allKeys.filter((k) => k !== g.key)))}
+													onClick={() => {
+														close();
+														setFolded(allKeys.filter((k) => k !== g.key));
+													}}
 												>
 													{t("table.foldOthers")}
 												</MenuItem>
-												<MenuItem onClick={() => (close(), setFolded([]))}>
+												<MenuItem
+													onClick={() => {
+														close();
+														setFolded([]);
+													}}
+												>
 													{t("table.unfoldAll")}
 												</MenuItem>
 												{look?.onLook && (
 													<MenuItem
 														active={!!tab?.hideEmpty}
-														onClick={() => (
-															close(), look.onLook!({ hideEmpty: !tab?.hideEmpty || undefined })
-														)}
+														onClick={() => {
+															close();
+															look.onLook!({ hideEmpty: !tab?.hideEmpty || undefined });
+														}}
 													>
 														{t("view.hideEmpty")}
 													</MenuItem>
@@ -539,11 +551,17 @@ export function NewRowButton({
 			<Input
 				aria-label={aria}
 				className={compact ? "w-48" : "ml-2 mt-1 w-72"}
-				onBlur={() => (create(), setTyping(false))}
+				onBlur={() => {
+					create();
+					setTyping(false);
+				}}
 				onChange={(e) => setTitle(e.target.value)}
 				onKeyDown={(e) => {
 					if (e.key === "Enter") create(); // and the next one
-					if (e.key === "Escape") setTitle(""), setTyping(false);
+					if (e.key === "Escape") {
+						setTitle("");
+						setTyping(false);
+					}
 				}}
 				placeholder={t("table.newTitle")}
 				ref={ref}

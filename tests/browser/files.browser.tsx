@@ -167,7 +167,10 @@ test("switching to online only while a downloaded original is being written: it 
 	let started = false;
 	const put = store.put.bind(store);
 	store.put = async (h, b) => {
-		if (h === a.hash) (started = true), await writing;
+		if (h === a.hash) {
+			started = true;
+			await writing;
+		}
 		return put(h, b);
 	};
 	files.setMode("local");
@@ -196,7 +199,10 @@ test("an original opened while everything is local, switched to online only whil
 	let started = false;
 	const put = inner.store.put.bind(inner.store);
 	inner.store.put = async (h, b) => {
-		if (h === a.hash) (started = true), await writing;
+		if (h === a.hash) {
+			started = true;
+			await writing;
+		}
 		return put(h, b);
 	};
 	files.mode = "local"; // as setMode, without starting downloads
@@ -223,7 +229,7 @@ test("contents from the server: loaded with the token in the header, shown from 
 	const view = (await files.viewUrl(pdf.hash, "application/pdf"))!;
 	expect(view).toMatch(/^blob:/);
 	expect(String(last()[0])).toBe(`http://server.test/api/blobs/${pdf.hash}`);
-	expect((last()[1]?.headers as Record<string, string>).authorization).toBe("Bearer t");
+	expect((last()[1]!.headers as Record<string, string>).authorization).toBe("Bearer t");
 	expect((await (await read(view)).blob()).type).toBe("application/pdf");
 	// a type that could run in the app's origin never goes on a blob: URL
 	const html = (await files.viewUrl(pdf.hash, "text/html"))!;

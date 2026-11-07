@@ -9,7 +9,7 @@ import { AreaError, Store } from "@obtion/server/store";
 import { undoStep } from "@obtion/server/undo";
 import * as Y from "yjs";
 import { docUpdate, removeTempDirs, tempDir } from "../support/helpers";
-import { setupStore, stepOf, tool } from "../support/store";
+import { ok, setupStore, stepOf, tool } from "../support/store";
 
 afterAll(removeTempDirs);
 
@@ -51,7 +51,7 @@ test("a start takes the records stored with the snapshots and decodes no documen
 	s.change(ids[0]!, "seed", (d) => d.getMap("meta").set("deleted", `via:${ids[1]}`));
 	s.flush();
 	s.db.close();
-	const read = spyOn(Store.prototype as any, "read");
+	const read = spyOn(Store.prototype as unknown as { read: (id: string) => Y.Doc | null }, "read");
 	const again = new Store(dir, 3);
 	expect(read).not.toHaveBeenCalled();
 	read.mockRestore();
@@ -160,7 +160,10 @@ test("undo works on documents that are no longer in memory", () => {
 		return "ok";
 	});
 	const step = stepOf(out);
-	ops.call(AG, () => (ops.update("Garden", { properties: { Status: "aktiv" } }, AG), "ok"));
+	ops.call(
+		AG,
+		ok(() => ops.update("Garden", { properties: { Status: "aktiv" } }, AG)),
+	);
 	for (let i = 0; i < 6; i++) s.create({ title: `Filler ${i}` }, "seed");
 	s.trim();
 	const garden = s.index().resolveTitle("Garden")!;
@@ -212,7 +215,7 @@ test("after a crash before the flush, the log rows after the snapshot are not lo
 	phone.getMap("meta").set("kind", "note");
 	phone.getMap("meta").set("title", "B from the phone");
 	s.applyRemote("b", Y.encodeStateAsUpdate(phone), "web:phone");
-	clearTimeout((s as any).timer); // the process dies before the flush: no snapshots
+	clearTimeout((s as unknown as { timer: ReturnType<typeof setTimeout> }).timer); // the process dies before the flush: no snapshots
 	s.db.close();
 	const again = new Store(dir, 3);
 	expect(body(again, a)).toBe("after before");

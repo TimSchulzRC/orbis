@@ -258,8 +258,10 @@ async function accountApi(req: Request, path: string, url: URL): Promise<Respons
 			closeConnsOf(user.id, "password changed", (conn) => conn.session === token);
 			return json<Ok>({ ok: true });
 		}
-		if (path === "/api/account/signout" && req.method === "POST")
-			return (await accounts.signOut(token!), json<Ok>({ ok: true }));
+		if (path === "/api/account/signout" && req.method === "POST") {
+			await accounts.signOut(token!);
+			return json<Ok>({ ok: true });
+		}
 		if (path === "/api/account/workspaces" && req.method === "PUT") {
 			const b = await body<{ order?: unknown }>(req);
 			if (!Array.isArray(b?.order) || !b.order.every((id) => typeof id === "string"))
@@ -322,15 +324,17 @@ async function accountApi(req: Request, path: string, url: URL): Promise<Respons
 				if (role !== undefined && !isRole(role)) return fail(400, "role invalid");
 				return json<InviteCode>({ code: accounts.createInvite(id, user.id, role ?? "member") });
 			}
-			if (sub.startsWith("/invites/") && req.method === "DELETE")
-				return (
-					accounts.revokeInvite(id, user.id, sub.slice("/invites/".length)), json<Ok>({ ok: true })
-				);
+			if (sub.startsWith("/invites/") && req.method === "DELETE") {
+				accounts.revokeInvite(id, user.id, sub.slice("/invites/".length));
+				return json<Ok>({ ok: true });
+			}
 			// the token is shown only once
 			if (sub === "/mcp-token" && req.method === "GET")
 				return json<McpTokenInfo>({ created: accounts.mcpTokenCreated(id, user.id) });
-			if (sub === "/mcp-token" && req.method === "DELETE")
-				return (accounts.revokeMcpToken(id, user.id), json<Ok>({ ok: true }));
+			if (sub === "/mcp-token" && req.method === "DELETE") {
+				accounts.revokeMcpToken(id, user.id);
+				return json<Ok>({ ok: true });
+			}
 			if (sub === "/mcp-token" && req.method === "POST") {
 				const base = PUBLIC_URL || `${url.protocol}//${req.headers.get("host")}`;
 				const mcpUrl = `${base}/w/${id}/mcp`;
@@ -383,7 +387,8 @@ async function capBody(req: Request, max: number): Promise<Request | Response> {
 	const chunks: Uint8Array[] = [];
 	let size = 0;
 	for await (const chunk of req.body) {
-		if ((size += chunk.length) > max) return tooLarge();
+		size += chunk.length;
+		if (size > max) return tooLarge();
 		chunks.push(chunk);
 	}
 	return new Request(req, { body: Buffer.concat(chunks) });

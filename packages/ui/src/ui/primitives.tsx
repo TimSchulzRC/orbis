@@ -159,7 +159,10 @@ export function useContextMenu(): ContextMenu {
 		point,
 		// keep the point while the menu fades out, else it jumps to the "…" button over the next rows
 		// and catches a right click meant for them
-		onOpenChange: (o) => (setOpen(o), o && setPoint(null)),
+		onOpenChange: (o) => {
+			setOpen(o);
+			if (o) setPoint(null);
+		},
 		onContextMenu: (e) => {
 			e.preventDefault();
 			e.stopPropagation();
@@ -374,6 +377,7 @@ export function ViewMenu({
 		>
 			{(close) =>
 				shown.map((s, i) => (
+					// biome-ignore lint/suspicious/noArrayIndexKey: sections have no id and hold no state; their order is fixed by the caller
 					<div className={cn(i > 0 && "mt-1 border-t border-line pt-1")} key={i}>
 						{s.title && (
 							<p className="px-2.5 pb-0.5 pt-1 text-xs text-muted-foreground">{s.title}</p>
@@ -382,7 +386,10 @@ export function ViewMenu({
 							<MenuItem
 								active={o.value === s.value}
 								key={o.value}
-								onClick={() => (close(), s.value !== o.value && s.onChange(o.value))}
+								onClick={() => {
+									close();
+									if (s.value !== o.value) s.onChange(o.value);
+								}}
 							>
 								{o.label}
 							</MenuItem>

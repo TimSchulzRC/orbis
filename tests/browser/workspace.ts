@@ -7,23 +7,24 @@ import { type ReplicaStorage, Repo, type SyncSocket } from "@obtion/sync";
 import { type DeviceFiles, setFiles } from "../../packages/ui/src/files";
 import { setRepo } from "../../packages/ui/src/repo";
 
+/** For callbacks a test does not care about. */
+export const noop = () => undefined;
+const done = () => Promise.resolve();
+
 const storage: ReplicaStorage = {
-	open: async () => {},
+	open: done,
 	load: async () => ({ rows: [], outbox: [] }),
-	compact: async () => {},
-	write: async () => {},
+	compact: done,
+	write: done,
 	outbox: async () => [],
-	drop: async () => {},
+	drop: done,
 	serverId: async () => undefined,
-	destroy: async () => {},
+	destroy: done,
 };
 
 /** No file contents on this "device": every file counts as missing, nothing is fetched. */
 export const noFiles = new Proxy(
-	{ subscribe: () => () => {}, getVersion: () => 0, isMissing: () => true } as Record<
-		string,
-		unknown
-	>,
+	{ subscribe: () => noop, getVersion: () => 0, isMissing: () => true } as Record<string, unknown>,
 	{
 		get: (t, k) => t[k as string] ?? (async () => undefined),
 	},
@@ -31,8 +32,8 @@ export const noFiles = new Proxy(
 
 const offline = (): SyncSocket => ({
 	readyState: 0,
-	send() {},
-	close() {},
+	send: noop,
+	close: noop,
 	onopen: null,
 	onmessage: null,
 	onclose: null,
@@ -48,8 +49,8 @@ export async function workspace(examples = true) {
 		post: async () => null,
 		askOtherServer: async () => null,
 		confirmDiscard: async () => false,
-		tooNew() {},
-		reload() {},
+		tooNew: noop,
+		reload: noop,
 	});
 	await repo.init();
 	runSetup(repo.writer, "de", repo.origin);

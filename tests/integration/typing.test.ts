@@ -17,23 +17,27 @@ import { removeTempDirs, tempDir } from "../support/helpers";
 
 afterAll(removeTempDirs);
 
+const noop = () => undefined;
+const done = () => Promise.resolve();
+
 /** A device's storage in memory, with the same write order as IndexedDB's (puts, then deletes). */
 function memStorage() {
 	const rows: StoredRow[] = [];
 	const outbox = new Map<string, OutItem>();
 	const storage: ReplicaStorage = {
-		open: async () => {},
+		open: done,
 		load: async () => ({ rows: [...rows], outbox: [...outbox.values()] }),
-		compact: async () => {},
-		write: async (w) => {
+		compact: done,
+		write: (w) => {
 			rows.push(...(w.rows ?? []));
 			for (const o of w.outbox ?? []) outbox.set(o.k, o);
 			for (const k of w.acked ?? []) outbox.delete(k);
+			return done();
 		},
 		outbox: async () => [...outbox.values()],
-		drop: async () => {},
+		drop: done,
 		serverId: async () => undefined,
-		destroy: async () => {},
+		destroy: done,
 	};
 	return { storage, rows, outbox };
 }
@@ -81,7 +85,7 @@ async function device(store: Store) {
 					});
 				}
 			},
-			close() {},
+			close: noop,
 			onopen: null,
 			onmessage: null,
 			onclose: null,
@@ -100,8 +104,8 @@ async function device(store: Store) {
 		post: async () => null,
 		askOtherServer: async () => null,
 		confirmDiscard: async () => false,
-		tooNew() {},
-		reload() {},
+		tooNew: noop,
+		reload: noop,
 	});
 	await repo.init();
 	while (!repo.status.synced) await sleep(1);

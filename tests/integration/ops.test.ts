@@ -20,6 +20,7 @@ let s: Store;
 let ops: Ops;
 const A = "agent:test";
 beforeEach(() => ({ dir, s, ops } = setupStore("obtion-ops-")));
+const props = (ref: string) => ops.get(ref).properties as Record<string, unknown>;
 
 test("progress report: status, update and follow-up task, all through names", () => {
 	const p = ops.create(
@@ -37,9 +38,9 @@ test("progress report: status, update and follow-up task, all through names", ()
 		{ title: "Review", type: "Task", parents: [p.id], properties: { Fällig: "2026-10-30" } },
 		A,
 	);
-	const got = ops.get(p.id) as any;
+	const got = ops.get(p.id);
 	expect(got.status).toBe("In Bearbeitung (active)");
-	expect(got.updates[0].text).toBe("Mapping done, review on Friday");
+	expect((got.updates as { text: string }[])[0]!.text).toBe("Mapping done, review on Friday");
 	expect(got.progress).toBe("1/2 done");
 	expect(ops.get(t.id).status).toBe("Erledigt (done)");
 	const q = ops.query("typ:Task status:offen unter:[[Northern Lights · France]]");
@@ -66,17 +67,14 @@ test("errors are helpful: unknown property, option, type, ambiguous title, cycle
 
 test("free properties are only read and removed, never added", () => {
 	const n = ops.create({ title: "Course", properties: {} }, A);
-	s.change(
-		n.id,
-		A,
-		(doc) => (
-			setExtra(doc, "ECTS", { k: "number", v: 6 }), setExtra(doc, "Grade", { k: "number", v: 1.7 })
-		),
-	);
+	s.change(n.id, A, (doc) => {
+		setExtra(doc, "ECTS", { k: "number", v: 6 });
+		setExtra(doc, "Grade", { k: "number", v: 1.7 });
+	});
 	s.flush();
-	expect((ops.get(n.id) as any).free_properties).toEqual({ ECTS: 6, Grade: 1.7 });
+	expect(ops.get(n.id).free_properties).toEqual({ ECTS: 6, Grade: 1.7 });
 	ops.update(n.id, { free_properties_remove: ["ects"] }, A);
-	expect((ops.get(n.id) as any).free_properties).toEqual({ Grade: 1.7 });
+	expect(ops.get(n.id).free_properties).toEqual({ Grade: 1.7 });
 	// without a type there is nowhere to put a new property
 	expect(() => ops.update(n.id, { properties: { Color: "red" } }, A)).toThrow(
 		/Properties belong to a type/,
@@ -156,8 +154,8 @@ test("an agent marks what holds up; the type shows the status groups", () => {
 	expect(ix.isBlocked(ix.get(b.id)!)).toBe(true);
 	ops.update("Boxes", { properties: { Stage: "in Arbeit" } }, A); // a German synonym finds the group
 	expect(ops.get(a.id).status).toBe("Resting (active)");
-	const info = (ops.schema() as any).types.find((x: any) => x.name === "Step");
-	expect(info.properties.map((p: any) => p.options ?? p.blocks)).toEqual([
+	const info = ops.schema().types.find((x) => x.name === "Step")!;
+	expect(info.properties.map((p) => p.options ?? p.blocks)).toEqual([
 		["New (todo)", "Resting (active)", "Finished (done)", "Stopped (done)"],
 		true,
 	]);
@@ -215,11 +213,14 @@ test("define a type and its views without code, query by type name", () => {
 	expect(r.list).toBe("Bücher");
 	expect(r.items.map((i) => i.title)).toEqual(["No author"]);
 	expect(
-		(ops.schema() as any).types.find((x: any) => x.name === "Buch").views.map((v: any) => v.name),
+		ops
+			.schema()
+			.types.find((x) => x.name === "Buch")!
+			.views.map((v) => v.name),
 	).toEqual(["No author", "All"]);
-	const person = ops.get("Richard Hamming") as any;
+	const person = ops.get("Richard Hamming");
 	expect(person.related_by).toEqual(["Bücher: The Art"]);
-	expect((ops.get("The Art") as any).properties).toMatchObject({
+	expect(props("The Art")).toMatchObject({
 		Author: ["Richard Hamming"],
 		Rating: 5,
 		Status: "Want to read",
@@ -231,7 +232,7 @@ test("define a type and its views without code, query by type name", () => {
 		["1.234,5", 1234.5],
 	] as const) {
 		ops.update("The Art", { properties: { Rating: raw } }, A);
-		expect((ops.get("The Art") as any).properties.Rating).toBe(n);
+		expect(props("The Art").Rating).toBe(n);
 	}
 	expect(() => ops.update("The Art", { properties: { Rating: "lots" } }, A)).toThrow(/number/);
 	ops.update("The Art", { properties: { Rating: 5 } }, A);
@@ -250,20 +251,18 @@ test("one kind of select: several values, a default that keeps it filled, a sele
 		},
 		A,
 	);
-	const info = (ops.schema() as any).types.find((x: any) => x.name === "Article");
-	expect(info.properties.map((p: any) => [p.name, p.kind, p.multiple ?? false, p.default])).toEqual(
-		[
-			["Phase", "select", false, "Idea"],
-			["Channels", "select", true, undefined],
-			["Stage", "select", true, undefined],
-		],
-	);
+	const info = ops.schema().types.find((x) => x.name === "Article")!;
+	expect(info.properties.map((p) => [p.name, p.kind, p.multiple ?? false, p.default])).toEqual([
+		["Phase", "select", false, "Idea"],
+		["Channels", "select", true, undefined],
+		["Stage", "select", true, undefined],
+	]);
 	// new entries get the default; several values take a list
 	const a = ops.create(
 		{ title: "First article", type: "Article", properties: { Channels: "Blog, Newsletter" } },
 		A,
 	);
-	expect((ops.get(a.id) as any).properties).toMatchObject({
+	expect(props(a.id)).toMatchObject({
 		Phase: "Idea",
 		Channels: "Blog, Newsletter",
 	});
@@ -284,7 +283,7 @@ test("one kind of select: several values, a default that keeps it filled, a sele
 		A,
 	);
 	ops.update(a.id, { properties: { Phase: "erledigt" } }, A);
-	expect((ops.get(a.id) as any).properties.Phase).toBe("Done");
+	expect(props(a.id).Phase).toBe("Done");
 	expect(() => ops.update(a.id, { properties: { Phase: null } }, A)).toThrow(/cannot be empty/);
 	// a second status is refused
 	expect(() =>
@@ -308,8 +307,12 @@ test("a status added later: default options, existing entries show the default, 
 	const z = ops.create({ title: "Already there", type: "Slip" }, A);
 	// no options given: the three default ones of the German setup
 	ops.updateType("Slip", { add_properties: [{ name: "Stage", kind: "status" }] }, A);
-	const info = (ops.schema() as any).types.find((x: any) => x.name === "Slip");
-	expect(info.properties[0].options).toEqual(["Offen (todo)", "Aktiv (active)", "Erledigt (done)"]);
+	const info = ops.schema().types.find((x) => x.name === "Slip")!;
+	expect(info.properties[0]!.options).toEqual([
+		"Offen (todo)",
+		"Aktiv (active)",
+		"Erledigt (done)",
+	]);
 	expect(ops.get(z.id).status).toBe("Offen (todo)");
 	expect(ops.query("typ:Slip status:offen").items.map((i) => i.title)).toEqual(["Already there"]);
 	expect(ops.query("typ:Slip stage:offen").items.map((i) => i.title)).toEqual(["Already there"]);
@@ -340,7 +343,7 @@ test("query blocks written by an agent in text form are stored as JSON and read 
 		A,
 	);
 	expect(s.records.get(o.id)!.body).toContain('"type":"sys:project"');
-	expect((ops.get(o.id) as any).body).toContain("typ:Projekt unter:diese");
+	expect(ops.get(o.id).body).toContain("typ:Projekt unter:diese");
 });
 
 test("markdown mirror writes items below their home and removes stale files", () => {
@@ -527,8 +530,8 @@ test("queries understand status synonyms and dates in other notations", () => {
 });
 
 test("the agent sees the inbox rule and a type's list name", () => {
-	const sc = ops.schema() as any;
+	const sc = ops.schema();
 	expect(sc.inbox.query).toContain("ohne:typ");
 	ops.updateType("Karte", { plural: "Slips" }, A);
-	expect((ops.schema() as any).types.find((x: any) => x.name === "Karte").list).toBe("Slips");
+	expect(ops.schema().types.find((x) => x.name === "Karte")!.list).toBe("Slips");
 });

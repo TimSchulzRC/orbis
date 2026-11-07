@@ -3,7 +3,7 @@
 
 import type { Repo } from "@obtion/sync";
 import { ChevronsUpDown, Plus } from "lucide-react";
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useId, useMemo, useState, useSyncExternalStore } from "react";
 import { createSpace, errorText, replica, setShown, spaceById, useAccounts } from "../accounts";
 import { Checkbox } from "../components/ui/checkbox";
 import { Input } from "../components/ui/input";
@@ -50,6 +50,7 @@ export function SpaceEyebrow() {
 /** Which workspaces are seen: the label says it ("All workspaces", one name, or the names); the menu ticks them. */
 export function SpaceSelector({ className, onNew }: { className?: string; onNew: () => void }) {
 	const { t } = useT();
+	const boxId = useId();
 	const { account, spaces, shown } = useAccounts();
 	const ids = shown.map((s) => s.id);
 	const label =
@@ -87,19 +88,27 @@ export function SpaceSelector({ className, onNew }: { className?: string; onNew:
 					{spaces.map((s) => (
 						<label
 							className="tap-row flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm hover:bg-hover"
+							htmlFor={`${boxId}-${s.id}`}
 							key={s.id}
 						>
 							<Checkbox
 								checked={ids.includes(s.id)}
 								className="size-4"
 								disabled={ids.length === 1 && ids.includes(s.id)}
+								id={`${boxId}-${s.id}`}
 								onCheckedChange={() => toggle(s.id)}
 							/>
 							<span className="min-w-0 flex-1 truncate">{s.name}</span>
 						</label>
 					))}
 					<div className="my-1 border-t border-line" />
-					<MenuItem icon={<Plus size={14} />} onClick={() => (close(), onNew())}>
+					<MenuItem
+						icon={<Plus size={14} />}
+						onClick={() => {
+							close();
+							onNew();
+						}}
+					>
 						{t("space.new")}
 					</MenuItem>
 				</div>
@@ -143,13 +152,12 @@ export function SpaceFilter({
 				: "border-line text-muted-foreground hover:bg-hover hover:text-fg",
 		);
 	return (
-		<div
+		<fieldset
 			aria-label={t("space.choose")}
 			className={cn(
-				"-mx-4 mb-4 flex gap-1 overflow-x-auto px-4 text-sm [scrollbar-width:none] md:mx-0 md:px-0",
+				"-mx-4 mb-4 flex min-w-0 gap-1 overflow-x-auto px-4 text-sm [scrollbar-width:none] md:mx-0 md:px-0",
 				className,
 			)}
-			role="group"
 		>
 			<Button
 				aria-pressed={!chosen}
@@ -170,20 +178,24 @@ export function SpaceFilter({
 					{s.name}
 				</Button>
 			))}
-		</div>
+		</fieldset>
 	);
 }
 
 /** The replicas of these workspaces, re-rendering when any of them changes. */
 export function useReplicas(ids: string[]): Repo[] {
 	const repos = ids.map((id) => replica(id).repo);
-	const subscribe = useMemo(
-		() => (l: () => void) => {
-			const offs = repos.map((r) => r.subscribe(l));
-			return () => offs.forEach((off) => off());
-		},
-		[ids.join()],
-	);
+	// a new subscription only when the list of workspaces changes, not with every new array
+	const key = ids.join("\n");
+	const subscribe = useMemo(() => {
+		const subscribed = key ? key.split("\n").map((id) => replica(id).repo) : [];
+		return (l: () => void) => {
+			const offs = subscribed.map((r) => r.subscribe(l));
+			return () => {
+				for (const off of offs) off();
+			};
+		};
+	}, [key]);
 	useSyncExternalStore(subscribe, () => repos.map((r) => r.getVersion()).join());
 	return repos;
 }
@@ -208,6 +220,8 @@ export function NewSpaceForm({
 	onDone?: () => void;
 }) {
 	const { t } = useT();
+	const nameId = useId();
+	const examplesId = useId();
 	const [name, setName] = useState(initial);
 	const [examples, setExamples] = useState(true);
 	const [error, setError] = useState("");
@@ -217,26 +231,31 @@ export function NewSpaceForm({
 			onSubmit={(e) => {
 				e.preventDefault();
 				setBusy(true);
-				createSpace(name, examples).then(
-					onDone,
-					(err) => (setError(errorText(err, t, "space")), setBusy(false)),
-				);
+				createSpace(name, examples).then(onDone, (err) => {
+					setError(errorText(err, t, "space"));
+					setBusy(false);
+				});
 			}}
 		>
-			<label className="block text-sm font-medium">
+			<label className="block text-sm font-medium" htmlFor={nameId}>
 				{t("space.name")}
 				<Input
 					autoFocus
 					className="mt-1 block bg-surface"
+					id={nameId}
 					onChange={(e) => setName(e.target.value)}
 					required
 					value={name}
 				/>
 			</label>
-			<label className="mt-4 flex cursor-pointer gap-3 rounded-xl border border-line p-3 hover:bg-hover">
+			<label
+				className="mt-4 flex cursor-pointer gap-3 rounded-xl border border-line p-3 hover:bg-hover"
+				htmlFor={examplesId}
+			>
 				<Checkbox
 					checked={examples}
 					className="mt-0.5 size-4 shrink-0"
+					id={examplesId}
 					onCheckedChange={(checked) => setExamples(checked === true)}
 				/>
 				<span>

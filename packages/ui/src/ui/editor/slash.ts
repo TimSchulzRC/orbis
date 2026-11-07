@@ -49,7 +49,9 @@ type Option = Completion & {
 	place?: string;
 };
 
-let filesHandler: (view: EditorView, files: File[]) => void = () => {};
+let filesHandler: (view: EditorView, files: File[]) => void = () => {
+	// no editor has registered yet: dropped files have nowhere to go
+};
 /** Set by Editor.tsx, which does the actual file insertion. */
 export function onSlashFiles(handler: typeof filesHandler) {
 	filesHandler = handler;

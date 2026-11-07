@@ -159,7 +159,10 @@ test("purging takes what was deleted with the item, never what was deleted on it
 	m.change(earlier, (d) => setMeta(d, { deleted: true }));
 	del(m, p);
 	// moved out of the trash by another device: alive again, stays alive
-	m.change(note, (d) => (addParent(d, work), removeParent(d, p)));
+	m.change(note, (d) => {
+		addParent(d, work);
+		removeParent(d, p);
+	});
 	expect(
 		trashRoots(m.records())
 			.map((r) => r.id)

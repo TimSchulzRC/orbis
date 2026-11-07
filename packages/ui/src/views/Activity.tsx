@@ -1,9 +1,9 @@
 // One log for all workspaces, with its own workspace choice independent of the sidebar's.
 
 import type { ActivityEvent } from "@obtion/core/protocol";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { spaceCall, useAccounts } from "../accounts";
-import { useDocumentTitle } from "../hooks";
+import { useDocumentTitle, useOnChange } from "../hooks";
 import { useT } from "../i18n";
 import { groupBySteps, mergeEvents, StepGroup } from "../ui/ActivityFeed";
 import { byMe, who } from "../ui/actor";
@@ -54,9 +54,9 @@ export function Activity() {
 				})),
 		);
 	const online = repos.map((r) => r.status.online).join();
-	useEffect(() => {
+	useOnChange(`${ids.join()} ${online}`, () => {
 		for (const id of ids) void load(id);
-	}, [ids.join(), online]);
+	});
 	// per workspace the fetched rows, then the live events that came since
 	const logs = ids.map((id, n) => {
 		const loaded = fetched[id];
@@ -117,12 +117,10 @@ export function Activity() {
 			{logs.some((l) => l.loaded?.more) && (
 				<Button
 					className="mt-6 text-sm text-muted-foreground hover:text-fg"
-					onClick={() =>
-						logs.forEach(
-							(l) =>
-								l.loaded?.more && void load(l.id, Math.min(...l.loaded.events.map((e) => e.id))),
-						)
-					}
+					onClick={() => {
+						for (const l of logs)
+							if (l.loaded?.more) void load(l.id, Math.min(...l.loaded.events.map((e) => e.id)));
+					}}
 					variant="plain"
 				>
 					{t("activity.more")}

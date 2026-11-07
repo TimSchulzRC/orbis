@@ -53,7 +53,10 @@ export function showMenu(
 			if (entry.color)
 				row.querySelector<HTMLElement>(".cm-menu-icon")?.style.setProperty("color", entry.color);
 			row.addEventListener("mousedown", (e) => e.preventDefault());
-			row.addEventListener("click", () => (close(), entry.run()));
+			row.addEventListener("click", () => {
+				close();
+				entry.run();
+			});
 			rows.push(row);
 			box.append(row);
 		}
@@ -72,9 +75,16 @@ export function showMenu(
 		rows[index]!.focus();
 	};
 	const key = (e: KeyboardEvent) => {
-		if (e.key === "Escape") e.preventDefault(), close();
-		else if (e.key === "ArrowDown") e.preventDefault(), focus(index + 1);
-		else if (e.key === "ArrowUp") e.preventDefault(), focus(index - 1);
+		if (e.key === "Escape") {
+			e.preventDefault();
+			close();
+		} else if (e.key === "ArrowDown") {
+			e.preventDefault();
+			focus(index + 1);
+		} else if (e.key === "ArrowUp") {
+			e.preventDefault();
+			focus(index - 1);
+		}
 	};
 	const outside = (e: MouseEvent) => !box.contains(e.target as Node) && close();
 	function close() {
@@ -119,8 +129,13 @@ export function askText(
 		};
 		const outside = (e: MouseEvent) => !box.contains(e.target as Node) && done(null);
 		input.addEventListener("keydown", (e) => {
-			if (e.key === "Enter") e.preventDefault(), done(input.value);
-			else if (e.key === "Escape") e.preventDefault(), done(null);
+			if (e.key === "Enter") {
+				e.preventDefault();
+				done(input.value);
+			} else if (e.key === "Escape") {
+				e.preventDefault();
+				done(null);
+			}
 		});
 		setTimeout(() => document.addEventListener("mousedown", outside, true));
 		open = { close: () => done(null) };

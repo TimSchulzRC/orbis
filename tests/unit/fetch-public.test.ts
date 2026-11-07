@@ -55,7 +55,10 @@ test("the connection goes to the checked address, never to one resolved again (D
 	const out = await fetchPublic(url, {
 		max: 100,
 		timeoutMs: 800,
-		resolve: async () => (lookups++, ["203.0.113.7"]),
+		resolve: () => {
+			lookups++;
+			return Promise.resolve(["203.0.113.7"]);
+		},
 	}).catch((e: Error) => e);
 	expect(out).toBeInstanceOf(Error);
 	expect(String(out)).not.toContain("internal-secret");

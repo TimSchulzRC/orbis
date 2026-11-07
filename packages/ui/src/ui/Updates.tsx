@@ -24,7 +24,7 @@ import { Checkbox } from "../components/ui/checkbox";
 import { Dialog, DialogTitle, SheetContent } from "../components/ui/dialog";
 import { NativeSelect } from "../components/ui/native-select";
 import { Textarea } from "../components/ui/textarea";
-import { itemHref, useIndex, useMediaQuery, usePhone, useSpaceId } from "../hooks";
+import { itemHref, useIndex, useMediaQuery, useOnChange, usePhone, useSpaceId } from "../hooks";
 import { useT } from "../i18n";
 import { modName } from "../lib/platform";
 import { cn } from "../lib/utils";
@@ -123,6 +123,9 @@ function Origin({
 	);
 }
 
+/** Following an update's link with the panel docked: it stays open, nothing to do. */
+const keepPanel = () => undefined;
+
 const EMPTY: Draft = { text: "", status: "" };
 /** The panel's view, kept from one opening to the next. */
 let lastView: View = "updates";
@@ -166,6 +169,7 @@ export function PagePanel({
 	const feed = useMemo(() => updateFeed(ix, item.id), [ix, item.id]);
 	// what has been read of each page of the feed (on this device): read once per change
 	const [looked, setLooked] = useState(0);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: `looked` counts closings; each one reads the marks from storage again
 	const marks = useMemo(
 		() => new Map([...new Set(feed.map((e) => e.from.id))].map((id) => [id, readMark(id)])),
 		[feed, looked],
@@ -193,7 +197,10 @@ export function PagePanel({
 
 	// the view as last chosen while the app is open (on another page, too); each way in picks its own
 	const [chosen, setChosen] = useState<View>(lastView);
-	const pick = (v: View) => ((lastView = v), setChosen(v));
+	const pick = (v: View) => {
+		lastView = v;
+		setChosen(v);
+	};
 	const current: View = updates ? chosen : "history";
 	// already open: only the view changes
 	const show = (mode: "read" | "write", quiet = false, view?: View) => {
@@ -225,6 +232,7 @@ export function PagePanel({
 		setOpen(false);
 	};
 	// leaving the page with the panel open: what was read counts; docked, the next page opens it again
+	// biome-ignore lint/correctness/useExhaustiveDependencies: once per page, on arriving and on leaving; both work from refs
 	useEffect(() => {
 		if (dockedOpen && matchMedia(DOCKED).matches) show("read", true);
 		return commit;
@@ -432,7 +440,10 @@ function UpdatesSheet({
 	const tone = useStatusTone();
 	// with the pages below or not as last chosen on this device
 	const [withBelow, setWithBelow] = useState(() => readJSON<boolean>(KEYS.updatesWithBelow, true));
-	const chooseBelow = (v: boolean) => (setWithBelow(v), writeJSON(KEYS.updatesWithBelow, v));
+	const chooseBelow = (v: boolean) => {
+		setWithBelow(v);
+		writeJSON(KEYS.updatesWithBelow, v);
+	};
 	const space = useSpaceId();
 	// without updates only the history; without a server no history
 	const view: View = !hasUpdates ? "history" : space ? chosen : "updates";
@@ -476,6 +487,7 @@ function UpdatesSheet({
 	const visibleKey = visible.map((e) => e.u.id).join();
 
 	// what scrolls into view counts as read, not what was merely rendered further down
+	// biome-ignore lint/correctness/useExhaustiveDependencies: rows shown later (`visibleKey`) are watched too, so the observer starts again
 	useEffect(() => {
 		const root = listBox;
 		if (!open || !session || !root) return;
@@ -502,10 +514,10 @@ function UpdatesSheet({
 		setTimeout(() => setSaid(text), 50);
 	};
 	// another view, also chosen from the page's buttons: from its top
-	useEffect(() => {
+	useOnChange(view, () => {
 		setShown(PAGE);
 		scroller.current?.scrollTo({ top: 0 });
-	}, [view]);
+	});
 	// asked first; deleted, it is gone from the list and kept in the page's changes, and "Undo"
 	// puts it back where it was
 	const remove = async (e: FeedEntry) => {
@@ -537,7 +549,10 @@ function UpdatesSheet({
 				aria-describedby={undefined}
 				className={quiet ? "data-[state=open]:animate-none" : undefined}
 				modal={!docked}
-				onCloseAutoFocus={(e) => (e.preventDefault(), onClosed())}
+				onCloseAutoFocus={(e) => {
+					e.preventDefault();
+					onClosed();
+				}}
 				onEscapeKeyDown={(e) =>
 					docked && !panel.current?.contains(document.activeElement) && e.preventDefault()
 				}
@@ -587,7 +602,10 @@ function UpdatesSheet({
 							<Checkbox
 								checked={withBelow}
 								className="size-3.5"
-								onCheckedChange={(c) => (chooseBelow(c === true), setShown(PAGE))}
+								onCheckedChange={(c) => {
+									chooseBelow(c === true);
+									setShown(PAGE);
+								}}
 							/>
 							{t("updates.withBelow")}
 						</label>
@@ -640,7 +658,7 @@ function UpdatesSheet({
 												</span>
 											</span>
 											{/* docked, following the link keeps the panel open beside the next page */}
-											<Origin e={e} item={item} onLeave={docked ? () => {} : onClose} />
+											<Origin e={e} item={item} onLeave={docked ? keepPanel : onClose} />
 											{/* the word once, at the first new one, explains the green dots */}
 											{e.u.id === firstNew && (
 												<span className="font-medium text-ok">{t("updates.new")}</span>
@@ -724,10 +742,7 @@ function Composer({
 		box.current?.focus();
 	};
 	return (
-		<div
-			className="rounded-xl border border-line bg-bg px-3 py-2 focus-within:border-focus"
-			onFocus={() => setUsed(true)}
-		>
+		<div className="rounded-xl border border-line bg-bg px-3 py-2 focus-within:border-focus">
 			<Textarea
 				aria-describedby={phone ? undefined : hintId}
 				aria-keyshortcuts="Control+Enter Meta+Enter"
@@ -738,9 +753,13 @@ function Composer({
 					expanded ? "max-h-60 min-h-[78px]" : "h-7 overflow-hidden whitespace-nowrap",
 				)}
 				onChange={(e) => onDraft({ ...draft, text: e.target.value })}
+				// the status and the button only show once used, so the text is what gets focus first
+				onFocus={() => setUsed(true)}
 				onKeyDown={(e) => {
-					if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !e.nativeEvent.isComposing)
-						e.preventDefault(), submit();
+					if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !e.nativeEvent.isComposing) {
+						e.preventDefault();
+						submit();
+					}
 				}}
 				placeholder={t(expanded ? "updates.placeholder" : "updates.placeholderShort")}
 				ref={box}

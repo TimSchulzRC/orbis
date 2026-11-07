@@ -80,13 +80,13 @@ export function Today() {
 						{pinned ? (
 							<span className="font-medium text-warn">{t("today.entries", { count: inbox })}</span>
 						) : (
-							<a
-								className="font-medium text-warn hover:underline"
-								href="#/inbox"
-								onClick={(e) => (e.preventDefault(), openShelf())}
+							<button
+								className="cursor-pointer font-medium text-warn hover:underline"
+								onClick={() => openShelf()}
+								type="button"
 							>
 								{t("today.entries", { count: inbox })}
-							</a>
+							</button>
 						)}
 						{after}
 					</>

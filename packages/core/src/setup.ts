@@ -289,7 +289,7 @@ export function runSetup(w: Writer, lang: Lang, origin?: string) {
 	if (fresh) {
 		const order = [SYS.project, SYS.task, SYS.card];
 		const pos = keysFor(order.length);
-		order.forEach((id, i) => w.change(id, (d) => setSchemaField(d, "pos", pos[i]!)));
+		for (const [i, id] of order.entries()) w.change(id, (d) => setSchemaField(d, "pos", pos[i]!));
 	}
 	if (!w.get(SETTINGS_ID))
 		w.change(SETTINGS_ID, (doc) => {

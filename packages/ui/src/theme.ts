@@ -26,7 +26,7 @@ function apply() {
 	document
 		.querySelector('link[rel="icon"]')
 		?.setAttribute("href", mode === "dark" ? "/icon-dark.svg" : "/icon.svg");
-	listeners.forEach((l) => l());
+	for (const l of listeners) l();
 }
 
 export function setTheme(c: ThemeChoice) {
@@ -39,7 +39,10 @@ media.addEventListener("change", () => themeChoice() === "system" && apply());
 window.addEventListener("storage", (e) => e.key === KEY && apply()); // another tab chose
 apply();
 
-const subscribe = (l: () => void) => (listeners.add(l), () => void listeners.delete(l));
+const subscribe = (l: () => void) => {
+	listeners.add(l);
+	return () => void listeners.delete(l);
+};
 /** `resolved` is for canvas drawings that read colours once. */
 export function useTheme(): { choice: ThemeChoice; resolved: "light" | "dark" } {
 	const choice = useSyncExternalStore(subscribe, themeChoice);

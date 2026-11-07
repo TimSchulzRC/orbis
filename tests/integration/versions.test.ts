@@ -73,12 +73,10 @@ test("an edit in the app makes the agent's copy stale and the answer names who c
 	const replica = new Y.Doc({ guid: id });
 	Y.applyUpdate(replica, s.stateOf(id));
 	const sv = Y.encodeStateVector(replica);
-	replica.transact(
-		() => (
-			replaceBody(replica, "First line.\n\nSecond line.\n\nAddendum from the browser"),
-			touch(replica)
-		),
-	);
+	replica.transact(() => {
+		replaceBody(replica, "First line.\n\nSecond line.\n\nAddendum from the browser");
+		touch(replica);
+	});
 	s.applyRemote(
 		id,
 		Y.encodeStateAsUpdate(replica, sv),

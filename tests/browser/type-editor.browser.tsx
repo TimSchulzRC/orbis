@@ -9,13 +9,13 @@ import { cleanup, render } from "vitest-browser-react";
 import { useRepo } from "../../packages/ui/src/hooks";
 import { ScopeContext } from "../../packages/ui/src/scope";
 import { TypeEditor } from "../../packages/ui/src/views/TypeEditor";
-import { noFiles, workspace } from "./workspace";
+import { noFiles, noop, workspace } from "./workspace";
 
 afterEach(() => cleanup());
 
 /** As in the app: the editor gets the type anew after each change. */
 function Host() {
-	return <TypeEditor item={useRepo().get(SYS.project)!} onClose={() => {}} />;
+	return <TypeEditor item={useRepo().get(SYS.project)!} onClose={noop} />;
 }
 
 async function setup() {
@@ -151,7 +151,9 @@ test("the add button sits beside the heading; back from the new property, its ro
 
 test("a type without properties shows one card with the button in it", async () => {
 	const { repo, dialog, schema } = await setupProps();
-	repo.change(SYS.project, (d) => schema().properties.forEach((p) => removeProp(d, p.id)));
+	repo.change(SYS.project, (d) => {
+		for (const p of schema().properties) removeProp(d, p.id);
+	});
 	await expect.element(dialog.getByText("Noch keine Eigenschaften.")).toBeVisible();
 	expect(dialog.getByText("Oben als Badges").query()).toBeNull();
 	expect(dialog.getByRole("button", { name: "Eigenschaft hinzufügen" }).elements()).toHaveLength(1);

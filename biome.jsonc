@@ -28,6 +28,13 @@
 		},
 		"rules": {
 			"preset": "recommended",
+			"a11y": {
+				// our wrappers around <input>, <select>, <textarea> and Radix's checkbox (a <button>)
+				"noLabelWithoutControl": {
+					"level": "error",
+					"options": { "inputComponents": ["Checkbox", "Input", "NativeSelect", "Textarea"] }
+				}
+			},
 			"complexity": {
 				"noForEach": "error",
 				"noUselessStringConcat": "error",

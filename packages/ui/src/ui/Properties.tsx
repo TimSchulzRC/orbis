@@ -246,7 +246,13 @@ function MultiField({ item, prop }: { item: Item; prop: PropDef }) {
 					prop.options
 						?.filter((o) => !ids.includes(o.id))
 						.map((o) => (
-							<MenuItem key={o.id} onClick={() => (close(), set([...ids, o.id]))}>
+							<MenuItem
+								key={o.id}
+								onClick={() => {
+									close();
+									set([...ids, o.id]);
+								}}
+							>
 								{o.name}
 							</MenuItem>
 						))
@@ -273,9 +279,10 @@ export function OptionSelect({
 	const value = isStatus ? statusOf(item, schema)?.option.id : item.props[prop.id];
 	const opt = prop.options?.find((o) => o.id === value);
 	// a select with a default is never empty
-	const required = !!defaultOption(prop, schema);
+	const required = !!defaultOption(prop);
 	return (
-		<label className={cn("tap-row relative cursor-pointer items-center", className)}>
+		// no label needed: the select lies over the whole chip and has its own aria-label
+		<span className={cn("tap-row relative cursor-pointer items-center", className)}>
 			{opt ? (
 				<StatusPill group={isStatus ? (opt.group ?? "todo") : undefined} option={opt} />
 			) : (
@@ -310,7 +317,7 @@ export function OptionSelect({
 							</option>
 						))}
 			</NativeSelect>
-		</label>
+		</span>
 	);
 }
 
@@ -649,9 +656,8 @@ function SelectBadge({ item, prop }: { item: Item; prop: PropDef }) {
 	const { t } = useT();
 	const value = item.props[prop.id];
 	const opt = prop.options?.find((o) => o.id === value);
-	const ix = useIndex();
 	// a select with a default is never empty
-	const required = !!defaultOption(prop, ix.schemaOf(item));
+	const required = !!defaultOption(prop);
 	const label = !opt ? null : (
 		<>
 			<span className="opacity-70">{prop.name}</span> {opt.name}
@@ -684,7 +690,10 @@ function SelectBadge({ item, prop }: { item: Item; prop: PropDef }) {
 						<MenuItem
 							active={o.id === value}
 							key={o.id}
-							onClick={() => (close(), repo.setProp(item.id, prop.id, o.id))}
+							onClick={() => {
+								close();
+								repo.setProp(item.id, prop.id, o.id);
+							}}
 						>
 							<StatusPill option={o} />
 						</MenuItem>
@@ -694,7 +703,10 @@ function SelectBadge({ item, prop }: { item: Item; prop: PropDef }) {
 							<div className="my-1 border-t border-line" />
 							<MenuItem
 								icon={<X size={13} />}
-								onClick={() => (close(), repo.setProp(item.id, prop.id, null))}
+								onClick={() => {
+									close();
+									repo.setProp(item.id, prop.id, null);
+								}}
 							>
 								{t("props.removeValue")}
 							</MenuItem>

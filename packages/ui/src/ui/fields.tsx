@@ -100,7 +100,10 @@ export function DateField({
 		const iso = parseDateTime(raw, todayISO());
 		if (!iso) {
 			setBad(true);
-			setTimeout(() => (setBad(false), setText(shown)), 1500);
+			setTimeout(() => {
+				setBad(false);
+				setText(shown);
+			}, 1500);
 			return;
 		}
 		setBad(false);
@@ -127,7 +130,10 @@ export function DateField({
 				onChange={(e) => setText(e.target.value)}
 				// typing a date on a touch screen is awkward, so an empty one opens the picker
 				onClick={() => !value && isCoarse() && picker.current?.showPicker?.()}
-				onFocus={() => ((focused.current = true), setEditing(true))}
+				onFocus={() => {
+					focused.current = true;
+					setEditing(true);
+				}}
 				onKeyDown={onKeyDown}
 				placeholder={editing ? t("date.placeholder") : "–"}
 				value={text}

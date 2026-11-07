@@ -26,6 +26,9 @@ const rnd = (n: number) => {
 	return seed % n;
 };
 
+const noop = () => {
+	// the benchmark has no server and no page to talk to
+};
 const mb = (n: number) => `${(n / 1024 / 1024).toFixed(1)} MB`;
 function memory(): string {
 	Bun.gc(true);
@@ -97,20 +100,21 @@ if (mode === "gen") {
 		src.db.close();
 	} else rows = deserialize(await Bun.file(file).arrayBuffer()) as StoredRow[];
 	const storage: ReplicaStorage = {
-		open: async () => {},
+		open: () => Promise.resolve(),
 		load: async () => ({ rows, outbox: [] }),
-		compact: async (docs) => {
+		compact: (docs) => {
 			const gone = new Set(docs.flatMap((d) => d.keys));
 			rows = [
 				...rows.filter((r) => !gone.has(r.key)),
 				...docs.map((d, i) => ({ ...d.row, key: `c${i}` })),
 			];
+			return Promise.resolve();
 		},
-		write: async () => {},
+		write: () => Promise.resolve(),
 		outbox: async () => [],
-		drop: async () => {},
+		drop: () => Promise.resolve(),
 		serverId: async () => undefined,
-		destroy: async () => {},
+		destroy: () => Promise.resolve(),
 	};
 	const before = memory();
 	const t0 = performance.now();
@@ -119,8 +123,8 @@ if (mode === "gen") {
 		device: "bench",
 		connect: () => ({
 			readyState: 0,
-			send() {},
-			close() {},
+			send: noop,
+			close: noop,
 			onopen: null,
 			onmessage: null,
 			onclose: null,
@@ -129,8 +133,8 @@ if (mode === "gen") {
 		post: async () => null,
 		askOtherServer: async () => null,
 		confirmDiscard: async () => false,
-		tooNew() {},
-		reload() {},
+		tooNew: noop,
+		reload: noop,
 	});
 	await repo.init();
 	const ms = performance.now() - t0;

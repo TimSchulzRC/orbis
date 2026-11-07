@@ -54,6 +54,7 @@ async function open(extra: Parameters<typeof Editor>[0]["extra"] = []) {
 const lineEls = () => [...document.querySelectorAll<HTMLElement>(".cm-content .cm-line")];
 const lines = () =>
 	lineEls().map((l) => ({
+		// biome-ignore lint/performance/useDomNodeTextContent: the text as shown; textContent would include the hidden markdown syntax these tests check is hidden
 		text: l.innerText,
 		top: Math.round(l.getBoundingClientRect().top),
 		h: Math.round(l.getBoundingClientRect().height),
@@ -340,9 +341,9 @@ test('"/Trennlinie" right under a line of text draws a line and keeps the text a
 	await pastInteractionDelay();
 	await commands.keys("press", "Enter");
 	await expect.poll(() => document.querySelectorAll(".cm-rule").length).toBe(1);
-	const above = lineEls().find((l) => l.innerText.includes("Fourth"))!;
+	const above = lineEls().find((l) => l.textContent?.includes("Fourth"))!;
 	expect(above.classList.contains("cm-h"), "the text above stays a paragraph").toBe(false);
-	expect(above.innerText).toBe("Fourth paragraph");
+	expect(above.textContent).toBe("Fourth paragraph");
 	expect(doc().split("\n").slice(5, 7)).toEqual(["Fourth paragraph", "***"]);
 });
 

@@ -29,9 +29,9 @@ import { runSetup } from "@obtion/core/setup";
 import { Repo } from "@obtion/sync";
 import { startAuthentication, startRegistration } from "@simplewebauthn/browser";
 import { useSyncExternalStore } from "react";
+import { navigate, parseHash, spaceHref } from "./address";
 import { browserHost, type SpaceLink, storageNames } from "./browser";
 import { DeviceFiles, setFiles } from "./files";
-import { navigate, parseHash, spaceHref } from "./hooks";
 import { getLang } from "./i18n";
 import { moveInArray } from "./lib/utils";
 import { setRepo } from "./repo";
@@ -78,7 +78,10 @@ function save() {
 
 export function useAccounts() {
 	useSyncExternalStore(
-		(l) => (listeners.add(l), () => listeners.delete(l)),
+		(l) => {
+			listeners.add(l);
+			return () => listeners.delete(l);
+		},
 		() => version,
 	);
 	// no choice made ("All"), as opposed to every workspace picked one by one
@@ -278,7 +281,9 @@ async function keep(token: string) {
 	const me = await call<AccountInfo>("/api/account", undefined, "GET", token);
 	if (account && account.user.id !== me.user.id) await forgetAll();
 	else if (account && account.token !== token && !account.lost)
-		await call<Ok>("/api/account/signout", {}).catch(() => {});
+		await call<Ok>("/api/account/signout", {}).catch(() => {
+			// the old session ends on its own if the server cannot be reached
+		});
 	account = { token, user: me.user };
 	await refresh();
 }
@@ -289,6 +294,7 @@ export const loginOf = (info: ServerInfo | null): LoginMethods =>
 
 /** The server reads this cookie when a code or OAuth sign-in creates the user. */
 function signupContext(invite: string | undefined, lang: string) {
+	// biome-ignore lint/suspicious/noDocumentCookie: the Cookie Store API needs a secure context, which a self-hosted server on plain http lacks
 	document.cookie = `obtion_signup=${encodeURIComponent(JSON.stringify({ invite, lang }))}; path=/api/auth; max-age=1800; samesite=lax`;
 }
 
@@ -378,6 +384,7 @@ async function finishOAuth() {
 	const back = sessionStorage.getItem(OAUTH_RETURN) ?? location.hash;
 	sessionStorage.removeItem(OAUTH_RETURN);
 	history.replaceState(history.state, "", location.pathname + back);
+	// biome-ignore lint/suspicious/noDocumentCookie: the Cookie Store API needs a secure context, which a self-hosted server on plain http lacks
 	document.cookie = "obtion_signup=; path=/api/auth; max-age=0";
 	if (how === "linked") return;
 	const error = params.get("error") ?? "";
@@ -455,7 +462,9 @@ function deviceLabel(): string {
 }
 
 export async function signOut() {
-	await call<Ok>("/api/account/signout", {}).catch(() => {});
+	await call<Ok>("/api/account/signout", {}).catch(() => {
+		// signing out offline still forgets everything on this device
+	});
 	await forgetAll();
 	save();
 	restart();
@@ -505,7 +514,9 @@ async function forget(s: Space) {
 		),
 	);
 	const root = await navigator.storage?.getDirectory?.().catch(() => undefined);
-	await root?.removeEntry(names.blobs, { recursive: true }).catch(() => {});
+	await root?.removeEntry(names.blobs, { recursive: true }).catch(() => {
+		// no stored files to remove
+	});
 }
 
 export async function createSpace(name: string, examples: boolean) {

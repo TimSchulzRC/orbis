@@ -60,14 +60,10 @@ test("removing a property: it leaves views, filters, grouping, the template and 
 		"Priorität",
 		"area",
 	]);
-	s.change(
-		SYS.project,
-		A,
-		(d) => (
-			setCapability(d, "template", { body: "x", values: { [prio().id]: "o_x" } }),
-			setCapability(d, "due", prio().id)
-		),
-	);
+	s.change(SYS.project, A, (d) => {
+		setCapability(d, "template", { body: "x", values: { [prio().id]: "o_x" } });
+		setCapability(d, "due", prio().id);
+	});
 	s.flush();
 	ops.updateType("Projekt", { remove_properties: ["Priorität"] }, A);
 	s.flush();

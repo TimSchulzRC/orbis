@@ -157,7 +157,10 @@ function oleStrings(b: Uint8Array): string {
 	const seen = new Set<string>();
 	const add = (s: string) => {
 		const t = s.trim();
-		if (t.length >= 6 && /[a-zA-Zäöü]{3}/.test(t) && !seen.has(t)) seen.add(t), out.push(t);
+		if (t.length >= 6 && /[a-zA-Zäöü]{3}/.test(t) && !seen.has(t)) {
+			seen.add(t);
+			out.push(t);
+		}
 	};
 	// UTF-16LE: printable character, 0
 	let run = "";
@@ -165,7 +168,10 @@ function oleStrings(b: Uint8Array): string {
 		const c = b[i]! | (b[i + 1]! << 8);
 		if ((c >= 32 && c < 0xd800 && c !== 0xfffd) || c === 10 || c === 13 || c === 9)
 			run += String.fromCharCode(c);
-		else add(run), (run = "");
+		else {
+			add(run);
+			run = "";
+		}
 	}
 	add(run);
 	return out.join("\n");
@@ -422,8 +428,10 @@ async function xlsxText(zip: Zip): Promise<string> {
 			if (t.text !== undefined) {
 				if (cur !== undefined && inT && !rph) cur += t.text;
 			} else if (t.tag === "si") {
-				if (t.close) shared.push(cur ?? ""), (cur = undefined);
-				else if (t.self) shared.push("");
+				if (t.close) {
+					shared.push(cur ?? "");
+					cur = undefined;
+				} else if (t.self) shared.push("");
 				else cur = "";
 			} else if (t.tag === "t" && !t.self) inT += t.close ? -1 : 1;
 			else if (t.tag === "rPh" && !t.self) rph += t.close ? -1 : 1;
@@ -464,7 +472,8 @@ async function xlsxText(zip: Zip): Promise<string> {
 					rows.push(row.join("\t").replace(/\t+$/, ""));
 					row = [];
 					next = 0;
-					if ((size += rows.at(-1)!.length + 1) > TEXT_MAX) break;
+					size += rows.at(-1)!.length + 1;
+					if (size > TEXT_MAX) break;
 				} else {
 					row = [];
 					next = 0;

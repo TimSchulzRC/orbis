@@ -154,9 +154,10 @@ function buildMcpServer(
 			true,
 		);
 	/** Mark items as touched and pass them on. */
-	const mark = <T extends { id: string }>(touched: Touched, items: T[]): T[] => (
-		items.forEach((i) => touched.add(i.id)), items
-	);
+	const mark = <T extends { id: string }>(touched: Touched, items: T[]): T[] => {
+		for (const i of items) touched.add(i.id);
+		return items;
+	};
 
 	server.registerTool(
 		"schema",
@@ -234,7 +235,7 @@ function buildMcpServer(
 		wrap(
 			ruled((a, touched) => {
 				const hits = ops.search(a.query, a.limit);
-				hits.forEach((h) => touched.add(h.item.id));
+				for (const h of hits) touched.add(h.item.id);
 				return hits.length
 					? hits
 							.map(
@@ -573,6 +574,12 @@ export async function handleMcp(
 	try {
 		return await transport.handleRequest(req);
 	} finally {
-		setTimeout(() => server.close().catch(() => {}), 0);
+		setTimeout(
+			() =>
+				server.close().catch(() => {
+					// the request is answered; a failed close leaves nothing to clean up
+				}),
+			0,
+		);
 	}
 }

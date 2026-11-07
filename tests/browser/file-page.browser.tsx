@@ -8,21 +8,24 @@ import { page } from "vitest/browser";
 import { cleanup, render } from "vitest-browser-react";
 import { type DeviceFiles, setFiles } from "../../packages/ui/src/files";
 import { FilePage } from "../../packages/ui/src/views/FilePage";
-import { workspace } from "./workspace";
+import { noop, workspace } from "./workspace";
 
 afterEach(() => cleanup());
 
 /** Contents only on the server, nothing on this device: loaded with the token, shown from blob: URLs. */
 const saved: unknown[][] = [];
 const serverFiles = {
-	subscribe: () => () => {},
+	subscribe: () => noop,
 	getVersion: () => 0,
 	isMissing: () => false,
 	hasLocal: () => false,
-	check: async () => {},
+	check: () => Promise.resolve(),
 	url: async () => undefined,
 	viewUrl: async (hash: string) => `blob:loaded-${hash}`,
-	download: async (...args: unknown[]) => (saved.push(args), true),
+	download: (...args: unknown[]) => {
+		saved.push(args);
+		return Promise.resolve(true);
+	},
 	missingKey: () => "file.missing",
 	wholeText: async () => undefined,
 } as unknown as DeviceFiles;
@@ -119,7 +122,10 @@ test("the facts carry the start of a long text: the page shows the whole one fro
 	const asked: string[] = [];
 	const whole = {
 		...serverFiles,
-		wholeText: async (h: string) => (asked.push(h), "Start\nMiddle\nEnd"),
+		wholeText: (h: string) => {
+			asked.push(h);
+			return Promise.resolve("Start\nMiddle\nEnd");
+		},
 	} as unknown as DeviceFiles;
 	await show({ name: "long.txt", text: "Start\n…", extracted: "x" }, whole);
 	await expect

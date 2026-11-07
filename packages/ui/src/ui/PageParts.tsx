@@ -145,12 +145,21 @@ function PlacesMenu({ item, count, onPlace }: { item: Item; count: number; onPla
 									{(closeMenu) => (
 										<>
 											{p !== home && (
-												<MenuItem onClick={() => (closeMenu(), repo.setHome(item.id, p))}>
+												<MenuItem
+													onClick={() => {
+														closeMenu();
+														repo.setHome(item.id, p);
+													}}
+												>
 													{t("place.makeHome")}
 												</MenuItem>
 											)}
 											<MenuItem
-												onClick={() => (closeMenu(), close(), repo.removeParent(item.id, p))}
+												onClick={() => {
+													closeMenu();
+													close();
+													repo.removeParent(item.id, p);
+												}}
 											>
 												{t("place.removeHere")}
 											</MenuItem>
@@ -161,7 +170,13 @@ function PlacesMenu({ item, count, onPlace }: { item: Item; count: number; onPla
 						);
 					})}
 					<div className="mt-1 border-t border-line pt-1">
-						<MenuItem icon={<Plus size={14} />} onClick={() => (close(), onPlace())}>
+						<MenuItem
+							icon={<Plus size={14} />}
+							onClick={() => {
+								close();
+								onPlace();
+							}}
+						>
 							{t("place.addAnother")}
 						</MenuItem>
 					</div>
@@ -369,7 +384,10 @@ function PlaceHere({ target, page }: { target: Item; page: Item }) {
 	return (
 		<Button
 			className="tap-y rounded-md px-1.5 py-0.5 text-xs text-link hover:bg-hover"
-			onClick={(e) => (e.preventDefault(), repo.addParent(target.id, page.id))}
+			onClick={(e) => {
+				e.preventDefault();
+				repo.addParent(target.id, page.id);
+			}}
 			variant="plain"
 		>
 			{t("links.placeHere")}
@@ -409,7 +427,10 @@ export function AddRef({ item, text }: { item: Item; text?: boolean }) {
 				<ItemPicker
 					exclude={(x) => x.id === item.id || item.refs.includes(x.id)}
 					onClose={() => setPicking(false)}
-					onPick={(x) => (repo.setMember(item.id, "refs", x, true), setPicking(false))}
+					onPick={(x) => {
+						repo.setMember(item.id, "refs", x, true);
+						setPicking(false);
+					}}
 					title={t("item.addRef")}
 				/>
 			)}
@@ -431,7 +452,10 @@ export function LinksRow({ item }: { item: Item }) {
 	if (!refs.length) return null;
 	const inText = new Set(ix.textLinks(item).map((l) => l.to));
 	const ids = refs.map((x) => x.id);
-	const end = () => (setDrag(null), setAt(undefined));
+	const end = () => {
+		setDrag(null);
+		setAt(undefined);
+	};
 	// the left half of a chip means in front of it, the right half after it
 	const aim = (e: React.DragEvent<HTMLElement>, id: string) => {
 		if (!drag) return;
@@ -453,18 +477,20 @@ export function LinksRow({ item }: { item: Item }) {
 	};
 	const line = "pointer-events-none absolute -top-0.5 -bottom-0.5 w-0.5 rounded-full bg-link";
 	return (
-		<div
+		<ul
 			className="mt-2 flex flex-wrap items-center gap-1.5"
 			onDragLeave={(e) =>
 				!e.currentTarget.contains(e.relatedTarget as Node | null) && setAt(undefined)
 			}
 			onDragOver={(e) => drag && e.preventDefault()}
-			onDrop={(e) => (
-				e.preventDefault(), drag && at !== undefined && repo.moveRef(item.id, drag, at), end()
-			)}
+			onDrop={(e) => {
+				e.preventDefault();
+				if (drag && at !== undefined) repo.moveRef(item.id, drag, at);
+				end();
+			}}
 		>
 			{refs.map((x, n) => (
-				<span
+				<li
 					className={cn(
 						"group relative inline-flex max-w-full cursor-grab select-none items-center gap-1 rounded-md bg-surface-2 py-0.5 pl-1.5 pr-0.5 text-[13px] active:cursor-grabbing",
 						drag === x.id && "opacity-50",
@@ -525,10 +551,12 @@ export function LinksRow({ item }: { item: Item }) {
 							size="xs"
 						/>
 					)}
-				</span>
+				</li>
 			))}
-			<AddRef item={item} />
-		</div>
+			<li className="inline-flex">
+				<AddRef item={item} />
+			</li>
+		</ul>
 	);
 }
 

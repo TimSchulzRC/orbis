@@ -33,15 +33,20 @@ const LIST = [
 ];
 const STATS = { "rf-cloud": { total: 900 }, "anna-aws": { total: 10 } };
 
+/** The library site's answers. */
+function answer(url: string) {
+	if (url === `${SITE}libraries.json`) return Response.json(LIST);
+	if (url === `${SITE}stats.json`) return Response.json(STATS);
+	if (url === `${SITE}libraries/anna/aws.excalidrawlib`)
+		return new Response('{"type":"excalidrawlib","libraryItems":[]}');
+	return new Response("", { status: 404 });
+}
+
 test("lists, searches and sorts the libraries; a library goes into the drawing", async () => {
 	const fetched: string[] = [];
-	vi.stubGlobal("fetch", async (url: string) => {
+	vi.stubGlobal("fetch", (url: string) => {
 		fetched.push(url);
-		if (url === `${SITE}libraries.json`) return Response.json(LIST);
-		if (url === `${SITE}stats.json`) return Response.json(STATS);
-		if (url === `${SITE}libraries/anna/aws.excalidrawlib`)
-			return new Response('{"type":"excalidrawlib","libraryItems":[]}');
-		return new Response("", { status: 404 });
+		return Promise.resolve(answer(url));
 	});
 	const added: Blob[] = [];
 	const onClose = vi.fn();

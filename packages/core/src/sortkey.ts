@@ -25,7 +25,10 @@ export function keyBetween(a?: string | null, b?: string | null): string {
 export function keysFor(n: number): string[] {
 	const out: string[] = [];
 	let prev: string | null = null;
-	for (let i = 0; i < n; i++) out.push((prev = keyBetween(prev, null)));
+	for (let i = 0; i < n; i++) {
+		prev = keyBetween(prev, null);
+		out.push(prev);
+	}
 	return out;
 }
 

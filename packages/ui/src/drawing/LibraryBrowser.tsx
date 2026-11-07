@@ -64,14 +64,17 @@ export function LibraryBrowser({
 
 	useEffect(() => {
 		let live = true;
-		(cached ??= loadList()).then(
+		cached ??= loadList();
+		cached.then(
 			(l) => live && setList(l),
 			() => {
 				cached = undefined;
 				if (live) setFailed(true);
 			},
 		);
-		return () => void (live = false);
+		return () => {
+			live = false;
+		};
 	}, []);
 
 	const shown = useMemo(() => {
@@ -116,7 +119,7 @@ export function LibraryBrowser({
 			wide
 		>
 			{/* keys stay here: typing in the search is not a drawing shortcut, Escape closes only this */}
-			<div onKeyDown={(e) => e.stopPropagation()}>
+			<fieldset className="min-w-0" onKeyDown={(e) => e.stopPropagation()}>
 				<div className="mb-3 flex flex-wrap items-center gap-2">
 					<Input
 						aria-label={t("drawing.librarySearch")}
@@ -200,7 +203,7 @@ export function LibraryBrowser({
 						))}
 					</ul>
 				)}
-			</div>
+			</fieldset>
 		</Dialog>
 	);
 }

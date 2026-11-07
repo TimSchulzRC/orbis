@@ -30,7 +30,7 @@ import {
 	Trash2,
 	X,
 } from "lucide-react";
-import { useContext, useState } from "react";
+import { useContext, useId, useState } from "react";
 import { Checkbox } from "../components/ui/checkbox";
 import { NativeSelect } from "../components/ui/native-select";
 import { setParams, useIndex, useLocalStorage, useRoute } from "../hooks";
@@ -77,7 +77,13 @@ export function useTabChoice(
 		(inAddress && named ? tabs.find((x) => x.id === named) : undefined) ??
 		tabs.find((x) => x.id === id) ??
 		tabs[0]!;
-	return [tab, (x) => (setId(x), inAddress && setParams({ view: x }))];
+	return [
+		tab,
+		(x) => {
+			setId(x);
+			if (inAddress) setParams({ view: x });
+		},
+	];
 }
 
 export interface TabEdit {
@@ -165,22 +171,41 @@ export function ViewTabs({
 										over === tab.id && "bg-hover",
 									)}
 									draggable={!!edit}
-									onClick={() => (on ? edit && (setPoint(null), p.onClick()) : onPick(tab.id))}
+									onClick={() => {
+										if (!on) onPick(tab.id);
+										else if (edit) {
+											setPoint(null);
+											p.onClick();
+										}
+									}}
 									onContextMenu={
 										edit &&
-										((e) => (
-											e.preventDefault(),
-											setPoint({ id: tab.id, x: e.clientX, y: e.clientY }),
-											setMenu(tab.id)
-										))
+										((e) => {
+											e.preventDefault();
+											setPoint({ id: tab.id, x: e.clientX, y: e.clientY });
+											setMenu(tab.id);
+										})
 									}
-									onDragEnd={() => (setDrag(null), setOver(null))}
+									onDragEnd={() => {
+										setDrag(null);
+										setOver(null);
+									}}
 									onDragLeave={() => setOver(null)}
-									onDragOver={(e) => drag && (e.preventDefault(), setOver(tab.id))}
-									onDragStart={(e) => (
-										e.dataTransfer.setData("obtion/tab", tab.id), setDrag(tab.id)
-									)}
-									onDrop={(e) => (e.preventDefault(), drop(tab.id), setDrag(null), setOver(null))}
+									onDragOver={(e) => {
+										if (!drag) return;
+										e.preventDefault();
+										setOver(tab.id);
+									}}
+									onDragStart={(e) => {
+										e.dataTransfer.setData("obtion/tab", tab.id);
+										setDrag(tab.id);
+									}}
+									onDrop={(e) => {
+										e.preventDefault();
+										drop(tab.id);
+										setDrag(null);
+										setOver(null);
+									}}
 									role="tab"
 									variant="plain"
 								>
@@ -202,13 +227,20 @@ export function ViewTabs({
 									</div>
 									<MenuItem
 										icon={<SlidersHorizontal size={14} />}
-										onClick={() => (close(), on || onPick(tab.id), edit!.settings())}
+										onClick={() => {
+											close();
+											if (!on) onPick(tab.id);
+											edit!.settings();
+										}}
 									>
 										{t("view.settings")}
 									</MenuItem>
 									<MenuItem
 										icon={<Copy size={14} />}
-										onClick={() => (close(), edit!.duplicate(tab.id))}
+										onClick={() => {
+											close();
+											edit!.duplicate(tab.id);
+										}}
 									>
 										{t("view.duplicate")}
 									</MenuItem>
@@ -226,7 +258,10 @@ export function ViewTabs({
 										<MenuItem
 											danger
 											icon={<Trash2 size={14} />}
-											onClick={() => (close(), edit!.remove(tab.id))}
+											onClick={() => {
+												close();
+												edit!.remove(tab.id);
+											}}
 										>
 											{t("view.remove")}
 										</MenuItem>
@@ -257,7 +292,10 @@ export function ViewTabs({
 									<MenuItem
 										icon={<Icon size={14} />}
 										key={k}
-										onClick={() => (close(), edit.add(k))}
+										onClick={() => {
+											close();
+											edit.add(k);
+										}}
 									>
 										{t(`view.${k}`)}
 									</MenuItem>
@@ -289,8 +327,11 @@ export function useViewFields(
 	const typeIds = viewTypeIds(where, sample, ix);
 	const out: ViewField[] = [];
 	const seen = new Set<string>();
-	const push = (f: ViewField) =>
-		!seen.has(titleKey(f.key)) && (seen.add(titleKey(f.key)), out.push(f));
+	const push = (f: ViewField) => {
+		if (seen.has(titleKey(f.key))) return;
+		seen.add(titleKey(f.key));
+		out.push(f);
+	};
 	for (const id of typeIds)
 		for (const p of ix.types.get(id)!.schema.properties)
 			push({ key: p.name, label: p.name, kind: p.kind, prop: p });
@@ -342,6 +383,7 @@ export function ViewSettings({
 	part?: "sort" | "group" | "more";
 }) {
 	const { t } = useT();
+	const boxId = useId();
 	const ix = useIndex();
 	const hasStatus = [...ix.types.values()].some((x) => statusProp(x.schema));
 	const groupable = [
@@ -446,9 +488,13 @@ export function ViewSettings({
 						))}
 					</NativeSelect>
 					{tab.group && (
-						<label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+						<label
+							className="flex items-center gap-1.5 text-xs text-muted-foreground"
+							htmlFor={`${boxId}-empty`}
+						>
 							<Checkbox
 								checked={!!tab.hideEmpty}
+								id={`${boxId}-empty`}
 								onCheckedChange={(checked) => onLook({ hideEmpty: checked === true || undefined })}
 							/>
 							{t("view.hideEmpty")}
@@ -464,9 +510,13 @@ export function ViewSettings({
 							const hidden = (tab.hiddenGroups ?? []).includes(groupId(g));
 							return (
 								<li className="min-w-0 max-w-full" key={g.key || "_"}>
-									<label className="flex min-w-0 cursor-pointer items-center gap-1.5">
+									<label
+										className="flex min-w-0 cursor-pointer items-center gap-1.5"
+										htmlFor={`${boxId}-group-${encodeURIComponent(groupId(g))}`}
+									>
 										<Checkbox
 											checked={!hidden}
+											id={`${boxId}-group-${encodeURIComponent(groupId(g))}`}
 											onCheckedChange={(checked) =>
 												onLook({
 													hiddenGroups:
@@ -530,6 +580,7 @@ export function ViewSettings({
 						{sorts.map((s, n) => (
 							<span
 								className="inline-flex items-center gap-1 rounded-md border border-line bg-bg py-0.5 pl-1 pr-0.5"
+								// biome-ignore lint/suspicious/noArrayIndexKey: sort rules have no id; keying by field would remount the select being changed
 								key={n}
 							>
 								<NativeSelect
@@ -608,6 +659,7 @@ export function ViewSettings({
 												? "border-line bg-bg text-fg"
 												: "border-dashed border-line text-muted-foreground hover:text-fg",
 										)}
+										htmlFor={`${boxId}-col-${encodeURIComponent(f.key)}`}
 									>
 										{on && (
 											<GripVertical
@@ -619,6 +671,7 @@ export function ViewSettings({
 										<Checkbox
 											checked={on}
 											className="sr-only"
+											id={`${boxId}-col-${encodeURIComponent(f.key)}`}
 											onCheckedChange={(checked) =>
 												onLook({
 													columns:

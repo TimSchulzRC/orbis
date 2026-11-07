@@ -68,10 +68,11 @@ function TagPicker({ item, onClose }: { item: Item; onClose: () => void }) {
 	// added in this pass, newest last (the page keeps its tags sorted, so its last is not the newest)
 	const [added, setAdded] = useState<string[]>([]);
 	const q = normalizeTag(text);
+	const tags = item.tags;
 	const options = useMemo(() => {
 		const counts = new Map(ix.tags().map((x) => [x.tag, x.count]));
 		const all = [...counts].map(([tag, count]) => ({ tag, count, isNew: false }));
-		const on = (tag: string) => Number(!q && item.tags.includes(tag));
+		const on = (tag: string) => Number(!q && tags.includes(tag));
 		// nothing typed: the page's own first; typed: the exact match, then prefix matches; then by use
 		const list = all
 			.filter((x) => !q || x.tag.includes(q))
@@ -85,7 +86,7 @@ function TagPicker({ item, onClose }: { item: Item; onClose: () => void }) {
 			);
 		if (q && !counts.has(q)) list.push({ tag: q, count: 0, isNew: true });
 		return list;
-	}, [ix, q, item.tags.join(" ")]);
+	}, [ix, q, tags]);
 	const active = Math.min(sel, options.length - 1);
 	const list = useRef<HTMLSpanElement>(null);
 	// the list scrolls: keep the one picked with the arrow keys in view
@@ -98,8 +99,12 @@ function TagPicker({ item, onClose }: { item: Item; onClose: () => void }) {
 		setText("");
 		setSel(-1);
 	};
-	const toggle = (tag: string) =>
-		item.tags.includes(tag) ? (setTag(item, tag, false), setText(""), setSel(-1)) : add([tag]);
+	const toggle = (tag: string) => {
+		if (!item.tags.includes(tag)) return add([tag]);
+		setTag(item, tag, false);
+		setText("");
+		setSel(-1);
+	};
 	return (
 		<span className={cn(BOX, "relative border-line bg-surface")}>
 			<Hash aria-hidden className="shrink-0 text-muted-foreground" size={12} />
@@ -107,12 +112,17 @@ function TagPicker({ item, onClose }: { item: Item; onClose: () => void }) {
 				aria-controls="tag-picker-list"
 				aria-expanded={options.length > 0}
 				aria-label={t("tag.addMany")}
+				// biome-ignore lint/a11y/noAutofocus: the picker opens on a click to add tags, and typing them is what comes next
 				autoFocus
 				className="h-full w-44 min-w-0 bg-transparent px-1 text-xs outline-none placeholder:text-faint"
 				onBlur={() => setTimeout(onClose, 150)}
 				onChange={(e) => {
 					const value = e.target.value;
-					if (!SEP.test(value)) return void (setText(value), setSel(value ? 0 : -1));
+					if (!SEP.test(value)) {
+						setText(value);
+						setSel(value ? 0 : -1);
+						return;
+					}
 					// a separator typed or pasted: everything before the last one becomes tags
 					const parts = value.split(SEP);
 					const rest = parts.pop() ?? "";
@@ -120,10 +130,13 @@ function TagPicker({ item, onClose }: { item: Item; onClose: () => void }) {
 					setText(rest);
 				}}
 				onKeyDown={(e) => {
-					if (e.key === "ArrowDown")
-						e.preventDefault(), setSel(Math.min(options.length - 1, active + 1));
-					else if (e.key === "ArrowUp") e.preventDefault(), setSel(Math.max(0, active - 1));
-					else if (e.key === "Enter") {
+					if (e.key === "ArrowDown") {
+						e.preventDefault();
+						setSel(Math.min(options.length - 1, active + 1));
+					} else if (e.key === "ArrowUp") {
+						e.preventDefault();
+						setSel(Math.max(0, active - 1));
+					} else if (e.key === "Enter") {
 						e.preventDefault();
 						const option = options[active];
 						// typed: Enter adds (one the page has already just clears the field); picked with
@@ -133,7 +146,10 @@ function TagPicker({ item, onClose }: { item: Item; onClose: () => void }) {
 					} else if (e.key === "Escape") e.currentTarget.blur();
 					else if (e.key === "Backspace" && !text) {
 						const last = added.findLast((x) => item.tags.includes(x));
-						if (last) setTag(item, last, false), setAdded((a) => a.filter((x) => x !== last));
+						if (last) {
+							setTag(item, last, false);
+							setAdded((a) => a.filter((x) => x !== last));
+						}
 					}
 				}}
 				onPaste={(e) => {
@@ -173,7 +189,10 @@ function TagPicker({ item, onClose }: { item: Item; onClose: () => void }) {
 								)}
 								key={o.tag + (o.isNew ? "+" : "")}
 								// keep the focus in the field: the list stays open for the next one
-								onMouseDown={(e) => (e.preventDefault(), toggle(o.tag))}
+								onMouseDown={(e) => {
+									e.preventDefault();
+									toggle(o.tag);
+								}}
 								onMouseEnter={() => setSel(i)}
 								role="option"
 								variant="plain"

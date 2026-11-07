@@ -3,28 +3,36 @@ import { expect, test } from "bun:test";
 import { RECORD_VERSION } from "@obtion/core/model";
 import { type ReplicaStorage, Repo, type StoredRow } from "@obtion/sync";
 
+const noop = () => undefined;
+const done = () => Promise.resolve();
+
 /** Keeps its rows across repos, like IndexedDB across reloads. */
 function memoryStorage(): { rows: StoredRow[]; storage: ReplicaStorage } {
 	let next = 0;
 	const s: { rows: StoredRow[]; storage: ReplicaStorage } = {
 		rows: [],
 		storage: {
-			open: async () => {},
+			open: done,
 			load: async () => ({ rows: s.rows.map((r) => ({ ...r })), outbox: [] }),
-			compact: async (docs) => {
+			compact: (docs) => {
 				const gone = new Set(docs.flatMap((d) => d.keys));
 				s.rows = [
 					...s.rows.filter((r) => !gone.has(r.key)),
 					...docs.map((d) => ({ ...d.row, key: next++ })),
 				];
+				return done();
 			},
-			write: async (w) => {
+			write: (w) => {
 				for (const r of w.rows ?? []) s.rows.push({ d: r.d, u: r.u, key: next++ });
+				return done();
 			},
 			outbox: async () => [],
-			drop: async (ids) => void (s.rows = s.rows.filter((r) => !ids.includes(r.d))),
+			drop: (ids) => {
+				s.rows = s.rows.filter((r) => !ids.includes(r.d));
+				return done();
+			},
 			serverId: async () => undefined,
-			destroy: async () => {},
+			destroy: done,
 		},
 	};
 	return s;
@@ -36,8 +44,8 @@ async function start(storage: ReplicaStorage) {
 		device: "test",
 		connect: () => ({
 			readyState: 0,
-			send() {},
-			close() {},
+			send: noop,
+			close: noop,
 			onopen: null,
 			onmessage: null,
 			onclose: null,
@@ -46,8 +54,8 @@ async function start(storage: ReplicaStorage) {
 		post: async () => null,
 		askOtherServer: async () => null,
 		confirmDiscard: async () => false,
-		tooNew() {},
-		reload() {},
+		tooNew: noop,
+		reload: noop,
 	});
 	await repo.init();
 	await Bun.sleep(0); // compaction

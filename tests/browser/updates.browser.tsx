@@ -11,7 +11,15 @@ import { cleanup, render } from "vitest-browser-react";
 import { ConfirmHost } from "../../packages/ui/src/ui/feedback";
 import { AppToaster } from "../../packages/ui/src/ui/toasts";
 import { ItemPage } from "../../packages/ui/src/views/ItemPage";
-import { workspace } from "./workspace";
+import { noop, workspace } from "./workspace";
+
+/** The item page; `go` switches it to another item, as navigating does. */
+let go: (id: string) => void = noop;
+function Shown({ start }: { start: string }) {
+	const [id, setId] = useState(start);
+	go = setId;
+	return <ItemPage id={id} isNew={false} />;
+}
 
 afterEach(() => {
 	cleanup();
@@ -104,13 +112,7 @@ test("wide: the panel docks beside the page, which stays in use; only what was o
 				by: "agent:claude",
 			}),
 		);
-	let go: (id: string) => void = () => {};
-	function Shown() {
-		const [id, setId] = useState(project);
-		go = setId;
-		return <ItemPage id={id} isNew={false} />;
-	}
-	await render(<Shown />);
+	await render(<Shown start={project} />);
 
 	await page.getByRole("button", { name: /^Neues Update, .*40 neu/ }).click();
 	const panel = page.getByRole("dialog", { name: /^Updates zu / });

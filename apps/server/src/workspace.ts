@@ -57,6 +57,7 @@ function fileHeaders(mime: string, name: string, download: boolean): Record<stri
 
 /** attachment with the file's name: plain ASCII for old clients, UTF-8 for the rest. */
 function contentDisposition(name: string): string {
+	// biome-ignore lint/suspicious/noControlCharactersInRegex: stripping control characters (and quotes) is what this regex is for
 	const clean = name.replace(/[\u0000-\u001f\u007f"\\]/g, "") || "file";
 	const ascii = clean.replace(/[^\x20-\x7e]/g, "_");
 	return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(clean)}`;

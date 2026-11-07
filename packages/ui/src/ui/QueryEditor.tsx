@@ -102,9 +102,11 @@ function CondPicker({
 					autoFocus
 					className="w-48"
 					onChange={(e) => setTag(e.target.value.replace(/^#/, ""))}
-					onKeyDown={(e) =>
-						e.key === "Enter" && tag.trim() && (pick({ tag: tag.trim().toLowerCase() }), setTag(""))
-					}
+					onKeyDown={(e) => {
+						if (e.key !== "Enter" || !tag.trim()) return;
+						pick({ tag: tag.trim().toLowerCase() });
+						setTag("");
+					}}
 					placeholder={t("query.tagName")}
 					value={tag}
 					variant="sm"
@@ -178,23 +180,46 @@ function Chip({
 				mode === "or" ? (
 					<CondPicker
 						context={context}
-						onUnder={() => (close(), onUnder(onOr!))}
-						pick={(c) => (onOr!(c), close())}
+						onUnder={() => {
+							close();
+							onUnder(onOr!);
+						}}
+						pick={(c) => {
+							onOr!(c);
+							close();
+						}}
 					/>
 				) : (
 					<>
 						{onToggle && (
-							<MenuItem onClick={() => (onToggle(), close())}>
+							<MenuItem
+								onClick={() => {
+									onToggle();
+									close();
+								}}
+							>
 								{off ? t("query.on") : t("query.off")}
 							</MenuItem>
 						)}
 						{!off && onNegate && (
-							<MenuItem onClick={() => (onNegate(), close())}>
+							<MenuItem
+								onClick={() => {
+									onNegate();
+									close();
+								}}
+							>
 								{"not" in cond ? t("query.unnegate") : t("query.negate")}
 							</MenuItem>
 						)}
 						{!off && onOr && <MenuItem onClick={() => setMode("or")}>{t("query.or")}</MenuItem>}
-						<MenuItem danger icon={<X size={13} />} onClick={() => (onRemove(), close())}>
+						<MenuItem
+							danger
+							icon={<X size={13} />}
+							onClick={() => {
+								onRemove();
+								close();
+							}}
+						>
 							{t("query.removeCond")}
 						</MenuItem>
 					</>
@@ -236,8 +261,14 @@ export function AddFilter({
 				{(close) => (
 					<CondPicker
 						context={context}
-						onUnder={() => (close(), setPicking(true))}
-						pick={(c) => (onAdd(c), close())}
+						onUnder={() => {
+							close();
+							setPicking(true);
+						}}
+						pick={(c) => {
+							onAdd(c);
+							close();
+						}}
 					/>
 				)}
 			</Popover>
@@ -245,7 +276,10 @@ export function AddFilter({
 				<ItemPicker
 					filter={(x) => x.kind === "note"}
 					onClose={() => setPicking(false)}
-					onPick={(id) => (onAdd({ under: { id } }), setPicking(false))}
+					onPick={(id) => {
+						onAdd({ under: { id } });
+						setPicking(false);
+					}}
 					title={t("query.cond.under")}
 				/>
 			)}
@@ -314,6 +348,7 @@ export function QueryEditor({
 					key={n}
 				>
 					{c.or.map((alt, k) => (
+						// biome-ignore lint/suspicious/noArrayIndexKey: conditions have no id; a chip is its place in the query
 						<span className="inline-flex items-center gap-1" key={k}>
 							{k > 0 && <span className="text-muted-foreground">{t("query.orWord")}</span>}
 							<Chip
@@ -351,6 +386,7 @@ export function QueryEditor({
 		<div className={bare ? undefined : "rounded-xl border border-line bg-surface p-2.5"}>
 			<div className="flex flex-wrap items-center gap-1.5 text-xs">
 				{parts.map((p, n) => (
+					// biome-ignore lint/suspicious/noArrayIndexKey: conditions have no id; a chip is its place in the query
 					<span className="inline-flex items-center gap-1.5" key={n}>
 						{n > 0 && !bare && <span className="text-muted-foreground">{t("query.and")}</span>}
 						{chip(p, n)}
@@ -360,6 +396,7 @@ export function QueryEditor({
 					<Chip
 						cond={o.cond}
 						ctx={ctx}
+						// biome-ignore lint/suspicious/noArrayIndexKey: switched-off conditions have no id; a chip is its place in the list
 						key={`off${k}`}
 						off
 						onRemove={() => setOff(off.filter((_, i) => i !== k))}
@@ -382,8 +419,14 @@ export function QueryEditor({
 					{(close) => (
 						<CondPicker
 							context={context}
-							onUnder={() => (close(), under(add))}
-							pick={(c) => (add(c), close())}
+							onUnder={() => {
+								close();
+								under(add);
+							}}
+							pick={(c) => {
+								add(c);
+								close();
+							}}
 						/>
 					)}
 				</Popover>
@@ -406,11 +449,17 @@ export function QueryEditor({
 							"field min-w-0 flex-1 bg-transparent font-mono text-sm outline-none placeholder:text-muted-foreground",
 							errors.length > 0 && "text-warn",
 						)}
-						onBlur={() => (setFocused(false), text !== printed && commit())}
+						onBlur={() => {
+							setFocused(false);
+							if (text !== printed) commit();
+						}}
 						onChange={(e) => setText(e.target.value)}
 						onFocus={() => setFocused(true)}
 						onKeyDown={(e) => {
-							if (e.key === "Enter") e.preventDefault(), commit();
+							if (e.key === "Enter") {
+								e.preventDefault();
+								commit();
+							}
 							if (e.key === "Escape") setText(printed);
 						}}
 						placeholder={t("query.placeholder")}
@@ -421,6 +470,7 @@ export function QueryEditor({
 					<span
 						aria-label={t("query.help")}
 						className="cursor-help text-muted-foreground"
+						role="img"
 						title={t("query.help")}
 					>
 						<HelpCircle size={14} />

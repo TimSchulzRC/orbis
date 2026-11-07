@@ -408,7 +408,7 @@ test("typing moves the change time: local text edits touch meta.updated, edits f
 		initItem(doc, { title: "Note", body: "Old", created: 1000, updated: 1000 });
 		let now = 50_000;
 		const stop = touchOnTextEdit(doc, 3000, () => now);
-		const updated = () => doc.getMap<any>("meta").get("updated");
+		const updated = () => doc.getMap<unknown>("meta").get("updated");
 		doc.getText("body").insert(3, " and new"); // typed here
 		jest.advanceTimersByTime(0);
 		expect(updated()).toBe(50_000);
