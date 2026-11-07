@@ -1014,7 +1014,7 @@
  "settings.workspaces": "Workspaces",
  "settings.workspacesHint": "Jeder Workspace hat seine eigenen Inhalte, Typen, Mitglieder und Einstellungen.",
  "space.delete": "Workspace löschen",
- "space.deleteHint": "Löscht ihn mit allem darin auf dem Server – für alle Mitglieder, auch die Dateien und Backups. Das lässt sich nicht rückgängig machen.",
+ "space.deleteHint": "Löscht ihn mit allem darin auf dem Server – für alle Mitglieder, auch die Dateien. Das lässt sich nicht rückgängig machen.",
  "space.deleteConfirm": "„{name}“ endgültig löschen?",
  "space.deleteOwner": "Löschen können nur Besitzer. Du kannst den Workspace verlassen.",
  "nav.today": "Heute",

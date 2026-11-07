@@ -38,7 +38,7 @@ bun run dev:reset:all
 ```
 
 Reset deletes each worktree's entire `data/` directory, including accounts,
-workspaces, files, settings, tokens, and backups. It runs immediately without a
+workspaces, files, settings, and tokens. It runs immediately without a
 confirmation prompt. The next start creates fresh data. Symlinked `data/`
 directories are rejected. Custom `OBTION_DATA` paths and browser storage are not
 cleared. Servers started manually with `bun run dev` are not managed by these

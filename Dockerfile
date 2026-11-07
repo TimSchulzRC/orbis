@@ -1,6 +1,6 @@
 # Obtion server with its web app: sync, API, MCP and the app in one container.
 # Data live in /data: accounts.db and config.json, and per workspace workspaces/<id>/ with its
-# database, daily backups, files and Markdown mirror.
+# database, files and Markdown mirror.
 # Built for amd64 and arm64: the web app and the server's dependencies are plain JavaScript, so
 # both are made on the build platform; the last stage only copies (no emulation needed).
 # The base images are pinned to a digest: nightly and stable are built again from the commit dev
