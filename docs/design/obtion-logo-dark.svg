@@ -1,13 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
   <defs>
     <linearGradient id="tile" x1="80" y1="0" x2="430" y2="512" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#24272E"/><stop offset="1" stop-color="#101216"/>
+      <stop stop-color="#272727"/><stop offset="1" stop-color="#121212"/>
     </linearGradient>
     <linearGradient id="orbit" x1="148" y1="133" x2="355" y2="385" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#81B5FF"/><stop offset=".48" stop-color="#4E96FA"/><stop offset="1" stop-color="#2963CC"/>
+      <stop stop-color="#FFD47E"/><stop offset=".48" stop-color="#F0B040"/><stop offset="1" stop-color="#C98A1C"/>
     </linearGradient>
     <linearGradient id="object" x1="325" y1="115" x2="402" y2="211" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#9AC8FF"/><stop offset="1" stop-color="#4B94F5"/>
+      <stop stop-color="#FFE2A0"/><stop offset="1" stop-color="#F5B83F"/>
     </linearGradient>
     <filter id="shadow" x="0" y="0" width="512" height="512" filterUnits="userSpaceOnUse">
       <feDropShadow dx="0" dy="12" stdDeviation="12" flood-color="#000000" flood-opacity=".35"/>
