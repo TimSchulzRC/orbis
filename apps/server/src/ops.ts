@@ -61,7 +61,7 @@ import { type Writer, runSetup, typeTabs } from "@obtion/core/setup";
 import { type PropChange, followKindChange, followPropChange, followTypeRename } from "@obtion/core/typerefs";
 import { running } from "@obtion/core/today";
 import { type Lang, translate } from "@obtion/core/i18n";
-import { deleteItem, onlyBelow, restoreItem } from "@obtion/core/trash";
+import { deleteItem, onlyBelow, purgeSet, restoreItem, trashRoots } from "@obtion/core/trash";
 import { fromB64 } from "@obtion/core/protocol";
 import type { Store } from "./store";
 import { type Blobs, sha256 } from "./blobs";
@@ -1253,13 +1253,33 @@ export class Ops {
     return { item, only: children === "inbox" ? 0 : only.length };
   }
 
-  /** Brings back exactly what was deleted together with it. */
-  restore(ref: string, origin: string) {
+  private inTrash(ref: string): Item {
     const item = this.store.records.get(ref) ?? [...this.store.records.values()].find((x) => x.deleted && titleKey(x.title) === titleKey(ref));
     if (!item || !item.deleted) throw new OpError(`Nothing in the trash matches "${ref}".`);
+    return item;
+  }
+
+  /** Brings back exactly what was deleted together with it. */
+  restore(ref: string, origin: string) {
+    const item = this.inTrash(ref);
     const back = restoreItem(this.writer(origin), this.store.records, item.id);
     this.store.flush();
     return { item, back: back.length };
+  }
+
+  /**
+   * Deletes an item in the trash for good, with what was deleted with it, its history and the file
+   * contents nothing else uses. Without `ref`: everything in the trash. Returns the purged ids.
+   */
+  purge(ref?: string): string[] {
+    const records = this.store.records;
+    const roots = ref === undefined ? trashRoots(records) : [this.inTrash(ref)];
+    const ids = [...new Set(roots.flatMap((r) => purgeSet(records, r.id)))];
+    if (!ids.length) return [];
+    const files = ids.map((id) => records.get(id)!);
+    this.store.purge(ids);
+    this.blobs?.forget(files);
+    return ids;
   }
 
   defineType(input: DefineTypeInput, origin: string) {

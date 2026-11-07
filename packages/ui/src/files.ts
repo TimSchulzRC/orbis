@@ -219,6 +219,16 @@ export class DeviceFiles {
     this.store = (await opfsStore(this.link.storage.blobs)) ?? idbStore(this.db);
     for (const b of await this.store.list()) this.local.add(b.hash);
     this.repo.subscribe(() => this.scheduleSync());
+    // contents only purged items used go once the records are gone, also ones stored this session or not uploaded yet
+    this.repo.onPurge(async (items) => {
+      const used = new Set([...this.repo.records.values()].flatMap(contentsOf));
+      for (const h of items.flatMap(contentsOf)) {
+        if (used.has(h)) continue;
+        this.fresh.delete(h);
+        await this.db.delete("uploads", h);
+      }
+      await this.collect();
+    });
     this.repo.onBlob((hash) => {
       if (this.missing.delete(hash)) this.emit();
       this.scheduleSync(50);
@@ -474,8 +484,7 @@ export class DeviceFiles {
    * before anything is deleted. Spares pending uploads and contents stored this session.
    */
   private async collect() {
-    const keep = new Set<string>();
-    for (const r of this.repo.records.values()) for (const h of [r.file?.hash, r.file?.display, r.file?.thumb, ...(r.drawing?.files ?? [])]) if (h) keep.add(h);
+    const keep = new Set([...this.repo.records.values()].flatMap(contentsOf));
     const pending = await this.pendingUploads();
     for (const h of [...this.local]) if (!keep.has(h) && !pending.has(h) && !this.fresh.has(h)) await this.drop(h);
   }
@@ -583,6 +592,11 @@ export class DeviceFiles {
       this.urls.delete(hash);
     });
   }
+}
+
+/** The contents an item points to on a device: a file's original and previews, a drawing's images. */
+function contentsOf(r: Item): string[] {
+  return [r.file?.hash, r.file?.display, r.file?.thumb, ...(r.drawing?.files ?? [])].filter((h): h is string => !!h);
 }
 
 function keptOnline(repo: Repo): Set<string> {

@@ -43,7 +43,7 @@ import { deleteItem, resolveCascade, restoreItem } from "@obtion/core/trash";
 import type { Writer } from "@obtion/core/setup";
 import { nextPinKey } from "@obtion/core/sortkey";
 import { type ActivityEvent, type ClientMsg, type PushItem, type ServerMsg, fromB64, toB64 } from "@obtion/core/protocol";
-import type { UndoRequest } from "@obtion/core/api";
+import type { PurgeRequest, PurgeResult, UndoRequest } from "@obtion/core/api";
 import { createIndex, indexRecord, searchIds } from "@obtion/core/search";
 import { type Person, personOrigin } from "@obtion/core/origin";
 
@@ -82,6 +82,8 @@ export interface ReplicaStorage {
   compact(docs: { keys: unknown[]; row: StoredRow }[]): Promise<void>;
   write(w: { rows?: StoredRow[]; outbox?: OutItem[]; acked?: string[]; cursor?: { lastSeq: number; lastId?: string }; serverId?: string }): Promise<void>;
   outbox(): Promise<OutItem[]>;
+  /** Removes the stored rows and outbox items of these documents. */
+  drop(ids: string[]): Promise<void>;
   serverId(): Promise<string | undefined>;
   destroy(): Promise<void>;
 }
@@ -160,6 +162,9 @@ export class Repo {
   private persistFailed = false;
   private ix: { v: number; index: Index } | null = null;
   private blobListeners = new Set<(hash: string) => void>();
+  private purgeListeners = new Set<(items: Item[]) => void>();
+  /** Documents the server deleted for good: never applied or sent again. */
+  private purged = new Set<string>();
 
   constructor(private host: RepoHost) {
     this.db = host.storage;
@@ -381,6 +386,7 @@ export class Repo {
   }
 
   private applyFromTab(msg: TabMsg) {
+    if (this.purged.has(msg.d)) return;
     Y.applyUpdate(this.getDoc(msg.d), msg.u, TAB);
   }
 
@@ -452,6 +458,8 @@ export class Repo {
       await this.onUpdates(msg);
     } else if (msg.t === "ack") {
       await this.onAck(msg);
+    } else if (msg.t === "purged") {
+      await this.drop(msg.ids);
     } else if (msg.t === "blob") {
       for (const l of this.blobListeners) l(msg.hash);
     } else if (msg.t === "event") {
@@ -501,6 +509,7 @@ export class Repo {
     }
     const rows: StoredRow[] = [];
     for (const it of msg.items) {
+      if (this.purged.has(it.d)) continue;
       const u = fromB64(it.u);
       Y.applyUpdate(this.getDoc(it.d), u, REMOTE);
       rows.push({ d: it.d, u });
@@ -550,6 +559,44 @@ export class Repo {
     this.host.reload();
   }
 
+  /** Deletes an item in the trash for good on the server (with what was deleted with it), or with `all` everything in the trash. False offline or on refusal. */
+  async purge(req: PurgeRequest): Promise<boolean> {
+    await this.flushOutbox();
+    const res = await this.host.post("/api/purge", req);
+    if (!res?.ok) return false;
+    await this.drop((res.body as PurgeResult).purged);
+    return true;
+  }
+
+  /** Forgets documents the server deleted for good, here and in the storage. */
+  private async drop(ids: string[]) {
+    const gone = new Set(ids);
+    const items = ids.flatMap((id) => this.records.get(id) ?? []);
+    for (const id of ids) {
+      this.purged.add(id);
+      this.docs.get(id)?.destroy();
+      this.docs.delete(id);
+      this.stored.delete(id);
+      this.records.delete(id);
+      this.dirty.delete(id);
+      this.searchDirty.delete(id);
+      if (this.searchIndex.has(id)) this.searchIndex.discard(id);
+    }
+    for (const [k, o] of this.outbox) if (gone.has(o.d)) this.outbox.delete(k);
+    this.status.pending = this.outbox.size;
+    this.events = this.events.filter((e) => !gone.has(e.doc));
+    resolveCascade(this.records);
+    await this.db.drop(ids);
+    for (const l of this.purgeListeners) l(items);
+    this.emit();
+  }
+
+  /** After documents were purged (their last records), e.g. to drop file contents only they used. */
+  onPurge(l: (items: Item[]) => void) {
+    this.purgeListeners.add(l);
+    return () => this.purgeListeners.delete(l);
+  }
+
   onBlob(l: (hash: string) => void) {
     this.blobListeners.add(l);
     return () => this.blobListeners.delete(l);
@@ -580,6 +627,7 @@ export class Repo {
   }
 
   change(id: string, fn: (doc: Y.Doc) => void) {
+    if (this.purged.has(id)) return;
     if (this.readOnly) {
       if (!this.tooNewShown) this.host.tooNew();
       this.tooNewShown = true;

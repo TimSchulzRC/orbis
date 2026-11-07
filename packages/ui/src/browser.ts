@@ -77,6 +77,13 @@ function idbStorage(name: string): ReplicaStorage {
     async outbox() {
       return (await db.getAll("outbox")) as OutItem[];
     },
+    async drop(ids) {
+      const gone = new Set(ids);
+      const tx = db.transaction(["updates", "outbox"], "readwrite");
+      for (let c = await tx.objectStore("updates").openCursor(); c; c = await c.continue()) if (gone.has((c.value as { d: string }).d)) c.delete();
+      for (let c = await tx.objectStore("outbox").openCursor(); c; c = await c.continue()) if (gone.has((c.value as OutItem).d)) c.delete();
+      await tx.done;
+    },
     async serverId() {
       return (await db.get("meta", "hubId")) as string | undefined;
     },

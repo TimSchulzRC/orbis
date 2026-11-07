@@ -6,7 +6,7 @@ import { AreaError, Store } from "./store";
 import { Mirror } from "./mirror";
 import { handleMcp } from "./mcp";
 import { type Person, personOrigin } from "@obtion/core/origin";
-import type { EventText, HistoryList, VersionText } from "@obtion/core/api";
+import type { EventText, HistoryList, PurgeResult, VersionText } from "@obtion/core/api";
 import { Blobs } from "./blobs";
 import { MAX_BLOB } from "./config";
 import { body, fail, json } from "./http";
@@ -110,6 +110,9 @@ export class Workspace {
       record: (r) => {
         if (r.file && this.blobs.needsWork(r)) this.blobs.schedule(r.id);
       },
+      purge: (ids, area) => {
+        for (const ws of this.conns) if (ws.data.areas.has(area)) send(ws, { t: "purged", area, ids });
+      },
     });
     this.blobs.onStored = (hash) => {
       for (const ws of this.conns) if (ws.data.areas.size) send(ws, { t: "blob", hash });
@@ -142,6 +145,8 @@ export class Workspace {
     const last = store.last(area);
     send(ws, { t: "welcome", hub: store.serverId, area, seq: last.seq, format: FORMAT });
     const reset = !store.knowsCursor(area, msg.since, msg.sinceId); // server restored from an older backup; replica must merge everything
+    const purged = store.purgedSince(area, reset ? 0 : msg.since);
+    if (purged.length) send(ws, { t: "purged", area, ids: purged });
     const ids = store.docsSince(area, reset ? 0 : msg.since);
     if (ids.length === 0) send(ws, { t: "updates", area, items: [], last: last.seq, lastId: last.uid || undefined, initial: true, done: true, reset });
     for (let i = 0; i < ids.length; i += SYNC_BATCH) {
@@ -214,6 +219,17 @@ export class Workspace {
         return json(undoStep(store, b.step, personOrigin(ctx.user, typeof b.device === "string" ? b.device : undefined)));
       } catch (e) {
         if (e instanceof UndoError) return fail(409, e.message);
+        throw e;
+      }
+    }
+
+    if (rest === "/api/purge" && req.method === "POST") {
+      const b = await body<{ id?: unknown; all?: unknown }>(req);
+      if (typeof b?.id !== "string" && b?.all !== true) return fail(400, "id or all: true required");
+      try {
+        return json<PurgeResult>({ purged: new Ops(store, this.blobs).purge(typeof b.id === "string" ? b.id : undefined) });
+      } catch (e) {
+        if (e instanceof OpError) return fail(404, e.message);
         throw e;
       }
     }

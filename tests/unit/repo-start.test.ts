@@ -19,6 +19,7 @@ function memoryStorage(): { rows: StoredRow[]; storage: ReplicaStorage } {
         for (const r of w.rows ?? []) s.rows.push({ d: r.d, u: r.u, key: next++ });
       },
       outbox: async () => [],
+      drop: async (ids) => void (s.rows = s.rows.filter((r) => !ids.includes(r.d))),
       serverId: async () => undefined,
       destroy: async () => {},
     },
@@ -78,4 +79,18 @@ test("records from another RECORD_VERSION are read anew", async () => {
   mem.rows = mem.rows.map((r) => ({ ...r, r: { v: RECORD_VERSION - 1, item: { ...r.r!.item!, title: "old" } } }));
   const again = await start(mem.storage);
   expect(again.get(a)?.title).toBe("A");
+});
+
+test("a purge drops a document that was never decoded, and it stays gone", async () => {
+  const mem = memoryStorage();
+  const first = await start(mem.storage);
+  const a = first.create({ title: "A", body: "geheim" });
+  await first.saved();
+  await start(mem.storage);
+  const repo = await start(mem.storage);
+  expect(repo.docs.has(a)).toBe(false); // waits undecoded
+  await (repo as unknown as { drop(ids: string[]): Promise<void> }).drop([a]);
+  expect(repo.get(a)).toBeUndefined();
+  expect(repo.getDoc(a).getText("body").toString()).toBe("");
+  expect(mem.rows.some((r) => r.d === a)).toBe(false);
 });

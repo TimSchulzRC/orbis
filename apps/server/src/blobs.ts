@@ -136,14 +136,16 @@ export class Blobs {
 
   /** Includes history and derived versions. */
   referenced(): Set<string> {
-    const out = new Set<string>();
-    for (const r of this.store.records.values()) {
-      for (const h of r.drawing?.files ?? []) out.add(h);
-      const f = r.file;
-      if (!f) continue;
-      for (const h of [f.hash, f.display, f.thumb, ...(f.history ?? []).map((x) => x.hash)]) if (h) out.add(h);
+    return new Set([...this.store.records.values()].flatMap(contentsOf));
+  }
+
+  /** After items were purged: removes their contents (and kept texts) that no other item points to. */
+  forget(items: Item[]) {
+    const keep = this.referenced();
+    for (const hash of new Set(items.flatMap(contentsOf))) {
+      if (keep.has(hash) || !HASH.test(hash)) continue;
+      for (const p of [this.path(hash), this.textPath(hash)]) if (existsSync(p)) unlinkSync(p);
     }
-    return out;
   }
 
   /** Run by hand only (cli.ts gc): copies in backups/ may still point to these. */
@@ -257,6 +259,13 @@ export class Blobs {
     await this.put(hash, data);
     return hash;
   }
+}
+
+/** The contents an item points to: the file with its history and derived versions, a drawing's images. */
+function contentsOf(r: Item): string[] {
+  const f = r.file;
+  const own = f ? [f.hash, f.display, f.thumb, ...(f.history ?? []).map((x) => x.hash)] : [];
+  return [...own, ...(r.drawing?.files ?? [])].filter((h): h is string => !!h);
 }
 
 async function probe(path: string): Promise<{ width?: number; height?: number; duration?: number }> {
