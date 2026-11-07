@@ -1,4 +1,4 @@
-// One page for every information. Types change the properties and which sections appear, never
+// One page for every note. Types change the properties and which sections appear, never
 // the layout.
 import { Input } from "../components/ui/input";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";

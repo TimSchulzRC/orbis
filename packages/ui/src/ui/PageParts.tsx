@@ -1,4 +1,4 @@
-// Parts every page shares, information and file pages alike (design rules § 3.1).
+// Parts every page shares, note and file pages alike (design rules § 3.1).
 import { ChevronRight, Link2, Pin, PinOff, Plus, RotateCcw, Star, X } from "lucide-react";
 import { useState } from "react";
 import { type Item, META_TYPE } from "@obtion/core/model";

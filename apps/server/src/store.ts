@@ -7,7 +7,7 @@ import * as Y from "yjs";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { migrate } from "./migrate";
-import { type FileMeta, type Item, type ItemInit, type UpdateEntry, PERSONAL, RECORD_VERSION, SETTINGS_ID, areaOf, initItem, isContent, metaMap, newId, readItem } from "@obtion/core/model";
+import { type FileMeta, type Item, type ItemInit, type UpdateEntry, PERSONAL, RECORD_VERSION, SETTINGS_ID, areaOf, initItem, isContent, isContentKind, metaMap, newId, readItem } from "@obtion/core/model";
 import { sameValue } from "@obtion/core/equal";
 import type { Lang } from "@obtion/core/i18n";
 import { Index } from "@obtion/core/graph";
@@ -451,7 +451,7 @@ export class Store {
         const step = p.step;
         // the settings doc shows only with its rules for agents (the workspace's)
         const event = p.quiet || (next.kind === "settings" && (!prev || prev.rules === next.rules)) ? undefined : this.saveEvent(id, prev, next, origin, step, ts, events);
-        if (prev && prev.body !== next.body && hasBody(next)) this.saveVersion(id, prev, next, origin, step, ts, event);
+        if (prev && prev.body !== next.body && isContentKind(next.kind)) this.saveVersion(id, prev, next, origin, step, ts, event);
       }
       // every log row so far is in a snapshot and a record (rows come only through append, which marks the doc pending)
       this.kvSet("flushed", String(this.seq));
@@ -477,7 +477,7 @@ export class Store {
     const last = this.db.query("SELECT id, ts, kind, origin, changes, step FROM events WHERE doc = ? ORDER BY id DESC LIMIT 1").get(id) as
       | { id: number; ts: number; kind: string; origin: string; changes: string; step: string | null }
       | null;
-    const diff = changes.some((c) => c.field === "body") && hasBody(next);
+    const diff = changes.some((c) => c.field === "body") && isContentKind(next.kind);
     if (kind === "updated" && last && last.kind === "updated" && last.origin === origin && (last.step ?? undefined) === step && ts - last.ts < EVENT_MERGE_WINDOW_MS) {
       const merged = mergeChanges(JSON.parse(last.changes || "[]"), changes);
       this.db.query("UPDATE events SET ts = ?, title = ?, changes = ? WHERE id = ?").run(ts, next.title, JSON.stringify(merged), last.id);
@@ -564,7 +564,7 @@ export class Store {
     const IN = "IN (SELECT value FROM json_each(?))";
     this.db.transaction(() => {
       // a device whose cursor sits on one of these rows still knows where it is (knowsCursor)
-      this.db.query(`INSERT OR IGNORE INTO purged_rows (uid) SELECT uid FROM updates WHERE uid IS NOT NULL AND doc ${IN}`).run(list);
+      this.db.query(`INSERT OR IGNORE INTO purged_rows (uid) SELECT uid FROM updates WHERE doc ${IN}`).run(list);
       for (const table of ["updates", "events", "versions"]) this.db.query(`DELETE FROM ${table} WHERE doc ${IN}`).run(list);
       for (const table of ["docstate", "records"]) this.db.query(`DELETE FROM ${table} WHERE id ${IN}`).run(list);
       this.db.query("DELETE FROM steps WHERE id NOT IN (SELECT step FROM updates WHERE step IS NOT NULL)").run();
@@ -692,9 +692,6 @@ export class Store {
 }
 
 // ---------- helpers ----------
-
-/** Items whose text has versions: informations and files (not settings, not operations). */
-const hasBody = (i: Item) => i.kind === "note" || i.kind === "file" || i.kind === "drawing";
 
 const utf8 = new TextEncoder();
 const fromUtf8 = new TextDecoder();

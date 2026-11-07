@@ -10,7 +10,7 @@ export const viewInput = z.object({
   query: z.string().optional().describe('filter added to the type, plus sort:, group: (status|statusgroup|type|project|area|path|property), columns:, e.g. "status:active group:status sort:due columns:Status,area,Period,Progress"'),
   subgroup: z.string().optional().describe("boards: rows by this field (e.g. project)"),
   hide_empty_groups: z.boolean().optional(),
-  hidden_groups: z.array(z.string()).optional().describe('groups to hide by name, e.g. ["Backlog", "Erledigt"]'),
+  hidden_groups: z.array(z.string()).optional().describe('groups to hide by name, e.g. ["Backlog", "Done"]'),
   date: z.string().optional().describe("calendar/timeline: the date property"),
 });
 export type ViewInput = z.infer<typeof viewInput>;

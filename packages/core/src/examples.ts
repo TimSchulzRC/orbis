@@ -164,7 +164,7 @@ export function writeExamples(w: Writer, lang: Lang, files: Partial<Record<Examp
     },
     (doc) => {
       appendUpdate(doc, { at: now - 9 * D, text: ex("relaunch.update1"), by: "you" });
-      appendUpdate(doc, { at: now - 2 * D, text: ex("relaunch.update2"), by: "agent:claude" });
+      appendUpdate(doc, { at: now - 2 * D, text: ex("relaunch.update2"), by: "claude" });
     },
   );
   const design = put("ex-design", { type: SYS.project, title: ex("design.title"), parents: [relaunch], props: { p_status: "st_active", p_period: `${day(-20)}/${day(3)}` } });

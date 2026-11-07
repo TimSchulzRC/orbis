@@ -14,7 +14,7 @@ import { excalidrawFile, readScene } from "@obtion/core/drawing";
 
 /** Records change in bursts (typing, imports): the first change starts the timer, and one write covers everything until it fires. */
 const SYNC_DELAY_MS = 1500;
-const README = "# Obtion mirror\n\nGenerated from the Obtion database: every information as Markdown below its home. Read freely; changes made here are overwritten. To change data, use the app or the MCP tools.\n";
+const README = "# Obtion mirror\n\nGenerated from the Obtion database: every note as Markdown below its home. Read freely; changes made here are overwritten. To change data, use the app or the MCP tools.\n";
 
 export class Mirror {
   private files = new Map<string, string>(); // relative path -> content signature

@@ -1,4 +1,4 @@
-// A type is an information with a schema; changing it is editing, not programming.
+// A type is a note with a schema; changing it is editing, not programming.
 import { Checkbox } from "../components/ui/checkbox";
 import { DialogContent, DialogHeader, DialogTitle, Dialog as DialogRoot } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";

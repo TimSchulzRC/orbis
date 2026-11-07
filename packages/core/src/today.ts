@@ -1,4 +1,4 @@
-// Data for the "Heute" page. Dormant entries (done above them) are left out, as the
+// Data for the "Today" page. Dormant entries (done above them) are left out, as the
 // focus lists do.
 import { type Item, META_TYPE } from "./model";
 import type { Index } from "./graph";

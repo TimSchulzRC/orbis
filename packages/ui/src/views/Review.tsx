@@ -293,7 +293,7 @@ function Entry({ entry, space, scroller }: { entry: InboxEntry; space?: string; 
   return <NoteCard item={item} meta={space && <span>{space}</span>} scroller={scroller} className="flex-1" />;
 }
 
-/** The phone's "Erledigt" in place of the list. */
+/** The phone's "Done" in place of the list. */
 function LastSorted({ last, onUndo }: { last: Sorted; onUndo: () => void }) {
   const { t } = useT();
   return (

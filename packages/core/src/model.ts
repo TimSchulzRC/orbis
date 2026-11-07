@@ -349,7 +349,7 @@ export function readItem(id: string, doc: Y.Doc): Item | null {
   const item: Item = {
     id,
     kind: kind as Kind,
-    area: str("area") ?? PERSONAL,
+    area: str("area") ?? PERSONAL, // initItem always sets it; the default only guards a malformed document
     title: str("title") ?? "",
     type: str("type") ?? null,
     home: str("home") ?? null,
@@ -503,7 +503,7 @@ export function touchOnTextEdit(doc: Y.Doc, every = 3000, clock: () => number = 
 export function addParent(doc: Y.Doc, parentId: string, sort?: string, at = Date.now()) {
   const parents = doc.getMap<ParentLink>("parents");
   if (parents.has(parentId)) return;
-  // a file has exactly one parent (other uses show under "Verwendet in"), so a new place replaces the old one
+  // a file has exactly one parent (other uses show under "Used in"), so a new place replaces the old one
   const meta = metaMap(doc);
   if (meta.get("kind") === "file") for (const k of [...parents.keys()]) parents.delete(k);
   parents.set(parentId, { sort: sort ?? keyBetween(null, null), at });
@@ -854,9 +854,14 @@ export function optionNames(p: PropDef, v: Value): string[] {
   return (Array.isArray(v) ? v : [v]).map((id) => p.options?.find((o) => o.id === id)?.name ?? String(id));
 }
 
-/** Not deleted, and a note, file or drawing rather than an op or the settings. */
+/** A note, file or drawing rather than an op or the settings. */
+export function isContentKind(kind: Kind) {
+  return kind === "note" || kind === "file" || kind === "drawing";
+}
+
+/** Not deleted, and content (isContentKind). */
 export function isContent(i: Item) {
-  return !i.deleted && (i.kind === "note" || i.kind === "file" || i.kind === "drawing");
+  return !i.deleted && isContentKind(i.kind);
 }
 
 /**

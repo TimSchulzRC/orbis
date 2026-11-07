@@ -45,7 +45,7 @@ function pushTo<V>(map: Map<string, V[]>, key: string, value: V) {
 export class Index {
   /** Includes deleted records (for "type deleted", trash, restore). */
   readonly all: Map<string, Item>;
-  /** Live informations and files, types included. */
+  /** Live notes, files and drawings, types included. */
   readonly live: Item[];
   readonly byId = new Map<string, Item>();
   readonly types = new Map<string, TypeItem>();
@@ -236,7 +236,7 @@ export class Index {
     return this._children!.get(id) ?? [];
   }
 
-  /** Edges ignored because they closed a cycle ("Teil von" made offline on two devices). */
+  /** Edges ignored because they closed a cycle ("Part of" made offline on two devices). */
   cycleEdgesOf(id: string): string[] {
     this.structure();
     return this._cycleEdges!.filter((e) => e.child === id).map((e) => e.parent);

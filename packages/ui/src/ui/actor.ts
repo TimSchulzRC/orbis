@@ -1,7 +1,7 @@
 // The device stays in the origin for later queries but is never shown.
 import { Bot, Cog, Download, Sparkles, User, type LucideIcon } from "lucide-react";
 import type { T } from "@obtion/core/i18n";
-import { parseOrigin } from "@obtion/core/origin";
+import { parseOrigin, type Person } from "@obtion/core/origin";
 import { agentLabel } from "./AgentNotice";
 
 export interface Who {
@@ -9,7 +9,7 @@ export interface Who {
   icon: LucideIcon;
   agent: boolean;
   /** Set only when the person changed it directly, not through an agent. */
-  person?: { id?: string; name: string };
+  person?: Person;
 }
 
 export function who(origin: string, t: T): Who {

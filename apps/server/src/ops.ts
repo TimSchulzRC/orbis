@@ -19,6 +19,7 @@ import {
   initItem,
   displayTitle,
   initType,
+  isContentKind,
   optionNames,
   renameLinksIn,
   mimeOf,
@@ -389,7 +390,7 @@ export class Ops {
     const out: Record<string, unknown> = { id: i.id, title: i.title };
     const tn = ix.typeName(i.type);
     if (i.kind === "file") out.file = `${i.file?.filetype} ${i.file?.name}`;
-    else if (i.kind === "drawing") out.kind = "drawing";
+    else if (i.kind === "drawing") out.kind = i.kind;
     else if (tn) out.type = tn;
     else out.kind = placeKind(i, ix);
     if (i.pinned) out.pinned = true;
@@ -409,7 +410,7 @@ export class Ops {
     const schema = ix.schemaOf(i);
     const parts = [`${displayTitle(i) || "(untitled)"} [${i.id}]`];
     const tn = ix.typeName(i.type);
-    parts.push(i.kind === "file" ? `file ${i.file?.filetype ?? ""}`.trim() : i.kind === "drawing" ? "drawing" : (tn ?? placeKind(i, ix)));
+    parts.push(i.kind === "file" ? `file ${i.file?.filetype ?? ""}`.trim() : i.kind === "drawing" ? i.kind : (tn ?? placeKind(i, ix)));
     if (i.pinned) parts.push("pinned");
     const st = statusOf(i, schema);
     if (st) parts.push(`${st.option.name} (${st.group})`);
@@ -888,7 +889,7 @@ export class Ops {
 
   private anyItem(ref: string): Item {
     const byId = this.store.records.get(ref.trim().replace(/^\[\[|\]\]$/g, ""));
-    return byId && (byId.kind === "note" || byId.kind === "file" || byId.kind === "drawing") ? byId : this.resolve(ref);
+    return byId && isContentKind(byId.kind) ? byId : this.resolve(ref);
   }
 
   /**

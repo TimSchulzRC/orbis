@@ -14,7 +14,7 @@ test("a compacted row keeps its record in IndexedDB", async () => {
   const storage = host.storage;
   await storage.open();
   const doc = new Y.Doc();
-  doc.getMap("meta").set("kind", "info");
+  doc.getMap("meta").set("kind", "note");
   doc.getText("body").insert(0, "Text");
   await storage.write({ rows: [{ d: "a", u: Y.encodeStateAsUpdate(doc) }] });
 

@@ -1,5 +1,5 @@
 // "Rules for agents": an item's own rules and the ones it inherits – from everything above it over
-// "Teil von" (all parents) and from the workspace (its settings). Agents get them over MCP with every
+// "Part of" (all parents) and from the workspace (its settings). Agents get them over MCP with every
 // answer about the item (see core rules.ts); people rarely need them, so the page shows only an icon
 // at the right edge after the tags.
 import { useEffect, useRef, useState } from "react";

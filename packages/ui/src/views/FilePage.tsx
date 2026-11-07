@@ -1,4 +1,4 @@
-// A file behaves like an information whose content is the file itself.
+// A file behaves like a note whose content is the file itself.
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
 import { useEffect, useState } from "react";
@@ -46,7 +46,9 @@ export function FilePage({ item }: { item: Item }) {
   }, [file.hash, local, viewed]);
   const media = src?.hash === file.hash ? src.url : undefined;
   const missing = files.isMissing(file.hash);
-  const addedBy = item.createdBy ? who(item.createdBy, t).label : "";
+  // only a person or an agent is named: examples, imports and the system add files without one
+  const by = item.createdBy ? who(item.createdBy, t) : undefined;
+  const addedBy = by && (by.agent || by.person) ? by.label : "";
   const extension = (file.name.split(".").pop() ?? "").toUpperCase();
   const dimensions = file.width && file.height ? `${file.width} × ${file.height}` : "";
   const size = [dimensions, file.pages ? t("file.pages", { count: file.pages }) : "", file.duration ? fmtDuration(file.duration) : "", fmtBytes(lang, file.size)].filter(Boolean).join(" · ");
