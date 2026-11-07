@@ -576,6 +576,7 @@ export class Repo {
       this.purged.add(id);
       this.docs.get(id)?.destroy();
       this.docs.delete(id);
+      this.stored.delete(id);
       this.records.delete(id);
       this.dirty.delete(id);
       this.searchDirty.delete(id);

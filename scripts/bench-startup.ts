@@ -93,6 +93,7 @@ if (mode === "gen") {
     },
     write: async () => {},
     outbox: async () => [],
+    drop: async () => {},
     serverId: async () => undefined,
     destroy: async () => {},
   };
