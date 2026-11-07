@@ -179,6 +179,11 @@ test("changes other than typing go to the server without the delay", async () =>
   await sleep(5);
   store.flush();
   expect(store.records.get(id)!.title).toBe("B");
+  // a step of its own (e.g. a version brought back) is no typing either
+  repo.ownStep(() => repo.setBody(id, "restored"));
+  await sleep(5);
+  store.flush();
+  expect(store.records.get(id)!.body).toBe("restored");
 });
 
 test("a reload before the push finds every keystroke in the stored outbox", async () => {

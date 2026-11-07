@@ -351,6 +351,7 @@ export class Repo {
     const step = this.curStep as { id: string; typing: boolean } | null;
     if (!step) return undefined;
     step.typing = false;
+    if (this.unsent.length) this.pushAfterTick(); // it waited as typing
     return step.id;
   }
 
@@ -363,15 +364,21 @@ export class Repo {
     this.status.pending = this.outbox.size;
     this.store({ rows: [{ d: docId, u: update }], outbox: [item] });
     this.host.tabs?.post({ d: docId, u: update });
-    const push = () => this.queuePush(() => this.send(...this.takeUnsent()));
-    if (this.curStep?.typing) this.pushTimer ??= setTimeout(push, PUSH_DELAY);
-    else if (!this.pushSoon) {
-      this.pushSoon = true;
-      queueMicrotask(() => {
-        this.pushSoon = false;
-        void push();
-      });
-    }
+    if (this.curStep?.typing) this.pushTimer ??= setTimeout(() => this.push(), PUSH_DELAY);
+    else this.pushAfterTick();
+  }
+
+  private push() {
+    void this.queuePush(() => this.send(...this.takeUnsent()));
+  }
+
+  private pushAfterTick() {
+    if (this.pushSoon) return;
+    this.pushSoon = true;
+    queueMicrotask(() => {
+      this.pushSoon = false;
+      this.push();
+    });
   }
 
   /** Outbox keys of this tab not pushed yet, in order. */
