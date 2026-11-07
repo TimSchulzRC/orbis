@@ -297,3 +297,74 @@ test("a deleted update leaves the list but stays in the activity, and comes back
   expect(s.index().get(id)!.updates.map((u) => u.id)).toEqual([first!.id, s.index().get(id)!.updates[1]!.id]);
   expect(s.index().get(id)!.updates[0]!.text).toBe("Erstes.");
 });
+
+const DAY = 24 * 60 * 60_000;
+const NOW = Date.UTC(2026, 10, 7, 12); // noon: ages a few hours apart stay on one day
+/** Backdates a document's versions, oldest first, to these ages in days before NOW. */
+function age(id: string, days: number[]) {
+  s.versions(id).forEach((v, i) => s.db.query("UPDATE versions SET ts = ? WHERE id = ?").run(NOW - days[i]! * DAY, v.id));
+}
+
+test("thin keeps 30 days whole, then the newest version per day, then per week; numbers stay", async () => {
+  await tool("create", { items: [{ title: "Alt", body: "0\n" }] });
+  const id = idOf("Alt");
+  for (let i = 1; i <= 8; i++) edit(i % 2 ? TIM : ANNA, id, `${i}\n`);
+  // #1 #2 in one week over a year ago, #3 #4 #5 on one day 40 days ago, #6 to #9 within 30 days
+  age(id, [400.05, 400, 40.1, 40.05, 40, 20, 10, 2, 1]);
+  expect(s.thin(NOW)).toEqual({ versions: 3, events: 0 });
+  const kept = s.versions(id);
+  expect(kept.map((v) => v.n)).toEqual([2, 5, 6, 7, 8, 9]);
+  expect(s.versionText(kept[0]!.id)).toBe("1\n");
+  // a second run drops nothing more
+  expect(s.thin(NOW)).toEqual({ versions: 0, events: 0 });
+  // new versions go on from the highest number
+  edit(TIM, id, "9\n");
+  expect(s.versions(id).at(-1)!.n).toBe(10);
+  // over MCP: numbers with gaps, diffs against the kept version before
+  const list = (await tool("history", { ref: id })).text;
+  expect(list).toContain("7 version(s)");
+  expect(list).toMatch(/#5 · .* · \d+ characters · \+1 −1 line\(s\)/);
+  expect(list).toMatch(/#2 · .* · \d+ characters \(step/); // oldest kept after a gap: nothing to compare with
+  expect((await tool("history", { ref: id, version: 5 })).text).toEndWith("\n\n4\n");
+  expect((await tool("history", { ref: id, to: 5 })).text).toContain("#2 → #5");
+  expect((await tool("history", { ref: id, version: 3 })).text).toContain("has no version 3; it has versions 2 to 10 (7 kept, older ones thinned out)");
+});
+
+test("thin never drops a document's newest version, and unlinks entries whose version before went", async () => {
+  await tool("create", { items: [{ title: "Ruhend", body: "a\n" }] });
+  const id = idOf("Ruhend");
+  edit(TIM, id, "b\n");
+  edit(TIM, id, "c\n");
+  age(id, [500.1, 500.05, 500]); // one week, long ago
+  const entries = s.events({ doc: id, limit: 5 }).filter((e) => e.changes.some((c) => c.field === "body"));
+  expect(s.thin(NOW).versions).toBe(2);
+  expect(s.versions(id).map((v) => v.n)).toEqual([3]);
+  // what the last entry changed is gone with version 2: it no longer offers a diff
+  for (const e of entries) expect(s.eventText(e.id)).toBeUndefined();
+  expect(s.events({ doc: id, limit: 5 }).flatMap((e) => e.changes).some((c) => c.diff)).toBe(false);
+});
+
+test("thin drops activity older than a year; an agent's old entry id still reads as a position", async () => {
+  await tool("create", { items: [{ title: "Früher" }, { title: "Heute" }] });
+  const [old] = s.events({ doc: idOf("Früher"), limit: 1 });
+  s.db.query("UPDATE events SET ts = ? WHERE id = ?").run(Date.now() - 400 * DAY, old!.id);
+  const cursor = /cursor: (\S+)/.exec((await tool("activity", { days: 1 })).text)![1]!;
+  expect(s.thin().events).toBe(1);
+  expect(s.events({ doc: idOf("Früher") })).toEqual([]);
+  // the entry is gone, so every kept entry came after it
+  expect((await tool("activity", { since: String(old!.id) })).text).toMatch(/^1 change\(s\)[\s\S]*Heute/);
+  expect((await tool("activity", { since: cursor })).text).toStartWith("0 change(s)");
+  expect((await tool("activity", { since: "999999" })).error).toBe(true);
+  // all activity expired: the old id still reads, as nothing changed since
+  s.db.query("UPDATE events SET ts = 0").run();
+  s.thin();
+  expect((await tool("activity", { since: String(old!.id) })).text).toStartWith("0 change(s)");
+  expect((await tool("activity", { since: "999999" })).error).toBe(true);
+});
+
+test("the hourly backup check thins", () => {
+  ops.call(AG, () => (ops.create({ title: "Stündlich" }, AG), "ok"));
+  s.db.query("UPDATE events SET ts = 0").run();
+  new Backups(s, join(dir, "backups")).run("2026-11-01");
+  expect(s.events()).toEqual([]);
+});

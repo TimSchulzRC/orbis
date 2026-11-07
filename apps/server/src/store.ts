@@ -42,6 +42,13 @@ const FLUSH_DELAY_MS = 250;
 const EVENT_MERGE_WINDOW_MS = 5 * 60_000;
 const MAX_CLOCK_SKEW_MS = 10 * 60_000;
 const MAX_UNDO_CHAIN = 20;
+const DAY_MS = 24 * 60 * 60_000;
+/** Every version of the text stays this long; older ones thin out (see thin()). */
+const VERSIONS_ALL_MS = 30 * DAY_MS;
+/** Older versions keep the newest per day for this long, then the newest per week. */
+const VERSIONS_DAILY_MS = 365 * DAY_MS;
+/** Activity entries older than this go. */
+const EVENTS_KEEP_MS = 365 * DAY_MS;
 
 export class Store {
   db: Database;
@@ -85,8 +92,8 @@ export class Store {
       CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT);
       CREATE TABLE IF NOT EXISTS steps (id TEXT PRIMARY KEY, actor TEXT, ts INTEGER, undoes TEXT);
       CREATE INDEX IF NOT EXISTS steps_undoes ON steps(undoes);
-      CREATE TABLE IF NOT EXISTS versions (id INTEGER PRIMARY KEY AUTOINCREMENT, doc TEXT NOT NULL, ts INTEGER NOT NULL, origin TEXT NOT NULL, step TEXT, event INTEGER, len INTEGER NOT NULL, data BLOB NOT NULL);
-      CREATE INDEX IF NOT EXISTS versions_doc ON versions(doc, id);
+      CREATE TABLE IF NOT EXISTS versions (id INTEGER PRIMARY KEY AUTOINCREMENT, doc TEXT NOT NULL, n INTEGER NOT NULL, ts INTEGER NOT NULL, origin TEXT NOT NULL, step TEXT, event INTEGER, len INTEGER NOT NULL, data BLOB NOT NULL);
+      CREATE INDEX IF NOT EXISTS versions_doc ON versions(doc, n);
       CREATE INDEX IF NOT EXISTS versions_event ON versions(event);
     `);
     this.load();
@@ -486,31 +493,56 @@ export class Store {
   // the same author in the same step within the merge window updates the newest version instead
   // of adding one – typing a paragraph makes one version, not one per keystroke. The first time
   // an item that has no version yet changes, the text it was created with is kept first, so its
-  // history starts with it. Versions are never dropped: a text edited in a
-  // hundred sessions costs a hundred compressed copies – a few MB for long, busy pages, which
-  // is small next to the update log that keeps every keystroke anyway. Backups copy the whole
-  // database (VACUUM INTO), versions included.
+  // history starts with it. thin() keeps every version of the last 30 days, then the newest per
+  // day for a year, then the newest per week, and always the newest of a document. Each version
+  // keeps the number it got (`n`), so numbers stay stable and the list may have gaps. Backups
+  // copy the whole database (VACUUM INTO), versions included.
 
   /** Keep the new text of a document whose body changed (see above). */
   private saveVersion(id: string, prev: Item, next: Item, origin: string, step: string | undefined, ts: number, event?: { id: number; merged: boolean }) {
-    const last = this.db.query("SELECT id, ts, origin, step, event FROM versions WHERE doc = ? ORDER BY id DESC LIMIT 1").get(id) as
-      | { id: number; ts: number; origin: string; step: string | null; event: number | null }
+    const last = this.db.query("SELECT id, n, ts, origin, step, event FROM versions WHERE doc = ? ORDER BY n DESC LIMIT 1").get(id) as
+      | { id: number; n: number; ts: number; origin: string; step: string | null; event: number | null }
       | null;
-    const insert = this.db.query("INSERT INTO versions (doc, ts, origin, step, event, len, data) VALUES (?, ?, ?, ?, ?, ?, ?)");
-    if (!last && prev.body) insert.run(id, prev.created, prev.createdBy ?? "", null, null, prev.body.length, pack(prev.body));
+    const insert = this.db.query("INSERT INTO versions (doc, n, ts, origin, step, event, len, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+    let n = last?.n ?? 0;
+    if (!last && prev.body) insert.run(id, ++n, prev.created, prev.createdBy ?? "", null, null, prev.body.length, pack(prev.body));
     const fold = last && (event ? event.merged && last.event === event.id : last.event === null && last.origin === origin && (last.step ?? undefined) === step && ts - last.ts < EVENT_MERGE_WINDOW_MS);
     if (fold) this.db.query("UPDATE versions SET ts = ?, len = ?, data = ? WHERE id = ?").run(ts, next.body.length, pack(next.body), last.id);
-    else insert.run(id, ts, origin, step ?? null, event?.id ?? null, next.body.length, pack(next.body));
+    else insert.run(id, ++n, ts, origin, step ?? null, event?.id ?? null, next.body.length, pack(next.body));
   }
 
   private hasVersions(event: number): boolean {
     return !!this.db.query("SELECT 1 FROM versions WHERE event = ? LIMIT 1").get(event);
   }
 
-  /** The versions of a document's text, oldest first, numbered from 1 (the number stays: versions are never dropped). */
+  /** The versions of a document's text, oldest first, each with its number (gaps where thin() dropped some). */
   versions(doc: string): Version[] {
-    const rows = this.db.query("SELECT id, ts, origin, step, event, len FROM versions WHERE doc = ? ORDER BY id").all(doc) as (Omit<Version, "n" | "step" | "event"> & { step: string | null; event: number | null })[];
-    return rows.map((r, i) => ({ ...r, n: i + 1, step: r.step ?? undefined, event: r.event ?? undefined }));
+    const rows = this.db.query("SELECT id, n, ts, origin, step, event, len FROM versions WHERE doc = ? ORDER BY n").all(doc) as (Omit<Version, "step" | "event"> & { step: string | null; event: number | null })[];
+    return rows.map((r) => ({ ...r, step: r.step ?? undefined, event: r.event ?? undefined }));
+  }
+
+  /**
+   * Bounds the history: versions older than 30 days thin to the newest per day, older than a year
+   * to the newest per week; the newest version of a document always stays. An activity entry whose
+   * version before it went no longer links its versions (it can't show what it changed then).
+   * Activity entries older than a year go. Runs hourly with the backup check. Returns what went.
+   */
+  thin(now = Date.now()): { versions: number; events: number } {
+    return this.db.transaction(() => {
+      const versions = this.db
+        .query(
+          `DELETE FROM versions WHERE ts < $all
+            AND id NOT IN (SELECT max(id) FROM versions GROUP BY doc)
+            AND id NOT IN (SELECT max(id) FROM versions WHERE ts < $all
+              GROUP BY doc, CASE WHEN ts >= $daily THEN ts / ${DAY_MS} ELSE -1 - ts / ${7 * DAY_MS} END)`,
+        )
+        .run({ $all: now - VERSIONS_ALL_MS, $daily: now - VERSIONS_DAILY_MS }).changes;
+      if (versions)
+        this.db.exec(`UPDATE versions SET event = NULL WHERE event IN (SELECT v.event FROM versions v WHERE v.event IS NOT NULL AND v.n > 1
+          AND NOT EXISTS (SELECT 1 FROM versions p WHERE p.doc = v.doc AND p.n = v.n - 1))`);
+      const events = this.db.query("DELETE FROM events WHERE ts < ?").run(now - EVENTS_KEEP_MS).changes;
+      return { versions, events };
+    })();
   }
 
   /** The text of a version by its id (undefined if unknown, or of another document when `doc` is given). */
@@ -531,7 +563,7 @@ export class Store {
     const all = this.versions(doc);
     const first = all.findIndex((v) => v.id === mine[0]!.id);
     const last = all.find((v) => v.id === mine.at(-1)!.id)!;
-    const before = first > 0 ? all[first - 1] : undefined;
+    const before = first > 0 ? all[first - 1] : undefined; // the one numbered just before: thin() unlinks the entry otherwise
     return { doc, before: before ? this.versionText(before.id)! : "", after: this.versionText(last.id)!, from: before?.n, to: last.n };
   }
 
