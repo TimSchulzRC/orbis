@@ -3,8 +3,12 @@
   "type": "module",
   "private": true,
   "license": "AGPL-3.0-or-later",
-  "workspaces": ["packages/*", "apps/*"],
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
   "devDependencies": {
+    "@biomejs/biome": "2.6.7",
     "@obtion/core": "workspace:*",
     "@obtion/server": "workspace:*",
     "@obtion/sync": "workspace:*",
@@ -37,6 +41,9 @@
     "test:unit": "bun test tests/unit",
     "test:integration": "bun test tests/integration",
     "test:browser": "vitest run",
-    "test:e2e": "bun run build && bun tests/e2e/smoke.ts"
+    "test:e2e": "bun run build && bun tests/e2e/smoke.ts",
+    "check": "bash scripts/check",
+    "lint": "biome check",
+    "fix": "biome check --write"
   }
 }

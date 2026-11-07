@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# Everything CI checks for a pull request, the same way: `bun run check` locally, the `check` job in
+# .github/workflows/ci.yml. Biome (format, lint, assist actions; a warning fails too), bun test,
+# typecheck, the browser tests and the E2E smoke test. None of them depend on each other, so they
+# run side by side and take as long as the longest. Each one's output is printed in one piece, in
+# a collapsible group on GitHub. The script fails if any of them failed.
+set -uo pipefail
+
+cd "$(git rev-parse --show-toplevel)"
+logs=$(mktemp -d)
+trap 'rm -rf "$logs"' EXIT
+
+if [[ ${GITHUB_ACTIONS:-} == true ]]; then
+  group() { echo "::group::$1"; }
+  endgroup() { echo "::endgroup::"; }
+  warn() { echo "::warning::$1"; }
+  fail() { echo "::error::$1"; }
+  # GitHub shows Biome's findings as annotations on the changed lines
+  biome_reporter=--reporter=github
+else
+  group() { echo "── $1"; }
+  endgroup() { echo; }
+  warn() { echo "warning: $1"; }
+  fail() { echo "error: $1"; }
+  biome_reporter=
+fi
+
+# shellcheck disable=SC2086 # an empty reporter adds no argument
+bunx biome ci --error-on-warnings $biome_reporter > "$logs/biome" 2>&1 & biome=$!
+bun test > "$logs/test" 2>&1 & test=$!
+bun run typecheck > "$logs/typecheck" 2>&1 & typecheck=$!
+# a second run if the first failed: Vitest's retry covers a failed test, but not a test file that
+# did not load at all (cold Vite cache on a busy machine); the second run has the cache
+{ bun run test:browser || { warn "browser failed once, second try"; bun run test:browser; }; } > "$logs/browser" 2>&1 & browser=$!
+# the build once; the smoke test a second time if the first failed (like Vitest's retry), with a
+# warning so it shows
+{ bun run build && { bun tests/e2e/smoke.ts || { warn "e2e failed once, second try"; bun tests/e2e/smoke.ts; }; }; } > "$logs/e2e" 2>&1 & e2e=$!
+
+failed=0
+for name in biome test typecheck browser e2e; do
+  if wait "${!name}"; then result=ok; else result=FAILED; failed=1; fi
+  group "$name: $result"
+  cat "$logs/$name"
+  endgroup
+  [[ $result == ok ]] || fail "$name failed"
+done
+exit $failed
