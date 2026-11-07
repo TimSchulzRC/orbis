@@ -14,7 +14,7 @@ async function startServer(seeded: boolean, noTypes = false, workspace = true) {
   const dir = mkdtempSync(join(tmpdir(), "obtion-e2e-"));
   const env = { ...process.env, OBTION_DATA: dir };
   if (seeded) {
-    await seedExamples(env);
+    await seedExamples(dir);
     if (noTypes) {
       const del = Bun.spawnSync(["bun", "tests/support/no-types.ts"], { cwd: ROOT, env });
       if (!del.stdout.toString().includes("types left: 0")) throw new Error("deleting types failed: " + del.stderr.toString());

@@ -2,7 +2,7 @@
 // to several servers. Only an OAuth sign-in ends with a cookie, which the app trades for a token
 // once (claim). Workspace membership and roles are ours.
 import { Database } from "bun:sqlite";
-import { existsSync, mkdirSync, readdirSync, renameSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { betterAuth } from "better-auth";
 import { APIError } from "better-auth/api";
@@ -529,40 +529,4 @@ function makeAuth(accounts: Accounts, secret: string, baseURL: string) {
     rateLimit: { enabled: true },
     telemetry: { enabled: false },
   });
-}
-
-/** The way back in on a server without email codes. Signed-in devices stay signed in. */
-export async function setPassword(dataDir: string, email: string, password: string) {
-  if (password.length < 8 || password.length > 128) throw new Error("The password needs 8 to 128 characters.");
-  const accounts = new Accounts(dataDir, { secret: "set-password-only-hashes-and-signs-nothing-here", baseURL: "http://localhost", policy: "off" });
-  try {
-    await accounts.init(() => "Personal");
-    const ctx = await accounts.auth.$context;
-    const user = await ctx.internalAdapter.findUserByEmail(email.trim().toLowerCase());
-    if (!user) throw new Error(`No account with the address ${email}.`);
-    const hash = await ctx.password.hash(password);
-    const credential = await ctx.internalAdapter.findCredentialAccount(user.user.id);
-    if (credential) await ctx.internalAdapter.updatePassword(user.user.id, hash);
-    else await ctx.internalAdapter.linkAccount({ userId: user.user.id, providerId: "credential", accountId: user.user.id, password: hash });
-  } finally {
-    accounts.db.close();
-  }
-}
-
-/**
- * For turning codes on after people signed up with passwords: their first code then revokes nothing
- * (see the user update hook). Only safe if the admin knows the accounts are those people's.
- */
-export function trustEmails(dataDir: string): number {
-  const db = new Database(join(dataDir, "accounts.db"));
-  try {
-    return db.query('UPDATE "user" SET emailVerified = 1 WHERE emailVerified = 0').run().changes;
-  } finally {
-    db.close();
-  }
-}
-
-export function workspaceDirs(dataDir: string): string[] {
-  const root = join(dataDir, "workspaces");
-  return existsSync(root) ? readdirSync(root).map((n) => join(root, n)) : [];
 }

@@ -1,6 +1,6 @@
 // Daily VACUUM INTO copies, so a host backup job may copy the data folder while the server runs.
-// blobs/ is not copied: files are written once under their hash, and only `cli.ts gc` and deleting
-// for good (Ops.purge) remove any.
+// blobs/ is not copied: files are written once under their hash, and only deleting for good
+// (Ops.purge) removes any.
 import { existsSync, mkdirSync, readdirSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import type { Store } from "./store";

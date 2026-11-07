@@ -12,7 +12,7 @@ mkdir obtion && cd obtion
 docker compose up -d
 ```
 
-Open `http://<host>:8480` and create the first account. Optional settings go into `.env` (see [`.env.example`](.env.example)). All data lives in `./data`; back it up.
+Open `http://<host>:8480` and create the first account. Optional settings go into `.env` (see [`.env.example`](.env.example)). All data lives in `./data`; back it up. Each workspace keeps a database copy per day in its `backups` folder, the last 7. An item deleted for good stays in those copies until they rotate out, and restoring one brings it back.
 
 Update: `docker compose pull && docker compose up -d`
 
@@ -27,9 +27,7 @@ Update: `docker compose pull && docker compose up -d`
 | Passkeys | `passkey` | `OBTION_PUBLIC_URL` with `https://`; add one in Settings → Account |
 | OAuth | – | `OBTION_PUBLIC_URL` and an OpenID Connect provider (`OBTION_OIDC_*`), GitHub or Google |
 
-E.g. `OBTION_LOGIN=code,passkey`: no passwords. Turning codes on later for accounts made with passwords: see `trust-emails` in [`.env.example`](.env.example).
-
-Forgot your password: `docker compose exec obtion bun apps/server/src/cli.ts set-password <email>`.
+E.g. `OBTION_LOGIN=code,passkey`: no passwords. Before turning codes on for accounts made with passwords, read what their first code does in [`.env.example`](.env.example).
 
 ## Release channels
 
@@ -58,7 +56,7 @@ bun run typecheck
 
 The browser tests need Chromium once: `bunx playwright install chromium`.
 
-More in [`docs`](docs): [CI](docs/ci.md), [file API](docs/files-api.md), [releasing](docs/releasing.md), [removing unused files](docs/removing-unused-files.md), [background dev servers](scripts/README.md).
+More in [`docs`](docs): [CI](docs/ci.md), [file API](docs/files-api.md), [releasing](docs/releasing.md), [background dev servers](scripts/README.md).
 
 ## License
 

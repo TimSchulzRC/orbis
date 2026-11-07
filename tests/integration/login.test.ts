@@ -2,7 +2,7 @@
 // cookie traded for a token, deleting an account that has no password.
 import { test, expect, afterAll } from "bun:test";
 import { tempDir, removeTempDirs } from "../support/helpers";
-import { Accounts, SIGNUP_COOKIE, setPassword, trustEmails } from "@obtion/server/accounts";
+import { Accounts, SIGNUP_COOKIE } from "@obtion/server/accounts";
 import type { SignupPolicy } from "@obtion/core/api";
 
 afterAll(removeTempDirs);
@@ -136,23 +136,6 @@ test("the session an OAuth callback leaves in a cookie is traded for its token",
   } finally { accounts.db.close(); }
 });
 
-test("the CLI gives an account a new password, also one that never had one", async () => {
-  const { accounts, withCode } = await setUp("open");
-  const dir = accounts.dataDir;
-  try {
-    await withCode("me@example.org");
-  } finally { accounts.db.close(); }
-  await setPassword(dir, "Me@example.org", "neues-passwort");
-  const again = new Accounts(dir, { secret: SECRET, baseURL: "http://localhost:8480", policy: "open" });
-  try {
-    const ok = await again.auth.api.signInEmail({ body: { email: "me@example.org", password: "neues-passwort" } });
-    expect(ok.user.email).toBe("me@example.org");
-    expect(await again.hasPassword(ok.user.id)).toBe(true);
-  } finally { again.db.close(); }
-  await expect(setPassword(dir, "nobody@example.org", "neues-passwort")).rejects.toThrow("No account");
-  await expect(setPassword(dir, "me@example.org", "kurz")).rejects.toThrow("8 to 128");
-});
-
 test("a code proving an unproven address drops the passkeys, agent tokens, invite links and connections someone else may have made; a proven account keeps its own", async () => {
   const { accounts, withCode } = await setUp("open");
   const addPasskey = (userId: string, id: string) =>
@@ -203,15 +186,3 @@ test("where codes are on, an account with a password proves its address before i
   } finally { accounts.db.close(); }
 });
 
-test("trust-emails: accounts from before codes keep their password through their first code", async () => {
-  const { accounts, withCode } = await setUp("open");
-  const dir = accounts.dataDir;
-  try {
-    const old = await accounts.signUp({ name: "Old", email: "old@example.org", password: "geheim12345" });
-    expect(trustEmails(dir)).toBe(1);
-    expect(trustEmails(dir)).toBe(0);
-    expect((await withCode("old@example.org"))!.status).toBe(200);
-    expect(await accounts.hasPassword(old.user.id)).toBe(true);
-    expect((await accounts.session(old.token))?.user.id).toBe(old.user.id);
-  } finally { accounts.db.close(); }
-});

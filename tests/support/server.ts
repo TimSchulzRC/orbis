@@ -1,5 +1,8 @@
 import { createServer } from "node:net";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
+import { Blobs } from "@obtion/server/blobs";
+import { setUp } from "@obtion/server/setup";
+import { Store } from "@obtion/server/store";
 
 export const MCP_ACCEPT = "application/json, text/event-stream";
 let rpcId = 0;
@@ -18,11 +21,13 @@ export function freePort(): Promise<number> {
   });
 }
 
-/** Runs "setup de --examples" in OBTION_DATA. PORT is a free one because setup refuses to run while
- * a server answers on it, and the self-hosted CI runner has Obtion on the default port. */
-export async function seedExamples(env: Record<string, string | undefined>) {
-  const seed = Bun.spawnSync(["bun", "apps/server/src/cli.ts", "setup", "de", "--examples"], { cwd: ROOT, env: { ...env, PORT: String(await freePort()) } });
-  if (seed.exitCode !== 0) throw new Error("seed failed: " + seed.stderr.toString());
+/** Fills a new data folder with the German setup and its examples, before a server boots on it. */
+export async function seedExamples(dir: string) {
+  const store = new Store(dir);
+  const blobs = new Blobs(join(dir, "blobs"), store);
+  await setUp(store, blobs, "de", { examples: true, quiet: false });
+  blobs.stop();
+  store.db.close();
 }
 
 /** The server as a program on a free port, answering once /api/info does. */

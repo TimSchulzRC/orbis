@@ -12,7 +12,7 @@ import { initItem, setFileMeta } from "@obtion/core/model";
 import { runSetup } from "@obtion/core/setup";
 import { storeWriter } from "@obtion/server/setup";
 import { searchIds } from "@obtion/core/search";
-import { existsSync, mkdirSync, readdirSync } from "node:fs";
+import { mkdirSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 setDefaultTimeout(60_000);
@@ -297,30 +297,6 @@ test("the facts of a file hold at most the start of its text; an older long text
     }
     expect(searchIds(w.store.searchIndex, "Zielwort").sort()).toEqual(["alt-1", "alt-2"]);
     expect(searchIds(w.store.searchIndex, "Spurwort")).toEqual(["neu-1"]);
-  } finally {
-    w.shut();
-  }
-});
-
-test("collect removes contents and texts no file points to, keeps older versions; a dry run removes nothing", async () => {
-  const dir = tempDir("obtion-collect-");
-  const w = new Workspace(dir);
-  try {
-    const [now, before, orphan] = ["jetzt", "vorher", "verwaist"].map((c) => `${c}\n${"Zeile\n".repeat(900)}`);
-    for (const c of [now!, before!, orphan!]) await Bun.write(join(dir, "blobs", sha256(c)), c);
-    for (const c of [now!, before!, orphan!]) await Bun.write(w.blobs.textPath(sha256(c)), c);
-    w.store.change("f-1", "test", (doc) => {
-      initItem(doc, { kind: "datei", title: "a.txt" });
-      setFileMeta(doc, { hash: sha256(now!), name: "a.txt", mime: "text/plain", filetype: "dokument", size: now!.length, extracted: sha256(now!).slice(0, 16), history: [{ hash: sha256(before!), at: 1 }] });
-    });
-    w.store.flush();
-    expect(w.blobs.collect(true)).toEqual([sha256(orphan!)]);
-    expect(existsSync(join(dir, "blobs", sha256(orphan!)))).toBe(true);
-    expect(existsSync(w.blobs.textPath(sha256(orphan!)))).toBe(true);
-    expect(w.blobs.collect()).toEqual([sha256(orphan!)]);
-    expect(readdirSync(join(dir, "blobs")).filter((n) => /^[0-9a-f]{64}$/.test(n)).sort()).toEqual([sha256(now!), sha256(before!)].sort());
-    expect(existsSync(w.blobs.textPath(sha256(orphan!)))).toBe(false);
-    for (const c of [now!, before!]) expect(existsSync(w.blobs.textPath(sha256(c)))).toBe(true);
   } finally {
     w.shut();
   }
