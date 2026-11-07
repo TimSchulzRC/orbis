@@ -6,6 +6,7 @@ import { Database } from "bun:sqlite";
 import * as Y from "yjs";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
+import { migrate } from "./migrate";
 import { type FileMeta, type Item, type ItemInit, type UpdateEntry, PERSONAL, RECORD_VERSION, SETTINGS_ID, areaOf, initItem, isContent, metaMap, newId, readItem } from "@obtion/core/model";
 import { sameValue } from "@obtion/core/equal";
 import type { Lang } from "@obtion/core/i18n";
@@ -74,11 +75,9 @@ export class Store {
   ) {
     mkdirSync(dir, { recursive: true });
     this.db = new Database(join(dir, "obtion.db"));
-    this.db.exec(`
-      PRAGMA journal_mode = WAL;
-      PRAGMA synchronous = NORMAL;
-      PRAGMA secure_delete = ON;
-      CREATE TABLE IF NOT EXISTS updates (seq INTEGER PRIMARY KEY AUTOINCREMENT, doc TEXT NOT NULL, data BLOB NOT NULL, origin TEXT NOT NULL, ts INTEGER NOT NULL, uid TEXT, step TEXT, area TEXT NOT NULL DEFAULT '${PERSONAL}');
+    this.db.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA secure_delete = ON;");
+    migrate(this.db, [
+      `CREATE TABLE IF NOT EXISTS updates (seq INTEGER PRIMARY KEY AUTOINCREMENT, doc TEXT NOT NULL, data BLOB NOT NULL, origin TEXT NOT NULL, ts INTEGER NOT NULL, uid TEXT, step TEXT, area TEXT NOT NULL DEFAULT '${PERSONAL}');
       CREATE INDEX IF NOT EXISTS updates_doc ON updates(doc, seq);
       CREATE INDEX IF NOT EXISTS updates_step ON updates(step);
       CREATE INDEX IF NOT EXISTS updates_area ON updates(area, seq);
@@ -93,8 +92,8 @@ export class Store {
       CREATE INDEX IF NOT EXISTS versions_doc ON versions(doc, id);
       CREATE INDEX IF NOT EXISTS versions_event ON versions(event);
       CREATE TABLE IF NOT EXISTS purged (id TEXT PRIMARY KEY, area TEXT NOT NULL, seq INTEGER NOT NULL);
-      CREATE TABLE IF NOT EXISTS purged_rows (uid TEXT PRIMARY KEY);
-    `);
+      CREATE TABLE IF NOT EXISTS purged_rows (uid TEXT PRIMARY KEY);`,
+    ]);
     this.load();
     // the server was called hub before; renaming the key would look like a new server to devices
     if (!this.kvGet("hubId")) this.kvSet("hubId", newId());

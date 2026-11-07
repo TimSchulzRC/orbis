@@ -13,6 +13,7 @@ import { newId } from "@obtion/core/model";
 import type { InviteLink, Member, Role, SignedIn, SignupPolicy, User, WorkspaceInfo } from "@obtion/core/api";
 import { sha256 } from "./blobs";
 import type { LoginConfig } from "./login";
+import { migrate } from "./migrate";
 
 /** How long after signing in a passkey may be added or the account deleted without a password. */
 export const FRESH_SECONDS = 10 * 60;
@@ -86,16 +87,16 @@ export class Accounts {
     this.login = opts.login ?? { password: true, oauth: [] };
     this.onRevoke = opts.onRevoke ?? (() => {});
     this.auth = makeAuth(this, opts.secret, opts.baseURL);
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS workspaces (id TEXT PRIMARY KEY, name TEXT NOT NULL, created INTEGER NOT NULL, legacy INTEGER NOT NULL DEFAULT 0);
+    migrate(this.db, [
+      `CREATE TABLE IF NOT EXISTS workspaces (id TEXT PRIMARY KEY, name TEXT NOT NULL, created INTEGER NOT NULL, legacy INTEGER NOT NULL DEFAULT 0);
       CREATE TABLE IF NOT EXISTS members (workspace TEXT NOT NULL, user TEXT NOT NULL, role TEXT NOT NULL, joined INTEGER NOT NULL, pos INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (workspace, user));
       CREATE INDEX IF NOT EXISTS members_user ON members(user);
       CREATE TABLE IF NOT EXISTS invites (code TEXT PRIMARY KEY, workspace TEXT NOT NULL, by TEXT NOT NULL, created INTEGER NOT NULL, expires INTEGER NOT NULL, role TEXT NOT NULL DEFAULT 'member');
       CREATE TABLE IF NOT EXISTS tokens (hash TEXT PRIMARY KEY, user TEXT NOT NULL, workspace TEXT NOT NULL, label TEXT, created INTEGER NOT NULL);
-      CREATE TABLE IF NOT EXISTS admins (user TEXT PRIMARY KEY);
-    `);
-    // from before a new MCP token ended the one before: only the newest per member and workspace stays
-    this.db.exec(`DELETE FROM tokens WHERE label = 'mcp' AND EXISTS (SELECT 1 FROM tokens n WHERE n.label = 'mcp' AND n.workspace = tokens.workspace AND n.user = tokens.user AND (n.created > tokens.created OR (n.created = tokens.created AND n.hash > tokens.hash)))`);
+      CREATE TABLE IF NOT EXISTS admins (user TEXT PRIMARY KEY);`,
+      // from before a new MCP token ended the one before: only the newest per member and workspace stays
+      `DELETE FROM tokens WHERE label = 'mcp' AND EXISTS (SELECT 1 FROM tokens n WHERE n.label = 'mcp' AND n.workspace = tokens.workspace AND n.user = tokens.user AND (n.created > tokens.created OR (n.created = tokens.created AND n.hash > tokens.hash)))`,
+    ]);
   }
 
   policy: SignupPolicy;
