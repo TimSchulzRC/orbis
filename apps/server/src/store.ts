@@ -75,7 +75,10 @@ export class Store {
   ) {
     mkdirSync(dir, { recursive: true });
     this.db = new Database(join(dir, "obtion.db"));
-    this.db.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA secure_delete = ON;");
+    // A checkpoint restarts the WAL but keeps the file as large as the largest write (an import,
+    // a rebuild of all records). The limit cuts it back at the next commit. 8 MB is twice what the
+    // automatic checkpoint (1000 pages) lets the WAL reach, so everyday writes never shrink it.
+    this.db.exec(`PRAGMA journal_mode = WAL; PRAGMA journal_size_limit = ${8 * 1024 * 1024}; PRAGMA synchronous = NORMAL; PRAGMA secure_delete = ON;`);
     migrate(this.db, [
       `CREATE TABLE IF NOT EXISTS updates (seq INTEGER PRIMARY KEY AUTOINCREMENT, doc TEXT NOT NULL, data BLOB NOT NULL, origin TEXT NOT NULL, ts INTEGER NOT NULL, uid TEXT, step TEXT, area TEXT NOT NULL DEFAULT '${PERSONAL}');
       CREATE INDEX IF NOT EXISTS updates_doc ON updates(doc, seq);
