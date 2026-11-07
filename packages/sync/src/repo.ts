@@ -52,6 +52,14 @@ export type OutItem = PushItem & { a: string };
 
 const LOAD = Symbol("load");
 const TAB = Symbol("tab");
+/**
+ * How long local changes collect before they go to the server. Typing is one update per
+ * keystroke; collected, a document's updates of one step go as one push item (one log row on the
+ * server) instead of one each. Other tabs get every update at once.
+ */
+export const PUSH_DELAY = 300;
+/** At most this many updates are merged into one item (Y.mergeUpdates grows quadratically). */
+const MERGE_MAX = 200;
 
 const SEARCH_DEBOUNCE_MS = 400;
 /** Typing into the same text continues its undo step while pauses stay shorter than this. */
@@ -78,6 +86,7 @@ export interface ReplicaStorage {
   open(): Promise<void>;
   load(): Promise<{ rows: StoredRow[]; outbox: OutItem[]; lastSeq?: number; lastId?: string }>;
   compact(docs: { keys: unknown[]; row: StoredRow }[]): Promise<void>;
+  /** Outbox puts happen before the deletes of `acked`. */
   write(w: { rows?: StoredRow[]; outbox?: OutItem[]; acked?: string[]; cursor?: { lastSeq: number; lastId?: string }; serverId?: string }): Promise<void>;
   outbox(): Promise<OutItem[]>;
   /** Removes the stored rows and outbox items of these documents. */
@@ -349,26 +358,81 @@ export class Repo {
     const k = newId();
     const item: OutItem = { k, d: docId, u: toB64(update), s: step, a: area };
     this.outbox.set(k, item);
+    this.unsent.push(k);
     this.status.pending = this.outbox.size;
-    this.store({ d: docId, u: update }, item);
+    this.store({ rows: [{ d: docId, u: update }], outbox: [item] });
     this.host.tabs?.post({ d: docId, u: update });
-    this.send({ t: "push", area, items: [item] });
+    this.pushTimer ??= setTimeout(() => this.queuePush(() => this.send(...this.takeUnsent())), PUSH_DELAY);
+  }
+
+  /** Outbox keys of this tab not pushed yet, in order. */
+  private unsent: string[] = [];
+  private pushTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Pushes run one after the other: a flush reads the stored outbox, which a merge changes. */
+  private pushing: Promise<void> = Promise.resolve();
+
+  private queuePush(fn: () => void | Promise<void>): Promise<void> {
+    const run = this.pushing.then(fn);
+    this.pushing = run.catch((e) => console.error("push failed", e));
+    return run;
+  }
+
+  /**
+   * Take the unsent outbox items, merging consecutive ones of the same document and step into
+   * one, in memory and in the storage (one transaction after their own: a reload finds either the
+   * single items or the merged one). Returns push messages per area.
+   */
+  private takeUnsent(): ClientMsg[] {
+    if (this.pushTimer) clearTimeout(this.pushTimer);
+    this.pushTimer = null;
+    const groups: OutItem[][] = [];
+    const lastOf = new Map<string, OutItem[]>(); // the latest group of each document
+    for (const k of this.unsent.splice(0)) {
+      const o = this.outbox.get(k);
+      if (!o) continue;
+      const g = lastOf.get(o.d);
+      if (g && o.s && g[0]!.s === o.s && g[0]!.a === o.a && g.length < MERGE_MAX) g.push(o);
+      else groups.push([o]), lastOf.set(o.d, groups.at(-1)!);
+    }
+    const items: OutItem[] = [];
+    const merged: OutItem[] = [];
+    const replaced: string[] = [];
+    for (const g of groups) {
+      if (g.length === 1) {
+        items.push(g[0]!);
+        continue;
+      }
+      const m: OutItem = { ...g[0]!, k: newId(), u: toB64(Y.mergeUpdates(g.map((o) => fromB64(o.u)))) };
+      for (const o of g) this.outbox.delete(o.k), replaced.push(o.k);
+      this.outbox.set(m.k, m);
+      items.push(m), merged.push(m);
+    }
+    if (merged.length) this.store({ outbox: merged, acked: replaced });
+    this.status.pending = this.outbox.size;
+    const byArea = new Map<string, OutItem[]>();
+    for (const o of items) {
+      const a = o.a;
+      byArea.get(a)?.push(o) ?? byArea.set(a, [o]);
+    }
+    return [...byArea].map(([area, items]) => ({ t: "push", area, items }));
   }
 
   // Everything one tick changed is stored in one transaction, so a reload right after a big
-  // change (the setup writes dozens of documents) loses nothing.
-  private toStore: { row: StoredRow; out: OutItem }[] = [];
+  // change (the setup writes dozens of documents) loses nothing. Writes keep their order: a
+  // merged outbox item replaces items an earlier write stored.
+  private toStore: { rows: StoredRow[]; outbox: OutItem[]; acked: string[] }[] = [];
   private storing: Promise<void> | null = null;
 
-  private store(row: StoredRow, out: OutItem) {
-    this.toStore.push({ row, out });
+  private store(w: { rows?: StoredRow[]; outbox?: OutItem[]; acked?: string[] }) {
+    this.toStore.push({ rows: w.rows ?? [], outbox: w.outbox ?? [], acked: w.acked ?? [] });
     this.storing ??= Promise.resolve().then(() => this.storeNow());
   }
 
   private async storeNow(): Promise<void> {
     const batch = this.toStore.splice(0);
     try {
-      await this.db.write({ rows: batch.map((b) => b.row), outbox: batch.map((b) => b.out) });
+      // puts before deletes (see ReplicaStorage.write), so items stored and replaced in one batch go
+      await this.db.write({ rows: batch.flatMap((b) => b.rows), outbox: batch.flatMap((b) => b.outbox), acked: batch.flatMap((b) => b.acked) });
     } catch (e) {
       // stop advancing lastSeq so the server resends this doc later
       this.persistFailed = true;
@@ -419,13 +483,18 @@ export class Repo {
   }
 
   /** Includes items that other (closed) tabs left in the storage. */
-  private async flushOutbox() {
-    for (const o of await this.db.outbox()) this.outbox.set(o.k, o);
-    this.status.pending = this.outbox.size;
-    for (const area of AREAS) {
-      const items = [...this.outbox.values()].filter((o) => o.a === area);
-      for (let i = 0; i < items.length; i += PUSH_BATCH) this.send({ t: "push", area, items: items.slice(i, i + PUSH_BATCH) });
-    }
+  private flushOutbox(): Promise<void> {
+    return this.queuePush(async () => {
+      this.takeUnsent(); // merged first; sent below with the rest
+      await this.saved(); // the stored outbox has the merged items, not the ones they replace
+      for (const o of await this.db.outbox()) this.outbox.set(o.k, o);
+      this.status.pending = this.outbox.size;
+      const later = new Set(this.unsent); // changed meanwhile: goes with the next push
+      for (const area of AREAS) {
+        const items = [...this.outbox.values()].filter((o) => o.a === area && !later.has(o.k));
+        for (let i = 0; i < items.length; i += PUSH_BATCH) this.send({ t: "push", area, items: items.slice(i, i + PUSH_BATCH) });
+      }
+    });
   }
 
   /** Goes through the durable outbox, so it survives disconnects. */
@@ -437,8 +506,8 @@ export class Repo {
     this.status.pending = this.outbox.size;
   }
 
-  private send(msg: ClientMsg) {
-    if (this.ws?.readyState === OPEN) this.ws.send(JSON.stringify(msg));
+  private send(...msgs: ClientMsg[]) {
+    for (const msg of msgs) if (this.ws?.readyState === OPEN) this.ws.send(JSON.stringify(msg));
   }
 
   private serverId: string | undefined;
@@ -535,6 +604,7 @@ export class Repo {
       this.lastId = msg.lastId;
       cursor = { lastSeq: msg.last, lastId: msg.lastId };
     }
+    await this.saved(); // a merged item is stored before its ack removes it
     await this.db.write({ acked: msg.keys, cursor });
     this.status.pending = this.outbox.size;
     this.emit();
