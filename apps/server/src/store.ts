@@ -72,6 +72,8 @@ export class Store {
     mkdirSync(dir, { recursive: true });
     this.db = new Database(join(dir, "obtion.db"));
     this.db.exec(`
+      -- takes effect on a new database only; Backups.reclaim then shrinks the file after deletes
+      PRAGMA auto_vacuum = INCREMENTAL;
       PRAGMA journal_mode = WAL;
       PRAGMA synchronous = NORMAL;
       CREATE TABLE IF NOT EXISTS updates (seq INTEGER PRIMARY KEY AUTOINCREMENT, doc TEXT NOT NULL, data BLOB NOT NULL, origin TEXT NOT NULL, ts INTEGER NOT NULL, uid TEXT, step TEXT, area TEXT NOT NULL DEFAULT '${PERSONAL}');
