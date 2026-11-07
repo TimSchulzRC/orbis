@@ -755,6 +755,8 @@ export class Ops {
     if (cur) return { ts: Number(cur[1]), id: Number(cur[2]) };
     if (/^\d+$/.test(s)) {
       const row = this.store.db.query("SELECT ts FROM events WHERE id = ?").get(Number(s)) as { ts: number } | null;
+      // older than every kept entry: it went with the activity older than a year, so all kept entries came after it
+      if (!row && Number(s) < ((this.store.db.query("SELECT min(id) AS id FROM events").get() as { id: number | null }).id ?? 0)) return { ts: 0, id: 0 };
       if (!row) throw new OpError(`No activity entry has the id ${s}. since takes the cursor of the last call, an entry id or an ISO time.`);
       return { ts: row.ts, id: Number(s) };
     }
@@ -903,19 +905,22 @@ export class Ops {
     touched?.add(item.id);
     const name = `"${displayTitle(item) || "(untitled)"}" [${item.id}]`;
     const versions = this.store.versions(item.id);
+    const latest = versions.at(-1);
+    // numbers have gaps where older versions thinned out
     const pick = (n: number) => {
-      const v = versions[n - 1];
-      if (!v) throw new OpError(`${name} has no version ${n}; it has ${versions.length ? `versions 1 to ${versions.length}` : "no versions yet"}.`);
+      const v = versions.find((x) => x.n === n);
+      if (!v) throw new OpError(`${name} has no version ${n}; it has ${latest ? `versions ${versions[0]!.n} to ${latest.n}${versions.length < latest.n ? ` (${versions.length} kept, older ones thinned out)` : ""}` : "no versions yet"}.`);
       return v;
     };
     const textOf = (n: number) => (n === 0 ? "" : this.store.versionText(pick(n).id)!);
+    const previous = (n: number) => versions.findLast((x) => x.n < n)?.n ?? 0;
     const label = (v: TextVersion) => `#${v.n} · ${new Date(v.ts).toISOString().slice(0, 16).replace("T", " ")} · ${originText(v.origin) || "unknown"}`;
     if (opts.version !== undefined) {
       const v = pick(opts.version);
       return `Version ${label(v)} · ${v.len} characters of ${name}:\n\n${textOf(v.n)}`;
     }
     if (opts.from !== undefined || opts.to !== undefined) {
-      const from = opts.from ?? Math.max(0, (opts.to ?? versions.length) - 1);
+      const from = opts.from ?? (opts.to === undefined ? (latest?.n ?? 0) : previous(opts.to));
       const a = textOf(from);
       const b = opts.to === undefined ? item.body : textOf(opts.to);
       const d = textDiff(a, b);
@@ -924,16 +929,16 @@ export class Ops {
       if (!d.hunks.length) return `${name}: ${names} – no difference.`;
       return `${name}: ${names}, +${d.added} −${d.removed} line(s)\n${u.text}${u.total > u.shown ? `\n… ${u.total - u.shown} more line(s) left out; compare closer versions` : ""}`;
     }
-    if (!versions.length) return `${name} has no versions yet: its text has not changed since versions are kept. Its text now: get ref=${item.id}.`;
+    if (!latest) return `${name} has no versions yet: its text has not changed since versions are kept. Its text now: get ref=${item.id}.`;
     const shown = versions
       .slice(-50)
       .reverse()
       .map((v) => {
-        const d = textDiff(v.n > 1 ? textOf(v.n - 1) : "", textOf(v.n));
-        return `${label(v)} · ${v.len} characters · +${d.added} −${d.removed} line(s)${v.step ? ` (step ${v.step})` : ""}`;
+        // the oldest kept one after a gap has nothing to compare with
+        const d = v.n === 1 || previous(v.n) ? textDiff(textOf(previous(v.n)), textOf(v.n)) : undefined;
+        return `${label(v)} · ${v.len} characters${d ? ` · +${d.added} −${d.removed} line(s)` : ""}${v.step ? ` (step ${v.step})` : ""}`;
       });
-    const latest = textOf(versions.length);
-    const now = latest === item.body ? `The text now is version ${versions.length}.` : `The text now differs from version ${versions.length} (changes moments ago).`;
+    const now = textOf(latest.n) === item.body ? `The text now is version ${latest.n}.` : `The text now differs from version ${latest.n} (changes moments ago).`;
     return [
       `${versions.length} version(s) of the text of ${name}, newest first${versions.length > shown.length ? ` (the newest 50)` : ""}:`,
       ...shown.map((r) => "- " + r),

@@ -39,7 +39,8 @@ export function HistoryDialog({ item, onClose }: { item: Item; onClose: () => vo
 
   const versions = list.state === "ok" ? list.value : [];
   const shown = picked !== null ? versions.find((v) => v.id === picked) : versions.at(-1);
-  const previous = shown ? versions[shown.n - 2] : undefined;
+  // the one before in the list: numbers have gaps where older versions thinned out
+  const previous = shown ? versions[versions.indexOf(shown) - 1] : undefined;
 
   // the texts the comparison needs: the picked version and the one before it
   useEffect(() => {
@@ -79,9 +80,9 @@ export function HistoryDialog({ item, onClose }: { item: Item; onClose: () => vo
       ) : (
         <div className="flex gap-4 max-md:flex-col">
           <ol aria-label={t("history.versions")} className="flex shrink-0 flex-col gap-0.5 md:max-h-[60vh] md:w-52 md:overflow-y-auto max-md:max-h-48 max-md:overflow-y-auto">
-            {[...versions].reverse().map((v) => {
+            {[...versions].reverse().map((v, i, newest) => {
               const w = who(v.origin, t);
-              const delta = v.len - (versions[v.n - 2]?.len ?? 0);
+              const delta = v.len - (newest[i + 1]?.len ?? 0);
               return (
                 <li key={v.id}>
                   <Button
@@ -92,7 +93,7 @@ export function HistoryDialog({ item, onClose }: { item: Item; onClose: () => vo
                   >
                     <span className="block text-sm font-medium">
                       {t("history.version", { n: v.n })}
-                      {v.n === versions.length && item.body === texts[v.id] && <span className="font-normal text-muted-foreground"> · {t("history.current")}</span>}
+                      {i === 0 && item.body === texts[v.id] && <span className="font-normal text-muted-foreground"> · {t("history.current")}</span>}
                     </span>
                     <span className="block text-xs text-muted-foreground" title={fmtDateTime(lang, v.ts)}>
                       <RelTime ts={v.ts} />

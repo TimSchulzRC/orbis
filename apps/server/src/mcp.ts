@@ -321,7 +321,7 @@ function buildMcpServer(store: Store, origin: string, blobs?: Blobs, lang: Lang 
     {
       title: "History",
       description:
-        "The kept versions of an item's text (every editing session is one version, with time and who). Without more: the list. version = one version's full text. from (0 = empty) and to (default: the text now) = a unified diff between two versions. To go back to a version, update the body with its text.",
+        "The kept versions of an item's text (every editing session is one version, with time and who; after 30 days one per day, after a year one per week, numbers kept, so there are gaps). Without more: the list. version = one version's full text. from (0 = empty) and to (default: the text now) = a unified diff between two versions. To go back to a version, update the body with its text.",
       inputSchema: { ref: z.string(), version: z.number().int().min(1).optional(), from: z.number().int().min(0).optional(), to: z.number().int().min(1).optional() },
       annotations: ro,
     },

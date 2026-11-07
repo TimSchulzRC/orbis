@@ -29,6 +29,7 @@ export class Backups {
   run(day = new Date().toISOString().slice(0, 10)): string | undefined {
     mkdirSync(this.dir, { recursive: true });
     const file = join(this.dir, `obtion-${day}.db`);
+    this.store.thin(); // hourly, like this check: bounds versions and activity before the copy
     const made = existsSync(file) ? undefined : this.snapshot(file);
     this.prune();
     return made;

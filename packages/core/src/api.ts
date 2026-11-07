@@ -142,7 +142,7 @@ export interface UndoResult {
 /** One kept version of an item's text (GET /w/<id>/api/history?doc=<doc>). */
 export interface TextVersion {
   id: number;
-  /** its number among the item's versions, from 1 (oldest) */
+  /** its number among the item's versions, from 1 (oldest); kept when older ones thin out, so there may be gaps */
   n: number;
   ts: number;
   /** who made it */
