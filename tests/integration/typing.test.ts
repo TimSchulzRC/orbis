@@ -3,6 +3,7 @@
 import { test, expect, afterAll } from "bun:test";
 import { tempDir, removeTempDirs } from "../support/helpers";
 import { Store } from "@obtion/server/store";
+import { undoStep } from "@obtion/server/undo";
 import { FORMAT, PERSONAL, touch } from "@obtion/core/model";
 import { fromB64, type ClientMsg, type ServerMsg } from "@obtion/core/protocol";
 import { PUSH_DELAY, Repo, type OutItem, type ReplicaStorage, type StoredRow, type SyncSocket } from "@obtion/sync";
@@ -145,6 +146,27 @@ test("updates of different steps or documents are never merged; undo pushes what
   const n = rows(store);
   await repo.undo("s-none");
   expect(rows(store)).toBe(n + 1);
+});
+
+test("a flush before the push delay keeps a later step behind the typing it builds on", async () => {
+  const store = new Store(tempDir("obtion-typing-"));
+  const { repo } = await device(store);
+  const id = repo.create({ title: "A" });
+  await settle(repo);
+  type(repo, id, "x");
+  await sleep(1);
+  type(repo, id, "y");
+  await sleep(1);
+  repo.setTitle(id, "B");
+  await repo.undo("s-none"); // flushes the outbox at once
+  await settle(repo);
+  store.flush();
+  const last = store.db.query("SELECT step FROM updates ORDER BY seq DESC LIMIT 1").get() as { step: string };
+  expect(store.records.get(id)!.title).toBe("B");
+  undoStep(store, last.step, "web:test");
+  store.flush();
+  expect(store.records.get(id)!.title).toBe("A");
+  expect(store.records.get(id)!.body).toBe("xy");
 });
 
 test("a reload before the push finds every keystroke in the stored outbox", async () => {

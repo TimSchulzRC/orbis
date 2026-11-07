@@ -402,8 +402,10 @@ export class Repo {
         items.push(g[0]!);
         continue;
       }
-      const m: OutItem = { ...g[0]!, k: newId(), u: toB64(Y.mergeUpdates(g.map((o) => fromB64(o.u)))) };
-      for (const o of g) this.outbox.delete(o.k), replaced.push(o.k);
+      // the first item's key keeps the merged one in its place, in memory and in the storage (keys
+      // sort by time): a later step of the document may depend on it
+      const m: OutItem = { ...g[0]!, u: toB64(Y.mergeUpdates(g.map((o) => fromB64(o.u)))) };
+      for (const o of g.slice(1)) this.outbox.delete(o.k), replaced.push(o.k);
       this.outbox.set(m.k, m);
       items.push(m), merged.push(m);
     }
