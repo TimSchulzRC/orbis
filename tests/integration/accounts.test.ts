@@ -79,6 +79,7 @@ test("MCP tokens from before they were exclusive: at the next start only the new
   const tokens = ["obt_alt", "obt_mittel", "obt_neu"];
   tokens.forEach((t, i) => accounts.db.query("INSERT INTO tokens (hash, user, workspace, label, created) VALUES (?, ?, ?, 'mcp', ?)").run(new Bun.CryptoHasher("sha256").update(t).digest("hex"), me.user.id, a.id, i + 1));
   for (const t of tokens) expect(accounts.mcpUser(a.id, t)?.id).toBe(me.user.id);
+  accounts.db.exec("PRAGMA user_version = 0");
   accounts.db.close();
   const again = new Accounts(dir, opts);
   try {
