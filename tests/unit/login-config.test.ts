@@ -22,8 +22,10 @@ test("codes are a way of their own: mail settings alone switch nothing on", () =
   expect(() => loginConfig({ OBTION_LOGIN: "code" }, "")).toThrow("OBTION_SMTP_URL");
 });
 
-test("a server needs a way to create accounts", () => {
-  expect(() => loginConfig({ OBTION_LOGIN: "passkey" }, "https://obtion.example.org")).toThrow("nobody can create an account");
+test("a server needs a way to create accounts: passkeys alone do, where the address allows them", () => {
+  expect(methods({ OBTION_LOGIN: "passkey" }, "https://obtion.example.org")).toEqual({ password: false, emailCode: false, passkey: true, oauth: [] });
+  expect(() => loginConfig({ OBTION_LOGIN: "passkey" }, "http://nas:8480")).toThrow("nobody can create an account");
+  expect(() => loginConfig({ OBTION_LOGIN: "passkey" }, "")).toThrow("nobody can create an account");
   expect(methods({ OBTION_LOGIN: "passkey", OBTION_GITHUB_CLIENT_ID: "gh", OBTION_GITHUB_CLIENT_SECRET: "s" }, "https://o.example.org")).toMatchObject({ password: false, passkey: true, oauth: [{ id: "github" }] });
 });
 

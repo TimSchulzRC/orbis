@@ -24,12 +24,12 @@ Update: `docker compose pull && docker compose up -d`
 |---|---|---|
 | Email and password | `password` | – |
 | Code by email | `code` | `OBTION_SMTP_URL` (or `log`: the codes go to the server log) |
-| Passkeys | `passkey` | `OBTION_PUBLIC_URL` with `https://`; add one in Settings → Account |
+| Passkeys | `passkey` | `OBTION_PUBLIC_URL` with `https://`; create an account with one, or add one in Settings → Account |
 | OAuth | – | `OBTION_PUBLIC_URL` and an OpenID Connect provider (`OBTION_OIDC_*`), GitHub or Google |
 
-E.g. `OBTION_LOGIN=code,passkey`: no passwords. Turning codes on later for accounts made with passwords: see `trust-emails` in [`.env.example`](.env.example).
+E.g. `OBTION_LOGIN=code,passkey`: no passwords. `OBTION_LOGIN=passkey`: name, email and a passkey, no mail server needed. Turning codes on later for accounts made with passwords: see `trust-emails` in [`.env.example`](.env.example).
 
-Forgot your password: `docker compose exec obtion bun apps/server/src/cli.ts set-password <email>`.
+Forgot your password: `docker compose exec obtion bun apps/server/src/cli.ts set-password <email>`. Lost every passkey on a server with `OBTION_LOGIN=passkey`: set `OBTION_LOGIN=password,passkey` for a moment, run `set-password`, sign in, add a passkey in Settings → Account, then switch back.
 
 ## Release channels
 

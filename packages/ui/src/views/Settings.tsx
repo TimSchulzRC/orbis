@@ -376,7 +376,7 @@ function Passkeys() {
               <span className="min-w-0 flex-1 truncate">{passkey.name || t("account.passkey")}</span>
               <span className="shrink-0 text-xs text-muted-foreground">{new Date(passkey.createdAt).toLocaleDateString()}</span>
               <Button variant="plain" className="tap rounded-md p-1.5 text-muted-foreground hover:bg-hover" aria-label={t("account.removePasskey")} title={t("account.removePasskey")}
-                onClick={() => void removePasskey(passkey.id).then(load, () => setError(t("account.offline")))}>
+                onClick={() => void removePasskey(passkey.id).then(load, (e) => setError(t(e instanceof ApiError && e.status === 409 ? "account.lastPasskey" : "account.offline")))}>
                 <Trash2 size={14} />
               </Button>
             </li>

@@ -10,6 +10,7 @@ import { Store } from "@obtion/server/store";
 import { Database } from "bun:sqlite";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { register } from "../support/webauthn";
 
 // Booting a server can exceed bun's 5 s default on a cold cache in CI. A timeout also kills every
 // spawned server, failing all later tests, so tests get more than bootServer's 20 s.
@@ -27,6 +28,10 @@ let bare = "";
 let legacy = "";
 let legacyDir = "";
 let bareDir = "";
+let passkeyOnly = "";
+let passkeyDir = "";
+// passkeys belong to this address, though the tests call the server under 127.0.0.1
+const PASSKEY_ORIGIN = "http://localhost:9";
 beforeAll(async () => {
   // a built web app of its own: the test does not depend on `bun run build`
   const dist = tempDir("obtion-dist-");
@@ -38,10 +43,12 @@ beforeAll(async () => {
   s.flush();
   s.db.close();
   bareDir = tempDir("obtion-server-");
-  [plain, bare, legacy] = await Promise.all([
+  passkeyDir = tempDir("obtion-server-");
+  [plain, bare, legacy, passkeyOnly] = await Promise.all([
     start({ OBTION_DATA: tempDir("obtion-server-"), OBTION_WEB_DIST: dist }),
     start({ OBTION_DATA: bareDir, OBTION_WEB_APP: "off", OBTION_SIGNUP: "open" }),
     start({ OBTION_DATA: legacyDir }),
+    start({ OBTION_DATA: passkeyDir, OBTION_WEB_APP: "off", OBTION_LOGIN: "passkey", OBTION_PUBLIC_URL: PASSKEY_ORIGIN }),
   ]);
 });
 afterAll(async () => {
@@ -198,6 +205,44 @@ test("linking a provider (its address may differ) needs a sign-in of the last mi
   const mixed = await fetch(`${bare}/api/auth/link-social`, { method: "POST", headers: { "content-type": "application/json", origin: bare, authorization: `Bearer ${kim.token}`, "sec-websocket-protocol": `auth.${fresh.token}` }, body: JSON.stringify({ provider: "github", callbackURL: "/" }) });
   expect(mixed.status).toBe(403);
   expect((await post(bare, "/api/auth/link-social", { provider: "github", callbackURL: "/" }, undefined, { origin: bare })).status).toBe(403);
+});
+
+test("with passkeys alone the first account signs up by passkey; adding another needs a sign-in of the last minutes; the last one stays", async () => {
+  expect((await get(passkeyOnly, "/api/info").then((r) => r.json())).login).toEqual({ password: false, emailCode: false, passkey: true, oauth: [] });
+  expect((await post(passkeyOnly, "/api/account/signup", { name: "Pia", email: "pia@example.org", password: "geheim12345" })).status).toBe(403);
+  /** generate-register-options, the passkey, verify-registration: as the page does it. */
+  async function newPasskey(query: string, token?: string) {
+    // no origin header: the server's own check wants it to match the host (127.0.0.1); the passkey
+    // still carries PASSKEY_ORIGIN, as the server expects
+    const headers: Record<string, string> = token ? { authorization: `Bearer ${token}` } : {};
+    const options = await fetch(`${passkeyOnly}/api/auth/passkey/generate-register-options${query}`, { headers });
+    if (!options.ok) return options;
+    const [response] = await register(await options.json(), PASSKEY_ORIGIN);
+    const cookie = options.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
+    return fetch(`${passkeyOnly}/api/auth/passkey/verify-registration`, { method: "POST", headers: { ...headers, cookie, "content-type": "application/json" }, body: JSON.stringify({ response, createSession: !token }) });
+  }
+  const start = await post(passkeyOnly, "/api/account/signup", { name: "Pia", email: "pia@example.org", passkey: true });
+  expect(start.status).toBe(200);
+  const { context } = await start.json();
+  const made = await newPasskey(`?context=${context}`);
+  expect(made.status).toBe(200);
+  const { session, user } = await made.json();
+  expect(await account(passkeyOnly, session.token)).toMatchObject({ user: { id: user.id, email: "pia@example.org", name: "Pia" }, admin: true, password: false });
+  // signed in just now: a second passkey for the same account
+  expect((await newPasskey("", session.token)).status).toBe(200);
+  const db = new Database(join(passkeyDir, "accounts.db"));
+  db.query("UPDATE session SET createdAt = ? WHERE userId = ?").run(new Date(Date.now() - 11 * 60_000).toISOString(), user.id);
+  const stale = await newPasskey("", session.token);
+  expect(stale.status).toBe(403);
+  expect(await stale.json()).toMatchObject({ error: "sign in again" });
+  const ids = (db.query("SELECT id FROM passkey WHERE userId = ?").all(user.id) as { id: string }[]).map((r) => r.id);
+  db.close();
+  expect(ids).toHaveLength(2);
+  // one may go; the last one stays, as nothing else signs this account in
+  expect((await post(passkeyOnly, "/api/auth/passkey/delete-passkey", { id: ids[0] }, session.token)).status).toBe(200);
+  const last = await post(passkeyOnly, "/api/auth/passkey/delete-passkey", { id: ids[1] }, session.token);
+  expect(last.status).toBe(409);
+  expect(await last.json()).toMatchObject({ error: "last way in" });
 });
 
 test("the data from before accounts become a workspace of the first account; the old MCP address still opens them", async () => {

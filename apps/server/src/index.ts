@@ -6,7 +6,7 @@ import type { ServerWebSocket } from "bun";
 import { Store } from "./store";
 import { Accounts, AccountError, FRESH_SECONDS, SIGNUP_COOKIE, randomToken } from "./accounts";
 import { loginConfig, loginMethods } from "./login";
-import type { AccountInfo, InviteCode, InviteInfo, InviteLink, McpConnect, Ok, Role, ServerInfo, SignedIn, SignupPolicy, SignupRequest } from "@obtion/core/api";
+import type { AccountInfo, InviteCode, InviteInfo, InviteLink, McpConnect, Ok, Role, ServerInfo, SignedIn, PasskeySignupStart, SignupPolicy, SignupRequest } from "@obtion/core/api";
 import { type Conn, Workspace, parseClientMsg } from "./workspace";
 import { agentOrigin, firstName, personOrigin } from "@obtion/core/origin";
 import { agentName } from "./mcp";
@@ -160,6 +160,10 @@ async function accountApi(req: Request, path: string, url: URL): Promise<Respons
 
   if (path === "/api/account/signup" && req.method === "POST") {
     const b = await body<SignupRequest>(req);
+    if (b?.passkey) {
+      if (!b.email) return fail(400, "email required");
+      return accounts.startPasskeySignup({ name: b.name ?? "", email: b.email, invite: b.invite || undefined }).then((r) => json<PasskeySignupStart>(r), accountError);
+    }
     if (!login.password) return fail(403, "passwords off");
     if (!b?.email || !b.password) return fail(400, "email and password required");
     const details = { name: b.name ?? "", email: b.email, password: b.password, invite: b.invite || undefined };
@@ -326,14 +330,22 @@ const server = Bun.serve<Conn>({
       // an OAuth provider sends the browser back from its own site; Better Auth checks the state
       const callback = req.method === "GET" && path.startsWith("/api/auth/callback/");
       if (!callback && !sameOrigin(req)) return fail(403, "forbidden");
-      // accounts are created through /api/account/signup
+      // accounts are created through /api/account/signup (a passkey sign-up starts there too)
       if (path.startsWith("/api/auth/sign-up")) return fail(404, "not found");
       if (path.startsWith("/api/auth/passkey/") && !login.passkey) return fail(404, "not found");
-      // linking a provider (its address may differ) needs a recent sign-in. Ask Better Auth for the
-      // session so it reads the token the same way its handler will.
-      if (path === "/api/auth/link-social") {
+      // linking a provider (its address may differ) or adding a passkey needs a recent sign-in. Ask
+      // Better Auth for the session so it reads the token the same way its handler will. A passkey
+      // without a session is a sign-up: its context decides (accounts.ts).
+      const passkeyAdd = path === "/api/auth/passkey/generate-register-options" || path === "/api/auth/passkey/verify-registration";
+      if (path === "/api/auth/link-social" || passkeyAdd) {
         const s = await accounts.auth.api.getSession({ headers: req.headers }).catch(() => null);
-        if (!s || Date.now() - new Date(s.session.createdAt).getTime() > FRESH_SECONDS * 1000) return fail(403, "sign in again");
+        const stale = !!s && Date.now() - new Date(s.session.createdAt).getTime() > FRESH_SECONDS * 1000;
+        if (stale || (!s && !passkeyAdd)) return fail(403, "sign in again");
+      }
+      // the last way in stays: removing it would lock the account out
+      if (path === "/api/auth/passkey/delete-passkey") {
+        const s = await accounts.auth.api.getSession({ headers: req.headers }).catch(() => null);
+        if (s && !(await accounts.canDropPasskey(s.user.id))) return fail(409, "last way in");
       }
       return accounts.auth.handler(req);
     }

@@ -5,10 +5,11 @@ import { Database } from "bun:sqlite";
 import { existsSync, mkdirSync, readdirSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { betterAuth } from "better-auth";
-import { APIError } from "better-auth/api";
+import { APIError, getSessionFromCtx } from "better-auth/api";
 import { bearer, emailOTP, genericOAuth } from "better-auth/plugins";
 import { passkey } from "@better-auth/passkey";
 import { getMigrations } from "better-auth/db/migration";
+import { z } from "zod";
 import { newId } from "@obtion/core/model";
 import type { InviteLink, Member, Role, SignedIn, SignupPolicy, User, WorkspaceInfo } from "@obtion/core/api";
 import { sha256 } from "./blobs";
@@ -60,6 +61,19 @@ const LEGACY_ENTRIES = ["obtion.db", "obtion.db-wal", "obtion.db-shm", "blobs", 
 const INVITE_DAYS = 14;
 const DAY_MS = 86400_000;
 const CLAIM_TTL_MS = 60_000;
+/** From the sign-up form to the device's answer: time to find the phone or the security key. */
+const PASSKEY_SIGNUP_MS = 5 * 60_000;
+const MAX_PASSKEY_SIGNUPS = 1000;
+const MAX_NAME = 100;
+
+/** A sign-up waiting for its passkey (Accounts.startPasskeySignup). */
+interface PasskeySignup {
+  /** the account's id, also the passkey's user handle */
+  id: string;
+  name: string;
+  email: string;
+  until: number;
+}
 
 const publicUser = (u: User): User => ({ id: u.id, name: u.name, email: u.email });
 
@@ -106,6 +120,8 @@ export class Accounts {
    * inside its transaction would roll back the other one's join too.
    */
   private claims = new Map<string, { email: string; since: number }>();
+  /** Keyed by the context the page hands to the passkey routes. */
+  private passkeySignups = new Map<string, PasskeySignup>();
 
   /** Someone else proved the user's address: close what is open. */
   onRevoke: (user: string) => void;
@@ -255,6 +271,37 @@ export class Accounts {
     return { token: res.token, user: publicUser(res.user) };
   }
 
+  /**
+   * Sign-up with a passkey instead of a password, where codes are off (with codes the address
+   * proves itself first, and the new account then adds a passkey as any account does). Checks name,
+   * address and the sign-up rules; the page then registers a passkey with the returned context, and
+   * that creates the account (afterVerification in makeAuth). Nothing is created before.
+   */
+  async startPasskeySignup(body: { name: string; email: string; invite?: string }): Promise<{ context: string }> {
+    if (!this.login.passkey) throw new AccountError("passkeys off", 403);
+    if (this.login.sendCode) throw new AccountError("verify by code", 403);
+    const email = body.email.trim().toLowerCase();
+    if (!z.email().safeParse(email).success) throw new AccountError("invalid email");
+    if (!this.canSignUp(body.invite, email)) throw new AccountError(body.invite ? "invite invalid" : "signup closed", 403);
+    const ctx = await this.auth.$context;
+    if (await ctx.internalAdapter.findUserByEmail(email)) throw new AccountError("exists", 409);
+    const now = Date.now();
+    for (const [k, v] of this.passkeySignups) if (v.until <= now) this.passkeySignups.delete(k);
+    if (this.passkeySignups.size >= MAX_PASSKEY_SIGNUPS) throw new AccountError("too many", 429);
+    const context = randomToken();
+    const name = body.name.trim().slice(0, MAX_NAME) || email.split("@")[0]!;
+    this.passkeySignups.set(context, { id: ctx.generateId({ model: "user" }) || randomToken(), name, email, until: now + PASSKEY_SIGNUP_MS });
+    return { context };
+  }
+
+  /** The waiting sign-up behind a context; `take` uses it up. */
+  passkeySignup(context: string | null | undefined, take = false): PasskeySignup | undefined {
+    const s = context ? this.passkeySignups.get(context) : undefined;
+    if (!s || s.until <= Date.now()) return undefined;
+    if (take) this.passkeySignups.delete(context!);
+    return s;
+  }
+
   /** `created` is for actions that need a recent sign-in. */
   async session(token: string | null | undefined) {
     if (!token) return null;
@@ -272,6 +319,14 @@ export class Accounts {
   async hasPassword(user: string): Promise<boolean> {
     const ctx = await this.auth.$context;
     return !!(await ctx.internalAdapter.findCredentialAccount(user))?.password;
+  }
+
+  /** False for an account's last passkey where nothing else signs it in: no code, password or provider. */
+  async canDropPasskey(user: string): Promise<boolean> {
+    if (this.login.sendCode || (this.login.password && (await this.hasPassword(user)))) return true;
+    if ((this.db.query("SELECT count(*) AS n FROM passkey WHERE userId = ?").get(user) as { n: number }).n > 1) return true;
+    const providers = this.login.oauth.map((p) => p.id);
+    return providers.some((p) => !!this.db.query("SELECT 1 FROM account WHERE userId = ? AND providerId = ?").get(user, p));
   }
 
   async signOut(token: string) {
@@ -505,7 +560,36 @@ function makeAuth(accounts: Accounts, secret: string, baseURL: string) {
     plugins: [
       bearer(),
       // always registered so its table exists; index.ts hides the routes when passkeys are off
-      passkey({ rpID: login.passkey?.rpID ?? "localhost", rpName: "Obtion", origin: login.passkey?.origin ?? null }),
+      passkey({
+        rpID: login.passkey?.rpID ?? "localhost",
+        rpName: "Obtion",
+        origin: login.passkey?.origin ?? null,
+        // Without a session a passkey creates an account, and only one checked before
+        // (startPasskeySignup). With one it is added to that account; index.ts wants a recent sign-in
+        // for that, as Better Auth's own check is off along with requireSession.
+        registration: {
+          requireSession: false,
+          resolveUser: ({ context }) => {
+            const s = accounts.passkeySignup(context);
+            if (!s) throw new APIError("UNAUTHORIZED", { message: "sign in", code: "SESSION_REQUIRED" });
+            return { id: s.id, name: s.email, displayName: s.name };
+          },
+          afterVerification: async ({ ctx, user, context }) => {
+            if (!context) {
+              // options asked for while signed in, the answer sent without the session
+              if (!(await getSessionFromCtx(ctx))) throw new APIError("UNAUTHORIZED", { message: "sign in", code: "SESSION_REQUIRED" });
+              return;
+            }
+            const s = accounts.passkeySignup(context, true);
+            if (!s || s.id !== user.id) throw new APIError("BAD_REQUEST", { message: "sign up again", code: "SIGNUP_EXPIRED" });
+            // the address may have become an account meanwhile
+            if (await ctx.context.internalAdapter.findUserByEmail(s.email)) throw new APIError("UNPROCESSABLE_ENTITY", { message: "exists", code: "USER_ALREADY_EXISTS" });
+            // the user hooks check the sign-up rules again and join the invite (cookie, as for codes)
+            await ctx.context.internalAdapter.createUser({ id: s.id, email: s.email, name: s.name, emailVerified: false }, { method: "passkey" });
+            return { userId: s.id };
+          },
+        },
+      }),
       ...(login.sendCode
         ? [
             emailOTP({

@@ -4,7 +4,7 @@ import { Input } from "../components/ui/input";
 import { BrandLogo } from "../ui/BrandLogo";
 import { useEffect, useState, type ReactNode } from "react";
 import { KeyRound } from "lucide-react";
-import { ApiError, errorText, invite, joinInvite, loginOf, oauthFailed, sendCode, serverInfo, signIn, signInWithCode, signInWithOAuth, signInWithPasskey, signUp, useAccounts } from "../accounts";
+import { addPasskey, ApiError, errorText, invite, joinInvite, loginOf, oauthFailed, sendCode, serverInfo, signIn, signInWithCode, signInWithOAuth, signInWithPasskey, signUp, signUpWithPasskey, useAccounts } from "../accounts";
 import type { InviteInfo, ServerInfo } from "@obtion/core/api";
 import { useRoute, navigate } from "../hooks";
 import { getLang, useT } from "../i18n";
@@ -52,6 +52,8 @@ export function SignIn({ inviteCode, onDone, email: fixedEmail, hasPassword, has
   // by code (when the server sends them) or by password
   const [withPassword, setWithPassword] = useState(false);
   const [codeSent, setCodeSent] = useState(false);
+  // a new account by code that adds a passkey right after (passkey sign-up where codes are on)
+  const [thenPasskey, setThenPasskey] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState(fixedEmail ?? "");
   const [password, setPassword] = useState("");
@@ -72,6 +74,8 @@ export function SignIn({ inviteCode, onDone, email: fixedEmail, hasPassword, has
   // confirming an account without a password: no password to ask for
   const byPassword = login.password && !(fixedEmail && hasPassword === false);
   const byEmail = login.emailCode || byPassword;
+  // a new account with a passkey: name and address as always, then the passkey instead of a password
+  const passkeyUp = login.passkey && canPasskey() && mode === "up" && !fixedEmail;
   const ctx = { invite: inviteCode, lang: getLang() };
   const canSignUp = !fixedEmail && !!info && (info.firstAccount || info.signup === "open" || (info.signup === "invite" && !!inviteCode));
   const run = async (what: "signIn" | "code", action: () => Promise<unknown>) => {
@@ -90,10 +94,16 @@ export function SignIn({ inviteCode, onDone, email: fixedEmail, hasPassword, has
   const account = { name, email, password, invite: inviteCode, lang: getLang() };
   // a new account with a password, where codes are on: its address proves itself with a code first
   const signUpWithCode = withPassword && mode === "up" && login.emailCode;
-  const sendAgain = () => run("code", () => (signUpWithCode ? signUp(account) : sendCode(email, ctx)));
+  const sendAgain = () => run("code", () => (signUpWithCode && !thenPasskey ? signUp(account) : sendCode(email, ctx)));
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (codeSent && signUpWithCode) {
+    if (!byEmail) return void passkeySignUp();
+    if (codeSent && thenPasskey) {
+      if (!(await run("code", () => signInWithCode(email, code, name, ctx)))) return;
+      // closed or failed: the account is there and signs in by code; a passkey can follow in the settings
+      await addPasskey().catch(() => {});
+      onDone?.();
+    } else if (codeSent && signUpWithCode) {
       if (await run("code", () => signUp({ ...account, code }))) onDone?.();
     } else if (withPassword) {
       let verify = false;
@@ -121,6 +131,30 @@ export function SignIn({ inviteCode, onDone, email: fixedEmail, hasPassword, has
       setBusy(false);
     }
   };
+  /** Closed by the person (NotAllowedError): nothing to say. */
+  const passkeyError = (err: unknown) => {
+    if (err instanceof Error && err.name === "NotAllowedError") return;
+    setError(err instanceof ApiError ? errorText(err, t, "signIn") : t("account.passkeyFailed"));
+  };
+  const passkeySignUp = async (form?: HTMLFormElement | null) => {
+    const field = form?.elements.namedItem("username");
+    if (field instanceof HTMLInputElement && !field.reportValidity()) return;
+    if (login.emailCode) {
+      // the address proves itself first; the new account then adds the passkey
+      if (await run("code", () => sendCode(email, ctx))) (setThenPasskey(true), setCodeSent(true));
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      await signUpWithPasskey({ name, email, invite: inviteCode, lang: getLang() });
+      onDone?.();
+    } catch (err) {
+      passkeyError(err);
+    } finally {
+      setBusy(false);
+    }
+  };
   const withPasskey = login.passkey && canPasskey() && mode === "in" && hasPasskey !== false;
   const others = withPasskey || login.oauth.length > 0;
   const signInLabel = mode === "up" ? t("account.signUp") : fixedEmail ? t("account.confirm") : t("account.signIn");
@@ -138,7 +172,7 @@ export function SignIn({ inviteCode, onDone, email: fixedEmail, hasPassword, has
           {signInLabel}
         </Button>
         <div className="mt-3 flex justify-between text-sm">
-          <Button variant="plain" type="button" className="text-link hover:underline" onClick={() => (setCodeSent(false), setCode(""), setError(""))}>
+          <Button variant="plain" type="button" className="text-link hover:underline" onClick={() => (setCodeSent(false), setThenPasskey(false), setCode(""), setError(""))}>
             {t("account.back")}
           </Button>
           <Button variant="plain" type="button" className="text-link hover:underline" disabled={busy} onClick={() => void sendAgain()}>
@@ -165,7 +199,7 @@ export function SignIn({ inviteCode, onDone, email: fixedEmail, hasPassword, has
           {byEmail && <p className="mt-2 text-center text-xs text-muted-foreground">{t(fixedEmail && withPassword ? "account.orPassword" : "account.or")}</p>}
         </div>
       )}
-      {byEmail && (
+      {(byEmail || passkeyUp) && (
         <>
           {mode === "up" && <Field label={t("account.name")} value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" />}
           {fixedEmail ? (
@@ -174,7 +208,7 @@ export function SignIn({ inviteCode, onDone, email: fixedEmail, hasPassword, has
           ) : (
             <Field label={t("account.email")} type="email" name="username" required value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" />
           )}
-          {withPassword && <Field label={t("account.password")} type="password" name="password" required minLength={mode === "up" ? 8 : undefined} autoFocus={!!fixedEmail} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={mode === "up" ? "new-password" : "current-password"} />}
+          {withPassword && byPassword && <Field label={t("account.password")} type="password" name="password" required minLength={mode === "up" ? 8 : undefined} autoFocus={!!fixedEmail} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={mode === "up" ? "new-password" : "current-password"} />}
         </>
       )}
       {error && (
@@ -185,6 +219,11 @@ export function SignIn({ inviteCode, onDone, email: fixedEmail, hasPassword, has
       {byEmail && (
         <Button type="submit" variant="primary" className="mt-6 w-full" disabled={busy || !info}>
           {withPassword ? signInLabel : t("account.sendCode")}
+        </Button>
+      )}
+      {passkeyUp && (
+        <Button type="button" variant={byEmail ? "outline" : "primary"} className={`${byEmail ? "mt-2" : "mt-6"} w-full`} disabled={busy || !info} onClick={(e) => void passkeySignUp(e.currentTarget.form)}>
+          <KeyRound size={16} /> {t("account.signUpPasskey")}
         </Button>
       )}
       {login.emailCode && byPassword && (
