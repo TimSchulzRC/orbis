@@ -3,7 +3,7 @@
 // (texts/<sha256>), the file's facts carry its start: they sync to every device. A file whose content wasn't
 // read yet (`extracted` missing or for another content, e.g. after a restart) is read when the
 // workspace opens. Devices that add images offline make previews themselves; the server fills gaps.
-import { existsSync, mkdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { type FileMeta, type Item, setFileMeta } from "@obtion/core/model";
 import type { Store } from "./store";
@@ -67,10 +67,6 @@ export class Blobs {
 
   has(hash: string) {
     return HASH.test(hash) && existsSync(this.path(hash));
-  }
-
-  size(hash: string) {
-    return statSync(this.path(hash)).size;
   }
 
   /** Returns false on a hash mismatch. */
