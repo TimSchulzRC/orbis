@@ -1,6 +1,7 @@
 // Sign-in methods from the environment (see .env.example). SMTP settings alone switch nothing on.
 import { createTransport } from "nodemailer";
 import type { LoginMethods } from "@obtion/core/api";
+import { type Lang, translate } from "@obtion/core/i18n";
 
 export interface OAuthProvider {
   id: "oidc" | "github" | "google";
@@ -25,10 +26,6 @@ export interface LoginConfig {
 const WAYS = ["password", "code", "passkey"] as const;
 const DEFAULT_LOGIN = "password,passkey";
 
-const MAIL = {
-  de: { subject: (code: string) => `${code} ist dein Anmeldecode für Obtion`, body: (code: string, host: string) => `Dein Code für die Anmeldung bei ${host}:\n\n${code}\n\nEr gilt 10 Minuten. Wenn du dich nicht anmelden wolltest, ignoriere diese E-Mail.` },
-  en: { subject: (code: string) => `${code} is your Obtion sign-in code`, body: (code: string, host: string) => `Your code for signing in at ${host}:\n\n${code}\n\nIt is valid for 10 minutes. If you did not try to sign in, ignore this email.` },
-};
 
 // OBTION_SMTP_URL=log prints the codes to the server log instead of sending mail.
 function mailer(env: Record<string, string | undefined>, host: string): SendCode | undefined {
@@ -41,8 +38,8 @@ function mailer(env: Record<string, string | undefined>, host: string): SendCode
   const from = env.OBTION_MAIL_FROM?.trim() || `Obtion <obtion@${host.replace(/:\d+$/, "")}>`;
   const transport = createTransport(url);
   return async (to, code, lang) => {
-    const mail = lang === "en" ? MAIL.en : MAIL.de;
-    await transport.sendMail({ from, to, subject: mail.subject(code), text: mail.body(code, host) }).catch((e: unknown) => {
+    const l: Lang = lang === "en" ? "en" : "de";
+    await transport.sendMail({ from, to, subject: translate(l, "mail.code.subject", { code }), text: translate(l, "mail.code.body", { code, host }) }).catch((e: unknown) => {
       console.error(`[obtion] could not send the sign-in code to ${to}:`, e instanceof Error ? e.message : e);
     });
   };

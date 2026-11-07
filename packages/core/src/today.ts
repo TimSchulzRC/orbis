@@ -9,7 +9,7 @@ import { cmpKey } from "./sortkey";
 export function dueBy(ix: Index, today: string): { item: Item; due: string }[] {
   const out: { item: Item; due: string }[] = [];
   for (const item of ix.live) {
-    if (item.kind !== "info") continue;
+    if (item.kind !== "note") continue;
     const schema = ix.schemaOf(item);
     const due = dueOf(item, schema)?.slice(0, 10);
     if (!due || due > today || isDone(item, schema) || ix.isDormant(item)) continue;

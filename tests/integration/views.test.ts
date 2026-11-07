@@ -13,6 +13,7 @@ afterAll(removeTempDirs);
 let s: Store;
 let ops: Ops;
 const A = "agent:test";
+// set up in German: the shipped view names, status options and query words checked here are German
 beforeEach(() => ({ s, ops } = setupStore("obtion-views-")));
 const tabsOf = (id: string) => typeTabs(s.records.get(id)!, "de");
 
@@ -26,10 +27,10 @@ test("a type's views: the defaults until one is changed, then each a map of its 
   s.change(SYS.card, "web:x", (d) => (setTabs(d, before), setTab(d, "b", { kind: "board", group: "status", pos: "A" })));
   s.flush();
   expect(tabsOf(SYS.card).map((t) => t.id)).toEqual(["b", "v_all"]); // "b" sorts before
-  s.change(SYS.card, "web:x", (d) => setTab(d, "v_all", { name: "Alles", columns: ["area"], widths: { area: 120 } }));
+  s.change(SYS.card, "web:x", (d) => setTab(d, "v_all", { name: "Everything", columns: ["area"], widths: { area: 120 } }));
   s.change(SYS.card, "web:x", (d) => setTab(d, "b", { group: null }));
   s.flush();
-  expect(tabsOf(SYS.card)[1]).toMatchObject({ name: "Alles", columns: ["area"], widths: { area: 120 } });
+  expect(tabsOf(SYS.card)[1]).toMatchObject({ name: "Everything", columns: ["area"], widths: { area: 120 } });
   expect(tabsOf(SYS.card)[0]!.group).toBeUndefined();
   expect(s.getDoc(SYS.card).getMap("tabs").get("b")).toBeInstanceOf(Y.Map);
   s.change(SYS.card, "web:x", (d) => setTab(d, "b", null));
@@ -37,7 +38,7 @@ test("a type's views: the defaults until one is changed, then each a map of its 
   expect(tabsOf(SYS.card).map((t) => t.id)).toEqual(["v_all"]);
 });
 
-test("\"Ansichten zurücksetzen\": the stored views go, the defaults show again", () => {
+test("\"Reset views\": the stored views go, the defaults show again", () => {
   s.change(SYS.card, "web:x", (d) => setTab(d, "v_x", { kind: "board", pos: "W" }));
   s.flush();
   expect(s.records.get(SYS.card)!.schema!.views!.map((t) => t.kind)).toEqual(["board"]);
@@ -48,26 +49,26 @@ test("\"Ansichten zurücksetzen\": the stored views go, the defaults show again"
 });
 
 test("a tab's filter is added to the type (AND)", () => {
-  ops.create({ title: "Offen", type: "Task" }, A);
-  ops.create({ title: "Läuft", type: "Task", properties: { Status: "In Arbeit" } }, A);
-  ops.create({ title: "Fertig", type: "Task", properties: { Status: "Erledigt" } }, A);
+  ops.create({ title: "Open", type: "Task" }, A);
+  ops.create({ title: "Running", type: "Task", properties: { Status: "In Arbeit" } }, A);
+  ops.create({ title: "Finished", type: "Task", properties: { Status: "Erledigt" } }, A);
   s.flush();
   const ix = s.index();
   const base = { type: SYS.task };
-  expect(runQuery(tabDef(base, { id: "x", pos: "V", kind: "table" }), { ix }).items.map((i) => i.title).sort()).toEqual(["Fertig", "Läuft", "Offen"]);
+  expect(runQuery(tabDef(base, { id: "x", pos: "V", kind: "table" }), { ix }).items.map((i) => i.title).sort()).toEqual(["Finished", "Open", "Running"]);
   const active = tabDef(base, { id: "y", pos: "V", kind: "table", where: { status: "active" } });
   expect(active.where).toEqual({ and: [{ type: SYS.task }, { status: "active" }] });
-  expect(runQuery(active, { ix }).items.map((i) => i.title)).toEqual(["Läuft"]);
+  expect(runQuery(active, { ix }).items.map((i) => i.title)).toEqual(["Running"]);
 });
 
 test("grouping: status in the order of the work, with empty options; above, area and status group", () => {
   const r = new MemRepo();
   runSetup(r.writer, "de");
-  const area = r.add({ title: "Arbeit", pinned: "a0" });
+  const area = r.add({ title: "Work", pinned: "a0" });
   const p1 = r.add({ title: "Portal", type: "sys:project", parents: [area], props: { p_status: "st_active" } });
   const t1 = r.add({ title: "Login", type: "sys:task", parents: [p1], props: { p_status: "st_active" } });
-  const sub = r.add({ title: "Passwort", type: "sys:task", parents: [t1], props: { p_status: "st_todo" } });
-  const loose = r.add({ title: "Lose", type: "sys:task", props: { p_status: "st_done" } });
+  const sub = r.add({ title: "Password", type: "sys:task", parents: [t1], props: { p_status: "st_todo" } });
+  const loose = r.add({ title: "Loose", type: "sys:task", props: { p_status: "st_done" } });
   const ix = r.index();
   const items = [t1, sub, loose].map((id) => ix.get(id)!);
   const ctx = { ix };
@@ -77,18 +78,18 @@ test("grouping: status in the order of the work, with empty options; above, area
   const withEmpty = groupItems(items, "status", ctx, undefined, { types: ["sys:task"] });
   expect(withEmpty.map((g) => g.label)).toEqual(["Nicht begonnen", "In Bearbeitung", "Pausiert", "Erledigt", "Verworfen", "Archiviert"]);
   expect(withEmpty.find((g) => g.label === "Pausiert")!.items).toEqual([]);
-  // under status:offen the empty done options say nothing and stay away
+  // under status:offen (German query word) the empty done options say nothing and stay away
   const open = groupItems(items, "status", ctx, undefined, { types: ["sys:task"], where: { and: [{ type: "sys:task" }, { status: "open" }] } });
   expect(open.map((g) => g.label)).toEqual(["Nicht begonnen", "In Bearbeitung", "Pausiert", "Erledigt"]); // "Erledigt" has an entry here
-  // "Darüber": the entry it lives under, whatever its type; without one: last
+  // grouped by "Darüber" (above): the entry it lives under, whatever its type; without one: last
   const byProject = groupItems(items, "project", ctx);
   expect(byProject.map((g) => [g.label ?? "", g.items.map((i) => i.title)])).toEqual([
-    ["Login", ["Passwort"]],
+    ["Login", ["Password"]],
     ["Portal", ["Login"]],
-    ["", ["Lose"]],
+    ["", ["Loose"]],
   ]);
   expect(byProject[1]!.ref).toBe(p1);
-  expect(groupItems([ix.get(p1)!], "area", ctx).map((g) => g.label)).toEqual(["Arbeit"]);
+  expect(groupItems([ix.get(p1)!], "area", ctx).map((g) => g.label)).toEqual(["Work"]);
   expect(groupItems(items, "statusGroup", ctx).map((g) => g.key)).toEqual(["todo", "active", "done"]);
 });
 
@@ -97,8 +98,8 @@ test("update_type sets the views; the same name keeps its tab; hidden groups are
   let tabs = tabsOf(SYS.project);
   expect(tabs[0]).toMatchObject({ id: "v_active", name: "Aktiv", kind: "table", where: { status: "active" }, group: "status", columns: ["Status", "area", "progress"], hideEmpty: true });
   expect(tabs[1]!.hiddenGroups).toEqual(["st_backlog", "st_done", "st_canceled"]);
-  ops.create({ title: "Läuft", type: "Projekt", properties: { Status: "In Bearbeitung" } }, A);
-  ops.create({ title: "Später", type: "Projekt", properties: { Status: "Backlog" } }, A);
+  ops.create({ title: "Running", type: "Projekt", properties: { Status: "In Bearbeitung" } }, A);
+  ops.create({ title: "Later", type: "Projekt", properties: { Status: "Backlog" } }, A);
   s.flush();
   const ix = s.index();
   const def = tabDef({ type: SYS.project }, tabs[1]!);
@@ -126,8 +127,8 @@ test("views live in the type: shipped types get theirs at setup, older workspace
   r.change(SYS.project, (doc) => doc.getMap("tabs").delete("v_board"));
   upgradeSetup(r.writer, "de");
   expect(r.index().types.get(SYS.project)!.schema!.views!.some((v) => v.id === "v_board")).toBe(false);
-  r.addType("t_modul", { name: "Modul" });
-  expect(typeTabs(r.index().types.get("t_modul")!, "de").map((v) => v.id)).toEqual(["v_all"]);
+  r.addType("t_module", { name: "Module" });
+  expect(typeTabs(r.index().types.get("t_module")!, "de").map((v) => v.id)).toEqual(["v_all"]);
   // the stored format follows, so an older app turns read-only even offline
   r.change(SETTINGS_ID, (doc) => setSettings(doc, { format: 1 }));
   upgradeSetup(r.writer, "de");

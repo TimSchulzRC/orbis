@@ -143,7 +143,7 @@ export class Workspace {
     if (msg.device) ws.data.origin = personOrigin(ws.data.user, msg.device);
     const store = this.store;
     const last = store.last(area);
-    send(ws, { t: "welcome", hub: store.serverId, area, seq: last.seq, format: FORMAT });
+    send(ws, { t: "welcome", server: store.serverId, area, seq: last.seq, format: FORMAT });
     const reset = !store.knowsCursor(area, msg.since, msg.sinceId); // server restored from an older backup; replica must merge everything
     const purged = store.purgedSince(area, reset ? 0 : msg.since);
     if (purged.length) send(ws, { t: "purged", area, ids: purged });
@@ -245,8 +245,8 @@ export class Workspace {
     return fail(404, "not found");
   }
 
-  /** No person for the pre-accounts /mcp address. `filesUrl`: the file API, named to agents. */
-  mcp(req: Request, person?: Person, filesUrl?: string): Promise<Response> {
+  /** `filesUrl`: the file API, named to agents. */
+  mcp(req: Request, person: Person, filesUrl?: string): Promise<Response> {
     return handleMcp(this.store, req, this.blobs, person, filesUrl);
   }
 
@@ -262,7 +262,7 @@ export class Workspace {
     const id = sub.replace(/^\//, "");
     if (id && !/^[\w-]{1,64}$/.test(id)) return fail(404, "not found");
     const item = id ? this.store.records.get(id) : undefined;
-    if (id && (item?.kind !== "datei" || !item.file)) return fail(404, "no such file");
+    if (id && (item?.kind !== "file" || !item.file)) return fail(404, "no such file");
 
     if (req.method === "GET" || req.method === "HEAD") {
       if (!item) return fail(405, "POST a file, or GET /api/files/<file id>");

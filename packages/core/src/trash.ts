@@ -118,7 +118,7 @@ export function cascadeCount(records: Map<string, Item>, id: string): number {
 /** What the trash lists: deleted items, except those deleted with a root that is still in the trash (they show with it). */
 export function trashRoots(records: Map<string, Item>): Item[] {
   const withRoot = (i: Item) => !!i.deletedVia && !!records.get(i.deletedVia)?.deleted;
-  return [...records.values()].filter((i) => i.deleted && !withRoot(i) && (i.kind === "info" || i.kind === "datei" || i.kind === "zeichnung"));
+  return [...records.values()].filter((i) => i.deleted && !withRoot(i) && (i.kind === "note" || i.kind === "file" || i.kind === "drawing"));
 }
 
 /**

@@ -1,11 +1,11 @@
-// Live query blocks inside a text: ```abfrage … ``` is stored as JSON with ids and shown
+// Live query blocks inside a text: ```query … ``` is stored as JSON with ids and shown
 // as its results. Text-form blocks (typed by hand or by an agent) are normalised to JSON.
 import { StrictMode, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { StateEffect, StateField, type EditorState, type Extension, RangeSetBuilder } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, WidgetType } from "@codemirror/view";
 import { ArrowUpDown, EyeOff, Funnel, Heading, MoreHorizontal, Rows3, Trash2 } from "lucide-react";
-import { type ViewTab, MAIN_TAB, legacyTab, shortId } from "@obtion/core/model";
+import { type ViewTab, MAIN_TAB, singleTab, shortId } from "@obtion/core/model";
 import { keyBetween, cmpKey } from "@obtion/core/sortkey";
 import { type QueryDef, andWhere, blockSource, findBlocks, readBlock, runQuery, queryFence } from "@obtion/core/query";
 import { repo } from "../repo";
@@ -23,7 +23,7 @@ import { sameValue } from "@obtion/core/equal";
 /** A block's views: its tabs, or its one look as the only tab. */
 function blockTabs(def: QueryDef): ViewTab[] {
   if (def.tabs && def.tabs.length > 1) return def.tabs;
-  return [{ ...legacyTab({ display: def.view, sort: def.sort, group: def.group, columns: def.columns }), ...(def.tabs?.[0] ? { widths: def.tabs[0].widths, name: def.tabs[0].name } : {}) }];
+  return [{ ...singleTab({ display: def.view, sort: def.sort, group: def.group, columns: def.columns }), ...(def.tabs?.[0] ? { widths: def.tabs[0].widths, name: def.tabs[0].name } : {}) }];
 }
 
 /** The block's own look ("main") turns into a tab with an id of its own once there are several. */
@@ -38,7 +38,7 @@ function QueryBlockView({ src, thisId, n = 0, onChange, onDelete, readOnly }: { 
   // the tools beside the tabs open one popover at a time; a new block starts with its filter
   const [panel, setPanel] = useState<"filter" | "sort" | "group" | "more" | null>(!stored.where && !readOnly ? "filter" : null);
   const [addingTitle, setAddingTitle] = useState(false);
-  // the conditions are a draft until "Speichern" or until the filter closes: trying a filter
+  // the conditions are a draft until "Save" or until the filter closes: trying a filter
   // changes nothing. Title, view and "hide when empty" apply at once, like everywhere.
   type Draft = { scope: string; where: QueryDef["where"] } | null; // scope: "base" or a tab id
   const [draft, setDraftState] = useState<Draft>(null);
@@ -297,7 +297,7 @@ function decos(state: EditorState, thisId?: string): DecorationSet {
 }
 
 // A heading whose section holds only query blocks that hide when empty disappears with them
-// when none of them has results ("Kürzlich erledigt" on a quiet week). It comes back as soon
+// when none of them has results ("Recently done" on a quiet week). It comes back as soon
 // as one of them finds something.
 
 const refresh = StateEffect.define<null>();

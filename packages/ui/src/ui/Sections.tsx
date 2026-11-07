@@ -1,4 +1,4 @@
-// The page's lower part: "Darunter", everything below the page as one tree.
+// The page's lower part: "Below", everything below the page as one tree.
 import { Input } from "../components/ui/input";
 import { Fragment, useState } from "react";
 import { ChevronRight, Plus } from "lucide-react";
@@ -47,9 +47,9 @@ function AddRow({ label, onAdd, autoFocus, onDone }: { label: string; onAdd: (ti
   );
 }
 
-/** Which group of "Darunter" an entry belongs to: its type, notes (no type) or files. */
+/** Which group of "Below" an entry belongs to: its type, notes (no type) or files. */
 function groupOf(x: Item): string {
-  return x.kind === "datei" ? "files" : (x.type ?? "notes");
+  return x.kind === "file" ? "files" : (x.type ?? "notes");
 }
 
 /** Open ones first (running before not started), then by due date and title. */
@@ -60,7 +60,7 @@ function order(ix: Index) {
 }
 
 /**
- * "Darunter" (design rules § 3.1, zone 4): everything below the page, the same for every type.
+ * "Below" (design rules § 3.1, zone 4): everything below the page, the same for every type.
  * The entries directly below, grouped by type; each one with entries below opens into them, any
  * type, any depth; all start closed. Done ones show at the end of their group.
  */

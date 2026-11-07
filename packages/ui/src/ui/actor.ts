@@ -1,7 +1,7 @@
 // The device stays in the origin for later queries but is never shown.
 import { Bot, Cog, Download, Sparkles, User, type LucideIcon } from "lucide-react";
 import type { T } from "@obtion/core/i18n";
-import { firstName, parseOrigin } from "@obtion/core/origin";
+import { parseOrigin } from "@obtion/core/origin";
 import { agentLabel } from "./AgentNotice";
 
 export interface Who {
@@ -25,9 +25,7 @@ export function who(origin: string, t: T): Who {
   return { label: origin, icon: User, agent: false };
 }
 
-/** Older entries carry no account id, so the name decides for them. */
-export function byMe(w: Who, me: { id: string; name: string; email: string } | undefined): boolean {
-  if (!w.person || !me) return false;
-  return w.person.id ? w.person.id === me.id : w.person.name === firstName(me);
+export function byMe(w: Who, me: { id: string } | undefined): boolean {
+  return !!w.person && !!me && w.person.id === me.id;
 }
 

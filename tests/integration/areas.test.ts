@@ -8,10 +8,10 @@ afterAll(removeTempDirs);
 
 test("new documents belong to the personal area; documents from before are read as personal", () => {
   const d = new Y.Doc();
-  d.transact(() => initItem(d, { title: "Neu" }));
+  d.transact(() => initItem(d, { title: "New" }));
   expect(d.getMap("meta").get("area")).toBe(PERSONAL);
   const old = new Y.Doc();
-  old.transact(() => (initItem(old, { title: "Alt" }), old.getMap("meta").delete("area")));
+  old.transact(() => (initItem(old, { title: "Old" }), old.getMap("meta").delete("area")));
   expect(readItem("x", old)!.area).toBe(PERSONAL);
 });
 

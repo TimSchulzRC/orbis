@@ -18,7 +18,7 @@ import { notify } from "../ui/feedback";
 import { createAndOpen } from "../actions";
 import { sameValue } from "@obtion/core/equal";
 
-/** A view's look is saved at once; a filter is a draft until "Speichern". */
+/** A view's look is saved at once; a filter is a draft until "Save". */
 export function TypeList({ type }: { type: Item }) {
   const repo = useRepo();
   const { t, lang } = useT();
@@ -131,15 +131,14 @@ export function TypeList({ type }: { type: Item }) {
   );
 }
 
-/** "?kind=image"; the older German names still work. */
-const KIND_PARAM: Record<FileType, string> = { bild: "image", pdf: "pdf", audio: "audio", video: "video", dokument: "document", sonstiges: "other" };
-const kindOf = (param: string | null) => (FILE_TYPES.find((k) => KIND_PARAM[k] === param || k === param) ?? null);
+/** "?kind=image": the file type. */
+const kindOf = (param: string | null) => FILE_TYPES.find((k) => k === param) ?? null;
 
 export function FilesPage() {
   const files = useFiles();
   const { t } = useT();
   const kind = kindOf(useRoute().query.get("kind"));
-  const setKind = (k: FileType | null) => setParams({ kind: k && KIND_PARAM[k] });
+  const setKind = (k: FileType | null) => setParams({ kind: k });
   const all = useQuery({ where: { file: true } }).items;
   const kinds = FILE_TYPES.map((type) => ({ type, count: all.filter((i) => i.file?.filetype === type).length })).filter((x) => x.count > 0);
   const def: QueryDef = { where: kind ? { and: [{ file: true }, { filetype: kind }] } : { file: true }, sort: [{ key: "created", desc: true }] };
@@ -171,7 +170,7 @@ export function FilesPage() {
           ))}
         </div>
       )}
-      <Results def={def} display={kind === "bild" ? "gallery" : "list"} keyPrefix="files" empty={<Empty title={t("files.empty")} />} />
+      <Results def={def} display={kind === "image" ? "gallery" : "list"} keyPrefix="files" empty={<Empty title={t("files.empty")} />} />
     </div>
   );
 }

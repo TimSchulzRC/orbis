@@ -45,6 +45,23 @@ const EVENT_MERGE_WINDOW_MS = 5 * 60_000;
 const MAX_CLOCK_SKEW_MS = 10 * 60_000;
 const MAX_UNDO_CHAIN = 20;
 
+const SCHEMA = `CREATE TABLE IF NOT EXISTS updates (seq INTEGER PRIMARY KEY AUTOINCREMENT, doc TEXT NOT NULL, data BLOB NOT NULL, origin TEXT NOT NULL, ts INTEGER NOT NULL, uid TEXT NOT NULL, step TEXT, area TEXT NOT NULL);
+  CREATE INDEX IF NOT EXISTS updates_doc ON updates(doc, seq);
+  CREATE INDEX IF NOT EXISTS updates_step ON updates(step);
+  CREATE INDEX IF NOT EXISTS updates_area ON updates(area, seq);
+  CREATE TABLE IF NOT EXISTS docstate (id TEXT PRIMARY KEY, state BLOB NOT NULL, seq INTEGER NOT NULL);
+  CREATE TABLE IF NOT EXISTS records (id TEXT PRIMARY KEY, area TEXT, data TEXT);
+  CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, doc TEXT NOT NULL, title TEXT, type TEXT, kind TEXT, origin TEXT, changes TEXT, step TEXT, area TEXT NOT NULL);
+  CREATE INDEX IF NOT EXISTS events_doc ON events(doc, id);
+  CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT);
+  CREATE TABLE IF NOT EXISTS steps (id TEXT PRIMARY KEY, actor TEXT, ts INTEGER, undoes TEXT);
+  CREATE INDEX IF NOT EXISTS steps_undoes ON steps(undoes);
+  CREATE TABLE IF NOT EXISTS versions (id INTEGER PRIMARY KEY AUTOINCREMENT, doc TEXT NOT NULL, ts INTEGER NOT NULL, origin TEXT NOT NULL, step TEXT, event INTEGER, len INTEGER NOT NULL, data BLOB NOT NULL);
+  CREATE INDEX IF NOT EXISTS versions_doc ON versions(doc, id);
+  CREATE INDEX IF NOT EXISTS versions_event ON versions(event);
+  CREATE TABLE IF NOT EXISTS purged (id TEXT PRIMARY KEY, area TEXT NOT NULL, seq INTEGER NOT NULL);
+  CREATE TABLE IF NOT EXISTS purged_rows (uid TEXT PRIMARY KEY);`;
+
 export class Store {
   db: Database;
   /** LRU order, oldest first. Not every document is here. */
@@ -79,32 +96,14 @@ export class Store {
     // a rebuild of all records). The limit cuts it back at the next commit. 8 MB is twice what the
     // automatic checkpoint (1000 pages) lets the WAL reach, so everyday writes never shrink it.
     this.db.exec(`PRAGMA journal_mode = WAL; PRAGMA journal_size_limit = ${8 * 1024 * 1024}; PRAGMA synchronous = NORMAL; PRAGMA secure_delete = ON;`);
-    migrate(this.db, [
-      `CREATE TABLE IF NOT EXISTS updates (seq INTEGER PRIMARY KEY AUTOINCREMENT, doc TEXT NOT NULL, data BLOB NOT NULL, origin TEXT NOT NULL, ts INTEGER NOT NULL, uid TEXT, step TEXT, area TEXT NOT NULL DEFAULT '${PERSONAL}');
-      CREATE INDEX IF NOT EXISTS updates_doc ON updates(doc, seq);
-      CREATE INDEX IF NOT EXISTS updates_step ON updates(step);
-      CREATE INDEX IF NOT EXISTS updates_area ON updates(area, seq);
-      CREATE TABLE IF NOT EXISTS docstate (id TEXT PRIMARY KEY, state BLOB NOT NULL, seq INTEGER NOT NULL);
-      CREATE TABLE IF NOT EXISTS records (id TEXT PRIMARY KEY, area TEXT, data TEXT);
-      CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, doc TEXT NOT NULL, title TEXT, type TEXT, kind TEXT, origin TEXT, changes TEXT, step TEXT, area TEXT NOT NULL DEFAULT '${PERSONAL}');
-      CREATE INDEX IF NOT EXISTS events_doc ON events(doc, id);
-      CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT);
-      CREATE TABLE IF NOT EXISTS steps (id TEXT PRIMARY KEY, actor TEXT, ts INTEGER, undoes TEXT);
-      CREATE INDEX IF NOT EXISTS steps_undoes ON steps(undoes);
-      CREATE TABLE IF NOT EXISTS versions (id INTEGER PRIMARY KEY AUTOINCREMENT, doc TEXT NOT NULL, ts INTEGER NOT NULL, origin TEXT NOT NULL, step TEXT, event INTEGER, len INTEGER NOT NULL, data BLOB NOT NULL);
-      CREATE INDEX IF NOT EXISTS versions_doc ON versions(doc, id);
-      CREATE INDEX IF NOT EXISTS versions_event ON versions(event);
-      CREATE TABLE IF NOT EXISTS purged (id TEXT PRIMARY KEY, area TEXT NOT NULL, seq INTEGER NOT NULL);
-      CREATE TABLE IF NOT EXISTS purged_rows (uid TEXT PRIMARY KEY);`,
-    ]);
+    migrate(this.db, [SCHEMA]);
     this.load();
-    // the server was called hub before; renaming the key would look like a new server to devices
-    if (!this.kvGet("hubId")) this.kvSet("hubId", newId());
+    if (!this.kvGet("serverId")) this.kvSet("serverId", newId());
   }
 
   /** A device seeing a different id knows it met a new server. */
   get serverId(): string {
-    return this.kvGet("hubId")!;
+    return this.kvGet("serverId")!;
   }
 
   /**
@@ -235,7 +234,7 @@ export class Store {
     return () => this.listeners.delete(l);
   }
 
-  /** Documents from before areas are personal; undefined if unknown. */
+  /** Undefined if unknown. */
   areaOf(docId: string): string | undefined {
     return this.areas.get(docId);
   }
@@ -261,7 +260,7 @@ export class Store {
   }
 
   /**
-   * Devices with a wrong clock: timestamps too far ahead are set back to now, so "geändert",
+   * Devices with a wrong clock: timestamps too far ahead are set back to now, so "updated",
    * sorting and the activity don't jump. The fix syncs like any change.
    */
   private capFuture(docId: string) {
@@ -600,9 +599,8 @@ export class Store {
     if (since <= 0) return true;
     if (sinceId && this.db.query("SELECT 1 FROM purged_rows WHERE uid = ?").get(sinceId)) return true;
     if (since > this.last(area).seq) return false;
-    if (!sinceId) return true; // replica from before cursor ids: seq is all we can check
     const row = this.db.query("SELECT uid, area FROM updates WHERE seq = ?").get(since) as { uid: string; area: string } | null;
-    return row?.uid === sinceId && row.area === area;
+    return !!row && row.uid === sinceId && row.area === area;
   }
 
   /** The position a replica of the area has after catching up. */
@@ -696,7 +694,7 @@ export class Store {
 // ---------- helpers ----------
 
 /** Items whose text has versions: informations and files (not settings, not operations). */
-const hasBody = (i: Item) => i.kind === "info" || i.kind === "datei" || i.kind === "zeichnung";
+const hasBody = (i: Item) => i.kind === "note" || i.kind === "file" || i.kind === "drawing";
 
 const utf8 = new TextEncoder();
 const fromUtf8 = new TextDecoder();
@@ -756,7 +754,7 @@ function moved(c: FieldChange): boolean {
 }
 
 function typeTag(i: Item): string {
-  return i.kind === "info" ? (i.type ?? "") : i.kind;
+  return i.kind === "note" ? (i.type ?? "") : i.kind;
 }
 
 function setDiff(field: string, a: string[], b: string[], out: FieldChange[]) {

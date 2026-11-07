@@ -6,7 +6,7 @@ import "@obtion/ui/styles.css";
 localStorage.clear();
 localStorage.setItem("obtion.lang", "de");
 localStorage.setItem("obtion.account", JSON.stringify({ token: "test", user: { id: "u-test", name: "Test", email: "test@example.org" } }));
-localStorage.setItem("obtion.spaces", JSON.stringify([{ id: "ws", name: "Persönlich", role: "owner" }]));
+localStorage.setItem("obtion.spaces", JSON.stringify([{ id: "ws", name: "Personal", role: "owner" }]));
 localStorage.setItem("obtion.active", "ws");
 
 // accounts.ts as it is, only replica() answers with the workspace in memory. Spied, not replaced

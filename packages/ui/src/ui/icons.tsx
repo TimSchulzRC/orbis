@@ -51,6 +51,6 @@ export const INBOX_ICON = Inbox;
 // a lined sheet – a notebook read as "several entries", and the plain sheet is taken by documents
 export const NOTE_ICON = FileText;
 export const TYPE_ICON = Shapes;
-export const FILE_ICONS: Record<string, LucideIcon> = { bild: Image, pdf: FileType2, audio: FileAudio, video: FileVideo, dokument: File, sonstiges: File };
+export const FILE_ICONS: Record<string, LucideIcon> = { image: Image, pdf: FileType2, audio: FileAudio, video: FileVideo, document: File, other: File };
 export const FILES_ICON = Paperclip;
 export const DRAWING_ICON = PenTool;

@@ -1,5 +1,6 @@
-// "Änderungen" in the updates panel: the changes to this one page from the server's log, by day,
-// with the live ones; an update there is one line; a failed load says so and can be tried again.
+// "Changes" in the updates panel: the changes to this one page from the server's log, by day, with
+// the live ones; an update there is one line; a failed load says so and can be tried again. The
+// tests run in German, so the panel's labels below are German.
 import { afterEach, expect, test, vi } from "vitest";
 import { page } from "vitest/browser";
 import { cleanup, render } from "vitest-browser-react";

@@ -1,12 +1,12 @@
-// Example data for "Mit Beispielen starten". Everything carries meta.source = "example" so
-// "Beispiele entfernen" finds exactly these again; fixed ids (ex-*) make a second run a no-op.
+// Example data for "Start with examples". Everything carries meta.source = "example" so
+// "Remove examples" finds exactly these again; fixed ids (ex-*) make a second run a no-op.
 import type * as Y from "yjs";
 import { type FileMeta, type ItemInit, META_TYPE, appendUpdate, addDaysISO, fileTypeOf, initItem, initType, metaMap, setFileMeta, setMeta, todayISO } from "./model";
 import type { Index } from "./graph";
 import { BLOCKED_BY, SYS, type Writer } from "./setup";
 import { keysFor } from "./sortkey";
 import { blockSource, queryFence, type QueryDef } from "./query";
-import { type Lang, translate, words } from "./i18n";
+import { type Lang, type Values, translate, words } from "./i18n";
 
 export const EXAMPLE = "example";
 export const EXAMPLE_ORIGIN = "system:examples";
@@ -34,25 +34,25 @@ export function fileFacts(f: ExampleFile, hash: string): FileMeta {
 }
 
 export function exampleFiles(lang: Lang): ExampleFile[] {
-  const L = (de: string, en: string) => (lang === "de" ? de : en);
+  const ex = (key: string, values?: Values) => translate(lang, `sample.${key}`, values);
   const sheet = [
-    L("Übungsblatt 1 – Normalformen", "Exercise sheet 1 – Normal forms"),
+    ex("sheet.title"),
     "",
-    L("1. Bringe die Tabelle Belegung in die 1. Normalform.", "1. Bring the table Enrolment into first normal form."),
-    L("2. Welche funktionalen Abhängigkeiten gibt es?", "2. Which functional dependencies are there?"),
-    L("3. Zerlege das Schema verlustfrei in die 3. Normalform.", "3. Decompose the schema losslessly into third normal form."),
-    L("4. Begründe, warum ein Index auf Matrikelnr. hilft.", "4. Explain why an index on the student number helps."),
+    ex("sheet.task1"),
+    ex("sheet.task2"),
+    ex("sheet.task3"),
+    ex("sheet.task4"),
     "",
-    L("Abgabe: bis zur nächsten Übung.", "Due: by the next tutorial."),
+    ex("sheet.due"),
   ];
   return [
-    { key: "diagram", name: L("er-modell.svg", "er-model.svg"), mime: "image/svg+xml", bytes: new TextEncoder().encode(erDiagram(lang)) },
-    { key: "sheet", name: L("Übungsblatt 1.pdf", "Exercise sheet 1.pdf"), mime: "application/pdf", bytes: tinyPdf(sheet), pages: 1, text: sheet.filter(Boolean).join("\n") },
+    { key: "diagram", name: ex("file.diagram"), mime: "image/svg+xml", bytes: new TextEncoder().encode(erDiagram(lang)) },
+    { key: "sheet", name: ex("file.sheet"), mime: "application/pdf", bytes: tinyPdf(sheet), pages: 1, text: sheet.filter(Boolean).join("\n") },
   ];
 }
 
 export function writeExamples(w: Writer, lang: Lang, files: Partial<Record<ExampleFile["key"], FileMeta>>, now = Date.now()): string[] {
-  const L = (de: string, en: string) => (lang === "de" ? de : en);
+  const ex = (key: string, values?: Values) => translate(lang, `sample.${key}`, values);
   const t = (k: string) => translate(lang, `setup.${k}`);
   const typeKey = words(lang, "q.key.type")[0];
   const block = (q: QueryDef) => queryFence(blockSource(q)) + "\n";
@@ -70,7 +70,7 @@ export function writeExamples(w: Writer, lang: Lang, files: Partial<Record<Examp
     clock += 12 * H;
     const created = init.created ?? Math.min(clock, now - 30 * H);
     w.change(id, (doc) => {
-      // updated stays equal to created until the user edits it; "Beispiele entfernen" relies on that
+      // updated stays equal to created until the user edits it; "Remove examples" relies on that
       initItem(doc, { source: EXAMPLE, createdBy: EXAMPLE_ORIGIN, ...init, created });
       extra?.(doc);
     });
@@ -85,33 +85,33 @@ export function writeExamples(w: Writer, lang: Lang, files: Partial<Record<Examp
     written.push(id);
   };
   const person = "Person";
-  const book = L("Buch", "Book");
-  const article = L("Artikel", "Article");
-  type(EX_TYPES.person, { name: person, icon: "user", color: "teal", description: L("Menschen, zum Beispiel Autorinnen und Autoren.", "People, for example authors."), capabilities: {}, properties: [] }, L("Personen", "People"));
+  const book = ex("book.name");
+  const article = ex("article.name");
+  type(EX_TYPES.person, { name: person, icon: "user", color: "teal", description: ex("person.description"), capabilities: {}, properties: [] }, ex("person.plural"));
   type(
     EX_TYPES.book,
     {
       name: book,
       icon: "book",
       color: "brown",
-      description: L("Bücher, die ich lese oder lesen will.", "Books I read or want to read."),
+      description: ex("book.description"),
       capabilities: {},
       properties: [
-        { id: "p_ex_author", name: L("Autor", "Author"), kind: "relation", multiple: true, target: `${typeKey}:${person}`, inverseName: L("Bücher", "Books") },
+        { id: "p_ex_author", name: ex("book.author"), kind: "relation", multiple: true, target: `${typeKey}:${person}`, inverseName: ex("book.authorInverse") },
         {
           id: "p_ex_read",
-          name: L("Lesestatus", "Reading"),
+          name: ex("book.reading"),
           kind: "status",
           default: "rd_want",
           options: [
-            { id: "rd_want", name: L("Will ich lesen", "Want to read"), group: "todo", color: "gray" },
-            { id: "rd_now", name: L("Lese ich", "Reading"), group: "active", color: "amber" },
-            { id: "rd_done", name: L("Gelesen", "Read"), group: "done", color: "green" },
+            { id: "rd_want", name: ex("book.wantToRead"), group: "todo", color: "gray" },
+            { id: "rd_now", name: ex("book.readingNow"), group: "active", color: "amber" },
+            { id: "rd_done", name: ex("book.read"), group: "done", color: "green" },
           ],
         },
       ],
     },
-    L("Bücher", "Books"),
+    ex("book.plural"),
   );
   type(
     EX_TYPES.article,
@@ -119,89 +119,39 @@ export function writeExamples(w: Writer, lang: Lang, files: Partial<Record<Examp
       name: article,
       icon: "file-text",
       color: "pink",
-      description: L("Blogartikel, auch in mehreren Sprachen.", "Blog posts, also in several languages."),
+      description: ex("article.description"),
       capabilities: {},
       properties: [
         { id: "p_ex_lang", name: t("prop.language"), kind: "select", options: [{ id: "lang_de", name: "DE", color: "gray" }, { id: "lang_en", name: "EN", color: "gray" }] },
-        { id: "p_ex_stage", name: L("Stand", "Stage"), kind: "select", options: [{ id: "stage_draft", name: L("Entwurf", "Draft"), color: "amber" }, { id: "stage_pub", name: L("Veröffentlicht", "Published"), color: "green" }] },
-        { id: "p_ex_tr", name: L("Übersetzung", "Translation"), kind: "relation", target: `${typeKey}:${article}`, symmetric: true },
+        { id: "p_ex_stage", name: ex("article.stage"), kind: "select", options: [{ id: "stage_draft", name: ex("article.draft"), color: "amber" }, { id: "stage_pub", name: ex("article.published"), color: "green" }] },
+        { id: "p_ex_tr", name: ex("article.translation"), kind: "relation", target: `${typeKey}:${article}`, symmetric: true },
       ],
     },
-    L("Artikel", "Articles"),
+    ex("article.plural"),
   );
 
   const [k0, k1, k2, k3, k4] = keysFor(5);
-  const relaunchTitle = L("Website-Relaunch", "Website relaunch");
-  const weekTitle = L("Diese Woche fällig", "Due this week");
+  const relaunchTitle = ex("relaunch.title");
+  const weekTitle = ex("week.title");
   const customerTitle = "Studio Nordlicht";
   put("ex-welcome", {
-    title: L("So funktioniert Obtion", "How Obtion works"),
+    title: ex("welcome.title"),
     pinned: k0,
-    body: L(
-      `Alles hier ist ausgedacht und zeigt, wie Obtion funktioniert. Wenn du fertig bist: Einstellungen › Beispiele entfernen.
-
-### Erfassen
-Drück c oder +, schreib los. Was noch keinen Ort hat, landet im Eingang.
-
-### Einsortieren
-Im Eingang liegt eine Idee, die [[${relaunchTitle}]] erwähnt. „Einsortieren“ schlägt das Projekt als Ort vor.
-
-### Orte
-Ein Eintrag kann an mehreren Orten hängen: [[${relaunchTitle}]] steht unter [[Arbeit]] und beim Kunden [[${customerTitle}]].
-
-### Anheften
-Diese Notiz und die Bereiche darunter sind angeheftet: Sie stehen oben in der Seitenleiste.
-
-### Typen und Ansichten
-Projekt, Task und Karte sind Typen, eigene gehen auch – etwa [[${book}]]. Jeder Typ hat eine Seite mit Ansichten wie Tabelle und Board.
-
-### Abfragen
-[[${weekTitle}]] sammelt mit einem Abfrage-Block, was bald ansteht.
-
-### MCP
-Verbinde einen MCP-Client über die Workspace-Einstellungen, um deine Einträge per Agent zu lesen und zu ändern.
-`,
-      `Everything here is made up and shows how Obtion works. When you are done: Settings › Remove examples.
-
-### Capture
-Press c or + and start typing. What has no place yet lands in the inbox.
-
-### Sort in
-The inbox holds an idea that mentions [[${relaunchTitle}]]. "Sort in" suggests the project as its place.
-
-### Places
-An entry can live in several places: [[${relaunchTitle}]] is under [[Work]] and with the client [[${customerTitle}]].
-
-### Pinning
-This note and the areas below it are pinned: they stay at the top of the sidebar.
-
-### Types and views
-Project, task and card are types, and you can add your own – like [[${book}]]. Every type has a page with views such as table and board.
-
-### Queries
-[[${weekTitle}]] gathers what is due soon with a query block.
-
-### MCP
-Connect an MCP client in the workspace settings to read and change your entries through an agent.
-`,
-    ),
+    body: ex("welcome.body", { relaunch: relaunchTitle, customer: customerTitle, book, week: weekTitle }),
   });
 
   const work = put("ex-work", {
-    title: L("Arbeit", "Work"),
+    title: ex("work.title"),
     pinned: k1,
     body:
-      L("Alles rund um den Job. Projekte, Kunden, Besprechungen.\n\n", "Everything about the job. Projects, clients, meetings.\n\n") +
-      block({ title: L("Aktive Projekte", "Active projects"), where: { and: [{ type: SYS.project }, { under: here }, { status: "active" }] }, columns: ["progress", "next"] }),
+      ex("work.body") +
+      block({ title: ex("work.activeProjects"), where: { and: [{ type: SYS.project }, { under: here }, { status: "active" }] }, columns: ["progress", "next"] }),
   });
-  const clients = put("ex-clients", { title: L("Kunden", "Clients"), parents: [work], body: L("Eine Seite pro Kunde. Projekte hängen zusätzlich hier.\n", "One page per client. Projects also live here.\n") });
+  const clients = put("ex-clients", { title: ex("clients.title"), parents: [work], body: ex("clients.body") });
   const nordlicht = put("ex-nordlicht", {
     title: customerTitle,
     parents: [clients],
-    body: L(
-      "Kleine Designagentur, ausgedacht. Ansprechpartnerin: Mara Lind.\n\n" ,
-      "A small design studio, made up. Contact: Mara Lind.\n\n",
-    ) + block({ title: L("Offene Tasks", "Open tasks"), where: { and: [{ type: SYS.task }, { under: here }, { status: "open" }] }, sort: [{ key: "due" }] }),
+    body: ex("nordlicht.body") + block({ title: ex("nordlicht.openTasks"), where: { and: [{ type: SYS.task }, { under: here }, { status: "open" }] }, sort: [{ key: "due" }] }),
   });
   const relaunch = put(
     "ex-relaunch",
@@ -209,128 +159,119 @@ Connect an MCP client in the workspace settings to read and change your entries 
       type: SYS.project,
       title: relaunchTitle,
       parents: [work, nordlicht],
-      props: { p_status: "st_active", p_priority: "pr_high", p_period: `${day(-20)}/${day(30)}`, p_summary: L("Neue Website für Studio Nordlicht: frischer Auftritt, schneller, mobil zuerst.", "A new website for Studio Nordlicht: fresh look, faster, mobile first.") },
-      body: L("Ziel: Livegang in vier Wochen. Design und Umsetzung sind eigene Unterprojekte.\n", "Goal: live in four weeks. Design and build are sub-projects of their own.\n"),
+      props: { p_status: "st_active", p_priority: "pr_high", p_period: `${day(-20)}/${day(30)}`, p_summary: ex("relaunch.summary") },
+      body: ex("relaunch.body"),
     },
     (doc) => {
-      appendUpdate(doc, { at: now - 9 * D, text: L("Kickoff war gut, Moodboard steht. Als Nächstes die Mockups.", "Good kickoff, the moodboard is done. Mockups next."), by: "you" });
-      appendUpdate(doc, { at: now - 2 * D, text: L("CMS-Entscheidung hängt noch, dadurch verschieben sich die Seiten.", "The CMS decision is still open, which delays the pages."), by: "agent:claude" });
+      appendUpdate(doc, { at: now - 9 * D, text: ex("relaunch.update1"), by: "you" });
+      appendUpdate(doc, { at: now - 2 * D, text: ex("relaunch.update2"), by: "agent:claude" });
     },
   );
-  const design = put("ex-design", { type: SYS.project, title: L("Design", "Design"), parents: [relaunch], props: { p_status: "st_active", p_period: `${day(-20)}/${day(3)}` } });
-  put("ex-t-moodboard", { type: SYS.task, title: L("Moodboard sammeln", "Collect a moodboard"), parents: [design], props: { p_status: "st_done" } }, doneAt(10));
-  put("ex-t-mockups", { type: SYS.task, title: L("Mockups für die Startseite", "Mockups for the home page"), parents: [design], props: { p_status: "st_active", p_priority: "pr_high", p_due: day(0) } });
-  const build = put("ex-build", { type: SYS.project, title: L("Umsetzung", "Build"), parents: [relaunch], props: { p_status: "st_planning", p_period: `${day(0)}/${day(30)}` } });
-  put("ex-t-cms", { type: SYS.task, title: L("CMS auswählen", "Choose a CMS"), parents: [build], props: { p_status: "st_todo", p_priority: "pr_high", p_due: day(-2) } });
-  const pages = put("ex-t-pages", { type: SYS.task, title: L("Seiten anlegen", "Create the pages"), parents: [build], props: { p_status: "st_todo", p_due: day(6) } });
-  put("ex-t-pages-home", { type: SYS.task, title: L("Startseite", "Home page"), parents: [pages], props: { p_status: "st_done" } }, doneAt(1));
-  put("ex-t-pages-about", { type: SYS.task, title: L("Über uns", "About us"), parents: [pages], props: { p_status: "st_todo" } });
-  put("ex-t-pages-contact", { type: SYS.task, title: L("Kontakt", "Contact"), parents: [pages], props: { p_status: "st_todo" } });
-  put("ex-t-launch", { type: SYS.task, title: L("Livegang", "Go live"), parents: [build], props: { p_status: "st_todo", p_due: day(14) }, rels: { [BLOCKED_BY]: [pages] } });
+  const design = put("ex-design", { type: SYS.project, title: ex("design.title"), parents: [relaunch], props: { p_status: "st_active", p_period: `${day(-20)}/${day(3)}` } });
+  put("ex-t-moodboard", { type: SYS.task, title: ex("task.moodboard"), parents: [design], props: { p_status: "st_done" } }, doneAt(10));
+  put("ex-t-mockups", { type: SYS.task, title: ex("task.mockups"), parents: [design], props: { p_status: "st_active", p_priority: "pr_high", p_due: day(0) } });
+  const build = put("ex-build", { type: SYS.project, title: ex("build.title"), parents: [relaunch], props: { p_status: "st_planning", p_period: `${day(0)}/${day(30)}` } });
+  put("ex-t-cms", { type: SYS.task, title: ex("task.cms"), parents: [build], props: { p_status: "st_todo", p_priority: "pr_high", p_due: day(-2) } });
+  const pages = put("ex-t-pages", { type: SYS.task, title: ex("task.pages"), parents: [build], props: { p_status: "st_todo", p_due: day(6) } });
+  put("ex-t-pages-home", { type: SYS.task, title: ex("task.pagesHome"), parents: [pages], props: { p_status: "st_done" } }, doneAt(1));
+  put("ex-t-pages-about", { type: SYS.task, title: ex("task.pagesAbout"), parents: [pages], props: { p_status: "st_todo" } });
+  put("ex-t-pages-contact", { type: SYS.task, title: ex("task.pagesContact"), parents: [pages], props: { p_status: "st_todo" } });
+  put("ex-t-launch", { type: SYS.task, title: ex("task.launch"), parents: [build], props: { p_status: "st_todo", p_due: day(14) }, rels: { [BLOCKED_BY]: [pages] } });
   put("ex-n-kickoff", {
-    title: L("Kickoff mit Studio Nordlicht", "Kickoff with Studio Nordlicht"),
+    title: ex("kickoff.title"),
     parents: [relaunch],
-    body: L(
-      "- Zielgruppe: kleine Unternehmen aus der Region\n- Wichtig: Referenzen gut sichtbar, Kontakt mit einem Klick\n- Mara schickt Logos und Fotos bis Freitag\n",
-      "- Audience: small local businesses\n- Important: references easy to find, contact in one click\n- Mara sends logos and photos by Friday\n",
-    ),
+    body: ex("kickoff.body"),
   });
   put("ex-newsletter", {
     type: SYS.project,
-    title: L("Newsletter", "Newsletter"),
+    title: ex("newsletter.title"),
     parents: [work],
-    props: { p_status: "st_paused", p_priority: "pr_low", p_summary: L("Monatlicher Newsletter – pausiert bis nach dem Relaunch.", "A monthly newsletter – paused until after the relaunch.") },
+    props: { p_status: "st_paused", p_priority: "pr_low", p_summary: ex("newsletter.summary") },
   });
 
-  const learn = put("ex-learn", { title: L("Lernen", "Learning"), pinned: k2, body: L("Kurse, Mitschriften, Karteikarten.\n", "Courses, notes, flash cards.\n") });
+  const learn = put("ex-learn", { title: ex("learn.title"), pinned: k2, body: ex("learn.body") });
   const course = put("ex-course", {
-    title: L("Kurs Datenbanken", "Databases course"),
+    title: ex("course.title"),
     parents: [learn],
-    body: L("Relationale Modelle, SQL, Normalisierung, Indizes. 6 ECTS, Note 1,7.\n", "Relational models, SQL, normalisation, indexes. 6 ECTS, grade 1.7.\n"),
+    body: ex("course.body"),
   });
-  const nf = L("Normalformen", "Normal forms");
-  const btree = L("B-Bäume", "B-trees");
+  const nf = ex("card.normalForms");
+  const btree = ex("card.btree");
   put("ex-k-nf", {
     type: SYS.card,
     title: nf,
     parents: [course],
-    body: L(
-      `**1NF:** nur atomare Werte. **2NF:** keine partiellen Abhängigkeiten vom Schlüssel. **3NF:** keine transitiven Abhängigkeiten.\n\nNach dem Normalisieren werden Abfragen über Indizes schnell, siehe [[${btree}]].\n`,
-      `**1NF:** atomic values only. **2NF:** no partial dependencies on the key. **3NF:** no transitive dependencies.\n\nOnce normalised, indexes make the queries fast, see [[${btree}]].\n`,
-    ),
+    body: ex("card.normalFormsBody", { btree }),
   });
   put("ex-k-btree", {
     type: SYS.card,
     title: btree,
     parents: [course],
-    body: L(
-      `Balancierter Suchbaum mit vielen Kindern pro Knoten. Wenige Plattenzugriffe, deshalb die Grundlage der meisten Datenbank-Indizes.\n\nGut normalisierte Tabellen ([[${nf}]]) brauchen meist nur wenige davon.\n`,
-      `A balanced search tree with many children per node. Few disk reads, which is why most database indexes use it.\n\nWell normalised tables ([[${nf}]]) usually need only a few of them.\n`,
-    ),
+    body: ex("card.btreeBody", { nf }),
   });
   const diagram = files.diagram;
   const sheet = files.sheet;
   put("ex-n-lecture", {
-    title: L("Vorlesung 3: Entwurf", "Lecture 3: Design"),
+    title: ex("lecture.title"),
     parents: [course],
     body:
-      L("Vom Sachverhalt zum Schema: erst Entitäten und Beziehungen, dann Tabellen.\n\n", "From the domain to the schema: entities and relations first, then tables.\n\n") +
+      ex("lecture.body") +
       (diagram ? `![[${diagram.name}]]\n\n` : "") +
-      L(`Offene Frage: Gehört die Note zur Belegung oder zum Kurs? → [[${nf}]]\n`, `Open question: does the grade belong to the enrolment or to the course? → [[${nf}]]\n`) +
-      (sheet ? L(`\nÜbung dazu: [[${sheet.name}]]\n`, `\nExercise: [[${sheet.name}]]\n`) : ""),
+      ex("lecture.question", { nf }) +
+      (sheet ? ex("lecture.exercise", { sheet: sheet.name }) : ""),
   });
-  if (diagram) put("ex-f-diagram", { kind: "datei", title: diagram.name, parents: [course] }, (doc) => setFileMeta(doc, { ...diagram, width: 640, height: 220 }));
-  if (sheet) put("ex-f-sheet", { kind: "datei", title: sheet.name, parents: [course] }, (doc) => setFileMeta(doc, sheet));
+  if (diagram) put("ex-f-diagram", { kind: "file", title: diagram.name, parents: [course] }, (doc) => setFileMeta(doc, { ...diagram, width: 640, height: 220 }));
+  if (sheet) put("ex-f-sheet", { kind: "file", title: sheet.name, parents: [course] }, (doc) => setFileMeta(doc, sheet));
 
   const personal = put("ex-personal", {
-    title: L("Persönlich", "Personal"),
+    title: ex("personal.title"),
     pinned: k3,
     body:
-      L("Lesen, Schreiben, alles Private.\n\n", "Reading, writing, everything private.\n\n") +
-      block({ title: L("Leseliste", "Reading list"), where: { and: [{ type: EX_TYPES.book }, { under: here }] }, view: "table" }),
+      ex("personal.body") +
+      block({ title: ex("personal.readingList"), where: { and: [{ type: EX_TYPES.book }, { under: here }] }, view: "table" }),
   });
   // people need no place: they are on the type's page and on their books
   const lena = put("ex-p-lena", { type: EX_TYPES.person, title: "Lena Berg" });
   const jonas = put("ex-p-jonas", { type: EX_TYPES.person, title: "Jonas Falk" });
-  put("ex-b-city", { type: EX_TYPES.book, title: L("Die stille Stadt", "The Quiet City"), parents: [personal], props: { p_ex_read: "rd_done" }, rels: { p_ex_author: [lena] } }, doneAt(12));
-  put("ex-b-moor", { type: EX_TYPES.book, title: L("Wege durchs Moor", "Paths Through the Moor"), parents: [personal], props: { p_ex_read: "rd_now" }, rels: { p_ex_author: [lena] } });
-  put("ex-b-systems", { type: EX_TYPES.book, title: L("Kleine Systeme", "Small Systems"), parents: [personal], props: { p_ex_read: "rd_want" }, rels: { p_ex_author: [jonas] }, body: L("Empfehlung aus dem Lesekreis.\n", "Recommended at the book club.\n") });
-  const blog = put("ex-blog", { title: L("Blog", "Blog"), parents: [personal], body: L("Artikel für die eigene Website, manche in zwei Sprachen.\n", "Posts for my own website, some in two languages.\n") });
-  // the language switch on an article comes from "Sprache" plus the symmetric "Übersetzung"
+  put("ex-b-city", { type: EX_TYPES.book, title: ex("bookCity.title"), parents: [personal], props: { p_ex_read: "rd_done" }, rels: { p_ex_author: [lena] } }, doneAt(12));
+  put("ex-b-moor", { type: EX_TYPES.book, title: ex("bookMoor.title"), parents: [personal], props: { p_ex_read: "rd_now" }, rels: { p_ex_author: [lena] } });
+  put("ex-b-systems", { type: EX_TYPES.book, title: ex("bookSystems.title"), parents: [personal], props: { p_ex_read: "rd_want" }, rels: { p_ex_author: [jonas] }, body: ex("bookSystems.body") });
+  const blog = put("ex-blog", { title: ex("blog.title"), parents: [personal], body: ex("blog.body") });
+  // the language switch on an article comes from "Language" plus the symmetric "Translation"
   const artDe = put("ex-art-de", {
     type: EX_TYPES.article,
-    title: "Warum ich zuerst offline schreibe",
+    title: ex("articleDe.title"),
     parents: [blog],
     props: { p_ex_lang: "lang_de", p_ex_stage: "stage_pub" },
-    body: "Notizen gehören zuerst auf das eigene Gerät. Dann gehen sie nie verloren, auch nicht im Zug ohne Netz.\n",
+    body: ex("articleDe.body"),
   });
   put("ex-art-en", {
     type: EX_TYPES.article,
-    title: "Why I write offline first",
+    title: ex("articleEn.title"),
     parents: [blog],
     props: { p_ex_lang: "lang_en", p_ex_stage: "stage_draft" },
     rels: { p_ex_tr: [artDe] },
-    body: "Notes belong on my own device first. Then they never get lost, not even on a train without signal.\n",
+    body: ex("articleEn.body"),
   });
 
   put("ex-week", {
     title: weekTitle,
     pinned: k4,
     body:
-      L("Alles Offene, das in den nächsten sieben Tagen fällig ist – oder schon drüber. Die Seite rechnet selbst, du pflegst hier nichts.\n\n", "Everything open that is due within the next seven days – or already overdue. The page works it out itself, nothing to maintain here.\n\n") +
+      ex("week.body") +
       block({ title: weekTitle, where: { and: [{ status: "open" }, { prop: "due", op: "<=", value: "+7d" }] }, sort: [{ key: "due" }], group: "path" }),
   });
 
   put("ex-i-references", {
     created: hoursAgo(20),
-    title: L("Idee: Referenzen als Fallstudien zeigen", "Idea: show references as case studies"),
-    body: L(`Für [[${relaunchTitle}]]: pro Referenz eine kurze Geschichte statt nur Logos.\n`, `For the [[${relaunchTitle}]]: a short story per reference instead of just logos.\n`),
+    title: ex("idea.references"),
+    body: ex("idea.referencesBody", { relaunch: relaunchTitle }),
   });
-  put("ex-i-podcast", { created: hoursAgo(9), title: L("Podcast-Tipp: Folge über Wissensmanagement", "Podcast tip: an episode on knowledge management") });
-  put("ex-i-bike", { created: hoursAgo(4), title: L("Fahrrad zur Inspektion bringen", "Take the bike in for a service") });
-  const trip = put("ex-i-trip", { created: hoursAgo(26), title: L("Urlaub im Herbst", "Autumn holiday"), body: L("Sammelpunkt, bis daraus ein Projekt wird.\n", "A place to collect until it becomes a project.\n") });
-  put("ex-i-trip-1", { created: hoursAgo(25), title: L("Zugverbindungen vergleichen", "Compare train connections"), parents: [trip] });
-  put("ex-i-trip-2", { created: hoursAgo(2), title: L("Ferienwohnung mit Balkon suchen", "Find a flat with a balcony"), parents: [trip] });
+  put("ex-i-podcast", { created: hoursAgo(9), title: ex("idea.podcast") });
+  put("ex-i-bike", { created: hoursAgo(4), title: ex("idea.bike") });
+  const trip = put("ex-i-trip", { created: hoursAgo(26), title: ex("trip.title"), body: ex("trip.body") });
+  put("ex-i-trip-1", { created: hoursAgo(25), title: ex("trip.trains"), parents: [trip] });
+  put("ex-i-trip-2", { created: hoursAgo(2), title: ex("trip.flat"), parents: [trip] });
 
   return written;
 }
@@ -363,7 +304,7 @@ export function listExamples(ix: Index): ExampleEntry[] {
 
 /**
  * Each id is trashed by itself (no cascade), so each comes back alone. A type goes only if no
- * living entry of it is left. Returns what was removed, for "Rückgängig".
+ * living entry of it is left. Returns what was removed, for "Undo".
  */
 export function removeExamples(w: Writer, ix: Index, ids: string[]): string[] {
   const chosen = new Set(ids.filter((id) => ix.get(id)?.source === EXAMPLE));
@@ -387,7 +328,7 @@ export function restoreExamples(w: Writer, ids: string[]) {
 }
 
 function erDiagram(lang: Lang): string {
-  const L = (de: string, en: string) => (lang === "de" ? de : en);
+  const ex = (key: string, values?: Values) => translate(lang, `sample.${key}`, values);
   const box = (x: number, title: string, rows: string[], fill: string) =>
     `<g transform="translate(${x} 70)"><rect width="160" height="${44 + rows.length * 24}" rx="10" fill="#fff" stroke="${fill}" stroke-width="2"/>` +
     `<rect width="160" height="36" rx="10" fill="${fill}"/><rect y="26" width="160" height="10" fill="${fill}"/>` +
@@ -396,13 +337,13 @@ function erDiagram(lang: Lang): string {
     `</g>`;
   return `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="220" viewBox="0 0 640 220" font-family="system-ui, sans-serif" font-size="14">
 <rect width="640" height="220" fill="#f7f5f2"/>
-<text x="24" y="36" font-size="16" font-weight="600" fill="#333">${L("ER-Modell: Belegung", "ER model: enrolment")}</text>
+<text x="24" y="36" font-size="16" font-weight="600" fill="#333">${ex("diagram.title")}</text>
 <path d="M184 120 H240 M400 120 H456" stroke="#888" stroke-width="2"/>
 <text x="200" y="112" fill="#666">1</text><text x="226" y="112" fill="#666">n</text>
 <text x="410" y="112" fill="#666">n</text><text x="440" y="112" fill="#666">1</text>
-${box(24, "Student", [L("Matrikelnr.", "Student no."), "Name"], "#2f6ae0")}
-${box(240, L("Belegung", "Enrolment"), [L("Semester", "Term"), L("Note", "Grade")], "#8b4fd8")}
-${box(456, L("Kurs", "Course"), [L("Kursnr.", "Course no."), L("Titel", "Title"), "ECTS"], "#23905f")}
+${box(24, "Student", [ex("diagram.studentNo"), "Name"], "#2f6ae0")}
+${box(240, ex("diagram.enrolment"), [ex("diagram.term"), ex("diagram.grade")], "#8b4fd8")}
+${box(456, ex("diagram.course"), [ex("diagram.courseNo"), ex("diagram.courseTitle"), "ECTS"], "#23905f")}
 </svg>
 `;
 }

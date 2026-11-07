@@ -33,7 +33,7 @@ function storedPlaces(): string[] {
 /** Newest first. */
 export function recentPlaces(repo: Repo = current): string[] {
   const ix = repo.index();
-  return storedPlaces().filter((id) => ix.get(id)?.kind === "info").slice(0, RECENT_SHOWN);
+  return storedPlaces().filter((id) => ix.get(id)?.kind === "note").slice(0, RECENT_SHOWN);
 }
 /** One list for all workspaces; each reads only its own ids. */
 export function rememberPlace(id: string) {

@@ -43,7 +43,7 @@ function pushTo<V>(map: Map<string, V[]>, key: string, value: V) {
 }
 
 export class Index {
-  /** Includes deleted records (for "Typ gelöscht", trash, restore). */
+  /** Includes deleted records (for "type deleted", trash, restore). */
   readonly all: Map<string, Item>;
   /** Live informations and files, types included. */
   readonly live: Item[];
@@ -105,7 +105,7 @@ export class Index {
     return this.all.get(id)?.schema?.name;
   }
 
-  /** The stored plural ("Bücher"), else a guess in the setup language. */
+  /** The stored plural ("Books"), else a guess in the setup language. */
   typePlural(id: string): string {
     const s = this.types.get(id)?.schema;
     if (!s) return "";
@@ -125,7 +125,7 @@ export class Index {
     return (this.all.get(SETTINGS_ID)?.settings?.captureTypes ?? []).filter((id) => this.types.has(id));
   }
 
-  /** Singular and plural both match (Task/Tasks, Projekt/Projekte). */
+  /** Singular and plural both match (Task/Tasks, Project/Projects). */
   typeByName(name: string): string | undefined {
     const k = titleKey(name);
     for (const t of this.types.values()) if (titleKey(t.schema.name) === k || titleKey(t.title) === k) return t.id;
@@ -383,17 +383,17 @@ export class Index {
     return [...new Set([...own, ...back])];
   }
 
-  /** "Bereich": the first pinned entry on the home path (Arbeit, Persönlich …). */
+  /** "Area": the first pinned entry on the home path (Work, Personal …). */
   area(id: string): string | undefined {
     return this.homePath(id).find((p) => this.byId.get(p)?.pinned);
   }
 
-  /** Embedded, linked or referenced from an information; relations don't count. */
+  /** Embedded, linked or referenced from a note; relations don't count. */
   usedIn(fileId: string): Backlink[] {
-    return this.backlinks(fileId).filter((b) => b.kind !== "rel" && this.byId.get(b.from)?.kind === "info");
+    return this.backlinks(fileId).filter((b) => b.kind !== "rel" && this.byId.get(b.from)?.kind === "note");
   }
 
-  /** Everything this item is connected to (for verknüpft:/linked:). */
+  /** Everything this item is connected to (for linked:). */
   connected(id: string): Set<string> {
     const item = this.byId.get(id);
     const out = new Set<string>();
@@ -432,7 +432,7 @@ export class Index {
   }
 
   /**
-   * Open targets of blocking relations ("Blockiert durch") and blocking texts ("Wartet auf"). Done
+   * Open targets of blocking relations ("Blocked by") and blocking texts ("Waiting for"). Done
    * or deleted blockers don't count.
    */
   blockers(item: Item): { by: Item[]; waiting?: string } {
@@ -454,7 +454,7 @@ export class Index {
     return b.by.length > 0 || !!b.waiting;
   }
 
-  /** Children without a status don't count ("offene Unteraufgaben"). */
+  /** Children without a status don't count ("open subtasks"). */
   openChildren(id: string): Item[] {
     return this.childrenOf(id)
       .map((c) => this.byId.get(c)!)
@@ -465,7 +465,7 @@ export class Index {
   }
 
   /**
-   * "Ruhend": the item or something above it is done, so tasks of a finished project stay out of
+   * "Dormant": the item or something above it is done, so tasks of a finished project stay out of
    * the focus lists.
    */
   isDormant(item: Item): boolean {

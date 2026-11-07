@@ -22,7 +22,7 @@ afterAll(() => {
   for (const [k, v] of Object.entries(before)) v === undefined ? delete g[k] : (g[k] = v);
 });
 
-const space = (...ids: string[]) => ({ index: () => ({ get: (id: string) => (ids.includes(id) ? { id, kind: "info" } : undefined) }) });
+const space = (...ids: string[]) => ({ index: () => ({ get: (id: string) => (ids.includes(id) ? { id, kind: "note" } : undefined) }) });
 
 test("a place remembered in one workspace keeps the other workspace's list", () => {
   const a = space("a1", "a2");

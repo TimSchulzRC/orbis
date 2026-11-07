@@ -21,11 +21,11 @@ export function GalleryView({ items, ctx }: { items: Item[]; ctx: EvalCtx }) {
 }
 
 function firstImage(item: Item): string | undefined {
-  if (item.file) return item.file.thumb ?? (item.file.filetype === "bild" ? item.file.display : undefined);
+  if (item.file) return item.file.thumb ?? (item.file.filetype === "image" ? item.file.display : undefined);
   const ix = repo.index();
   for (const link of ix.textLinks(item)) {
     const file = ix.get(link.to)?.file;
-    if (link.embed && file?.filetype === "bild") return file.thumb ?? file.display;
+    if (link.embed && file?.filetype === "image") return file.thumb ?? file.display;
   }
   return undefined;
 }

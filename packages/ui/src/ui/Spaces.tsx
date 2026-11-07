@@ -46,7 +46,7 @@ export function SpaceEyebrow() {
   return <p className="mb-0.5 text-[13px] text-muted-foreground">{spaceById(id ?? "")?.name}</p>;
 }
 
-/** Which workspaces are seen: the label says it ("Alle Workspaces", one name, or the names); the menu ticks them. */
+/** Which workspaces are seen: the label says it ("All workspaces", one name, or the names); the menu ticks them. */
 export function SpaceSelector({ className, onNew }: { className?: string; onNew: () => void }) {
   const { t } = useT();
   const { account, spaces, shown } = useAccounts();
@@ -93,8 +93,8 @@ export function SpaceSelector({ className, onNew }: { className?: string; onNew:
 
 /**
  * Without `onChange` the chips edit the sidebar selector's choice; with it a page's own choice
- * (`value`, null for all). From "Alle", a chip shows that workspace only; then chips toggle one by
- * one, and none left is "Alle" again.
+ * (`value`, null for all). From "All", a chip shows that workspace only; then chips toggle one by
+ * one, and none left is "All" again.
  */
 export function SpaceFilter({ className, value, onChange }: { className?: string; value?: string[] | null; onChange?: (ids: string[] | null) => void }) {
   const { t } = useT();

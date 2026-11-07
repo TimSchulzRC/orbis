@@ -18,7 +18,7 @@ import { workspaceRules } from "@obtion/core/rules";
 const INSTRUCTIONS = `Obtion is the user's personal system for knowledge and work: informations linked like Obsidian, projects and tasks like Notion, all in one graph. You are their interface: they tell you what happened, you record it; they ask, you answer from the data.
 
 The model:
-- Everything is an information (title, Markdown body, tags, refs) or a file. An information has at most one type. Types are data: call \`schema\` first – it lists every type with its description, properties (with options) and capabilities. Follow the descriptions. Never assume a type exists because of its name.
+- Everything is a note (title, Markdown body, tags, refs) or a file. A note has at most one type. Types are data: call \`schema\` first – it lists every type with its description, properties (with options) and capabilities. Follow the descriptions. Never assume a type exists because of its name.
 - "Part of" (place) builds the tree: an item can have several parents, one is its home. Links ([[Title]]) and refs are mentions; they connect without sorting. Relations are typed properties.
 - Pinned items form the top of the sidebar (place with pin:true); pinning counts as a place.
 - An information without a type, without a parent and not pinned is in the inbox (precisely: whatever the inbox query matches, see \`schema\`). Without a type but with a parent it is a note.
@@ -363,7 +363,7 @@ Then ask what I want to change. Don't change anything before I answer.`),
 }
 
 /** `filesUrl`: the workspace's HTTP file API (…/w/<id>/api/files), named in answers and instructions. */
-export async function handleMcp(store: Store, req: Request, blobs?: Blobs, person?: Person, filesUrl?: string): Promise<Response> {
+export async function handleMcp(store: Store, req: Request, blobs: Blobs | undefined, person: Person, filesUrl?: string): Promise<Response> {
   store.flush();
   const server = buildMcpServer(store, agentOrigin(agentName(req), person), blobs, acceptLang(req.headers.get("accept-language")), filesUrl);
   const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });

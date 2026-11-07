@@ -1,5 +1,5 @@
 // The inbox panel's list (left of the entry on a desktop, the panel itself on a phone): what waits,
-// what was sorted with its undo (kept until cleared), and folded below what comes back tomorrow ("Morgen wieder").
+// what was sorted with its undo (kept until cleared), and folded below what comes back tomorrow ("Back tomorrow").
 // Also the newest entries as cards on Heute, and the rule of what lands in the inbox.
 import { useState } from "react";
 import { ArrowUp, Check, ChevronDown, ChevronRight, ListX, Maximize2, RotateCcw, SlidersHorizontal, Undo2 } from "lucide-react";
@@ -24,10 +24,10 @@ import { notify } from "./feedback";
 import { type InboxEntry, openShelf } from "./inbox";
 import { sameValue } from "@obtion/core/equal";
 
-/** A waiting entry ("Morgen wieder") comes back into the inbox now. */
+/** A waiting entry ("Back tomorrow") comes back into the inbox now. */
 export const backNow = (repo: Repo, id: string) => repo.change(id, (d) => setMeta(d, { later: null }));
 
-/** Sorted entries shown before "Alle anzeigen". */
+/** Sorted entries shown before "Show all". */
 const SORTED_SHOWN = 5;
 
 export interface SortedRow {
@@ -37,7 +37,7 @@ export interface SortedRow {
 }
 
 /** `current`: the entry shown beside (none on a phone's list). */
-/** `onClear`: empties "Einsortiert"; the entries stay where they were sorted to. */
+/** `onClear`: empties "Sorted"; the entries stay where they were sorted to. */
 export function InboxList({ waiting, later, sorted, current, onPick, onUndo, onClear }: { waiting: InboxEntry[]; later: InboxEntry[]; sorted: SortedRow[]; current?: string; onPick: (key: string) => void; onUndo: (key: string) => void; onClear: () => void }) {
   const { t } = useT();
   const { shown } = useAccounts();
@@ -131,7 +131,7 @@ export function InboxList({ waiting, later, sorted, current, onPick, onUndo, onC
   );
 }
 
-/** The newest entries side by side, as on Heute: a card opens the panel at it, "Alle ansehen" at the list. */
+/** The newest entries side by side, as on Today: a card opens the panel at it, "See all" at the list. */
 export function ShelfCards({ entries }: { entries: InboxEntry[] }) {
   const { t, lang } = useT();
   const { shown } = useAccounts();
@@ -231,7 +231,7 @@ function OpenFull({ entry, className }: { entry: InboxEntry; className?: string 
   );
 }
 
-/** What lands in a workspace's inbox: its rule (a draft until "Speichern") and the way back to the default. */
+/** What lands in a workspace's inbox: its rule (a draft until "Save") and the way back to the default. */
 function InboxRule({ name, onClose }: { name?: string; onClose: () => void }) {
   const { t } = useT();
   const repo = useRepo();

@@ -36,8 +36,8 @@ async function setUp() {
   await w.blobs.put(sha256(shared), shared);
   await w.blobs.put(sha256(own), own);
   const file = (title: string, hash: string) => {
-    const id = s.create({ kind: "datei", title }, "web:Tim");
-    s.change(id, "web:Tim", (d) => setFileMeta(d, { name: title, hash, size: 1, mime: "text/plain", filetype: "dokument" }));
+    const id = s.create({ kind: "file", title }, "web:Tim");
+    s.change(id, "web:Tim", (d) => setFileMeta(d, { name: title, hash, size: 1, mime: "text/plain", filetype: "document" }));
     return id;
   };
   const project = s.create({ title: "Secret project" }, "web:Tim");

@@ -386,7 +386,7 @@ function StatusBadge({ item }: { item: Item }) {
   );
 }
 
-/** Shows the property's name before the value ("Phase Entwurf"). */
+/** Shows the property's name before the value ("Stage Draft"). */
 function SelectBadge({ item, prop }: { item: Item; prop: PropDef }) {
   const { t } = useT();
   const value = item.props[prop.id];

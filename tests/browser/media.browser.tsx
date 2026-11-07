@@ -5,7 +5,7 @@ import type { DeviceFiles } from "../../packages/ui/src/files";
 import { hydrateFiles } from "../../packages/ui/src/ui/Markdown";
 
 function fakeFiles() {
-  const url = vi.fn(async (h: string) => `blob:geladen-${h}`);
+  const url = vi.fn(async (h: string) => `blob:loaded-${h}`);
   const files = { url, isMissing: () => false } as unknown as DeviceFiles;
   return { files, url };
 }
@@ -20,6 +20,6 @@ test.each(["audio", "video"] as const)("%s plays from a blob: URL, never from a 
   const { files, url } = fakeFiles();
   const { root, el } = embed(tag);
   hydrateFiles(root, files);
-  await expect.poll(() => el.getAttribute("src")).toBe("blob:geladen-abc");
+  await expect.poll(() => el.getAttribute("src")).toBe("blob:loaded-abc");
   expect(url).toHaveBeenCalledWith("abc", { keep: false });
 });

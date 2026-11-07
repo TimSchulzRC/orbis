@@ -22,13 +22,13 @@ test("the line opens the panel; a draft survives closing; Ctrl+Enter posts; the 
   const project = repo.create({ title: "Relaunch", type: SYS.project, pinned: "a" });
   const cms = repo.create({ title: "CMS", type: SYS.project, parents: [project] });
   repo.change(project, (d) => appendUpdate(d, { at: Date.now() - 3600_000, text: "Kickoff war gut.", by: "you" }));
-  repo.change(cms, (d) => appendUpdate(d, { at: Date.now() - 60_000, text: "Entscheidung hängt.", by: "agent:claude" }));
+  repo.change(cms, (d) => appendUpdate(d, { at: Date.now() - 60_000, text: "Decision pending.", by: "agent:claude" }));
   await render(<ItemPage id={project} isNew={false} />);
 
   // the newest update is in the head, from the page below, with the count of new ones
   const line = page.getByRole("button", { name: /^Neues Update, .*Claude, CMS\. 1 neu\. Alle 2 Updates öffnen/ });
   await expect.element(line).toBeVisible();
-  await expect.element(line.getByText("Entscheidung hängt.")).toBeVisible();
+  await expect.element(line.getByText("Decision pending.")).toBeVisible();
   // an unread one is not called the latest
   expect(line.element().textContent).toMatch(/^Neues Update/);
   await expect.element(line.getByText("CMS").first()).toBeVisible();
@@ -62,7 +62,7 @@ test("the line opens the panel; a draft survives closing; Ctrl+Enter posts; the 
 
   // without "Mit Unterseiten", the page below is left out
   await panel.getByRole("checkbox", { name: "Mit Unterseiten" }).click();
-  await expect.element(panel.getByText("Entscheidung hängt.")).not.toBeInTheDocument();
+  await expect.element(panel.getByText("Decision pending.")).not.toBeInTheDocument();
   await expect.element(panel.getByText("Kickoff war gut.")).toBeVisible();
   await panel.getByRole("button", { name: "Schließen" }).click();
 });
@@ -126,12 +126,12 @@ test("wide: the panel docks beside the page, which stays in use; only what was o
 test("the button in the top bar opens the panel too, says what is new, and gets the focus back", async () => {
   const repo = await workspace(false);
   const project = repo.create({ title: "Relaunch", type: SYS.project, pinned: "a" });
-  repo.change(project, (d) => appendUpdate(d, { at: Date.now() - 60_000, text: "Entscheidung hängt.", by: "agent:claude" }));
+  repo.change(project, (d) => appendUpdate(d, { at: Date.now() - 60_000, text: "Decision pending.", by: "agent:claude" }));
   await render(<ItemPage id={project} isNew={false} />);
   const button = page.getByRole("button", { name: "Updates, 1 neu" });
   await button.click();
   const panel = page.getByRole("dialog", { name: /^Updates zu / });
-  await expect.element(panel.getByText("Entscheidung hängt.")).toBeVisible();
+  await expect.element(panel.getByText("Decision pending.")).toBeVisible();
   await commands.keys("press", "Escape");
   await expect.element(page.getByRole("dialog")).not.toBeInTheDocument();
   await expect.element(page.getByRole("button", { name: "Updates", exact: true })).toHaveFocus();

@@ -30,7 +30,7 @@ export const isDrawingLine = (text: string) => wikiLinkRe(true).exec(text.trim()
 export function drawingOnLine(text: string): string | undefined {
   if (!isDrawingLine(text)) return undefined;
   const id = repo.resolveTitle(wikiLinkRe(true).exec(text.trim())![2]!.trim());
-  return id && repo.get(id)?.kind === "zeichnung" ? id : undefined;
+  return id && repo.get(id)?.kind === "drawing" ? id : undefined;
 }
 
 function linksIn(state: EditorState, from: number, to: number): Link[] {
@@ -49,7 +49,7 @@ function linksIn(state: EditorState, from: number, to: number): Link[] {
         const id = open === "![[" ? repo.resolveTitle(title.trim()) : undefined;
         // [[id]] without a text reads as the page's title
         const text = bar >= 0 ? rest.slice(bar + 1) : (repo.get(title.trim())?.title ?? target);
-        const drawing = !!id && repo.get(id)?.kind === "zeichnung";
+        const drawing = !!id && repo.get(id)?.kind === "drawing";
         // the drawing's block covers its line already
         if (drawing && isDrawingLine(line.text)) continue;
         out.push({ from: start, to: start + all.length, text, target, web: false, embed: !!(id && (repo.get(id)?.file || drawing)) });
