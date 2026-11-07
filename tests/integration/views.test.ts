@@ -113,24 +113,15 @@ test("update_type sets the views; the same name keeps its tab; hidden groups are
 });
 
 
-test("views live in the type: shipped types get theirs at setup, older workspaces once on open, own types one table", () => {
+test("views live in the type: shipped types get theirs at setup, own types one table", () => {
   const r = new MemRepo();
   runSetup(r.writer, "de");
   expect(r.index().types.get(SYS.task)!.schema!.views!.map((v) => v.id)).toEqual(["v_byproject", "v_progress", "v_priority", "v_all"]);
-  // a workspace from before: the shipped type without stored views shows one table, until the upgrade
-  r.change(SYS.project, (doc) => doc.getMap("tabs").clear());
-  expect(typeTabs(r.index().types.get(SYS.project)!, "de").map((v) => v.id)).toEqual(["v_all"]);
-  upgradeSetup(r.writer, "de");
-  const project = r.index().types.get(SYS.project)!;
-  expect(project.schema!.views!.map((v) => v.id)).toEqual(["v_active", "v_timeline", "v_board", "v_all", "v_calendar"]);
-  // views the user changed stay
-  r.change(SYS.project, (doc) => doc.getMap("tabs").delete("v_board"));
-  upgradeSetup(r.writer, "de");
-  expect(r.index().types.get(SYS.project)!.schema!.views!.some((v) => v.id === "v_board")).toBe(false);
+  expect(r.index().types.get(SYS.project)!.schema!.views!.map((v) => v.id)).toEqual(["v_active", "v_timeline", "v_board", "v_all", "v_calendar"]);
   r.addType("t_module", { name: "Module" });
   expect(typeTabs(r.index().types.get("t_module")!, "de").map((v) => v.id)).toEqual(["v_all"]);
   // the stored format follows, so an older app turns read-only even offline
   r.change(SETTINGS_ID, (doc) => setSettings(doc, { format: 1 }));
-  upgradeSetup(r.writer, "de");
+  upgradeSetup(r.writer);
   expect(r.writer.get(SETTINGS_ID)!.settings!.format).toBe(FORMAT);
 });

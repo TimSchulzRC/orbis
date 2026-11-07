@@ -178,7 +178,7 @@ export const FORMAT = 4;
 
 export interface SettingsRecord {
   setupLang?: string;
-  format?: number; // unset means 0 (data from before format versions)
+  format?: number;
   captureTypes: string[]; // pinned types in the capture type picker
   inbox?: Cond; // what lands in the inbox; unset: the default
   filesPos?: string; // where "Files" stands among the types in the sidebar

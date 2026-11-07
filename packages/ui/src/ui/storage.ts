@@ -1,12 +1,11 @@
-// Every localStorage key. Values are JSON, except those read before the app starts or by older
-// versions (theme: index.html; lang, active space, file mode: plain text).
+// Every localStorage key. Values are JSON, except these plain-text ones: theme (index.html reads it
+// before the app starts), lang, active space and file mode.
 
 export const KEYS = {
   account: "obtion.account",
   spaces: "obtion.spaces",
   active: "obtion.active",
   shown: "obtion.shown",
-  /** before workspaces: the accounts of this device, moved over once */
   lang: "obtion.lang",
   theme: "obtion.theme",
   device: "obtion.device",
@@ -36,14 +35,14 @@ export const KEYS = {
   open: (key: string) => `obtion.open.${key}`,
 };
 
-/** A stored value, or `fallback`; text stored as plain text by an older version reads as that text. */
+/** A stored value, or `fallback`. */
 export function readJSON<T>(key: string, fallback: T): T {
   const s = localStorage.getItem(key);
   if (s === null) return fallback;
   try {
     return JSON.parse(s) as T;
   } catch {
-    return (typeof fallback === "string" || fallback === null ? s : fallback) as T;
+    return fallback;
   }
 }
 
