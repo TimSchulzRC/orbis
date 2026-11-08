@@ -1,5 +1,9 @@
+import { existsSync, readdirSync } from "node:fs";
 import { createServer } from "node:net";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
+import { Blobs } from "@obtion/server/blobs";
+import { setUp } from "@obtion/server/setup";
+import { Store } from "@obtion/server/store";
 
 export const MCP_ACCEPT = "application/json, text/event-stream";
 let rpcId = 0;
@@ -18,11 +22,21 @@ export function freePort(): Promise<number> {
   });
 }
 
-/** Runs "setup de --examples" in OBTION_DATA. PORT is a free one because setup refuses to run while
- * a server answers on it, and the self-hosted CI runner has Obtion on the default port. */
-export async function seedExamples(env: Record<string, string | undefined>) {
-  const seed = Bun.spawnSync(["bun", "apps/server/src/cli.ts", "setup", "de", "--examples"], { cwd: ROOT, env: { ...env, PORT: String(await freePort()) } });
-  if (seed.exitCode !== 0) throw new Error("seed failed: " + seed.stderr.toString());
+/** The workspace folders in a data folder (workspaces/<id>). */
+export function workspaceDirs(dataDir: string): string[] {
+  const root = join(dataDir, "workspaces");
+  return existsSync(root) ? readdirSync(root).map((n) => join(root, n)) : [];
+}
+
+/** Fills the first workspace of a data folder with the German setup and its examples, while no server runs on it. */
+export async function seedExamples(dataDir: string) {
+  const [dir] = workspaceDirs(dataDir);
+  if (!dir) throw new Error("no workspace in " + dataDir);
+  const store = new Store(dir);
+  const blobs = new Blobs(join(dir, "blobs"), store);
+  await setUp(store, blobs, "de", { examples: true, quiet: false });
+  blobs.stop();
+  store.db.close();
 }
 
 /** The server as a program on a free port, answering once /api/info does. */
@@ -48,13 +62,13 @@ export const del = (base: string, path: string, token?: string, body?: unknown) 
 
 export const mcpPost = (base: string, path: string, token: string, method: string, params?: unknown) =>
   fetch(base + path, { method: "POST", headers: { ...auth(token), "content-type": "application/json", accept: MCP_ACCEPT }, body: rpcBody(method, params) });
-export async function mcpTool(base: string, token: string, name: string, args: unknown, path = "/mcp"): Promise<string> {
+export async function mcpTool(base: string, token: string, name: string, args: unknown, path: string): Promise<string> {
   return toolText(await (await mcpPost(base, path, token, "tools/call", { name, arguments: args })).json());
 }
 
 /** With `workspace`, creates one if the account has none, as the app would. */
 export async function firstAccount(url: string, workspace = true) {
-  const signup = (await post(url, "/api/account/signup", { name: "E2E", email: "e2e@example.org", password: "geheim12345" }).then((r) => r.json())) as { token: string };
+  const signup = (await post(url, "/api/account/signup", { name: "E2E", email: "e2e@example.org", password: "secret12345" }).then((r) => r.json())) as { token: string };
   const own = (await get(url, "/api/account", signup.token).then((r) => r.json())) as { workspaces: unknown[] };
   if (workspace && !own.workspaces.length) await post(url, "/api/workspaces", { name: "Persönlich" }, signup.token);
   const me = (await get(url, "/api/account", signup.token).then((r) => r.json())) as { user: unknown; workspaces: { id: string }[] };

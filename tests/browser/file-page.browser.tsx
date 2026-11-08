@@ -20,7 +20,7 @@ const serverFiles = {
   hasLocal: () => false,
   check: async () => {},
   url: async () => undefined,
-  viewUrl: async (hash: string) => `blob:geladen-${hash}`,
+  viewUrl: async (hash: string) => `blob:loaded-${hash}`,
   download: async (...args: unknown[]) => (saved.push(args), true),
   missingKey: () => "file.missing",
   wholeText: async () => undefined,
@@ -31,8 +31,8 @@ async function show(meta: Partial<FileMeta> & { name: string }, files: DeviceFil
   setFiles(files);
   const id = newId();
   repo.change(id, (doc) => {
-    initItem(doc, { kind: "datei", title: meta.name });
-    setFileMeta(doc, { hash: "a".repeat(64), mime: "application/octet-stream", filetype: "sonstiges", size: 10, ...meta });
+    initItem(doc, { kind: "file", title: meta.name });
+    setFileMeta(doc, { hash: "a".repeat(64), mime: "application/octet-stream", filetype: "other", size: 10, ...meta });
   });
   await Promise.resolve(); // the replica reads changed documents in a microtask
   await render(<FilePage item={repo.index().get(id)!} />);
@@ -41,11 +41,11 @@ async function show(meta: Partial<FileMeta> & { name: string }, files: DeviceFil
 const download = () => page.getByRole("link", { name: "Herunterladen" });
 
 test("a code file: its content in monospace, scrollable, with the download", async () => {
-  await show({ name: "schema.xsd", text: '<xs:schema>\n  <xs:element name="Beispiel"/>\n</xs:schema>', extracted: "x" });
+  await show({ name: "schema.xsd", text: '<xs:schema>\n  <xs:element name="Example"/>\n</xs:schema>', extracted: "x" });
   await expect.element(page.getByText("Inhalt", { exact: true })).toBeVisible();
   const pre = page.getByTestId("file-text");
   await expect.element(pre).toBeVisible();
-  expect(pre.element().textContent).toContain('<xs:element name="Beispiel"/>');
+  expect(pre.element().textContent).toContain('<xs:element name="Example"/>');
   expect(pre.element().className).toContain("font-mono");
   expect(getComputedStyle(pre.element()).overflowY).toBe("auto");
   // no server URL: the click loads the content with the token and saves it
@@ -56,17 +56,17 @@ test("a code file: its content in monospace, scrollable, with the download", asy
 });
 
 test("a Word file: the extracted text", async () => {
-  await show({ name: "Konzept.docx", filetype: "dokument", text: "Ablauf der Freigabe\nFeld\tQuelle", extracted: "x" });
+  await show({ name: "Concept.docx", filetype: "document", text: "Approval process\nField\tSource", extracted: "x" });
   await expect.element(page.getByText("Erkannter Text", { exact: true })).toBeVisible();
   await expect.element(page.getByTestId("file-text")).toBeVisible();
-  expect(page.getByTestId("file-text").element().textContent).toBe("Ablauf der Freigabe\nFeld\tQuelle");
+  expect(page.getByTestId("file-text").element().textContent).toBe("Approval process\nField\tSource");
   expect(page.getByTestId("file-text").element().className).toContain("font-sans");
 });
 
 test("HTML only as its text: no markup is rendered", async () => {
-  await show({ name: "seite.html", text: "Kopf\nA & B", extracted: "x" });
+  await show({ name: "page.html", text: "Header\nA & B", extracted: "x" });
   await expect.element(page.getByTestId("file-text")).toBeVisible();
-  expect(page.getByTestId("file-text").element().textContent).toBe("Kopf\nA & B");
+  expect(page.getByTestId("file-text").element().textContent).toBe("Header\nA & B");
   expect(document.querySelector("main iframe, [data-testid=file-text] h1, [data-testid=file-text] script")).toBeNull();
 });
 
@@ -77,28 +77,28 @@ test("a binary file: no preview, but the download", async () => {
 });
 
 test("a file the server has not read yet says so", async () => {
-  await show({ name: "neu.txt" });
+  await show({ name: "new.txt" });
   await expect.element(page.getByText("Der Server liest den Text dieser Datei gerade noch.")).toBeVisible();
 });
 
 test("long text cut on the server says so", async () => {
-  await show({ name: "gross.csv", text: "a;b\nc;d\n…", extracted: "x" });
+  await show({ name: "large.csv", text: "a;b\nc;d\n…", extracted: "x" });
   await expect.element(page.getByText("Gekürzt – der ganze Inhalt steckt im Download.")).toBeVisible();
   expect(page.getByTestId("file-text").element().textContent).toBe("a;b\nc;d");
 });
 
 test("the facts carry the start of a long text: the page shows the whole one from the server", async () => {
   const asked: string[] = [];
-  const whole = { ...serverFiles, wholeText: async (h: string) => (asked.push(h), "Anfang\nMitte\nEnde") } as unknown as DeviceFiles;
-  await show({ name: "lang.txt", text: "Anfang\n…", extracted: "x" }, whole);
-  await expect.poll(() => page.getByTestId("file-text").element().textContent).toBe("Anfang\nMitte\nEnde");
+  const whole = { ...serverFiles, wholeText: async (h: string) => (asked.push(h), "Start\nMiddle\nEnd") } as unknown as DeviceFiles;
+  await show({ name: "long.txt", text: "Start\n…", extracted: "x" }, whole);
+  await expect.poll(() => page.getByTestId("file-text").element().textContent).toBe("Start\nMiddle\nEnd");
   expect(asked).toEqual(["a".repeat(64)]);
   expect(document.body.textContent).not.toContain("Gekürzt");
 });
 
 test("a PDF shows from a blob: URL, and its download saves that", async () => {
-  await show({ name: "rechnung.pdf", filetype: "pdf", mime: "application/pdf", extracted: "x" });
-  await expect.poll(() => document.querySelector("iframe")?.getAttribute("src")).toBe(`blob:geladen-${"a".repeat(64)}`);
-  expect(download().element().getAttribute("href")).toBe(`blob:geladen-${"a".repeat(64)}`);
-  expect(download().element().getAttribute("download")).toBe("rechnung.pdf");
+  await show({ name: "invoice.pdf", filetype: "pdf", mime: "application/pdf", extracted: "x" });
+  await expect.poll(() => document.querySelector("iframe")?.getAttribute("src")).toBe(`blob:loaded-${"a".repeat(64)}`);
+  expect(download().element().getAttribute("href")).toBe(`blob:loaded-${"a".repeat(64)}`);
+  expect(download().element().getAttribute("download")).toBe("invoice.pdf");
 });

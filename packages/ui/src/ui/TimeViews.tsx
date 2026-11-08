@@ -2,8 +2,8 @@
 // timeline the start or the end); entries without a date are listed below.
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
-import { type Item, type PropDef, formatRange, parseRange, titleKey } from "@obtion/core/model";
-import { addDays, diffDays, todayISO } from "@obtion/core/date";
+import { type Item, type PropDef, formatRange, parseRange, propByName, titleKey } from "@obtion/core/model";
+import { addDays, dayOf, diffDays, timeOf, todayISO, withTime } from "@obtion/core/date";
 import { type EvalCtx, type Group, type QueryDef, fieldOf, groupItems, viewTypeIds } from "@obtion/core/query";
 import { dueProp } from "@obtion/core/traits";
 import { repo } from "../repo";
@@ -48,25 +48,30 @@ function dateKey(def: QueryDef, items: Item[], ctx: EvalCtx, chosen?: string): s
 function spanOf(item: Item, key: string, ctx: EvalCtx): Span | undefined {
   const hit = fieldOf(item, key, ctx.ix);
   if (!hit || hit.kind !== "date" || typeof hit.value !== "string" || !hit.value) return undefined;
+  // a time of day doesn't move the bar: it spans whole days
   const range = parseRange(hit.value);
-  const start = isDay(range.start) ? range.start : isDay(range.end) ? range.end : undefined;
-  const end = isDay(range.end) ? range.end : start;
+  const [from, to] = [dayOf(range.start), dayOf(range.end)];
+  const start = isDay(from) ? from : isDay(to) ? to : undefined;
+  const end = isDay(to) ? to : start;
   if (!start || !end) return undefined;
   return ms(end) < ms(start) ? { start: end, end: start } : { start, end };
 }
 
-/** The property behind a date key on this entry, if it can be written (not "Erstellt", not "Geändert"). */
+/** The property behind a date key on this entry, if it can be written (not "Created", not "Updated"). */
 function writable(item: Item, key: string, ctx: EvalCtx): PropDef | undefined {
   const schema = ctx.ix.schemaOf(item);
   if (key === "due") return dueProp(schema);
   if (key === "created" || key === "updated" || key === "done") return undefined;
-  return schema?.properties.find((p) => p.kind === "date" && titleKey(p.name) === titleKey(key));
+  return propByName(schema, key, (p) => p.kind === "date");
 }
 
+/** Moving a bar changes the days; a time the value had stays. */
 function writeSpan(item: Item, key: string, span: Span, ctx: EvalCtx) {
   const prop = writable(item, key, ctx);
   if (!prop) return;
-  repo.setProp(item.id, prop.id, prop.range ? formatRange(span.start, span.end) : span.start);
+  const was = parseRange(item.props[prop.id]);
+  const start = withTime(span.start, timeOf(was.start));
+  repo.setProp(item.id, prop.id, prop.range ? formatRange(start, withTime(span.end, timeOf(was.end))) : start);
 }
 
 /** A span after dragging by `days`: the whole bar, or one edge (never past the other). */

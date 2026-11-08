@@ -6,11 +6,10 @@ import { AreaError, Store } from "./store";
 import { Mirror } from "./mirror";
 import { handleMcp } from "./mcp";
 import { type Person, personOrigin } from "@obtion/core/origin";
-import type { EventText, HistoryList, VersionText } from "@obtion/core/api";
+import type { EventText, HistoryList, PurgeResult, VersionText } from "@obtion/core/api";
 import { Blobs } from "./blobs";
 import { MAX_BLOB } from "./config";
 import { body, fail, json } from "./http";
-import { Backups } from "./backup";
 import { FORMAT, type Item, PERSONAL } from "@obtion/core/model";
 import { OpError, Ops, fileName } from "./ops";
 import { UndoError, undoStep } from "./undo";
@@ -88,7 +87,6 @@ export class Workspace {
   store: Store;
   blobs: Blobs;
   conns = new Set<ServerWebSocket<Conn>>();
-  private backups: Backups;
   private mirror: Mirror;
 
   constructor(dir: string) {
@@ -110,18 +108,18 @@ export class Workspace {
       record: (r) => {
         if (r.file && this.blobs.needsWork(r)) this.blobs.schedule(r.id);
       },
+      purge: (ids, area) => {
+        for (const ws of this.conns) if (ws.data.areas.has(area)) send(ws, { t: "purged", area, ids });
+      },
     });
     this.blobs.onStored = (hash) => {
       for (const ws of this.conns) if (ws.data.areas.size) send(ws, { t: "blob", hash });
     };
     this.blobs.scan();
     this.mirror.start();
-    this.backups = new Backups(this.store, join(dir, "backups"));
-    this.backups.start();
   }
 
   close() {
-    this.backups.stop();
     this.mirror.stop();
     this.store.flush();
   }
@@ -140,8 +138,10 @@ export class Workspace {
     if (msg.device) ws.data.origin = personOrigin(ws.data.user, msg.device);
     const store = this.store;
     const last = store.last(area);
-    send(ws, { t: "welcome", hub: store.serverId, area, seq: last.seq, format: FORMAT });
+    send(ws, { t: "welcome", server: store.serverId, area, seq: last.seq, format: FORMAT });
     const reset = !store.knowsCursor(area, msg.since, msg.sinceId); // server restored from an older backup; replica must merge everything
+    const purged = store.purgedSince(area, reset ? 0 : msg.since);
+    if (purged.length) send(ws, { t: "purged", area, ids: purged });
     const ids = store.docsSince(area, reset ? 0 : msg.since);
     if (ids.length === 0) send(ws, { t: "updates", area, items: [], last: last.seq, lastId: last.uid || undefined, initial: true, done: true, reset });
     for (let i = 0; i < ids.length; i += SYNC_BATCH) {
@@ -218,6 +218,17 @@ export class Workspace {
       }
     }
 
+    if (rest === "/api/purge" && req.method === "POST") {
+      const b = await body<{ id?: unknown; all?: unknown }>(req);
+      if (typeof b?.id !== "string" && b?.all !== true) return fail(400, "id or all: true required");
+      try {
+        return json<PurgeResult>({ purged: new Ops(store, this.blobs).purge(typeof b.id === "string" ? b.id : undefined) });
+      } catch (e) {
+        if (e instanceof OpError) return fail(404, e.message);
+        throw e;
+      }
+    }
+
     if (rest.startsWith(BLOBS)) return this.blob(req, url, rest.slice(BLOBS.length));
     // a file's whole text, when its facts carry only the start (the app shows it on the file's page)
     if (rest.startsWith(TEXTS) && req.method === "GET") {
@@ -229,8 +240,8 @@ export class Workspace {
     return fail(404, "not found");
   }
 
-  /** No person for the pre-accounts /mcp address. `filesUrl`: the file API, named to agents. */
-  mcp(req: Request, person?: Person, filesUrl?: string): Promise<Response> {
+  /** `filesUrl`: the file API, named to agents. */
+  mcp(req: Request, person: Person, filesUrl?: string): Promise<Response> {
     return handleMcp(this.store, req, this.blobs, person, filesUrl);
   }
 
@@ -246,7 +257,7 @@ export class Workspace {
     const id = sub.replace(/^\//, "");
     if (id && !/^[\w-]{1,64}$/.test(id)) return fail(404, "not found");
     const item = id ? this.store.records.get(id) : undefined;
-    if (id && (item?.kind !== "datei" || !item.file)) return fail(404, "no such file");
+    if (id && (item?.kind !== "file" || !item.file)) return fail(404, "no such file");
 
     if (req.method === "GET" || req.method === "HEAD") {
       if (!item) return fail(405, "POST a file, or GET /api/files/<file id>");

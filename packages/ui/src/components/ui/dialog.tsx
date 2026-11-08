@@ -41,7 +41,7 @@ function DialogOverlay({
   )
 }
 
-/** A notice at the bottom ("Rückgängig") stays usable over a dialog: a click on it does not close the dialog. */
+/** A notice at the bottom ("Undo") stays usable over a dialog: a click on it does not close the dialog. */
 const onToast = (e: Event) => !!(e.target as Element | null)?.closest?.("[data-sonner-toaster]")
 
 function DialogContent({
@@ -83,6 +83,42 @@ function DialogContent({
   )
 }
 
+/**
+ * A panel at the right edge (from the bottom on phones). `modal`: over the page with a backdrop;
+ * otherwise beside it, without one (the dialog root gets `modal={false}` too).
+ */
+function SheetContent({
+  className,
+  children,
+  onInteractOutside,
+  modal = true,
+  ...props
+}: React.ComponentProps<typeof DialogPrimitive.Content> & { modal?: boolean }) {
+  return (
+    <DialogPortal>
+      {/* lighter than a dialog's: the page stays readable beside the panel */}
+      {modal && <DialogOverlay className="bg-black/30 backdrop-blur-none" />}
+      <DialogPrimitive.Content
+        data-slot="sheet-content"
+        className={cn(
+          "fixed z-50 flex flex-col border-line bg-surface outline-none duration-200 data-[state=closed]:animate-out data-[state=open]:animate-in",
+          "inset-y-0 right-0 w-(--side-panel) max-w-[calc(100%-3rem)] border-l data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right",
+          "max-md:inset-x-0 max-md:top-auto max-md:max-h-[88dvh] max-md:w-full max-md:max-w-none max-md:rounded-t-2xl max-md:border-t max-md:border-l-0 max-md:pb-safe max-md:data-[state=closed]:slide-out-to-bottom max-md:data-[state=open]:slide-in-from-bottom",
+          modal && "shadow-2xl",
+          className
+        )}
+        onInteractOutside={(e) => {
+          if (onToast(e)) e.preventDefault()
+          onInteractOutside?.(e)
+        }}
+        {...props}
+      >
+        {children}
+      </DialogPrimitive.Content>
+    </DialogPortal>
+  )
+}
+
 function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -114,6 +150,7 @@ export {
   DialogOverlay,
   DialogPortal,
   DialogTitle,
+  SheetContent,
 }
 
 /** Layout-preserving modal for the command palette, mobile sheets and media viewer. */

@@ -1,4 +1,4 @@
-// One page for every information. Types change the properties and which sections appear, never
+// One page for every note. Types change the properties and which sections appear, never
 // the layout.
 import { Input } from "../components/ui/input";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -9,6 +9,7 @@ import { isInInbox } from "@obtion/core/placement";
 import { wouldBeInInbox } from "@obtion/core/typeops";
 import { onlyBelow } from "@obtion/core/trash";
 import { hasUpdates, progressSpec } from "@obtion/core/traits";
+import { updateFeed } from "@obtion/core/updates";
 import { useRepo, useIndex, itemHref, leavePage, openItem, setParams, showTitle, useDocumentTitle } from "../hooks";
 import { repo } from "../repo";
 import { useT, tr, getLang, titleOf } from "../i18n";
@@ -20,7 +21,8 @@ import { ItemIcon, TypeChip, TypeGlyph } from "../ui/item-look";
 import { ProgressBand } from "../ui/progress";
 import { cn } from "../lib/utils";
 import { PropertyBlock } from "../ui/Properties";
-import { Below, Updates } from "../ui/Sections";
+import { Below } from "../ui/Sections";
+import { PageUpdates } from "../ui/Updates";
 import { AddRef, Crumbs, LinksMenu, LinksRow, PageFooter, TrashBanner, pinnedRefs } from "../ui/PageParts";
 import { PlacePicker } from "../ui/Picker";
 import { pluralOf } from "@obtion/core/plural";
@@ -61,8 +63,8 @@ export function ItemPage({ id, isNew }: { id: string; isNew: boolean }) {
   if (!item || item.kind === "settings")
     return <PagePlaceholder>{scoped.status.synced ? t("item.missing") : t("item.loading")}</PagePlaceholder>;
   if (item.kind === "op") return <PagePlaceholder>{item.title}</PagePlaceholder>;
-  if (item.kind === "datei") return <FilePage key={id} item={item} />;
-  if (item.kind === "zeichnung") return <DrawingInNote key={id} item={item} />;
+  if (item.kind === "file") return <FilePage key={id} item={item} />;
+  if (item.kind === "drawing") return <DrawingInNote key={id} item={item} />;
   if (item.type === META_TYPE) return <TypePage key={id} item={item} />;
   return <InfoView key={id} item={item} isNew={isNew} />;
 }
@@ -75,7 +77,7 @@ function DrawingInNote({ item }: { item: Item }) {
   const scoped = useRepo();
   const { t } = useT();
   const ix = scoped.index();
-  const note = ix.backlinks(item.id).find((b) => b.kind === "embed" && ix.get(b.from)?.kind === "info")?.from ?? ix.parentsOf(item.id)[0];
+  const note = ix.backlinks(item.id).find((b) => b.kind === "embed" && ix.get(b.from)?.kind === "note")?.from ?? ix.parentsOf(item.id)[0];
   useEffect(() => {
     // the drawing opens on its note (a search hit, a link to it)
     if (note) openItem(note, { replace: true, query: "?d=" + encodeURIComponent(item.id) });
@@ -119,11 +121,16 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
   }, [item.id, isNew]);
 
   const cycles = ix.cycleEdgesOf(item.id);
-  // the type's area (§ 3.1, zone 3): long texts fold so the updates stay in sight
-  const typeArea = hasUpdates(schema);
   const progress = progressSpec(schema) ? ix.progressOf(item) : undefined;
 
+  // the top bar's place for the updates button, left of "…"
+  const [updatesSlot, setUpdatesSlot] = useState<HTMLElement | null>(null);
+  const updatable = hasUpdates(schema) && !item.deleted;
+  // with an update the card follows the properties and needs no line above it
+  const updateCard = updatable && updateFeed(ix, item.id).length > 0;
   const tools = (
+    <>
+    {updatable && <span ref={setUpdatesSlot} className="contents" />}
     <MoreMenu>
       {(close) => (
         <>
@@ -165,6 +172,7 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
         </>
       )}
     </MoreMenu>
+    </>
   );
 
   return (
@@ -207,12 +215,15 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
             </>
           ),
           links: <LinksRow item={item} />,
+          noEndLine: updateCard,
           progress: progress && <ProgressBand done={progress.done} total={progress.total} desc={progressText(item, ix, progress.done, progress.total)} />,
         }}
       />
+      {/* the newest update and, on a click, all of them in a panel */}
+      {updatable && <PageUpdates item={item} bar={updatesSlot} />}
 
       {/* 2 · text */}
-      <PageText item={item} long={typeArea} isNew={isNew} onView={setView} hasMore={typeArea || ix.childrenOf(item.id).length > 0} />
+      <PageText item={item} isNew={isNew} onView={setView} hasMore={ix.childrenOf(item.id).length > 0} />
       <Input variant="bare" ref={fileInput} type="file" multiple className="hidden" onChange={(e) => view && insertFilesAtCursor(view, [...(e.target.files ?? [])])} />
 
       {/* a line between the text one writes and what the page adds below it;
@@ -221,8 +232,6 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
       <div className="page-below [&>:first-child]:mt-6">
         {/* 3 · below: everything under the page, the same for every type (the links are in the head) */}
         <Below item={item} />
-        {/* 4 · the type's area: updates */}
-        {hasUpdates(schema) && <Updates item={item} />}
       </div>
       {/* one more line above the dates, unless nothing came between */}
       <PageFooter item={item} className="mt-10 border-t border-line pt-4 max-md:mt-8 [.page-below:empty+&]:mt-4 [.page-below:empty+&]:border-t-0 [.page-below:empty+&]:pt-0" />
@@ -236,49 +245,24 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
   );
 }
 
-/** "2 von 9 Tasks erledigt, alle Ebenen". */
+/** "2 of 9 tasks done, all levels". */
 function progressText(item: Item, ix: Index, done: number, total: number): string {
   const of = progressSpec(ix.schemaOf(item))?.of;
   const name = of ? (ix.typeName(of) ?? "") : "";
   return tr(of ? "progress.allLevelsOf" : "progress.allLevels", { done, total, name: name && pluralOf(name, getLang()) });
 }
 
-/** Text taller than this (about 12 lines) is cut on a page with its own list. */
-const TALL_TEXT = 12 * 25 + 8;
-
-/** Zone 2. Long text on a page with its own list is cut to 8 lines until clicked. */
-function PageText({ item, long, isNew, onView, hasMore }: { item: Item; long: boolean; isNew: boolean; onView: (v: EditorView | null) => void; hasMore: boolean }) {
-  const { t } = useT();
-  const [expanded, setExpanded] = useState(false);
-  const box = useRef<HTMLDivElement>(null);
-  const [tall, setTall] = useState(false);
-  useEffect(() => {
-    if (!long || !box.current) return;
-    const check = () => setTall((box.current?.scrollHeight ?? 0) > TALL_TEXT);
-    check();
-    const resize = new ResizeObserver(check);
-    resize.observe(box.current.firstElementChild ?? box.current);
-    return () => resize.disconnect();
-  }, [long, item.id]);
-  const cut = long && tall && !expanded;
+/** Zone 2: the page's text. */
+function PageText({ item, isNew, onView, hasMore }: { item: Item; isNew: boolean; onView: (v: EditorView | null) => void; hasMore: boolean }) {
   return (
-    <div className="relative mt-6" onFocus={() => setExpanded(true)}>
-      <div ref={box} className={cut ? "max-h-[200px] overflow-hidden" : undefined}>
-        <NoteEditor
-          item={item}
-          autoFocus={isNew && !!item.title}
-          onView={onView}
-          // room to start writing only while the text is empty and nothing else follows
-          minHeight={item.body.trim() || hasMore ? "min-h-6" : "min-h-[30vh]"}
-        />
-      </div>
-      {cut && (
-        <div className="absolute inset-x-0 bottom-0 flex h-20 items-end bg-gradient-to-t from-[var(--bg)] to-transparent">
-          <Button variant="plain" onClick={() => setExpanded(true)} className="tap-y text-[13px] font-medium text-muted-foreground hover:text-fg">
-            {t("page.showText")}
-          </Button>
-        </div>
-      )}
+    <div className="mt-6">
+      <NoteEditor
+        item={item}
+        autoFocus={isNew && !!item.title}
+        onView={onView}
+        // room to start writing only while the text is empty and nothing else follows
+        minHeight={item.body.trim() || hasMore ? "min-h-6" : "min-h-[30vh]"}
+      />
     </div>
   );
 }
@@ -299,7 +283,7 @@ function TypeSwitch({ item }: { item: Item }) {
             <TypeChip schema={schema} onClick={p.onClick} />
           </span>
         ) : (
-          // no type: a plain line, not a chip – "Notiz" is no type
+          // no type: a plain line, not a chip – "Note" is no type
           <Button variant="plain" {...p} className={cn("tap-y inline-flex items-center gap-1 rounded px-0.5 text-[13px] hover:underline", inbox ? "text-warn" : "text-muted-foreground")} title={t("item.giveType")}>
             {inbox ? <INBOX_ICON size={12} /> : <NOTE_ICON size={12} />}
             {inbox ? t("kind.inbox") : t("kind.note")}

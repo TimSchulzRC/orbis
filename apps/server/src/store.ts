@@ -1,11 +1,13 @@
 // The server's replica: an append-only update log in SQLite plus plain-object records for queries,
 // search, activity and the mirror. Only the records stay in memory for all documents; a Y.Doc is
-// loaded from its snapshot and later log rows on use, and dropped again by trim().
+// loaded from its snapshot and later log rows on use, and dropped again by trim(). Each flush also
+// stores the record next to the snapshot, so a start reads records without decoding any Y.Doc.
 import { Database } from "bun:sqlite";
 import * as Y from "yjs";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { type FileMeta, type Item, type ItemInit, type UpdateEntry, PERSONAL, SETTINGS_ID, areaOf, initItem, isContent, metaMap, newId, readItem } from "@obtion/core/model";
+import { migrate } from "./migrate";
+import { type FileMeta, type Item, type ItemInit, type UpdateEntry, PERSONAL, RECORD_VERSION, SETTINGS_ID, areaOf, initItem, isContent, isContentKind, metaMap, newId, readItem } from "@obtion/core/model";
 import { sameValue } from "@obtion/core/equal";
 import type { Lang } from "@obtion/core/i18n";
 import { Index } from "@obtion/core/graph";
@@ -33,6 +35,7 @@ type Listener = {
   update?: (u: StoredUpdate, conn?: unknown) => void;
   event?: (e: ActivityEvent) => void;
   record?: (r: Item) => void;
+  purge?: (ids: string[], area: string) => void;
 };
 
 /** How many documents stay in memory when not in use (least recently used go first). */
@@ -41,6 +44,23 @@ const FLUSH_DELAY_MS = 250;
 const EVENT_MERGE_WINDOW_MS = 5 * 60_000;
 const MAX_CLOCK_SKEW_MS = 10 * 60_000;
 const MAX_UNDO_CHAIN = 20;
+
+const SCHEMA = `CREATE TABLE IF NOT EXISTS updates (seq INTEGER PRIMARY KEY AUTOINCREMENT, doc TEXT NOT NULL, data BLOB NOT NULL, origin TEXT NOT NULL, ts INTEGER NOT NULL, uid TEXT NOT NULL, step TEXT, area TEXT NOT NULL);
+  CREATE INDEX IF NOT EXISTS updates_doc ON updates(doc, seq);
+  CREATE INDEX IF NOT EXISTS updates_step ON updates(step);
+  CREATE INDEX IF NOT EXISTS updates_area ON updates(area, seq);
+  CREATE TABLE IF NOT EXISTS docstate (id TEXT PRIMARY KEY, state BLOB NOT NULL, seq INTEGER NOT NULL);
+  CREATE TABLE IF NOT EXISTS records (id TEXT PRIMARY KEY, area TEXT, data TEXT);
+  CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, doc TEXT NOT NULL, title TEXT, type TEXT, kind TEXT, origin TEXT, changes TEXT, step TEXT, area TEXT NOT NULL);
+  CREATE INDEX IF NOT EXISTS events_doc ON events(doc, id);
+  CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT);
+  CREATE TABLE IF NOT EXISTS steps (id TEXT PRIMARY KEY, actor TEXT, ts INTEGER, undoes TEXT);
+  CREATE INDEX IF NOT EXISTS steps_undoes ON steps(undoes);
+  CREATE TABLE IF NOT EXISTS versions (id INTEGER PRIMARY KEY AUTOINCREMENT, doc TEXT NOT NULL, ts INTEGER NOT NULL, origin TEXT NOT NULL, step TEXT, event INTEGER, len INTEGER NOT NULL, data BLOB NOT NULL);
+  CREATE INDEX IF NOT EXISTS versions_doc ON versions(doc, id);
+  CREATE INDEX IF NOT EXISTS versions_event ON versions(event);
+  CREATE TABLE IF NOT EXISTS purged (id TEXT PRIMARY KEY, area TEXT NOT NULL, seq INTEGER NOT NULL);
+  CREATE TABLE IF NOT EXISTS purged_rows (uid TEXT PRIMARY KEY);`;
 
 export class Store {
   db: Database;
@@ -63,6 +83,8 @@ export class Store {
   /** While an atomic call runs: its updates, written only if the whole call succeeds. */
   private held: { docId: string; data: Uint8Array; origin: string; quiet: boolean; step?: string }[] | null = null;
   private heldPrev = new Map<string, Item | undefined>();
+  /** Documents deleted for good: updates for them are dropped. */
+  private purged = new Set<string>();
 
   constructor(
     public dir: string,
@@ -70,44 +92,64 @@ export class Store {
   ) {
     mkdirSync(dir, { recursive: true });
     this.db = new Database(join(dir, "obtion.db"));
-    this.db.exec(`
-      PRAGMA journal_mode = WAL;
-      PRAGMA synchronous = NORMAL;
-      CREATE TABLE IF NOT EXISTS updates (seq INTEGER PRIMARY KEY AUTOINCREMENT, doc TEXT NOT NULL, data BLOB NOT NULL, origin TEXT NOT NULL, ts INTEGER NOT NULL, uid TEXT, step TEXT, area TEXT NOT NULL DEFAULT '${PERSONAL}');
-      CREATE INDEX IF NOT EXISTS updates_doc ON updates(doc, seq);
-      CREATE INDEX IF NOT EXISTS updates_step ON updates(step);
-      CREATE INDEX IF NOT EXISTS updates_area ON updates(area, seq);
-      CREATE TABLE IF NOT EXISTS docstate (id TEXT PRIMARY KEY, state BLOB NOT NULL, seq INTEGER NOT NULL);
-      CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, doc TEXT NOT NULL, title TEXT, type TEXT, kind TEXT, origin TEXT, changes TEXT, step TEXT, area TEXT NOT NULL DEFAULT '${PERSONAL}');
-      CREATE INDEX IF NOT EXISTS events_doc ON events(doc, id);
-      CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT);
-      CREATE TABLE IF NOT EXISTS steps (id TEXT PRIMARY KEY, actor TEXT, ts INTEGER, undoes TEXT);
-      CREATE INDEX IF NOT EXISTS steps_undoes ON steps(undoes);
-      CREATE TABLE IF NOT EXISTS versions (id INTEGER PRIMARY KEY AUTOINCREMENT, doc TEXT NOT NULL, ts INTEGER NOT NULL, origin TEXT NOT NULL, step TEXT, event INTEGER, len INTEGER NOT NULL, data BLOB NOT NULL);
-      CREATE INDEX IF NOT EXISTS versions_doc ON versions(doc, id);
-      CREATE INDEX IF NOT EXISTS versions_event ON versions(event);
-    `);
+    // A checkpoint restarts the WAL but keeps the file as large as the largest write (an import,
+    // a rebuild of all records). The limit cuts it back at the next commit. 8 MB is twice what the
+    // automatic checkpoint (1000 pages) lets the WAL reach, so everyday writes never shrink it.
+    this.db.exec(`PRAGMA journal_mode = WAL; PRAGMA journal_size_limit = ${8 * 1024 * 1024}; PRAGMA synchronous = NORMAL; PRAGMA secure_delete = ON;`);
+    migrate(this.db, [SCHEMA]);
     this.load();
-    // the server was called hub before; renaming the key would look like a new server to devices
-    if (!this.kvGet("hubId")) this.kvSet("hubId", newId());
+    if (!this.kvGet("serverId")) this.kvSet("serverId", newId());
   }
 
   /** A device seeing a different id knows it met a new server. */
   get serverId(): string {
-    return this.kvGet("hubId")!;
+    return this.kvGet("serverId")!;
   }
 
+  /**
+   * Records come from the records table. Only documents whose record may miss changes are read as
+   * Y.Docs: those without a record (new database, RECORD_VERSION changed) and those with log rows
+   * after the last complete flush (the server stopped before it).
+   */
   private load() {
     const last = this.db.query("SELECT seq, uid FROM updates ORDER BY seq DESC LIMIT 1").get() as { seq: number; uid: string } | null;
-    this.seq = last?.seq ?? 0;
+    // purged rows may have been the newest: AUTOINCREMENT remembers the highest seq handed out
+    const top = this.db.query("SELECT seq FROM sqlite_sequence WHERE name = 'updates'").get() as { seq: number } | null;
+    this.seq = Math.max(last?.seq ?? 0, top?.seq ?? 0);
     this.lastUid = last?.uid ?? "";
-    for (const [id, doc] of this.eachDoc()) {
-      this.noteArea(id, doc);
-      const rec = readItem(id, doc);
-      if (rec) this.records.set(id, rec);
+    for (const r of this.db.query("SELECT id FROM purged").all() as { id: string }[]) this.purged.add(r.id);
+    if (this.kvGet("recordVersion") !== String(RECORD_VERSION)) {
+      this.db.exec("DELETE FROM records");
+      this.kvSet("recordVersion", String(RECORD_VERSION));
+    }
+    for (const r of this.db.query("SELECT id, area, data FROM records").all() as { id: string; area: string | null; data: string | null }[]) {
+      if (r.area) this.areas.set(r.id, r.area);
+      if (r.data) this.records.set(r.id, JSON.parse(r.data) as Item);
+    }
+    const stale = this.db
+      .query("SELECT id FROM docstate WHERE id NOT IN (SELECT id FROM records) UNION SELECT doc FROM updates WHERE seq > ?")
+      .all(Number(this.kvGet("flushed") ?? 0)) as { id: string }[];
+    if (stale.length) {
+      const saveSnap = this.db.prepare("INSERT OR REPLACE INTO docstate (id, state, seq) VALUES (?, ?, ?)");
+      this.db.transaction(() => {
+        for (const { id } of stale) {
+          const doc = this.read(id)!;
+          this.noteArea(id, doc);
+          const rec = readItem(id, doc);
+          if (rec) this.records.set(id, rec);
+          saveSnap.run(id, Y.encodeStateAsUpdate(doc), this.seq);
+          this.saveRecord(id, rec);
+        }
+        this.kvSet("flushed", String(this.seq));
+      })();
     }
     resolveCascade(this.records);
     for (const rec of this.records.values()) this.indexForSearch(rec);
+  }
+
+  /** `rec` as readItem returned it, before resolveCascade. */
+  private saveRecord(id: string, rec: Item | null) {
+    this.db.query("INSERT OR REPLACE INTO records (id, area, data) VALUES (?, ?, ?)").run(id, this.areas.get(id) ?? null, rec && JSON.stringify(rec));
   }
 
   private indexForSearch(rec: Item) {
@@ -118,16 +160,6 @@ export class Store {
   /** After `fileText` is set: files are searched by their whole text. */
   reindexFiles() {
     for (const rec of this.records.values()) if (rec.file) this.indexForSearch(rec);
-  }
-
-  /** For passes over all documents. Docs not in memory are read for the caller and not kept. */
-  *eachDoc(): Generator<[string, Y.Doc]> {
-    // a doc without snapshot has only log rows (a crash before its first flush)
-    const ids = this.db.query("SELECT id FROM docstate UNION SELECT doc FROM updates").all() as { id: string }[];
-    for (const { id } of ids) {
-      const doc = this.loaded.get(id) ?? this.read(id);
-      if (doc) yield [id, doc];
-    }
   }
 
   private stored(id: string): Uint8Array[] {
@@ -202,13 +234,14 @@ export class Store {
     return () => this.listeners.delete(l);
   }
 
-  /** Documents from before areas are personal; undefined if unknown. */
+  /** Undefined if unknown. */
   areaOf(docId: string): string | undefined {
     return this.areas.get(docId);
   }
 
   /** Returns the sequence number. Throws AreaError for a document of another area: areas never mix through sync. */
   applyRemote(docId: string, data: Uint8Array, origin: string, conn?: unknown, step?: string, area = PERSONAL): number {
+    if (this.purged.has(docId)) return this.seq; // a device that missed the purge
     const known = this.areaOf(docId);
     if (known && known !== area) throw new AreaError(`${docId} belongs to the area ${known}, not ${area}`);
     const doc = this.getDoc(docId);
@@ -227,7 +260,7 @@ export class Store {
   }
 
   /**
-   * Devices with a wrong clock: timestamps too far ahead are set back to now, so "geändert",
+   * Devices with a wrong clock: timestamps too far ahead are set back to now, so "updated",
    * sorting and the activity don't jump. The fix syncs like any change.
    */
   private capFuture(docId: string) {
@@ -271,6 +304,7 @@ export class Store {
 
   /** For changes made on the server itself (tools, imports). */
   change(docId: string, origin: string, fn: (doc: Y.Doc) => void, opts: { quiet?: boolean } = {}): void {
+    if (this.purged.has(docId)) return;
     const doc = this.getDoc(docId);
     const sv = Y.encodeStateVector(doc);
     doc.transact(() => fn(doc), this.stepCtx ? { actor: origin, step: this.stepCtx.id } : origin);
@@ -315,10 +349,9 @@ export class Store {
     }
   }
 
-  /** Drops changes that never reached the log. */
+  /** Drops changes that never reached the log. Changes logged before stay pending, so the next flush saves them. */
   private reload(ids: string[]) {
     for (const id of ids) {
-      this.pending.delete(id);
       this.loaded.delete(id);
       const doc = this.read(id);
       const rec = doc && readItem(id, doc);
@@ -386,8 +419,10 @@ export class Store {
     const events: ActivityEvent[] = [];
     const changed: Item[] = [];
     const prevs = new Map<string, Item | undefined>();
+    const read = new Map<string, Item | null>();
     for (const [id] of pending) {
       const next = readItem(id, this.getDoc(id));
+      read.set(id, next);
       if (!next) continue;
       prevs.set(id, this.records.get(id));
       this.records.set(id, next);
@@ -405,6 +440,7 @@ export class Store {
       for (const [id, p] of pending) {
         const doc = this.getDoc(id);
         saveSnap.run(id, Y.encodeStateAsUpdate(doc), this.seq);
+        this.saveRecord(id, read.get(id)!);
         if (!prevs.has(id)) continue;
         const prev = prevs.get(id);
         const next = this.records.get(id)!;
@@ -415,8 +451,10 @@ export class Store {
         const step = p.step;
         // the settings doc shows only with its rules for agents (the workspace's)
         const event = p.quiet || (next.kind === "settings" && (!prev || prev.rules === next.rules)) ? undefined : this.saveEvent(id, prev, next, origin, step, ts, events);
-        if (prev && prev.body !== next.body && hasBody(next)) this.saveVersion(id, prev, next, origin, step, ts, event);
+        if (prev && prev.body !== next.body && isContentKind(next.kind)) this.saveVersion(id, prev, next, origin, step, ts, event);
       }
+      // every log row so far is in a snapshot and a record (rows come only through append, which marks the doc pending)
+      this.kvSet("flushed", String(this.seq));
     })();
     this._ix = null;
     this.scheduleTrim();
@@ -439,7 +477,7 @@ export class Store {
     const last = this.db.query("SELECT id, ts, kind, origin, changes, step FROM events WHERE doc = ? ORDER BY id DESC LIMIT 1").get(id) as
       | { id: number; ts: number; kind: string; origin: string; changes: string; step: string | null }
       | null;
-    const diff = changes.some((c) => c.field === "body") && hasBody(next);
+    const diff = changes.some((c) => c.field === "body") && isContentKind(next.kind);
     if (kind === "updated" && last && last.kind === "updated" && last.origin === origin && (last.step ?? undefined) === step && ts - last.ts < EVENT_MERGE_WINDOW_MS) {
       const merged = mergeChanges(JSON.parse(last.changes || "[]"), changes);
       this.db.query("UPDATE events SET ts = ?, title = ?, changes = ? WHERE id = ?").run(ts, next.title, JSON.stringify(merged), last.id);
@@ -462,8 +500,7 @@ export class Store {
   // an item that has no version yet changes, the text it was created with is kept first, so its
   // history starts with it. Versions are never dropped: a text edited in a
   // hundred sessions costs a hundred compressed copies – a few MB for long, busy pages, which
-  // is small next to the update log that keeps every keystroke anyway. Backups copy the whole
-  // database (VACUUM INTO), versions included.
+  // is small next to the update log that keeps every keystroke anyway.
 
   /** Keep the new text of a document whose body changed (see above). */
   private saveVersion(id: string, prev: Item, next: Item, origin: string, step: string | undefined, ts: number, event?: { id: number; merged: boolean }) {
@@ -509,6 +546,48 @@ export class Store {
     return { doc, before: before ? this.versionText(before.id)! : "", after: this.versionText(last.id)!, from: before?.n, to: last.n };
   }
 
+  /**
+   * Deletes documents for good: log rows, snapshots, activity entries, text versions and steps
+   * left without rows. Updates for them are dropped from now on, and devices are told to drop theirs.
+   * The database overwrites freed pages (secure_delete), and the WAL is emptied.
+   */
+  purge(ids: string[]) {
+    if (this.held) throw new Error("purge inside an atomic call");
+    this.flush();
+    const byArea = new Map<string, string[]>();
+    for (const id of ids) {
+      const area = this.areaOf(id) ?? PERSONAL;
+      byArea.set(area, [...(byArea.get(area) ?? []), id]);
+    }
+    const list = JSON.stringify(ids);
+    const IN = "IN (SELECT value FROM json_each(?))";
+    this.db.transaction(() => {
+      // a device whose cursor sits on one of these rows still knows where it is (knowsCursor)
+      this.db.query(`INSERT OR IGNORE INTO purged_rows (uid) SELECT uid FROM updates WHERE doc ${IN}`).run(list);
+      for (const table of ["updates", "events", "versions"]) this.db.query(`DELETE FROM ${table} WHERE doc ${IN}`).run(list);
+      for (const table of ["docstate", "records"]) this.db.query(`DELETE FROM ${table} WHERE id ${IN}`).run(list);
+      this.db.query("DELETE FROM steps WHERE id NOT IN (SELECT step FROM updates WHERE step IS NOT NULL)").run();
+      const add = this.db.query("INSERT OR REPLACE INTO purged (id, area, seq) VALUES (?, ?, ?)");
+      for (const [area, of] of byArea) for (const id of of) add.run(id, area, this.seq);
+    })();
+    this.db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+    for (const id of ids) {
+      this.purged.add(id);
+      this.loaded.delete(id);
+      this.areas.delete(id);
+      this.records.delete(id);
+      if (this.searchIndex.has(id)) this.searchIndex.discard(id);
+    }
+    resolveCascade(this.records);
+    this._ix = null;
+    for (const [area, of] of byArea) for (const l of this.listeners) l.purge?.(of, area);
+  }
+
+  /** Documents purged while a replica's cursor was at `since` or later: it may still have them. */
+  purgedSince(area: string, since: number): string[] {
+    return (this.db.query("SELECT id FROM purged WHERE area = ? AND seq >= ?").all(area, since) as { id: string }[]).map((r) => r.id);
+  }
+
   // ---------- reading ----------
 
   /**
@@ -517,10 +596,10 @@ export class Store {
    */
   knowsCursor(area: string, since: number, sinceId?: string): boolean {
     if (since <= 0) return true;
+    if (sinceId && this.db.query("SELECT 1 FROM purged_rows WHERE uid = ?").get(sinceId)) return true;
     if (since > this.last(area).seq) return false;
-    if (!sinceId) return true; // replica from before cursor ids: seq is all we can check
     const row = this.db.query("SELECT uid, area FROM updates WHERE seq = ?").get(since) as { uid: string; area: string } | null;
-    return row?.uid === sinceId && row.area === area;
+    return !!row && row.uid === sinceId && row.area === area;
   }
 
   /** The position a replica of the area has after catching up. */
@@ -613,9 +692,6 @@ export class Store {
 
 // ---------- helpers ----------
 
-/** Items whose text has versions: informations and files (not settings, not operations). */
-const hasBody = (i: Item) => i.kind === "info" || i.kind === "datei" || i.kind === "zeichnung";
-
 const utf8 = new TextEncoder();
 const fromUtf8 = new TextDecoder();
 const pack = (text: string) => Bun.deflateSync(utf8.encode(text));
@@ -674,7 +750,7 @@ function moved(c: FieldChange): boolean {
 }
 
 function typeTag(i: Item): string {
-  return i.kind === "info" ? (i.type ?? "") : i.kind;
+  return i.kind === "note" ? (i.type ?? "") : i.kind;
 }
 
 function setDiff(field: string, a: string[], b: string[], out: FieldChange[]) {
@@ -697,7 +773,11 @@ function diffRecords(prev: Item | undefined, next: Item): { kind: ActivityEvent[
   for (const k of new Set([...Object.keys(prev.rels), ...Object.keys(next.rels)])) setDiff("r:" + k, prev.rels[k] ?? [], next.rels[k] ?? [], changes);
   if (prev.body !== next.body) changes.push({ field: "body", from: prev.body.length, to: next.body.length });
   if (prev.rules !== next.rules) changes.push({ field: "rules", from: prev.rules.length, to: next.rules.length });
-  if (next.updates.length > prev.updates.length) for (const e of next.updates.slice(prev.updates.length)) changes.push({ field: "update", to: e.text });
+  // by id: an update written has only `to`, one deleted only `from`
+  const had = new Set(prev.updates.map((u) => u?.id));
+  const has = new Set(next.updates.map((u) => u?.id));
+  for (const e of next.updates) if (e && !had.has(e.id)) changes.push({ field: "update", to: e.text, id: e.id });
+  for (const e of prev.updates) if (e && !has.has(e.id)) changes.push({ field: "update", from: e.text, id: e.id });
   // views count separately from the schema so their changes show in the activity and can be undone
   if (prev.schema || next.schema) {
     const { views: va, ...sa } = prev.schema ?? ({} as NonNullable<Item["schema"]>);

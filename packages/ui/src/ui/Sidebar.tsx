@@ -28,7 +28,7 @@ import { startPointerDrag } from "../lib/drag";
 
 /**
  * What is being dragged in the sidebar: an item (from below `from`, null: pinned; `type`: a pinned
- * type page, which only changes its place among the pinned) or a row of "Typen", and from which workspace.
+ * type page, which only changes its place among the pinned) or a row of "Types", and from which workspace.
  */
 let dragging: { id: string; from: string | null; space: string; type?: boolean } | null = null;
 /**
@@ -101,7 +101,7 @@ function ResizeHandle({ width, onWidth, onDone }: { width: number; onWidth: (w: 
   );
 }
 
-/** Can it go into another workspace? Items can (a move), type pages and rows of "Typen" not. */
+/** Can it go into another workspace? Items can (a move), type pages and rows of "Types" not. */
 const movable = (d: typeof dragging) => !!d && d.from !== "types" && !d.type;
 /** Icons of tree rows: larger in the phone menu. */
 const rowIconSize = (touch?: boolean) => (touch ? 17 : 15);
@@ -380,7 +380,7 @@ function PinnedTree({ touch, here }: { touch?: boolean; here: boolean }) {
   );
 }
 
-/** The page of every type of a workspace and the files, in an order of their own (synced); a new type comes last. New types are made from the "…" next to "Typen". */
+/** The page of every type of a workspace and the files, in an order of their own (synced); a new type comes last. New types are made from the "…" next to "Types". */
 function TypeNav({ touch, here }: { touch?: boolean; here: boolean }) {
   const { t } = useT();
   const repo = useRepo();
@@ -430,8 +430,8 @@ function TypeNav({ touch, here }: { touch?: boolean; here: boolean }) {
 }
 
 /**
- * A type (or the files) under a workspace: dragged to reorder; a type's gear opens "Typ
- * bearbeiten" in one click. The link covers the whole row (::after), only the gear lies above it.
+ * A type (or the files) under a workspace: dragged to reorder; a type's gear opens "Edit type" in
+ * one click. The link covers the whole row (::after), only the gear lies above it.
  */
 function TypeRow({ row: r, touch, active, drop, ...drag }: {
   row: { id: string; label: string; href: string; icon: React.ReactNode };

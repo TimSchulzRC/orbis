@@ -1,6 +1,6 @@
-// "Verlauf": the kept versions of an item's text (the server keeps one per editing session), with
+// "History": the kept versions of an item's text (the server keeps one per editing session), with
 // when and by whom, what each changed against the one before or against the text now – and
-// "Wiederherstellen", which writes the old text as a new change: undoable, in the activity.
+// "Restore", which writes the old text as a new change: undoable, in the activity.
 import { useEffect, useMemo, useState } from "react";
 import type { HistoryList, TextVersion, VersionText } from "@obtion/core/api";
 import { textDiff } from "@obtion/core/diff";

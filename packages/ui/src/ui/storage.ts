@@ -12,13 +12,13 @@ export const KEYS = {
   device: "obtion.device",
   fileMode: "obtion.fileMode",
   recentPlaces: "obtion.recentPlaces",
-  /** Excalidraw's library ("Bibliothek"): shapes kept for all drawings */
+  /** Excalidraw's library: shapes kept for all drawings */
   drawingLibrary: "obtion.drawing.library",
   captureSpace: "obtion.capture.space",
   timelineScale: "obtion.timeline.scale",
   sidebarTree: "obtion.sidebar.tree",
   sidebarWidth: "obtion.sidebar.width",
-  /** the inbox's "Einsortiert" with each entry's undo, until cleared */
+  /** the inbox's "Sorted" with each entry's undo, until cleared */
   inboxSorted: "obtion.inbox.sorted",
   sidebarSpace: (space: string) => `obtion.sidebar.space.${space}`,
   sidebarTypes: (space: string) => `obtion.sidebar.types.${space}`,
@@ -26,6 +26,12 @@ export const KEYS = {
   tab: (key: string) => `obtion.tab.${key}`,
   /** folded groups of a table */
   fold: (key: string) => `obtion.fold.${key}`,
+  /** when a page's updates were last read on this device (not synced): newer ones by agents count as new */
+  updatesSeen: (item: string) => `obtion.updates.seen.${item}`,
+  /** an update being written on a page, until it is posted */
+  updatesDraft: (item: string) => `obtion.updates.draft.${item}`,
+  /** whether the updates panel shows those of the pages below too (this device) */
+  updatesWithBelow: "obtion.updates.withBelow",
   /** opened rows: sub-items of a table, parts of a page */
   open: (key: string) => `obtion.open.${key}`,
 };

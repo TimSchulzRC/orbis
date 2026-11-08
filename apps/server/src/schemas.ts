@@ -10,7 +10,7 @@ export const viewInput = z.object({
   query: z.string().optional().describe('filter added to the type, plus sort:, group: (status|statusgroup|type|project|area|path|property), columns:, e.g. "status:active group:status sort:due columns:Status,area,Period,Progress"'),
   subgroup: z.string().optional().describe("boards: rows by this field (e.g. project)"),
   hide_empty_groups: z.boolean().optional(),
-  hidden_groups: z.array(z.string()).optional().describe('groups to hide by name, e.g. ["Backlog", "Erledigt"]'),
+  hidden_groups: z.array(z.string()).optional().describe('groups to hide by name, e.g. ["Backlog", "Done"]'),
   date: z.string().optional().describe("calendar/timeline: the date property"),
 });
 export type ViewInput = z.infer<typeof viewInput>;
@@ -27,7 +27,6 @@ export const propInput = z.object({
   symmetric: z.boolean().optional(),
   range: z.boolean().optional(),
   computed: z.string().optional().describe('"progress", "progress:Type" or "count:Type"'),
-  hide_empty: z.boolean().optional().describe("pages show it only when it has a value (default: every property shows, empty as –)"),
   blocks: z.boolean().optional().describe("relation or text: the item counts as blocked while it is set (a relation: while a linked item is open)"),
 });
 export type PropInput = z.infer<typeof propInput>;
@@ -37,7 +36,7 @@ export const capInput = z.object({
   updates: z.boolean().optional(),
   template: z.string().nullable().optional(),
 })
-  // removed ones (status, progress, main_action) fail loudly instead of being dropped
+  // unknown keys fail loudly instead of being dropped
   .strict();
 export type CapInput = z.infer<typeof capInput>;
 

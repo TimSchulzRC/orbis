@@ -64,12 +64,12 @@ export function useTriageActions(spaceOf: (i: Item) => string, opts: { quiet?: b
   const label = (list: Item[], key: string, values: Values = {}) =>
     list.length > 1 ? t(key + "Many", { count: list.length, ...values }) : t(key, { title: short(list[0]), ...values });
   const giveType = (list: Item[], type: string) => {
-    const infos = list.filter((i) => i.kind === "info");
-    if (!infos.length) return;
-    const repo = repoOf(infos[0]!);
+    const notes = list.filter((i) => i.kind === "note");
+    if (!notes.length) return;
+    const repo = repoOf(notes[0]!);
     const name = repo.index().typeName(type);
-    const u = done({ label: list.length > 1 ? label(infos, "triage.typed", { name }) : t("triage.typedOne", { title: short(infos[0]), name }), steps: infos.map((i) => ({ space: spaceOf(i), id: i.id, type: i.type })) });
-    for (const i of infos) repo.setType(i.id, type);
+    const u = done({ label: list.length > 1 ? label(notes, "triage.typed", { name }) : t("triage.typedOne", { title: short(notes[0]), name }), steps: notes.map((i) => ({ space: spaceOf(i), id: i.id, type: i.type })) });
+    for (const i of notes) repo.setType(i.id, type);
     return u;
   };
   const trash = async (list: Item[]): Promise<Undo | null> => {
@@ -149,14 +149,14 @@ export function usePickers(spaceOf: (i: Item) => string, place: (list: Item[], p
   return { node, placing, typing, setPlacing, setTyping };
 }
 
-/** Choose a type by keyboard: type to filter, arrows, Enter, 1–9; "Neuer Typ …" at the end. */
+/** Choose a type by keyboard: type to filter, arrows, Enter, 1–9; "New type …" at the end. */
 function TypePicker({ current, onPick, onClose }: { current: string | null; onPick: (id: string) => void; onClose: () => void }) {
   const { t } = useT();
   const repo = useRepo();
   const ix = repo.index();
   const [q, setQ] = useState("");
   const [sel, setSel] = useState(0);
-  // "Neuer Typ …" without a name: the field asks for one
+  // "New type …" without a name: the field asks for one
   const [naming, setNaming] = useState(false);
   const field = useRef<HTMLInputElement>(null);
   const types = ix.typesByName().filter((type) => !q.trim() || type.schema.name.toLowerCase().includes(titleKey(q)));

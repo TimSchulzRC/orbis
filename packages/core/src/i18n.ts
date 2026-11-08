@@ -59,16 +59,18 @@ export function detectLang(pref?: string | null): Lang {
 
 const locale = (lang: Lang) => (lang === "de" ? "de-DE" : "en-US");
 
+/** A stored date value; one with a time (2026-10-30T14:30) shows it too. */
 export function fmtDate(lang: Lang, iso: string | undefined, opts: Intl.DateTimeFormatOptions = { day: "2-digit", month: "2-digit", year: "numeric" }) {
   if (!iso) return "";
   const d = new Date(iso.length === 10 ? iso + "T00:00:00" : iso);
   if (isNaN(d.getTime())) return iso;
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(iso)) return d.toLocaleString(locale(lang), { ...opts, hour: "2-digit", minute: "2-digit" });
   return d.toLocaleDateString(locale(lang), opts);
 }
 
 /** "28. Okt." / "28 Oct", with the year only if not this year. */
 export function fmtShortDate(lang: Lang, iso: string) {
-  const d = new Date(iso + "T00:00:00");
+  const d = new Date(iso.slice(0, 10) + "T00:00:00");
   if (isNaN(d.getTime())) return iso;
   const sameYear = d.getFullYear() === new Date().getFullYear();
   return d.toLocaleDateString(locale(lang), { day: "numeric", month: "short", year: sameYear ? undefined : "numeric" });
@@ -76,6 +78,11 @@ export function fmtShortDate(lang: Lang, iso: string) {
 
 export function fmtDateTime(lang: Lang, ts: number) {
   return new Date(ts).toLocaleString(locale(lang), { dateStyle: "medium", timeStyle: "short" });
+}
+
+/** "14:05" / "02:05 PM". */
+export function fmtTime(lang: Lang, ts: number) {
+  return new Date(ts).toLocaleTimeString(locale(lang), { hour: "2-digit", minute: "2-digit" });
 }
 
 export function fmtNumber(lang: Lang, n: number) {

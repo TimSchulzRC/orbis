@@ -1,4 +1,4 @@
-// A type is an information with a schema; changing it is editing, not programming.
+// A type is a note with a schema; changing it is editing, not programming.
 import { useEffect } from "react";
 import { Pencil, Pin, RotateCcw } from "lucide-react";
 import { type Item, setTabs } from "@obtion/core/model";
@@ -49,7 +49,7 @@ export function TypePage({ item }: { item: Item }) {
   );
 }
 
-/** "Typ bearbeiten" while it is open (editType), over the page that is open. Lives once in the app. */
+/** "Edit type" while it is open (editType), over the page that is open. Lives once in the app. */
 export function TypeEditorHost() {
   const editing = useTypeEditing();
   if (!editing) return null;

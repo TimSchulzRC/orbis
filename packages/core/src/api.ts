@@ -15,8 +15,6 @@ export interface WorkspaceInfo {
   id: string;
   name: string;
   role: Role;
-  /** The server's data from before accounts; devices keep their local copy of it. */
-  legacy?: boolean;
 }
 
 export interface Member extends User {
@@ -137,6 +135,13 @@ export interface UndoResult {
   changed: string[]; // documents changed back
   trashed: string[]; // documents the step had created
   kept: { doc: string; field: string }[]; // changed again later: newer value kept
+}
+
+/** POST /w/<id>/api/purge: one item from the trash, or everything in it (`all`). */
+export type PurgeRequest = { id: string } | { all: true };
+
+export interface PurgeResult {
+  purged: string[]; // every document deleted for good
 }
 
 /** One kept version of an item's text (GET /w/<id>/api/history?doc=<doc>). */

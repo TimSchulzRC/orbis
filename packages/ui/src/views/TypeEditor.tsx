@@ -1,4 +1,4 @@
-// "Typ bearbeiten": a dialog laid out like the app's settings. A short navigation on the left
+// "Edit type": a dialog laid out like the app's settings. A short navigation on the left
 // (Allgemein, Eigenschaften, Fähigkeiten), a page of setting rows on the right. "Eigenschaften"
 // lists the properties; each opens a page of its own, with a way back.
 import { Checkbox } from "../components/ui/checkbox";
@@ -634,7 +634,7 @@ function kindLabel(p: PropDef, t: T): string {
 /** How many entries a relation can point to; without a target anything can be chosen. */
 function relationTargets(prop: PropDef, ix: ReturnType<typeof useIndex>): number {
   if (prop.target) return runQuery(parseQuery(prop.target, ix).def, { ix }).total;
-  return ix.live.filter((i) => i.kind === "info").length;
+  return ix.live.filter((i) => i.kind === "note").length;
 }
 
 function DeleteTypeDialog({ item, onClose, toTag }: { item: Item; onClose: () => void; toTag?: boolean }) {
@@ -770,7 +770,7 @@ function FromTagDialog({ item, onClose }: { item: Item; onClose: () => void }) {
   );
 }
 
-/** A type, a tag or any query; stored as query text, e.g. "typ:Person" or "#autor". */
+/** A type, a tag or any query; stored as query text, e.g. "type:Person" or "#author". */
 function TargetField({ target, hits, onChange }: { target?: string; hits: number; onChange: (t: string) => void }) {
   const repo = useRepo();
   const { t, lang } = useT();

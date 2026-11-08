@@ -101,7 +101,7 @@ function ListView({ items, def, ctx, look }: { items: Item[]; def: QueryDef; ctx
   const base = pathBase(def, ctx);
   const [groups, hidden] = def.group ? splitHidden(groupItems(items, def.group, ctx, base), look?.tab) : [groupItems(items, def.group, ctx, base), []];
   const ix = ctx.ix;
-  // "spalten:nächste" in a list: each entry shows its next task below the title
+  // "columns:next" in a list: each entry shows its next task below the title
   const withNext = def.columns?.includes("next");
   const by = def.group ?? "";
   const byLabel = fieldLabel(by, t);
@@ -201,7 +201,7 @@ export function CellValue({ item, name, ctx }: { item: Item; name: string; ctx: 
       </a>
     );
   // long text stays two lines in tables and boards; the full text is on the page
-  return <span className="line-clamp-2">{String(v)}</span>;
+  return <span className="line-clamp-2">{Array.isArray(v) ? v.join(", ") : String(v)}</span>;
 }
 
 function TreeView({ items }: { items: Item[] }) {

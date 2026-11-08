@@ -715,7 +715,7 @@ function SpaceSettings({ space }: { space: Space }) {
       <SettingsGroup title={t("settings.sync")}>
         <SettingRow title={t("settings.server")} control={<span className="text-sm text-muted-foreground">{status.online ? t("settings.connected") : t("settings.offline")}</span>} />
         {status.pending > 0 && <SettingRow title={t("settings.pending")} control={<span className="text-sm tabular-nums text-muted-foreground">{status.pending}</span>} />}
-        <SettingRow title={t("settings.onDevice")} hint={t("settings.counts", { items: ix.live.filter((item) => item.kind === "info").length, files: ix.live.filter((item) => item.kind === "datei").length, types: ix.types.size })} />
+        <SettingRow title={t("settings.onDevice")} hint={t("settings.counts", { items: ix.live.filter((item) => item.kind === "note").length, files: ix.live.filter((item) => item.kind === "file").length, types: ix.types.size })} />
         <SettingRow title={t("settings.advanced")} hint={`${t("settings.position")} #${status.lastSeq}`}>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={() => repo.resetLocal()}>

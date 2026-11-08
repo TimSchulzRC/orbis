@@ -71,7 +71,7 @@ test("timestamps from a device clock far in the future are capped by the server"
   const d = new Y.Doc({ guid: "a" });
   const future = Date.now() + 3 * 864e5;
   d.transact(() => {
-    initItem(d, { title: "Uhr falsch", created: future, updated: future });
+    initItem(d, { title: "Clock wrong", created: future, updated: future });
     d.getArray("updates").push([{ id: "u1", at: future, text: "x", by: "you" }]);
   });
   s.applyRemote("a", Y.encodeStateAsUpdate(d), "web:x");
@@ -83,7 +83,7 @@ test("timestamps from a device clock far in the future are capped by the server"
   // a little ahead (under 10 minutes) is left alone
   const soon = Date.now() + 60_000;
   const d2 = new Y.Doc({ guid: "b" });
-  d2.transact(() => initItem(d2, { title: "Knapp", created: soon }));
+  d2.transact(() => initItem(d2, { title: "Just ahead", created: soon }));
   s.applyRemote("b", Y.encodeStateAsUpdate(d2), "web:x");
   s.flush();
   expect(s.records.get("b")!.created).toBe(soon);

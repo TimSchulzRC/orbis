@@ -219,6 +219,16 @@ export class DeviceFiles {
     this.store = (await opfsStore(this.link.storage.blobs)) ?? idbStore(this.db);
     for (const b of await this.store.list()) this.local.add(b.hash);
     this.repo.subscribe(() => this.scheduleSync());
+    // contents only purged items used go once the records are gone, also ones stored this session or not uploaded yet
+    this.repo.onPurge(async (items) => {
+      const used = new Set([...this.repo.records.values()].flatMap(contentsOf));
+      for (const h of items.flatMap(contentsOf)) {
+        if (used.has(h)) continue;
+        this.fresh.delete(h);
+        await this.db.delete("uploads", h);
+      }
+      await this.collect();
+    });
     this.repo.onBlob((hash) => {
       if (this.missing.delete(hash)) this.emit();
       this.scheduleSync(50);
@@ -382,7 +392,7 @@ export class DeviceFiles {
     const meta = await this.prepare(file, unique, hash);
     const id = newId();
     this.repo.change(id, (doc) => {
-      initItem(doc, { kind: "datei", title: unique, parents: opts.parent ? [opts.parent] : [], createdBy: this.repo.origin });
+      initItem(doc, { kind: "file", title: unique, parents: opts.parent ? [opts.parent] : [], createdBy: this.repo.origin });
       setFileMeta(doc, meta);
     });
     this.scheduleSync(10);
@@ -396,7 +406,7 @@ export class DeviceFiles {
     const meta: FileMeta = { hash, name, mime, filetype: fileTypeOf(name, mime), size: file.size };
     await this.save(hash, file);
     await this.enqueueUpload({ hash, name });
-    if (meta.filetype === "bild" && !/svg/.test(mime)) {
+    if (meta.filetype === "image" && !/svg/.test(mime)) {
       const display = await scaled(file, DISPLAY_WIDTH);
       const thumb = await scaled(file, THUMB_WIDTH);
       if (display) {
@@ -462,7 +472,7 @@ export class DeviceFiles {
   }
 
   private liveFiles(): Item[] {
-    return this.repo.live().filter((r) => r.kind === "datei" && r.file?.hash);
+    return this.repo.live().filter((r) => r.kind === "file" && r.file?.hash);
   }
 
   private async pendingUploads(): Promise<Set<string>> {
@@ -474,8 +484,7 @@ export class DeviceFiles {
    * before anything is deleted. Spares pending uploads and contents stored this session.
    */
   private async collect() {
-    const keep = new Set<string>();
-    for (const r of this.repo.records.values()) for (const h of [r.file?.hash, r.file?.display, r.file?.thumb, ...(r.drawing?.files ?? [])]) if (h) keep.add(h);
+    const keep = new Set([...this.repo.records.values()].flatMap(contentsOf));
     const pending = await this.pendingUploads();
     for (const h of [...this.local]) if (!keep.has(h) && !pending.has(h) && !this.fresh.has(h)) await this.drop(h);
   }
@@ -585,6 +594,11 @@ export class DeviceFiles {
   }
 }
 
+/** The contents an item points to on a device: a file's original and previews, a drawing's images. */
+function contentsOf(r: Item): string[] {
+  return [r.file?.hash, r.file?.display, r.file?.thumb, ...(r.drawing?.files ?? [])].filter((h): h is string => !!h);
+}
+
 function keptOnline(repo: Repo): Set<string> {
   const keep = shownItself(repo);
   for (const r of repo.live()) if (r.file) for (const h of [r.file.thumb, r.file.display]) if (h) keep.add(h);
@@ -593,7 +607,7 @@ function keptOnline(repo: Repo): Set<string> {
 
 /** Images without a display version (SVGs) show their original, and so do images in drawings. */
 function shownItself(repo: Repo): Set<string> {
-  return new Set(repo.live().flatMap((r) => (r.file?.filetype === "bild" && !r.file.display ? [r.file.hash] : (r.drawing?.files ?? []))));
+  return new Set(repo.live().flatMap((r) => (r.file?.filetype === "image" && !r.file.display ? [r.file.hash] : (r.drawing?.files ?? []))));
 }
 
 export let files: DeviceFiles;

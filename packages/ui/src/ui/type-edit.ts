@@ -1,7 +1,7 @@
-// "Typ bearbeiten" opens as a dialog over the page that is open: from the type's page's "…", from
-// the type's "…" in the sidebar, after "Neuer Typ" (over the new type's page). It is no part of the
+// "Edit type" opens as a dialog over the page that is open: from the type's page's "…", from
+// the type's "…" in the sidebar, after "New type" (over the new type's page). It is no part of the
 // address; another page closes it.
-// "Neuer Typ" is a dialog over any page too (from "Typen" in the sidebar, the palette).
+// "New type" is a dialog over any page too (from "Types" in the sidebar, the palette).
 import { useSyncExternalStore } from "react";
 import { itemPath, navigate, parseHash } from "../hooks";
 
@@ -40,9 +40,9 @@ addEventListener("hashchange", () => {
 let creating: string | null = null; // the workspace a new type is made in, while its dialog is open
 const createListeners = new Set<() => void>();
 const setCreating = (next: string | null) => ((creating = next), createListeners.forEach((f) => f()));
-/** "Neuer Typ" in workspace `space`. */
+/** "New type" in workspace `space`. */
 export const openNewType = (space: string) => setCreating(space);
 export const closeNewType = () => setCreating(null);
-/** The workspace whose "Neuer Typ" dialog is open, or null. */
+/** The workspace whose "New type" dialog is open, or null. */
 export const newTypeOpen = () => creating;
 export const useNewTypeOpen = () => useSyncExternalStore((f) => (createListeners.add(f), () => createListeners.delete(f)), newTypeOpen);

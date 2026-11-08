@@ -10,12 +10,12 @@ afterEach(() => cleanup());
 
 test("not on the page; the icon after the tags opens them, inherited ones link to their owners", async () => {
   const repo = await workspace(false);
-  const root = repo.create({ title: "Beratung", pinned: "a", rules: "Nie in Produktion schreiben." });
-  const kunde = repo.create({ title: "Kunde Nord", parents: [root] });
-  await render(<ItemPage id={kunde} isNew={false} />);
+  const root = repo.create({ title: "Consulting", pinned: "a", rules: "Never write to production." });
+  const customer = repo.create({ title: "Customer North", parents: [root] });
+  await render(<ItemPage id={customer} isNew={false} />);
 
   // rules apply from above, yet the page does not show them
-  await expect.element(page.getByText("Kunde Nord").first()).toBeVisible();
+  await expect.element(page.getByText("Customer North").first()).toBeVisible();
   expect(page.getByText("Regeln für Agenten").query()).toBeNull();
 
   // the icon opens the dialog, the focus in the field; the page menu no longer has them
@@ -26,32 +26,32 @@ test("not on the page; the icon after the tags opens them, inherited ones link t
   const dialog = page.getByRole("dialog", { name: "Regeln für Agenten" });
   const field = dialog.getByRole("textbox", { name: "Regeln für Agenten" });
   await expect.element(field).toHaveFocus();
-  await expect.element(dialog.getByRole("link", { name: "Beratung" })).toHaveAttribute("href", expect.stringContaining(root));
+  await expect.element(dialog.getByRole("link", { name: "Consulting" })).toHaveAttribute("href", expect.stringContaining(root));
 
   // typing alone saves nothing; "Speichern" saves and closes
-  await field.fill("Vor dem Senden fragen.");
+  await field.fill("Ask before sending.");
   await dialog.getByText("Außerdem gelten Regeln von").click();
-  expect(repo.get(kunde)!.rules).toBe("");
+  expect(repo.get(customer)!.rules).toBe("");
   await dialog.getByRole("button", { name: "Speichern" }).click();
-  await expect.poll(() => repo.get(kunde)!.rules).toBe("Vor dem Senden fragen.");
+  await expect.poll(() => repo.get(customer)!.rules).toBe("Ask before sending.");
   expect(page.getByRole("dialog").query()).toBeNull();
 
   // a change from elsewhere (an agent) shows while the text is unedited
   const open = page.getByRole("button", { name: "Regeln für Agenten" });
   await open.click();
   await expect.element(dialog.getByRole("button", { name: "Speichern" })).toBeDisabled();
-  repo.setRules(kunde, "Neu vom Agent.");
-  await expect.element(field).toHaveValue("Neu vom Agent.");
+  repo.setRules(customer, "New from the agent.");
+  await expect.element(field).toHaveValue("New from the agent.");
 
   // closing without saving drops what was typed
-  await field.fill("Zuletzt getippt.");
+  await field.fill("Typed last.");
   await commands.keys("press", "Escape");
   expect(page.getByRole("dialog").query()).toBeNull();
-  expect(repo.get(kunde)!.rules).toBe("Neu vom Agent.");
+  expect(repo.get(customer)!.rules).toBe("New from the agent.");
 
   // Ctrl+Enter saves as well
   await open.click();
-  await field.fill("Per Tastatur.");
+  await field.fill("By keyboard.");
   await commands.keys("press", "Control+Enter");
-  await expect.poll(() => repo.get(kunde)!.rules).toBe("Per Tastatur.");
+  await expect.poll(() => repo.get(customer)!.rules).toBe("By keyboard.");
 });

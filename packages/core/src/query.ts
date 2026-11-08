@@ -1,12 +1,12 @@
 // Queries are stored as JSON with ids and typed and shown as text in any UI language:
 //
-//   typ:Task status:offen unter:[[Relaunch]] fällig<=+7d sort:fällig gruppe:pfad
-//   (typ:Person | #people) #autor
-//   typ:Projekt in:diese -status:erledigt ansicht:board gruppe:status
+//   type:Task status:open under:[[Relaunch]] due<=+7d sort:due group:path
+//   (type:Person | #people) #author
+//   type:Project in:this -status:done view:board group:status
 //
 // Space = AND, | = OR, - = NOT, parentheses group. Properties match by name across all types and
 // free properties.
-import { type ViewTab, type ComputedDef, type FileType, type Item, type OptionDef, type PropDef, type ViewKind, FILE_TYPES, META_TYPE, QUERY_FENCE, STATUS_GROUPS, VIEW_KINDS, optionNames, titleKey } from "./model";
+import { type ViewTab, type ComputedDef, type FileType, type Item, type OptionDef, type PropDef, type ViewKind, FILE_TYPES, META_TYPE, QUERY_FENCE, STATUS_GROUPS, VIEW_KINDS, optionNames, propByName, titleKey } from "./model";
 import { dateOf, todayISO } from "./date";
 import { foldUmlauts as fold } from "./text";
 import type { Index } from "./graph";
@@ -38,12 +38,12 @@ export type Cond =
   | { under: Ref }
   | { in: Ref }
   | { linked: Ref }
-  | { linkedUnder: Ref } // verknüpft:unter:[[X]] – connected to X or a descendant of X
+  | { linkedUnder: Ref } // linked:under:[[X]] – connected to X or a descendant of X
   | { prop: string; op: Op; value?: FieldValue }
   | { status: StatusKey }
   | { inbox: true } // what the inbox rule matches, minus what is set aside
   | { pinned: true }
-  | { blocked: true } // an open entry under "Blockiert durch" or "Wartet auf" is set
+  | { blocked: true } // an open entry under "Blocked by" or "Waiting for" is set
   | { dormant: true } // it or something above it is done
   | { without: Without }
   | { file: true }
@@ -215,7 +215,7 @@ export function parseQuery(src: string, ix: Index): ParseResult {
       case "under":
       case "in":
       case "linked": {
-        // verknüpft:unter:[[X]] / linked:under:[[X]]
+        // linked:under:[[X]]
         const sub = key === "linked" ? /^([^:[]+):(.*)$/.exec(value) : null;
         if (sub && kw("key", sub[1]!) === "under") return linkCond(sub[2]!, (r) => ({ linkedUnder: r }));
         return linkCond(value, (r) => {
@@ -375,7 +375,7 @@ function printCond(c: Cond, lang: Lang, ix: Index, top = false): string {
   }
   if ("not" in c) return "-" + printCond(c.not, lang, ix);
   if ("type" in c) {
-    if (c.type === META_TYPE) return `${k("type")}:${words(lang, "q.metaType")[0] ?? "Typ"}`;
+    if (c.type === META_TYPE) return `${k("type")}:${words(lang, "q.metaType")[0] ?? "Type"}`;
     return `${k("type")}:${quoteIf(ix.typeName(c.type) ?? c.type)}`;
   }
   if ("typeName" in c) return `${k("type")}:${quoteIf(c.typeName)}`;
@@ -443,7 +443,7 @@ export function fieldOf(item: Item, name: string, ix: Index): FieldHit | undefin
       return a ? { kind: "item", value: a } : undefined;
     }
     case "project": {
-      const p = ix.home(item.id); // "Darüber": where the entry lives
+      const p = ix.home(item.id); // "Above": where the entry lives
       return p ? { kind: "item", value: p } : undefined;
     }
     case "progress": {
@@ -463,7 +463,7 @@ export function fieldOf(item: Item, name: string, ix: Index): FieldHit | undefin
     const sp = statusProp(schema);
     if (sp) return { kind: "select", value: statusOf(item, schema)?.option.id, prop: sp };
   }
-  const p = schema?.properties.find((x) => titleKey(x.name) === key);
+  const p = propByName(schema, name);
   if (p) {
     if (p.kind === "relation") return { kind: "relation", value: ix.relValues(item, p.id, p.symmetric), prop: p };
     if (p.kind === "computed") return { kind: "number", value: computedValue(item, p.computed, ix), prop: p };
@@ -494,7 +494,7 @@ function inverseRelationHit(item: Item, key: string, ix: Index): FieldHit | unde
 
 const percent = (pr: { done: number; total: number }) => Math.round((pr.done / pr.total) * 100);
 
-/** A date in a query (+7d, heute, 30.10.2026, 10/30/2026 …) → ISO; "2026-10" stays a month. */
+/** A date in a query (+7d, today, 30.10.2026, 10/30/2026 …) → ISO; "2026-10" stays a month. */
 export function relDate(v: string, today: string): string | undefined {
   if (/^\d{4}-\d{2}$/.test(v.trim())) return v.trim();
   return parseDate(v, today);
@@ -568,7 +568,7 @@ function matchField(item: Item, c: { prop: string; op: Op; value?: FieldValue },
       if (!b) return false;
       const raw = String(hit.value);
       const a = c.prop === "due" ? dateEnd(raw) : dateStart(raw);
-      // "fällig:2026-10" matches the whole month
+      // "due:2026-10" matches the whole month
       if (c.op === ":" && b.length === 7) return a.startsWith(b);
       return cmp(a, b, c.op);
     }
@@ -586,6 +586,11 @@ function matchField(item: Item, c: { prop: string; op: Op; value?: FieldValue },
       if (c.op === ":") return has;
       if (c.op === "!=") return !has;
       return names.some((n) => cmp(titleKey(n), titleKey(want), c.op));
+    }
+    case "list": {
+      // a free list: ":" and "!=" test whether one entry is the value
+      const has = asIds(hit.value).some((x) => titleKey(x) === titleKey(want));
+      return membership(has, c.op);
     }
     case "relation": {
       const ids = hit.value as string[];
@@ -620,7 +625,7 @@ export function matches(item: Item, c: Cond, ctx: EvalCtx): boolean {
     const area = ix.descendants(id);
     if (area.has(item.id)) return true;
     // a file also belongs where it is used: embedded or linked in an entry below (or in X itself)
-    return item.kind === "datei" && ix.usedIn(item.id).some((b) => b.from === id || area.has(b.from));
+    return item.kind === "file" && ix.usedIn(item.id).some((b) => b.from === id || area.has(b.from));
   }
   if ("in" in c) {
     const id = resolveRef(c.in, ctx);
@@ -648,18 +653,18 @@ export function matches(item: Item, c: Cond, ctx: EvalCtx): boolean {
   if ("without" in c) {
     switch (c.without) {
       case "type":
-        return item.kind === "info" && item.type !== META_TYPE && ix.typeOf(item) === null;
+        return item.kind === "note" && item.type !== META_TYPE && ix.typeOf(item) === null;
       case "parents":
         return ix.parentsOf(item.id).length === 0;
       case "children":
         return ix.childrenOf(item.id).length === 0;
       case "usage":
-        return item.kind === "datei" ? ix.usedIn(item.id).length === 0 : !ix.backlinks(item.id).some((b) => b.kind !== "rel");
+        return item.kind === "file" ? ix.usedIn(item.id).length === 0 : !ix.backlinks(item.id).some((b) => b.kind !== "rel");
       case "openChildren":
         return ix.openChildren(item.id).length === 0;
     }
   }
-  if ("file" in c) return item.kind === "datei";
+  if ("file" in c) return item.kind === "file";
   if ("pinned" in c) return !!item.pinned;
   if ("blocked" in c) return ix.isBlocked(item);
   if ("dormant" in c) return ix.isDormant(item);
@@ -683,7 +688,7 @@ function leaves(c: Cond | undefined, out: Cond[] = []): Cond[] {
   return out;
 }
 
-/** Type ids a query refers to that no longer exist ("Typ gelöscht"). */
+/** Type ids a query refers to that no longer exist ("type deleted"). */
 export function missingTypes(c: Cond | undefined, ix: Index): string[] {
   return leaves(c).flatMap((x) => {
     if ("type" in x && x.type !== META_TYPE && !ix.types.has(x.type)) return [x.type];
@@ -725,7 +730,7 @@ export function runQuery(def: QueryDef, ctx: EvalCtx): QueryResult {
   const missing = missingTypes(def.where, ix);
   const wantTypes = typesIn(def.where).includes(META_TYPE);
   // drawings belong to their note: lists show the note
-  let items = ix.live.filter((i) => i.kind !== "zeichnung" && (wantTypes || i.type !== META_TYPE) && (!def.where || matches(i, def.where, ctx)));
+  let items = ix.live.filter((i) => i.kind !== "drawing" && (wantTypes || i.type !== META_TYPE) && (!def.where || matches(i, def.where, ctx)));
   items = sortItems(items, def.sort, ix);
   const total = items.length;
   if (def.limit) items = items.slice(0, def.limit);
@@ -846,17 +851,20 @@ export function groupItems(items: Item[], by: string | undefined, ctx: EvalCtx, 
       } else if (hit.kind === "relation") {
         const ids = hit.value as string[];
         add(ids.join(","), { label: ids.map((id) => ix.get(id)?.title ?? "").join(", "), ref: ids.length === 1 ? ids[0] : undefined }, i);
-      } else add(String(hit.value), { label: String(hit.value) }, i);
+      } else {
+        const label = Array.isArray(hit.value) ? hit.value.join(", ") : String(hit.value);
+        add(label, { label }, i);
+      }
     }
   }
-  // empty option groups give a drop target and a "+ Neu" button
+  // empty option groups give a drop target and a "+ New" button
   if (empty?.types.length && by !== "path" && by !== "type") {
     const schemas = empty.types.map((id) => ix.types.get(id)?.schema).filter(Boolean);
     if (by === "statusGroup") {
       if (schemas.some((sc) => statusProp(sc))) for (const g of STATUS_GROUPS) add(g, { statusGroup: g });
     } else
       for (const sc of schemas) {
-        const p = by === "status" ? statusProp(sc) : sc!.properties.find((x) => titleKey(x.name) === titleKey(by) && hasOptions(x));
+        const p = by === "status" ? statusProp(sc) : propByName(sc, by, hasOptions);
         ranked(p);
         for (const o of p?.options ?? []) add(o.name, { label: o.name, statusGroup: by === "status" ? (o.group ?? "todo") : undefined, option: o });
       }
@@ -915,12 +923,12 @@ export function blockSource(def: QueryDef): string {
 }
 
 export function queryFence(src: string): string {
-  return "```abfrage\n" + src + "\n```";
+  return "```query\n" + src + "\n```";
 }
 
-/** The fence info string of a query block (```abfrage, ```query). */
+/** The fence info string of a query block (```query). */
 export function isQueryInfo(info: string): boolean {
-  return info === "abfrage" || info === "query";
+  return info === "query";
 }
 
 type Block = { from: number; to: number; src: string };
@@ -928,8 +936,8 @@ type Block = { from: number; to: number; src: string };
 export function findBlocks(body: string): Block[] {
   const out: Block[] = [];
   for (const m of body.matchAll(QUERY_FENCE)) out.push({ from: m.index!, to: m.index! + m[0].length, src: ((m[1] ?? "") + "\n" + (m[2] ?? "")).trim() });
-  // single-line form: ```abfrage typ:Task```
-  const inline = /```(?:abfrage|query)[ \t]+([^`\n]+)```/g;
+  // single-line form: ```query type:Task```
+  const inline = /```query[ \t]+([^`\n]+)```/g;
   for (const m of body.matchAll(inline)) if (!out.some((b) => m.index! >= b.from && m.index! < b.to)) out.push({ from: m.index!, to: m.index! + m[0].length, src: m[1]!.trim() });
   return out.sort((a, b) => a.from - b.from);
 }
@@ -960,7 +968,7 @@ function replaceBlocks(body: string, fn: (b: Block) => string): string {
   return out + body.slice(pos);
 }
 
-/** Items already shown by in:diese or unter:diese blocks, so the page lists them once. */
+/** Items already shown by in:this or under:this blocks, so the page lists them once. */
 export function shownByBlocks(item: Item, ix: Index): Set<string> {
   const out = new Set<string>();
   for (const b of findBlocks(item.body)) {
@@ -971,7 +979,7 @@ export function shownByBlocks(item: Item, ix: Index): Set<string> {
   return out;
 }
 
-/** in:diese or unter:diese, outside of any negation. */
+/** in:this or under:this, outside of any negation. */
 function usesInThis(c: Cond | undefined): boolean {
   if (!c) return false;
   if ("and" in c) return c.and.some(usesInThis);

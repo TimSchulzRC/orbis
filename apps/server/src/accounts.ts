@@ -2,7 +2,7 @@
 // to several servers. Only an OAuth sign-in ends with a cookie, which the app trades for a token
 // once (claim). Workspace membership and roles are ours.
 import { Database } from "bun:sqlite";
-import { existsSync, mkdirSync, readdirSync, renameSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { betterAuth } from "better-auth";
 import { APIError } from "better-auth/api";
@@ -13,6 +13,7 @@ import { newId } from "@obtion/core/model";
 import type { InviteLink, Member, Role, SignedIn, SignupPolicy, User, WorkspaceInfo } from "@obtion/core/api";
 import { sha256 } from "./blobs";
 import type { LoginConfig } from "./login";
+import { migrate } from "./migrate";
 
 /** How long after signing in a passkey may be added or the account deleted without a password. */
 export const FRESH_SECONDS = 10 * 60;
@@ -54,9 +55,6 @@ export class AccountError extends Error {
   }
 }
 
-/** What a data folder held before accounts. */
-const LEGACY_ENTRIES = ["obtion.db", "obtion.db-wal", "obtion.db-shm", "blobs", "vault", "backups", "agent"];
-
 const INVITE_DAYS = 14;
 const DAY_MS = 86400_000;
 const CLAIM_TTL_MS = 60_000;
@@ -86,16 +84,15 @@ export class Accounts {
     this.login = opts.login ?? { password: true, oauth: [] };
     this.onRevoke = opts.onRevoke ?? (() => {});
     this.auth = makeAuth(this, opts.secret, opts.baseURL);
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS workspaces (id TEXT PRIMARY KEY, name TEXT NOT NULL, created INTEGER NOT NULL, legacy INTEGER NOT NULL DEFAULT 0);
+    // Better Auth's own tables come from its migrations (init); these are ours
+    migrate(this.db, [
+      `CREATE TABLE IF NOT EXISTS workspaces (id TEXT PRIMARY KEY, name TEXT NOT NULL, created INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS members (workspace TEXT NOT NULL, user TEXT NOT NULL, role TEXT NOT NULL, joined INTEGER NOT NULL, pos INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (workspace, user));
       CREATE INDEX IF NOT EXISTS members_user ON members(user);
       CREATE TABLE IF NOT EXISTS invites (code TEXT PRIMARY KEY, workspace TEXT NOT NULL, by TEXT NOT NULL, created INTEGER NOT NULL, expires INTEGER NOT NULL, role TEXT NOT NULL DEFAULT 'member');
       CREATE TABLE IF NOT EXISTS tokens (hash TEXT PRIMARY KEY, user TEXT NOT NULL, workspace TEXT NOT NULL, label TEXT, created INTEGER NOT NULL);
-      CREATE TABLE IF NOT EXISTS admins (user TEXT PRIMARY KEY);
-    `);
-    // from before a new MCP token ended the one before: only the newest per member and workspace stays
-    this.db.exec(`DELETE FROM tokens WHERE label = 'mcp' AND EXISTS (SELECT 1 FROM tokens n WHERE n.label = 'mcp' AND n.workspace = tokens.workspace AND n.user = tokens.user AND (n.created > tokens.created OR (n.created = tokens.created AND n.hash > tokens.hash)))`);
+      CREATE TABLE IF NOT EXISTS admins (user TEXT PRIMARY KEY);`,
+    ]);
   }
 
   policy: SignupPolicy;
@@ -110,24 +107,9 @@ export class Accounts {
   /** Someone else proved the user's address: close what is open. */
   onRevoke: (user: string) => void;
 
-  async init(legacyName: (dir: string) => string) {
+  async init() {
     const { runMigrations } = await getMigrations(this.auth.options);
     await runMigrations();
-    this.migrateLegacy(legacyName);
-  }
-
-  /**
-   * Pre-accounts data becomes a workspace without members; the first account gets it. The store
-   * keeps its id, so devices recognise it and keep their copy.
-   */
-  private migrateLegacy(legacyName: (dir: string) => string) {
-    if (!existsSync(join(this.dataDir, "obtion.db"))) return;
-    const id = newId();
-    const dir = this.dir(id);
-    mkdirSync(dir, { recursive: true });
-    for (const name of LEGACY_ENTRIES) if (existsSync(join(this.dataDir, name))) renameSync(join(this.dataDir, name), join(dir, name));
-    this.db.query("INSERT INTO workspaces (id, name, created, legacy) VALUES (?, ?, ?, 1)").run(id, legacyName(dir), Date.now());
-    console.log(`[obtion] the data from before accounts are now the workspace ${id} (workspaces/${id})`);
   }
 
   dir(id: string) {
@@ -201,17 +183,10 @@ export class Accounts {
     throw new AccountError("invite invalid", 403);
   }
 
-  /**
-   * Better Auth hook after it created a user. The very first account becomes admin and owns any
-   * workspace without members (pre-accounts data).
-   */
+  /** Better Auth hook after it created a user. The very first account becomes admin. */
   setUpNewUser(id: string, email: string, headers: Headers | undefined) {
     const { invite } = signupContext(headers);
-    if (this.userCount() === 1) {
-      this.db.query("INSERT OR IGNORE INTO admins (user) VALUES (?)").run(id);
-      const orphans = this.db.query("SELECT id FROM workspaces WHERE id NOT IN (SELECT workspace FROM members)").all() as { id: string }[];
-      for (const w of orphans) this.addMember(w.id, id, "owner");
-    }
+    if (this.userCount() === 1) this.db.query("INSERT OR IGNORE INTO admins (user) VALUES (?)").run(id);
     if (invite && this.invite(invite) && this.claimant(invite) === email.toLowerCase()) {
       this.release(invite, email);
       this.join(invite, id);
@@ -314,8 +289,7 @@ export class Accounts {
   }
 
   workspacesOf(user: string): WorkspaceInfo[] {
-    const rows = this.db.query("SELECT w.id, w.name, w.legacy, m.role FROM members m JOIN workspaces w ON w.id = m.workspace WHERE m.user = ? ORDER BY m.pos, m.joined DESC").all(user) as { id: string; name: string; legacy: number; role: Role }[];
-    return rows.map((r) => ({ id: r.id, name: r.name, role: r.role, ...(r.legacy ? { legacy: true } : {}) }));
+    return this.db.query("SELECT w.id, w.name, m.role FROM members m JOIN workspaces w ON w.id = m.workspace WHERE m.user = ? ORDER BY m.pos, m.joined DESC").all(user) as WorkspaceInfo[];
   }
 
   role(workspace: string, user: string): Role | undefined {
@@ -528,40 +502,4 @@ function makeAuth(accounts: Accounts, secret: string, baseURL: string) {
     rateLimit: { enabled: true },
     telemetry: { enabled: false },
   });
-}
-
-/** The way back in on a server without email codes. Signed-in devices stay signed in. */
-export async function setPassword(dataDir: string, email: string, password: string) {
-  if (password.length < 8 || password.length > 128) throw new Error("The password needs 8 to 128 characters.");
-  const accounts = new Accounts(dataDir, { secret: "set-password-only-hashes-and-signs-nothing-here", baseURL: "http://localhost", policy: "off" });
-  try {
-    await accounts.init(() => "Personal");
-    const ctx = await accounts.auth.$context;
-    const user = await ctx.internalAdapter.findUserByEmail(email.trim().toLowerCase());
-    if (!user) throw new Error(`No account with the address ${email}.`);
-    const hash = await ctx.password.hash(password);
-    const credential = await ctx.internalAdapter.findCredentialAccount(user.user.id);
-    if (credential) await ctx.internalAdapter.updatePassword(user.user.id, hash);
-    else await ctx.internalAdapter.linkAccount({ userId: user.user.id, providerId: "credential", accountId: user.user.id, password: hash });
-  } finally {
-    accounts.db.close();
-  }
-}
-
-/**
- * For turning codes on after people signed up with passwords: their first code then revokes nothing
- * (see the user update hook). Only safe if the admin knows the accounts are those people's.
- */
-export function trustEmails(dataDir: string): number {
-  const db = new Database(join(dataDir, "accounts.db"));
-  try {
-    return db.query('UPDATE "user" SET emailVerified = 1 WHERE emailVerified = 0').run().changes;
-  } finally {
-    db.close();
-  }
-}
-
-export function workspaceDirs(dataDir: string): string[] {
-  const root = join(dataDir, "workspaces");
-  return existsSync(root) ? readdirSync(root).map((n) => join(root, n)) : [];
 }

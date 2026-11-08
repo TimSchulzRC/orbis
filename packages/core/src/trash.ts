@@ -2,7 +2,7 @@
 // item only counts as deleted while the root is deleted, the root is still above it at any
 // depth, and every parent of it is deleted. Every device computes this from the same data, so
 // concurrent moves and deletes need no coordination: an item moved away from the root stays alive.
-import { type Item, META_TYPE, VIA, setMeta, removeParent } from "./model";
+import { type Item, META_TYPE, VIA, isContentKind, setMeta, removeParent } from "./model";
 import type { Index } from "./graph";
 import type { Writer } from "./setup";
 
@@ -113,4 +113,31 @@ export function cascadeCount(records: Map<string, Item>, id: string): number {
   let n = 0;
   for (const r of records.values()) if (r.deletedVia === id && r.deleted) n++;
   return n;
+}
+
+/** What the trash lists: deleted items, except those deleted with a root that is still in the trash (they show with it). */
+export function trashRoots(records: Map<string, Item>): Item[] {
+  const withRoot = (i: Item) => !!i.deletedVia && !!records.get(i.deletedVia)?.deleted;
+  return [...records.values()].filter((i) => i.deleted && !withRoot(i) && isContentKind(i.kind));
+}
+
+/**
+ * The ids that purging the deleted item `id` removes for good: it, what was deleted with it, and
+ * what was deleted with any root and hangs only below these (else it would come back without a
+ * parent). Items deleted on their own stay in the trash.
+ */
+export function purgeSet(records: Map<string, Item>, id: string): string[] {
+  const out = new Set([id]);
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (const r of records.values()) {
+      if (out.has(r.id) || !r.deleted || !r.deletedVia) continue;
+      const parents = knownParents(r, records);
+      if (r.deletedVia === id || (parents.length > 0 && parents.every((p) => out.has(p)))) {
+        out.add(r.id);
+        grew = true;
+      }
+    }
+  }
+  return [...out];
 }

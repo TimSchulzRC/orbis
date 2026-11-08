@@ -1,7 +1,7 @@
 // The replica's host in a browser: IndexedDB storage, the serving server's workspace, other tabs
 // over BroadcastChannel, UI dialogs.
 import { openDB, type IDBPDatabase } from "idb";
-import type { OutItem, RepoHost, ReplicaStorage, SyncSocket, TabMsg } from "@obtion/sync";
+import type { OutItem, RepoHost, ReplicaStorage, StoredRow, SyncSocket, TabMsg } from "@obtion/sync";
 import type { Person } from "@obtion/core/origin";
 import { tr } from "./i18n";
 import { KEYS, readJSON, writeJSON } from "./ui/storage";
@@ -15,9 +15,7 @@ export interface SpaceLink {
 
 export type StorageNames = ReturnType<typeof storageNames>;
 
-/** Data from before accounts keeps its old names. */
-export function storageNames(space: { id: string; legacy?: boolean }) {
-  if (space.legacy) return { replica: "obtion", files: "obtion-files", blobs: "blobs" };
+export function storageNames(space: { id: string }) {
   const replica = `obtion-ws-${space.id}`;
   return { replica, files: `${replica}-files`, blobs: `blobs-${replica}` };
 }
@@ -49,14 +47,14 @@ function idbStorage(name: string): ReplicaStorage {
         tx.objectStore("meta").get("lastSeq"),
         tx.objectStore("meta").get("lastId"),
       ]);
-      const rows = values.map((v: { d: string; u: Uint8Array }, i) => ({ key: keys[i], d: v.d, u: v.u }));
+      const rows = values.map((v: StoredRow, i) => ({ ...v, key: keys[i] }));
       return { rows, outbox: outbox as OutItem[], lastSeq: lastSeq as number | undefined, lastId: lastId as string | undefined };
     },
     async compact(docs) {
       const tx = db.transaction("updates", "readwrite");
       for (const { keys, row } of docs) {
         for (const k of keys) tx.store.delete(k as IDBValidKey);
-        tx.store.add({ d: row.d, u: row.u });
+        tx.store.add({ d: row.d, u: row.u, r: row.r });
       }
       await tx.done;
     },
@@ -70,15 +68,21 @@ function idbStorage(name: string): ReplicaStorage {
         if (w.cursor.lastId) tx.objectStore("meta").put(w.cursor.lastId, "lastId");
         else tx.objectStore("meta").delete("lastId");
       }
-      // key "hubId" from when the server was called hub; kept so devices still recognise it
-      if (w.serverId) tx.objectStore("meta").put(w.serverId, "hubId");
+      if (w.serverId) tx.objectStore("meta").put(w.serverId, "serverId");
       await tx.done;
     },
     async outbox() {
       return (await db.getAll("outbox")) as OutItem[];
     },
+    async drop(ids) {
+      const gone = new Set(ids);
+      const tx = db.transaction(["updates", "outbox"], "readwrite");
+      for (let c = await tx.objectStore("updates").openCursor(); c; c = await c.continue()) if (gone.has((c.value as { d: string }).d)) c.delete();
+      for (let c = await tx.objectStore("outbox").openCursor(); c; c = await c.continue()) if (gone.has((c.value as OutItem).d)) c.delete();
+      await tx.done;
+    },
     async serverId() {
-      return (await db.get("meta", "hubId")) as string | undefined;
+      return (await db.get("meta", "serverId")) as string | undefined;
     },
     async destroy() {
       db.close();

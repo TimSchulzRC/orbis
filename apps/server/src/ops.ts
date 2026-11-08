@@ -19,6 +19,7 @@ import {
   initItem,
   displayTitle,
   initType,
+  isContentKind,
   optionNames,
   renameLinksIn,
   mimeOf,
@@ -27,6 +28,7 @@ import {
   removeParent,
   replaceBody,
   setCapability,
+  propByName,
   setExtra,
   setFileMeta,
   setHome,
@@ -55,12 +57,12 @@ import { type Heading, findSection, outline, page } from "@obtion/core/outline";
 import { keyBetween, nextPinKey } from "@obtion/core/sortkey";
 import { DAY_MS, dateOf } from "@obtion/core/date";
 import { freshColor } from "@obtion/core/palette";
-import { DATE_HELP, InputError, matchOption, parseDate, parseNumber, statusGroupOf } from "@obtion/core/input";
+import { DATE_HELP, InputError, matchOption, parseDateTime, parseNumber, statusGroupOf } from "@obtion/core/input";
 import { type Writer, runSetup, typeTabs } from "@obtion/core/setup";
 import { type PropChange, followKindChange, followPropChange, followTypeRename } from "@obtion/core/typerefs";
 import { running } from "@obtion/core/today";
 import { type Lang, translate } from "@obtion/core/i18n";
-import { deleteItem, onlyBelow, restoreItem } from "@obtion/core/trash";
+import { deleteItem, onlyBelow, purgeSet, restoreItem, trashRoots } from "@obtion/core/trash";
 import { fromB64 } from "@obtion/core/protocol";
 import type { Store } from "./store";
 import { type Blobs, sha256 } from "./blobs";
@@ -194,8 +196,8 @@ function splitRange(s: string, today: string): string | undefined {
   for (let i = s.indexOf("/"); i >= 0; i = s.indexOf("/", i + 1)) {
     const a = s.slice(0, i).trim();
     const b = s.slice(i + 1).trim();
-    const da = a ? parseDate(a, today) : "";
-    const db = b ? parseDate(b, today) : "";
+    const da = a ? parseDateTime(a, today) : "";
+    const db = b ? parseDateTime(b, today) : "";
     if (da !== undefined && db !== undefined && (da || db)) return `${da}/${db}`;
   }
   return undefined;
@@ -248,7 +250,7 @@ export class Ops {
     const r = ref.trim().replace(/^\[\[|\]\]$/g, "");
     const direct = ix.get(r);
     if (direct) return direct;
-    const pool = ix.live.filter((i) => i.type !== META_TYPE && (opts.files !== false || i.kind !== "datei"));
+    const pool = ix.live.filter((i) => i.type !== META_TYPE && (opts.files !== false || i.kind !== "file"));
     const key = titleKey(r);
     const exact = pool.filter((i) => titleKey(i.title) === key || titleKey(i.file?.name ?? "") === key);
     if (exact.length === 1) return exact[0]!;
@@ -282,7 +284,7 @@ export class Ops {
 
   label(i: Item) {
     const ix = this.store.index();
-    const kind = i.kind === "datei" ? "file" : i.kind === "zeichnung" ? "drawing" : (ix.typeName(i.type) ?? placeKind(i, ix));
+    const kind = i.kind === "file" || i.kind === "drawing" ? i.kind : (ix.typeName(i.type) ?? placeKind(i, ix));
     return `${displayTitle(i) || "(untitled)"} [${kind}]`;
   }
 
@@ -358,7 +360,6 @@ export class Ops {
       target: p.target || undefined,
       inverse: p.inverseName || undefined,
       symmetric: p.symmetric || undefined,
-      hide_empty: p.hideEmpty || undefined,
       blocks: p.blocks || undefined,
       range: p.range || undefined,
       computed: p.computed ? `${p.computed.fn}${p.computed.of ? ` of ${this.store.index().typeName(p.computed.of)}` : ""}` : undefined,
@@ -388,8 +389,8 @@ export class Ops {
     const ix = this.store.index();
     const out: Record<string, unknown> = { id: i.id, title: i.title };
     const tn = ix.typeName(i.type);
-    if (i.kind === "datei") out.file = `${i.file?.filetype} ${i.file?.name}`;
-    else if (i.kind === "zeichnung") out.kind = "drawing";
+    if (i.kind === "file") out.file = `${i.file?.filetype} ${i.file?.name}`;
+    else if (i.kind === "drawing") out.kind = i.kind;
     else if (tn) out.type = tn;
     else out.kind = placeKind(i, ix);
     if (i.pinned) out.pinned = true;
@@ -409,7 +410,7 @@ export class Ops {
     const schema = ix.schemaOf(i);
     const parts = [`${displayTitle(i) || "(untitled)"} [${i.id}]`];
     const tn = ix.typeName(i.type);
-    parts.push(i.kind === "datei" ? `file ${i.file?.filetype ?? ""}`.trim() : i.kind === "zeichnung" ? "drawing" : (tn ?? placeKind(i, ix)));
+    parts.push(i.kind === "file" ? `file ${i.file?.filetype ?? ""}`.trim() : i.kind === "drawing" ? i.kind : (tn ?? placeKind(i, ix)));
     if (i.pinned) parts.push("pinned");
     const st = statusOf(i, schema);
     if (st) parts.push(`${st.option.name} (${st.group})`);
@@ -482,7 +483,7 @@ export class Ops {
     const unblocked: string[] = [];
     for (const [id, now] of this.store.records) {
       const prev = before.get(id);
-      if (prev === now || !ix.get(id) || now.kind !== "info") continue;
+      if (prev === now || !ix.get(id) || now.kind !== "note") continue;
       const missing = ix.missingLinks(now).filter((t) => !prev || !ix0.missingLinks(prev).includes(t));
       for (const t of [...new Set(missing)]) hints.push(`[[${t}]] in "${now.title}" does not match any item (yet).`);
       if (!prev || prev.title !== now.title) {
@@ -552,7 +553,7 @@ export class Ops {
       out.file = file;
       out.used_in = ix.usedIn(i.id).map((b) => `${ix.get(b.from)?.title} (${b.kind})`);
       // a text read from another content (replaced, undone) is not shown; it is read anew
-      const reading = !!f.hash && f.extracted !== extractMark(f.hash) && f.filetype !== "bild" && f.filetype !== "audio" && f.filetype !== "video" && !!this.blobs?.has(f.hash);
+      const reading = !!f.hash && f.extracted !== extractMark(f.hash) && f.filetype !== "image" && f.filetype !== "audio" && f.filetype !== "video" && !!this.blobs?.has(f.hash);
       if (reading) out.text_note = "The server is still reading this file's text; get it again in a moment.";
       else if (f.text && opts.include_body !== false) this.readText(out, "text", this.blobs?.text(f) ?? f.text, opts);
     }
@@ -583,7 +584,7 @@ export class Ops {
       out.updates = i.updates.slice(start, end).map((u) => ({ at: new Date(u.at).toISOString().slice(0, 16), by: u.by, text: u.text }));
       if (skip > 0 || start > 0) out.updates_range = `${i.updates.length - end + 1}–${i.updates.length - start} newest of ${i.updates.length}${start > 0 ? ` – older ones with updates_offset: ${skip + UPDATES}` : ""}`;
     }
-    // a file's long content is its text, an information's its body
+    // a file's long content is its text, a note's its body
     // a drawing's text is what its text elements say; the drawing itself is for people
     if (i.drawing) out.drawing = { elements: i.drawing.count, text: i.drawing.text };
     if (opts.include_body !== false && i.body) {
@@ -685,7 +686,7 @@ export class Ops {
       today,
       overdue: withDue.filter((x) => x.due && x.due < today).map((x) => line(x.i)),
       due_next_7_days: withDue.filter((x) => x.due && x.due >= today && x.due <= in7).map((x) => line(x.i)),
-      // as "Läuft gerade" on the Heute page
+      // as "In progress" on the Today page
       active: running(ix).map(({ item: i }) => {
         const next = ix.nextTask(i.id, today);
         if (next) touched?.add(next.id);
@@ -828,8 +829,7 @@ export class Ops {
   private kindOf(i: Item): string {
     const ix = this.store.index();
     if (i.type === META_TYPE) return "type";
-    if (i.kind === "datei") return "file";
-    if (i.kind === "zeichnung") return "drawing";
+    if (i.kind === "file" || i.kind === "drawing") return i.kind;
     return this.typeName(i.type) ?? (isInInbox(i, ix) ? "inbox" : "note");
   }
 
@@ -889,7 +889,7 @@ export class Ops {
 
   private anyItem(ref: string): Item {
     const byId = this.store.records.get(ref.trim().replace(/^\[\[|\]\]$/g, ""));
-    return byId && (byId.kind === "info" || byId.kind === "datei" || byId.kind === "zeichnung") ? byId : this.resolve(ref);
+    return byId && isContentKind(byId.kind) ? byId : this.resolve(ref);
   }
 
   /**
@@ -965,7 +965,7 @@ export class Ops {
       case "date": {
         const s = String(raw).trim();
         const today = todayISO();
-        const whole = parseDate(s, today);
+        const whole = parseDateTime(s, today);
         if (whole) return { value: whole };
         const range = p.range ? splitRange(s, today) : undefined;
         if (range) return { value: range };
@@ -999,7 +999,7 @@ export class Ops {
   }
 
   private prop(schema: TypeSchema | undefined, name: string): PropDef {
-    const p = schema?.properties.find((x) => titleKey(x.name) === titleKey(name) || x.id === name);
+    const p = propByName(schema, name);
     if (!p) throw new OpError(`Unknown property "${name}"${schema ? ` on type ${schema.name}. Properties: ${schema.properties.map((x) => x.name).join(", ") || "none"}` : " (no type)"}. Properties belong to a type: add it to the type with update_type, or give the item a type that has it.`);
     return p;
   }
@@ -1045,7 +1045,7 @@ export class Ops {
     const item = this.target(ref, "update");
     const ix = this.store.index();
     if (input.type !== undefined) {
-      if (input.type && item.kind !== "info") throw new OpError(item.kind === "zeichnung" ? `"${item.title}" is a drawing. Drawings have no type.` : `"${item.title}" is a file. Files have no type, only the file type (filetype).`);
+      if (input.type && item.kind !== "note") throw new OpError(item.kind === "drawing" ? `"${item.title}" is a drawing. Drawings have no type.` : `"${item.title}" is a file. Files have no type, only the file type (filetype).`);
       this.guardInbox(item, "giving it a type");
     }
     // null or "" removes the type
@@ -1143,7 +1143,7 @@ export class Ops {
     for (const p of add) if (ix.wouldCycle(item.id, p.id)) throw new OpError(`"${item.title}" cannot go below "${p.title}": that is part of it (a cycle).`);
     const rem = (input.remove ?? []).map((p) => this.resolve(p).id);
     const home = input.home ? this.resolve(input.home).id : undefined;
-    if (item.kind === "datei") {
+    if (item.kind === "file") {
       const after = new Set(ix.parentsOf(item.id));
       for (const p of add) after.add(p.id);
       for (const p of rem) after.delete(p);
@@ -1224,8 +1224,8 @@ export class Ops {
   suggest(ref: string, input: SuggestInput, by: string, origin: string, touched?: Set<string>) {
     const item = this.target(ref, "suggest");
     touched?.add(item.id);
-    if (input.type && item.kind !== "info") throw new OpError(`"${item.title}" is a ${item.kind === "zeichnung" ? "drawing" : "file"}. ${item.kind === "zeichnung" ? "Drawings" : "Files"} have no type; suggest a place instead.`);
-    if (item.kind === "datei" && (input.parents?.length ?? 0) > 1) throw new OpError(`"${item.title}" is a file, and a file has exactly one parent. Suggest one place.`);
+    if (input.type && item.kind !== "note") throw new OpError(`"${item.title}" is a ${item.kind}. ${item.kind === "drawing" ? "Drawings" : "Files"} have no type; suggest a place instead.`);
+    if (item.kind === "file" && (input.parents?.length ?? 0) > 1) throw new OpError(`"${item.title}" is a file, and a file has exactly one parent. Suggest one place.`);
     const type = input.type ? this.resolveType(input.type).id : undefined;
     const parents = (input.parents ?? []).map((p) => this.resolve(p).id);
     for (const p of parents) touched?.add(p); // what applies there applies once it is accepted
@@ -1252,13 +1252,33 @@ export class Ops {
     return { item, only: children === "inbox" ? 0 : only.length };
   }
 
-  /** Brings back exactly what was deleted together with it. */
-  restore(ref: string, origin: string) {
+  private inTrash(ref: string): Item {
     const item = this.store.records.get(ref) ?? [...this.store.records.values()].find((x) => x.deleted && titleKey(x.title) === titleKey(ref));
     if (!item || !item.deleted) throw new OpError(`Nothing in the trash matches "${ref}".`);
+    return item;
+  }
+
+  /** Brings back exactly what was deleted together with it. */
+  restore(ref: string, origin: string) {
+    const item = this.inTrash(ref);
     const back = restoreItem(this.writer(origin), this.store.records, item.id);
     this.store.flush();
     return { item, back: back.length };
+  }
+
+  /**
+   * Deletes an item in the trash for good, with what was deleted with it, its history and the file
+   * contents nothing else uses. Without `ref`: everything in the trash. Returns the purged ids.
+   */
+  purge(ref?: string): string[] {
+    const records = this.store.records;
+    const roots = ref === undefined ? trashRoots(records) : [this.inTrash(ref)];
+    const ids = [...new Set(roots.flatMap((r) => purgeSet(records, r.id)))];
+    if (!ids.length) return [];
+    const files = ids.map((id) => records.get(id)!);
+    this.store.purge(ids);
+    this.blobs?.forget(files);
+    return ids;
   }
 
   defineType(input: DefineTypeInput, origin: string) {
@@ -1306,7 +1326,7 @@ export class Ops {
       }
       let computed = cur?.computed;
       if (p.computed) computed = { fn: p.computed.startsWith("count") ? "count" : "progress", of: p.computed.includes(":") ? this.resolveType(p.computed.split(":")[1]!.trim()).id : undefined };
-      const out = { name: p.name, kind, description: p.description, options, multiple: p.multiple, default: def, target: p.target, inverseName: p.inverse, symmetric: p.symmetric, range: p.range, computed, hideEmpty: p.hide_empty, blocks: p.blocks };
+      const out = { name: p.name, kind, description: p.description, options, multiple: p.multiple, default: def, target: p.target, inverseName: p.inverse, symmetric: p.symmetric, range: p.range, computed, blocks: p.blocks };
       if (kind === "status" && !status) status = { id: cur?.id ?? "", name: p.name ?? cur?.name ?? "", kind, sort: "" };
       // entering or leaving the status: groups and a default come or go
       if (kind && kind !== cur?.kind && (kind === "status" || cur?.kind === "status")) return { ...out, ...kindPatch({ options: options ?? cur?.options, default: def ?? cur?.default }, kind, defaultStatusOptions((k) => translate(this.store.lang(), k))) };
@@ -1397,14 +1417,14 @@ export class Ops {
     if (by === "statusGroup") return statusGroupOf(name) ?? name;
     const types = typesIn(where).map((id) => ix.types.get(id)?.schema).filter(Boolean);
     for (const sc of types.length ? types : [...ix.types.values()].map((x) => x.schema)) {
-      const p = by === "status" ? statusProp(sc) : sc?.properties.find((x) => titleKey(x.name) === titleKey(by ?? ""));
+      const p = by === "status" ? statusProp(sc) : propByName(sc, by ?? "");
       const o = p?.options?.find((x) => titleKey(x.name) === k);
       if (o) return o.id;
     }
     return ix.resolveTitle(name) ?? name;
   }
 
-  /** A view's name as its tab shows it: its own, else the name of its kind ("Kalender"). */
+  /** A view's name as its tab shows it: its own, else the name of its kind ("Calendar"). */
   tabLabel(t: Pick<ViewTab, "name" | "kind">): string {
     return t.name || translate(this.store.lang(), `view.${t.kind}`);
   }
@@ -1470,12 +1490,12 @@ export class Ops {
   addFile(input: { name: string; hash: string; size: number; parent?: string; tags?: string[]; description?: string }, origin: string): Item {
     const name = fileName(input.name);
     const parent = input.parent ? this.resolve(input.parent) : undefined;
-    if (parent && parent.kind !== "info") throw new OpError(`"${parent.title}" is a file; a file can't be the place of another one. Choose an information as parent.`);
-    if (parent?.type === META_TYPE) throw new OpError(`"${parent.title}" is a type; choose an information as parent.`);
+    if (parent && parent.kind !== "note") throw new OpError(`"${parent.title}" is a file; a file can't be the place of another one. Choose a note as parent.`);
+    if (parent?.type === META_TYPE) throw new OpError(`"${parent.title}" is a type; choose a note as parent.`);
     const id = newId();
     const mime = mimeOf(name);
     this.store.change(id, origin, (doc) => {
-      initItem(doc, { kind: "datei", title: name, parents: parent ? [parent.id] : [], tags: input.tags, body: input.description, createdBy: origin });
+      initItem(doc, { kind: "file", title: name, parents: parent ? [parent.id] : [], tags: input.tags, body: input.description, createdBy: origin });
       setFileMeta(doc, { hash: input.hash, name, mime, filetype: fileTypeOf(name, mime), size: input.size });
     });
     this.blobs?.schedule(id);
@@ -1483,14 +1503,14 @@ export class Ops {
   }
 
   /**
-   * New content for a file, same item ("Ersetzen" in the app): the old content stays in its
+   * New content for a file, same item ("Replace…" in the app): the old content stays in its
    * history, previews and text are made anew. `previous` is undefined when the content is the same.
    * Call inside `call`.
    */
   replaceFile(ref: string, content: { hash: string; size: number }, origin: string): { item: Item; previous?: string } {
     const item = this.resolve(ref);
     const f = item.file;
-    if (item.kind !== "datei" || !f) throw new OpError(`"${item.title}" is not a file. Only files have a content to replace.`);
+    if (item.kind !== "file" || !f) throw new OpError(`"${item.title}" is not a file. Only files have a content to replace.`);
     if (item.deleted) throw new OpError(`"${item.title}" is in the trash. Restore it first.`);
     if (f.hash === content.hash) return { item };
     this.store.change(item.id, origin, (doc) =>

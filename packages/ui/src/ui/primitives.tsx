@@ -264,8 +264,8 @@ export function Dialog({ title, children, onClose, wide }: { title: string; chil
   </DialogRoot>;
 }
 
-export function Seg<T extends string>({ value, options, onChange, label }: { value: T; options: { value: T; label: ReactNode }[]; onChange: (v: T) => void; label: string }) {
-  return <ToggleGroup type="single" value={value} onValueChange={(v) => { if (v) onChange(v as T); }} aria-label={label} className="inline-flex rounded-lg border border-line bg-secondary p-0.5 text-xs">
+export function Seg<T extends string>({ value, options, onChange, label, className }: { value: T; options: { value: T; label: ReactNode }[]; onChange: (v: T) => void; label: string; className?: string }) {
+  return <ToggleGroup type="single" value={value} onValueChange={(v) => { if (v) onChange(v as T); }} aria-label={label} className={cn("inline-flex rounded-lg border border-line bg-secondary p-0.5 text-xs", className)}>
     {options.map((o) => <ToggleGroupItem key={o.value} value={o.value} className="tap h-auto min-w-0 rounded-md px-2 py-0.5 text-xs data-[state=on]:bg-card data-[state=on]:font-medium data-[state=on]:shadow-sm dark:text-muted-foreground dark:data-[state=on]:bg-foreground/15 dark:data-[state=on]:text-foreground">{o.label}</ToggleGroupItem>)}
   </ToggleGroup>;
 }

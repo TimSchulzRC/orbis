@@ -36,7 +36,7 @@ const titleNow = () => document.querySelector<HTMLTextAreaElement>("article text
 test("a row: workspace, title, text; on hover its buttons take the corner from the age", async () => {
   const row = rows().first();
   await expect.element(row).toBeVisible();
-  expect(row.element().textContent?.normalize()).toContain("Persönlich".normalize());
+  expect(row.element().textContent).toContain("Personal");
   const open = row.getByRole("link", { name: "Ganz öffnen" });
   const buttons = () => getComputedStyle(open.element().parentElement!).opacity;
   const age = () => getComputedStyle(row.element().querySelector("time")?.parentElement ?? row.element()).visibility;

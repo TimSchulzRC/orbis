@@ -16,7 +16,7 @@ const READY_POLL_MS = 100;
 /** Caught up with the server so its types are known; offline with local data is enough too. */
 async function ready(repo: Repo, ms = READY_TIMEOUT_MS): Promise<boolean> {
   for (let waited = 0; waited < ms; waited += READY_POLL_MS) {
-    if (repo.status.synced || (repo.status.loaded && !repo.status.online && repo.docs.size > 0)) return true;
+    if (repo.status.synced || (repo.status.loaded && !repo.status.online && repo.hasData)) return true;
     await new Promise((res) => setTimeout(res, READY_POLL_MS));
   }
   return false;
@@ -30,7 +30,7 @@ async function checkTarget(dst: Repo) {
 
 type Replica = ReturnType<typeof replica>;
 
-/** Before the items, or the copy would show "Datei fehlt". */
+/** Before the items, or the copy would show "file missing". */
 async function copyContents(items: ReturnType<typeof movedItems>, src: Replica, dst: Replica) {
   for (const it of items) {
     const f = it.file;

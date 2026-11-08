@@ -276,7 +276,8 @@ function BlockRow({ label, title, children }: { label: React.ReactNode; title?: 
 
 /**
  * `first` goes before the badges, `afterTags` right after the tags, `end` at the right edge, `links`
- * in a row of its own below them (a divider follows), `progress` above the rows.
+ * in a row of its own below them (a divider follows), `progress` above the rows. `noEndLine`: what
+ * follows sets itself apart (the update card), so the block ends without a line.
  */
 interface PageHead {
   first?: React.ReactNode;
@@ -284,11 +285,12 @@ interface PageHead {
   end?: React.ReactNode;
   links?: React.ReactNode;
   progress?: React.ReactNode;
+  noEndLine?: boolean;
 }
 
 /**
  * Status and single selections read as badges by themselves at the top, so they need no label.
- * "Typ bearbeiten" orders them apart from the rest.
+ * "Edit type" orders them apart from the rest.
  */
 export const isBadge = (p: PropDef) => isSingle(p);
 
@@ -353,7 +355,7 @@ export function PropertyBlock({ item, schema, head = {} }: { item: Item; schema?
       ))}
       </div>
       )}
-      {(!!head.progress || rows > 0) && <div className="mt-4 border-t border-line" />}
+      {!head.noEndLine && (!!head.progress || rows > 0) && <div className="mt-4 border-t border-line" />}
     </div>
   );
 }
@@ -375,7 +377,7 @@ function StatusBadge({ item }: { item: Item }) {
   );
 }
 
-/** Shows the property's name before the value ("Phase Entwurf"). */
+/** Shows the property's name before the value ("Stage Draft"). */
 function SelectBadge({ item, prop }: { item: Item; prop: PropDef }) {
   const { t } = useT();
   const value = item.props[prop.id];

@@ -1,14 +1,13 @@
 // The server as a program: accounts and workspaces (who sees what), with and without the web app,
-// the data from before accounts, and the sync per workspace. Starts real servers.
+// and the sync per workspace. Starts real servers.
 import { test, expect, beforeAll, afterAll, setDefaultTimeout } from "bun:test";
 import * as Y from "yjs";
 import { tempDir, removeTempDirs } from "../support/helpers";
 import { bootServer, del, get, mcpPost, mcpTool, post } from "../support/server";
 import { FORMAT, PERSONAL, initItem } from "@obtion/core/model";
 import { type ServerMsg, toB64 } from "@obtion/core/protocol";
-import { Store } from "@obtion/server/store";
 import { Database } from "bun:sqlite";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 // Booting a server can exceed bun's 5 s default on a cold cache in CI. A timeout also kills every
@@ -24,24 +23,15 @@ async function start(env: Record<string, string>): Promise<string> {
 
 let plain = "";
 let bare = "";
-let legacy = "";
-let legacyDir = "";
 let bareDir = "";
 beforeAll(async () => {
   // a built web app of its own: the test does not depend on `bun run build`
   const dist = tempDir("obtion-dist-");
-  writeFileSync(join(dist, "index.html"), "<!doctype html><title>Obtion im Test</title>");
-  // a data folder from before accounts, with one item
-  legacyDir = tempDir("obtion-server-");
-  const s = new Store(legacyDir);
-  s.create({ title: "Von früher" }, "test", { id: "old-1" });
-  s.flush();
-  s.db.close();
+  writeFileSync(join(dist, "index.html"), "<!doctype html><title>Obtion under test</title>");
   bareDir = tempDir("obtion-server-");
-  [plain, bare, legacy] = await Promise.all([
+  [plain, bare] = await Promise.all([
     start({ OBTION_DATA: tempDir("obtion-server-"), OBTION_WEB_DIST: dist }),
     start({ OBTION_DATA: bareDir, OBTION_WEB_APP: "off", OBTION_SIGNUP: "open" }),
-    start({ OBTION_DATA: legacyDir }),
   ]);
 });
 afterAll(async () => {
@@ -50,13 +40,13 @@ afterAll(async () => {
 });
 
 async function signUp(base: string, email: string, invite?: string): Promise<{ token: string; user: { id: string } }> {
-  const res = await post(base, "/api/account/signup", { name: email.split("@")[0], email, password: "geheim12345", invite });
+  const res = await post(base, "/api/account/signup", { name: email.split("@")[0], email, password: "secret12345", invite });
   if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
   return res.json();
 }
 const account = (base: string, token: string) => get(base, "/api/account", token).then((r) => r.json());
 /** A new workspace of the account, as the app creates the first one after signing up. */
-const newWorkspace = (base: string, token: string, name = "Persönlich") => post(base, "/api/workspaces", { name }, token).then((r) => r.json());
+const newWorkspace = (base: string, token: string, name = "Personal") => post(base, "/api/workspaces", { name }, token).then((r) => r.json());
 const patch = (base: string, path: string, body: unknown, token: string) =>
   fetch(base + path, { method: "PATCH", headers: { "content-type": "application/json", authorization: `Bearer ${token}` }, body: JSON.stringify(body) });
 
@@ -66,16 +56,16 @@ test("the first account is the admin, without a workspace until it creates one; 
   expect(await account(plain, ada.token)).toMatchObject({ admin: true, user: { email: "ada@example.org" }, workspaces: [] });
   await newWorkspace(plain, ada.token);
   const me = await account(plain, ada.token);
-  expect(me.workspaces).toEqual([{ id: expect.any(String), name: "Persönlich", role: "owner" }]);
-  expect((await post(plain, "/api/account/signup", { email: "eve@example.org", password: "geheim12345" })).status).toBe(403);
+  expect(me.workspaces).toEqual([{ id: expect.any(String), name: "Personal", role: "owner" }]);
+  expect((await post(plain, "/api/account/signup", { email: "eve@example.org", password: "secret12345" })).status).toBe(403);
   expect((await get(plain, "/api/account")).status).toBe(401);
 
   // an invite link: Bob joins Ada's workspace
   const ws = me.workspaces[0].id as string;
   const { code } = await post(plain, `/api/workspaces/${ws}/invites`, {}, ada.token).then((r) => r.json());
-  expect(await get(plain, `/api/invites/${code}`).then((r) => r.json())).toEqual({ workspace: "Persönlich", by: "ada", role: "member", signup: true });
+  expect(await get(plain, `/api/invites/${code}`).then((r) => r.json())).toEqual({ workspace: "Personal", by: "ada", role: "member", signup: true });
   const bob = await signUp(plain, "bob@example.org", code);
-  expect((await account(plain, bob.token)).workspaces).toEqual([{ id: ws, name: "Persönlich", role: "member" }]);
+  expect((await account(plain, bob.token)).workspaces).toEqual([{ id: ws, name: "Personal", role: "member" }]);
   expect((await account(plain, bob.token)).admin).toBe(false);
   expect((await get(plain, `/api/workspaces/${ws}/members`, bob.token).then((r) => r.json())).map((m: any) => m.role)).toEqual(["owner", "member"]);
   // the last owner cannot leave; a member can
@@ -108,25 +98,25 @@ test("a workspace is only open to its members – sync, files, activity, MCP", a
   expect((await call(dw.id, token)).status).toBe(401);
   expect((await call(cw.id, carla.token)).status).toBe(401); // a session is no MCP token
   // what the agent changes names it and the member whose token it uses
-  await mcpTool(bare, token, "create", { items: [{ title: "Vom Agenten" }] }, `/w/${cw.id}/mcp`);
+  await mcpTool(bare, token, "create", { items: [{ title: "From the agent" }] }, `/w/${cw.id}/mcp`);
   const events = (await get(bare, `/w/${cw.id}/api/activity?limit=5`, carla.token).then((r) => r.json())) as { origin: string; title: string; doc: string }[];
-  expect(events.find((e) => e.title === "Vom Agenten")!.origin).toBe(`agent:mcp;u=${carla.user.id};n=carla`);
+  expect(events.find((e) => e.title === "From the agent")!.origin).toBe(`agent:mcp;u=${carla.user.id};n=carla`);
   // the versions of a text: for members only, the list, one version, what an entry changed
   const replace = async (body: string) => {
-    const base_version = JSON.parse(await mcpTool(bare, token, "get", { ref: "Vom Agenten" }, `/w/${cw.id}/mcp`)).version;
-    await mcpTool(bare, token, "update", { ref: "Vom Agenten", body, base_version }, `/w/${cw.id}/mcp`);
+    const base_version = JSON.parse(await mcpTool(bare, token, "get", { ref: "From the agent" }, `/w/${cw.id}/mcp`)).version;
+    await mcpTool(bare, token, "update", { ref: "From the agent", body, base_version }, `/w/${cw.id}/mcp`);
   };
-  await replace("Erste Fassung");
-  await replace("Zweite Fassung");
-  const doc = events.find((e) => e.title === "Vom Agenten")!.doc;
+  await replace("First draft");
+  await replace("Second draft");
+  const doc = events.find((e) => e.title === "From the agent")!.doc;
   expect((await get(bare, `/w/${cw.id}/api/history?doc=${doc}`, dan.token)).status).toBe(403);
   const { versions } = await get(bare, `/w/${cw.id}/api/history?doc=${doc}`, carla.token).then((r) => r.json());
-  expect(versions.map((v: { n: number; len: number }) => [v.n, v.len])).toEqual([[1, 13], [2, 14]]);
-  expect(await get(bare, `/w/${cw.id}/api/history?doc=${doc}&version=${versions[0].id}`, carla.token).then((r) => r.json())).toEqual({ text: "Erste Fassung" });
+  expect(versions.map((v: { n: number; len: number }) => [v.n, v.len])).toEqual([[1, 11], [2, 12]]);
+  expect(await get(bare, `/w/${cw.id}/api/history?doc=${doc}&version=${versions[0].id}`, carla.token).then((r) => r.json())).toEqual({ text: "First draft" });
   expect((await get(bare, `/w/${cw.id}/api/history?doc=other&version=${versions[0].id}`, carla.token)).status).toBe(404);
   const latest = (await get(bare, `/w/${cw.id}/api/activity?doc=${doc}&limit=1`, carla.token).then((r) => r.json()))[0];
   expect(latest.changes.find((c: { field: string }) => c.field === "body")).toMatchObject({ diff: true });
-  expect(await get(bare, `/w/${cw.id}/api/history?event=${latest.id}`, carla.token).then((r) => r.json())).toEqual({ doc, before: "Erste Fassung", after: "Zweite Fassung", from: 1, to: 2 });
+  expect(await get(bare, `/w/${cw.id}/api/history?event=${latest.id}`, carla.token).then((r) => r.json())).toEqual({ doc, before: "First draft", after: "Second draft", from: 1, to: 2 });
 });
 
 test("a workspace made through the API gets the default types with setup (else the agent's setup tool); never twice", async () => {
@@ -134,16 +124,16 @@ test("a workspace made through the API gets the default types with setup (else t
   const agentToken = async (ws: string) => (await post(bare, `/api/workspaces/${ws}/mcp-token`, {}, eve.token).then((r) => r.json())).token as string;
   const schema = async (ws: string) => JSON.parse(await mcpTool(bare, await agentToken(ws), "schema", {}, `/w/${ws}/mcp`));
   // setup: true – in the language the client asks for
-  const en = await post(bare, "/api/workspaces", { name: "Agentenprojekt", setup: true }, eve.token, { "accept-language": "en-US,en;q=0.9,de;q=0.5" }).then((r) => r.json());
-  expect(en).toMatchObject({ name: "Agentenprojekt", role: "owner", setup: "en" });
+  const en = await post(bare, "/api/workspaces", { name: "Agent project", setup: true }, eve.token, { "accept-language": "en-US,en;q=0.9,de;q=0.5" }).then((r) => r.json());
+  expect(en).toMatchObject({ name: "Agent project", role: "owner", setup: "en" });
   expect((await schema(en.id)).types.map((t: { name: string }) => t.name)).toEqual(["Project", "Task", "Card"]);
   // a language named outright; without any: German
-  const de = await post(bare, "/api/workspaces", { name: "Projekt DE", setup: "de" }, eve.token, { "accept-language": "en" }).then((r) => r.json());
+  const de = await post(bare, "/api/workspaces", { name: "Project DE", setup: "de" }, eve.token, { "accept-language": "en" }).then((r) => r.json());
   expect((await schema(de.id)).types.map((t: { name: string }) => t.name)).toEqual(["Projekt", "Task", "Karte"]);
-  expect((await post(bare, "/api/workspaces", { name: "Ohne", setup: true }, eve.token).then((r) => r.json())).setup).toBe("de");
-  expect((await post(bare, "/api/workspaces", { name: "Falsch", setup: "fr" }, eve.token)).status).toBe(400);
+  expect((await post(bare, "/api/workspaces", { name: "None", setup: true }, eve.token).then((r) => r.json())).setup).toBe("de");
+  expect((await post(bare, "/api/workspaces", { name: "Wrong", setup: "fr" }, eve.token)).status).toBe(400);
   // as the app creates them (no setup): nothing is set up on the server, the agent can do it once
-  const plainWs = await newWorkspace(bare, eve.token, "Wie die App");
+  const plainWs = await newWorkspace(bare, eve.token, "Like the app");
   expect(plainWs.setup).toBeUndefined();
   const token = await agentToken(plainWs.id);
   const before = JSON.parse(await mcpTool(bare, token, "schema", {}, `/w/${plainWs.id}/mcp`));
@@ -158,8 +148,8 @@ test("the sign-in only from the server's own page; other sites get no CORS answe
   const w = await newWorkspace(bare, eve.token);
   const res = await fetch(`${bare}/w/${w.id}/api/activity`, { headers: { origin: "https://app.example.org", authorization: `Bearer ${eve.token}` } });
   expect(res.headers.get("access-control-allow-origin")).toBeNull();
-  expect((await post(bare, "/api/auth/sign-in/email", { email: "eve@example.org", password: "geheim12345" }, undefined, { origin: "https://evil.example.org" })).status).toBe(403);
-  const own = await post(bare, "/api/auth/sign-in/email", { email: "eve@example.org", password: "geheim12345" }, undefined, { origin: bare });
+  expect((await post(bare, "/api/auth/sign-in/email", { email: "eve@example.org", password: "secret12345" }, undefined, { origin: "https://evil.example.org" })).status).toBe(403);
+  const own = await post(bare, "/api/auth/sign-in/email", { email: "eve@example.org", password: "secret12345" }, undefined, { origin: bare });
   expect(own.status).toBe(200);
   expect(await account(bare, (await own.json()).token)).toMatchObject({ user: { email: "eve@example.org" } });
 });
@@ -200,31 +190,15 @@ test("linking a provider (its address may differ) needs a sign-in of the last mi
   expect((await post(bare, "/api/auth/link-social", { provider: "github", callbackURL: "/" }, undefined, { origin: bare })).status).toBe(403);
 });
 
-test("the data from before accounts become a workspace of the first account; the old MCP address still opens them", async () => {
-  expect(existsSync(join(legacyDir, "obtion.db"))).toBe(false);
-  const ada = await signUp(legacy, "ada@example.org");
-  const [w] = (await account(legacy, ada.token)).workspaces;
-  expect(w).toEqual({ id: expect.any(String), name: "Persönlich", role: "owner", legacy: true });
-  expect(existsSync(join(legacyDir, "workspaces", w.id, "obtion.db"))).toBe(true);
-  const c = await connect(legacy, w.id, ada.token);
-  c.ws.send(JSON.stringify({ t: "hello", area: PERSONAL, since: 0, client: "a" }));
-  const first = (await c.until((m) => m.t === "updates" && !!m.done)) as Extract<ServerMsg, { t: "updates" }>;
-  expect(first.items.map((i) => i.d)).toContain("old-1");
-  c.ws.close();
-  const old = JSON.parse(readFileSync(join(legacyDir, "config.json"), "utf8")).token;
-  expect((await mcpPost(legacy, "/mcp", old, "tools/list")).status).toBe(200);
-  expect((await mcpPost(legacy, "/mcp", "wrong", "tools/list")).status).toBe(401);
-});
-
 test("every server brings the web app; OBTION_WEB_APP=off leaves sync, API and MCP", async () => {
   const app = await fetch(plain + "/");
   expect(app.status).toBe(200);
-  expect(await app.text()).toContain("Obtion im Test");
+  expect(await app.text()).toContain("Obtion under test");
   const none = await fetch(bare + "/");
   expect(none.status).toBe(404);
   expect(await none.text()).toContain("OBTION_WEB_APP=off");
   expect((await fetch(bare + "/api/info")).status).toBe(200);
-  expect((await fetch(bare + "/mcp", { method: "POST" })).status).toBe(401); // there, asks for its token
+  expect((await fetch(bare + "/w/x/mcp", { method: "POST" })).status).toBe(401); // there, asks for its token
 });
 
 /** A sync connection to a workspace that collects what the server sends; the token goes as subprotocol, as in browsers. */
@@ -258,7 +232,7 @@ test("sync per workspace: members get each other's changes", async () => {
   await b.until((m) => m.t === "updates" && !!m.done);
 
   const d = new Y.Doc({ guid: "n1" });
-  d.transact(() => initItem(d, { title: "Aus dem Test" }));
+  d.transact(() => initItem(d, { title: "From the test" }));
   a.ws.send(JSON.stringify({ t: "push", area: PERSONAL, items: [{ k: "k1", d: "n1", u: toB64(Y.encodeStateAsUpdate(d)) }] }));
   expect(await a.until((m) => m.t === "ack")).toMatchObject({ area: PERSONAL, keys: ["k1"] });
   const relayed = (await b.until((m) => m.t === "updates" && m.items.some((i) => i.d === "n1"))) as Extract<ServerMsg, { t: "updates" }>;
@@ -299,15 +273,15 @@ test("account deletion requires a password and leaves last-owner workspaces inta
   const user = await signUp(bare, "delete-owner@example.org");
   const workspace = await newWorkspace(bare, user.token);
   const remove = (body: unknown, token = user.token) => del(bare, "/api/account", token, body);
-  expect((await remove({ password: "geheim12345" }, "invalid")).status).toBe(401);
+  expect((await remove({ password: "secret12345" }, "invalid")).status).toBe(401);
   expect((await remove({})).status).toBe(400);
   expect((await remove({ password: "wrong" })).status).toBe(403);
-  expect((await remove({ password: "geheim12345" })).status).toBe(409);
+  expect((await remove({ password: "secret12345" })).status).toBe(409);
   expect((await account(bare, user.token)).workspaces).toHaveLength(1);
   expect((await del(bare, `/api/workspaces/${workspace.id}`, user.token)).status).toBe(200);
-  expect((await remove({ password: "geheim12345" })).status).toBe(200);
+  expect((await remove({ password: "secret12345" })).status).toBe(200);
   expect((await get(bare, "/api/account", user.token)).status).toBe(401);
-  expect((await post(bare, "/api/auth/sign-in/email", { email: "delete-owner@example.org", password: "geheim12345" })).ok).toBe(false);
+  expect((await post(bare, "/api/auth/sign-in/email", { email: "delete-owner@example.org", password: "secret12345" })).ok).toBe(false);
   // Credentials are gone too: the same email can register again.
   expect((await signUp(bare, "delete-owner@example.org")).user.id).not.toBe(user.user.id);
 });
@@ -317,7 +291,7 @@ test("deleting a member revokes sessions, invites, MCP tokens and live sync with
   const workspace = await newWorkspace(bare, owner.token);
   const { code } = await post(bare, `/api/workspaces/${workspace.id}/invites`, {}, owner.token).then((r) => r.json());
   const member = await signUp(bare, "delete-member@example.org", code);
-  const second = await post(bare, "/api/auth/sign-in/email", { email: "delete-member@example.org", password: "geheim12345" }).then((r) => r.json());
+  const second = await post(bare, "/api/auth/sign-in/email", { email: "delete-member@example.org", password: "secret12345" }).then((r) => r.json());
   // only owners invite: the member becomes one first
   expect((await patch(bare, `/api/workspaces/${workspace.id}/members/${member.user.id}`, { role: "owner" }, owner.token)).status).toBe(200);
   const invite = await post(bare, `/api/workspaces/${workspace.id}/invites`, {}, member.token).then((r) => r.json());
@@ -327,7 +301,7 @@ test("deleting a member revokes sessions, invites, MCP tokens and live sync with
     const timeout = setTimeout(() => reject(new Error("deleted account's sync remained open")), 3000);
     live.ws.onclose = (e) => { clearTimeout(timeout); resolve(e.code); };
   });
-  expect((await del(bare, "/api/account", member.token, { password: "geheim12345" })).status).toBe(200);
+  expect((await del(bare, "/api/account", member.token, { password: "secret12345" })).status).toBe(200);
   expect(await closed).toBe(4401);
   for (const token of [member.token, second.token]) expect((await get(bare, "/api/account", token)).status).toBe(401);
   expect((await get(bare, `/api/invites/${invite.code}`)).status).toBe(404);
@@ -435,11 +409,11 @@ test("invite links give their role and work for one person, also when two sign u
 });
 
 test("where only invites let people sign up, a link makes one account, also when two try at once", async () => {
-  const ada = await post(plain, "/api/auth/sign-in/email", { email: "ada@example.org", password: "geheim12345" }).then((r) => r.json());
+  const ada = await post(plain, "/api/auth/sign-in/email", { email: "ada@example.org", password: "secret12345" }).then((r) => r.json());
   const w = await newWorkspace(plain, ada.token);
   const { code } = await post(plain, `/api/workspaces/${w.id}/invites`, {}, ada.token).then((r) => r.json());
-  const tries = ["once-a@example.org", "once-b@example.org"].map((email) => post(plain, "/api/account/signup", { name: "x", email, password: "geheim12345", invite: code }));
+  const tries = ["once-a@example.org", "once-b@example.org"].map((email) => post(plain, "/api/account/signup", { name: "x", email, password: "secret12345", invite: code }));
   expect((await Promise.all(tries)).map((r) => r.status).sort()).toEqual([200, 403]);
-  expect((await post(plain, "/api/account/signup", { name: "x", email: "once-c@example.org", password: "geheim12345", invite: code })).status).toBe(403);
+  expect((await post(plain, "/api/account/signup", { name: "x", email: "once-c@example.org", password: "secret12345", invite: code })).status).toBe(403);
   expect(await get(plain, `/api/workspaces/${w.id}/members`, ada.token).then((r) => r.json())).toHaveLength(2);
 });

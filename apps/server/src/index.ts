@@ -3,17 +3,15 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve, extname } from "node:path";
 import type { ServerWebSocket } from "bun";
-import { Store } from "./store";
 import { Accounts, AccountError, FRESH_SECONDS, SIGNUP_COOKIE, randomToken } from "./accounts";
 import { loginConfig, loginMethods } from "./login";
 import type { AccountInfo, InviteCode, InviteInfo, InviteLink, McpConnect, Ok, Role, ServerInfo, SignedIn, SignupPolicy, SignupRequest } from "@obtion/core/api";
 import { type Conn, Workspace, parseClientMsg } from "./workspace";
 import { agentOrigin, firstName, personOrigin } from "@obtion/core/origin";
 import { agentName } from "./mcp";
-import { type Lang, LANGS, acceptLang, translate } from "@obtion/core/i18n";
+import { type Lang, LANGS, acceptLang } from "@obtion/core/i18n";
 import { SETUP_ORIGIN, setUp, storeWriter } from "./setup";
 import { upgradeSetup } from "@obtion/core/setup";
-import { META_TYPE, migrateStatus } from "@obtion/core/model";
 import { allowedHosts } from "./trust";
 import { DATA, MAX_ATTACH, MAX_BLOB, MAX_WS_MESSAGE, PORT } from "./config";
 import { body, fail, json } from "./http";
@@ -30,14 +28,11 @@ const COMMIT = (process.env.OBTION_BUILD_COMMIT ?? "").slice(0, 7);
 
 mkdirSync(DATA, { recursive: true });
 const configPath = join(DATA, "config.json");
-// token is the pre-accounts MCP token and still opens that data at /mcp.
-const config: { token: string; authSecret?: string } = existsSync(configPath) ? JSON.parse(readFileSync(configPath, "utf8")) : { token: randomToken() };
-const freshConfig = !config.authSecret || !existsSync(configPath);
-config.authSecret ??= randomToken() + randomToken();
-if (freshConfig) writeFileSync(configPath, JSON.stringify(config, null, 2), { mode: 0o600 });
-
-
-const legacyWorkspaceName = (lang?: string) => translate(LANGS.includes(lang as Lang) ? (lang as Lang) : "de", "account.personal");
+const config: { authSecret?: string } = existsSync(configPath) ? JSON.parse(readFileSync(configPath, "utf8")) : {};
+if (!config.authSecret) {
+  config.authSecret = randomToken() + randomToken();
+  writeFileSync(configPath, JSON.stringify(config, null, 2), { mode: 0o600 });
+}
 
 const login = (() => {
   try {
@@ -52,13 +47,7 @@ const accounts = new Accounts(DATA, { secret: config.authSecret, baseURL: PUBLIC
   onRevoke: (user) => closeConnsOf(user, "signed out"),
 });
 
-await accounts.init((dir) => {
-  const s = new Store(dir);
-  const lang = s.lang();
-  s.db.close();
-  return legacyWorkspaceName(lang);
-});
-const legacyId = (accounts.db.query("SELECT id FROM workspaces WHERE legacy = 1").get() as { id: string } | null)?.id;
+await accounts.init();
 
 const open = new Map<string, Workspace>();
 function workspace(id: string): Workspace | undefined {
@@ -66,8 +55,6 @@ function workspace(id: string): Workspace | undefined {
   if (known || !accounts.exists(id)) return known;
   const opened = new Workspace(accounts.dir(id));
   const w = storeWriter(opened.store, SETUP_ORIGIN);
-  // types from before the status was a property kind; a no-op once done
-  for (const r of opened.store.records.values()) if (r.type === META_TYPE) w.change(r.id, migrateStatus);
   upgradeSetup(w, opened.store.lang());
   open.set(id, opened);
   return opened;
@@ -286,7 +273,7 @@ const FILE_ROUTE = /^\/w\/[\w-]{1,40}\/api\/(files(\/|$)|blobs\/)/;
 /** Only the file routes take a file's content; they count it themselves while it streams. */
 function bodyLimit(req: Request, path: string): number {
   if ((req.method === "POST" || req.method === "PUT") && FILE_ROUTE.test(path)) return MAX_BLOB;
-  if (path === "/mcp" || /^\/w\/[\w-]{1,40}\/mcp$/.test(path)) return MCP_BODY;
+  if (/^\/w\/[\w-]{1,40}\/mcp$/.test(path)) return MCP_BODY;
   return SMALL_BODY;
 }
 
@@ -338,16 +325,9 @@ const server = Bun.serve<Conn>({
       return accounts.auth.handler(req);
     }
 
-    const api = path.startsWith("/api/") || path.startsWith("/w/") || path === "/mcp";
+    const api = path.startsWith("/api/") || path.startsWith("/w/");
     // CSRF: a change without a token must come from this site
     if (api && req.method !== "GET" && !tokenOf(req) && !sameOrigin(req)) return fail(403, "forbidden");
-
-    if (path === "/mcp") {
-      // pre-accounts MCP address, opened by the old config token
-      const old = legacyId ? workspace(legacyId) : undefined;
-      if (!old || req.headers.get("authorization") !== `Bearer ${config.token}`) return fail(401, "unauthorized");
-      return old.mcp(req);
-    }
 
     if (path.startsWith("/api/")) return (await accountApi(req, path, url)) ?? fail(404, "not found");
 

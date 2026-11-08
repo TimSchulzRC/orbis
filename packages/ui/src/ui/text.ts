@@ -14,9 +14,9 @@ export function webHref(url: string): string {
   return /^www\./i.test(url) ? "https://" + url : url;
 }
 
-/** The quiet hint next to a page in link and mention lists: "Datei", else its type. */
+/** The quiet hint next to a page in link and mention lists: "File", else its type. */
 export function kindHint(item: Item, ix: Index): string {
-  return item.kind === "datei" ? tr("kind.file") : item.kind === "zeichnung" ? tr("kind.drawing") : (ix.typeName(item.type) ?? "");
+  return item.kind === "file" ? tr("kind.file") : item.kind === "drawing" ? tr("kind.drawing") : (ix.typeName(item.type) ?? "");
 }
 
 /** Where a page in link and mention lists is sorted in ("Arbeit › Relaunch"), empty if nowhere yet. */

@@ -4,15 +4,17 @@ import * as Y from "yjs";
 import {
   FORMAT,
   PERSONAL,
+  RECORD_VERSION,
   areaOf,
   SETTINGS_ID,
   type Item,
   type ItemInit,
   type FreeValue,
   type Value,
-  type ViewDef,
   addParent,
   appendUpdate,
+  putBackUpdate,
+  removeUpdate,
   initItem,
   isContent,
   metaMap,
@@ -31,7 +33,6 @@ import {
   setProp,
   setRel,
   setRules,
-  setView,
   touch,
 } from "@obtion/core/model";
 import { Index } from "@obtion/core/graph";
@@ -40,19 +41,18 @@ import { deleteItem, resolveCascade, restoreItem } from "@obtion/core/trash";
 import type { Writer } from "@obtion/core/setup";
 import { nextPinKey } from "@obtion/core/sortkey";
 import { type ActivityEvent, type ClientMsg, type PushItem, type ServerMsg, fromB64, toB64 } from "@obtion/core/protocol";
-import type { UndoRequest } from "@obtion/core/api";
+import type { PurgeRequest, PurgeResult, UndoRequest } from "@obtion/core/api";
 import { createIndex, indexRecord, searchIds } from "@obtion/core/search";
 import { type Person, personOrigin } from "@obtion/core/origin";
 
 const REMOTE = Symbol("remote");
 /** One area until teams come; the single sync cursor belongs to it. */
 const AREAS = [PERSONAL];
-export type OutItem = PushItem & { a?: string };
+export type OutItem = PushItem & { a: string };
 
 const LOAD = Symbol("load");
 const TAB = Symbol("tab");
 
-const COMPACT_AFTER_ROWS = 8;
 const SEARCH_DEBOUNCE_MS = 400;
 /** Typing into the same text continues its undo step while pauses stay shorter than this. */
 const TYPING_STEP_GAP_MS = 120_000;
@@ -62,11 +62,15 @@ const MAX_RETRY_MS = 30_000;
 const PUSH_BATCH = 200;
 const MAX_EVENTS = 100;
 
-/** `key` is the storage's own, used for compaction. */
+/**
+ * `key` is the storage's own, used for compaction. A compacted row carries readItem's result for
+ * its state (`r`), so a start can skip decoding the document while it has no other rows.
+ */
 export interface StoredRow {
   key?: unknown;
   d: string;
   u: Uint8Array;
+  r?: { v: number; item: Item | null };
 }
 
 /** Every write must be atomic, so a reload in between loses nothing. */
@@ -76,6 +80,8 @@ export interface ReplicaStorage {
   compact(docs: { keys: unknown[]; row: StoredRow }[]): Promise<void>;
   write(w: { rows?: StoredRow[]; outbox?: OutItem[]; acked?: string[]; cursor?: { lastSeq: number; lastId?: string }; serverId?: string }): Promise<void>;
   outbox(): Promise<OutItem[]>;
+  /** Removes the stored rows and outbox items of these documents. */
+  drop(ids: string[]): Promise<void>;
   serverId(): Promise<string | undefined>;
   destroy(): Promise<void>;
 }
@@ -129,7 +135,9 @@ export interface SyncStatus {
 type Listener = () => void;
 
 export class Repo {
+  /** Decoded documents. The others wait in `stored` until first use (getDoc). */
   docs = new Map<string, Y.Doc>();
+  private stored = new Map<string, Uint8Array>();
   records = new Map<string, Item>();
   version = 0;
   status: SyncStatus = { loaded: false, online: false, synced: false, pending: 0, lastSeq: 0 };
@@ -152,6 +160,9 @@ export class Repo {
   private persistFailed = false;
   private ix: { v: number; index: Index } | null = null;
   private blobListeners = new Set<(hash: string) => void>();
+  private purgeListeners = new Set<(items: Item[]) => void>();
+  /** Documents the server deleted for good: never applied or sent again. */
+  private purged = new Set<string>();
 
   constructor(private host: RepoHost) {
     this.db = host.storage;
@@ -167,27 +178,38 @@ export class Repo {
     await this.db.open();
     this.host.persist?.();
     const { rows, outbox, lastSeq, lastId } = await this.db.load();
-    const byDoc = new Map<string, { keys: unknown[]; updates: Uint8Array[] }>();
+    const byDoc = new Map<string, { keys: unknown[]; updates: Uint8Array[]; r?: StoredRow["r"] }>();
     for (const row of rows) {
       const e = byDoc.get(row.d) ?? { keys: [], updates: [] };
       e.keys.push(row.key);
       e.updates.push(row.u);
+      e.r = row.r;
       byDoc.set(row.d, e);
     }
+    const toCompact: [string, unknown[]][] = [];
     for (const [id, e] of byDoc) {
+      // one compacted row with a current record: no need to decode the document now
+      if (e.updates.length === 1 && e.r?.v === RECORD_VERSION) {
+        this.stored.set(id, e.updates[0]!);
+        if (e.r.item) this.records.set(id, e.r.item);
+        this.searchDirty.add(id);
+        continue;
+      }
       const doc = this.getDoc(id);
       Y.applyUpdate(doc, e.updates.length === 1 ? e.updates[0]! : Y.mergeUpdates(e.updates), LOAD);
+      this.dirty.add(id);
+      this.searchDirty.add(id);
+      toCompact.push([id, e.keys]);
     }
     for (const o of outbox) this.outbox.set(o.k, o);
     this.status.lastSeq = lastSeq ?? 0;
     this.lastId = lastId;
     this.status.pending = this.outbox.size;
-    for (const id of this.docs.keys()) this.dirty.add(id), this.searchDirty.add(id);
     this.materialize();
     this.reindex();
     this.status.loaded = true;
     this.emit();
-    this.compact(byDoc).catch((e) => console.warn("compact failed", e));
+    this.compact(toCompact).catch((e) => console.warn("compact failed", e));
 
     this.host.tabs?.listen((msg) => this.applyFromTab(msg));
     this.connect();
@@ -196,11 +218,15 @@ export class Repo {
     });
   }
 
-  /** Merges many small stored updates per doc into one. */
-  private async compact(byDoc: Map<string, { keys: unknown[]; updates: Uint8Array[] }>) {
-    const heavy = [...byDoc].filter(([, e]) => e.keys.length > COMPACT_AFTER_ROWS);
-    if (!heavy.length) return;
-    await this.db.compact(heavy.map(([id, e]) => ({ keys: e.keys, row: { d: id, u: Y.encodeStateAsUpdate(this.docs.get(id)!) } })));
+  /** Replaces the stored rows of each decoded document by one row with its record. */
+  private async compact(docs: [string, unknown[]][]) {
+    if (!docs.length) return;
+    await this.db.compact(
+      docs.map(([id, keys]) => {
+        const doc = this.docs.get(id)!;
+        return { keys, row: { d: id, u: Y.encodeStateAsUpdate(doc), r: { v: RECORD_VERSION, item: readItem(id, doc) } } };
+      }),
+    );
   }
 
   subscribe = (l: Listener) => {
@@ -219,11 +245,21 @@ export class Repo {
     for (const l of this.listeners) l();
   }
 
+  /** Has this device any data? */
+  get hasData(): boolean {
+    return this.docs.size > 0 || this.stored.size > 0;
+  }
+
   getDoc(id: string): Y.Doc {
     let doc = this.docs.get(id);
     if (doc) return doc;
     doc = new Y.Doc({ guid: id });
     this.docs.set(id, doc);
+    const stored = this.stored.get(id);
+    if (stored) {
+      this.stored.delete(id);
+      Y.applyUpdate(doc, stored, LOAD);
+    }
     doc.on("update", (update: Uint8Array, origin: unknown, _doc: Y.Doc, tr: Y.Transaction) => {
       if (origin === LOAD) return;
       if (origin === TAB) {
@@ -348,6 +384,7 @@ export class Repo {
   }
 
   private applyFromTab(msg: TabMsg) {
+    if (this.purged.has(msg.d)) return;
     Y.applyUpdate(this.getDoc(msg.d), msg.u, TAB);
   }
 
@@ -386,13 +423,14 @@ export class Repo {
     for (const o of await this.db.outbox()) this.outbox.set(o.k, o);
     this.status.pending = this.outbox.size;
     for (const area of AREAS) {
-      const items = [...this.outbox.values()].filter((o) => (o.a ?? PERSONAL) === area); // items from before areas: personal
+      const items = [...this.outbox.values()].filter((o) => o.a === area);
       for (let i = 0; i < items.length; i += PUSH_BATCH) this.send({ t: "push", area, items: items.slice(i, i + PUSH_BATCH) });
     }
   }
 
   /** Goes through the durable outbox, so it survives disconnects. */
   private async enqueueFullUpload() {
+    for (const id of [...this.stored.keys()]) this.getDoc(id);
     const items: OutItem[] = [...this.docs].map(([d, doc]) => ({ k: newId(), d, u: toB64(Y.encodeStateAsUpdate(doc)), a: areaOf(doc) }));
     await this.db.write({ outbox: items });
     for (const it of items) this.outbox.set(it.k, it);
@@ -418,6 +456,8 @@ export class Repo {
       await this.onUpdates(msg);
     } else if (msg.t === "ack") {
       await this.onAck(msg);
+    } else if (msg.t === "purged") {
+      await this.drop(msg.ids);
     } else if (msg.t === "blob") {
       for (const l of this.blobListeners) l(msg.hash);
     } else if (msg.t === "event") {
@@ -431,7 +471,7 @@ export class Repo {
   private async onWelcome(msg: Extract<ServerMsg, { t: "welcome" }>) {
     this.serverFormat = msg.format;
     const known = this.serverId ?? (await this.db.serverId());
-    if (known && known !== msg.hub && this.docs.size > 0) {
+    if (known && known !== msg.server && this.hasData) {
       // Usually the server was set up anew and this copy is stale (replace, recommended); rarely it
       // was restored from a backup and misses what only this device has (upload). Only the user knows.
       const answer = await this.host.askOtherServer();
@@ -443,7 +483,7 @@ export class Repo {
         return;
       }
       if (answer !== "upload") {
-        await this.db.write({ serverId: msg.hub });
+        await this.db.write({ serverId: msg.server });
         await this.resetLocal(true);
         return;
       }
@@ -454,8 +494,8 @@ export class Repo {
       await this.db.write({ cursor: { lastSeq: 0 } });
       this.send({ t: "hello", area: msg.area, since: 0, device: this.device });
     }
-    this.serverId = msg.hub;
-    if (known !== msg.hub) await this.db.write({ serverId: msg.hub });
+    this.serverId = msg.server;
+    if (known !== msg.server) await this.db.write({ serverId: msg.server });
     await this.flushOutbox();
   }
 
@@ -467,6 +507,7 @@ export class Repo {
     }
     const rows: StoredRow[] = [];
     for (const it of msg.items) {
+      if (this.purged.has(it.d)) continue;
       const u = fromB64(it.u);
       Y.applyUpdate(this.getDoc(it.d), u, REMOTE);
       rows.push({ d: it.d, u });
@@ -516,6 +557,44 @@ export class Repo {
     this.host.reload();
   }
 
+  /** Deletes an item in the trash for good on the server (with what was deleted with it), or with `all` everything in the trash. False offline or on refusal. */
+  async purge(req: PurgeRequest): Promise<boolean> {
+    await this.flushOutbox();
+    const res = await this.host.post("/api/purge", req);
+    if (!res?.ok) return false;
+    await this.drop((res.body as PurgeResult).purged);
+    return true;
+  }
+
+  /** Forgets documents the server deleted for good, here and in the storage. */
+  private async drop(ids: string[]) {
+    const gone = new Set(ids);
+    const items = ids.flatMap((id) => this.records.get(id) ?? []);
+    for (const id of ids) {
+      this.purged.add(id);
+      this.docs.get(id)?.destroy();
+      this.docs.delete(id);
+      this.stored.delete(id);
+      this.records.delete(id);
+      this.dirty.delete(id);
+      this.searchDirty.delete(id);
+      if (this.searchIndex.has(id)) this.searchIndex.discard(id);
+    }
+    for (const [k, o] of this.outbox) if (gone.has(o.d)) this.outbox.delete(k);
+    this.status.pending = this.outbox.size;
+    this.events = this.events.filter((e) => !gone.has(e.doc));
+    resolveCascade(this.records);
+    await this.db.drop(ids);
+    for (const l of this.purgeListeners) l(items);
+    this.emit();
+  }
+
+  /** After documents were purged (their last records), e.g. to drop file contents only they used. */
+  onPurge(l: (items: Item[]) => void) {
+    this.purgeListeners.add(l);
+    return () => this.purgeListeners.delete(l);
+  }
+
   onBlob(l: (hash: string) => void) {
     this.blobListeners.add(l);
     return () => this.blobListeners.delete(l);
@@ -546,6 +625,7 @@ export class Repo {
   }
 
   change(id: string, fn: (doc: Y.Doc) => void) {
+    if (this.purged.has(id)) return;
     if (this.readOnly) {
       if (!this.tooNewShown) this.host.tooNew();
       this.tooNewShown = true;
@@ -586,7 +666,7 @@ export class Repo {
   /** Applies the new type's initial values. Files have no type. */
   setType(id: string, type: string | null) {
     const item = this.records.get(id);
-    if (!item || item.kind !== "info" || item.type === type) return;
+    if (!item || item.kind !== "note" || item.type === type) return;
     const schema = type ? this.records.get(type)?.schema : undefined;
     this.change(id, (doc) => {
       setMeta(doc, { type });
@@ -653,17 +733,13 @@ export class Repo {
   setBody(id: string, body: string) {
     this.change(id, (doc) => replaceBody(doc, body));
   }
-  /** "Regeln für Agenten" of an item, or of the workspace (the settings doc). */
+  /** "Rules for agents" of an item, or of the workspace (the settings doc). */
   setRules(id: string, rules: string) {
     this.change(id, (doc) => {
       setRules(doc, rules);
       touch(doc);
     });
   }
-  setView(id: string, viewId: string, def: ViewDef | null) {
-    this.change(id, (doc) => setView(doc, viewId, def));
-  }
-
   /** `status.option` is an option id of the status property. */
   addUpdate(id: string, text: string, status?: { prop: string; option: string }) {
     const schema = this.index().schemaOf(this.records.get(id));
@@ -673,6 +749,17 @@ export class Repo {
       if (status) writeProp(doc, schema, status.prop, status.option, at);
       touch(doc);
     });
+  }
+
+  /** Deletes an update; the activity log keeps that it was there. Returns a way to put it back. */
+  removeUpdate(id: string, updateId: string): (() => void) | undefined {
+    let gone: ReturnType<typeof removeUpdate>;
+    this.change(id, (doc) => {
+      gone = removeUpdate(doc, updateId);
+    });
+    if (!gone) return undefined;
+    const { entry, at } = gone;
+    return () => this.change(id, (doc) => putBackUpdate(doc, entry, at));
   }
 
   /** Children that hang only here go along, or with "inbox" lose this parent. */

@@ -1,5 +1,5 @@
 // Workspaces share nothing, so moving to another workspace copies the item and what hangs only
-// below it with new ids; the originals go to the trash so "Wiederherstellen" brings them back.
+// below it with new ids; the originals go to the trash so "Restore" brings them back.
 // Parents, refs and relations to items left behind are dropped; [[id|…]] links to them become
 // [[Label]] links. Types are matched by id or name, not merged; a missing type is copied. Values
 // without a matching property become free properties.

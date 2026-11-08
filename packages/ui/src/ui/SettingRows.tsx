@@ -1,5 +1,5 @@
 // Settings as in the app's settings dialog: a group is a small heading over a card of rows, a
-// row its title and hint on the left and its control on the right. "Typ bearbeiten" uses them too.
+// row its title and hint on the left and its control on the right. "Edit type" uses them too.
 import type { ReactNode } from "react";
 
 export function SettingsGroup({ title, hint, action, children }: { title: string; hint?: string; action?: ReactNode; children: ReactNode }) {

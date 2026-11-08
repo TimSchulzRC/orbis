@@ -1,5 +1,5 @@
-// "Regeln für Agenten": an item's own rules and the ones it inherits – from everything above it over
-// "Teil von" (all parents) and from the workspace (its settings). Agents get them over MCP with every
+// "Rules for agents": an item's own rules and the ones it inherits – from everything above it over
+// "Part of" (all parents) and from the workspace (its settings). Agents get them over MCP with every
 // answer about the item (see core rules.ts); people rarely need them, so the page shows only an icon
 // at the right edge after the tags.
 import { useEffect, useRef, useState } from "react";
@@ -70,7 +70,7 @@ export function RulesField({ id, value, autoFocus, onBlur, label, placeholder }:
 }
 
 /** The robot icon after the tags: an item's own rules and what applies from above. Only agents act
- * on them, so they live in this dialog and not on the page. Nothing is saved until "Speichern"
+ * on them, so they live in this dialog and not on the page. Nothing is saved until "Save"
  * (or Ctrl/Cmd+Enter); closing the dialog drops what was typed. Until then a change from elsewhere
  * replaces the text, unless it was edited. */
 export function AgentRulesDialog({ item, onClose }: { item: Item; onClose: () => void }) {

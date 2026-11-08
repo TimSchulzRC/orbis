@@ -1,4 +1,4 @@
-// Parts every page shares, information and file pages alike (design rules § 3.1).
+// Parts every page shares, note and file pages alike (design rules § 3.1).
 import { ChevronRight, Link2, Pin, PinOff, Plus, RotateCcw, Star, X } from "lucide-react";
 import { useState } from "react";
 import { type Item, META_TYPE } from "@obtion/core/model";
@@ -165,7 +165,7 @@ function linkGroups(item: Item, ix: Index, t: T, usedIn: { item: Item; note?: st
   const linkingIds = new Set(ix.backlinks(item.id).filter((b) => b.kind !== "rel").map((b) => b.from));
   const from = [...linkingIds]
     .map((id) => ix.get(id)!)
-    .filter((x) => x && x.kind === "info" && !x.deleted && x.type !== META_TYPE && !usedIn.some((u) => u.item.id === x.id));
+    .filter((x) => x && x.kind === "note" && !x.deleted && x.type !== META_TYPE && !usedIn.some((u) => u.item.id === x.id));
   const where = (x: Item) => {
     const homePath = ix.homePath(x.id);
     return homePath.length ? <span className="truncate">{ix.get(homePath.at(-1)!)?.title}</span> : undefined;

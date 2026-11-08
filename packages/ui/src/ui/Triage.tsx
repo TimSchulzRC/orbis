@@ -43,7 +43,7 @@ function rowHint(item: Item, ix: Index, t: T): { icon: React.ReactNode; text: st
     const what = suggestionText(sug, ix);
     if (what) return { icon: <Sparkles size={12} />, text: what };
   }
-  const mentioned = ix.items(ix.mentions(item)).find((x) => x.kind === "info");
+  const mentioned = ix.items(ix.mentions(item)).find((x) => x.kind === "note");
   if (mentioned) return { icon: <ArrowRight size={12} />, text: mentioned.title };
   const kids = belowOf(item.id, ix).length;
   if (kids) return { icon: <NOTE_ICON size={12} />, text: t("triage.notes", { count: kids }) };
@@ -111,7 +111,7 @@ export function Triage({ items }: { items: Item[] }) {
     else if (k === "Escape" && marked.size) setMarked(new Set());
     else if (k === "e" && cur) pick.setPlacing(targets());
     else if (k === "c" && act.firstType(cur) && cur && new Set(targets().map(spaceOf)).size === 1) (act.giveType(targets(), act.firstType(cur)!), setMarked(new Set()));
-    else if (k === "y" && cur) pick.setTyping(targets().filter((i) => i.kind === "info"));
+    else if (k === "y" && cur) pick.setTyping(targets().filter((i) => i.kind === "note"));
     else if ((k === "x" || k === "Delete") && cur) trash(targets());
     else if (k === "u" || k === "z") act.undo();
     else if ((k === "Enter" || k === "o") && cur) openItem(cur.id, { space: spaceOf(cur) });
@@ -208,7 +208,7 @@ export function Triage({ items }: { items: Item[] }) {
       <Button variant="outline" onClick={() => pick.setPlacing(many)} className="h-7 px-2 text-[13px]">
         <FolderInput size={14} /> {t("triage.place")}
       </Button>
-      <Button onClick={() => pick.setTyping(many.filter((i) => i.kind === "info"))} aria-label={t("triage.type")} title={t("triage.type")} className="h-7 px-1.5">
+      <Button onClick={() => pick.setTyping(many.filter((i) => i.kind === "note"))} aria-label={t("triage.type")} title={t("triage.type")} className="h-7 px-1.5">
         <Shapes size={14} />
       </Button>
       <Button variant="danger" onClick={() => trash(many)} aria-label={t("triage.delete")} title={t("triage.delete")} className="h-7 px-1.5">
@@ -257,8 +257,8 @@ export function Triage({ items }: { items: Item[] }) {
         ) : null}
         <ActionBar
           onPlace={() => pick.setPlacing(targets())}
-          onType={() => pick.setTyping(targets().filter((i) => i.kind === "info"))}
-          toType={!many && current?.kind === "info" && act.firstType(current) && act.firstType(current) !== current.type ? act.firstType(current) : undefined}
+          onType={() => pick.setTyping(targets().filter((i) => i.kind === "note"))}
+          toType={!many && current?.kind === "note" && act.firstType(current) && act.firstType(current) !== current.type ? act.firstType(current) : undefined}
           onToType={(type) => act.giveType(targets(), type)}
           onTrash={() => trash(targets())}
         />
@@ -274,7 +274,7 @@ function Detail({ item, onPlaced }: { item: Item; onPlaced: (p: string) => void 
   const repo = useRepo();
   const hrefOf = useItemHref();
   const ix = repo.index();
-  const mentioned = ix.items(new Set(ix.mentions(item))).filter((x) => x.kind === "info");
+  const mentioned = ix.items(new Set(ix.mentions(item))).filter((x) => x.kind === "note");
   const kids = belowOf(item.id, ix);
   const sug = item.suggestion;
   const places = useMemo(() => {
@@ -355,7 +355,7 @@ function Detail({ item, onPlaced }: { item: Item; onPlaced: (p: string) => void 
   );
 }
 
-/** The fixed action bar under the detail: Einordnen (primary), Typ wählen, Zur Karte, Löschen; key hints below. */
+/** The fixed action bar under the detail: Place (primary), Choose type, To card, Delete; key hints below. */
 function ActionBar({ onPlace, onType, toType, onToType, onTrash }: { onPlace: () => void; onType: () => void; toType?: string; onToType: (t: string) => void; onTrash: () => void }) {
   const { t } = useT();
   const ix = useIndex();

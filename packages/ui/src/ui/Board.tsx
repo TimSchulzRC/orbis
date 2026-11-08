@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ChevronDown, ChevronRight, EyeOff } from "lucide-react";
-import { type Item, type StatusGroup } from "@obtion/core/model";
+import { type Item, type StatusGroup, propByName } from "@obtion/core/model";
 import { type QueryDef, type EvalCtx, type Group as QGroup, fieldOf, groupItems, viewTypeIds } from "@obtion/core/query";
 import { firstOfGroup, hasOptions, statusProp } from "@obtion/core/traits";
 import { useRepo, itemHref, openItem } from "../hooks";
@@ -19,7 +19,7 @@ export function BoardView({ items, def, ctx, look }: { items: Item[]; def: Query
   const ix = ctx.ix;
   const by = def.group && def.group !== "path" ? def.group : "status";
   const tab = look?.tab;
-  // empty options stay as columns so there is somewhere to drag to ("Erledigt" before anything is done)
+  // empty options stay as columns so there is somewhere to drag to ("Done" before anything is done)
   const typeIds = viewTypeIds(def.where, items, ix, items.length);
   const [columns, hiddenCols] = splitHidden(groupItems(items, by, ctx, undefined, tab?.hideEmpty ? undefined : { types: typeIds, where: def.where }).filter((g) => !tab?.hideEmpty || g.items.length), tab);
   const lanes = tab?.subgroup ? groupItems(items, tab.subgroup, ctx).filter((g) => g.items.length) : [{ key: "", items } as QGroup];
@@ -35,7 +35,7 @@ export function BoardView({ items, def, ctx, look }: { items: Item[]; def: Query
       if (first) void setStatus(item, first.id, repo);
       return;
     }
-    const prop = by === "status" ? statusProp(schema) : schema?.properties.find((p) => p.name.toLowerCase() === by.toLowerCase() && hasOptions(p));
+    const prop = by === "status" ? statusProp(schema) : propByName(schema, by, hasOptions);
     const opt = prop?.options?.find((o) => o.name === g.label);
     if (prop && opt && prop.id === statusProp(schema)?.id) void setStatus(item, opt.id, repo);
     else if (prop && opt) repo.setProp(id, prop.id, prop.multiple ? [opt.id] : opt.id);

@@ -13,17 +13,18 @@ afterAll(removeTempDirs);
 let s: Store;
 let ops: Ops;
 const AG = "agent:test";
+// set up in German: type names, status and date words below are German
 beforeEach(() => ({ s, ops } = setupStore("obtion-undo-")));
 const byTitle = (t: string) => s.records.get(s.index().resolveTitle(t) ?? [...s.records.values()].find((r) => r.title === t)?.id ?? "")!;
 
 test("one agent step with several changes is taken back as a whole, across items", () => {
-  ops.call(AG, () => (ops.create({ title: "Nordlicht · Frankreich", type: "Projekt", properties: { Status: "Planung" } }, AG), "ok"));
-  ops.call(AG, () => (ops.create({ title: "Mapping", type: "Task", parents: ["Nordlicht · Frankreich"] }, AG), "ok"));
-  // "Nordlicht: Mapping fertig, Review am Freitag"
+  ops.call(AG, () => (ops.create({ title: "Nordlicht · France", type: "Projekt", properties: { Status: "Planung" } }, AG), "ok"));
+  ops.call(AG, () => (ops.create({ title: "Mapping", type: "Task", parents: ["Nordlicht · France"] }, AG), "ok"));
+  // "Nordlicht: mapping done, review on Friday" (the German workspace takes "erledigt" and "Freitag")
   const out = ops.call(AG, () => {
     ops.update("Mapping", { properties: { Status: "erledigt" } }, AG);
-    ops.addUpdate("Nordlicht · Frankreich", "Mapping fertig, Review am Freitag", "In Bearbeitung", AG, AG);
-    ops.create({ title: "Review", type: "Task", parents: ["Nordlicht · Frankreich"], properties: { Fällig: "Freitag" } }, AG);
+    ops.addUpdate("Nordlicht · France", "Mapping done, review on Friday", "In Bearbeitung", AG, AG);
+    ops.create({ title: "Review", type: "Task", parents: ["Nordlicht · France"], properties: { Fällig: "Freitag" } }, AG);
     return "done";
   });
   const step = stepOf(out);
@@ -35,24 +36,24 @@ test("one agent step with several changes is taken back as a whole, across items
   expect(r.trashed).toEqual([byTitle("Review").id]);
   expect(byTitle("Mapping").props.p_status).toBe("st_todo");
   expect(byTitle("Mapping").doneAt).toBeUndefined();
-  expect(byTitle("Nordlicht · Frankreich").props.p_status).toBe("st_planning");
-  expect(byTitle("Nordlicht · Frankreich").updates).toEqual([]);
+  expect(byTitle("Nordlicht · France").props.p_status).toBe("st_planning");
+  expect(byTitle("Nordlicht · France").updates).toEqual([]);
   expect(s.index().resolveTitle("Review")).toBeUndefined();
   expect(s.activeUndo(step)).toBe(r.step);
   expect(() => undoStep(s, step, "web:tim@laptop")).toThrow(UndoError);
-  // Wiederholen: everything is back, and the activity calls it a redo ("hat wiederholt")
+  // redo: everything is back, and the activity calls it a redo
   const again = redoStep(s, step, "web:tim@laptop");
   expect(s.stepState(again.step)).toMatchObject({ undoes: r.step, redo: true });
   expect(byTitle("Mapping").props.p_status).toBe("st_done");
-  expect(byTitle("Nordlicht · Frankreich").updates.length).toBe(1);
+  expect(byTitle("Nordlicht · France").updates.length).toBe(1);
   expect(s.index().resolveTitle("Review")).toBeDefined();
   expect(s.activeUndo(step)).toBeUndefined();
 });
 
 test("fields changed again later keep their newer value", () => {
   ops.call(AG, () => (ops.create({ title: "Website", type: "Projekt" }, AG), "ok"));
-  const step = stepOf(ops.call(AG, () => (ops.update("Website", { title: "Website neu", properties: { Status: "aktiv" }, tags_add: ["web"] }, AG), "ok")));
-  ops.call("web:tim@phone", () => (ops.update("Website neu", { title: "Website 2027" }, "web:tim@phone"), "ok"));
+  const step = stepOf(ops.call(AG, () => (ops.update("Website", { title: "Website new", properties: { Status: "aktiv" }, tags_add: ["web"] }, AG), "ok")));
+  ops.call("web:tim@phone", () => (ops.update("Website new", { title: "Website 2027" }, "web:tim@phone"), "ok"));
   const r = undoStep(s, step, AG);
   const w = byTitle("Website 2027");
   expect(w.title).toBe("Website 2027");
@@ -62,9 +63,9 @@ test("fields changed again later keep their newer value", () => {
 });
 
 test("a step pushed by a device (delete with cascade over two documents) can be undone", () => {
-  ops.call(AG, () => (ops.create({ title: "Projekt", type: "Projekt", pin: true }, AG), "ok"));
-  ops.call(AG, () => (ops.create({ title: "Task", type: "Task", parents: ["Projekt"] }, AG), "ok"));
-  const p = byTitle("Projekt").id;
+  ops.call(AG, () => (ops.create({ title: "Project", type: "Projekt", pin: true }, AG), "ok"));
+  ops.call(AG, () => (ops.create({ title: "Task", type: "Task", parents: ["Project"] }, AG), "ok"));
+  const p = byTitle("Project").id;
   const t = byTitle("Task").id;
   // the device: its own copy, one user action marks both
   const device = new Map<string, Y.Doc>();
@@ -92,31 +93,31 @@ test("a step pushed by a device (delete with cascade over two documents) can be 
 });
 
 test("undoing a creation sends the new item to the trash; text typed later stays there", () => {
-  const step = stepOf(ops.call(AG, () => (ops.create({ title: "Idee" }, AG), "ok")));
-  ops.call("web:x", () => (ops.update("Idee", { body: "Mehr Text", body_mode: "append" }, "web:x"), "ok"));
+  const step = stepOf(ops.call(AG, () => (ops.create({ title: "Idea" }, AG), "ok")));
+  ops.call("web:x", () => (ops.update("Idea", { body: "More text", body_mode: "append" }, "web:x"), "ok"));
   undoStep(s, step, "web:x");
-  const it = [...s.records.values()].find((r) => r.title === "Idee")!;
+  const it = [...s.records.values()].find((r) => r.title === "Idea")!;
   expect(it.deleted).toBe(true);
-  expect(it.body).toBe("Mehr Text");
+  expect(it.body).toBe("More text");
 });
 
 test("the undo tool takes back the agent's own last step", () => {
-  ops.call(AG, () => (ops.create({ title: "Eins" }, AG), "ok"));
-  ops.call(AG, () => (ops.create({ title: "Zwei" }, AG), "ok"));
+  ops.call(AG, () => (ops.create({ title: "One" }, AG), "ok"));
+  ops.call(AG, () => (ops.create({ title: "Two" }, AG), "ok"));
   expect(ops.lastStep(AG, false)).toBeDefined();
   undoStep(s, ops.lastStep(AG, false), AG);
-  expect(s.index().resolveTitle("Zwei")).toBeUndefined();
-  expect(s.index().resolveTitle("Eins")).toBeDefined();
+  expect(s.index().resolveTitle("Two")).toBeUndefined();
+  expect(s.index().resolveTitle("One")).toBeDefined();
   // the next "last step" skips the undone one
   undoStep(s, ops.lastStep(AG, false), AG);
-  expect(s.index().resolveTitle("Eins")).toBeUndefined();
+  expect(s.index().resolveTitle("One")).toBeUndefined();
   redoStep(s, ops.lastStep(AG, true), AG);
-  expect(s.index().resolveTitle("Eins")).toBeDefined();
+  expect(s.index().resolveTitle("One")).toBeDefined();
 });
 
 test("a device's raw update without a step is logged as before", () => {
   const d = new Y.Doc({ guid: "x" });
-  d.transact(() => initItem(d, { title: "Alt" }));
+  d.transact(() => initItem(d, { title: "Old" }));
   s.applyRemote("x", Y.encodeStateAsUpdate(d), "web:old");
   s.flush();
   expect(s.events({ limit: 1 })[0]!.step).toBeUndefined();
@@ -124,7 +125,7 @@ test("a device's raw update without a step is logged as before", () => {
 
 test("a saved filter in a type's view shows in the activity and can be undone", () => {
   const before = typeTabs(s.records.get(SYS.card)!, "de");
-  // what "Speichern" writes after trying a filter in the view "Alle" of "Karten" (the defaults go along)
+  // what "Save" writes after trying a filter in the cards' view "Alle" (the defaults go along)
   const out = ops.call("web:tim@laptop", () => {
     s.change(SYS.card, "web:tim@laptop", (d) => (setTabs(d, before), setTab(d, before[0]!.id, { where: { under: { id: "demo-x" } } })));
     return "ok";

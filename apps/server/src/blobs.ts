@@ -3,7 +3,7 @@
 // (texts/<sha256>), the file's facts carry its start: they sync to every device. A file whose content wasn't
 // read yet (`extracted` missing or for another content, e.g. after a restart) is read when the
 // workspace opens. Devices that add images offline make previews themselves; the server fills gaps.
-import { existsSync, mkdirSync, readFileSync, renameSync, statSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { type FileMeta, type Item, setFileMeta } from "@obtion/core/model";
 import type { Store } from "./store";
@@ -69,10 +69,6 @@ export class Blobs {
     return HASH.test(hash) && existsSync(this.path(hash));
   }
 
-  size(hash: string) {
-    return statSync(this.path(hash)).size;
-  }
-
   /** Returns false on a hash mismatch. */
   async put(hash: string, data: Uint8Array): Promise<boolean> {
     if (!HASH.test(hash) || sha256(data) !== hash) return false;
@@ -136,36 +132,19 @@ export class Blobs {
 
   /** Includes history and derived versions. */
   referenced(): Set<string> {
-    const out = new Set<string>();
-    for (const r of this.store.records.values()) {
-      for (const h of r.drawing?.files ?? []) out.add(h);
-      const f = r.file;
-      if (!f) continue;
-      for (const h of [f.hash, f.display, f.thumb, ...(f.history ?? []).map((x) => x.hash)]) if (h) out.add(h);
-    }
-    return out;
+    return new Set([...this.store.records.values()].flatMap(contentsOf));
   }
 
-  /** Run by hand only (cli.ts gc): copies in backups/ may still point to these. */
-  collect(dryRun = false): string[] {
+  /** After items were purged: removes their contents (and kept texts) that no other item points to. */
+  forget(items: Item[]) {
     const keep = this.referenced();
-    const unused = readdirSync(this.dir).filter((name) => HASH.test(name) && !keep.has(name));
-    if (!dryRun) {
-      for (const hash of unused) unlinkSync(this.path(hash));
-      for (const name of readdirSync(this.texts)) if (!keep.has(name)) unlinkSync(this.textPath(name));
+    for (const hash of new Set(items.flatMap(contentsOf))) {
+      if (keep.has(hash) || !HASH.test(hash)) continue;
+      for (const p of [this.path(hash), this.textPath(hash)]) if (existsSync(p)) unlinkSync(p);
     }
-    return unused;
   }
 
   scan() {
-    // texts from before they were kept here: the whole one moves here, the facts keep the start
-    for (const r of this.store.records.values()) {
-      const f = r.file;
-      if (!f?.text || f.text.length <= FACTS_TEXT + 2 || f.extracted !== extractMark(f.hash) || !HASH.test(f.hash)) continue;
-      // there already when another file has the same content, or after a stop between the two steps
-      if (!existsSync(this.textPath(f.hash))) this.keepText(f.hash, f.text);
-      this.store.change(r.id, "system:files", (doc) => setFileMeta(doc, { text: factsText(f.text!) }), { quiet: true });
-    }
     for (const r of this.store.live()) if (this.needsWork(r)) this.schedule(r.id);
     // PDF previews a device announced but never uploaded: drop them so a device renders them again
     for (const r of this.store.live()) {
@@ -177,7 +156,7 @@ export class Blobs {
   needsWork(r: Item): boolean {
     const f = r.file;
     if (!f?.hash || !this.has(f.hash)) return false;
-    if (f.filetype === "bild") return (!f.display || !f.thumb || !f.width) && !/svg/.test(f.mime) && !!FFMPEG;
+    if (f.filetype === "image") return (!f.display || !f.thumb || !f.width) && !/svg/.test(f.mime) && !!FFMPEG;
     if (f.filetype === "audio" || f.filetype === "video") return f.duration === undefined && !!FFPROBE;
     return f.extracted !== extractMark(f.hash);
   }
@@ -215,7 +194,7 @@ export class Blobs {
     if (!f || !this.needsWork(record!)) return;
     const src = this.path(f.hash);
     const patch: Partial<FileMeta> = {};
-    if (f.filetype === "bild") {
+    if (f.filetype === "image") {
       const dim = await probe(src);
       if (dim.width) Object.assign(patch, { width: dim.width, height: dim.height });
       if (!f.display) patch.display = await this.derive(src, DISPLAY_WIDTH);
@@ -257,6 +236,13 @@ export class Blobs {
     await this.put(hash, data);
     return hash;
   }
+}
+
+/** The contents an item points to: the file with its history and derived versions, a drawing's images. */
+function contentsOf(r: Item): string[] {
+  const f = r.file;
+  const own = f ? [f.hash, f.display, f.thumb, ...(f.history ?? []).map((x) => x.hash)] : [];
+  return [...own, ...(r.drawing?.files ?? [])].filter((h): h is string => !!h);
 }
 
 async function probe(path: string): Promise<{ width?: number; height?: number; duration?: number }> {
