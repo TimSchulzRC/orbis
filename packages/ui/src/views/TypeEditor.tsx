@@ -123,12 +123,6 @@ export function TypeEditor({ item, onClose }: { item: Item; onClose: () => void 
                 <span className="truncate font-medium text-fg">{label}</span>
               )}
             </DialogTitle>
-            {/* for the whole list, not one of its cards: the kind decides where a new property goes */}
-            {page === "props" && !prop && schema.properties.length > 0 && (
-              <span className="mr-1">
-                <AddProperty item={item} onAdded={onAdded} />
-              </span>
-            )}
             <IconButton icon={X} label={t("close")} onClick={onClose} />
           </div>
           {/* a new key for each page, so it starts scrolled to the top */}
@@ -297,6 +291,11 @@ function PropListPage({ item, onOpen, onAdded, left }: { item: Item; onOpen: (id
       </div>
     ) : (
     <div className="space-y-7">
+      {/* the button heads the whole list, not one of its cards: the kind decides where a new property goes */}
+      <div className="flex items-center gap-4 px-1">
+        <h2 className="min-w-0 flex-1 truncate text-lg font-semibold">{t("type.properties")}</h2>
+        <AddProperty item={item} onAdded={onAdded} />
+      </div>
       <PropGroup title={t("type.badgeProps")} hint={t("type.badgeHint")} props={badges} empty={t("type.noBadges")} move={move} onOpen={onOpen} left={left} />
       <PropGroup title={t("type.rowProps")} hint={t("type.rowHint")} props={rows} empty={t("type.noRows")} move={move} onOpen={onOpen} left={left} />
     </div>

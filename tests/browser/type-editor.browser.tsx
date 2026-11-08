@@ -92,8 +92,10 @@ test("the badges and the rows below are two cards, each sorted on its own", asyn
   expect(schema().properties.some((p) => p.id === "p_priority")).toBe(true);
 });
 
-test("the add button sits in the head bar; back from the new property, its row has the focus", async () => {
+test("the add button sits beside the heading; back from the new property, its row has the focus", async () => {
   const { dialog, schema } = await setupProps();
+  const heading = dialog.getByRole("heading", { name: "Eigenschaften", level: 2 });
+  expect(heading.element().parentElement!.querySelector("button")!.textContent).toContain("Eigenschaft hinzufügen");
   await dialog.getByRole("button", { name: "Eigenschaft hinzufügen" }).click();
   await page.getByPlaceholder("Name").fill("Budget");
   await page.getByRole("button", { name: "Hinzufügen", exact: true }).click();
