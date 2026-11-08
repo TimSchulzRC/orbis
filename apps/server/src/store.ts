@@ -46,11 +46,13 @@ const EVENT_MERGE_WINDOW_MS = 5 * 60_000;
 const MAX_CLOCK_SKEW_MS = 10 * 60_000;
 const MAX_UNDO_CHAIN = 20;
 /**
- * How long log rows stay as written. Older rows fold into one row per document, and their steps
+ * How long log rows stay as written at least. Older rows fold into one row per document, and their steps
  * can no longer be undone. Two weeks: a device offline longer than that resyncs in full (reset),
  * and fields a step changed have mostly been changed again by then anyway.
  */
 export const LOG_WINDOW_MS = 14 * 24 * 60 * 60_000;
+/** Rows appended between two compactions: no timer, a server that writes nothing needs none. */
+export const COMPACT_AFTER_ROWS = 10_000;
 
 const SCHEMA = `CREATE TABLE IF NOT EXISTS updates (seq INTEGER PRIMARY KEY AUTOINCREMENT, doc TEXT NOT NULL, data BLOB NOT NULL, origin TEXT NOT NULL, ts INTEGER NOT NULL, uid TEXT NOT NULL, step TEXT, area TEXT NOT NULL);
   CREATE INDEX IF NOT EXISTS updates_doc ON updates(doc, seq);
@@ -86,6 +88,7 @@ export class Store {
   private stepCtx: { id: string; actor: string; undoes?: string } | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private trimTimer: ReturnType<typeof setTimeout> | null = null;
+  private appended = 0;
   private _ix: Index | null = null;
   /** While an atomic call runs: its updates, written only if the whole call succeeds. */
   private held: { docId: string; data: Uint8Array; origin: string; quiet: boolean; step?: string }[] | null = null;
@@ -389,6 +392,8 @@ export class Store {
       .get(docId, data, origin, Date.now(), uid, step ?? null, area) as { seq: number };
     this.seq = res.seq;
     this.lastUid = uid;
+    // on the next tick: not inside the caller's step or transaction
+    if (++this.appended === COMPACT_AFTER_ROWS) setTimeout(() => this.compact(), 0);
     if (step) {
       const undoes = this.stepCtx?.id === step ? (this.stepCtx.undoes ?? null) : null;
       this.db.query("INSERT OR IGNORE INTO steps (id, actor, ts, undoes) VALUES (?, ?, ?, ?)").run(step, origin, Date.now(), undoes);
@@ -505,8 +510,7 @@ export class Store {
   // of adding one – typing a paragraph makes one version, not one per keystroke. The first time
   // an item that has no version yet changes, the text it was created with is kept first, so its
   // history starts with it. Versions are never dropped: a text edited in a
-  // hundred sessions costs a hundred compressed copies – a few MB for long, busy pages, which
-  // is small next to the update log that keeps every keystroke anyway.
+  // hundred sessions costs a hundred compressed copies – a few MB for long, busy pages.
 
   /** Keep the new text of a document whose body changed (see above). */
   private saveVersion(id: string, prev: Item, next: Item, origin: string, step: string | undefined, ts: number, event?: { id: number; merged: boolean }) {
@@ -597,9 +601,11 @@ export class Store {
   /**
    * Folds each document's rows older than LOG_WINDOW_MS into one row and forgets their steps. The
    * folded row keeps the seq and uid of the newest row it replaces, so `docsSince` stays right for
-   * every cursor and a replica whose cursor was folded away gets a reset. Returns the rows removed.
+   * every cursor and a replica whose cursor was folded away gets a reset. Runs by itself after
+   * every COMPACT_AFTER_ROWS appended rows. Returns the rows removed.
    */
   compact(now = Date.now()): number {
+    this.appended = 0;
     if (this.held) return 0;
     this.flush();
     const below = this.db.query("SELECT MAX(seq) AS seq FROM updates WHERE ts < ?").get(now - LOG_WINDOW_MS) as { seq: number | null };

@@ -2,7 +2,7 @@ import { test, expect, afterAll } from "bun:test";
 import { docUpdate, tempDir, removeTempDirs } from "../support/helpers";
 import { join } from "node:path";
 import * as Y from "yjs";
-import { Store } from "@obtion/server/store";
+import { COMPACT_AFTER_ROWS, Store } from "@obtion/server/store";
 import { PERSONAL as P, initItem } from "@obtion/core/model";
 
 afterAll(removeTempDirs);
@@ -115,6 +115,18 @@ test("old log rows fold into one row per document; sync and loading still see ev
   const again = new Store(dir);
   expect(again.getDoc("a").getText("body").toString()).toBe("yx43210");
   expect(again.records.get("b")?.title).toBe("B");
+});
+
+test("the log compacts itself after enough writes, without a timer", async () => {
+  const s = new Store(tmp());
+  s.applyRemote("a", docUpdate({ id: "a", title: "A" }), "web:x");
+  for (let i = 0; i < 3; i++) s.change("a", "web:x", (d) => d.getText("body").insert(0, "o"));
+  s.db.query("UPDATE updates SET ts = 0").run();
+  while (s.seq < COMPACT_AFTER_ROWS) s.change("a", "web:x", (d) => d.getText("body").insert(0, "n"));
+  const rows = () => (s.db.query("SELECT COUNT(*) AS n FROM updates").get() as { n: number }).n;
+  expect(rows()).toBe(COMPACT_AFTER_ROWS);
+  for (let i = 0; i < 100 && rows() === COMPACT_AFTER_ROWS; i++) await Bun.sleep(5); // the next tick, later under load
+  expect(rows()).toBe(COMPACT_AFTER_ROWS - 3); // the four old rows are one now
 });
 
 test("compaction never splits a step, even where steps interleave", () => {
