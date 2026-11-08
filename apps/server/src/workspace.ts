@@ -6,7 +6,7 @@ import { AreaError, Store } from "./store";
 import { Mirror } from "./mirror";
 import { handleMcp } from "./mcp";
 import { type Person, personOrigin } from "@obtion/core/origin";
-import type { EventText, HistoryList, PurgeResult, VersionText } from "@obtion/core/api";
+import type { EventText, PurgeResult } from "@obtion/core/api";
 import { Blobs } from "./blobs";
 import { MAX_BLOB } from "./config";
 import { body, fail, json } from "./http";
@@ -189,21 +189,11 @@ export class Workspace {
       return json(store.events({ before, doc, limit: Number(url.searchParams.get("limit") ?? 60) }));
     }
 
-    // the kept versions of an item's text: the list (doc), one text (version), what an activity entry changed (event)
+    // what an activity entry did to an item's text, from the kept versions
     if (rest === "/api/history") {
       store.flush();
-      const q = url.searchParams;
-      if (q.has("event")) {
-        const t = store.eventText(Number(q.get("event")));
-        return t ? json<EventText>(t) : fail(404, "no versions for this entry");
-      }
-      if (q.has("version")) {
-        const text = store.versionText(Number(q.get("version")), q.get("doc") ?? undefined);
-        return text === undefined ? fail(404, "unknown version") : json<VersionText>({ text });
-      }
-      const doc = q.get("doc");
-      if (!doc) return fail(400, "doc, version or event required");
-      return json<HistoryList>({ versions: store.versions(doc) });
+      const t = store.eventText(Number(url.searchParams.get("event")));
+      return t ? json<EventText>(t) : fail(404, "no versions for this entry");
     }
 
     if (rest === "/api/undo" && req.method === "POST") {

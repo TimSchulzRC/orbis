@@ -101,7 +101,7 @@ test("a workspace is only open to its members – sync, files, activity, MCP", a
   await mcpTool(bare, token, "create", { items: [{ title: "From the agent" }] }, `/w/${cw.id}/mcp`);
   const events = (await get(bare, `/w/${cw.id}/api/activity?limit=5`, carla.token).then((r) => r.json())) as { origin: string; title: string; doc: string }[];
   expect(events.find((e) => e.title === "From the agent")!.origin).toBe(`agent:mcp;u=${carla.user.id};n=carla`);
-  // the versions of a text: for members only, the list, one version, what an entry changed
+  // what an entry changed in a text: for members only
   const replace = async (body: string) => {
     const base_version = JSON.parse(await mcpTool(bare, token, "get", { ref: "From the agent" }, `/w/${cw.id}/mcp`)).version;
     await mcpTool(bare, token, "update", { ref: "From the agent", body, base_version }, `/w/${cw.id}/mcp`);
@@ -109,14 +109,11 @@ test("a workspace is only open to its members – sync, files, activity, MCP", a
   await replace("First draft");
   await replace("Second draft");
   const doc = events.find((e) => e.title === "From the agent")!.doc;
-  expect((await get(bare, `/w/${cw.id}/api/history?doc=${doc}`, dan.token)).status).toBe(403);
-  const { versions } = await get(bare, `/w/${cw.id}/api/history?doc=${doc}`, carla.token).then((r) => r.json());
-  expect(versions.map((v: { n: number; len: number }) => [v.n, v.len])).toEqual([[1, 11], [2, 12]]);
-  expect(await get(bare, `/w/${cw.id}/api/history?doc=${doc}&version=${versions[0].id}`, carla.token).then((r) => r.json())).toEqual({ text: "First draft" });
-  expect((await get(bare, `/w/${cw.id}/api/history?doc=other&version=${versions[0].id}`, carla.token)).status).toBe(404);
   const latest = (await get(bare, `/w/${cw.id}/api/activity?doc=${doc}&limit=1`, carla.token).then((r) => r.json()))[0];
   expect(latest.changes.find((c: { field: string }) => c.field === "body")).toMatchObject({ diff: true });
+  expect((await get(bare, `/w/${cw.id}/api/history?event=${latest.id}`, dan.token)).status).toBe(403);
   expect(await get(bare, `/w/${cw.id}/api/history?event=${latest.id}`, carla.token).then((r) => r.json())).toEqual({ doc, before: "First draft", after: "Second draft", from: 1, to: 2 });
+  expect((await get(bare, `/w/${cw.id}/api/history?event=0`, carla.token)).status).toBe(404);
 });
 
 test("a workspace made through the API gets the default types with setup (else the agent's setup tool); never twice", async () => {

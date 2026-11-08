@@ -1,15 +1,16 @@
-// "Changes" in the updates panel: the changes to this one page from the server's log, by day, with
-// the live ones; an update there is one line; a failed load says so and can be tried again. The
-// tests run in German, so the panel's labels below are German.
+// "Verlauf" in the side panel: the changes to this one page from the server's log, as the activity
+// page shows them, with the live ones; on every page; a text change can go back to the text before
+// it; a failed load says so and can be tried again. The tests run in German, so the labels below are.
 import { afterEach, expect, test, vi } from "vitest";
 import { page } from "vitest/browser";
 import { cleanup, render } from "vitest-browser-react";
 import { useState } from "react";
-import { appendUpdate } from "@obtion/core/model";
+import { replaceBody } from "@obtion/core/model";
 import type { ActivityEvent } from "@obtion/core/protocol";
 import { SYS } from "@obtion/core/setup";
 import * as accounts from "../../packages/ui/src/accounts";
 import { ItemPage } from "../../packages/ui/src/views/ItemPage";
+import { AppToaster } from "../../packages/ui/src/ui/toasts";
 import { workspace } from "./workspace";
 
 afterEach(() => {
@@ -20,19 +21,14 @@ afterEach(() => {
 
 const event = (id: number, doc: string, e: Partial<ActivityEvent>): ActivityEvent => ({ id, ts: Date.now() - (100 - id) * 60_000, doc, title: "Relaunch", type: SYS.project, kind: "updated", origin: "web:Test;u=u-test", changes: [], ...e });
 
-test("the changes of this page: by day, named as the updates are, an update in one line", async () => {
+test("the history of this page: rows as on the activity page, live ones join at the top", async () => {
   const repo = await workspace(false);
   const project = repo.create({ title: "Relaunch", type: SYS.project, pinned: "a" });
-  // twice the same text: the line leads to the one it wrote, by its id
-  repo.change(project, (d) => appendUpdate(d, { at: Date.now() - 7200_000, text: "Kickoff war gut.", by: "you" }));
-  repo.change(project, (d) => appendUpdate(d, { at: Date.now(), text: "Kickoff war gut.", by: "you" }));
-  await expect.poll(() => repo.get(project)?.updates.length).toBe(2);
-  const [older] = repo.get(project)!.updates;
   const asked: string[] = [];
   vi.mocked(accounts.spaceCall).mockImplementation(async (_space, path) => {
     asked.push(path);
     return [
-      event(3, project, { changes: [{ field: "update", to: "Kickoff war gut.", id: older!.id }] }),
+      event(3, project, { changes: [{ field: "update", to: "Kickoff war gut.", id: "u1" }] }),
       event(2, project, { origin: "agent:claude-code;u=u-test;n=Test", changes: [{ field: "title", from: "Relaunch alt", to: "Relaunch" }] }),
       event(1.5, project, { changes: [{ field: "update", from: "Vertippt.", id: "gone" }] }),
       event(1, project, { kind: "created" }),
@@ -41,36 +37,67 @@ test("the changes of this page: by day, named as the updates are, an update in o
     ] as never;
   });
   await render(<ItemPage id={project} isNew={false} />);
-  await page.getByRole("button", { name: /Letztes Update/ }).click();
-  // the head counts the updates, in either view
+  await page.getByRole("button", { name: "Verlauf" }).click();
   const panel = page.getByRole("dialog", { name: /^Updates zu / });
-  await panel.getByRole("radio", { name: "Änderungen" }).click();
+  await expect.element(panel.getByRole("radio", { name: "Verlauf" })).toBeChecked();
+  // writing belongs to the updates
+  expect(panel.getByRole("textbox").query()).toBeNull();
 
   await expect.element(panel.getByText("umbenannt: „Relaunch alt“ → „Relaunch“")).toBeVisible();
   expect(asked[0]).toContain(`doc=${project}`);
-  await expect.element(panel.getByText("Seite angelegt")).toBeVisible();
-  // a deleted update stays here, struck through, with no way to it
-  await expect.element(panel.getByText("Vertippt.")).toBeVisible();
-  expect(panel.getByRole("button", { name: /Vertippt/ }).query()).toBeNull();
-  expect(panel.getByText("Seite angelegt").all()).toHaveLength(1);
-  await expect.element(panel.getByText("Claude")).toBeVisible();
-  await expect.element(panel.getByText("Du", { exact: true }).first()).toBeVisible();
-  await expect.element(panel.getByRole("heading", { name: "Heute" })).toBeVisible();
-
+  await expect.element(panel.getByText("Update: „Kickoff war gut.“")).toBeVisible();
+  await expect.element(panel.getByText("Update gelöscht: „Vertippt.“")).toBeVisible();
+  // the page is the one beside the panel: its rows don't name it
+  await expect.element(panel.getByText("hat angelegt")).toBeVisible();
+  expect(panel.getByRole("link", { name: /Relaunch/ }).query()).toBeNull();
+  await expect.element(panel.getByText(/^Claude/)).toBeVisible();
 
   // a change arriving live joins at the top
   // (as the server's "event" message does it)
   repo.events = [event(4, project, { changes: [{ field: "tags", to: ["web"], from: [] }] }), ...repo.events];
   (repo as unknown as { emit(): void }).emit();
   await expect.element(panel.getByText("getaggt #web")).toBeVisible();
+  await panel.getByRole("button", { name: "Schließen" }).click();
+});
 
-  // the update's line leads to it in the updates: focused, marked a moment
-  await panel.getByRole("button", { name: /Kickoff war gut\. – Update zeigen/ }).click();
-  await expect.element(panel.getByRole("radio", { name: /^Updates/ })).toBeChecked();
-  const shown = document.activeElement!.closest<HTMLElement>("[data-update]")!;
-  expect(shown.dataset.update).toBe(older!.id);
-  expect(shown.hasAttribute("data-flash")).toBe(true);
-  await expect.poll(() => shown.hasAttribute("data-flash"), { timeout: 3000 }).toBe(false);
+test("every page has its history, also one whose type has no updates", async () => {
+  const repo = await workspace(false);
+  const note = repo.create({ title: "Notiz", pinned: "a" });
+  vi.mocked(accounts.spaceCall).mockResolvedValue([event(1, note, { kind: "created" })] as never);
+  await render(<ItemPage id={note} isNew={false} />);
+  expect(page.getByRole("button", { name: /Update/ }).query()).toBeNull();
+  await page.getByRole("button", { name: "Verlauf" }).click();
+  const panel = page.getByRole("dialog", { name: "Verlauf von „Notiz“" });
+  await expect.element(panel.getByText("hat angelegt")).toBeVisible();
+  expect(panel.getByRole("radio").query()).toBeNull();
+  expect(panel.getByRole("textbox").query()).toBeNull();
+  await panel.getByRole("button", { name: "Schließen" }).click();
+});
+
+test("a text change can go back to the text before it, as a change of its own", async () => {
+  const repo = await workspace(false);
+  const note = repo.create({ title: "Angebot", pinned: "a" });
+  repo.change(note, (d) => replaceBody(d, "Preis: 200 €\n"));
+  await expect.poll(() => repo.get(note)?.body).toBe("Preis: 200 €\n");
+  vi.mocked(accounts.spaceCall).mockImplementation(async (_space, path) =>
+    path.startsWith("/api/history")
+      ? ({ doc: note, before: "Preis: 100 €\n", after: "Preis: 200 €\n", from: 1, to: 2 } as never)
+      : ([event(2, note, { origin: "agent:claude-code;u=u-test;n=Test", changes: [{ field: "body", from: 13, to: 13, diff: true }] })] as never),
+  );
+  await render(
+    <>
+      <ItemPage id={note} isNew={false} />
+      <AppToaster />
+    </>,
+  );
+  await page.getByRole("button", { name: "Verlauf" }).click();
+  const panel = page.getByRole("dialog");
+  await panel.getByRole("button", { name: /Änderung zeigen/ }).click();
+  await panel.getByRole("button", { name: "Text von davor wiederherstellen" }).click();
+  await expect.poll(() => repo.get(note)?.body).toBe("Preis: 100 €\n");
+  await expect.element(page.getByText("Text wiederhergestellt")).toBeVisible();
+  // it is the text there now: nothing more to restore
+  expect(panel.getByRole("button", { name: "Text von davor wiederherstellen" }).query()).toBeNull();
   await panel.getByRole("button", { name: "Schließen" }).click();
 });
 
@@ -81,10 +108,10 @@ test("not loaded: says so, and asks again for the same", async () => {
   await render(<ItemPage id={project} isNew={false} />);
   await page.getByRole("button", { name: "Erstes Update schreiben" }).click();
   const panel = page.getByRole("dialog", { name: /^Updates zu / });
-  await panel.getByRole("radio", { name: "Änderungen" }).click();
+  await panel.getByRole("radio", { name: "Verlauf" }).click();
   await expect.element(panel.getByText("Die Änderungen liegen auf deinem Server.", { exact: false })).toBeVisible();
   await panel.getByRole("button", { name: "Erneut versuchen" }).click();
-  await expect.element(panel.getByText("Seite angelegt")).toBeVisible();
+  await expect.element(panel.getByText("hat angelegt")).toBeVisible();
   await panel.getByRole("button", { name: "Schließen" }).click();
 });
 
@@ -103,32 +130,33 @@ test("older changes load below, until the log ends; a failed load is asked for a
   await render(<ItemPage id={project} isNew={false} />);
   await page.getByRole("button", { name: "Erstes Update schreiben" }).click();
   const panel = page.getByRole("dialog", { name: /^Updates zu / });
-  await panel.getByRole("radio", { name: "Änderungen" }).click();
+  await panel.getByRole("radio", { name: "Verlauf" }).click();
   await expect.element(panel.getByText("getaggt #t200")).toBeInTheDocument();
   await panel.getByRole("button", { name: "Ältere laden" }).click();
   // failed: what is there stays, and trying again asks for the same rows
   await expect.element(panel.getByText("Nicht alles geladen.", { exact: false })).toBeVisible();
   await expect.element(panel.getByText("getaggt #t200")).toBeInTheDocument();
   await panel.getByRole("button", { name: "Erneut versuchen" }).click();
-  await expect.element(panel.getByText("Seite angelegt")).toBeInTheDocument();
+  await expect.element(panel.getByText("hat angelegt")).toBeInTheDocument();
   expect(asked.slice(1)).toEqual([expect.stringContaining("before=151"), expect.stringContaining("before=151")]);
   // the whole log is there: no more to load
   expect(panel.getByRole("button", { name: "Ältere laden" }).query()).toBeNull();
   await panel.getByRole("button", { name: "Schließen" }).click();
 });
 
-test("the view chosen stays for the next opening", async () => {
+test("each way in opens its view: the history button the history, the update line the updates", async () => {
   const repo = await workspace(false);
   const project = repo.create({ title: "Newsletter", type: SYS.project, pinned: "a" });
   vi.mocked(accounts.spaceCall).mockResolvedValue([event(1, project, { kind: "created" })] as never);
   await render(<ItemPage id={project} isNew={false} />);
-  await page.getByRole("button", { name: "Erstes Update schreiben" }).click();
-  await page.getByRole("dialog").getByRole("radio", { name: "Änderungen" }).click();
+  await page.getByRole("button", { name: "Verlauf" }).click();
+  await expect.element(page.getByRole("dialog").getByRole("radio", { name: "Verlauf" })).toBeChecked();
+  await expect.element(page.getByRole("dialog").getByText("hat angelegt")).toBeVisible();
   await page.getByRole("dialog").getByRole("button", { name: "Schließen" }).click();
   await expect.element(page.getByRole("dialog")).not.toBeInTheDocument();
   await page.getByRole("button", { name: "Erstes Update schreiben" }).click();
-  await expect.element(page.getByRole("dialog").getByRole("radio", { name: "Änderungen" })).toBeChecked();
-  await expect.element(page.getByRole("dialog").getByText("Seite angelegt")).toBeVisible();
+  await expect.element(page.getByRole("dialog").getByRole("radio", { name: /^Updates/ })).toBeChecked();
+  await expect.element(page.getByRole("dialog").getByRole("textbox")).toHaveFocus();
   await page.getByRole("dialog").getByRole("button", { name: "Schließen" }).click();
   await expect.element(page.getByRole("dialog")).not.toBeInTheDocument();
 });
@@ -153,10 +181,10 @@ test("a late answer for the page before never shows on the next one", async () =
   }
   await render(<Shown />);
   await page.getByRole("button", { name: "Erstes Update schreiben" }).click();
-  await page.getByRole("dialog").getByRole("radio", { name: "Änderungen" }).click();
+  await page.getByRole("dialog").getByRole("radio", { name: "Verlauf" }).click();
   // docked, the panel stays open on the next page; the first answer arrives after
   go(second);
-  await expect.element(page.getByRole("dialog").getByText("Seite angelegt")).toBeVisible();
+  await expect.element(page.getByRole("dialog").getByText("hat angelegt")).toBeVisible();
   release();
   await new Promise((r) => setTimeout(r, 100));
   expect(page.getByRole("dialog").getByText("getaggt #alt").query()).toBeNull();

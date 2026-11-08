@@ -144,7 +144,7 @@ export interface PurgeResult {
   purged: string[]; // every document deleted for good
 }
 
-/** One kept version of an item's text (GET /w/<id>/api/history?doc=<doc>). */
+/** One kept version of an item's text. */
 export interface TextVersion {
   id: number;
   /** its number among the item's versions, from 1 (oldest) */
@@ -157,16 +157,6 @@ export interface TextVersion {
   event?: number;
   /** its length in characters */
   len: number;
-}
-
-/** GET /w/<id>/api/history?doc=<doc> */
-export interface HistoryList {
-  versions: TextVersion[];
-}
-
-/** GET /w/<id>/api/history?version=<id> */
-export interface VersionText {
-  text: string;
 }
 
 /** GET /w/<id>/api/history?event=<id>: what an activity entry did to the text. */

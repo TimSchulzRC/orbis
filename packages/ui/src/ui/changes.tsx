@@ -1,5 +1,5 @@
 // One change of the activity log in words ("Status: Offen → Erledigt"), what it did to a text, and
-// the day headings of the lists in the updates panel. Used by the activity page and the panel.
+// the day headings of the updates list. Used by the activity page and the side panel.
 import { type ReactNode, useEffect, useId, useMemo, useState } from "react";
 import { ChevronRight } from "lucide-react";
 import type { EventText } from "@obtion/core/api";
@@ -95,8 +95,11 @@ export function describe(c: FieldChange, item: Item | undefined, ix: Index, t: T
   }
 }
 
-/** What an entry did to a text, fetched when asked for: the lines removed and added. */
-export function BodyDiff({ e, space, prose }: { e: ActivityEvent; space: string; prose?: boolean }) {
+/**
+ * What an entry did to a text, fetched when asked for: the lines removed and added. `onRestore`
+ * writes the text before the entry back, offered while that is not the text `current`ly there.
+ */
+export function BodyDiff({ e, space, prose, onRestore, current }: { e: ActivityEvent; space: string; prose?: boolean; onRestore?: (before: string) => void; current?: string }) {
   const { t } = useT();
   const [open, setOpen] = useState(false);
   const [got, setGot] = useState<EventText | null | undefined>(undefined);
@@ -140,6 +143,11 @@ export function BodyDiff({ e, space, prose }: { e: ActivityEvent; space: string;
         {open && diff && (
           // its own scroll area, so reachable by keyboard
           <DiffView diff={diff} words={prose} tabIndex={0} label={t("activity.diffLabel")} className={cn("mt-1 max-h-80 overflow-y-auto focus-visible:ring-2 focus-visible:ring-ring outline-none", prose && "font-sans text-[13px]")} />
+        )}
+        {open && got && onRestore && got.before !== current && (
+          <Button variant="plain" onClick={() => onRestore(got.before)} className="tap-y mt-1 text-xs text-muted-foreground underline hover:text-fg">
+            {t("history.restoreBefore")}
+          </Button>
         )}
       </div>
     </div>

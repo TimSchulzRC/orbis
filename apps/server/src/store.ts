@@ -534,11 +534,10 @@ export class Store {
     return rows.map((r, i) => ({ ...r, n: i + 1, step: r.step ?? undefined, event: r.event ?? undefined }));
   }
 
-  /** The text of a version by its id (undefined if unknown, or of another document when `doc` is given). */
-  versionText(id: number, doc?: string): string | undefined {
-    const row = this.db.query("SELECT doc, data FROM versions WHERE id = ?").get(id) as { doc: string; data: Uint8Array } | null;
-    if (!row || (doc !== undefined && row.doc !== doc)) return undefined;
-    return unpack(row.data);
+  /** The text of a version by its id (undefined if unknown). */
+  versionText(id: number): string | undefined {
+    const row = this.db.query("SELECT data FROM versions WHERE id = ?").get(id) as { data: Uint8Array } | null;
+    return row ? unpack(row.data) : undefined;
   }
 
   /**
