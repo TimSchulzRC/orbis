@@ -1014,7 +1014,7 @@
  "settings.workspaces": "Workspaces",
  "settings.workspacesHint": "Each workspace has its own content, types, members and settings.",
  "space.delete": "Delete workspace",
- "space.deleteHint": "Deletes it with everything in it on the server – for all members, files and backups included. This cannot be undone.",
+ "space.deleteHint": "Deletes it with everything in it on the server – for all members, files included. This cannot be undone.",
  "space.deleteConfirm": "Delete “{name}” for good?",
  "space.deleteOwner": "Only owners can delete it. You can leave the workspace.",
  "nav.today": "Today",

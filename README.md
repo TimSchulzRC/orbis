@@ -12,7 +12,7 @@ mkdir obtion && cd obtion
 docker compose up -d
 ```
 
-Open `http://<host>:8480` and create the first account. Optional settings go into `.env` (see [`.env.example`](.env.example)). All data lives in `./data`; back it up. Each workspace keeps a database copy per day in its `backups` folder, the last 7. An item deleted for good stays in those copies until they rotate out, and restoring one brings it back.
+Open `http://<host>:8480` and create the first account. Optional settings go into `.env` (see [`.env.example`](.env.example)). All data lives in `./data`; back it up while the server is stopped. An item deleted for good stays in older backups, and restoring one brings it back.
 
 Update: `docker compose pull && docker compose up -d`
 

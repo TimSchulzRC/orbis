@@ -500,8 +500,7 @@ export class Store {
   // an item that has no version yet changes, the text it was created with is kept first, so its
   // history starts with it. Versions are never dropped: a text edited in a
   // hundred sessions costs a hundred compressed copies – a few MB for long, busy pages, which
-  // is small next to the update log that keeps every keystroke anyway. Backups copy the whole
-  // database (VACUUM INTO), versions included.
+  // is small next to the update log that keeps every keystroke anyway.
 
   /** Keep the new text of a document whose body changed (see above). */
   private saveVersion(id: string, prev: Item, next: Item, origin: string, step: string | undefined, ts: number, event?: { id: number; merged: boolean }) {

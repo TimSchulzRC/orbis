@@ -10,7 +10,6 @@ import type { EventText, HistoryList, PurgeResult, VersionText } from "@obtion/c
 import { Blobs } from "./blobs";
 import { MAX_BLOB } from "./config";
 import { body, fail, json } from "./http";
-import { Backups } from "./backup";
 import { FORMAT, type Item, PERSONAL } from "@obtion/core/model";
 import { OpError, Ops, fileName } from "./ops";
 import { UndoError, undoStep } from "./undo";
@@ -88,7 +87,6 @@ export class Workspace {
   store: Store;
   blobs: Blobs;
   conns = new Set<ServerWebSocket<Conn>>();
-  private backups: Backups;
   private mirror: Mirror;
 
   constructor(dir: string) {
@@ -119,12 +117,9 @@ export class Workspace {
     };
     this.blobs.scan();
     this.mirror.start();
-    this.backups = new Backups(this.store, join(dir, "backups"));
-    this.backups.start();
   }
 
   close() {
-    this.backups.stop();
     this.mirror.stop();
     this.store.flush();
   }

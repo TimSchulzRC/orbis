@@ -2,7 +2,7 @@
 // devices make them (each session a new Yjs client, every edit a pushed update).
 //   bun scripts/bench-startup.ts gen <dir> [items] [sessions] [edits]
 //   bun scripts/bench-startup.ts store <dir>    time and memory of opening the store alone
-//   bun scripts/bench-startup.ts server <dir>   the same for the whole workspace (store, files, mirror, backups)
+//   bun scripts/bench-startup.ts server <dir>   the same for the whole workspace (store, files, mirror)
 //   bun scripts/bench-startup.ts device <dir>   the same data loaded by a device's Repo (the first run prepares its rows)
 import * as Y from "yjs";
 import { deserialize, serialize } from "bun:jsc";

@@ -11,7 +11,7 @@ services:
       # on every address of the host (LAN, tailnet, …)
       - "${OBTION_BIND:-0.0.0.0}:${OBTION_PORT:-8480}:8480"
     volumes:
-      # an ordinary folder on the host: database, daily backups, files, Markdown mirror. Created
+      # an ordinary folder on the host: database, files, Markdown mirror. Created
       # if missing; the server runs as its owner (or OBTION_UID/OBTION_GID), never as root
       - ${OBTION_DATA_DIR:-./data}:/data
     environment:

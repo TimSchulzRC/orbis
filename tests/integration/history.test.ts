@@ -4,18 +4,14 @@ import { setupStore, tool as storeTool } from "../support/store";
 import type { Store } from "@obtion/server/store";
 import type { Ops } from "@obtion/server/ops";
 import { undoStep } from "@obtion/server/undo";
-import { Backups } from "@obtion/server/backup";
-import { Database } from "bun:sqlite";
 import { putBackUpdate, removeUpdate, replaceBody, touch } from "@obtion/core/model";
 import { personOrigin, agentOrigin } from "@obtion/core/origin";
-import { join } from "node:path";
 
 afterAll(removeTempDirs);
 
 let s: Store;
 let ops: Ops;
-let dir: string;
-beforeEach(() => ({ s, ops, dir } = setupStore("obtion-history-")));
+beforeEach(() => ({ s, ops } = setupStore("obtion-history-")));
 
 const AG = agentOrigin("claude-code", { id: "u1", name: "Tim" });
 const TIM = personOrigin({ id: "u1", name: "Tim" }, "Mac");
@@ -60,7 +56,7 @@ test("every change of the text keeps a version; typing in one step folds into on
   expect(s.versions(id).length).toBe(4);
 });
 
-test("versions are stored compressed and travel with the daily backup", () => {
+test("versions are stored compressed", () => {
   const long = "A long paragraph about the integration that repeats a lot. ".repeat(400);
   ops.call(AG, () => (ops.create({ title: "Long" }, AG), "ok"));
   const id = idOf("Long");
@@ -68,10 +64,6 @@ test("versions are stored compressed and travel with the daily backup", () => {
   const row = s.db.query("SELECT length(data) AS size, len FROM versions WHERE doc = ?").get(id) as { size: number; len: number };
   expect(row.len).toBe(long.length);
   expect(row.size).toBeLessThan(long.length / 10);
-  const file = new Backups(s, join(dir, "backups")).run("2026-11-01")!;
-  const copy = new Database(file, { readonly: true });
-  expect((copy.query("SELECT count(*) AS n FROM versions WHERE doc = ?").get(id) as { n: number }).n).toBe(1);
-  copy.close();
 });
 
 test("activity: text changes as a diff, properties and options by name, updates with their text", async () => {
