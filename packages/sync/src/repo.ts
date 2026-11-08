@@ -429,10 +429,7 @@ export class Repo {
     if (merged.length) this.store({ outbox: merged, acked: replaced });
     this.status.pending = this.outbox.size;
     const byArea = new Map<string, OutItem[]>();
-    for (const o of items) {
-      const a = o.a;
-      byArea.get(a)?.push(o) ?? byArea.set(a, [o]);
-    }
+    for (const o of items) byArea.get(o.a)?.push(o) ?? byArea.set(o.a, [o]);
     return [...byArea].map(([area, items]) => ({ t: "push", area, items }));
   }
 

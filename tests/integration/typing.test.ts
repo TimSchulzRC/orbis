@@ -43,7 +43,7 @@ async function device(store: Store) {
         const reply = (m: ServerMsg) => queueMicrotask(() => ws.onmessage?.({ data: JSON.stringify(m) }));
         if (msg.t === "hello") {
           const last = store.last(msg.area);
-          reply({ t: "welcome", hub: store.serverId, area: msg.area, seq: last.seq, format: FORMAT });
+          reply({ t: "welcome", server: store.serverId, area: msg.area, seq: last.seq, format: FORMAT });
           reply({ t: "updates", area: msg.area, items: [], last: last.seq, lastId: last.uid || undefined, initial: true, done: true });
         } else if (msg.t === "push") {
           pushes += msg.items.length;
