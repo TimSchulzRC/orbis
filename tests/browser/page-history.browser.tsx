@@ -161,6 +161,26 @@ test("each way in opens its view: the history button the history, the update lin
   await expect.element(page.getByRole("dialog")).not.toBeInTheDocument();
 });
 
+test("docked and open, each way in switches the view; the button of the view shown closes it", async () => {
+  await page.viewport(1440, 900);
+  const repo = await workspace(false);
+  const project = repo.create({ title: "Newsletter", type: SYS.project, pinned: "a" });
+  vi.mocked(accounts.spaceCall).mockResolvedValue([event(1, project, { kind: "created" })] as never);
+  await render(<ItemPage id={project} isNew={false} />);
+  await page.getByRole("button", { name: "Verlauf" }).click();
+  const panel = page.getByRole("dialog");
+  await expect.element(panel.getByRole("radio", { name: "Verlauf" })).toBeChecked();
+  await page.getByRole("button", { name: "Erstes Update schreiben" }).click();
+  await expect.element(panel.getByRole("radio", { name: /^Updates/ })).toBeChecked();
+  // without the app's layout the page makes no room, so the docked panel covers the top bar here
+  const historyButton = () => (page.getByRole("button", { name: "Verlauf", exact: true }).element() as HTMLElement).click();
+  historyButton();
+  await expect.element(panel.getByRole("radio", { name: "Verlauf" })).toBeChecked();
+  historyButton();
+  await expect.element(page.getByRole("dialog")).not.toBeInTheDocument();
+  await page.viewport(1280, 900);
+});
+
 test("a late answer for the page before never shows on the next one", async () => {
   await page.viewport(1440, 900);
   const repo = await workspace(false);

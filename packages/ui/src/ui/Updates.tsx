@@ -150,9 +150,14 @@ export function PagePanel({ item, bar, updates }: { item: Item; bar?: HTMLElemen
   const from = useRef<HTMLElement | null>(null);
   const textId = useId();
 
+  // the view as last chosen while the app is open (on another page, too); each way in picks its own
+  const [chosen, setChosen] = useState<View>(lastView);
+  const pick = (v: View) => ((lastView = v), setChosen(v));
+  const current: View = updates ? chosen : "history";
+  // already open: only the view changes
   const show = (mode: "read" | "write", quiet = false, view?: View) => {
+    if (view) pick(view);
     if (session.current) return;
-    if (view) lastView = view;
     from.current = quiet ? null : (document.activeElement as HTMLElement | null);
     session.current = {
       openedAt: Date.now(),
@@ -255,6 +260,8 @@ export function PagePanel({ item, bar, updates }: { item: Item; bar?: HTMLElemen
           docked={docked}
           item={item}
           updates={updates}
+          view={chosen}
+          onView={pick}
           feed={feed}
           session={session.current}
           write={open === "write"}
@@ -272,8 +279,8 @@ export function PagePanel({ item, bar, updates }: { item: Item; bar?: HTMLElemen
             label={t("item.history")}
             aria-haspopup="dialog"
             aria-expanded={!!open}
-            onClick={() => (open ? close() : show("read", false, "history"))}
-            className={cn(open && !updates && "bg-hover text-fg")}
+            onClick={() => (open && current === "history" ? close() : show("read", false, "history"))}
+            className={cn(open && current === "history" && "bg-hover text-fg")}
           />
           {updates && (
           <span className="relative inline-flex">
@@ -282,8 +289,8 @@ export function PagePanel({ item, bar, updates }: { item: Item; bar?: HTMLElemen
               label={[t("updates.title"), fresh.length ? t("updates.newCount", { count: fresh.length }) : ""].filter(Boolean).join(", ")}
               aria-haspopup="dialog"
               aria-expanded={!!open}
-              onClick={() => (open ? close() : show(feed.length ? "read" : "write", false, "updates"))}
-              className={cn(open && "bg-hover text-fg")}
+              onClick={() => (open && current === "updates" ? close() : show(feed.length ? "read" : "write", false, "updates"))}
+              className={cn(open && current === "updates" && "bg-hover text-fg")}
             />
             {fresh.length > 0 && <span className="pointer-events-none absolute right-1 top-1 size-2 rounded-full border-2 border-surface bg-ok" aria-hidden />}
           </span>
@@ -295,25 +302,15 @@ export function PagePanel({ item, bar, updates }: { item: Item; bar?: HTMLElemen
   );
 }
 
-function UpdatesSheet({ open, docked, item, updates: hasUpdates, feed, session, write, draft, onDraft, onClose, onClosed }: { open: boolean; docked: boolean; item: Item; updates: boolean; feed: FeedEntry[]; session: Session | null; write: boolean; draft: Draft; onDraft: (d: Draft) => void; onClose: () => void; onClosed: () => void }) {
+function UpdatesSheet({ open, docked, item, updates: hasUpdates, view: chosen, onView, feed, session, write, draft, onDraft, onClose, onClosed }: { open: boolean; docked: boolean; item: Item; updates: boolean; view: View; onView: (v: View) => void; feed: FeedEntry[]; session: Session | null; write: boolean; draft: Draft; onDraft: (d: Draft) => void; onClose: () => void; onClosed: () => void }) {
   const { t, lang } = useT();
   const tone = useStatusTone();
-  // the view as last chosen while the app is open (on another page, too); with the pages below or
-  // not as last chosen on this device
-  const [look, setLook] = useState(() => ({
-    view: lastView,
-    withBelow: readJSON<boolean>(KEYS.updatesWithBelow, true),
-  }));
-  const choose = (next: Partial<typeof look>) => {
-    const value = { ...look, ...next };
-    setLook(value);
-    lastView = value.view;
-    writeJSON(KEYS.updatesWithBelow, value.withBelow);
-  };
+  // with the pages below or not as last chosen on this device
+  const [withBelow, setWithBelow] = useState(() => readJSON<boolean>(KEYS.updatesWithBelow, true));
+  const chooseBelow = (v: boolean) => (setWithBelow(v), writeJSON(KEYS.updatesWithBelow, v));
   const space = useSpaceId();
   // without updates only the history; without a server no history
-  const view: View = !hasUpdates ? "history" : space ? look.view : "updates";
-  const withBelow = look.withBelow;
+  const view: View = !hasUpdates ? "history" : space ? chosen : "updates";
   const [shown, setShown] = useState(PAGE);
   const [said, setSaid] = useState("");
   const panel = useRef<HTMLDivElement>(null);
@@ -375,11 +372,11 @@ function UpdatesSheet({ open, docked, item, updates: hasUpdates, feed, session, 
     setSaid("");
     setTimeout(() => setSaid(text), 50);
   };
-  const toView = (v: View) => {
-    choose({ view: v });
+  // another view, also chosen from the page's buttons: from its top
+  useEffect(() => {
     setShown(PAGE);
     scroller.current?.scrollTo({ top: 0 });
-  };
+  }, [view]);
   // asked first; deleted, it is gone from the list and kept in the page's changes, and "Undo"
   // puts it back where it was
   const remove = async (e: FeedEntry) => {
@@ -392,7 +389,7 @@ function UpdatesSheet({ open, docked, item, updates: hasUpdates, feed, session, 
   };
   const posted = () => {
     // the new update is the user's: show it, at the top
-    if (view === "history") choose({ view: "updates" });
+    if (view === "history") onView("updates");
     scroller.current?.scrollTo({ top: 0 });
     say(t("updates.posted"));
   };
@@ -434,7 +431,7 @@ function UpdatesSheet({ open, docked, item, updates: hasUpdates, feed, session, 
             shown; beside it, which of it */}
         <div className="flex min-h-9 flex-wrap items-center gap-x-3 gap-y-2 px-4 pt-3 pb-1">
           {hasUpdates && space ? (
-            <Seg value={view} options={views} onChange={toView} label={t("updates.view.label")} />
+            <Seg value={view} options={views} onChange={onView} label={t("updates.view.label")} />
           ) : (
             // one view only: named, as the bar would
             <span className="text-xs font-medium">
@@ -444,7 +441,7 @@ function UpdatesSheet({ open, docked, item, updates: hasUpdates, feed, session, 
           )}
           {view === "updates" && below && (
             <label className="tap-y ml-auto inline-flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground hover:text-fg">
-              <Checkbox checked={withBelow} onCheckedChange={(c) => (choose({ withBelow: c === true }), setShown(PAGE))} className="size-3.5" />
+              <Checkbox checked={withBelow} onCheckedChange={(c) => (chooseBelow(c === true), setShown(PAGE))} className="size-3.5" />
               {t("updates.withBelow")}
             </label>
           )}
