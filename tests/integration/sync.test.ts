@@ -127,7 +127,7 @@ test("the log compacts itself after enough writes, without a timer", async () =>
   expect(rows()).toBe(COMPACT_AFTER_ROWS);
   for (let i = 0; i < 100 && rows() === COMPACT_AFTER_ROWS; i++) await Bun.sleep(5); // the next tick, later under load
   expect(rows()).toBe(COMPACT_AFTER_ROWS - 3); // the four old rows are one now
-});
+}, 30_000); // 10,000 writes: about a second here, several on a busy CI machine
 
 test("compaction never splits a step, even where steps interleave", () => {
   const s = new Store(tmp());
