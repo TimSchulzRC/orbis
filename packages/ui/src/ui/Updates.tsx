@@ -274,14 +274,6 @@ export function PagePanel({ item, bar, updates }: { item: Item; bar?: HTMLElemen
       {bar &&
         createPortal(
           <>
-          <IconButton
-            icon={History}
-            label={t("item.history")}
-            aria-haspopup="dialog"
-            aria-expanded={!!open}
-            onClick={() => (open && current === "history" ? close() : show("read", false, "history"))}
-            className={cn(open && current === "history" && "bg-hover text-fg")}
-          />
           {updates && (
           <span className="relative inline-flex">
             <IconButton
@@ -295,6 +287,14 @@ export function PagePanel({ item, bar, updates }: { item: Item; bar?: HTMLElemen
             {fresh.length > 0 && <span className="pointer-events-none absolute right-1 top-1 size-2 rounded-full border-2 border-surface bg-ok" aria-hidden />}
           </span>
           )}
+          <IconButton
+            icon={History}
+            label={t("item.history")}
+            aria-haspopup="dialog"
+            aria-expanded={!!open}
+            onClick={() => (open && current === "history" ? close() : show("read", false, "history"))}
+            className={cn(open && current === "history" && "bg-hover text-fg")}
+          />
           </>,
           bar,
         )}
