@@ -151,6 +151,7 @@ test("a device drops purged documents from memory and storage and ignores them a
   expect(repo.get(project)?.title).toBe("Secret project");
 
   repo.remove(project);
+  await Bun.sleep(1); // pushed after the tick that made the change
   s.flush();
   expect(s.records.get(project)?.deleted).toBe(true);
   expect(await repo.purge({ id: project })).toBe(true);
