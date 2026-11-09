@@ -2,18 +2,18 @@
 import { Checkbox } from "../components/ui/checkbox";
 import { NativeSelect } from "../components/ui/native-select";
 import { useState } from "react";
-import { X, Plus, ExternalLink, AlertTriangle, CalendarDays } from "lucide-react";
+import { X, Plus, ExternalLink, AlertTriangle } from "lucide-react";
 import { type Item, type PropDef, type TypeSchema, type Value, STATUS_GROUPS, formatRange, optionNames, parseRange } from "@obtion/core/model";
 import { type T, fmtDate } from "@obtion/core/i18n";
 import type { Index } from "@obtion/core/graph";
 import { numberText, parseNumber } from "@obtion/core/input";
 import { parseQuery, matches } from "@obtion/core/query";
-import { defaultOption, doneAt, hasValue, isSingle, isStatusProp, optionIds, statusOf, visibleProps } from "@obtion/core/traits";
+import { defaultOption, doneAt, isSingle, isStatusProp, optionIds, statusOf, visibleProps } from "@obtion/core/traits";
 import { repo } from "../repo";
 import { useIndex } from "../hooks";
 import { useT } from "../i18n";
 import { DateField, InlineText } from "./fields";
-import { EmptyDash, ItemLink, StatusPill, Tag } from "./item-look";
+import { EmptyDash, ItemLink, StatusPill } from "./item-look";
 import { Button, EmptyValueButton, IconButton, MenuItem, Popover, AddButton, REVEAL } from "./primitives";
 import { Progress, ProgressCount } from "./progress";
 import { cn } from "../lib/utils";
@@ -276,7 +276,7 @@ function BlockRow({ label, title, children }: { label: React.ReactNode; title?: 
 
 /**
  * `first` goes before the badges, `afterTags` right after the tags, `end` at the right edge, `links`
- * in a row of its own below them (a divider follows), `progress` under the dates. `noEndLine`: what
+ * in a row of its own below them (a divider follows), `progress` above the rows. `noEndLine`: what
  * follows sets itself apart (the update card), so the block ends without a line.
  */
 interface PageHead {
@@ -288,20 +288,23 @@ interface PageHead {
   noEndLine?: boolean;
 }
 
-/** Status and selections read as badges by themselves, so they need no label. */
-const isBadge = (p: PropDef) => isSingle(p);
+/**
+ * Status and single selections read as badges by themselves at the top, so they need no label.
+ * "Edit type" orders them apart from the rest.
+ */
+export const isBadge = (p: PropDef) => isSingle(p);
 
 /**
- * Design rules § 2.2. Every property of the type shows from the start, a page adds none the type
- * lacks. Tags are no property and follow the badges (see PageTags).
+ * Every property of the type shows from the start, a page adds none the type lacks: the badges
+ * in a row at the top, everything else below as rows with its name, each in the type's order.
+ * Tags are no property and follow the badges (see PageTags).
  */
 export function PropertyBlock({ item, schema, head = {} }: { item: Item; schema?: TypeSchema; head?: PageHead }) {
   const { t } = useT();
   const ix = useIndex();
   const visible = schema ? visibleProps(item, schema, ix).filter((p) => !(p.kind === "computed" && p.computed?.fn !== "count")) : [];
   const badges = visible.filter(isBadge);
-  const dates = visible.filter((p) => p.kind === "date");
-  const shown = visible.filter((p) => !isBadge(p) && p.kind !== "date");
+  const shown = visible.filter((p) => !isBadge(p));
   const leftovers = schema ? schema.removedProperties.filter((p) => item.props[p.id] !== undefined || item.rels[p.id]?.length) : [];
   const inverse = inverseGroups(item, ix, t);
   const free = Object.entries(item.extra);
@@ -321,18 +324,6 @@ export function PropertyBlock({ item, schema, head = {} }: { item: Item; schema?
       </div>
       {head.links}
       <div className="mt-3 border-t border-line" />
-      {dates.length > 0 && (
-        <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
-          {dates.map((p) => (
-            <span key={p.id} className="inline-flex items-center gap-1.5" title={p.description || p.name}>
-              <CalendarDays size={15} className="shrink-0 text-muted-foreground" aria-hidden />
-              {/* name the date only where the icon alone does not say which one it is */}
-              {(dates.length > 1 || !hasValue(item, p, ix)) && <span className="text-muted-foreground">{p.name}</span>}
-              <PropertyField item={item} prop={p} />
-            </span>
-          ))}
-        </div>
-      )}
       {head.progress}
       {rows > 0 && (
       <div className="-mx-1.5 mt-4 grid grid-cols-[160px_minmax(0,1fr)] gap-x-1 max-md:grid-cols-[124px_minmax(0,1fr)]">
@@ -364,7 +355,7 @@ export function PropertyBlock({ item, schema, head = {} }: { item: Item; schema?
       ))}
       </div>
       )}
-      {!head.noEndLine && (dates.length > 0 || !!head.progress || rows > 0) && <div className="mt-4 border-t border-line" />}
+      {!head.noEndLine && (!!head.progress || rows > 0) && <div className="mt-4 border-t border-line" />}
     </div>
   );
 }

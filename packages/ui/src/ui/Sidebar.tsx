@@ -3,7 +3,7 @@
 // another workspace's block, an item moves there. Dragging a workspace's name to the nearest gap
 // reorders the blocks; the order is the account's, on every device.
 import { useEffect, useState } from "react";
-import { ArrowDown, ArrowLeft, ArrowUp, ChevronRight, ChevronDown, History, Search, Settings, Link2, Plus, Paperclip, Pencil, RotateCcw, Sun, Trash2, Waypoints } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowUp, ChevronRight, ChevronDown, History, Search, Settings, Link2, Plus, Paperclip, RotateCcw, Sun, Trash2, Waypoints } from "lucide-react";
 import { type Item, META_TYPE, SETTINGS_ID, setSchemaField, setSettings } from "@obtion/core/model";
 import { sidebarChildren, sidebarRoots } from "@obtion/core/placement";
 import { keyBetween, keysFor, cmpKey } from "@obtion/core/sortkey";
@@ -430,8 +430,8 @@ function TypeNav({ touch, here }: { touch?: boolean; here: boolean }) {
 }
 
 /**
- * A type (or the files) under a workspace: dragged to reorder; a type's "…" (or a right click)
- * has "Edit type". The link covers the whole row (::after), only the "…" lies above it.
+ * A type (or the files) under a workspace: dragged to reorder; a type's gear opens "Edit type" in
+ * one click. The link covers the whole row (::after), only the gear lies above it.
  */
 function TypeRow({ row: r, touch, active, drop, ...drag }: {
   row: { id: string; label: string; href: string; icon: React.ReactNode };
@@ -445,13 +445,11 @@ function TypeRow({ row: r, touch, active, drop, ...drag }: {
 }) {
   const { t } = useT();
   const space = useSpaceId()!;
-  const menu = useContextMenu();
   const isType = r.id !== "files";
   return (
     <div
       draggable={!touch}
       {...drag}
-      onContextMenu={touch || !isType ? undefined : menu.onContextMenu}
       className={cn("group/row relative flex items-center gap-2 rounded-lg pl-[30px] pr-1", touch ? "py-2 text-[15px]" : "py-1 text-sm", active ? "bg-hover font-medium text-fg" : "text-muted-foreground hover:bg-hover hover:text-fg")}
     >
       {drop && <span className={cn("absolute inset-x-1 h-0.5 rounded bg-focus", drop === "before" ? "-top-px" : "-bottom-px")} />}
@@ -460,13 +458,7 @@ function TypeRow({ row: r, touch, active, drop, ...drag }: {
         {r.label}
       </a>
       {!touch && isType && (
-        <MoreMenu menu={menu} size="xs" iconSize={14} tabIndex={-1} className={cn("relative z-10 hover:bg-surface-2", REVEAL.row)}>
-          {(close) => (
-            <MenuItem icon={<Pencil size={14} />} onClick={() => (close(), editType(r.id, space))}>
-              {t("type.edit")}
-            </MenuItem>
-          )}
-        </MoreMenu>
+        <IconButton label={t("type.edit")} icon={Settings} size="xs" iconSize={14} tabIndex={-1} onClick={() => editType(r.id, space)} className={cn("relative z-10 hover:bg-surface-2", REVEAL.row)} />
       )}
     </div>
   );
