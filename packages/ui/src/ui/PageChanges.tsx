@@ -123,12 +123,8 @@ export function PageChanges({ item, space, onUpdate }: { item: Item; space: stri
     );
 
   const oldest = fetched.length ? Math.min(...fetched.map((e) => e.id)) : undefined;
-  // the update an entry wrote: by its id; older entries have only the text, which must be unique
-  const updateOf = (c: { id?: string; to?: unknown }) => {
-    if (c.id) return item.updates.some((u) => u.id === c.id) ? c.id : undefined;
-    const same = item.updates.filter((u) => u.text === c.to);
-    return same.length === 1 ? same[0]!.id : undefined;
-  };
+  // the update an entry wrote, by its id
+  const updateOf = (c: { id?: string }) => (c.id && item.updates.some((u) => u.id === c.id) ? c.id : undefined);
 
   return (
     <div>

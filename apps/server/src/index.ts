@@ -54,8 +54,7 @@ function workspace(id: string): Workspace | undefined {
   const known = open.get(id);
   if (known || !accounts.exists(id)) return known;
   const opened = new Workspace(accounts.dir(id));
-  const w = storeWriter(opened.store, SETUP_ORIGIN);
-  upgradeSetup(w, opened.store.lang());
+  upgradeSetup(storeWriter(opened.store, SETUP_ORIGIN));
   open.set(id, opened);
   return opened;
 }

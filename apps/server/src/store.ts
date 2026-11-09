@@ -223,8 +223,7 @@ export class Store {
   }
 
   private noteArea(id: string, doc: Y.Doc) {
-    const meta = metaMap(doc);
-    const area = meta.has("area") || meta.has("kind") ? areaOf(doc) : undefined;
+    const area = metaMap(doc).has("area") ? areaOf(doc) : undefined;
     if (area) this.areas.set(id, area);
     else this.areas.delete(id);
   }
@@ -533,7 +532,7 @@ export class Store {
 
   /**
    * What an activity entry did to the text: the version before it (the empty text when there is
-   * none) and the last version it made. Undefined when the entry kept no version (older entries).
+   * none) and the last version it made. Undefined when the entry kept no version.
    */
   eventText(event: number): { doc: string; before: string; after: string; from?: number; to: number } | undefined {
     const mine = this.db.query("SELECT id, doc FROM versions WHERE event = ? ORDER BY id").all(event) as { id: number; doc: string }[];

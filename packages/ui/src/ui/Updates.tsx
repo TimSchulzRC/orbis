@@ -102,10 +102,9 @@ let dockedOpen = false;
 /** Pages holding the docked panel open; the page keeps its room while one hands over to the next. */
 let rooms = 0;
 
-/** What has been read of a page's updates on this device; before marks, a plain time. */
+/** What has been read of a page's updates on this device. */
 function readMark(pageId: string): ReadMark {
-  const v = readJSON<ReadMark | number>(KEYS.updatesSeen(pageId), NOT_READ);
-  return typeof v === "number" ? { at: v, ids: [] } : v;
+  return readJSON<ReadMark>(KEYS.updatesSeen(pageId), NOT_READ);
 }
 
 /**

@@ -177,15 +177,10 @@ export function typeTabs(type: Item, lang: Lang): ViewTab[] {
 }
 
 /**
- * Workspaces set up before the views lived in the type: writes the shipped views into the shipped
- * types that still have none. Runs when the server opens a workspace; a second run changes nothing.
+ * Stores the current FORMAT, so an older app stays read-only even offline once it has synced this.
+ * Runs when the server opens a workspace; a second run changes nothing.
  */
-export function upgradeSetup(w: Writer, lang: Lang) {
-  for (const [id, tabs] of Object.entries(defaultTabs(lang))) {
-    const type = w.get(id);
-    if (type && !type.deleted && type.schema && !type.schema.views?.length) w.change(id, (doc) => setTabs(doc, tabs));
-  }
-  // stored, so an older app stays read-only even offline once it has synced this
+export function upgradeSetup(w: Writer) {
   const settings = w.get(SETTINGS_ID);
   if (settings && (settings.settings?.format ?? 0) < FORMAT) w.change(SETTINGS_ID, (doc) => setSettings(doc, { format: FORMAT }));
 }
