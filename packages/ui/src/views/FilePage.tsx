@@ -16,6 +16,7 @@ import { ItemPicker } from "../ui/Picker";
 import { TitleField } from "../ui/TitleField";
 import { dateOf } from "@obtion/core/date";
 import { who } from "../ui/actor";
+import { PagePanel } from "../ui/Updates";
 
 export function FilePage({ item }: { item: Item }) {
   const repo = useRepo();
@@ -65,7 +66,11 @@ export function FilePage({ item }: { item: Item }) {
       setFileMeta(doc, { ...meta, name: file.name, display: meta.display ?? null, thumb: meta.thumb ?? null, pages: null, text: null, extracted: null, duration: null, history: [...(file.history ?? []), { hash: file.hash, at: Date.now() }] }),
     );
   };
+  // the top bar's place for the side panel's button, left of "…"
+  const [panelSlot, setPanelSlot] = useState<HTMLElement | null>(null);
   const tools = (
+    <>
+    <span ref={setPanelSlot} className="contents" />
     <MoreMenu>
       {(close) => (
         <>
@@ -84,6 +89,7 @@ export function FilePage({ item }: { item: Item }) {
         </>
       )}
     </MoreMenu>
+    </>
   );
   return (
     <div className="page-read">
@@ -92,6 +98,7 @@ export function FilePage({ item }: { item: Item }) {
       )}
       {missing && <p className="mb-3 rounded-lg border border-dashed border-line px-3 py-2 text-sm text-muted-foreground">{t(files.missingKey(item.created) === "file.uploading" ? "file.uploadingHint" : "file.missingHint")}</p>}
       <Crumbs item={item} tools={tools} onPlace={() => setPicking(true)} />
+      <PagePanel item={item} bar={panelSlot} updates={false} />
       <div className="mt-1.5 flex items-start gap-4">
         <div className="min-w-0 flex-1">
           <TitleField item={item} autoFocus={false} placeholder={file.name} />

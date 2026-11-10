@@ -3,7 +3,7 @@
 import { Input } from "../components/ui/input";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { EditorView } from "@codemirror/view";
-import { Trash2, Plus, AlertTriangle, ImagePlus, ListFilter, Pin, PinOff, FilePlus, FolderInput, ArrowRightLeft, History, Bot } from "lucide-react";
+import { Trash2, Plus, AlertTriangle, ImagePlus, ListFilter, Pin, PinOff, FilePlus, FolderInput, ArrowRightLeft, Bot } from "lucide-react";
 import { type Item, META_TYPE, titleKey } from "@obtion/core/model";
 import { isInInbox } from "@obtion/core/placement";
 import { wouldBeInInbox } from "@obtion/core/typeops";
@@ -22,7 +22,7 @@ import { ProgressBand } from "../ui/progress";
 import { cn } from "../lib/utils";
 import { PropertyBlock } from "../ui/Properties";
 import { Below } from "../ui/Sections";
-import { PageUpdates } from "../ui/Updates";
+import { PagePanel } from "../ui/Updates";
 import { AddRef, Crumbs, LinksMenu, LinksRow, PageFooter, TrashBanner, pinnedRefs } from "../ui/PageParts";
 import { PlacePicker } from "../ui/Picker";
 import { pluralOf } from "@obtion/core/plural";
@@ -31,7 +31,6 @@ import { FilePage } from "./FilePage";
 import { insertDrawing } from "../ui/editor/slash";
 import { DRAWING_ICON } from "../ui/icons";
 import { TitleField } from "../ui/TitleField";
-import { HistoryDialog } from "../ui/History";
 import { TypePage } from "./TypePage";
 import { createAndOpen, isBlank, rememberPlace } from "../actions";
 import { INBOX_ICON, NOTE_ICON } from "../ui/icons";
@@ -101,7 +100,6 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
   const [deleting, setDeleting] = useState(false);
   const [placing, setPlacing] = useState(false);
   const [moving, setMoving] = useState(false);
-  const [history, setHistory] = useState(false);
   const others = useAccounts().spaces.length > 1;
   const [rulesOpen, setRulesOpen] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -123,14 +121,14 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
   const cycles = ix.cycleEdgesOf(item.id);
   const progress = progressSpec(schema) ? ix.progressOf(item) : undefined;
 
-  // the top bar's place for the updates button, left of "…"
-  const [updatesSlot, setUpdatesSlot] = useState<HTMLElement | null>(null);
+  // the top bar's place for the side panel's buttons, left of "…"
+  const [panelSlot, setPanelSlot] = useState<HTMLElement | null>(null);
   const updatable = hasUpdates(schema) && !item.deleted;
   // with an update the card follows the properties and needs no line above it
   const updateCard = updatable && updateFeed(ix, item.id).length > 0;
   const tools = (
     <>
-    {updatable && <span ref={setUpdatesSlot} className="contents" />}
+    <span ref={setPanelSlot} className="contents" />
     <MoreMenu>
       {(close) => (
         <>
@@ -155,9 +153,6 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
           </MenuItem>
           <MenuItem icon={<FilePlus size={14} />} onClick={() => (close(), createAndOpen({ parents: [item.id] }))}>
             {t("item.newBelow")}
-          </MenuItem>
-          <MenuItem icon={<History size={14} />} onClick={() => (close(), setHistory(true))}>
-            {t("item.history")}
           </MenuItem>
           {others && !item.deleted && item.type !== META_TYPE && (
             <MenuItem icon={<ArrowRightLeft size={14} />} onClick={() => (close(), setMoving(true))}>
@@ -219,8 +214,8 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
           progress: progress && <ProgressBand done={progress.done} total={progress.total} desc={progressText(item, ix, progress.done, progress.total)} />,
         }}
       />
-      {/* the newest update and, on a click, all of them in a panel */}
-      {updatable && <PageUpdates item={item} bar={updatesSlot} />}
+      {/* the newest update, and the side panel with all of them and the page's history */}
+      <PagePanel item={item} bar={panelSlot} updates={updatable} />
 
       {/* 2 · text */}
       <PageText item={item} isNew={isNew} onView={setView} hasMore={ix.childrenOf(item.id).length > 0} />
@@ -240,7 +235,6 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
       {deleting && <DeleteDialog item={item} onClose={() => setDeleting(false)} />}
       {rulesOpen && <AgentRulesDialog item={item} onClose={() => setRulesOpen(false)} />}
       {moving && <MoveDialog item={item} onClose={() => setMoving(false)} />}
-      {history && <HistoryDialog item={item} onClose={() => setHistory(false)} />}
     </div>
   );
 }

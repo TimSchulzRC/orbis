@@ -1,7 +1,8 @@
-// The server's replica: an append-only update log in SQLite plus plain-object records for queries,
-// search, activity and the mirror. Only the records stay in memory for all documents; a Y.Doc is
-// loaded from its snapshot and later log rows on use, and dropped again by trim(). Each flush also
-// stores the record next to the snapshot, so a start reads records without decoding any Y.Doc.
+// The server's replica: an update log in SQLite plus plain-object records for queries, search,
+// activity and the mirror. Rows older than two weeks fold into one per document (compact()). Only
+// the records stay in memory for all documents; a Y.Doc is loaded from its snapshot and later log
+// rows on use, and dropped again by trim(). Each flush also stores the record next to the
+// snapshot, so a start reads records without decoding any Y.Doc.
 import { Database } from "bun:sqlite";
 import * as Y from "yjs";
 import { mkdirSync } from "node:fs";
@@ -44,6 +45,14 @@ const FLUSH_DELAY_MS = 250;
 const EVENT_MERGE_WINDOW_MS = 5 * 60_000;
 const MAX_CLOCK_SKEW_MS = 10 * 60_000;
 const MAX_UNDO_CHAIN = 20;
+/**
+ * How long log rows stay as written at least. Older rows fold into one row per document, and their steps
+ * can no longer be undone. Two weeks: a device offline longer than that resyncs in full (reset),
+ * and fields a step changed have mostly been changed again by then anyway.
+ */
+export const LOG_WINDOW_MS = 14 * 24 * 60 * 60_000;
+/** Rows appended between two compactions: no timer, a server that writes nothing needs none. */
+export const COMPACT_AFTER_ROWS = 10_000;
 
 const SCHEMA = `CREATE TABLE IF NOT EXISTS updates (seq INTEGER PRIMARY KEY AUTOINCREMENT, doc TEXT NOT NULL, data BLOB NOT NULL, origin TEXT NOT NULL, ts INTEGER NOT NULL, uid TEXT NOT NULL, step TEXT, area TEXT NOT NULL);
   CREATE INDEX IF NOT EXISTS updates_doc ON updates(doc, seq);
@@ -79,6 +88,7 @@ export class Store {
   private stepCtx: { id: string; actor: string; undoes?: string } | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private trimTimer: ReturnType<typeof setTimeout> | null = null;
+  private appended = 0;
   private _ix: Index | null = null;
   /** While an atomic call runs: its updates, written only if the whole call succeeds. */
   private held: { docId: string; data: Uint8Array; origin: string; quiet: boolean; step?: string }[] | null = null;
@@ -382,6 +392,8 @@ export class Store {
       .get(docId, data, origin, Date.now(), uid, step ?? null, area) as { seq: number };
     this.seq = res.seq;
     this.lastUid = uid;
+    // on the next tick: not inside the caller's step or transaction
+    if (++this.appended === COMPACT_AFTER_ROWS) setTimeout(() => this.compact(), 0);
     if (step) {
       const undoes = this.stepCtx?.id === step ? (this.stepCtx.undoes ?? null) : null;
       this.db.query("INSERT OR IGNORE INTO steps (id, actor, ts, undoes) VALUES (?, ?, ?, ?)").run(step, origin, Date.now(), undoes);
@@ -498,8 +510,7 @@ export class Store {
   // of adding one – typing a paragraph makes one version, not one per keystroke. The first time
   // an item that has no version yet changes, the text it was created with is kept first, so its
   // history starts with it. Versions are never dropped: a text edited in a
-  // hundred sessions costs a hundred compressed copies – a few MB for long, busy pages, which
-  // is small next to the update log that keeps every keystroke anyway.
+  // hundred sessions costs a hundred compressed copies – a few MB for long, busy pages.
 
   /** Keep the new text of a document whose body changed (see above). */
   private saveVersion(id: string, prev: Item, next: Item, origin: string, step: string | undefined, ts: number, event?: { id: number; merged: boolean }) {
@@ -523,11 +534,10 @@ export class Store {
     return rows.map((r, i) => ({ ...r, n: i + 1, step: r.step ?? undefined, event: r.event ?? undefined }));
   }
 
-  /** The text of a version by its id (undefined if unknown, or of another document when `doc` is given). */
-  versionText(id: number, doc?: string): string | undefined {
-    const row = this.db.query("SELECT doc, data FROM versions WHERE id = ?").get(id) as { doc: string; data: Uint8Array } | null;
-    if (!row || (doc !== undefined && row.doc !== doc)) return undefined;
-    return unpack(row.data);
+  /** The text of a version by its id (undefined if unknown). */
+  versionText(id: number): string | undefined {
+    const row = this.db.query("SELECT data FROM versions WHERE id = ?").get(id) as { data: Uint8Array } | null;
+    return row ? unpack(row.data) : undefined;
   }
 
   /**
@@ -585,6 +595,43 @@ export class Store {
   /** Documents purged while a replica's cursor was at `since` or later: it may still have them. */
   purgedSince(area: string, since: number): string[] {
     return (this.db.query("SELECT id FROM purged WHERE area = ? AND seq >= ?").all(area, since) as { id: string }[]).map((r) => r.id);
+  }
+
+  /**
+   * Folds each document's rows older than LOG_WINDOW_MS into one row and forgets their steps. The
+   * folded row keeps the seq and uid of the newest row it replaces, so `docsSince` stays right for
+   * every cursor and a replica whose cursor was folded away gets a reset. Runs by itself after
+   * every COMPACT_AFTER_ROWS appended rows. Returns the rows removed.
+   */
+  compact(now = Date.now()): number {
+    this.appended = 0;
+    if (this.held) return 0;
+    this.flush();
+    const below = this.db.query("SELECT MAX(seq) AS seq FROM updates WHERE ts < ?").get(now - LOG_WINDOW_MS) as { seq: number | null };
+    // never split a step: its rows would be half folded, half undoable. Steps can interleave
+    // (several devices), so moving the cut may split another one.
+    const split = this.db.query("SELECT MIN(seq) AS seq FROM updates WHERE seq <= ?1 AND step IN (SELECT step FROM updates WHERE seq > ?1)");
+    let cut = below.seq ?? 0;
+    for (let s = split.get(cut) as { seq: number | null }; s.seq; s = split.get(cut) as { seq: number | null }) cut = s.seq - 1;
+    if (cut <= 0) return 0;
+    const docs = this.db.query("SELECT doc FROM updates WHERE seq <= ? GROUP BY doc HAVING COUNT(*) > 1").all(cut) as { doc: string }[];
+    const rowsOf = this.db.query("SELECT seq, data FROM updates WHERE doc = ? AND seq <= ? ORDER BY seq");
+    const replace = this.db.query("UPDATE updates SET data = ? WHERE seq = ?");
+    const drop = this.db.query("DELETE FROM updates WHERE doc = ? AND seq < ?");
+    let removed = 0;
+    this.db.transaction(() => {
+      for (const { doc: id } of docs) {
+        const rows = rowsOf.all(id, cut) as { seq: number; data: Uint8Array }[];
+        const doc = new Y.Doc({ guid: id, gc: true });
+        for (const r of rows) Y.applyUpdate(doc, r.data); // Y.mergeUpdates grows quadratically with the rows
+        const last = rows.at(-1)!.seq;
+        replace.run(Y.encodeStateAsUpdate(doc), last);
+        removed += drop.run(id, last).changes;
+      }
+      this.db.query("UPDATE updates SET step = NULL WHERE seq <= ? AND step IS NOT NULL").run(cut);
+      this.db.query("DELETE FROM steps WHERE id NOT IN (SELECT step FROM updates WHERE step IS NOT NULL)").run();
+    })();
+    return removed;
   }
 
   // ---------- reading ----------

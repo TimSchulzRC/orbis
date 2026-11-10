@@ -227,8 +227,6 @@ test("what an activity entry changed: the versions before and after it", async (
   edit(TIM, id, "one\ntwo\n");
   const ev = s.events({ doc: id, limit: 1 })[0]!;
   expect(s.eventText(ev.id)).toEqual({ doc: id, before: "one\n", after: "one\ntwo\n", from: 1, to: 2 });
-  const [v1] = s.versions(id);
-  expect(s.versionText(v1!.id, "other-id")).toBeUndefined();
   // an entry that kept no version (the creation) has nothing to show
   const created = s.events({ doc: id, limit: 5 }).find((e) => e.kind === "created")!;
   expect(s.eventText(created.id)).toBeUndefined();

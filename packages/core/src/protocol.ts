@@ -1,10 +1,11 @@
 // Sync protocol between replicas and the server.
 //
-// The server keeps an append-only log of Yjs updates with sequence numbers. A replica says `hello`
-// with the last sequence it saw and that row's id (`sinceId`) and receives everything newer. If the
-// server no longer has that row (restored from an older backup, even if others pushed it past the
-// old number since), it answers with `reset` and the replica uploads its full state. Offline changes
-// sit in a local outbox until acked. Yjs updates are idempotent and commutative, so re-sending is safe.
+// The server keeps a log of Yjs updates with sequence numbers. A replica says `hello` with the last
+// sequence it saw and that row's id (`sinceId`) and receives everything newer. If the server no
+// longer has that row (folded into a newer one after two weeks, or restored from an older backup,
+// even if others pushed it past the old number since), it answers with `reset` and the replica
+// uploads its full state. Offline changes sit in a local outbox until acked. Yjs updates are
+// idempotent and commutative, so re-sending is safe.
 //
 // Everything runs per area.
 

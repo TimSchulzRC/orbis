@@ -49,7 +49,7 @@ test("no links, no link button; + after the chips adds a ref, the page menu no l
 
   await page.getByRole("button", { name: "Mehr" }).first().click();
   const pageMenu = page.getByRole("dialog");
-  await expect.element(pageMenu.getByRole("button", { name: "Verlauf" })).toBeVisible();
+  await expect.element(pageMenu.getByRole("button", { name: "Neue Seite darunter" })).toBeVisible();
   expect(pageMenu.getByRole("button", { name: "Ref hinzufügen" }).query()).toBeNull();
   await page.getByRole("button", { name: "Mehr" }).first().click();
 
