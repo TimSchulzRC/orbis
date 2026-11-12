@@ -1,5 +1,6 @@
 // One icon set per release channel from the logos in docs/design, the same mark on its own tile:
-// stable black and white with a yellow square as drawn, nightly violet under a night sky, dev blue on a blueprint. The server
+// the ring black or white as drawn, the square and the tile behind in the channel's colour: stable
+// yellow, nightly violet under a night sky, dev blue on a blueprint. The server
 // answers /icon.svg & co. from apps/web/public/icons/<its channel>/ (apps/server/src/icons.ts).
 // The dark mark is the app's primary icon (PWA, home screen, Apple touch icon).
 
@@ -13,7 +14,6 @@ const dark = readFileSync(resolve(root, "docs/design/obtion-logo-dark.svg"), "ut
 
 type Colours = {
 	tile: [string, string];
-	orbit: [string, string, string];
 	object: [string, string];
 	shadow: string;
 	decor: string;
@@ -46,38 +46,33 @@ const night = (star: string, stars: number, back: string, front: string) => `
     <path d="M250 512V402a62 62 0 0 1 110-36 78 78 0 0 1 134 22 60 60 0 0 1 18 6V512z" fill="${back}"/>
     <path d="M0 512V392a66 66 0 0 1 92-28 88 88 0 0 1 152 34 62 62 0 0 1 96 44 50 50 0 0 1 60 70z" fill="${front}"/>`;
 
-// stable is the logo as drawn; the others change its colours and draw on the tile behind the mark
+// stable is the logo as drawn; the others colour its square and draw on the tile behind the mark
 const palettes: Record<string, Palette | null> = {
 	stable: null,
 	nightly: {
 		light: {
 			tile: ["#F6F2FF", "#DDD2F7"],
-			orbit: ["#A983FF", "#8452F0", "#5A2BBE"],
-			object: ["#C9AEFF", "#9D6EF5"],
+			object: ["#A983FF", "#7A45E8"],
 			shadow: "#3F1A8F",
 			decor: night("#8452F0", 0.55, "#CDBDF3", "#BBA6EE"),
 		},
 		dark: {
 			tile: ["#241E55", "#0D0B26"],
-			orbit: ["#F1EAFF", "#C9B2FF", "#9B76F2"],
-			object: ["#FFFFFF", "#D9C6FF"],
+			object: ["#C3A6FF", "#9466F5"],
 			shadow: "#000000",
 			decor: night("#FFFFFF", 0.9, "#3A2D85", "#4C3BA6"),
 		},
 	},
-	// the blue the logo had before #132
 	dev: {
 		light: {
 			tile: ["#F7FAFF", "#DCE7F8"],
-			orbit: ["#5B9AFF", "#2773ED", "#1749B5"],
-			object: ["#9AC8FF", "#4B94F5"],
+			object: ["#5B9AFF", "#2466DD"],
 			shadow: "#1A4B9B",
 			decor: blueprint("#2773ED", 0.13, 0.45),
 		},
 		dark: {
 			tile: ["#3F86F2", "#1749B5"],
-			orbit: ["#FFFFFF", "#F2F7FF", "#D3E4FF"],
-			object: ["#FFFFFF", "#E1EDFF"],
+			object: ["#BFE0FF", "#7DB8FF"],
 			shadow: "#0B2A6B",
 			decor: blueprint("#FFFFFF", 0.14, 0.55),
 		},
@@ -105,7 +100,7 @@ function replaceOnce(svg: string, find: string | RegExp, by: string): string {
 
 function recolour(svg: string, c: Colours | undefined): string {
 	if (!c) return svg;
-	let out = stops(stops(stops(svg, "tile", c.tile), "orbit", c.orbit), "object", c.object);
+	let out = stops(stops(svg, "tile", c.tile), "object", c.object);
 	out = out.replace(/flood-color="#[0-9A-Fa-f]{6}"/, `flood-color="${c.shadow}"`);
 	out = replaceOnce(
 		out,

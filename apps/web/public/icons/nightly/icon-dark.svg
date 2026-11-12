@@ -5,10 +5,10 @@
       <stop stop-color="#241E55"/><stop offset="1" stop-color="#0D0B26"/>
     </linearGradient>
     <linearGradient gradientUnits="userSpaceOnUse" id="orbit" x1="148" x2="355" y1="133" y2="385" >
-      <stop stop-color="#F1EAFF"/><stop offset=".48" stop-color="#C9B2FF"/><stop offset="1" stop-color="#9B76F2"/>
+      <stop stop-color="#FFFFFF"/><stop offset=".48" stop-color="#F4F4F4"/><stop offset="1" stop-color="#D8D8D8"/>
     </linearGradient>
     <linearGradient gradientUnits="userSpaceOnUse" id="object" x1="325" x2="402" y1="115" y2="211" >
-      <stop stop-color="#FFFFFF"/><stop offset="1" stop-color="#D9C6FF"/>
+      <stop stop-color="#C3A6FF"/><stop offset="1" stop-color="#9466F5"/>
     </linearGradient>
     <filter filterUnits="userSpaceOnUse" height="512" id="shadow" width="512" x="0" y="0" >
       <feDropShadow dx="0" dy="12" flood-color="#000000" flood-opacity=".35" stdDeviation="12" />
