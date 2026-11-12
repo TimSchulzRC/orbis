@@ -18,13 +18,14 @@ import { matches, parseQuery } from "@obtion/core/query";
 import {
 	defaultOption,
 	doneAt,
+	hasValue,
 	isSingle,
 	isStatusProp,
 	optionIds,
 	statusOf,
 	visibleProps,
 } from "@obtion/core/traits";
-import { AlertTriangle, ExternalLink, Plus, X } from "lucide-react";
+import { AlertTriangle, ChevronRight, ExternalLink, Plus, X } from "lucide-react";
 import { useState } from "react";
 import { Checkbox } from "../components/ui/checkbox";
 import { NativeSelect } from "../components/ui/native-select";
@@ -525,8 +526,9 @@ interface PageHead {
 export const isBadge = (p: PropDef) => isSingle(p);
 
 /**
- * Every property of the type shows from the start, a page adds none the type lacks: the badges
- * in a row at the top, everything else below as rows with its name, each in the type's order.
+ * A page adds no property its type lacks. Those with a value show: the badges in a row at the top,
+ * everything else below as rows with its name, each in the type's order. The empty ones wait at
+ * the very bottom behind "n more properties", again in the type's order, as rows to fill in.
  * Tags are no property and follow the badges (see PageTags).
  */
 export function PropertyBlock({
@@ -545,8 +547,14 @@ export function PropertyBlock({
 				(p) => !(p.kind === "computed" && p.computed?.fn !== "count"),
 			)
 		: [];
-	const badges = visible.filter(isBadge);
-	const shown = visible.filter((p) => !isBadge(p));
+	// a select with a default always shows one, stored or not
+	const used = (p: PropDef) => hasValue(item, p, ix) || !!defaultOption(p);
+	const badges = visible.filter((p) => isBadge(p) && used(p));
+	const shown = visible.filter((p) => !isBadge(p) && used(p));
+	const unused = visible.filter((p) => !used(p));
+	// open for this page only: the next page starts closed again
+	const [openFor, setOpenFor] = useState<string>();
+	const open = openFor === item.id;
 	const leftovers = schema
 		? schema.removedProperties.filter(
 				(p) => item.props[p.id] !== undefined || item.rels[p.id]?.length,
@@ -554,7 +562,7 @@ export function PropertyBlock({
 		: [];
 	const inverse = inverseGroups(item, ix, t);
 	const free = Object.entries(item.extra);
-	const rows = shown.length || free.length || inverse.length || leftovers.length;
+	const rows = shown.length || free.length || inverse.length || leftovers.length || unused.length;
 	return (
 		<div className="group/props">
 			<div className="mt-3 flex flex-wrap items-center gap-1.5">
@@ -577,49 +585,74 @@ export function PropertyBlock({
 			{head.progress}
 			{rows > 0 && (
 				<div className="-mx-1.5 mt-4 grid grid-cols-[160px_minmax(0,1fr)] gap-x-1 max-md:grid-cols-[124px_minmax(0,1fr)]">
-					{shown.map((p) => (
-						<BlockRow key={p.id} label={p.name} title={p.description || p.name}>
-							<PropertyField item={item} prop={p} />
-						</BlockRow>
-					))}
-					{free.map(([n, v]) => (
-						<BlockRow key={`free:${n}`} label={n}>
-							<FreeValueText value={v} />
-							<IconButton
-								className={cn("ml-auto text-faint", REVEAL.any)}
-								icon={X}
-								iconSize={12}
-								label={t("props.removeFree", { name: n })}
-								onClick={() => repo.setExtra(item.id, n, null)}
-								size="xs"
-							/>
-						</BlockRow>
-					))}
-					{inverse.map((g) => (
-						<BlockRow key={`inv:${g.label}`} label={g.label}>
-							{g.ids.map((id) => (
-								<span
-									className="inline-flex max-w-full items-center gap-1 rounded-md bg-surface-2 px-1.5 py-0.5 text-[13px]"
-									key={id}
+					{/* one keyed list: a row filled in below the toggle moves up with its state (an open date range) */}
+					{[
+						...shown.map((p) => (
+							<BlockRow key={p.id} label={p.name} title={p.description || p.name}>
+								<PropertyField item={item} prop={p} />
+							</BlockRow>
+						)),
+						...free.map(([n, v]) => (
+							<BlockRow key={`free:${n}`} label={n}>
+								<FreeValueText value={v} />
+								<IconButton
+									className={cn("ml-auto text-faint", REVEAL.any)}
+									icon={X}
+									iconSize={12}
+									label={t("props.removeFree", { name: n })}
+									onClick={() => repo.setExtra(item.id, n, null)}
+									size="xs"
+								/>
+							</BlockRow>
+						)),
+						...inverse.map((g) => (
+							<BlockRow key={`inv:${g.label}`} label={g.label}>
+								{g.ids.map((id) => (
+									<span
+										className="inline-flex max-w-full items-center gap-1 rounded-md bg-surface-2 px-1.5 py-0.5 text-[13px]"
+										key={id}
+									>
+										<ItemLink className="min-w-0" item={ix.get(id)!} />
+									</span>
+								))}
+							</BlockRow>
+						)),
+						...leftovers.map((p) => (
+							<BlockRow key={`old:${p.id}`} label={p.name} title={t("props.more")}>
+								<span className="text-muted-foreground">{displayValue(item, p)}</span>
+								<IconButton
+									className={cn("ml-auto text-faint", REVEAL.any)}
+									icon={X}
+									iconSize={12}
+									label={t("props.removeFree", { name: p.name })}
+									onClick={() => repo.setProp(item.id, p.id, null)}
+									size="xs"
+								/>
+							</BlockRow>
+						)),
+						unused.length > 0 && (
+							<div className="col-span-2" key="unused">
+								<Button
+									aria-expanded={open}
+									className="tap-y inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs text-muted-foreground hover:bg-hover hover:text-fg"
+									onClick={() => setOpenFor(open ? undefined : item.id)}
+									type="button"
+									variant="plain"
 								>
-									<ItemLink className="min-w-0" item={ix.get(id)!} />
-								</span>
-							))}
-						</BlockRow>
-					))}
-					{leftovers.map((p) => (
-						<BlockRow key={`old:${p.id}`} label={p.name} title={t("props.more")}>
-							<span className="text-muted-foreground">{displayValue(item, p)}</span>
-							<IconButton
-								className={cn("ml-auto text-faint", REVEAL.any)}
-								icon={X}
-								iconSize={12}
-								label={t("props.removeFree", { name: p.name })}
-								onClick={() => repo.setProp(item.id, p.id, null)}
-								size="xs"
-							/>
-						</BlockRow>
-					))}
+									<ChevronRight
+										className={cn("transition-transform", open && "rotate-90")}
+										size={13}
+									/>
+									{t("props.unused", { n: unused.length, count: unused.length })}
+								</Button>
+							</div>
+						),
+						...(open ? unused : []).map((p) => (
+							<BlockRow key={p.id} label={p.name} title={p.description || p.name}>
+								<PropertyField item={item} prop={p} />
+							</BlockRow>
+						)),
+					]}
 				</div>
 			)}
 			{!head.noEndLine && (!!head.progress || rows > 0) && (

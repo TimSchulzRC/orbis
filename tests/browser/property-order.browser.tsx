@@ -1,10 +1,12 @@
 // A page shows its type's properties in the order "Typ bearbeiten" gives them: the badges (status,
 // single selections) in a row at the top, everything else (dates too) as rows below, each in order.
+// Empty ones wait at the very bottom behind "n weitere Eigenschaften", in that order too.
 
 import { upsertProp } from "@obtion/core/model";
 import { SYS } from "@obtion/core/setup";
 import { keyBetween } from "@obtion/core/sortkey";
 import { afterEach, expect, test } from "vitest";
+import { page } from "vitest/browser";
 import { cleanup, render } from "vitest-browser-react";
 import { useRepo } from "../../packages/ui/src/hooks";
 import { PropertyBlock } from "../../packages/ui/src/ui/Properties";
@@ -20,9 +22,7 @@ function Host({ id }: { id: string }) {
 
 /** The names of the rows, top to bottom. */
 const rows = () =>
-	[...document.querySelectorAll(".group\\/props .grid > div:nth-child(odd)")].map(
-		(e) => e.textContent,
-	);
+	[...document.querySelectorAll(".group\\/props .grid > div.truncate")].map((e) => e.textContent);
 /** The badges' text, left to right ("Backlog", "Priorität"). */
 const badges = () =>
 	[...document.querySelectorAll(".group\\/props > div:first-child > span.inline-flex")].map(
@@ -42,19 +42,68 @@ async function setup() {
 			upsertProp(d, id, { sort: keyBetween(all[i]!.sort, all[i + 1]?.sort ?? null) }),
 		);
 	};
-	return { props, moveAfter };
+	return { repo, id, props, moveAfter };
 }
 
-test("the rows below follow the type's order; a date is one of them", async () => {
+const more = (n: number) =>
+	page.getByRole("button", { name: `${n} weitere Eigenschaft${n === 1 ? "" : "en"}` });
+
+test("empty properties hide behind a toggle and open in the type's order", async () => {
 	const { props, moveAfter } = await setup();
-	await expect.poll(rows).toEqual(["Zeitraum", "Zusammenfassung", "Blockiert durch"]);
+	await expect.poll(rows).toEqual([]);
+	await expect.poll(badges).toEqual(["Backlog"]);
+	await more(4).click();
+	await expect.poll(rows).toEqual(["Priorität", "Zeitraum", "Zusammenfassung", "Blockiert durch"]);
 	moveAfter("p_period", props().at(-1)!.id);
-	await expect.poll(rows).toEqual(["Zusammenfassung", "Blockiert durch", "Zeitraum"]);
+	await expect.poll(rows).toEqual(["Priorität", "Zusammenfassung", "Blockiert durch", "Zeitraum"]);
+	await more(4).click();
+	await expect.poll(rows).toEqual([]);
+});
+
+test("a property with a value shows above the toggle, the rest stay below it", async () => {
+	const { repo, id } = await setup();
+	repo.setProp(id, "p_summary", "Neue Website");
+	repo.setProp(id, "p_priority", "pr_high");
+	await expect.poll(rows).toEqual(["Zusammenfassung"]);
+	await expect.poll(() => badges().map((b) => b?.includes("Priorität"))).toEqual([false, true]);
+	await more(2).click();
+	await expect.poll(rows).toEqual(["Zusammenfassung", "Zeitraum", "Blockiert durch"]);
+	// filling one in the open list moves it up, in the type's order
+	repo.setProp(id, "p_period", "2026-11-01/2026-11-30");
+	await expect.poll(rows).toEqual(["Zeitraum", "Zusammenfassung", "Blockiert durch"]);
+	await expect.element(more(1)).toBeVisible();
+	// emptied again, it goes back down
+	repo.setProp(id, "p_summary", null);
+	await expect.poll(rows).toEqual(["Zeitraum", "Zusammenfassung", "Blockiert durch"]);
+	await more(2).click();
+	await expect.poll(rows).toEqual(["Zeitraum"]);
+});
+
+test("the rows with a value follow the type's order; a date is one of them", async () => {
+	const { repo, id, props, moveAfter } = await setup();
+	repo.setProp(id, "p_period", "2026-11-01/2026-11-30");
+	repo.setProp(id, "p_summary", "Neue Website");
+	await expect.poll(rows).toEqual(["Zeitraum", "Zusammenfassung"]);
+	moveAfter("p_period", props().at(-1)!.id);
+	await expect.poll(rows).toEqual(["Zusammenfassung", "Zeitraum"]);
 });
 
 test("the badges at the top follow the type's order", async () => {
-	const { moveAfter } = await setup();
+	const { repo, id, moveAfter } = await setup();
+	repo.setProp(id, "p_priority", "pr_high");
 	await expect.poll(() => badges().map((b) => b?.includes("Priorität"))).toEqual([false, true]);
 	moveAfter("p_status", "p_priority");
 	await expect.poll(() => badges().map((b) => b?.includes("Priorität"))).toEqual([true, false]);
+});
+
+test("a date range filled in below the toggle keeps its editor open for the end", async () => {
+	const { repo, id } = await setup();
+	repo.setProp(id, "p_summary", "Neue Website");
+	await more(3).click();
+	await page.getByRole("button", { name: "Zeitraum setzen" }).click();
+	await page.getByRole("textbox", { name: "Start" }).fill("01.11.2026");
+	await page.getByRole("textbox", { name: "Ende" }).fill("30.11.2026");
+	await page.getByRole("textbox", { name: "Start" }).click();
+	await expect.poll(() => repo.get(id)!.props.p_period).toBe("2026-11-01/2026-11-30");
+	await expect.poll(rows).toEqual(["Zeitraum", "Zusammenfassung", "Priorität", "Blockiert durch"]);
 });

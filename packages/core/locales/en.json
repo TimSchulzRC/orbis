@@ -535,6 +535,7 @@
 	"props.removeValue": "Remove value",
 	"props.set": "Set {name}",
 	"props.start": "Start",
+	"props.unused": "{n} more {count, plural, one {property} other {properties}}",
 	"q.bare.blocked": "blocked",
 	"q.bare.dormant": "dormant",
 	"q.bare.file": "file,files",

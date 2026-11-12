@@ -219,7 +219,7 @@ export function initialProps(schema?: TypeSchema): Record<string, Value> {
 	return out;
 }
 
-/** For computed properties: whether there is something to show. */
+/** Whether there is something to show. A select's default is not counted (see `defaultOption`). */
 export function hasValue(
 	item: Item,
 	p: PropDef,
@@ -232,7 +232,7 @@ export function hasValue(
 	return v !== undefined && v !== null && v !== "" && !(Array.isArray(v) && !v.length);
 }
 
-/** Empty properties show (as a clickable "–"); computed ones only once they have a value. */
+/** What a page can show: every property, a computed one only once it has a value. The page folds the empty ones away. */
 export function visibleProps(
 	item: Item,
 	schema: TypeSchema,
