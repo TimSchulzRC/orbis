@@ -914,6 +914,7 @@
 	"table.groupMenu": "More for this group",
 	"table.newTitle": "Title, Enter",
 	"table.openSub": "{count, plural, one {Show # sub-item} other {Show # sub-items}}",
+	"table.sorted": "This view is sorted. Rows can be put in order by hand only without a sort.",
 	"table.unfold": "Expand group",
 	"table.unfoldAll": "Expand all groups",
 	"tag.add": "tag",

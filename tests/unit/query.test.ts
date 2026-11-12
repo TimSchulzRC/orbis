@@ -336,3 +336,14 @@ test("a view's filter applies without a base query too", () => {
 		and: [{ type: "t_a" }, where],
 	});
 });
+
+test("a view's order by hand comes first, the rest follows as usual; a sort wins over it", () => {
+	const { ix, relaunch, fr, nordFr } = world();
+	const tab = { id: "t", pos: "a", kind: "table" as const };
+	const ids = (extra: object) =>
+		runQuery(tabDef({ type: SYS.project }, { ...tab, ...extra }), { ix }).items.map((i) => i.id);
+	expect(ids({})).toEqual([nordFr, relaunch, fr]);
+	expect(ids({ order: [fr] })).toEqual([fr, nordFr, relaunch]);
+	expect(ids({ order: [fr, "gone", relaunch, nordFr] })).toEqual([fr, relaunch, nordFr]);
+	expect(ids({ order: [fr], sort: [{ key: "title" }] })).toEqual([nordFr, relaunch, fr]);
+});

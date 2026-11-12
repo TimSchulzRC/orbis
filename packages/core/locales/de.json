@@ -914,6 +914,7 @@
 	"table.groupMenu": "Mehr zu dieser Gruppe",
 	"table.newTitle": "Titel, Enter",
 	"table.openSub": "{count, plural, one {# Unterpunkt zeigen} other {# Unterpunkte zeigen}}",
+	"table.sorted": "Diese Ansicht ist sortiert. Von Hand ordnen geht nur ohne Sortierung.",
 	"table.unfold": "Gruppe ausklappen",
 	"table.unfoldAll": "Alle Gruppen ausklappen",
 	"tag.add": "Tag",

@@ -72,6 +72,8 @@ export type Cond =
 export interface QueryDef {
 	where?: Cond;
 	sort?: { key: string; desc?: boolean }[];
+	/** Entries put in order by hand (ids): they come first, in this order, while there is no `sort`. */
+	order?: string[];
 	group?: string; // "path" | "status" | "statusGroup" | "type" | field or property name
 	view?: ViewKind;
 	columns?: string[];
@@ -839,6 +841,12 @@ export function runQuery(def: QueryDef, ctx: EvalCtx): QueryResult {
 			(!def.where || matches(i, def.where, ctx)),
 	);
 	items = sortItems(items, def.sort, ix);
+	if (!def.sort?.length && def.order?.length) {
+		const at = new Map(def.order.map((id, n) => [id, n]));
+		const rank = (i: Item) => at.get(i.id) ?? Number.POSITIVE_INFINITY;
+		// stable: what was never placed by hand follows in the usual order
+		items = [...items].sort((a, b) => rank(a) - rank(b) || 0);
+	}
 	const total = items.length;
 	if (def.limit) items = items.slice(0, def.limit);
 	return { items, total, missingTypes: missing };
@@ -1173,6 +1181,7 @@ export function tabDef(base: Cond | undefined, tab: ViewTab): QueryDef {
 	return {
 		where: andWhere(base, tab.where),
 		sort: tab.sort,
+		order: tab.order,
 		group: tab.group,
 		columns: tab.columns,
 		view: tab.kind,

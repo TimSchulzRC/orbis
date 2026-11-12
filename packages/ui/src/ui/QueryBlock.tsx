@@ -54,7 +54,9 @@ function blockTabs(def: QueryDef): ViewTab[] {
 	return [
 		{
 			...singleTab({ display: def.view, sort: def.sort, group: def.group, columns: def.columns }),
-			...(def.tabs?.[0] ? { widths: def.tabs[0].widths, name: def.tabs[0].name } : {}),
+			...(def.tabs?.[0]
+				? { widths: def.tabs[0].widths, name: def.tabs[0].name, order: def.tabs[0].order }
+				: {}),
 		},
 	];
 }
@@ -121,7 +123,7 @@ function QueryBlockView({
 			group: first.group,
 			columns: first.columns,
 			tabs: one
-				? first.widths || first.name
+				? first.widths || first.name || first.order
 					? [{ ...first, where: undefined }]
 					: undefined
 				: next,
@@ -192,6 +194,7 @@ function QueryBlockView({
 		where: andWhere(def.where, tabWhere),
 		view: tab.kind,
 		sort: tab.sort,
+		order: tab.order,
 		group: tab.group,
 		columns: tab.columns,
 	};

@@ -41,7 +41,7 @@ import {
 	useSpaceId,
 } from "../hooks";
 import { getLang, useT } from "../i18n";
-import { startPointerDrag } from "../lib/drag";
+import { dropZone, startPointerDrag } from "../lib/drag";
 import { shortcut } from "../lib/platform";
 import { cn, moveInArray } from "../lib/utils";
 import { DeleteDialog, deleteOrAsk } from "../views/ItemPage";
@@ -203,16 +203,6 @@ function ResizeHandle({
 const movable = (d: typeof dragging) => !!d && d.from !== "types" && !d.type && !d.link;
 /** Icons of tree rows: larger in the phone menu. */
 const rowIconSize = (touch?: boolean) => (touch ? 17 : 15);
-/**
- * Where a row takes what is dropped on it: its upper part before it, its lower part after it, the
- * narrow middle into it. So between two rows there is more room than on one.
- */
-function dropZone(y: number, height: number): "before" | "inside" | "after" {
-	if (y < height * 0.36) return "before";
-	if (y > height * 0.64) return "after";
-	return "inside";
-}
-
 export function Sidebar({ onSearch }: { onSearch: () => void }) {
 	const { t, lang } = useT();
 	const route = useRoute();

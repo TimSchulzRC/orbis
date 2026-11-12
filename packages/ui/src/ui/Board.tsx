@@ -1,4 +1,4 @@
-import { type Item, propByName, type StatusGroup } from "@obtion/core/model";
+import type { Item } from "@obtion/core/model";
 import {
 	type EvalCtx,
 	fieldOf,
@@ -7,7 +7,6 @@ import {
 	type QueryDef,
 	viewTypeIds,
 } from "@obtion/core/query";
-import { firstOfGroup, hasOptions, statusProp } from "@obtion/core/traits";
 import { ChevronDown, ChevronRight, EyeOff } from "lucide-react";
 import { useState } from "react";
 import { itemHref, openItem, useRepo } from "../hooks";
@@ -18,7 +17,7 @@ import { AreaChip, fieldLabel, GroupChip, HiddenGroups, hiddenPatch, splitHidden
 import { ItemIcon } from "./item-look";
 import { Button, IconButton } from "./primitives";
 import { PercentBar, ProgressCount } from "./progress";
-import { setStatus } from "./Row";
+import { groupSetter } from "./Row";
 import type { Look } from "./Table";
 
 export function BoardView({
@@ -56,18 +55,7 @@ export function BoardView({
 	const repo = useRepo();
 	const drop = (id: string, g: QGroup) => {
 		const item = repo.get(id);
-		if (!item) return;
-		const schema = ix.schemaOf(item);
-		if (by === "statusGroup") {
-			const first = g.key ? firstOfGroup(schema, g.key as StatusGroup) : undefined;
-			if (first) void setStatus(item, first.id, repo);
-			return;
-		}
-		const prop = by === "status" ? statusProp(schema) : propByName(schema, by, hasOptions);
-		const opt = prop?.options?.find((o) => o.name === g.label);
-		if (prop && opt && prop.id === statusProp(schema)?.id) void setStatus(item, opt.id, repo);
-		else if (prop && opt) repo.setProp(id, prop.id, prop.multiple ? [opt.id] : opt.id);
-		else if (prop && !g.key) repo.setProp(id, prop.id, null);
+		if (item) groupSetter(item, by, g, repo)?.();
 	};
 	// fade the right edge while more columns are off-screen, so it is clear the board scrolls
 	const [more, setMore] = useState(false);
