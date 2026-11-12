@@ -23,6 +23,7 @@ import type { ServerWebSocket } from "bun";
 import { AccountError, Accounts, FRESH_SECONDS, randomToken, SIGNUP_COOKIE } from "./accounts";
 import { DATA, MAX_ATTACH, MAX_BLOB, MAX_WS_MESSAGE, PORT } from "./config";
 import { body, fail, json } from "./http";
+import { iconPath } from "./icons";
 import { loginConfig, loginMethods } from "./login";
 import { agentName } from "./mcp";
 import { SETUP_ORIGIN, setUp, storeWriter } from "./setup";
@@ -144,7 +145,7 @@ function cacheControl(path: string, isIndex: boolean): string {
 }
 
 async function serveStatic(path: string): Promise<Response> {
-	const clean = path.replace(/\.\.+/g, "");
+	const clean = iconPath(path.replace(/\.\.+/g, ""), VERSION);
 	let file = Bun.file(join(DIST, clean === "/" ? "index.html" : clean));
 	let isIndex = clean === "/";
 	if (!(await file.exists())) {

@@ -3,7 +3,7 @@
 
 import { Database } from "bun:sqlite";
 import { afterAll, beforeAll, expect, setDefaultTimeout, test } from "bun:test";
-import { existsSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { FORMAT, initItem, PERSONAL } from "@obtion/core/model";
 import { type ServerMsg, toB64 } from "@obtion/core/protocol";
@@ -29,6 +29,8 @@ beforeAll(async () => {
 	// a built web app of its own: the test does not depend on `bun run build`
 	const dist = tempDir("obtion-dist-");
 	writeFileSync(join(dist, "index.html"), "<!doctype html><title>Obtion under test</title>");
+	mkdirSync(join(dist, "icons/dev"), { recursive: true });
+	writeFileSync(join(dist, "icons/dev/icon.svg"), "<svg>dev</svg>");
 	bareDir = tempDir("obtion-server-");
 	[plain, bare] = await Promise.all([
 		start({ OBTION_DATA: tempDir("obtion-server-"), OBTION_WEB_DIST: dist }),
@@ -375,6 +377,8 @@ test("every server brings the web app; OBTION_WEB_APP=off leaves sync, API and M
 	const app = await fetch(`${plain}/`);
 	expect(app.status).toBe(200);
 	expect(await app.text()).toContain("Obtion under test");
+	// without a build version the server is dev and shows the dev icon
+	expect(await (await fetch(`${plain}/icon.svg`)).text()).toBe("<svg>dev</svg>");
 	const none = await fetch(`${bare}/`);
 	expect(none.status).toBe(404);
 	expect(await none.text()).toContain("OBTION_WEB_APP=off");
