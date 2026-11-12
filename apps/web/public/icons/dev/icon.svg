@@ -1,0 +1,37 @@
+<svg fill="none" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" >
+  <title>Obtion</title>
+  <defs>
+    <linearGradient gradientUnits="userSpaceOnUse" id="tile" x1="80" x2="430" y1="0" y2="512" >
+      <stop stop-color="#F7FAFF"/><stop offset="1" stop-color="#DCE7F8"/>
+    </linearGradient>
+    <linearGradient gradientUnits="userSpaceOnUse" id="orbit" x1="148" x2="355" y1="133" y2="385" >
+      <stop stop-color="#4A4A4A"/><stop offset=".48" stop-color="#2A2A2A"/><stop offset="1" stop-color="#111111"/>
+    </linearGradient>
+    <linearGradient gradientUnits="userSpaceOnUse" id="object" x1="325" x2="402" y1="115" y2="211" >
+      <stop stop-color="#5B9AFF"/><stop offset="1" stop-color="#2466DD"/>
+    </linearGradient>
+    <filter filterUnits="userSpaceOnUse" height="512" id="shadow" width="512" x="0" y="0" >
+      <feDropShadow dx="0" dy="12" flood-color="#1A4B9B" flood-opacity=".17" stdDeviation="12" />
+    </filter>
+    <clipPath id="clip"><rect height="512" rx="114" width="512" /></clipPath>
+  </defs>
+  <rect fill="url(#tile)" height="512" rx="114" width="512" />
+  <g clip-path="url(#clip)"><g fill="none" stroke="#2773ED" >
+    <path d="M32 0V512M0 32H512M64 0V512M0 64H512M96 0V512M0 96H512M160 0V512M0 160H512M192 0V512M0 192H512M224 0V512M0 224H512M288 0V512M0 288H512M320 0V512M0 320H512M352 0V512M0 352H512M416 0V512M0 416H512M448 0V512M0 448H512M480 0V512M0 480H512" stroke-opacity="0.13" stroke-width="1.5" />
+    <path d="M128 0V512M0 128H512M256 0V512M0 256H512M384 0V512M0 384H512" stroke-opacity="0.26" stroke-width="2" />
+    <g stroke-opacity="0.45" stroke-width="3" >
+      <circle cx="256" cy="256" r="153" stroke-dasharray="10 9"/>
+      <circle cx="256" cy="256" r="89" stroke-dasharray="10 9"/>
+      <path d="M68 256H444M256 68V444" stroke-dasharray="22 8 4 8"/>
+      <path d="M103 462H409M103 450V474M409 450V474M50 103V409M38 103H62M38 409H62"/>
+      <path d="M426 52V76M414 64H438M64 430 80 446M80 430 64 446"/>
+    </g>
+  </g>
+  </g>
+  <rect height="510" rx="113" stroke="white" stroke-opacity=".8" stroke-width="2" width="510" x="1" y="1" />
+  <g filter="url(#shadow)">
+    <path d="M256 135C189.17 135 135 189.17 135 256S189.17 377 256 377 377 322.83 377 256" stroke="url(#orbit)" stroke-linecap="round" stroke-width="64" />
+    <rect fill="url(#object)" height="74" rx="24" transform="rotate(12 363 157)" width="74" x="326" y="120" />
+    <rect height="72" rx="23" stroke="white" stroke-opacity=".45" stroke-width="2" transform="rotate(12 363 157)" width="72" x="327" y="121" />
+  </g>
+</svg>

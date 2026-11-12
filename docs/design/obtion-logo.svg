@@ -5,13 +5,13 @@
       <stop stop-color="#FDFCFA"/><stop offset="1" stop-color="#EEEAE2"/>
     </linearGradient>
     <linearGradient gradientUnits="userSpaceOnUse" id="orbit" x1="148" x2="355" y1="133" y2="385" >
-      <stop stop-color="#FFC95E"/><stop offset=".48" stop-color="#F0B040"/><stop offset="1" stop-color="#BE780A"/>
+      <stop stop-color="#4A4A4A"/><stop offset=".48" stop-color="#2A2A2A"/><stop offset="1" stop-color="#111111"/>
     </linearGradient>
     <linearGradient gradientUnits="userSpaceOnUse" id="object" x1="325" x2="402" y1="115" y2="211" >
-      <stop stop-color="#FFE2A0"/><stop offset="1" stop-color="#F5B83F"/>
+      <stop stop-color="#F6B93E"/><stop offset="1" stop-color="#E0940F"/>
     </linearGradient>
     <filter filterUnits="userSpaceOnUse" height="512" id="shadow" width="512" x="0" y="0" >
-      <feDropShadow dx="0" dy="12" flood-color="#7A4A05" flood-opacity=".17" stdDeviation="12" />
+      <feDropShadow dx="0" dy="12" flood-color="#000000" flood-opacity=".17" stdDeviation="12" />
     </filter>
   </defs>
   <rect fill="url(#tile)" height="512" rx="114" width="512" />

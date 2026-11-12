@@ -17,6 +17,7 @@ import react from "@vitejs/plugin-react";
 import type { Plugin, ProxyOptions } from "vite";
 import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
+import { iconPath } from "../server/src/icons";
 
 // pdf.js loads its JBIG2/JPEG 2000 decoders as WebAssembly from a folder at runtime.
 const pdfjs = dirname(
@@ -87,6 +88,18 @@ const atomicWatch: Plugin = {
 	},
 };
 
+// The server answers /icon.svg & co. with its channel's colour (apps/server/src/icons.ts); the dev
+// server is the dev channel.
+const devIcons: Plugin = {
+	name: "dev-icons",
+	configureServer(server) {
+		server.middlewares.use((req, _res, next) => {
+			if (req.url) req.url = iconPath(req.url, "dev");
+			next();
+		});
+	},
+};
+
 const server = `http://127.0.0.1:${process.env.PORT ?? 8480}`;
 /** Set when the dev server is reached through `tailscale serve`. */
 const devPublic = process.env.OBTION_DEV_PUBLIC_URL
@@ -116,11 +129,11 @@ export default defineConfig({
 		pdfWasm,
 		excalidrawFonts,
 		atomicWatch,
+		devIcons,
 		VitePWA({
 			// the app asks before switching versions instead of silently serving the old cache
 			registerType: "prompt",
 			injectRegister: false,
-			includeAssets: ["icon-dark.svg", "icon.svg", "apple-touch-icon.png"],
 			manifest: {
 				name: "Obtion",
 				short_name: "Obtion",
@@ -141,8 +154,14 @@ export default defineConfig({
 				navigateFallbackDenylist: [/^\/api/, /^\/w\//],
 				globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
 				// the Chinese handwriting font is 200 parts (13 MB): kept once a drawing needed them
-				globIgnores: ["excalidraw/fonts/Xiaolai/**"],
+				// the icons of all channels stay out; the server's own are kept once loaded (also offline)
+				globIgnores: ["excalidraw/fonts/Xiaolai/**", "icons/**"],
 				runtimeCaching: [
+					{
+						urlPattern: /\/(icon(-dark)?\.svg|icon-\d+\.png|apple-touch-icon\.png)$/,
+						handler: "StaleWhileRevalidate",
+						options: { cacheName: "icons" },
+					},
 					{
 						urlPattern: /\/excalidraw\/fonts\//,
 						handler: "CacheFirst",
