@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "diff": "^9.0.0",
-    "intl-messageformat": "^12.1.4",
+    "intl-messageformat": "^12.1.5",
     "minisearch": "^7.2.0",
     "yjs": "^13.6.33"
   }
