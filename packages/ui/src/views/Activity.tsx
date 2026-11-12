@@ -5,7 +5,7 @@ import { SpaceFilter, SpaceScope, useReplicas } from "../ui/Spaces";
 import type { ActivityEvent } from "@obtion/core/protocol";
 import { useDocumentTitle } from "../hooks";
 import { useT } from "../i18n";
-import { groupBySteps, StepGroup } from "../ui/ActivityFeed";
+import { groupBySteps, mergeEvents, StepGroup } from "../ui/ActivityFeed";
 import { Button, Empty, Seg } from "../ui/primitives";
 import { byMe, who } from "../ui/actor";
 
@@ -44,7 +44,7 @@ export function Activity() {
   // per workspace the fetched rows, then the live events that came since
   const logs = ids.map((id, n) => {
     const loaded = fetched[id];
-    const events = [...(loaded?.events ?? []), ...repos[n]!.events].filter((e, i, a) => a.findIndex((x) => x.id === e.id) === i);
+    const events = mergeEvents(loaded?.events ?? [], repos[n]!.events);
     return { id, loaded, events };
   });
   // a workspace with more to fetch is complete only down to its oldest row: older rows of the others wait

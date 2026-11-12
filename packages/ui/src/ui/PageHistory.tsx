@@ -6,7 +6,7 @@ import type { Item } from "@obtion/core/model";
 import { spaceCall, useAccounts } from "../accounts";
 import { useRepo } from "../hooks";
 import { useT } from "../i18n";
-import { groupBySteps, StepGroup } from "./ActivityFeed";
+import { groupBySteps, mergeEvents, StepGroup } from "./ActivityFeed";
 import { Button } from "./primitives";
 
 /** Rows fetched at a time. */
@@ -70,13 +70,10 @@ export function PageHistory({ item, space }: { item: Item; space: string }) {
 
   // the fetched rows and the live ones that came since, of this page only
   const fetched = got.key === key ? got.events : [];
-  const events = useMemo(() => {
-    const byId = new Map<number, ActivityEvent>();
-    // the server folds edits into one entry: of two copies, the later one counts; at the same
-    // time, the server's answer
-    for (const e of [...fetched, ...r.events]) if (e.doc === item.id && e.ts > (byId.get(e.id)?.ts ?? -1)) byId.set(e.id, e);
-    return [...byId.values()].sort((a, b) => b.ts - a.ts || b.id - a.id);
-  }, [fetched, r.events, item.id]);
+  const events = useMemo(
+    () => mergeEvents(fetched, r.events).filter((e) => e.doc === item.id).sort((a, b) => b.ts - a.ts || b.id - a.id),
+    [fetched, r.events, item.id],
+  );
   const steps = useMemo(() => groupBySteps(events), [events]);
 
   // what an error means: offline, or the server did not answer as it should

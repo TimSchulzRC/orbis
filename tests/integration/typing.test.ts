@@ -201,3 +201,20 @@ test("a reload before the push finds every keystroke in the stored outbox", asyn
   expect(store.records.get(id)!.body).toBe("abc");
   await settle(first.repo);
 });
+
+test("a title typed key by key, every key its own step and push, is one entry in the history", async () => {
+  const store = new Store(tempDir("obtion-typing-"));
+  const { repo } = await device(store);
+  const id = repo.create({ title: "" });
+  await settle(repo);
+  for (const title of ["F", "Fr", "Fri", "Fritz", "Fritzme", "Fritzmeier"]) {
+    repo.setTitle(id, title);
+    await settle(repo);
+    store.flush();
+  }
+  const steps = store.db.query("SELECT DISTINCT step FROM updates WHERE doc = ?").all(id);
+  expect(steps.length).toBe(7); // the creation and six keys
+  const events = store.events({ doc: id });
+  expect(events.length).toBe(1);
+  expect(events[0]!.changes).toEqual([{ field: "title", from: "", to: "Fritzmeier" }]);
+});
