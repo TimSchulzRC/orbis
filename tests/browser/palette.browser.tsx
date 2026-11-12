@@ -7,28 +7,42 @@ import { workspace } from "./workspace";
 
 const onClose = vi.fn();
 beforeEach(async () => {
-  await workspace();
-  onClose.mockClear();
-  await render(<CommandPalette onClose={onClose} />);
+	await workspace();
+	onClose.mockClear();
+	await render(<CommandPalette onClose={onClose} />);
 });
 afterEach(() => cleanup());
 
 test("one dialog with its field focused; typing finds the page", async () => {
-  expect(document.querySelectorAll("[role=dialog]")).toHaveLength(1);
-  await expect.element(page.getByRole("dialog").getByRole("textbox")).toHaveFocus();
-  await commands.keys("type", "relaunch");
-  await expect.element(page.getByRole("dialog").getByText(/Relaunch/).first()).toBeVisible();
+	expect(document.querySelectorAll("[role=dialog]")).toHaveLength(1);
+	await expect.element(page.getByRole("dialog").getByRole("textbox")).toHaveFocus();
+	await commands.keys("type", "relaunch");
+	await expect
+		.element(
+			page
+				.getByRole("dialog")
+				.getByText(/Relaunch/)
+				.first(),
+		)
+		.toBeVisible();
 });
 
 test("Esc closes it", async () => {
-  await expect.element(page.getByRole("dialog").getByRole("textbox")).toHaveFocus();
-  await commands.keys("press", "Escape");
-  expect(onClose).toHaveBeenCalled();
+	await expect.element(page.getByRole("dialog").getByRole("textbox")).toHaveFocus();
+	await commands.keys("press", "Escape");
+	expect(onClose).toHaveBeenCalled();
 });
 
 test("opened with a query (a tag, an old search link), it shows its hits right away", async () => {
-  cleanup();
-  await render(<CommandPalette query="relaunch" onClose={onClose} />);
-  await expect.element(page.getByRole("dialog").getByRole("textbox")).toHaveValue("relaunch");
-  await expect.element(page.getByRole("dialog").getByText(/Relaunch/).first()).toBeVisible();
+	cleanup();
+	await render(<CommandPalette onClose={onClose} query="relaunch" />);
+	await expect.element(page.getByRole("dialog").getByRole("textbox")).toHaveValue("relaunch");
+	await expect
+		.element(
+			page
+				.getByRole("dialog")
+				.getByText(/Relaunch/)
+				.first(),
+		)
+		.toBeVisible();
 });

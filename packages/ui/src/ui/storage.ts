@@ -2,50 +2,50 @@
 // before the app starts), lang, active space and file mode.
 
 export const KEYS = {
-  account: "obtion.account",
-  spaces: "obtion.spaces",
-  active: "obtion.active",
-  shown: "obtion.shown",
-  lang: "obtion.lang",
-  theme: "obtion.theme",
-  device: "obtion.device",
-  fileMode: "obtion.fileMode",
-  recentPlaces: "obtion.recentPlaces",
-  /** Excalidraw's library: shapes kept for all drawings */
-  drawingLibrary: "obtion.drawing.library",
-  captureSpace: "obtion.capture.space",
-  timelineScale: "obtion.timeline.scale",
-  sidebarTree: "obtion.sidebar.tree",
-  sidebarWidth: "obtion.sidebar.width",
-  /** the inbox's "Sorted" with each entry's undo, until cleared */
-  inboxSorted: "obtion.inbox.sorted",
-  sidebarSpace: (space: string) => `obtion.sidebar.space.${space}`,
-  sidebarTypes: (space: string) => `obtion.sidebar.types.${space}`,
-  /** a view's tab shown last (a type's page, a block) */
-  tab: (key: string) => `obtion.tab.${key}`,
-  /** folded groups of a table */
-  fold: (key: string) => `obtion.fold.${key}`,
-  /** when a page's updates were last read on this device (not synced): newer ones by agents count as new */
-  updatesSeen: (item: string) => `obtion.updates.seen.${item}`,
-  /** an update being written on a page, until it is posted */
-  updatesDraft: (item: string) => `obtion.updates.draft.${item}`,
-  /** whether the updates panel shows those of the pages below too (this device) */
-  updatesWithBelow: "obtion.updates.withBelow",
-  /** opened rows: sub-items of a table, parts of a page */
-  open: (key: string) => `obtion.open.${key}`,
+	account: "obtion.account",
+	spaces: "obtion.spaces",
+	active: "obtion.active",
+	shown: "obtion.shown",
+	lang: "obtion.lang",
+	theme: "obtion.theme",
+	device: "obtion.device",
+	fileMode: "obtion.fileMode",
+	recentPlaces: "obtion.recentPlaces",
+	/** Excalidraw's library: shapes kept for all drawings */
+	drawingLibrary: "obtion.drawing.library",
+	captureSpace: "obtion.capture.space",
+	timelineScale: "obtion.timeline.scale",
+	sidebarTree: "obtion.sidebar.tree",
+	sidebarWidth: "obtion.sidebar.width",
+	/** the inbox's "Sorted" with each entry's undo, until cleared */
+	inboxSorted: "obtion.inbox.sorted",
+	sidebarSpace: (space: string) => `obtion.sidebar.space.${space}`,
+	sidebarTypes: (space: string) => `obtion.sidebar.types.${space}`,
+	/** a view's tab shown last (a type's page, a block) */
+	tab: (key: string) => `obtion.tab.${key}`,
+	/** folded groups of a table */
+	fold: (key: string) => `obtion.fold.${key}`,
+	/** when a page's updates were last read on this device (not synced): newer ones by agents count as new */
+	updatesSeen: (item: string) => `obtion.updates.seen.${item}`,
+	/** an update being written on a page, until it is posted */
+	updatesDraft: (item: string) => `obtion.updates.draft.${item}`,
+	/** whether the updates panel shows those of the pages below too (this device) */
+	updatesWithBelow: "obtion.updates.withBelow",
+	/** opened rows: sub-items of a table, parts of a page */
+	open: (key: string) => `obtion.open.${key}`,
 };
 
 /** A stored value, or `fallback`. */
 export function readJSON<T>(key: string, fallback: T): T {
-  const s = localStorage.getItem(key);
-  if (s === null) return fallback;
-  try {
-    return JSON.parse(s) as T;
-  } catch {
-    return fallback;
-  }
+	const s = localStorage.getItem(key);
+	if (s === null) return fallback;
+	try {
+		return JSON.parse(s) as T;
+	} catch {
+		return fallback;
+	}
 }
 
 export function writeJSON(key: string, value: unknown) {
-  localStorage.setItem(key, JSON.stringify(value));
+	localStorage.setItem(key, JSON.stringify(value));
 }

@@ -1,31 +1,57 @@
 // Tolerant input for agents and queries, in German and English. Unclear input throws an
 // InputError with an explanation instead of being guessed.
-import { type OptionDef, type PropDef, type StatusGroup, addDaysISO } from "./model";
+
 import { dayOf, timeOf, withTime } from "./date";
+import { LANGS, type Lang } from "./i18n";
+import { addDaysISO, type OptionDef, type PropDef, type StatusGroup } from "./model";
 import { defaultTypes } from "./setup";
-import { type Lang, LANGS } from "./i18n";
 import { foldUmlauts } from "./text";
 
 export class InputError extends Error {}
 
 function foldWord(s: string): string {
-  return foldUmlauts(s.trim()).replace(/[\s_-]+/g, "_");
+	return foldUmlauts(s.trim()).replace(/[\s_-]+/g, "_");
 }
 
 const DAY_WORDS: Record<string, number> = {
-  heute: 0, today: 0,
-  morgen: 1, tomorrow: 1,
-  uebermorgen: 2, day_after_tomorrow: 2,
-  gestern: -1, yesterday: -1,
+	heute: 0,
+	today: 0,
+	morgen: 1,
+	tomorrow: 1,
+	uebermorgen: 2,
+	day_after_tomorrow: 2,
+	gestern: -1,
+	yesterday: -1,
 };
 const WEEKDAYS: Record<string, number> = {
-  sonntag: 0, sunday: 0, so: 0, sun: 0,
-  montag: 1, monday: 1, mo: 1, mon: 1,
-  dienstag: 2, tuesday: 2, di: 2, tue: 2,
-  mittwoch: 3, wednesday: 3, mi: 3, wed: 3,
-  donnerstag: 4, thursday: 4, do: 4, thu: 4,
-  freitag: 5, friday: 5, fr: 5, fri: 5,
-  samstag: 6, saturday: 6, sa: 6, sat: 6,
+	sonntag: 0,
+	sunday: 0,
+	so: 0,
+	sun: 0,
+	montag: 1,
+	monday: 1,
+	mo: 1,
+	mon: 1,
+	dienstag: 2,
+	tuesday: 2,
+	di: 2,
+	tue: 2,
+	mittwoch: 3,
+	wednesday: 3,
+	mi: 3,
+	wed: 3,
+	donnerstag: 4,
+	thursday: 4,
+	do: 4,
+	thu: 4,
+	freitag: 5,
+	friday: 5,
+	fr: 5,
+	fri: 5,
+	samstag: 6,
+	saturday: 6,
+	sa: 6,
+	sat: 6,
 };
 
 /** Days per unit of a relative date (+3d, +2w, +1m, +1y); months and years are approximate. */
@@ -33,14 +59,14 @@ const UNIT_DAYS: Record<string, number> = { d: 1, w: 7, m: 30, y: 365 };
 
 /** "26" → 2026; a four-digit year stays; none means this year. */
 function fullYear(year: string | undefined, thisYear: number): number {
-  if (!year) return thisYear;
-  return year.length === 2 ? 2000 + +year : +year;
+	if (!year) return thisYear;
+	return year.length === 2 ? 2000 + +year : +year;
 }
 
 function iso(y: number, m: number, d: number): string | undefined {
-  const s = `${String(y).padStart(4, "0")}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-  const dt = new Date(s + "T12:00:00Z");
-  return !isNaN(dt.getTime()) && dt.toISOString().startsWith(s) ? s : undefined;
+	const s = `${String(y).padStart(4, "0")}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+	const dt = new Date(s + "T12:00:00Z");
+	return !isNaN(dt.getTime()) && dt.toISOString().startsWith(s) ? s : undefined;
 }
 
 /**
@@ -49,45 +75,46 @@ function iso(y: number, m: number, d: number): string | undefined {
  * "in 3 Tagen", "in 2 weeks".
  */
 export function parseDate(input: string, today: string): string | undefined {
-  const v = input.trim();
-  const base = new Date(today + "T12:00:00");
-  let m = /^(\d{4})-(\d{2})-(\d{2})(?:[T ][\d:.]+(?:Z|[+-]\d{2}:?\d{2})?)?$/.exec(v);
-  if (m) return iso(+m[1]!, +m[2]!, +m[3]!);
-  m = /^(\d{1,2})\.(\d{1,2})\.(\d{2}|\d{4})?$/.exec(v);
-  if (m) return iso(fullYear(m[3], base.getFullYear()), +m[2]!, +m[1]!);
-  m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(v);
-  if (m) return iso(+m[3]!, +m[1]!, +m[2]!);
-  m = /^([+-])(\d+)([dwmy])$/.exec(v);
-  if (m) {
-    const n = Number(m[2]) * (m[1] === "-" ? -1 : 1);
-    return addDaysISO(n * UNIT_DAYS[m[3]!]!, base);
-  }
-  m = /^in (\d+) (tag|tagen|day|days|woche|wochen|week|weeks)$/i.exec(v);
-  if (m) return addDaysISO(Number(m[1]) * (/^w/i.test(m[2]!) ? 7 : 1), base);
-  const w = foldWord(v);
-  if (w in DAY_WORDS) return addDaysISO(DAY_WORDS[w]!, base);
-  if (w in WEEKDAYS) {
-    const diff = (WEEKDAYS[w]! - base.getDay() + 7) % 7 || 7;
-    return addDaysISO(diff, base);
-  }
-  return undefined;
+	const v = input.trim();
+	const base = new Date(today + "T12:00:00");
+	let m = /^(\d{4})-(\d{2})-(\d{2})(?:[T ][\d:.]+(?:Z|[+-]\d{2}:?\d{2})?)?$/.exec(v);
+	if (m) return iso(+m[1]!, +m[2]!, +m[3]!);
+	m = /^(\d{1,2})\.(\d{1,2})\.(\d{2}|\d{4})?$/.exec(v);
+	if (m) return iso(fullYear(m[3], base.getFullYear()), +m[2]!, +m[1]!);
+	m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(v);
+	if (m) return iso(+m[3]!, +m[1]!, +m[2]!);
+	m = /^([+-])(\d+)([dwmy])$/.exec(v);
+	if (m) {
+		const n = Number(m[2]) * (m[1] === "-" ? -1 : 1);
+		return addDaysISO(n * UNIT_DAYS[m[3]!]!, base);
+	}
+	m = /^in (\d+) (tag|tagen|day|days|woche|wochen|week|weeks)$/i.exec(v);
+	if (m) return addDaysISO(Number(m[1]) * (/^w/i.test(m[2]!) ? 7 : 1), base);
+	const w = foldWord(v);
+	if (w in DAY_WORDS) return addDaysISO(DAY_WORDS[w]!, base);
+	if (w in WEEKDAYS) {
+		const diff = (WEEKDAYS[w]! - base.getDay() + 7) % 7 || 7;
+		return addDaysISO(diff, base);
+	}
+	return undefined;
 }
 
 /**
  * A time at the end of a date ("… 14:30", "… 9.30 Uhr", "… 2:30 pm", ISO "…T14:30:00.000+02:00").
  * A zone is dropped: the wall-clock time is kept as written, like the date.
  */
-const TIME_TAIL = /^(.*?)(?:T|[\s,]+(?:um\s+|at\s+)?)(\d{1,2})(?:[:.](\d{2}))?(?::\d{2}(?:\.\d+)?)?\s*(?:Z|[+-]\d{2}:?\d{2})?\s*(uhr|h|am|pm)?$/i;
+const TIME_TAIL =
+	/^(.*?)(?:T|[\s,]+(?:um\s+|at\s+)?)(\d{1,2})(?:[:.](\d{2}))?(?::\d{2}(?:\.\d+)?)?\s*(?:Z|[+-]\d{2}:?\d{2})?\s*(uhr|h|am|pm)?$/i;
 
 /** "HH:MM" from hours, minutes and an am/pm mark; undefined when it is no time of day. */
 function clock(h: number, m: number, mark?: string): string | undefined {
-  const k = mark?.toLowerCase();
-  if (k === "am" || k === "pm") {
-    if (h < 1 || h > 12) return undefined;
-    h = (h % 12) + (k === "pm" ? 12 : 0);
-  }
-  if (h > 23 || m > 59) return undefined;
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+	const k = mark?.toLowerCase();
+	if (k === "am" || k === "pm") {
+		if (h < 1 || h > 12) return undefined;
+		h = (h % 12) + (k === "pm" ? 12 : 0);
+	}
+	if (h > 23 || m > 59) return undefined;
+	return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
 /**
@@ -96,38 +123,39 @@ function clock(h: number, m: number, mark?: string): string | undefined {
  * the result is the day alone.
  */
 export function parseDateTime(input: string, today: string): string | undefined {
-  const v = input.trim();
-  const whole = parseDate(v, today);
-  // an ISO date with a time: parseDate already took the day
-  const iso = /^\d{4}-\d{2}-\d{2}[T ](\d{2}):(\d{2})/.exec(v);
-  if (whole && iso) {
-    const t = clock(+iso[1]!, +iso[2]!);
-    return t ? withTime(whole, t) : undefined;
-  }
-  const m = TIME_TAIL.exec(v);
-  // a bare hour needs a mark ("14 Uhr", "2 pm"), so "30.10. 2026" is not read as 20:26
-  if (!m || (m[3] === undefined && !m[4])) return whole;
-  // parseDate also takes "2026-10-30 9:30" as the day alone, so the time is looked at first
-  const day = parseDate(m[1]!, today);
-  const t = clock(+m[2]!, +(m[3] ?? 0), m[4] && /^(am|pm)$/i.test(m[4]) ? m[4] : undefined);
-  return day && t ? withTime(day, t) : whole;
+	const v = input.trim();
+	const whole = parseDate(v, today);
+	// an ISO date with a time: parseDate already took the day
+	const iso = /^\d{4}-\d{2}-\d{2}[T ](\d{2}):(\d{2})/.exec(v);
+	if (whole && iso) {
+		const t = clock(+iso[1]!, +iso[2]!);
+		return t ? withTime(whole, t) : undefined;
+	}
+	const m = TIME_TAIL.exec(v);
+	// a bare hour needs a mark ("14 Uhr", "2 pm"), so "30.10. 2026" is not read as 20:26
+	if (!m || (m[3] === undefined && !m[4])) return whole;
+	// parseDate also takes "2026-10-30 9:30" as the day alone, so the time is looked at first
+	const day = parseDate(m[1]!, today);
+	const t = clock(+m[2]!, +(m[3] ?? 0), m[4] && /^(am|pm)$/i.test(m[4]) ? m[4] : undefined);
+	return day && t ? withTime(day, t) : whole;
 }
 
 /** 30.10.2026 (de) or 10/30/2026 (en), with " 14:30" when the value has a time; parseDateTime reads both back. */
 export function dateText(lang: Lang, iso?: string): string {
-  const m = iso && /^(\d{4})-(\d{2})-(\d{2})$/.exec(dayOf(iso));
-  if (!m) return "";
-  const day = lang === "de" ? `${m[3]}.${m[2]}.${m[1]}` : `${m[2]}/${m[3]}/${m[1]}`;
-  const time = timeOf(iso!);
-  return time ? `${day} ${time}` : day;
+	const m = iso && /^(\d{4})-(\d{2})-(\d{2})$/.exec(dayOf(iso));
+	if (!m) return "";
+	const day = lang === "de" ? `${m[3]}.${m[2]}.${m[1]}` : `${m[2]}/${m[3]}/${m[1]}`;
+	const time = timeOf(iso!);
+	return time ? `${day} ${time}` : day;
 }
 
-export const DATE_HELP = "a date like 2026-10-30, 30.10.2026, 10/30/2026, today/heute, tomorrow/morgen, a weekday or +3d, optionally with a time (2026-10-30 14:30, 30.10.2026 9:30)";
+export const DATE_HELP =
+	"a date like 2026-10-30, 30.10.2026, 10/30/2026, today/heute, tomorrow/morgen, a weekday or +3d, optionally with a time (2026-10-30 14:30, 30.10.2026 9:30)";
 
 /** Without grouping: 1234,5 (de) or 1234.5 (en). */
 export function numberText(lang: Lang, n: number): string {
-  const s = String(n);
-  return lang === "de" ? s.replace(".", ",") : s;
+	const s = String(n);
+	return lang === "de" ? s.replace(".", ",") : s;
 }
 
 /**
@@ -135,44 +163,66 @@ export function numberText(lang: Lang, n: number): string {
  * counts as the decimal mark (1.5 in German, 1,5 in English).
  */
 export function parseNumber(lang: Lang, input: string): number | undefined {
-  const [dec, group] = lang === "de" ? [",", "."] : [".", ","];
-  let [int = "", frac, ...more] = input.replace(/[\s']/g, "").split(dec);
-  if (more.length) return undefined;
-  if (new RegExp(`^[+-]?\\d{1,3}(\\${group}\\d{3})+$`).test(int)) int = int.split(group).join("");
-  else if (frac === undefined) int = int.replace(group, ".");
-  const s = frac === undefined ? int : `${int}.${frac}`;
-  return /^[+-]?(\d+\.?\d*|\.\d+)$/.test(s) ? Number(s) : undefined;
+	const [dec, group] = lang === "de" ? [",", "."] : [".", ","];
+	let [int = "", frac, ...more] = input.replace(/[\s']/g, "").split(dec);
+	if (more.length) return undefined;
+	if (new RegExp(`^[+-]?\\d{1,3}(\\${group}\\d{3})+$`).test(int)) int = int.split(group).join("");
+	else if (frac === undefined) int = int.replace(group, ".");
+	const s = frac === undefined ? int : `${int}.${frac}`;
+	return /^[+-]?(\d+\.?\d*|\.\d+)$/.test(s) ? Number(s) : undefined;
 }
 
 type Alias = { group: StatusGroup; names?: string[] };
 /** Synonym → status group, plus option names to prefer within it. */
 const STATUS_ALIASES: Record<string, Alias> = {};
-const alias = (words: string, a: Alias) => words.split(",").forEach((w) => (STATUS_ALIASES[foldWord(w)] = a));
-alias("open,offen,todo,to do,new,neu,not started,nicht begonnen,noch nicht begonnen", { group: "todo" });
+const alias = (words: string, a: Alias) =>
+	words.split(",").forEach((w) => (STATUS_ALIASES[foldWord(w)] = a));
+alias("open,offen,todo,to do,new,neu,not started,nicht begonnen,noch nicht begonnen", {
+	group: "todo",
+});
 alias("backlog,idee,idea,someday,irgendwann", { group: "todo", names: ["backlog"] });
-alias("active,aktiv,in progress,in arbeit,in bearbeitung,doing,wip,started,begonnen,läuft,progress", { group: "active", names: ["in bearbeitung", "in progress"] });
+alias(
+	"active,aktiv,in progress,in arbeit,in bearbeitung,doing,wip,started,begonnen,läuft,progress",
+	{ group: "active", names: ["in bearbeitung", "in progress"] },
+);
 alias("planning,planung,geplant,planned", { group: "active", names: ["planung", "planning"] });
-alias("paused,pausiert,on hold,hold,angehalten,pause", { group: "active", names: ["pausiert", "paused"] });
-alias("done,erledigt,fertig,abgeschlossen,completed,complete,finished,closed,geschlossen", { group: "done", names: ["erledigt", "done"] });
-alias("canceled,cancelled,abgebrochen,aborted,verworfen,dropped,discarded", { group: "done", names: ["abgebrochen", "verworfen", "canceled", "dropped"] });
+alias("paused,pausiert,on hold,hold,angehalten,pause", {
+	group: "active",
+	names: ["pausiert", "paused"],
+});
+alias("done,erledigt,fertig,abgeschlossen,completed,complete,finished,closed,geschlossen", {
+	group: "done",
+	names: ["erledigt", "done"],
+});
+alias("canceled,cancelled,abgebrochen,aborted,verworfen,dropped,discarded", {
+	group: "done",
+	names: ["abgebrochen", "verworfen", "canceled", "dropped"],
+});
 alias("archived,archiviert", { group: "done", names: ["archiviert", "archived"] });
-const NOT_A_STATUS = new Set(["blocked", "blockiert", "waiting", "wartet", "waiting_for", "wartet_auf"].map(foldWord));
+const NOT_A_STATUS = new Set(
+	["blocked", "blockiert", "waiting", "wartet", "waiting_for", "wartet_auf"].map(foldWord),
+);
 
 /** Shipped option names in every language, so an English "High" finds "Hoch". */
 let shippedNames: Map<string, string[]> | null = null;
 function namesOf(optionId: string): string[] {
-  if (!shippedNames) {
-    shippedNames = new Map();
-    for (const lang of LANGS)
-      for (const spec of Object.values(defaultTypes(lang)))
-        for (const p of spec.properties) for (const o of p.options ?? []) shippedNames.set(o.id, [...(shippedNames.get(o.id) ?? []), foldWord(o.name)]);
-  }
-  return shippedNames.get(optionId) ?? [];
+	if (!shippedNames) {
+		shippedNames = new Map();
+		for (const lang of LANGS)
+			for (const spec of Object.values(defaultTypes(lang)))
+				for (const p of spec.properties)
+					for (const o of p.options ?? [])
+						shippedNames.set(o.id, [...(shippedNames.get(o.id) ?? []), foldWord(o.name)]);
+	}
+	return shippedNames.get(optionId) ?? [];
 }
 
 function byName(options: OptionDef[], word: string): OptionDef | undefined {
-  const w = foldWord(word);
-  return options.find((o) => foldWord(o.name) === w) ?? options.find((o) => o.id === word.trim() || namesOf(o.id).includes(w));
+	const w = foldWord(word);
+	return (
+		options.find((o) => foldWord(o.name) === w) ??
+		options.find((o) => o.id === word.trim() || namesOf(o.id).includes(w))
+	);
 }
 
 /** Only a status has grouped options; group words match those too. */
@@ -182,47 +232,53 @@ const groupOf = (o: OptionDef): StatusGroup => o.group ?? "todo";
 
 /** Throws InputError if unclear. */
 export function matchOption(p: PropDef, raw: string): OptionDef {
-  const options = p.options ?? [];
-  const hit = byName(options, raw);
-  if (hit) return hit;
-  const w = foldWord(raw);
-  if (grouped(p)) {
-    if (NOT_A_STATUS.has(w))
-      throw new InputError(`"${raw}" is not a status. Set a property that holds it up (blocks), e.g. "Blocked by" (the blocking entry) or "Waiting for" (what it waits for).`);
-    const a = STATUS_ALIASES[w];
-    if (a) {
-      const inGroup = (x: OptionDef) => groupOf(x) === a.group;
-      for (const n of a.names ?? []) {
-        const o = byName(options, n);
-        if (o && inGroup(o)) return o;
-      }
-      const o = options.find(inGroup);
-      if (o) return o;
-    }
-  }
-  const list = options.map((o) => (grouped(p) ? `${o.name} (${groupOf(o)})` : o.name)).join(", ");
-  throw new InputError(`"${raw}" is not an option of "${p.name}". Options: ${list}${grouped(p) ? "; or a group: open, active, done" : ""}.`);
+	const options = p.options ?? [];
+	const hit = byName(options, raw);
+	if (hit) return hit;
+	const w = foldWord(raw);
+	if (grouped(p)) {
+		if (NOT_A_STATUS.has(w))
+			throw new InputError(
+				`"${raw}" is not a status. Set a property that holds it up (blocks), e.g. "Blocked by" (the blocking entry) or "Waiting for" (what it waits for).`,
+			);
+		const a = STATUS_ALIASES[w];
+		if (a) {
+			const inGroup = (x: OptionDef) => groupOf(x) === a.group;
+			for (const n of a.names ?? []) {
+				const o = byName(options, n);
+				if (o && inGroup(o)) return o;
+			}
+			const o = options.find(inGroup);
+			if (o) return o;
+		}
+	}
+	const list = options.map((o) => (grouped(p) ? `${o.name} (${groupOf(o)})` : o.name)).join(", ");
+	throw new InputError(
+		`"${raw}" is not an option of "${p.name}". Options: ${list}${grouped(p) ? "; or a group: open, active, done" : ""}.`,
+	);
 }
 
-
 export function statusGroupOf(raw: string): StatusGroup | undefined {
-  return STATUS_ALIASES[foldWord(raw)]?.group;
+	return STATUS_ALIASES[foldWord(raw)]?.group;
 }
 
 /** Matches by name, the other language's name or a synonym. */
 export function optionMatches(p: PropDef, o: OptionDef, raw: string): boolean {
-  try {
-    return matchOption(p, raw).id === o.id || (grouped(p) && !STATUS_ALIASES[foldWord(raw)]?.names && statusGroupOf(raw) === groupOf(o));
-  } catch {
-    return false;
-  }
+	try {
+		return (
+			matchOption(p, raw).id === o.id ||
+			(grouped(p) && !STATUS_ALIASES[foldWord(raw)]?.names && statusGroupOf(raw) === groupOf(o))
+		);
+	} catch {
+		return false;
+	}
 }
 
 /** Singular and plural count as the same: Task/Tasks, Project/Projects, and German plurals (-e, -n, -en). */
 export function sameTypeName(name: string, input: string): boolean {
-  const a = foldWord(name);
-  const b = foldWord(input);
-  if (a === b) return true;
-  for (const end of ["s", "e", "n", "en", "es"]) if (b === a + end || a === b + end) return true;
-  return false;
+	const a = foldWord(name);
+	const b = foldWord(input);
+	if (a === b) return true;
+	for (const end of ["s", "e", "n", "en", "es"]) if (b === a + end || a === b + end) return true;
+	return false;
 }

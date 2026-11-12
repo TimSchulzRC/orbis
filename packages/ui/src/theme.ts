@@ -11,26 +11,28 @@ const media = matchMedia("(prefers-color-scheme: dark)");
 const listeners = new Set<() => void>();
 
 function themeChoice(): ThemeChoice {
-  const v = localStorage.getItem(KEY);
-  return v === "light" || v === "dark" ? v : "system";
+	const v = localStorage.getItem(KEY);
+	return v === "light" || v === "dark" ? v : "system";
 }
 
 function resolve(c = themeChoice()): "light" | "dark" {
-  return c === "system" ? (media.matches ? "dark" : "light") : c;
+	return c === "system" ? (media.matches ? "dark" : "light") : c;
 }
 
 function apply() {
-  const mode = resolve();
-  document.documentElement.dataset.theme = mode;
-  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", BAR[mode]);
-  document.querySelector('link[rel="icon"]')?.setAttribute("href", mode === "dark" ? "/icon-dark.svg" : "/icon.svg");
-  listeners.forEach((l) => l());
+	const mode = resolve();
+	document.documentElement.dataset.theme = mode;
+	document.querySelector('meta[name="theme-color"]')?.setAttribute("content", BAR[mode]);
+	document
+		.querySelector('link[rel="icon"]')
+		?.setAttribute("href", mode === "dark" ? "/icon-dark.svg" : "/icon.svg");
+	listeners.forEach((l) => l());
 }
 
 export function setTheme(c: ThemeChoice) {
-  if (c === "system") localStorage.removeItem(KEY);
-  else localStorage.setItem(KEY, c);
-  apply();
+	if (c === "system") localStorage.removeItem(KEY);
+	else localStorage.setItem(KEY, c);
+	apply();
 }
 
 media.addEventListener("change", () => themeChoice() === "system" && apply());
@@ -40,7 +42,7 @@ apply();
 const subscribe = (l: () => void) => (listeners.add(l), () => void listeners.delete(l));
 /** `resolved` is for canvas drawings that read colours once. */
 export function useTheme(): { choice: ThemeChoice; resolved: "light" | "dark" } {
-  const choice = useSyncExternalStore(subscribe, themeChoice);
-  const resolved = useSyncExternalStore(subscribe, () => resolve());
-  return { choice, resolved };
+	const choice = useSyncExternalStore(subscribe, themeChoice);
+	const resolved = useSyncExternalStore(subscribe, () => resolve());
+	return { choice, resolved };
 }

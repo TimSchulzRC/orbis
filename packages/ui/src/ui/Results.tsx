@@ -1,27 +1,34 @@
-import { useState } from "react";
-import { AlertTriangle } from "lucide-react";
-import { type Item, type ViewKind, todayISO } from "@obtion/core/model";
-import { type QueryDef, type EvalCtx, fieldOf, groupItems, pathBase, runQuery } from "@obtion/core/query";
 import { fmtDate, fmtNumber } from "@obtion/core/i18n";
-import { useIndex, itemHref } from "../hooks";
-import { useT, titleOf } from "../i18n";
-import { StatusPill, Tag } from "./item-look";
-import { ProgressCount } from "./progress";
-import { ItemRow, pathLabel, treeOrder, Group } from "./Row";
-import { Triage } from "./Triage";
-import { openShelf } from "./inbox";
-import { CalendarView, TimelineView } from "./TimeViews";
+import { type Item, todayISO, type ViewKind } from "@obtion/core/model";
+import {
+	type EvalCtx,
+	fieldOf,
+	groupItems,
+	pathBase,
+	type QueryDef,
+	runQuery,
+} from "@obtion/core/query";
+import { AlertTriangle } from "lucide-react";
+import { useState } from "react";
+import { itemHref, useIndex } from "../hooks";
+import { titleOf, useT } from "../i18n";
 import { BoardView } from "./Board";
 import { GalleryView } from "./Gallery";
-import { type Look, GroupedTable } from "./Table";
-import { HiddenGroups, fieldLabel, hiddenPatch, splitHidden } from "./groups";
+import { fieldLabel, HiddenGroups, hiddenPatch, splitHidden } from "./groups";
+import { openShelf } from "./inbox";
+import { StatusPill, Tag } from "./item-look";
 import { Button } from "./primitives";
+import { ProgressCount } from "./progress";
+import { Group, ItemRow, pathLabel, treeOrder } from "./Row";
+import { GroupedTable, type Look } from "./Table";
+import { CalendarView, TimelineView } from "./TimeViews";
+import { Triage } from "./Triage";
 
 export function useQuery(def: QueryDef, thisId?: string) {
-  const ix = useIndex();
-  const ctx: EvalCtx = { ix, thisId };
-  const res = runQuery(def, ctx);
-  return { ...res, ctx };
+	const ix = useIndex();
+	const ctx: EvalCtx = { ix, thisId };
+	const res = runQuery(def, ctx);
+	return { ...res, ctx };
 }
 
 /** Rows a long result shows at first, and how many more each "more" adds. */
@@ -34,199 +41,294 @@ const isInboxQuery = (def: QueryDef) => !!def.where && "inbox" in def.where;
 
 /** Under a shortened inbox list: how much is waiting, and a clear way to work through it. */
 function InboxNudge({ total }: { total: number }) {
-  const { t } = useT();
-  return (
-    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 px-2 pt-1 text-sm">
-      <span className="tabular-nums text-muted-foreground">{t("inbox.waiting", { count: total })}</span>
-      <Button variant="plain" onClick={() => openShelf()} className="font-medium text-fg underline-offset-2 hover:underline">
-        {t("inbox.sortNow")}
-      </Button>
-    </div>
-  );
+	const { t } = useT();
+	return (
+		<div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 px-2 pt-1 text-sm">
+			<span className="tabular-nums text-muted-foreground">
+				{t("inbox.waiting", { count: total })}
+			</span>
+			<Button
+				className="font-medium text-fg underline-offset-2 hover:underline"
+				onClick={() => openShelf()}
+				variant="plain"
+			>
+				{t("inbox.sortNow")}
+			</Button>
+		</div>
+	);
 }
 
 function MissingTypes({ ids }: { ids: string[] }) {
-  const { t } = useT();
-  const ix = useIndex();
-  if (!ids.length) return null;
-  return (
-    <p className="mb-2 flex items-center gap-1.5 rounded-lg bg-surface-2 px-2.5 py-1.5 text-xs text-warn">
-      <AlertTriangle size={13} /> {t("query.typeDeleted", { names: ids.map((id) => ix.all.get(id)?.schema?.name ?? id).join(", ") })}
-    </p>
-  );
+	const { t } = useT();
+	const ix = useIndex();
+	if (!ids.length) return null;
+	return (
+		<p className="mb-2 flex items-center gap-1.5 rounded-lg bg-surface-2 px-2.5 py-1.5 text-xs text-warn">
+			<AlertTriangle size={13} />{" "}
+			{t("query.typeDeleted", {
+				names: ids.map((id) => ix.all.get(id)?.schema?.name ?? id).join(", "),
+			})}
+		</p>
+	);
 }
 
-export function Results({ def, thisId, display, empty, keyPrefix = "", look }: { def: QueryDef; thisId?: string; display?: ViewKind; empty?: React.ReactNode; keyPrefix?: string; look?: Look }) {
-  const { t } = useT();
-  const res = useQuery(def, thisId);
-  const { total, missingTypes, ctx } = res;
-  // long results render in pages, so a collection of hundreds stays responsive
-  const [shown, setShown] = useState(FIRST_PAGE);
-  const view = display ?? def.view ?? "list";
-  const items = res.items.slice(0, UNPAGED.includes(view) ? undefined : shown);
-  return (
-    <div>
-      <MissingTypes ids={missingTypes} />
-      {!items.length && !missingTypes.length && !(look?.add && (view === "table" || view === "board")) ? (
-        (empty ?? <p className="px-2 py-1.5 text-sm text-muted-foreground">{t("query.empty")}</p>)
-      ) : view === "table" ? (
-        <GroupedTable items={items} def={def} ctx={ctx} look={look ?? { key: keyPrefix }} />
-      ) : view === "board" ? (
-        <BoardView items={items} def={def} ctx={ctx} look={look} />
-      ) : view === "calendar" ? (
-        <CalendarView items={items} def={def} ctx={ctx} look={look} />
-      ) : view === "timeline" ? (
-        <TimelineView items={items} def={def} ctx={ctx} look={look} />
-      ) : view === "tree" ? (
-        <TreeView items={items} />
-      ) : view === "gallery" ? (
-        <GalleryView items={items} ctx={ctx} />
-      ) : view === "triage" ? (
-        <Triage items={items} />
-      ) : (
-        <ListView items={items} def={def} ctx={ctx} look={look} />
-      )}
-      {def.limit && total > res.items.length && (isInboxQuery(def) ? <InboxNudge total={total} /> : <p className="px-2 pt-1 text-xs text-muted-foreground">{t("query.more", { count: total - res.items.length })}</p>)}
-      {res.items.length > items.length && (
-        <Button variant="plain" onClick={() => setShown(shown + NEXT_PAGE)} className="mt-2 w-full py-2 text-sm text-muted-foreground hover:text-fg">
-          {t("query.more", { count: res.items.length - items.length })}
-        </Button>
-      )}
-    </div>
-  );
+export function Results({
+	def,
+	thisId,
+	display,
+	empty,
+	keyPrefix = "",
+	look,
+}: {
+	def: QueryDef;
+	thisId?: string;
+	display?: ViewKind;
+	empty?: React.ReactNode;
+	keyPrefix?: string;
+	look?: Look;
+}) {
+	const { t } = useT();
+	const res = useQuery(def, thisId);
+	const { total, missingTypes, ctx } = res;
+	// long results render in pages, so a collection of hundreds stays responsive
+	const [shown, setShown] = useState(FIRST_PAGE);
+	const view = display ?? def.view ?? "list";
+	const items = res.items.slice(0, UNPAGED.includes(view) ? undefined : shown);
+	return (
+		<div>
+			<MissingTypes ids={missingTypes} />
+			{!items.length &&
+			!missingTypes.length &&
+			!(look?.add && (view === "table" || view === "board")) ? (
+				(empty ?? <p className="px-2 py-1.5 text-sm text-muted-foreground">{t("query.empty")}</p>)
+			) : view === "table" ? (
+				<GroupedTable ctx={ctx} def={def} items={items} look={look ?? { key: keyPrefix }} />
+			) : view === "board" ? (
+				<BoardView ctx={ctx} def={def} items={items} look={look} />
+			) : view === "calendar" ? (
+				<CalendarView ctx={ctx} def={def} items={items} look={look} />
+			) : view === "timeline" ? (
+				<TimelineView ctx={ctx} def={def} items={items} look={look} />
+			) : view === "tree" ? (
+				<TreeView items={items} />
+			) : view === "gallery" ? (
+				<GalleryView ctx={ctx} items={items} />
+			) : view === "triage" ? (
+				<Triage items={items} />
+			) : (
+				<ListView ctx={ctx} def={def} items={items} look={look} />
+			)}
+			{def.limit &&
+				total > res.items.length &&
+				(isInboxQuery(def) ? (
+					<InboxNudge total={total} />
+				) : (
+					<p className="px-2 pt-1 text-xs text-muted-foreground">
+						{t("query.more", { count: total - res.items.length })}
+					</p>
+				))}
+			{res.items.length > items.length && (
+				<Button
+					className="mt-2 w-full py-2 text-sm text-muted-foreground hover:text-fg"
+					onClick={() => setShown(shown + NEXT_PAGE)}
+					variant="plain"
+				>
+					{t("query.more", { count: res.items.length - items.length })}
+				</Button>
+			)}
+		</div>
+	);
 }
 
-function ListView({ items, def, ctx, look }: { items: Item[]; def: QueryDef; ctx: EvalCtx; look?: Look }) {
-  const { t } = useT();
-  const base = pathBase(def, ctx);
-  const [groups, hidden] = def.group ? splitHidden(groupItems(items, def.group, ctx, base), look?.tab) : [groupItems(items, def.group, ctx, base), []];
-  const ix = ctx.ix;
-  // "columns:next" in a list: each entry shows its next task below the title
-  const withNext = def.columns?.includes("next");
-  const by = def.group ?? "";
-  const byLabel = fieldLabel(by, t);
-  const headingOf = (g: (typeof groups)[number]) => {
-    if (!def.group) return undefined;
-    if (def.group === "path") return g.path?.length ? pathLabel(g.path) : t("group.thisLevel");
-    return g.label || (g.statusGroup ? t("group." + g.statusGroup) : t("group.without", { name: byLabel }));
-  };
-  return (
-    <div className="-mx-2">
-      {groups.map((g, gi) => (
-        <Group key={g.key} first={gi === 0} heading={headingOf(g)} count={g.items.length}>
-          {treeOrder(g.items).map(({ item: i, depth }) => {
-            // sub-items whose parent is listed too follow it, indented. Every other entry says
-            // where it lives: relative to the page, or (in global lists) its home path.
-            const rel = base ? ix.relPath(base, i.id) : ix.homePath(i.id);
-            const showPath = def.group !== "path" && !depth && rel && rel.length > 0 ? rel : undefined;
-            const next = withNext ? ix.nextTask(i.id, todayISO()) : undefined;
-            return <ItemRow key={i.id} item={i} sub={depth} path={showPath} note={next && t("row.next", { title: titleOf(next, t) })} />;
-          })}
-        </Group>
-      ))}
-      {def.group && <HiddenGroups groups={hidden} by={by} byLabel={byLabel} onShow={look?.onLook ? (g) => look.onLook!(hiddenPatch(look.tab, g, false)) : undefined} />}
-    </div>
-  );
+function ListView({
+	items,
+	def,
+	ctx,
+	look,
+}: {
+	items: Item[];
+	def: QueryDef;
+	ctx: EvalCtx;
+	look?: Look;
+}) {
+	const { t } = useT();
+	const base = pathBase(def, ctx);
+	const [groups, hidden] = def.group
+		? splitHidden(groupItems(items, def.group, ctx, base), look?.tab)
+		: [groupItems(items, def.group, ctx, base), []];
+	const ix = ctx.ix;
+	// "columns:next" in a list: each entry shows its next task below the title
+	const withNext = def.columns?.includes("next");
+	const by = def.group ?? "";
+	const byLabel = fieldLabel(by, t);
+	const headingOf = (g: (typeof groups)[number]) => {
+		if (!def.group) return;
+		if (def.group === "path") return g.path?.length ? pathLabel(g.path) : t("group.thisLevel");
+		return (
+			g.label ||
+			(g.statusGroup ? t("group." + g.statusGroup) : t("group.without", { name: byLabel }))
+		);
+	};
+	return (
+		<div className="-mx-2">
+			{groups.map((g, gi) => (
+				<Group count={g.items.length} first={gi === 0} heading={headingOf(g)} key={g.key}>
+					{treeOrder(g.items).map(({ item: i, depth }) => {
+						// sub-items whose parent is listed too follow it, indented. Every other entry says
+						// where it lives: relative to the page, or (in global lists) its home path.
+						const rel = base ? ix.relPath(base, i.id) : ix.homePath(i.id);
+						const showPath =
+							def.group !== "path" && !depth && rel && rel.length > 0 ? rel : undefined;
+						const next = withNext ? ix.nextTask(i.id, todayISO()) : undefined;
+						return (
+							<ItemRow
+								item={i}
+								key={i.id}
+								note={next && t("row.next", { title: titleOf(next, t) })}
+								path={showPath}
+								sub={depth}
+							/>
+						);
+					})}
+				</Group>
+			))}
+			{def.group && (
+				<HiddenGroups
+					by={by}
+					byLabel={byLabel}
+					groups={hidden}
+					onShow={look?.onLook ? (g) => look.onLook!(hiddenPatch(look.tab, g, false)) : undefined}
+				/>
+			)}
+		</div>
+	);
 }
 
 export function defaultColumns(items: Item[], ctx: EvalCtx): string[] {
-  const names: string[] = [];
-  for (const i of items.slice(0, 50)) {
-    for (const p of ctx.ix.schemaOf(i)?.properties ?? []) if (!names.includes(p.name)) names.push(p.name);
-    for (const n of Object.keys(i.extra)) if (!names.includes(n)) names.push(n);
-  }
-  return names.slice(0, 6);
+	const names: string[] = [];
+	for (const i of items.slice(0, 50)) {
+		for (const p of ctx.ix.schemaOf(i)?.properties ?? [])
+			if (!names.includes(p.name)) names.push(p.name);
+		for (const n of Object.keys(i.extra)) if (!names.includes(n)) names.push(n);
+	}
+	return names.slice(0, 6);
 }
 
 export function CellValue({ item, name, ctx }: { item: Item; name: string; ctx: EvalCtx }) {
-  const { lang } = useT();
-  if (name === "tags")
-    return (
-      <span className="flex flex-wrap gap-1">
-        {item.tags.map((x) => (
-          <Tag key={x} tag={x} />
-        ))}
-      </span>
-    );
-  const hit = fieldOf(item, name, ctx.ix);
-  // computed progress reads as "2/7", like in rows and on the page (the query value stays a percentage)
-  if (hit?.prop?.kind === "computed" && hit.prop.computed?.fn !== "count") {
-    const progress = ctx.ix.progress(item.id, hit.prop.computed?.of);
-    return <ProgressCount done={progress.done} total={progress.total} className={progress.total ? undefined : "text-muted-foreground"} />;
-  }
-  const empty = !hit || hit.value === undefined || hit.value === null || hit.value === "" || (Array.isArray(hit.value) && !hit.value.length);
-  if (empty) return <span className="text-faint">–</span>;
-  const v = hit.value;
-  if (hit.kind === "item") {
-    const target = ctx.ix.get(String(v));
-    return target ? (
-      <a href={itemHref(target.id)} className="hover:underline">
-        {target.title || "–"}
-      </a>
-    ) : (
-      <span className="text-faint">–</span>
-    );
-  }
-  if (hit.kind === "select" || hit.kind === "status") {
-    const ids = Array.isArray(v) ? (v as string[]) : [String(v)];
-    return (
-      <span className="flex flex-wrap gap-1">
-        {ids.map((id) => {
-          const option = hit.prop?.options?.find((o) => o.id === id);
-          return option ? <StatusPill key={id} option={option} small /> : <span key={id}>{id}</span>;
-        })}
-      </span>
-    );
-  }
-  if (hit.kind === "relation")
-    return (
-      <span className="flex flex-wrap gap-x-2">
-        {(v as string[]).map((id) => {
-          const target = ctx.ix.get(id);
-          return target ? (
-            <a key={id} href={itemHref(id)} className="hover:underline">
-              {target.title}
-            </a>
-          ) : null;
-        })}
-      </span>
-    );
-  if (hit.kind === "date") return <span className="whitespace-nowrap">{String(v).split("/").map((d) => fmtDate(lang, d)).join(" – ")}</span>;
-  if (hit.kind === "number") return <span className="tabular-nums">{typeof v === "number" ? fmtNumber(lang, v) : String(v)}</span>;
-  if (hit.kind === "checkbox") return <span>{v ? "✓" : "–"}</span>;
-  if (hit.kind === "url")
-    return (
-      <a href={String(v)} target="_blank" rel="noopener" className="text-link hover:underline">
-        {String(v).replace(/^https?:\/\//, "")}
-      </a>
-    );
-  // long text stays two lines in tables and boards; the full text is on the page
-  return <span className="line-clamp-2">{Array.isArray(v) ? v.join(", ") : String(v)}</span>;
+	const { lang } = useT();
+	if (name === "tags")
+		return (
+			<span className="flex flex-wrap gap-1">
+				{item.tags.map((x) => (
+					<Tag key={x} tag={x} />
+				))}
+			</span>
+		);
+	const hit = fieldOf(item, name, ctx.ix);
+	// computed progress reads as "2/7", like in rows and on the page (the query value stays a percentage)
+	if (hit?.prop?.kind === "computed" && hit.prop.computed?.fn !== "count") {
+		const progress = ctx.ix.progress(item.id, hit.prop.computed?.of);
+		return (
+			<ProgressCount
+				className={progress.total ? undefined : "text-muted-foreground"}
+				done={progress.done}
+				total={progress.total}
+			/>
+		);
+	}
+	const empty =
+		!hit ||
+		hit.value === undefined ||
+		hit.value === null ||
+		hit.value === "" ||
+		(Array.isArray(hit.value) && !hit.value.length);
+	if (empty) return <span className="text-faint">–</span>;
+	const v = hit.value;
+	if (hit.kind === "item") {
+		const target = ctx.ix.get(String(v));
+		return target ? (
+			<a className="hover:underline" href={itemHref(target.id)}>
+				{target.title || "–"}
+			</a>
+		) : (
+			<span className="text-faint">–</span>
+		);
+	}
+	if (hit.kind === "select" || hit.kind === "status") {
+		const ids = Array.isArray(v) ? (v as string[]) : [String(v)];
+		return (
+			<span className="flex flex-wrap gap-1">
+				{ids.map((id) => {
+					const option = hit.prop?.options?.find((o) => o.id === id);
+					return option ? (
+						<StatusPill key={id} option={option} small />
+					) : (
+						<span key={id}>{id}</span>
+					);
+				})}
+			</span>
+		);
+	}
+	if (hit.kind === "relation")
+		return (
+			<span className="flex flex-wrap gap-x-2">
+				{(v as string[]).map((id) => {
+					const target = ctx.ix.get(id);
+					return target ? (
+						<a className="hover:underline" href={itemHref(id)} key={id}>
+							{target.title}
+						</a>
+					) : null;
+				})}
+			</span>
+		);
+	if (hit.kind === "date")
+		return (
+			<span className="whitespace-nowrap">
+				{String(v)
+					.split("/")
+					.map((d) => fmtDate(lang, d))
+					.join(" – ")}
+			</span>
+		);
+	if (hit.kind === "number")
+		return (
+			<span className="tabular-nums">{typeof v === "number" ? fmtNumber(lang, v) : String(v)}</span>
+		);
+	if (hit.kind === "checkbox") return <span>{v ? "✓" : "–"}</span>;
+	if (hit.kind === "url")
+		return (
+			<a className="text-link hover:underline" href={String(v)} rel="noopener" target="_blank">
+				{String(v).replace(/^https?:\/\//, "")}
+			</a>
+		);
+	// long text stays two lines in tables and boards; the full text is on the page
+	return <span className="line-clamp-2">{Array.isArray(v) ? v.join(", ") : String(v)}</span>;
 }
 
 function TreeView({ items }: { items: Item[] }) {
-  const ix = useIndex();
-  const set = new Set(items.map((i) => i.id));
-  const parentOf = (id: string) => {
-    const home = ix.home(id);
-    if (home && set.has(home)) return home;
-    return ix.parentsOf(id).find((p) => set.has(p));
-  };
-  const kids = new Map<string, Item[]>();
-  const roots: Item[] = [];
-  for (const i of items) {
-    const p = parentOf(i.id);
-    if (p) (kids.get(p) ?? kids.set(p, []).get(p)!).push(i);
-    else roots.push(i);
-  }
-  const render = (i: Item, depth: number, seen: Set<string>): React.ReactNode =>
-    seen.has(i.id) ? null : (
-      <div key={i.id}>
-        <div style={{ paddingLeft: depth * 18 }}>
-          <ItemRow item={i} />
-        </div>
-        {(kids.get(i.id) ?? []).map((k) => render(k, depth + 1, new Set([...seen, i.id])))}
-      </div>
-    );
-  return <div className="-mx-2">{roots.map((r) => render(r, 0, new Set()))}</div>;
+	const ix = useIndex();
+	const set = new Set(items.map((i) => i.id));
+	const parentOf = (id: string) => {
+		const home = ix.home(id);
+		if (home && set.has(home)) return home;
+		return ix.parentsOf(id).find((p) => set.has(p));
+	};
+	const kids = new Map<string, Item[]>();
+	const roots: Item[] = [];
+	for (const i of items) {
+		const p = parentOf(i.id);
+		if (p) (kids.get(p) ?? kids.set(p, []).get(p)!).push(i);
+		else roots.push(i);
+	}
+	const render = (i: Item, depth: number, seen: Set<string>): React.ReactNode =>
+		seen.has(i.id) ? null : (
+			<div key={i.id}>
+				<div style={{ paddingLeft: depth * 18 }}>
+					<ItemRow item={i} />
+				</div>
+				{(kids.get(i.id) ?? []).map((k) => render(k, depth + 1, new Set([...seen, i.id])))}
+			</div>
+		);
+	return <div className="-mx-2">{roots.map((r) => render(r, 0, new Set()))}</div>;
 }

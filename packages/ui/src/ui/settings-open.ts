@@ -15,4 +15,5 @@ addEventListener("hashchange", () => open !== null && location.hash !== open.at 
 
 /** Whether the dialog is open (null: not), and with which workspace's settings (`space` null: the app's). */
 export const settingsOpen = () => open;
-export const useSettingsOpen = () => useSyncExternalStore((f) => (listeners.add(f), () => listeners.delete(f)), settingsOpen);
+export const useSettingsOpen = () =>
+	useSyncExternalStore((f) => (listeners.add(f), () => listeners.delete(f)), settingsOpen);

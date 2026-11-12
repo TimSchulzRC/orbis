@@ -10,9 +10,9 @@ let check: () => Promise<boolean> = async () => false;
 const listeners = new Set<() => void>();
 
 export function setUpdate(next: UpdateState, run?: () => void) {
-  state = next;
-  if (run) apply = run;
-  listeners.forEach((f) => f());
+	state = next;
+	if (run) apply = run;
+	listeners.forEach((f) => f());
 }
 
 /** `fn` resolves true when it found one. Without a service worker nothing is ever found. */
@@ -20,4 +20,8 @@ export const setUpdateCheck = (fn: () => Promise<boolean>) => void (check = fn);
 
 export const applyUpdate = () => apply();
 export const checkForUpdate = () => check();
-export const useUpdate = () => useSyncExternalStore((f) => (listeners.add(f), () => listeners.delete(f)), () => state);
+export const useUpdate = () =>
+	useSyncExternalStore(
+		(f) => (listeners.add(f), () => listeners.delete(f)),
+		() => state,
+	);

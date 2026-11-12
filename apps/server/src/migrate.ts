@@ -7,12 +7,12 @@ import type { Database } from "bun:sqlite";
  * function for what SQL cannot do.
  */
 export function migrate(db: Database, steps: (string | ((db: Database) => void))[]) {
-  const done = (db.query("PRAGMA user_version").get() as { user_version: number }).user_version;
-  for (let i = done; i < steps.length; i++)
-    db.transaction(() => {
-      const step = steps[i]!;
-      if (typeof step === "string") db.exec(step);
-      else step(db);
-      db.exec(`PRAGMA user_version = ${i + 1}`);
-    })();
+	const done = (db.query("PRAGMA user_version").get() as { user_version: number }).user_version;
+	for (let i = done; i < steps.length; i++)
+		db.transaction(() => {
+			const step = steps[i]!;
+			if (typeof step === "string") db.exec(step);
+			else step(db);
+			db.exec(`PRAGMA user_version = ${i + 1}`);
+		})();
 }

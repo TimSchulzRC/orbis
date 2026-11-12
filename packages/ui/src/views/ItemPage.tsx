@@ -1,71 +1,108 @@
 // One page for every note. Types change the properties and which sections appear, never
 // the layout.
-import { Input } from "../components/ui/input";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+
 import type { EditorView } from "@codemirror/view";
-import { Trash2, Plus, AlertTriangle, ImagePlus, ListFilter, Pin, PinOff, FilePlus, FolderInput, ArrowRightLeft, Bot } from "lucide-react";
+import type { Index } from "@obtion/core/graph";
 import { type Item, META_TYPE, titleKey } from "@obtion/core/model";
 import { isInInbox } from "@obtion/core/placement";
-import { wouldBeInInbox } from "@obtion/core/typeops";
-import { onlyBelow } from "@obtion/core/trash";
-import { hasUpdates, progressSpec } from "@obtion/core/traits";
-import { updateFeed } from "@obtion/core/updates";
-import { useRepo, useIndex, itemHref, leavePage, openItem, setParams, showTitle, useDocumentTitle } from "../hooks";
-import { repo } from "../repo";
-import { useT, tr, getLang, titleOf } from "../i18n";
-import { insertFilesAtCursor } from "../ui/Editor";
-import { NoteEditor } from "../ui/NoteEditor";
-import { Button, Dialog, MenuItem, Popover, MoreMenu, PagePlaceholder } from "../ui/primitives";
-import { Tip } from "../components/ui/tooltip";
-import { ItemIcon, TypeChip, TypeGlyph } from "../ui/item-look";
-import { ProgressBand } from "../ui/progress";
-import { cn } from "../lib/utils";
-import { PropertyBlock } from "../ui/Properties";
-import { Below } from "../ui/Sections";
-import { PagePanel } from "../ui/Updates";
-import { AddRef, Crumbs, LinksMenu, LinksRow, PageFooter, TrashBanner, pinnedRefs } from "../ui/PageParts";
-import { PlacePicker } from "../ui/Picker";
 import { pluralOf } from "@obtion/core/plural";
-import { insertQueryBlock } from "../ui/QueryBlock";
-import { FilePage } from "./FilePage";
-import { insertDrawing } from "../ui/editor/slash";
-import { DRAWING_ICON } from "../ui/icons";
-import { TitleField } from "../ui/TitleField";
-import { TypePage } from "./TypePage";
-import { createAndOpen, isBlank, rememberPlace } from "../actions";
-import { INBOX_ICON, NOTE_ICON } from "../ui/icons";
+import { hasUpdates, progressSpec } from "@obtion/core/traits";
 import { movedItems } from "@obtion/core/transfer";
+import { onlyBelow } from "@obtion/core/trash";
+import { wouldBeInInbox } from "@obtion/core/typeops";
+import { updateFeed } from "@obtion/core/updates";
+import {
+	AlertTriangle,
+	ArrowRightLeft,
+	Bot,
+	FilePlus,
+	FolderInput,
+	ImagePlus,
+	ListFilter,
+	Pin,
+	PinOff,
+	Plus,
+	Trash2,
+} from "lucide-react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useAccounts } from "../accounts";
-import { moveTo } from "../ui/Spaces";
-import type { Index } from "@obtion/core/graph";
+import { createAndOpen, isBlank, rememberPlace } from "../actions";
+import { Input } from "../components/ui/input";
+import { Tip } from "../components/ui/tooltip";
+import {
+	itemHref,
+	leavePage,
+	openItem,
+	setParams,
+	showTitle,
+	useDocumentTitle,
+	useIndex,
+	useRepo,
+} from "../hooks";
+import { getLang, titleOf, tr, useT } from "../i18n";
+import { cn } from "../lib/utils";
+import type { repo } from "../repo";
 import { AgentRulesDialog } from "../ui/AgentRules";
+import { insertFilesAtCursor } from "../ui/Editor";
+import { insertDrawing } from "../ui/editor/slash";
+import { DRAWING_ICON, INBOX_ICON, NOTE_ICON } from "../ui/icons";
+import { ItemIcon, TypeChip, TypeGlyph } from "../ui/item-look";
+import { NoteEditor } from "../ui/NoteEditor";
+import {
+	AddRef,
+	Crumbs,
+	LinksMenu,
+	LinksRow,
+	PageFooter,
+	pinnedRefs,
+	TrashBanner,
+} from "../ui/PageParts";
+import { PlacePicker } from "../ui/Picker";
+import { PropertyBlock } from "../ui/Properties";
+import { Button, Dialog, MenuItem, MoreMenu, PagePlaceholder, Popover } from "../ui/primitives";
+import { ProgressBand } from "../ui/progress";
+import { insertQueryBlock } from "../ui/QueryBlock";
+import { Below } from "../ui/Sections";
+import { moveTo } from "../ui/Spaces";
+import { TitleField } from "../ui/TitleField";
+import { PagePanel } from "../ui/Updates";
+import { FilePage } from "./FilePage";
+import { TypePage } from "./TypePage";
 
 export function ItemPage({ id, isNew }: { id: string; isNew: boolean }) {
-  const scoped = useRepo();
-  const { t } = useT();
-  const item = scoped.get(id);
-  // the title after the id: at once when the page opens, while typing a moment later
-  // (browsers limit how often an address may change)
-  const hasPage = item && item.kind !== "settings" && item.kind !== "op";
-  const title = !hasPage ? undefined : item.type === META_TYPE ? scoped.index().typePlural(id) : item.title;
-  const shown = useRef<string | undefined>(undefined);
-  useLayoutEffect(() => {
-    if (title === undefined) return;
-    if (shown.current !== id) {
-      shown.current = id;
-      showTitle(title);
-      return;
-    }
-    const wait = setTimeout(() => showTitle(title), 400);
-    return () => clearTimeout(wait);
-  }, [id, title]);
-  if (!item || item.kind === "settings")
-    return <PagePlaceholder>{scoped.status.synced ? t("item.missing") : t("item.loading")}</PagePlaceholder>;
-  if (item.kind === "op") return <PagePlaceholder>{item.title}</PagePlaceholder>;
-  if (item.kind === "file") return <FilePage key={id} item={item} />;
-  if (item.kind === "drawing") return <DrawingInNote key={id} item={item} />;
-  if (item.type === META_TYPE) return <TypePage key={id} item={item} />;
-  return <InfoView key={id} item={item} isNew={isNew} />;
+	const scoped = useRepo();
+	const { t } = useT();
+	const item = scoped.get(id);
+	// the title after the id: at once when the page opens, while typing a moment later
+	// (browsers limit how often an address may change)
+	const hasPage = item && item.kind !== "settings" && item.kind !== "op";
+	const title = !hasPage
+		? undefined
+		: item.type === META_TYPE
+			? scoped.index().typePlural(id)
+			: item.title;
+	const shown = useRef<string | undefined>(undefined);
+	useLayoutEffect(() => {
+		if (title === undefined) return;
+		if (shown.current !== id) {
+			shown.current = id;
+			showTitle(title);
+			return;
+		}
+		const wait = setTimeout(() => showTitle(title), 400);
+		return () => clearTimeout(wait);
+	}, [id, title]);
+	if (!item || item.kind === "settings")
+		return (
+			<PagePlaceholder>
+				{scoped.status.synced ? t("item.missing") : t("item.loading")}
+			</PagePlaceholder>
+		);
+	if (item.kind === "op") return <PagePlaceholder>{item.title}</PagePlaceholder>;
+	if (item.kind === "file") return <FilePage item={item} key={id} />;
+	if (item.kind === "drawing") return <DrawingInNote item={item} key={id} />;
+	if (item.type === META_TYPE) return <TypePage item={item} key={id} />;
+	return <InfoView isNew={isNew} item={item} key={id} />;
 }
 
 /**
@@ -73,325 +110,441 @@ export function ItemPage({ id, isNew }: { id: string; isNew: boolean }) {
  * the one whose text embeds it or else the one it is kept under, and the drawing over it.
  */
 function DrawingInNote({ item }: { item: Item }) {
-  const scoped = useRepo();
-  const { t } = useT();
-  const ix = scoped.index();
-  const note = ix.backlinks(item.id).find((b) => b.kind === "embed" && ix.get(b.from)?.kind === "note")?.from ?? ix.parentsOf(item.id)[0];
-  useEffect(() => {
-    // the drawing opens on its note (a search hit, a link to it)
-    if (note) openItem(note, { replace: true, query: "?d=" + encodeURIComponent(item.id) });
-    else setParams({ d: item.id });
-  }, [item.id]);
-  return <PagePlaceholder>{note ? t("drawing.loading") : titleOf(item, t)}</PagePlaceholder>;
+	const scoped = useRepo();
+	const { t } = useT();
+	const ix = scoped.index();
+	const note =
+		ix.backlinks(item.id).find((b) => b.kind === "embed" && ix.get(b.from)?.kind === "note")
+			?.from ?? ix.parentsOf(item.id)[0];
+	useEffect(() => {
+		// the drawing opens on its note (a search hit, a link to it)
+		if (note) openItem(note, { replace: true, query: "?d=" + encodeURIComponent(item.id) });
+		else setParams({ d: item.id });
+	}, [item.id]);
+	return <PagePlaceholder>{note ? t("drawing.loading") : titleOf(item, t)}</PagePlaceholder>;
 }
 
 const openItems = new Set<string>();
 
 function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
-  const repo = useRepo();
-  // "?new=1" is for opening it once: gone from the address, so a reload or Back later does not take it as new
-  const [isNew] = useState(created);
-  useEffect(() => void setParams({ new: null }), []);
-  const ix = useIndex();
-  const { t } = useT();
-  useDocumentTitle(titleOf(item, t));
-  const schema = ix.schemaOf(item);
-  const [view, setView] = useState<EditorView | null>(null);
-  const [deleting, setDeleting] = useState(false);
-  const [placing, setPlacing] = useState(false);
-  const [moving, setMoving] = useState(false);
-  const others = useAccounts().spaces.length > 1;
-  const [rulesOpen, setRulesOpen] = useState(false);
-  const fileInput = useRef<HTMLInputElement>(null);
+	const repo = useRepo();
+	// "?new=1" is for opening it once: gone from the address, so a reload or Back later does not take it as new
+	const [isNew] = useState(created);
+	useEffect(() => void setParams({ new: null }), []);
+	const ix = useIndex();
+	const { t } = useT();
+	useDocumentTitle(titleOf(item, t));
+	const schema = ix.schemaOf(item);
+	const [view, setView] = useState<EditorView | null>(null);
+	const [deleting, setDeleting] = useState(false);
+	const [placing, setPlacing] = useState(false);
+	const [moving, setMoving] = useState(false);
+	const others = useAccounts().spaces.length > 1;
+	const [rulesOpen, setRulesOpen] = useState(false);
+	const fileInput = useRef<HTMLInputElement>(null);
 
-  // An item created with "New …" and left empty is discarded, not left as "Untitled".
-  useEffect(() => {
-    if (!isNew) return;
-    openItems.add(item.id);
-    return () => {
-      openItems.delete(item.id);
-      setTimeout(() => {
-        if (openItems.has(item.id)) return;
-        const current = repo.get(item.id);
-        if (current && !current.deleted && isBlank(current, repo.index())) repo.remove(item.id);
-      }, 50);
-    };
-  }, [item.id, isNew]);
+	// An item created with "New …" and left empty is discarded, not left as "Untitled".
+	useEffect(() => {
+		if (!isNew) return;
+		openItems.add(item.id);
+		return () => {
+			openItems.delete(item.id);
+			setTimeout(() => {
+				if (openItems.has(item.id)) return;
+				const current = repo.get(item.id);
+				if (current && !current.deleted && isBlank(current, repo.index())) repo.remove(item.id);
+			}, 50);
+		};
+	}, [item.id, isNew]);
 
-  const cycles = ix.cycleEdgesOf(item.id);
-  const progress = progressSpec(schema) ? ix.progressOf(item) : undefined;
+	const cycles = ix.cycleEdgesOf(item.id);
+	const progress = progressSpec(schema) ? ix.progressOf(item) : undefined;
 
-  // the top bar's place for the side panel's buttons, left of "…"
-  const [panelSlot, setPanelSlot] = useState<HTMLElement | null>(null);
-  const updatable = hasUpdates(schema) && !item.deleted;
-  // with an update the card follows the properties and needs no line above it
-  const updateCard = updatable && updateFeed(ix, item.id).length > 0;
-  const tools = (
-    <>
-    <span ref={setPanelSlot} className="contents" />
-    <MoreMenu>
-      {(close) => (
-        <>
-          <MenuItem icon={<FolderInput size={14} />} onClick={() => (close(), setPlacing(true))}>
-            {ix.parentsOf(item.id).length ? t("place.addAnother") : t("place.place")}
-          </MenuItem>
-          <MenuItem icon={<ImagePlus size={14} />} onClick={() => (close(), fileInput.current?.click())}>
-            {t("editor.addFile")}
-          </MenuItem>
-          {view && (
-            <MenuItem icon={<DRAWING_ICON size={14} />} onClick={() => (close(), insertDrawing(view))}>
-              {t("drawing.insert")}
-            </MenuItem>
-          )}
-          {view && (
-            <MenuItem icon={<ListFilter size={14} />} onClick={() => (close(), insertQueryBlock(view))}>
-              {t("item.insertQuery")}
-            </MenuItem>
-          )}
-          <MenuItem icon={item.pinned ? <PinOff size={14} /> : <Pin size={14} />} onClick={() => (close(), repo.pin(item.id, !item.pinned))}>
-            {item.pinned ? t("item.unpin") : t("item.pin")}
-          </MenuItem>
-          <MenuItem icon={<FilePlus size={14} />} onClick={() => (close(), createAndOpen({ parents: [item.id] }))}>
-            {t("item.newBelow")}
-          </MenuItem>
-          {others && !item.deleted && item.type !== META_TYPE && (
-            <MenuItem icon={<ArrowRightLeft size={14} />} onClick={() => (close(), setMoving(true))}>
-              {t("move.menu")}
-            </MenuItem>
-          )}
-          {!item.deleted && (
-            <MenuItem danger icon={<Trash2 size={14} />} onClick={() => (close(), deleteOrAsk(repo, item.id, () => setDeleting(true)))}>
-              {t("item.delete")}
-            </MenuItem>
-          )}
-        </>
-      )}
-    </MoreMenu>
-    </>
-  );
+	// the top bar's place for the side panel's buttons, left of "…"
+	const [panelSlot, setPanelSlot] = useState<HTMLElement | null>(null);
+	const updatable = hasUpdates(schema) && !item.deleted;
+	// with an update the card follows the properties and needs no line above it
+	const updateCard = updatable && updateFeed(ix, item.id).length > 0;
+	const tools = (
+		<>
+			<span className="contents" ref={setPanelSlot} />
+			<MoreMenu>
+				{(close) => (
+					<>
+						<MenuItem icon={<FolderInput size={14} />} onClick={() => (close(), setPlacing(true))}>
+							{ix.parentsOf(item.id).length ? t("place.addAnother") : t("place.place")}
+						</MenuItem>
+						<MenuItem
+							icon={<ImagePlus size={14} />}
+							onClick={() => (close(), fileInput.current?.click())}
+						>
+							{t("editor.addFile")}
+						</MenuItem>
+						{view && (
+							<MenuItem
+								icon={<DRAWING_ICON size={14} />}
+								onClick={() => (close(), insertDrawing(view))}
+							>
+								{t("drawing.insert")}
+							</MenuItem>
+						)}
+						{view && (
+							<MenuItem
+								icon={<ListFilter size={14} />}
+								onClick={() => (close(), insertQueryBlock(view))}
+							>
+								{t("item.insertQuery")}
+							</MenuItem>
+						)}
+						<MenuItem
+							icon={item.pinned ? <PinOff size={14} /> : <Pin size={14} />}
+							onClick={() => (close(), repo.pin(item.id, !item.pinned))}
+						>
+							{item.pinned ? t("item.unpin") : t("item.pin")}
+						</MenuItem>
+						<MenuItem
+							icon={<FilePlus size={14} />}
+							onClick={() => (close(), createAndOpen({ parents: [item.id] }))}
+						>
+							{t("item.newBelow")}
+						</MenuItem>
+						{others && !item.deleted && item.type !== META_TYPE && (
+							<MenuItem
+								icon={<ArrowRightLeft size={14} />}
+								onClick={() => (close(), setMoving(true))}
+							>
+								{t("move.menu")}
+							</MenuItem>
+						)}
+						{!item.deleted && (
+							<MenuItem
+								danger
+								icon={<Trash2 size={14} />}
+								onClick={() => (close(), deleteOrAsk(repo, item.id, () => setDeleting(true)))}
+							>
+								{t("item.delete")}
+							</MenuItem>
+						)}
+					</>
+				)}
+			</MoreMenu>
+		</>
+	);
 
-  return (
-    <div className="page-read">
-      {item.deleted && (
-        <TrashBanner onRestore={() => repo.restore(item.id)} />
-      )}
-      {/* 1 · head: path, title, type and status, progress, properties */}
-      <Crumbs item={item} tools={tools} onPlace={() => setPlacing(true)} />
-      <div className="mt-6 flex items-start gap-4 max-md:mt-3">
-        <div data-page-title className="min-w-0 flex-1 rounded-lg">
-          <TitleField item={item} autoFocus={isNew && !item.title} />
-        </div>
-      </div>
-      <TitleClash item={item} />
-      {cycles.length > 0 && (
-        <p className="mt-1 flex items-center gap-1.5 text-xs text-warn">
-          <AlertTriangle size={12} /> {t("item.cycle", { titles: cycles.map((c) => ix.get(c)?.title).join(", ") })}
-        </p>
-      )}
-      <div className="mt-3 border-t border-line" />
-      {/* what the page is as badges, the links, its dates, its progress, then the properties with their names */}
-      <PropertyBlock
-        item={item}
-        schema={schema}
-        head={{
-          first: <TypeSwitch item={item} />,
-          // "+ Ref" next to "+ Tags" until refs are pinned; then the "+" follows their chips
-          afterTags: !pinnedRefs(item, ix).length && <AddRef item={item} text />,
-          end: (
-            <>
-              <LinksMenu item={item} />
-              {!item.deleted && (
-                <Tip label={t("rules.title")}>
-                  <Button variant="plain" onClick={() => setRulesOpen(true)} aria-label={t("rules.title")} className={cn("tap inline-flex items-center justify-center rounded-lg p-1.5 transition-colors hover:bg-hover hover:text-fg", item.rules.trim() ? "text-fg" : "text-muted-foreground")}>
-                    <Bot size={16} />
-                  </Button>
-                </Tip>
-              )}
-            </>
-          ),
-          links: <LinksRow item={item} />,
-          noEndLine: updateCard,
-          progress: progress && <ProgressBand done={progress.done} total={progress.total} desc={progressText(item, ix, progress.done, progress.total)} />,
-        }}
-      />
-      {/* the newest update, and the side panel with all of them and the page's history */}
-      <PagePanel item={item} bar={panelSlot} updates={updatable} />
+	return (
+		<div className="page-read">
+			{item.deleted && <TrashBanner onRestore={() => repo.restore(item.id)} />}
+			{/* 1 · head: path, title, type and status, progress, properties */}
+			<Crumbs item={item} onPlace={() => setPlacing(true)} tools={tools} />
+			<div className="mt-6 flex items-start gap-4 max-md:mt-3">
+				<div className="min-w-0 flex-1 rounded-lg" data-page-title>
+					<TitleField autoFocus={isNew && !item.title} item={item} />
+				</div>
+			</div>
+			<TitleClash item={item} />
+			{cycles.length > 0 && (
+				<p className="mt-1 flex items-center gap-1.5 text-xs text-warn">
+					<AlertTriangle size={12} />{" "}
+					{t("item.cycle", { titles: cycles.map((c) => ix.get(c)?.title).join(", ") })}
+				</p>
+			)}
+			<div className="mt-3 border-t border-line" />
+			{/* what the page is as badges, the links, its dates, its progress, then the properties with their names */}
+			<PropertyBlock
+				head={{
+					first: <TypeSwitch item={item} />,
+					// "+ Ref" next to "+ Tags" until refs are pinned; then the "+" follows their chips
+					afterTags: !pinnedRefs(item, ix).length && <AddRef item={item} text />,
+					end: (
+						<>
+							<LinksMenu item={item} />
+							{!item.deleted && (
+								<Tip label={t("rules.title")}>
+									<Button
+										aria-label={t("rules.title")}
+										className={cn(
+											"tap inline-flex items-center justify-center rounded-lg p-1.5 transition-colors hover:bg-hover hover:text-fg",
+											item.rules.trim() ? "text-fg" : "text-muted-foreground",
+										)}
+										onClick={() => setRulesOpen(true)}
+										variant="plain"
+									>
+										<Bot size={16} />
+									</Button>
+								</Tip>
+							)}
+						</>
+					),
+					links: <LinksRow item={item} />,
+					noEndLine: updateCard,
+					progress: progress && (
+						<ProgressBand
+							desc={progressText(item, ix, progress.done, progress.total)}
+							done={progress.done}
+							total={progress.total}
+						/>
+					),
+				}}
+				item={item}
+				schema={schema}
+			/>
+			{/* the newest update, and the side panel with all of them and the page's history */}
+			<PagePanel bar={panelSlot} item={item} updates={updatable} />
 
-      {/* 2 · text */}
-      <PageText item={item} isNew={isNew} onView={setView} hasMore={ix.childrenOf(item.id).length > 0} />
-      <Input variant="bare" ref={fileInput} type="file" multiple className="hidden" onChange={(e) => view && insertFilesAtCursor(view, [...(e.target.files ?? [])])} />
+			{/* 2 · text */}
+			<PageText
+				hasMore={ix.childrenOf(item.id).length > 0}
+				isNew={isNew}
+				item={item}
+				onView={setView}
+			/>
+			<Input
+				className="hidden"
+				multiple
+				onChange={(e) => view && insertFilesAtCursor(view, [...(e.target.files ?? [])])}
+				ref={fileInput}
+				type="file"
+				variant="bare"
+			/>
 
-      {/* a line between the text one writes and what the page adds below it;
+			{/* a line between the text one writes and what the page adds below it;
           mt-7, not mt-6: the editor has 4px padding on top only, so the text sits in the middle */}
-      <div className="mt-7 border-t border-line" />
-      <div className="page-below [&>:first-child]:mt-6">
-        {/* 3 · below: everything under the page, the same for every type (the links are in the head) */}
-        <Below item={item} />
-      </div>
-      {/* one more line above the dates, unless nothing came between */}
-      <PageFooter item={item} className="mt-10 border-t border-line pt-4 max-md:mt-8 [.page-below:empty+&]:mt-4 [.page-below:empty+&]:border-t-0 [.page-below:empty+&]:pt-0" />
+			<div className="mt-7 border-t border-line" />
+			<div className="page-below [&>:first-child]:mt-6">
+				{/* 3 · below: everything under the page, the same for every type (the links are in the head) */}
+				<Below item={item} />
+			</div>
+			{/* one more line above the dates, unless nothing came between */}
+			<PageFooter
+				className="mt-10 border-t border-line pt-4 max-md:mt-8 [.page-below:empty+&]:mt-4 [.page-below:empty+&]:border-t-0 [.page-below:empty+&]:pt-0"
+				item={item}
+			/>
 
-      {placing && <PlacePicker list={[item]} title={t("place.add")} onPick={(pid) => (repo.addParent(item.id, pid), rememberPlace(pid), setPlacing(false))} onClose={() => setPlacing(false)} />}
-      {deleting && <DeleteDialog item={item} onClose={() => setDeleting(false)} />}
-      {rulesOpen && <AgentRulesDialog item={item} onClose={() => setRulesOpen(false)} />}
-      {moving && <MoveDialog item={item} onClose={() => setMoving(false)} />}
-    </div>
-  );
+			{placing && (
+				<PlacePicker
+					list={[item]}
+					onClose={() => setPlacing(false)}
+					onPick={(pid) => (repo.addParent(item.id, pid), rememberPlace(pid), setPlacing(false))}
+					title={t("place.add")}
+				/>
+			)}
+			{deleting && <DeleteDialog item={item} onClose={() => setDeleting(false)} />}
+			{rulesOpen && <AgentRulesDialog item={item} onClose={() => setRulesOpen(false)} />}
+			{moving && <MoveDialog item={item} onClose={() => setMoving(false)} />}
+		</div>
+	);
 }
 
 /** "2 of 9 tasks done, all levels". */
 function progressText(item: Item, ix: Index, done: number, total: number): string {
-  const of = progressSpec(ix.schemaOf(item))?.of;
-  const name = of ? (ix.typeName(of) ?? "") : "";
-  return tr(of ? "progress.allLevelsOf" : "progress.allLevels", { done, total, name: name && pluralOf(name, getLang()) });
+	const of = progressSpec(ix.schemaOf(item))?.of;
+	const name = of ? (ix.typeName(of) ?? "") : "";
+	return tr(of ? "progress.allLevelsOf" : "progress.allLevels", {
+		done,
+		total,
+		name: name && pluralOf(name, getLang()),
+	});
 }
 
 /** Zone 2: the page's text. */
-function PageText({ item, isNew, onView, hasMore }: { item: Item; isNew: boolean; onView: (v: EditorView | null) => void; hasMore: boolean }) {
-  return (
-    <div className="mt-6">
-      <NoteEditor
-        item={item}
-        autoFocus={isNew && !!item.title}
-        onView={onView}
-        // room to start writing only while the text is empty and nothing else follows
-        minHeight={item.body.trim() || hasMore ? "min-h-6" : "min-h-[30vh]"}
-      />
-    </div>
-  );
+function PageText({
+	item,
+	isNew,
+	onView,
+	hasMore,
+}: {
+	item: Item;
+	isNew: boolean;
+	onView: (v: EditorView | null) => void;
+	hasMore: boolean;
+}) {
+	return (
+		<div className="mt-6">
+			<NoteEditor
+				autoFocus={isNew && !!item.title}
+				item={item}
+				// room to start writing only while the text is empty and nothing else follows
+				minHeight={item.body.trim() || hasMore ? "min-h-6" : "min-h-[30vh]"}
+				onView={onView}
+			/>
+		</div>
+	);
 }
 
 function TypeSwitch({ item }: { item: Item }) {
-  const repo = useRepo();
-  const ix = useIndex();
-  const { t } = useT();
-  const schema = ix.schemaOf(item);
-  const inbox = isInInbox(item, ix);
-  const types = ix.typesByName();
-  const deletedType = item.type && !schema ? ix.all.get(item.type)?.schema?.name : undefined;
-  return (
-    <Popover
-      trigger={(p) =>
-        schema ? (
-          <span {...p} className="inline-flex">
-            <TypeChip schema={schema} onClick={p.onClick} />
-          </span>
-        ) : (
-          // no type: a plain line, not a chip – "Note" is no type
-          <Button variant="plain" {...p} className={cn("tap-y inline-flex items-center gap-1 rounded px-0.5 text-[13px] hover:underline", inbox ? "text-warn" : "text-muted-foreground")} title={t("item.giveType")}>
-            {inbox ? <INBOX_ICON size={12} /> : <NOTE_ICON size={12} />}
-            {inbox ? t("kind.inbox") : t("kind.note")}
-            {deletedType && <span className="text-muted-foreground">· {t("type.deletedName", { name: deletedType })}</span>}
-          </Button>
-        )
-      }
-    >
-      {(close) => (
-        <>
-          <p className="px-2.5 pb-1 pt-1.5 text-xs text-muted-foreground">{t("item.giveType")}</p>
-          <MenuItem active={!item.type} icon={<NOTE_ICON size={14} style={{ color: "var(--t-note)" }} />} onClick={() => (repo.setType(item.id, null), close())}>
-            {t("kind.note")}
-          </MenuItem>
-          {types.map((type) => (
-            <MenuItem key={type.id} active={type.id === item.type} icon={<TypeGlyph schema={type.schema} size={14} />} onClick={() => (repo.setType(item.id, type.id), close())}>
-              {type.schema.name}
-            </MenuItem>
-          ))}
-        </>
-      )}
-    </Popover>
-  );
+	const repo = useRepo();
+	const ix = useIndex();
+	const { t } = useT();
+	const schema = ix.schemaOf(item);
+	const inbox = isInInbox(item, ix);
+	const types = ix.typesByName();
+	const deletedType = item.type && !schema ? ix.all.get(item.type)?.schema?.name : undefined;
+	return (
+		<Popover
+			trigger={(p) =>
+				schema ? (
+					<span {...p} className="inline-flex">
+						<TypeChip onClick={p.onClick} schema={schema} />
+					</span>
+				) : (
+					// no type: a plain line, not a chip – "Note" is no type
+					<Button
+						variant="plain"
+						{...p}
+						className={cn(
+							"tap-y inline-flex items-center gap-1 rounded px-0.5 text-[13px] hover:underline",
+							inbox ? "text-warn" : "text-muted-foreground",
+						)}
+						title={t("item.giveType")}
+					>
+						{inbox ? <INBOX_ICON size={12} /> : <NOTE_ICON size={12} />}
+						{inbox ? t("kind.inbox") : t("kind.note")}
+						{deletedType && (
+							<span className="text-muted-foreground">
+								· {t("type.deletedName", { name: deletedType })}
+							</span>
+						)}
+					</Button>
+				)
+			}
+		>
+			{(close) => (
+				<>
+					<p className="px-2.5 pb-1 pt-1.5 text-xs text-muted-foreground">{t("item.giveType")}</p>
+					<MenuItem
+						active={!item.type}
+						icon={<NOTE_ICON size={14} style={{ color: "var(--t-note)" }} />}
+						onClick={() => (repo.setType(item.id, null), close())}
+					>
+						{t("kind.note")}
+					</MenuItem>
+					{types.map((type) => (
+						<MenuItem
+							active={type.id === item.type}
+							icon={<TypeGlyph schema={type.schema} size={14} />}
+							key={type.id}
+							onClick={() => (repo.setType(item.id, type.id), close())}
+						>
+							{type.schema.name}
+						</MenuItem>
+					))}
+				</>
+			)}
+		</Popover>
+	);
 }
 
 function TitleClash({ item }: { item: Item }) {
-  const scoped = useRepo();
-  const { t } = useT();
-  if (!item.title.trim()) return null;
-  const other = scoped.live().find((x) => x.id !== item.id && titleKey(x.title) === titleKey(item.title));
-  if (!other) return null;
-  return (
-    <p className="mt-1 text-xs text-warn">
-      {t("item.titleClash")}{" "}
-      <a className="tap-y underline" href={itemHref(other.id)}>
-        {t("item.openOther")}
-      </a>
-    </p>
-  );
+	const scoped = useRepo();
+	const { t } = useT();
+	if (!item.title.trim()) return null;
+	const other = scoped
+		.live()
+		.find((x) => x.id !== item.id && titleKey(x.title) === titleKey(item.title));
+	if (!other) return null;
+	return (
+		<p className="mt-1 text-xs text-warn">
+			{t("item.titleClash")}{" "}
+			<a className="tap-y underline" href={itemHref(other.id)}>
+				{t("item.openOther")}
+			</a>
+		</p>
+	);
 }
 
 function removeAndLeave(inRepo: typeof repo, id: string, withChildren: boolean, leave = true) {
-  inRepo.remove(id, withChildren ? "trash" : "inbox");
-  if (leave) leavePage();
+	inRepo.remove(id, withChildren ? "trash" : "inbox");
+	if (leave) leavePage();
 }
 
 /**
  * With children that only hang here, the dialog asks first. `leave`: the item is the open page,
  * which then goes back. True when it went to the trash right away.
  */
-export function deleteOrAsk(inRepo: typeof repo, id: string, ask: () => void, leave = true): boolean {
-  if (onlyBelow(inRepo.index(), id).length) return (ask(), false);
-  removeAndLeave(inRepo, id, false, leave);
-  return true;
+export function deleteOrAsk(
+	inRepo: typeof repo,
+	id: string,
+	ask: () => void,
+	leave = true,
+): boolean {
+	if (onlyBelow(inRepo.index(), id).length) return (ask(), false);
+	removeAndLeave(inRepo, id, false, leave);
+	return true;
 }
 
 /** Children that only hang here: delete them too, or let them lose this place. */
-export function DeleteDialog({ item, onClose, leave = true }: { item: Item; onClose: () => void; leave?: boolean }) {
-  const scoped = useRepo();
-  const ix = scoped.index();
-  const { t } = useT();
-  const only = onlyBelow(ix, item.id);
-  const finish = (withChildren: boolean) => {
-    removeAndLeave(scoped, item.id, withChildren, leave);
-    onClose();
-  };
-  // Kept children lose this place; whether they land in the inbox is the inbox's own query.
-  const untyped = wouldBeInInbox(ix, only, (i) => i, [{ ...item, deleted: true }]);
-  return (
-    <Dialog title={t("delete.title", { title: titleOf(item, t) })} onClose={onClose}>
-      <p className="text-sm">{t("delete.children", { count: only.length })}</p>
-      {untyped > 0 && <p className="mt-1 text-sm text-muted-foreground">{t("delete.toInbox", { count: untyped })}</p>}
-      <ul className="mt-3 max-h-48 space-y-0.5 overflow-y-auto">
-        {only.slice(0, 30).map((c) => (
-          <li key={c} className="flex items-center gap-1.5 text-sm text-muted-foreground">
-            <ItemIcon item={ix.get(c)!} size={13} /> {titleOf(ix.get(c)!, t)}
-          </li>
-        ))}
-      </ul>
-      <div className="mt-4 flex justify-end gap-2">
-        <Button variant="outline" onClick={() => finish(false)}>
-          {t("delete.keep")}
-        </Button>
-        <Button variant="danger" onClick={() => finish(true)}>
-          {t("delete.all", { count: only.length + 1 })}
-        </Button>
-      </div>
-    </Dialog>
-  );
+export function DeleteDialog({
+	item,
+	onClose,
+	leave = true,
+}: {
+	item: Item;
+	onClose: () => void;
+	leave?: boolean;
+}) {
+	const scoped = useRepo();
+	const ix = scoped.index();
+	const { t } = useT();
+	const only = onlyBelow(ix, item.id);
+	const finish = (withChildren: boolean) => {
+		removeAndLeave(scoped, item.id, withChildren, leave);
+		onClose();
+	};
+	// Kept children lose this place; whether they land in the inbox is the inbox's own query.
+	const untyped = wouldBeInInbox(ix, only, (i) => i, [{ ...item, deleted: true }]);
+	return (
+		<Dialog onClose={onClose} title={t("delete.title", { title: titleOf(item, t) })}>
+			<p className="text-sm">{t("delete.children", { count: only.length })}</p>
+			{untyped > 0 && (
+				<p className="mt-1 text-sm text-muted-foreground">
+					{t("delete.toInbox", { count: untyped })}
+				</p>
+			)}
+			<ul className="mt-3 max-h-48 space-y-0.5 overflow-y-auto">
+				{only.slice(0, 30).map((c) => (
+					<li className="flex items-center gap-1.5 text-sm text-muted-foreground" key={c}>
+						<ItemIcon item={ix.get(c)!} size={13} /> {titleOf(ix.get(c)!, t)}
+					</li>
+				))}
+			</ul>
+			<div className="mt-4 flex justify-end gap-2">
+				<Button onClick={() => finish(false)} variant="outline">
+					{t("delete.keep")}
+				</Button>
+				<Button onClick={() => finish(true)} variant="danger">
+					{t("delete.all", { count: only.length + 1 })}
+				</Button>
+			</div>
+		</Dialog>
+	);
 }
 
 /** "In anderen Workspace verschieben": with what hangs only below it; here it goes to the trash. */
 function MoveDialog({ item, onClose }: { item: Item; onClose: () => void }) {
-  const repo = useRepo();
-  const { t } = useT();
-  const { spaces, active } = useAccounts();
-  const count = movedItems(repo.index(), item.id).length - 1;
-  return (
-    <Dialog title={t("move.title", { title: titleOf(item, t) })} onClose={onClose}>
-      <p className="text-sm text-muted-foreground">{count > 0 ? t("move.introBelow", { count }) : t("move.intro")}</p>
-      <ul className="mt-3 space-y-1">
-        {spaces
-          .filter((s) => s.id !== active?.id)
-          .map((s) => (
-            <li key={s.id}>
-              <Button variant="plain"
-                onClick={() => (onClose(), void moveTo(item.id, active!.id, s.id))}
-                className="tap-row flex w-full items-center gap-2 rounded-lg border border-line px-3 py-2 text-left text-sm hover:bg-hover"
-              >
-                <span className="min-w-0 flex-1 truncate font-medium">{s.name}</span>
-              </Button>
-            </li>
-          ))}
-      </ul>
-    </Dialog>
-  );
+	const repo = useRepo();
+	const { t } = useT();
+	const { spaces, active } = useAccounts();
+	const count = movedItems(repo.index(), item.id).length - 1;
+	return (
+		<Dialog onClose={onClose} title={t("move.title", { title: titleOf(item, t) })}>
+			<p className="text-sm text-muted-foreground">
+				{count > 0 ? t("move.introBelow", { count }) : t("move.intro")}
+			</p>
+			<ul className="mt-3 space-y-1">
+				{spaces
+					.filter((s) => s.id !== active?.id)
+					.map((s) => (
+						<li key={s.id}>
+							<Button
+								className="tap-row flex w-full items-center gap-2 rounded-lg border border-line px-3 py-2 text-left text-sm hover:bg-hover"
+								onClick={() => (onClose(), void moveTo(item.id, active!.id, s.id))}
+								variant="plain"
+							>
+								<span className="min-w-0 flex-1 truncate font-medium">{s.name}</span>
+							</Button>
+						</li>
+					))}
+			</ul>
+		</Dialog>
+	);
 }

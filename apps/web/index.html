@@ -2,8 +2,8 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
-    <meta name="theme-color" content="#f7f6f3" />
+    <meta content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" name="viewport" />
+    <meta content="#f7f6f3" name="theme-color" />
     <script>
       // light or dark before the first paint (per device; see packages/ui/src/theme.ts)
       try {
@@ -13,14 +13,14 @@
         document.querySelector('meta[name="theme-color"]').setAttribute("content", d ? "#191919" : "#f7f6f3");
       } catch (e) {}
     </script>
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <link rel="icon" href="/icon-dark.svg" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta content="yes" name="apple-mobile-web-app-capable" />
+    <meta content="black-translucent" name="apple-mobile-web-app-status-bar-style" />
+    <link href="/icon-dark.svg" rel="icon" type="image/svg+xml" />
+    <link href="/apple-touch-icon.png" rel="apple-touch-icon" />
     <title>Obtion</title>
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <script src="/src/main.tsx" type="module" ></script>
   </body>
 </html>

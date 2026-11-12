@@ -20,12 +20,12 @@ Update: `docker compose pull && docker compose up -d`
 
 `OBTION_LOGIN` in `.env` lists the ways, default `password,passkey` (details in [`.env.example`](.env.example)):
 
-| Way | In `OBTION_LOGIN` | Needs |
-|---|---|---|
-| Email and password | `password` | – |
-| Code by email | `code` | `OBTION_SMTP_URL` (or `log`: the codes go to the server log) |
-| Passkeys | `passkey` | `OBTION_PUBLIC_URL` with `https://`; add one in Settings → Account |
-| OAuth | – | `OBTION_PUBLIC_URL` and an OpenID Connect provider (`OBTION_OIDC_*`), GitHub or Google |
+| Way                | In `OBTION_LOGIN` | Needs                                                                                  |
+| ------------------ | ----------------- | -------------------------------------------------------------------------------------- |
+| Email and password | `password`        | –                                                                                      |
+| Code by email      | `code`            | `OBTION_SMTP_URL` (or `log`: the codes go to the server log)                           |
+| Passkeys           | `passkey`         | `OBTION_PUBLIC_URL` with `https://`; add one in Settings → Account                     |
+| OAuth              | –                 | `OBTION_PUBLIC_URL` and an OpenID Connect provider (`OBTION_OIDC_*`), GitHub or Google |
 
 E.g. `OBTION_LOGIN=code,passkey`: no passwords. Before turning codes on for accounts made with passwords, read what their first code does in [`.env.example`](.env.example).
 
@@ -33,11 +33,11 @@ E.g. `OBTION_LOGIN=code,passkey`: no passwords. Before turning codes on for acco
 
 Choose with `OBTION_VERSION` in `.env`:
 
-| Tag | |
-|---|---|
-| `latest` | stable releases (default) |
-| `nightly` | newest changes, at most every six hours |
-| `dev` | every commit to `main`, for testing only |
+| Tag       |                                          |
+| --------- | ---------------------------------------- |
+| `latest`  | stable releases (default)                |
+| `nightly` | newest changes, at most every six hours  |
+| `dev`     | every commit to `main`, for testing only |
 
 Or pin a version, e.g. `0.0.2`. Going back after an update may need a backup of `./data`.
 

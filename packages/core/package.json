@@ -1,17 +1,17 @@
 {
-  "name": "@obtion/core",
-  "description": "Data model, index, queries, search, setup, sync protocol and translations – no UI, no platform APIs",
-  "type": "module",
-  "private": true,
-  "license": "AGPL-3.0-or-later",
-  "exports": {
-    "./locales/*": "./locales/*",
-    "./*": "./src/*.ts"
-  },
-  "dependencies": {
-    "diff": "^9.0.0",
-    "intl-messageformat": "^12.1.5",
-    "minisearch": "^7.2.0",
-    "yjs": "^13.6.33"
-  }
+	"name": "@obtion/core",
+	"private": true,
+	"description": "Data model, index, queries, search, setup, sync protocol and translations – no UI, no platform APIs",
+	"license": "AGPL-3.0-or-later",
+	"type": "module",
+	"exports": {
+		"./locales/*": "./locales/*",
+		"./*": "./src/*.ts"
+	},
+	"dependencies": {
+		"diff": "^9.0.0",
+		"intl-messageformat": "^12.1.5",
+		"minisearch": "^7.2.0",
+		"yjs": "^13.6.33"
+	}
 }

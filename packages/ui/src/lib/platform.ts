@@ -4,10 +4,10 @@ export const MOD = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAg
 
 /** "⌘J" on Apple devices, "Ctrl J" elsewhere (in the language's own name for the key). */
 export function shortcut(key: string, lang: Lang): string {
-  return MOD === "⌘" ? `⌘${key}` : `${modName(lang)} ${key}`;
+	return MOD === "⌘" ? `⌘${key}` : `${modName(lang)} ${key}`;
 }
 export function modName(lang: Lang): string {
-  return MOD === "⌘" ? "⌘" : translate(lang, "key.ctrl");
+	return MOD === "⌘" ? "⌘" : translate(lang, "key.ctrl");
 }
 
 /** Below Tailwind `md`. */

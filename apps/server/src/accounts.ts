@@ -4,13 +4,21 @@
 import { Database } from "bun:sqlite";
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { passkey } from "@better-auth/passkey";
+import type {
+	InviteLink,
+	Member,
+	Role,
+	SignedIn,
+	SignupPolicy,
+	User,
+	WorkspaceInfo,
+} from "@obtion/core/api";
+import { newId } from "@obtion/core/model";
 import { betterAuth } from "better-auth";
 import { APIError } from "better-auth/api";
-import { bearer, emailOTP, genericOAuth } from "better-auth/plugins";
-import { passkey } from "@better-auth/passkey";
 import { getMigrations } from "better-auth/db/migration";
-import { newId } from "@obtion/core/model";
-import type { InviteLink, Member, Role, SignedIn, SignupPolicy, User, WorkspaceInfo } from "@obtion/core/api";
+import { bearer, emailOTP, genericOAuth } from "better-auth/plugins";
 import { sha256 } from "./blobs";
 import type { LoginConfig } from "./login";
 import { migrate } from "./migrate";
@@ -24,35 +32,43 @@ export const FRESH_SECONDS = 10 * 60;
  */
 export const SIGNUP_COOKIE = "obtion_signup";
 interface SignupContext {
-  invite?: string;
-  /** language of the code email */
-  lang?: string;
+	invite?: string;
+	/** language of the code email */
+	lang?: string;
 }
 
 function signupContext(headers: Headers | undefined): SignupContext {
-  const raw = headers?.get("cookie")?.split(";").map((c) => c.trim()).find((c) => c.startsWith(SIGNUP_COOKIE + "="));
-  if (!raw) return {};
-  try {
-    const parsed = JSON.parse(decodeURIComponent(raw.slice(SIGNUP_COOKIE.length + 1))) as Record<string, unknown>;
-    const str = (x: unknown) => (typeof x === "string" && x.length < 200 ? x : undefined);
-    return { invite: str(parsed.invite), lang: str(parsed.lang) };
-  } catch {
-    return {};
-  }
+	const raw = headers
+		?.get("cookie")
+		?.split(";")
+		.map((c) => c.trim())
+		.find((c) => c.startsWith(SIGNUP_COOKIE + "="));
+	if (!raw) return {};
+	try {
+		const parsed = JSON.parse(decodeURIComponent(raw.slice(SIGNUP_COOKIE.length + 1))) as Record<
+			string,
+			unknown
+		>;
+		const str = (x: unknown) => (typeof x === "string" && x.length < 200 ? x : undefined);
+		return { invite: str(parsed.invite), lang: str(parsed.lang) };
+	} catch {
+		return {};
+	}
 }
 
-const signupHeaders = (c: SignupContext) => new Headers({ cookie: `${SIGNUP_COOKIE}=${encodeURIComponent(JSON.stringify(c))}` });
+const signupHeaders = (c: SignupContext) =>
+	new Headers({ cookie: `${SIGNUP_COOKIE}=${encodeURIComponent(JSON.stringify(c))}` });
 
 const MAX_WORKSPACE_NAME = 80;
 const workspaceName = (name: string) => name.trim().slice(0, MAX_WORKSPACE_NAME);
 
 export class AccountError extends Error {
-  constructor(
-    message: string,
-    public status = 400,
-  ) {
-    super(message);
-  }
+	constructor(
+		message: string,
+		public status = 400,
+	) {
+		super(message);
+	}
 }
 
 const INVITE_DAYS = 14;
@@ -62,450 +78,604 @@ const CLAIM_TTL_MS = 60_000;
 const publicUser = (u: User): User => ({ id: u.id, name: u.name, email: u.email });
 
 /** Better Auth's length limits, as the signup page shows them. */
-function checkPasswordLength(password: string, config: { minPasswordLength: number; maxPasswordLength: number }) {
-  if (password.length < config.minPasswordLength) throw new AccountError("password too short");
-  if (password.length > config.maxPasswordLength) throw new AccountError("password too long");
+function checkPasswordLength(
+	password: string,
+	config: { minPasswordLength: number; maxPasswordLength: number },
+) {
+	if (password.length < config.minPasswordLength) throw new AccountError("password too short");
+	if (password.length > config.maxPasswordLength) throw new AccountError("password too long");
 }
 
-export const randomToken = () => Buffer.from(crypto.getRandomValues(new Uint8Array(24))).toString("base64url");
+export const randomToken = () =>
+	Buffer.from(crypto.getRandomValues(new Uint8Array(24))).toString("base64url");
 
 export class Accounts {
-  db: Database;
-  auth: ReturnType<typeof makeAuth>;
+	db: Database;
+	auth: ReturnType<typeof makeAuth>;
 
-  constructor(
-    public dataDir: string,
-    opts: { secret: string; baseURL: string; policy: SignupPolicy; login?: LoginConfig; onRevoke?: (user: string) => void },
-  ) {
-    mkdirSync(join(dataDir, "workspaces"), { recursive: true });
-    this.db = new Database(join(dataDir, "accounts.db"));
-    this.db.exec("PRAGMA journal_mode = WAL;");
-    this.policy = opts.policy;
-    this.login = opts.login ?? { password: true, oauth: [] };
-    this.onRevoke = opts.onRevoke ?? (() => {});
-    this.auth = makeAuth(this, opts.secret, opts.baseURL);
-    // Better Auth's own tables come from its migrations (init); these are ours
-    migrate(this.db, [
-      `CREATE TABLE IF NOT EXISTS workspaces (id TEXT PRIMARY KEY, name TEXT NOT NULL, created INTEGER NOT NULL);
+	constructor(
+		public dataDir: string,
+		opts: {
+			secret: string;
+			baseURL: string;
+			policy: SignupPolicy;
+			login?: LoginConfig;
+			onRevoke?: (user: string) => void;
+		},
+	) {
+		mkdirSync(join(dataDir, "workspaces"), { recursive: true });
+		this.db = new Database(join(dataDir, "accounts.db"));
+		this.db.exec("PRAGMA journal_mode = WAL;");
+		this.policy = opts.policy;
+		this.login = opts.login ?? { password: true, oauth: [] };
+		this.onRevoke = opts.onRevoke ?? (() => {});
+		this.auth = makeAuth(this, opts.secret, opts.baseURL);
+		// Better Auth's own tables come from its migrations (init); these are ours
+		migrate(this.db, [
+			`CREATE TABLE IF NOT EXISTS workspaces (id TEXT PRIMARY KEY, name TEXT NOT NULL, created INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS members (workspace TEXT NOT NULL, user TEXT NOT NULL, role TEXT NOT NULL, joined INTEGER NOT NULL, pos INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (workspace, user));
       CREATE INDEX IF NOT EXISTS members_user ON members(user);
       CREATE TABLE IF NOT EXISTS invites (code TEXT PRIMARY KEY, workspace TEXT NOT NULL, by TEXT NOT NULL, created INTEGER NOT NULL, expires INTEGER NOT NULL, role TEXT NOT NULL DEFAULT 'member');
       CREATE TABLE IF NOT EXISTS tokens (hash TEXT PRIMARY KEY, user TEXT NOT NULL, workspace TEXT NOT NULL, label TEXT, created INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS admins (user TEXT PRIMARY KEY);`,
-    ]);
-  }
+		]);
+	}
 
-  policy: SignupPolicy;
-  login: LoginConfig;
-  /**
-   * Invite codes a signup is using right now. Until that account has joined, nobody else gets in
-   * with the link. Checked before Better Auth starts: it shares this connection, and a signup failing
-   * inside its transaction would roll back the other one's join too.
-   */
-  private claims = new Map<string, { email: string; since: number }>();
+	policy: SignupPolicy;
+	login: LoginConfig;
+	/**
+	 * Invite codes a signup is using right now. Until that account has joined, nobody else gets in
+	 * with the link. Checked before Better Auth starts: it shares this connection, and a signup failing
+	 * inside its transaction would roll back the other one's join too.
+	 */
+	private claims = new Map<string, { email: string; since: number }>();
 
-  /** Someone else proved the user's address: close what is open. */
-  onRevoke: (user: string) => void;
+	/** Someone else proved the user's address: close what is open. */
+	onRevoke: (user: string) => void;
 
-  async init() {
-    const { runMigrations } = await getMigrations(this.auth.options);
-    await runMigrations();
-  }
+	async init() {
+		const { runMigrations } = await getMigrations(this.auth.options);
+		await runMigrations();
+	}
 
-  dir(id: string) {
-    return join(this.dataDir, "workspaces", id);
-  }
+	dir(id: string) {
+		return join(this.dataDir, "workspaces", id);
+	}
 
-  exists(id: string): boolean {
-    return /^[\w-]{1,40}$/.test(id) && !!this.db.query("SELECT 1 FROM workspaces WHERE id = ?").get(id) && existsSync(this.dir(id));
-  }
+	exists(id: string): boolean {
+		return (
+			/^[\w-]{1,40}$/.test(id) &&
+			!!this.db.query("SELECT 1 FROM workspaces WHERE id = ?").get(id) &&
+			existsSync(this.dir(id))
+		);
+	}
 
-  /** Cookies are never looked at: a request without the token cannot be one the user meant, whatever site sent it. */
-  async userOf(token: string | null | undefined): Promise<User | null> {
-    return (await this.session(token))?.user ?? null;
-  }
+	/** Cookies are never looked at: a request without the token cannot be one the user meant, whatever site sent it. */
+	async userOf(token: string | null | undefined): Promise<User | null> {
+		return (await this.session(token))?.user ?? null;
+	}
 
-  userCount(): number {
-    return (this.db.query('SELECT count(*) AS n FROM "user"').get() as { n: number }).n;
-  }
+	userCount(): number {
+		return (this.db.query('SELECT count(*) AS n FROM "user"').get() as { n: number }).n;
+	}
 
-  /** The first account is the admin; no right depends on it yet. */
-  isAdmin(user: string): boolean {
-    return !!this.db.query("SELECT 1 FROM admins WHERE user = ?").get(user);
-  }
+	/** The first account is the admin; no right depends on it yet. */
+	isAdmin(user: string): boolean {
+		return !!this.db.query("SELECT 1 FROM admins WHERE user = ?").get(user);
+	}
 
-  canSignUp(invite?: string, email?: string): boolean {
-    if (this.userCount() === 0 || this.policy === "open") return true;
-    return this.policy === "invite" && !!invite && !!this.invite(invite) && !this.claimedByOther(invite, email);
-  }
+	canSignUp(invite?: string, email?: string): boolean {
+		if (this.userCount() === 0 || this.policy === "open") return true;
+		return (
+			this.policy === "invite" &&
+			!!invite &&
+			!!this.invite(invite) &&
+			!this.claimedByOther(invite, email)
+		);
+	}
 
-  /** Better Auth hook before it creates a user by any method. */
-  allowNewUser(email: string, headers: Headers | undefined) {
-    const { invite } = signupContext(headers);
-    // the code sends an OAuth sign-in back to the page as ?signin=failed&error=signup_closed
-    if (!this.canSignUp(invite, email)) throw new APIError("FORBIDDEN", invite ? { message: "invite invalid", code: "invite_invalid" } : { message: "signup closed", code: "signup_closed" });
-    // a password signup has claimed it already; OAuth and codes arrive here directly
-    if (invite) this.hold(invite, email);
-  }
+	/** Better Auth hook before it creates a user by any method. */
+	allowNewUser(email: string, headers: Headers | undefined) {
+		const { invite } = signupContext(headers);
+		// the code sends an OAuth sign-in back to the page as ?signin=failed&error=signup_closed
+		if (!this.canSignUp(invite, email))
+			throw new APIError(
+				"FORBIDDEN",
+				invite
+					? { message: "invite invalid", code: "invite_invalid" }
+					: { message: "signup closed", code: "signup_closed" },
+			);
+		// a password signup has claimed it already; OAuth and codes arrive here directly
+		if (invite) this.hold(invite, email);
+	}
 
-  /** For signups through our own routes, before Better Auth sees them. */
-  private checkPasswordSignup(invite: string | undefined, email: string) {
-    if (!this.login.password) throw new AccountError("passwords off", 403);
-    if (!this.canSignUp(invite, email)) throw new AccountError(invite ? "invite invalid" : "signup closed", 403);
-  }
+	/** For signups through our own routes, before Better Auth sees them. */
+	private checkPasswordSignup(invite: string | undefined, email: string) {
+		if (!this.login.password) throw new AccountError("passwords off", 403);
+		if (!this.canSignUp(invite, email))
+			throw new AccountError(invite ? "invite invalid" : "signup closed", 403);
+	}
 
-  private claimant(code: string): string | undefined {
-    const c = this.claims.get(code);
-    if (c && Date.now() - c.since > CLAIM_TTL_MS) this.claims.delete(code);
-    return this.claims.get(code)?.email;
-  }
+	private claimant(code: string): string | undefined {
+		const c = this.claims.get(code);
+		if (c && Date.now() - c.since > CLAIM_TTL_MS) this.claims.delete(code);
+		return this.claims.get(code)?.email;
+	}
 
-  private claimedByOther(code: string, email?: string): boolean {
-    const by = this.claimant(code);
-    return !!by && by !== email?.trim().toLowerCase();
-  }
+	private claimedByOther(code: string, email?: string): boolean {
+		const by = this.claimant(code);
+		return !!by && by !== email?.trim().toLowerCase();
+	}
 
-  /** False if someone else holds it. */
-  private hold(code: string, email: string): boolean {
-    if (this.claimedByOther(code, email)) return false;
-    this.claims.set(code, { email: email.trim().toLowerCase(), since: Date.now() });
-    return true;
-  }
+	/** False if someone else holds it. */
+	private hold(code: string, email: string): boolean {
+		if (this.claimedByOther(code, email)) return false;
+		this.claims.set(code, { email: email.trim().toLowerCase(), since: Date.now() });
+		return true;
+	}
 
-  private release(code: string | undefined, email: string) {
-    if (code && !this.claimedByOther(code, email)) this.claims.delete(code);
-  }
+	private release(code: string | undefined, email: string) {
+		if (code && !this.claimedByOther(code, email)) this.claims.delete(code);
+	}
 
-  /** Drops a link someone else holds when signup is open; otherwise throws. */
-  private signupInvite(invite: string | undefined, email: string): string | undefined {
-    if (!invite || this.hold(invite, email)) return invite;
-    if (this.policy === "open") return undefined;
-    throw new AccountError("invite invalid", 403);
-  }
+	/** Drops a link someone else holds when signup is open; otherwise throws. */
+	private signupInvite(invite: string | undefined, email: string): string | undefined {
+		if (!invite || this.hold(invite, email)) return invite;
+		if (this.policy === "open") return undefined;
+		throw new AccountError("invite invalid", 403);
+	}
 
-  /** Better Auth hook after it created a user. The very first account becomes admin. */
-  setUpNewUser(id: string, email: string, headers: Headers | undefined) {
-    const { invite } = signupContext(headers);
-    if (this.userCount() === 1) this.db.query("INSERT OR IGNORE INTO admins (user) VALUES (?)").run(id);
-    if (invite && this.invite(invite) && this.claimant(invite) === email.toLowerCase()) {
-      this.release(invite, email);
-      this.join(invite, id);
-    }
-  }
+	/** Better Auth hook after it created a user. The very first account becomes admin. */
+	setUpNewUser(id: string, email: string, headers: Headers | undefined) {
+		const { invite } = signupContext(headers);
+		if (this.userCount() === 1)
+			this.db.query("INSERT OR IGNORE INTO admins (user) VALUES (?)").run(id);
+		if (invite && this.invite(invite) && this.claimant(invite) === email.toLowerCase()) {
+			this.release(invite, email);
+			this.join(invite, id);
+		}
+	}
 
-  async signUp(body: { name: string; email: string; password: string; invite?: string }): Promise<SignedIn> {
-    this.checkPasswordSignup(body.invite, body.email);
-    const invite = this.signupInvite(body.invite, body.email);
-    const res = await this.auth.api
-      .signUpEmail({ body: { name: body.name.trim() || body.email.split("@")[0]!, email: body.email.trim(), password: body.password }, headers: signupHeaders({ invite }) })
-      .catch((e) => {
-        this.release(invite, body.email);
-        throw new AccountError(e?.body?.message ?? e?.message ?? "signup failed", e?.statusCode === 422 ? 409 : (e?.statusCode ?? 400));
-      });
-    return { token: res.token!, user: publicUser(res.user) };
-  }
+	async signUp(body: {
+		name: string;
+		email: string;
+		password: string;
+		invite?: string;
+	}): Promise<SignedIn> {
+		this.checkPasswordSignup(body.invite, body.email);
+		const invite = this.signupInvite(body.invite, body.email);
+		const res = await this.auth.api
+			.signUpEmail({
+				body: {
+					name: body.name.trim() || body.email.split("@")[0]!,
+					email: body.email.trim(),
+					password: body.password,
+				},
+				headers: signupHeaders({ invite }),
+			})
+			.catch((e) => {
+				this.release(invite, body.email);
+				throw new AccountError(
+					e?.body?.message ?? e?.message ?? "signup failed",
+					e?.statusCode === 422 ? 409 : (e?.statusCode ?? 400),
+				);
+			});
+		return { token: res.token!, user: publicUser(res.user) };
+	}
 
-  /**
-   * Password signup where codes are on: the account proves its address first, so nobody can take
-   * someone else's. Without `code` this only validates; the page then requests a code through Better
-   * Auth's rate-limited route. With it the code creates the account, then it gets the password.
-   */
-  async signUpWithCode(body: { name: string; email: string; password: string; invite?: string; lang?: string; code?: string }): Promise<SignedIn | { verify: true }> {
-    this.checkPasswordSignup(body.invite, body.email);
-    const ctx = await this.auth.$context;
-    const email = body.email.trim().toLowerCase();
-    checkPasswordLength(body.password, ctx.password.config);
-    if (await ctx.internalAdapter.findUserByEmail(email)) throw new AccountError("exists", 409);
-    if (!body.code) return { verify: true };
-    const invite = this.signupInvite(body.invite, email);
-    const res = await this.auth.api
-      .signInEmailOTP({ body: { email, otp: body.code.trim(), name: body.name.trim() || email.split("@")[0]! }, headers: signupHeaders({ invite, lang: body.lang }) })
-      .catch((e) => {
-        this.release(invite, email);
-        throw new AccountError(e?.body?.code === "INVALID_OTP" || e?.statusCode === 400 ? "invalid code" : (e?.body?.message ?? e?.message ?? "signup failed"), e?.statusCode ?? 400);
-      });
-    // a password set meanwhile by another way stays
-    if (!(await ctx.internalAdapter.findCredentialAccount(res.user.id)))
-      await ctx.internalAdapter.linkAccount({ userId: res.user.id, providerId: "credential", accountId: res.user.id, password: await ctx.password.hash(body.password) });
-    return { token: res.token, user: publicUser(res.user) };
-  }
+	/**
+	 * Password signup where codes are on: the account proves its address first, so nobody can take
+	 * someone else's. Without `code` this only validates; the page then requests a code through Better
+	 * Auth's rate-limited route. With it the code creates the account, then it gets the password.
+	 */
+	async signUpWithCode(body: {
+		name: string;
+		email: string;
+		password: string;
+		invite?: string;
+		lang?: string;
+		code?: string;
+	}): Promise<SignedIn | { verify: true }> {
+		this.checkPasswordSignup(body.invite, body.email);
+		const ctx = await this.auth.$context;
+		const email = body.email.trim().toLowerCase();
+		checkPasswordLength(body.password, ctx.password.config);
+		if (await ctx.internalAdapter.findUserByEmail(email)) throw new AccountError("exists", 409);
+		if (!body.code) return { verify: true };
+		const invite = this.signupInvite(body.invite, email);
+		const res = await this.auth.api
+			.signInEmailOTP({
+				body: { email, otp: body.code.trim(), name: body.name.trim() || email.split("@")[0]! },
+				headers: signupHeaders({ invite, lang: body.lang }),
+			})
+			.catch((e) => {
+				this.release(invite, email);
+				throw new AccountError(
+					e?.body?.code === "INVALID_OTP" || e?.statusCode === 400
+						? "invalid code"
+						: (e?.body?.message ?? e?.message ?? "signup failed"),
+					e?.statusCode ?? 400,
+				);
+			});
+		// a password set meanwhile by another way stays
+		if (!(await ctx.internalAdapter.findCredentialAccount(res.user.id)))
+			await ctx.internalAdapter.linkAccount({
+				userId: res.user.id,
+				providerId: "credential",
+				accountId: res.user.id,
+				password: await ctx.password.hash(body.password),
+			});
+		return { token: res.token, user: publicUser(res.user) };
+	}
 
-  /** `created` is for actions that need a recent sign-in. */
-  async session(token: string | null | undefined) {
-    if (!token) return null;
-    const s = await this.auth.api.getSession({ headers: new Headers({ authorization: `Bearer ${token}` }) }).catch(() => null);
-    return s ? { user: publicUser(s.user), created: new Date(s.session.createdAt).getTime() } : null;
-  }
+	/** `created` is for actions that need a recent sign-in. */
+	async session(token: string | null | undefined) {
+		if (!token) return null;
+		const s = await this.auth.api
+			.getSession({ headers: new Headers({ authorization: `Bearer ${token}` }) })
+			.catch(() => null);
+		return s
+			? { user: publicUser(s.user), created: new Date(s.session.createdAt).getTime() }
+			: null;
+	}
 
-  /** Trades the session an OAuth sign-in left in a cookie for a token the app keeps. */
-  async claim(headers: Headers): Promise<SignedIn | null> {
-    const cookieOnly = new Headers({ cookie: headers.get("cookie") ?? "" });
-    const s = await this.auth.api.getSession({ headers: cookieOnly }).catch(() => null);
-    return s ? { token: s.session.token, user: publicUser(s.user) } : null;
-  }
+	/** Trades the session an OAuth sign-in left in a cookie for a token the app keeps. */
+	async claim(headers: Headers): Promise<SignedIn | null> {
+		const cookieOnly = new Headers({ cookie: headers.get("cookie") ?? "" });
+		const s = await this.auth.api.getSession({ headers: cookieOnly }).catch(() => null);
+		return s ? { token: s.session.token, user: publicUser(s.user) } : null;
+	}
 
-  async hasPassword(user: string): Promise<boolean> {
-    const ctx = await this.auth.$context;
-    return !!(await ctx.internalAdapter.findCredentialAccount(user))?.password;
-  }
+	async hasPassword(user: string): Promise<boolean> {
+		const ctx = await this.auth.$context;
+		return !!(await ctx.internalAdapter.findCredentialAccount(user))?.password;
+	}
 
-  async signOut(token: string) {
-    const ctx = await this.auth.$context;
-    await ctx.internalAdapter.deleteSession(token);
-  }
+	async signOut(token: string) {
+		const ctx = await this.auth.$context;
+		await ctx.internalAdapter.deleteSession(token);
+	}
 
-  /** Ends every other session (other devices, a stolen token); `keep` stays. */
-  async changePassword(user: string, keep: string, current: string, next: string) {
-    const ctx = await this.auth.$context;
-    await this.verifyPassword(user, current);
-    checkPasswordLength(next, ctx.password.config);
-    await ctx.internalAdapter.updatePassword(user, await ctx.password.hash(next));
-    this.db.query('DELETE FROM "session" WHERE userId = ? AND token != ?').run(user, keep);
-  }
+	/** Ends every other session (other devices, a stolen token); `keep` stays. */
+	async changePassword(user: string, keep: string, current: string, next: string) {
+		const ctx = await this.auth.$context;
+		await this.verifyPassword(user, current);
+		checkPasswordLength(next, ctx.password.config);
+		await ctx.internalAdapter.updatePassword(user, await ctx.password.hash(next));
+		this.db.query('DELETE FROM "session" WHERE userId = ? AND token != ?').run(user, keep);
+	}
 
-  private async verifyPassword(user: string, password: string) {
-    if (!password || password.length > 1024) throw new AccountError("invalid password", 403);
-    const ctx = await this.auth.$context;
-    const credential = await ctx.internalAdapter.findCredentialAccount(user);
-    if (!credential?.password || !(await ctx.password.verify({ hash: credential.password, password })))
-      throw new AccountError("invalid password", 403);
-  }
+	private async verifyPassword(user: string, password: string) {
+		if (!password || password.length > 1024) throw new AccountError("invalid password", 403);
+		const ctx = await this.auth.$context;
+		const credential = await ctx.internalAdapter.findCredentialAccount(user);
+		if (
+			!credential?.password ||
+			!(await ctx.password.verify({ hash: credential.password, password }))
+		)
+			throw new AccountError("invalid password", 403);
+	}
 
-  /**
-   * Proof is the password, or for accounts without one a recent sign-in. Workspaces must keep an
-   * owner and are not deleted.
-   */
-  async deleteAccount(user: string, password: string | undefined, signedInAt = 0) {
-    if (password !== undefined) await this.verifyPassword(user, password);
-    else if (Date.now() - signedInAt > FRESH_SECONDS * 1000) throw new AccountError("sign in again", 403);
-    this.db.transaction(() => {
-      for (const w of this.workspacesOf(user)) if (this.isLastOwner(w.id, user)) throw new AccountError("last owner", 409);
-      for (const table of ["members", "tokens", "admins"]) this.db.query(`DELETE FROM ${table} WHERE user = ?`).run(user);
-      this.db.query('DELETE FROM invites WHERE "by" = ?').run(user);
-      // Better Auth's database-backed sessions and credentials have no secondary cache here.
-      for (const table of ["session", "account", "passkey"]) this.db.query(`DELETE FROM "${table}" WHERE userId = ?`).run(user);
-      this.db.query('DELETE FROM "user" WHERE id = ?').run(user);
-    })();
-  }
+	/**
+	 * Proof is the password, or for accounts without one a recent sign-in. Workspaces must keep an
+	 * owner and are not deleted.
+	 */
+	async deleteAccount(user: string, password: string | undefined, signedInAt = 0) {
+		if (password !== undefined) await this.verifyPassword(user, password);
+		else if (Date.now() - signedInAt > FRESH_SECONDS * 1000)
+			throw new AccountError("sign in again", 403);
+		this.db.transaction(() => {
+			for (const w of this.workspacesOf(user))
+				if (this.isLastOwner(w.id, user)) throw new AccountError("last owner", 409);
+			for (const table of ["members", "tokens", "admins"])
+				this.db.query(`DELETE FROM ${table} WHERE user = ?`).run(user);
+			this.db.query('DELETE FROM invites WHERE "by" = ?').run(user);
+			// Better Auth's database-backed sessions and credentials have no secondary cache here.
+			for (const table of ["session", "account", "passkey"])
+				this.db.query(`DELETE FROM "${table}" WHERE userId = ?`).run(user);
+			this.db.query('DELETE FROM "user" WHERE id = ?').run(user);
+		})();
+	}
 
-  workspacesOf(user: string): WorkspaceInfo[] {
-    return this.db.query("SELECT w.id, w.name, m.role FROM members m JOIN workspaces w ON w.id = m.workspace WHERE m.user = ? ORDER BY m.pos, m.joined DESC").all(user) as WorkspaceInfo[];
-  }
+	workspacesOf(user: string): WorkspaceInfo[] {
+		return this.db
+			.query(
+				"SELECT w.id, w.name, m.role FROM members m JOIN workspaces w ON w.id = m.workspace WHERE m.user = ? ORDER BY m.pos, m.joined DESC",
+			)
+			.all(user) as WorkspaceInfo[];
+	}
 
-  role(workspace: string, user: string): Role | undefined {
-    return (this.db.query("SELECT role FROM members WHERE workspace = ? AND user = ?").get(workspace, user) as { role: Role } | null)?.role;
-  }
+	role(workspace: string, user: string): Role | undefined {
+		return (
+			this.db
+				.query("SELECT role FROM members WHERE workspace = ? AND user = ?")
+				.get(workspace, user) as { role: Role } | null
+		)?.role;
+	}
 
-  createWorkspace(user: string, name: string): WorkspaceInfo {
-    const id = newId();
-    const clean = workspaceName(name) || "Workspace";
-    mkdirSync(this.dir(id), { recursive: true });
-    this.db.query("INSERT INTO workspaces (id, name, created) VALUES (?, ?, ?)").run(id, clean, Date.now());
-    this.addMember(id, user, "owner");
-    return { id, name: clean, role: "owner" };
-  }
+	createWorkspace(user: string, name: string): WorkspaceInfo {
+		const id = newId();
+		const clean = workspaceName(name) || "Workspace";
+		mkdirSync(this.dir(id), { recursive: true });
+		this.db
+			.query("INSERT INTO workspaces (id, name, created) VALUES (?, ?, ?)")
+			.run(id, clean, Date.now());
+		this.addMember(id, user, "owner");
+		return { id, name: clean, role: "owner" };
+	}
 
-  rename(workspace: string, user: string, name: string) {
-    this.requireOwner(workspace, user, "only owners rename");
-    const clean = workspaceName(name);
-    if (!clean) throw new AccountError("name required");
-    this.db.query("UPDATE workspaces SET name = ? WHERE id = ?").run(clean, workspace);
-  }
+	rename(workspace: string, user: string, name: string) {
+		this.requireOwner(workspace, user, "only owners rename");
+		const clean = workspaceName(name);
+		if (!clean) throw new AccountError("name required");
+		this.db.query("UPDATE workspaces SET name = ? WHERE id = ?").run(clean, workspace);
+	}
 
-  /** Removes the folder too; close the workspace first. */
-  deleteWorkspace(workspace: string, by: string) {
-    this.requireOwner(workspace, by, "only owners delete");
-    for (const table of ["members", "invites", "tokens"]) this.db.query(`DELETE FROM ${table} WHERE workspace = ?`).run(workspace);
-    this.db.query("DELETE FROM workspaces WHERE id = ?").run(workspace);
-    rmSync(this.dir(workspace), { recursive: true, force: true });
-  }
+	/** Removes the folder too; close the workspace first. */
+	deleteWorkspace(workspace: string, by: string) {
+		this.requireOwner(workspace, by, "only owners delete");
+		for (const table of ["members", "invites", "tokens"])
+			this.db.query(`DELETE FROM ${table} WHERE workspace = ?`).run(workspace);
+		this.db.query("DELETE FROM workspaces WHERE id = ?").run(workspace);
+		rmSync(this.dir(workspace), { recursive: true, force: true });
+	}
 
-  /**
-   * The user's own order of their workspaces: `ids` in this order. Ones the list leaves out (joined
-   * since the list was made) stay on top, as new ones are.
-   */
-  reorder(user: string, ids: string[]) {
-    const current = this.workspacesOf(user).map((w) => w.id);
-    const order = [...current.filter((id) => !ids.includes(id)), ...ids.filter((id) => current.includes(id))];
-    const set = this.db.query("UPDATE members SET pos = ? WHERE workspace = ? AND user = ?");
-    this.db.transaction(() => order.forEach((id, i) => set.run(i, id, user)))();
-  }
+	/**
+	 * The user's own order of their workspaces: `ids` in this order. Ones the list leaves out (joined
+	 * since the list was made) stay on top, as new ones are.
+	 */
+	reorder(user: string, ids: string[]) {
+		const current = this.workspacesOf(user).map((w) => w.id);
+		const order = [
+			...current.filter((id) => !ids.includes(id)),
+			...ids.filter((id) => current.includes(id)),
+		];
+		const set = this.db.query("UPDATE members SET pos = ? WHERE workspace = ? AND user = ?");
+		this.db.transaction(() => order.forEach((id, i) => set.run(i, id, user)))();
+	}
 
-  /** A new member; the workspace comes first in their order. */
-  private addMember(workspace: string, user: string, role: Role) {
-    this.db
-      .query("INSERT OR IGNORE INTO members (workspace, user, role, joined, pos) VALUES (?, ?, ?, ?, (SELECT COALESCE(MIN(pos), 1) - 1 FROM members WHERE user = ?))")
-      .run(workspace, user, role, Date.now(), user);
-  }
+	/** A new member; the workspace comes first in their order. */
+	private addMember(workspace: string, user: string, role: Role) {
+		this.db
+			.query(
+				"INSERT OR IGNORE INTO members (workspace, user, role, joined, pos) VALUES (?, ?, ?, ?, (SELECT COALESCE(MIN(pos), 1) - 1 FROM members WHERE user = ?))",
+			)
+			.run(workspace, user, role, Date.now(), user);
+	}
 
-  members(workspace: string): Member[] {
-    return this.db.query('SELECT u.id, u.name, u.email, m.role FROM members m JOIN "user" u ON u.id = m.user WHERE m.workspace = ? ORDER BY m.joined').all(workspace) as Member[];
-  }
+	members(workspace: string): Member[] {
+		return this.db
+			.query(
+				'SELECT u.id, u.name, u.email, m.role FROM members m JOIN "user" u ON u.id = m.user WHERE m.workspace = ? ORDER BY m.joined',
+			)
+			.all(workspace) as Member[];
+	}
 
-  private isLastOwner(workspace: string, user: string) {
-    const owners = this.members(workspace).filter((m) => m.role === "owner");
-    return owners.length === 1 && owners[0]!.id === user;
-  }
+	private isLastOwner(workspace: string, user: string) {
+		const owners = this.members(workspace).filter((m) => m.role === "owner");
+		return owners.length === 1 && owners[0]!.id === user;
+	}
 
-  /** Their agent tokens and invite links go with them. Closing their connections is up to the caller. */
-  removeMember(workspace: string, by: string, user: string) {
-    const byRole = this.role(workspace, by);
-    if (!byRole || (by !== user && byRole !== "owner")) throw new AccountError("not allowed", 403);
-    if (!this.role(workspace, user)) throw new AccountError("not a member", 404);
-    if (this.isLastOwner(workspace, user)) throw new AccountError("last owner", 409);
-    this.db.transaction(() => {
-      this.db.query("DELETE FROM members WHERE workspace = ? AND user = ?").run(workspace, user);
-      this.db.query("DELETE FROM tokens WHERE workspace = ? AND user = ?").run(workspace, user);
-      this.db.query('DELETE FROM invites WHERE workspace = ? AND "by" = ?').run(workspace, user);
-    })();
-  }
+	/** Their agent tokens and invite links go with them. Closing their connections is up to the caller. */
+	removeMember(workspace: string, by: string, user: string) {
+		const byRole = this.role(workspace, by);
+		if (!byRole || (by !== user && byRole !== "owner")) throw new AccountError("not allowed", 403);
+		if (!this.role(workspace, user)) throw new AccountError("not a member", 404);
+		if (this.isLastOwner(workspace, user)) throw new AccountError("last owner", 409);
+		this.db.transaction(() => {
+			this.db.query("DELETE FROM members WHERE workspace = ? AND user = ?").run(workspace, user);
+			this.db.query("DELETE FROM tokens WHERE workspace = ? AND user = ?").run(workspace, user);
+			this.db.query('DELETE FROM invites WHERE workspace = ? AND "by" = ?').run(workspace, user);
+		})();
+	}
 
-  private requireOwner(workspace: string, user: string, message: string) {
-    if (this.role(workspace, user) !== "owner") throw new AccountError(message, 403);
-  }
+	private requireOwner(workspace: string, user: string, message: string) {
+		if (this.role(workspace, user) !== "owner") throw new AccountError(message, 403);
+	}
 
-  setRole(workspace: string, by: string, user: string, role: Role) {
-    this.requireOwner(workspace, by, "only owners change roles");
-    const now = this.role(workspace, user);
-    if (!now) throw new AccountError("not a member", 404);
-    if (now === role) return;
-    if (role === "member" && this.isLastOwner(workspace, user)) throw new AccountError("last owner", 409);
-    this.db.query("UPDATE members SET role = ? WHERE workspace = ? AND user = ?").run(role, workspace, user);
-  }
+	setRole(workspace: string, by: string, user: string, role: Role) {
+		this.requireOwner(workspace, by, "only owners change roles");
+		const now = this.role(workspace, user);
+		if (!now) throw new AccountError("not a member", 404);
+		if (now === role) return;
+		if (role === "member" && this.isLastOwner(workspace, user))
+			throw new AccountError("last owner", 409);
+		this.db
+			.query("UPDATE members SET role = ? WHERE workspace = ? AND user = ?")
+			.run(role, workspace, user);
+	}
 
-  /** Single use, so a link passed on reaches nobody else. */
-  createInvite(workspace: string, by: string, role: Role = "member"): string {
-    this.requireOwner(workspace, by, "only owners invite");
-    const code = randomToken();
-    this.db.query("INSERT INTO invites (code, workspace, by, created, expires, role) VALUES (?, ?, ?, ?, ?, ?)").run(code, workspace, by, Date.now(), Date.now() + INVITE_DAYS * DAY_MS, role);
-    return code;
-  }
+	/** Single use, so a link passed on reaches nobody else. */
+	createInvite(workspace: string, by: string, role: Role = "member"): string {
+		this.requireOwner(workspace, by, "only owners invite");
+		const code = randomToken();
+		this.db
+			.query(
+				"INSERT INTO invites (code, workspace, by, created, expires, role) VALUES (?, ?, ?, ?, ?, ?)",
+			)
+			.run(code, workspace, by, Date.now(), Date.now() + INVITE_DAYS * DAY_MS, role);
+		return code;
+	}
 
-  /** Also deletes expired links. */
-  invites(workspace: string, by: string): InviteLink[] {
-    this.requireOwner(workspace, by, "only owners invite");
-    this.db.query("DELETE FROM invites WHERE workspace = ? AND expires <= ?").run(workspace, Date.now());
-    return this.db.query('SELECT i.code, i.created, i.expires, i.role, coalesce(u.name, \'\') AS by FROM invites i LEFT JOIN "user" u ON u.id = i.by WHERE i.workspace = ? ORDER BY i.created DESC').all(workspace) as InviteLink[];
-  }
+	/** Also deletes expired links. */
+	invites(workspace: string, by: string): InviteLink[] {
+		this.requireOwner(workspace, by, "only owners invite");
+		this.db
+			.query("DELETE FROM invites WHERE workspace = ? AND expires <= ?")
+			.run(workspace, Date.now());
+		return this.db
+			.query(
+				"SELECT i.code, i.created, i.expires, i.role, coalesce(u.name, '') AS by FROM invites i LEFT JOIN \"user\" u ON u.id = i.by WHERE i.workspace = ? ORDER BY i.created DESC",
+			)
+			.all(workspace) as InviteLink[];
+	}
 
-  revokeInvite(workspace: string, by: string, code: string) {
-    this.requireOwner(workspace, by, "only owners invite");
-    if (!this.db.query("DELETE FROM invites WHERE workspace = ? AND code = ?").run(workspace, code).changes) throw new AccountError("invite invalid", 404);
-  }
+	revokeInvite(workspace: string, by: string, code: string) {
+		this.requireOwner(workspace, by, "only owners invite");
+		if (
+			!this.db.query("DELETE FROM invites WHERE workspace = ? AND code = ?").run(workspace, code)
+				.changes
+		)
+			throw new AccountError("invite invalid", 404);
+	}
 
-  invite(code: string): { workspace: string; name: string; by: string; role: Role } | undefined {
-    const row = this.db.query('SELECT i.workspace, w.name, u.name AS by, i.role FROM invites i JOIN workspaces w ON w.id = i.workspace LEFT JOIN "user" u ON u.id = i.by WHERE i.code = ? AND i.expires > ?').get(code, Date.now()) as { workspace: string; name: string; by: string; role: Role } | null;
-    return row ?? undefined;
-  }
+	invite(code: string): { workspace: string; name: string; by: string; role: Role } | undefined {
+		const row = this.db
+			.query(
+				'SELECT i.workspace, w.name, u.name AS by, i.role FROM invites i JOIN workspaces w ON w.id = i.workspace LEFT JOIN "user" u ON u.id = i.by WHERE i.code = ? AND i.expires > ?',
+			)
+			.get(code, Date.now()) as { workspace: string; name: string; by: string; role: Role } | null;
+		return row ?? undefined;
+	}
 
-  /** Someone already in keeps their role, and the link stays for whom it was meant. */
-  join(code: string, user: string): WorkspaceInfo {
-    const inv = this.invite(code);
-    if (!inv || this.claimant(code)) throw new AccountError("invite invalid", 404);
-    if (!this.role(inv.workspace, user))
-      this.db.transaction(() => {
-        this.addMember(inv.workspace, user, inv.role);
-        this.db.query("DELETE FROM invites WHERE code = ?").run(code);
-      })();
-    return this.workspacesOf(user).find((w) => w.id === inv.workspace)!;
-  }
+	/** Someone already in keeps their role, and the link stays for whom it was meant. */
+	join(code: string, user: string): WorkspaceInfo {
+		const inv = this.invite(code);
+		if (!inv || this.claimant(code)) throw new AccountError("invite invalid", 404);
+		if (!this.role(inv.workspace, user))
+			this.db.transaction(() => {
+				this.addMember(inv.workspace, user, inv.role);
+				this.db.query("DELETE FROM invites WHERE code = ?").run(code);
+			})();
+		return this.workspacesOf(user).find((w) => w.id === inv.workspace)!;
+	}
 
-  /** Only the hash is stored, so the token can be shown once. A new one ends the one before. */
-  mcpToken(workspace: string, user: string): string {
-    if (!this.role(workspace, user)) throw new AccountError("not a member", 403);
-    const token = "obt_" + randomToken();
-    this.db.transaction(() => {
-      this.revokeMcpToken(workspace, user);
-      this.db.query("INSERT INTO tokens (hash, user, workspace, label, created) VALUES (?, ?, ?, ?, ?)").run(sha256(token), user, workspace, "mcp", Date.now());
-    })();
-    return token;
-  }
+	/** Only the hash is stored, so the token can be shown once. A new one ends the one before. */
+	mcpToken(workspace: string, user: string): string {
+		if (!this.role(workspace, user)) throw new AccountError("not a member", 403);
+		const token = "obt_" + randomToken();
+		this.db.transaction(() => {
+			this.revokeMcpToken(workspace, user);
+			this.db
+				.query("INSERT INTO tokens (hash, user, workspace, label, created) VALUES (?, ?, ?, ?, ?)")
+				.run(sha256(token), user, workspace, "mcp", Date.now());
+		})();
+		return token;
+	}
 
-  /** When the user's MCP token for this workspace was made; null without one. */
-  mcpTokenCreated(workspace: string, user: string): number | null {
-    const row = this.db.query("SELECT created FROM tokens WHERE workspace = ? AND user = ? AND label = 'mcp'").get(workspace, user) as { created: number } | null;
-    return row?.created ?? null;
-  }
+	/** When the user's MCP token for this workspace was made; null without one. */
+	mcpTokenCreated(workspace: string, user: string): number | null {
+		const row = this.db
+			.query("SELECT created FROM tokens WHERE workspace = ? AND user = ? AND label = 'mcp'")
+			.get(workspace, user) as { created: number } | null;
+		return row?.created ?? null;
+	}
 
-  /** Ends the user's MCP token for this workspace at once. */
-  revokeMcpToken(workspace: string, user: string) {
-    this.db.query("DELETE FROM tokens WHERE workspace = ? AND user = ? AND label = 'mcp'").run(workspace, user);
-  }
+	/** Ends the user's MCP token for this workspace at once. */
+	revokeMcpToken(workspace: string, user: string) {
+		this.db
+			.query("DELETE FROM tokens WHERE workspace = ? AND user = ? AND label = 'mcp'")
+			.run(workspace, user);
+	}
 
-  /** Undefined once the user is no longer a member. */
-  mcpUser(workspace: string, token: string): User | undefined {
-    const row = this.db.query('SELECT u.id, u.name, u.email FROM tokens t JOIN "user" u ON u.id = t.user JOIN members m ON m.workspace = t.workspace AND m.user = t.user WHERE t.hash = ? AND t.workspace = ?').get(sha256(token), workspace) as User | null;
-    return row ?? undefined;
-  }
+	/** Undefined once the user is no longer a member. */
+	mcpUser(workspace: string, token: string): User | undefined {
+		const row = this.db
+			.query(
+				'SELECT u.id, u.name, u.email FROM tokens t JOIN "user" u ON u.id = t.user JOIN members m ON m.workspace = t.workspace AND m.user = t.user WHERE t.hash = ? AND t.workspace = ?',
+			)
+			.get(sha256(token), workspace) as User | null;
+		return row ?? undefined;
+	}
 }
 
 function makeAuth(accounts: Accounts, secret: string, baseURL: string) {
-  const login = accounts.login;
-  const oidc = login.oauth.find((p) => p.id === "oidc");
-  const social = Object.fromEntries(login.oauth.filter((p) => p.id !== "oidc").map((p) => [p.id, { clientId: p.clientId, clientSecret: p.clientSecret }]));
-  return betterAuth({
-    database: accounts.db,
-    secret,
-    baseURL,
-    appName: "Obtion",
-    emailAndPassword: { enabled: login.password, minPasswordLength: 8 },
-    socialProviders: social,
-    // Signing in links on its own only to an address the provider vouches for (email_verified).
-    // Linking in the settings is the user's own choice, so the address may differ; index.ts wants a
-    // fresh sign-in for it.
-    account: { accountLinking: { enabled: true, allowDifferentEmails: true } },
-    // apps stay signed in like a mail app; any use within a day extends it. freshAge keeps a stolen
-    // token from adding a passkey.
-    session: { expiresIn: 60 * 60 * 24 * 365, updateAge: 60 * 60 * 24, freshAge: FRESH_SECONDS },
-    // the app's own page calls /api/auth/*; the server checks the origin itself (index.ts)
-    trustedOrigins: (req) => [req?.headers.get("origin") ?? undefined].filter((o): o is string => !!o),
-    databaseHooks: {
-      user: {
-        create: {
-          before: async (user, ctx) => accounts.allowNewUser(user.email, ctx?.headers),
-          after: async (user, ctx) => accounts.setUpNewUser(user.id, user.email, ctx?.headers),
-        },
-        update: {
-          // A code proves the address of a password account nobody had verified. Better Auth drops
-          // its password and sessions; here goes everything else whoever signed up with that
-          // address may have made to get in.
-          before: async (data, ctx) => {
-            const email = (ctx?.body as { email?: unknown } | undefined)?.email;
-            if (data.emailVerified !== true || typeof email !== "string") return;
-            const user = accounts.db.query<{ id: string }, [string]>('SELECT id FROM "user" WHERE email = ? AND emailVerified = 0').get(email.toLowerCase());
-            if (!user) return;
-            accounts.db.query("DELETE FROM passkey WHERE userId = ?").run(user.id);
-            accounts.db.query("DELETE FROM tokens WHERE user = ?").run(user.id);
-            accounts.db.query('DELETE FROM invites WHERE "by" = ?').run(user.id);
-            accounts.onRevoke(user.id);
-          },
-        },
-      },
-    },
-    plugins: [
-      bearer(),
-      // always registered so its table exists; index.ts hides the routes when passkeys are off
-      passkey({ rpID: login.passkey?.rpID ?? "localhost", rpName: "Obtion", origin: login.passkey?.origin ?? null }),
-      ...(login.sendCode
-        ? [
-            emailOTP({
-              expiresIn: 10 * 60,
-              storeOTP: "hashed",
-              sendVerificationOTP: async ({ email, otp, type }, ctx) => {
-                if (type !== "sign-in") return;
-                // a code for an address without an account only where it may become one
-                const known = !!accounts.db.query('SELECT 1 FROM "user" WHERE email = ?').get(email.toLowerCase());
-                const signup = signupContext(ctx?.headers);
-                if (!known && !accounts.canSignUp(signup.invite, email)) return;
-                await login.sendCode!(email, otp, signup.lang);
-              },
-            }),
-          ]
-        : []),
-      ...(oidc ? [genericOAuth({ config: [{ providerId: "oidc", discoveryUrl: oidc.discoveryUrl!, clientId: oidc.clientId, clientSecret: oidc.clientSecret, scopes: ["openid", "email", "profile"], pkce: true }] })] : []),
-    ],
-    // also outside NODE_ENV=production: a hosted server must not let anyone guess passwords
-    rateLimit: { enabled: true },
-    telemetry: { enabled: false },
-  });
+	const login = accounts.login;
+	const oidc = login.oauth.find((p) => p.id === "oidc");
+	const social = Object.fromEntries(
+		login.oauth
+			.filter((p) => p.id !== "oidc")
+			.map((p) => [p.id, { clientId: p.clientId, clientSecret: p.clientSecret }]),
+	);
+	return betterAuth({
+		database: accounts.db,
+		secret,
+		baseURL,
+		appName: "Obtion",
+		emailAndPassword: { enabled: login.password, minPasswordLength: 8 },
+		socialProviders: social,
+		// Signing in links on its own only to an address the provider vouches for (email_verified).
+		// Linking in the settings is the user's own choice, so the address may differ; index.ts wants a
+		// fresh sign-in for it.
+		account: { accountLinking: { enabled: true, allowDifferentEmails: true } },
+		// apps stay signed in like a mail app; any use within a day extends it. freshAge keeps a stolen
+		// token from adding a passkey.
+		session: { expiresIn: 60 * 60 * 24 * 365, updateAge: 60 * 60 * 24, freshAge: FRESH_SECONDS },
+		// the app's own page calls /api/auth/*; the server checks the origin itself (index.ts)
+		trustedOrigins: (req) =>
+			[req?.headers.get("origin") ?? undefined].filter((o): o is string => !!o),
+		databaseHooks: {
+			user: {
+				create: {
+					before: async (user, ctx) => accounts.allowNewUser(user.email, ctx?.headers),
+					after: async (user, ctx) => accounts.setUpNewUser(user.id, user.email, ctx?.headers),
+				},
+				update: {
+					// A code proves the address of a password account nobody had verified. Better Auth drops
+					// its password and sessions; here goes everything else whoever signed up with that
+					// address may have made to get in.
+					before: async (data, ctx) => {
+						const email = (ctx?.body as { email?: unknown } | undefined)?.email;
+						if (data.emailVerified !== true || typeof email !== "string") return;
+						const user = accounts.db
+							.query<{ id: string }, [string]>(
+								'SELECT id FROM "user" WHERE email = ? AND emailVerified = 0',
+							)
+							.get(email.toLowerCase());
+						if (!user) return;
+						accounts.db.query("DELETE FROM passkey WHERE userId = ?").run(user.id);
+						accounts.db.query("DELETE FROM tokens WHERE user = ?").run(user.id);
+						accounts.db.query('DELETE FROM invites WHERE "by" = ?').run(user.id);
+						accounts.onRevoke(user.id);
+					},
+				},
+			},
+		},
+		plugins: [
+			bearer(),
+			// always registered so its table exists; index.ts hides the routes when passkeys are off
+			passkey({
+				rpID: login.passkey?.rpID ?? "localhost",
+				rpName: "Obtion",
+				origin: login.passkey?.origin ?? null,
+			}),
+			...(login.sendCode
+				? [
+						emailOTP({
+							expiresIn: 10 * 60,
+							storeOTP: "hashed",
+							sendVerificationOTP: async ({ email, otp, type }, ctx) => {
+								if (type !== "sign-in") return;
+								// a code for an address without an account only where it may become one
+								const known = !!accounts.db
+									.query('SELECT 1 FROM "user" WHERE email = ?')
+									.get(email.toLowerCase());
+								const signup = signupContext(ctx?.headers);
+								if (!known && !accounts.canSignUp(signup.invite, email)) return;
+								await login.sendCode!(email, otp, signup.lang);
+							},
+						}),
+					]
+				: []),
+			...(oidc
+				? [
+						genericOAuth({
+							config: [
+								{
+									providerId: "oidc",
+									discoveryUrl: oidc.discoveryUrl!,
+									clientId: oidc.clientId,
+									clientSecret: oidc.clientSecret,
+									scopes: ["openid", "email", "profile"],
+									pkce: true,
+								},
+							],
+						}),
+					]
+				: []),
+		],
+		// also outside NODE_ENV=production: a hosted server must not let anyone guess passwords
+		rateLimit: { enabled: true },
+		telemetry: { enabled: false },
+	});
 }

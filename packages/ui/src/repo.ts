@@ -3,5 +3,5 @@ import type { Repo } from "@obtion/sync";
 
 export let repo: Repo;
 export function setRepo(r: Repo) {
-  repo = r;
+	repo = r;
 }
