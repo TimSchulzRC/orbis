@@ -104,6 +104,14 @@ function modeLabel(shape: Shape, mode: Mode, t: T): string {
 	return t(mode === ":" ? "filter.contains" : "filter.containsNot");
 }
 
+const TRUE_WORDS = ["ja", "yes", "true", "1", "wahr", "x"];
+/** A checkbox is checked or not: "is false" and "is not true" both read as "is not checked". */
+function checkCond(c: FieldCond): FieldCond {
+	const word = typeof c.values[0] === "string" ? c.values[0].toLowerCase() : "true";
+	const checked = (c.mode === ":") === TRUE_WORDS.includes(word);
+	return { prop: c.prop, mode: checked ? ":" : "!=", values: ["true"] };
+}
+
 /** The condition as "field, comparison, values" – where it is one on a single field. */
 function readField(c: Cond): FieldCond | undefined {
 	if ("prop" in c)
@@ -305,7 +313,7 @@ function CondPicker({
 
 /** A condition on one field: the pill says it in words, its popover changes comparison and value. */
 function FieldPill({
-	cond,
+	cond: stored,
 	ctx,
 	off,
 	startOpen,
@@ -324,8 +332,9 @@ function FieldPill({
 	onPickPage: (then: (id: string) => void) => void;
 }) {
 	const { t } = ctx;
-	const field = fieldFor(cond.prop, ctx);
+	const field = fieldFor(stored.prop, ctx);
 	const shape = shapeOf(field);
+	const cond = shape === "check" ? checkCond(stored) : stored;
 	const [open, setOpen] = useState(!!startOpen);
 	const [modes, setModes] = useState(false);
 	const set = (patch: Partial<FieldCond>) => onChange(writeField({ ...cond, ...patch }));
