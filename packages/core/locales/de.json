@@ -535,6 +535,7 @@
 	"props.removeValue": "Wert entfernen",
 	"props.set": "{name} setzen",
 	"props.start": "Start",
+	"props.unused": "{n} weitere {count, plural, one {Eigenschaft} other {Eigenschaften}}",
 	"q.bare.blocked": "blockiert",
 	"q.bare.dormant": "ruhend",
 	"q.bare.file": "datei,dateien",
