@@ -1,5 +1,5 @@
 // One icon set per release channel from the logos in docs/design, the same mark on its own tile:
-// stable yellow as drawn, nightly violet under a night sky, dev blue on a blueprint. The server
+// stable black and white with a yellow square as drawn, nightly violet under a night sky, dev blue on a blueprint. The server
 // answers /icon.svg & co. from apps/web/public/icons/<its channel>/ (apps/server/src/icons.ts).
 // The dark mark is the app's primary icon (PWA, home screen, Apple touch icon).
 
@@ -65,7 +65,7 @@ const palettes: Record<string, Palette | null> = {
 			decor: night("#FFFFFF", 0.9, "#3A2D85", "#4C3BA6"),
 		},
 	},
-	// the blue the logo had before it turned yellow (#132)
+	// the blue the logo had before #132
 	dev: {
 		light: {
 			tile: ["#F7FAFF", "#DCE7F8"],
