@@ -5,7 +5,7 @@ import { join, resolve, extname } from "node:path";
 import type { ServerWebSocket } from "bun";
 import { Accounts, AccountError, FRESH_SECONDS, SIGNUP_COOKIE, randomToken } from "./accounts";
 import { loginConfig, loginMethods } from "./login";
-import type { AccountInfo, InviteCode, InviteInfo, InviteLink, McpConnect, Ok, Role, ServerInfo, SignedIn, SignupPolicy, SignupRequest } from "@obtion/core/api";
+import type { AccountInfo, InviteCode, InviteInfo, InviteLink, McpConnect, McpTokenInfo, Ok, Role, ServerInfo, SignedIn, SignupPolicy, SignupRequest } from "@obtion/core/api";
 import { type Conn, Workspace, parseClientMsg } from "./workspace";
 import { agentOrigin, firstName, personOrigin } from "@obtion/core/origin";
 import { agentName } from "./mcp";
@@ -243,6 +243,7 @@ async function accountApi(req: Request, path: string, url: URL): Promise<Respons
       }
       if (sub.startsWith("/invites/") && req.method === "DELETE") return (accounts.revokeInvite(id, user.id, sub.slice("/invites/".length)), json<Ok>({ ok: true }));
       // the token is shown only once
+      if (sub === "/mcp-token" && req.method === "GET") return json<McpTokenInfo>({ created: accounts.mcpTokenCreated(id, user.id) });
       if (sub === "/mcp-token" && req.method === "DELETE") return (accounts.revokeMcpToken(id, user.id), json<Ok>({ ok: true }));
       if (sub === "/mcp-token" && req.method === "POST") {
         const base = PUBLIC_URL || `${url.protocol}//${req.headers.get("host")}`;

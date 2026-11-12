@@ -3,7 +3,7 @@
 import { useSyncExternalStore } from "react";
 import { startAuthentication, startRegistration } from "@simplewebauthn/browser";
 import { Repo } from "@obtion/sync";
-import type { AccountInfo, ErrorBody, InviteCode, InviteInfo, InviteLink, InviteRequest, LoginMethods, McpConnect, Member, Ok, PasskeyInfo, Role, ServerInfo, SignedIn, User, VerifyFirst, WorkspaceInfo } from "@obtion/core/api";
+import type { AccountInfo, ErrorBody, InviteCode, InviteInfo, InviteLink, InviteRequest, LoginMethods, McpConnect, McpTokenInfo, Member, Ok, PasskeyInfo, Role, ServerInfo, SignedIn, User, VerifyFirst, WorkspaceInfo } from "@obtion/core/api";
 import type { T } from "@obtion/core/i18n";
 import { type FileMeta, SETTINGS_ID } from "@obtion/core/model";
 import { runSetup } from "@obtion/core/setup";
@@ -504,6 +504,8 @@ export const invite = (code: string) => call<InviteInfo>(`/api/invites/${code}`)
 export const serverInfo = () => call<ServerInfo>("/api/info");
 
 export const mcpToken = (s: Space) => call<McpConnect>(`/api/workspaces/${s.id}/mcp-token`, {});
+export const mcpTokenInfo = (s: Space) => call<McpTokenInfo>(`/api/workspaces/${s.id}/mcp-token`);
+export const revokeMcpToken = (s: Space) => call<Ok>(`/api/workspaces/${s.id}/mcp-token`, undefined, "DELETE");
 
 /**
  * A workspace page without "#/w/<id>" (a link inside the app) gets the open workspace's id, so going
