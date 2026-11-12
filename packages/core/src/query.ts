@@ -623,8 +623,10 @@ function matchField(
 ): boolean {
 	const hit = fieldOf(item, c.prop, ctx.ix);
 	if (c.op === "empty") return !hit || isEmpty(hit.value);
-	if (!hit || isEmpty(hit.value)) return c.op === "!=";
 	const v = c.value;
+	// a comparison that has no value yet (a filter just added) lets everything through
+	if (v === undefined || v === "") return true;
+	if (!hit || isEmpty(hit.value)) return c.op === "!=";
 	if (typeof v === "object" && v && "ref" in v) {
 		const target = resolveRef(v.ref, ctx);
 		const has = !!target && asIds(hit.value).includes(target);

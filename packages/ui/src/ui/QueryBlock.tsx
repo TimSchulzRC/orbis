@@ -217,7 +217,6 @@ function QueryBlockView({
 			columns={tab.kind === "table" ? defaultColumns(items, ctx) : undefined}
 			fields={fields}
 			groups={viewGroups(items, eff, ctx)}
-			onClose={() => openPanel(null)}
 			onLook={(p) => patchTab(tab.id, p)}
 			part={part}
 			tab={{ ...tab, where: tabWhere }}
@@ -234,6 +233,7 @@ function QueryBlockView({
 		label: string,
 		active: boolean,
 		body: React.ReactNode,
+		wide?: boolean,
 	) => (
 		<Popover
 			align="right"
@@ -250,7 +250,7 @@ function QueryBlockView({
 				/>
 			)}
 		>
-			<div className="w-[min(26rem,85vw)] p-2 text-sm">{body}</div>
+			{wide ? <div className="w-[min(26rem,85vw)] p-2 text-sm">{body}</div> : body}
 		</Popover>
 	);
 	const toolbar = editable && (
@@ -265,6 +265,7 @@ function QueryBlockView({
 						autoFocus={!stored.where}
 						context
 						def={{ where: baseWhere }}
+						fields={fields}
 						onChange={(d) =>
 							!sameValue(d.where, baseWhere) && setDraft({ scope: "base", where: d.where })
 						}
@@ -274,6 +275,7 @@ function QueryBlockView({
 							<p className="mb-1 text-xs text-muted-foreground">{t("block.filterTab")}</p>
 							<QueryEditor
 								def={{ where: tabWhere }}
+								fields={fields}
 								onChange={(d) =>
 									!sameValue(d.where, tabWhere) && setDraft({ scope: tab.id, where: d.where })
 								}
@@ -282,6 +284,7 @@ function QueryBlockView({
 					)}
 					{dirty && <DraftBar onDiscard={() => setDraft(null)} onSave={save} />}
 				</div>,
+				true,
 			)}
 			{tab.kind !== "triage" &&
 				tool("sort", ArrowUpDown, t("view.sort"), !!tab.sort?.length, settingsFor("sort"))}
@@ -298,11 +301,7 @@ function QueryBlockView({
 			>
 				{(close) => (
 					<div className="min-w-56">
-						{hasMore && (
-							<div className="w-[min(26rem,85vw)] border-b border-line p-2 text-sm">
-								{settingsFor("more")}
-							</div>
-						)}
+						{hasMore && <div className="mb-1 border-b border-line pb-1">{settingsFor("more")}</div>}
 						{!def.title && (
 							<MenuItem
 								icon={<Heading size={14} />}

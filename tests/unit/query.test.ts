@@ -347,3 +347,12 @@ test("a view's order by hand comes first, the rest follows as usual; a sort wins
 	expect(ids({ order: [fr, "gone", relaunch, nordFr] })).toEqual([fr, relaunch, nordFr]);
 	expect(ids({ order: [fr], sort: [{ key: "title" }] })).toEqual([nordFr, relaunch, fr]);
 });
+
+test("a comparison without a value (a filter just added) lets everything through", () => {
+	const { ix } = world();
+	const count = (where: object) =>
+		runQuery({ where: { and: [{ type: SYS.project }, where] } as never }, { ix }).items.length;
+	expect(count({ prop: "Status", op: ":" })).toBe(3);
+	expect(count({ prop: "Status", op: "!=", value: "" })).toBe(3);
+	expect(count({ prop: "Status", op: ":", value: "Planung" })).toBe(1);
+});

@@ -14,10 +14,10 @@ import { Results } from "../../packages/ui/src/ui/Results";
 import { AppToaster } from "../../packages/ui/src/ui/toasts";
 import { noFiles, workspace } from "./workspace";
 
-afterEach(() => {
-	cleanup();
-	localStorage.clear();
-});
+afterEach(() => cleanup());
+
+// what a table remembers on the device (opened rows) goes by this key: a fresh one per test
+let run = 0;
 
 let saved: Partial<ViewTab>[] = [];
 function View({ look }: { look: Partial<ViewTab> }) {
@@ -26,7 +26,7 @@ function View({ look }: { look: Partial<ViewTab> }) {
 		<Results
 			def={tabDef({ type: SYS.project }, tab)}
 			look={{
-				key: "t",
+				key: `drag-test-${run}`,
 				tab,
 				onLook: (patch) => {
 					saved.push(patch);
@@ -39,6 +39,7 @@ function View({ look }: { look: Partial<ViewTab> }) {
 
 async function setup(look: Partial<ViewTab> = {}) {
 	saved = [];
+	run++;
 	const repo = await workspace(false);
 	const project = (title: string, status: string) =>
 		repo.create({ title, type: SYS.project, props: { p_status: status } });
