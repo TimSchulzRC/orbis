@@ -269,26 +269,20 @@ export function GroupedTable({
 		return ix.parentsOf(id).find((p) => ids.has(p));
 	};
 	/**
-	 * What a drop on `target` means: the entry it goes below (none: the top level of the list) and
-	 * the row it comes before. Below an open row with sub-items is the place of its first one.
+	 * The entry a drop on `target` goes below (none: the top level of the list). Below an open row
+	 * with sub-items is the place of its first one.
 	 */
-	const landing = (g: Group, target: Item, zone: DropZone, firstKid?: Item, next?: Item) => {
-		if (zone === "inside") return { parent: target.id as string | undefined, before: undefined };
-		if (zone === "after" && firstKid) return { parent: target.id, before: firstKid.id };
-		return {
-			parent: listedParent(g, target.id),
-			before: zone === "before" ? target.id : next?.id,
-		};
-	};
-	const dropRow = (g: Group, to: ReturnType<typeof landing>, zone: DropZone, target: Item) => {
+	const landing = (g: Group, target: Item, zone: DropZone, hasOpenKids: boolean) =>
+		zone === "inside" || (zone === "after" && hasOpenKids) ? target.id : listedParent(g, target.id);
+	const dropRow = (g: Group, parent: string | undefined, zone: DropZone, target: Item) => {
 		const d = dragged();
 		rowDrag = null;
 		setAim(null);
 		const item = d && ix.get(d.id);
 		if (!d || !item) return;
-		if (to.parent !== d.from) {
-			if (to.parent) {
-				if (!repo.moveParent(d.id, d.from ?? null, to.parent)) return;
+		if (parent !== d.from) {
+			if (parent) {
+				if (!repo.moveParent(d.id, d.from ?? null, parent)) return;
 			} else if (d.from) repo.removeParent(d.id, d.from);
 		}
 		if (by && d.group !== g.key) groupSetter(item, by, g)?.();
@@ -296,10 +290,21 @@ export function GroupedTable({
 		if (!look?.onLook) return;
 		// a sorted view keeps its order: say so where the drop changed nothing else
 		if (def.sort?.length)
-			return void (to.parent === d.from && d.group === g.key && notify(t("table.sorted")));
-		const order = items.map((x) => x.id).filter((id) => id !== d.id);
-		const at = to.before ? order.indexOf(to.before) : -1;
-		order.splice(at < 0 ? order.length : at, 0, d.id);
+			return void (parent === d.from && d.group === g.key && notify(t("table.sorted")));
+		// the rows as they are shown (sub-items after their parent), without the dragged one
+		const rows = new Map<string, number>();
+		for (const gr of all)
+			for (const o of treeOrder(gr.items))
+				if (o.item.id !== d.id && !rows.has(o.item.id)) rows.set(o.item.id, o.depth);
+		const order = [...rows.keys()];
+		const depths = [...rows.values()];
+		let at = order.indexOf(target.id);
+		if (zone === "after") {
+			at++;
+			// after the row and everything below it – unless it lands there as the first sub-item
+			if (parent !== target.id) while (at < order.length && depths[at]! > depths[at - 1]!) at++;
+		}
+		order.splice(at, 0, d.id);
 		look.onLook({ order });
 	};
 	const resize = (c: string, e: React.PointerEvent) => {
@@ -379,18 +384,15 @@ export function GroupedTable({
 			const kids = countKids(order, n);
 			const isOpen = opened.has(i.id);
 			if (kids && !isOpen) hideBelow = depth;
-			// the row after this one and everything below it
-			const next = order.slice(n + 1).find((o) => o.depth <= depth)?.item;
-			const firstKid = kids && isOpen ? order[n + 1]!.item : undefined;
 			const landingAt = (e: React.DragEvent) => {
 				const d = dragged();
 				if (!d || d.id === i.id) return;
 				const box = e.currentTarget.getBoundingClientRect();
 				const zone = dropZone(e.clientY - box.top, box.height);
-				const to = landing(g, i, zone, firstKid, next);
+				const parent = landing(g, i, zone, kids > 0 && isOpen);
 				// not into itself or anything below it
-				if (to.parent && ix.wouldCycle(d.id, to.parent)) return;
-				return { zone, to };
+				if (parent && ix.wouldCycle(d.id, parent)) return;
+				return { zone, parent };
 			};
 			out.push(
 				<TableRow
@@ -413,7 +415,7 @@ export function GroupedTable({
 						if (!at) return;
 						e.preventDefault();
 						e.stopPropagation();
-						dropRow(g, at.to, at.zone, i);
+						dropRow(g, at.parent, at.zone, i);
 					}}
 				>
 					<ShadcnTableCell

@@ -78,6 +78,10 @@ test("a row dropped between two rows goes there and stays on their level", async
 	await drag("Gamma", "Alpha", 0.8);
 	await expect.poll(titles).toEqual(["Alpha", "Gamma", "Beta"]);
 	expect(parents(c)).toEqual([]);
+	// onto the gap it already follows: it stays
+	await drag("Gamma", "Alpha", 0.8);
+	await expect.poll(() => saved.length).toBe(3);
+	expect(titles()).toEqual(["Alpha", "Gamma", "Beta"]);
 });
 
 test("a row dropped on the middle of a row goes below it, and out again between two rows", async () => {
@@ -99,6 +103,10 @@ test("below an open row with sub-items is the place of its first one", async () 
 	await expect.poll(titles).toEqual(["Alpha", "Beta", "Gamma"]);
 	expect(parents(b)).toEqual([a]);
 	expect(parents(c)).toEqual([a]);
+	// among the sub-items: after the last one, still below the same row
+	await drag("Beta", "Gamma", 0.8);
+	await expect.poll(titles).toEqual(["Alpha", "Gamma", "Beta"]);
+	expect(parents(b)).toEqual([a]);
 });
 
 test("a row dropped into another group takes its value, without going into the row there", async () => {
