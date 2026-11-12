@@ -157,7 +157,7 @@ describe("editing", () => {
 		await commands.keys("press", "Enter");
 		expect(doc().split("\n")[9]).toBe("|  |  |  |");
 		await commands.keys("press", "Enter");
-		expect(doc()).toBe(BODY.replace(TABLE, TABLE + "\n| new |  |  |\n\n"));
+		expect(doc()).toBe(BODY.replace(TABLE, `${TABLE}\n| new |  |  |\n\n`));
 		expect(view.state.doc.lineAt(view.state.selection.main.head).number).toBe(11);
 	});
 

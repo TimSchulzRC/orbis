@@ -17,7 +17,7 @@ export function translate(lang: Lang, key: string, values?: Values): string {
 	const msg = CATALOGS[lang][key] ?? CATALOGS.en[key];
 	if (msg === undefined) return key;
 	if (!values && !msg.includes("{")) return msg;
-	const cacheKey = lang + "\u0000" + key;
+	const cacheKey = `${lang}\u0000${key}`;
 	let formatter = cache.get(cacheKey);
 	if (!formatter) cache.set(cacheKey, (formatter = new IntlMessageFormat(msg, lang)));
 	try {
@@ -50,7 +50,7 @@ export function acceptLang(header: string | null | undefined, fallback: Lang = "
 	let best: { lang: Lang; q: number } | undefined;
 	for (const part of (header ?? "").split(",")) {
 		const [tag = "", ...params] = part.trim().toLowerCase().split(";");
-		const lang = LANGS.find((l) => tag === l || tag.startsWith(l + "-"));
+		const lang = LANGS.find((l) => tag === l || tag.startsWith(`${l}-`));
 		const q = Number(
 			params
 				.map((x) => x.trim())
@@ -77,8 +77,8 @@ export function fmtDate(
 	opts: Intl.DateTimeFormatOptions = { day: "2-digit", month: "2-digit", year: "numeric" },
 ) {
 	if (!iso) return "";
-	const d = new Date(iso.length === 10 ? iso + "T00:00:00" : iso);
-	if (isNaN(d.getTime())) return iso;
+	const d = new Date(iso.length === 10 ? `${iso}T00:00:00` : iso);
+	if (Number.isNaN(d.getTime())) return iso;
 	if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(iso))
 		return d.toLocaleString(locale(lang), { ...opts, hour: "2-digit", minute: "2-digit" });
 	return d.toLocaleDateString(locale(lang), opts);
@@ -86,8 +86,8 @@ export function fmtDate(
 
 /** "28. Okt." / "28 Oct", with the year only if not this year. */
 export function fmtShortDate(lang: Lang, iso: string) {
-	const d = new Date(iso.slice(0, 10) + "T00:00:00");
-	if (isNaN(d.getTime())) return iso;
+	const d = new Date(`${iso.slice(0, 10)}T00:00:00`);
+	if (Number.isNaN(d.getTime())) return iso;
 	const sameYear = d.getFullYear() === new Date().getFullYear();
 	return d.toLocaleDateString(locale(lang), {
 		day: "numeric",

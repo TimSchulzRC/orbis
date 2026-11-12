@@ -132,7 +132,7 @@ test("an entry that changed about a page of text is full: writing a lot leaves s
 	wait(MIN);
 	const id2 = note("Paste", "x\n");
 	wait(FOLD_PAUSE_MS);
-	write(TIM, id2, "x\n" + "y".repeat(FOLD_MAX_TEXT));
+	write(TIM, id2, `x\n${"y".repeat(FOLD_MAX_TEXT)}`);
 	wait(MIN);
 	write(TIM, id2, "x\n");
 	wait(MIN);
@@ -277,13 +277,13 @@ test("entries stored one per keystroke fold when the server starts; no text vers
 			other,
 			TIM,
 			[{ field: "body", from: (n - 1) * FOLD_MAX_TEXT, to: n * FOLD_MAX_TEXT }],
-			"t" + n,
+			`t${n}`,
 		);
 		version.run(
 			other,
 			t0 + 20_000 + n * 1000,
 			TIM,
-			"t" + n,
+			`t${n}`,
 			ev,
 			n * FOLD_MAX_TEXT,
 			pack(page.repeat(n)),

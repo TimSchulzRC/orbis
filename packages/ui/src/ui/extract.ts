@@ -23,7 +23,7 @@ export function extractAs(view: EditorView, type: string) {
 	const lines = text.split("\n");
 	const first = lines[0]!.replace(/^[-*#>\s]+/, "").trim();
 	const tooLong = first.length > MAX_TITLE;
-	const title = tooLong ? first.slice(0, MAX_TITLE - 3) + "…" : first;
+	const title = tooLong ? `${first.slice(0, MAX_TITLE - 3)}…` : first;
 	const body = lines.length > 1 || tooLong ? text : "";
 	const ix = repo.index();
 	let unique = title;

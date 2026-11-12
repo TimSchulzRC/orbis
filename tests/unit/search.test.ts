@@ -70,7 +70,7 @@ test("does not treat single letters as prefixes", () => {
 });
 
 test("snippets find the spot across spellings", () => {
-	const body = "x ".repeat(80) + "Treffen mit Jürgen an der Straße";
+	const body = `${"x ".repeat(80)}Treffen mit Jürgen an der Straße`;
 	expect(snippet(body, "Juergen")).toContain("Jürgen");
 	expect(snippet(body, "strasse")).toContain("Straße");
 });
@@ -124,10 +124,10 @@ test("the excerpt is centred on the hit, keeps underscores and names its heading
 	expect(excerpt(body, "4711").heading).toBeUndefined(); // not in it: the start, no heading
 	expect(excerpt(body, "4711").text.startsWith("Status")).toBe(true);
 	// several words: the occurrence near the others
-	const two = "Mapping is done. " + "x ".repeat(200) + "Mapping review on Friday.";
+	const two = `Mapping is done. ${"x ".repeat(200)}Mapping review on Friday.`;
 	expect(excerpt(two, "mapping friday").text).toContain("review on Friday");
 	// hyphenated query words are found as written
-	expect(snippet("x ".repeat(100) + "Required: the E-Invoice from 2025", "e-invoice")).toContain(
+	expect(snippet(`${"x ".repeat(100)}Required: the E-Invoice from 2025`, "e-invoice")).toContain(
 		"E-Invoice",
 	);
 });
@@ -189,7 +189,7 @@ test("excerpts look for words where they start, and for what a prefix or fuzzy s
 	expect(excerpt(body, "cat").heading).toBe("Animals");
 	// two letters are no prefix: "an" is the word, not the start of "Answers"
 	expect(
-		excerpt("# Answers\n" + "Text. ".repeat(60) + "\n# Goal\nWe work on an idea.", "an").heading,
+		excerpt(`# Answers\n${"Text. ".repeat(60)}\n# Goal\nWe work on an idea.`, "an").heading,
 	).toBe("Goal");
 	// a whole word in the other spelling comes before a part of a word (German umlaut on purpose)
 	expect(excerpt("# Oldtimer\nText.\n# Wartung\nDas Öl ist neu.", "ol").heading).toBe("Wartung");
@@ -197,7 +197,7 @@ test("excerpts look for words where they start, and for what a prefix or fuzzy s
 	const idx = createIndex();
 	const id = m.add({
 		title: "Note",
-		body: "# Preamble\n" + "Text. ".repeat(60) + "\n# Work\nThe mapping is done.",
+		body: `# Preamble\n${"Text. ".repeat(60)}\n# Work\nThe mapping is done.`,
 	});
 	indexRecord(idx, m.get(id)!);
 	const [hit] = searchHits(idx, "maping");

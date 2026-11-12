@@ -708,7 +708,7 @@ function distinctLabel(title: string, parentTitle?: string): string {
 	const rest = title.slice(prefix.length);
 	if (!/^[\s:·–-]/.test(rest)) return title; // "RelaunchX" is no repetition
 	const words = rest.replace(/^[\s:·–-]+/, "");
-	return words.replace(/[^\p{L}\p{N}]/gu, "").length >= 2 ? "… " + words : title;
+	return words.replace(/[^\p{L}\p{N}]/gu, "").length >= 2 ? `… ${words}` : title;
 }
 
 function TreeNode({

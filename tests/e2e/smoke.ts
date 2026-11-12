@@ -26,7 +26,7 @@ async function startServer(seeded: boolean, noTypes = false, workspace = true) {
 		if (noTypes) {
 			const del = Bun.spawnSync(["bun", "tests/support/no-types.ts"], { cwd: ROOT, env });
 			if (!del.stdout.toString().includes("types left: 0"))
-				throw new Error("deleting types failed: " + del.stderr.toString());
+				throw new Error(`deleting types failed: ${del.stderr.toString()}`);
 		}
 		({ url, proc } = await bootServer({ OBTION_DATA: dir }));
 	}
@@ -500,7 +500,7 @@ async function firstWorkspace(browser: import("playwright").Browser, server: Ser
 		)
 			failures.push(`${label}: no welcome note after creating the workspace`);
 	});
-	server.me = (await fetch(server.url + "/api/account", {
+	server.me = (await fetch(`${server.url}/api/account`, {
 		headers: { authorization: `Bearer ${server.token}` },
 	}).then((r) => r.json())) as typeof server.me;
 	// the image is embedded in the lecture note (made on this device, then uploaded)
@@ -697,7 +697,7 @@ async function twoWorkspaces(browser: import("playwright").Browser, server: Serv
 			(
 				(
 					await (
-						await fetch(server.url + "/api/account", {
+						await fetch(`${server.url}/api/account`, {
 							headers: { authorization: `Bearer ${server.token}` },
 						})
 					).json()
@@ -938,7 +938,7 @@ async function deleteAccountOnSettings(browser: import("playwright").Browser, se
 		await dialog.getByRole("alert").filter({ hasText: "letzter Owner" }).waitFor();
 		await dialog.getByRole("button", { name: "Abbrechen", exact: true }).click();
 		// Use the existing workspace API so the final confirmation also cleans an open local replica.
-		const me = await fetch(server.url + "/api/account", {
+		const me = await fetch(`${server.url}/api/account`, {
 			headers: { authorization: `Bearer ${server.token}` },
 		}).then((r) => r.json());
 		for (const w of me.workspaces) {

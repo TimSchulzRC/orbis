@@ -80,7 +80,7 @@ export class Blobs {
 	async put(hash: string, data: Uint8Array): Promise<boolean> {
 		if (!HASH.test(hash) || sha256(data) !== hash) return false;
 		if (!this.has(hash)) {
-			const tmp = this.path(hash) + ".part";
+			const tmp = `${this.path(hash)}.part`;
 			await Bun.write(tmp, data);
 			renameSync(tmp, this.path(hash));
 		}
@@ -317,7 +317,7 @@ async function probe(
 		return {
 			width: picture.width,
 			height: picture.height,
-			duration: isNaN(seconds) ? undefined : Math.round(seconds),
+			duration: Number.isNaN(seconds) ? undefined : Math.round(seconds),
 		};
 	} catch {
 		return {};

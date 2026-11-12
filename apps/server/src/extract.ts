@@ -17,7 +17,7 @@ export const FACTS_TEXT = 4_000;
 
 /** What of a text goes into the facts; a cut one ends in "\n…" like a text cut at TEXT_MAX. */
 export const factsText = (text: string) =>
-	text.length > FACTS_TEXT ? text.slice(0, FACTS_TEXT).trimEnd() + "\n…" : text;
+	text.length > FACTS_TEXT ? `${text.slice(0, FACTS_TEXT).trimEnd()}\n…` : text;
 /** What is read of a text file. */
 const TEXT_READ = 1024 * 1024;
 /** One part of an Office file or an embedded file, unpacked. */
@@ -41,7 +41,7 @@ const cap = (s: string) => {
 		.replace(/[ \t]+\n/g, "\n")
 		.replace(/\n{3,}/g, "\n\n")
 		.trim();
-	return t.length > TEXT_MAX ? t.slice(0, TEXT_MAX) + "\n…" : t || undefined;
+	return t.length > TEXT_MAX ? `${t.slice(0, TEXT_MAX)}\n…` : t || undefined;
 };
 
 /** Text of the file at `path`; nothing for formats without text (images, audio, binaries). */
@@ -323,11 +323,11 @@ function markupText(
 		if (t.close || t.self) {
 			if (k.para.has(tag)) out += "\n";
 			else if (k.text.has(tag)) continue;
-			else if (k.cell.has(tag)) out = out.replace(/\n$/, "") + "\t";
+			else if (k.cell.has(tag)) out = `${out.replace(/\n$/, "")}\t`;
 			else if (k.tab.has(tag)) out += "\t";
 			else if (k.br.has(tag)) out += "\n";
 			else if (tag === "w:tr" || tag === "a:tr" || tag === "table:table-row")
-				out = out.replace(/\t$/, "") + "\n";
+				out = `${out.replace(/\t$/, "")}\n`;
 		}
 	}
 	return out;
@@ -436,7 +436,7 @@ async function xlsxText(zip: Zip): Promise<string> {
 		const id = attr(m[1], "Id");
 		const to = attr(m[1], "Target");
 		if (id && to)
-			target.set(id, to.startsWith("/") ? to.slice(1) : "xl/" + to.replace(/^\.\//, ""));
+			target.set(id, to.startsWith("/") ? to.slice(1) : `xl/${to.replace(/^\.\//, "")}`);
 	}
 	const sheets = [...book.matchAll(/<sheet\b([^>]*)\/?>/g)].map((m) => ({
 		name: decodeEntities(attr(m[1], "name") ?? ""),
@@ -530,11 +530,10 @@ async function pdfText(path: string): Promise<Extracted> {
 		for (let i = 1; i <= Math.min(pages, 60) && text.length < 40_000; i++) {
 			const page = await doc.getPage(i);
 			const tc = await page.getTextContent();
-			text +=
-				tc.items
-					.map((x) => ("str" in x ? x.str : ""))
-					.join(" ")
-					.replace(/\s+/g, " ") + "\n";
+			text += `${tc.items
+				.map((x) => ("str" in x ? x.str : ""))
+				.join(" ")
+				.replace(/\s+/g, " ")}\n`;
 		}
 		text = text.trim().slice(0, 40_000);
 		// embedded files: an e-invoice's XML (Factur-X, ZUGFeRD, XRechnung) and other attachments
@@ -548,7 +547,7 @@ async function pdfText(path: string): Promise<Extracted> {
 				const inner = content && content.length <= PART_MAX ? decodeText(content) : undefined;
 				if (inner?.trim()) bodies.push(`--- ${a.filename} ---\n${inner.trim()}`);
 			}
-			text += `${text ? "\n\n" : ""}Embedded files (${list.length}):\n${list.join("\n")}${bodies.length ? "\n\n" + bodies.join("\n\n") : ""}`;
+			text += `${text ? "\n\n" : ""}Embedded files (${list.length}):\n${list.join("\n")}${bodies.length ? `\n\n${bodies.join("\n\n")}` : ""}`;
 		}
 		return { pages, text: cap(text) };
 	} finally {

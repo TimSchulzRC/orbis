@@ -2,14 +2,7 @@
 // timeline the start or the end); entries without a date are listed below.
 
 import { addDays, dayOf, diffDays, timeOf, todayISO, withTime } from "@obtion/core/date";
-import {
-	formatRange,
-	type Item,
-	type PropDef,
-	parseRange,
-	propByName,
-	titleKey,
-} from "@obtion/core/model";
+import { formatRange, type Item, type PropDef, parseRange, propByName } from "@obtion/core/model";
 import {
 	type EvalCtx,
 	fieldOf,
@@ -40,7 +33,7 @@ const firstDay = (lang: string) => (lang === "en" ? 0 : 1);
 const startOfWeek = (d: string, lang: string) =>
 	addDays(d, -((weekday(d) - firstDay(lang) + 7) % 7));
 const isDay = (s: unknown): s is string => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s);
-const monthStart = (day: string) => day.slice(0, 7) + "-01";
+const monthStart = (day: string) => `${day.slice(0, 7)}-01`;
 
 /** Entries a calendar week shows one above the other before "+ n more". */
 const MAX_LANES = 3;
@@ -66,7 +59,7 @@ function dateKey(def: QueryDef, items: Item[], ctx: EvalCtx, chosen?: string): s
 
 function spanOf(item: Item, key: string, ctx: EvalCtx): Span | undefined {
 	const hit = fieldOf(item, key, ctx.ix);
-	if (!hit || hit.kind !== "date" || typeof hit.value !== "string" || !hit.value) return undefined;
+	if (hit?.kind !== "date" || typeof hit.value !== "string" || !hit.value) return undefined;
 	// a time of day doesn't move the bar: it spans whole days
 	const range = parseRange(hit.value);
 	const [from, to] = [dayOf(range.start), dayOf(range.end)];
@@ -201,7 +194,7 @@ export function CalendarView({
 							const s = Math.max(0, diffDays(w, p.span.start));
 							const e = Math.min(6, diffDays(w, p.span.end));
 							let lane = lanes.findIndex((l) => l.slice(s, e + 1).every((x) => !x));
-							if (lane < 0) lanes.push(Array(7).fill("")), (lane = lanes.length - 1);
+							if (lane < 0) lanes.push(new Array(7).fill("")), (lane = lanes.length - 1);
 							for (let n = s; n <= e; n++) lanes[lane]![n] = p.item.id;
 							return { ...p, s, e, lane };
 						});
@@ -271,7 +264,7 @@ export function CalendarView({
 									return more ? (
 										<span
 											className="z-[1] mx-1.5 text-xs text-muted-foreground"
-											key={"m" + d}
+											key={`m${d}`}
 											style={{ gridColumn: n + 1, gridRow: MAX_LANES + 2 }}
 										>
 											{t("cal.more", { count: more })}

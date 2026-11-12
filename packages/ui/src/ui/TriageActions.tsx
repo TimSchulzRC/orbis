@@ -68,12 +68,12 @@ export function useTriageActions(spaceOf: (i: Item) => string, opts: { quiet?: b
 	};
 	const short = (i?: Item) => {
 		const name = i ? titleOf(i, t) : t("untitled");
-		return name.length > TITLE_MAX ? name.slice(0, TITLE_MAX - 1) + "…" : name;
+		return name.length > TITLE_MAX ? `${name.slice(0, TITLE_MAX - 1)}…` : name;
 	};
 	// one entry: its short title, unless `values` brings one
 	const label = (list: Item[], key: string, values: Values = {}) =>
 		list.length > 1
-			? t(key + "Many", { count: list.length, ...values })
+			? t(`${key}Many`, { count: list.length, ...values })
 			: t(key, { title: short(list[0]), ...values });
 	const giveType = (list: Item[], type: string) => {
 		const notes = list.filter((i) => i.kind === "note");

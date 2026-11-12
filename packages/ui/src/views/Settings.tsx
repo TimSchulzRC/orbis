@@ -29,7 +29,7 @@ import {
 	UserRound,
 	X,
 } from "lucide-react";
-import { type ReactNode, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
 	ApiError,
 	activeUser,
@@ -844,12 +844,12 @@ function DeviceFilesGroup() {
 						onChange={setMode}
 						options={(["online", "local"] as const).map((m) => ({
 							value: m,
-							label: t("settings.mode." + m),
+							label: t(`settings.mode.${m}`),
 						}))}
 						value={mode}
 					/>
 				}
-				hint={t("settings.mode." + mode + "Hint")}
+				hint={t(`settings.mode.${mode}Hint`)}
 				title={t("settings.originals")}
 			>
 				<DeviceFilesMeter local={sum("originals")} status={status} total={sum("total")} />
@@ -989,7 +989,7 @@ function AppSettings() {
 							onChange={setTheme}
 							options={(["system", "light", "dark"] as const).map((choice) => ({
 								value: choice,
-								label: t("theme." + choice),
+								label: t(`theme.${choice}`),
 							}))}
 							value={theme.choice}
 						/>

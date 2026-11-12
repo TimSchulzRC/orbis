@@ -34,7 +34,7 @@ const MAX_MS = 250;
 export function textDiff(a: string, b: string, context = 3): TextDiff {
 	if (a === b) return { hunks: [], added: 0, removed: 0 };
 	// jsdiff marks a missing final newline with an extra line; both sides end with one, so it never does
-	const nl = (s: string) => (s === "" || s.endsWith("\n") ? s : s + "\n");
+	const nl = (s: string) => (s === "" || s.endsWith("\n") ? s : `${s}\n`);
 	const patch = structuredPatch("", "", nl(a), nl(b), undefined, undefined, {
 		context,
 		maxEditLength: MAX_EDITS,
@@ -95,7 +95,7 @@ export function unifiedDiff(
 	let total = 0;
 	const push = (s: string) => {
 		total++;
-		if (out.length < max) out.push(s.length > width ? s.slice(0, width - 1) + "…" : s);
+		if (out.length < max) out.push(s.length > width ? `${s.slice(0, width - 1)}…` : s);
 	};
 	for (const h of d.hunks) {
 		push(`@@ -${range(h.oldStart, h.oldLines)} +${range(h.newStart, h.newLines)} @@`);

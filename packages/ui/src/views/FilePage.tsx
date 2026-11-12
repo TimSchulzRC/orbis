@@ -34,7 +34,7 @@ export function FilePage({ item }: { item: Item }) {
 	);
 	const usedIn = ix
 		.usedIn(item.id)
-		.map((b) => ({ item: ix.get(b.from)!, note: t("file.use." + b.kind) }))
+		.map((b) => ({ item: ix.get(b.from)!, note: t(`file.use.${b.kind}`) }))
 		.filter((x) => x.item);
 	const parents = ix.parentsOf(item.id);
 	const local = files.hasLocal(file.hash);
@@ -72,9 +72,9 @@ export function FilePage({ item }: { item: Item }) {
 		.filter(Boolean)
 		.join(" · ");
 	const facts: [string, React.ReactNode][] = [
-		[t("file.type"), `${t("filetype." + file.filetype)} · ${extension}`],
+		[t("file.type"), `${t(`filetype.${file.filetype}`)} · ${extension}`],
 		[t("file.size"), size],
-		[t("file.added"), `${fmtDate(lang, dateOf(item.created))}${addedBy ? " · " + addedBy : ""}`],
+		[t("file.added"), `${fmtDate(lang, dateOf(item.created))}${addedBy ? ` · ${addedBy}` : ""}`],
 		[t("file.here"), local ? t("file.local") : t("file.online")],
 	];
 	/** "Replace…": new content, same document; the old version stays in the history. */

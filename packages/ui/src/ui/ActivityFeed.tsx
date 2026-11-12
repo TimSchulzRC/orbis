@@ -32,7 +32,7 @@ function Entry({
 	const ix = repo.index();
 	const item = repo.get(e.doc);
 	const changes = e.changes.map((c) => describe(c, item, ix, t)).filter(Boolean);
-	const verb = t("activity.kind." + e.kind);
+	const verb = t(`activity.kind.${e.kind}`);
 	const op = item?.kind === "op" ? item : undefined;
 	const own = !!here && e.doc === here;
 	// as a change of its own step, so its toast can take it back again

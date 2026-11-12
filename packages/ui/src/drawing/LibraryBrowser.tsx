@@ -28,10 +28,10 @@ type Sort = "popular" | "new" | "updated";
 /** The list as the site shows it: each library with its downloads (stats.json is keyed like this). */
 async function loadList(): Promise<Library[]> {
 	const [list, stats] = await Promise.all([
-		fetch(SITE + "libraries.json").then((r) =>
+		fetch(`${SITE}libraries.json`).then((r) =>
 			r.ok ? r.json() : Promise.reject(new Error(String(r.status))),
 		),
-		fetch(SITE + "stats.json").then(
+		fetch(`${SITE}stats.json`).then(
 			(r) => (r.ok ? r.json() : {}),
 			() => ({}),
 		),
@@ -99,7 +99,7 @@ export function LibraryBrowser({
 	const add = async (l: Library) => {
 		setState((s) => ({ ...s, [l.id]: "adding" }));
 		try {
-			const r = await fetch(SITE + "libraries/" + l.source);
+			const r = await fetch(`${SITE}libraries/${l.source}`);
 			if (!r.ok) throw new Error(String(r.status));
 			await onAdd(await r.blob());
 			setState((s) => ({ ...s, [l.id]: "added" }));

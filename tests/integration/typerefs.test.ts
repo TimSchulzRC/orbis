@@ -23,9 +23,9 @@ const prio = () =>
 
 /** A page with a query block; returns its id. */
 function page(where: object, columns: string[]): string {
-	const id = ops.create({ title: "Overview " + JSON.stringify(where) }, A).id;
+	const id = ops.create({ title: `Overview ${JSON.stringify(where)}` }, A).id;
 	const def = { where, columns, sort: [{ key: "Priorität" }] };
-	s.change(id, A, (d) => replaceBody(d, "Text\n\n" + queryFence(blockSource(def as never)) + "\n"));
+	s.change(id, A, (d) => replaceBody(d, `Text\n\n${queryFence(blockSource(def as never))}\n`));
 	s.flush();
 	return id;
 }

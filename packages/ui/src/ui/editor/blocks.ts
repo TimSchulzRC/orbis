@@ -31,7 +31,7 @@ export const KINDS: { kind: BlockKind; prefix: string; icon: ComponentType<{ siz
 		{ kind: "quote", prefix: "> ", icon: Quote },
 	];
 
-export const kindName = (k: BlockKind) => tr("editor.block." + k);
+export const kindName = (k: BlockKind) => tr(`editor.block.${k}`);
 
 const PREFIX = /^(\s*)(#{1,6} |[-*+] \[[ xX]\] |[-*+] |\d+[.)] |> ?)?/;
 
@@ -164,8 +164,8 @@ export function moveBlock(view: EditorView, block: { from: number; to: number },
 	const remove = removalRange(doc, block);
 	const insert =
 		target >= doc.length
-			? { from: doc.length, insert: "\n" + text }
-			: { from: target, insert: text + "\n" };
+			? { from: doc.length, insert: `\n${text}` }
+			: { from: target, insert: `${text}\n` };
 	const changes = view.state.changes([remove, insert]);
 	const start = changes.mapPos(insert.from, -1) + (target >= doc.length ? 1 : 0);
 	view.dispatch({
@@ -192,7 +192,7 @@ export function duplicateBlock(view: EditorView, pos: number) {
 	const block = blockAt(view.state, pos);
 	const text = view.state.doc.sliceString(block.from, block.to);
 	view.dispatch({
-		changes: { from: block.to, insert: "\n" + text },
+		changes: { from: block.to, insert: `\n${text}` },
 		selection: EditorSelection.cursor(block.to + 1 + text.length),
 	});
 	view.focus();

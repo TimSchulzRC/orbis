@@ -369,7 +369,7 @@ export class Store {
 	/** Every change `fn` makes carries one step id, so one undo takes it all back. Nested calls join the outer step. */
 	step<T>(actor: string, fn: (step: string) => T, opts: { undoes?: string } = {}): T {
 		if (this.stepCtx) return fn(this.stepCtx.id);
-		this.stepCtx = { id: "s" + newId(), actor, undoes: opts.undoes };
+		this.stepCtx = { id: `s${newId()}`, actor, undoes: opts.undoes };
 		try {
 			return fn(this.stepCtx.id);
 		} finally {
@@ -1065,12 +1065,12 @@ function diffRecords(
 	setDiff("refs", prev.refs, next.refs, changes);
 	for (const k of new Set([...Object.keys(prev.props), ...Object.keys(next.props)]))
 		if (!sameValue(prev.props[k], next.props[k]))
-			changes.push({ field: "p:" + k, from: prev.props[k], to: next.props[k] });
+			changes.push({ field: `p:${k}`, from: prev.props[k], to: next.props[k] });
 	for (const k of new Set([...Object.keys(prev.extra), ...Object.keys(next.extra)]))
 		if (!sameValue(prev.extra[k], next.extra[k]))
-			changes.push({ field: "x:" + k, from: prev.extra[k]?.v, to: next.extra[k]?.v });
+			changes.push({ field: `x:${k}`, from: prev.extra[k]?.v, to: next.extra[k]?.v });
 	for (const k of new Set([...Object.keys(prev.rels), ...Object.keys(next.rels)]))
-		setDiff("r:" + k, prev.rels[k] ?? [], next.rels[k] ?? [], changes);
+		setDiff(`r:${k}`, prev.rels[k] ?? [], next.rels[k] ?? [], changes);
 	if (prev.body !== next.body)
 		changes.push({ field: "body", from: prev.body.length, to: next.body.length });
 	if (prev.rules !== next.rules)

@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { signOut, useAccounts } from "./accounts";
 import { Backdrop, ModalSurface } from "./components/ui/dialog";
 import { DrawingHost } from "./drawing/Drawing";
-import { itemPath, navigate, openItem, spaceHref, useDesktop, useRepo, useRoute } from "./hooks";
+import { itemPath, openItem, spaceHref, useDesktop, useRepo, useRoute } from "./hooks";
 import { useT } from "./i18n";
 import { cn } from "./lib/utils";
 import { globalPage } from "./scope";

@@ -294,7 +294,7 @@ export function OptionSelect({
 				{(!required || !opt) && <option value="">–</option>}
 				{isStatus
 					? STATUS_GROUPS.map((g) => (
-							<optgroup key={g} label={t("group." + g)}>
+							<optgroup key={g} label={t(`group.${g}`)}>
 								{prop
 									.options!.filter((o) => (o.group ?? "todo") === g)
 									.map((o) => (
@@ -576,7 +576,7 @@ export function PropertyBlock({
 						</BlockRow>
 					))}
 					{free.map(([n, v]) => (
-						<BlockRow key={"free:" + n} label={n}>
+						<BlockRow key={`free:${n}`} label={n}>
 							<FreeValueText value={v} />
 							<IconButton
 								className={cn("ml-auto text-faint", REVEAL.any)}
@@ -589,7 +589,7 @@ export function PropertyBlock({
 						</BlockRow>
 					))}
 					{inverse.map((g) => (
-						<BlockRow key={"inv:" + g.label} label={g.label}>
+						<BlockRow key={`inv:${g.label}`} label={g.label}>
 							{g.ids.map((id) => (
 								<span
 									className="inline-flex max-w-full items-center gap-1 rounded-md bg-surface-2 px-1.5 py-0.5 text-[13px]"
@@ -601,7 +601,7 @@ export function PropertyBlock({
 						</BlockRow>
 					))}
 					{leftovers.map((p) => (
-						<BlockRow key={"old:" + p.id} label={p.name} title={t("props.more")}>
+						<BlockRow key={`old:${p.id}`} label={p.name} title={t("props.more")}>
 							<span className="text-muted-foreground">{displayValue(item, p)}</span>
 							<IconButton
 								className={cn("ml-auto text-faint", REVEAL.any)}

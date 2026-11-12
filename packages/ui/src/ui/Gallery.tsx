@@ -66,7 +66,7 @@ function GalleryTile({ item, ctx }: { item: Item; ctx: EvalCtx }) {
 	}
 	const meta = f
 		? [
-				t("filetype." + f.filetype),
+				t(`filetype.${f.filetype}`),
 				f.pages ? t("file.pages", { count: f.pages }) : "",
 				f.duration ? fmtDuration(f.duration) : "",
 			]

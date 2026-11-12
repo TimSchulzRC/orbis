@@ -103,9 +103,9 @@ function GraphCanvas({
 			.nodeLabel(() => "")
 			.linkColor((l) =>
 				l.kind === "part"
-					? colorOf("violet") + "66"
+					? `${colorOf("violet")}66`
 					: l.kind === "rel"
-						? colorOf("teal") + "66"
+						? `${colorOf("teal")}66`
 						: line,
 			)
 			.linkWidth((l) => {
@@ -143,7 +143,7 @@ function GraphCanvas({
 					ctx.textAlign = "center";
 					ctx.textBaseline = "top";
 					ctx.fillStyle = isHovered ? text : faint;
-					const label = n.title.length > 40 ? n.title.slice(0, 38) + "…" : n.title;
+					const label = n.title.length > 40 ? `${n.title.slice(0, 38)}…` : n.title;
 					ctx.fillText(label, n.x!, n.y! + radius + 1.5);
 				}
 				ctx.globalAlpha = 1;
@@ -299,7 +299,7 @@ export function GraphView() {
 							onClick={() => setKinds(toggled(kinds, k))}
 							variant="plain"
 						>
-							{t("graph.edge." + k)}
+							{t(`graph.edge.${k}`)}
 						</Button>
 					))}
 				</div>

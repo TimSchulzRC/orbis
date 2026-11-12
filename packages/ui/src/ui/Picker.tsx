@@ -35,8 +35,7 @@ export function ItemPicker({
 	const repo = useRepo();
 	const [q, setQ] = useState("");
 	const [sel, setSel] = useState(0);
-	const allowed = (i: Item) =>
-		(!exclude || !exclude(i)) && (!filter || filter(i)) && i.type !== META_TYPE;
+	const allowed = (i: Item) => !exclude?.(i) && (!filter || filter(i)) && i.type !== META_TYPE;
 	const suggested = q.trim()
 		? []
 		: suggestions.filter((s) => repo.get(s.id) && allowed(repo.get(s.id)!));
@@ -106,7 +105,7 @@ export function ItemPicker({
 							{row.reason && (
 								<span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
 									{row.reason === "agent" && <Sparkles size={11} />}
-									{t("picker.reason." + row.reason)}
+									{t(`picker.reason.${row.reason}`)}
 								</span>
 							)}
 							{item && !row.reason && <PathHint item={item} />}

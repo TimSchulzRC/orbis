@@ -437,7 +437,7 @@ function CapsPage({ item }: { item: Item }) {
 							aria-label={t("caps.template")}
 							className={cn(AREA, "font-mono text-xs")}
 							defaultValue={caps.template.body ?? ""}
-							key={item.id + "tpl"}
+							key={`${item.id}tpl`}
 							onBlur={(e) => set("template", { ...caps.template, body: e.target.value })}
 							placeholder={t("caps.templatePlaceholder")}
 							rows={5}
@@ -767,7 +767,7 @@ function PropPage({ item, prop }: { item: Item; prop: PropDef }) {
 						>
 							{kinds.map((k) => (
 								<option key={k} value={k}>
-									{t("kind.prop." + k)}
+									{t(`kind.prop.${k}`)}
 								</option>
 							))}
 						</NativeSelect>
@@ -780,7 +780,7 @@ function PropPage({ item, prop }: { item: Item; prop: PropDef }) {
 						aria-label={t("type.propDescription")}
 						className={AREA}
 						defaultValue={prop.description ?? ""}
-						key={prop.id + "d"}
+						key={`${prop.id}d`}
 						onBlur={(e) => set({ description: e.target.value || null })}
 						rows={2}
 					/>
@@ -891,7 +891,7 @@ function PropPage({ item, prop }: { item: Item; prop: PropDef }) {
 					<SettingRow hint={t("type.targetHint")} title={t("type.target")}>
 						<TargetField
 							hits={relationTargets(prop, ix)}
-							key={prop.id + "t"}
+							key={`${prop.id}t`}
 							onChange={(target) => set({ target: target || null })}
 							target={prop.target}
 						/>
@@ -910,7 +910,7 @@ function PropPage({ item, prop }: { item: Item; prop: PropDef }) {
 								aria-label={t("type.inverse")}
 								className={INPUT}
 								defaultValue={prop.inverseName ?? ""}
-								key={prop.id + "i"}
+								key={`${prop.id}i`}
 								onBlur={(e) => set({ inverseName: e.target.value.trim() || null })}
 								placeholder={t("type.inverseOf", { name: prop.name })}
 								variant="bare"
@@ -1054,7 +1054,7 @@ function OptionGroups({
 								<Seg
 									label={t("type.group")}
 									onChange={(g) => (moveTo(o, g), close())}
-									options={STATUS_GROUPS.map((g) => ({ value: g, label: t("group." + g) }))}
+									options={STATUS_GROUPS.map((g) => ({ value: g, label: t(`group.${g}`) }))}
 									value={groupOf(o)}
 								/>
 							</div>
@@ -1107,9 +1107,9 @@ function OptionGroups({
 				return (
 					<SettingsGroup
 						action={action(g)}
-						hint={t("type.statusGroup." + g)}
+						hint={t(`type.statusGroup.${g}`)}
 						key={g}
-						title={t("group." + g)}
+						title={t(`group.${g}`)}
 					>
 						{mine.map(optionRow)}
 						{!mine.length && (
@@ -1221,7 +1221,7 @@ function AddProperty({
 				>
 					{PROP_KINDS.filter((k) => k !== "status" || !hasStatus).map((k) => (
 						<option key={k} value={k}>
-							{t("kind.prop." + k)}
+							{t(`kind.prop.${k}`)}
 						</option>
 					))}
 				</NativeSelect>
@@ -1235,7 +1235,7 @@ function AddProperty({
 
 /** A select with several values says so. */
 function kindLabel(p: PropDef, t: T): string {
-	return t(p.kind === "select" && p.multiple ? "kind.prop.multiselect" : "kind.prop." + p.kind);
+	return t(p.kind === "select" && p.multiple ? "kind.prop.multiselect" : `kind.prop.${p.kind}`);
 }
 
 /** How many entries a relation can point to; without a target anything can be chosen. */
@@ -1505,7 +1505,7 @@ function TargetField({
 					defaultValue={tag ?? ""}
 					onBlur={(e) =>
 						e.target.value.trim() &&
-						onChange("#" + e.target.value.trim().replace(/^#/, "").toLowerCase())
+						onChange(`#${e.target.value.trim().replace(/^#/, "").toLowerCase()}`)
 					}
 					placeholder="#autor"
 					variant="sm"

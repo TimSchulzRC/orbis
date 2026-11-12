@@ -369,14 +369,14 @@ test("linking a provider (its address may differ) needs a sign-in of the last mi
 });
 
 test("every server brings the web app; OBTION_WEB_APP=off leaves sync, API and MCP", async () => {
-	const app = await fetch(plain + "/");
+	const app = await fetch(`${plain}/`);
 	expect(app.status).toBe(200);
 	expect(await app.text()).toContain("Obtion under test");
-	const none = await fetch(bare + "/");
+	const none = await fetch(`${bare}/`);
 	expect(none.status).toBe(404);
 	expect(await none.text()).toContain("OBTION_WEB_APP=off");
-	expect((await fetch(bare + "/api/info")).status).toBe(200);
-	expect((await fetch(bare + "/w/x/mcp", { method: "POST" })).status).toBe(401); // there, asks for its token
+	expect((await fetch(`${bare}/api/info`)).status).toBe(200);
+	expect((await fetch(`${bare}/w/x/mcp`, { method: "POST" })).status).toBe(401); // there, asks for its token
 });
 
 /** A sync connection to a workspace that collects what the server sends; the token goes as subprotocol, as in browsers. */
@@ -394,7 +394,7 @@ async function connect(base: string, workspace: string, token: string) {
 			if (m) return m;
 			await Bun.sleep(20);
 		}
-		throw new Error("no such message: " + JSON.stringify(msgs));
+		throw new Error(`no such message: ${JSON.stringify(msgs)}`);
 	};
 	return { ws, msgs, until };
 }

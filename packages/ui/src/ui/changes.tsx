@@ -84,8 +84,8 @@ export function describe(c: FieldChange, item: Item | undefined, ix: Index, t: T
 				: t("activity.update", { text: String(c.to).slice(0, 140) });
 		case "tags":
 			return addedRemoved(
-				t("activity.tagged", { tags: added.map((x) => "#" + x).join(" ") }),
-				t("activity.untagged", { tags: removed.map((x) => "#" + x).join(" ") }),
+				t("activity.tagged", { tags: added.map((x) => `#${x}`).join(" ") }),
+				t("activity.untagged", { tags: removed.map((x) => `#${x}`).join(" ") }),
 			);
 		case "refs":
 			return addedRemoved(

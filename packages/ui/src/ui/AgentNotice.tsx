@@ -55,7 +55,7 @@ export function AgentNotice() {
 				list.length === 1
 					? t("agent.changed", { agent: name, title: list[0] || t("untitled") })
 					: t("agent.changedMany", { agent: name, count: list.length });
-			notify.undo(message, () => void repo.undo(step), "agent:" + step);
+			notify.undo(message, () => void repo.undo(step), `agent:${step}`);
 		});
 		return () => void off();
 	}, [t]);

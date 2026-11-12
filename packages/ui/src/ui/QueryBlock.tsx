@@ -574,6 +574,6 @@ export function insertQueryBlock(view: EditorView, def: QueryDef = {}) {
 	const pos = view.state.selection.main.head;
 	const line = view.state.doc.lineAt(pos);
 	const at = line.length ? line.to : pos;
-	const text = (line.length ? "\n" : "") + queryFence(blockSource(def)) + "\n";
+	const text = `${(line.length ? "\n" : "") + queryFence(blockSource(def))}\n`;
 	view.dispatch({ changes: { from: at, insert: text } });
 }

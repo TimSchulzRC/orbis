@@ -96,7 +96,7 @@ describe("editing in the card", () => {
 		await commands.keys("press", "Control+End");
 		await commands.keys("type", " Xs"); // "s" is a letter here, not "später" (later)
 		await page.getByRole("heading", { level: 2, name: "Einsortieren" }).click();
-		await expect.poll(titleNow).toBe(title + " Xs");
+		await expect.poll(titleNow).toBe(`${title} Xs`);
 		expect(page.getByRole("button", { name: "Bearbeiten" }).query()).toBeNull();
 		expect(
 			document.querySelector("main section[aria-label=Einsortiert]"),
@@ -131,7 +131,7 @@ describe("the card's text", () => {
 		repo
 			.getDoc(id)
 			.getText("body")
-			.insert(0, queryFence('{"where":{"type":"task"}}') + "\n");
+			.insert(0, `${queryFence('{"where":{"type":"task"}}')}\n`);
 		await expect.poll(() => document.querySelector("main article .cm-queryblock")).not.toBeNull();
 	});
 });

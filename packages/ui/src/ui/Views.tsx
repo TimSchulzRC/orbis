@@ -63,7 +63,7 @@ const KIND_ICON: Record<ViewKind, React.ComponentType<{ size?: number; className
 };
 
 export const tabName = (tab: Pick<ViewTab, "name" | "kind">, t: T) =>
-	tab.name || t("view." + tab.kind);
+	tab.name || t(`view.${tab.kind}`);
 
 /** Remembered per device. `inAddress`: also in "?view=<tab>", so a shared link shows the same tab. */
 export function useTabChoice(
@@ -196,7 +196,7 @@ export function ViewTabs({
 											className="rounded-md border border-line bg-bg px-2 py-1 text-sm"
 											label={t("view.rename")}
 											onCommit={(v) => edit!.rename(tab.id, v.trim())}
-											placeholder={t("view." + tab.kind)}
+											placeholder={t(`view.${tab.kind}`)}
 											value={tab.name ?? ""}
 										/>
 									</div>
@@ -259,7 +259,7 @@ export function ViewTabs({
 										key={k}
 										onClick={() => (close(), edit.add(k))}
 									>
-										{t("view." + k)}
+										{t(`view.${k}`)}
 									</MenuItem>
 								);
 							})
@@ -405,7 +405,7 @@ export function ViewSettings({
 						<Seg
 							label={t("view.label")}
 							onChange={(k) => onLook({ kind: k })}
-							options={kindsHere.map((k) => ({ value: k, label: t("view." + k) }))}
+							options={kindsHere.map((k) => ({ value: k, label: t(`view.${k}`) }))}
 							value={tab.kind}
 						/>
 					</div>

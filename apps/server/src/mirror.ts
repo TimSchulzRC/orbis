@@ -87,7 +87,7 @@ export class Mirror {
 			const path = ix.homePath(i.id).map((id) => safe(ix.get(id)!.title));
 			if (path.length) return path.join("/");
 			if (i.pinned) return "."; // pinned items without a parent sit at the top of the mirror
-			if (i.type === META_TYPE) return "_" + translate(lang, "nav.types");
+			if (i.type === META_TYPE) return `_${translate(lang, "nav.types")}`;
 			if (isInInbox(i, ix)) return translate(lang, "nav.inbox");
 			const tn = ix.typeName(i.type);
 			if (tn) return safe(tn);
@@ -119,7 +119,7 @@ export class Mirror {
 		});
 
 		for (const [rel, w] of want) {
-			const sig = w.content ?? "blob:" + w.blob;
+			const sig = w.content ?? `blob:${w.blob}`;
 			if (this.files.get(rel) === sig) continue;
 			const abs = join(this.root, rel);
 			mkdirSync(dirname(abs), { recursive: true });
@@ -180,13 +180,13 @@ export class Mirror {
 				i.schema.properties
 					.map(
 						(p) =>
-							`- ${p.name} (${p.kind})${p.options ? ": " + p.options.map((o) => o.name).join(", ") : ""}`,
+							`- ${p.name} (${p.kind})${p.options ? `: ${p.options.map((o) => o.name).join(", ")}` : ""}`,
 					)
 					.join("\n") +
 				"\n";
 			return out;
 		}
-		out += blocksAsText(i.body, lang, ix).trimEnd() + "\n";
+		out += `${blocksAsText(i.body, lang, ix).trimEnd()}\n`;
 		if (i.rules.trim()) out += `\n## ${translate(lang, "rules.title")}\n\n${i.rules.trimEnd()}\n`;
 		const kids = ix.childrenOf(i.id).map((c) => ix.get(c)!);
 		if (kids.length)
@@ -218,7 +218,7 @@ function frontmatter(fields: Record<string, unknown>): string {
 		if (Array.isArray(v)) out += `${key}:\n${v.map((x) => `  - ${yaml(String(x))}`).join("\n")}\n`;
 		else out += `${key}: ${yaml(String(v))}\n`;
 	}
-	return out + "---\n\n";
+	return `${out}---\n\n`;
 }
 
 function safe(title: string) {

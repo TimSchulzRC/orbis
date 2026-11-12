@@ -1,5 +1,4 @@
 import { expect, test } from "bun:test";
-import { type PropKind, setProp } from "@obtion/core/model";
 import { isInInbox } from "@obtion/core/placement";
 import { runSetup, SYS } from "@obtion/core/setup";
 import { visibleProps } from "@obtion/core/traits";

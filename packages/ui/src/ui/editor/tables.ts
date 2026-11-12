@@ -108,7 +108,7 @@ export function addRow(view: EditorView, t: TableBlock, n: number) {
 	const row = emptyRow(width(state, t));
 	const first = parseRow(row).cells[0]!;
 	view.dispatch({
-		changes: { from: at.to, insert: "\n" + row },
+		changes: { from: at.to, insert: `\n${row}` },
 		selection: EditorSelection.cursor(at.to + 1 + first.from),
 		scrollIntoView: true,
 		userEvent: "input",

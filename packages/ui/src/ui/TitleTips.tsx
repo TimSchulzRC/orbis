@@ -30,7 +30,7 @@ export function TitleTips() {
 			if (e.pointerType !== "mouse") return;
 			const target = (e.target as Element | null)?.closest?.<HTMLElement>("[title]");
 			if (target === el) return;
-			if (el && el.contains(e.target as Node)) return; // within the element: an inner one without a title
+			if (el?.contains(e.target as Node)) return; // within the element: an inner one without a title
 			restore();
 			if (!target) return;
 			const title = target.getAttribute("title");

@@ -102,7 +102,7 @@ export function writeExamples(
 	const ex = (key: string, values?: Values) => translate(lang, `sample.${key}`, values);
 	const t = (k: string) => translate(lang, `setup.${k}`);
 	const typeKey = words(lang, "q.key.type")[0];
-	const block = (q: QueryDef) => queryFence(blockSource(q)) + "\n";
+	const block = (q: QueryDef) => `${queryFence(blockSource(q))}\n`;
 	const here = { this: true as const };
 	const day = (n: number) => (n === 0 ? todayISO() : addDaysISO(n));
 	const H = 3600_000;

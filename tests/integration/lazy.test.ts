@@ -48,7 +48,7 @@ test("a start keeps no document in memory", () => {
 
 test("a start takes the records stored with the snapshots and decodes no document", () => {
 	const { dir, s, ids } = seeded(12);
-	s.change(ids[0]!, "seed", (d) => d.getMap("meta").set("deleted", "via:" + ids[1]));
+	s.change(ids[0]!, "seed", (d) => d.getMap("meta").set("deleted", `via:${ids[1]}`));
 	s.flush();
 	s.db.close();
 	const read = spyOn(Store.prototype as any, "read");

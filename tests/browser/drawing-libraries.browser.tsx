@@ -37,9 +37,9 @@ test("lists, searches and sorts the libraries; a library goes into the drawing",
 	const fetched: string[] = [];
 	vi.stubGlobal("fetch", async (url: string) => {
 		fetched.push(url);
-		if (url === SITE + "libraries.json") return Response.json(LIST);
-		if (url === SITE + "stats.json") return Response.json(STATS);
-		if (url === SITE + "libraries/anna/aws.excalidrawlib")
+		if (url === `${SITE}libraries.json`) return Response.json(LIST);
+		if (url === `${SITE}stats.json`) return Response.json(STATS);
+		if (url === `${SITE}libraries/anna/aws.excalidrawlib`)
 			return new Response('{"type":"excalidrawlib","libraryItems":[]}');
 		return new Response("", { status: 404 });
 	});

@@ -30,7 +30,7 @@ function openWorkspaceRules(space: string) {
 }
 
 /** A hint of a rule's text: its first lines. */
-const preview = (text: string) => (text.length > 300 ? text.slice(0, 299) + "…" : text);
+const preview = (text: string) => (text.length > 300 ? `${text.slice(0, 299)}…` : text);
 
 /**
  * The text of rules (an item's or, with the settings id, the workspace's). Saved when it loses

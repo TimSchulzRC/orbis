@@ -959,7 +959,7 @@ export function newId(): string {
 }
 
 export function shortId(prefix: string): string {
-	return prefix + "_" + newId().slice(-8);
+	return `${prefix}_${newId().slice(-8)}`;
 }
 
 export function titleKey(title: string) {
@@ -1010,7 +1010,7 @@ const WIKILINK = /(!?)\[\[([^\]|#\n]+?)\\?(#[^\]|\n]*?)?\\?(\|[^\]\n]*)?\]\]/g;
 
 /** A fresh copy of the wikilink pattern (its own lastIndex); `anchored` matches only at the start. */
 export function wikiLinkRe(anchored = false): RegExp {
-	return anchored ? new RegExp("^" + WIKILINK.source) : new RegExp(WIKILINK.source, "g");
+	return anchored ? new RegExp(`^${WIKILINK.source}`) : new RegExp(WIKILINK.source, "g");
 }
 
 export interface WikiLinkMatch {

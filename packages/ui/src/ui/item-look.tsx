@@ -73,7 +73,7 @@ export function itemLook(item: Item, ix: Index = repo.index()): Look {
 /** `inboxAsNote` labels inbox entries as notes. */
 export function kindLabel(look: Look, t: T, opts: { inboxAsNote?: boolean } = {}): string {
 	if (look.kind === "schema") return look.name ?? "";
-	return t("kind." + (look.kind === "inbox" && opts.inboxAsNote ? "note" : look.kind));
+	return t(`kind.${look.kind === "inbox" && opts.inboxAsNote ? "note" : look.kind}`);
 }
 
 /** Pass `ix` when the item is in another workspace than the open one (the sidebar shows others). */

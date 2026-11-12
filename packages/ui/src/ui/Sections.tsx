@@ -132,7 +132,7 @@ export function Below({ item }: { item: Item }) {
 		const blocked = !!status && status.group !== "done" && ix.isBlocked(x);
 		const inner = new Set(path).add(x.id);
 		return (
-			<Fragment key={x.id + ":" + depth}>
+			<Fragment key={`${x.id}:${depth}`}>
 				<div
 					className="flex min-h-10 items-center gap-2 border-t border-line pr-3 hover:bg-hover max-md:min-h-[48px]"
 					data-id={x.id}

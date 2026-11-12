@@ -486,7 +486,7 @@ test.each([
 test("tolerant input: weekdays; unclear input is rejected; status groups by word, all or nothing", () => {
 	const t = ops.create({ title: "Review", type: "Task" }, A);
 	ops.update(t.id, { properties: { Fällig: "Freitag" } }, A);
-	const fri = new Date(String(s.records.get(t.id)!.props.p_due) + "T12:00:00");
+	const fri = new Date(`${String(s.records.get(t.id)!.props.p_due)}T12:00:00`);
 	expect(fri.getDay()).toBe(5);
 	// unclear input is rejected with an explanation, nothing guessed
 	expect(() => ops.update(t.id, { properties: { Status: "blockiert" } }, A)).toThrow(

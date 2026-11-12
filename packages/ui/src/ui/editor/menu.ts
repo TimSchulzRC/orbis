@@ -43,8 +43,7 @@ export function showMenu(
 			const row = document.createElement("button");
 			row.type = "button";
 			row.setAttribute("role", "menuitem");
-			row.className =
-				"cm-menu-row" + (entry.danger ? " danger" : "") + (entry.active ? " active" : "");
+			row.className = `cm-menu-row${entry.danger ? " danger" : ""}${entry.active ? " active" : ""}`;
 			row.innerHTML =
 				(entry.icon ? `<span class="cm-menu-icon">${iconHTML(entry.icon, 16)}</span>` : "") +
 				`<span class="cm-menu-label"></span>` +
@@ -61,12 +60,12 @@ export function showMenu(
 	});
 	document.body.append(box);
 	const cut = maxRows ? rows[maxRows] : undefined;
-	if (cut) box.style.maxHeight = cut.offsetTop + cut.offsetHeight / 2 + "px";
+	if (cut) box.style.maxHeight = `${cut.offsetTop + cut.offsetHeight / 2}px`;
 	const rect = box.getBoundingClientRect();
-	box.style.left = Math.max(EDGE, Math.min(at.left, innerWidth - rect.width - EDGE)) + "px";
+	box.style.left = `${Math.max(EDGE, Math.min(at.left, innerWidth - rect.width - EDGE))}px`;
 	// no room below: open above instead
 	const fitsBelow = at.top + rect.height <= innerHeight - EDGE;
-	box.style.top = (fitsBelow ? at.top : Math.max(EDGE, at.top - rect.height - 32)) + "px";
+	box.style.top = `${fitsBelow ? at.top : Math.max(EDGE, at.top - rect.height - 32)}px`;
 	let index = -1;
 	const focus = (i: number) => {
 		index = (i + rows.length) % rows.length;
@@ -109,8 +108,8 @@ export function askText(
 		input.placeholder = label;
 		box.append(input);
 		document.body.append(box);
-		box.style.left = Math.max(EDGE, Math.min(at.left, innerWidth - box.offsetWidth - EDGE)) + "px";
-		box.style.top = at.top + "px";
+		box.style.left = `${Math.max(EDGE, Math.min(at.left, innerWidth - box.offsetWidth - EDGE))}px`;
+		box.style.top = `${at.top}px`;
 		const done = (result: string | null) => {
 			if (!box.isConnected) return;
 			box.remove();

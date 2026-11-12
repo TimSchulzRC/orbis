@@ -20,7 +20,7 @@ function hand(url: string) {
 // opened in a tab of its own (the drawing's tab was closed): the start page
 const first = take(location.hash);
 if (first) {
-	history.replaceState(history.state, "", location.pathname + location.search + "#/");
+	history.replaceState(history.state, "", `${location.pathname + location.search}#/`);
 	hand(first);
 }
 

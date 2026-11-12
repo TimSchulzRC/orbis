@@ -74,7 +74,7 @@ function CondPicker({
 				{back}
 				{(["open", "active", "done"] as const).map((s) => (
 					<MenuItem key={s} onClick={() => pick({ status: s })}>
-						{t("query.status." + s)}
+						{t(`query.status.${s}`)}
 					</MenuItem>
 				))}
 			</>
@@ -360,7 +360,7 @@ export function QueryEditor({
 					<Chip
 						cond={o.cond}
 						ctx={ctx}
-						key={"off" + k}
+						key={`off${k}`}
 						off
 						onRemove={() => setOff(off.filter((_, i) => i !== k))}
 						onToggle={() => switchOn(k)}

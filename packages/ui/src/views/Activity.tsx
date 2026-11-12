@@ -95,7 +95,7 @@ export function Activity() {
 						onChange={setFilter}
 						options={(["all", "agent", "you"] as const).map((f) => ({
 							value: f,
-							label: t("activity.filter." + f),
+							label: t(`activity.filter.${f}`),
 						}))}
 						value={filter}
 					/>

@@ -1,6 +1,5 @@
 // Deleting for good: the server forgets every trace, and devices that missed it can't bring it back.
 import { afterAll, expect, test } from "bun:test";
-import { existsSync } from "node:fs";
 import { PERSONAL, replaceBody, setFileMeta } from "@obtion/core/model";
 import { type ServerMsg, toB64 } from "@obtion/core/protocol";
 import { deleteItem } from "@obtion/core/trash";
@@ -202,7 +201,7 @@ test("a device drops purged documents from memory and storage and ignores them a
 		connect: () => (queueMicrotask(() => socket.onopen?.()), socket),
 		post: async (path, body) => {
 			const res = await w.handle(
-				new Request("http://x/w/w" + path, {
+				new Request(`http://x/w/w${path}`, {
 					method: "POST",
 					headers: { "content-type": "application/json" },
 					body: JSON.stringify(body),

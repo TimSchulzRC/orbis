@@ -186,7 +186,7 @@ export function Triage({ items }: { items: Item[] }) {
 					<div key={keyOf(i)}>
 						{head && (
 							<p className="px-3 pb-1 pt-3 text-xs font-semibold text-muted-foreground lg:pl-11">
-								{t("triage.age." + g)} <span className="font-normal tabular-nums">{count}</span>
+								{t(`triage.age.${g}`)} <span className="font-normal tabular-nums">{count}</span>
 							</p>
 						)}
 						<div
@@ -361,7 +361,7 @@ function Detail({ item, onPlaced }: { item: Item; onPlaced: (p: string) => void 
 	const places = useMemo(() => {
 		const offered = placeSuggestions(item, repo)
 			.slice(0, MAX_PLACES)
-			.map((x) => ({ id: x.id, why: t("triage.why." + x.reason) }));
+			.map((x) => ({ id: x.id, why: t(`triage.why.${x.reason}`) }));
 		for (const id of recentPlaces(repo))
 			if (
 				offered.length < MAX_PLACES &&

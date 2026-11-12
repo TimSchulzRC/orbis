@@ -29,7 +29,7 @@ function fields(doc: Y.Doc): Fields {
 	const put = (k: string, v: unknown) => {
 		if (v !== undefined) out.set(k, v instanceof Y.AbstractType ? v.toJSON() : v);
 	};
-	for (const [k, v] of metaMap(doc).entries()) if (k !== "updated") put("meta:" + k, v);
+	for (const [k, v] of metaMap(doc).entries()) if (k !== "updated") put(`meta:${k}`, v);
 	for (const name of DOC_MAPS)
 		if (!NESTED.has(name))
 			for (const [k, v] of doc.getMap<unknown>(name).entries()) put(`${name}:${k}`, v);
@@ -39,13 +39,13 @@ function fields(doc: Y.Doc): Fields {
 		const text = doc.getText(name).toString();
 		if (text) out.set(name, text);
 	}
-	for (const u of doc.getArray<UpdateEntry>("updates").toArray()) put("updates:" + u.id, u);
+	for (const u of doc.getArray<UpdateEntry>("updates").toArray()) put(`updates:${u.id}`, u);
 	for (const [k, v] of doc.getMap<unknown>("schema").entries()) {
 		if (k === "properties" && v instanceof Y.Map)
-			for (const [pid, p] of v.entries()) put("schema.prop:" + pid, p);
+			for (const [pid, p] of v.entries()) put(`schema.prop:${pid}`, p);
 		else if (k === "capabilities" && v instanceof Y.Map)
-			for (const [c, cv] of v.entries()) put("schema.cap:" + c, cv);
-		else put("schema:" + k, v);
+			for (const [c, cv] of v.entries()) put(`schema.cap:${c}`, cv);
+		else put(`schema:${k}`, v);
 	}
 	return out;
 }

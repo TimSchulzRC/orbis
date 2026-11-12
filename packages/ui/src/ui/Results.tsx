@@ -166,7 +166,7 @@ function ListView({
 		if (def.group === "path") return g.path?.length ? pathLabel(g.path) : t("group.thisLevel");
 		return (
 			g.label ||
-			(g.statusGroup ? t("group." + g.statusGroup) : t("group.without", { name: byLabel }))
+			(g.statusGroup ? t(`group.${g.statusGroup}`) : t("group.without", { name: byLabel }))
 		);
 	};
 	return (

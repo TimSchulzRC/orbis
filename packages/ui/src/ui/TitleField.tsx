@@ -29,7 +29,7 @@ export function TitleField({
 	useLayoutEffect(() => {
 		const el = ref.current!;
 		el.style.height = "auto";
-		el.style.height = el.scrollHeight + "px";
+		el.style.height = `${el.scrollHeight}px`;
 	}, [draft]);
 	const latest = useRef(draft);
 	latest.current = draft;

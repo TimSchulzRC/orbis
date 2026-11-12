@@ -57,7 +57,7 @@ export function TypeList({ type }: { type: Item }) {
 		if (!changed.length) return;
 		writeTab(tab.id, Object.fromEntries(changed.map(([k, v]) => [k, v ?? null])));
 		if (patch.kind && patch.kind !== tab.kind)
-			notify.undo(t("view.viewSet", { view: t("view." + patch.kind) }), () =>
+			notify.undo(t("view.viewSet", { view: t(`view.${patch.kind}`) }), () =>
 				writeTab(tab.id, { kind: tab.kind }),
 			);
 	};
@@ -245,7 +245,7 @@ export function FilesPage() {
 							onClick={() => setKind(type)}
 							variant="plain"
 						>
-							{type ? t("filetype.many." + type) : t("files.all")}{" "}
+							{type ? t(`filetype.many.${type}`) : t("files.all")}{" "}
 							<span className="tabular-nums text-muted-foreground">{count}</span>
 						</Button>
 					))}

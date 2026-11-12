@@ -69,13 +69,13 @@ function blockMenu(view: EditorView, pos: number, at: { left: number; top: numbe
 				{
 					label: tr("editor.moveUp"),
 					icon: ArrowUp,
-					hint: ALT + "↑",
+					hint: `${ALT}↑`,
 					run: () => (moveBy(view, pos, -1), view.focus()),
 				},
 				{
 					label: tr("editor.moveDown"),
 					icon: ArrowDown,
-					hint: ALT + "↓",
+					hint: `${ALT}↓`,
 					run: () => (moveBy(view, pos, 1), view.focus()),
 				},
 				{
@@ -148,7 +148,7 @@ export const blockHandles = ViewPlugin.fromClass(
 					? anchor.top + Math.min(anchor.height, 36) / 2
 					: coords.top + view.defaultLineHeight / 2;
 			}
-			this.box.style.top = mid - 12 - dom.top + "px";
+			this.box.style.top = `${mid - 12 - dom.top}px`;
 			this.box.classList.remove("instant");
 			this.box.classList.add("shown");
 		}
@@ -198,7 +198,7 @@ export const blockHandles = ViewPlugin.fromClass(
 				const { length } = view.state.doc;
 				const afterOver = over.to >= length ? length : over.to + 1;
 				target = before ? over.from : afterOver;
-				this.drop.style.top = (before ? over.top : over.bottom) - dom.top - 1 + "px";
+				this.drop.style.top = `${(before ? over.top : over.bottom) - dom.top - 1}px`;
 				this.drop.classList.add("shown");
 			};
 			const up = () => {

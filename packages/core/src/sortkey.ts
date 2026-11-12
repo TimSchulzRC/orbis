@@ -18,7 +18,7 @@ function midpoint(a: string, b: string | null): string {
 export function keyBetween(a?: string | null, b?: string | null): string {
 	const lo = a ?? "";
 	const hi = b ?? null;
-	if (hi !== null && lo >= hi) return lo + "V"; // broken order (concurrent edits): stay after a
+	if (hi !== null && lo >= hi) return `${lo}V`; // broken order (concurrent edits): stay after a
 	return midpoint(lo, hi);
 }
 

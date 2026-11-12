@@ -34,7 +34,7 @@ function fixture(
 		writeFileSync(join(tree, "data/accounts.db"), "fixture");
 	}
 	const mock = (name: string, body: string) =>
-		writeFileSync(join(bin, name), "#!/bin/bash\nset -eu\n" + body, { mode: 0o755 });
+		writeFileSync(join(bin, name), `#!/bin/bash\nset -eu\n${body}`, { mode: 0o755 });
 	mock(
 		"git",
 		'if [[ $1 == rev-parse ]]; then printf "%s\\n" "$ROOT"; else printf "worktree %s\\0\\0worktree %s\\0\\0" "$ROOT" "$OTHER"; fi\n',
@@ -61,7 +61,7 @@ function fixture(
 					cwd: root,
 					env: {
 						...process.env,
-						PATH: bin + ":" + process.env.PATH,
+						PATH: `${bin}:${process.env.PATH}`,
 						XDG_STATE_HOME: join(dir, "state"),
 						ROOT: root,
 						OTHER: other,

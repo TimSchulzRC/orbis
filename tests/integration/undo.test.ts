@@ -117,7 +117,7 @@ test("a step pushed by a device (delete with cascade over two documents) can be 
 	const step = "sDEVICE1";
 	for (const [id, mark] of [
 		[p, true],
-		[t, "via:" + p],
+		[t, `via:${p}`],
 	] as const) {
 		const d = device.get(id)!;
 		const sv = Y.encodeStateVector(d);

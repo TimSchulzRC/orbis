@@ -221,8 +221,8 @@ class Toolbar {
 					-dom.left + GAP,
 					Math.min(preferred - dom.left, innerWidth - dom.left - width - GAP),
 				);
-				this.dom.style.left = left + "px";
-				this.dom.style.top = start.top - dom.top - this.dom.offsetHeight - GAP + "px";
+				this.dom.style.left = `${left}px`;
+				this.dom.style.top = `${start.top - dom.top - this.dom.offsetHeight - GAP}px`;
 			},
 		});
 	}
@@ -318,7 +318,7 @@ class Toolbar {
 		rows.forEach((row, i) => {
 			const button = document.createElement("button");
 			button.type = "button";
-			button.className = "cm-menu-row" + (i === 0 ? " active" : "");
+			button.className = `cm-menu-row${i === 0 ? " active" : ""}`;
 			button.innerHTML = `<span class="cm-menu-icon">${iconHTML(row.icon, 15)}</span><span class="cm-menu-label"></span><span class="cm-menu-hint"></span>`;
 			const label = button.querySelector(".cm-menu-label")!;
 			label.textContent = row.label;

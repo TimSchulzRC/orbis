@@ -49,7 +49,7 @@ class CheckWidget extends WidgetType {
 	}
 	toDOM(view: EditorView) {
 		const box = document.createElement("span");
-		box.className = "cm-check" + (this.checked ? " checked" : "");
+		box.className = `cm-check${this.checked ? " checked" : ""}`;
 		box.setAttribute("role", "checkbox");
 		box.setAttribute("aria-checked", String(this.checked));
 		box.setAttribute("aria-label", tr("editor.block.todo"));
@@ -142,7 +142,7 @@ function build(view: EditorView): { deco: DecorationSet; atomic: DecorationSet }
 						if (!heading) return false;
 						const level = heading[1]!.length;
 						const prefixEnd = headLine.from + heading[0].length;
-						deco.push(line("cm-h cm-h" + level).range(headLine.from));
+						deco.push(line(`cm-h cm-h${level}`).range(headLine.from));
 						const cursorInPrefix =
 							focus && sel.empty && sel.head >= headLine.from && sel.head <= prefixEnd;
 						if (!cursorInPrefix) deco.push(hide.range(headLine.from, prefixEnd));

@@ -251,10 +251,9 @@ export function PagePanel({
 	const fresh = open ? [] : news;
 	const tone = useStatusTone();
 	const latest = fresh[0] ?? feed[0];
-	const status =
-		latest && latest.u.status
-			? statusProp(ix.schemaOf(latest.from))?.options?.find((o) => o.id === latest.u.status)?.name
-			: undefined;
+	const status = latest?.u.status
+		? statusProp(ix.schemaOf(latest.from))?.options?.find((o) => o.id === latest.u.status)?.name
+		: undefined;
 	const where =
 		latest &&
 		[

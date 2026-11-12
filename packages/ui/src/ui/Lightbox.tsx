@@ -101,7 +101,7 @@ function Lightbox({ ids, start }: { ids: string[]; start: number }) {
 						<>
 							<Button
 								aria-label={t("lightbox.prev")}
-								className={nav + " left-3"}
+								className={`${nav} left-3`}
 								onClick={(e) => (e.stopPropagation(), step(-1))}
 								variant="plain"
 							>
@@ -109,7 +109,7 @@ function Lightbox({ ids, start }: { ids: string[]; start: number }) {
 							</Button>
 							<Button
 								aria-label={t("lightbox.next")}
-								className={nav + " right-3"}
+								className={`${nav} right-3`}
 								onClick={(e) => (e.stopPropagation(), step(1))}
 								variant="plain"
 							>

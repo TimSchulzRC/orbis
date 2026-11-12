@@ -144,7 +144,7 @@ export function insertDrawing(view: EditorView, pos = view.state.selection.main.
 	const id = repo.create({ kind: "drawing", title: "", parents: parent ? [parent] : [] });
 	const embed = `![[${id}]]`;
 	// after the index has the new drawing (next microtask), so the embed shows at once
-	queueMicrotask(() => insertBlock(view, pos, embed + "\n", embed.length + 1));
+	queueMicrotask(() => insertBlock(view, pos, `${embed}\n`, embed.length + 1));
 }
 
 const SECTIONS = {
@@ -165,13 +165,13 @@ export function slashCompletion(ctx: CompletionContext): CompletionResult | null
 	const options: Option[] = [];
 	for (const item of ITEMS) {
 		const kind = KINDS.find((k) => k.kind === item.id)?.kind;
-		const label = kind ? kindName(kind) : tr("editor.slash." + item.id);
-		if (query && !hasWord(label + " " + tr("editor.slash." + item.id + ".keys"), query)) continue;
+		const label = kind ? kindName(kind) : tr(`editor.slash.${item.id}`);
+		if (query && !hasWord(`${label} ${tr(`editor.slash.${item.id}.keys`)}`, query)) continue;
 		const section = SECTIONS[item.section];
 		options.push({
 			label,
 			icon: item.icon,
-			hint: tr("editor.slash." + item.id + ".hint"),
+			hint: tr(`editor.slash.${item.id}.hint`),
 			section: { name: tr(section.name), rank: section.rank },
 			boost: -ITEMS.indexOf(item),
 			apply: (view) => {
@@ -234,7 +234,7 @@ export const slashRender = {
 		const option = c as Option;
 		if (!option.icon) return null;
 		const row = document.createElement("div");
-		row.className = "cm-slash" + (option.page ? " page" : "");
+		row.className = `cm-slash${option.page ? " page" : ""}`;
 		const tile = document.createElement("span");
 		tile.className = "cm-slash-icon";
 		tile.innerHTML = iconHTML(option.icon, option.page ? 15 : 18);

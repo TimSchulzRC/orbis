@@ -51,7 +51,7 @@ test("a property opens its page, and the arrow goes back to the list", async () 
 	const { dialog, schema } = await setupProps();
 	const status = schema().properties.find((p) => p.kind === "status")!;
 	await dialog
-		.getByRole("button", { name: new RegExp("^" + status.name) })
+		.getByRole("button", { name: new RegExp(`^${status.name}`) })
 		.first()
 		.click();
 	await expect
@@ -65,7 +65,7 @@ test("removing a property shows the list again, its values stay", async () => {
 	const { dialog, schema } = await setupProps();
 	const prop = schema().properties.find((p) => p.kind === "date")!;
 	await dialog
-		.getByRole("button", { name: new RegExp("^" + prop.name) })
+		.getByRole("button", { name: new RegExp(`^${prop.name}`) })
 		.first()
 		.click();
 	await dialog.getByRole("button", { name: "Eigenschaft entfernen", exact: true }).click();
@@ -91,7 +91,7 @@ test("a status option moves to another group", async () => {
 	const status = () => schema().properties.find((p) => p.kind === "status")!;
 	const option = status().options!.find((o) => (o.group ?? "todo") === "active")!;
 	await dialog
-		.getByRole("button", { name: new RegExp("^" + status().name) })
+		.getByRole("button", { name: new RegExp(`^${status().name}`) })
 		.first()
 		.click();
 	const row = dialog

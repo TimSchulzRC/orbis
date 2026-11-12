@@ -46,7 +46,7 @@ test("from and to the empty text", () => {
 test("unified text is capped by lines and width, and says how much there was", () => {
 	const d = textDiff(
 		"",
-		Array.from({ length: 50 }, (_, i) => `${i} ` + "x".repeat(300)).join("\n"),
+		Array.from({ length: 50 }, (_, i) => `${i} ${"x".repeat(300)}`).join("\n"),
 	);
 	const u = unifiedDiff(d, { maxLines: 10, maxWidth: 40 });
 	expect(u.shown).toBe(10);

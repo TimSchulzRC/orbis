@@ -115,7 +115,7 @@ export function BoardView({
 							<div className="flex gap-3 px-2">
 								{columns.map((col) => {
 									const cards = col.items.filter((i) => inLane.has(i.id));
-									const k = lane.key + "|" + col.key;
+									const k = `${lane.key}|${col.key}`;
 									return (
 										<div
 											className={cn(
@@ -203,7 +203,7 @@ function BoardCard({ item: i, cols, ctx }: { item: Item; cols: string[]; ctx: Ev
 					)}
 				</span>
 			))}
-			{pr && pr.total ? (
+			{pr?.total ? (
 				<ProgressCount className="text-xs text-muted-foreground" done={pr.done} total={pr.total} />
 			) : null}
 		</div>

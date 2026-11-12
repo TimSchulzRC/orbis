@@ -81,7 +81,7 @@ export function CommandPalette({
 		[t("palette.cmd.newType"), () => openNewType(captureIn)],
 		[t("palette.cmd.language"), () => setLang(getLang() === "de" ? "en" : "de")],
 		...(["system", "light", "dark"] as const).map((v): [string, () => void] => [
-			t("palette.cmd.theme", { name: t("theme." + v) }),
+			t("palette.cmd.theme", { name: t(`theme.${v}`) }),
 			() => setTheme(v),
 		]),
 	];

@@ -33,7 +33,7 @@ export function workspaceDirs(dataDir: string): string[] {
 /** Fills the first workspace of a data folder with the German setup and its examples, while no server runs on it. */
 export async function seedExamples(dataDir: string) {
 	const [dir] = workspaceDirs(dataDir);
-	if (!dir) throw new Error("no workspace in " + dataDir);
+	if (!dir) throw new Error(`no workspace in ${dataDir}`);
 	const store = new Store(dir);
 	const blobs = new Blobs(join(dir, "blobs"), store);
 	await setUp(store, blobs, "de", { examples: true, quiet: false });
@@ -57,7 +57,7 @@ export async function bootServer(
 	// generous: the self-hosted CI runner shares its machine, and under load a boot can take over 10 s
 	for (let i = 0; i < 400; i++) {
 		if (
-			await fetch(url + "/api/info").then(
+			await fetch(`${url}/api/info`).then(
 				(r) => r.ok,
 				() => false,
 			)

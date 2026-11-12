@@ -42,7 +42,7 @@ function signupContext(headers: Headers | undefined): SignupContext {
 		?.get("cookie")
 		?.split(";")
 		.map((c) => c.trim())
-		.find((c) => c.startsWith(SIGNUP_COOKIE + "="));
+		.find((c) => c.startsWith(`${SIGNUP_COOKIE}=`));
 	if (!raw) return {};
 	try {
 		const parsed = JSON.parse(decodeURIComponent(raw.slice(SIGNUP_COOKIE.length + 1))) as Record<
@@ -543,7 +543,7 @@ export class Accounts {
 	/** Only the hash is stored, so the token can be shown once. A new one ends the one before. */
 	mcpToken(workspace: string, user: string): string {
 		if (!this.role(workspace, user)) throw new AccountError("not a member", 403);
-		const token = "obt_" + randomToken();
+		const token = `obt_${randomToken()}`;
 		this.db.transaction(() => {
 			this.revokeMcpToken(workspace, user);
 			this.db

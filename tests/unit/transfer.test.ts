@@ -21,7 +21,7 @@ test("a move takes what hangs only below; parents, refs and relations outside st
 		parents: [work],
 		props: { p_status: "st_active", p_priority: "pr_high" },
 		refs: [other],
-		body: "See [[Elsewhere]] and [[" + other + "|there]].",
+		body: `See [[Elsewhere]] and [[${other}|there]].`,
 	});
 	const t1 = a.add({
 		title: "Build pages",

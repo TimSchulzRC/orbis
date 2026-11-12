@@ -103,7 +103,7 @@ test("activity: text changes as a diff, properties and options by name, updates 
 test("activity: a long diff is cut, with the call that shows all of it", async () => {
 	await tool("create", { items: [{ title: "Much text" }] });
 	const id = idOf("Much text");
-	edit(TIM, id, Array.from({ length: 120 }, (_, i) => `Line ${i}`).join("\n") + "\n");
+	edit(TIM, id, `${Array.from({ length: 120 }, (_, i) => `Line ${i}`).join("\n")}\n`);
 	const out = (await tool("activity", { days: 1, ref: "Much text" })).text;
 	expect(out).toContain(`more line(s): history ref=${id} from=0 to=1`);
 	const full = (await tool("history", { ref: id, from: 0, to: 1 })).text;

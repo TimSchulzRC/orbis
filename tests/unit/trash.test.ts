@@ -130,7 +130,7 @@ test("restoring an outer root keeps a subtree whose own root is still deleted", 
 	// the merged state of two concurrent deletes: s deleted itself, t marked via the outer root
 	m.change(p, (d) => setMeta(d, { deleted: true }));
 	m.change(s, (d) => setMeta(d, { deleted: true }));
-	m.change(t, (d) => setMeta(d, { deleted: "via:" + p }));
+	m.change(t, (d) => setMeta(d, { deleted: `via:${p}` }));
 	restore(m, p);
 	expect(alive(m, p)).toBe(true);
 	expect(alive(m, s)).toBe(false);

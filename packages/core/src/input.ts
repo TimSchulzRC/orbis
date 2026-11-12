@@ -65,8 +65,8 @@ function fullYear(year: string | undefined, thisYear: number): number {
 
 function iso(y: number, m: number, d: number): string | undefined {
 	const s = `${String(y).padStart(4, "0")}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-	const dt = new Date(s + "T12:00:00Z");
-	return !isNaN(dt.getTime()) && dt.toISOString().startsWith(s) ? s : undefined;
+	const dt = new Date(`${s}T12:00:00Z`);
+	return !Number.isNaN(dt.getTime()) && dt.toISOString().startsWith(s) ? s : undefined;
 }
 
 /**
@@ -76,7 +76,7 @@ function iso(y: number, m: number, d: number): string | undefined {
  */
 export function parseDate(input: string, today: string): string | undefined {
 	const v = input.trim();
-	const base = new Date(today + "T12:00:00");
+	const base = new Date(`${today}T12:00:00`);
 	let m = /^(\d{4})-(\d{2})-(\d{2})(?:[T ][\d:.]+(?:Z|[+-]\d{2}:?\d{2})?)?$/.exec(v);
 	if (m) return iso(+m[1]!, +m[2]!, +m[3]!);
 	m = /^(\d{1,2})\.(\d{1,2})\.(\d{2}|\d{4})?$/.exec(v);

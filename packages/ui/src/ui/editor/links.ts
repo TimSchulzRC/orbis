@@ -50,7 +50,7 @@ function linksIn(state: EditorState, from: number, to: number): Link[] {
 			for (const match of line.text.matchAll(wikiLinkRe())) {
 				const start = line.from + match.index!;
 				const all = match[0];
-				const open = match[1] + "[[";
+				const open = `${match[1]}[[`;
 				const title = match[2]!;
 				const rest = (match[3] ?? "") + (match[4] ?? "");
 				const bar = rest.indexOf("|");
@@ -200,7 +200,7 @@ class LinkWidget extends WidgetType {
 	}
 	toDOM(view: EditorView) {
 		const span = document.createElement("span");
-		span.className = this.web ? "cm-mdlink" : "cm-wikilink" + (this.exists ? "" : " missing");
+		span.className = this.web ? "cm-mdlink" : `cm-wikilink${this.exists ? "" : " missing"}`;
 		span.textContent = this.text;
 		span.title = this.target;
 		span.setAttribute("role", "link");

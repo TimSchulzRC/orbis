@@ -101,14 +101,14 @@ export function drawingSvg(
 		svgs.set(key, hit);
 		// keep only the newest version of each drawing
 		for (const k of svgs.keys())
-			if (k.startsWith(id + ":") && !k.startsWith(`${id}:${version}:`)) svgs.delete(k);
+			if (k.startsWith(`${id}:`) && !k.startsWith(`${id}:${version}:`)) svgs.delete(k);
 	}
 	return hit.then((svg) => (svg ? (svg.cloneNode(true) as SVGSVGElement) : null));
 }
 
 /** An image arrived: the next drawingSvg draws afresh, also while an earlier render is still running. */
 export function forgetDrawingSvg(id: string) {
-	for (const k of svgs.keys()) if (k.startsWith(id + ":")) svgs.delete(k);
+	for (const k of svgs.keys()) if (k.startsWith(`${id}:`)) svgs.delete(k);
 }
 
 async function renderSvg(

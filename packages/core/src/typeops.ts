@@ -259,7 +259,7 @@ function recordOp(
 	payload: OpPayload,
 	origin?: string,
 ): string {
-	const id = "op_" + newId();
+	const id = `op_${newId()}`;
 	w.change(id, (doc) => {
 		initItem(doc, { kind: "op", title: label, createdBy: origin });
 		setOp(doc, { action, label, payload });

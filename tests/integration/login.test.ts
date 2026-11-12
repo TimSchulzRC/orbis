@@ -28,7 +28,7 @@ async function setUp(policy: SignupPolicy, opts: { password?: boolean } = {}) {
 	/** A request of the app's page to Better Auth, as the server passes it on. */
 	const call = (path: string, body: unknown, ctx?: { invite?: string; lang?: string }) =>
 		accounts.auth.handler(
-			new Request("http://localhost:8480/api/auth" + path, {
+			new Request(`http://localhost:8480/api/auth${path}`, {
 				method: "POST",
 				headers: {
 					"content-type": "application/json",

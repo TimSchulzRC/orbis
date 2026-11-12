@@ -6,8 +6,6 @@ import {
 	parseRange,
 	propByName,
 	type StatusGroup,
-	type TypeSchema,
-	titleKey,
 	type ViewTab,
 } from "@obtion/core/model";
 import {
@@ -234,7 +232,7 @@ export function GroupedTable({
 	const titleW = narrow ? Math.min(width("title"), 190) : width("title");
 	const total = titleW + cols.reduce((s, c) => s + width(c), 0);
 	const label = (c: string) => {
-		if ((FIELDS as readonly string[]).includes(c)) return t("field." + c);
+		if ((FIELDS as readonly string[]).includes(c)) return t(`field.${c}`);
 		if (c === "tags") return t("item.tags");
 		for (const i of items) {
 			const hit = fieldOf(i, c, ix);

@@ -27,7 +27,7 @@ export function PageTags({ item }: { item: Item }) {
 			{item.tags.map((tag) => (
 				<Tag
 					key={tag}
-					onOpen={() => openPalette("#" + tag)}
+					onOpen={() => openPalette(`#${tag}`)}
 					onRemove={() => setTag(item, tag, false)}
 					tag={tag}
 				/>

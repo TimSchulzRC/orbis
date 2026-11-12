@@ -70,15 +70,15 @@ export function pluralOf(name: string, lang: string): string {
 				const head = n.slice(0, n.length - one.length);
 				return head ? head + many : many[0]!.toUpperCase() + many.slice(1);
 			}
-		if (/(ung|heit|keit|schaft|ion|tät|ik|ur|ei|or)$/i.test(n)) return n + "en"; // Autor → Autoren
-		if (/iel$/i.test(n)) return n + "e"; // Ziel, Spiel
-		if (/in$/i.test(n)) return n + "nen"; // Autorin → Autorinnen
-		if (/[aoiuy]$/i.test(n)) return n + "s"; // Video, Foto, Hobby
-		if (/e$/i.test(n)) return n + "n";
+		if (/(ung|heit|keit|schaft|ion|tät|ik|ur|ei|or)$/i.test(n)) return `${n}en`; // Autor → Autoren
+		if (/iel$/i.test(n)) return `${n}e`; // Ziel, Spiel
+		if (/in$/i.test(n)) return `${n}nen`; // Autorin → Autorinnen
+		if (/[aoiuy]$/i.test(n)) return `${n}s`; // Video, Foto, Hobby
+		if (/e$/i.test(n)) return `${n}n`;
 		if (/(el|er|en|chen|lein)$/i.test(n)) return n;
-		return n + "e";
+		return `${n}e`;
 	}
-	if (/(s|x|z|ch|sh)$/i.test(n)) return n + "es";
-	if (/[^aeiou]y$/i.test(n)) return n.slice(0, -1) + "ies";
-	return n + "s";
+	if (/(s|x|z|ch|sh)$/i.test(n)) return `${n}es`;
+	if (/[^aeiou]y$/i.test(n)) return `${n.slice(0, -1)}ies`;
+	return `${n}s`;
 }

@@ -7,7 +7,7 @@
 
 import { deserialize, serialize } from "bun:jsc";
 import { initItem, metaMap } from "@obtion/core/model";
-import { type ReplicaStorage, Repo, type RepoHost, type StoredRow } from "@obtion/sync";
+import { type ReplicaStorage, Repo, type StoredRow } from "@obtion/sync";
 import * as Y from "yjs";
 import { Store } from "../apps/server/src/store";
 import { Workspace } from "../apps/server/src/workspace";
@@ -26,7 +26,7 @@ const rnd = (n: number) => {
 	return seed % n;
 };
 
-const mb = (n: number) => (n / 1024 / 1024).toFixed(1) + " MB";
+const mb = (n: number) => `${(n / 1024 / 1024).toFixed(1)} MB`;
 function memory(): string {
 	Bun.gc(true);
 	const u = process.memoryUsage();
@@ -38,7 +38,7 @@ if (mode === "gen") {
 	const store = new Store(dir);
 	const t0 = performance.now();
 	for (let i = 0; i < items; i++) {
-		const id = "bench" + i.toString().padStart(6, "0");
+		const id = `bench${i.toString().padStart(6, "0")}`;
 		let state: Uint8Array | null = null;
 		store.db.exec("BEGIN"); // generation only: one transaction per item instead of one per update
 		for (let s = 0; s < sessions; s++) {
@@ -50,7 +50,7 @@ if (mode === "gen") {
 			for (let e = 0; e < edits; e++) {
 				doc.transact(() => {
 					const r = rnd(10);
-					if (r < 7) text.insert(rnd(text.length + 1), WORDS[rnd(WORDS.length)]! + " ");
+					if (r < 7) text.insert(rnd(text.length + 1), `${WORDS[rnd(WORDS.length)]!} `);
 					else if (r < 9 && text.length > 20) text.delete(rnd(text.length - 10), 1 + rnd(8));
 					else metaMap(doc).set("title", `Item ${i} v${s}.${e}`);
 					metaMap(doc).set("updated", Date.now());

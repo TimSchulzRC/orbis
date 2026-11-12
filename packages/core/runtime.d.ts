@@ -2,7 +2,7 @@
 // Native (Hermes) all have. No DOM, Node or Bun types. On Hermes, crypto.getRandomValues needs
 // react-native-get-random-values.
 
-declare var console: {
+declare let console: {
 	log(...a: unknown[]): void;
 	warn(...a: unknown[]): void;
 	error(...a: unknown[]): void;
@@ -14,7 +14,7 @@ declare function clearInterval(id: number | undefined): void;
 declare function queueMicrotask(fn: () => void): void;
 declare function btoa(s: string): string;
 declare function atob(s: string): string;
-declare var crypto: { getRandomValues<T extends Uint8Array>(a: T): T };
+declare let crypto: { getRandomValues<T extends Uint8Array>(a: T): T };
 declare class TextEncoder {
 	encode(s: string): Uint8Array<ArrayBuffer>;
 }

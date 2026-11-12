@@ -15,7 +15,7 @@ export function escapeHtml(s: string): string {
 
 /** "www.example.org" gets its https://. */
 export function webHref(url: string): string {
-	return /^www\./i.test(url) ? "https://" + url : url;
+	return /^www\./i.test(url) ? `https://${url}` : url;
 }
 
 /** The quiet hint next to a page in link and mention lists: "File", else its type. */

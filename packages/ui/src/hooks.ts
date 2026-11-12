@@ -84,7 +84,7 @@ export function navigate(path: string, opts: { space?: string; replace?: boolean
 }
 
 function replaceHash(hash: string) {
-	history.replaceState(history.state, "", "#" + hash);
+	history.replaceState(history.state, "", `#${hash}`);
 	reroute();
 }
 
@@ -94,14 +94,14 @@ export function setParams(params: Record<string, string | null>) {
 	const query = new URLSearchParams(qs ?? "");
 	for (const [k, v] of Object.entries(params)) v === null ? query.delete(k) : query.set(k, v);
 	const next = query.toString();
-	if (next !== (qs ?? "")) replaceHash(path + (next ? "?" + next : ""));
+	if (next !== (qs ?? "")) replaceHash(path + (next ? `?${next}` : ""));
 }
 
 /** Ids like "sys:project" keep their colon: allowed in a path and easier to read. */
 const seg = (s: string) => encodeURIComponent(s).replace(/%3A/gi, ":");
 
 export const itemPath = (id: string) => `/i/${seg(id)}`;
-export const itemHref = (id: string) => "#" + itemPath(id);
+export const itemHref = (id: string) => `#${itemPath(id)}`;
 
 /** "Projektplan Q4" → "projektplan-q4" */
 const MAX_SLUG = 60;
@@ -124,7 +124,7 @@ export function showTitle(title: string) {
 	const at = /^((?:\/w\/[^/?]+)?\/i\/[^/]+)/.exec(path!)?.[1];
 	if (!at) return;
 	const titleSlug = slug(title);
-	const next = at + (titleSlug ? "/" + titleSlug : "") + (qs ? "?" + qs : "");
+	const next = at + (titleSlug ? `/${titleSlug}` : "") + (qs ? `?${qs}` : "");
 	if (next !== location.hash.replace(/^#/, "")) replaceHash(next);
 }
 

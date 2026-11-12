@@ -152,7 +152,7 @@ function attempts(f: { id: string; hash: string }, headers: Record<string, strin
 		"GET file": () => fetch(`${files()}/${f.id}${q}`, { headers }),
 		"HEAD file": () => fetch(`${files()}/${f.id}${q}`, { method: "HEAD", headers }),
 		"POST file": () =>
-			fetch(`${files()}?name=new.txt${q ? "&" + q.slice(1) : ""}`, {
+			fetch(`${files()}?name=new.txt${q ? `&${q.slice(1)}` : ""}`, {
 				method: "POST",
 				headers,
 				body: "new",
@@ -188,7 +188,7 @@ test("without a token, with a wrong one, with the token in the query: 401, no da
 	const f = await uploaded("secret.txt", secret);
 	await refused(f, secret, {});
 	await refused(f, secret, bearer("obt_wrong"));
-	await refused(f, secret, bearer(owner.token.slice(0, -2) + "xx"));
+	await refused(f, secret, bearer(`${owner.token.slice(0, -2)}xx`));
 	await refused(f, secret, { authorization: owner.token }); // without "Bearer"
 	// tokens never count in the URL, neither the session nor the MCP token, under any name
 	for (const name of ["t", "token", "access_token", "s", "auth"])

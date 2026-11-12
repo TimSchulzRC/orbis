@@ -147,9 +147,9 @@ const DIFF_BUDGET = 400;
 function short(x: unknown, max = 120): string {
 	const s = typeof x === "string" ? x : JSON.stringify(x);
 	return typeof x === "string"
-		? `"${s.length > max ? s.slice(0, max - 1) + "…" : s}"`
+		? `"${s.length > max ? `${s.slice(0, max - 1)}…` : s}"`
 		: s.length > max
-			? s.slice(0, max - 1) + "…"
+			? `${s.slice(0, max - 1)}…`
 			: s;
 }
 
@@ -267,8 +267,8 @@ function joinBody(
 	text: string,
 	mode: UpdateInput["body_mode"] = "replace",
 ): string {
-	if (mode === "append") return (current.trimEnd() ? current.trimEnd() + "\n\n" : "") + text;
-	if (mode === "prepend") return text + (current ? "\n\n" + current : "");
+	if (mode === "append") return (current.trimEnd() ? `${current.trimEnd()}\n\n` : "") + text;
+	if (mode === "prepend") return text + (current ? `\n\n${current}` : "");
 	return text;
 }
 
@@ -279,7 +279,7 @@ function firstLine(text: string): string {
 			.split("\n")
 			.map((x) => x.trim())
 			.find(Boolean) ?? "";
-	return l.length > 160 ? l.slice(0, 159) + "…" : l;
+	return l.length > 160 ? `${l.slice(0, 159)}…` : l;
 }
 
 /** "start/end", either side may be empty. Tries every slash, since a date itself may contain one. */
@@ -370,7 +370,7 @@ export class Ops {
 		const candidates = (items: Item[]) =>
 			items.map((i) => `- ${this.label(i)} (id ${i.id})`).join("\n");
 		if (exact.length > 1)
-			throw new OpError(`Several items are titled "${r}". Use an id:\n` + candidates(exact));
+			throw new OpError(`Several items are titled "${r}". Use an id:\n${candidates(exact)}`);
 		const contains = pool.filter((i) => titleKey(i.title).includes(key));
 		if (contains.length === 1) return contains[0]!;
 		const sugg = (
@@ -584,7 +584,7 @@ export class Ops {
 	}
 
 	lines(items: Item[], base?: string): string {
-		return items.map((i) => "- " + this.line(i, base)).join("\n");
+		return items.map((i) => `- ${this.line(i, base)}`).join("\n");
 	}
 
 	/** The answer of a writing tool: one line per entry, with its version (base_version for the next update). */
@@ -673,7 +673,7 @@ export class Ops {
 			if (i && !ix.isBlocked(i)) unblocked.push(`"${i.title}"`);
 		}
 		if (unblocked.length) hints.push(`No longer blocked: ${unblocked.join(", ")}.`);
-		return hints.length ? `${out}\n\nHints:\n${hints.map((h) => "- " + h).join("\n")}` : out;
+		return hints.length ? `${out}\n\nHints:\n${hints.map((h) => `- ${h}`).join("\n")}` : out;
 	}
 
 	/** With `redo`, the step whose undo happened last. */
@@ -955,7 +955,7 @@ export class Ops {
 			recent_activity: this.activityFeed({ days: 3, limit: 10 }).entries.map(
 				(e) => (
 					e.doc && touched?.add(e.doc),
-					`${this.entryHead(e)}${e.changes.length ? ": " + this.changeTexts(e).join("; ") : ""}`
+					`${this.entryHead(e)}${e.changes.length ? `: ${this.changeTexts(e).join("; ")}` : ""}`
 				),
 			),
 		};
@@ -1039,7 +1039,7 @@ export class Ops {
 			return { ts: row.ts, id: Number(s) };
 		}
 		const t = Date.parse(s);
-		if (isNaN(t))
+		if (Number.isNaN(t))
 			throw new OpError(
 				`since "${since}" is neither a cursor nor a time. Use the cursor of the last call or an ISO time like 2026-11-01T08:00.`,
 			);
@@ -1075,7 +1075,7 @@ export class Ops {
 		const head = `${entries.length}${more ? "+" : ""} change(s) ${scope.join(" · ")}${opts.since !== undefined ? " (oldest first)" : " (newest first)"}`;
 		let budget = DIFF_BUDGET;
 		const blocks = entries.map((e) => {
-			const lines = [this.entryHead(e), ...this.changeTexts(e).map((c) => "  " + c)];
+			const lines = [this.entryHead(e), ...this.changeTexts(e).map((c) => `  ${c}`)];
 			const body = e.changes.find((c) => c.field === "body");
 			if (body?.diff && opts.diff !== false) {
 				const t = this.store.eventText(e.id);
@@ -1088,7 +1088,7 @@ export class Ops {
 							maxWidth: 240,
 						});
 						budget -= u.shown;
-						lines.push(...u.text.split("\n").map((l) => "    " + l));
+						lines.push(...u.text.split("\n").map((l) => `    ${l}`));
 						if (u.total > u.shown) lines.push(`    … ${u.total - u.shown} more line(s): ${more}`);
 					}
 				}
@@ -1175,7 +1175,7 @@ export class Ops {
 			else if (f === "pinned") out.push(c.to ? "pinned" : "unpinned");
 			else if (f === "parents") out.push(plusMinus("part of", c));
 			else if (f === "tags")
-				out.push(plusMinus("tags", c, (x) => (x as string[]).map((t) => "#" + t).join(" ")));
+				out.push(plusMinus("tags", c, (x) => (x as string[]).map((t) => `#${t}`).join(" ")));
 			else if (f === "refs") out.push(plusMinus("refs", c));
 			else if (f === "body") out.push(`text: ${c.from ?? 0} → ${c.to ?? 0} characters`);
 			else if (f === "rules") out.push("agent_rules changed");
@@ -1260,7 +1260,7 @@ export class Ops {
 				: `The text now differs from version ${versions.length} (changes moments ago).`;
 		return [
 			`${versions.length} version(s) of the text of ${name}, newest first${versions.length > shown.length ? " (the newest 50)" : ""}:`,
-			...shown.map((r) => "- " + r),
+			...shown.map((r) => `- ${r}`),
 			now,
 			"version=N shows a version's text; from=N (and to=M, default the text now) shows a diff. To go back to a version, update the body with it (body_mode replace).",
 		].join("\n");
@@ -1286,8 +1286,8 @@ export class Ops {
 				const plain = Number(s);
 				let n: number | undefined;
 				if (typeof raw === "number") n = raw;
-				else n = isNaN(plain) ? parseNumber("de", s) : plain;
-				if (n === undefined || isNaN(n))
+				else n = Number.isNaN(plain) ? parseNumber("de", s) : plain;
+				if (n === undefined || Number.isNaN(n))
 					throw new OpError(`"${p.name}" needs a number, got "${raw}".`);
 				return { value: n };
 			}
@@ -1501,7 +1501,7 @@ export class Ops {
 			const excerpt = (xs: string[]) =>
 				xs
 					.slice(0, 6)
-					.map((l) => `  ${l.length > 160 ? l.slice(0, 159) + "…" : l}`)
+					.map((l) => `  ${l.length > 160 ? `${l.slice(0, 159)}…` : l}`)
 					.join("\n") + (xs.length > 6 ? `\n  … ${xs.length - 6} more line(s)` : "");
 			const lost = current.filter((l) => !yours.includes(l));
 			const added = yours.filter((l) => !current.includes(l));
@@ -1693,7 +1693,7 @@ export class Ops {
 			[...this.store.records.values()].find(
 				(x) => x.deleted && titleKey(x.title) === titleKey(ref),
 			);
-		if (!item || !item.deleted) throw new OpError(`Nothing in the trash matches "${ref}".`);
+		if (!item?.deleted) throw new OpError(`Nothing in the trash matches "${ref}".`);
 		return item;
 	}
 

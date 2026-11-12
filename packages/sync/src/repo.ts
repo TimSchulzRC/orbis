@@ -361,7 +361,7 @@ export class Repo {
 		const keepsTyping =
 			typing && prev?.typing && prev.doc === docId && now - prev.at < TYPING_STEP_GAP_MS;
 		if (prev && (this.sameTick || keepsTyping)) prev.at = now;
-		else this.curStep = { id: "s" + newId(), at: now, doc: docId, typing };
+		else this.curStep = { id: `s${newId()}`, at: now, doc: docId, typing };
 		if (!this.sameTick) {
 			this.sameTick = true;
 			queueMicrotask(() => (this.sameTick = false));
@@ -818,7 +818,7 @@ export class Repo {
 	/** Applies the new type's initial values. Files have no type. */
 	setType(id: string, type: string | null) {
 		const item = this.records.get(id);
-		if (!item || item.kind !== "note" || item.type === type) return;
+		if (item?.kind !== "note" || item.type === type) return;
 		const schema = type ? this.records.get(type)?.schema : undefined;
 		this.change(id, (doc) => {
 			setMeta(doc, { type });

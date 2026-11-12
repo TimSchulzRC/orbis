@@ -41,7 +41,7 @@ export function openDrawing(id: string) {
 	const [path, qs] = location.hash.replace(/^#/, "").split("?");
 	const query = new URLSearchParams(qs ?? "");
 	query.set(OPEN, id);
-	location.hash = path + "?" + query;
+	location.hash = `${path}?${query}`;
 	// opened from here: closing is going Back (a link or a reload opened it: the note replaces it)
 	history.replaceState({ ...history.state, drawing: id }, "");
 }

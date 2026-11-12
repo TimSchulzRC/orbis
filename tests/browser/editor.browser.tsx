@@ -348,7 +348,7 @@ test('"/Trennlinie" right under a line of text draws a line and keeps the text a
 
 describe("the toolbar over selected text", () => {
 	const toolbar = () => document.querySelector<HTMLElement>(".cm-toolbar.shown");
-	const button = (cls: string) => document.querySelector<HTMLElement>(".cm-toolbar.shown " + cls)!;
+	const button = (cls: string) => document.querySelector<HTMLElement>(`.cm-toolbar.shown ${cls}`)!;
 	/** A click in the middle of an element, once the toolbar has moved to its place (a frame after a change). */
 	const press = async (el: Element) => {
 		await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));

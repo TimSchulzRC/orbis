@@ -425,7 +425,7 @@ function printCond(c: Cond, lang: Lang, ix: Index, top = false): string {
 		const s = c.or.map((x) => printCond(x, lang, ix)).join(" | ");
 		return top ? s : `(${s})`;
 	}
-	if ("not" in c) return "-" + printCond(c.not, lang, ix);
+	if ("not" in c) return `-${printCond(c.not, lang, ix)}`;
 	if ("type" in c) {
 		if (c.type === META_TYPE) return `${k("type")}:${words(lang, "q.metaType")[0] ?? "Type"}`;
 		return `${k("type")}:${quoteIf(ix.typeName(c.type) ?? c.type)}`;
@@ -502,7 +502,7 @@ export function fieldOf(item: Item, name: string, ix: Index): FieldHit | undefin
 		case "progress": {
 			// share of done descendants that have a status
 			const pr = ix.progressOf(item);
-			return pr && pr.total ? { kind: "number", value: percent(pr) } : undefined;
+			return pr?.total ? { kind: "number", value: percent(pr) } : undefined;
 		}
 		case "subtasks": {
 			// children of the entry's own type (a task's sub-tasks); none: no value
@@ -572,7 +572,7 @@ function num(v: unknown): number | undefined {
 	if (typeof v === "number") return v;
 	if (typeof v !== "string") return undefined;
 	const n = Number(v.replace(/\s/g, ""));
-	return isNaN(n) ? parseNumber("de", v) : n;
+	return Number.isNaN(n) ? parseNumber("de", v) : n;
 }
 
 function cmp(a: number | string, b: number | string, op: Op): boolean {
@@ -695,7 +695,7 @@ export function matches(item: Item, c: Cond, ctx: EvalCtx): boolean {
 	if ("not" in c) return !matches(item, c.not, ctx);
 	if ("type" in c) return item.type === c.type && (c.type === META_TYPE || ix.types.has(c.type));
 	if ("typeName" in c || "unresolved" in c) return false;
-	if ("tag" in c) return item.tags.some((t) => t === c.tag || t.startsWith(c.tag + "/"));
+	if ("tag" in c) return item.tags.some((t) => t === c.tag || t.startsWith(`${c.tag}/`));
 	if ("under" in c) {
 		const id = resolveRef(c.under, ctx);
 		if (!id) return false;
@@ -949,11 +949,12 @@ export function groupItems(
 			if (!rank.has(o.name))
 				rank.set(o.name, (byStatus ? (FLOW[o.group ?? "todo"] ?? 0) * 100 : 0) + n);
 		});
+	const listed = new Set(items.map((x) => x.id));
 	for (const i of items) {
 		if (by === "path") {
 			let path = base ? (ix.relPath(base, i.id) ?? ix.homePath(i.id)) : ix.homePath(i.id);
 			// A sub-task shows with its parent task's group: cut the path at the first listed ancestor.
-			const inList = path.findIndex((p) => items.some((x) => x.id === p));
+			const inList = path.findIndex((p) => listed.has(p));
 			if (inList >= 0) path = path.slice(0, inList);
 			add(path.join("/"), { path }, i);
 		} else if (by === "status") {
@@ -1086,7 +1087,7 @@ export function blockSource(def: QueryDef): string {
 }
 
 export function queryFence(src: string): string {
-	return "```query\n" + src + "\n```";
+	return `\`\`\`query\n${src}\n\`\`\``;
 }
 
 /** The fence info string of a query block (```query). */
@@ -1102,7 +1103,7 @@ export function findBlocks(body: string): Block[] {
 		out.push({
 			from: m.index!,
 			to: m.index! + m[0].length,
-			src: ((m[1] ?? "") + "\n" + (m[2] ?? "")).trim(),
+			src: `${m[1] ?? ""}\n${m[2] ?? ""}`.trim(),
 		});
 	// single-line form: ```query type:Task```
 	const inline = /```query[ \t]+([^`\n]+)```/g;

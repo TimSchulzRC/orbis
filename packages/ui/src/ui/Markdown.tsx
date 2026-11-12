@@ -161,7 +161,7 @@ export function Markdown({ src, className }: { src: string; className?: string }
 	};
 	return (
 		<div
-			className={"md " + (className ?? "")}
+			className={`md ${className ?? ""}`}
 			dangerouslySetInnerHTML={{ __html: html }}
 			onClick={onClick}
 			ref={ref}

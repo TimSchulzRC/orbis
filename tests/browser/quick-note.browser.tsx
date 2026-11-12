@@ -111,7 +111,7 @@ test("a query in the text shows its results, as on the note's page", async () =>
 	repo
 		.getDoc(note.id)
 		.getText("body")
-		.insert(0, queryFence('{"where":{"type":"task"}}') + "\n");
+		.insert(0, `${queryFence('{"where":{"type":"task"}}')}\n`);
 	await expect
 		.poll(() => document.querySelector("[data-quick-note] .cm-queryblock"))
 		.not.toBeNull();

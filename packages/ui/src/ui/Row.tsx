@@ -30,7 +30,7 @@ export function StatusMenu({
 			{(close) =>
 				STATUS_GROUPS.map((g) => (
 					<div key={g}>
-						<p className="px-2.5 pb-0.5 pt-1.5 text-xs text-muted-foreground">{t("group." + g)}</p>
+						<p className="px-2.5 pb-0.5 pt-1.5 text-xs text-muted-foreground">{t(`group.${g}`)}</p>
 						{(statusProperty?.options ?? [])
 							.filter((o) => (o.group ?? "todo") === g)
 							.map((o) => (
@@ -131,7 +131,7 @@ export function pathLabel(ids: string[], repo: Repo = current) {
 /** Where an entry lives, short: the last two places of its home path ("… › Frankreich › Nordlicht"). */
 export function shortPath(ids: string[], keep = 2, repo: Repo = current): string {
 	const label = pathLabel(ids.slice(-keep), repo);
-	return ids.length > keep ? "… › " + label : label;
+	return ids.length > keep ? `… › ${label}` : label;
 }
 
 export function ItemRow({

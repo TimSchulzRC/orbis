@@ -21,7 +21,6 @@ import {
 	ListFilter,
 	Pin,
 	PinOff,
-	Plus,
 	Trash2,
 } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -118,7 +117,7 @@ function DrawingInNote({ item }: { item: Item }) {
 			?.from ?? ix.parentsOf(item.id)[0];
 	useEffect(() => {
 		// the drawing opens on its note (a search hit, a link to it)
-		if (note) openItem(note, { replace: true, query: "?d=" + encodeURIComponent(item.id) });
+		if (note) openItem(note, { replace: true, query: `?d=${encodeURIComponent(item.id)}` });
 		else setParams({ d: item.id });
 	}, [item.id]);
 	return <PagePlaceholder>{note ? t("drawing.loading") : titleOf(item, t)}</PagePlaceholder>;

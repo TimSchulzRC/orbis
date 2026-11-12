@@ -26,8 +26,8 @@ export function fieldLabel(
 	fields: { key: string; label: string }[] = [],
 ): string {
 	if (key === "status" || key === "statusGroup" || key === "type" || key === "path")
-		return t("group." + key);
-	if ((FIELDS as readonly string[]).includes(key)) return t("field." + key);
+		return t(`group.${key}`);
+	if ((FIELDS as readonly string[]).includes(key)) return t(`field.${key}`);
 	if (key === "tags") return t("item.tags");
 	return fields.find((f) => titleKey(f.key) === titleKey(key))?.label ?? key;
 }
@@ -74,7 +74,7 @@ export function GroupChip({ g, by, byLabel }: { g: Group; by: string; byLabel: s
 			<StatusPill
 				option={{
 					id: g.key,
-					name: t("group." + g.key),
+					name: t(`group.${g.key}`),
 					group: g.key as StatusGroup,
 					color: undefined,
 				}}
