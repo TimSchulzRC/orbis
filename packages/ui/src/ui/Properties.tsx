@@ -609,7 +609,7 @@ export function PropertyBlock({
 							<BlockRow key={`inv:${g.label}`} label={g.label}>
 								{g.ids.map((id) => (
 									<span
-										className="inline-flex max-w-full items-center gap-1 rounded-md bg-surface-2 px-1.5 py-0.5 text-[13px]"
+										className="inline-flex max-w-full items-center gap-1 rounded-md bg-surface-2 px-1.5 py-0.5 text-xs"
 										key={id}
 									>
 										<ItemLink className="min-w-0" item={ix.get(id)!} />
@@ -631,21 +631,21 @@ export function PropertyBlock({
 							</BlockRow>
 						)),
 						unused.length > 0 && (
-							<div className="col-span-2" key="unused">
-								<Button
-									aria-expanded={open}
-									className="tap-y inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs text-muted-foreground hover:bg-hover hover:text-fg"
-									onClick={() => setOpenFor(open ? undefined : item.id)}
-									type="button"
-									variant="plain"
-								>
-									<ChevronRight
-										className={cn("transition-transform", open && "rotate-90")}
-										size={13}
-									/>
-									{t("props.unused", { n: unused.length, count: unused.length })}
-								</Button>
-							</div>
+							// a row like the others: same height, its text on the labels' line, the arrow after it
+							<Button
+								aria-expanded={open}
+								className="col-span-2 flex min-h-[34px] w-full items-center gap-1 rounded-md px-1.5 text-left text-sm text-muted-foreground hover:bg-hover/60 hover:text-fg pointer-coarse:min-h-11"
+								key="unused"
+								onClick={() => setOpenFor(open ? undefined : item.id)}
+								type="button"
+								variant="plain"
+							>
+								{t("props.unused", { n: unused.length, count: unused.length })}
+								<ChevronRight
+									className={cn("transition-transform", open && "rotate-90")}
+									size={14}
+								/>
+							</Button>
 						),
 						...(open ? unused : []).map((p) => (
 							<BlockRow key={p.id} label={p.name} title={p.description || p.name}>
