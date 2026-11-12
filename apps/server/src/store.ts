@@ -8,6 +8,7 @@ import * as Y from "yjs";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { migrate } from "./migrate";
+import { type Foldable, FOLD_PAUSE_MS, changeSize, folds, foldStoredEvents, mergeChanges } from "./fold";
 import { type FileMeta, type Item, type ItemInit, type UpdateEntry, PERSONAL, RECORD_VERSION, SETTINGS_ID, areaOf, initItem, isContent, isContentKind, metaMap, newId, readItem } from "@obtion/core/model";
 import { sameValue } from "@obtion/core/equal";
 import type { Lang } from "@obtion/core/i18n";
@@ -42,7 +43,6 @@ type Listener = {
 /** How many documents stay in memory when not in use (least recently used go first). */
 const CACHE_SIZE = 200;
 const FLUSH_DELAY_MS = 250;
-const EVENT_MERGE_WINDOW_MS = 5 * 60_000;
 const MAX_CLOCK_SKEW_MS = 10 * 60_000;
 const MAX_UNDO_CHAIN = 20;
 /**
@@ -70,6 +70,12 @@ const SCHEMA = `CREATE TABLE IF NOT EXISTS updates (seq INTEGER PRIMARY KEY AUTO
   CREATE INDEX IF NOT EXISTS versions_event ON versions(event);
   CREATE TABLE IF NOT EXISTS purged (id TEXT PRIMARY KEY, area TEXT NOT NULL, seq INTEGER NOT NULL);
   CREATE TABLE IF NOT EXISTS purged_rows (uid TEXT PRIMARY KEY);`;
+
+/** `grown`: the characters of text an entry's edits changed (fold.ts). Entries from before fold as new ones do. */
+function EVENT_GROWN(db: Database) {
+  db.exec("ALTER TABLE events ADD grown INTEGER NOT NULL DEFAULT 0");
+  foldStoredEvents(db);
+}
 
 export class Store {
   db: Database;
@@ -106,7 +112,7 @@ export class Store {
     // a rebuild of all records). The limit cuts it back at the next commit. 8 MB is twice what the
     // automatic checkpoint (1000 pages) lets the WAL reach, so everyday writes never shrink it.
     this.db.exec(`PRAGMA journal_mode = WAL; PRAGMA journal_size_limit = ${8 * 1024 * 1024}; PRAGMA synchronous = NORMAL; PRAGMA secure_delete = ON;`);
-    migrate(this.db, [SCHEMA]);
+    migrate(this.db, [SCHEMA, EVENT_GROWN]);
     this.load();
     if (!this.kvGet("serverId")) this.kvSet("serverId", newId());
   }
@@ -483,21 +489,22 @@ export class Store {
     // Blank drafts (created, then left empty) are not worth an activity entry.
     const blank = !next.title.trim() && !next.body.trim();
     if (blank && (kind === "created" || kind === "deleted")) return undefined;
-    // Typing flushes constantly: fold consecutive edits by one author into one entry, but only
-    // within one step, so every entry can still be undone on its own.
-    const last = this.db.query("SELECT id, ts, kind, origin, changes, step FROM events WHERE doc = ? ORDER BY id DESC LIMIT 1").get(id) as
-      | { id: number; ts: number; kind: string; origin: string; changes: string; step: string | null }
-      | null;
+    // Typing flushes constantly: consecutive edits fold into one entry (fold.ts says which).
+    const last = this.db.query("SELECT id, ts, grown, kind, origin, changes, step FROM events WHERE doc = ? ORDER BY id DESC LIMIT 1").get(id) as (Foldable & { id: number; changes: string }) | null;
     const diff = changes.some((c) => c.field === "body") && isContentKind(next.kind);
-    if (kind === "updated" && last && last.kind === "updated" && last.origin === origin && (last.step ?? undefined) === step && ts - last.ts < EVENT_MERGE_WINDOW_MS) {
+    const isUndo = (s: string) => !!this.stepState(s).undoes;
+    const grown = diff && prev ? changeSize(prev.body, next.body) : 0;
+    if (last && folds(last, { kind, origin, step: step ?? null, ts }, isUndo)) {
       const merged = mergeChanges(JSON.parse(last.changes || "[]"), changes);
-      this.db.query("UPDATE events SET ts = ?, title = ?, changes = ? WHERE id = ?").run(ts, next.title, JSON.stringify(merged), last.id);
-      out.push({ id: last.id, ts, doc: id, title: next.title, type: typeTag(next), kind, origin, changes: markDiff(merged, diff || this.hasVersions(last.id)), step });
+      // an entry of several steps names none: undoing one of them would take back a part of it
+      const of = last.step === (step ?? null) ? step : undefined;
+      this.db.query("UPDATE events SET ts = ?, title = ?, changes = ?, step = ?, grown = ? WHERE id = ?").run(ts, next.title, JSON.stringify(merged), of ?? null, last.grown + grown, last.id);
+      out.push({ id: last.id, ts, doc: id, title: next.title, type: typeTag(next), kind, origin, changes: markDiff(merged, diff || this.hasVersions(last.id)), step: of });
       return { id: last.id, merged: true };
     }
     const row = this.db
-      .query("INSERT INTO events (ts, doc, title, type, kind, origin, changes, step, area) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id")
-      .get(ts, id, next.title, typeTag(next), kind, origin, JSON.stringify(changes), step ?? null, next.area) as { id: number };
+      .query("INSERT INTO events (ts, grown, doc, title, type, kind, origin, changes, step, area) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id")
+      .get(ts, grown, id, next.title, typeTag(next), kind, origin, JSON.stringify(changes), step ?? null, next.area) as { id: number };
     out.push({ id: row.id, ts, doc: id, title: next.title, type: typeTag(next), kind, origin, changes: markDiff(changes, diff), step });
     return { id: row.id, merged: false };
   }
@@ -506,8 +513,8 @@ export class Store {
   //
   // Every change of an item's text keeps the whole new text (deflated) in `versions`, so any
   // earlier version can be shown, compared and restored. Versions fold like activity entries:
-  // the same author in the same step within the merge window updates the newest version instead
-  // of adding one – typing a paragraph makes one version, not one per keystroke. The first time
+  // a change folded into the entry before it updates that entry's version instead of adding one –
+  // typing a paragraph makes one version, not one per keystroke. The first time
   // an item that has no version yet changes, the text it was created with is kept first, so its
   // history starts with it. Versions are never dropped: a text edited in a
   // hundred sessions costs a hundred compressed copies – a few MB for long, busy pages.
@@ -519,8 +526,8 @@ export class Store {
       | null;
     const insert = this.db.query("INSERT INTO versions (doc, ts, origin, step, event, len, data) VALUES (?, ?, ?, ?, ?, ?, ?)");
     if (!last && prev.body) insert.run(id, prev.created, prev.createdBy ?? "", null, null, prev.body.length, pack(prev.body));
-    const fold = last && (event ? event.merged && last.event === event.id : last.event === null && last.origin === origin && (last.step ?? undefined) === step && ts - last.ts < EVENT_MERGE_WINDOW_MS);
-    if (fold) this.db.query("UPDATE versions SET ts = ?, len = ?, data = ? WHERE id = ?").run(ts, next.body.length, pack(next.body), last.id);
+    const fold = last && (event ? event.merged && last.event === event.id : last.event === null && last.origin === origin && (last.step ?? undefined) === step && ts - last.ts < FOLD_PAUSE_MS);
+    if (fold) this.db.query("UPDATE versions SET ts = ?, len = ?, data = ?, step = CASE WHEN step IS ?4 THEN step END WHERE id = ?5").run(ts, next.body.length, pack(next.body), step ?? null, last.id);
     else insert.run(id, ts, origin, step ?? null, event?.id ?? null, next.body.length, pack(next.body));
   }
 
@@ -699,7 +706,9 @@ export class Store {
     }
     if (opts.docs) filter("doc IN (SELECT value FROM json_each(?))", JSON.stringify(opts.docs));
     const order = opts.after ? "ts, id" : "id DESC";
-    const sql = `SELECT * FROM events ${where.length ? "WHERE " + where.join(" AND ") : ""} ORDER BY ${order} LIMIT ?`;
+    // an entry whose folded changes ended where they began (typed, then taken back) says nothing
+    where.push("NOT (kind = 'updated' AND changes = '[]')");
+    const sql = `SELECT id, ts, doc, title, type, kind, origin, changes, step FROM events WHERE ${where.join(" AND ")} ORDER BY ${order} LIMIT ?`;
     args.push(opts.limit ?? 50);
     const found = this.db.query(sql).all(...args) as (Omit<ActivityEvent, "step" | "changes"> & { step: string | null; changes: string | null })[];
     const rows: ActivityEvent[] = found.map((r) => ({ ...r, step: r.step ?? undefined, changes: JSON.parse(r.changes || "[]") }));
@@ -762,37 +771,6 @@ function hasDeleteSet(update: Uint8Array) {
   } catch {
     return true;
   }
-}
-
-/** Combine two change lists: keep the first "from" and the last "to" per field. */
-function mergeChanges(a: FieldChange[], b: FieldChange[]): FieldChange[] {
-  const out = a.map((c) => ({ ...c }));
-  for (const c of b) {
-    if (c.field === "update") {
-      out.push(c);
-      continue;
-    }
-    const prev = out.find((x) => x.field === c.field);
-    if (!prev) out.push({ ...c });
-    else if (Array.isArray(c.to) || Array.isArray(c.from)) {
-      const added = new Set([...((prev.to as string[]) ?? []), ...((c.to as string[]) ?? [])]);
-      const removed = new Set([...((prev.from as string[]) ?? []), ...((c.from as string[]) ?? [])]);
-      for (const x of [...added]) {
-        if (!removed.has(x)) continue;
-        added.delete(x);
-        removed.delete(x);
-      }
-      prev.to = [...added];
-      prev.from = [...removed];
-    } else prev.to = c.to;
-  }
-  // Drop fields that ended where they started. The body only has lengths here, and equal lengths can be another text.
-  return out.filter((c) => c.field === "update" || c.field === "schema" || c.field === "body" || moved(c));
-}
-
-function moved(c: FieldChange): boolean {
-  if (!Array.isArray(c.to)) return c.from !== c.to;
-  return c.to.length > 0 || ((c.from as unknown[]) ?? []).length > 0;
 }
 
 function typeTag(i: Item): string {

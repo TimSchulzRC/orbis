@@ -92,6 +92,17 @@ export function StepGroup({ events, spaceName, space, here }: { events: Activity
   );
 }
 
+/**
+ * The fetched entries and the live ones that came since, each once. The server folds edits into
+ * one entry: of two copies the later one counts, at the same time the server's answer. An entry
+ * folded down to no change at all (typed, then taken back) is left out.
+ */
+export function mergeEvents(fetched: ActivityEvent[], live: ActivityEvent[]): ActivityEvent[] {
+  const byId = new Map<number, ActivityEvent>();
+  for (const e of [...fetched, ...live]) if (e.ts > (byId.get(e.id)?.ts ?? -1)) byId.set(e.id, e);
+  return [...byId.values()].filter((e) => e.kind !== "updated" || e.changes.length > 0);
+}
+
 /** Consecutive events of the same step (in the same workspace) form one group. */
 export function groupBySteps<E extends ActivityEvent & { space?: string }>(events: E[]): E[][] {
   const out: E[][] = [];

@@ -211,3 +211,28 @@ test("a late answer for the page before never shows on the next one", async () =
   await page.getByRole("dialog").getByRole("button", { name: "Schließen" }).click();
   await page.viewport(1280, 900);
 });
+
+test("an entry the server folded: the later copy counts, and one folded down to nothing leaves", async () => {
+  const repo = await workspace(false);
+  const note = repo.create({ title: "Fritz", pinned: "a" });
+  const typed = event(2, note, { title: "Fritzm", changes: [{ field: "title", from: "Fritz", to: "Fritzm" }] });
+  vi.mocked(accounts.spaceCall).mockResolvedValue([typed, event(1, note, { kind: "created" })] as never);
+  await render(<ItemPage id={note} isNew={false} />);
+  await page.getByRole("button", { name: "Verlauf" }).click();
+  const panel = page.getByRole("dialog");
+  await expect.element(panel.getByText("umbenannt: „Fritz“ → „Fritzm“")).toBeVisible();
+  const live = (e: ActivityEvent) => {
+    repo.events = [e, ...repo.events.filter((x) => x.id !== e.id)];
+    (repo as unknown as { emit(): void }).emit();
+  };
+  // typed on: the same entry, grown
+  live({ ...typed, ts: Date.now(), title: "Fritzmeier", changes: [{ field: "title", from: "Fritz", to: "Fritzmeier" }] });
+  await expect.element(panel.getByText("umbenannt: „Fritz“ → „Fritzmeier“")).toBeVisible();
+  expect(panel.getByText("umbenannt: „Fritz“ → „Fritzm“", { exact: true }).query()).toBeNull();
+  // deleted back to the title it had: nothing changed, so no entry
+  live({ ...typed, ts: Date.now() + 1, title: "Fritz", changes: [] });
+  await expect.element(panel.getByText("hat angelegt")).toBeVisible();
+  expect(panel.getByText(/umbenannt/).query()).toBeNull();
+  expect(panel.getByText("hat geändert").query()).toBeNull();
+  await panel.getByRole("button", { name: "Schließen" }).click();
+});
