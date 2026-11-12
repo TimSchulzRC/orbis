@@ -3,31 +3,46 @@
 // A person editing in the app sends a step per keystroke in the title and per burst of typing in
 // the text. Logged one by one, a renamed note fills the history with "F → Fr", "Fr → Fri". So a
 // person's edits of one document fold into one entry until they pause (FOLD_PAUSE_MS), or until
-// the entry has grown for FOLD_MAX_SPAN_MS: a long session still leaves a version to go back to
-// every two hours. An agent's tool call stays an entry of its own, so each can be undone by its
-// step. An entry that covers several steps names none.
+// the entry changed about a page of text (FOLD_MAX_TEXT): an entry keeps one version of the text,
+// so writing a lot leaves versions to go back to, however fast it went, and polishing three
+// sentences for an hour leaves one. An agent's tool call stays an entry of its own, so each can
+// be undone by its step. An entry that covers several steps names none.
 import type { Database } from "bun:sqlite";
 import type { FieldChange } from "@obtion/core/protocol";
 import { parseOrigin } from "@obtion/core/origin";
 
 /** A pause this long ends an entry: the next change starts a new one. */
 export const FOLD_PAUSE_MS = 15 * 60_000;
-/** An entry grows this long at most, also without a pause. */
-export const FOLD_MAX_SPAN_MS = 2 * 60 * 60_000;
+/** An entry that changed this many characters of the text is full: the next change starts a new one. */
+export const FOLD_MAX_TEXT = 2000;
 
-/** An activity entry as far as folding needs it. `start`: its first change, `ts`: its last. */
+/**
+ * How much of a text one edit changed, in characters: what lies between the start and the end the
+ * two texts share, the longer side of it (typed, deleted or replaced).
+ */
+export function changeSize(a: string, b: string): number {
+  if (a === b) return 0;
+  const max = Math.min(a.length, b.length);
+  let head = 0;
+  while (head < max && a.charCodeAt(head) === b.charCodeAt(head)) head++;
+  let tail = 0;
+  while (tail < max - head && a.charCodeAt(a.length - 1 - tail) === b.charCodeAt(b.length - 1 - tail)) tail++;
+  return Math.max(a.length, b.length) - head - tail;
+}
+
+/** An activity entry as far as folding needs it. `grown`: the characters of text its edits changed, added up. */
 export interface Foldable {
   kind: string;
   origin: string;
   step: string | null;
-  start: number;
+  grown: number;
   ts: number;
 }
 
 /** Whether a change (`next`, at `next.ts`) joins the entry `last` of the same document. */
 export function folds(last: Foldable, next: { kind: string; origin: string; step: string | null; ts: number }, isUndo: (step: string) => boolean): boolean {
   if (last.kind !== "updated" || next.kind !== "updated" || last.origin !== next.origin) return false;
-  if (next.ts - last.ts >= FOLD_PAUSE_MS || next.ts - last.start >= FOLD_MAX_SPAN_MS) return false;
+  if (next.ts - last.ts >= FOLD_PAUSE_MS || last.grown >= FOLD_MAX_TEXT) return false;
   if (last.step === next.step) return true;
   // an undo shows as one ("undid a step"), and what it took back stays readable in the entry before
   if ((last.step && isUndo(last.step)) || (next.step && isUndo(next.step))) return false;
@@ -69,21 +84,32 @@ function moved(c: FieldChange): boolean {
 /**
  * Folds the entries already stored the way new ones fold (a database from before entries folded
  * across steps). The first entry of a run stays and takes the changes and the time of the ones
- * after it; their text versions move to it, none is dropped. Returns the entries removed.
+ * after it; their text versions move to it, none is dropped. How much text an entry changed
+ * comes from its versions. Returns the entries removed.
  */
 export function foldStoredEvents(db: Database): number {
   type Row = Foldable & { id: number; doc: string; title: string | null; changes: string | null };
   const undos = new Set((db.query("SELECT id FROM steps WHERE undoes IS NOT NULL").all() as { id: string }[]).map((r) => r.id));
   const isUndo = (step: string) => undos.has(step);
-  const rows = db.query("SELECT id, doc, title, kind, origin, step, start, ts, changes FROM events ORDER BY doc, id").all() as Row[];
-  const save = db.query("UPDATE events SET ts = ?, title = ?, changes = ?, step = ? WHERE id = ?");
+  // each version against the one before it
+  const grown = new Map<number, number>();
+  const text = new TextDecoder();
+  let before = { doc: "", body: "" };
+  for (const v of db.query("SELECT doc, event, data FROM versions ORDER BY doc, id").iterate() as Iterable<{ doc: string; event: number | null; data: Uint8Array }>) {
+    const body = text.decode(Bun.inflateSync(v.data as Uint8Array<ArrayBuffer>));
+    if (v.event !== null) grown.set(v.event, (grown.get(v.event) ?? 0) + changeSize(v.doc === before.doc ? before.body : "", body));
+    before = { doc: v.doc, body };
+  }
+  const rows = db.query("SELECT id, doc, title, kind, origin, step, ts, changes FROM events ORDER BY doc, id").all() as Row[];
+  for (const e of rows) e.grown = grown.get(e.id) ?? 0;
+  const save = db.query("UPDATE events SET ts = ?, title = ?, changes = ?, step = ?, grown = ? WHERE id = ?");
   const moveVersions = db.query("UPDATE versions SET event = ? WHERE event = ?");
   const drop = db.query("DELETE FROM events WHERE id = ?");
   let removed = 0;
   let cur: Row | undefined;
-  let grown = false;
+  let folded = false;
   const done = () => {
-    if (cur && grown) save.run(cur.ts, cur.title, cur.changes, cur.step, cur.id);
+    if (cur && (folded || cur.grown)) save.run(cur.ts, cur.title, cur.changes, cur.step, cur.grown, cur.id);
   };
   for (const e of rows) {
     if (cur && cur.doc === e.doc && folds(cur, e, isUndo)) {
@@ -91,7 +117,8 @@ export function foldStoredEvents(db: Database): number {
       cur.ts = Math.max(cur.ts, e.ts);
       cur.title = e.title;
       if (cur.step !== e.step) cur.step = null;
-      grown = true;
+      cur.grown += e.grown;
+      folded = true;
       moveVersions.run(cur.id, e.id);
       drop.run(e.id);
       removed++;
@@ -99,7 +126,7 @@ export function foldStoredEvents(db: Database): number {
     }
     done();
     cur = e;
-    grown = false;
+    folded = false;
   }
   done();
   return removed;

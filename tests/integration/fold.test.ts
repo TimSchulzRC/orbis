@@ -6,7 +6,7 @@ import { setupStore, tool as storeTool } from "../support/store";
 import { Store } from "@obtion/server/store";
 import type { Ops } from "@obtion/server/ops";
 import { undoStep } from "@obtion/server/undo";
-import { FOLD_MAX_SPAN_MS, FOLD_PAUSE_MS } from "@obtion/server/fold";
+import { FOLD_MAX_TEXT, FOLD_PAUSE_MS, changeSize } from "@obtion/server/fold";
 import { replaceBody, setMeta, touch } from "@obtion/core/model";
 import { personOrigin, agentOrigin } from "@obtion/core/origin";
 
@@ -62,7 +62,7 @@ test("renaming a note key by key is one entry, from the first title to the last"
   expect(all[0]!.step).toBeUndefined();
 });
 
-test("a pause ends the entry; without one it ends after the longest span", () => {
+test("a pause ends the entry, however long the sitting", () => {
   const id = note("Start");
   rename(TIM, id, "A");
   wait(FOLD_PAUSE_MS - 1000);
@@ -71,15 +71,57 @@ test("a pause ends the entry; without one it ends after the longest span", () =>
   wait(FOLD_PAUSE_MS);
   rename(TIM, id, "C");
   expect(titles(id)).toEqual(["", "Start→B", "B→C"]);
-  // editing on and on, never pausing: a new entry once the last one has grown for the longest span
-  let n = 0;
-  for (let t = 0; t < FOLD_MAX_SPAN_MS + 20 * MIN; t += 10 * MIN) {
+  // three hours of small edits, never pausing: still that entry
+  for (let n = 0; n < 18; n++) {
     wait(10 * MIN);
-    rename(TIM, id, `D${n++}`);
+    rename(TIM, id, `D${n}`);
   }
-  expect(titles(id)).toEqual(["", "Start→B", "B→D10", "D10→D13"]);
+  expect(titles(id)).toEqual(["", "Start→B", "B→D17"]);
   // the entry's time is its last change
   expect(entries(id).at(-1)!.ts).toBe(now);
+});
+
+test("how much of a text an edit changed", () => {
+  expect(changeSize("abc", "abc")).toBe(0);
+  expect(changeSize("Hello world", "Hello big world")).toBe(4); // typed
+  expect(changeSize("Hello big world", "Hello world")).toBe(4); // deleted
+  expect(changeSize("Hello world", "Hello there")).toBe(5); // replaced
+  expect(changeSize("", "abc")).toBe(3);
+  expect(changeSize("aaa", "aa")).toBe(1);
+});
+
+test("an entry that changed about a page of text is full: writing a lot leaves several, with a version each", () => {
+  const id = note("Essay", "Intro\n");
+  wait(FOLD_PAUSE_MS);
+  const para = "A sentence of the essay that goes on for a while. ".repeat(10); // 500 characters
+  let text = "Intro\n";
+  // twelve paragraphs, one every half minute: 6000 characters without a pause
+  for (let n = 0; n < 12; n++) {
+    wait(MIN / 2);
+    write(TIM, id, (text += para));
+  }
+  const mine = entries(id).slice(1);
+  expect(mine.map((e) => e.changes.map((c) => `${c.from}→${c.to}`).join())).toEqual(["6→2006", "2006→4006", "4006→6006"]);
+  expect(s.versions(id).map((v) => v.len)).toEqual([6, 2006, 4006, 6006]);
+  expect(s.eventText(mine[1]!.id)).toMatchObject({ from: 2, to: 3 });
+  // polishing: many small edits add up slowly and stay in the entry
+  wait(MIN);
+  write(TIM, id, (text += "The end.\n"));
+  for (let n = 0; n < 30; n++) {
+    wait(MIN);
+    write(TIM, id, text.replace("Intro", `Intro ${n}`));
+  }
+  expect(entries(id).length).toBe(5);
+  // a big block pasted or deleted at once fills an entry: what comes next is a new one
+  wait(MIN);
+  const id2 = note("Paste", "x\n");
+  wait(FOLD_PAUSE_MS);
+  write(TIM, id2, "x\n" + "y".repeat(FOLD_MAX_TEXT));
+  wait(MIN);
+  write(TIM, id2, "x\n");
+  wait(MIN);
+  write(TIM, id2, "x\nz\n");
+  expect(entries(id2).slice(1).map((e) => e.changes.map((c) => `${c.from}→${c.to}`).join())).toEqual([`2→${FOLD_MAX_TEXT + 2}`, `${FOLD_MAX_TEXT + 2}→2`, "2→4"]);
 });
 
 test("different kinds of edits in one sitting are one entry", async () => {
@@ -155,7 +197,7 @@ test("entries stored one per keystroke fold when the server starts; no text vers
   s.db.close();
   // the database as the version before wrote it: an entry per step, no start
   const old = new Store(dir).db;
-  old.exec("DELETE FROM events; DELETE FROM versions; ALTER TABLE events DROP COLUMN start; PRAGMA user_version = 1;");
+  old.exec("DELETE FROM events; DELETE FROM versions; ALTER TABLE events DROP COLUMN grown; PRAGMA user_version = 1;");
   const t0 = Date.UTC(2026, 10, 12, 15, 0);
   const add = old.query("INSERT INTO events (ts, doc, title, type, kind, origin, changes, step, area) VALUES (?, ?, ?, '', 'updated', ?, ?, ?, 'personal') RETURNING id");
   const row = (at: number, doc: string, origin: string, changes: unknown[], step: string) => (add.get(t0 + at, doc, "x", origin, JSON.stringify(changes), step) as { id: number }).id;
@@ -177,6 +219,13 @@ test("entries stored one per keystroke fold when the server starts; no text vers
   const version = old.query("INSERT INTO versions (doc, ts, origin, step, event, len, data) VALUES (?, ?, ?, ?, ?, ?, ?)");
   version.run(id, t0 + 3000, TIM, "s4", body1, 2, pack("Hi"));
   version.run(id, t0 + 9000, TIM, "s5", body2, 5, pack("Hi yo"));
+  // the other note: three paragraphs typed without a pause, each its own entry and version
+  const page = "p".repeat(FOLD_MAX_TEXT);
+  const typed = [1, 2, 3].map((n) => {
+    const ev = row(20_000 + n * 1000, other, TIM, [{ field: "body", from: (n - 1) * FOLD_MAX_TEXT, to: n * FOLD_MAX_TEXT }], "t" + n);
+    version.run(other, t0 + 20_000 + n * 1000, TIM, "t" + n, ev, n * FOLD_MAX_TEXT, pack(page.repeat(n)));
+    return ev;
+  });
   old.close();
 
   s = new Store(dir);
@@ -190,7 +239,13 @@ test("entries stored one per keystroke fold when the server starts; no text vers
     [later, "Tim", undefined, "title:Fritzchen→Fritzmeier!"],
   ]);
   expect(all[0]!.ts).toBe(t0 + 9000);
-  expect(entries(other).length).toBe(1);
+  // a page of text fills an entry here too: the rename joins the first page, the other pages stay
+  expect(entries(other).map((e) => [e.id, e.changes.map((c) => c.field).join()])).toEqual([
+    [entries(other)[0]!.id, "title,body"],
+    [typed[1]!, "body"],
+    [typed[2]!, "body"],
+  ]);
+  expect(s.versions(other).length).toBe(3);
   // both versions are still there, and the entry shows the text from before it to its last
   expect(s.versions(id).map((v) => s.versionText(v.id))).toEqual(["Hi", "Hi yo"]);
   expect(s.eventText(first)).toEqual({ doc: id, before: "", after: "Hi yo", from: undefined, to: 2 });

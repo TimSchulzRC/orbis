@@ -8,7 +8,7 @@ import * as Y from "yjs";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { migrate } from "./migrate";
-import { type Foldable, FOLD_PAUSE_MS, folds, foldStoredEvents, mergeChanges } from "./fold";
+import { type Foldable, FOLD_PAUSE_MS, changeSize, folds, foldStoredEvents, mergeChanges } from "./fold";
 import { type FileMeta, type Item, type ItemInit, type UpdateEntry, PERSONAL, RECORD_VERSION, SETTINGS_ID, areaOf, initItem, isContent, isContentKind, metaMap, newId, readItem } from "@obtion/core/model";
 import { sameValue } from "@obtion/core/equal";
 import type { Lang } from "@obtion/core/i18n";
@@ -71,9 +71,9 @@ const SCHEMA = `CREATE TABLE IF NOT EXISTS updates (seq INTEGER PRIMARY KEY AUTO
   CREATE TABLE IF NOT EXISTS purged (id TEXT PRIMARY KEY, area TEXT NOT NULL, seq INTEGER NOT NULL);
   CREATE TABLE IF NOT EXISTS purged_rows (uid TEXT PRIMARY KEY);`;
 
-/** `start`: when an entry's first change was (`ts` moves with every change folded into it). Entries from before fold as new ones do. */
-function EVENT_START(db: Database) {
-  db.exec("ALTER TABLE events ADD start INTEGER; UPDATE events SET start = ts;");
+/** `grown`: the characters of text an entry's edits changed (fold.ts). Entries from before fold as new ones do. */
+function EVENT_GROWN(db: Database) {
+  db.exec("ALTER TABLE events ADD grown INTEGER NOT NULL DEFAULT 0");
   foldStoredEvents(db);
 }
 
@@ -112,7 +112,7 @@ export class Store {
     // a rebuild of all records). The limit cuts it back at the next commit. 8 MB is twice what the
     // automatic checkpoint (1000 pages) lets the WAL reach, so everyday writes never shrink it.
     this.db.exec(`PRAGMA journal_mode = WAL; PRAGMA journal_size_limit = ${8 * 1024 * 1024}; PRAGMA synchronous = NORMAL; PRAGMA secure_delete = ON;`);
-    migrate(this.db, [SCHEMA, EVENT_START]);
+    migrate(this.db, [SCHEMA, EVENT_GROWN]);
     this.load();
     if (!this.kvGet("serverId")) this.kvSet("serverId", newId());
   }
@@ -490,20 +490,21 @@ export class Store {
     const blank = !next.title.trim() && !next.body.trim();
     if (blank && (kind === "created" || kind === "deleted")) return undefined;
     // Typing flushes constantly: consecutive edits fold into one entry (fold.ts says which).
-    const last = this.db.query("SELECT id, ts, start, kind, origin, changes, step FROM events WHERE doc = ? ORDER BY id DESC LIMIT 1").get(id) as (Foldable & { id: number; changes: string }) | null;
+    const last = this.db.query("SELECT id, ts, grown, kind, origin, changes, step FROM events WHERE doc = ? ORDER BY id DESC LIMIT 1").get(id) as (Foldable & { id: number; changes: string }) | null;
     const diff = changes.some((c) => c.field === "body") && isContentKind(next.kind);
     const isUndo = (s: string) => !!this.stepState(s).undoes;
+    const grown = diff && prev ? changeSize(prev.body, next.body) : 0;
     if (last && folds(last, { kind, origin, step: step ?? null, ts }, isUndo)) {
       const merged = mergeChanges(JSON.parse(last.changes || "[]"), changes);
       // an entry of several steps names none: undoing one of them would take back a part of it
       const of = last.step === (step ?? null) ? step : undefined;
-      this.db.query("UPDATE events SET ts = ?, title = ?, changes = ?, step = ? WHERE id = ?").run(ts, next.title, JSON.stringify(merged), of ?? null, last.id);
+      this.db.query("UPDATE events SET ts = ?, title = ?, changes = ?, step = ?, grown = ? WHERE id = ?").run(ts, next.title, JSON.stringify(merged), of ?? null, last.grown + grown, last.id);
       out.push({ id: last.id, ts, doc: id, title: next.title, type: typeTag(next), kind, origin, changes: markDiff(merged, diff || this.hasVersions(last.id)), step: of });
       return { id: last.id, merged: true };
     }
     const row = this.db
-      .query("INSERT INTO events (ts, start, doc, title, type, kind, origin, changes, step, area) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id")
-      .get(ts, ts, id, next.title, typeTag(next), kind, origin, JSON.stringify(changes), step ?? null, next.area) as { id: number };
+      .query("INSERT INTO events (ts, grown, doc, title, type, kind, origin, changes, step, area) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id")
+      .get(ts, grown, id, next.title, typeTag(next), kind, origin, JSON.stringify(changes), step ?? null, next.area) as { id: number };
     out.push({ id: row.id, ts, doc: id, title: next.title, type: typeTag(next), kind, origin, changes: markDiff(changes, diff), step });
     return { id: row.id, merged: false };
   }
