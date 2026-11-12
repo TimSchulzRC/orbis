@@ -7,7 +7,7 @@ import { RulesField, WORKSPACE_RULES } from "../ui/AgentRules";
 import { type ReactNode, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { ArrowLeft, Copy, Check, Crown, Eye, EyeOff, KeyRound, Link2, Plus, RotateCcw, ChevronRight, Trash2, UserMinus, UserRound, X } from "lucide-react";
 import { SETTINGS_ID, setSettings } from "@obtion/core/model";
-import { ENDONYMS, LANGS, fmtBytes, fmtDate } from "@obtion/core/i18n";
+import { ENDONYMS, LANGS, fmtBytes, fmtDate, fmtDateTime } from "@obtion/core/i18n";
 import { resetInbox } from "@obtion/core/setup";
 import { listExamples, removeExamples, restoreExamples } from "@obtion/core/examples";
 import { useRepo, navigate } from "../hooks";
@@ -18,7 +18,7 @@ import { cn, toggled } from "../lib/utils";
 import { confirmAction, notify } from "../ui/feedback";
 import { SettingRow, SettingsGroup } from "../ui/SettingRows";
 import { setTheme, useTheme } from "../theme";
-import { type Space, ApiError, activeUser, addPasskey, changePassword, linkFailed, linkOAuth, linkedProviders, deleteAccount, deleteSpace, errorText, inviteLink, inviteLinks, joinUrl, leaveSpace, loginOf, mcpToken, members, passkeys, removeMember, removePasskey, renameSpace, replica, revokeInvite, serverInfo, setRole, signOut, spaceById, useAccounts } from "../accounts";
+import { type Space, ApiError, activeUser, addPasskey, changePassword, linkFailed, linkOAuth, linkedProviders, deleteAccount, deleteSpace, errorText, inviteLink, inviteLinks, joinUrl, leaveSpace, loginOf, mcpToken, mcpTokenInfo, members, passkeys, removeMember, removePasskey, renameSpace, replica, revokeInvite, revokeMcpToken, serverInfo, setRole, signOut, spaceById, useAccounts } from "../accounts";
 import { SignIn } from "./Account";
 import { NewSpaceDialog, SpaceScope } from "../ui/Spaces";
 import { closeSettings, openSettings, openSpaceSettings, useSettingsOpen } from "../ui/settings-open";
@@ -632,12 +632,28 @@ export function SpaceSettingsRedirect({ space }: { space: string }) {
 
 function SpaceSettings({ space }: { space: Space }) {
   const repo = useRepo();
-  const { t } = useT();
+  const { t, lang } = useT();
   // an MCP token is made on request (each is a new one, shown once)
   const [connect, setConnect] = useState<McpConnect | null>(null);
   const [tokenFailed, setTokenFailed] = useState(false);
+  // when the user's token was made; null without one, undefined while unknown (offline)
+  const [tokenCreated, setTokenCreated] = useState<number | null>();
+  const [tokenError, setTokenError] = useState("");
   const [removed, setRemoved] = useState(0);
-  const newToken = () => mcpToken(space).then(setConnect, () => setTokenFailed(true));
+  useEffect(() => void mcpTokenInfo(space).then((info) => setTokenCreated(info.created), () => {}), [space.id]);
+  const newToken = () =>
+    mcpToken(space).then(
+      (c) => (setConnect(c), setTokenCreated(Date.now()), setTokenError("")),
+      () => setTokenFailed(true),
+    );
+  const removeToken = async () => {
+    const yes = await confirmAction({ title: t("settings.removeTokenConfirm"), body: t("settings.removeTokenHint"), yes: t("settings.removeToken"), danger: true });
+    if (!yes) return;
+    await revokeMcpToken(space).then(
+      () => (setConnect(null), setTokenCreated(null), setTokenError("")),
+      (e) => setTokenError(errorText(e, t, "space")),
+    );
+  };
   const status = repo.status;
   const ix = repo.index();
   const capture = repo.get(SETTINGS_ID)?.settings?.captureTypes ?? [];
@@ -689,6 +705,15 @@ function SpaceSettings({ space }: { space: Space }) {
           control={!connect && <Button variant="outline" onClick={() => void newToken()}>{t("settings.newToken")}</Button>}
         >
           {tokenFailed && !connect && <p className="text-sm text-muted-foreground">{t("settings.connectOffline")}</p>}
+          {tokenCreated != null && (
+            <div className={cn("flex flex-wrap items-center gap-2", connect && "mb-4")}>
+              <p className="min-w-0 flex-1 text-sm text-muted-foreground">{t("settings.tokenActive", { created: fmtDateTime(lang, tokenCreated) })}</p>
+              <Button variant="danger-outline" onClick={() => void removeToken()}>
+                <Trash2 size={14} /> {t("settings.removeToken")}
+              </Button>
+            </div>
+          )}
+          {tokenError && <p role="alert" className="text-sm text-danger">{tokenError}</p>}
           {connect && (
             <div className="space-y-4">
               <div>

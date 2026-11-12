@@ -421,6 +421,12 @@ export class Accounts {
     return token;
   }
 
+  /** When the user's MCP token for this workspace was made; null without one. */
+  mcpTokenCreated(workspace: string, user: string): number | null {
+    const row = this.db.query("SELECT created FROM tokens WHERE workspace = ? AND user = ? AND label = 'mcp'").get(workspace, user) as { created: number } | null;
+    return row?.created ?? null;
+  }
+
   /** Ends the user's MCP token for this workspace at once. */
   revokeMcpToken(workspace: string, user: string) {
     this.db.query("DELETE FROM tokens WHERE workspace = ? AND user = ? AND label = 'mcp'").run(workspace, user);

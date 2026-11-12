@@ -168,6 +168,21 @@ test("a new MCP token ends the one before; a revoked one is refused at once", as
   strangerAgent = (await post(base, `/api/workspaces/${strangerWs}/mcp-token`, {}, stranger.token).then((r) => r.json())).token;
 });
 
+test("the app learns whether a token is active, never the token itself", async () => {
+  const info = async () => (await get(base, `/api/workspaces/${strangerWs}/mcp-token`, stranger.token)).json();
+  const before = Date.now();
+  const token = (await post(base, `/api/workspaces/${strangerWs}/mcp-token`, {}, stranger.token).then((r) => r.json())).token;
+  const active = await info();
+  expect(Object.keys(active)).toEqual(["created"]);
+  expect(active.created).toBeGreaterThanOrEqual(before);
+  expect(JSON.stringify(active)).not.toContain(token);
+  expect((await del(base, `/api/workspaces/${strangerWs}/mcp-token`, stranger.token)).status).toBe(200);
+  expect(await info()).toEqual({ created: null });
+  // the route needs membership, like the others
+  expect((await get(base, `/api/workspaces/${strangerWs}/mcp-token`, owner.token)).status).toBe(403);
+  strangerAgent = (await post(base, `/api/workspaces/${strangerWs}/mcp-token`, {}, stranger.token).then((r) => r.json())).token;
+});
+
 test("no link opens a content without a token: no signed links, no token in the URL", async () => {
   const secret = "Secret content 4";
   const f = await uploaded("secret4.txt", secret);

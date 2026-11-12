@@ -114,6 +114,12 @@ export interface InviteLink {
   role: Role;
 }
 
+/** GET /api/workspaces/<id>/mcp-token: whether the user has a token for this workspace (never the token itself). */
+export interface McpTokenInfo {
+  /** null without a token */
+  created: number | null;
+}
+
 /** POST /api/workspaces/<id>/mcp-token. The token is shown only once. */
 export interface McpConnect {
   mcpUrl: string;
