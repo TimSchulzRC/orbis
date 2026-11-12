@@ -101,6 +101,18 @@ async function check(page: Page, label: string, path: string, errors: string[], 
   for (const e of errors) failures.push(`${label} ${path}: ${e}`);
 }
 
+// Excalidraw 0.18.1 (the newest) listens for "unload" on the window. Chromium 158 no longer allows
+// that event by default and logs the registration as an error; the handler only resets held keys.
+const KNOWN_ERRORS = ["Permissions policy violation: unload is not allowed in this document."];
+
+/** Collects the page's uncaught errors and console errors, except the known ones. */
+function watch(page: Page, errors: string[]) {
+  page.on("pageerror", (e) => errors.push(`page error: ${e.message}`));
+  page.on("console", (m) => {
+    if (m.type() === "error" && !KNOWN_ERRORS.includes(m.text())) errors.push(`console error: ${m.text()}`);
+  });
+}
+
 const ROUTES = ["/", "/#/inbox", "/#/review", "/#/graph", "/#/activity", "/#/trash", "/#/settings", "/#/nope", "/#/i/sys%3Aproject", "/#/i/sys%3Atask", "/#/i/sys%3Acard", "/#/i/ex-type-book", "/#/files", "/#/files?kind=image"];
 // one page per kind: note with entries below, article with translation, project, sub-project, task, card, note,
 // inbox item, inbox bundle, course, book, image, PDF, query page, welcome note
@@ -152,10 +164,7 @@ async function pages(browser: import("playwright").Browser, serverName: string, 
   const context = await signedIn(browser, server, { viewport: v.viewport, isMobile: !!v.mobile, hasTouch: !!v.mobile, locale: "de-DE" });
   const page = await context.newPage();
   const errors: string[] = [];
-  page.on("pageerror", (e) => errors.push(`page error: ${e.message}`));
-  page.on("console", (m) => {
-    if (m.type() === "error") errors.push(`console error: ${m.text()}`);
-  });
+  watch(page, errors);
   const label = `${serverName} ${v.name}`;
   const phone = !!v.mobile;
   if (serverName === "empty" && !phone) {
@@ -258,10 +267,7 @@ async function firstWorkspace(browser: import("playwright").Browser, server: Ser
   const context = await signedIn(browser, server, { viewport: { width: 1440, height: 900 }, locale: "de-DE" });
   const page = await context.newPage();
   const errors: string[] = [];
-  page.on("pageerror", (e) => errors.push(`page error: ${e.message}`));
-  page.on("console", (m) => {
-    if (m.type() === "error") errors.push(`console error: ${m.text()}`);
-  });
+  watch(page, errors);
   const label = "fresh light";
   const welcome = (p: Page) => p.locator("aside section[aria-label='Persönlich']").getByText("So funktioniert Obtion");
   await check(page, label, "/", errors, async (p) => {
@@ -316,10 +322,7 @@ async function twoWorkspaces(browser: import("playwright").Browser, server: Serv
   const context = await signedIn(browser, server, { viewport: { width: 1440, height: 900 }, locale: "de-DE" });
   const page = await context.newPage();
   const errors: string[] = [];
-  page.on("pageerror", (e) => errors.push(`page error: ${e.message}`));
-  page.on("console", (m) => {
-    if (m.type() === "error") errors.push(`console error: ${m.text()}`);
-  });
+  watch(page, errors);
   const label = "two workspaces";
   const firma = (p: Page) => p.locator("aside section[aria-label='Firma']");
   await check(page, label, `/#/w/${personal}/`, errors, async (p) => {
@@ -412,10 +415,7 @@ async function membersOnSettings(browser: import("playwright").Browser, server: 
   const context = await signedIn(browser, server, { viewport: { width: 1440, height: 900 }, locale: "de-DE" });
   const page = await context.newPage();
   const errors: string[] = [];
-  page.on("pageerror", (e) => errors.push(`page error: ${e.message}`));
-  page.on("console", (m) => {
-    if (m.type() === "error") errors.push(`console error: ${m.text()}`);
-  });
+  watch(page, errors);
   const label = "members";
   await check(page, label, `/#/w/${ws}/settings`, errors, async (p) => {
     const links = p.getByRole("list", { name: "Einladungslinks" }).getByRole("listitem");
