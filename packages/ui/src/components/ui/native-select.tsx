@@ -1,44 +1,57 @@
-import * as React from "react"
-import { cn, framedFocus } from "../../lib/utils"
-import { ChevronDownIcon } from "lucide-react"
+import { ChevronDownIcon } from "lucide-react";
+import type * as React from "react";
+import { cn, framedFocus } from "../../lib/utils";
 
 /**
  * `overlay`: an invisible select over a chip (the chip is its look), in the chip's positioning
  * context; `full`: takes the whole width.
  */
 function NativeSelect({
-  className,
-  size = "default",
-  overlay,
-  full,
-  ...props
-}: Omit<React.ComponentProps<"select">, "size"> & { size?: "sm" | "default"; overlay?: boolean; full?: boolean }) {
-  if (overlay) {
-    return <select data-slot="native-select" className={cn("absolute inset-0 cursor-pointer opacity-0", className)} {...props} />;
-  }
-  return (
-    <div
-      className={cn("group/native-select relative min-w-0 w-fit has-[select:disabled]:opacity-50", full && "w-full")}
-      data-slot="native-select-wrapper"
-    >
-      <select
-        data-slot="native-select"
-        data-size={size}
-        className={cn(
-          "h-9 w-full min-w-0 appearance-none rounded-md border border-input bg-transparent px-3 py-2 pr-9 text-sm shadow-xs transition-[color,border-color,box-shadow] outline-none selection:bg-primary selection:text-primary-foreground placeholder:text-muted-foreground disabled:pointer-events-none disabled:cursor-not-allowed data-[size=sm]:h-8 data-[size=sm]:py-1 dark:bg-input/30 dark:hover:bg-input/50",
-          framedFocus,
-          "aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40",
-          className
-        )}
-        {...props}
-      />
-      <ChevronDownIcon
-        className="pointer-events-none absolute top-1/2 right-3.5 size-4 -translate-y-1/2 text-muted-foreground opacity-50 select-none"
-        aria-hidden="true"
-        data-slot="native-select-icon"
-      />
-    </div>
-  )
+	className,
+	size = "default",
+	overlay,
+	full,
+	...props
+}: Omit<React.ComponentProps<"select">, "size"> & {
+	size?: "sm" | "default";
+	overlay?: boolean;
+	full?: boolean;
+}) {
+	if (overlay) {
+		return (
+			<select
+				className={cn("absolute inset-0 cursor-pointer opacity-0", className)}
+				data-slot="native-select"
+				{...props}
+			/>
+		);
+	}
+	return (
+		<div
+			className={cn(
+				"group/native-select relative min-w-0 w-fit has-[select:disabled]:opacity-50",
+				full && "w-full",
+			)}
+			data-slot="native-select-wrapper"
+		>
+			<select
+				className={cn(
+					"h-9 w-full min-w-0 appearance-none rounded-md border border-input bg-transparent px-3 py-2 pr-9 text-sm shadow-xs transition-[color,border-color,box-shadow] outline-none selection:bg-primary selection:text-primary-foreground placeholder:text-muted-foreground disabled:pointer-events-none disabled:cursor-not-allowed data-[size=sm]:h-8 data-[size=sm]:py-1 dark:bg-input/30 dark:hover:bg-input/50",
+					framedFocus,
+					"aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40",
+					className,
+				)}
+				data-size={size}
+				data-slot="native-select"
+				{...props}
+			/>
+			<ChevronDownIcon
+				aria-hidden="true"
+				className="pointer-events-none absolute top-1/2 right-3.5 size-4 -translate-y-1/2 text-muted-foreground opacity-50 select-none"
+				data-slot="native-select-icon"
+			/>
+		</div>
+	);
 }
 
-export { NativeSelect }
+export { NativeSelect };

@@ -4,7 +4,10 @@ import { useSyncExternalStore } from "react";
 
 let open: { at: string; space: string | null } | null = null; // `at`: the address it was opened on
 const listeners = new Set<() => void>();
-const set = (next: typeof open) => ((open = next), listeners.forEach((f) => f()));
+const set = (next: typeof open) => {
+	open = next;
+	for (const f of listeners) f();
+};
 
 /** The app's settings (also from within a workspace's: back to them). Takes no argument: safe as an onClick. */
 export const openSettings = () => set({ at: open?.at ?? location.hash, space: null });
@@ -15,4 +18,8 @@ addEventListener("hashchange", () => open !== null && location.hash !== open.at 
 
 /** Whether the dialog is open (null: not), and with which workspace's settings (`space` null: the app's). */
 export const settingsOpen = () => open;
-export const useSettingsOpen = () => useSyncExternalStore((f) => (listeners.add(f), () => listeners.delete(f)), settingsOpen);
+export const useSettingsOpen = () =>
+	useSyncExternalStore((f) => {
+		listeners.add(f);
+		return () => listeners.delete(f);
+	}, settingsOpen);

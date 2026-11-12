@@ -1,23 +1,24 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+<svg fill="none" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" >
+  <title>Obtion</title>
   <defs>
-    <linearGradient id="tile" x1="80" y1="0" x2="430" y2="512" gradientUnits="userSpaceOnUse">
+    <linearGradient gradientUnits="userSpaceOnUse" id="tile" x1="80" x2="430" y1="0" y2="512" >
       <stop stop-color="#FDFCFA"/><stop offset="1" stop-color="#EEEAE2"/>
     </linearGradient>
-    <linearGradient id="orbit" x1="148" y1="133" x2="355" y2="385" gradientUnits="userSpaceOnUse">
+    <linearGradient gradientUnits="userSpaceOnUse" id="orbit" x1="148" x2="355" y1="133" y2="385" >
       <stop stop-color="#FFC95E"/><stop offset=".48" stop-color="#F0B040"/><stop offset="1" stop-color="#BE780A"/>
     </linearGradient>
-    <linearGradient id="object" x1="325" y1="115" x2="402" y2="211" gradientUnits="userSpaceOnUse">
+    <linearGradient gradientUnits="userSpaceOnUse" id="object" x1="325" x2="402" y1="115" y2="211" >
       <stop stop-color="#FFE2A0"/><stop offset="1" stop-color="#F5B83F"/>
     </linearGradient>
-    <filter id="shadow" x="0" y="0" width="512" height="512" filterUnits="userSpaceOnUse">
-      <feDropShadow dx="0" dy="12" stdDeviation="12" flood-color="#7A4A05" flood-opacity=".17"/>
+    <filter filterUnits="userSpaceOnUse" height="512" id="shadow" width="512" x="0" y="0" >
+      <feDropShadow dx="0" dy="12" flood-color="#7A4A05" flood-opacity=".17" stdDeviation="12" />
     </filter>
   </defs>
-  <rect width="512" height="512" rx="114" fill="url(#tile)"/>
-  <rect x="1" y="1" width="510" height="510" rx="113" stroke="white" stroke-opacity=".8" stroke-width="2"/>
+  <rect fill="url(#tile)" height="512" rx="114" width="512" />
+  <rect height="510" rx="113" stroke="white" stroke-opacity=".8" stroke-width="2" width="510" x="1" y="1" />
   <g filter="url(#shadow)">
-    <path d="M256 135C189.17 135 135 189.17 135 256S189.17 377 256 377 377 322.83 377 256" stroke="url(#orbit)" stroke-width="64" stroke-linecap="round"/>
-    <rect x="326" y="120" width="74" height="74" rx="24" transform="rotate(12 363 157)" fill="url(#object)"/>
-    <rect x="327" y="121" width="72" height="72" rx="23" transform="rotate(12 363 157)" stroke="white" stroke-opacity=".45" stroke-width="2"/>
+    <path d="M256 135C189.17 135 135 189.17 135 256S189.17 377 256 377 377 322.83 377 256" stroke="url(#orbit)" stroke-linecap="round" stroke-width="64" />
+    <rect fill="url(#object)" height="74" rx="24" transform="rotate(12 363 157)" width="74" x="326" y="120" />
+    <rect height="72" rx="23" stroke="white" stroke-opacity=".45" stroke-width="2" transform="rotate(12 363 157)" width="72" x="327" y="121" />
   </g>
 </svg>

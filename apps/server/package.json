@@ -1,24 +1,24 @@
 {
-  "name": "@obtion/server",
-  "description": "The server: SQLite, sync, API, MCP, Markdown mirror; serves the web app (optional)",
-  "type": "module",
-  "private": true,
-  "license": "AGPL-3.0-or-later",
-  "exports": {
-    "./*": "./src/*.ts"
-  },
-  "dependencies": {
-    "@better-auth/passkey": "^1.7.18",
-    "@modelcontextprotocol/sdk": "^1.32.2",
-    "@obtion/core": "workspace:*",
-    "better-auth": "^1.7.18",
-    "nodemailer": "^10.4.0",
-    "pdfjs-dist": "^6.5.438",
-    "yjs": "^13.6.33",
-    "zod": "^4.6.7"
-  },
-  "devDependencies": {
-    "@types/bun": "^1.4.4",
-    "@types/nodemailer": "^8.0.2"
-  }
+	"name": "@obtion/server",
+	"private": true,
+	"description": "The server: SQLite, sync, API, MCP, Markdown mirror; serves the web app (optional)",
+	"license": "AGPL-3.0-or-later",
+	"type": "module",
+	"exports": {
+		"./*": "./src/*.ts"
+	},
+	"dependencies": {
+		"@better-auth/passkey": "^1.7.18",
+		"@modelcontextprotocol/sdk": "^1.32.2",
+		"@obtion/core": "workspace:*",
+		"better-auth": "^1.7.18",
+		"nodemailer": "^10.4.0",
+		"pdfjs-dist": "^6.5.438",
+		"yjs": "^13.6.33",
+		"zod": "^4.6.7"
+	},
+	"devDependencies": {
+		"@types/bun": "^1.4.4",
+		"@types/nodemailer": "^8.0.2"
+	}
 }

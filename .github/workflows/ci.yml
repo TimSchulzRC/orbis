@@ -43,30 +43,10 @@ jobs:
       # machine); GitHub's runners also need its system libraries, which the self-hosted one has
       # (installing them would need root)
       - run: bunx playwright install ${{ env.SELF_HOSTED != 'true' && '--with-deps' || '' }} chromium
-      # None of these depend on each other: in parallel they take as long as the longest. Browser:
-      # parts of the interface on their own in Chromium (tests/browser). E2E: the built app against
-      # real servers (tests/e2e, builds first). Each one's output is printed in its own group, the
-      # step fails if any of them failed.
-      - name: Test, typecheck, browser, e2e
-        run: |
-          mkdir -p "$RUNNER_TEMP/check"
-          bun test > "$RUNNER_TEMP/check/test.log" 2>&1 & test=$!
-          bun run typecheck > "$RUNNER_TEMP/check/typecheck.log" 2>&1 & typecheck=$!
-          # a second run if the first failed: Vitest's retry covers a failed test, but not a test file
-          # that did not load at all (cold Vite cache on a busy machine); the second run has the cache
-          { bun run test:browser || { echo "::warning::browser failed once, second try"; bun run test:browser; }; } > "$RUNNER_TEMP/check/browser.log" 2>&1 & browser=$!
-          # the build once; the smoke test a second time if the first failed (like Vitest's retry),
-          # with a warning so it shows
-          { bun run build && { bun tests/e2e/smoke.ts || { echo "::warning::e2e failed once, second try"; bun tests/e2e/smoke.ts; }; }; } > "$RUNNER_TEMP/check/e2e.log" 2>&1 & e2e=$!
-          failed=0
-          for name in test typecheck browser e2e; do
-            if wait "${!name}"; then result=ok; else result=FAILED; failed=1; fi
-            echo "::group::$name: $result"
-            cat "$RUNNER_TEMP/check/$name.log"
-            echo "::endgroup::"
-            [ "$result" = ok ] || echo "::error::$name failed"
-          done
-          exit $failed
+      # Biome, unit and integration tests, typecheck, browser tests (parts of the interface on their
+      # own in Chromium, tests/browser) and E2E (the built app against real servers, tests/e2e): side
+      # by side, the same script as `bun run check` locally
+      - run: bash scripts/check
       # the screenshots Vitest takes of a failed browser test
       - uses: actions/upload-artifact@v7
         if: failure()

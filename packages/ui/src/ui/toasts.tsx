@@ -8,29 +8,35 @@ const WITH_ACTION = 7000; // a notice with "Undo" or "Open" stays longer
 
 /** A short notice; `.undo` offers "Undo", `.action` another step ("Open"), `.error` says what failed. */
 export function notify(text: string) {
-  toast(text, { duration: PLAIN });
+	toast(text, { duration: PLAIN });
 }
 /** "“Title” moved to the trash · Undo" – the same for every undo. `id`: a notice that grows instead of repeating. */
 notify.undo = (text: string, onUndo: () => void, id?: string) => {
-  toast(text, { id, duration: WITH_ACTION, action: { label: tr("activity.undo"), onClick: onUndo } });
+	toast(text, {
+		id,
+		duration: WITH_ACTION,
+		action: { label: tr("activity.undo"), onClick: onUndo },
+	});
 };
 notify.action = (text: string, label: string, run: () => void) => {
-  toast(text, { duration: WITH_ACTION, action: { label, onClick: run } });
+	toast(text, { duration: WITH_ACTION, action: { label, onClick: run } });
 };
 notify.error = (text: string) => {
-  toast.error(text, { duration: WITH_ACTION });
+	toast.error(text, { duration: WITH_ACTION });
 };
 
 /** Sonner as it comes: top right, a close button, several stacked (spread out on hover), swiped away to the side. */
 export function AppToaster() {
-  return (
-    <Toaster
-      position="top-right"
-      closeButton
-      offset={{ top: "calc(16px + env(safe-area-inset-top))", right: 16 }}
-      mobileOffset={{ top: "calc(16px + env(safe-area-inset-top))", left: 16, right: 16 }}
-      // an open dialog makes the page behind it unclickable (pointer-events on the body): not the notices
-      toastOptions={{ classNames: { toast: "pointer-events-auto", error: "[&_[data-icon]]:text-destructive" } }}
-    />
-  );
+	return (
+		<Toaster
+			closeButton
+			mobileOffset={{ top: "calc(16px + env(safe-area-inset-top))", left: 16, right: 16 }}
+			offset={{ top: "calc(16px + env(safe-area-inset-top))", right: 16 }}
+			position="top-right"
+			// an open dialog makes the page behind it unclickable (pointer-events on the body): not the notices
+			toastOptions={{
+				classNames: { toast: "pointer-events-auto", error: "[&_[data-icon]]:text-destructive" },
+			}}
+		/>
+	);
 }

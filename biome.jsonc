@@ -1,0 +1,117 @@
+{
+	// Formatter, linter and assist actions in one tool. `bun run check` runs all of it the way CI does
+	// (no writes, warnings fail), `bun run fix` applies the safe fixes and formats.
+	"$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+	"vcs": {
+		"enabled": true,
+		"clientKind": "git",
+		"useIgnoreFile": true,
+		"defaultBranch": "main"
+	},
+	"files": {
+		"ignoreUnknown": true
+	},
+	"formatter": {
+		"enabled": true,
+		"lineWidth": 100
+	},
+	"css": {
+		"parser": {
+			"tailwindDirectives": true
+		}
+	},
+	"linter": {
+		"enabled": true,
+		"domains": {
+			"react": "recommended",
+			"test": "recommended"
+		},
+		"rules": {
+			"preset": "recommended",
+			"a11y": {
+				// our wrappers around <input>, <select>, <textarea> and Radix's checkbox (a <button>)
+				"noLabelWithoutControl": {
+					"level": "error",
+					"options": { "inputComponents": ["Checkbox", "Input", "NativeSelect", "Textarea"] }
+				}
+			},
+			"complexity": {
+				"noForEach": "error",
+				"noUselessStringConcat": "error",
+				"noUselessUndefined": "error",
+				"useWhile": "error"
+			},
+			"correctness": {
+				"noUndeclaredDependencies": "error",
+				"noUnusedFunctionParameters": "error",
+				"noUnusedImports": "error",
+				"noUnusedPrivateClassMembers": "error",
+				"noUnusedVariables": "error"
+			},
+			"performance": {
+				"noAccumulatingSpread": "error"
+			},
+			"style": {
+				// TypeScript runs with noUncheckedIndexedAccess, so `list[i]!` is the visible place where
+				// the code claims an index exists. The rule's fix (`?.`) would hide that claim instead.
+				"noNonNullAssertion": "off",
+				"noParameterAssign": "error",
+				"noUnusedTemplateLiteral": "error",
+				"noUselessElse": "error",
+				"noYodaExpression": "error",
+				"useArrayLiterals": "error",
+				"useAtIndex": "error",
+				"useCollapsedElseIf": "error",
+				"useCollapsedIf": "error",
+				"useConsistentArrayType": "error",
+				"useConsistentBuiltinInstantiation": "error",
+				"useConst": "error",
+				"useDefaultParameterLast": "error",
+				"useExportType": "error",
+				"useForOf": "error",
+				"useFragmentSyntax": "error",
+				"useImportType": "error",
+				"useNodejsImportProtocol": "error",
+				"useNumberNamespace": "error",
+				"useSelfClosingElements": "error",
+				"useShorthandAssign": "error",
+				"useTemplate": "error",
+				"useThrowNewError": "error",
+				"useThrowOnlyError": "error"
+			},
+			"suspicious": {
+				"noEmptyBlockStatements": "error",
+				"noEvolvingTypes": "error",
+				"noImportCycles": "error",
+				"noVar": "error",
+				"useAwait": "error",
+				"useErrorMessage": "error"
+			}
+		}
+	},
+	"assist": {
+		"enabled": true,
+		"actions": {
+			"source": {
+				"noDuplicateClasses": "on",
+				"organizeImports": "on",
+				"useSortedAttributes": "on",
+				"useSortedPackageJson": "on",
+				"useSortedProperties": "on"
+			}
+		}
+	},
+	"overrides": [
+		{
+			// translations: one key order in every language makes a missing key easy to spot
+			"includes": ["packages/core/locales/**/*.json"],
+			"assist": {
+				"actions": {
+					"source": {
+						"useSortedKeys": "on"
+					}
+				}
+			}
+		}
+	]
+}
