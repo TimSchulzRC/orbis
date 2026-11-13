@@ -107,6 +107,7 @@ function modeLabel(shape: Shape, mode: Mode, t: T): string {
 const TRUE_WORDS = ["ja", "yes", "true", "1", "wahr", "x"];
 /** A checkbox is checked or not: "is false" and "is not true" both read as "is not checked". */
 function checkCond(c: FieldCond): FieldCond {
+	if (c.mode !== ":" && c.mode !== "!=") return c; // "is empty", as typed in the text form
 	const word = typeof c.values[0] === "string" ? c.values[0].toLowerCase() : "true";
 	const checked = (c.mode === ":") === TRUE_WORDS.includes(word);
 	return { prop: c.prop, mode: checked ? ":" : "!=", values: ["true"] };
