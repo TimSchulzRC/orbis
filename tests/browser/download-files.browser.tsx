@@ -220,7 +220,9 @@ test("a file whose content can't be had is left out and named; with none to be h
 	pending.length = 0;
 	await page.getByRole("link", { name: "Status" }).click({ button: "right" });
 	await entry(2).click();
-	await expect.element(page.getByText(/Die Dateien waren nicht zu bekommen/)).toBeVisible();
+	await expect
+		.element(page.getByText(/Nichts heruntergeladen: .* \(lost-1\.pdf, lost-2\.pdf\)/))
+		.toBeVisible();
 	expect(pending).toHaveLength(0);
 });
 

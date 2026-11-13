@@ -317,7 +317,7 @@
 	"file.descriptionPlaceholder": "Beschreibung, auch Bildunterschrift und Alt-Text",
 	"file.download": "Herunterladen",
 	"file.downloadAll": "Dateien herunterladen ({count})",
-	"file.downloadAllFailed": "Die Dateien waren nicht zu bekommen. Ihr Inhalt liegt weder auf diesem Gerät noch ist der Server erreichbar.",
+	"file.downloadAllFailed": "Nichts heruntergeladen: Der Inhalt liegt weder auf diesem Gerät noch war er vom Server zu bekommen ({names}).",
 	"file.downloadAllMissing": "{count, plural, one {1 Datei fehlt im ZIP} other {# Dateien fehlen im ZIP}}, der Inhalt war nicht zu bekommen: {names}",
 	"file.downloadAllName": "Dateien",
 	"file.downloadAllPacking": "{count} Dateien werden gepackt …",

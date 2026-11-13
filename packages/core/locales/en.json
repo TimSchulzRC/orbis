@@ -317,7 +317,7 @@
 	"file.descriptionPlaceholder": "Description, also caption and alt text",
 	"file.download": "Download",
 	"file.downloadAll": "Download files ({count})",
-	"file.downloadAllFailed": "The files could not be had. Their content is not on this device and the server can't be reached.",
+	"file.downloadAllFailed": "Nothing downloaded: the content is not on this device and could not be had from the server ({names}).",
 	"file.downloadAllMissing": "{count, plural, one {1 file is missing in the ZIP} other {# files are missing in the ZIP}}, the content could not be had: {names}",
 	"file.downloadAllName": "Files",
 	"file.downloadAllPacking": "Packing {count} files …",

@@ -24,14 +24,13 @@ export function useDownloadFiles() {
 		const { saved, missing } = await device
 			.downloadAll(files, `${safeName(title)}_${day}.zip`)
 			.finally(done);
-		if (!saved) return notify.error(t("file.downloadAllFailed"));
-		if (missing.length)
-			notify.error(
-				t("file.downloadAllMissing", {
-					count: missing.length,
-					names: missing.slice(0, NAMED).join(", ") + (missing.length > NAMED ? " …" : ""),
-				}),
-			);
+		if (!missing.length) return;
+		const names = missing.slice(0, NAMED).join(", ") + (missing.length > NAMED ? " …" : "");
+		notify.error(
+			saved
+				? t("file.downloadAllMissing", { count: missing.length, names })
+				: t("file.downloadAllFailed", { names }),
+		);
 	};
 }
 
