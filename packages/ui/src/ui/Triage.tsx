@@ -13,10 +13,10 @@ import { Checkbox } from "../components/ui/checkbox";
 import {
 	isTypingTarget,
 	openItem,
-	useDesktop,
 	useIndex,
 	useItemHref,
 	useRepo,
+	useRoomy,
 	useSpaceId,
 	useWindowKeys,
 } from "../hooks";
@@ -97,7 +97,7 @@ export function Triage({ items }: { items: Item[] }) {
 	const here = useSpaceId()!;
 	const ix = useIndex();
 	const spaceOf = (_: Item) => here;
-	const phone = !useDesktop();
+	const phone = !useRoomy();
 	const [sel, setSel] = useState(0);
 	const [marked, setMarked] = useState<Set<string>>(new Set());
 	const [limit, setLimit] = useState(PAGE);

@@ -147,9 +147,11 @@ export function useMediaQuery(q: string) {
 	return matches;
 }
 
-/** The phone/desktop breakpoint where the sidebar shows (Tailwind `lg`). */
-export const useDesktop = () => useMediaQuery("(min-width: 1024px)");
+/** The phone/desktop breakpoint where the sidebar shows (Tailwind `md`, the opposite of PHONE). */
+export const useDesktop = () => useMediaQuery("(min-width: 768px)");
 export const usePhone = () => useMediaQuery(PHONE);
+/** Tailwind `lg`: room for two panes next to the sidebar. */
+export const useRoomy = () => useMediaQuery("(min-width: 1024px)");
 /** Below Tailwind `sm`: too narrow for side-by-side columns. */
 export const useNarrow = () => useMediaQuery("(max-width: 640px)");
 
