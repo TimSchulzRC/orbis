@@ -20,7 +20,7 @@ import {
 } from "@obtion/core/query";
 import { firstOfGroup, statusProp } from "@obtion/core/traits";
 import { ChevronDown, ChevronRight, Plus } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Input } from "../components/ui/input";
 import {
 	Table as ShadcnTable,
@@ -32,17 +32,18 @@ import {
 } from "../components/ui/table";
 import { itemHref, useIndex, useNarrow, useStoredSet } from "../hooks";
 import { titleOf, useT } from "../i18n";
-import { startPointerDrag } from "../lib/drag";
+import { type DropZone, dropZone, startPointerDrag } from "../lib/drag";
 import { cn, moveInArray } from "../lib/utils";
 import { repo } from "../repo";
 import { CellValue, defaultColumns } from "./cells";
+import { notify } from "./feedback";
 import { DateField, InlineText } from "./fields";
 import { AreaChip, fieldLabel, GroupChip, HiddenGroups, hiddenPatch, splitHidden } from "./groups";
 import { EmptyDash, ItemIcon } from "./item-look";
 import { OptionSelect, PropertyField, RangeEditor } from "./Properties";
 import { Button, IconButton, MenuItem, MoreMenu, Popover } from "./primitives";
 import { PercentBar } from "./progress";
-import { treeOrder } from "./Row";
+import { groupSetter, treeOrder } from "./Row";
 import { KEYS } from "./storage";
 
 /** What a view adds to the query when showing it: its tab (grouping options, widths) and how to save. */
@@ -53,6 +54,18 @@ export interface Look {
 	/** "+ Task" in each group: new entries of this type (with the group's value). */
 	add?: { type: string; init?: ItemInit };
 }
+
+/**
+ * The row being dragged by its title: from which table (rows stay in theirs), from which group and
+ * below which listed entry it is shown there.
+ */
+let rowDrag: { id: string; table: string; group: string; from?: string } | null = null;
+/** The line or frame that shows where a dragged row lands. */
+const AIM: Record<DropZone, string> = {
+	before: "[&>td]:shadow-[inset_0_2px_0_0_var(--focus)]",
+	after: "[&>td]:shadow-[inset_0_-2px_0_0_var(--focus)]",
+	inside: "[&>td]:shadow-[inset_0_2px_0_0_var(--focus),inset_0_-2px_0_0_var(--focus)]",
+};
 
 /** Bounds for a column width dragged by its border. */
 const MIN_WIDTH = 60;
@@ -244,6 +257,56 @@ export function GroupedTable({
 	};
 	const byLabel = by ? fieldLabel(by, t, [{ key: by, label: label(by) }]) : "";
 	const [dragCol, setDragCol] = useState<string | null>(null);
+	// Rows are dragged by their title. On another row's middle: below that entry. Between two rows:
+	// on their level, and there in the order – kept in the view, so only while it has no sort of
+	// its own. Into another group: its value too.
+	const tableId = useId();
+	const [aim, setAim] = useState<{ id: string; zone: DropZone } | { group: string } | null>(null);
+	const dragged = () => (rowDrag?.table === tableId ? rowDrag : null);
+	/** The entry of this group the row is shown below (as `treeOrder` nests them). */
+	const listedParent = (g: Group, id: string) => {
+		const ids = new Set(g.items.map((x) => x.id));
+		return ix.parentsOf(id).find((p) => ids.has(p));
+	};
+	/**
+	 * The entry a drop on `target` goes below (none: the top level of the list). Below an open row
+	 * with sub-items is the place of its first one.
+	 */
+	const landing = (g: Group, target: Item, zone: DropZone, hasOpenKids: boolean) =>
+		zone === "inside" || (zone === "after" && hasOpenKids) ? target.id : listedParent(g, target.id);
+	const dropRow = (g: Group, parent: string | undefined, zone: DropZone, target: Item) => {
+		const d = dragged();
+		rowDrag = null;
+		setAim(null);
+		const item = d && ix.get(d.id);
+		if (!d || !item) return;
+		if (parent !== d.from) {
+			if (parent) {
+				if (!repo.moveParent(d.id, d.from ?? null, parent)) return;
+			} else if (d.from) repo.removeParent(d.id, d.from);
+		}
+		if (by && d.group !== g.key) groupSetter(item, by, g)?.();
+		if (zone === "inside") return open(target.id, true);
+		if (!look?.onLook) return;
+		// a sorted view keeps its order: say so where the drop changed nothing else
+		if (def.sort?.length)
+			return void (parent === d.from && d.group === g.key && notify(t("table.sorted")));
+		// the rows as they are shown (sub-items after their parent), without the dragged one
+		const rows = new Map<string, number>();
+		for (const gr of all)
+			for (const o of treeOrder(gr.items))
+				if (o.item.id !== d.id && !rows.has(o.item.id)) rows.set(o.item.id, o.depth);
+		const order = [...rows.keys()];
+		const depths = [...rows.values()];
+		let at = order.indexOf(target.id);
+		if (zone === "after") {
+			at++;
+			// after the row and everything below it – unless it lands there as the first sub-item
+			if (parent !== target.id) while (at < order.length && depths[at]! > depths[at - 1]!) at++;
+		}
+		order.splice(at, 0, d.id);
+		look.onLook({ order });
+	};
 	const resize = (c: string, e: React.PointerEvent) => {
 		e.preventDefault();
 		e.stopPropagation();
@@ -321,15 +384,65 @@ export function GroupedTable({
 			const kids = countKids(order, n);
 			const isOpen = opened.has(i.id);
 			if (kids && !isOpen) hideBelow = depth;
+			const landingAt = (e: React.DragEvent) => {
+				const d = dragged();
+				if (!d || d.id === i.id) return;
+				const box = e.currentTarget.getBoundingClientRect();
+				const zone = dropZone(e.clientY - box.top, box.height);
+				const parent = landing(g, i, zone, kids > 0 && isOpen);
+				// not into itself or anything below it
+				if (parent && ix.wouldCycle(d.id, parent)) return;
+				return { zone, parent };
+			};
 			out.push(
-				<TableRow className="group/row hover:bg-hover" data-id={i.id} key={i.id}>
+				<TableRow
+					className={cn(
+						"group/row hover:bg-hover",
+						aim && "id" in aim && aim.id === i.id && AIM[aim.zone],
+					)}
+					data-id={i.id}
+					key={i.id}
+					onDragLeave={() => setAim(null)}
+					onDragOver={(e) => {
+						const at = landingAt(e);
+						if (!at) return;
+						e.preventDefault();
+						e.stopPropagation();
+						setAim({ id: i.id, zone: at.zone });
+					}}
+					onDrop={(e) => {
+						const at = landingAt(e);
+						if (!at) return;
+						e.preventDefault();
+						e.stopPropagation();
+						dropRow(g, at.parent, at.zone, i);
+					}}
+				>
 					<ShadcnTableCell
 						className={cn(
 							sticky,
 							"border-b border-line px-2 py-1 align-middle group-hover/row:bg-hover",
 						)}
 					>
-						<span className="flex min-w-0 items-center gap-1" style={{ paddingLeft: depth * 20 }}>
+						{/* biome-ignore lint/a11y/noStaticElementInteractions: dragging a row to another place; the page's places and its properties do the same by keyboard */}
+						<span
+							className="flex min-w-0 items-center gap-1"
+							draggable
+							onDragEnd={() => {
+								rowDrag = null;
+								setAim(null);
+							}}
+							onDragStart={(e) => {
+								rowDrag = {
+									id: i.id,
+									table: tableId,
+									group: g.key,
+									from: listedParent(g, i.id),
+								};
+								e.dataTransfer.setData("text/plain", titleOf(i, t));
+							}}
+							style={{ paddingLeft: depth * 20 }}
+						>
 							{kids ? (
 								<IconButton
 									aria-expanded={isOpen}
@@ -343,7 +456,11 @@ export function GroupedTable({
 							) : (
 								depth > 0 && <span className="w-4 shrink-0" />
 							)}
-							<a className="flex min-w-0 items-center gap-2 hover:underline" href={itemHref(i.id)}>
+							<a
+								className="flex min-w-0 items-center gap-2 hover:underline"
+								draggable={false}
+								href={itemHref(i.id)}
+							>
 								<ItemIcon className="shrink-0" item={i} size={14} />
 								<span className="truncate font-medium">{titleOf(i, t)}</span>
 							</a>
@@ -400,8 +517,30 @@ export function GroupedTable({
 				return (
 					<section
 						aria-label={heads ? g.label || g.key || byLabel : undefined}
-						className={heads ? "mb-5" : undefined}
+						className={cn(
+							heads && "mb-5",
+							aim && "group" in aim && aim.group === g.key && "rounded-lg ring-2 ring-focus",
+						)}
 						key={g.key || "_"}
+						onDragLeave={(e) =>
+							!e.currentTarget.contains(e.relatedTarget as Node | null) && setAim(null)
+						}
+						onDragOver={(e) => {
+							const d = dragged();
+							const item = d && ix.get(d.id);
+							if (!by || !d || !item || d.group === g.key || !groupSetter(item, by, g)) return;
+							e.preventDefault();
+							setAim({ group: g.key });
+						}}
+						onDrop={(e) => {
+							const d = dragged();
+							const item = d && ix.get(d.id);
+							rowDrag = null;
+							setAim(null);
+							if (!by || !d || !item || d.group === g.key) return;
+							e.preventDefault();
+							groupSetter(item, by, g)?.();
+						}}
 					>
 						{heads && (
 							<div className="group/head sticky left-0 flex w-fit max-w-full items-center gap-2 px-2 py-1.5">

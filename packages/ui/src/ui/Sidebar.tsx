@@ -1,5 +1,6 @@
 // Fold state is remembered per device. In the tree, dragging replaces the parent you come from;
-// with Alt held a place is added. Dropping on a row's upper or lower edge reorders. Dropped into
+// with Alt held a place is added. Dropping on a row's upper or lower edge reorders. A link to an
+// item dragged in from the page gets a place where it is dropped: below a row, or pinned. Dropped into
 // another workspace's block, an item moves there. Dragging a workspace's name to the nearest gap
 // reorders the blocks; the order is the account's, on every device.
 
@@ -32,6 +33,7 @@ import {
 	itemPath,
 	leavePage,
 	navigate,
+	parseHash,
 	spaceHref,
 	useLocalStorage,
 	useRepo,
@@ -39,7 +41,7 @@ import {
 	useSpaceId,
 } from "../hooks";
 import { getLang, useT } from "../i18n";
-import { startPointerDrag } from "../lib/drag";
+import { dropZone, startPointerDrag } from "../lib/drag";
 import { shortcut } from "../lib/platform";
 import { cn, moveInArray } from "../lib/utils";
 import { DeleteDialog, deleteOrAsk } from "../views/ItemPage";
@@ -54,9 +56,16 @@ import { editType, openNewType } from "./type-edit";
 
 /**
  * What is being dragged in the sidebar: an item (from below `from`, null: pinned; `type`: a pinned
- * type page, which only changes its place among the pinned) or a row of "Types", and from which workspace.
+ * type page, which only changes its place among the pinned) or a row of "Types", and from which
+ * workspace. `link`: an item dragged in from the page; it keeps the places it has and gets one more.
  */
-let dragging: { id: string; from: string | null; space: string; type?: boolean } | null = null;
+let dragging: {
+	id: string;
+	from: string | null;
+	space: string;
+	type?: boolean;
+	link?: boolean;
+} | null = null;
 /**
  * Carries only the title as text. The URL the browser adds for a link is dropped, or the drag
  * would be taken as a link to open elsewhere (a new tab, a split view).
@@ -66,6 +75,50 @@ const startDrag = (e: React.DragEvent, d: NonNullable<typeof dragging>, text: st
 	e.dataTransfer.clearData();
 	e.dataTransfer.setData("text/plain", text);
 };
+/** The item a link leads to and the workspace it names: "#/w/<workspace>/i/<id>/<title>". */
+function linkedItem(a: HTMLAnchorElement): { id: string; space?: string } | null {
+	// also a full address of this app, as pasted into a text
+	if (a.origin !== location.origin || a.pathname !== location.pathname) return null;
+	const { space, rest } = parseHash(a.hash);
+	const id = /^\/i\/([^/?]+)/.exec(rest)?.[1];
+	return id ? { id: decodeURIComponent(id), space } : null;
+}
+/**
+ * Whatever is dragged on the page and leads to one item (a link, or something dragged with one
+ * link in it: a card, a chip) can be dropped into the tree of its workspace. A dragged link carries
+ * only its text: with its URL the browser would take the drag as a link to open elsewhere.
+ */
+function useLinkDrags(space: string, here: boolean, on: boolean) {
+	const repo = useRepo();
+	useEffect(() => {
+		if (!on) return;
+		const start = (e: DragEvent) => {
+			const el = e.target;
+			if (!(el instanceof Element) || e.defaultPrevented || el.closest("[data-space-block]"))
+				return;
+			const link = el.closest<HTMLAnchorElement>("a[href]");
+			const inside = link ? [link] : [...el.querySelectorAll<HTMLAnchorElement>("a[href]")];
+			// links that lead elsewhere (a URL property on a card) do not count
+			const found = inside.map(linkedItem).filter((f) => !!f);
+			const to = found[0];
+			if (!to || found.some((f) => f.id !== to.id || f.space !== to.space)) return;
+			if (to.space ? to.space !== space : !here) return;
+			const item = repo.get(to.id);
+			if (!item || item.deleted) return;
+			dragging = { id: to.id, from: null, space, type: item.type === META_TYPE, link: true };
+			if (!link || !e.dataTransfer) return;
+			e.dataTransfer.clearData();
+			e.dataTransfer.setData("text/plain", link.textContent?.trim() || item.title);
+		};
+		const end = () => (dragging = null);
+		document.addEventListener("dragstart", start);
+		document.addEventListener("dragend", end);
+		return () => {
+			document.removeEventListener("dragstart", start);
+			document.removeEventListener("dragend", end);
+		};
+	}, [repo, space, here, on]);
+}
 /** The workspace whose block is being dragged to another place among the blocks. */
 let draggingSpace: string | null = null;
 /**
@@ -147,16 +200,9 @@ function ResizeHandle({
 }
 
 /** Can it go into another workspace? Items can (a move), type pages and rows of "Types" not. */
-const movable = (d: typeof dragging) => !!d && d.from !== "types" && !d.type;
+const movable = (d: typeof dragging) => !!d && d.from !== "types" && !d.type && !d.link;
 /** Icons of tree rows: larger in the phone menu. */
 const rowIconSize = (touch?: boolean) => (touch ? 17 : 15);
-/** Where a row takes what is dropped on it: its upper quarter before it, its lower quarter after it, else into it. */
-function dropZone(y: number, height: number): "before" | "inside" | "after" {
-	if (y < height * 0.25) return "before";
-	if (y > height * 0.75) return "after";
-	return "inside";
-}
-
 export function Sidebar({ onSearch }: { onSearch: () => void }) {
 	const { t, lang } = useT();
 	const route = useRoute();
@@ -313,6 +359,7 @@ export function SpaceTree({ space, touch }: { space: Space; touch?: boolean }) {
 	const [over, setOver] = useState(false);
 	const menu = useContextMenu();
 	const typesMenu = useContextMenu();
+	useLinkDrags(space.id, here, !touch);
 	const ix = repo.index();
 	const roots = sidebarRoots(ix);
 	// missing or deleted default types come back; the others stay as they are
@@ -564,7 +611,12 @@ function PinnedTree({ touch, here }: { touch?: boolean; here: boolean }) {
 		// biome-ignore lint/a11y/noStaticElementInteractions: drop target for dragging pages to the top level; pinning works from each page's menu
 		<div
 			className="min-h-1"
-			onDragOver={(e) => dragging && dragging.from !== "types" && e.preventDefault()}
+			onDragOver={(e) =>
+				dragging &&
+				dragging.from !== "types" &&
+				(dragging.space === space || movable(dragging)) &&
+				e.preventDefault()
+			}
 			onDrop={(e) => {
 				// dropped on empty space: pinned at the end (moving away from the parent it came from)
 				const dragged = dragging;
@@ -806,7 +858,7 @@ function TreeNode({
 			);
 		if ((dragged.type || isType) && drop === "inside") return;
 		if (drop === "inside") {
-			if (e.altKey) repo.addParent(dragged.id, item.id);
+			if (e.altKey || dragged.link) repo.addParent(dragged.id, item.id);
 			else if (dragged.from) repo.moveParent(dragged.id, dragged.from, item.id);
 			else if (repo.addParent(dragged.id, item.id)) repo.pin(dragged.id, false); // from the top: no longer pinned
 			if (!isOpen) toggle(key, depth);
@@ -820,9 +872,11 @@ function TreeNode({
 			? keyBetween(neighbourSort, sortOf(item))
 			: keyBetween(sortOf(item), neighbourSort);
 		if (parent) {
-			if (dragged.from !== parent) {
+			// a link dragged in does not say where it came from: is the item below this parent already?
+			const there = dragged.link ? !!ix.get(dragged.id)?.parents[parent] : dragged.from === parent;
+			if (!there) {
 				if (
-					e.altKey
+					e.altKey || dragged.link
 						? !repo.addParent(dragged.id, parent, sort)
 						: !repo.moveParent(dragged.id, dragged.from, parent, sort)
 				)

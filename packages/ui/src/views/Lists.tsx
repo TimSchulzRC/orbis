@@ -11,7 +11,7 @@ import {
 import { andWhere, type QueryDef, tabDef } from "@obtion/core/query";
 import { typeTabs } from "@obtion/core/setup";
 import { keyBetween } from "@obtion/core/sortkey";
-import { ListFilter, Plus, SlidersHorizontal, Upload } from "lucide-react";
+import { ArrowUpDown, ListFilter, Plus, SlidersHorizontal, Upload } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { createAndOpen } from "../actions";
 import { Input } from "../components/ui/input";
@@ -20,11 +20,12 @@ import { tr, useT } from "../i18n";
 import { cn } from "../lib/utils";
 import { notify } from "../ui/feedback";
 import { viewGroups } from "../ui/groups";
-import { Button, DraftBar, Empty, IconButton } from "../ui/primitives";
+import { Button, DraftBar, Empty, IconButton, Popover } from "../ui/primitives";
 import { AddFilter, QueryEditor } from "../ui/QueryEditor";
 import { defaultColumns, Results, useQuery } from "../ui/Results";
 import { SpaceEyebrow } from "../ui/Spaces";
 import {
+	SortPill,
 	type TabEdit,
 	tabName,
 	useTabChoice,
@@ -110,6 +111,19 @@ export function TypeList({ type }: { type: Item }) {
 	};
 	const { items, ctx } = useQuery(def);
 	const [settingsOpen, setSettingsOpen] = useState(false);
+	// a filter added from the toolbar: its pill in the line below starts open, to take its value
+	const [added, setAdded] = useState(false);
+	const shownTab = { ...tab, where: tabWhere };
+	const settings = (part?: "sort") => (
+		<ViewSettings
+			columns={tab.kind === "table" ? defaultColumns(items, ctx) : undefined}
+			fields={fields}
+			groups={viewGroups(items, def, ctx)}
+			onLook={saveLook}
+			part={part}
+			tab={shownTab}
+		/>
+	);
 	const fields = useViewFields(base, items);
 	const setTabFilter = (where: QueryDef["where"]) =>
 		!sameValue(where, tabWhere) && setDraft({ tab: tab.id, where });
@@ -129,16 +143,46 @@ export function TypeList({ type }: { type: Item }) {
 				right={
 					<>
 						<AddFilter
-							onAdd={(c) => setTabFilter(andWhere(tabWhere, c))}
-							trigger={(p) => <IconButton {...p} icon={ListFilter} label={t("view.addFilter")} />}
+							fields={fields}
+							onAdd={(c) => {
+								setTabFilter(andWhere(tabWhere, c));
+								setAdded(true);
+								setTimeout(() => setAdded(false));
+							}}
+							trigger={(p) => (
+								<IconButton
+									{...p}
+									className={tabWhere ? "text-fg" : undefined}
+									icon={ListFilter}
+									label={t("view.addFilter")}
+								/>
+							)}
 						/>
-						<IconButton
-							aria-pressed={settingsOpen}
-							className={settingsOpen ? "bg-hover text-fg" : undefined}
-							icon={SlidersHorizontal}
-							label={t("view.settings")}
-							onClick={() => setSettingsOpen(!settingsOpen)}
-						/>
+						{tab.kind !== "triage" && (
+							<Popover
+								align="right"
+								trigger={(p) => (
+									<IconButton
+										{...p}
+										className={tab.sort?.length ? "text-fg" : undefined}
+										icon={ArrowUpDown}
+										label={t("view.sort")}
+									/>
+								)}
+							>
+								{settings("sort")}
+							</Popover>
+						)}
+						<Popover
+							align="right"
+							onOpenChange={setSettingsOpen}
+							open={settingsOpen}
+							trigger={(p) => (
+								<IconButton {...p} icon={SlidersHorizontal} label={t("view.settings")} />
+							)}
+						>
+							{settings()}
+						</Popover>
 						<Button
 							aria-label={t("view.new", { name })}
 							onClick={() => createAndOpen({ type: type.id })}
@@ -150,20 +194,17 @@ export function TypeList({ type }: { type: Item }) {
 				}
 				tabs={tabs}
 			/>
-			{settingsOpen && (
-				<ViewSettings
-					columns={tab.kind === "table" ? defaultColumns(items, ctx) : undefined}
-					fields={fields}
-					groups={viewGroups(items, def, ctx)}
-					onClose={() => setSettingsOpen(false)}
-					onLook={saveLook}
-					tab={{ ...tab, where: tabWhere }}
-				/>
-			)}
-			{/* the view's own filter: only when it has one, as chips under the tabs (like Notion) */}
-			{tabWhere && (
+			{/* how the view is sorted and filtered: only when it is, as pills under the tabs (like Notion) */}
+			{(tabWhere || !!tab.sort?.length) && (
 				<div className="mb-3">
-					<QueryEditor bare def={{ where: tabWhere }} onChange={(d) => setTabFilter(d.where)} />
+					<QueryEditor
+						bare
+						before={<SortPill fields={fields} onLook={saveLook} tab={shownTab} />}
+						def={{ where: tabWhere }}
+						fields={fields}
+						onChange={(d) => setTabFilter(d.where)}
+						openLast={added}
+					/>
 				</div>
 			)}
 			{dirty && (
@@ -187,7 +228,7 @@ export function TypeList({ type }: { type: Item }) {
 					keyPrefix={type.id}
 					look={{
 						key: `${type.id}:${tab.id}`,
-						tab: { ...tab, where: tabWhere },
+						tab: shownTab,
 						onLook: saveLook,
 						add: { type: type.id },
 					}}

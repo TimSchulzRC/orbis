@@ -42,18 +42,11 @@ import {
 	ArrowDown,
 	ArrowLeft,
 	ArrowUp,
-	Calendar,
-	CheckSquare,
 	ChevronRight,
-	CircleDashed,
 	GripVertical,
-	Hash,
-	Link,
-	Link2,
 	ListChecks,
 	Plus,
 	Settings2,
-	Sigma,
 	Sparkles,
 	Type,
 	X,
@@ -73,22 +66,11 @@ import { ItemIcon, pal, TypeGlyph } from "../ui/item-look";
 import { isBadge } from "../ui/Properties";
 import { Button, Dialog, IconButton, Popover, Seg } from "../ui/primitives";
 import { SettingRow, SettingsGroup } from "../ui/SettingRows";
+import { PROP_ICON } from "../ui/view-fields";
 import { NewTypeDialog } from "./Types";
 
 type Page = "general" | "props" | "caps";
 type Modal = null | "delete" | "fromTag" | "toTag";
-
-const KIND_ICON: Record<PropKind, ComponentType<{ size?: number; className?: string }>> = {
-	text: Type,
-	number: Hash,
-	date: Calendar,
-	checkbox: CheckSquare,
-	url: Link,
-	select: ListChecks,
-	status: CircleDashed,
-	relation: Link2,
-	computed: Sigma,
-};
 
 const INPUT =
 	"w-56 max-w-full rounded-md border border-line bg-bg px-2.5 py-1 text-sm outline-none focus:border-focus";
@@ -676,7 +658,7 @@ function MoveButton({
 
 function PropRowText({ prop }: { prop: PropDef }) {
 	const { t } = useT();
-	const Icon = KIND_ICON[prop.kind] ?? Type;
+	const Icon = PROP_ICON[prop.kind] ?? Type;
 	const kind = kindLabel(prop, t);
 	// options say more than the description; without either, the kind alone
 	const detail = prop.options?.length

@@ -223,6 +223,7 @@ export interface ViewTab {
 	kind: ViewKind;
 	where?: Cond;
 	sort?: { key: string; desc?: boolean }[];
+	order?: string[]; // entries put in order by hand; counts while the view has no sort
 	group?: string; // "status" | "statusGroup" | "type" | "path" | field or property name
 	subgroup?: string; // boards: rows ("swimlanes") within the columns
 	hideEmpty?: boolean; // hide empty groups

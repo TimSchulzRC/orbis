@@ -1,6 +1,7 @@
 import { fmtBytes } from "@obtion/core/i18n";
-import { type Item, STATUS_GROUPS } from "@obtion/core/model";
-import { dueOf, isDone, statusOf, statusProp } from "@obtion/core/traits";
+import { type Item, propByName, STATUS_GROUPS, type StatusGroup } from "@obtion/core/model";
+import type { Group as QueryGroup } from "@obtion/core/query";
+import { dueOf, firstOfGroup, hasOptions, isDone, statusOf, statusProp } from "@obtion/core/traits";
 import type { Repo } from "@obtion/sync";
 import { useItemHref, useRepo } from "../hooks";
 import { titleOf, tr, useT } from "../i18n";
@@ -243,6 +244,30 @@ export function RowStatus({ item, size = 17 }: { item: Item; size?: number }) {
 			<ItemIcon item={item} size={size - 3} />
 		</>
 	);
+}
+
+/**
+ * Gives an entry the value of a group it is dragged into (a board column, a group of a table).
+ * Undefined where the grouping is nothing to set: a place, a type, a property its type lacks.
+ */
+export function groupSetter(
+	item: Item,
+	by: string,
+	g: QueryGroup,
+	repo: Repo = current,
+): (() => void) | undefined {
+	const schema = repo.index().schemaOf(item);
+	if (by === "statusGroup") {
+		const first = g.key ? firstOfGroup(schema, g.key as StatusGroup) : undefined;
+		return first && (() => void setStatus(item, first.id, repo));
+	}
+	const prop = by === "status" ? statusProp(schema) : propByName(schema, by, hasOptions);
+	const opt = prop?.options?.find((o) => o.name === g.label);
+	if (prop && opt && prop.id === statusProp(schema)?.id)
+		return () => void setStatus(item, opt.id, repo);
+	if (prop && opt) return () => repo.setProp(item.id, prop.id, prop.multiple ? [opt.id] : opt.id);
+	if (prop && !g.key) return () => repo.setProp(item.id, prop.id, null);
+	return undefined;
 }
 
 /** Keep the given order, but put sub-items right after their listed parent (any depth). */

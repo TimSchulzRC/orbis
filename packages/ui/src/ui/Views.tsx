@@ -1,46 +1,46 @@
 // View tabs, shared by a type's page and query blocks. A tab's filter is added to the query.
 
 import type { T } from "@obtion/core/i18n";
-import { type PropDef, titleKey, type ViewKind, type ViewTab } from "@obtion/core/model";
-import {
-	type Cond,
-	type Group,
-	groupId,
-	parseQuery,
-	typesIn,
-	viewTypeIds,
-} from "@obtion/core/query";
+import { titleKey, type ViewKind, type ViewTab } from "@obtion/core/model";
+import { type Group, groupId } from "@obtion/core/query";
 import { keyBetween } from "@obtion/core/sortkey";
 import { statusProp } from "@obtion/core/traits";
 import {
+	ArrowDown,
+	ArrowUp,
+	ArrowUpDown,
 	CalendarDays,
 	ChartGantt,
+	ChevronDown,
 	ChevronLeft,
 	ChevronRight,
 	Copy,
+	Eye,
+	EyeOff,
 	GripVertical,
 	LayoutGrid,
 	List,
 	ListChecks,
 	ListTree,
 	Plus,
+	Rows3,
 	SlidersHorizontal,
 	SquareKanban,
 	Table2,
 	Trash2,
 	X,
 } from "lucide-react";
-import { useContext, useId, useState } from "react";
-import { Checkbox } from "../components/ui/checkbox";
-import { NativeSelect } from "../components/ui/native-select";
+import { useContext, useState } from "react";
 import { setParams, useIndex, useLocalStorage, useRoute } from "../hooks";
 import { useT } from "../i18n";
 import { cn, moveInArray } from "../lib/utils";
 import { InlineText } from "./fields";
 import { fieldLabel, GroupChip } from "./groups";
-import { Button, Card, DraftBar, IconButton, InCard, MenuItem, Popover, Seg } from "./primitives";
-import { QueryEditor } from "./QueryEditor";
+import { Button, IconButton, InCard, MenuItem, Popover } from "./primitives";
 import { KEYS } from "./storage";
+import { FieldIcon, type ViewField } from "./view-fields";
+
+export { useViewFields } from "./view-fields";
 
 const TAB_KINDS: ViewKind[] = [
 	"table",
@@ -310,65 +310,96 @@ export function ViewTabs({
 	);
 }
 
-interface ViewField {
-	key: string; // stored in columns / sort / group: a built-in field or the property's name
+/** What the built-in keys of sorting and grouping hold, for their icon. */
+const BUILTIN_KIND: Record<string, ViewField["kind"]> = {
+	status: "status",
+	statusGroup: "status",
+	title: "text",
+	type: "select",
+	due: "date",
+	done: "date",
+	created: "builtin-date",
+	updated: "builtin-date",
+};
+
+type Part = "layout" | "props" | "sort" | "group" | "sub" | "date";
+
+/** A line of the view's menu that leads on: what it sets and what is set now. */
+function MenuRow({
+	icon: Icon,
+	label,
+	value,
+	onClick,
+}: {
+	icon: React.ComponentType<{ size?: number; className?: string }>;
 	label: string;
-	kind: PropDef["kind"] | "item" | "tags" | "builtin-date";
-	prop?: PropDef;
+	value?: string;
+	onClick: () => void;
+}) {
+	return (
+		<Button
+			className="tap-row flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm hover:bg-hover"
+			onClick={onClick}
+			variant="plain"
+		>
+			<Icon className="shrink-0 text-muted-foreground" size={15} />
+			<span className="min-w-0 flex-1 truncate">{label}</span>
+			<span className="max-w-28 truncate text-muted-foreground">{value}</span>
+			<ChevronRight className="shrink-0 text-muted-foreground" size={14} />
+		</Button>
+	);
 }
 
-/** Fields of the types a view lists (and the built-in ones), for columns, sorting, grouping and dates. */
-export function useViewFields(
-	where: Cond | undefined,
-	sample: { type: string | null }[] = [],
-): ViewField[] {
-	const ix = useIndex();
-	const { t } = useT();
-	const typeIds = viewTypeIds(where, sample, ix);
-	const out: ViewField[] = [];
-	const seen = new Set<string>();
-	const push = (f: ViewField) => {
-		if (seen.has(titleKey(f.key))) return;
-		seen.add(titleKey(f.key));
-		out.push(f);
-	};
-	for (const id of typeIds)
-		for (const p of ix.types.get(id)!.schema.properties)
-			push({ key: p.name, label: p.name, kind: p.kind, prop: p });
-	// the other side of relations that can point here ("Blockiert diese")
-	for (const type of ix.types.values())
-		for (const p of type.schema.properties) {
-			if (p.kind !== "relation" || p.symmetric || !p.inverseName) continue;
-			const target = p.target ? typesIn(parseQuery(p.target, ix).def.where) : [];
-			if (target.length && !target.some((x) => typeIds.includes(x))) continue;
-			if (!typeIds.includes(type.id) && !target.length) continue;
-			push({ key: p.inverseName, label: p.inverseName, kind: "relation" });
-		}
-	push({ key: "project", label: t("field.project"), kind: "item" });
-	push({ key: "area", label: t("field.area"), kind: "item" });
-	push({ key: "tags", label: t("item.tags"), kind: "tags" });
-	push({ key: "created", label: t("field.created"), kind: "builtin-date" });
-	push({ key: "updated", label: t("field.updated"), kind: "builtin-date" });
-	return out;
+/** A row that is switched on or off by its eye, as in the lists of properties and groups. */
+function EyeRow({
+	on,
+	label,
+	children,
+	onToggle,
+	...drag
+}: {
+	on: boolean;
+	label: string;
+	children: React.ReactNode;
+	onToggle: () => void;
+} & Pick<React.ComponentProps<"li">, "draggable" | "onDragStart" | "onDragOver" | "onDrop">) {
+	return (
+		<li
+			className={cn(
+				"flex items-center gap-2 rounded-lg py-1 pl-1 pr-1 text-sm hover:bg-hover",
+				!on && "text-muted-foreground",
+			)}
+			{...drag}
+		>
+			<GripVertical
+				aria-hidden
+				className={cn("shrink-0 text-faint", drag.draggable ? "cursor-grab" : "invisible")}
+				size={13}
+			/>
+			<span className="flex min-w-0 flex-1 items-center gap-2">{children}</span>
+			<IconButton
+				aria-pressed={on}
+				icon={on ? Eye : EyeOff}
+				iconSize={14}
+				label={label}
+				onClick={onToggle}
+				size="xs"
+			/>
+		</li>
+	);
 }
 
-interface FilterDraft {
-	where: Cond | undefined;
-	onChange: (where: Cond | undefined) => void;
-	dirty: boolean;
-	save: () => void;
-	discard: () => void;
-}
-
-/** The look is saved at once; the filter stays a draft until "Save". */
+/**
+ * What a view shows and how: a menu that leads to one page per setting, as in Notion. Every
+ * change is saved at once. `part`: that page alone, for a popover of its own (the sort pill, a
+ * query block's tools); "more" is what has no tool there: properties and the date.
+ */
 export function ViewSettings({
 	tab,
 	fields,
 	columns,
 	groups = [],
 	onLook,
-	filter,
-	onClose,
 	kinds = TAB_KINDS,
 	part,
 }: {
@@ -377,14 +408,15 @@ export function ViewSettings({
 	columns?: string[];
 	groups?: Group[];
 	onLook: (patch: Partial<ViewTab>) => void;
-	filter?: FilterDraft;
-	onClose: () => void;
-	kinds?: ViewKind[] /** one part only, for a popover (a query block's tools): no card, kind switch, filter or close button */;
+	kinds?: ViewKind[];
 	part?: "sort" | "group" | "more";
 }) {
 	const { t } = useT();
-	const boxId = useId();
 	const ix = useIndex();
+	const [page, setPage] = useState<Part | null>(null);
+	// which sort rule is choosing its field ("new": one more)
+	const [choosing, setChoosing] = useState<number | "new" | null>(null);
+	const [dragged, setDragged] = useState<string | null>(null);
 	const hasStatus = [...ix.types.values()].some((x) => statusProp(x.schema));
 	const groupable = [
 		...(hasStatus ? ["status", "statusGroup"] : []),
@@ -412,283 +444,358 @@ export function ViewSettings({
 	];
 	const dates = fields.filter((f) => f.kind === "date" || f.kind === "builtin-date");
 	const shown = tab.columns ?? columns ?? []; // none chosen yet: the ones shown by default
-	const [dragCol, setDragCol] = useState<string | null>(null);
-	const select = "rounded-md border border-line bg-bg px-2 py-1 text-sm";
-	const row = "flex flex-wrap items-center gap-2";
-	const label = "w-28 shrink-0 text-xs text-muted-foreground";
 	const kindsHere = kinds.includes(tab.kind) ? kinds : [...kinds, tab.kind];
 	const groupedKind = tab.kind !== "triage" && tab.kind !== "calendar";
+	const hasProps = tab.kind === "table" || tab.kind === "board";
+	const hasDate = tab.kind === "calendar" || tab.kind === "timeline";
 	const sorts = tab.sort ?? [];
-	const patchSort = (
-		n: number,
-		patch: (s: (typeof sorts)[number]) => Partial<(typeof sorts)[number]>,
-	) => onLook({ sort: sorts.map((x, m) => (m === n ? { ...x, ...patch(x) } : x)) });
+	const name = (key: string) => fieldLabel(key, t, fields);
+	const kindOf = (key: string): ViewField["kind"] =>
+		fields.find((f) => titleKey(f.key) === titleKey(key))?.kind ?? BUILTIN_KIND[key] ?? "item";
 	const isShown = (key: string) => shown.some((k) => titleKey(k) === titleKey(key));
-	// the shown ones first, in their order, then the others
-	const Box = part ? "div" : Card;
-	const shows = (x: "sort" | "group" | "more") => !part || part === x;
-	const columnFields = [
-		...shown.map(
-			(k) =>
-				fields.find((f) => titleKey(f.key) === titleKey(k)) ?? {
-					key: k,
-					label: fieldLabel(k, t, fields),
-					kind: "text" as const,
-				},
-		),
-		...fields.filter((f) => !isShown(f.key)),
-	];
-	return (
-		<Box className={cn("space-y-3 text-sm", !part && "mb-4 p-3")}>
-			{/* in a query block another kind is another tab: add it with "+" and remove the old one */}
-			{!part && (
-				<div className="flex items-start gap-2">
-					<div className="min-w-0 flex-1 overflow-x-auto [scrollbar-width:none]">
-						<Seg
-							label={t("view.label")}
-							onChange={(k) => onLook({ kind: k })}
-							options={kindsHere.map((k) => ({ value: k, label: t(`view.${k}`) }))}
-							value={tab.kind}
-						/>
-					</div>
-					<IconButton
-						icon={X}
-						iconSize={15}
-						label={t("view.closeSettings")}
-						onClick={onClose}
-						size="sm"
-					/>
-				</div>
-			)}
+	const fieldRow = (key: string, active: boolean, onClick: () => void) => (
+		<MenuItem active={active} icon={<FieldIcon kind={kindOf(key)} />} key={key} onClick={onClick}>
+			{name(key)}
+		</MenuItem>
+	);
+	const heading = (text: string) => (
+		<p className="px-2.5 pb-1 pt-2 text-xs font-medium text-muted-foreground">{text}</p>
+	);
 
-			{filter && !part && (
-				<div>
-					<p className="mb-1 text-xs text-muted-foreground">{t("view.filter")}</p>
-					<QueryEditor def={{ where: filter.where }} onChange={(d) => filter.onChange(d.where)} />
-					{filter.dirty && (
-						<DraftBar className="mt-2" onDiscard={filter.discard} onSave={filter.save} />
-					)}
-				</div>
-			)}
+	const layout = kindsHere.map((k) => {
+		const Icon = KIND_ICON[k];
+		return (
+			<MenuItem
+				active={k === tab.kind}
+				icon={<Icon size={14} />}
+				key={k}
+				onClick={() => onLook({ kind: k })}
+			>
+				{t(`view.${k}`)}
+			</MenuItem>
+		);
+	});
 
-			{groupedKind && shows("group") && (
-				<div className={row}>
-					<span className={label}>{t("view.groupBy")}</span>
-					<NativeSelect
-						aria-label={t("view.groupBy")}
-						className={select}
-						onChange={(e) => onLook({ group: e.target.value || undefined })}
-						value={tab.group ?? ""}
+	const hiddenFields = fields.filter((f) => !isShown(f.key));
+	const props = (
+		<>
+			<ul>
+				{shown.map((k) => (
+					<EyeRow
+						draggable
+						key={k}
+						label={t("view.hideProp", { name: name(k) })}
+						on
+						onDragOver={(e) => dragged && dragged !== k && e.preventDefault()}
+						onDragStart={() => setDragged(k)}
+						onDrop={() => {
+							if (!dragged) return;
+							const from = shown.indexOf(dragged);
+							const to = shown.indexOf(k);
+							onLook({ columns: moveInArray(shown, from, from < to ? to + 1 : to) });
+							setDragged(null);
+						}}
+						onToggle={() => onLook({ columns: shown.filter((x) => x !== k) })}
 					>
-						<option value="">{t("view.noGroup")}</option>
-						{groupable.map((g) => (
-							<option key={g} value={g}>
-								{fieldLabel(g, t, fields)}
-							</option>
-						))}
-					</NativeSelect>
-					{tab.group && (
-						<label
-							className="flex items-center gap-1.5 text-xs text-muted-foreground"
-							htmlFor={`${boxId}-empty`}
+						<FieldIcon kind={kindOf(k)} />
+						<span className="truncate">{name(k)}</span>
+					</EyeRow>
+				))}
+			</ul>
+			{hiddenFields.length > 0 && heading(t("view.hidden"))}
+			<ul>
+				{hiddenFields.map((f) => (
+					<EyeRow
+						key={f.key}
+						label={t("view.showProp", { name: f.label })}
+						on={false}
+						onToggle={() => onLook({ columns: [...shown, f.key] })}
+					>
+						<FieldIcon kind={f.kind} />
+						<span className="truncate">{f.label}</span>
+					</EyeRow>
+				))}
+			</ul>
+		</>
+	);
+
+	const setSort = (n: number, patch: Partial<(typeof sorts)[number]>) =>
+		onLook({ sort: sorts.map((x, m) => (m === n ? { ...x, ...patch } : x)) });
+	const sort =
+		choosing !== null ? (
+			sortable
+				.filter((k) => !sorts.some((s, n) => n !== choosing && titleKey(s.key) === titleKey(k)))
+				.map((k) =>
+					fieldRow(k, choosing !== "new" && titleKey(sorts[choosing]!.key) === titleKey(k), () => {
+						if (choosing === "new") onLook({ sort: [...sorts, { key: k }] });
+						else setSort(choosing, { key: k });
+						setChoosing(null);
+					}),
+				)
+		) : (
+			<>
+				<ul>
+					{sorts.map((s, n) => (
+						<li
+							className="flex items-center gap-1 rounded-lg py-0.5 pl-1 pr-1 text-sm"
+							draggable={sorts.length > 1}
+							// biome-ignore lint/suspicious/noArrayIndexKey: sort rules have no id; a rule is its place in the list
+							key={n}
+							onDragOver={(e) => dragged && dragged !== String(n) && e.preventDefault()}
+							onDragStart={() => setDragged(String(n))}
+							onDrop={() => {
+								if (dragged === null) return;
+								const from = Number(dragged);
+								onLook({ sort: moveInArray(sorts, from, from < n ? n + 1 : n) });
+								setDragged(null);
+							}}
 						>
-							<Checkbox
-								checked={!!tab.hideEmpty}
-								id={`${boxId}-empty`}
-								onCheckedChange={(checked) => onLook({ hideEmpty: checked === true || undefined })}
+							<GripVertical
+								aria-hidden
+								className={cn(
+									"shrink-0 text-faint",
+									sorts.length > 1 ? "cursor-grab" : "invisible",
+								)}
+								size={13}
 							/>
-							{t("view.hideEmpty")}
-						</label>
-					)}
-				</div>
-			)}
-			{tab.group && groups.length > 1 && groupedKind && shows("group") && (
-				<div className={cn(row, "items-start")}>
-					<span className={cn(label, "pt-1")}>{t("view.visibleGroups")}</span>
-					<ul className="flex min-w-0 flex-1 flex-wrap gap-x-3 gap-y-1.5">
-						{groups.map((g) => {
-							const hidden = (tab.hiddenGroups ?? []).includes(groupId(g));
-							return (
-								<li className="min-w-0 max-w-full" key={g.key || "_"}>
-									<label
-										className="flex min-w-0 cursor-pointer items-center gap-1.5"
-										htmlFor={`${boxId}-group-${encodeURIComponent(groupId(g))}`}
-									>
-										<Checkbox
-											checked={!hidden}
-											id={`${boxId}-group-${encodeURIComponent(groupId(g))}`}
-											onCheckedChange={(checked) =>
-												onLook({
-													hiddenGroups:
-														checked === true
-															? (tab.hiddenGroups ?? []).filter((x) => x !== groupId(g))
-															: [...(tab.hiddenGroups ?? []), groupId(g)],
-												})
-											}
-										/>
-										<GroupChip by={tab.group!} byLabel={fieldLabel(tab.group!, t, fields)} g={g} />
-									</label>
-								</li>
-							);
-						})}
-					</ul>
-				</div>
-			)}
-			{tab.kind === "board" && shows("group") && (
-				<div className={row}>
-					<span className={label}>{t("view.subgroup")}</span>
-					<NativeSelect
-						aria-label={t("view.subgroup")}
-						className={select}
-						onChange={(e) => onLook({ subgroup: e.target.value || undefined })}
-						value={tab.subgroup ?? ""}
-					>
-						<option value="">{t("view.noGroup")}</option>
-						{groupable
-							.filter((g) => g !== (tab.group ?? "status"))
-							.map((g) => (
-								<option key={g} value={g}>
-									{fieldLabel(g, t, fields)}
-								</option>
-							))}
-					</NativeSelect>
-				</div>
-			)}
-			{(tab.kind === "calendar" || tab.kind === "timeline") && shows("more") && (
-				<div className={row}>
-					<span className={label}>{t("view.date")}</span>
-					<NativeSelect
-						aria-label={t("view.date")}
-						className={select}
-						onChange={(e) => onLook({ date: e.target.value || undefined })}
-						value={tab.date ?? ""}
-					>
-						<option value="">{t("view.dateAuto")}</option>
-						{dates.map((f) => (
-							<option key={f.key} value={f.key}>
-								{f.label}
-							</option>
-						))}
-					</NativeSelect>
-				</div>
-			)}
-
-			{tab.kind !== "triage" && shows("sort") && (
-				<div className={row}>
-					<span className={label}>{t("view.sort")}</span>
-					<div className="flex flex-wrap items-center gap-1.5">
-						{sorts.map((s, n) => (
-							<span
-								className="inline-flex items-center gap-1 rounded-md border border-line bg-bg py-0.5 pl-1 pr-0.5"
-								// biome-ignore lint/suspicious/noArrayIndexKey: sort rules have no id; keying by field would remount the select being changed
-								key={n}
+							<Button
+								aria-label={t("view.sortField", { name: name(s.key) })}
+								className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1 text-left hover:bg-hover"
+								onClick={() => setChoosing(n)}
+								variant="plain"
 							>
-								<NativeSelect
-									aria-label={t("view.sort")}
-									className="bg-transparent text-sm outline-none"
-									onChange={(e) => patchSort(n, () => ({ key: e.target.value }))}
-									value={s.key}
-								>
-									{[...new Set([s.key, ...sortable])].map((k) => (
-										<option key={k} value={k}>
-											{fieldLabel(k, t, fields)}
-										</option>
-									))}
-								</NativeSelect>
-								<Button
-									className="tap rounded px-1 text-xs text-muted-foreground hover:bg-hover hover:text-fg"
-									onClick={() => patchSort(n, (x) => ({ desc: !x.desc || undefined }))}
-									variant="plain"
-								>
-									{s.desc ? t("view.desc") : t("view.asc")}
-								</Button>
-								<IconButton
-									icon={X}
-									iconSize={12}
-									label={t("view.sortRemove")}
-									onClick={() => onLook({ sort: sorts.filter((_, m) => m !== n) })}
-									size="xs"
-								/>
-							</span>
-						))}
-						<Button
-							className="tap inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-hover hover:text-fg"
-							onClick={() =>
-								onLook({
-									sort: [
-										...sorts,
-										{ key: sortable.find((k) => !sorts.some((s) => s.key === k)) ?? "title" },
-									],
-								})
-							}
-							variant="plain"
-						>
-							<Plus size={12} /> {sorts.length ? t("view.sortMore") : t("view.sortAdd")}
-						</Button>
-					</div>
-				</div>
-			)}
+								<FieldIcon kind={kindOf(s.key)} />
+								<span className="min-w-0 flex-1 truncate">{name(s.key)}</span>
+								<ChevronDown className="shrink-0 text-muted-foreground" size={12} />
+							</Button>
+							<Button
+								className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-muted-foreground hover:bg-hover hover:text-fg"
+								onClick={() => setSort(n, { desc: !s.desc || undefined })}
+								variant="plain"
+							>
+								{s.desc ? <ArrowDown size={13} /> : <ArrowUp size={13} />}
+								{s.desc ? t("view.desc") : t("view.asc")}
+							</Button>
+							<IconButton
+								icon={X}
+								iconSize={13}
+								label={t("view.sortRemove")}
+								onClick={() => onLook({ sort: sorts.filter((_, m) => m !== n) })}
+								size="xs"
+							/>
+						</li>
+					))}
+				</ul>
+				{!sorts.length && (
+					<p className="px-2.5 py-1.5 text-sm text-muted-foreground">{t("view.sortNone")}</p>
+				)}
+				<MenuItem icon={<Plus size={14} />} onClick={() => setChoosing("new")}>
+					{t("view.sortAdd")}
+				</MenuItem>
+				{sorts.length > 0 && (
+					<MenuItem danger icon={<Trash2 size={14} />} onClick={() => onLook({ sort: [] })}>
+						{t("view.sortClear")}
+					</MenuItem>
+				)}
+			</>
+		);
 
-			{/* properties: columns of a table, lines on board cards (lists and galleries show their own) */}
-			{(tab.kind === "table" || tab.kind === "board") && shows("more") && (
-				<div className={cn(row, "items-start")}>
-					<span className={cn(label, "pt-1")}>
-						{tab.kind === "table" ? t("view.columns") : t("view.cardProps")}
-					</span>
-					<ul className="flex min-w-0 flex-1 flex-wrap gap-1.5">
-						{columnFields.map((f) => {
-							const on = isShown(f.key);
-							return (
-								<li
-									draggable={on}
-									key={f.key}
-									onDragOver={(e) => dragCol && on && e.preventDefault()}
-									onDragStart={() => setDragCol(f.key)}
-									onDrop={() => {
-										if (!dragCol || dragCol === f.key) return;
-										onLook({
-											columns: moveInArray(shown, shown.indexOf(dragCol), shown.indexOf(f.key)),
-										});
-										setDragCol(null);
-									}}
-								>
-									<label
-										className={cn(
-											"inline-flex cursor-pointer items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs",
-											on
-												? "border-line bg-bg text-fg"
-												: "border-dashed border-line text-muted-foreground hover:text-fg",
-										)}
-										htmlFor={`${boxId}-col-${encodeURIComponent(f.key)}`}
+	const hiddenGroups = tab.hiddenGroups ?? [];
+	const group = (
+		<>
+			<MenuItem active={!tab.group} onClick={() => onLook({ group: undefined })}>
+				{t("view.noGroup")}
+			</MenuItem>
+			{groupable.map((g) => fieldRow(g, tab.group === g, () => onLook({ group: g })))}
+			{tab.group && (
+				<>
+					<div className="my-1 border-t border-line" />
+					<MenuItem
+						active={!!tab.hideEmpty}
+						onClick={() => onLook({ hideEmpty: !tab.hideEmpty || undefined })}
+					>
+						{t("view.hideEmpty")}
+					</MenuItem>
+					{groups.length > 1 && heading(t("view.visibleGroups"))}
+					{groups.length > 1 && (
+						<ul>
+							{groups.map((g) => {
+								const hidden = hiddenGroups.includes(groupId(g));
+								return (
+									<EyeRow
+										key={g.key || "_"}
+										label={t(hidden ? "view.showGroup" : "view.hideGroup")}
+										on={!hidden}
+										onToggle={() =>
+											onLook({
+												hiddenGroups: hidden
+													? hiddenGroups.filter((x) => x !== groupId(g))
+													: [...hiddenGroups, groupId(g)],
+											})
+										}
 									>
-										{on && (
-											<GripVertical
-												aria-hidden
-												className="cursor-grab text-muted-foreground"
-												size={11}
-											/>
-										)}
-										<Checkbox
-											checked={on}
-											className="sr-only"
-											id={`${boxId}-col-${encodeURIComponent(f.key)}`}
-											onCheckedChange={(checked) =>
-												onLook({
-													columns:
-														checked === true
-															? [...shown, f.key]
-															: shown.filter((k) => titleKey(k) !== titleKey(f.key)),
-												})
-											}
-										/>
-										{f.label}
-									</label>
-								</li>
-							);
-						})}
-					</ul>
-				</div>
+										<GroupChip by={tab.group!} byLabel={name(tab.group!)} g={g} />
+									</EyeRow>
+								);
+							})}
+						</ul>
+					)}
+				</>
 			)}
-		</Box>
+		</>
+	);
+	const sub = (
+		<>
+			<MenuItem active={!tab.subgroup} onClick={() => onLook({ subgroup: undefined })}>
+				{t("view.noGroup")}
+			</MenuItem>
+			{groupable
+				.filter((g) => g !== (tab.group ?? "status"))
+				.map((g) => fieldRow(g, tab.subgroup === g, () => onLook({ subgroup: g })))}
+		</>
+	);
+	const date = (
+		<>
+			<MenuItem active={!tab.date} onClick={() => onLook({ date: undefined })}>
+				{t("view.dateAuto")}
+			</MenuItem>
+			{dates.map((f) => fieldRow(f.key, tab.date === f.key, () => onLook({ date: f.key })))}
+		</>
+	);
+
+	const pages: Record<Part, { title: string; body: React.ReactNode }> = {
+		layout: { title: t("view.layout"), body: layout },
+		props: { title: t(tab.kind === "board" ? "view.cardProps" : "view.properties"), body: props },
+		sort: { title: t("view.sort"), body: sort },
+		group: { title: t("view.groupBy"), body: group },
+		sub: { title: t("view.subgroup"), body: sub },
+		date: { title: t("view.date"), body: date },
+	};
+	const box = "w-[min(18rem,85vw)] text-sm";
+	if (part === "sort") return <div className={box}>{sort}</div>;
+	if (part === "group")
+		return (
+			<div className={box}>
+				{group}
+				{tab.kind === "board" && (
+					<>
+						{heading(t("view.subgroup"))}
+						{sub}
+					</>
+				)}
+			</div>
+		);
+	if (part === "more")
+		return (
+			<div className={box}>
+				{hasProps && props}
+				{hasDate && date}
+			</div>
+		);
+	if (page)
+		return (
+			<div className={box}>
+				<Button
+					className="mb-1 flex w-full items-center gap-1 rounded-lg px-1.5 py-1 text-left text-xs font-medium text-muted-foreground hover:text-fg"
+					onClick={() => (choosing !== null ? setChoosing(null) : setPage(null))}
+					variant="plain"
+				>
+					<ChevronLeft size={13} /> {pages[page].title}
+				</Button>
+				{pages[page].body}
+			</div>
+		);
+	return (
+		<div className={box}>
+			<MenuRow
+				icon={KIND_ICON[tab.kind]}
+				label={t("view.layout")}
+				onClick={() => setPage("layout")}
+				value={t(`view.${tab.kind}`)}
+			/>
+			{hasProps && (
+				<MenuRow
+					icon={Eye}
+					label={pages.props.title}
+					onClick={() => setPage("props")}
+					value={t("view.shownCount", { count: shown.length })}
+				/>
+			)}
+			{tab.kind !== "triage" && (
+				<MenuRow
+					icon={ArrowUpDown}
+					label={t("view.sort")}
+					onClick={() => setPage("sort")}
+					value={
+						sorts.length > 1
+							? t("view.sortCount", { count: sorts.length })
+							: sorts[0] && name(sorts[0].key)
+					}
+				/>
+			)}
+			{groupedKind && (
+				<MenuRow
+					icon={Rows3}
+					label={t("view.groupBy")}
+					onClick={() => setPage("group")}
+					value={tab.group ? name(tab.group) : t("view.noGroup")}
+				/>
+			)}
+			{tab.kind === "board" && (
+				<MenuRow
+					icon={Rows3}
+					label={t("view.subgroup")}
+					onClick={() => setPage("sub")}
+					value={tab.subgroup ? name(tab.subgroup) : t("view.noGroup")}
+				/>
+			)}
+			{hasDate && (
+				<MenuRow
+					icon={CalendarDays}
+					label={t("view.date")}
+					onClick={() => setPage("date")}
+					value={tab.date ? name(tab.date) : t("view.dateAuto")}
+				/>
+			)}
+		</div>
+	);
+}
+
+/** How a view is sorted, as a pill in the line of its filters: its popover holds the rules. */
+export function SortPill({
+	tab,
+	fields,
+	onLook,
+}: {
+	tab: ViewTab;
+	fields: ViewField[];
+	onLook: (patch: Partial<ViewTab>) => void;
+}) {
+	const { t } = useT();
+	const sorts = tab.sort ?? [];
+	if (!sorts.length) return null;
+	const first = sorts[0]!;
+	return (
+		<Popover
+			trigger={(p) => (
+				<Button
+					variant="plain"
+					{...p}
+					className="inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-full border border-line bg-surface px-2.5 text-[13px] text-fg hover:bg-hover aria-expanded:border-focus"
+				>
+					{first.desc ? (
+						<ArrowDown className="text-muted-foreground" size={13} />
+					) : (
+						<ArrowUp className="text-muted-foreground" size={13} />
+					)}
+					{sorts.length > 1
+						? t("view.sortCount", { count: sorts.length })
+						: fieldLabel(first.key, t, fields)}
+					<ChevronDown className="text-muted-foreground" size={12} />
+				</Button>
+			)}
+		>
+			<ViewSettings fields={fields} onLook={onLook} part="sort" tab={tab} />
+		</Popover>
 	);
 }

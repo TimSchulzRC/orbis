@@ -72,6 +72,8 @@ export type Cond =
 export interface QueryDef {
 	where?: Cond;
 	sort?: { key: string; desc?: boolean }[];
+	/** Entries put in order by hand (ids): they come first, in this order, while there is no `sort`. */
+	order?: string[];
 	group?: string; // "path" | "status" | "statusGroup" | "type" | field or property name
 	view?: ViewKind;
 	columns?: string[];
@@ -621,8 +623,10 @@ function matchField(
 ): boolean {
 	const hit = fieldOf(item, c.prop, ctx.ix);
 	if (c.op === "empty") return !hit || isEmpty(hit.value);
-	if (!hit || isEmpty(hit.value)) return c.op === "!=";
 	const v = c.value;
+	// a comparison that has no value yet (a filter just added) lets everything through
+	if (v === undefined || v === "") return true;
+	if (!hit || isEmpty(hit.value)) return c.op === "!=";
 	if (typeof v === "object" && v && "ref" in v) {
 		const target = resolveRef(v.ref, ctx);
 		const has = !!target && asIds(hit.value).includes(target);
@@ -839,6 +843,12 @@ export function runQuery(def: QueryDef, ctx: EvalCtx): QueryResult {
 			(!def.where || matches(i, def.where, ctx)),
 	);
 	items = sortItems(items, def.sort, ix);
+	if (!def.sort?.length && def.order?.length) {
+		const at = new Map(def.order.map((id, n) => [id, n]));
+		const rank = (i: Item) => at.get(i.id) ?? Number.POSITIVE_INFINITY;
+		// stable: what was never placed by hand follows in the usual order
+		items = [...items].sort((a, b) => rank(a) - rank(b) || 0);
+	}
 	const total = items.length;
 	if (def.limit) items = items.slice(0, def.limit);
 	return { items, total, missingTypes: missing };
@@ -1173,6 +1183,7 @@ export function tabDef(base: Cond | undefined, tab: ViewTab): QueryDef {
 	return {
 		where: andWhere(base, tab.where),
 		sort: tab.sort,
+		order: tab.order,
 		group: tab.group,
 		columns: tab.columns,
 		view: tab.kind,
