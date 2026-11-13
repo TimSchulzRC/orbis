@@ -8,6 +8,7 @@ import { type Item, META_TYPE, SETTINGS_ID, setSchemaField, setSettings } from "
 import { sidebarChildren, sidebarRoots } from "@obtion/core/placement";
 import { restoreDefaultTypes } from "@obtion/core/setup";
 import { cmpKey, keyBetween, keysFor } from "@obtion/core/sortkey";
+import { filesBelow } from "@obtion/core/zip";
 import {
 	ArrowDown,
 	ArrowLeft,
@@ -45,6 +46,7 @@ import { dropZone, startPointerDrag } from "../lib/drag";
 import { shortcut } from "../lib/platform";
 import { cn, moveInArray } from "../lib/utils";
 import { DeleteDialog, deleteOrAsk } from "../views/ItemPage";
+import { DownloadFilesItem } from "./DownloadFiles";
 import { ItemIcon, TypeGlyph } from "./item-look";
 import { Button, IconButton, Kbd, MenuItem, MoreMenu, REVEAL, useContextMenu } from "./primitives";
 import { moveTo, NewSpaceDialog, SpaceScope, SpaceSelector } from "./Spaces";
@@ -1027,6 +1029,11 @@ function TreeNode({
 										{t("place.makeHome")}
 									</MenuItem>
 								)}
+								<DownloadFilesItem
+									close={close}
+									files={filesBelow(item.id, ix)}
+									title={item.title || t("untitled")}
+								/>
 								{/* types are deleted on their page, with the preview of what becomes of the values */}
 								{!isType && (
 									<MenuItem

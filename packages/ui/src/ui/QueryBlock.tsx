@@ -27,6 +27,7 @@ import {
 	runQuery,
 } from "@obtion/core/query";
 import { cmpKey, keyBetween } from "@obtion/core/sortkey";
+import { filesAmong } from "@obtion/core/zip";
 import { ArrowUpDown, EyeOff, Funnel, Heading, MoreHorizontal, Rows3, Trash2 } from "lucide-react";
 import { StrictMode, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -34,6 +35,7 @@ import { useIndex } from "../hooks";
 import { useT } from "../i18n";
 import { cn } from "../lib/utils";
 import { repo } from "../repo";
+import { DownloadFilesItem } from "./DownloadFiles";
 import { InlineText } from "./fields";
 import { viewGroups } from "./groups";
 import { DraftBar, IconButton, InCard, MenuItem, Popover } from "./primitives";
@@ -320,6 +322,12 @@ function QueryBlockView({
 						>
 							{t("block.hideEmpty")}
 						</MenuItem>
+						<DownloadFilesItem
+							close={close}
+							files={filesAmong(items)}
+							icon
+							title={def.title || (thisId && ix.get(thisId)?.title) || t("file.downloadAllName")}
+						/>
 						<MenuItem
 							danger
 							icon={<Trash2 size={14} />}
