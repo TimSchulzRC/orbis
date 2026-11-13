@@ -130,6 +130,20 @@ export const openItem = (
 /** For a page that is gone (deleted, left). */
 export const leavePage = () => (history.length > 1 ? history.back() : navigate("/"));
 
+// The Navigation API knows the app's own entries only, so "back" never leaves the app. A browser
+// without it keeps both ways open: a step with nothing behind it does nothing.
+const entries: Navigation | undefined = window.navigation;
+const ways = () => (entries ? Number(entries.canGoBack) + 2 * Number(entries.canGoForward) : 3);
+
+/** Whether there is a page before and after this one, as in a browser's toolbar. */
+export function useHistoryWays() {
+	const open = useSyncExternalStore((f) => {
+		entries?.addEventListener("currententrychange", f);
+		return () => entries?.removeEventListener("currententrychange", f);
+	}, ways);
+	return { back: open % 2 === 1, forward: open >= 2 };
+}
+
 /** Names the workspace, so a link opened in a new tab lands there too. */
 export function useItemHref() {
 	const space = useSpaceId();

@@ -13,6 +13,7 @@ import { BrandLogo } from "./ui/BrandLogo";
 import { CommandPalette } from "./ui/CommandPalette";
 import { PageBoundary } from "./ui/ErrorBoundary";
 import { ConfirmHost } from "./ui/feedback";
+import { HistoryButtons } from "./ui/HistoryButtons";
 import { ICON } from "./ui/icons";
 import { setShelfPinned, syncShelf, useInboxItems, useShelf } from "./ui/inbox";
 import { LightboxHost } from "./ui/Lightbox";
@@ -204,6 +205,8 @@ function Main() {
 			<div className="flex min-w-0 flex-1 flex-col" data-column ref={column}>
 				{!wide && (
 					<header className="flex items-center gap-2 border-b border-line bg-bg/90 px-3 pb-2 pt-[calc(0.5rem+env(safe-area-inset-top))] backdrop-blur">
+						{/* only back: the bar has no room for both, and a phone has no toolbar for it */}
+						<HistoryButtons />
 						<a
 							aria-label={t("nav.today")}
 							className="tap flex items-center justify-center gap-2"

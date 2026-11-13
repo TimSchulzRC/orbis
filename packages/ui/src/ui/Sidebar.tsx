@@ -47,6 +47,7 @@ import { shortcut } from "../lib/platform";
 import { cn, moveInArray } from "../lib/utils";
 import { DeleteDialog, deleteOrAsk } from "../views/ItemPage";
 import { DownloadFilesItem } from "./DownloadFiles";
+import { HistoryButtons } from "./HistoryButtons";
 import { ItemIcon, TypeGlyph } from "./item-look";
 import { Button, IconButton, Kbd, MenuItem, MoreMenu, REVEAL, useContextMenu } from "./primitives";
 import { moveTo, NewSpaceDialog, SpaceScope, SpaceSelector } from "./Spaces";
@@ -244,6 +245,7 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
 		>
 			<div className="flex items-center px-2 pb-px pt-2">
 				<SpaceSelector className="flex-1" onNew={() => setCreating(true)} />
+				<HistoryButtons forward />
 			</div>
 			{/* biome-ignore lint/a11y/noStaticElementInteractions: dropping a dragged workspace between the others; the workspace menu moves them by keyboard */}
 			<div
