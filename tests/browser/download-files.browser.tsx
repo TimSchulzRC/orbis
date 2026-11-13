@@ -35,6 +35,7 @@ afterEach(() => {
 	vi.restoreAllMocks();
 	saved.length = 0;
 	pending.length = 0;
+	slow.ms = 0;
 	location.hash = "";
 });
 
@@ -58,6 +59,8 @@ function unzip(zip: Uint8Array): Record<string, string> {
 	return out;
 }
 
+/** How long each content takes to load. */
+const slow = { ms: 0 };
 /** The device's files with contents held in memory; `lost` ones are on no device and no server. */
 const contents = new Map<string, Blob>();
 const device = Object.assign(Object.create(DeviceFiles.prototype), {
@@ -67,7 +70,10 @@ const device = Object.assign(Object.create(DeviceFiles.prototype), {
 	hasLocal: () => true,
 	check: () => Promise.resolve(),
 	url: async () => undefined,
-	content: async (hash: string) => contents.get(hash),
+	content: async (hash: string) => {
+		if (slow.ms) await new Promise((r) => setTimeout(r, slow.ms));
+		return contents.get(hash);
+	},
 	viewUrl: async (hash: string) =>
 		contents.has(hash) ? URL.createObjectURL(contents.get(hash)!) : undefined,
 }) as DeviceFiles;
@@ -216,4 +222,17 @@ test("a file whose content can't be had is left out and named; with none to be h
 	await entry(2).click();
 	await expect.element(page.getByText(/Die Dateien waren nicht zu bekommen/)).toBeVisible();
 	expect(pending).toHaveLength(0);
+});
+
+test("a download that takes a while says so until the ZIP is saved", async () => {
+	const { repo } = await customer();
+	slow.ms = 1200;
+	await sidebar(repo);
+	await page.getByRole("link", { name: "Etimex" }).click({ button: "right" });
+	await entry(3).click();
+	const notice = page.getByText("3 Dateien werden gepackt …");
+	await expect.element(notice).toBeVisible();
+	expect(pending).toHaveLength(0);
+	await theSaved();
+	await expect.element(notice).not.toBeInTheDocument();
 });

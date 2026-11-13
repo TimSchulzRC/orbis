@@ -18,9 +18,12 @@ export function useDownloadFiles() {
 	return async (files: ArchiveFile[], title: string) => {
 		if (!files.length) return;
 		if (!fitsZip(files)) return notify.error(t("file.downloadAllTooLarge"));
-		if (files.length > 1) notify(t("file.downloadAllPacking", { count: files.length }));
+		// a large archive loads for a while: say so until it is saved
+		const done = notify.busy(t("file.downloadAllPacking", { count: files.length }));
 		const day = new Date().toLocaleDateString("sv"); // 2026-11-13, local
-		const { saved, missing } = await device.downloadAll(files, `${safeName(title)}_${day}.zip`);
+		const { saved, missing } = await device
+			.downloadAll(files, `${safeName(title)}_${day}.zip`)
+			.finally(done);
 		if (!saved) return notify.error(t("file.downloadAllFailed"));
 		if (missing.length)
 			notify.error(
@@ -60,14 +63,21 @@ export function DownloadFilesItem({
 	);
 }
 
-/** The same as a section's action, beside "Add below". */
+/**
+ * The same as a section's action, beside "Add below". On a phone the head has no room for both
+ * labels: the icon and the number show, the label stays for screen readers.
+ */
 export function DownloadFilesAction({ files, title }: { files: ArchiveFile[]; title: string }) {
 	const { t } = useT();
 	const download = useDownloadFiles();
 	if (!files.length) return null;
+	const label = t("file.downloadAll", { count: files.length });
 	return (
-		<SectionAction icon={Download} onClick={() => void download(files, title)}>
-			{t("file.downloadAll", { count: files.length })}
+		<SectionAction icon={Download} onClick={() => void download(files, title)} title={label}>
+			<span className="max-md:sr-only">{label}</span>
+			<span aria-hidden className="tabular-nums md:hidden">
+				{files.length}
+			</span>
 		</SectionAction>
 	);
 }

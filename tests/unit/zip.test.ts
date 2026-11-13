@@ -68,11 +68,12 @@ test("a file with two places comes once, at its home; one in the trash or withou
 	expect(paths(w.m, w.customer)).toEqual(["E-Rechnungen/twice.pdf"]);
 });
 
-test("a note that lies below itself does not loop", () => {
+test("notes that lie below each other do not loop", () => {
 	const w = world();
-	w.m.change(w.customer, (d) => setMeta(d, { parents: { [w.run]: { sort: "V" } } }));
-	w.file("a.pdf", [w.run]);
-	expect(paths(w.m, w.tests)).toHaveLength(1);
+	w.m.add({ id: "loop-a", title: "A", parents: [w.tests, "loop-b"] });
+	w.m.add({ id: "loop-b", title: "B", parents: ["loop-a"] });
+	w.file("a.pdf", ["loop-b"]);
+	expect(paths(w.m, w.tests)).toEqual(["A/B/a.pdf"]);
 });
 
 test("the same name twice in one folder gets a number, upper and lower case alike", () => {
