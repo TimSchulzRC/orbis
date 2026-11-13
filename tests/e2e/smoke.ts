@@ -219,6 +219,7 @@ async function run() {
 			})(),
 			pages(browser, "seeded", seeded, desktop),
 			pages(browser, "seeded", seeded, phone),
+			sidebarOnTablet(browser, seeded),
 			pages(browser, "no types", typeless, desktop),
 			pages(browser, "no types", typeless, phone),
 			(async () => {
@@ -443,6 +444,22 @@ async function pages(
 			{ phone },
 		);
 	}
+	await context.close();
+}
+
+/** A window as wide as a tablet or half a screen still gets the desktop layout, not the phone's. */
+async function sidebarOnTablet(browser: import("playwright").Browser, server: Server) {
+	const context = await signedIn(browser, server, {
+		viewport: { width: 800, height: 900 },
+		locale: "de-DE",
+	});
+	const page = await context.newPage();
+	const errors: string[] = [];
+	watch(page, errors);
+	await check(page, "seeded tablet", "/", errors, async (p) => {
+		if (!(await p.locator("aside").first().isVisible()))
+			failures.push("seeded tablet: no sidebar at 800 px");
+	});
 	await context.close();
 }
 

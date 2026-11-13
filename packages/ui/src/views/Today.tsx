@@ -133,7 +133,7 @@ export function Today() {
 				<section className="mt-9">
 					<SectionTitle>{t("today.recentTitle")}</SectionTitle>
 					{desktop ? (
-						<div className="grid grid-cols-4 gap-3">
+						<div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
 							{recent.map(({ space, value }) => (
 								<SpaceScope id={space} key={`${space}/${value.id}`}>
 									<RecentTile item={value} />
