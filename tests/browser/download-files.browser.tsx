@@ -1,5 +1,5 @@
 // "Dateien herunterladen (n)": everything below an item as one ZIP with its folders, from the
-// sidebar's menu, the page's menu and "Darunter"; the files a query block shows, from its menu.
+// sidebar's menu and "Darunter"; the files a query block shows, from its menu.
 
 import { initItem, newId, setFileMeta } from "@obtion/core/model";
 import type { Repo } from "@obtion/sync";
@@ -157,7 +157,7 @@ test("sidebar: an item with one file below saves that file as it is; one without
 	expect(new TextDecoder().decode(one.bytes)).toBe("print data");
 });
 
-test('page: "Darunter" has the action beside "Darunter anlegen", the … menu has the entry', async () => {
+test('page: "Darunter" has the action beside "Darunter anlegen", the … menu has no entry', async () => {
 	const { invoices } = await customer();
 	await render(<ItemPage id={invoices} isNew={false} />);
 	await expect.element(page.getByRole("heading", { name: "Darunter" })).toBeVisible();
@@ -177,8 +177,9 @@ test('page: "Darunter" has the action beside "Darunter anlegen", the … menu ha
 	]);
 
 	await page.getByRole("button", { name: "Mehr", exact: true }).click();
-	// the section's action and the menu's entry
-	await expect.poll(() => entry(2).elements().length).toBe(2);
+	await expect.element(page.getByRole("button", { name: "Neue Seite darunter" })).toBeVisible();
+	// only the section's action
+	expect(entry(2).elements().length).toBe(1);
 });
 
 test("query block: its … menu offers the files it shows, flat, same names told apart", async () => {

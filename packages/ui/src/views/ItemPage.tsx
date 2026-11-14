@@ -11,7 +11,6 @@ import { movedItems } from "@obtion/core/transfer";
 import { onlyBelow } from "@obtion/core/trash";
 import { wouldBeInInbox } from "@obtion/core/typeops";
 import { updateFeed } from "@obtion/core/updates";
-import { filesBelow } from "@obtion/core/zip";
 import {
 	AlertTriangle,
 	ArrowRightLeft,
@@ -44,7 +43,6 @@ import { getLang, titleOf, tr, useT } from "../i18n";
 import { cn } from "../lib/utils";
 import type { repo } from "../repo";
 import { AgentRulesDialog } from "../ui/AgentRules";
-import { DownloadFilesItem } from "../ui/DownloadFiles";
 import { insertFilesAtCursor } from "../ui/Editor";
 import { insertDrawing } from "../ui/editor/slash";
 import { DRAWING_ICON, INBOX_ICON, NOTE_ICON } from "../ui/icons";
@@ -231,12 +229,6 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
 						>
 							{t("item.newBelow")}
 						</MenuItem>
-						<DownloadFilesItem
-							close={close}
-							files={filesBelow(item.id, ix)}
-							icon
-							title={titleOf(item, t)}
-						/>
 						{others && !item.deleted && item.type !== META_TYPE && (
 							<MenuItem
 								icon={<ArrowRightLeft size={14} />}
