@@ -203,7 +203,7 @@ function Main() {
 
 			<div className="flex min-w-0 flex-1 flex-col" data-column ref={column}>
 				{!wide && (
-					<header className="flex items-center gap-2 border-b border-line bg-bg/90 px-3 py-2 backdrop-blur pt-safe">
+					<header className="flex items-center gap-2 border-b border-line bg-bg/90 px-3 pb-2 pt-[calc(0.5rem+env(safe-area-inset-top))] backdrop-blur">
 						<a
 							aria-label={t("nav.today")}
 							className="tap flex items-center justify-center gap-2"
