@@ -44,8 +44,7 @@ import { cn } from "../lib/utils";
 import type { repo } from "../repo";
 import { AgentRulesDialog } from "../ui/AgentRules";
 import { insertFilesAtCursor } from "../ui/Editor";
-import { insertDrawing } from "../ui/editor/slash";
-import { DRAWING_ICON, INBOX_ICON, NOTE_ICON } from "../ui/icons";
+import { INBOX_ICON, NOTE_ICON } from "../ui/icons";
 import { ItemIcon, TypeChip, TypeGlyph } from "../ui/item-look";
 import { NoteEditor } from "../ui/NoteEditor";
 import {
@@ -189,17 +188,6 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
 						>
 							{t("editor.addFile")}
 						</MenuItem>
-						{view && (
-							<MenuItem
-								icon={<DRAWING_ICON size={14} />}
-								onClick={() => {
-									close();
-									insertDrawing(view);
-								}}
-							>
-								{t("drawing.insert")}
-							</MenuItem>
-						)}
 						{view && (
 							<MenuItem
 								icon={<ListFilter size={14} />}

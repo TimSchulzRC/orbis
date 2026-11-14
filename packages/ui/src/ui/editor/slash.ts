@@ -141,7 +141,7 @@ const ITEMS: SlashItem[] = [
  * A drawing as a block of this text: kept as a document of its own below the note (so it syncs per
  * element and its images are files), embedded by id. A click on the block opens it to draw.
  */
-export function insertDrawing(view: EditorView, pos = view.state.selection.main.head) {
+function insertDrawing(view: EditorView, pos: number) {
 	const parent = view.state.facet(editorNode);
 	const id = repo.create({ kind: "drawing", title: "", parents: parent ? [parent] : [] });
 	const embed = `![[${id}]]`;
