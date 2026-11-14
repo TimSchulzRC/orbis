@@ -18,7 +18,6 @@ import {
 	FilePlus,
 	FolderInput,
 	ImagePlus,
-	ListFilter,
 	Pin,
 	PinOff,
 	Trash2,
@@ -60,7 +59,6 @@ import { PlacePicker } from "../ui/Picker";
 import { PropertyBlock } from "../ui/Properties";
 import { Button, Dialog, MenuItem, MoreMenu, PagePlaceholder, Popover } from "../ui/primitives";
 import { ProgressBand } from "../ui/progress";
-import { insertQueryBlock } from "../ui/QueryBlock";
 import { Below } from "../ui/Sections";
 import { moveTo } from "../ui/Spaces";
 import { TitleField } from "../ui/TitleField";
@@ -188,17 +186,6 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
 						>
 							{t("editor.addFile")}
 						</MenuItem>
-						{view && (
-							<MenuItem
-								icon={<ListFilter size={14} />}
-								onClick={() => {
-									close();
-									insertQueryBlock(view);
-								}}
-							>
-								{t("item.insertQuery")}
-							</MenuItem>
-						)}
 						<MenuItem
 							icon={item.pinned ? <PinOff size={14} /> : <Pin size={14} />}
 							onClick={() => {
