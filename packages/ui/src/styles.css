@@ -56,6 +56,16 @@ body,
 #root {
 	height: 100%;
 }
+/* iOS 26, installed app: 100% and 100dvh come up short by the top safe-area inset, which leaves an empty
+   band below the bottom bar. 100lvh is the whole screen there. Only iOS, since Android shrinks 100% for the
+   keyboard and lvh would not. */
+@media (display-mode: standalone) {
+	@supports (-webkit-touch-callout: none) {
+		html {
+			height: max(100%, 100lvh);
+		}
+	}
+}
 body {
 	background: var(--bg);
 	color: var(--text);
