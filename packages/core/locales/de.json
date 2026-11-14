@@ -176,7 +176,6 @@
 	"drawing.close": "Schließen",
 	"drawing.edit": "In Excalidraw bearbeiten",
 	"drawing.empty": "Leeres Excalidraw-Diagramm – klicken, um zu zeichnen",
-	"drawing.insert": "Excalidraw-Diagramm einfügen",
 	"drawing.libraries": "Bibliotheken",
 	"drawing.librariesFailed": "Die Bibliotheken konnten nicht geladen werden. Bist du online?",
 	"drawing.librariesLoading": "Bibliotheken werden geladen …",
