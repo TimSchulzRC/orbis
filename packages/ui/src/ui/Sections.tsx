@@ -6,6 +6,7 @@ import type { Item } from "@obtion/core/model";
 import { belowOf } from "@obtion/core/placement";
 import { cmpKey } from "@obtion/core/sortkey";
 import { dueOf, isDone, statusOf } from "@obtion/core/traits";
+import { filesBelow } from "@obtion/core/zip";
 import { ChevronRight, Plus } from "lucide-react";
 import { Fragment, useState } from "react";
 import { Input } from "../components/ui/input";
@@ -13,6 +14,7 @@ import { itemHref, useIndex, useStoredSet } from "../hooks";
 import { titleOf, useT } from "../i18n";
 import { cn } from "../lib/utils";
 import { repo } from "../repo";
+import { DownloadFilesAction } from "./DownloadFiles";
 import { NOTE_ICON } from "./icons";
 import { DueLabel, RelTime, TypeGlyph } from "./item-look";
 import { Button, Card, MenuItem, Popover, SectionAction, SectionTitle } from "./primitives";
@@ -233,7 +235,15 @@ export function Below({ item }: { item: Item }) {
 		);
 	return (
 		<section className="mt-10 max-md:mt-8">
-			<SectionTitle count={direct.length} right={addMenu}>
+			<SectionTitle
+				count={direct.length}
+				right={
+					<>
+						<DownloadFilesAction files={filesBelow(item.id, ix)} title={titleOf(item, t)} />
+						{addMenu}
+					</>
+				}
+			>
 				{t("below.title")}
 			</SectionTitle>
 			<Card className="overflow-hidden">

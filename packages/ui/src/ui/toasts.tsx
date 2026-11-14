@@ -6,7 +6,7 @@ import { tr } from "../i18n";
 const PLAIN = 5000;
 const WITH_ACTION = 7000; // a notice with "Undo" or "Open" stays longer
 
-/** A short notice; `.undo` offers "Undo", `.action` another step ("Open"), `.error` says what failed. */
+/** A short notice; `.undo` offers "Undo", `.action` another step ("Open"), `.busy` stays while work runs, `.error` says what failed. */
 export function notify(text: string) {
 	toast(text, { duration: PLAIN });
 }
@@ -20,6 +20,17 @@ notify.undo = (text: string, onUndo: () => void, id?: string) => {
 };
 notify.action = (text: string, label: string, run: () => void) => {
 	toast(text, { duration: WITH_ACTION, action: { label, onClick: run } });
+};
+/** While something takes its time: shown once it has taken `after` ms, gone when the answer's function is called. */
+notify.busy = (text: string, after = 400): (() => void) => {
+	let id: string | number | undefined;
+	const timer = setTimeout(() => {
+		id = toast(text, { duration: Number.POSITIVE_INFINITY });
+	}, after);
+	return () => {
+		clearTimeout(timer);
+		if (id !== undefined) toast.dismiss(id);
+	};
 };
 notify.error = (text: string) => {
 	toast.error(text, { duration: WITH_ACTION });

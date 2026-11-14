@@ -13,6 +13,7 @@ import {
 	setFileMeta,
 } from "@obtion/core/model";
 import { toB64 } from "@obtion/core/protocol";
+import { type ArchiveFile, archivePaths, type ZipEntry, zipStore } from "@obtion/core/zip";
 import type { Repo } from "@obtion/sync";
 import { type IDBPDatabase, openDB } from "idb";
 import { useContext, useEffect, useState, useSyncExternalStore } from "react";
@@ -121,6 +122,12 @@ const MAX_DOWNLOADS = 3;
 const UPLOAD_GRACE_MS = 60 * 60_000;
 /** Types a blob: URL may carry: they show, never run as part of the app (no HTML, no SVG). */
 const VIEWED = /^(application\/pdf|audio\/[\w.+-]+|video\/[\w.+-]+)$/;
+
+/** Hands a `blob:` URL to the browser as a file to save, and lets go of it afterwards. */
+function saveAs(url: string, name: string) {
+	Object.assign(document.createElement("a"), { href: url, download: name }).click();
+	setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
 
 async function scaled(
 	file: Blob,
@@ -352,10 +359,47 @@ export class DeviceFiles {
 	async download(hash: string, name: string, mime: string): Promise<boolean> {
 		const url = await this.viewUrl(hash, mime);
 		if (!url) return false;
-		const a = Object.assign(document.createElement("a"), { href: url, download: name });
-		a.click();
-		setTimeout(() => URL.revokeObjectURL(url), 60_000);
+		saveAs(url, name);
 		return true;
+	}
+
+	/**
+	 * Saves several files as one ZIP called `zipName`, a single file as itself. Contents come from
+	 * this device or the server, like `download`. Answers how many were saved and the names of
+	 * those whose content could not be had; with none saved, nothing is written.
+	 */
+	async downloadAll(
+		files: ArchiveFile[],
+		zipName: string,
+	): Promise<{ saved: number; missing: string[] }> {
+		const metas = files.map((f) => f.item.file!);
+		if (files.length === 1) {
+			const [f] = metas as [FileMeta];
+			const ok = await this.download(f.hash, f.name, f.mime);
+			return ok ? { saved: 1, missing: [] } : { saved: 0, missing: [f.name] };
+		}
+		const paths = archivePaths(files);
+		const entries: (ZipEntry | undefined)[] = files.map(() => undefined);
+		let next = 0;
+		const worker = async () => {
+			while (next < files.length) {
+				const n = next++;
+				const blob = await this.content(metas[n]!.hash);
+				if (blob)
+					entries[n] = {
+						path: paths[n]!,
+						data: new Uint8Array(await blob.arrayBuffer()),
+						modified: files[n]!.item.updated,
+					};
+			}
+		};
+		await Promise.all(Array.from({ length: MAX_DOWNLOADS }, worker));
+		const found = entries.filter((e) => !!e);
+		const missing = metas.filter((_, n) => !entries[n]).map((f) => f.name);
+		if (!found.length) return { saved: 0, missing };
+		const zip = new Blob(zipStore(found) as BlobPart[], { type: "application/zip" });
+		saveAs(URL.createObjectURL(zip), zipName);
+		return { saved: found.length, missing };
 	}
 
 	missingKey(created: number): "file.uploading" | "file.missing" {
