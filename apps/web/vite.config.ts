@@ -138,8 +138,8 @@ export default defineConfig({
 				name: "Obtion",
 				short_name: "Obtion",
 				description: "Knowledge and projects in one linked system",
-				theme_color: "#191919",
-				background_color: "#191919",
+				theme_color: "#121212",
+				background_color: "#121212",
 				display: "standalone",
 				start_url: "/",
 				icons: [
