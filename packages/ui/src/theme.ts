@@ -5,7 +5,7 @@ import { KEYS } from "./ui/storage";
 type ThemeChoice = "system" | "light" | "dark";
 const KEY = KEYS.theme;
 /** Page background per mode, for the browser bar and PWA status bar. */
-const BAR = { light: "#f7f6f3", dark: "#191919" } as const;
+const BAR = { light: "#f7f6f3", dark: "#121212" } as const;
 
 const media = matchMedia("(prefers-color-scheme: dark)");
 const listeners = new Set<() => void>();

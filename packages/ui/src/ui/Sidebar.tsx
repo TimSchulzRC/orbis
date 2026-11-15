@@ -239,7 +239,7 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
 
 	return (
 		<aside
-			className="relative flex shrink-0 flex-col border-r border-line bg-surface-2/50 pt-safe"
+			className="relative flex shrink-0 flex-col border-r border-line bg-sidebar pt-safe"
 			style={{ width }}
 		>
 			<div className="flex items-center px-2 pb-px pt-2">

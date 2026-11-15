@@ -34,6 +34,7 @@
 	--color-surface-2: var(--surface-2);
 	--color-hover: var(--hover);
 	--color-selected: var(--selected);
+	--color-sidebar: var(--sidebar);
 	--color-line: var(--border);
 	--color-fg: var(--text);
 	--color-muted: var(--muted);
