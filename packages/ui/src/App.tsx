@@ -226,7 +226,8 @@ function Main() {
 
 			<div className="flex min-w-0 flex-1 flex-col" data-column ref={column}>
 				{!wide && (
-					<header className="flex items-center gap-2 border-b border-line bg-bg/90 px-3 pb-2 pt-[calc(0.5rem+env(safe-area-inset-top))] backdrop-blur">
+					// iOS 26 blurs the top edge of an installed app unless a sticky, opaque, full-width box covers it
+					<header className="sticky top-0 flex items-center gap-2 border-b border-line bg-bg px-3 pb-2 pt-[calc(0.5rem+env(safe-area-inset-top))]">
 						{/* only back: the bar has no room for both, and a phone has no toolbar for it */}
 						<HistoryButtons />
 						<a

@@ -170,7 +170,7 @@ export function Tray({ desktop, pinned }: { desktop: boolean; pinned?: boolean }
 							</div>
 						</div>
 					) : (
-						<div className="flex items-center gap-2 rounded-2xl bg-surface p-1.5 shadow-sm">
+						<div className="flex items-center gap-2">
 							{tray}
 							<Button
 								aria-label={t("capture.title")}
