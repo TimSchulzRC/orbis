@@ -1,10 +1,30 @@
 import { SETTINGS_ID } from "@obtion/core/model";
-import { History, Inbox, Menu, Search, SlidersHorizontal, Sun, Trash2, X } from "lucide-react";
+import {
+	History,
+	Inbox,
+	Menu,
+	PanelLeftClose,
+	PanelLeftOpen,
+	Search,
+	SlidersHorizontal,
+	Sun,
+	Trash2,
+	X,
+} from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { signOut, useAccounts } from "./accounts";
 import { Backdrop, ModalSurface } from "./components/ui/dialog";
 import { DrawingHost } from "./drawing/Drawing";
-import { itemPath, openItem, spaceHref, useDesktop, useOnChange, useRepo, useRoute } from "./hooks";
+import {
+	itemPath,
+	openItem,
+	spaceHref,
+	useDesktop,
+	useLocalStorage,
+	useOnChange,
+	useRepo,
+	useRoute,
+} from "./hooks";
 import { useT } from "./i18n";
 import { cn } from "./lib/utils";
 import { globalPage } from "./scope";
@@ -13,6 +33,7 @@ import { BrandLogo } from "./ui/BrandLogo";
 import { CommandPalette } from "./ui/CommandPalette";
 import { PageBoundary } from "./ui/ErrorBoundary";
 import { ConfirmHost } from "./ui/feedback";
+import { HistoryButtons } from "./ui/HistoryButtons";
 import { ICON } from "./ui/icons";
 import { setShelfPinned, syncShelf, useInboxItems, useShelf } from "./ui/inbox";
 import { LightboxHost } from "./ui/Lightbox";
@@ -21,6 +42,7 @@ import { Sidebar, SpaceTree } from "./ui/Sidebar";
 import { NewSpaceDialog, SpaceScope, SpaceSelector, useReplicas } from "./ui/Spaces";
 import { StatusButton } from "./ui/StatusButton";
 import { openSettings } from "./ui/settings-open";
+import { KEYS } from "./ui/storage";
 import { TitleTips } from "./ui/TitleTips";
 import { Tray } from "./ui/Tray";
 import { AppToaster } from "./ui/toasts";
@@ -104,6 +126,7 @@ function Main() {
 	const wide = useDesktop();
 	const [palette, setPalette] = useState<string | null>(null); // the query it opens with; null: closed
 	const [menu, setMenu] = useState(false);
+	const [sidebar, setSidebar] = useLocalStorage(KEYS.sidebarOpen, true);
 	useOnChange(route.path, () => setMenu(false));
 	// leaving the page closes the tray's panel, except for "#/inbox" and pages it was open at
 	useOnChange(route.path, syncShelf);
@@ -199,11 +222,13 @@ function Main() {
 			>
 				{t("nav.skip")}
 			</Button>
-			{wide && <Sidebar onSearch={() => setPalette("")} />}
+			{wide && sidebar && <Sidebar onSearch={() => setPalette("")} />}
 
 			<div className="flex min-w-0 flex-1 flex-col" data-column ref={column}>
 				{!wide && (
 					<header className="flex items-center gap-2 border-b border-line bg-bg/90 px-3 pb-2 pt-[calc(0.5rem+env(safe-area-inset-top))] backdrop-blur">
+						{/* only back: the bar has no room for both, and a phone has no toolbar for it */}
+						<HistoryButtons />
 						<a
 							aria-label={t("nav.today")}
 							className="tap flex items-center justify-center gap-2"
@@ -231,6 +256,20 @@ function Main() {
 				)}
 				<SignedOut />
 				<TooNew />
+				{/* a row of their own above the page, where a browser has its arrows: pages fill their
+            width, so there is no free corner to put them in. The sidebar's button is here, not in
+            the sidebar, so it stays where it is when the sidebar is closed */}
+				{wide && (
+					<div className="flex shrink-0 px-2 pt-2">
+						<IconButton
+							aria-expanded={sidebar}
+							icon={sidebar ? PanelLeftClose : PanelLeftOpen}
+							label={t(sidebar ? "nav.hideSidebar" : "nav.showSidebar")}
+							onClick={() => setSidebar(!sidebar)}
+						/>
+						<HistoryButtons forward />
+					</div>
+				)}
 				{/* pinned: main is only as tall as Today, the panel takes the rest */}
 				<main
 					className={cn(
@@ -306,7 +345,9 @@ function useRoom(
 			const height =
 				page.offsetHeight -
 				(cards ? cards.offsetHeight + Number.parseFloat(getComputedStyle(cards).marginTop) : 0);
-			setRoom(column.current!.clientHeight - height - TRAY_BAR_PX >= MIN_PANEL_PX);
+			// what stands above the page in the column (the history buttons, a banner) takes room too
+			const above = main.current!.offsetTop - column.current!.offsetTop;
+			setRoom(column.current!.clientHeight - above - height - TRAY_BAR_PX >= MIN_PANEL_PX);
 		};
 		const ro = new ResizeObserver(measure);
 		ro.observe(column.current);

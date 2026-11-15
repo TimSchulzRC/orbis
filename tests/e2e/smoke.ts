@@ -459,6 +459,16 @@ async function sidebarOnTablet(browser: import("playwright").Browser, server: Se
 	await check(page, "seeded tablet", "/", errors, async (p) => {
 		if (!(await p.locator("aside").first().isVisible()))
 			failures.push("seeded tablet: no sidebar at 800 px");
+		// its button closes it, a reload keeps it closed, the button opens it again
+		await p.getByRole("button", { name: "Seitenleiste schließen" }).click();
+		if (await p.locator("aside").count()) failures.push("seeded tablet: sidebar did not close");
+		await p.reload();
+		await settle(p);
+		if (await p.locator("aside").count())
+			failures.push("seeded tablet: sidebar open again after a reload");
+		await p.getByRole("button", { name: "Seitenleiste öffnen" }).click();
+		if (!(await p.locator("aside").first().isVisible()))
+			failures.push("seeded tablet: sidebar did not open");
 	});
 	await context.close();
 }
