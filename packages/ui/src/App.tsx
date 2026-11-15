@@ -234,6 +234,13 @@ function Main() {
 				)}
 				<SignedOut />
 				<TooNew />
+				{/* a row of their own above the page, where a browser has them: pages fill their width, so
+            there is no free corner to put them in */}
+				{wide && (
+					<div className="flex shrink-0 px-2 pt-2">
+						<HistoryButtons forward />
+					</div>
+				)}
 				{/* pinned: main is only as tall as Today, the panel takes the rest */}
 				<main
 					className={cn(
@@ -309,7 +316,9 @@ function useRoom(
 			const height =
 				page.offsetHeight -
 				(cards ? cards.offsetHeight + Number.parseFloat(getComputedStyle(cards).marginTop) : 0);
-			setRoom(column.current!.clientHeight - height - TRAY_BAR_PX >= MIN_PANEL_PX);
+			// what stands above the page in the column (the history buttons, a banner) takes room too
+			const above = main.current!.offsetTop - column.current!.offsetTop;
+			setRoom(column.current!.clientHeight - above - height - TRAY_BAR_PX >= MIN_PANEL_PX);
 		};
 		const ro = new ResizeObserver(measure);
 		ro.observe(column.current);
