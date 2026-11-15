@@ -17,6 +17,7 @@ export const KEYS = {
 	timelineScale: "obtion.timeline.scale",
 	sidebarTree: "obtion.sidebar.tree",
 	sidebarWidth: "obtion.sidebar.width",
+	sidebarOpen: "obtion.sidebar.open",
 	/** the inbox's "Sorted" with each entry's undo, until cleared */
 	inboxSorted: "obtion.inbox.sorted",
 	sidebarSpace: (space: string) => `obtion.sidebar.space.${space}`,
