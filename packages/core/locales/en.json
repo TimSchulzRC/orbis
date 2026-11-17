@@ -642,7 +642,7 @@
 	"query.cond.underThis": "Below this page",
 	"query.empty": "Nothing yet.",
 	"query.errors": "Not understood: {list}",
-	"query.help": "space = and · | = or · - = not · type: #tag under: in: linked: linked:under: status: without: pinned collection: sort: group:",
+	"query.help": "space = and · | = or · - = not · type: #tag under: in: linked: linked:under: status: relation.field: without: pinned collection: sort: group:",
 	"query.hideText": "Hide text",
 	"query.label": "Query",
 	"query.more": "{count} more",

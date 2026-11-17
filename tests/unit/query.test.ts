@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { addDaysISO, setMember } from "@obtion/core/model";
+import { addDaysISO, setMember, setProp, setRel } from "@obtion/core/model";
 import {
 	blocksAsText,
 	findBlocks,
 	groupItems,
 	normalizeBlocks,
+	orderGroups,
 	parseQuery,
 	printQuery,
 	readBlock,
@@ -355,4 +356,41 @@ test("a comparison without a value (a filter just added) lets everything through
 	expect(count({ prop: "Status", op: ":" })).toBe(3);
 	expect(count({ prop: "Status", op: "!=", value: "" })).toBe(3);
 	expect(count({ prop: "Status", op: ":", value: "Planung" })).toBe(1);
+});
+
+test("Field.condition: a condition on the entries a field points to (above, a relation)", () => {
+	const w = world();
+	// "Nordlicht · France" back to the backlog (new); "Relaunch France" and its task stay active
+	w.m.change(w.nordFr, (d) => setProp(d, "p_status", "st_backlog"));
+	w.m.change(w.t2, (d) => setRel(d, "p_blocked", w.t1, true));
+	const ix = w.m.index();
+	const tasks = (q: string) => titles(runQuery(parseQuery(q, ix).def, { ix }).items);
+	expect(tasks("typ:Task darüber.status:neu")).toEqual(["Kick-off", "Pick colours"]);
+	expect(tasks("typ:Task -darüber.status:neu")).toEqual([
+		"Check required fields",
+		"Create mockups",
+	]);
+	// two steps: the sub-task's task, then its project; Nordlicht · France lives in Relaunch France
+	expect(tasks('typ:Task darüber.darüber.titel:"Relaunch France"')).toEqual([
+		"Check required fields",
+		"Kick-off",
+		"Pick colours",
+	]);
+	// a relation with a space in its name, quoted; it also round-trips through the text form
+	const q = parseQuery('typ:Task "Blockiert durch".status:aktiv', ix);
+	expect(q.errors).toEqual([]);
+	expect(titles(runQuery(q.def, { ix }).items)).toEqual(["Pick colours"]);
+	const text = printQuery(q.def, "de", ix);
+	expect(text).toBe('typ:Task "Blockiert durch".status:aktiv');
+	expect(parseQuery(text, ix).def).toEqual(q.def);
+	// a property whose name has a dot is quoted, so it stays a property
+	expect(printQuery({ where: { prop: "Nr.", op: ":", value: "1" } }, "de", ix)).toBe('"Nr.":1');
+});
+
+test("groups put in order by hand come first, the others follow as they were", () => {
+	const g = (key: string) => ({ key, items: [] });
+	const groups = [g("a"), g("b"), g("c"), g("d")];
+	expect(orderGroups(groups, ["c", "a"]).map((x) => x.key)).toEqual(["c", "a", "b", "d"]);
+	expect(orderGroups(groups, ["gone", "d"]).map((x) => x.key)).toEqual(["d", "a", "b", "c"]);
+	expect(orderGroups(groups, undefined)).toBe(groups);
 });

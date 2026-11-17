@@ -227,7 +227,7 @@ export function versionOf(i: Item): string {
 }
 
 export const QUERY_HELP =
-	"type:Name #tag under:[[X]] in:[[X]] linked:[[X]] linked:under:[[X]] status:open|new|active|done (open = new or active) property:value property<value property:empty without:type|parents|children|usage pinned inbox blocked dormant (it or something above it done) file filetype:image|pdf; space=AND, |=OR, -=NOT, (…); sort:field group:path|status|type limit:n. German keywords work too.";
+	"type:Name #tag under:[[X]] in:[[X]] linked:[[X]] linked:under:[[X]] status:open|new|active|done (open = new or active) property:value property<value property:empty relation.condition (on the entries it points to, e.g. Project.status:active or above.status:active) without:type|parents|children|usage pinned inbox blocked dormant (it or something above it done) file filetype:image|pdf; space=AND, |=OR, -=NOT, (…); sort:field group:path|status|type limit:n. German keywords work too.";
 
 /** Characters that end or split a [[link]] target: such titles can't be linked by title. */
 /** Longer bodies and file texts come as their outline unless a part is asked for. */
@@ -1933,6 +1933,9 @@ export class Ops {
 			const hiddenGroups = v.hidden_groups?.length
 				? v.hidden_groups.map((name) => this.groupKey(p.def.group, name, where))
 				: undefined;
+			const groupOrder = v.group_order?.length
+				? v.group_order.map((name) => this.groupKey(p.def.group, name, where))
+				: undefined;
 			return {
 				id: same?.id ?? shortId("v"),
 				name,
@@ -1944,6 +1947,7 @@ export class Ops {
 				subgroup: v.subgroup,
 				hideEmpty: v.hide_empty_groups || undefined,
 				hiddenGroups,
+				groupOrder,
 				date: v.date,
 			};
 		});
@@ -1974,6 +1978,7 @@ export class Ops {
 		return {
 			name: this.tabLabel(t),
 			hidden_groups: t.hiddenGroups,
+			group_order: t.groupOrder,
 			query: printQuery(
 				{ where: t.where, sort: t.sort, group: t.group, columns: t.columns, view: t.kind },
 				this.store.lang(),

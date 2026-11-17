@@ -58,6 +58,7 @@ export type Cond =
 	| { linked: Ref }
 	| { linkedUnder: Ref } // linked:under:[[X]] – connected to X or a descendant of X
 	| { prop: string; op: Op; value?: FieldValue }
+	| { via: string; cond: Cond } // Projekt.status:aktiv – the condition holds for an entry the field points to
 	| { status: StatusKey }
 	| { inbox: true } // what the inbox rule matches, minus what is set aside
 	| { pinned: true }
@@ -247,6 +248,15 @@ export function parseQuery(src: string, ix: Index): ParseResult {
 			}
 			return { text: unquote(raw) };
 		}
+		// Field.rest or "Field name".rest: the rest is a condition on the entries the field points to
+		const k = m[1]!;
+		const quoted = k.startsWith('"') ? k.indexOf('"', 1) + 1 : 0;
+		const dot = quoted ? (k[quoted] === "." ? quoted : -1) : k.indexOf(".");
+		if (dot > 0) {
+			const via = unquote(k.slice(0, dot));
+			const cond = term(raw.slice(dot + 1));
+			return cond ? { via: kw("field", via) ?? via, cond } : null;
+		}
 		const keyRaw = unquote(m[1]!);
 		const op = (m[2] === "=" ? ":" : m[2]) as Op;
 		const value = unquote(m[3]!);
@@ -408,7 +418,8 @@ export function printQuery(def: QueryDef, lang: Lang, ix: Index): string {
 }
 
 function printField(f: string, lang: Lang) {
-	return (FIELDS as readonly string[]).includes(f) ? say(lang, "field", f) : quoteIf(f);
+	if ((FIELDS as readonly string[]).includes(f)) return say(lang, "field", f);
+	return f.includes(".") ? `"${f}"` : quoteIf(f); // a dot would read as Field.condition
 }
 
 function quoteIf(s: string) {
@@ -450,6 +461,7 @@ function printCond(c: Cond, lang: Lang, ix: Index, top = false): string {
 	if ("filetype" in c) return `${k("filetype")}:${say(lang, "filetype", c.filetype)}`;
 	if ("text" in c) return quoteIf(c.text);
 	if ("unresolved" in c) return `[[${c.unresolved}]]`;
+	if ("via" in c) return `${printField(c.via, lang)}.${printCond(c.cond, lang, ix)}`;
 	const name = printField(c.prop, lang);
 	if (c.op === "empty") return `${name}:${say(lang, "value", "empty")}`;
 	const v = c.value;
@@ -759,6 +771,15 @@ export function matches(item: Item, c: Cond, ctx: EvalCtx): boolean {
 	if ("pinned" in c) return !!item.pinned;
 	if ("blocked" in c) return ix.isBlocked(item);
 	if ("dormant" in c) return ix.isDormant(item);
+	if ("via" in c) {
+		const hit = fieldOf(item, c.via, ix);
+		const ref = hit?.kind === "item" || hit?.kind === "relation";
+		const ids = ref && !isEmpty(hit.value) ? asIds(hit.value) : [];
+		return ids.some((id) => {
+			const target = ix.get(id);
+			return !!target && matches(target, c.cond, ctx);
+		});
+	}
 	if ("filetype" in c) return item.file?.filetype === c.filetype;
 	if ("text" in c) {
 		const hay = (
@@ -931,6 +952,17 @@ const UNRANKED = 9999;
 /** Hidden groups are stored by option or entry id, so a rename keeps them hidden. */
 export function groupId(g: Group): string {
 	return g.option?.id ?? g.ref ?? g.key;
+}
+
+/** Groups put in order by hand come first, in that order; the others follow as they were. */
+export function orderGroups(groups: Group[], order: string[] | undefined): Group[] {
+	if (!order?.length) return groups;
+	const at = new Map(order.map((id, n) => [id, n]));
+	const rank = (g: Group) => at.get(groupId(g)) ?? order.length;
+	return groups
+		.map((g, n) => ({ g, n }))
+		.sort((a, b) => rank(a.g) - rank(b.g) || a.n - b.n)
+		.map((x) => x.g);
 }
 
 /**

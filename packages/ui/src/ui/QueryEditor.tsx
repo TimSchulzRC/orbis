@@ -162,6 +162,14 @@ function valueText(v: FieldValue, shape: Shape, { ix, t, lang }: Ctx): string {
 function condLabel(c: Cond, ctx: Ctx): string {
 	const { ix, t, lang } = ctx;
 	if ("not" in c) return `${t("query.not")} ${condLabel(c.not, ctx)}`;
+	if ("via" in c) {
+		const f = readField(c.cond);
+		const inner =
+			f?.mode === ":"
+				? `${fieldLabel(f.prop, t, ctx.fields)}: ${f.values.map((v) => valueText(v, "text", ctx)).join(", ")}`
+				: condLabel(c.cond, ctx);
+		return `${fieldLabel(c.via, t, ctx.fields)} › ${inner}`;
+	}
 	if ("type" in c) return `${t("group.type")}: ${ix.typeName(c.type) ?? c.type}`;
 	if ("tag" in c) return `#${c.tag}`;
 	if ("under" in c)
