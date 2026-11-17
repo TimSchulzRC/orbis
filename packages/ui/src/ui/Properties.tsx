@@ -25,7 +25,7 @@ import {
 	statusOf,
 	visibleProps,
 } from "@obtion/core/traits";
-import { AlertTriangle, ChevronRight, ExternalLink, Plus, X } from "lucide-react";
+import { AlertTriangle, ExternalLink, Plus, X } from "lucide-react";
 import { useState } from "react";
 import { Checkbox } from "../components/ui/checkbox";
 import { NativeSelect } from "../components/ui/native-select";
@@ -630,28 +630,24 @@ export function PropertyBlock({
 								/>
 							</BlockRow>
 						)),
-						unused.length > 0 && (
-							// a row like the others: same height, its text on the labels' line, the arrow after it
-							<Button
-								aria-expanded={open}
-								className="col-span-2 flex min-h-[34px] w-full items-center gap-1 rounded-md px-1.5 text-left text-sm text-muted-foreground hover:bg-hover/60 hover:text-fg pointer-coarse:min-h-11"
-								key="unused"
-								onClick={() => setOpenFor(open ? undefined : item.id)}
-								type="button"
-								variant="plain"
-							>
-								{t("props.unused", { n: unused.length, count: unused.length })}
-								<ChevronRight
-									className={cn("transition-transform", open && "rotate-90")}
-									size={14}
-								/>
-							</Button>
-						),
 						...(open ? unused : []).map((p) => (
 							<BlockRow key={p.id} label={p.name} title={p.description || p.name}>
 								<PropertyField item={item} prop={p} />
 							</BlockRow>
 						)),
+						unused.length > 0 && (
+							// a quiet link below all rows: "Mehr" opens the empty ones above it, "Weniger" closes them
+							<Button
+								aria-expanded={open}
+								className="col-span-2 flex min-h-[34px] items-center justify-self-start rounded-md px-1.5 text-left text-sm text-faint underline-offset-2 hover:text-muted-foreground hover:underline pointer-coarse:min-h-11"
+								key="unused"
+								onClick={() => setOpenFor(open ? undefined : item.id)}
+								type="button"
+								variant="plain"
+							>
+								{t(open ? "props.showLess" : "props.showMore")}
+							</Button>
+						),
 					]}
 				</div>
 			)}

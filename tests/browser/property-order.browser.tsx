@@ -1,6 +1,6 @@
 // A page shows its type's properties in the order "Typ bearbeiten" gives them: the badges (status,
 // single selections) in a row at the top, everything else (dates too) as rows below, each in order.
-// Empty ones wait at the very bottom behind "n weitere Eigenschaften", in that order too.
+// Empty ones wait at the very bottom behind a quiet "Mehr"; open, "Weniger" sits below all of them, in that order too.
 
 import { upsertProp } from "@obtion/core/model";
 import { SYS } from "@obtion/core/setup";
@@ -45,19 +45,34 @@ async function setup() {
 	return { repo, id, props, moveAfter };
 }
 
-const more = (n: number) =>
-	page.getByRole("button", { name: `${n} weitere Eigenschaft${n === 1 ? "" : "en"}` });
+const more = () => page.getByRole("button", { name: "Mehr", exact: true });
+const less = () => page.getByRole("button", { name: "Weniger", exact: true });
+/** The text of everything in the rows' grid, top to bottom: rows and the toggle below them. */
+const order = () =>
+	[...document.querySelectorAll(".group\\/props .grid > *")]
+		.map((e) =>
+			e.matches("div.truncate")
+				? e.textContent
+				: e.tagName === "BUTTON"
+					? `[${e.textContent}]`
+					: null,
+		)
+		.filter(Boolean);
 
 test("empty properties hide behind a toggle and open in the type's order", async () => {
 	const { props, moveAfter } = await setup();
 	await expect.poll(rows).toEqual([]);
 	await expect.poll(badges).toEqual(["Backlog"]);
-	await more(4).click();
+	await more().click();
 	await expect.poll(rows).toEqual(["Priorität", "Zeitraum", "Zusammenfassung", "Blockiert durch"]);
+	await expect
+		.poll(order)
+		.toEqual(["Priorität", "Zeitraum", "Zusammenfassung", "Blockiert durch", "[Weniger]"]);
 	moveAfter("p_period", props().at(-1)!.id);
 	await expect.poll(rows).toEqual(["Priorität", "Zusammenfassung", "Blockiert durch", "Zeitraum"]);
-	await more(4).click();
+	await less().click();
 	await expect.poll(rows).toEqual([]);
+	await expect.poll(order).toEqual(["[Mehr]"]);
 });
 
 test("a property with a value shows above the toggle, the rest stay below it", async () => {
@@ -66,16 +81,16 @@ test("a property with a value shows above the toggle, the rest stay below it", a
 	repo.setProp(id, "p_priority", "pr_high");
 	await expect.poll(rows).toEqual(["Zusammenfassung"]);
 	await expect.poll(() => badges().map((b) => b?.includes("Priorität"))).toEqual([false, true]);
-	await more(2).click();
+	await more().click();
 	await expect.poll(rows).toEqual(["Zusammenfassung", "Zeitraum", "Blockiert durch"]);
 	// filling one in the open list moves it up, in the type's order
 	repo.setProp(id, "p_period", "2026-11-01/2026-11-30");
 	await expect.poll(rows).toEqual(["Zeitraum", "Zusammenfassung", "Blockiert durch"]);
-	await expect.element(more(1)).toBeVisible();
+	await expect.element(less()).toBeVisible();
 	// emptied again, it goes back down
 	repo.setProp(id, "p_summary", null);
 	await expect.poll(rows).toEqual(["Zeitraum", "Zusammenfassung", "Blockiert durch"]);
-	await more(2).click();
+	await less().click();
 	await expect.poll(rows).toEqual(["Zeitraum"]);
 });
 
@@ -99,7 +114,7 @@ test("the badges at the top follow the type's order", async () => {
 test("a date range filled in below the toggle keeps its editor open for the end", async () => {
 	const { repo, id } = await setup();
 	repo.setProp(id, "p_summary", "Neue Website");
-	await more(3).click();
+	await more().click();
 	await page.getByRole("button", { name: "Zeitraum setzen" }).click();
 	await page.getByRole("textbox", { name: "Start" }).fill("01.11.2026");
 	await page.getByRole("textbox", { name: "Ende" }).fill("30.11.2026");
