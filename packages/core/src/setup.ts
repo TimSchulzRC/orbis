@@ -27,6 +27,8 @@ export const SYS = {
 /** Property ids of the shipped "Blocked by" and "Waiting for". */
 export const BLOCKED_BY = "p_blocked";
 export const WAITING_FOR = "p_waiting";
+/** Property id of the shipped "Project" on tasks. */
+export const TASK_PROJECT = "p_project";
 
 export interface Writer {
 	change(id: string, fn: (doc: Y.Doc) => void): void;
@@ -135,6 +137,12 @@ export function defaultTypes(lang: Lang): Record<string, TypeSpec> {
 					kind: "computed",
 					computed: { fn: "progress", of: SYS.task },
 				},
+				{
+					id: TASK_PROJECT,
+					name: t("prop.project"),
+					kind: "relation",
+					target: `${typeKey}:${t("project.name")}`,
+				},
 				blockedBy,
 				{ id: WAITING_FOR, name: t("prop.waitingFor"), kind: "text", blocks: true },
 			],
@@ -213,7 +221,7 @@ function defaultTabs(lang: Lang): Record<string, Omit<ViewTab, "pos">[]> {
 				name: v("byProject"),
 				kind: "table",
 				where: { status: "open" },
-				group: "project",
+				group: p("project"),
 				hideEmpty: true,
 				sort: [{ key: "due" }],
 				columns: [p("status"), p("priority"), p("blockedBy"), p("blocking"), p("due"), "tags"],
@@ -224,7 +232,7 @@ function defaultTabs(lang: Lang): Record<string, Omit<ViewTab, "pos">[]> {
 				kind: "board",
 				group: "status",
 				hiddenGroups: ["st_dropped", "st_archived"],
-				subgroup: "project",
+				subgroup: p("project"),
 				sort: [{ key: p("priority") }],
 				columns: [p("due")],
 			},
@@ -243,7 +251,7 @@ function defaultTabs(lang: Lang): Record<string, Omit<ViewTab, "pos">[]> {
 				kind: "table",
 				sort: [{ key: "status" }, { key: "due" }],
 				columns: [
-					"project",
+					p("project"),
 					p("status"),
 					p("priority"),
 					p("due"),

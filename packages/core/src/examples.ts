@@ -18,7 +18,7 @@ import {
 	todayISO,
 } from "./model";
 import { blockSource, type QueryDef, queryFence } from "./query";
-import { BLOCKED_BY, SYS, type Writer } from "./setup";
+import { BLOCKED_BY, SYS, TASK_PROJECT, type Writer } from "./setup";
 import { keysFor } from "./sortkey";
 
 export const EXAMPLE = "example";
@@ -297,6 +297,7 @@ export function writeExamples(
 			title: ex("task.moodboard"),
 			parents: [design],
 			props: { p_status: "st_done" },
+			rels: { [TASK_PROJECT]: [design] },
 		},
 		doneAt(10),
 	);
@@ -305,6 +306,7 @@ export function writeExamples(
 		title: ex("task.mockups"),
 		parents: [design],
 		props: { p_status: "st_active", p_priority: "pr_high", p_due: day(0) },
+		rels: { [TASK_PROJECT]: [design] },
 	});
 	const build = put("ex-build", {
 		type: SYS.project,
@@ -317,12 +319,14 @@ export function writeExamples(
 		title: ex("task.cms"),
 		parents: [build],
 		props: { p_status: "st_todo", p_priority: "pr_high", p_due: day(-2) },
+		rels: { [TASK_PROJECT]: [build] },
 	});
 	const pages = put("ex-t-pages", {
 		type: SYS.task,
 		title: ex("task.pages"),
 		parents: [build],
 		props: { p_status: "st_todo", p_due: day(6) },
+		rels: { [TASK_PROJECT]: [build] },
 	});
 	put(
 		"ex-t-pages-home",
@@ -331,6 +335,7 @@ export function writeExamples(
 			title: ex("task.pagesHome"),
 			parents: [pages],
 			props: { p_status: "st_done" },
+			rels: { [TASK_PROJECT]: [build] },
 		},
 		doneAt(1),
 	);
@@ -339,19 +344,21 @@ export function writeExamples(
 		title: ex("task.pagesAbout"),
 		parents: [pages],
 		props: { p_status: "st_todo" },
+		rels: { [TASK_PROJECT]: [build] },
 	});
 	put("ex-t-pages-contact", {
 		type: SYS.task,
 		title: ex("task.pagesContact"),
 		parents: [pages],
 		props: { p_status: "st_todo" },
+		rels: { [TASK_PROJECT]: [build] },
 	});
 	put("ex-t-launch", {
 		type: SYS.task,
 		title: ex("task.launch"),
 		parents: [build],
 		props: { p_status: "st_todo", p_due: day(14) },
-		rels: { [BLOCKED_BY]: [pages] },
+		rels: { [TASK_PROJECT]: [build], [BLOCKED_BY]: [pages] },
 	});
 	put("ex-n-kickoff", {
 		title: ex("kickoff.title"),
