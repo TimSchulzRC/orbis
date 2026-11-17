@@ -18,7 +18,7 @@ import { ItemIcon } from "./item-look";
 import { Button, IconButton } from "./primitives";
 import { PercentBar, ProgressCount } from "./progress";
 import { groupSetter } from "./Row";
-import type { Look } from "./Table";
+import { groupInit, type Look, NewRowButton, newInit } from "./Table";
 
 export function BoardView({
 	items,
@@ -104,6 +104,10 @@ export function BoardView({
 								{columns.map((col) => {
 									const cards = col.items.filter((i) => inLane.has(i.id));
 									const k = `${lane.key}|${col.key}`;
+									// "+ New" here: the column's value and the lane's
+									const init =
+										look?.add &&
+										groupInit(groupInit(newInit(look.add), by, col, ix), tab?.subgroup, lane, ix);
 									return (
 										<li
 											className={cn(
@@ -139,7 +143,7 @@ export function BoardView({
 												)}
 											</p>
 											{/* with sub-rows the empty cells stay quiet */}
-											{!cards.length && !tab?.subgroup && (
+											{!cards.length && !tab?.subgroup && !init && (
 												<p className="rounded-lg border border-dashed border-line px-2 py-3 text-center text-xs text-muted-foreground">
 													{t("board.dropHere")}
 												</p>
@@ -147,6 +151,13 @@ export function BoardView({
 											{cards.map((i) => (
 												<BoardCard cols={def.columns ?? []} ctx={ctx} item={i} key={i.id} />
 											))}
+											{init && (
+												<NewRowButton
+													card
+													init={init}
+													label={t("table.addIn", { name: ix.typeName(init.type ?? null) ?? "" })}
+												/>
+											)}
 										</li>
 									);
 								})}

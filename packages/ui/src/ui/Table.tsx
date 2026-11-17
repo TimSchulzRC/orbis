@@ -483,31 +483,7 @@ export function GroupedTable({
 		});
 		return out;
 	};
-	const addInit = (g: Group): ItemInit | undefined => {
-		if (!look?.add) return undefined;
-		const schema = ix.types.get(look.add.type)?.schema;
-		const init: ItemInit = {
-			...look.add.init,
-			type: look.add.type,
-			props: { ...(look.add.init?.props ?? {}) },
-		};
-		if (!by || !g.key) return init;
-		if (by === "status" && g.option) init.props![statusProp(schema)?.id ?? ""] = g.option.id;
-		else if (by === "statusGroup") {
-			const option = firstOfGroup(schema, g.key as StatusGroup);
-			if (option) init.props![statusProp(schema)!.id] = option.id;
-		} else if (by === "type") init.type = g.key;
-		else if (by === "path" && g.path?.length) init.parents = [g.path.at(-1)!];
-		else if (g.option) {
-			const prop = propByName(schema, by);
-			if (prop) init.props![prop.id] = prop.multiple ? [g.option.id] : g.option.id;
-		} else if (g.ref && (by === "project" || by === "area")) init.parents = [g.ref];
-		else if (g.ref) {
-			const prop = propByName(schema, by, (x) => x.kind === "relation");
-			if (prop) init.rels = { [prop.id]: [g.ref] };
-		}
-		return init;
-	};
+	const addInit = (g: Group) => (look?.add ? groupInit(newInit(look.add), by, g, ix) : undefined);
 	const allKeys = groups.map((g) => g.key);
 	return (
 		<div className="-mx-2 overflow-x-auto pb-2 text-sm">
@@ -662,15 +638,45 @@ function countKids(order: { depth: number }[], n: number): number {
 	return count;
 }
 
+/** What "+ New" starts from: the view's type and its fixed values. */
+export function newInit(add: NonNullable<Look["add"]>): ItemInit {
+	return { ...add.init, type: add.type, props: { ...(add.init?.props ?? {}) } };
+}
+
+/** The entry `init` with the value of group g set, so a new entry lands in that group. */
+export function groupInit(init: ItemInit, by: string | undefined, g: Group, ix: EvalCtx["ix"]) {
+	if (!by || !g.key) return init;
+	const out: ItemInit = { ...init, props: { ...init.props } };
+	const schema = ix.types.get(out.type ?? "")?.schema;
+	if (by === "status" && g.option) out.props![statusProp(schema)?.id ?? ""] = g.option.id;
+	else if (by === "statusGroup") {
+		const option = firstOfGroup(schema, g.key as StatusGroup);
+		if (option) out.props![statusProp(schema)!.id] = option.id;
+	} else if (by === "type") out.type = g.key;
+	else if (by === "path" && g.path?.length) out.parents = [g.path.at(-1)!];
+	else if (g.option) {
+		const prop = propByName(schema, by);
+		if (prop) out.props![prop.id] = prop.multiple ? [g.option.id] : g.option.id;
+	} else if (g.ref && (by === "project" || by === "area")) out.parents = [g.ref];
+	else if (g.ref) {
+		const prop = propByName(schema, by, (x) => x.kind === "relation");
+		if (prop) out.rels = { ...out.rels, [prop.id]: [g.ref] };
+	}
+	return out;
+}
+
 /** Nothing is created before there is a title. */
 export function NewRowButton({
 	init,
 	label,
 	compact,
+	card,
 }: {
 	init: ItemInit;
 	label: string;
 	compact?: boolean;
+	/** At the foot of a board column: as wide as the cards. */
+	card?: boolean;
 }) {
 	const { t } = useT();
 	const ix = useIndex();
@@ -689,7 +695,7 @@ export function NewRowButton({
 		return (
 			<Input
 				aria-label={aria}
-				className={compact ? "w-48" : "ml-2 mt-1 w-72"}
+				className={compact ? "w-48" : card ? "w-full" : "ml-2 mt-1 w-72"}
 				onBlur={() => {
 					create();
 					setTyping(false);
@@ -713,7 +719,10 @@ export function NewRowButton({
 	) : (
 		<Button
 			aria-label={aria}
-			className="tap-y flex items-center gap-1.5 px-2 py-1.5 text-sm text-muted-foreground hover:text-fg"
+			className={cn(
+				"tap-y flex items-center gap-1.5 px-2 py-1.5 text-sm text-muted-foreground hover:text-fg",
+				card && "w-full rounded-lg hover:bg-hover",
+			)}
 			onClick={() => setTyping(true)}
 			variant="plain"
 		>
