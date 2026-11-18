@@ -9,6 +9,7 @@ import { router, Stack, useIsPreview, useLocalSearchParams } from "expo-router";
 import { useHeaderHeight } from "expo-router/react-navigation";
 import { useEffect, useRef, useState } from "react";
 import {
+	Alert,
 	KeyboardAvoidingView,
 	Pressable,
 	Share,
@@ -251,12 +252,30 @@ function BodyEditor({ id, repo, onDone }: { id: string; repo: Repo; onDone: () =
 	 * `saved` is the text the draft started from. Changed elsewhere meanwhile (another device, an
 	 * agent), the draft's own edits go onto that text instead of replacing it.
 	 */
+	const asking = useRef(false);
+	/** Too far apart to merge: the user keeps one of the two (the other stays in the history). */
+	const choose = (next: string, current: string) => {
+		if (asking.current) return;
+		asking.current = true;
+		const settle = (text: string) => {
+			asking.current = false;
+			saved.current = text;
+			latest.current = text;
+			if (text !== repo.get(id)?.body) repo.setBody(id, text);
+			if (open.current) setText(text);
+		};
+		Alert.alert(t("mobile.clash.title"), t("mobile.clash.body"), [
+			{ text: t("mobile.clash.mine"), onPress: () => settle(next) },
+			{ text: t("mobile.clash.theirs"), onPress: () => settle(current) },
+		]);
+	};
 	const save = (next: string) => {
 		if (timer.current) clearTimeout(timer.current);
 		timer.current = null;
-		if (next === saved.current) return;
+		if (next === saved.current || asking.current) return;
 		const current = repo.get(id)?.body ?? "";
 		const merged = mergeText(saved.current, next, current);
+		if (merged === undefined) return choose(next, current);
 		saved.current = merged;
 		latest.current = merged; // closing right after (Done) must not save the draft over it
 		if (merged !== current) repo.setBody(id, merged);

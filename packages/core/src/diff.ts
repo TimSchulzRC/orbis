@@ -127,7 +127,7 @@ interface Edit {
 	lines: string[];
 }
 
-/** How long a merge may diff: past that (huge rewrites) the draft is kept as it is. */
+/** How long a merge may diff: past that (huge rewrites) it gives up and the user chooses. */
 const MERGE_MS = 250;
 
 /**
@@ -173,14 +173,15 @@ const clash = (a: Edit, b: Edit) =>
  * The edits made from `base` to `draft`, applied to `current`, which someone else changed from
  * `base` meanwhile: a three-way merge by lines on the base's line ranges. Where both changed the
  * same lines, theirs stays and that edit of the draft gives way; every other edit of both goes in.
+ * undefined when the texts are too far apart to merge in time: then someone has to choose.
  */
-export function mergeText(base: string, draft: string, current: string): string {
+export function mergeText(base: string, draft: string, current: string): string | undefined {
 	if (current === base || draft === current) return draft;
 	if (draft === base) return current;
 	const lines = base.split("\n");
 	const theirs = editsOf(lines, current.split("\n"));
 	const drafted = editsOf(lines, draft.split("\n"));
-	if (!theirs || !drafted) return draft; // too big to merge in time: the text on screen stays
+	if (!theirs || !drafted) return undefined;
 	const mine = drafted.filter((m) => !theirs.some((t) => clash(m, t)));
 	// in base order; an insertion before a change that starts at the same line
 	const all = [...theirs, ...mine].sort(
