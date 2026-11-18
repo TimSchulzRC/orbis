@@ -504,7 +504,7 @@ function Entry({
 /** Which workspace the new note goes to. Already written in, it moves there. */
 function SpaceChoice({ entry, name }: { entry: InboxEntry; name: string }) {
 	const { t } = useT();
-	const { spaces } = useAccounts();
+	const { shown } = useAccounts();
 	const choose = async (to: string) => {
 		if (to === entry.space) return;
 		writeJSON(KEYS.captureSpace, to);
@@ -531,7 +531,7 @@ function SpaceChoice({ entry, name }: { entry: InboxEntry; name: string }) {
 			)}
 		>
 			{(close) =>
-				spaces.map((s) => (
+				shown.map((s) => (
 					<MenuItem
 						active={s.id === entry.space}
 						key={s.id}

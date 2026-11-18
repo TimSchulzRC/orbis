@@ -51,12 +51,11 @@ export function newNote(space = captureSpace()) {
 	openShelf(entryKey(space, id));
 }
 
-/** The panel leaves the new note: left empty, it goes. The title commits on blur, the item follows a moment later. */
+/** The panel leaves the new note: left empty, it goes. The item follows its text a moment later. */
 export function dropDraft() {
 	const { space, id } = draft.get();
 	if (!space || !id) return;
 	draft.set({});
-	(document.activeElement as HTMLElement | null)?.blur();
 	setTimeout(() => {
 		const repo = replica(space).repo;
 		const item = repo.get(id);
