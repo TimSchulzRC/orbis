@@ -1,6 +1,6 @@
 // Before the app: signing in or creating an account on this server, joining by an invite link
-// (#/join/<code>). Then a workspace has to be open: without one, the first is created here. In
-// the desktop app also connecting a further server (ConnectServer).
+// (#/join/<code>). In the desktop app also connecting a further server (ConnectServer). Gate.tsx
+// puts them in front of the app.
 
 import type { InviteInfo, ServerInfo } from "@obtion/core/api";
 import { KeyRound } from "lucide-react";
@@ -26,12 +26,10 @@ import {
 	useAccounts,
 } from "../accounts";
 import { Input } from "../components/ui/input";
-import { navigate, useRoute } from "../hooks";
+import { navigate } from "../hooks";
 import { getLang, useT } from "../i18n";
-import { desktop } from "../platform";
 import { BrandLogo } from "../ui/BrandLogo";
 import { Button } from "../ui/primitives";
-import { NewSpaceForm } from "../ui/Spaces";
 
 export function AuthCard({
 	title,
@@ -127,7 +125,7 @@ export function SignIn({
 		serverInfo(server)
 			.then((i) => gotServer(i))
 			.catch(() => offline());
-	}, []);
+	}, [server]);
 	const login = server ? { ...loginOf(info), passkey: false, oauth: [] } : loginOf(info);
 	// confirming an account without a password: no password to ask for
 	const byPassword = login.password && !(fixedEmail && hasPassword === false);
@@ -399,8 +397,16 @@ export function ConnectServer({
 				autoFocus
 				label={t("server.address")}
 				// another address: sign in there anew
-				onChange={(e) => (setText(e.target.value), setError(""), setTarget(null))}
-				onKeyDown={(e) => e.key === "Enter" && !target && !busy && (e.preventDefault(), void go())}
+				onChange={(e) => {
+					setText(e.target.value);
+					setError("");
+					setTarget(null);
+				}}
+				onKeyDown={(e) => {
+					if (e.key !== "Enter" || target || busy) return;
+					e.preventDefault();
+					void go();
+				}}
 				placeholder="https://"
 				spellCheck={false}
 				value={text}
@@ -455,7 +461,7 @@ export function ConnectServer({
 }
 
 /** Joining a workspace by its invite link: with the account signed in here, or a new one. */
-function Join({ code }: { code: string }) {
+export function Join({ code }: { code: string }) {
 	const { t } = useT();
 	const [invitation, setInvitation] = useState<InviteInfo | null | undefined>();
 	const [error, setError] = useState("");
@@ -498,44 +504,4 @@ function Join({ code }: { code: string }) {
 			)}
 		</AuthCard>
 	);
-}
-
-/**
- * Signed in, but in no workspace (a new account, or left them all): make one. In the desktop app
- * also its first start: the first workspace on this device or on a server, maybe an existing one.
- */
-function NoSpace() {
-	const { t } = useT();
-	return (
-		<AuthCard
-			intro={desktop ? t("space.firstIntro") : t("account.noSpaceHint")}
-			title={desktop ? t("setup.welcome") : t("account.noSpace")}
-		>
-			<div className="mt-4">
-				<NewSpaceForm name={t("account.personal")} />
-			</div>
-		</AuthCard>
-	);
-}
-
-export function Gate({ children }: { children: ReactNode }) {
-	const { t } = useT();
-	const route = useRoute();
-	const { account, active } = useAccounts();
-	if (route.parts[0] === "join" && route.parts[1]) return <Join code={route.parts[1]} />;
-	if (!account)
-		return (
-			<AuthCard intro={t("account.intro", { server: serverName() })} title={t("setup.welcome")}>
-				<SignIn />
-			</AuthCard>
-		);
-	if (!active)
-		return account.lost ? (
-			<AuthCard intro={t("account.lost", { server: serverName() })} title={t("account.lostTitle")}>
-				<SignIn />
-			</AuthCard>
-		) : (
-			<NoSpace />
-		);
-	return <>{children}</>;
 }

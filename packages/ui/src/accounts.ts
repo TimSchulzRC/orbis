@@ -323,7 +323,10 @@ async function refreshServer(server?: string): Promise<Space[]> {
 	} catch (e) {
 		if (!(e instanceof ApiError && e.status === 401)) return []; // offline: keep what is known
 		// the desktop app's own server: the app signs in again by itself
-		if (server || !desktop) return ((acc.lost = true), []);
+		if (server || !desktop) {
+			acc.lost = true;
+			return [];
+		}
 		Object.assign(acc, await desktop.renewLocal());
 		me = await call<AccountInfo>("/api/account");
 	}
@@ -464,14 +467,22 @@ async function adopt(url: string, res: SignedIn, invite?: string) {
 		remotes = remotes.map((r) => (r.url === url ? { url, account: acc } : r));
 	else remotes = [...remotes, { url, account: acc }];
 	save();
-	if (invite) await call(`/api/invites/${invite}`, { server: url, body: {} }).catch(() => {});
+	if (invite)
+		await call(`/api/invites/${invite}`, { server: url, body: {} }).catch(() => {
+			// an invite that no longer counts: signed in all the same
+		});
 	await refresh();
-	if (switched) location.replace("#/"), location.reload();
+	if (switched) {
+		location.replace("#/");
+		location.reload();
+	}
 }
 
 /** Sign out of a further server: its workspaces leave this device, with their local copies. */
 export async function disconnectServer(url: string) {
-	await call<Ok>("/api/account/signout", { server: url, body: {} }).catch(() => {});
+	await call<Ok>("/api/account/signout", { server: url, body: {} }).catch(() => {
+		// signing out offline still forgets everything on this device
+	});
 	await forgetServer(url);
 	navigate("/", { replace: true });
 	location.reload();
@@ -496,8 +507,8 @@ async function forgetServer(url: string) {
  * Whether `url` answers at all, even where it does not let this app in (no CORS for it: an older
  * server, or the app's origin not in its OBTION_APP_ORIGINS).
  */
-export async function answers(url: string): Promise<boolean> {
-	return fetch(url + "/api/info", { mode: "no-cors" }).then(
+export function answers(url: string): Promise<boolean> {
+	return fetch(`${url}/api/info`, { mode: "no-cors" }).then(
 		() => true,
 		() => false,
 	);

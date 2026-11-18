@@ -59,9 +59,14 @@ function fullName(): string {
 				.split(":")[4]!
 				.split(",")[0]!
 				.trim();
-	} catch {}
+	} catch {
+		// no full name on this system: the account takes the user name
+	}
 	return "";
 }
+
+/** A request to the server on this device: its status and JSON. */
+type Answer<R> = { ok: boolean; status: number; data: R };
 
 export class LocalServer {
 	private proc: ChildProcess | null = null;
@@ -89,7 +94,10 @@ export class LocalServer {
 	/** Start the server and sign its account in; resolves once both are done. */
 	async start(lang: string): Promise<Local> {
 		const port = await choosePort(this.saved.port);
-		if (port !== this.saved.port) (this.saved.port = port), this.save();
+		if (port !== this.saved.port) {
+			this.saved.port = port;
+			this.save();
+		}
 		this.url = `http://127.0.0.1:${port}`;
 		this.spawn(port);
 		await this.ready();
@@ -142,11 +150,7 @@ export class LocalServer {
 		);
 	}
 
-	private async call<R>(
-		path: string,
-		body?: unknown,
-		token?: string,
-	): Promise<{ ok: boolean; status: number; data: R }> {
+	private async call<R>(path: string, body?: unknown, token?: string): Promise<Answer<R>> {
 		const res = await fetch(this.url + path, {
 			method: body === undefined ? "GET" : "POST",
 			headers: {
@@ -165,7 +169,7 @@ export class LocalServer {
 			if (me.ok) return { url: this.url, token: this.saved.token, user: me.data.user };
 		}
 		const info = (await this.call<ServerInfo>("/api/info")).data;
-		let res;
+		let res: Answer<SignedIn>;
 		if (info.firstAccount || !this.saved.email) {
 			// the first start (or its data were removed): the account is made, with a password nobody types
 			this.saved.email = "me@obtion.local";
@@ -184,7 +188,8 @@ export class LocalServer {
 		if (!res.ok) throw new Error(`Could not sign in to the server on this device (${res.status}).`);
 		this.saved.token = res.data.token;
 		this.save();
-		return (this.local = { url: this.url, token: res.data.token, user: res.data.user });
+		this.local = { url: this.url, token: res.data.token, user: res.data.user };
+		return this.local;
 	}
 
 	stop() {

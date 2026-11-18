@@ -53,7 +53,9 @@ async function launch(dir = userData): Promise<{ app: ElectronApplication; page:
 	const page = await app.firstWindow();
 	page.on("pageerror", (e) => errors.push(`page error: ${e.stack ?? e.message}`));
 	page.on("console", (m) => m.type() === "error" && errors.push(`console error: ${m.text()}`));
-	await page.setViewportSize({ width: 1280, height: 820 }).catch(() => {});
+	await page.setViewportSize({ width: 1280, height: 820 }).catch(() => {
+		// the window keeps its size
+	});
 	return { app, page };
 }
 const shot = (page: Page, name: string) => page.screenshot({ path: join(shots, `${name}.png`) });
@@ -62,7 +64,9 @@ const opened = async (page: Page, name: string) => {
 	await page
 		.getByRole("dialog")
 		.waitFor({ state: "hidden", timeout: 30000 })
-		.catch(() => {});
+		.catch(() => {
+			// no dialog (the first workspace): the page below decides
+		});
 	return page
 		.waitForFunction(
 			(n) => {
@@ -168,7 +172,7 @@ try {
 	expect(await opened(page, "Team"), "server workspace: not opened");
 
 	// it is on the server: its account and workspaces, the setup synced there
-	const signIn = await fetch(remote.url + "/api/auth/sign-in/email", {
+	const signIn = await fetch(`${remote.url}/api/auth/sign-in/email`, {
 		method: "POST",
 		headers: { "content-type": "application/json" },
 		body: JSON.stringify({ email: "tim@example.org", password: "geheim12345" }),
@@ -178,7 +182,7 @@ try {
 	expect(!!team, `server: no workspace "Team" (${JSON.stringify(me.workspaces)})`);
 	// more of them, so that removing their copies takes a while (sign-out, below)
 	for (let i = 0; i < 17; i++)
-		await fetch(remote.url + "/api/workspaces", {
+		await fetch(`${remote.url}/api/workspaces`, {
 			method: "POST",
 			headers: { "content-type": "application/json", authorization: `Bearer ${signIn.token}` },
 			body: JSON.stringify({ name: `Extra ${i}` }),
@@ -189,7 +193,7 @@ try {
 		headers: { "content-type": "application/json", authorization: `Bearer ${signIn.token}` },
 		body: "{}",
 	}).then((r) => r.json());
-	await fetch(remote.url + "/api/account/signup", {
+	await fetch(`${remote.url}/api/account/signup`, {
 		method: "POST",
 		headers: { "content-type": "application/json" },
 		body: JSON.stringify({
@@ -236,7 +240,7 @@ try {
 	await pw.getByRole("button", { name: "Passwort ändern" }).click();
 	expect(await visible(page, "Dein Passwort ist geändert"), "password: not changed");
 	await pw.getByText("Schließen", { exact: true }).click();
-	const fresh = await fetch(remote.url + "/api/auth/sign-in/email", {
+	const fresh = await fetch(`${remote.url}/api/auth/sign-in/email`, {
 		method: "POST",
 		headers: { "content-type": "application/json" },
 		body: JSON.stringify({ email: "tim@example.org", password: "anders12345" }),
@@ -325,7 +329,7 @@ try {
 	for (
 		let i = 0;
 		i < 200 &&
-		!(await fetch(remote.url + "/api/info").then(
+		!(await fetch(`${remote.url}/api/info`).then(
 			(r) => r.ok,
 			() => false,
 		));

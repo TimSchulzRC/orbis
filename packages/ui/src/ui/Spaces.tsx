@@ -270,10 +270,10 @@ export function NewSpaceForm({
 	const create = (srv?: string) => {
 		setBusy(true);
 		setError("");
-		return createSpace(name, examples, srv).then(
-			onDone,
-			(err) => (setError(errorText(err, t, "space")), setBusy(false)),
-		);
+		return createSpace(name, examples, srv).then(onDone, (err) => {
+			setError(errorText(err, t, "space"));
+			setBusy(false);
+		});
 	};
 	const submit = () => name.trim() && !busy && void create(where === "server" ? server : undefined);
 	return (
@@ -285,7 +285,11 @@ export function NewSpaceForm({
 					className="mt-1 block bg-surface"
 					id={nameId}
 					onChange={(e) => setName(e.target.value)}
-					onKeyDown={(e) => !connecting && e.key === "Enter" && (e.preventDefault(), submit())}
+					onKeyDown={(e) => {
+						if (connecting || e.key !== "Enter") return;
+						e.preventDefault();
+						submit();
+					}}
 					value={name}
 				/>
 			</label>
@@ -321,7 +325,10 @@ export function NewSpaceForm({
 									where === w ? "border-focus bg-surface" : "border-line hover:bg-hover",
 								)}
 								key={w}
-								onClick={() => (setWhere(w), setError(""))}
+								onClick={() => {
+									setWhere(w);
+									setError("");
+								}}
 								variant="plain"
 							>
 								<p className="text-sm font-medium">

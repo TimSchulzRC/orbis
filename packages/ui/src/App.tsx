@@ -11,7 +11,7 @@ import {
 	Trash2,
 	X,
 } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { serverName, signOut, useAccounts } from "./accounts";
 import { Backdrop, ModalSurface } from "./components/ui/dialog";
 import { DrawingHost } from "./drawing/Drawing";
@@ -46,8 +46,9 @@ import { KEYS } from "./ui/storage";
 import { TitleTips } from "./ui/TitleTips";
 import { Tray } from "./ui/Tray";
 import { AppToaster } from "./ui/toasts";
-import { ConnectServer, Gate } from "./views/Account";
+import { ConnectServer } from "./views/Account";
 import { Activity } from "./views/Activity";
+import { Gate } from "./views/Gate";
 import { GraphView } from "./views/Graph";
 import { ItemPage } from "./views/ItemPage";
 import { FilesPage } from "./views/Lists";
