@@ -28,8 +28,9 @@ import { AlertTriangle, ExternalLink, Plus, X } from "lucide-react";
 import { useState } from "react";
 import { Checkbox } from "../components/ui/checkbox";
 import { NativeSelect } from "../components/ui/native-select";
+import { Tip } from "../components/ui/tooltip";
 import { useIndex } from "../hooks";
-import { useT } from "../i18n";
+import { titleOf, useT } from "../i18n";
 import { cn } from "../lib/utils";
 import { repo } from "../repo";
 import { FreeValueText } from "./FreeProps";
@@ -434,14 +435,20 @@ function RangeField({
 	);
 }
 
+/**
+ * As a `badge` in the head the chips go without the property's name: the tooltip names it, and a
+ * relation without values is no badge (it waits among the empty rows).
+ */
 function RelationField({
 	item,
 	prop,
 	autoOpen,
+	badge,
 }: {
 	item: Item;
 	prop: PropDef;
 	autoOpen?: boolean;
+	badge?: boolean;
 }) {
 	const { t } = useT();
 	const ix = useIndex();
@@ -458,19 +465,26 @@ function RelationField({
 		<>
 			{ids.map((id) => {
 				const related = ix.get(id)!;
-				return (
+				const chip = (
 					<span
-						className="inline-flex max-w-full items-center gap-1 rounded-md bg-surface-2 py-0.5 pl-1.5 pr-0.5 text-xs"
+						className={cn(
+							"inline-flex max-w-full items-center gap-1 rounded-md bg-surface-2 py-0.5 pl-1.5 pr-0.5 text-xs",
+							badge && "h-6",
+						)}
 						key={id}
 					>
-						<ItemLink className="min-w-0" item={related} />
+						<ItemLink className="min-w-0" item={related} prefix={badge ? prop.name : undefined} />
 						{!fits(related) && (
 							<span className="text-warn" title={t("props.notTarget", { target: prop.target })}>
 								<AlertTriangle size={11} />
 							</span>
 						)}
 						<Button
-							aria-label={t("props.removeValue")}
+							aria-label={
+								badge
+									? t("props.removeRel", { name: prop.name, title: titleOf(related, t) })
+									: t("props.removeValue")
+							}
 							className="rounded px-1 text-muted-foreground hover:bg-hover hover:text-fg"
 							onClick={() => remove(id)}
 							variant="plain"
@@ -479,8 +493,25 @@ function RelationField({
 						</Button>
 					</span>
 				);
+				return badge ? (
+					<Tip key={id} label={prop.name}>
+						{chip}
+					</Tip>
+				) : (
+					chip
+				);
 			})}
-			{!ids.length ? (
+			{badge ? (
+				prop.multiple && (
+					<Tip label={t("props.set", { name: prop.name })}>
+						<AddButton
+							aria-label={t("props.set", { name: prop.name })}
+							className="h-6 opacity-0 transition-opacity focus:opacity-100 group-hover/props:opacity-100 pointer-coarse:opacity-100"
+							onClick={() => setPicking(true)}
+						/>
+					</Tip>
+				)
+			) : !ids.length ? (
 				<EmptyValueButton
 					aria-label={t("props.set", { name: prop.name })}
 					onClick={() => setPicking(true)}
@@ -584,10 +615,11 @@ interface PageHead {
 }
 
 /**
- * Status and single selections read as badges by themselves at the top, so they need no label.
- * "Edit type" orders them apart from the rest.
+ * Status, single selections and relations read as badges by themselves at the top, so they need no
+ * label: a selection shows its name in the chip, a relation in the tooltip. "Edit type" orders them
+ * apart from the rest.
  */
-export const isBadge = (p: PropDef) => isSingle(p);
+export const isBadge = (p: PropDef) => isSingle(p) || p.kind === "relation";
 
 /**
  * A page adds no property its type lacks. Those with a value show: the badges in a row at the top,
@@ -634,6 +666,10 @@ export function PropertyBlock({
 					<span className="inline-flex" key={p.id}>
 						{isStatusProp(schema, p) ? (
 							<StatusBadge item={item} />
+						) : p.kind === "relation" ? (
+							<span className="inline-flex flex-wrap items-center gap-1.5">
+								<RelationField badge item={item} prop={p} />
+							</span>
 						) : (
 							<SelectBadge item={item} prop={p} />
 						)}

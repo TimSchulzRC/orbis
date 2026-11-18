@@ -239,15 +239,20 @@ export function Tag({
 	);
 }
 
-/** `draggable={false}` where the link sits in something dragged itself (the browser would drag the link). */
+/**
+ * `draggable={false}` where the link sits in something dragged itself (the browser would drag the link).
+ * `prefix` is read out before the title only ("Project: Fritzmeier"), for a chip without a visible label.
+ */
 export function ItemLink({
 	item,
 	className,
 	draggable,
+	prefix,
 }: {
 	item: Item;
 	className?: string;
 	draggable?: boolean;
+	prefix?: string;
 }) {
 	const { t } = useT();
 	const hrefOf = useItemHref();
@@ -257,6 +262,7 @@ export function ItemLink({
 			draggable={draggable}
 			href={hrefOf(item.id)}
 		>
+			{prefix && <span className="sr-only">{prefix}: </span>}
 			<ItemIcon item={item} size={14} />
 			<span className="truncate">{titleOf(item, t)}</span>
 		</a>

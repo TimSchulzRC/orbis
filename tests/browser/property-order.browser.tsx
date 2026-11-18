@@ -1,5 +1,5 @@
 // A page shows its type's properties in the order "Typ bearbeiten" gives them: the badges (status,
-// single selections) in a row at the top, everything else (dates too) as rows below, each in order.
+// single selections, relations with a value) in a row at the top, everything else (dates too) as rows below, each in order.
 // Empty ones wait at the very bottom behind a quiet "Mehr"; open, "Weniger" sits below all of them, in that order too.
 
 import { upsertProp } from "@obtion/core/model";
@@ -25,8 +25,8 @@ const rows = () =>
 	[...document.querySelectorAll(".group\\/props .grid > div.truncate")].map((e) => e.textContent);
 /** The badges' text, left to right ("Backlog", "Priorität"). */
 const badges = () =>
-	[...document.querySelectorAll(".group\\/props > div:first-child > span.inline-flex")].map(
-		(e) => e.textContent,
+	[...document.querySelectorAll(".group\\/props > div:first-child > span.inline-flex")].map((e) =>
+		e.textContent?.trim(),
 	);
 
 async function setup() {
@@ -129,4 +129,21 @@ test("the other side of a relation is no row: what points here stays on the poin
 	repo.setRel(other, BLOCKED_BY, id, true);
 	await expect.poll(() => repo.index().backlinks(id).length).toBe(1);
 	await expect.poll(order).toEqual(["[Mehr]"]);
+});
+
+test("a relation with a value is a chip at the top, its name in the tooltip instead of a row", async () => {
+	const { repo, id } = await setup();
+	const other = repo.create({ title: "Login", type: SYS.project });
+	repo.setRel(id, BLOCKED_BY, other, true);
+	await expect.poll(badges).toEqual(["Backlog", "Blockiert durch: Login"]);
+	await expect.poll(rows).toEqual([]);
+	// a screen reader hears the name with the link
+	expect(document.querySelector(".group\\/props a")?.textContent).toBe("Blockiert durch: Login");
+	await page.getByText("Login", { exact: true }).hover();
+	await expect.element(page.getByRole("tooltip", { name: "Blockiert durch" })).toBeVisible();
+	// removed, it waits among the empty rows again
+	await page.getByRole("button", { name: "Login aus Blockiert durch entfernen" }).click();
+	await expect.poll(badges).toEqual(["Backlog"]);
+	await more().click();
+	await expect.poll(rows).toContain("Blockiert durch");
 });

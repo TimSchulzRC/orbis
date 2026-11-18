@@ -113,19 +113,14 @@ test("the badges and the rows below are two cards, each sorted on its own", asyn
 		)!;
 	const names = (title: string) =>
 		[...card(title).querySelectorAll("[draggable] .font-medium")].map((e) => e.textContent);
-	expect(names("Oben als Badges")).toEqual(["Status", "Priorität"]);
-	expect(names("Darunter als Zeilen")).toEqual([
-		"Zeitraum",
-		"Zusammenfassung",
-		"Fortschritt",
-		"Blockiert durch",
-	]);
+	expect(names("Oben als Badges")).toEqual(["Status", "Priorität", "Blockiert durch"]);
+	expect(names("Darunter als Zeilen")).toEqual(["Zeitraum", "Zusammenfassung", "Fortschritt"]);
 	// the last badge has no step down into the rows
 	const down = card("Oben als Badges").querySelectorAll('button[aria-label="Nach unten"]');
-	expect((down[1] as HTMLButtonElement).disabled).toBe(true);
+	expect((down[2] as HTMLButtonElement).disabled).toBe(true);
 	// a selection made multiple leaves the badges
 	repo.change(SYS.project, (d) => upsertProp(d, "p_priority", { multiple: true }));
-	await expect.poll(() => names("Oben als Badges")).toEqual(["Status"]);
+	await expect.poll(() => names("Oben als Badges")).toEqual(["Status", "Blockiert durch"]);
 	expect(schema().properties.some((p) => p.id === "p_priority")).toBe(true);
 });
 
