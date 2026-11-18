@@ -4,7 +4,7 @@
 import { fmtBytes, fmtDateTime } from "@obtion/core/i18n";
 import { META_TYPE } from "@obtion/core/model";
 import type { Repo } from "@obtion/sync";
-import { router, Stack, useLocalSearchParams } from "expo-router";
+import { router, Stack, useIsPreview, useLocalSearchParams } from "expo-router";
 import { useHeaderHeight } from "expo-router/react-navigation";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -33,6 +33,8 @@ export default function ItemPage() {
 	const { space, id, edit } = useLocalSearchParams<{ space: string; id: string; edit?: string }>();
 	const repo = useRepo(space);
 	const tab = useTab();
+	// the page as a long press preview: no title or toolbar to set (it would change the list's)
+	const preview = useIsPreview();
 	const [editing, setEditing] = useState(edit === "1");
 	const [scrolled, setScrolled] = useState(false);
 	const ix = repo.index();
@@ -55,76 +57,80 @@ export default function ItemPage() {
 	const isType = item.type === META_TYPE;
 	return (
 		<>
-			<Stack.Screen options={{ title: scrolled ? titleOf(item) : "" }} />
-			<Stack.Toolbar placement="right">
-				{item.kind === "note" && !isType && (
-					<Stack.Toolbar.Button icon="square.and.pencil" onPress={() => setEditing(true)}>
-						{t("mobile.editText")}
-					</Stack.Toolbar.Button>
-				)}
-				<Stack.Toolbar.Menu icon="ellipsis">
-					{item.kind === "note" && !isType && (
-						<Stack.Toolbar.Menu icon="tag" title={t("triage.type")}>
+			{!preview && (
+				<>
+					<Stack.Screen options={{ title: scrolled ? titleOf(item) : "" }} />
+					<Stack.Toolbar placement="right">
+						{item.kind === "note" && !isType && (
+							<Stack.Toolbar.Button icon="square.and.pencil" onPress={() => setEditing(true)}>
+								{t("mobile.editText")}
+							</Stack.Toolbar.Button>
+						)}
+						<Stack.Toolbar.Menu icon="ellipsis">
+							{item.kind === "note" && !isType && (
+								<Stack.Toolbar.Menu icon="tag" title={t("triage.type")}>
+									<Stack.Toolbar.MenuAction
+										icon="doc.text"
+										isOn={!item.type}
+										onPress={() => repo.ownStep(() => repo.setType(item.id, null))}
+									>
+										{t("kind.note")}
+									</Stack.Toolbar.MenuAction>
+									{types.map((type) => (
+										<Stack.Toolbar.MenuAction
+											icon={typeSymbol(type.schema)}
+											isOn={item.type === type.id}
+											key={type.id}
+											onPress={() => repo.ownStep(() => repo.setType(item.id, type.id))}
+										>
+											{type.schema.name}
+										</Stack.Toolbar.MenuAction>
+									))}
+								</Stack.Toolbar.Menu>
+							)}
 							<Stack.Toolbar.MenuAction
-								icon="doc.text"
-								isOn={!item.type}
-								onPress={() => repo.ownStep(() => repo.setType(item.id, null))}
+								icon="folder"
+								onPress={() => router.push({ pathname: "/place", params: { space, id } })}
 							>
-								{t("kind.note")}
+								{t("triage.place")}
 							</Stack.Toolbar.MenuAction>
-							{types.map((type) => (
+							<Stack.Toolbar.MenuAction
+								icon={item.pinned ? "pin.slash" : "pin"}
+								onPress={() => repo.ownStep(() => repo.pin(item.id, !item.pinned))}
+							>
+								{item.pinned ? t("item.unpin") : t("item.pin")}
+							</Stack.Toolbar.MenuAction>
+							{isType && (
 								<Stack.Toolbar.MenuAction
-									icon={typeSymbol(type.schema)}
-									isOn={item.type === type.id}
-									key={type.id}
-									onPress={() => repo.ownStep(() => repo.setType(item.id, type.id))}
+									icon="list.bullet"
+									onPress={() => router.push(typeHref(tab, space, item.id))}
 								>
-									{type.schema.name}
+									{ix.typePlural(item.id)}
 								</Stack.Toolbar.MenuAction>
-							))}
+							)}
+							<Stack.Toolbar.MenuAction
+								icon="square.and.arrow.up"
+								onPress={() =>
+									void Share.share({
+										message: [titleOf(item), item.body.trim()].filter(Boolean).join("\n\n"),
+									})
+								}
+							>
+								{t("mobile.share")}
+							</Stack.Toolbar.MenuAction>
+							{!item.deleted && (
+								<Stack.Toolbar.MenuAction
+									destructive
+									icon="trash"
+									onPress={() => confirmDelete(repo, item, () => router.back())}
+								>
+									{t("item.delete")}
+								</Stack.Toolbar.MenuAction>
+							)}
 						</Stack.Toolbar.Menu>
-					)}
-					<Stack.Toolbar.MenuAction
-						icon="folder"
-						onPress={() => router.push({ pathname: "/place", params: { space, id } })}
-					>
-						{t("triage.place")}
-					</Stack.Toolbar.MenuAction>
-					<Stack.Toolbar.MenuAction
-						icon={item.pinned ? "pin.slash" : "pin"}
-						onPress={() => repo.ownStep(() => repo.pin(item.id, !item.pinned))}
-					>
-						{item.pinned ? t("item.unpin") : t("item.pin")}
-					</Stack.Toolbar.MenuAction>
-					{isType && (
-						<Stack.Toolbar.MenuAction
-							icon="list.bullet"
-							onPress={() => router.push(typeHref(tab, space, item.id))}
-						>
-							{ix.typePlural(item.id)}
-						</Stack.Toolbar.MenuAction>
-					)}
-					<Stack.Toolbar.MenuAction
-						icon="square.and.arrow.up"
-						onPress={() =>
-							void Share.share({
-								message: [titleOf(item), item.body.trim()].filter(Boolean).join("\n\n"),
-							})
-						}
-					>
-						{t("mobile.share")}
-					</Stack.Toolbar.MenuAction>
-					{!item.deleted && (
-						<Stack.Toolbar.MenuAction
-							destructive
-							icon="trash"
-							onPress={() => confirmDelete(repo, item, () => router.back())}
-						>
-							{t("item.delete")}
-						</Stack.Toolbar.MenuAction>
-					)}
-				</Stack.Toolbar.Menu>
-			</Stack.Toolbar>
+					</Stack.Toolbar>
+				</>
+			)}
 			<Screen
 				automaticallyAdjustKeyboardInsets
 				onScroll={(e) => setScrolled(e.nativeEvent.contentOffset.y > 40)}
@@ -160,7 +166,7 @@ export default function ItemPage() {
 						{item.body.trim() ? (
 							<Markdown body={item.body} item={item} ix={ix} repo={repo} space={space} tab={tab} />
 						) : (
-							!isType && <Text style={styles.placeholder}>{t("mobile.writeHere")}</Text>
+							!isType && !preview && <Text style={styles.placeholder}>{t("mobile.writeHere")}</Text>
 						)}
 					</Pressable>
 				)}
