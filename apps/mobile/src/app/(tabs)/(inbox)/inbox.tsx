@@ -52,7 +52,6 @@ export default function Inbox() {
 						};
 						return (
 							<ItemRow
-								detail={fmtRelative(lang, item.created)}
 								item={item}
 								ix={ix}
 								key={`${space.info.id}/${item.id}`}
@@ -89,7 +88,9 @@ export default function Inbox() {
 								}
 								repo={repo}
 								space={space.info.id}
-								subtitle={[several ? space.info.name : "", text].filter(Boolean).join(" · ")}
+								subtitle={[fmtRelative(lang, item.created), several ? space.info.name : "", text]
+									.filter(Boolean)
+									.join(" · ")}
 							/>
 						);
 					})}
