@@ -8,7 +8,12 @@
 		"allowImportingTsExtensions": true,
 		"paths": {
 			"@obtion/core/*": ["../../packages/core/src/*"],
-			"@obtion/sync": ["../../packages/sync/src/repo.ts"]
+			"@obtion/sync": ["../../packages/sync/src/repo.ts"],
+			// what the shared packages import comes from this app, as in metro.config.js
+			"diff": ["./node_modules/diff"],
+			"intl-messageformat": ["./node_modules/intl-messageformat"],
+			"minisearch": ["./node_modules/minisearch"],
+			"yjs": ["./node_modules/yjs"]
 		}
 	},
 	"include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts"],
