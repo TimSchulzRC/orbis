@@ -65,6 +65,9 @@ export function createIndex() {
 	return new MiniSearch<Item>({
 		fields: ["title", "tagText", "body", "props"],
 		storeFields: ["id"],
+		// Clean up discarded documents in one go: MiniSearch otherwise pauses between batches and
+		// crashes (child.keys of undefined) when an add in a pause reshapes the tree it walks.
+		autoVacuum: { batchSize: Number.POSITIVE_INFINITY },
 		tokenize: tokenizeForIndex,
 		processTerm: (term) => {
 			const a = foldTerm(term);

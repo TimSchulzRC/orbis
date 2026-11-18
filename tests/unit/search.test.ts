@@ -206,3 +206,37 @@ test("excerpts look for words where they start, and for what a prefix or fuzzy s
 	expect(e.heading).toBe("Work");
 	expect(e.text).toContain("mapping is done");
 });
+
+test("re-indexing while the index cleans up after itself does not crash", async () => {
+	const m = new MemRepo();
+	const idx = createIndex();
+	// short words of varying length, so adding them reshapes the term tree the clean-up walks
+	let seed = 1;
+	const rand = () => {
+		seed = (seed * 16807) % 2147483647;
+		return seed / 2147483647;
+	};
+	const words = () =>
+		Array.from({ length: 20 }, () =>
+			rand()
+				.toString(36)
+				.slice(2, 3 + Math.floor(rand() * 6)),
+		).join(" ");
+	const ids = Array.from({ length: 1000 }, () => m.add({ title: words(), body: words() }));
+	for (const id of ids) indexRecord(idx, m.get(id)!);
+	const errors: unknown[] = [];
+	const onError = (e: unknown) => errors.push(e);
+	process.on("unhandledRejection", onError);
+	try {
+		for (let round = 0; round < 4; round++) {
+			for (const id of ids.slice(round * 300, round * 300 + 300))
+				indexRecord(idx, { ...m.get(id)!, body: words() });
+			await new Promise((r) => setTimeout(r, 0));
+		}
+		await idx.vacuum({ batchSize: Number.POSITIVE_INFINITY });
+	} finally {
+		process.off("unhandledRejection", onError);
+	}
+	expect(errors).toEqual([]);
+	expect(idx.documentCount).toBe(1000);
+}, 15_000);
