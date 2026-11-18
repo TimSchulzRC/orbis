@@ -6,6 +6,7 @@ import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, normalize, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { app, BrowserWindow, ipcMain, nativeTheme, net, protocol, shell } from "electron";
+import { iconPath } from "../../server/src/icons";
 import { LocalServer } from "./local";
 
 const SCHEME = "obtion";
@@ -36,6 +37,8 @@ const lang = () => (app.getLocale().startsWith("de") ? "de" : "en");
 /** dist/ of apps/desktop, inside the packaged app's archive or not. */
 const here = join(app.getAppPath(), "dist");
 const renderer = join(here, "renderer");
+/** The build version, the way the server takes it (OBTION_BUILD_VERSION): "dev" outside a package. */
+const version = app.isPackaged ? app.getVersion() : "dev";
 const exe = process.platform === "win32" ? "obtion-server.exe" : "obtion-server";
 const server = new LocalServer(
 	join(userData, "server"),
@@ -43,14 +46,18 @@ const server = new LocalServer(
 		? { cmd: join(process.resourcesPath, "server", exe), args: [] }
 		: { cmd: process.env.BUN ?? "bun", args: [join(app.getAppPath(), "../server/src/index.ts")] },
 	{
-		OBTION_BUILD_VERSION: app.isPackaged ? app.getVersion() : "dev",
+		OBTION_BUILD_VERSION: version,
 		...(DEV_URL ? { OBTION_APP_ORIGINS: new URL(DEV_URL).origin } : {}),
 	},
 );
 
-/** The app's files for obtion://app/<path>; every other path is the app itself (index.html). */
+/**
+ * The app's files for obtion://app/<path>; every other path is the app itself (index.html).
+ * /icon.svg & co. in the colour of this version's channel, like the server answers them.
+ */
 function serve(req: Request): Promise<Response> {
-	const path = normalize(join(renderer, decodeURIComponent(new URL(req.url).pathname)));
+	const asked = iconPath(decodeURIComponent(new URL(req.url).pathname), version);
+	const path = normalize(join(renderer, asked));
 	const inside = path.startsWith(renderer + sep) && existsSync(path) && statSync(path).isFile();
 	return net.fetch(pathToFileURL(inside ? path : join(renderer, "index.html")).toString());
 }
