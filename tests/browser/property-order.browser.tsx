@@ -3,7 +3,7 @@
 // Empty ones wait at the very bottom behind a quiet "Mehr"; open, "Weniger" sits below all of them, in that order too.
 
 import { upsertProp } from "@obtion/core/model";
-import { SYS } from "@obtion/core/setup";
+import { BLOCKED_BY, SYS } from "@obtion/core/setup";
 import { keyBetween } from "@obtion/core/sortkey";
 import { afterEach, expect, test } from "vitest";
 import { page } from "vitest/browser";
@@ -121,4 +121,12 @@ test("a date range filled in below the toggle keeps its editor open for the end"
 	await page.getByRole("textbox", { name: "Start" }).click();
 	await expect.poll(() => repo.get(id)!.props.p_period).toBe("2026-11-01/2026-11-30");
 	await expect.poll(rows).toEqual(["Zeitraum", "Zusammenfassung", "Priorität", "Blockiert durch"]);
+});
+
+test("the other side of a relation is no row: what points here stays on the pointing page", async () => {
+	const { repo, id } = await setup();
+	const other = repo.create({ title: "Shop", type: SYS.project });
+	repo.setRel(other, BLOCKED_BY, id, true);
+	await expect.poll(() => repo.index().backlinks(id).length).toBe(1);
+	await expect.poll(order).toEqual(["[Mehr]"]);
 });

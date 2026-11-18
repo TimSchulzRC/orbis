@@ -551,7 +551,6 @@
 	"props.doneOn": "on {date}",
 	"props.empty": "–",
 	"props.end": "End",
-	"props.inverse": "{prop} (from {type})",
 	"props.kind": "Kind",
 	"props.more": "More properties",
 	"props.name": "Name",
