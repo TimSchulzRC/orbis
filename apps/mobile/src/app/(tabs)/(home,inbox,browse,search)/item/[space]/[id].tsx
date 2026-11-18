@@ -5,8 +5,18 @@ import { fmtBytes, fmtDateTime } from "@obtion/core/i18n";
 import { META_TYPE } from "@obtion/core/model";
 import type { Repo } from "@obtion/sync";
 import { router, Stack, useLocalSearchParams } from "expo-router";
+import { useHeaderHeight } from "expo-router/react-navigation";
 import { useEffect, useRef, useState } from "react";
-import { Pressable, Share, StyleSheet, Text, TextInput, View } from "react-native";
+import {
+	KeyboardAvoidingView,
+	Pressable,
+	Share,
+	StyleSheet,
+	Text,
+	TextInput,
+	View,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRepo } from "../../../../../lib/hooks";
 import { lang, t, titleOf } from "../../../../../lib/i18n";
 import { confirmDelete, typeHref, useTab } from "../../../../../ui/item";
@@ -235,6 +245,8 @@ function BodyEditor({ id, repo, onDone }: { id: string; repo: Repo; onDone: () =
 		save(text);
 		onDone();
 	};
+	const top = useHeaderHeight();
+	const { bottom } = useSafeAreaInsets();
 	return (
 		<>
 			<Stack.Screen options={{ title: item ? titleOf(item) : "" }} />
@@ -243,7 +255,9 @@ function BodyEditor({ id, repo, onDone }: { id: string; repo: Repo; onDone: () =
 					{t("mobile.done")}
 				</Stack.Toolbar.Button>
 			</Stack.Toolbar>
-			<Screen automaticallyAdjustKeyboardInsets style={styles.editor}>
+			{/* The text view scrolls itself and keeps the caret in view, as in Notes. In a ScrollView
+			    with keyboard insets the focus pushed the text up under the navigation bar. */}
+			<KeyboardAvoidingView behavior="padding" style={styles.editor}>
 				<TextInput
 					autoFocus
 					multiline
@@ -254,11 +268,10 @@ function BodyEditor({ id, repo, onDone }: { id: string; repo: Repo; onDone: () =
 					}}
 					placeholder={t("mobile.writeHere")}
 					placeholderTextColor={C.placeholder}
-					scrollEnabled={false}
-					style={styles.editorInput}
+					style={[styles.editorInput, { paddingTop: top + 8, paddingBottom: bottom + 24 }]}
 					value={text}
 				/>
-			</Screen>
+			</KeyboardAvoidingView>
 		</>
 	);
 }
@@ -277,13 +290,12 @@ const styles = StyleSheet.create({
 		marginTop: 28,
 		textAlign: "center",
 	},
-	editor: { backgroundColor: C.plain },
+	editor: { backgroundColor: C.plain, flex: 1 },
 	editorInput: {
 		color: C.label,
+		flex: 1,
 		fontSize: 17,
 		lineHeight: 25,
-		minHeight: 400,
 		paddingHorizontal: GUTTER + 4,
-		paddingTop: 8,
 	},
 });
