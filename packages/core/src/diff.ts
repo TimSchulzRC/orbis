@@ -127,12 +127,21 @@ interface Edit {
 	lines: string[];
 }
 
-/** The changes that turn `base` into `other`, each on its own range of base lines. */
-function editsOf(base: string[], other: string[]): Edit[] {
+/** How long a merge may diff: past that (huge rewrites) the draft is kept as it is. */
+const MERGE_MS = 250;
+
+/**
+ * The changes that turn `base` into `other`, each on its own range of base lines. A block of lines
+ * changed one for one is one change per line, so a clash on one of them leaves the others. undefined
+ * when the diff takes too long.
+ */
+function editsOf(base: string[], other: string[]): Edit[] | undefined {
+	const parts = diffArrays(base, other, { timeout: MERGE_MS });
+	if (!parts) return undefined;
 	const out: Edit[] = [];
 	let at = 0;
 	let open: Edit | undefined; // the edit a removal and an addition next to each other share
-	for (const part of diffArrays(base, other)) {
+	for (const part of parts) {
 		if (!part.added && !part.removed) {
 			at += part.count;
 			open = undefined;
@@ -148,7 +157,11 @@ function editsOf(base: string[], other: string[]): Edit[] {
 			open.end = at;
 		}
 	}
-	return out;
+	return out.flatMap((e) =>
+		e.end - e.start > 1 && e.end - e.start === e.lines.length
+			? e.lines.map((line, i) => ({ start: e.start + i, end: e.start + i + 1, lines: [line] }))
+			: [e],
+	);
 }
 
 /** Two edits that touch the same base lines, or insert at the same place. */
@@ -166,7 +179,9 @@ export function mergeText(base: string, draft: string, current: string): string 
 	if (draft === base) return current;
 	const lines = base.split("\n");
 	const theirs = editsOf(lines, current.split("\n"));
-	const mine = editsOf(lines, draft.split("\n")).filter((m) => !theirs.some((t) => clash(m, t)));
+	const drafted = editsOf(lines, draft.split("\n"));
+	if (!theirs || !drafted) return draft; // too big to merge in time: the text on screen stays
+	const mine = drafted.filter((m) => !theirs.some((t) => clash(m, t)));
 	// in base order; an insertion before a change that starts at the same line
 	const all = [...theirs, ...mine].sort(
 		(a, b) => a.start - b.start || a.end - a.start - (b.end - b.start),
