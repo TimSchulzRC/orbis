@@ -42,9 +42,24 @@ export const useDraftKey = () => {
 	return space && id ? entryKey(space, id) : undefined;
 };
 
-/** A new empty note in the inbox, open in the panel (in workspace `space`, else the one notes go to). */
+/**
+ * A new empty note in the inbox, open in the panel (in workspace `space`, else the one notes go to).
+ * One still empty is taken again, the caret back in its title, so clicking twice makes no second.
+ */
 export function newNote(space = captureSpace()) {
 	if (!space) return;
+	const open = draft.get();
+	if (open.space === space && open.id) {
+		const repo = replica(space).repo;
+		const item = repo.get(open.id);
+		if (item && !item.deleted && isBlank(item, repo.index())) {
+			openShelf(entryKey(space, open.id));
+			requestAnimationFrame(() =>
+				document.querySelector<HTMLElement>("[data-shelf-panel] article textarea")?.focus(),
+			);
+			return;
+		}
+	}
 	dropDraft();
 	const id = replica(space).repo.create({ title: "", type: null, parents: [] });
 	draft.set({ space, id });

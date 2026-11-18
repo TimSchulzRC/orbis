@@ -74,3 +74,21 @@ test('the "+" in the inbox\'s head starts a new note; on to another entry, the e
 	await expect.element(titleField()).not.toHaveValue("");
 	await expect.poll(() => repo.live().length).toBe(before);
 });
+
+test("clicked again while the new note is still empty, the same note stays open", async () => {
+	const before = repo.live().length;
+	await open();
+	const shown = () => document.querySelector("[data-row]")?.getAttribute("data-row");
+	const first = shown();
+	// the tray's button, then the one in the inbox's head
+	await page.getByRole("button", { name: "Neue Notiz" }).last().click();
+	await panel().getByRole("button", { name: "Neue Notiz" }).click();
+	await expect.element(titleField()).toHaveFocus();
+	expect(shown()).toBe(first);
+	expect(repo.live().length).toBe(before + 1);
+	// written in, the next click starts another
+	await commands.keys("type", "First");
+	await panel().getByRole("button", { name: "Neue Notiz" }).click();
+	await expect.element(titleField()).toHaveValue("");
+	expect(repo.live().length).toBe(before + 2);
+});
