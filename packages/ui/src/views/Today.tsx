@@ -1,4 +1,4 @@
-// "Today", the start page, across every workspace seen. Empty sections are left out.
+// "Home", the start page, across every workspace seen. Empty sections are left out.
 
 import { fmtDate } from "@obtion/core/i18n";
 import { type Item, SETTINGS_ID, todayISO } from "@obtion/core/model";
@@ -9,11 +9,10 @@ import { useAccounts } from "../accounts";
 import { useDesktop, useDocumentTitle, useIndex, useItemHref } from "../hooks";
 import { titleOf, useT } from "../i18n";
 import { cn } from "../lib/utils";
-import { openShelf, useInboxItems, useShelfPinned } from "../ui/inbox";
+import { openShelf, useInboxItems } from "../ui/inbox";
 import { DueLabel, ItemIcon, itemLook, kindLabel, pal, RelTime } from "../ui/item-look";
 import { Card, SectionTitle } from "../ui/primitives";
 import { RowStatus } from "../ui/Row";
-import { ShelfCards } from "../ui/Shelf";
 import { SpaceScope, useReplicas } from "../ui/Spaces";
 
 /** Entries each section shows at most. */
@@ -37,11 +36,9 @@ export function Today() {
 	const desktop = useDesktop();
 	const { shown, account } = useAccounts();
 	const repos = useReplicas(shown.map((s) => s.id));
-	const entries = useInboxItems();
-	const inbox = entries.length;
-	const pinned = useShelfPinned();
+	const inbox = useInboxItems().length;
 	const today = todayISO();
-	useDocumentTitle(t("nav.today"));
+	useDocumentTitle(t("nav.home"));
 	// each workspace's part, then one list of all
 	const perSpace = shown.map((s, n) => ({
 		space: s.id,
@@ -59,12 +56,10 @@ export function Today() {
 
 	const part = dayPart(new Date().getHours());
 	const name = account?.user.name.trim().split(/\s+/)[0];
-	// the inbox count, amber as the tray, opens the tray's panel – pinned open below it is there already,
-	// the count is no link then: the sentence around it comes in two parts
+	// the inbox count, amber as the tray, opens the tray's panel: the sentence around it comes in two parts
 	const [before, after] = t("today.inbox", { count: inbox, n: "\u0000" }).split("\u0000");
 	return (
-		// on a desktop the open panel follows right below
-		<div className="page-wide" style={desktop ? { paddingBottom: 24 } : undefined}>
+		<div className="page-wide">
 			<p className="flex items-center gap-2 text-sm text-muted-foreground">
 				<Sun size={15} /> {fmtDate(lang, today, { weekday: "long", day: "numeric", month: "long" })}
 			</p>
@@ -77,25 +72,19 @@ export function Today() {
 				{inbox ? (
 					<>
 						{before}
-						{pinned ? (
-							<span className="font-medium text-warn">{t("today.entries", { count: inbox })}</span>
-						) : (
-							<button
-								className="cursor-pointer font-medium text-warn hover:underline"
-								onClick={() => openShelf()}
-								type="button"
-							>
-								{t("today.entries", { count: inbox })}
-							</button>
-						)}
+						<button
+							className="cursor-pointer font-medium text-warn hover:underline"
+							onClick={() => openShelf()}
+							type="button"
+						>
+							{t("today.entries", { count: inbox })}
+						</button>
 						{after}
 					</>
 				) : (
 					t("today.inboxEmpty")
 				)}
 			</p>
-			{/* the panel not pinned below (too little room): the newest entries, a way into it */}
-			{desktop && !pinned && inbox > 0 && <ShelfCards entries={entries} />}
 
 			<div
 				className={cn(

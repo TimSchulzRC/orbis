@@ -1,6 +1,6 @@
 // The inbox panel's list (left of the entry on a desktop, the panel itself on a phone): what waits,
 // what was sorted with its undo (kept until cleared), and folded below what comes back tomorrow ("Back tomorrow").
-// Also the newest entries as cards on Heute, and the rule of what lands in the inbox.
+// Also the rule of what lands in the inbox.
 
 import { sameValue } from "@obtion/core/equal";
 import { fmtBytes, type Lang, type T } from "@obtion/core/i18n";
@@ -12,7 +12,6 @@ import { plainText } from "@obtion/core/search";
 import { resetInbox } from "@obtion/core/setup";
 import type { Repo } from "@obtion/sync";
 import {
-	ArrowUp,
 	Check,
 	ChevronDown,
 	ChevronRight,
@@ -30,7 +29,7 @@ import { itemPath, spaceHref, useRepo } from "../hooks";
 import { titleOf, useT } from "../i18n";
 import { cn } from "../lib/utils";
 import { notify } from "./feedback";
-import { type InboxEntry, newNote, openShelf } from "./inbox";
+import { type InboxEntry, newNote } from "./inbox";
 import { ItemIcon, RelTime } from "./item-look";
 import { Button, Dialog, DraftBar, IconButton, MenuItem, MoreMenu } from "./primitives";
 import { QueryEditor } from "./QueryEditor";
@@ -232,52 +231,6 @@ export function InboxList({
 				</SpaceScope>
 			)}
 		</>
-	);
-}
-
-/** The newest entries side by side, as on Today: a card opens the panel at it, "See all" at the list. */
-export function ShelfCards({ entries }: { entries: InboxEntry[] }) {
-	const { t, lang } = useT();
-	const { shown } = useAccounts();
-	return (
-		<section className="mt-9" data-shelf-cards>
-			<div className="mb-2.5 flex min-h-8 items-center gap-2">
-				<h2 className="text-[15px] font-semibold leading-[22px]">
-					{t("tray.title")} <span className="tabular-nums text-warn">{entries.length}</span>
-				</h2>
-				<span className="flex-1" />
-				<Button
-					className="tap-y inline-flex items-center gap-1 rounded-md px-1.5 text-[13px] text-muted-foreground hover:text-fg"
-					onClick={() => openShelf()}
-					variant="plain"
-				>
-					{t("tray.showAll")} <ArrowUp size={14} />
-				</Button>
-			</div>
-			<div className="grid grid-cols-2 gap-3 @3xl:grid-cols-4">
-				{entries.slice(0, 4).map((e) => {
-					const ix = replica(e.space).repo.index();
-					const line = preview(e, t, lang, belowOf(e.item.id, ix).length);
-					return (
-						<Button
-							aria-label={t("tray.openEntry", { title: titleOf(e.item, t) })}
-							className="flex min-w-0 flex-col items-stretch gap-1 rounded-xl border border-[color-mix(in_srgb,var(--t-inbox)_35%,var(--border))] bg-surface px-4 py-3 text-left hover:bg-hover"
-							key={e.key}
-							onClick={() => openShelf(e.key)}
-							variant="plain"
-						>
-							<span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-								<ItemIcon item={e.item} ix={ix} size={13} />
-								<RelTime ts={e.item.created} />
-								{shown.length > 1 && <span className="truncate">· {spaceById(e.space)?.name}</span>}
-							</span>
-							<span className="truncate text-[15px] font-semibold">{titleOf(e.item, t)}</span>
-							<span className="truncate text-xs text-muted-foreground">{line || "\u00a0"}</span>
-						</Button>
-					);
-				})}
-			</div>
-		</section>
 	);
 }
 

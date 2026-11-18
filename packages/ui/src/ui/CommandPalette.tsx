@@ -55,7 +55,7 @@ export function CommandPalette({
 	const several = shown.length > 1;
 	const nameOf = (space: string) => shown.find((s) => s.id === space)?.name ?? "";
 	const navs = [
-		[t("nav.today"), "#/"],
+		[t("nav.home"), "#/"],
 		[t("nav.inbox"), "#/inbox"],
 		...shown.flatMap((s, n) => {
 			const ix = repos[n]!.index();

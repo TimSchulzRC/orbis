@@ -1,17 +1,17 @@
 import { SETTINGS_ID } from "@obtion/core/model";
 import {
 	History,
+	House,
 	Inbox,
 	Menu,
 	PanelLeftClose,
 	PanelLeftOpen,
 	Search,
 	SlidersHorizontal,
-	Sun,
 	Trash2,
 	X,
 } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { signOut, useAccounts } from "./accounts";
 import { Backdrop, ModalSurface } from "./components/ui/dialog";
 import { DrawingHost } from "./drawing/Drawing";
@@ -35,7 +35,7 @@ import { PageBoundary } from "./ui/ErrorBoundary";
 import { ConfirmHost } from "./ui/feedback";
 import { HistoryButtons } from "./ui/HistoryButtons";
 import { ICON } from "./ui/icons";
-import { setShelfPinned, syncShelf, useInboxItems, useShelf } from "./ui/inbox";
+import { syncShelf, useInboxItems, useShelf } from "./ui/inbox";
 import { LightboxHost } from "./ui/Lightbox";
 import { Button, IconButton, PagePlaceholder } from "./ui/primitives";
 import { Sidebar, SpaceTree } from "./ui/Sidebar";
@@ -177,7 +177,7 @@ function Main() {
 			case undefined:
 			case "inbox":
 			case "review":
-				// "#/inbox": Heute, with the tray's panel open (above); "#/review": with it open to sort
+				// "#/inbox": Home, with the tray's panel open (above); "#/review": with it open to sort
 				return <Today />;
 			case "files":
 				return <FilesPage />;
@@ -201,17 +201,6 @@ function Main() {
 	})();
 	const isGraph = route.parts[0] === "graph";
 	const tray = !!settings;
-	const column = useRef<HTMLDivElement>(null);
-	const main = useRef<HTMLElement>(null);
-	const pinned = useRoom(
-		tray &&
-			wide &&
-			(route.parts[0] === undefined || route.parts[0] === "inbox" || route.parts[0] === "review"),
-		column,
-		main,
-		route.path,
-	);
-	useEffect(() => void setShelfPinned(pinned), [pinned]);
 
 	return (
 		<div className="flex h-full">
@@ -224,14 +213,14 @@ function Main() {
 			</Button>
 			{wide && sidebar && <Sidebar onSearch={() => setPalette("")} />}
 
-			<div className="flex min-w-0 flex-1 flex-col" data-column ref={column}>
+			<div className="flex min-w-0 flex-1 flex-col" data-column>
 				{!wide && (
 					// iOS 26 blurs the top edge of an installed app unless a sticky, opaque, full-width box covers it
 					<header className="sticky top-0 flex items-center gap-2 border-b border-line bg-bg px-3 pb-2 pt-[calc(0.5rem+env(safe-area-inset-top))]">
 						{/* only back: the bar has no room for both, and a phone has no toolbar for it */}
 						<HistoryButtons />
 						<a
-							aria-label={t("nav.today")}
+							aria-label={t("nav.home")}
 							className="tap flex items-center justify-center gap-2"
 							href="#/"
 						>
@@ -271,15 +260,12 @@ function Main() {
 						<HistoryButtons forward />
 					</div>
 				)}
-				{/* pinned: main is only as tall as Today, the panel takes the rest */}
 				<main
 					className={cn(
-						"@container min-h-0 outline-none",
-						pinned ? "flex-initial" : "flex-1",
+						"@container min-h-0 flex-1 outline-none",
 						isGraph ? "overflow-hidden" : "overflow-y-auto",
-						tray && wide && !pinned && !isGraph && "pb-24",
+						tray && wide && !isGraph && "pb-24",
 					)}
-					ref={main}
 					tabIndex={-1}
 				>
 					{/* keyed by workspace so a switch remounts the page on the other replica */}
@@ -289,7 +275,7 @@ function Main() {
 						{page}
 					</PageBoundary>
 				</main>
-				{tray && <Tray desktop={wide} pinned={pinned} />}
+				{tray && <Tray desktop={wide} />}
 				{!wide && <MobileNav />}
 			</div>
 
@@ -320,42 +306,6 @@ function Main() {
 			<DrawingHost />
 		</div>
 	);
-}
-
-const TRAY_BAR_PX = 88;
-/** Room for two entries; with less, pinning would not gain anything over the cards. */
-const MIN_PANEL_PX = 220;
-
-/**
- * Whether the tray's panel fits below the page. Unpinned, Today shows the newest entries instead
- * (data-shelf-cards); they don't count, or the panel would never come back.
- */
-function useRoom(
-	on: boolean,
-	column: React.RefObject<HTMLDivElement | null>,
-	main: React.RefObject<HTMLElement | null>,
-	path: string,
-) {
-	const [room, setRoom] = useState(true);
-	// biome-ignore lint/correctness/useExhaustiveDependencies: a new `path` renders a new page element to observe
-	useLayoutEffect(() => {
-		const page = main.current?.firstElementChild as HTMLElement | null | undefined;
-		if (!on || !column.current || !page) return;
-		const measure = () => {
-			const cards = page.querySelector<HTMLElement>("[data-shelf-cards]");
-			const height =
-				page.offsetHeight -
-				(cards ? cards.offsetHeight + Number.parseFloat(getComputedStyle(cards).marginTop) : 0);
-			// what stands above the page in the column (the history buttons, a banner) takes room too
-			const above = main.current!.offsetTop - column.current!.offsetTop;
-			setRoom(column.current!.clientHeight - above - height - TRAY_BAR_PX >= MIN_PANEL_PX);
-		};
-		const ro = new ResizeObserver(measure);
-		ro.observe(column.current);
-		ro.observe(page);
-		return () => ro.disconnect();
-	}, [on, column, main, path]);
-	return on && room;
 }
 
 function MenuSheet({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
@@ -393,7 +343,7 @@ function MobileMenu({ onSettings }: { onSettings: () => void }) {
 			</div>
 			{creating && <NewSpaceDialog onClose={() => setCreating(false)} />}
 			<a className={row} href="#/">
-				<Sun className="text-muted-foreground" size={18} /> {t("nav.today")}
+				<House className="text-muted-foreground" size={18} /> {t("nav.home")}
 			</a>
 			<a className={row} href="#/inbox">
 				<Inbox className="text-muted-foreground" size={18} />{" "}
@@ -441,8 +391,8 @@ function MobileNav() {
 	}[] = [
 		{
 			key: "today",
-			label: t("nav.today"),
-			icon: <Sun size={20} />,
+			label: t("nav.home"),
+			icon: <House size={20} />,
 			href: "#/",
 			active: route.path === "/" && !shelf,
 		},

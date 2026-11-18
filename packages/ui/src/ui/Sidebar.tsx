@@ -16,13 +16,13 @@ import {
 	ChevronDown,
 	ChevronRight,
 	History,
+	House,
 	Link2,
 	Paperclip,
 	Plus,
 	RotateCcw,
 	Search,
 	Settings,
-	Sun,
 	Trash2,
 	Waypoints,
 } from "lucide-react";
@@ -287,7 +287,7 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
 						</span>
 					</Button>
 					<a className={navCls(route.path === "/")} href="#/">
-						<Sun size={16} /> {t("nav.today")}
+						<House size={16} /> {t("nav.home")}
 					</a>
 				</nav>
 				{shown.map((s) => (

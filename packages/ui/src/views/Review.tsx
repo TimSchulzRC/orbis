@@ -53,53 +53,46 @@ const MAX_STEPS = 16;
 const OVERLAY_OPEN =
 	"[role=dialog][data-state=open], [data-radix-popper-content-wrapper]:not(:has([role=tooltip]))";
 
-/** Pinned (on desktop Heute) it is part of the page: no close, and the keys only while the focus is in it. */
-export function InboxPanel({ desktop, pinned }: { desktop: boolean; pinned?: boolean }) {
+export function InboxPanel({ desktop }: { desktop: boolean }) {
 	const { t } = useT();
 	const { at } = useShelf();
 	const self = useRef<HTMLDivElement>(null);
 	// take the keys from the button that opened the panel (a new note keeps the caret in its title)
 	const focusOnOpen = useEffectEvent(() => {
-		if (!pinned && !self.current?.contains(document.activeElement)) self.current?.focus();
+		if (!self.current?.contains(document.activeElement)) self.current?.focus();
 	});
 	useEffect(() => focusOnOpen(), []);
 	useEffect(() => {
-		if (pinned) return;
 		const was = document.title;
 		document.title = t("review.title");
 		return () => {
 			document.title = was;
 		};
-	}, [pinned, t]);
+	}, [t]);
 	// on a phone the list, an entry over it as a sheet
 	const sheet = !desktop && !!at;
 	return (
 		<div
+			aria-label={t("review.title")}
 			className={cn(
-				"flex flex-col overflow-hidden border border-line bg-surface outline-none",
-				pinned
-					? "h-full rounded-2xl shadow-[0_6px_24px_-12px_rgb(0_0_0/0.25)]"
-					: cn(
-							"shadow-[0_18px_50px_-12px_rgb(0_0_0/0.45)]",
-							desktop
-								? "h-[min(900px,calc(100dvh-150px))] rounded-2xl"
-								: sheet
-									? "h-full rounded-t-2xl"
-									: "max-h-[min(70dvh,560px)] rounded-2xl",
-						),
+				"flex flex-col overflow-hidden border border-line bg-surface shadow-[0_18px_50px_-12px_rgb(0_0_0/0.45)] outline-none",
+				desktop
+					? "h-[min(900px,calc(100dvh-150px))] rounded-2xl"
+					: sheet
+						? "h-full rounded-t-2xl"
+						: "max-h-[min(70dvh,560px)] rounded-2xl",
 			)}
-			data-shelf-panel={pinned ? "pinned" : "open"}
+			data-shelf-panel="open"
 			// a link inside leads away: the panel closes behind it
 			onClickCapture={(e) => (e.target as HTMLElement).closest("a[href]") && closeShelf()}
 			ref={self}
-			// pinned it is part of the tray's region, else a dialog over the page
-			{...(pinned ? {} : { "aria-label": t("review.title"), role: "dialog" })}
+			role="dialog"
 			tabIndex={-1}
 		>
 			{!desktop && (
 				<div aria-hidden className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-line" />
 			)}
-			<Inbox at={at} desktop={desktop} panel={self} pinned={!!pinned} />
+			<Inbox at={at} desktop={desktop} panel={self} />
 		</div>
 	);
 }
@@ -111,16 +104,14 @@ function othersKey(el: Element) {
 	return !!layer && !layer.hasAttribute("data-shelf-panel");
 }
 
-/** `at`: the entry asked for, "<workspace>/<id>" (a card on Heute, a row on a phone). */
+/** `at`: the entry asked for, "<workspace>/<id>" (a row on a phone). */
 function Inbox({
 	at,
 	desktop,
-	pinned,
 	panel,
 }: {
 	at?: string;
 	desktop: boolean;
-	pinned: boolean;
 	panel: React.RefObject<HTMLDivElement | null>;
 }) {
 	const { t } = useT();
@@ -233,8 +224,6 @@ function Inbox({
 	const keys = useRef<(e: KeyboardEvent) => void>(null);
 	keys.current = (e) => {
 		const el = e.target as HTMLElement;
-		// pinned the panel is part of the page: its keys only while the focus is in it
-		if (pinned && !panel.current?.contains(document.activeElement)) return;
 		// in the title or the text the keys are theirs (Esc: below, after the editor)
 		if (pick.placing || pick.typing || othersKey(el) || e.metaKey || e.ctrlKey || e.altKey) return;
 		const pressed = e.key;
@@ -247,8 +236,7 @@ function Inbox({
 		const isNote = entry?.item.kind === "note";
 		if (pressed === "Escape") {
 			if (!desktop && at) openShelf();
-			else if (!pinned) dismissShelf();
-			else return;
+			else dismissShelf();
 		} else if (pressed === "u" || pressed === "z") undo();
 		else if (!entry) return;
 		else if (pressed === "e") pick.setPlacing([entry.item]);
@@ -266,7 +254,7 @@ function Inbox({
 		} else return;
 		e.preventDefault();
 	};
-	// Esc leaves the title or the text, unless the editor used it (its completions close first); the keys are the panel's again (pinned: only with the focus in it)
+	// Esc leaves the title or the text, unless the editor used it (its completions close first); the keys are the panel's again
 	const onEscapeKey = useRef<(e: KeyboardEvent) => void>(null);
 	onEscapeKey.current = (e) => {
 		const el = document.activeElement as HTMLElement | null;
@@ -312,7 +300,7 @@ function Inbox({
 		<ReviewHead
 			at={entry && !waiting ? sorted.length + 1 : total}
 			onBack={desktop ? undefined : () => openShelf()}
-			onClose={pinned ? undefined : dismissShelf}
+			onClose={dismissShelf}
 			sorted={sorted.length}
 			total={total}
 		/>
@@ -339,7 +327,7 @@ function Inbox({
 			/>
 		</SpaceScope>
 	) : (
-		<Finished count={sorted.length} onDone={pinned ? undefined : finish} />
+		<Finished count={sorted.length} onDone={finish} />
 	);
 
 	if (listOnly)
