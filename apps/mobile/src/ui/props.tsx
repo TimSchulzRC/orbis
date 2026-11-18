@@ -6,7 +6,7 @@ import { DatePicker, Host, Picker, Text as SwiftText } from "@expo/ui/swift-ui";
 import { datePickerStyle, labelsHidden, pickerStyle, tag, tint } from "@expo/ui/swift-ui/modifiers";
 import { dayOf, timeOf } from "@obtion/core/date";
 import type { Index } from "@obtion/core/graph";
-import { fmtShortDate } from "@obtion/core/i18n";
+import { fmtPercent, fmtShortDate } from "@obtion/core/i18n";
 import { numberText, parseNumber } from "@obtion/core/input";
 import { type Item, optionNames, type PropDef, todayISO, type Value } from "@obtion/core/model";
 import { dueProp, hasValue, optionIds, visibleProps } from "@obtion/core/traits";
@@ -26,9 +26,9 @@ import {
 	View,
 } from "react-native";
 import { lang, t, titleOf } from "../lib/i18n";
-import { itemHref } from "./item";
+import { itemHref, Ring } from "./item";
 import { Icon, Row, Section } from "./list";
-import { C } from "./theme";
+import { C, palHex } from "./theme";
 
 const ACCENT = { light: "#be780a", dark: "#f0b040" };
 
@@ -179,12 +179,14 @@ function Control({
 					<Text style={styles.value}>{String(ix.countDescendants(item.id, prop.computed.of))}</Text>
 				);
 			const p = ix.progress(item.id, prop.computed?.of);
+			if (!p.total) return <Text style={styles.value}>{t("props.empty")}</Text>;
 			return (
-				<Text style={styles.value}>
-					{p.total
-						? `${p.done}/${p.total} · ${Math.round((p.done / p.total) * 100)} %`
-						: t("props.empty")}
-				</Text>
+				<View style={styles.inline}>
+					<Text style={styles.value}>
+						{p.done}/{p.total} · {fmtPercent(lang, p.done / p.total)}
+					</Text>
+					<Ring color={palHex(ix.schemaOf(item)?.color)} share={p.done / p.total} size={24} />
+				</View>
 			);
 		}
 		default:
@@ -359,6 +361,7 @@ function Field({
 			placeholder={t("props.empty")}
 			placeholderTextColor={C.placeholder}
 			returnKeyType="done"
+			selectionColor={C.accent}
 			style={styles.field}
 			value={text}
 		/>

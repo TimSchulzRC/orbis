@@ -174,8 +174,8 @@ export default function ItemPage() {
 				<Updates {...props} />
 				<Mentions {...props} />
 				<Text style={styles.meta}>
-					{t("page.createdOn", { date: fmtDateTime(lang, item.created) })} · {t("item.edited")}{" "}
-					{fmtDateTime(lang, item.updated)}
+					{t("page.createdOn", { date: fmtDateTime(lang, item.created) })} ·{" "}
+					{t("mobile.editedOn", { date: fmtDateTime(lang, item.updated) })}
 				</Text>
 			</Screen>
 		</>
@@ -215,6 +215,7 @@ function TitleField({ id, title, repo }: { id: string; title: string; repo: Repo
 			placeholderTextColor={C.placeholder}
 			returnKeyType="done"
 			scrollEnabled={false}
+			selectionColor={C.accent}
 			style={styles.title}
 			submitBehavior="blurAndSubmit"
 			value={text}
@@ -274,6 +275,7 @@ function BodyEditor({ id, repo, onDone }: { id: string; repo: Repo; onDone: () =
 					}}
 					placeholder={t("mobile.writeHere")}
 					placeholderTextColor={C.placeholder}
+					selectionColor={C.accent}
 					style={[styles.editorInput, { paddingTop: top + 8, paddingBottom: bottom + 24 }]}
 					value={text}
 				/>

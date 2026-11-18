@@ -133,6 +133,7 @@ export function SignInForm({
 							placeholder="notes.example.org"
 							placeholderTextColor={C.placeholder}
 							returnKeyType="go"
+							selectionColor={C.accent}
 							style={styles.input}
 							textContentType="URL"
 							value={address}
@@ -162,6 +163,7 @@ export function SignInForm({
 							onChangeText={setEmail}
 							placeholder={t("account.email")}
 							placeholderTextColor={C.placeholder}
+							selectionColor={C.accent}
 							style={styles.input}
 							textContentType="username"
 							value={email}
@@ -175,6 +177,7 @@ export function SignInForm({
 							placeholderTextColor={C.placeholder}
 							returnKeyType="go"
 							secureTextEntry
+							selectionColor={C.accent}
 							style={styles.input}
 							textContentType="password"
 							value={password}
@@ -202,6 +205,7 @@ export function SignInForm({
 							onChangeText={setEmail}
 							placeholder={t("account.email")}
 							placeholderTextColor={C.placeholder}
+							selectionColor={C.accent}
 							style={styles.input}
 							textContentType="username"
 							value={email}
@@ -216,6 +220,7 @@ export function SignInForm({
 									onChangeText={setCode}
 									placeholder={t("account.code")}
 									placeholderTextColor={C.placeholder}
+									selectionColor={C.accent}
 									style={styles.input}
 									textContentType="oneTimeCode"
 									value={code}

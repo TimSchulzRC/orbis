@@ -478,6 +478,7 @@
 	"mobile.connectIntro": "Verbinde die App mit deinem Obtion-Server.",
 	"mobile.continue": "Weiter",
 	"mobile.done": "Fertig",
+	"mobile.editedOn": "geändert am {date}",
 	"mobile.editText": "Text bearbeiten",
 	"mobile.hideDone": "Erledigte ausblenden",
 	"mobile.more": "und {count} weitere",

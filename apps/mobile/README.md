@@ -25,7 +25,9 @@ bun install
 npx expo run:ios                 # the simulator, with Metro for live reload
 ```
 
-`npx expo run:ios` writes the native project to `ios/` (not in git) from `app.config.ts`.
+`npx expo run:ios` writes the native project to `ios/` (not in git) from `app.config.ts`. Once `ios/` exists it is not written again: after a change to `app.config.ts`, run `npx expo prebuild --platform ios` first.
+
+With Xcode 27, `expo run:ios` may end with "Simulator app did not open fast enough" after it installed the app, and take Metro down with it. The app is installed: start Metro on its own (`npx expo start`), build with `--no-bundler`, and launch the app from the simulator or with `xcrun simctl launch booted app.obtion.mobile`.
 
 ### On your iPhone
 

@@ -55,6 +55,7 @@ export default function Place() {
 						onChangeText={setQ}
 						placeholder={t("nav.searchPlaceholder")}
 						placeholderTextColor={C.placeholder}
+						selectionColor={C.accent}
 						style={styles.input}
 						value={q}
 					/>

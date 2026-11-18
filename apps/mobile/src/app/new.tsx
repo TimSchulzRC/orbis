@@ -126,6 +126,7 @@ function NewNote() {
 						placeholder={t("item.title")}
 						placeholderTextColor={C.placeholder}
 						scrollEnabled={false}
+						selectionColor={C.accent}
 						style={styles.title}
 						submitBehavior="blurAndSubmit"
 						value={title}
@@ -137,6 +138,7 @@ function NewNote() {
 						placeholder={t("mobile.writeHere")}
 						placeholderTextColor={C.placeholder}
 						scrollEnabled={false}
+						selectionColor={C.accent}
 						style={styles.body}
 						value={body}
 					/>
@@ -214,6 +216,7 @@ function NewUpdate({ space, id }: { space: string; id: string }) {
 						placeholder={t("updates.placeholder")}
 						placeholderTextColor={C.placeholder}
 						scrollEnabled={false}
+						selectionColor={C.accent}
 						style={[styles.body, { minHeight: 140 }]}
 						value={text}
 					/>
