@@ -78,8 +78,8 @@ interface Host extends RepoHost {
 	suspend(): void;
 	/** Signed in again: a replica waiting for that connects now. */
 	resume(): void;
-	/** The last write to the phone's database failed (full, closed). */
-	writeFailed(): boolean;
+	/** How many writes to the phone's database failed so far (full, closed). */
+	failures(): number;
 }
 interface Open {
 	repo: Repo;
@@ -128,18 +128,13 @@ function ask<K extends string>(
 function host(space: string, s: Session, onReload: () => void): Host {
 	let disposed = false;
 	const storage = sqliteStorage(space, closing.get(space));
-	let failed = false;
+	let failures = 0;
 	const write = storage.write;
 	storage.write = (w) =>
-		write(w).then(
-			() => {
-				failed = false;
-			},
-			(e: unknown) => {
-				failed = true;
-				throw e;
-			},
-		);
+		write(w).catch((e: unknown) => {
+			failures++;
+			throw e;
+		});
 	let socket: WebSocket | null = null;
 	let waiting: SyncSocket | null = null;
 	const wakers: (() => void)[] = [];
@@ -201,7 +196,7 @@ function host(space: string, s: Session, onReload: () => void): Host {
 			waiting = null;
 			w?.close();
 		},
-		writeFailed: () => failed,
+		failures: () => failures,
 		async dispose() {
 			disposed = true;
 			waiting = null;
@@ -271,8 +266,11 @@ function dropReplica(space: string): Promise<void> {
 	return done;
 }
 
-/** Whether the last change in the workspace reached the phone's database. */
-export const writeFailed = (space: string) => open.get(space)?.host.writeFailed() ?? false;
+/**
+ * Writes to the workspace's database that failed so far: compare the count before a change with the
+ * count once it is saved, and a later success cannot hide a failure.
+ */
+export const writeFailures = (space: string) => open.get(space)?.host.failures() ?? 0;
 
 /** Signed in again: the replicas that waited connect with the new token. */
 function resume() {

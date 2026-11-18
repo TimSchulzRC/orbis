@@ -1,7 +1,7 @@
 // Line diffs between two versions of a text, for the history of an item's body: hunks for the
 // app (lines marked as kept, added or removed) and a compact unified diff for agents. The diff
 // itself comes from jsdiff (Myers); here only the shape the app and the tools need.
-import { applyPatch, diffWordsWithSpace, structuredPatch } from "diff";
+import { diffArrays, diffWordsWithSpace, structuredPatch } from "diff";
 
 export interface DiffLine {
 	op: " " | "+" | "-";
@@ -120,19 +120,63 @@ export function wordDiff(a: string, b: string): { old: WordPart[]; now: WordPart
 	return { old, now };
 }
 
+/** One change against the base text: its lines [start, end) become `lines` (start = end: inserted). */
+interface Edit {
+	start: number;
+	end: number;
+	lines: string[];
+}
+
+/** The changes that turn `base` into `other`, each on its own range of base lines. */
+function editsOf(base: string[], other: string[]): Edit[] {
+	const out: Edit[] = [];
+	let at = 0;
+	let open: Edit | undefined; // the edit a removal and an addition next to each other share
+	for (const part of diffArrays(base, other)) {
+		if (!part.added && !part.removed) {
+			at += part.count;
+			open = undefined;
+			continue;
+		}
+		if (!open) {
+			open = { start: at, end: at, lines: [] };
+			out.push(open);
+		}
+		if (part.added) open.lines.push(...part.value);
+		else {
+			at += part.count;
+			open.end = at;
+		}
+	}
+	return out;
+}
+
+/** Two edits that touch the same base lines, or insert at the same place. */
+const clash = (a: Edit, b: Edit) =>
+	(a.start < b.end && b.start < a.end) ||
+	(a.start === a.end && b.start === b.end && a.start === b.start);
+
 /**
  * The edits made from `base` to `draft`, applied to `current`, which someone else changed from
- * `base` meanwhile (line by line). Each edit that still fits goes in; one whose lines were changed
- * there too gives way, so nothing changed elsewhere is lost.
+ * `base` meanwhile: a three-way merge by lines on the base's line ranges. Where both changed the
+ * same lines, theirs stays and that edit of the draft gives way; every other edit of both goes in.
  */
 export function mergeText(base: string, draft: string, current: string): string {
 	if (current === base || draft === current) return draft;
 	if (draft === base) return current;
-	const patch = structuredPatch("", "", base, draft, "", "", { context: 1 });
-	let out = current;
-	for (const hunk of patch.hunks) {
-		const next = applyPatch(out, { ...patch, hunks: [hunk] });
-		if (next !== false) out = next;
+	const lines = base.split("\n");
+	const theirs = editsOf(lines, current.split("\n"));
+	const mine = editsOf(lines, draft.split("\n")).filter((m) => !theirs.some((t) => clash(m, t)));
+	// in base order; an insertion before a change that starts at the same line
+	const all = [...theirs, ...mine].sort(
+		(a, b) => a.start - b.start || a.end - a.start - (b.end - b.start),
+	);
+	const out: string[] = [];
+	let at = 0;
+	for (const e of all) {
+		out.push(...lines.slice(at, e.start), ...e.lines);
+		at = Math.max(at, e.end);
 	}
-	return out;
+	out.push(...lines.slice(at));
+	return out.join("\n");
 }

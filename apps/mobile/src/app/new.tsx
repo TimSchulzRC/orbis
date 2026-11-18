@@ -11,7 +11,7 @@ import { useEffect, useRef, useState } from "react";
 import { Alert, ScrollView, StyleSheet, Text, TextInput, useColorScheme, View } from "react-native";
 import { useRepo, useSpaces } from "../lib/hooks";
 import { t, titleOf } from "../lib/i18n";
-import { useSession, writeFailed } from "../lib/session";
+import { useSession, writeFailures } from "../lib/session";
 import { useKeyboardHeight } from "../ui/list";
 import { SpaceGone } from "../ui/status";
 import { C, GUTTER, RADIUS } from "../ui/theme";
@@ -84,9 +84,10 @@ function Toolbar({ canSave, onSave }: { canSave: boolean; onSave: () => void }) 
 
 /**
  * After saving: closes the sheet unless it was closed meanwhile (back would leave the page below).
- * A change that did not reach the phone's database keeps the sheet open, with a notice.
+ * A change that did not reach the phone's database is still kept in memory and goes to the server
+ * once it can: the notice says so, and the sheet closes anyway (saving again would add it twice).
  */
-function useDone(saving: { current: boolean }) {
+function useDone() {
 	const shown = useRef(true);
 	useEffect(
 		() => () => {
@@ -95,13 +96,10 @@ function useDone(saving: { current: boolean }) {
 		[],
 	);
 	return (failed: boolean) => {
-		saving.current = false;
 		if (failed) {
 			void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
 			Alert.alert(t("mobile.notSaved"));
-			return;
-		}
-		void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+		} else void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 		if (shown.current) router.back();
 	};
 }
@@ -123,10 +121,11 @@ function NewNote() {
 	const canSave = !!space?.repo.status.loaded && !!(title.trim() || body.trim());
 	const keyboard = useKeyboardHeight();
 	const saving = useRef(false);
-	const done = useDone(saving);
+	const done = useDone();
 	const save = async () => {
 		if (!space || !canSave || saving.current) return;
 		saving.current = true;
+		const failures = writeFailures(space.info.id);
 		space.repo.ownStep(() =>
 			space.repo.create({
 				title: title.trim(),
@@ -135,7 +134,7 @@ function NewNote() {
 			}),
 		);
 		await space.repo.saved();
-		done(writeFailed(space.info.id));
+		done(writeFailures(space.info.id) > failures);
 	};
 	return (
 		<>
@@ -220,16 +219,17 @@ function Update({ id, repo, space }: { id: string; repo: Repo; space: string }) 
 	const current = item ? statusOf(item, schema)?.option.id : undefined;
 	const keyboard = useKeyboardHeight();
 	const saving = useRef(false);
-	const done = useDone(saving);
+	const done = useDone();
 	const save = async () => {
 		if (!item || !text.trim() || saving.current) return;
 		saving.current = true;
+		const failures = writeFailures(space);
 		const option = status !== KEEP && status !== current ? status : undefined;
 		repo.ownStep(() =>
 			repo.addUpdate(item.id, text.trim(), prop && option ? { prop: prop.id, option } : undefined),
 		);
 		await repo.saved();
-		done(writeFailed(space));
+		done(writeFailures(space) > failures);
 	};
 	return (
 		<>

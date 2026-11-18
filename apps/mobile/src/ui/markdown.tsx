@@ -91,13 +91,17 @@ function taskOrder(tokens: Token[]): Map<Tokens.ListItem, TaskAt> {
 
 /**
  * Ticks the checkbox inside its own top-level block of the text (blocks are the lexer's tokens, whose
- * sources make up the text): a code block elsewhere that looks like it never counts.
+ * sources make up the text): a code block elsewhere that looks like it never counts. The lexer
+ * reads Windows line ends as plain ones, and so does the text it writes back.
  */
-function tickIn(body: string, tokens: Token[], at: TaskAt, raw: string): string {
-	if (tokens.map((x) => x.raw).join("") !== body) return body; // the blocks do not add up: leave it
+function tickIn(source: string, tokens: Token[], at: TaskAt, raw: string): string {
+	const body = source.replace(/\r\n?/g, "\n");
+	if (tokens.map((x) => x.raw).join("") !== body) return source; // the blocks do not add up: leave it
 	const start = tokens.slice(0, at.block).reduce((n, x) => n + x.raw.length, 0);
 	const end = start + (tokens[at.block]?.raw.length ?? 0);
-	return body.slice(0, start) + toggleTask(body.slice(start, end), at.n, raw) + body.slice(end);
+	const block = body.slice(start, end);
+	const ticked = toggleTask(block, at.n, raw);
+	return ticked === block ? source : body.slice(0, start) + ticked + body.slice(end);
 }
 
 export function Markdown({ body, space, tab, ix, repo, item }: Omit<Ctx, "tasks" | "tokens">) {

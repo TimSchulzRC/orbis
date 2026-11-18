@@ -78,4 +78,12 @@ test("merging a draft: edits from elsewhere stay, a clash keeps theirs", () => {
 	expect(mergeText("a\nb\nc\nd\ne\nf", "a\nB\nc\nd\ne\nF", "a\nX\nc\nd\ne\nf")).toBe(
 		"a\nX\nc\nd\ne\nF",
 	);
+	// neighbouring lines are no clash
+	expect(mergeText("a\nb\nc", "a\nB\nc", "a\nb\nC")).toBe("a\nB\nC");
+	// two equal passages: an edit stays where it was made, never moves to the other one
+	expect(mergeText("x\ny\nx\ny", "X\ny\nx\ny", "Z\ny\nx\ny")).toBe("Z\ny\nx\ny");
+	expect(mergeText("x\ny\nx\ny", "x\ny\nX\ny", "Z\ny\nx\ny")).toBe("Z\ny\nX\ny");
+	// insertions at the same place clash, at different places both stay
+	expect(mergeText("a\nb", "a\nmine\nb", "a\ntheirs\nb")).toBe("a\ntheirs\nb");
+	expect(mergeText("a\nb", "mine\na\nb", "a\nb\ntheirs")).toBe("mine\na\nb\ntheirs");
 });
