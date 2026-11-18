@@ -1,8 +1,7 @@
 // Schema changes never delete values; values of removed properties show as "Weitere Eigenschaften".
 
 import { dateOf } from "@obtion/core/date";
-import type { Index } from "@obtion/core/graph";
-import { fmtDate, type T } from "@obtion/core/i18n";
+import { fmtDate } from "@obtion/core/i18n";
 import { numberText, parseNumber } from "@obtion/core/input";
 import {
 	formatRange,
@@ -560,9 +559,8 @@ export function PropertyBlock({
 				(p) => item.props[p.id] !== undefined || item.rels[p.id]?.length,
 			)
 		: [];
-	const inverse = inverseGroups(item, ix, t);
 	const free = Object.entries(item.extra);
-	const rows = shown.length || free.length || inverse.length || leftovers.length || unused.length;
+	const rows = shown.length || free.length || leftovers.length || unused.length;
 	return (
 		<div className="group/props">
 			<div className="mt-3 flex flex-wrap items-center gap-1.5">
@@ -603,18 +601,6 @@ export function PropertyBlock({
 									onClick={() => repo.setExtra(item.id, n, null)}
 									size="xs"
 								/>
-							</BlockRow>
-						)),
-						...inverse.map((g) => (
-							<BlockRow key={`inv:${g.label}`} label={g.label}>
-								{g.ids.map((id) => (
-									<span
-										className="inline-flex max-w-full items-center gap-1 rounded-md bg-surface-2 px-1.5 py-0.5 text-xs"
-										key={id}
-									>
-										<ItemLink className="min-w-0" item={ix.get(id)!} />
-									</span>
-								))}
 							</BlockRow>
 						)),
 						...leftovers.map((p) => (
@@ -745,22 +731,4 @@ function SelectBadge({ item, prop }: { item: Item; prop: PropDef }) {
 			)}
 		</Popover>
 	);
-}
-
-function inverseGroups(item: Item, ix: Index, t: T): { label: string; ids: string[] }[] {
-	const groups = new Map<string, { label: string; ids: string[] }>();
-	for (const b of ix.backlinks(item.id)) {
-		if (b.kind !== "rel") continue;
-		const from = ix.get(b.from);
-		if (!from) continue;
-		const prop = ix.schemaOf(from)?.properties.find((x) => x.id === b.prop);
-		if (!prop || prop.symmetric) continue;
-		const label =
-			prop.inverseName ||
-			t("props.inverse", { prop: prop.name, type: ix.typeName(from.type) ?? "" });
-		const group = groups.get(label) ?? { label, ids: [] };
-		if (!group.ids.includes(from.id)) group.ids.push(from.id);
-		groups.set(label, group);
-	}
-	return [...groups.values()];
 }
