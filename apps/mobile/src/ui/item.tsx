@@ -7,8 +7,16 @@ import { type Item, todayISO } from "@obtion/core/model";
 import { firstOfGroup, isDone, statusOf, statusProp } from "@obtion/core/traits";
 import type { Repo } from "@obtion/sync";
 import * as Haptics from "expo-haptics";
-import { type Href, Link, useSegments } from "expo-router";
-import { Children, type ComponentProps, Fragment, isValidElement, type ReactNode } from "react";
+import { type Href, Link } from "expo-router";
+import {
+	Children,
+	type ComponentProps,
+	createContext,
+	Fragment,
+	isValidElement,
+	type ReactNode,
+	useContext,
+} from "react";
 import { ActionSheetIOS, Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 import { lang, t, titleOf } from "../lib/i18n";
@@ -16,10 +24,15 @@ import { Icon, Row } from "./list";
 import { lookOf } from "./look";
 import { C, palHex } from "./theme";
 
-/** The tab the user is in: pages open on its own stack. */
+/** The tab whose stack a screen sits in ("(inbox)"), set by the tab's layout. */
+export const TabContext = createContext("(home)");
+
+/**
+ * The tab a screen belongs to: pages open on its own stack. Not the route on screen (useSegments):
+ * the other tabs stay mounted, and their links must not change while you are elsewhere.
+ */
 export function useTab(): string {
-	const segments = useSegments() as string[];
-	return segments.find((s) => /^\((home|inbox|browse|search)\)$/.test(s)) ?? "(home)";
+	return useContext(TabContext);
 }
 
 export function itemHref(tab: string, space: string, id: string): Href {

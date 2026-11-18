@@ -2,6 +2,7 @@
 // top of it (shared by all four tabs, so the tab bar stays and "back" returns where you were).
 
 import { Stack } from "expo-router";
+import { TabContext } from "../../../ui/item";
 
 const FIRST: Record<string, string> = {
 	"(home)": "index",
@@ -19,18 +20,20 @@ export const unstable_settings = {
 
 export default function TabStack({ segment }: { segment: string }) {
 	return (
-		<Stack
-			screenOptions={{
-				headerTransparent: true,
-				headerShadowVisible: false,
-				headerLargeTitleShadowVisible: false,
-				headerBackButtonDisplayMode: "minimal",
-				headerLargeStyle: { backgroundColor: "transparent" },
-			}}
-		>
-			<Stack.Screen name={FIRST[segment] ?? "index"} options={{ headerLargeTitle: true }} />
-			<Stack.Screen name="type/[space]/[id]" options={{ headerLargeTitle: true }} />
-			<Stack.Screen name="item/[space]/[id]" options={{ title: "" }} />
-		</Stack>
+		<TabContext.Provider value={segment}>
+			<Stack
+				screenOptions={{
+					headerTransparent: true,
+					headerShadowVisible: false,
+					headerLargeTitleShadowVisible: false,
+					headerBackButtonDisplayMode: "minimal",
+					headerLargeStyle: { backgroundColor: "transparent" },
+				}}
+			>
+				<Stack.Screen name={FIRST[segment] ?? "index"} options={{ headerLargeTitle: true }} />
+				<Stack.Screen name="type/[space]/[id]" options={{ headerLargeTitle: true }} />
+				<Stack.Screen name="item/[space]/[id]" options={{ title: "" }} />
+			</Stack>
+		</TabContext.Provider>
 	);
 }
