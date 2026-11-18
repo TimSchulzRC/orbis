@@ -37,6 +37,8 @@ const titleNow = () =>
 	document.querySelector<HTMLTextAreaElement>("article textarea")?.value.trim() ?? "";
 
 test("a row: workspace, title, text; on hover its buttons take the corner from the age", async () => {
+	// the mouse is the page's, shared by all test files: off any row
+	await commands.mouse("move", 0, 0);
 	const row = rows().first();
 	await expect.element(row).toBeVisible();
 	expect(row.element().textContent).toContain("Personal");
