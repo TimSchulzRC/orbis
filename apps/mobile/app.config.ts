@@ -19,6 +19,10 @@ export default (): ExpoConfig => ({
 		supportsTablet: false,
 		icon: { light: "./assets/icon.png", dark: "./assets/icon-dark.png" },
 		infoPlist: {
+			// the app speaks German and English: without these iOS runs it in English on a German
+			// iPhone, and the system's own parts (date pickers, menus, VoiceOver) stay English
+			CFBundleDevelopmentRegion: "en",
+			CFBundleLocalizations: ["en", "de"],
 			// self-hosted servers often run on plain http in the home network
 			NSAppTransportSecurity: { NSAllowsArbitraryLoads: true },
 			NSLocalNetworkUsageDescription:
