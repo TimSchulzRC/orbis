@@ -1,5 +1,6 @@
-// Workspace routes under /w/<id>/ need a member's token in the Authorization header. The server
-// sends no CORS headers: only the app on its own origin calls them.
+// Workspace routes under /w/<id>/ need a member's token in the Authorization header. Besides the
+// server's own page, only the apps in APP_ORIGINS (the desktop app, a web app served elsewhere) may
+// call the server from a browser (CORS). OBTION_WEB_APP=off serves no web app (headless).
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { extname, join, resolve } from "node:path";
 import type {
@@ -19,7 +20,7 @@ import type {
 import { acceptLang, LANGS, type Lang } from "@obtion/core/i18n";
 import { agentOrigin, firstName, personOrigin } from "@obtion/core/origin";
 import { upgradeSetup } from "@obtion/core/setup";
-import type { ServerWebSocket } from "bun";
+import type { Server, ServerWebSocket } from "bun";
 import { AccountError, Accounts, FRESH_SECONDS, randomToken, SIGNUP_COOKIE } from "./accounts";
 import { DATA, MAX_ATTACH, MAX_BLOB, MAX_WS_MESSAGE, PORT } from "./config";
 import { body, fail, json } from "./http";
@@ -33,6 +34,7 @@ import { type Conn, parseClientMsg, Workspace } from "./workspace";
 const HOST = process.env.HOST ?? "127.0.0.1";
 const DIST = resolve(process.env.OBTION_WEB_DIST ?? join(import.meta.dir, "../../web/dist"));
 const PUBLIC_URL = process.env.OBTION_PUBLIC_URL ?? "";
+/** Every server brings the web app; OBTION_WEB_APP=off makes it a server for sync, API and MCP only (headless). */
 const WEB_APP = !/^(off|0|false|no)$/i.test(process.env.OBTION_WEB_APP ?? "on");
 /** The first account may always sign up. */
 const SIGNUP = (
@@ -112,6 +114,36 @@ function sameOrigin(req: Request): boolean {
 	} catch {
 		return false;
 	}
+}
+
+/**
+ * Apps on another origin that sign in and call the API like the server's own page: the desktop
+ * app (its pages are obtion://app) and OBTION_APP_ORIGINS, e.g. https://notes.example.org for the
+ * web app served by another host. Every other site gets no CORS answer.
+ */
+const APP_ORIGINS = new Set([
+	"obtion://app",
+	...(process.env.OBTION_APP_ORIGINS ?? "")
+		.split(",")
+		.map((o) => o.trim().replace(/\/$/, ""))
+		.filter(Boolean),
+]);
+const appOrigin = (req: Request) => {
+	const origin = req.headers.get("origin");
+	return origin && APP_ORIGINS.has(origin) ? origin : undefined;
+};
+/** From the server's own page or one of the apps. */
+const trusted = (req: Request) => sameOrigin(req) || !!appOrigin(req);
+
+/** An answer readable by the app that asked from another origin. */
+function withCors(req: Request, res: Response): Response {
+	const origin = appOrigin(req);
+	if (!origin || sameOrigin(req)) return res;
+	const out = new Response(res.body, res);
+	out.headers.set("access-control-allow-origin", origin);
+	out.headers.set("access-control-expose-headers", "x-obtion-missing");
+	out.headers.append("vary", "origin");
+	return out;
 }
 
 const allowedHost = allowedHosts([
@@ -395,6 +427,109 @@ async function capBody(req: Request, max: number): Promise<Request | Response> {
 	return new Request(req, { body: Buffer.concat(chunks) });
 }
 
+/** A request's answer; undefined once it became a WebSocket. */
+async function route(incoming: Request, srv: Server<Conn>): Promise<Response | undefined> {
+	const url = new URL(incoming.url);
+	const path = url.pathname;
+	if (!allowedHost(incoming.headers.get("host")))
+		return new Response("Unknown host. Add it to OBTION_ALLOWED_HOSTS or set OBTION_PUBLIC_URL.", {
+			status: 421,
+		});
+
+	const api = path.startsWith("/api/") || path.startsWith("/w/");
+	// an app on another origin asks first whether it may (CORS preflight)
+	if (api && incoming.method === "OPTIONS" && appOrigin(incoming)) {
+		return new Response(null, {
+			status: 204,
+			headers: {
+				"access-control-allow-methods": "GET, POST, PUT, PATCH, DELETE",
+				"access-control-allow-headers": "authorization, content-type, x-obtion-probe",
+				"access-control-max-age": "86400",
+			},
+		});
+	}
+	const req = await capBody(incoming, bodyLimit(incoming, path));
+	if (req instanceof Response) return req;
+
+	// Better Auth, for the server's own page and the apps in APP_ORIGINS
+	if (path.startsWith("/api/auth/")) {
+		// an OAuth provider sends the browser back from its own site; Better Auth checks the state
+		const callback = req.method === "GET" && path.startsWith("/api/auth/callback/");
+		if (!callback && !trusted(req)) return fail(403, "forbidden");
+		// accounts are created through /api/account/signup
+		if (path.startsWith("/api/auth/sign-up")) return fail(404, "not found");
+		if (path.startsWith("/api/auth/passkey/") && !login.passkey) return fail(404, "not found");
+		// linking a provider (its address may differ) needs a recent sign-in. Ask Better Auth for the
+		// session so it reads the token the same way its handler will.
+		if (path === "/api/auth/link-social") {
+			const s = await accounts.auth.api.getSession({ headers: req.headers }).catch(() => null);
+			if (!s || Date.now() - new Date(s.session.createdAt).getTime() > FRESH_SECONDS * 1000)
+				return fail(403, "sign in again");
+		}
+		return accounts.auth.handler(req);
+	}
+
+	// CSRF: a change without a token must come from this site or an app in APP_ORIGINS
+	if (api && req.method !== "GET" && !tokenOf(req) && !trusted(req)) return fail(403, "forbidden");
+
+	if (path.startsWith("/api/")) return (await accountApi(req, path, url)) ?? fail(404, "not found");
+
+	const m = path.match(/^\/w\/(?<id>[\w-]{1,40})(?<rest>\/.*)$/)?.groups;
+	if (m) {
+		const id = m.id!;
+		const rest = m.rest!;
+		// tokens come in the header only, never in the URL
+		const token = tokenOf(req);
+		const base = PUBLIC_URL || `${url.protocol}//${req.headers.get("host")}`;
+		const filesUrl = `${base}/w/${id}/api/files`;
+		if (rest === "/mcp") {
+			const user = token && accounts.mcpUser(id, token);
+			if (!user || !workspace(id)) return fail(401, "unauthorized");
+			return workspace(id)!.mcp(req, { id: user.id, name: firstName(user) }, filesUrl);
+		}
+		// the file API (only it) also takes the workspace's MCP token: agents and scripts move files with it
+		const files = rest === "/api/files" || rest.startsWith("/api/files/");
+		const agent = files && token ? accounts.mcpUser(id, token) : undefined;
+		if (agent) {
+			const w = workspace(id);
+			if (!w) return fail(404, "no such workspace");
+			const person = { id: agent.id, name: firstName(agent) };
+			return w.handle(req, rest, {
+				user: person,
+				origin: agentOrigin(agentName(req), person),
+				filesUrl,
+			});
+		}
+		const user = await accounts.userOf(token);
+		if (!user) return fail(401, "unauthorized");
+		if (!accounts.role(id, user.id)) return fail(403, "not a member");
+		const w = workspace(id);
+		if (!w) return fail(404, "no such workspace");
+		const person = { id: user.id, name: firstName(user) };
+		if (rest === "/sync") {
+			const ok = srv.upgrade(req, {
+				data: {
+					workspace: id,
+					areas: new Set<string>(),
+					origin: personOrigin(person),
+					user: person,
+					userId: user.id,
+					session: token,
+				},
+				headers: { "sec-websocket-protocol": "obtion" },
+			});
+			return ok ? undefined : fail(400, "expected WebSocket");
+		}
+		return w.handle(req, rest, { user: person, filesUrl });
+	}
+
+	if (!WEB_APP)
+		return new Response("This Obtion server serves sync, API and MCP only (OBTION_WEB_APP=off).", {
+			status: 404,
+		});
+	return serveStatic(path);
+}
+
 const server = Bun.serve<Conn>({
 	port: PORT,
 	hostname: HOST,
@@ -402,97 +537,9 @@ const server = Bun.serve<Conn>({
 	// a file's content may be as large as MAX_BLOB (Bun's default stops at 128 MB); bodyLimit keeps
 	// every other route far below
 	maxRequestBodySize: MAX_BLOB,
-	async fetch(incoming, srv) {
-		const url = new URL(incoming.url);
-		const path = url.pathname;
-		if (!allowedHost(incoming.headers.get("host")))
-			return new Response(
-				"Unknown host. Add it to OBTION_ALLOWED_HOSTS or set OBTION_PUBLIC_URL.",
-				{ status: 421 },
-			);
-		const req = await capBody(incoming, bodyLimit(incoming, path));
-		if (req instanceof Response) return req;
-
-		if (path.startsWith("/api/auth/")) {
-			// an OAuth provider sends the browser back from its own site; Better Auth checks the state
-			const callback = req.method === "GET" && path.startsWith("/api/auth/callback/");
-			if (!callback && !sameOrigin(req)) return fail(403, "forbidden");
-			// accounts are created through /api/account/signup
-			if (path.startsWith("/api/auth/sign-up")) return fail(404, "not found");
-			if (path.startsWith("/api/auth/passkey/") && !login.passkey) return fail(404, "not found");
-			// linking a provider (its address may differ) needs a recent sign-in. Ask Better Auth for the
-			// session so it reads the token the same way its handler will.
-			if (path === "/api/auth/link-social") {
-				const s = await accounts.auth.api.getSession({ headers: req.headers }).catch(() => null);
-				if (!s || Date.now() - new Date(s.session.createdAt).getTime() > FRESH_SECONDS * 1000)
-					return fail(403, "sign in again");
-			}
-			return accounts.auth.handler(req);
-		}
-
-		const api = path.startsWith("/api/") || path.startsWith("/w/");
-		// CSRF: a change without a token must come from this site
-		if (api && req.method !== "GET" && !tokenOf(req) && !sameOrigin(req))
-			return fail(403, "forbidden");
-
-		if (path.startsWith("/api/"))
-			return (await accountApi(req, path, url)) ?? fail(404, "not found");
-
-		const route = path.match(/^\/w\/(?<id>[\w-]{1,40})(?<rest>\/.*)$/)?.groups;
-		if (route) {
-			const id = route.id!;
-			const rest = route.rest!;
-			// tokens come in the header only, never in the URL
-			const token = tokenOf(req);
-			const base = PUBLIC_URL || `${url.protocol}//${req.headers.get("host")}`;
-			const filesUrl = `${base}/w/${id}/api/files`;
-			if (rest === "/mcp") {
-				const user = token && accounts.mcpUser(id, token);
-				if (!user || !workspace(id)) return fail(401, "unauthorized");
-				return workspace(id)!.mcp(req, { id: user.id, name: firstName(user) }, filesUrl);
-			}
-			// the file API (only it) also takes the workspace's MCP token: agents and scripts move files with it
-			const files = rest === "/api/files" || rest.startsWith("/api/files/");
-			const agent = files && token ? accounts.mcpUser(id, token) : undefined;
-			if (agent) {
-				const w = workspace(id);
-				if (!w) return fail(404, "no such workspace");
-				const person = { id: agent.id, name: firstName(agent) };
-				return w.handle(req, rest, {
-					user: person,
-					origin: agentOrigin(agentName(req), person),
-					filesUrl,
-				});
-			}
-			const user = await accounts.userOf(token);
-			if (!user) return fail(401, "unauthorized");
-			if (!accounts.role(id, user.id)) return fail(403, "not a member");
-			const w = workspace(id);
-			if (!w) return fail(404, "no such workspace");
-			const person = { id: user.id, name: firstName(user) };
-			if (rest === "/sync") {
-				const ok = srv.upgrade(req, {
-					data: {
-						workspace: id,
-						areas: new Set<string>(),
-						origin: personOrigin(person),
-						user: person,
-						userId: user.id,
-						session: token,
-					},
-					headers: { "sec-websocket-protocol": "obtion" },
-				});
-				return ok ? undefined : fail(400, "expected WebSocket");
-			}
-			return w.handle(req, rest, { user: person, filesUrl });
-		}
-
-		if (!WEB_APP)
-			return new Response(
-				"This Obtion server serves sync, API and MCP only (OBTION_WEB_APP=off).",
-				{ status: 404 },
-			);
-		return serveStatic(path);
+	async fetch(req, srv) {
+		const res = await route(req, srv);
+		return res && withCors(req, res);
 	},
 	websocket: {
 		maxPayloadLength: MAX_WS_MESSAGE,

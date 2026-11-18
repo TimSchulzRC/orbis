@@ -287,6 +287,81 @@ test("the sign-in only from the server's own page; other sites get no CORS answe
 	});
 });
 
+test("the desktop app (obtion://app) and OBTION_APP_ORIGINS sign in and call the API from their origin; a headless server serves no app", async () => {
+	const app = "obtion://app";
+	const eve = await post(
+		bare,
+		"/api/auth/sign-in/email",
+		{ email: "eve@example.org", password: "secret12345" },
+		undefined,
+		{ origin: app },
+	);
+	expect(eve.status).toBe(200);
+	expect(eve.headers.get("access-control-allow-origin")).toBe(app);
+	const { token } = await eve.json();
+	const [w] = (await account(bare, token)).workspaces;
+	const preflight = await fetch(`${bare}/w/${w.id}/api/blobs/${"0".repeat(64)}`, {
+		method: "OPTIONS",
+		headers: {
+			origin: app,
+			"access-control-request-method": "PUT",
+			"access-control-request-headers": "authorization",
+		},
+	});
+	expect(preflight.status).toBe(204);
+	expect(preflight.headers.get("access-control-allow-headers")).toContain("authorization");
+	const activity = await fetch(`${bare}/w/${w.id}/api/activity`, {
+		headers: { origin: app, authorization: `Bearer ${token}` },
+	});
+	expect(activity.headers.get("access-control-allow-origin")).toBe(app);
+	// an app's sign-up needs no token either
+	const signup = await post(
+		bare,
+		"/api/account/signup",
+		{ name: "Ida", email: "ida@example.org", password: "secret12345" },
+		undefined,
+		{ origin: app },
+	);
+	expect(signup.status).toBe(200);
+	// other sites still get nothing
+	expect(
+		(
+			await fetch(`${bare}/api/info`, {
+				method: "OPTIONS",
+				headers: { origin: "https://evil.example.org" },
+			})
+		).headers.get("access-control-allow-origin"),
+	).toBeNull();
+	expect(
+		(
+			await post(
+				bare,
+				"/api/account/signup",
+				{ email: "gil@example.org", password: "secret12345" },
+				undefined,
+				{ origin: "https://evil.example.org" },
+			)
+		).status,
+	).toBe(403);
+
+	const web = "https://notes.example.org";
+	const other = await start({
+		OBTION_DATA: tempDir("obtion-server-"),
+		OBTION_WEB_APP: "off",
+		OBTION_APP_ORIGINS: `${web}/`,
+	});
+	const first = await post(
+		other,
+		"/api/account/signup",
+		{ name: "Hal", email: "hal@example.org", password: "secret12345" },
+		undefined,
+		{ origin: web },
+	);
+	expect(first.status).toBe(200);
+	expect(first.headers.get("access-control-allow-origin")).toBe(web);
+	expect((await fetch(`${other}/`)).status).toBe(404);
+});
+
 test("without settings only passwords; the passkey routes stay shut; the OAuth cookie is traded only from the own page", async () => {
 	const info = await get(bare, "/api/info").then((r) => r.json());
 	expect(info.login).toEqual({ password: true, emailCode: false, passkey: false, oauth: [] });

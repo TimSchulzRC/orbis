@@ -20,6 +20,7 @@ services:
       OBTION_PUBLIC_URL: ${OBTION_PUBLIC_URL:-}
       OBTION_ALLOWED_HOSTS: ${OBTION_ALLOWED_HOSTS:-}
       OBTION_WEB_APP: ${OBTION_WEB_APP:-on}
+      OBTION_APP_ORIGINS: ${OBTION_APP_ORIGINS:-}
       # who may create an account: invite (with an invite link), open (anyone), off
       OBTION_SIGNUP: ${OBTION_SIGNUP:-invite}
       # how people sign in: password, code (by email), passkey; OAuth below (see .env.example)
