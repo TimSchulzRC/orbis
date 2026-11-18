@@ -258,6 +258,7 @@ function BodyEditor({ id, repo, onDone }: { id: string; repo: Repo; onDone: () =
 		const current = repo.get(id)?.body ?? "";
 		const merged = mergeText(saved.current, next, current);
 		saved.current = merged;
+		latest.current = merged; // closing right after (Done) must not save the draft over it
 		if (merged !== current) repo.setBody(id, merged);
 		if (merged !== next && open.current) setText(merged);
 	};

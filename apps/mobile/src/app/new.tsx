@@ -7,11 +7,11 @@ import { statusOf, statusProp } from "@obtion/core/traits";
 import type { Repo } from "@obtion/sync";
 import * as Haptics from "expo-haptics";
 import { router, Stack, useLocalSearchParams } from "expo-router";
-import { useRef, useState } from "react";
-import { ScrollView, StyleSheet, Text, TextInput, useColorScheme, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { Alert, ScrollView, StyleSheet, Text, TextInput, useColorScheme, View } from "react-native";
 import { useRepo, useSpaces } from "../lib/hooks";
 import { t, titleOf } from "../lib/i18n";
-import { useSession } from "../lib/session";
+import { useSession, writeFailed } from "../lib/session";
 import { useKeyboardHeight } from "../ui/list";
 import { SpaceGone } from "../ui/status";
 import { C, GUTTER, RADIUS } from "../ui/theme";
@@ -82,6 +82,30 @@ function Toolbar({ canSave, onSave }: { canSave: boolean; onSave: () => void }) 
 	);
 }
 
+/**
+ * After saving: closes the sheet unless it was closed meanwhile (back would leave the page below).
+ * A change that did not reach the phone's database keeps the sheet open, with a notice.
+ */
+function useDone(saving: { current: boolean }) {
+	const shown = useRef(true);
+	useEffect(
+		() => () => {
+			shown.current = false;
+		},
+		[],
+	);
+	return (failed: boolean) => {
+		saving.current = false;
+		if (failed) {
+			void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+			Alert.alert(t("mobile.notSaved"));
+			return;
+		}
+		void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+		if (shown.current) router.back();
+	};
+}
+
 function NewNote() {
 	const session = useSession();
 	const spaces = useSpaces();
@@ -99,6 +123,7 @@ function NewNote() {
 	const canSave = !!space?.repo.status.loaded && !!(title.trim() || body.trim());
 	const keyboard = useKeyboardHeight();
 	const saving = useRef(false);
+	const done = useDone(saving);
 	const save = async () => {
 		if (!space || !canSave || saving.current) return;
 		saving.current = true;
@@ -110,8 +135,7 @@ function NewNote() {
 			}),
 		);
 		await space.repo.saved();
-		void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-		router.back();
+		done(writeFailed(space.info.id));
 	};
 	return (
 		<>
@@ -183,10 +207,10 @@ const KEEP = "";
 function NewUpdate({ space, id }: { space: string; id: string }) {
 	const repo = useRepo(space);
 	if (!repo) return <SpaceGone />;
-	return <Update id={id} repo={repo} />;
+	return <Update id={id} repo={repo} space={space} />;
 }
 
-function Update({ id, repo }: { id: string; repo: Repo }) {
+function Update({ id, repo, space }: { id: string; repo: Repo; space: string }) {
 	const [text, setText] = useState("");
 	const [status, setStatus] = useState(KEEP);
 	const item = repo.get(id);
@@ -196,6 +220,7 @@ function Update({ id, repo }: { id: string; repo: Repo }) {
 	const current = item ? statusOf(item, schema)?.option.id : undefined;
 	const keyboard = useKeyboardHeight();
 	const saving = useRef(false);
+	const done = useDone(saving);
 	const save = async () => {
 		if (!item || !text.trim() || saving.current) return;
 		saving.current = true;
@@ -204,8 +229,7 @@ function Update({ id, repo }: { id: string; repo: Repo }) {
 			repo.addUpdate(item.id, text.trim(), prop && option ? { prop: prop.id, option } : undefined),
 		);
 		await repo.saved();
-		void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-		router.back();
+		done(writeFailed(space));
 	};
 	return (
 		<>

@@ -485,6 +485,7 @@
 	"mobile.noMethod": "Dieser Server lässt nur Passkeys oder die Anmeldung über einen Anbieter zu. Die App meldet sich mit Passwort oder Code per E-Mail an.",
 	"mobile.noResults": "Nichts gefunden",
 	"mobile.noServer": "Unter dieser Adresse antwortet kein Obtion-Server.",
+	"mobile.notSaved": "Auf diesem iPhone nicht gespeichert. Es geht an den Server, sobald er erreichbar ist – schließ die App bis dahin nicht.",
 	"mobile.otherServer": "Anderer Server",
 	"mobile.save": "Sichern",
 	"mobile.serverVersion": "Version",

@@ -74,8 +74,12 @@ function deviceName(): string {
 interface Host extends RepoHost {
 	/** Stops syncing for good and closes the database. */
 	dispose(): Promise<void>;
+	/** The server no longer takes the token: the live connection ends, the replica waits. */
+	suspend(): void;
 	/** Signed in again: a replica waiting for that connects now. */
 	resume(): void;
+	/** The last write to the phone's database failed (full, closed). */
+	writeFailed(): boolean;
 }
 interface Open {
 	repo: Repo;
@@ -124,6 +128,18 @@ function ask<K extends string>(
 function host(space: string, s: Session, onReload: () => void): Host {
 	let disposed = false;
 	const storage = sqliteStorage(space, closing.get(space));
+	let failed = false;
+	const write = storage.write;
+	storage.write = (w) =>
+		write(w).then(
+			() => {
+				failed = false;
+			},
+			(e: unknown) => {
+				failed = true;
+				throw e;
+			},
+		);
 	let socket: WebSocket | null = null;
 	let waiting: SyncSocket | null = null;
 	const wakers: (() => void)[] = [];
@@ -177,11 +193,15 @@ function host(space: string, s: Session, onReload: () => void): Host {
 			Alert.alert(t("format.tooNew"));
 		},
 		reload: onReload,
+		suspend() {
+			socket?.close();
+		},
 		resume() {
 			const w = waiting;
 			waiting = null;
 			w?.close();
 		},
+		writeFailed: () => failed,
 		async dispose() {
 			disposed = true;
 			waiting = null;
@@ -197,9 +217,9 @@ function host(space: string, s: Session, onReload: () => void): Host {
  * a workspace the account no longer has (a page of it may still be on screen).
  */
 export function replica(space: string): Repo | undefined {
+	if (!session?.spaces.some((w) => w.id === space)) return undefined;
 	const known = open.get(space);
 	if (known) return known.repo;
-	if (!session?.spaces.some((w) => w.id === space)) return undefined;
 	const h = host(space, session, () => {
 		// the storage was emptied (another server): start afresh
 		void forgetReplica(space).then(() => {
@@ -240,10 +260,19 @@ function forgetReplica(space: string): Promise<void> {
 }
 
 /** A workspace gone on the server or from this phone: its replica and its database. */
-async function dropReplica(space: string) {
-	await forgetReplica(space);
-	await removeReplica(space);
+function dropReplica(space: string): Promise<void> {
+	const done: Promise<void> = forgetReplica(space)
+		.then(() => removeReplica(space))
+		.finally(() => {
+			if (closing.get(space) === done) closing.delete(space);
+		});
+	// a replica opened again meanwhile waits until the file is gone
+	closing.set(space, done);
+	return done;
 }
+
+/** Whether the last change in the workspace reached the phone's database. */
+export const writeFailed = (space: string) => open.get(space)?.host.writeFailed() ?? false;
 
 /** Signed in again: the replicas that waited connect with the new token. */
 function resume() {
@@ -334,6 +363,7 @@ export async function refresh() {
 		// the copies stay and keep what changes here; they connect again after signing in
 		session = { ...session!, lost: true };
 		save();
+		for (const o of open.values()) o.host.suspend();
 		return;
 	}
 	if (!current()) return;

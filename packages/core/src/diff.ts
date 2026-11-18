@@ -122,11 +122,17 @@ export function wordDiff(a: string, b: string): { old: WordPart[]; now: WordPart
 
 /**
  * The edits made from `base` to `draft`, applied to `current`, which someone else changed from
- * `base` meanwhile (line by line). Where both changed the same lines, the draft wins.
+ * `base` meanwhile (line by line). Each edit that still fits goes in; one whose lines were changed
+ * there too gives way, so nothing changed elsewhere is lost.
  */
 export function mergeText(base: string, draft: string, current: string): string {
 	if (current === base || draft === current) return draft;
 	if (draft === base) return current;
-	const merged = applyPatch(current, structuredPatch("", "", base, draft, "", "", { context: 1 }));
-	return merged === false ? draft : merged;
+	const patch = structuredPatch("", "", base, draft, "", "", { context: 1 });
+	let out = current;
+	for (const hunk of patch.hunks) {
+		const next = applyPatch(out, { ...patch, hunks: [hunk] });
+		if (next !== false) out = next;
+	}
+	return out;
 }

@@ -54,35 +54,56 @@ interface Ctx {
 	ix: Index;
 	repo: Repo;
 	item: Item;
-	/** The text the page shows, and each checkbox's place among the text's checkboxes. */
+	/** The text the page shows, its blocks, and where each checkbox stands in them. */
 	body: string;
-	tasks: Map<Tokens.ListItem, number>;
+	tokens: Token[];
+	tasks: Map<Tokens.ListItem, TaskAt>;
+}
+
+/** Where a checkbox stands: its top-level block of the text, and its place among that block's. */
+interface TaskAt {
+	block: number;
+	n: number;
 }
 
 /**
- * Numbers the checkboxes in the order they stand in the text, nested ones included. (Counting while
- * rendering would not: nested lists render after their parent's later items.)
+ * Numbers each block's checkboxes in the order they stand in the text, nested ones included.
+ * (Counting while rendering would not: nested lists render after their parent's later items.)
  */
-function taskOrder(tokens: Token[]): Map<Tokens.ListItem, number> {
-	const order = new Map<Tokens.ListItem, number>();
-	const walk = (list: Token[]) => {
-		for (const tok of list) {
-			if (tok.type === "list")
-				for (const li of (tok as Tokens.List).items) {
-					if (li.task) order.set(li, order.size);
-					walk(li.tokens);
-				}
-			else if ("tokens" in tok && tok.tokens) walk(tok.tokens);
-		}
-	};
-	walk(tokens);
+function taskOrder(tokens: Token[]): Map<Tokens.ListItem, TaskAt> {
+	const order = new Map<Tokens.ListItem, TaskAt>();
+	for (const [block, top] of tokens.entries()) {
+		let n = 0;
+		const walk = (list: Token[]) => {
+			for (const tok of list) {
+				if (tok.type === "list")
+					for (const li of (tok as Tokens.List).items) {
+						if (li.task) order.set(li, { block, n: n++ });
+						walk(li.tokens);
+					}
+				else if ("tokens" in tok && tok.tokens) walk(tok.tokens);
+			}
+		};
+		walk([top]);
+	}
 	return order;
 }
 
-export function Markdown({ body, space, tab, ix, repo, item }: Omit<Ctx, "tasks">) {
+/**
+ * Ticks the checkbox inside its own top-level block of the text (blocks are the lexer's tokens, whose
+ * sources make up the text): a code block elsewhere that looks like it never counts.
+ */
+function tickIn(body: string, tokens: Token[], at: TaskAt, raw: string): string {
+	if (tokens.map((x) => x.raw).join("") !== body) return body; // the blocks do not add up: leave it
+	const start = tokens.slice(0, at.block).reduce((n, x) => n + x.raw.length, 0);
+	const end = start + (tokens[at.block]?.raw.length ?? 0);
+	return body.slice(0, start) + toggleTask(body.slice(start, end), at.n, raw) + body.slice(end);
+}
+
+export function Markdown({ body, space, tab, ix, repo, item }: Omit<Ctx, "tasks" | "tokens">) {
 	const tokens = useMemo(() => marked.lexer(body), [body]);
 	const tasks = useMemo(() => taskOrder(tokens), [tokens]);
-	const ctx: Ctx = { space, tab, ix, repo, item, body, tasks };
+	const ctx: Ctx = { space, tab, ix, repo, item, body, tokens, tasks };
 	return <View style={styles.doc}>{blocks(tokens, ctx)}</View>;
 }
 
@@ -161,15 +182,15 @@ function List({ list, ctx }: { list: Tokens.List; ctx: Ctx }) {
 			{list.items.map((li, i) => {
 				let marker: ReactNode;
 				if (li.task) {
-					const n = ctx.tasks.get(li) ?? -1;
+					const at = ctx.tasks.get(li);
 					marker = (
 						<Pressable
 							hitSlop={8}
 							onPress={() => {
 								// only the text this page shows: changed meanwhile, the tap counts for nothing
 								const now = ctx.repo.get(ctx.item.id)?.body;
-								if (now !== ctx.body) return;
-								const next = toggleTask(now, n, li.raw);
+								if (now !== ctx.body || !at) return;
+								const next = tickIn(now, ctx.tokens, at, li.raw);
 								if (next === now) return;
 								void Haptics.selectionAsync();
 								ctx.repo.ownStep(() => ctx.repo.setBody(ctx.item.id, next));

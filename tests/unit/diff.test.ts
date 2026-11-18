@@ -65,7 +65,7 @@ test("a rewrite too big to diff closely shows as replaced, still counted right",
 	expect(d.hunks[0]!.lines[0]).toEqual({ op: "-", text: "old 0" });
 });
 
-test("merging a draft: edits from elsewhere stay, a clash goes to the draft", () => {
+test("merging a draft: edits from elsewhere stay, a clash keeps theirs", () => {
 	const base = "Ziel\n\n- Design\n- Umsetzung\n";
 	// an agent appended a line while the phone changed another
 	expect(mergeText(base, "Ziel!\n\n- Design\n- Umsetzung\n", `${base}- Livegang\n`)).toBe(
@@ -74,6 +74,8 @@ test("merging a draft: edits from elsewhere stay, a clash goes to the draft", ()
 	// nothing changed elsewhere, or only there
 	expect(mergeText(base, "neu", base)).toBe("neu");
 	expect(mergeText(base, base, "anders")).toBe("anders");
-	// both changed the same line: the draft
-	expect(mergeText("a\nb\nc", "a\nB\nc", "a\nX\nc")).toBe("a\nB\nc");
+	// both changed the same line: theirs stays, the draft's other edits still go in
+	expect(mergeText("a\nb\nc\nd\ne\nf", "a\nB\nc\nd\ne\nF", "a\nX\nc\nd\ne\nf")).toBe(
+		"a\nX\nc\nd\ne\nF",
+	);
 });
