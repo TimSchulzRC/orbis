@@ -42,6 +42,11 @@ jobs:
         run: |
           echo "$HOME/.bun/bin" >> "$GITHUB_PATH"
           flock ~/.bun/upgrade.lock ~/.bun/bin/bun upgrade
+      # Expo's CLI runs on Node: it loads app.config.ts by stripping its types, which Bun standing in
+      # for a missing Node cannot do (the self-hosted machine has no Node of its own)
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
       - run: bun install --frozen-lockfile
       - run: bun run typecheck
       - run: bun run bundle --output-dir "$RUNNER_TEMP/mobile-bundle"
