@@ -55,7 +55,8 @@ export default function Home() {
 
 	const reload = async () => {
 		setRefreshing(true);
-		for (const s of spaces) s.repo.connect();
+		// a copy still loading connects by itself once loaded, from where it left off
+		for (const s of spaces) if (s.repo.status.loaded) s.repo.connect();
 		await refresh();
 		setRefreshing(false);
 	};

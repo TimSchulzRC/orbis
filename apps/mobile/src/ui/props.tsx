@@ -293,6 +293,18 @@ function DateField({
 	onChange: (v: Value | null) => void;
 }) {
 	const v = typeof value === "string" ? value : "";
+	// a range (start and end) is edited in the web app for now; here it is shown
+	if (prop.range || v.includes("/"))
+		return !v ? (
+			<Text style={styles.value}>{t("props.empty")}</Text>
+		) : (
+			<Text style={styles.value}>
+				{v
+					.split("/")
+					.map((x) => (x ? fmtShortDate(lang, dayOf(x)) : "…"))
+					.join(" – ")}
+			</Text>
+		);
 	if (!v)
 		return (
 			<Pressable hitSlop={8} onPress={() => onChange(todayISO())}>
@@ -300,15 +312,6 @@ function DateField({
 					{t("props.set", { name: prop.name })}
 				</Text>
 			</Pressable>
-		);
-	if (v.includes("/"))
-		return (
-			<Text style={styles.value}>
-				{v
-					.split("/")
-					.map((x) => (x ? fmtShortDate(lang, dayOf(x)) : "…"))
-					.join(" – ")}
-			</Text>
 		);
 	const withTime = !!timeOf(v);
 	return (

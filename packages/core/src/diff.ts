@@ -1,7 +1,7 @@
 // Line diffs between two versions of a text, for the history of an item's body: hunks for the
 // app (lines marked as kept, added or removed) and a compact unified diff for agents. The diff
 // itself comes from jsdiff (Myers); here only the shape the app and the tools need.
-import { diffWordsWithSpace, structuredPatch } from "diff";
+import { applyPatch, diffWordsWithSpace, structuredPatch } from "diff";
 
 export interface DiffLine {
 	op: " " | "+" | "-";
@@ -118,4 +118,15 @@ export function wordDiff(a: string, b: string): { old: WordPart[]; now: WordPart
 		if (!p.removed) now.push({ op: p.added ? "+" : " ", text: p.value });
 	}
 	return { old, now };
+}
+
+/**
+ * The edits made from `base` to `draft`, applied to `current`, which someone else changed from
+ * `base` meanwhile (line by line). Where both changed the same lines, the draft wins.
+ */
+export function mergeText(base: string, draft: string, current: string): string {
+	if (current === base || draft === current) return draft;
+	if (draft === base) return current;
+	const merged = applyPatch(current, structuredPatch("", "", base, draft, "", "", { context: 1 }));
+	return merged === false ? draft : merged;
 }

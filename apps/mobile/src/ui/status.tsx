@@ -5,8 +5,13 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-nati
 import type { Space } from "../lib/hooks";
 import { t } from "../lib/i18n";
 import { useSession } from "../lib/session";
-import { Icon } from "./list";
+import { Empty, Icon } from "./list";
 import { C, GUTTER, RADIUS } from "./theme";
+
+/** A page of a workspace the account no longer has. */
+export function SpaceGone() {
+	return <Empty symbol="folder.badge.questionmark" title={t("app.noSpace")} />;
+}
 
 export function SessionNotice({ spaces }: { spaces: Space[] }) {
 	const session = useSession();

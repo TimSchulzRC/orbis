@@ -381,10 +381,25 @@ test("a native app without Origin and cookies signs in, reads its account, syncs
 	expect(signIn.status).toBe(200);
 	const { token } = await signIn.json();
 	expect(await account(bare, token)).toMatchObject({ workspaces: [{ id: w.id }] });
+	// it writes an entry, and a fresh start of it gets the entry back
 	const app = await connect(bare, w.id, token);
 	app.ws.send(JSON.stringify({ t: "hello", area: PERSONAL, since: 0, device: "iPhone-test" }));
 	expect(await app.until((m) => m.t === "welcome")).toMatchObject({ area: PERSONAL });
+	const d = new Y.Doc({ guid: "from-iphone" });
+	d.transact(() => initItem(d, { title: "Vom iPhone" }));
+	app.ws.send(
+		JSON.stringify({
+			t: "push",
+			area: PERSONAL,
+			items: [{ k: "k1", d: "from-iphone", u: toB64(Y.encodeStateAsUpdate(d)) }],
+		}),
+	);
+	expect(await app.until((m) => m.t === "ack")).toMatchObject({ keys: ["k1"] });
 	app.ws.close();
+	const again = await connect(bare, w.id, token);
+	again.ws.send(JSON.stringify({ t: "hello", area: PERSONAL, since: 0, device: "iPhone-test" }));
+	await again.until((m) => m.t === "updates" && m.items.some((i) => i.d === "from-iphone"));
+	again.ws.close();
 	expect((await post(bare, "/api/account/signout", {}, token)).status).toBe(200);
 	expect((await get(bare, "/api/account", token)).status).toBe(401);
 });

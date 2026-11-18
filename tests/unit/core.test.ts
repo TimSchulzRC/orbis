@@ -10,6 +10,7 @@ import {
 	readItem,
 	readSchema,
 	removeParent,
+	replaceBody,
 	SETTINGS_ID,
 	setMeta,
 	setProp,
@@ -564,4 +565,20 @@ describe("link targets", () => {
 		expect(ix.linkTarget(ix.get(odd)!), "a # can't be in a link by name").toBe(odd);
 		for (const id of [a, b]) expect(ix.resolveTitle(ix.linkTarget(ix.get(id)!))).toBe(id);
 	});
+});
+
+test("replacing text never splits an emoji: Yjs keeps both halves of a surrogate pair", () => {
+	for (const [before, after] of [
+		["Party 😀!", "Party 😁!"], // same first half
+		["a😀b", "a😀😀b"], // inserted next to one
+		["x🎉🎉y", "x🎉y"], // removed between two
+		["😀", "🙂"],
+	] as const) {
+		const doc = new Y.Doc();
+		replaceBody(doc, before);
+		replaceBody(doc, after);
+		const copy = new Y.Doc();
+		Y.applyUpdate(copy, Y.encodeStateAsUpdate(doc));
+		expect(copy.getText("body").toString()).toBe(after);
+	}
 });

@@ -9,7 +9,7 @@ import type { Repo } from "@obtion/sync";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import { Marked, type Token, type TokenizerExtension, type Tokens } from "marked";
-import { Fragment, type ReactNode, useMemo } from "react";
+import { Fragment, type ReactNode, useMemo, useState } from "react";
 import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { t, titleOf } from "../lib/i18n";
 import { toggleTask } from "../lib/text";
@@ -54,19 +54,35 @@ interface Ctx {
 	ix: Index;
 	repo: Repo;
 	item: Item;
-	tasks: { n: number };
+	/** The text the page shows, and each checkbox's place among the text's checkboxes. */
+	body: string;
+	tasks: Map<Tokens.ListItem, number>;
 }
 
-export function Markdown({
-	body,
-	space,
-	tab,
-	ix,
-	repo,
-	item,
-}: Omit<Ctx, "tasks"> & { body: string }) {
+/**
+ * Numbers the checkboxes in the order they stand in the text, nested ones included. (Counting while
+ * rendering would not: nested lists render after their parent's later items.)
+ */
+function taskOrder(tokens: Token[]): Map<Tokens.ListItem, number> {
+	const order = new Map<Tokens.ListItem, number>();
+	const walk = (list: Token[]) => {
+		for (const tok of list) {
+			if (tok.type === "list")
+				for (const li of (tok as Tokens.List).items) {
+					if (li.task) order.set(li, order.size);
+					walk(li.tokens);
+				}
+			else if ("tokens" in tok && tok.tokens) walk(tok.tokens);
+		}
+	};
+	walk(tokens);
+	return order;
+}
+
+export function Markdown({ body, space, tab, ix, repo, item }: Omit<Ctx, "tasks">) {
 	const tokens = useMemo(() => marked.lexer(body), [body]);
-	const ctx: Ctx = { space, tab, ix, repo, item, tasks: { n: 0 } };
+	const tasks = useMemo(() => taskOrder(tokens), [tokens]);
+	const ctx: Ctx = { space, tab, ix, repo, item, body, tasks };
 	return <View style={styles.doc}>{blocks(tokens, ctx)}</View>;
 }
 
@@ -145,13 +161,18 @@ function List({ list, ctx }: { list: Tokens.List; ctx: Ctx }) {
 			{list.items.map((li, i) => {
 				let marker: ReactNode;
 				if (li.task) {
-					const n = ctx.tasks.n++;
+					const n = ctx.tasks.get(li) ?? -1;
 					marker = (
 						<Pressable
 							hitSlop={8}
 							onPress={() => {
+								// only the text this page shows: changed meanwhile, the tap counts for nothing
+								const now = ctx.repo.get(ctx.item.id)?.body;
+								if (now !== ctx.body) return;
+								const next = toggleTask(now, n, li.raw);
+								if (next === now) return;
 								void Haptics.selectionAsync();
-								ctx.repo.ownStep(() => ctx.repo.setBody(ctx.item.id, toggleTask(ctx.item.body, n)));
+								ctx.repo.ownStep(() => ctx.repo.setBody(ctx.item.id, next));
 							}}
 						>
 							<Icon
@@ -253,8 +274,10 @@ const QUERY_ROWS = 25;
 function QueryBlock({ src, ctx }: { src: string; ctx: Ctx }) {
 	const { ix } = ctx;
 	const { def } = readBlock(src, ix);
-	const first = def.tabs?.[0];
-	const result = runQuery(first ? { ...tabDef(def.where, first), limit: def.limit } : def, {
+	const tabs = def.tabs ?? [];
+	const [chosen, choose] = useState(0);
+	const tab = tabs[chosen] ?? tabs[0];
+	const result = runQuery(tab ? { ...tabDef(def.where, tab), limit: def.limit } : def, {
 		ix,
 		thisId: ctx.item.id,
 		today: todayISO(),
@@ -263,6 +286,23 @@ function QueryBlock({ src, ctx }: { src: string; ctx: Ctx }) {
 	return (
 		<View style={styles.query}>
 			{def.title ? <Text style={styles.queryTitle}>{def.title}</Text> : null}
+			{tabs.length > 1 && (
+				<View style={styles.tabs}>
+					{tabs.map((x, i) => (
+						<Pressable
+							accessibilityRole="tab"
+							accessibilityState={{ selected: x === tab }}
+							key={x.id}
+							onPress={() => choose(i)}
+							style={[styles.tab, x === tab && styles.tabOn]}
+						>
+							<Text style={[styles.tabText, x === tab && styles.tabTextOn]}>
+								{x.name || t(`view.${x.kind}`)}
+							</Text>
+						</Pressable>
+					))}
+				</View>
+			)}
 			{shown.length === 0 && <Text style={styles.queryEmpty}>{t("view.emptyFiltered")}</Text>}
 			{shown.map((x) => {
 				const look = lookOf(x, ix);
@@ -336,6 +376,11 @@ const styles = StyleSheet.create({
 		paddingHorizontal: 12,
 		paddingVertical: 8,
 	},
+	tabs: { flexDirection: "row", flexWrap: "wrap", gap: 6, paddingBottom: 4 },
+	tab: { backgroundColor: C.fill, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4 },
+	tabOn: { backgroundColor: C.accent },
+	tabText: { color: C.secondary, fontSize: 13, fontWeight: "500" },
+	tabTextOn: { color: "#fff" },
 	queryTitle: { color: C.secondary, fontSize: 13, fontWeight: "600", paddingVertical: 4 },
 	queryRow: { alignItems: "center", flexDirection: "row", gap: 10, minHeight: 40 },
 	queryText: { color: C.label, flex: 1, fontSize: 16 },

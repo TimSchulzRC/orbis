@@ -7,11 +7,17 @@ import type { Repo } from "@obtion/sync";
 import { useCallback, useSyncExternalStore } from "react";
 import { replica, useSession } from "./session";
 
-/** The workspace's replica; the screen follows its changes. */
-export function useRepo(space: string): Repo {
-	useSession(); // a new sign-in replaces the replicas
+const none = () => () => undefined;
+const zero = () => 0;
+
+/**
+ * The workspace's replica; the screen follows its changes. undefined once the account no longer
+ * has the workspace (deleted, or left) while a page of it is still open.
+ */
+export function useRepo(space: string): Repo | undefined {
+	useSession(); // a sign-in or a workspace list from the server changes the replicas
 	const repo = replica(space);
-	useSyncExternalStore(repo.subscribe, repo.getVersion);
+	useSyncExternalStore(repo?.subscribe ?? none, repo?.getVersion ?? zero);
 	return repo;
 }
 
@@ -37,7 +43,7 @@ export interface Space {
 export function useSpaces(): Space[] {
 	const session = useSession();
 	const infos = session?.spaces ?? [];
-	const repos = infos.map((s) => replica(s.id));
+	const repos = infos.map((s) => replica(s.id)!);
 	const key = repos.map(idOf).join();
 	// biome-ignore lint/correctness/useExhaustiveDependencies: `key` names exactly these replicas
 	const subscribe = useCallback(

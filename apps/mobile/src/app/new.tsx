@@ -4,14 +4,16 @@
 import { Host, Picker, Text as SwiftText } from "@expo/ui/swift-ui";
 import { pickerStyle, tag, tint } from "@expo/ui/swift-ui/modifiers";
 import { statusOf, statusProp } from "@obtion/core/traits";
+import type { Repo } from "@obtion/sync";
 import * as Haptics from "expo-haptics";
 import { router, Stack, useLocalSearchParams } from "expo-router";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ScrollView, StyleSheet, Text, TextInput, useColorScheme, View } from "react-native";
 import { useRepo, useSpaces } from "../lib/hooks";
 import { t, titleOf } from "../lib/i18n";
 import { useSession } from "../lib/session";
 import { useKeyboardHeight } from "../ui/list";
+import { SpaceGone } from "../ui/status";
 import { C, GUTTER, RADIUS } from "../ui/theme";
 
 const ACCENT = { light: "#be780a", dark: "#f0b040" };
@@ -93,10 +95,13 @@ function NewNote() {
 	const types = ix
 		? [...capture, ...ix.typesByName().map((x) => x.id)].filter((x, i, all) => all.indexOf(x) === i)
 		: [];
-	const canSave = !!space && !!(title.trim() || body.trim());
+	// the copy on this phone must be open first: what is written before would not be kept
+	const canSave = !!space?.repo.status.loaded && !!(title.trim() || body.trim());
 	const keyboard = useKeyboardHeight();
-	const save = () => {
-		if (!space || !canSave) return;
+	const saving = useRef(false);
+	const save = async () => {
+		if (!space || !canSave || saving.current) return;
+		saving.current = true;
 		space.repo.ownStep(() =>
 			space.repo.create({
 				title: title.trim(),
@@ -104,13 +109,14 @@ function NewNote() {
 				...(type && ix?.types.has(type) ? { type } : {}),
 			}),
 		);
+		await space.repo.saved();
 		void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 		router.back();
 	};
 	return (
 		<>
 			<Stack.Screen options={{ title: t("quick.title") }} />
-			<Toolbar canSave={canSave} onSave={save} />
+			<Toolbar canSave={canSave} onSave={() => void save()} />
 			<ScrollView
 				contentContainerStyle={styles.content}
 				contentInset={{ bottom: keyboard }}
@@ -176,6 +182,11 @@ const KEEP = "";
 
 function NewUpdate({ space, id }: { space: string; id: string }) {
 	const repo = useRepo(space);
+	if (!repo) return <SpaceGone />;
+	return <Update id={id} repo={repo} />;
+}
+
+function Update({ id, repo }: { id: string; repo: Repo }) {
 	const [text, setText] = useState("");
 	const [status, setStatus] = useState(KEEP);
 	const item = repo.get(id);
@@ -184,12 +195,15 @@ function NewUpdate({ space, id }: { space: string; id: string }) {
 	const prop = statusProp(schema);
 	const current = item ? statusOf(item, schema)?.option.id : undefined;
 	const keyboard = useKeyboardHeight();
-	const save = () => {
-		if (!item || !text.trim()) return;
+	const saving = useRef(false);
+	const save = async () => {
+		if (!item || !text.trim() || saving.current) return;
+		saving.current = true;
 		const option = status !== KEEP && status !== current ? status : undefined;
 		repo.ownStep(() =>
 			repo.addUpdate(item.id, text.trim(), prop && option ? { prop: prop.id, option } : undefined),
 		);
+		await repo.saved();
 		void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 		router.back();
 	};
@@ -200,7 +214,7 @@ function NewUpdate({ space, id }: { space: string; id: string }) {
 					title: item ? t("updates.titleOf", { title: titleOf(item) }) : t("updates.title"),
 				}}
 			/>
-			<Toolbar canSave={!!text.trim()} onSave={save} />
+			<Toolbar canSave={!!text.trim()} onSave={() => void save()} />
 			<ScrollView
 				contentContainerStyle={styles.content}
 				contentInset={{ bottom: keyboard }}

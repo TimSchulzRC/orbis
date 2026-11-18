@@ -26,4 +26,17 @@ test("a tap ticks the n-th checkbox as the page shows them, not one in a code bl
 	expect(toggleTask(body, 2).split("\n")[5]).toBe("> - [x] quoted");
 	expect(toggleTask(body, 1).split("\n")[2]).toBe("- [ ] not a task");
 	expect(toggleTask(body, 3)).toBe(body);
+	// a line that is not the item the page showed there stays
+	expect(toggleTask(body, 0, "- [ ] bread")).toBe(body);
+	expect(toggleTask(body, 0, "- [ ] milk").split("\n")[0]).toBe("- [x] milk");
+	// a code fence inside a quote hides its lines too
+	expect(toggleTask("> ```\n> - [ ] code\n> ```\n- [ ] real", 0, "- [ ] real")).toBe(
+		"> ```\n> - [ ] code\n> ```\n- [x] real",
+	);
+});
+
+test("nested checkboxes count in the order of the text, as the page numbers them", () => {
+	const body = "- [ ] a\n  - [ ] a1\n- [ ] b";
+	expect(toggleTask(body, 1, "- [ ] a1")).toBe("- [ ] a\n  - [x] a1\n- [ ] b");
+	expect(toggleTask(body, 2, "- [ ] b")).toBe("- [ ] a\n  - [ ] a1\n- [x] b");
 });

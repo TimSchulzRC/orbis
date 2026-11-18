@@ -1,6 +1,7 @@
 // An entry's page: where it lives, its title, properties and text, what sits below it, its
 // updates and who links to it. The pencil opens the text in a full-screen editor.
 
+import { mergeText } from "@obtion/core/diff";
 import { fmtBytes, fmtDateTime } from "@obtion/core/i18n";
 import { META_TYPE } from "@obtion/core/model";
 import type { Repo } from "@obtion/sync";
@@ -25,6 +26,7 @@ import { lookOf, typeSymbol } from "../../../../../ui/look";
 import { Markdown } from "../../../../../ui/markdown";
 import { Below, Mentions, Path, Updates } from "../../../../../ui/page";
 import { Properties } from "../../../../../ui/props";
+import { SpaceGone } from "../../../../../ui/status";
 import { C, GUTTER } from "../../../../../ui/theme";
 
 const SAVE_MS = 600;
@@ -32,6 +34,11 @@ const SAVE_MS = 600;
 export default function ItemPage() {
 	const { space, id, edit } = useLocalSearchParams<{ space: string; id: string; edit?: string }>();
 	const repo = useRepo(space);
+	if (!repo) return <SpaceGone />;
+	return <Page edit={edit} id={id} repo={repo} space={space} />;
+}
+
+function Page({ space, id, edit, repo }: { space: string; id: string; edit?: string; repo: Repo }) {
 	const tab = useTab();
 	// the page as a long press preview: no title or toolbar to set (it would change the list's)
 	const preview = useIsPreview();
@@ -186,14 +193,18 @@ export default function ItemPage() {
 function TitleField({ id, title, repo }: { id: string; title: string; repo: Repo }) {
 	const [text, setText] = useState(title);
 	const focused = useRef(false);
-	const latest = useRef({ text, title });
-	latest.current = { text, title };
+	// typed and not saved yet: only that is ever written (a title is never trimmed just by looking)
+	const dirty = useRef(false);
+	const latest = useRef(text);
+	latest.current = text;
 	useEffect(() => {
-		if (!focused.current) setText(title);
+		if (!focused.current && !dirty.current) setText(title);
 	}, [title]);
 	const save = () => {
-		const { text: now, title: was } = latest.current;
-		if (now.trim() !== was) repo.ownStep(() => repo.setTitle(id, now.trim()));
+		if (!dirty.current) return;
+		dirty.current = false;
+		const next = latest.current.trim();
+		if (next !== repo.get(id)?.title) repo.ownStep(() => repo.setTitle(id, next));
 	};
 	// leaving the page while still typing keeps the title too
 	// biome-ignore lint/correctness/useExhaustiveDependencies: saves once, when the page goes
@@ -207,7 +218,10 @@ function TitleField({ id, title, repo }: { id: string; title: string; repo: Repo
 				focused.current = false;
 				save();
 			}}
-			onChangeText={(v) => setText(v.replace(/\n/g, " "))}
+			onChangeText={(v) => {
+				dirty.current = true;
+				setText(v.replace(/\n/g, " "));
+			}}
 			onFocus={() => {
 				focused.current = true;
 			}}
@@ -232,12 +246,20 @@ function BodyEditor({ id, repo, onDone }: { id: string; repo: Repo; onDone: () =
 	const latest = useRef(text);
 	latest.current = text;
 	const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const open = useRef(true);
+	/**
+	 * `saved` is the text the draft started from. Changed elsewhere meanwhile (another device, an
+	 * agent), the draft's own edits go onto that text instead of replacing it.
+	 */
 	const save = (next: string) => {
 		if (timer.current) clearTimeout(timer.current);
 		timer.current = null;
 		if (next === saved.current) return;
-		saved.current = next;
-		repo.setBody(id, next);
+		const current = repo.get(id)?.body ?? "";
+		const merged = mergeText(saved.current, next, current);
+		saved.current = merged;
+		if (merged !== current) repo.setBody(id, merged);
+		if (merged !== next && open.current) setText(merged);
 	};
 	// a change from elsewhere arrives while nothing is unsaved here: take it
 	useEffect(() => {
@@ -247,7 +269,13 @@ function BodyEditor({ id, repo, onDone }: { id: string; repo: Repo; onDone: () =
 		}
 	}, [body]);
 	// biome-ignore lint/correctness/useExhaustiveDependencies: saves once, when the editor goes
-	useEffect(() => () => save(latest.current), []);
+	useEffect(
+		() => () => {
+			open.current = false;
+			save(latest.current);
+		},
+		[],
+	);
 	const finish = () => {
 		save(text);
 		onDone();

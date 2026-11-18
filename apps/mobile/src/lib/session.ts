@@ -71,27 +71,42 @@ function deviceName(): string {
 
 // ---- replicas -------------------------------------------------------------------------------
 
+interface Host extends RepoHost {
+	/** Stops syncing for good and closes the database. */
+	dispose(): Promise<void>;
+	/** Signed in again: a replica waiting for that connects now. */
+	resume(): void;
+}
 interface Open {
 	repo: Repo;
-	/** Stops syncing and closes the database. */
-	dispose: () => Promise<void>;
+	host: Host;
 }
 const open = new Map<string, Open>();
+/** Replicas still closing: a new one of the same workspace opens its database after. */
+const closing = new Map<string, Promise<void>>();
 
-/** A socket that never opens: a disposed replica's reconnect attempts end there. */
-const inert: SyncSocket = {
-	readyState: 0,
-	send() {
-		// never sent
-	},
-	close() {
-		// never opened
-	},
-	onopen: null,
-	onmessage: null,
-	onclose: null,
-	onerror: null,
-};
+/**
+ * A socket that stays "connecting": the replica waits on it while the server does not take the
+ * token (until resume() closes it), or for good once the replica is disposed.
+ */
+function parked(): SyncSocket {
+	const socket = {
+		readyState: 0,
+		send() {
+			// never sent
+		},
+		close() {
+			if (socket.readyState === 3) return;
+			socket.readyState = 3;
+			socket.onclose?.();
+		},
+		onopen: null,
+		onmessage: null,
+		onclose: null as (() => void) | null,
+		onerror: null,
+	};
+	return socket;
+}
 
 function ask<K extends string>(
 	title: string,
@@ -106,22 +121,24 @@ function ask<K extends string>(
 	);
 }
 
-function host(space: string, onReload: () => void): RepoHost & { dispose(): Promise<void> } {
+function host(space: string, s: Session, onReload: () => void): Host {
 	let disposed = false;
-	const storage = sqliteStorage(space);
+	const storage = sqliteStorage(space, closing.get(space));
 	let socket: WebSocket | null = null;
+	let waiting: SyncSocket | null = null;
 	const wakers: (() => void)[] = [];
 	const sub = AppState.addEventListener("change", (state) => {
 		if (state === "active") for (const fn of wakers) fn();
 	});
-	// asked for while signing out (a screen still on its way out): it never connects
-	const s = session ?? { server: "", user: { id: "", name: "", email: "" } };
 	return {
 		storage,
 		device: deviceName(),
 		person: { id: s.user.id, name: firstName(s.user) },
 		connect() {
-			if (disposed || !token || !s.server || session?.lost) return inert;
+			if (disposed || !token || session?.lost) {
+				waiting = parked();
+				return waiting;
+			}
 			// the token as a subprotocol, as in the browser (the server reads it there or in the header)
 			socket = new WebSocket(`${s.server.replace(/^http/, "ws")}/w/${space}/sync`, [
 				"obtion",
@@ -160,8 +177,14 @@ function host(space: string, onReload: () => void): RepoHost & { dispose(): Prom
 			Alert.alert(t("format.tooNew"));
 		},
 		reload: onReload,
+		resume() {
+			const w = waiting;
+			waiting = null;
+			w?.close();
+		},
 		async dispose() {
 			disposed = true;
+			waiting = null;
 			sub.remove();
 			socket?.close();
 			await storage.close();
@@ -169,11 +192,15 @@ function host(space: string, onReload: () => void): RepoHost & { dispose(): Prom
 	};
 }
 
-/** The workspace's replica, opened (and syncing) on first use. */
-export function replica(space: string): Repo {
+/**
+ * The replica of one of the account's workspaces, opened (and syncing) on first use. undefined for
+ * a workspace the account no longer has (a page of it may still be on screen).
+ */
+export function replica(space: string): Repo | undefined {
 	const known = open.get(space);
 	if (known) return known.repo;
-	const h = host(space, () => {
+	if (!session?.spaces.some((w) => w.id === space)) return undefined;
+	const h = host(space, session, () => {
 		// the storage was emptied (another server): start afresh
 		void forgetReplica(space).then(() => {
 			version++;
@@ -181,7 +208,7 @@ export function replica(space: string): Repo {
 		});
 	});
 	const repo = new Repo(h);
-	open.set(space, { repo, dispose: h.dispose });
+	open.set(space, { repo, host: h });
 	setUpWhenEmpty(repo);
 	repo.init().catch((e) => console.error("could not open the replica", e));
 	return repo;
@@ -200,10 +227,31 @@ function setUpWhenEmpty(repo: Repo) {
 	});
 }
 
+/** Closes a replica; a new one of the workspace waits for that (see `closing`). */
 function forgetReplica(space: string): Promise<void> {
 	const o = open.get(space);
+	if (!o) return closing.get(space) ?? Promise.resolve();
 	open.delete(space);
-	return o?.dispose() ?? Promise.resolve();
+	const done: Promise<void> = o.host.dispose().finally(() => {
+		if (closing.get(space) === done) closing.delete(space);
+	});
+	closing.set(space, done);
+	return done;
+}
+
+/** A workspace gone on the server or from this phone: its replica and its database. */
+async function dropReplica(space: string) {
+	await forgetReplica(space);
+	await removeReplica(space);
+}
+
+/** Signed in again: the replicas that waited connect with the new token. */
+function resume() {
+	for (const o of open.values()) {
+		o.host.resume();
+		// one still loading connects when it is loaded
+		if (o.repo.status.loaded) o.repo.connect();
+	}
 }
 
 /** Pending local changes in any workspace. */
@@ -235,53 +283,71 @@ export async function signInWithCode(server: string, email: string, otp: string)
 	await keep(server, res.token);
 }
 
-/** Another account (or server) signed in before is forgotten first; the same one keeps its copies. */
+/** The workspace the account has: the active one if it still is, else the first. */
+const activeOf = (active: string | null | undefined, spaces: WorkspaceInfo[]) =>
+	active && spaces.some((w) => w.id === active) ? active : (spaces[0]?.id ?? null);
+
+/**
+ * Another account (or server) signed in before is forgotten first. The same one signing in again
+ * keeps its copies, with what they did not send yet: they go on with the new token.
+ */
 async function keep(server: string, next: string) {
 	const me = await call<AccountInfo>(server, "/api/account", { token: next });
-	const same = session && session.server === server && session.user.id === me.user.id;
+	const same = !!session && session.server === server && session.user.id === me.user.id;
 	if (session && !same) await forgetAll();
 	else if (session && token && token !== next && !session.lost)
 		await call<Ok>(server, "/api/account/signout", { body: {}, token }).catch(() => {
 			// the old session ends on its own
 		});
-	await Promise.all([...open.keys()].map(forgetReplica)); // their hosts hold the old person and socket
+	const gone = same ? session!.spaces.filter((s) => !me.workspaces.some((w) => w.id === s.id)) : [];
 	token = next;
 	SecureStore.setItem(TOKEN, next);
-	const active =
-		session?.active && me.workspaces.some((w) => w.id === session!.active)
-			? session.active
-			: (me.workspaces[0]?.id ?? null);
-	session = { server, user: me.user, spaces: me.workspaces, active, lost: false };
+	session = {
+		server,
+		user: me.user,
+		spaces: me.workspaces,
+		active: activeOf(session?.active, me.workspaces),
+		lost: false,
+	};
 	save();
+	for (const s of gone) await dropReplica(s.id);
+	resume();
 }
 
-/** The account's workspaces and name from the server; marks the session lost when it refuses the token. */
+/**
+ * The account's workspaces and name from the server; marks the session lost when it refuses the
+ * token. An answer for a token or account that changed meanwhile is dropped.
+ */
 export async function refresh() {
 	if (!session || !token) return;
-	let gone: WorkspaceInfo[] = [];
+	const asked = { token, server: session.server, user: session.user.id, lost: !!session.lost };
+	const current = () =>
+		!!session &&
+		token === asked.token &&
+		session.server === asked.server &&
+		session.user.id === asked.user;
+	let me: AccountInfo;
 	try {
-		const me = await call<AccountInfo>(session.server, "/api/account", { token });
-		gone = session.spaces.filter((s) => !me.workspaces.some((w) => w.id === s.id));
-		session = {
-			...session,
-			user: me.user,
-			spaces: me.workspaces,
-			lost: false,
-			active:
-				session.active && me.workspaces.some((w) => w.id === session!.active)
-					? session.active
-					: (me.workspaces[0]?.id ?? null),
-		};
+		me = await call<AccountInfo>(asked.server, "/api/account", { token: asked.token });
 	} catch (e) {
-		if (statusOf(e) !== 401) return; // offline: keep what is known
-		session = { ...session, lost: true };
-		await Promise.all([...open.keys()].map(forgetReplica));
+		if (statusOf(e) !== 401 || !current()) return; // offline: keep what is known
+		// the copies stay and keep what changes here; they connect again after signing in
+		session = { ...session!, lost: true };
+		save();
+		return;
 	}
-	for (const s of gone) {
-		await forgetReplica(s.id);
-		await removeReplica(s.id);
-	}
+	if (!current()) return;
+	const gone = session!.spaces.filter((s) => !me.workspaces.some((w) => w.id === s.id));
+	session = {
+		...session!,
+		user: me.user,
+		spaces: me.workspaces,
+		lost: false,
+		active: activeOf(session!.active, me.workspaces),
+	};
 	save();
+	for (const s of gone) await dropReplica(s.id);
+	if (asked.lost) resume();
 }
 
 /** A new workspace on the server; this phone sets it up once it is in sync. */
@@ -308,10 +374,9 @@ export async function signOut() {
 }
 
 async function forgetAll() {
-	const spaces = session?.spaces ?? [];
+	const spaces = new Set([...(session?.spaces.map((s) => s.id) ?? []), ...open.keys()]);
 	session = null;
 	token = null;
 	await SecureStore.deleteItemAsync(TOKEN);
-	await Promise.all([...open.keys()].map(forgetReplica));
-	for (const s of spaces) await removeReplica(s.id);
+	await Promise.all([...spaces].map(dropReplica));
 }

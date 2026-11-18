@@ -19,13 +19,20 @@ export type Storage = ReplicaStorage & {
 	close(): Promise<void>;
 };
 
-export function sqliteStorage(space: string): Storage {
+/**
+ * `after`: a replica of the same workspace still closing. Expo SQLite hands out one connection per
+ * file, so this one opens only once that one closed it.
+ */
+export function sqliteStorage(space: string, after: Promise<unknown> = Promise.resolve()): Storage {
 	const name = databaseName(space);
 	let db: SQLiteDatabase | null = null;
+	let opening: Promise<void> | null = null;
+	const opened = () => opening?.catch(() => undefined);
 	// One connection, one operation at a time: a transaction never interleaves with another write.
 	let queue: Promise<unknown> = Promise.resolve();
 	const serial = <T>(fn: (db: SQLiteDatabase) => Promise<T>): Promise<T> => {
-		const run = queue.then(() => {
+		const run = queue.then(async () => {
+			await opened();
 			if (!db) throw new Error(`${name} is closed`);
 			return fn(db);
 		});
@@ -47,9 +54,14 @@ export function sqliteStorage(space: string): Storage {
 		(await d.getFirstAsync<{ v: string }>("SELECT v FROM meta WHERE k = ?", k))?.v;
 
 	return {
-		async open() {
-			db = await openDatabaseAsync(name);
-			await db.execAsync(SCHEMA);
+		open() {
+			opening = (async () => {
+				await after.catch(() => undefined);
+				const d = await openDatabaseAsync(name);
+				await d.execAsync(SCHEMA);
+				db = d;
+			})();
+			return opening;
 		},
 		load: () =>
 			serial(async (d) => {
@@ -135,12 +147,15 @@ export function sqliteStorage(space: string): Storage {
 			}),
 		serverId: () => serial((d) => meta(d, "serverId")),
 		async destroy() {
+			await opened();
 			await queue;
-			await db?.closeAsync();
+			const d = db;
 			db = null;
+			await d?.closeAsync();
 			await deleteDatabaseAsync(name);
 		},
 		async close() {
+			await opened();
 			await queue;
 			const d = db;
 			db = null;
@@ -149,9 +164,10 @@ export function sqliteStorage(space: string): Storage {
 	};
 }
 
-/** Deletes a workspace's replica that is not open (signing out, a workspace gone on the server). */
+/** Deletes a workspace's replica that is closed (signing out, a workspace gone on the server). */
 export async function removeReplica(space: string) {
-	await deleteDatabaseAsync(databaseName(space)).catch(() => {
-		// never opened on this device
+	await deleteDatabaseAsync(databaseName(space)).catch((e: unknown) => {
+		// a workspace never opened on this device has no file; anything else should show
+		if (!/not (exist|found)/i.test(String(e))) console.warn(`could not delete ${space}`, e);
 	});
 }

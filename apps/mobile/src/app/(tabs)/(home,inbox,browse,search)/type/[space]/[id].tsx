@@ -2,6 +2,7 @@
 // field filters by title, "+" adds one.
 
 import { dueOf, isDone, statusOf, statusProp } from "@obtion/core/traits";
+import type { Repo } from "@obtion/sync";
 import * as Haptics from "expo-haptics";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
@@ -10,12 +11,18 @@ import { useRepo } from "../../../../../lib/hooks";
 import { t, titleOf } from "../../../../../lib/i18n";
 import { DueText, ItemRow, itemHref, placeOf, useTab } from "../../../../../ui/item";
 import { Empty, Row, Screen, Section } from "../../../../../ui/list";
+import { SpaceGone } from "../../../../../ui/status";
 
 const GROUPS = ["active", "todo", "done"] as const;
 
 export default function TypePage() {
 	const { space, id } = useLocalSearchParams<{ space: string; id: string }>();
 	const repo = useRepo(space);
+	if (!repo) return <SpaceGone />;
+	return <Entries id={id} repo={repo} space={space} />;
+}
+
+function Entries({ space, id, repo }: { space: string; id: string; repo: Repo }) {
 	const tab = useTab();
 	const [filter, setFilter] = useState("");
 	const [showDone, setShowDone] = useState(false);

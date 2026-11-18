@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { textDiff, unifiedDiff } from "@orbis/core/diff";
+import { mergeText, textDiff, unifiedDiff } from "@orbis/core/diff";
 
 test("same text: no hunks", () => {
 	expect(textDiff("a\nb\n", "a\nb\n")).toEqual({ hunks: [], added: 0, removed: 0 });
@@ -63,4 +63,17 @@ test("a rewrite too big to diff closely shows as replaced, still counted right",
 	expect([d.added, d.removed]).toEqual([6000, 6000]);
 	expect(d.hunks.length).toBe(1);
 	expect(d.hunks[0]!.lines[0]).toEqual({ op: "-", text: "old 0" });
+});
+
+test("merging a draft: edits from elsewhere stay, a clash goes to the draft", () => {
+	const base = "Ziel\n\n- Design\n- Umsetzung\n";
+	// an agent appended a line while the phone changed another
+	expect(mergeText(base, "Ziel!\n\n- Design\n- Umsetzung\n", `${base}- Livegang\n`)).toBe(
+		"Ziel!\n\n- Design\n- Umsetzung\n- Livegang\n",
+	);
+	// nothing changed elsewhere, or only there
+	expect(mergeText(base, "neu", base)).toBe("neu");
+	expect(mergeText(base, base, "anders")).toBe("anders");
+	// both changed the same line: the draft
+	expect(mergeText("a\nb\nc", "a\nB\nc", "a\nX\nc")).toBe("a\nB\nc");
 });

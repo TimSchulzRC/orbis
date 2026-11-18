@@ -3,6 +3,7 @@
 
 import type { Item } from "@obtion/core/model";
 import { canPlaceIn } from "@obtion/core/placement";
+import type { Repo } from "@obtion/sync";
 import * as Haptics from "expo-haptics";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
@@ -11,6 +12,7 @@ import { useRepo } from "../lib/hooks";
 import { t, titleOf } from "../lib/i18n";
 import { Empty, Icon, Row, Screen, Section } from "../ui/list";
 import { lookOf } from "../ui/look";
+import { SpaceGone } from "../ui/status";
 import { C, GUTTER } from "../ui/theme";
 
 const LIMIT = 60;
@@ -18,6 +20,11 @@ const LIMIT = 60;
 export default function Place() {
 	const { space, id } = useLocalSearchParams<{ space: string; id: string }>();
 	const repo = useRepo(space);
+	if (!repo) return <SpaceGone />;
+	return <Places id={id} repo={repo} />;
+}
+
+function Places({ id, repo }: { id: string; repo: Repo }) {
 	const [q, setQ] = useState("");
 	const ix = repo.index();
 	const item = repo.get(id);
