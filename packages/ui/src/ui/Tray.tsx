@@ -1,6 +1,6 @@
 // The inbox tray below every page; on a desktop it floats over the page, centred in the window. The
 // tray opens its panel, the list and an entry to sort; the button beside it (on a phone the "+") the
-// panel at a new note. On Heute on a desktop with room, the panel is pinned open as part of the page.
+// panel at a new note.
 
 import { Check, ChevronDown, ChevronUp, Inbox, Plus } from "lucide-react";
 import { useRef } from "react";
@@ -20,29 +20,26 @@ const DAY = 86_400_000;
 /** Pixels a finger moves up on the tray to open its panel. */
 const SWIPE_UP = 40;
 
-export function Tray({ desktop, pinned }: { desktop: boolean; pinned?: boolean }) {
+export function Tray({ desktop }: { desktop: boolean }) {
 	const { t } = useT();
 	const entries = useInboxItems();
 	const count = entries.length;
 	const { open, at } = useShelf();
-	// the panel over the page (pinned it is part of the page and stays)
-	const looking = open && !pinned;
 	const openPanel = () => openShelf();
 	const touch = useRef<number | null>(null);
 	const ages = entries.map((e) => age(e.item.created)).sort((a, b) => b - a);
 	// the legend of the marks, while the panel above is shut
 	const tray = (
-		<Tip card={<Legend ages={ages} />} label={t("tray.open", { count })} off={looking}>
+		<Tip card={<Legend ages={ages} />} label={t("tray.open", { count })} off={open}>
 			<Button
-				aria-expanded={pinned || open}
+				aria-expanded={open}
 				aria-label={t("tray.open", { count })}
 				className={cn(
 					"relative flex min-w-0 items-center gap-2.5 rounded-xl py-1.5 pl-2.5 pr-2 text-left",
 					desktop ? cn(SEGMENT, "min-h-11") : "min-h-10 flex-1",
-					pinned ? "cursor-default" : "hover:bg-hover",
+					"hover:bg-hover",
 				)}
-				// pinned it does not close, so nothing to click
-				onClick={() => (looking ? dismissShelf() : !pinned && openPanel())}
+				onClick={() => (open ? dismissShelf() : openPanel())}
 				onTouchEnd={(e) => {
 					if (
 						touch.current !== null &&
@@ -67,11 +64,10 @@ export function Tray({ desktop, pinned }: { desktop: boolean; pinned?: boolean }
 					</span>
 					<Fill ages={ages} />
 				</span>
-				{/* pinned it stays, hidden, so the field beside does not move between Heute and other pages */}
-				{looking ? (
+				{open ? (
 					<ChevronDown className="text-muted-foreground" size={14} />
 				) : (
-					<ChevronUp className={cn("text-muted-foreground", pinned && "invisible")} size={14} />
+					<ChevronUp className="text-muted-foreground" size={14} />
 				)}
 			</Button>
 		</Tip>
@@ -88,45 +84,31 @@ export function Tray({ desktop, pinned }: { desktop: boolean; pinned?: boolean }
 	);
 	return (
 		<>
-			{looking && <Backdrop aria-hidden className="z-30" onClick={dismissShelf} />}
+			{open && <Backdrop aria-hidden className="z-30" onClick={dismissShelf} />}
 			<section
 				aria-label={t("tray.title")}
 				// floating, only the bar and its panel take clicks; the page below shows through
 				className={cn(
 					"z-40",
-					pinned
-						? "relative flex min-h-[308px] flex-1 flex-col px-8 pb-4 pt-2"
-						: desktop
-							? "pointer-events-none fixed inset-x-0 bottom-0 px-6 pb-4"
-							: "relative shrink-0 px-3 pb-2 pt-1",
+					desktop
+						? "pointer-events-none fixed inset-x-0 bottom-0 px-6 pb-4"
+						: "relative shrink-0 px-3 pb-2 pt-1",
 				)}
 			>
-				<div
-					className={cn(
-						"mx-auto",
-						desktop && "max-w-[1040px]",
-						pinned && "flex min-h-0 w-full flex-1 flex-col",
-					)}
-				>
-					{pinned ? (
-						<div className="min-h-0 flex-1 pb-10">
-							<InboxPanel desktop pinned />
+				<div className={cn("mx-auto", desktop && "max-w-[1040px]")}>
+					{open && (
+						// on a phone an entry takes the whole screen, as a sheet
+						<div
+							className={cn(
+								desktop
+									? "pointer-events-auto absolute inset-x-6 bottom-full mx-auto max-w-[1040px] pb-10"
+									: at
+										? "fixed inset-x-0 bottom-0 top-3 z-50 pt-safe"
+										: "absolute inset-x-2 bottom-full pb-7",
+							)}
+						>
+							<InboxPanel desktop={desktop} />
 						</div>
-					) : (
-						looking && (
-							// on a phone an entry takes the whole screen, as a sheet
-							<div
-								className={cn(
-									desktop
-										? "pointer-events-auto absolute inset-x-6 bottom-full mx-auto max-w-[1040px] pb-10"
-										: at
-											? "fixed inset-x-0 bottom-0 top-3 z-50 pt-safe"
-											: "absolute inset-x-2 bottom-full pb-7",
-								)}
-							>
-								<InboxPanel desktop={desktop} />
-							</div>
-						)
 					)}
 					{desktop ? (
 						// the inbox, "Neu" and, all sorted, a word on it: side by side in one frame

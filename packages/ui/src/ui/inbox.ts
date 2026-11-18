@@ -97,7 +97,7 @@ function useEntries(pick: (ix: Index) => Item[]): InboxEntry[] {
 
 /**
  * The inbox panel, open at `at` (an entry key; none: the first waiting). The open panel is a
- * history step, so Back closes it instead of leaving the app on a phone. On Heute that step is
+ * history step, so Back closes it instead of leaving the app on a phone. On Home that step is
  * "#/inbox", elsewhere the page's own address once more. "#/review" is the old address of the same.
  */
 const shelf = createStore<{ open: boolean; at?: string }>({ open: false });
@@ -141,8 +141,4 @@ export function syncShelf() {
 }
 addEventListener("popstate", syncShelf);
 
-/** Pinned open on desktop Heute (App.tsx), which then hides its own list of entries. */
-const pinned = createStore(false);
-export const setShelfPinned = (value: boolean) => value !== pinned.get() && pinned.set(value);
-export const useShelfPinned = pinned.use;
 export const useShelf = shelf.use;

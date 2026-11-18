@@ -1,6 +1,6 @@
 // The inbox panel's list: every row has the whole page one click away (an icon, shown on hover); what
 // waits until tomorrow is folded below ("Morgen wieder"), opens beside and can come back into the inbox
-// now. Pinned on Heute the panel takes its keys only while the focus is in it.
+// now.
 
 import { tomorrow } from "@obtion/core/inbox";
 import { setMeta } from "@obtion/core/model";
@@ -25,7 +25,7 @@ beforeEach(async () => {
 	openShelf(); // the panel is one for the app: not at an entry a test before opened
 	await render(
 		<div style={{ width: 1040, height: 700, margin: "0 auto" }}>
-			<InboxPanel desktop pinned />
+			<InboxPanel desktop />
 		</div>,
 	);
 });
@@ -69,26 +69,12 @@ test('"Morgen wieder" lists what waits, folded; it opens beside and comes back i
 		.toBeVisible();
 	await later.getByText(title, { exact: true }).click();
 	await expect.poll(titleNow).toBe(title);
-	// pinned: nothing to close
-	await expect.element(page.getByRole("button", { name: "Schließen" })).not.toBeInTheDocument();
 	await page.getByRole("button", { name: /^Zurückholen/ }).click();
 	await expect.element(page.getByRole("button", { name: /^Morgen/ }).first()).toBeVisible();
 	await expect.element(later.getByText(title, { exact: true })).not.toBeInTheDocument();
 });
 
-test("pinned, the keys are the panel's only while the focus is in it", async () => {
-	await expect.poll(titleNow).not.toBe("");
-	const first = titleNow();
-	(document.activeElement as HTMLElement | null)?.blur();
-	await commands.keys("press", "a");
-	await new Promise((r) => setTimeout(r, 200));
-	expect(titleNow(), "a key on the page does not pin the entry").toBe(first);
-	page.getByRole("article").element().closest<HTMLElement>("[data-shelf-panel]")!.focus();
-	await commands.keys("press", "a");
-	await expect.poll(titleNow, { message: "in the panel it does" }).not.toBe(first);
-});
-
-test("pinned, Esc in the title leaves it and the keys are the panel's again", async () => {
+test("Esc in the title leaves it and the keys are the panel's again", async () => {
 	await expect.poll(titleNow).not.toBe("");
 	const first = titleNow();
 	await page.getByRole("article").getByRole("textbox", { name: "Titel" }).click();
