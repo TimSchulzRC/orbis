@@ -11,10 +11,10 @@ const FIRST: Record<string, string> = {
 };
 
 export const unstable_settings = {
-	initialRouteName: "index",
-	inbox: { initialRouteName: "inbox" },
-	browse: { initialRouteName: "browse" },
-	search: { initialRouteName: "search" },
+	anchor: "index",
+	inbox: { anchor: "inbox" },
+	browse: { anchor: "browse" },
+	search: { anchor: "search" },
 };
 
 export default function TabStack({ segment }: { segment: string }) {
