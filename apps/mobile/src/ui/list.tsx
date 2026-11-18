@@ -221,18 +221,7 @@ export function Empty({ symbol, title, text }: { symbol: SFSymbol; title: string
 	);
 }
 
-/** A one-line note above or below the lists. */
-export function Note({
-	children,
-	color = C.secondary,
-}: {
-	children: ReactNode;
-	color?: ColorValue;
-}) {
-	return <Text style={[styles.note, { color }]}>{children}</Text>;
-}
-
-export const styles = StyleSheet.create({
+const styles = StyleSheet.create({
 	screen: { flex: 1, backgroundColor: C.background },
 	content: { paddingBottom: 48 },
 	section: { marginTop: 22, marginHorizontal: GUTTER },
@@ -281,5 +270,4 @@ export const styles = StyleSheet.create({
 	empty: { alignItems: "center", gap: 10, paddingHorizontal: 40, paddingTop: 90 },
 	emptyTitle: { color: C.label, fontSize: 20, fontWeight: "600", textAlign: "center" },
 	emptyText: { color: C.secondary, fontSize: 15, textAlign: "center" },
-	note: { fontSize: 15, lineHeight: 21, marginHorizontal: GUTTER + 4, marginTop: 6 },
 });

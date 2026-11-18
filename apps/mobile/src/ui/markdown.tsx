@@ -12,6 +12,7 @@ import { Marked, type Token, type TokenizerExtension, type Tokens } from "marked
 import { Fragment, type ReactNode, useMemo } from "react";
 import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { t, titleOf } from "../lib/i18n";
+import { toggleTask } from "../lib/text";
 import { DueText, itemHref, StatusCircle } from "./item";
 import { Icon } from "./list";
 import { lookOf } from "./look";
@@ -46,16 +47,6 @@ const wikilink: TokenizerExtension = {
 };
 
 const marked = new Marked({ gfm: true, extensions: [wikilink] });
-
-const TASK = /^([ \t]*(?:[-*+]|\d+[.)])[ \t]+\[)([ xX])(\])/gm;
-
-/** Ticks the n-th checkbox of the text. */
-export function toggleTask(body: string, n: number): string {
-	let i = 0;
-	return body.replace(TASK, (all, open: string, mark: string, close: string) =>
-		i++ === n ? `${open}${mark === " " ? "x" : " "}${close}` : all,
-	);
-}
 
 interface Ctx {
 	space: string;

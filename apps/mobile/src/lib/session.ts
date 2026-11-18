@@ -59,7 +59,6 @@ export function useSession(): Session | null {
 	useSyncExternalStore(subscribe, () => version);
 	return session;
 }
-export const currentSession = () => session;
 
 /** Names this device in the origin of its changes ("iPhone-x3f9"), never shown. */
 function deviceName(): string {
@@ -115,13 +114,14 @@ function host(space: string, onReload: () => void): RepoHost & { dispose(): Prom
 	const sub = AppState.addEventListener("change", (state) => {
 		if (state === "active") for (const fn of wakers) fn();
 	});
-	const s = session!;
+	// asked for while signing out (a screen still on its way out): it never connects
+	const s = session ?? { server: "", user: { id: "", name: "", email: "" } };
 	return {
 		storage,
 		device: deviceName(),
 		person: { id: s.user.id, name: firstName(s.user) },
 		connect() {
-			if (disposed || !token || session?.lost) return inert;
+			if (disposed || !token || !s.server || session?.lost) return inert;
 			// the token as a subprotocol, as in the browser (the server reads it there or in the header)
 			socket = new WebSocket(`${s.server.replace(/^http/, "ws")}/w/${space}/sync`, [
 				"obtion",
@@ -315,5 +315,3 @@ async function forgetAll() {
 	await Promise.all([...open.keys()].map(forgetReplica));
 	for (const s of spaces) await removeReplica(s.id);
 }
-
-export const errorStatus = statusOf;
