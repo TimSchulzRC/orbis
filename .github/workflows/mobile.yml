@@ -1,0 +1,47 @@
+name: Mobile
+
+# The iPhone app (apps/mobile): its types and its iOS bundle, built from the shared packages. It
+# has its own dependencies (React Native pins its React), so ci.yml's check job leaves it out.
+# Building the native app needs a Mac; this job proves what Linux can: every import resolves and
+# Hermes compiles the code.
+on:
+  push:
+    branches: [main]
+    paths: &paths
+      - apps/mobile/**
+      - packages/core/**
+      - packages/sync/**
+      - .github/workflows/mobile.yml
+  pull_request:
+    paths: *paths
+
+concurrency:
+  group: mobile-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  bundle:
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 15
+    env:
+      SELF_HOSTED: ${{ vars.RUNNER != '' }}
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v7
+      # Bun as in ci.yml: GitHub's runners install it, the self-hosted machine upgrades its own
+      - uses: oven-sh/setup-bun@v2
+        if: env.SELF_HOSTED != 'true'
+        with:
+          bun-version: latest
+      - if: env.SELF_HOSTED == 'true'
+        run: |
+          echo "$HOME/.bun/bin" >> "$GITHUB_PATH"
+          flock ~/.bun/upgrade.lock ~/.bun/bin/bun upgrade
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun run bundle --output-dir "$RUNNER_TEMP/mobile-bundle"

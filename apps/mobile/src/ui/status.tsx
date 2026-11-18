@@ -1,0 +1,58 @@
+// Above the lists: the session no longer counts (sign in again), or the first sync still runs.
+
+import { router } from "expo-router";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import type { Space } from "../lib/hooks";
+import { t } from "../lib/i18n";
+import { useSession } from "../lib/session";
+import { Icon } from "./list";
+import { C, GUTTER, RADIUS } from "./theme";
+
+export function SessionNotice({ spaces }: { spaces: Space[] }) {
+	const session = useSession();
+	if (session?.lost)
+		return (
+			<Pressable onPress={() => router.push("/reauth")} style={styles.card}>
+				<Icon color={C.red} name="exclamationmark.triangle.fill" size={20} />
+				<View style={styles.texts}>
+					<Text style={styles.title}>{t("account.lostTitle")}</Text>
+					<Text style={styles.text}>{t("account.lost", { server: session.server })}</Text>
+				</View>
+				<Icon color={C.tertiary} name="chevron.right" size={13} />
+			</Pressable>
+		);
+	const loading = spaces.some((s) => !s.ix && !s.repo.status.synced);
+	if (!loading) return null;
+	return (
+		<View style={styles.loading}>
+			<ActivityIndicator />
+			<Text style={styles.text}>
+				{spaces.some((s) => s.repo.status.online) ? t("sync.catchingUp") : t("sync.reconnecting")}
+			</Text>
+		</View>
+	);
+}
+
+const styles = StyleSheet.create({
+	card: {
+		alignItems: "center",
+		backgroundColor: C.card,
+		borderCurve: "continuous",
+		borderRadius: RADIUS,
+		flexDirection: "row",
+		gap: 12,
+		marginHorizontal: GUTTER,
+		marginTop: 16,
+		padding: GUTTER,
+	},
+	texts: { flex: 1, gap: 2 },
+	title: { color: C.label, fontSize: 17, fontWeight: "600" },
+	text: { color: C.secondary, fontSize: 15 },
+	loading: {
+		alignItems: "center",
+		flexDirection: "row",
+		gap: 10,
+		justifyContent: "center",
+		marginTop: 24,
+	},
+});

@@ -1,6 +1,7 @@
-// Every text key the app names literally – t("…") or tr("…") in packages/ui and apps/web – exists
-// in both languages, and both languages have the same keys. Keys built at runtime ("kind." + k,
-// `triage.${…}`) are not checked; core's own t() adds a prefix (setup.ts), so core is left out.
+// Every text key the apps name literally – t("…") or tr("…") in packages/ui, apps/web and
+// apps/mobile – exists in both languages, and both languages have the same keys. Keys built at
+// runtime ("kind." + k, `triage.${…}`) are not checked; core's own t() adds a prefix (setup.ts),
+// so core is left out.
 import { expect, test } from "bun:test";
 import de from "@orbis/core/locales/de.json";
 import en from "@orbis/core/locales/en.json";
@@ -10,7 +11,7 @@ const root = new URL("../../", import.meta.url).pathname;
 
 async function literalKeys(): Promise<Map<string, string>> {
 	const keys = new Map<string, string>();
-	for (const dir of ["packages/ui/src", "apps/web/src"]) {
+	for (const dir of ["packages/ui/src", "apps/web/src", "apps/mobile/src"]) {
 		for await (const file of new Glob("**/*.{ts,tsx}").scan({ cwd: root + dir })) {
 			const text = await Bun.file(`${root}${dir}/${file}`).text();
 			for (const m of text.matchAll(/(?<![\w.$])tr?\("([^"\\]+)"\s*[,)]/g))

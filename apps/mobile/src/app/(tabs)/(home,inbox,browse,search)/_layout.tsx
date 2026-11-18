@@ -1,0 +1,36 @@
+// Each tab is a native stack: its first page with a large title, entry and type pages pushed on
+// top of it (shared by all four tabs, so the tab bar stays and "back" returns where you were).
+
+import { Stack } from "expo-router";
+
+const FIRST: Record<string, string> = {
+	"(home)": "index",
+	"(inbox)": "inbox",
+	"(browse)": "browse",
+	"(search)": "search",
+};
+
+export const unstable_settings = {
+	initialRouteName: "index",
+	inbox: { initialRouteName: "inbox" },
+	browse: { initialRouteName: "browse" },
+	search: { initialRouteName: "search" },
+};
+
+export default function TabStack({ segment }: { segment: string }) {
+	return (
+		<Stack
+			screenOptions={{
+				headerTransparent: true,
+				headerShadowVisible: false,
+				headerLargeTitleShadowVisible: false,
+				headerBackButtonDisplayMode: "minimal",
+				headerLargeStyle: { backgroundColor: "transparent" },
+			}}
+		>
+			<Stack.Screen name={FIRST[segment] ?? "index"} options={{ headerLargeTitle: true }} />
+			<Stack.Screen name="type/[space]/[id]" options={{ headerLargeTitle: true }} />
+			<Stack.Screen name="item/[space]/[id]" options={{ title: "" }} />
+		</Stack>
+	);
+}

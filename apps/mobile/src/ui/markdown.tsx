@@ -1,0 +1,352 @@
+// A page's Markdown as native text: headings, lists with checkboxes that tick, quotes, code,
+// tables, [[links]] to other entries and ```query blocks as live lists.
+
+import type { Index } from "@obtion/core/graph";
+import { type Item, todayISO, wikiLinkRe } from "@obtion/core/model";
+import { readBlock, runQuery, tabDef } from "@obtion/core/query";
+import { dueOf, isDone, statusProp } from "@obtion/core/traits";
+import type { Repo } from "@obtion/sync";
+import * as Haptics from "expo-haptics";
+import { router } from "expo-router";
+import { Marked, type Token, type TokenizerExtension, type Tokens } from "marked";
+import { Fragment, type ReactNode, useMemo } from "react";
+import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
+import { t, titleOf } from "../lib/i18n";
+import { DueText, itemHref, StatusCircle } from "./item";
+import { Icon } from "./list";
+import { lookOf } from "./look";
+import { C } from "./theme";
+
+interface WikiToken {
+	type: "wikilink";
+	raw: string;
+	embed: boolean;
+	target: string;
+	label?: string;
+}
+
+const wikilink: TokenizerExtension = {
+	name: "wikilink",
+	level: "inline",
+	start(src) {
+		const i = src.indexOf("[[");
+		return i > 0 && src[i - 1] === "!" ? i - 1 : i;
+	},
+	tokenizer(src) {
+		const m = wikiLinkRe(true).exec(src);
+		if (!m) return;
+		return {
+			type: "wikilink",
+			raw: m[0],
+			embed: m[1] === "!",
+			target: m[2]!.trim(),
+			label: m[4]?.slice(1).trim() || undefined,
+		} satisfies WikiToken;
+	},
+};
+
+const marked = new Marked({ gfm: true, extensions: [wikilink] });
+
+const TASK = /^([ \t]*(?:[-*+]|\d+[.)])[ \t]+\[)([ xX])(\])/gm;
+
+/** Ticks the n-th checkbox of the text. */
+export function toggleTask(body: string, n: number): string {
+	let i = 0;
+	return body.replace(TASK, (all, open: string, mark: string, close: string) =>
+		i++ === n ? `${open}${mark === " " ? "x" : " "}${close}` : all,
+	);
+}
+
+interface Ctx {
+	space: string;
+	tab: string;
+	ix: Index;
+	repo: Repo;
+	item: Item;
+	tasks: { n: number };
+}
+
+export function Markdown({
+	body,
+	space,
+	tab,
+	ix,
+	repo,
+	item,
+}: Omit<Ctx, "tasks"> & { body: string }) {
+	const tokens = useMemo(() => marked.lexer(body), [body]);
+	const ctx: Ctx = { space, tab, ix, repo, item, tasks: { n: 0 } };
+	return <View style={styles.doc}>{blocks(tokens, ctx)}</View>;
+}
+
+function blocks(tokens: Token[], ctx: Ctx): ReactNode[] {
+	// biome-ignore lint/suspicious/noArrayIndexKey: parsed Markdown has no ids; it is rebuilt with the text
+	return tokens.map((tok, i) => <Fragment key={i}>{block(tok, ctx)}</Fragment>);
+}
+
+function block(tok: Token, ctx: Ctx): ReactNode {
+	switch (tok.type) {
+		case "space":
+		case "def":
+			return null;
+		case "heading": {
+			const h = tok as Tokens.Heading;
+			return (
+				<Text style={[styles.text, HEADINGS[h.depth - 1] ?? HEADINGS[2]]}>
+					{inline(h.tokens, ctx)}
+				</Text>
+			);
+		}
+		case "paragraph":
+			return <Text style={styles.text}>{inline((tok as Tokens.Paragraph).tokens, ctx)}</Text>;
+		case "text": {
+			const x = tok as Tokens.Text;
+			return <Text style={styles.text}>{x.tokens ? inline(x.tokens, ctx) : x.text}</Text>;
+		}
+		case "list":
+			return <List ctx={ctx} list={tok as Tokens.List} />;
+		case "blockquote":
+			return <View style={styles.quote}>{blocks((tok as Tokens.Blockquote).tokens, ctx)}</View>;
+		case "code": {
+			const code = tok as Tokens.Code;
+			if (code.lang?.startsWith("query"))
+				return <QueryBlock ctx={ctx} src={`${code.lang.slice(5)}\n${code.text}`.trim()} />;
+			return (
+				<View style={styles.code}>
+					<Text selectable style={styles.mono}>
+						{code.text}
+					</Text>
+				</View>
+			);
+		}
+		case "hr":
+			return <View style={styles.hr} />;
+		case "table": {
+			const table = tok as Tokens.Table;
+			return (
+				<View style={styles.table}>
+					{[table.header, ...table.rows].map((row, r) => (
+						// biome-ignore lint/suspicious/noArrayIndexKey: parsed Markdown has no ids; it is rebuilt with the text
+						<View key={r} style={[styles.tr, r === 0 && styles.th]}>
+							{row.map((cell, c) => (
+								// biome-ignore lint/suspicious/noArrayIndexKey: parsed Markdown has no ids; it is rebuilt with the text
+								<Text key={c} style={[styles.td, r === 0 && { fontWeight: "600" }]}>
+									{inline(cell.tokens, ctx)}
+								</Text>
+							))}
+						</View>
+					))}
+				</View>
+			);
+		}
+		case "html":
+			return <Text style={styles.text}>{(tok as Tokens.HTML).text}</Text>;
+		default:
+			return "tokens" in tok && tok.tokens ? (
+				<Text style={styles.text}>{inline(tok.tokens, ctx)}</Text>
+			) : null;
+	}
+}
+
+function List({ list, ctx }: { list: Tokens.List; ctx: Ctx }) {
+	return (
+		<View style={styles.list}>
+			{list.items.map((li, i) => {
+				let marker: ReactNode;
+				if (li.task) {
+					const n = ctx.tasks.n++;
+					marker = (
+						<Pressable
+							hitSlop={8}
+							onPress={() => {
+								void Haptics.selectionAsync();
+								ctx.repo.ownStep(() => ctx.repo.setBody(ctx.item.id, toggleTask(ctx.item.body, n)));
+							}}
+						>
+							<Icon
+								color={li.checked ? C.ok : C.faint}
+								name={li.checked ? "checkmark.square.fill" : "square"}
+								size={20}
+							/>
+						</Pressable>
+					);
+				} else
+					marker = (
+						<Text style={styles.marker}>
+							{list.ordered ? `${(Number(list.start) || 1) + i}.` : "•"}
+						</Text>
+					);
+				const content = li.tokens.filter((x) => x.type !== "checkbox");
+				return (
+					// biome-ignore lint/suspicious/noArrayIndexKey: parsed Markdown has no ids; it is rebuilt with the text
+					<View key={i} style={styles.li}>
+						<View style={styles.markerBox}>{marker}</View>
+						<View style={[styles.liBody, li.task && li.checked && styles.checked]}>
+							{blocks(content, ctx)}
+						</View>
+					</View>
+				);
+			})}
+		</View>
+	);
+}
+
+function inline(tokens: Token[] | undefined, ctx: Ctx): ReactNode[] {
+	// biome-ignore lint/suspicious/noArrayIndexKey: parsed Markdown has no ids; it is rebuilt with the text
+	return (tokens ?? []).map((tok, i) => <Fragment key={i}>{span(tok, ctx)}</Fragment>);
+}
+
+function span(tok: Token, ctx: Ctx): ReactNode {
+	switch (tok.type) {
+		case "text": {
+			const x = tok as Tokens.Text;
+			return x.tokens ? inline(x.tokens, ctx) : x.text;
+		}
+		case "escape":
+			return (tok as Tokens.Escape).text;
+		case "strong":
+			return (
+				<Text style={{ fontWeight: "700" }}>{inline((tok as Tokens.Strong).tokens, ctx)}</Text>
+			);
+		case "em":
+			return <Text style={{ fontStyle: "italic" }}>{inline((tok as Tokens.Em).tokens, ctx)}</Text>;
+		case "del":
+			return (
+				<Text style={{ textDecorationLine: "line-through" }}>
+					{inline((tok as Tokens.Del).tokens, ctx)}
+				</Text>
+			);
+		case "codespan":
+			return <Text style={styles.codespan}>{(tok as Tokens.Codespan).text}</Text>;
+		case "br":
+			return "\n";
+		case "link": {
+			const link = tok as Tokens.Link;
+			return (
+				<Text onPress={() => void Linking.openURL(link.href)} style={styles.link}>
+					{inline(link.tokens, ctx)}
+				</Text>
+			);
+		}
+		case "image":
+			return (
+				<Text style={styles.link}>{(tok as Tokens.Image).text || (tok as Tokens.Image).href}</Text>
+			);
+		case "wikilink": {
+			const w = tok as unknown as WikiToken;
+			const id = ctx.ix.resolveTitle(w.target);
+			const target = id ? ctx.ix.get(id) : undefined;
+			const label = w.label ?? (target ? titleOf(target) : w.target);
+			if (!target) return <Text style={styles.missing}>{label}</Text>;
+			return (
+				<Text
+					onPress={() => router.push(itemHref(ctx.tab, ctx.space, target.id))}
+					style={styles.wiki}
+				>
+					{w.embed ? `▸ ${label}` : label}
+				</Text>
+			);
+		}
+		case "checkbox":
+			return null;
+		case "html":
+			return (tok as Tokens.HTML).text;
+		default:
+			return "text" in tok ? String(tok.text) : null;
+	}
+}
+
+const QUERY_ROWS = 25;
+
+/** A ```query block: its entries as a small live list. */
+function QueryBlock({ src, ctx }: { src: string; ctx: Ctx }) {
+	const { ix } = ctx;
+	const { def } = readBlock(src, ix);
+	const first = def.tabs?.[0];
+	const result = runQuery(first ? { ...tabDef(def.where, first), limit: def.limit } : def, {
+		ix,
+		thisId: ctx.item.id,
+		today: todayISO(),
+	});
+	const shown = result.items.slice(0, QUERY_ROWS);
+	return (
+		<View style={styles.query}>
+			{def.title ? <Text style={styles.queryTitle}>{def.title}</Text> : null}
+			{shown.length === 0 && <Text style={styles.queryEmpty}>{t("view.emptyFiltered")}</Text>}
+			{shown.map((x) => {
+				const look = lookOf(x, ix);
+				const schema = ix.schemaOf(x);
+				return (
+					<Pressable
+						key={x.id}
+						onPress={() => router.push(itemHref(ctx.tab, ctx.space, x.id))}
+						style={({ pressed }) => [styles.queryRow, pressed && { opacity: 0.5 }]}
+					>
+						<StatusCircle item={x} ix={ix} repo={ctx.repo} />
+						{!statusProp(schema) && <Icon color={look.color} name={look.symbol} size={18} />}
+						<Text numberOfLines={1} style={[styles.queryText, isDone(x, schema) && styles.checked]}>
+							{titleOf(x)}
+						</Text>
+						<DueText done={isDone(x, schema)} due={dueOf(x, schema)} />
+					</Pressable>
+				);
+			})}
+			{result.total > shown.length && (
+				<Text style={styles.queryEmpty}>
+					{t("mobile.more", { count: result.total - shown.length })}
+				</Text>
+			)}
+		</View>
+	);
+}
+
+const H = StyleSheet.create({
+	h1: { fontSize: 26, fontWeight: "700", lineHeight: 32, marginTop: 10 },
+	h2: { fontSize: 22, fontWeight: "700", lineHeight: 28, marginTop: 8 },
+	h3: { fontSize: 19, fontWeight: "600", lineHeight: 25, marginTop: 6 },
+	h4: { fontSize: 17, fontWeight: "600", lineHeight: 23, marginTop: 4 },
+});
+const HEADINGS = [H.h1, H.h2, H.h3, H.h4, H.h4, H.h4];
+
+const styles = StyleSheet.create({
+	doc: { gap: 10 },
+	text: { color: C.label, fontSize: 17, lineHeight: 25 },
+	list: { gap: 6 },
+	li: { flexDirection: "row", gap: 8 },
+	markerBox: { alignItems: "flex-end", minWidth: 20, paddingTop: 2 },
+	marker: { color: C.secondary, fontSize: 17, lineHeight: 22 },
+	liBody: { flex: 1, gap: 6 },
+	checked: { opacity: 0.5 },
+	quote: { borderLeftColor: C.accent, borderLeftWidth: 3, gap: 8, paddingLeft: 12 },
+	code: { backgroundColor: C.fill, borderRadius: 10, padding: 12 },
+	mono: { color: C.label, fontFamily: "Menlo", fontSize: 14, lineHeight: 20 },
+	codespan: { backgroundColor: C.fill, fontFamily: "Menlo", fontSize: 15 },
+	hr: { backgroundColor: C.separator, height: StyleSheet.hairlineWidth, marginVertical: 8 },
+	table: {
+		borderColor: C.separator,
+		borderRadius: 8,
+		borderWidth: StyleSheet.hairlineWidth,
+		overflow: "hidden",
+	},
+	tr: {
+		borderTopColor: C.separator,
+		borderTopWidth: StyleSheet.hairlineWidth,
+		flexDirection: "row",
+	},
+	th: { backgroundColor: C.fill, borderTopWidth: 0 },
+	td: { color: C.label, flex: 1, fontSize: 14, padding: 8 },
+	link: { color: C.link },
+	wiki: { color: C.accent, fontWeight: "500" },
+	missing: { color: C.secondary, textDecorationLine: "underline", textDecorationStyle: "dotted" },
+	query: {
+		backgroundColor: C.card,
+		borderRadius: 16,
+		gap: 2,
+		paddingHorizontal: 12,
+		paddingVertical: 8,
+	},
+	queryTitle: { color: C.secondary, fontSize: 13, fontWeight: "600", paddingVertical: 4 },
+	queryRow: { alignItems: "center", flexDirection: "row", gap: 10, minHeight: 40 },
+	queryText: { color: C.label, flex: 1, fontSize: 16 },
+	queryEmpty: { color: C.secondary, fontSize: 14, paddingVertical: 6 },
+});
