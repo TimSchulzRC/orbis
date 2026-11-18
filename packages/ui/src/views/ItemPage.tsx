@@ -3,7 +3,7 @@
 
 import type { EditorView } from "@codemirror/view";
 import type { Index } from "@obtion/core/graph";
-import { type Item, META_TYPE, titleKey } from "@obtion/core/model";
+import { type Item, META_TYPE } from "@obtion/core/model";
 import { isInInbox } from "@obtion/core/placement";
 import { pluralOf } from "@obtion/core/plural";
 import { hasUpdates, progressSpec } from "@obtion/core/traits";
@@ -28,7 +28,6 @@ import { createAndOpen, isBlank, rememberPlace } from "../actions";
 import { Input } from "../components/ui/input";
 import { Tip } from "../components/ui/tooltip";
 import {
-	itemHref,
 	leavePage,
 	openItem,
 	setParams,
@@ -243,7 +242,6 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
 					<TitleField autoFocus={isNew && !item.title} item={item} />
 				</div>
 			</div>
-			<TitleClash item={item} />
 			{cycles.length > 0 && (
 				<p className="mt-1 flex items-center gap-1.5 text-xs text-warn">
 					<AlertTriangle size={12} />{" "}
@@ -443,24 +441,6 @@ function TypeSwitch({ item }: { item: Item }) {
 				</>
 			)}
 		</Popover>
-	);
-}
-
-function TitleClash({ item }: { item: Item }) {
-	const scoped = useRepo();
-	const { t } = useT();
-	if (!item.title.trim()) return null;
-	const other = scoped
-		.live()
-		.find((x) => x.id !== item.id && titleKey(x.title) === titleKey(item.title));
-	if (!other) return null;
-	return (
-		<p className="mt-1 text-xs text-warn">
-			{t("item.titleClash")}{" "}
-			<a className="tap-y underline" href={itemHref(other.id)}>
-				{t("item.openOther")}
-			</a>
-		</p>
 	);
 }
 
