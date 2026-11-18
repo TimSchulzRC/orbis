@@ -23,19 +23,27 @@ async function setup() {
 	await page.getByRole("button", { name: "Mehr", exact: true }).click();
 }
 
-/** Clicks the value cell of the row `name` near its right edge, far from the "–". */
-async function clickRow(name: string) {
+/** A point in the value cell of the row `name` near its right edge, far from the "–". */
+function farPoint(name: string) {
 	const label = [...document.querySelectorAll(".group\\/props .grid > div.truncate")].find(
 		(e) => e.textContent === name,
 	)!;
 	const r = label.nextElementSibling!.getBoundingClientRect();
-	await commands.mouse("click", r.right - 10, r.top + r.height / 2);
+	return { x: r.right - 10, y: r.top + r.height / 2 };
+}
+
+async function clickRow(name: string) {
+	const { x, y } = farPoint(name);
+	await commands.mouse("click", x, y);
 }
 
 const focused = () => document.activeElement?.getAttribute("aria-label");
 
 test("a click beside the dash of an empty select opens it", async () => {
 	await setup();
+	// the select itself lies there, so the browser opens it on the real click
+	const { x, y } = farPoint("Priorität");
+	expect(document.elementFromPoint(x, y)?.getAttribute("aria-label")).toBe("Priorität");
 	await clickRow("Priorität");
 	await expect.poll(() => document.activeElement?.tagName).toBe("SELECT");
 	await expect.poll(focused).toBe("Priorität");
