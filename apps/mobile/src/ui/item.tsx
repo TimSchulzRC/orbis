@@ -8,7 +8,7 @@ import { firstOfGroup, isDone, statusOf, statusProp } from "@obtion/core/traits"
 import type { Repo } from "@obtion/sync";
 import * as Haptics from "expo-haptics";
 import { type Href, Link, useSegments } from "expo-router";
-import type { ComponentProps, ReactNode } from "react";
+import { Children, type ComponentProps, Fragment, isValidElement, type ReactNode } from "react";
 import { ActionSheetIOS, Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 import { lang, t, titleOf } from "../lib/i18n";
@@ -150,6 +150,15 @@ export function confirmDelete(repo: Repo, item: Item, after?: () => void) {
 	]);
 }
 
+/** Menu entries without their fragments: Link.Menu keeps only its direct actions and submenus. */
+function menuItems(node: ReactNode): ReactNode[] {
+	return Children.toArray(node).flatMap((child) =>
+		isValidElement<{ children?: ReactNode }>(child) && child.type === Fragment
+			? menuItems(child.props.children)
+			: [child],
+	);
+}
+
 /**
  * An entry as a row. `menu` adds actions to its context menu (Open, Pin and Delete are always
  * there).
@@ -199,7 +208,7 @@ export function ItemRow({
 			</Link.Trigger>
 			<Link.Preview />
 			<Link.Menu>
-				{menu}
+				{menuItems(menu)}
 				<Link.MenuAction
 					icon={item.pinned ? "pin.slash" : "pin"}
 					onPress={() => repo.ownStep(() => repo.pin(item.id, !item.pinned))}
