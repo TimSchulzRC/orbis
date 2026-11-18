@@ -157,11 +157,34 @@ export function PropertyField({
 		case "select": {
 			if (prop.multiple) return <MultiField item={item} prop={prop} />;
 			const schema = ix.schemaOf(item);
-			const done = isStatusProp(schema, prop) ? doneAt(item, schema) : undefined;
+			if (!isStatusProp(schema, prop)) {
+				// the same menu as its badge at the top
+				const opt = prop.options?.find((o) => o.id === value);
+				return (
+					<SelectMenu
+						item={item}
+						prop={prop}
+						trigger={(p) =>
+							opt ? (
+								<Button
+									variant="plain"
+									{...p}
+									aria-label={t("props.set", { name: prop.name })}
+									className="tap-y inline-flex"
+								>
+									<StatusPill option={opt} />
+								</Button>
+							) : (
+								<EmptyValueButton {...p} aria-label={t("props.set", { name: prop.name })} />
+							)
+						}
+					/>
+				);
+			}
+			const done = doneAt(item, schema);
 			return (
 				<>
-					{/* fills the row, so a click anywhere in it opens the select */}
-					<OptionSelect className="flex flex-1 self-stretch" item={item} prop={prop} />
+					<OptionSelect className="inline-flex" item={item} prop={prop} />
 					{done && (
 						<span className="text-xs tabular-nums text-muted-foreground">
 							{t("props.doneOn", { date: fmtDate(lang, dateOf(done)) })}
@@ -335,18 +358,22 @@ export function RangeEditor({
 }) {
 	const { t } = useT();
 	const { start, end } = parseRange(value);
+	// an empty end shows the date format, not a "–" beside the range's own dash
+	const empty = t("date.placeholder");
 	return (
 		<span className={cn("flex flex-wrap items-center gap-1", className)}>
 			<DateField
 				autoFocus={autoFocus}
 				label={t("props.start")}
 				onChange={(x) => onChange(formatRange(x, end))}
+				placeholder={empty}
 				value={start || undefined}
 			/>
 			<EmptyDash />
 			<DateField
 				label={t("props.end")}
 				onChange={(x) => onChange(formatRange(start, x))}
+				placeholder={empty}
 				value={end || undefined}
 			/>
 		</span>
@@ -390,7 +417,18 @@ function RangeField({
 			</Button>
 		);
 	}
-	return <RangeEditor autoFocus onChange={onChange} value={value} />;
+	return (
+		// biome-ignore lint/a11y/noStaticElementInteractions: only notices the focus leaving its two date fields, which take the keys
+		<span
+			className="contents"
+			// left without a date: back to the "–" instead of two empty fields
+			onBlur={(e) => {
+				if (!value && !e.currentTarget.contains(e.relatedTarget)) setOpen(false);
+			}}
+		>
+			<RangeEditor autoFocus onChange={onChange} value={value} />
+		</span>
+	);
 }
 
 function RelationField({
@@ -483,21 +521,15 @@ function RelationField({
 
 /**
  * A click on the empty space of an empty field starts the input, as if it hit the "–": it focuses
- * the text field, opens the select or presses the button that adds a value.
+ * the text field or presses the button that opens the menu, editor or picker.
  */
 function startInput(e: React.MouseEvent<HTMLDivElement>) {
 	if (e.target !== e.currentTarget) return;
 	const control = e.currentTarget.querySelector<HTMLElement>(
-		"input:not([tabindex='-1']), textarea, select, button",
+		"input:not([tabindex='-1']), textarea, button",
 	);
-	if (!control) return;
-	if (control instanceof HTMLSelectElement) {
-		control.focus();
-		try {
-			control.showPicker();
-		} catch {} // the browser opens no picker without a direct click: the select keeps the focus
-	} else if (control instanceof HTMLButtonElement) control.click();
-	else control.focus();
+	if (control instanceof HTMLButtonElement) control.click();
+	else control?.focus();
 }
 
 /** `empty`: the whole value cell starts the input (startInput). */
@@ -699,17 +731,16 @@ function StatusBadge({ item }: { item: Item }) {
 /** Shows the property's name before the value ("Stage Draft"). */
 function SelectBadge({ item, prop }: { item: Item; prop: PropDef }) {
 	const { t } = useT();
-	const value = item.props[prop.id];
-	const opt = prop.options?.find((o) => o.id === value);
-	// a select with a default is never empty
-	const required = !!defaultOption(prop);
+	const opt = prop.options?.find((o) => o.id === item.props[prop.id]);
 	const label = !opt ? null : (
 		<>
 			<span className="opacity-70">{prop.name}</span> {opt.name}
 		</>
 	);
 	return (
-		<Popover
+		<SelectMenu
+			item={item}
+			prop={prop}
 			trigger={(p) => (
 				<Button
 					variant="plain"
@@ -727,7 +758,27 @@ function SelectBadge({ item, prop }: { item: Item; prop: PropDef }) {
 					)}
 				</Button>
 			)}
-		>
+		/>
+	);
+}
+
+/** A single select's options as a menu, with "Remove value" when it may be empty. */
+function SelectMenu({
+	item,
+	prop,
+	trigger,
+}: {
+	item: Item;
+	prop: PropDef;
+	trigger: React.ComponentProps<typeof Popover>["trigger"];
+}) {
+	const { t } = useT();
+	const value = item.props[prop.id];
+	const opt = prop.options?.find((o) => o.id === value);
+	// a select with a default is never empty
+	const required = !!defaultOption(prop);
+	return (
+		<Popover trigger={trigger}>
 			{(close) => (
 				<>
 					<p className="px-2.5 pb-1 pt-1.5 text-xs text-muted-foreground">{prop.name}</p>
