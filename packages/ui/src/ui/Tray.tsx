@@ -129,7 +129,7 @@ export function Tray({ desktop, pinned }: { desktop: boolean; pinned?: boolean }
 						)
 					)}
 					{desktop ? (
-						<div className="pointer-events-auto relative mx-auto flex w-fit max-w-full items-center gap-2 rounded-2xl border border-line bg-surface p-2 shadow-[0_6px_24px_-12px_rgb(0_0_0/0.35)]">
+						<div className="pointer-events-auto relative mx-auto flex w-fit max-w-full items-center gap-2 overflow-hidden rounded-2xl border border-line bg-surface shadow-[0_6px_24px_-12px_rgb(0_0_0/0.35)]">
 							{tray}
 							{/* looks like the inbox's button beside it: no frame of its own, the plus where it has its chevron */}
 							<Button
@@ -137,7 +137,7 @@ export function Tray({ desktop, pinned }: { desktop: boolean; pinned?: boolean }
 								onClick={() => newNote()}
 								variant="plain"
 							>
-								{t("quick.title")}
+								{t("tray.new")}
 								<Plus aria-hidden className="shrink-0 text-muted-foreground" size={16} />
 							</Button>
 							{empty}

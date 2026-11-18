@@ -1,4 +1,4 @@
-// A new note: the tray's button and the "+" in the inbox's head open the inbox panel at a new empty
+// A new note: the tray's "Neu" and the "+" in the inbox's head open the inbox panel at a new empty
 // note, the caret in its title. Left empty, it goes when the panel closes or moves on to another entry.
 
 import type { Repo } from "@obtion/sync";
@@ -28,7 +28,7 @@ const panel = () => page.getByRole("dialog", { name: "Eingang" });
 const titleField = () => panel().getByRole("textbox", { name: "Titel" });
 const found = (title: string) => repo.live().find((i) => i.title === title);
 const open = async () => {
-	await page.getByRole("button", { name: "Neue Notiz" }).click();
+	await page.getByRole("button", { name: "Neu", exact: true }).click();
 	await expect.element(titleField()).toHaveFocus();
 	await expect.element(titleField()).toHaveValue("");
 };
@@ -81,7 +81,7 @@ test("clicked again while the new note is still empty, the same note stays open"
 	const shown = () => document.querySelector("[data-row]")?.getAttribute("data-row");
 	const first = shown();
 	// the tray's button, then the one in the inbox's head
-	await page.getByRole("button", { name: "Neue Notiz" }).last().click();
+	await page.getByRole("button", { name: "Neu", exact: true }).click();
 	await panel().getByRole("button", { name: "Neue Notiz" }).click();
 	await expect.element(titleField()).toHaveFocus();
 	expect(shown()).toBe(first);

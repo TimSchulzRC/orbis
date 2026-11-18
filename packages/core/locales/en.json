@@ -995,6 +995,7 @@
 	"tray.backNow": "Back into the inbox now",
 	"tray.empty": "All sorted",
 	"tray.inTray": "In the inbox",
+	"tray.new": "New",
 	"tray.open": "Inbox: {count, plural, one {# entry} other {# entries}}",
 	"tray.openEntry": "Open “{title}”",
 	"tray.openFull": "Open fully",

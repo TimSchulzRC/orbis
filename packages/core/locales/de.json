@@ -995,6 +995,7 @@
 	"tray.backNow": "Jetzt zurück in den Eingang",
 	"tray.empty": "Alles einsortiert",
 	"tray.inTray": "Im Eingang",
+	"tray.new": "Neu",
 	"tray.open": "Eingang: {count, plural, one {# Eintrag} other {# Einträge}}",
 	"tray.openEntry": "„{title}“ öffnen",
 	"tray.openFull": "Ganz öffnen",
