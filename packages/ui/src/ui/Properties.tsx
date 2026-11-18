@@ -160,7 +160,8 @@ export function PropertyField({
 			const done = isStatusProp(schema, prop) ? doneAt(item, schema) : undefined;
 			return (
 				<>
-					<OptionSelect className="inline-flex" item={item} prop={prop} />
+					{/* fills the row, so a click anywhere in it opens the select */}
+					<OptionSelect className="flex flex-1 self-stretch" item={item} prop={prop} />
 					{done && (
 						<span className="text-xs tabular-nums text-muted-foreground">
 							{t("props.doneOn", { date: fmtDate(lang, dateOf(done)) })}
@@ -480,13 +481,35 @@ function RelationField({
 	);
 }
 
+/**
+ * A click on the empty space of an empty field starts the input, as if it hit the "–": it focuses
+ * the text field, opens the select or presses the button that adds a value.
+ */
+function startInput(e: React.MouseEvent<HTMLDivElement>) {
+	if (e.target !== e.currentTarget) return;
+	const control = e.currentTarget.querySelector<HTMLElement>(
+		"input:not([tabindex='-1']), textarea, select, button",
+	);
+	if (!control) return;
+	if (control instanceof HTMLSelectElement) {
+		control.focus();
+		try {
+			control.showPicker();
+		} catch {} // the browser opens no picker without a direct click: the select keeps the focus
+	} else if (control instanceof HTMLButtonElement) control.click();
+	else control.focus();
+}
+
+/** `empty`: the whole value cell starts the input (startInput). */
 function BlockRow({
 	label,
 	title,
+	empty,
 	children,
 }: {
 	label: React.ReactNode;
 	title?: string;
+	empty?: boolean;
 	children: React.ReactNode;
 }) {
 	return (
@@ -497,7 +520,14 @@ function BlockRow({
 			>
 				<span className="truncate">{label}</span>
 			</div>
-			<div className="group flex min-h-[34px] min-w-0 flex-wrap items-center gap-1.5 rounded-md px-1.5 text-sm hover:bg-hover/60 pointer-coarse:min-h-11">
+			{/* biome-ignore lint/a11y/noStaticElementInteractions lint/a11y/useKeyWithClickEvents: a larger target for the mouse; the field's own control takes the keyboard */}
+			<div
+				className={cn(
+					"group flex min-h-[34px] min-w-0 flex-wrap items-center gap-1.5 rounded-md px-1.5 text-sm hover:bg-hover/60 pointer-coarse:min-h-11",
+					empty && "cursor-pointer",
+				)}
+				onClick={empty ? startInput : undefined}
+			>
 				{children}
 			</div>
 		</>
@@ -617,7 +647,7 @@ export function PropertyBlock({
 							</BlockRow>
 						)),
 						...(open ? unused : []).map((p) => (
-							<BlockRow key={p.id} label={p.name} title={p.description || p.name}>
+							<BlockRow empty key={p.id} label={p.name} title={p.description || p.name}>
 								<PropertyField item={item} prop={p} />
 							</BlockRow>
 						)),
