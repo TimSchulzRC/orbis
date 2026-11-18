@@ -132,7 +132,7 @@ export default function ItemPage() {
 				</>
 			)}
 			<Screen
-				automaticallyAdjustKeyboardInsets
+				keyboard
 				onScroll={(e) => setScrolled(e.nativeEvent.contentOffset.y > 40)}
 				scrollEventThrottle={64}
 			>

@@ -11,6 +11,7 @@ import { ScrollView, StyleSheet, Text, TextInput, useColorScheme, View } from "r
 import { useRepo, useSpaces } from "../lib/hooks";
 import { t, titleOf } from "../lib/i18n";
 import { useSession } from "../lib/session";
+import { useKeyboardHeight } from "../ui/list";
 import { C, GUTTER, RADIUS } from "../ui/theme";
 
 const ACCENT = { light: "#be780a", dark: "#f0b040" };
@@ -93,6 +94,7 @@ function NewNote() {
 		? [...capture, ...ix.typesByName().map((x) => x.id)].filter((x, i, all) => all.indexOf(x) === i)
 		: [];
 	const canSave = !!space && !!(title.trim() || body.trim());
+	const keyboard = useKeyboardHeight();
 	const save = () => {
 		if (!space || !canSave) return;
 		space.repo.ownStep(() =>
@@ -110,8 +112,8 @@ function NewNote() {
 			<Stack.Screen options={{ title: t("quick.title") }} />
 			<Toolbar canSave={canSave} onSave={save} />
 			<ScrollView
-				automaticallyAdjustKeyboardInsets
 				contentContainerStyle={styles.content}
+				contentInset={{ bottom: keyboard }}
 				contentInsetAdjustmentBehavior="automatic"
 				keyboardShouldPersistTaps="handled"
 				style={styles.sheet}
@@ -179,6 +181,7 @@ function NewUpdate({ space, id }: { space: string; id: string }) {
 	const schema = ix.schemaOf(item);
 	const prop = statusProp(schema);
 	const current = item ? statusOf(item, schema)?.option.id : undefined;
+	const keyboard = useKeyboardHeight();
 	const save = () => {
 		if (!item || !text.trim()) return;
 		const option = status !== KEEP && status !== current ? status : undefined;
@@ -197,8 +200,8 @@ function NewUpdate({ space, id }: { space: string; id: string }) {
 			/>
 			<Toolbar canSave={!!text.trim()} onSave={save} />
 			<ScrollView
-				automaticallyAdjustKeyboardInsets
 				contentContainerStyle={styles.content}
+				contentInset={{ bottom: keyboard }}
 				contentInsetAdjustmentBehavior="automatic"
 				keyboardShouldPersistTaps="handled"
 				style={styles.sheet}

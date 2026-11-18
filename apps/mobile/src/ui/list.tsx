@@ -2,9 +2,10 @@
 // details on the right and separators that start at the text.
 
 import { SymbolView } from "expo-symbols";
-import { Children, Fragment, isValidElement, type ReactNode } from "react";
+import { Children, Fragment, isValidElement, type ReactNode, useEffect, useState } from "react";
 import {
 	type ColorValue,
+	Keyboard,
 	PlatformColor,
 	Pressable,
 	RefreshControl,
@@ -18,22 +19,52 @@ import {
 import type { SFSymbol } from "sf-symbols-typescript";
 import { C, GUTTER, RADIUS } from "./theme";
 
+/**
+ * How much of the screen the keyboard covers. For scroll views under a transparent header instead
+ * of automaticallyAdjustKeyboardInsets: React Native then scrolls to an offset it clamps without the
+ * header's inset, and the page jumps under the navigation bar as soon as a field gets focus.
+ */
+export function useKeyboardHeight(): number {
+	const [height, setHeight] = useState(0);
+	useEffect(() => {
+		const change = Keyboard.addListener("keyboardWillChangeFrame", (e) =>
+			setHeight(Math.max(0, e.endCoordinates.height)),
+		);
+		const hide = Keyboard.addListener("keyboardWillHide", () => setHeight(0));
+		return () => {
+			change.remove();
+			hide.remove();
+		};
+	}, []);
+	return height;
+}
+
 /** A scrolling page under a native header: large titles collapse with it. */
 export function Screen({
 	children,
 	onRefresh,
 	refreshing = false,
+	keyboard = false,
 	...rest
-}: ScrollViewProps & { onRefresh?: () => void; refreshing?: boolean }) {
+}: ScrollViewProps & {
+	onRefresh?: () => void;
+	refreshing?: boolean;
+	/** Room below the content for the keyboard, for pages with text fields. */
+	keyboard?: boolean;
+}) {
+	const covered = useKeyboardHeight();
+	const bottom = keyboard ? covered : 0;
 	return (
 		<ScrollView
 			contentContainerStyle={styles.content}
+			contentInset={{ bottom }}
 			contentInsetAdjustmentBehavior="automatic"
 			keyboardDismissMode="interactive"
 			keyboardShouldPersistTaps="handled"
 			refreshControl={
 				onRefresh ? <RefreshControl onRefresh={onRefresh} refreshing={refreshing} /> : undefined
 			}
+			scrollIndicatorInsets={{ bottom }}
 			style={styles.screen}
 			{...rest}
 		>
