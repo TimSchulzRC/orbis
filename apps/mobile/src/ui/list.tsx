@@ -100,13 +100,24 @@ export function Section({
 			<View style={styles.card}>
 				{rows.map((row, i) => (
 					<Fragment key={isValidElement(row) && row.key != null ? row.key : i}>
-						{i > 0 && <View style={styles.separator} />}
+						{i > 0 && (
+							<View style={[styles.separator, !hasIcon(rows[i - 1]) && styles.plainSeparator]} />
+						)}
 						{row}
 					</Fragment>
 				))}
 			</View>
 			{footer !== undefined && <Text style={styles.footer}>{footer}</Text>}
 		</View>
+	);
+}
+
+/** As in iOS, a row's separator starts at its text: after the icon, or at the edge without one. */
+function hasIcon(row: ReactNode): boolean {
+	return !(
+		isValidElement<{ icon?: ReactNode }>(row) &&
+		row.type === Row &&
+		row.props.icon === undefined
 	);
 }
 
@@ -251,6 +262,7 @@ export const styles = StyleSheet.create({
 		height: StyleSheet.hairlineWidth,
 		marginLeft: 58,
 	},
+	plainSeparator: { marginLeft: GUTTER },
 	row: {
 		alignItems: "center",
 		flexDirection: "row",
