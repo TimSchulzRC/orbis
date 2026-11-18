@@ -374,7 +374,8 @@ const styles = StyleSheet.create({
 	field: {
 		color: C.secondary,
 		fontSize: 17,
-		maxWidth: 210,
+		// half the row: the property's name stays whole ("Zusammenfassung"), the value scrolls
+		maxWidth: "50%",
 		minWidth: 90,
 		padding: 0,
 		textAlign: "right",
