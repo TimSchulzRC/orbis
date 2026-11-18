@@ -64,8 +64,12 @@ export default function Home() {
 		<>
 			<Stack.Screen options={{ title: greeting }} />
 			<Stack.Toolbar placement="right">
-				<Stack.Toolbar.Button icon="square.and.pencil" onPress={() => router.push("/new")} />
-				<Stack.Toolbar.Button icon="person.crop.circle" onPress={() => router.push("/settings")} />
+				<Stack.Toolbar.Button icon="square.and.pencil" onPress={() => router.push("/new")}>
+					{t("quick.title")}
+				</Stack.Toolbar.Button>
+				<Stack.Toolbar.Button icon="person.crop.circle" onPress={() => router.push("/settings")}>
+					{t("nav.settings")}
+				</Stack.Toolbar.Button>
 			</Stack.Toolbar>
 			<Screen onRefresh={reload} refreshing={refreshing}>
 				<Text style={styles.date}>

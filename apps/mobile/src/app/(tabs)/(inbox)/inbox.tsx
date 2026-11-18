@@ -28,7 +28,9 @@ export default function Inbox() {
 		<>
 			<Stack.Screen options={{ title: t("nav.inbox") }} />
 			<Stack.Toolbar placement="right">
-				<Stack.Toolbar.Button icon="square.and.pencil" onPress={() => router.push("/new")} />
+				<Stack.Toolbar.Button icon="square.and.pencil" onPress={() => router.push("/new")}>
+					{t("quick.title")}
+				</Stack.Toolbar.Button>
 			</Stack.Toolbar>
 			<Screen>
 				<SessionNotice spaces={spaces} />

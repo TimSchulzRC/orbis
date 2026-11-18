@@ -36,7 +36,9 @@ export default function Browse() {
 						))}
 					</Stack.Toolbar.Menu>
 				)}
-				<Stack.Toolbar.Button icon="square.and.pencil" onPress={() => router.push("/new")} />
+				<Stack.Toolbar.Button icon="square.and.pencil" onPress={() => router.push("/new")}>
+					{t("quick.title")}
+				</Stack.Toolbar.Button>
 			</Stack.Toolbar>
 			<Screen>
 				<SessionNotice spaces={spaces} />

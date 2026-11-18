@@ -54,7 +54,9 @@ export default function TypePage() {
 		<>
 			<Stack.Screen options={{ title: ix.typePlural(id) }} />
 			<Stack.Toolbar placement="right">
-				<Stack.Toolbar.Button icon="plus" onPress={add} />
+				<Stack.Toolbar.Button icon="plus" onPress={add}>
+					{t("type.addNew")}
+				</Stack.Toolbar.Button>
 			</Stack.Toolbar>
 			<Stack.SearchBar
 				hideWhenScrolling
