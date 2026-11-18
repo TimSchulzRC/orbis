@@ -421,9 +421,12 @@ function RangeField({
 		// biome-ignore lint/a11y/noStaticElementInteractions: only notices the focus leaving its two date fields, which take the keys
 		<span
 			className="contents"
-			// left without a date: back to the "–" instead of two empty fields
+			// left without a date: back to the "–" instead of two empty fields. The fields' text, not
+			// `value`: a date typed just now is committed in this same blur
 			onBlur={(e) => {
-				if (!value && !e.currentTarget.contains(e.relatedTarget)) setOpen(false);
+				const box = e.currentTarget;
+				const typed = [...box.querySelectorAll("input")].some((x) => x.value);
+				if (!typed && !box.contains(e.relatedTarget)) setOpen(false);
 			}}
 		>
 			<RangeEditor autoFocus onChange={onChange} value={value} />

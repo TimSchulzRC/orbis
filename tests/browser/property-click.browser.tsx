@@ -55,6 +55,14 @@ test("an empty date range left without a date closes back to its dash", async ()
 	await expect.element(page.getByRole("textbox", { name: "Start" })).not.toBeInTheDocument();
 });
 
+test("a start date confirmed with Enter keeps the editor open for the end", async () => {
+	await setup();
+	await clickRow("Zeitraum");
+	await page.getByRole("textbox", { name: "Start" }).fill("01.12.2026");
+	await commands.keys("press", "Enter");
+	await expect.element(page.getByRole("textbox", { name: "Ende" })).toBeVisible();
+});
+
 test("a click beside the dash of an empty relation opens the picker", async () => {
 	await setup();
 	await clickRow("Blockiert durch");
