@@ -10,6 +10,7 @@ import {
 	Image,
 	Pressable,
 	ScrollView,
+	Settings,
 	StyleSheet,
 	Text,
 	TextInput,
@@ -22,6 +23,16 @@ import { sendCode, serverInfo, signIn, signInWithCode } from "../lib/session";
 import { C, GUTTER, RADIUS } from "./theme";
 
 const LAST_SERVER = "obtion.lastServer";
+
+/**
+ * Automated simulator runs sign in with launch arguments (`xcrun simctl launch <device> <bundle id>
+ * -obtionServer <url> -obtionEmail <email> -obtionPassword <password>`). iOS keeps them for that
+ * launch only, and nothing outside Xcode or simctl can set them.
+ */
+function launchArg(key: string): string | undefined {
+	const v: unknown = Settings.get(key);
+	return typeof v === "string" && v ? v : undefined;
+}
 
 function errorText(e: unknown, what: "signIn" | "code" | "server"): string {
 	const status = statusOf(e);
@@ -42,9 +53,11 @@ export function SignInForm({
 	email?: string;
 }) {
 	const dark = useColorScheme() === "dark";
-	const [address, setAddress] = useState(fixedServer ?? Storage.getItemSync(LAST_SERVER) ?? "");
+	const [address, setAddress] = useState(
+		fixedServer ?? launchArg("obtionServer") ?? Storage.getItemSync(LAST_SERVER) ?? "",
+	);
 	const [info, setInfo] = useState<{ server: string; info: ServerInfo } | null>(null);
-	const [email, setEmail] = useState(knownEmail ?? "");
+	const [email, setEmail] = useState(knownEmail ?? launchArg("obtionEmail") ?? "");
 	const [password, setPassword] = useState("");
 	const [code, setCode] = useState("");
 	const [mode, setMode] = useState<"password" | "code">("password");
@@ -78,7 +91,14 @@ export function SignInForm({
 	// signing in again on the known server: straight to its sign-in
 	// biome-ignore lint/correctness/useExhaustiveDependencies: once, when the form opens
 	useEffect(() => {
-		if (fixedServer) void connect();
+		const auto = { server: launchArg("obtionServer"), password: launchArg("obtionPassword") };
+		if (!fixedServer && auto.server && auto.password && email)
+			void run(async () => {
+				const server = serverUrl(auto.server!);
+				await serverInfo(server);
+				await signIn(server, email, auto.password!);
+			}, "signIn");
+		else if (fixedServer || auto.server) void connect();
 	}, []);
 
 	const login: LoginMethods | undefined = info?.info.login;
