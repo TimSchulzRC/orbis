@@ -75,12 +75,15 @@ export function DateField({
 	label,
 	className,
 	autoFocus,
+	placeholder = "–",
 }: {
 	value?: string;
 	onChange: (v: string) => void;
 	label: string;
 	className?: string;
 	autoFocus?: boolean;
+	/** Shown while empty and not being edited. */
+	placeholder?: string;
 }) {
 	const { t, lang } = useT();
 	const shown = dateText(lang, value);
@@ -135,7 +138,7 @@ export function DateField({
 					setEditing(true);
 				}}
 				onKeyDown={onKeyDown}
-				placeholder={editing ? t("date.placeholder") : "–"}
+				placeholder={editing ? t("date.placeholder") : placeholder}
 				value={text}
 				variant="bare"
 			/>
