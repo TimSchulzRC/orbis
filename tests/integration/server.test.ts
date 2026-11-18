@@ -368,6 +368,27 @@ test("the desktop app (orbis://app) and ORBIS_APP_ORIGINS sign in and call the A
 	expect((await fetch(`${other}/`)).status).toBe(404);
 });
 
+// The iPhone app (apps/mobile) calls like this: native requests carry no Origin and the app sends no
+// cookies, the token goes in the header and, on the WebSocket, as the subprotocol. Servers without
+// any setting for the app must keep taking it.
+test("a native app without Origin and cookies signs in, reads its account, syncs and signs out", async () => {
+	const ivy = await signUp(bare, "ivy@example.org");
+	const w = await newWorkspace(bare, ivy.token);
+	const signIn = await post(bare, "/api/auth/sign-in/email", {
+		email: "ivy@example.org",
+		password: "secret12345",
+	});
+	expect(signIn.status).toBe(200);
+	const { token } = await signIn.json();
+	expect(await account(bare, token)).toMatchObject({ workspaces: [{ id: w.id }] });
+	const app = await connect(bare, w.id, token);
+	app.ws.send(JSON.stringify({ t: "hello", area: PERSONAL, since: 0, device: "iPhone-test" }));
+	expect(await app.until((m) => m.t === "welcome")).toMatchObject({ area: PERSONAL });
+	app.ws.close();
+	expect((await post(bare, "/api/account/signout", {}, token)).status).toBe(200);
+	expect((await get(bare, "/api/account", token)).status).toBe(401);
+});
+
 test("without settings only passwords; the passkey routes stay shut; the OAuth cookie is traded only from the own page", async () => {
 	const info = await get(bare, "/api/info").then((r) => r.json());
 	expect(info.login).toEqual({ password: true, emailCode: false, passkey: false, oauth: [] });
