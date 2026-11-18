@@ -1,6 +1,6 @@
 // The inbox tray below every page; on a desktop it floats over the page, centred in the window. The
-// tray opens its panel, the list and an entry to sort; the button beside it (on a phone the "+") a
-// quick note. On Heute on a desktop with room, the panel is pinned open as part of the page.
+// tray opens its panel, the list and an entry to sort; the button beside it (on a phone the "+") the
+// panel at a new note. On Heute on a desktop with room, the panel is pinned open as part of the page.
 
 import { Check, ChevronDown, ChevronUp, Inbox, Plus } from "lucide-react";
 import { useRef } from "react";
@@ -9,15 +9,8 @@ import { Tip } from "../components/ui/tooltip";
 import { useT } from "../i18n";
 import { cn } from "../lib/utils";
 import { InboxPanel } from "../views/Review";
-import { dismissShelf, openShelf, useInboxItems, useShelf } from "./inbox";
+import { dismissShelf, newNote, openShelf, useInboxItems, useShelf } from "./inbox";
 import { Button } from "./primitives";
-import {
-	closeQuickNote,
-	openQuickNote,
-	QuickNote,
-	QuickNoteButton,
-	useQuickNote,
-} from "./QuickNote";
 
 const FILL = 10;
 const DAY = 86_400_000;
@@ -31,11 +24,7 @@ export function Tray({ desktop, pinned }: { desktop: boolean; pinned?: boolean }
 	const { open, at } = useShelf();
 	// the panel over the page (pinned it is part of the page and stays)
 	const looking = open && !pinned;
-	const writing = useQuickNote();
-	const openPanel = () => {
-		if (writing) closeQuickNote();
-		openShelf();
-	};
+	const openPanel = () => openShelf();
 	const touch = useRef<number | null>(null);
 	const ages = entries.map((e) => age(e.item.created)).sort((a, b) => b - a);
 	const tray = (
@@ -100,7 +89,6 @@ export function Tray({ desktop, pinned }: { desktop: boolean; pinned?: boolean }
 	return (
 		<>
 			{looking && <Backdrop aria-hidden className="z-30" onClick={dismissShelf} />}
-			{writing && <Backdrop aria-hidden className="z-30" onClick={closeQuickNote} />}
 			<section
 				aria-label={t("tray.title")}
 				// floating, only the bar and its panel take clicks; the page below shows through
@@ -121,22 +109,8 @@ export function Tray({ desktop, pinned }: { desktop: boolean; pinned?: boolean }
 					)}
 				>
 					{pinned ? (
-						// with the quick note open the inbox steps back; a click on it is a click beside the card (it lies above the backdrop)
-						// biome-ignore lint/a11y/noStaticElementInteractions lint/a11y/useKeyWithClickEvents: a click beside the card, like its backdrop; Esc closes it from the keyboard
-						<div
-							className="flex min-h-0 flex-1 flex-col"
-							data-quick-beside
-							onClick={writing ? closeQuickNote : undefined}
-						>
-							<div
-								className={cn(
-									"min-h-0 flex-1 pb-10 transition-opacity",
-									writing && "pointer-events-none opacity-30",
-								)}
-								inert={writing}
-							>
-								<InboxPanel desktop pinned />
-							</div>
+						<div className="min-h-0 flex-1 pb-10">
+							<InboxPanel desktop pinned />
 						</div>
 					) : (
 						looking && (
@@ -154,28 +128,27 @@ export function Tray({ desktop, pinned }: { desktop: boolean; pinned?: boolean }
 							</div>
 						)
 					)}
-					{!desktop && writing && (
-						<div className="fixed inset-x-0 bottom-0 top-3 z-50 pt-safe">
-							<QuickNote desktop={false} />
-						</div>
-					)}
 					{desktop ? (
 						<div className="pointer-events-auto relative mx-auto flex w-fit max-w-full items-center gap-2 rounded-2xl border border-line bg-surface p-2 shadow-[0_6px_24px_-12px_rgb(0_0_0/0.35)]">
 							{tray}
-							<QuickNoteButton />
+							{/* looks like the inbox's button beside it: no frame of its own, the plus where it has its chevron */}
+							<Button
+								className="tap-y flex min-h-11 items-center gap-2.5 rounded-xl py-1.5 pl-3 pr-2 text-sm font-semibold hover:bg-hover"
+								onClick={() => newNote()}
+								variant="plain"
+							>
+								{t("quick.title")}
+								<Plus aria-hidden className="shrink-0 text-muted-foreground" size={16} />
+							</Button>
 							{empty}
-							{/* the card right above the bar, centred on it */}
-							<div className="absolute bottom-full left-1/2 mb-3 w-[min(760px,calc(100vw-3rem))] -translate-x-1/2 empty:hidden">
-								<QuickNote desktop />
-							</div>
 						</div>
 					) : (
 						<div className="flex items-center gap-2">
 							{tray}
 							<Button
-								aria-label={t("capture.title")}
+								aria-label={t("quick.title")}
 								className="tap flex size-10 shrink-0 items-center justify-center rounded-xl border border-line hover:bg-hover"
-								onClick={openQuickNote}
+								onClick={() => newNote()}
 								variant="plain"
 							>
 								<Plus size={20} />

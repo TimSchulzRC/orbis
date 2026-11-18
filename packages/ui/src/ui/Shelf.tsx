@@ -18,6 +18,7 @@ import {
 	ChevronRight,
 	ListX,
 	Maximize2,
+	Plus,
 	RotateCcw,
 	SlidersHorizontal,
 	Undo2,
@@ -29,7 +30,7 @@ import { itemPath, spaceHref, useRepo } from "../hooks";
 import { titleOf, useT } from "../i18n";
 import { cn } from "../lib/utils";
 import { notify } from "./feedback";
-import { type InboxEntry, openShelf } from "./inbox";
+import { type InboxEntry, newNote, openShelf } from "./inbox";
 import { ItemIcon, RelTime } from "./item-look";
 import { Button, Dialog, DraftBar, IconButton, MenuItem, MoreMenu } from "./primitives";
 import { QueryEditor } from "./QueryEditor";
@@ -101,6 +102,14 @@ export function InboxList({
 						))
 					}
 				</MoreMenu>
+				<IconButton
+					className="shrink-0"
+					icon={Plus}
+					iconSize={16}
+					label={t("quick.title")}
+					onClick={() => newNote()}
+					title={t("quick.title")}
+				/>
 			</div>
 			{/* several workspaces: which of them, as in the sidebar's selector */}
 			<div className="shrink-0 px-5 pt-3 empty:hidden [&>fieldset]:mb-1">
