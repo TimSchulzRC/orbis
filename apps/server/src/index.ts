@@ -126,19 +126,26 @@ const APP_ORIGINS = new Set([
 	...(process.env.OBTION_APP_ORIGINS ?? "")
 		.split(",")
 		.map((o) => o.trim().replace(/\/$/, ""))
-		.filter(Boolean),
+		// "null" is every opaque origin (sandboxed frames, file:), never an app
+		.filter((o) => o && o !== "null"),
 ]);
 const appOrigin = (req: Request) => {
 	const origin = req.headers.get("origin");
 	return origin && APP_ORIGINS.has(origin) ? origin : undefined;
 };
+/** What an app signs in with: a password or a code by email. Passkeys and OAuth stay on the own page. */
+const APP_AUTH = new Set([
+	"/api/auth/sign-in/email",
+	"/api/auth/email-otp/send-verification-otp",
+	"/api/auth/sign-in/email-otp",
+]);
 /** From the server's own page or one of the apps. */
 const trusted = (req: Request) => sameOrigin(req) || !!appOrigin(req);
 
 /** An answer readable by the app that asked from another origin. */
 function withCors(req: Request, res: Response): Response {
 	const origin = appOrigin(req);
-	if (!origin || sameOrigin(req)) return res;
+	if (!origin) return res;
 	const out = new Response(res.body, res);
 	out.headers.set("access-control-allow-origin", origin);
 	out.headers.set("access-control-expose-headers", "x-obtion-missing");
@@ -205,8 +212,10 @@ async function accountApi(req: Request, path: string, url: URL): Promise<Respons
 		});
 	}
 
-	// after an OAuth sign-in: the session in the cookie becomes the app's token, the cookie goes
+	// after an OAuth sign-in: the session in the cookie becomes the app's token, the cookie goes.
+	// Only on the server's own page, where OAuth runs: no other origin trades a cookie.
 	if (path === "/api/account/claim" && req.method === "POST") {
+		if (appOrigin(req) || !sameOrigin(req)) return fail(403, "forbidden");
 		const signedIn = await accounts.claim(req.headers);
 		if (!signedIn) return fail(401, "unauthorized");
 		const res = json<SignedIn>(signedIn);
@@ -438,7 +447,12 @@ async function route(incoming: Request, srv: Server<Conn>): Promise<Response | u
 
 	const api = path.startsWith("/api/") || path.startsWith("/w/");
 	// an app on another origin asks first whether it may (CORS preflight)
-	if (api && incoming.method === "OPTIONS" && appOrigin(incoming)) {
+	if (
+		api &&
+		incoming.method === "OPTIONS" &&
+		incoming.headers.get("access-control-request-method") &&
+		appOrigin(incoming)
+	) {
 		return new Response(null, {
 			status: 204,
 			headers: {
@@ -448,14 +462,22 @@ async function route(incoming: Request, srv: Server<Conn>): Promise<Response | u
 			},
 		});
 	}
-	const req = await capBody(incoming, bodyLimit(incoming, path));
+	let req = await capBody(incoming, bodyLimit(incoming, path));
 	if (req instanceof Response) return req;
 
-	// Better Auth, for the server's own page and the apps in APP_ORIGINS
+	// Better Auth: everything for the server's own page, signing in for the apps in APP_ORIGINS
 	if (path.startsWith("/api/auth/")) {
 		// an OAuth provider sends the browser back from its own site; Better Auth checks the state
 		const callback = req.method === "GET" && path.startsWith("/api/auth/callback/");
-		if (!callback && !trusted(req)) return fail(403, "forbidden");
+		// an app counts as one even where its origin's host looks like this server's (obtion://app, host "app")
+		const app = appOrigin(req);
+		if (!callback && (app || !sameOrigin(req))) {
+			if (!app || !APP_AUTH.has(path)) return fail(403, "forbidden");
+			// an app signs in with what it sends: cookies the browser keeps for this server stay out
+			const headers = new Headers(req.headers);
+			headers.delete("cookie");
+			req = new Request(req, { headers });
+		}
 		// accounts are created through /api/account/signup
 		if (path.startsWith("/api/auth/sign-up")) return fail(404, "not found");
 		if (path.startsWith("/api/auth/passkey/") && !login.passkey) return fail(404, "not found");
@@ -466,7 +488,12 @@ async function route(incoming: Request, srv: Server<Conn>): Promise<Response | u
 			if (!s || Date.now() - new Date(s.session.createdAt).getTime() > FRESH_SECONDS * 1000)
 				return fail(403, "sign in again");
 		}
-		return accounts.auth.handler(req);
+		const res = await accounts.auth.handler(req);
+		if (!app) return res;
+		// an app keeps the token from the body: no session cookie for this server from another origin
+		const out = new Response(res.body, res);
+		out.headers.delete("set-cookie");
+		return out;
 	}
 
 	// CSRF: a change without a token must come from this site or an app in APP_ORIGINS

@@ -298,7 +298,12 @@ test("the desktop app (obtion://app) and OBTION_APP_ORIGINS sign in and call the
 	);
 	expect(eve.status).toBe(200);
 	expect(eve.headers.get("access-control-allow-origin")).toBe(app);
+	expect(eve.headers.get("set-cookie")).toBeNull();
 	const { token } = await eve.json();
+	// only signing in: the rest of Better Auth (here: ending every session) stays with the own page
+	expect(
+		(await post(bare, "/api/auth/revoke-sessions", {}, undefined, { origin: app })).status,
+	).toBe(403);
 	const [w] = (await account(bare, token)).workspaces;
 	const preflight = await fetch(`${bare}/w/${w.id}/api/blobs/${"0".repeat(64)}`, {
 		method: "OPTIONS",
@@ -309,6 +314,7 @@ test("the desktop app (obtion://app) and OBTION_APP_ORIGINS sign in and call the
 		},
 	});
 	expect(preflight.status).toBe(204);
+	expect(preflight.headers.get("access-control-allow-origin")).toBe(app);
 	expect(preflight.headers.get("access-control-allow-headers")).toContain("authorization");
 	const activity = await fetch(`${bare}/w/${w.id}/api/activity`, {
 		headers: { origin: app, authorization: `Bearer ${token}` },
@@ -369,6 +375,10 @@ test("without settings only passwords; the passkey routes stay shut; the OAuth c
 	expect(
 		(await post(bare, "/api/account/claim", {}, undefined, { origin: "https://evil.example.org" }))
 			.status,
+	).toBe(403);
+	// not from the apps either: OAuth runs on the server's own page
+	expect(
+		(await post(bare, "/api/account/claim", {}, undefined, { origin: "obtion://app" })).status,
 	).toBe(403);
 	expect((await post(bare, "/api/account/claim", {}, undefined, { origin: bare })).status).toBe(
 		401,

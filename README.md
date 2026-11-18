@@ -41,7 +41,7 @@ Choose with `OBTION_VERSION` in `.env`:
 
 Or pin a version, e.g. `0.0.2`. Going back after an update may need a backup of `./data`.
 
-Without the web app (sync, API and MCP only): `OBTION_WEB_APP=off`. Apps on another origin call the server only if it lets them: the desktop app always, others when `OBTION_APP_ORIGINS` names their origin.
+Without the web app (sync, API and MCP only): `OBTION_WEB_APP=off`. Apps on another origin call the server only if it lets them: the desktop app always, others when `OBTION_APP_ORIGINS` names their origin. They sign in with a password or a code by email; passkeys and OAuth stay on the server's own page, and so does signing up with an invite where the server confirms addresses by code.
 
 ## Development
 
