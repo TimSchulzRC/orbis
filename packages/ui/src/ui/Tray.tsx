@@ -1,25 +1,21 @@
 // The inbox tray below every page; on a desktop it floats over the page, centred in the window. The
-// tray opens its panel, the list and an entry to sort; the button beside it (on a phone the "+") a
-// quick note. On Heute on a desktop with room, the panel is pinned open as part of the page.
+// tray opens its panel, the list and an entry to sort; the button beside it (on a phone the "+") the
+// panel at a new note. On Heute on a desktop with room, the panel is pinned open as part of the page.
 
 import { Check, ChevronDown, ChevronUp, Inbox, Plus } from "lucide-react";
 import { useRef } from "react";
+import { ButtonGroup } from "../components/ui/button-group";
 import { Backdrop } from "../components/ui/dialog";
 import { Tip } from "../components/ui/tooltip";
 import { useT } from "../i18n";
 import { cn } from "../lib/utils";
 import { InboxPanel } from "../views/Review";
-import { dismissShelf, openShelf, useInboxItems, useShelf } from "./inbox";
+import { dismissShelf, newNote, openShelf, useInboxItems, useShelf } from "./inbox";
 import { Button } from "./primitives";
-import {
-	closeQuickNote,
-	openQuickNote,
-	QuickNote,
-	QuickNoteButton,
-	useQuickNote,
-} from "./QuickNote";
 
 const FILL = 10;
+/** One part of the desktop bar's button group: its own frame, joined to the next. */
+const SEGMENT = "rounded-xl border border-line bg-surface";
 const DAY = 86_400_000;
 /** Pixels a finger moves up on the tray to open its panel. */
 const SWIPE_UP = 40;
@@ -31,76 +27,68 @@ export function Tray({ desktop, pinned }: { desktop: boolean; pinned?: boolean }
 	const { open, at } = useShelf();
 	// the panel over the page (pinned it is part of the page and stays)
 	const looking = open && !pinned;
-	const writing = useQuickNote();
-	const openPanel = () => {
-		if (writing) closeQuickNote();
-		openShelf();
-	};
+	const openPanel = () => openShelf();
 	const touch = useRef<number | null>(null);
 	const ages = entries.map((e) => age(e.item.created)).sort((a, b) => b - a);
+	// the legend of the marks, while the panel above is shut
 	const tray = (
-		<div
-			className={cn(
-				"relative flex shrink-0 items-center rounded-xl",
-				!desktop && "min-w-0 flex-[1_0_0%]",
-			)}
-		>
-			{/* the legend of the marks, while the panel above is shut */}
-			<Tip card={<Legend ages={ages} />} label={t("tray.open", { count })} off={looking}>
-				<Button
-					aria-expanded={pinned || open}
-					aria-label={t("tray.open", { count })}
-					className={cn(
-						"relative flex min-w-0 items-center gap-2.5 rounded-xl py-1.5 pl-2.5 pr-2 text-left",
-						desktop ? "min-h-11" : "min-h-10",
-						pinned ? "cursor-default" : cn("hover:bg-hover", looking && "bg-hover"),
-						!desktop && "flex-1",
-					)}
-					// pinned it does not close, so nothing to click
-					onClick={() => (looking ? dismissShelf() : !pinned && openPanel())}
-					onTouchEnd={(e) => {
-						if (
-							touch.current !== null &&
-							touch.current - (e.changedTouches[0]?.clientY ?? 0) > SWIPE_UP
-						) {
-							e.preventDefault();
-							openPanel();
-						}
-						touch.current = null;
-					}}
-					onTouchStart={(e) => (touch.current = e.touches[0]!.clientY)}
-					variant="plain"
-				>
-					<Inbox
-						aria-hidden
-						className={cn("shrink-0", count ? "text-muted-foreground" : "text-faint")}
-						size={18}
-					/>
-					<span className="flex min-w-0 flex-col gap-1.5">
-						<span className="text-sm font-semibold leading-none">
-							{t("tray.title")} · <span className="tabular-nums text-warn">{count}</span>
-						</span>
-						<Fill ages={ages} />
+		<Tip card={<Legend ages={ages} />} label={t("tray.open", { count })} off={looking}>
+			<Button
+				aria-expanded={pinned || open}
+				aria-label={t("tray.open", { count })}
+				className={cn(
+					"relative flex min-w-0 items-center gap-2.5 rounded-xl py-1.5 pl-2.5 pr-2 text-left",
+					desktop ? cn(SEGMENT, "min-h-11") : "min-h-10 flex-1",
+					pinned ? "cursor-default" : "hover:bg-hover",
+				)}
+				// pinned it does not close, so nothing to click
+				onClick={() => (looking ? dismissShelf() : !pinned && openPanel())}
+				onTouchEnd={(e) => {
+					if (
+						touch.current !== null &&
+						touch.current - (e.changedTouches[0]?.clientY ?? 0) > SWIPE_UP
+					) {
+						e.preventDefault();
+						openPanel();
+					}
+					touch.current = null;
+				}}
+				onTouchStart={(e) => (touch.current = e.touches[0]!.clientY)}
+				variant="plain"
+			>
+				<Inbox
+					aria-hidden
+					className={cn("shrink-0", count ? "text-muted-foreground" : "text-faint")}
+					size={18}
+				/>
+				<span className="flex min-w-0 flex-col gap-1.5">
+					<span className="text-sm font-semibold leading-none">
+						{t("tray.title")} · <span className="tabular-nums text-warn">{count}</span>
 					</span>
-					{/* pinned it stays, hidden, so the field beside does not move between Heute and other pages */}
-					{looking ? (
-						<ChevronDown className="text-muted-foreground" size={14} />
-					) : (
-						<ChevronUp className={cn("text-muted-foreground", pinned && "invisible")} size={14} />
-					)}
-				</Button>
-			</Tip>
-		</div>
+					<Fill ages={ages} />
+				</span>
+				{/* pinned it stays, hidden, so the field beside does not move between Heute and other pages */}
+				{looking ? (
+					<ChevronDown className="text-muted-foreground" size={14} />
+				) : (
+					<ChevronUp className={cn("text-muted-foreground", pinned && "invisible")} size={14} />
+				)}
+			</Button>
+		</Tip>
 	);
 	const empty = !count && (
-		<span className="flex h-10 shrink-0 items-center gap-1.5 px-2 text-sm text-muted-foreground">
+		<span
+			className={cn(
+				SEGMENT,
+				"flex shrink-0 items-center gap-1.5 px-3 text-sm text-muted-foreground",
+			)}
+		>
 			<Check className="text-ok" size={15} /> {t("tray.empty")}
 		</span>
 	);
 	return (
 		<>
 			{looking && <Backdrop aria-hidden className="z-30" onClick={dismissShelf} />}
-			{writing && <Backdrop aria-hidden className="z-30" onClick={closeQuickNote} />}
 			<section
 				aria-label={t("tray.title")}
 				// floating, only the bar and its panel take clicks; the page below shows through
@@ -121,22 +109,8 @@ export function Tray({ desktop, pinned }: { desktop: boolean; pinned?: boolean }
 					)}
 				>
 					{pinned ? (
-						// with the quick note open the inbox steps back; a click on it is a click beside the card (it lies above the backdrop)
-						// biome-ignore lint/a11y/noStaticElementInteractions lint/a11y/useKeyWithClickEvents: a click beside the card, like its backdrop; Esc closes it from the keyboard
-						<div
-							className="flex min-h-0 flex-1 flex-col"
-							data-quick-beside
-							onClick={writing ? closeQuickNote : undefined}
-						>
-							<div
-								className={cn(
-									"min-h-0 flex-1 pb-10 transition-opacity",
-									writing && "pointer-events-none opacity-30",
-								)}
-								inert={writing}
-							>
-								<InboxPanel desktop pinned />
-							</div>
+						<div className="min-h-0 flex-1 pb-10">
+							<InboxPanel desktop pinned />
 						</div>
 					) : (
 						looking && (
@@ -154,28 +128,30 @@ export function Tray({ desktop, pinned }: { desktop: boolean; pinned?: boolean }
 							</div>
 						)
 					)}
-					{!desktop && writing && (
-						<div className="fixed inset-x-0 bottom-0 top-3 z-50 pt-safe">
-							<QuickNote desktop={false} />
-						</div>
-					)}
 					{desktop ? (
-						<div className="pointer-events-auto relative mx-auto flex w-fit max-w-full items-center gap-2 rounded-2xl border border-line bg-surface p-2 shadow-[0_6px_24px_-12px_rgb(0_0_0/0.35)]">
-							{tray}
-							<QuickNoteButton />
-							{empty}
-							{/* the card right above the bar, centred on it */}
-							<div className="absolute bottom-full left-1/2 mb-3 w-[min(760px,calc(100vw-3rem))] -translate-x-1/2 empty:hidden">
-								<QuickNote desktop />
-							</div>
-						</div>
-					) : (
-						<div className="flex items-center gap-2">
+						// the inbox, "Neu" and, all sorted, a word on it: side by side in one frame
+						<ButtonGroup className="pointer-events-auto mx-auto max-w-full rounded-xl shadow-[0_6px_24px_-12px_rgb(0_0_0/0.35)]">
 							{tray}
 							<Button
-								aria-label={t("capture.title")}
+								className={cn(
+									SEGMENT,
+									"tap-y flex min-h-11 items-center gap-2.5 py-1.5 pl-3 pr-2.5 text-sm font-semibold hover:bg-hover",
+								)}
+								onClick={() => newNote()}
+								variant="plain"
+							>
+								{t("tray.new")}
+								<Plus aria-hidden className="shrink-0 text-muted-foreground" size={16} />
+							</Button>
+							{empty}
+						</ButtonGroup>
+					) : (
+						<div className="flex items-center gap-2">
+							<div className="flex min-w-0 flex-[1_0_0%]">{tray}</div>
+							<Button
+								aria-label={t("quick.title")}
 								className="tap flex size-10 shrink-0 items-center justify-center rounded-xl border border-line hover:bg-hover"
-								onClick={openQuickNote}
+								onClick={() => newNote()}
 								variant="plain"
 							>
 								<Plus size={20} />

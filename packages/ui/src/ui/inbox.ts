@@ -4,10 +4,11 @@ import type { Index } from "@obtion/core/graph";
 import { type Item, SETTINGS_ID } from "@obtion/core/model";
 import { laterItems } from "@obtion/core/placement";
 import { runQuery } from "@obtion/core/query";
-import { useAccounts } from "../accounts";
+import { replica, shownSpaces, useAccounts } from "../accounts";
 import { isBlank } from "../actions";
 import { createStore } from "../lib/store";
 import { useReplicas } from "./Spaces";
+import { KEYS, readJSON } from "./storage";
 
 export interface InboxEntry {
 	key: string;
@@ -26,23 +27,70 @@ export function useLaterItems(): InboxEntry[] {
 	return useEntries((ix) => laterItems(ix));
 }
 
-/** The quick note being written (an entry key): it counts as an entry only once something is in it. */
-const draft = createStore<{ key?: string }>({});
-export const setDraft = (key?: string) => draft.set({ key });
+/** The workspace a new note goes to: the one shown, else the last chosen of those shown. */
+export function captureSpace(): string | undefined {
+	const shown = shownSpaces();
+	if (shown.length === 1) return shown[0]!.id;
+	const last = readJSON(KEYS.captureSpace, "");
+	return (shown.find((s) => s.id === last) ?? shown[0])?.id;
+}
+
+/** The new note while the panel shows it: left empty, it goes. */
+const draft = createStore<{ space?: string; id?: string }>({});
+export const useDraftKey = () => {
+	const { space, id } = draft.use();
+	return space && id ? entryKey(space, id) : undefined;
+};
+
+/**
+ * A new empty note in the inbox, open in the panel (in workspace `space`, else the one notes go to).
+ * One still empty is taken again, the caret back in its title, so clicking twice makes no second.
+ */
+export function newNote(space = captureSpace()) {
+	if (!space) return;
+	const open = draft.get();
+	if (open.space === space && open.id) {
+		const repo = replica(space).repo;
+		const item = repo.get(open.id);
+		if (item && !item.deleted && isBlank(item, repo.index())) {
+			openShelf(entryKey(space, open.id));
+			requestAnimationFrame(() =>
+				document.querySelector<HTMLElement>("[data-shelf-panel] article textarea")?.focus(),
+			);
+			return;
+		}
+	}
+	dropDraft();
+	const id = replica(space).repo.create({ title: "", type: null, parents: [] });
+	draft.set({ space, id });
+	openShelf(entryKey(space, id));
+}
+
+/** The panel leaves the new note: left empty, it goes. The item follows its text a moment later. */
+export function dropDraft() {
+	const { space, id } = draft.get();
+	if (!space || !id) return;
+	draft.set({});
+	setTimeout(() => {
+		const repo = replica(space).repo;
+		const item = repo.get(id);
+		if (item && !item.deleted && isBlank(item, repo.index())) repo.remove(id);
+	});
+}
 
 /** `pick`'s items across the shown workspaces, newest first. A workspace without its settings item is skipped. */
 function useEntries(pick: (ix: Index) => Item[]): InboxEntry[] {
 	const { shown } = useAccounts();
 	const repos = useReplicas(shown.map((s) => s.id));
-	const { key: drafting } = draft.use();
 	return shown
 		.flatMap((s, n) => {
 			const spaceRepo = repos[n]!;
 			if (!spaceRepo.get(SETTINGS_ID)) return [];
-			const ix = spaceRepo.index();
-			return pick(ix)
-				.map((item) => ({ key: entryKey(s.id, item.id), space: s.id, item }))
-				.filter((e) => e.key !== drafting || !isBlank(e.item, ix));
+			return pick(spaceRepo.index()).map((item) => ({
+				key: entryKey(s.id, item.id),
+				space: s.id,
+				item,
+			}));
 		})
 		.sort((a, b) => b.item.created - a.item.created);
 }
@@ -80,6 +128,7 @@ export function dismissShelf() {
 	if (!shelf.get().open) return;
 	if (history.state?.shelf) return history.back();
 	shelf.set({ open: false });
+	dropDraft();
 	if (onInbox()) location.replace("#/");
 }
 
@@ -88,6 +137,7 @@ export function syncShelf() {
 	const open = !!history.state?.shelf || onInbox();
 	if (open === shelf.get().open) return;
 	shelf.set({ open, at: open ? addressAt() : undefined });
+	if (!open) dropDraft();
 }
 addEventListener("popstate", syncShelf);
 

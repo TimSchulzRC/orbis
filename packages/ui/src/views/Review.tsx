@@ -4,26 +4,31 @@
 // choices below it never move.
 
 import type { Item } from "@obtion/core/model";
-import { ArrowLeft, Check, X } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, Layers, X } from "lucide-react";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { replica, spaceById, useAccounts } from "../accounts";
+import { isBlank } from "../actions";
 import { openItem, useOnChange, useRepo } from "../hooks";
 import { titleOf, useT } from "../i18n";
 import { cn } from "../lib/utils";
 import {
 	closeShelf,
 	dismissShelf,
+	dropDraft,
+	entryKey,
 	type InboxEntry,
+	newNote,
 	openShelf,
+	useDraftKey,
 	useInboxItems,
 	useLaterItems,
 	useShelf,
 } from "../ui/inbox";
 import { NoteCard } from "../ui/NoteCard";
-import { Button, Empty, IconButton } from "../ui/primitives";
+import { Button, Empty, IconButton, MenuItem, Popover } from "../ui/primitives";
 import { backNow, InboxList } from "../ui/Shelf";
 import { SortChoices } from "../ui/SortChoices";
-import { SpaceScope } from "../ui/Spaces";
+import { moveTo, SpaceScope } from "../ui/Spaces";
 import { KEYS, readJSON, writeJSON } from "../ui/storage";
 import { revert, type Undo, usePickers, useTriageActions } from "../ui/TriageActions";
 
@@ -53,9 +58,9 @@ export function InboxPanel({ desktop, pinned }: { desktop: boolean; pinned?: boo
 	const { t } = useT();
 	const { at } = useShelf();
 	const self = useRef<HTMLDivElement>(null);
-	// take the keys from the button that opened the panel
+	// take the keys from the button that opened the panel (a new note keeps the caret in its title)
 	const focusOnOpen = useEffectEvent(() => {
-		if (!pinned) self.current?.focus();
+		if (!pinned && !self.current?.contains(document.activeElement)) self.current?.focus();
 	});
 	useEffect(() => focusOnOpen(), []);
 	useEffect(() => {
@@ -122,9 +127,12 @@ function Inbox({
 	const entries = useInboxItems();
 	const later = useLaterItems();
 	const { shown } = useAccounts();
+	const drafting = useDraftKey();
 	const order = useRef<string[]>(session?.order ?? []);
-	// what arrives meanwhile joins the end
-	for (const e of entries) if (!order.current.includes(e.key)) order.current.push(e.key);
+	// what arrives meanwhile joins the end, a new note the top
+	for (const e of entries)
+		if (!order.current.includes(e.key))
+			e.key === drafting ? order.current.unshift(e.key) : order.current.push(e.key);
 	const [sorted, setSorted] = useState<Sorted[]>(storedSorted);
 	const [chosen, setChosen] = useState<string | undefined>(at ?? session?.at);
 	// another entry asked for while open
@@ -161,6 +169,12 @@ function Inbox({
 	useEffect(() => {
 		session = { order: order.current, at: key };
 	}, [key]);
+	// on from the new note: left empty, it goes
+	const shownKey = useRef(key);
+	useEffect(() => {
+		if (shownKey.current === drafting && key !== drafting) dropDraft();
+		shownKey.current = key;
+	}, [key, drafting]);
 	useEffect(() => writeJSON(KEYS.inboxSorted, sorted), [sorted]);
 
 	const act = useTriageActions(() => entry!.space, { quiet: true });
@@ -307,6 +321,7 @@ function Inbox({
 		<SpaceScope id={entry.space}>
 			<Entry
 				entry={entry}
+				fresh={entry.key === drafting}
 				key={entry.key}
 				scroller={card}
 				space={several ? spaceById(entry.space)?.name : undefined}
@@ -458,24 +473,78 @@ function Steps({ total, done }: { total: number; done: number }) {
 	);
 }
 
-/** The entry's card, as tall as the panel leaves, the same for every entry, so the choices below never move. */
+/**
+ * The entry's card, as tall as the panel leaves, the same for every entry, so the choices below never
+ * move. `fresh`: the new note, the caret in its title, its workspace to choose.
+ */
 function Entry({
 	entry,
+	fresh,
 	space,
 	scroller,
 }: {
 	entry: InboxEntry;
+	fresh: boolean;
 	space?: string;
 	scroller: React.RefObject<HTMLDivElement | null>;
 }) {
 	const item = useRepo().get(entry.item.id) ?? entry.item;
 	return (
 		<NoteCard
+			autoFocus={fresh}
 			className="flex-1"
 			item={item}
-			meta={space && <span>{space}</span>}
+			live={fresh}
+			meta={space && (fresh ? <SpaceChoice entry={entry} name={space} /> : <span>{space}</span>)}
 			scroller={scroller}
 		/>
+	);
+}
+
+/** Which workspace the new note goes to. Already written in, it moves there. */
+function SpaceChoice({ entry, name }: { entry: InboxEntry; name: string }) {
+	const { t } = useT();
+	const { shown } = useAccounts();
+	const choose = async (to: string) => {
+		if (to === entry.space) return;
+		writeJSON(KEYS.captureSpace, to);
+		const from = replica(entry.space).repo;
+		const item = from.get(entry.item.id);
+		if (!item || isBlank(item, from.index())) return newNote(to);
+		(document.activeElement as HTMLElement | null)?.blur();
+		const moved = await moveTo(item.id, entry.space, to);
+		if (moved) openShelf(entryKey(to, moved));
+	};
+	return (
+		<Popover
+			trigger={(p) => (
+				<Button
+					variant="plain"
+					{...p}
+					aria-label={t("capture.spaceLabel", { name })}
+					className="tap-y inline-flex items-center gap-1 rounded-md px-1 hover:bg-hover hover:text-fg"
+				>
+					<Layers size={12} />
+					{name}
+					<ChevronDown size={12} />
+				</Button>
+			)}
+		>
+			{(close) =>
+				shown.map((s) => (
+					<MenuItem
+						active={s.id === entry.space}
+						key={s.id}
+						onClick={() => {
+							close();
+							void choose(s.id);
+						}}
+					>
+						{s.name}
+					</MenuItem>
+				))
+			}
+		</Popover>
 	);
 }
 
