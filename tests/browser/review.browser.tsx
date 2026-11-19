@@ -3,7 +3,7 @@
 // under "Erledigt", with its undo back up; the entry is edited right in the card. The list shows
 // all entries or only the to-dos, a new one typed in at the top, each ticked off right there.
 
-import { setMeta } from "@orbis/core/model";
+import { setMeta, upsertProp } from "@orbis/core/model";
 import { queryFence } from "@orbis/core/query";
 import type { Repo } from "@orbis/sync";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
@@ -200,6 +200,22 @@ describe("to-dos", () => {
 		await expect
 			.poll(() => todoRow("Angebot schicken")?.querySelector(".line-through"))
 			.toBeFalsy();
+	});
+});
+
+describe("a to-do of a type that starts done", () => {
+	test("starts open, so it waits in the inbox", async () => {
+		repo.change("sys:task", (d) => upsertProp(d, "p_status", { default: "st_done" }));
+		await expect.element(card()).toBeVisible();
+		await page.getByRole("tab", { name: /^To-dos/ }).click();
+		await page.getByRole("textbox", { name: "Neues To-do" }).fill("Rechnung prüfen");
+		await commands.keys("press", "Enter");
+		await expect.poll(() => repo.live().find((i) => i.title === "Rechnung prüfen")).toBeTruthy();
+		const made = repo.live().find((i) => i.title === "Rechnung prüfen")!;
+		expect(made.props.p_status).toBe("st_todo");
+		await expect
+			.element(page.getByRole("button", { name: "„Rechnung prüfen“ abhaken" }))
+			.toBeVisible();
 	});
 });
 

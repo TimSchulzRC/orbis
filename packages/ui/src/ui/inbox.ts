@@ -1,10 +1,10 @@
 // Ids are unique within a workspace only, so an inbox entry is keyed "<workspace>/<id>".
 
 import type { Index } from "@orbis/core/graph";
-import { type Item, SETTINGS_ID } from "@orbis/core/model";
+import { type Item, SETTINGS_ID, type TypeSchema } from "@orbis/core/model";
 import { laterItems } from "@orbis/core/placement";
 import { runQuery } from "@orbis/core/query";
-import { statusProp } from "@orbis/core/traits";
+import { initialProps, statusProp } from "@orbis/core/traits";
 import { replica, shownSpaces, useAccounts } from "../accounts";
 import { isBlank } from "../actions";
 import { createStore } from "../lib/store";
@@ -26,14 +26,26 @@ export function useInboxItems(): InboxEntry[] {
 /** A to-do: an entry whose type has a status, so it can be ticked off. */
 export const isTodo = (item: Item, ix: Index) => !!statusProp(ix.schemaOf(item));
 
+/** The open status a new to-do starts with: its type's initial one, unless that is done. */
+function openStatus(schema?: TypeSchema): { prop: string; option: string } | undefined {
+	const prop = statusProp(schema);
+	const options = prop?.options ?? [];
+	const initial = options.find((o) => o.id === initialProps(schema)[prop?.id ?? ""]);
+	const open =
+		initial && initial.group !== "done" ? initial : options.find((o) => o.group !== "done");
+	return prop && open && { prop: prop.id, option: open.id };
+}
+
 /**
  * The type a new to-do gets: the first type to offer first (the capture types) whose status can be
- * done, else the first such type by name. None: the workspace has no such type.
+ * open and done, else the first such type by name. None: the workspace has no such type.
  */
 export function todoType(ix: Index): string | undefined {
-	const withStatus = (id: string) =>
-		!!statusProp(ix.types.get(id)?.schema)?.options?.some((o) => o.group === "done");
-	return ix.captureTypes().find(withStatus) ?? ix.typesByName().find((t) => withStatus(t.id))?.id;
+	const fits = (id: string) => {
+		const schema = ix.types.get(id)?.schema;
+		return !!openStatus(schema) && !!statusProp(schema)?.options?.some((o) => o.group === "done");
+	};
+	return ix.captureTypes().find(fits) ?? ix.typesByName().find((t) => fits(t.id))?.id;
 }
 
 /**
@@ -47,8 +59,15 @@ export function newTodo(title: string): string | undefined {
 	if (!space || !title.trim()) return;
 	const repo = replica(space).repo;
 	const type = todoType(repo.index());
-	if (!type) return;
-	const id = repo.create({ title: title.trim(), type, parents: [], inbox: Date.now() });
+	const open = openStatus(repo.index().types.get(type ?? "")?.schema);
+	if (!type || !open) return;
+	const id = repo.create({
+		title: title.trim(),
+		type,
+		parents: [],
+		inbox: Date.now(),
+		props: { [open.prop]: open.option },
+	});
 	return entryKey(space, id);
 }
 
