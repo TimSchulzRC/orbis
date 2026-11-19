@@ -16,4 +16,4 @@ Tests that start servers as their own processes (`tests/integration/server.test.
 
 ## Runners
 
-All jobs run on GitHub's runners (`ubuntu-latest`; the desktop app also on `macos-latest` and `windows-latest`). The repository is public, so they cost nothing, and a pull request from a fork must never run its code on a machine of our own: it could change the workflow to pick that machine. Workflows from outside contributors start only after approval (Settings › Actions).
+All jobs run on GitHub's runners (`ubuntu-latest`). The repository is public, so they cost nothing, and a pull request from a fork must never run its code on a machine of our own: it could change the workflow to pick that machine. Settings › Actions › _Approval for running fork pull request workflows_ is set to all external contributors, so their workflows start only after approval.
