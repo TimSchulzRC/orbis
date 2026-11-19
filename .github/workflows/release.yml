@@ -1,6 +1,7 @@
 name: Release
 
-# Three channels of one image, ghcr.io/<owner>/obtion (the desktop app shall follow the same):
+# Three channels of one image, ghcr.io/<owner>/obtion, and of the desktop app (its installers on
+# each GitHub release; the app looks there for a newer one of its channel: apps/desktop/src/updates.ts):
 #   dev      every push to main (ci.yml): :dev and :sha-<commit>
 #   nightly  this workflow, checked every half hour: a new one when main has commits the last one
 #            lacks and that one is at least six hours old; by hand without the wait. GitHub's
@@ -152,3 +153,46 @@ jobs:
           [[ -n $NOTES ]] && args+=(--notes-start-tag "$NOTES")
           if [[ $CHANNEL == stable ]]; then args+=(--latest); else args+=(--prerelease --latest=false); fi
           gh release create "v$VERSION" "${args[@]}"
+
+  # the desktop app of this release, built like in desktop.yml but with its version: the installers
+  # go onto the release, where the apps of this channel find them
+  desktop:
+    needs: [resolve, release]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: macos-latest, platform: mac, arch: --x64 --arm64 }
+          - { runner: windows-latest, platform: win, arch: --x64 }
+          - { runner: ubuntu-latest, platform: linux, arch: --x64 }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.resolve.outputs.version }}
+    defaults:
+      run:
+        working-directory: apps/desktop
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - run: bun scripts/build.ts ${{ matrix.platform }}
+        env:
+          OBTION_BUILD_VERSION: ${{ env.VERSION }}
+      - run: bunx electron-builder --${{ matrix.platform }} ${{ matrix.arch }} --publish never -c.extraMetadata.version="$VERSION"
+      - name: Attach the installers to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          shopt -s nullglob
+          files=(release/*.dmg release/*.exe release/*.AppImage release/*.deb)
+          ((${#files[@]})) || { echo "::error::No installers in release/"; exit 1; }
+          gh release upload "v$VERSION" "${files[@]}" --clobber

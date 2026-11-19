@@ -15,7 +15,7 @@ extraResources:
     to: server
 artifactName: Obtion-${version}-${os}-${arch}.${ext}
 mac:
-  target: [dmg, zip]
+  target: [dmg]
   category: public.app-category.productivity
   # ad-hoc: Apple Silicon starts only signed apps; there is no developer certificate (yet)
   identity: "-"

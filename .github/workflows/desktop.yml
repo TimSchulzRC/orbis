@@ -2,8 +2,9 @@ name: Desktop
 
 # The desktop app for macOS (Apple Silicon and Intel), Windows and Linux, each built on its own
 # system (a Mac signs the app ad hoc, which only works there). The installers are the run's
-# artifacts. Runs when the desktop app itself changes, or by hand (Run workflow) for any state:
-# macOS runners cost ten times the minutes, so not for every pull request.
+# artifacts, a dev version that looks for no updates; release.yml builds those of the releases.
+# Runs when the desktop app itself changes, or by hand (Run workflow) for any state: macOS
+# runners cost ten times the minutes, so not for every pull request.
 on:
   push:
     branches: [main]
@@ -51,7 +52,6 @@ jobs:
         continue-on-error: true
         with:
           name: obtion-desktop-${{ matrix.platform }}
-          # the Mac's zips are for updates, which the app does not do yet: the DMGs are enough to try it
           path: |
             apps/desktop/release/*.dmg
             apps/desktop/release/*.exe

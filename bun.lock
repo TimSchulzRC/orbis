@@ -27,7 +27,7 @@
     },
     "apps/desktop": {
       "name": "@obtion/desktop",
-      "version": "0.1.0",
+      "version": "0.0.0-dev",
       "devDependencies": {
         "@obtion/core": "workspace:*",
         "@obtion/ui": "workspace:*",

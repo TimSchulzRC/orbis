@@ -9,6 +9,7 @@ const bridge: DesktopBridge = {
 	local: ipcRenderer.sendSync("obtion:local"),
 	renewLocal: () => ipcRenderer.invoke("obtion:renew"),
 	theme: (choice) => ipcRenderer.send("obtion:theme", choice),
+	checkUpdate: () => ipcRenderer.invoke("obtion:update"),
 };
 
 contextBridge.exposeInMainWorld("obtionDesktop", bridge);

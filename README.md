@@ -47,7 +47,7 @@ Without the web app (sync, API and MCP only): `OBTION_WEB_APP=off`. Apps on anot
 
 The same interface as the web app (both use `packages/ui`), with a server of its own on the device: workspaces **on this device** work without a network. A new workspace can go **on a server** instead; the first time you enter its address and sign in there.
 
-Installers come from the workflow [Desktop](.github/workflows/desktop.yml) (a run's artifacts). The Mac app is signed ad hoc, not notarized: open it once via System Settings › Privacy & Security › _Open anyway_, or run `xattr -dr com.apple.quarantine /Applications/Obtion.app`.
+Installers are attached to each [release](https://github.com/TimSchulzRC/obtion/releases): nightly and stable, like the image. The app looks there for a newer release of its own channel (the cloud button at the bottom of the sidebar, and every half hour); a click downloads its installer. Builds of the workflow [Desktop](.github/workflows/desktop.yml) (a run's artifacts) are dev versions and look for none. The Mac app is signed ad hoc, not notarized: open it once via System Settings › Privacy & Security › _Open anyway_, or run `xattr -dr com.apple.quarantine /Applications/Obtion.app`.
 
 ## Development
 

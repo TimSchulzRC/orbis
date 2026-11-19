@@ -120,6 +120,7 @@
 	"agent.changedMany": "{agent} hat {count} Einträge geändert",
 	"app.checking": "Suche nach einer neuen Version …",
 	"app.clickCheck": "Klicken, um nach einer neuen Version zu suchen",
+	"app.clickDownload": "Klicken, um sie herunterzuladen",
 	"app.clickUpdate": "Klicken, um zu aktualisieren",
 	"app.newVersion": "Neue Version verfügbar",
 	"app.noSpace": "Diesen Workspace gibt es nicht, oder du bist nicht (mehr) darin.",

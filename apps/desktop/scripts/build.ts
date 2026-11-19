@@ -5,7 +5,7 @@
 //   bun scripts/build.ts                  for this machine
 //   bun scripts/build.ts mac win linux    for these platforms (each x64 and arm64; win x64 only)
 
-import { copyFileSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { copyFileSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { $ } from "bun";
 import { iconPath } from "../../server/src/icons";
@@ -28,10 +28,9 @@ await $`bun run --cwd ${join(root, "apps/web")} build --mode desktop`;
 await $`bun build ${join(here, "src/main.ts")} --outfile ${join(here, "dist/main.cjs")} --target node --format cjs --external electron`;
 await $`bun build ${join(here, "src/preload.ts")} --outfile ${join(here, "dist/preload.cjs")} --target node --format cjs --external electron`;
 // the app icon is the web app's in the channel of this version (scripts/generate-icons.ts):
-// electron-builder takes it from build/, the Linux window from dist/
-const { version } = JSON.parse(readFileSync(join(here, "package.json"), "utf8")) as {
-	version: string;
-};
+// electron-builder takes it from build/, the Linux window from dist/. The version is a release's
+// (release.yml sets it, and electron-builder gets it as extraMetadata.version), otherwise dev
+const version = process.env.OBTION_BUILD_VERSION || "dev";
 mkdirSync(join(here, "build"), { recursive: true });
 for (const to of ["build/icon.png", "dist/icon.png"])
 	copyFileSync(join(root, "apps/web/public", iconPath("/icon-512.png", version)), join(here, to));

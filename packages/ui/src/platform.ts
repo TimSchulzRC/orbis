@@ -14,6 +14,11 @@ export interface DesktopBridge {
 	renewLocal(): Promise<{ token: string; user: User }>;
 	/** The theme chosen in the app: the window's buttons and the system menus follow it. */
 	theme(choice: "system" | "light" | "dark"): void;
+	/**
+	 * A newer release of the app's channel (nightly, stable) with an installer for this system,
+	 * from GitHub; null when there is none, and always for a dev build.
+	 */
+	checkUpdate(): Promise<{ version: string; url: string } | null>;
 }
 
 declare global {

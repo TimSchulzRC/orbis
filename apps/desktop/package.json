@@ -1,6 +1,6 @@
 {
 	"name": "@obtion/desktop",
-	"version": "0.1.0",
+	"version": "0.0.0-dev",
 	"private": true,
 	"description": "The desktop app (Electron): the web app's interface in a window of its own, with a server on this device for local workspaces",
 	"homepage": "https://github.com/TimSchulzRC/obtion",

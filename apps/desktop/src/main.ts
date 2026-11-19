@@ -8,6 +8,7 @@ import { pathToFileURL } from "node:url";
 import { app, BrowserWindow, ipcMain, nativeTheme, net, protocol, shell } from "electron";
 import { iconPath } from "../../server/src/icons";
 import { LocalServer } from "./local";
+import { pickUpdate, RELEASES, type Release } from "./updates";
 
 const SCHEME = "obtion";
 /** The app's pages: their origin is obtion://app, which every Obtion server lets call its API. */
@@ -37,8 +38,12 @@ const lang = () => (app.getLocale().startsWith("de") ? "de" : "en");
 /** dist/ of apps/desktop, inside the packaged app's archive or not. */
 const here = join(app.getAppPath(), "dist");
 const renderer = join(here, "renderer");
-/** The build version, the way the server takes it (OBTION_BUILD_VERSION): "dev" outside a package. */
-const version = app.isPackaged ? app.getVersion() : "dev";
+/**
+ * The build version, the way the server takes it (OBTION_BUILD_VERSION): a release's
+ * (release.yml), or "dev" outside a package and in builds of the Desktop workflow
+ * (package.json: 0.0.0-dev).
+ */
+const version = app.isPackaged && !app.getVersion().endsWith("-dev") ? app.getVersion() : "dev";
 const exe = process.platform === "win32" ? "obtion-server.exe" : "obtion-server";
 const server = new LocalServer(
 	join(userData, "server"),
@@ -143,6 +148,17 @@ function createWindow() {
 // what the page asks for (preload.ts)
 ipcMain.on("obtion:local", (e) => (e.returnValue = server.local));
 ipcMain.handle("obtion:renew", () => server.signIn(lang(), true));
+// a newer release of this version's channel with an installer for this system (updates.ts)
+ipcMain.handle("obtion:update", async () => {
+	if (version === "dev") return null;
+	const res = await net.fetch(RELEASES, { headers: { accept: "application/vnd.github+json" } });
+	if (!res.ok) throw new Error(`GitHub: ${res.status}`);
+	return pickUpdate((await res.json()) as Release[], version, {
+		platform: process.platform,
+		arch: process.arch,
+		appImage: !!process.env.APPIMAGE,
+	});
+});
 // the theme chosen in the app (system, light, dark): the window's buttons and menus follow it
 ipcMain.on("obtion:theme", (_e, choice: unknown) => {
 	if (choice === "system" || choice === "light" || choice === "dark")

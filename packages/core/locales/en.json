@@ -120,6 +120,7 @@
 	"agent.changedMany": "{agent} changed {count} items",
 	"app.checking": "Looking for a new version …",
 	"app.clickCheck": "Click to look for a new version",
+	"app.clickDownload": "Click to download it",
 	"app.clickUpdate": "Click to update",
 	"app.newVersion": "A new version is available",
 	"app.noSpace": "This workspace does not exist, or you are not (or no longer) in it.",
