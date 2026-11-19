@@ -39,6 +39,11 @@ const lang = () => (app.getLocale().startsWith("de") ? "de" : "en");
 const here = join(app.getAppPath(), "dist");
 const renderer = join(here, "renderer");
 /**
+ * The icon in the colour of this version's channel (scripts/build.ts). A package has it from
+ * electron-builder; outside one, Electron would show its own, so the window and the Dock get it.
+ */
+const icon = join(here, "icon.png");
+/**
  * The build version, the way the server takes it (OBTION_BUILD_VERSION): a release's
  * (release.yml), or "dev" outside a package and in builds of the Desktop workflow
  * (package.json: 0.0.0-dev).
@@ -105,7 +110,7 @@ function createWindow() {
 		titleBarStyle: "hidden",
 		...(mac ? { trafficLightPosition: { x: 16, y: 15 } } : { titleBarOverlay: overlay() }),
 		backgroundColor: nativeTheme.shouldUseDarkColors ? "#191919" : "#f7f6f3",
-		...(process.platform === "linux" ? { icon: join(here, "icon.png") } : {}),
+		...(process.platform === "linux" || !app.isPackaged ? { icon } : {}),
 		webPreferences: {
 			preload: join(here, "preload.cjs"),
 			contextIsolation: true,
@@ -180,6 +185,7 @@ app.on("activate", () => {
 app.on("will-quit", () => server.stop());
 
 app.whenReady().then(async () => {
+	if (mac && !app.isPackaged) app.dock?.setIcon(icon);
 	protocol.handle(SCHEME, serve);
 	try {
 		await server.start(lang());
