@@ -2,7 +2,7 @@
 // archive other programs can read.
 import { afterAll, expect, test } from "bun:test";
 import { join } from "node:path";
-import { setFileMeta, setMeta } from "@obtion/core/model";
+import { addParent, setFileMeta, setMeta } from "@obtion/core/model";
 import {
 	archivePaths,
 	crc32,
@@ -70,9 +70,12 @@ test("a file with two places comes once, at its home; one in the trash or withou
 
 test("notes that lie below each other do not loop", () => {
 	const w = world();
-	w.m.add({ id: "loop-a", title: "A", parents: [w.tests, "loop-b"] });
+	w.m.add({ id: "loop-a", title: "A", parents: [w.tests] });
 	w.m.add({ id: "loop-b", title: "B", parents: ["loop-a"] });
 	w.file("a.pdf", ["loop-b"]);
+	// A also below B, made last: the edge that closes the cycle is ignored (graph.ts), and with its
+	// own timestamp that does not depend on both items being made in the same millisecond
+	w.m.change("loop-a", (d) => addParent(d, "loop-b", undefined, Date.now() + 1000));
 	expect(paths(w.m, w.tests)).toEqual(["A/B/a.pdf"]);
 });
 

@@ -4,8 +4,8 @@ name: Release
 #   dev      every push to main (ci.yml): :dev and :sha-<commit>
 #   nightly  this workflow, checked every half hour: a new one when main has commits the last one
 #            lacks and that one is at least six hours old; by hand without the wait. GitHub's
-#            schedule drops most of its runs for this repository, so the self-hosted runner's
-#            machine starts the check too (dispatch with auto: scripts/systemd/obtion-nightly-check.*).
+#            schedule drops most of its runs for this repository, so a machine of our own
+#            starts the check too (dispatch with auto: scripts/systemd/obtion-nightly-check.*).
 #            :nightly and :0.0.2-nightly.20261030.1, a GitHub pre-release v0.0.2-nightly.20261030.1
 #   stable   this workflow, only by hand: the commit of the latest nightly, so stable only ever
 #            ships what ran as nightly. :stable, :latest and :0.0.2, a GitHub release v0.0.2 titled
@@ -44,8 +44,8 @@ permissions:
 jobs:
   resolve:
     if: github.ref == 'refs/heads/main'
-    # like ci.yml: the self-hosted runner when the repository variable RUNNER says so
-    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    # like ci.yml: GitHub's runners only
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
@@ -78,13 +78,12 @@ jobs:
   release:
     needs: resolve
     if: needs.resolve.outputs.skip == 'false'
-    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
       contents: write
       packages: write
     env:
-      SELF_HOSTED: ${{ vars.RUNNER != '' }}
       LOCAL_TAG: obtion-release:${{ github.run_id }}
     steps:
       - uses: actions/checkout@v7
@@ -97,8 +96,6 @@ jobs:
           sparse-checkout: .github/scripts
       # builder and cache as in ci.yml
       - uses: docker/setup-buildx-action@v4
-        with:
-          driver: ${{ env.SELF_HOSTED == 'true' && 'docker' || 'docker-container' }}
       - uses: docker/login-action@v4
         with:
           registry: ghcr.io
@@ -121,8 +118,8 @@ jobs:
           build-args: |
             OBTION_BUILD_VERSION=${{ needs.resolve.outputs.version }}
             OBTION_BUILD_COMMIT=${{ needs.resolve.outputs.sha }}
-          cache-from: ${{ env.SELF_HOSTED != 'true' && 'type=gha' || '' }}
-          cache-to: ${{ env.SELF_HOSTED != 'true' && 'type=gha,mode=max' || '' }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
       - name: Start the image
         run: bash .workflow/.github/scripts/check-image.sh "$LOCAL_TAG" "$VERSION" "$SHA"
         env:
@@ -138,13 +135,8 @@ jobs:
           build-args: |
             OBTION_BUILD_VERSION=${{ needs.resolve.outputs.version }}
             OBTION_BUILD_COMMIT=${{ needs.resolve.outputs.sha }}
-          cache-from: ${{ env.SELF_HOSTED != 'true' && 'type=gha' || '' }}
-          cache-to: ${{ env.SELF_HOSTED != 'true' && 'type=gha,mode=max' || '' }}
-      - name: Remove local image tags
-        if: always() && env.SELF_HOSTED == 'true'
-        run: docker image rm "$LOCAL_TAG" $(tr , ' ' <<< "$TAGS") || true
-        env:
-          TAGS: ${{ needs.resolve.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
       # after the image: a release always has its image
       - name: GitHub release
         env:

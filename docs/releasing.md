@@ -22,7 +22,7 @@ The version is the next stable one, the day (UTC) and the how-manieth nightly of
 
 ### The automatic check
 
-The workflow has a GitHub schedule (`8,38 * * * *`), but for this repository GitHub drops most of its runs without a trace. So the machine with the self-hosted runner starts the check as well, with `workflow_dispatch` and `auto=true` (which makes it wait the six hours like the schedule). The user timer is in [`scripts/systemd`](../scripts/systemd):
+The workflow has a GitHub schedule (`8,38 * * * *`), but for this repository GitHub drops most of its runs without a trace. So a machine of our own (the home server) starts the check as well, with `workflow_dispatch` and `auto=true` (which makes it wait the six hours like the schedule). The user timer is in [`scripts/systemd`](../scripts/systemd):
 
 ```bash
 cp scripts/systemd/obtion-nightly-check.* ~/.config/systemd/user/

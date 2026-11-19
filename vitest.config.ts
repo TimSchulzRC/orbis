@@ -14,7 +14,7 @@ export default defineConfig({
 	test: {
 		include: ["tests/browser/**/*.browser.tsx"],
 		setupFiles: ["tests/browser/setup.ts"],
-		// The self-hosted CI machine runs other jobs, so a load spike can fail a test. Vitest still reports it as flaky.
+		// The checks run side by side on the CI runner, so a load spike can fail a test. Vitest still reports it as flaky.
 		retry: process.env.CI ? 1 : 0,
 		// With an empty Vite cache (every CI run) loading the first test file took up to a minute, Vitest's default.
 		env: {
