@@ -831,7 +831,7 @@
 	"settings.themeHint": "For this device. “System” follows the device setting.",
 	"settings.tokenActive": "A token is active, created on {created}.",
 	"settings.uploading": "uploading {count}",
-	"settings.version": "Obtion {version}",
+	"settings.version": "{name} {version}",
 	"settings.workspaces": "Workspaces",
 	"settings.workspacesHint": "Each workspace has its own content, types, members and settings.",
 	"setup.card.description": "Standalone knowledge in your own words, reusable across projects. Needs no place. Test: would I still understand it if the project no longer existed?",
