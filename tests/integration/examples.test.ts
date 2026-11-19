@@ -13,8 +13,8 @@ import {
 import type { Lang } from "@obtion/core/i18n";
 import { touch } from "@obtion/core/model";
 import { inbox } from "@obtion/core/placement";
-import { findBlocks, readBlock, runQuery } from "@obtion/core/query";
-import { runSetup, SYS } from "@obtion/core/setup";
+import { findBlocks, groupItems, parseQuery, readBlock, runQuery } from "@obtion/core/query";
+import { runSetup, SYS, TASK_PROJECT, typeTabs } from "@obtion/core/setup";
 import { Blobs, sha256 } from "@obtion/server/blobs";
 import { setUp } from "@obtion/server/setup";
 import { Store } from "@obtion/server/store";
@@ -70,6 +70,24 @@ for (const lang of ["de", "en"] as Lang[])
 		expect(blockTitles(m, ix.get("ex-work")!.body, 0, "ex-work")).toContain(
 			lang === "de" ? "Website-Relaunch" : "Website relaunch",
 		);
+	});
+
+for (const lang of ["de", "en"] as Lang[])
+	test(`the examples (${lang}): "by project" groups tasks only by projects, sub-tasks too`, () => {
+		const m = world(lang);
+		const ix = m.index();
+		const byProject = typeTabs(ix.get(SYS.task)!, lang)[0]!;
+		const name = lang === "de" ? "Projekt" : "In project";
+		expect(byProject.group).toBe(name);
+		const tasks = ix.live.filter((i) => i.type === SYS.task && i.source === EXAMPLE);
+		for (const t of tasks) expect(ix.get(t.rels[TASK_PROJECT]![0]!)!.type).toBe(SYS.project);
+		const groups = groupItems(tasks, byProject.group, { ix });
+		expect(groups.map((g) => g.ref).sort()).toEqual(["ex-build", "ex-design"]);
+		// the sub-tasks of "pages" sit in the group of their project, not of their parent task
+		const build = groups.find((g) => g.ref === "ex-build")!;
+		expect(build.items.map((i) => i.id)).toContain("ex-t-pages-about");
+		// the property's name is no longer a word for the built-in "above"
+		expect(parseQuery(`${lang === "de" ? "gruppe" : "group"}:"${name}"`, ix).def.group).toBe(name);
 	});
 
 test("running the examples twice adds nothing", () => {
