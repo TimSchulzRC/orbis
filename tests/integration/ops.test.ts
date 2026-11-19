@@ -2,7 +2,15 @@ import { afterAll, beforeEach, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { addDrawing, drawingFence, writeElements } from "@orbis/core/drawing";
-import { addDaysISO, addParent, replaceBody, setExtra, todayISO } from "@orbis/core/model";
+import {
+	addDaysISO,
+	addParent,
+	replaceBody,
+	SETTINGS_ID,
+	setExtra,
+	setSettings,
+	todayISO,
+} from "@orbis/core/model";
 import { SYS } from "@orbis/core/setup";
 import { deleteItem } from "@orbis/core/trash";
 import { Mirror } from "@orbis/server/mirror";
@@ -109,6 +117,19 @@ test("a to-do made into the inbox stays there sorted; the agent may change it, t
 	// done, it leaves the inbox
 	ops.update(t.id, { properties: { Status: "erledigt" } }, A);
 	expect(ops.query("eingang").items).toEqual([]);
+});
+
+test("a task the inbox rule took stays there when the agent sorts it", () => {
+	// only tasks without a project land in this inbox by themselves
+	storeWriter(s, A).change(SETTINGS_ID, (d) =>
+		setSettings(d, { inbox: { and: [{ type: SYS.task }, { without: "parents" }] } }),
+	);
+	const p = ops.create({ title: "Relaunch", type: "Projekt" }, A);
+	const t = ops.create({ title: "Call Lena", type: "Task" }, A);
+	expect(ops.query("eingang").items.map((i) => i.title)).toEqual(["Call Lena"]);
+	ops.place(t.id, { add: [p.id] }, A);
+	expect(ops.query("eingang").items.map((i) => i.title)).toEqual(["Call Lena"]);
+	expect(s.records.get(t.id)!.inbox).toBeGreaterThan(0);
 });
 
 test("files never get a type, neither directly nor as a suggestion", () => {

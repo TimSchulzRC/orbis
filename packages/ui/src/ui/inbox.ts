@@ -27,11 +27,12 @@ export function useInboxItems(): InboxEntry[] {
 export const isTodo = (item: Item, ix: Index) => !!statusProp(ix.schemaOf(item));
 
 /**
- * The type a new to-do gets: the first type to offer first (the capture types) that has a status,
- * else the first such type by name. None: the workspace has no type with a status.
+ * The type a new to-do gets: the first type to offer first (the capture types) whose status can be
+ * done, else the first such type by name. None: the workspace has no such type.
  */
 export function todoType(ix: Index): string | undefined {
-	const withStatus = (id: string) => !!statusProp(ix.types.get(id)?.schema);
+	const withStatus = (id: string) =>
+		!!statusProp(ix.types.get(id)?.schema)?.options?.some((o) => o.group === "done");
 	return ix.captureTypes().find(withStatus) ?? ix.typesByName().find((t) => withStatus(t.id))?.id;
 }
 

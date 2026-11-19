@@ -380,10 +380,13 @@ function TodoRow({
 	const home = ix.get(ix.home(item.id));
 	const due = dueOf(item, schema);
 	const doneOption = firstOfGroup(schema, "done");
-	// open again: the type's default, unless that one is done too
-	const open = prop?.options?.find((o) => o.id === defaultOption(prop) && o.group !== "done");
+	// open again: the type's default unless that one is done too, else its first open option
+	const options = prop?.options ?? [];
+	const open =
+		options.find((o) => o.id === defaultOption(prop!) && o.group !== "done") ??
+		options.find((o) => o.group !== "done");
 	const toggle = async () => {
-		const to = done ? (open ?? firstOfGroup(schema, "todo"))?.id : doneOption?.id;
+		const to = (done ? open : doneOption)?.id;
 		if (to && (await setStatus(item, to, repo))) onTick(entry, !done);
 	};
 	return (

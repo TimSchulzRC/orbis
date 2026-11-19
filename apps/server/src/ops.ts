@@ -64,7 +64,7 @@ import {
 import { originText, parseOrigin } from "@orbis/core/origin";
 import { findSection, type Heading, outline, page } from "@orbis/core/outline";
 import { freshColor } from "@orbis/core/palette";
-import { isInInbox, isSorted } from "@orbis/core/placement";
+import { isInInbox, isSorted, keepInInbox } from "@orbis/core/placement";
 import type { ActivityEvent, FieldChange } from "@orbis/core/protocol";
 import { fromB64 } from "@orbis/core/protocol";
 import {
@@ -1447,6 +1447,7 @@ export class Ops {
 		this.store.change(item.id, origin, (doc) => {
 			if (input.title !== undefined) setMeta(doc, { title: input.title.trim() });
 			if (newType !== undefined) {
+				keepInInbox(doc, item, ix);
 				setMeta(doc, { type: newType?.id ?? null });
 				for (const [k, v] of Object.entries(initialProps(schema)))
 					if (item.props[k] === undefined) setProp(doc, k, v);
@@ -1557,6 +1558,8 @@ export class Ops {
 			}
 		}
 		this.store.change(item.id, origin, (doc) => {
+			// sorting never takes an entry out of the inbox, as in the app
+			if (add.length || home || input.pin === true) keepInInbox(doc, item, ix);
 			for (const p of add) addParent(doc, p.id);
 			for (const p of rem) removeParent(doc, p);
 			if (home) {
