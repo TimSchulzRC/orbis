@@ -16,33 +16,20 @@ permissions:
 
 jobs:
   check:
-    # The self-hosted runner (label "obtion") when the repository variable RUNNER says so, otherwise
-    # GitHub's: RUNNER=obtion switches to our own hardware, deleting the variable switches back.
-    # The machine has two runners, so check and image run side by side (docs/ci.md).
-    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    # GitHub's runners only: the repository is public, and a pull request from a fork must not run
+    # its code on a machine of our own (docs/ci.md)
+    runs-on: ubuntu-latest
     # a hanging test fails after minutes instead of holding the runner for GitHub's six hours
     timeout-minutes: 15
-    env:
-      SELF_HOSTED: ${{ vars.RUNNER != '' }}
     steps:
       - uses: actions/checkout@v7
-      # always the newest Bun release, like the Dockerfile's base image (kept current by Dependabot):
-      # GitHub's runners install it, the self-hosted machine has it and upgrades it in place (in
-      # half a second instead of ten; one at a time, its runners share it)
+      # always the newest Bun release, like the Dockerfile's base image (kept current by Dependabot)
       - uses: oven-sh/setup-bun@v2
-        if: env.SELF_HOSTED != 'true'
         with:
           bun-version: latest
-      # the runner's service starts without ~/.bun/bin in its PATH: this step and the ones after get it
-      - if: env.SELF_HOSTED == 'true'
-        run: |
-          echo "$HOME/.bun/bin" >> "$GITHUB_PATH"
-          flock ~/.bun/upgrade.lock ~/.bun/bin/bun upgrade
       - run: bun install --frozen-lockfile
-      # the Chromium of the installed Playwright (~/.cache/ms-playwright, kept on the self-hosted
-      # machine); GitHub's runners also need its system libraries, which the self-hosted one has
-      # (installing them would need root)
-      - run: bunx playwright install ${{ env.SELF_HOSTED != 'true' && '--with-deps' || '' }} chromium
+      # the Chromium of the installed Playwright, with its system libraries
+      - run: bunx playwright install --with-deps chromium
       # Biome, unit and integration tests, typecheck, browser tests (parts of the interface on their
       # own in Chromium, tests/browser) and E2E (the built app against real servers, tests/e2e): side
       # by side, the same script as `bun run check` locally
@@ -59,19 +46,14 @@ jobs:
   # pushed (.github/scripts/check-image.sh). Beside check, not after it: for pull requests too, so a
   # broken Dockerfile shows before the merge.
   image:
-    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      SELF_HOSTED: ${{ vars.RUNNER != '' }}
       LOCAL_TAG: obtion-ci:${{ github.run_id }}
     steps:
       - uses: actions/checkout@v7
-      # Self-hosted: the Docker daemon's own builder (containerd image store), its build cache stays
-      # on the machine between runs, nothing to export. GitHub's runners start empty each time and
-      # carry the cache through the GitHub Actions cache instead.
+      # the runner starts empty each time: the build cache goes through the GitHub Actions cache
       - uses: docker/setup-buildx-action@v4
-        with:
-          driver: ${{ env.SELF_HOSTED == 'true' && 'docker' || 'docker-container' }}
       - uses: docker/build-push-action@v7
         with:
           context: .
@@ -80,14 +62,10 @@ jobs:
           build-args: |
             OBTION_BUILD_VERSION=dev
             OBTION_BUILD_COMMIT=${{ github.sha }}
-          cache-from: ${{ env.SELF_HOSTED != 'true' && 'type=gha' || '' }}
-          cache-to: ${{ env.SELF_HOSTED != 'true' && 'type=gha,mode=max' || '' }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
       - name: Start the image
         run: bash .github/scripts/check-image.sh "$LOCAL_TAG" dev "$GITHUB_SHA"
-      # the docker builder keeps the image locally: drop the tag, the build cache stays
-      - name: Remove the local image tag
-        if: always() && env.SELF_HOSTED == 'true'
-        run: docker image rm "$LOCAL_TAG" || true
 
   # The dev channel of the image ghcr.io/<owner>/obtion: :dev is always the newest main,
   # :sha-<commit> keeps each build (release.yml builds nightly and stable only from commits that
@@ -96,19 +74,15 @@ jobs:
   publish:
     needs: [check, image]
     if: github.event_name == 'push'
-    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
       contents: read
       packages: write
-    env:
-      SELF_HOSTED: ${{ vars.RUNNER != '' }}
     steps:
       - uses: actions/checkout@v7
       # builder and cache as in the image job
       - uses: docker/setup-buildx-action@v4
-        with:
-          driver: ${{ env.SELF_HOSTED == 'true' && 'docker' || 'docker-container' }}
       - uses: docker/login-action@v4
         with:
           registry: ghcr.io
@@ -131,10 +105,5 @@ jobs:
           build-args: |
             OBTION_BUILD_VERSION=dev
             OBTION_BUILD_COMMIT=${{ github.sha }}
-          cache-from: ${{ env.SELF_HOSTED != 'true' && 'type=gha' || '' }}
-          cache-to: ${{ env.SELF_HOSTED != 'true' && 'type=gha,mode=max' || '' }}
-      # the docker builder also keeps the pushed image locally: drop exactly these tags, the build
-      # cache stays (other containers on the machine are none of CI's business)
-      - name: Remove local image tags
-        if: always() && env.SELF_HOSTED == 'true' && steps.meta.outcome == 'success'
-        run: docker image rm ${{ join(fromJSON(steps.meta.outputs.json).tags, ' ') }} || true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

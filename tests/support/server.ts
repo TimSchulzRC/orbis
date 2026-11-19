@@ -63,7 +63,7 @@ export async function bootServer(
 		stderr,
 	});
 	const url = `http://127.0.0.1:${port}`;
-	// generous: the self-hosted CI runner shares its machine, and under load a boot can take over 10 s
+	// generous: beside the other checks on a CI runner, a boot can take over 10 s under load
 	for (let i = 0; i < 400; i++) {
 		if (
 			await fetch(`${url}/api/info`).then(
