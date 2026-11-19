@@ -637,7 +637,7 @@
 	"query.cond.underThis": "Unter dieser Seite",
 	"query.empty": "Noch nichts.",
 	"query.errors": "Nicht verstanden: {list}",
-	"query.help": "Leerzeichen = und · | = oder · - = nicht · typ: #tag unter: in: verknüpft: verknüpft:unter: status: ohne: angeheftet sammlung: sort: gruppe:",
+	"query.help": "Leerzeichen = und · | = oder · - = nicht · typ: #tag unter: in: verknüpft: verknüpft:unter: status: Relation.feld: ohne: angeheftet sammlung: sort: gruppe:",
 	"query.hideText": "Text ausblenden",
 	"query.label": "Abfrage",
 	"query.more": "{count} weitere",

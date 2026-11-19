@@ -68,6 +68,11 @@ export function mapCond(cond: Cond | undefined, c: PropChange): Cond | undefined
 		const inner = mapCond(cond.not, c);
 		return inner ? { not: inner } : undefined;
 	}
+	if ("via" in cond) {
+		const inner = mapCond(cond.cond, c);
+		const via = mapName(cond.via, c);
+		return inner && via !== null ? { via, cond: inner } : undefined;
+	}
 	if ("prop" in cond && matchesName(cond.prop, c))
 		return c.to ? { ...cond, prop: c.to } : undefined;
 	return cond;
@@ -95,7 +100,7 @@ export function mapTab<T extends Partial<ViewTab>>(tab: T, c: PropChange): T {
 		const group = mapName(tab.group, c);
 		if (group === null) {
 			// no grouping left: the hidden option ids and the rows within the columns go with it
-			out.group = out.subgroup = out.hiddenGroups = out.hideEmpty = undefined;
+			out.group = out.subgroup = out.hiddenGroups = out.groupOrder = out.hideEmpty = undefined;
 		} else out.group = group;
 	}
 	return dropEmpty(out);
@@ -185,6 +190,7 @@ function fill(t: Omit<ViewTab, "id" | "pos">) {
 		"subgroup",
 		"hideEmpty",
 		"hiddenGroups",
+		"groupOrder",
 		"columns",
 		"widths",
 		"date",

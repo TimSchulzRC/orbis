@@ -6,6 +6,7 @@ import {
 	type Group,
 	groupId,
 	groupItems,
+	orderGroups,
 	pathBase,
 	type QueryDef,
 	viewTypeIds,
@@ -122,8 +123,10 @@ export function viewGroups(items: Item[], def: QueryDef, ctx: EvalCtx): Group[] 
 	});
 }
 
-export function splitHidden(groups: Group[], tab?: ViewTab): [Group[], Group[]] {
+/** Groups in the view's order (by hand first), split into shown and hidden ones. */
+export function splitHidden(all: Group[], tab?: ViewTab): [Group[], Group[]] {
 	const hidden = new Set(tab?.hiddenGroups ?? []);
+	const groups = orderGroups(all, tab?.groupOrder);
 	return [
 		groups.filter((g) => !hidden.has(groupId(g))),
 		groups.filter((g) => hidden.has(groupId(g))),

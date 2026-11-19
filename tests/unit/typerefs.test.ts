@@ -86,3 +86,18 @@ test("a type rename reaches relation targets, in any language and quoted", () =>
 	expect(renameTypeIn("typ:Taskforce #task", "Task", "Job")).toBeNull();
 	expect(renameTypeIn("status:Task", "Task", "Job")).toBeNull();
 });
+
+test("a renamed relation follows in Field.condition filters; dropping it drops the filter", () => {
+	const via = { via: "priority", cond: { status: "active" as const } };
+	expect(mapCond(via, rename)).toEqual({ ...via, via: "Importance" });
+	expect(mapCond(via, remove)).toBeUndefined();
+	// a chain through the same relation follows at every step
+	expect(mapCond({ via: "Priority", cond: via }, rename)).toEqual({
+		via: "Importance",
+		cond: { ...via, via: "Importance" },
+	});
+	expect(mapCond({ via: "Project", cond: via.cond }, rename)).toEqual({
+		via: "Project",
+		cond: via.cond,
+	});
+});

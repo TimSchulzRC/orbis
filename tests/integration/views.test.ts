@@ -1,6 +1,6 @@
 import { afterAll, beforeEach, expect, test } from "bun:test";
 import { FORMAT, SETTINGS_ID, setSettings, setTab, setTabs } from "@obtion/core/model";
-import { groupId, groupItems, runQuery, tabDef } from "@obtion/core/query";
+import { groupId, groupItems, orderGroups, runQuery, tabDef } from "@obtion/core/query";
 import { runSetup, SYS, typeTabs, upgradeSetup } from "@obtion/core/setup";
 import type { Ops } from "@obtion/server/ops";
 import type { Store } from "@obtion/server/store";
@@ -171,6 +171,7 @@ test("update_type sets the views; the same name keeps its tab; hidden groups are
 					view: "board",
 					query: "gruppe:status",
 					hidden_groups: ["Backlog", "Erledigt", "Abgebrochen"],
+					group_order: ["Pausiert", "Planung"],
 				},
 			],
 		},
@@ -187,6 +188,7 @@ test("update_type sets the views; the same name keeps its tab; hidden groups are
 		hideEmpty: true,
 	});
 	expect(tabs[1]!.hiddenGroups).toEqual(["st_backlog", "st_done", "st_canceled"]);
+	expect(tabs[1]!.groupOrder).toEqual(["st_paused", "st_planning"]);
 	ops.create({ title: "Running", type: "Projekt", properties: { Status: "In Bearbeitung" } }, A);
 	ops.create({ title: "Later", type: "Projekt", properties: { Status: "Backlog" } }, A);
 	s.flush();
@@ -197,11 +199,11 @@ test("update_type sets the views; the same name keeps its tab; hidden groups are
 		types: [SYS.project],
 		where: def.where,
 	});
-	expect(groups.filter((g) => !hidden.has(groupId(g))).map((g) => g.label)).toEqual([
-		"Planung",
-		"In Bearbeitung",
-		"Pausiert",
-	]);
+	expect(
+		orderGroups(groups, tabs[1]!.groupOrder)
+			.filter((g) => !hidden.has(groupId(g)))
+			.map((g) => g.label),
+	).toEqual(["Pausiert", "Planung", "In Bearbeitung"]);
 	ops.updateType("Projekt", { views: [{ name: "Aktiv", view: "board" }] }, A);
 	tabs = tabsOf(SYS.project);
 	expect(tabs.map((t) => [t.id, t.kind])).toEqual([["v_active", "board"]]);

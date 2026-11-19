@@ -2,7 +2,7 @@
 
 import type { T } from "@obtion/core/i18n";
 import { titleKey, type ViewKind, type ViewTab } from "@obtion/core/model";
-import { type Group, groupId } from "@obtion/core/query";
+import { type Group, groupId, orderGroups } from "@obtion/core/query";
 import { keyBetween } from "@obtion/core/sortkey";
 import { statusProp } from "@obtion/core/traits";
 import {
@@ -417,6 +417,7 @@ export function ViewSettings({
 	// which sort rule is choosing its field ("new": one more)
 	const [choosing, setChoosing] = useState<number | "new" | null>(null);
 	const [dragged, setDragged] = useState<string | null>(null);
+	const [draggedGroup, setDraggedGroup] = useState<string | null>(null);
 	const hasStatus = [...ix.types.values()].some((x) => statusProp(x.schema));
 	const groupable = [
 		...(hasStatus ? ["status", "statusGroup"] : []),
@@ -601,6 +602,8 @@ export function ViewSettings({
 		);
 
 	const hiddenGroups = tab.hiddenGroups ?? [];
+	const ordered = orderGroups(groups, tab.groupOrder);
+	const orderedIds = ordered.map(groupId);
 	const group = (
 		<>
 			<MenuItem active={!tab.group} onClick={() => onLook({ group: undefined })}>
@@ -619,13 +622,28 @@ export function ViewSettings({
 					{groups.length > 1 && heading(t("view.visibleGroups"))}
 					{groups.length > 1 && (
 						<ul>
-							{groups.map((g) => {
-								const hidden = hiddenGroups.includes(groupId(g));
+							{ordered.map((g) => {
+								const id = groupId(g);
+								const hidden = hiddenGroups.includes(id);
 								return (
 									<EyeRow
+										draggable
 										key={g.key || "_"}
 										label={t(hidden ? "view.showGroup" : "view.hideGroup")}
 										on={!hidden}
+										onDragOver={(e) =>
+											draggedGroup !== null && draggedGroup !== id && e.preventDefault()
+										}
+										onDragStart={() => setDraggedGroup(id)}
+										onDrop={() => {
+											if (draggedGroup === null) return;
+											const from = orderedIds.indexOf(draggedGroup);
+											const to = orderedIds.indexOf(id);
+											onLook({
+												groupOrder: moveInArray(orderedIds, from, from < to ? to + 1 : to),
+											});
+											setDraggedGroup(null);
+										}}
 										onToggle={() =>
 											onLook({
 												hiddenGroups: hidden

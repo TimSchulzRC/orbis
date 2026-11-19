@@ -228,6 +228,7 @@ export interface ViewTab {
 	subgroup?: string; // boards: rows ("swimlanes") within the columns
 	hideEmpty?: boolean; // hide empty groups
 	hiddenGroups?: string[]; // group ids hidden by hand
+	groupOrder?: string[]; // group ids put in order by hand; the others follow
 	columns?: string[]; // shown properties in this order (table columns, card lines)
 	widths?: Record<string, number>; // table column widths in px
 	date?: string; // calendar and timeline: the date property

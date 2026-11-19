@@ -20,6 +20,10 @@ export const viewInput = z.object({
 		.array(z.string())
 		.optional()
 		.describe('groups to hide by name, e.g. ["Backlog", "Done"]'),
+	group_order: z
+		.array(z.string())
+		.optional()
+		.describe("groups by name in the order to show them; the others follow"),
 	date: z.string().optional().describe("calendar/timeline: the date property"),
 });
 export type ViewInput = z.infer<typeof viewInput>;
