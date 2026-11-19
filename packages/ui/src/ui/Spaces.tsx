@@ -11,6 +11,7 @@ import {
 	serverName,
 	setShown,
 	spaceById,
+	spacesOn,
 	useAccounts,
 } from "../accounts";
 import { Checkbox } from "../components/ui/checkbox";
@@ -244,8 +245,9 @@ const OTHER = "+";
 /**
  * A new workspace: its name, whether it starts with the examples (set up in the app's language)
  * and, in the desktop app, where it goes – on this device or on a server: one connected already,
- * or another one, connected here first with a new account or an existing one (whose workspaces
- * come along; then the name may stay empty).
+ * or another one, connected here first with a new account or an existing one. An account that
+ * already has workspaces there brings them along and creates none; otherwise the form stays open
+ * with that server chosen.
  */
 export function NewSpaceForm({
 	name: initial = "",
@@ -278,25 +280,24 @@ export function NewSpaceForm({
 	const submit = () => name.trim() && !busy && void create(where === "server" ? server : undefined);
 	return (
 		<div>
-			<label className="block text-sm font-medium" htmlFor={nameId}>
-				{connecting ? t("server.nameOptional") : t("space.name")}
-				<Input
-					autoFocus
-					className="mt-1 block bg-surface"
-					id={nameId}
-					onChange={(e) => setName(e.target.value)}
-					onKeyDown={(e) => {
-						if (connecting || e.key !== "Enter") return;
-						e.preventDefault();
-						submit();
-					}}
-					value={name}
-				/>
-			</label>
-			{connecting && (
-				<p className="mt-1 text-xs text-muted-foreground">{t("server.nameOptionalHint")}</p>
+			{!connecting && (
+				<label className="block text-sm font-medium" htmlFor={nameId}>
+					{t("space.name")}
+					<Input
+						autoFocus
+						className="mt-1 block bg-surface"
+						id={nameId}
+						onChange={(e) => setName(e.target.value)}
+						onKeyDown={(e) => {
+							if (e.key !== "Enter") return;
+							e.preventDefault();
+							submit();
+						}}
+						value={name}
+					/>
+				</label>
 			)}
-			{(!connecting || name.trim()) && (
+			{!connecting && (
 				<label
 					className="mt-4 flex cursor-pointer gap-3 rounded-xl border border-line p-3 hover:bg-hover"
 					htmlFor={examplesId}
@@ -361,7 +362,16 @@ export function NewSpaceForm({
 			)}
 			{error && <p className="mt-3 text-sm text-danger">{error}</p>}
 			{connecting ? (
-				<ConnectServer onDone={(url) => (name.trim() ? void create(url) : onDone?.())} />
+				<ConnectServer
+					onDone={(url) => {
+						// the account's workspaces there came along: no new one unasked
+						const there = spacesOn(url);
+						if (there[0]) {
+							navigate("/", { space: there[0].id });
+							onDone?.();
+						} else setServer(url);
+					}}
+				/>
 			) : (
 				<div className="mt-5 flex justify-end gap-2">
 					{onCancel && <Button onClick={onCancel}>{t("cancel")}</Button>}

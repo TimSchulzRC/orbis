@@ -796,8 +796,6 @@
 	"server.invalid": "That is not a server address.",
 	"server.local": "On this device",
 	"server.localHint": "On this computer only, also without a network. No account needed.",
-	"server.nameOptional": "Name of a new workspace (optional)",
-	"server.nameOptionalHint": "Leave it empty to use only the account's existing workspaces.",
 	"server.notForApp": "{server} answers but does not let this app in. The server is probably older than the desktop app or does not list it in OBTION_APP_ORIGINS.",
 	"server.other": "Another server …",
 	"server.ownServer": "This is the app's own server.",

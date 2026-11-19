@@ -147,7 +147,6 @@ try {
 	await dialog.getByLabel("Adresse des Servers").fill(closedUrl);
 	await dialog.getByRole("button", { name: "Weiter" }).click();
 	expect(await visible(dialog, /ist gerade nicht erreichbar/), "server gone: not told so");
-	await dialog.getByLabel(/Name eines neuen Workspaces/).fill("Team");
 	await dialog.getByLabel("Adresse des Servers").fill(remoteUrl.replace(/^http:\/\//, ""));
 	await shot(page, "3-connect-server");
 	await dialog.getByRole("button", { name: "Weiter" }).click();
@@ -169,6 +168,10 @@ try {
 	await dialog.getByLabel("Passwort").fill("geheim12345");
 	await shot(page, "4-sign-up-on-server");
 	await dialog.getByRole("button", { name: "Konto anlegen" }).click();
+	// a new account has no workspace there: the form stays, with that server chosen
+	await dialog.getByRole("button", { name: "Workspace anlegen" }).waitFor();
+	await dialog.getByLabel("Name", { exact: true }).fill("Team");
+	await dialog.getByRole("button", { name: "Workspace anlegen" }).click();
 	expect(await opened(page, "Team"), "server workspace: not opened");
 
 	// it is on the server: its account and workspaces, the setup synced there
@@ -374,7 +377,6 @@ try {
 	const other = mkdtempSync(join(tmpdir(), "obtion-desktop-"));
 	({ app, page } = await launch(other));
 	await page.getByRole("button", { name: /^Auf einem Server/ }).click();
-	await page.getByLabel(/Name eines neuen Workspaces/).fill("");
 	await page.getByLabel("Adresse des Servers").fill(remoteUrl);
 	await page.getByRole("button", { name: "Weiter" }).click();
 	await page.getByLabel("E-Mail").fill("ada@example.org");

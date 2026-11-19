@@ -132,6 +132,9 @@ export const activeUser = () => account?.user.id;
 export const activeSpace = () => spaces.find((s) => s.id === active);
 export const spaceById = (id: string) => spaces.find((s) => s.id === id);
 
+/** The workspaces on further server `url` (desktop app), in their order. */
+export const spacesOn = (url: string) => spaces.filter((s) => s.server === url);
+
 // ---------- servers ----------
 
 /** The address of a server: a further one's own, or the app's (none). */
