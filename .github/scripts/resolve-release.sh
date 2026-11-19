@@ -3,6 +3,7 @@
 #   skip     true: nothing to do (no build, no release)
 #   sha      the commit to build
 #   version  0.0.2-nightly.20261030.1 or 0.0.2
+#   title    the release's title: Obtion 0.0.2-nightly.20261030.1 or Obtion 0.0.2 (Alpha)
 #   tags     the image tags, comma-separated
 #   notes    the release the notes start from (the previous one of the channel), may be empty
 #
@@ -20,6 +21,9 @@ repo=$GITHUB_REPOSITORY
 image=ghcr.io/${repo,,}
 out=${GITHUB_OUTPUT:-/dev/stdout}
 GAP_HOURS=6
+# Stable releases keep this stage in their title while Obtion is in it, like T3 Code (Alpha); the
+# same word as STABLE_STAGE in packages/core/src/release.ts, which puts it into the app's name.
+STABLE_STAGE=Alpha
 
 skip() {
   echo "::notice::$1"
@@ -57,6 +61,7 @@ if [[ $CHANNEL == nightly ]]; then
   day=$(date -u +%Y%m%d)
   n=$(($(cut -f1 <<< "$releases" | grep -c -- "-nightly\.$day\." || true) + 1))
   version=$next-nightly.$day.$n
+  title="Obtion $version"
   tags=$image:nightly,$image:$version
   notes=$nightly_tag
 else
@@ -75,15 +80,17 @@ else
     [[ $(gh api "repos/$repo/commits/v$stable_version" --jq .sha) != "$sha" ]] ||
       fail "$nightly_tag is already stable as v$stable_version"
   fi
+  title="Obtion $version ($STABLE_STAGE)"
   tags=$image:stable,$image:latest,$image:$version
   notes=${last_stable}
 fi
 
-echo "::notice::$CHANNEL $version from ${sha:0:7}"
+echo "::notice::$CHANNEL $title from ${sha:0:7}"
 {
   echo "skip=false"
   echo "sha=$sha"
   echo "version=$version"
+  echo "title=$title"
   echo "tags=$tags"
   echo "notes=$notes"
 } >> "$out"

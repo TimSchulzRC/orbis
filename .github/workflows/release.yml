@@ -8,7 +8,8 @@ name: Release
 #            machine starts the check too (dispatch with auto: scripts/systemd/obtion-nightly-check.*).
 #            :nightly and :0.0.2-nightly.20261030.1, a GitHub pre-release v0.0.2-nightly.20261030.1
 #   stable   this workflow, only by hand: the commit of the latest nightly, so stable only ever
-#            ships what ran as nightly. :stable, :latest and :0.0.2, a GitHub release v0.0.2
+#            ships what ran as nightly. :stable, :latest and :0.0.2, a GitHub release v0.0.2 titled
+#            "Obtion 0.0.2 (Alpha)": the stage stays in the name until Obtion leaves it
 # The last number of a version counts the stable releases; a new middle one (0.1.0: beta) is
 # given by hand as version. Details in .github/scripts/resolve-release.sh.
 
@@ -53,6 +54,7 @@ jobs:
       skip: ${{ steps.resolve.outputs.skip }}
       sha: ${{ steps.resolve.outputs.sha }}
       version: ${{ steps.resolve.outputs.version }}
+      title: ${{ steps.resolve.outputs.title }}
       tags: ${{ steps.resolve.outputs.tags }}
       notes: ${{ steps.resolve.outputs.notes }}
     steps:
@@ -149,11 +151,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           VERSION: ${{ needs.resolve.outputs.version }}
+          TITLE: ${{ needs.resolve.outputs.title }}
           SHA: ${{ needs.resolve.outputs.sha }}
           NOTES: ${{ needs.resolve.outputs.notes }}
           CHANNEL: ${{ inputs.channel || 'nightly' }}
         run: |
-          args=(--target "$SHA" --title "Obtion $VERSION" --generate-notes)
+          args=(--target "$SHA" --title "$TITLE" --generate-notes)
           [[ -n $NOTES ]] && args+=(--notes-start-tag "$NOTES")
           if [[ $CHANNEL == stable ]]; then args+=(--latest); else args+=(--prerelease --latest=false); fi
           gh release create "v$VERSION" "${args[@]}"

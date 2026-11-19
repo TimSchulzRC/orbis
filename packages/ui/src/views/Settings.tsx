@@ -11,6 +11,7 @@ import type {
 import { listExamples, removeExamples, restoreExamples } from "@obtion/core/examples";
 import { ENDONYMS, fmtBytes, fmtDate, fmtDateTime, LANGS } from "@obtion/core/i18n";
 import { SETTINGS_ID, setSettings } from "@obtion/core/model";
+import { appName } from "@obtion/core/release";
 import { resetInbox } from "@obtion/core/setup";
 import {
 	ArrowLeft,
@@ -979,9 +980,13 @@ function Version() {
 		});
 	}, []);
 	if (!info?.version) return null;
+	// "Obtion (Alpha) 0.0.2 (abc1234)"; a dev build has no version beyond its name
+	const build = [info.version !== "dev" && info.version, info.commit && `(${info.commit})`]
+		.filter(Boolean)
+		.join(" ");
 	return (
 		<p className="text-center text-xs text-muted-foreground">
-			{t("settings.version", { version: info.version + (info.commit ? ` (${info.commit})` : "") })}
+			{t("settings.version", { name: appName(info.version), version: build }).trim()}
 		</p>
 	);
 }

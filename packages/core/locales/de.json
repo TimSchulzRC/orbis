@@ -831,7 +831,7 @@
 	"settings.themeHint": "Gilt für dieses Gerät. „System“ folgt der Einstellung des Geräts.",
 	"settings.tokenActive": "Ein Token ist aktiv, erstellt am {created}.",
 	"settings.uploading": "lädt {count} hoch",
-	"settings.version": "Obtion {version}",
+	"settings.version": "{name} {version}",
 	"settings.workspaces": "Workspaces",
 	"settings.workspacesHint": "Jeder Workspace hat seine eigenen Inhalte, Typen, Mitglieder und Einstellungen.",
 	"setup.card.description": "Eigenständiges Wissen in eigenen Worten, wiederverwendbar über Projekte hinweg. Braucht keinen Ort. Testfrage: Verstehe ich sie noch, wenn das Projekt nicht mehr existiert?",

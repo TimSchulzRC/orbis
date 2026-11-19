@@ -37,6 +37,8 @@ Actions → Release → _Run workflow_, channel `stable`. It builds the commit o
 
 For a new middle number, enter it as `version`, e.g. `0.1.0` for the beta. The next nightlies then lead up to `0.1.1`.
 
+The release is titled `Obtion 0.0.2 (Alpha)`, and the app calls itself `Obtion (Alpha)` in the settings: stable means "ran as nightly", not finished. Nightly and dev builds say `(Nightly)` and `(Dev)` instead. When Obtion leaves the alpha, change the stage in both places: `STABLE_STAGE` in [`release.ts`](../packages/core/src/release.ts) and in [`resolve-release.sh`](../.github/scripts/resolve-release.sh).
+
 The workflow refuses a version that is not newer than the latest stable one, and a nightly that is already stable.
 
 ## Going back
