@@ -35,8 +35,14 @@ export function todoType(ix: Index): string | undefined {
 	return ix.captureTypes().find(withStatus) ?? ix.typesByName().find((t) => withStatus(t.id))?.id;
 }
 
-/** A new to-do in the inbox, kept there until ticked off or checked off. Returns its key. */
-export function newTodo(title: string, space = captureSpace()): string | undefined {
+/**
+ * A new to-do in the inbox, kept there until ticked off or checked off: in the workspace notes go
+ * to, else the first shown one with a type for it. Returns its key.
+ */
+export function newTodo(title: string): string | undefined {
+	const space = [captureSpace(), ...shownSpaces().map((s) => s.id)].find(
+		(s) => s && todoType(replica(s).repo.index()),
+	);
 	if (!space || !title.trim()) return;
 	const repo = replica(space).repo;
 	const type = todoType(repo.index());

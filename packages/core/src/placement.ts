@@ -41,12 +41,17 @@ export function keepInInbox(doc: Y.Doc, item: Item | undefined, ix: Index) {
 		setMeta(doc, { inbox: item.created });
 }
 
+/** Has a type, a place or a pin: it can be found outside the inbox. */
+export function isSorted(item: Item, ix: Index): boolean {
+	return ix.typeOf(item) !== null || hasPlace(item, ix);
+}
+
 /**
- * "Done" takes an entry kept in the inbox out of it. Not one the rule would take straight back (a
- * note without a type or a place): it would be found nowhere else.
+ * "Done" takes a sorted entry kept in the inbox out of it. Not a loose note (it would be found
+ * nowhere else), nor one the rule would take straight back.
  */
 export function canCheckOff(item: Item, ix: Index): boolean {
-	return !!item.inbox && !liesInInbox({ ...item, inbox: undefined }, { ix });
+	return !!item.inbox && isSorted(item, ix) && !liesInInbox({ ...item, inbox: undefined }, { ix });
 }
 
 export function canPlaceIn(item: Item, target: Item, ix: Index): boolean {

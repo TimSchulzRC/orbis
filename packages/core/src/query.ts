@@ -703,11 +703,12 @@ function matchField(
 }
 
 /**
- * In the inbox, "Back tomorrow" aside: kept there until checked off or done; else by the rule, where
- * pinning counts as a place.
+ * In the inbox, "Back tomorrow" aside: kept there until checked off, else by the rule, where pinning
+ * counts as a place. A done status takes it out either way.
  */
 export function liesInInbox(item: Item, ctx: EvalCtx): boolean {
-	if (item.inbox) return !isDone(item, ctx.ix.schemaOf(item));
+	if (isDone(item, ctx.ix.schemaOf(item))) return false;
+	if (item.inbox) return true;
 	return (
 		!item.pinned && matches(item, inboxWhere(ctx.ix), { ...ctx, thisId: undefined, inInbox: true })
 	);

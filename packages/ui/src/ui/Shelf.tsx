@@ -379,11 +379,11 @@ function TodoRow({
 	const title = titleOf(item, t);
 	const home = ix.get(ix.home(item.id));
 	const due = dueOf(item, schema);
+	const doneOption = firstOfGroup(schema, "done");
+	// open again: the type's default, unless that one is done too
+	const open = prop?.options?.find((o) => o.id === defaultOption(prop) && o.group !== "done");
 	const toggle = async () => {
-		if (!prop) return;
-		const to = done
-			? (defaultOption(prop) ?? firstOfGroup(schema, "todo")?.id)
-			: firstOfGroup(schema, "done")?.id;
+		const to = done ? (open ?? firstOfGroup(schema, "todo"))?.id : doneOption?.id;
 		if (to && (await setStatus(item, to, repo))) onTick(entry, !done);
 	};
 	return (
@@ -395,15 +395,17 @@ function TodoRow({
 			)}
 			data-row={entry.key}
 		>
-			<Button
-				aria-label={done ? t("inbox.reopen", { title }) : t("inbox.tick", { title })}
-				className="tap absolute left-2 top-2 rounded-full p-1 hover:bg-surface"
-				onClick={() => void toggle()}
-				style={status ? { color: statusColor(status.option, done) } : undefined}
-				variant="plain"
-			>
-				{status && <StatusGlyph option={status.option} size={17} />}
-			</Button>
+			{status && doneOption && (
+				<Button
+					aria-label={done ? t("inbox.reopen", { title }) : t("inbox.tick", { title })}
+					className="tap absolute left-2 top-2 rounded-full p-1 hover:bg-surface"
+					onClick={() => void toggle()}
+					style={{ color: statusColor(status.option, done) }}
+					variant="plain"
+				>
+					<StatusGlyph option={status.option} size={17} />
+				</Button>
+			)}
 			<Button
 				aria-current={current}
 				className="block w-full min-w-0 rounded-xl py-2.5 pl-10 pr-3 text-left"

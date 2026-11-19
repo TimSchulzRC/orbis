@@ -75,6 +75,17 @@ test('the "+" in the inbox\'s head starts a new note; on to another entry, the e
 	await expect.poll(() => repo.live().length).toBe(before);
 });
 
+test("with the to-dos shown, a new note switches the list to the whole inbox", async () => {
+	localStorage.setItem("orbis.inbox.view", JSON.stringify("todos"));
+	await open();
+	await expect
+		.element(panel().getByRole("tab", { name: /^Eingang/ }))
+		.toHaveAttribute("aria-selected", "true");
+	await commands.keys("type", "Idea");
+	await expect.poll(() => found("Idea")?.inbox).toBeGreaterThan(0);
+	localStorage.removeItem("orbis.inbox.view");
+});
+
 test("clicked again while the new note is still empty, the same note stays open", async () => {
 	const before = repo.live().length;
 	await open();

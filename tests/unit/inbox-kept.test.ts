@@ -2,7 +2,7 @@
 // checked off or done; sorting one that lies there by the rule alone keeps it too.
 import { describe, expect, test } from "bun:test";
 import { inboxSince } from "@orbis/core/inbox";
-import { setMeta, setProp } from "@orbis/core/model";
+import { SETTINGS_ID, setMeta, setProp, setSettings } from "@orbis/core/model";
 import { canCheckOff, inbox, isInInbox, keepInInbox, laterItems } from "@orbis/core/placement";
 import { parseQuery, runQuery } from "@orbis/core/query";
 import { runSetup, SYS } from "@orbis/core/setup";
@@ -63,6 +63,24 @@ describe("kept in the inbox", () => {
 		expect(canCheckOff(ix.get(typed)!, ix)).toBe(true);
 		expect(canCheckOff(ix.get(placed)!, ix)).toBe(true);
 		expect(canCheckOff(ix.get(byRule)!, ix)).toBe(false);
+	});
+
+	test("with a rule of its own: a loose note stays, a task the rule takes leaves once done", () => {
+		const m = new MemRepo();
+		runSetup(m.writer, "de");
+		// only tasks without a project land in this inbox by themselves
+		m.change(SETTINGS_ID, (d) =>
+			setSettings(d, { inbox: { and: [{ type: SYS.task }, { without: "parents" }] } }),
+		);
+		const loose = m.add({ title: "Loose", inbox: 1 });
+		const task = m.add({ title: "Task", type: SYS.task });
+		let ix = m.index();
+		expect(canCheckOff(ix.get(loose)!, ix)).toBe(false);
+		expect(canCheckOff(ix.get(task)!, ix)).toBe(false);
+		expect(titles(m)).toEqual(["Loose", "Task"]);
+		m.change(task, (d) => setProp(d, "p_status", "st_done"));
+		ix = m.index();
+		expect(titles(m)).toEqual(["Loose"]);
 	});
 
 	test("sorting an entry there by the rule keeps it, since it was made; one outside stays outside", () => {
@@ -142,6 +160,8 @@ describe("on a device", () => {
 		repo.setInbox(typed, false);
 		await settled();
 		expect(isInInbox(repo.get(typed)!, repo.index())).toBe(false);
+		// put in by hand: also one set aside until tomorrow is back now
+		repo.change(project, (d) => setMeta(d, { later: Date.now() + 60_000 }));
 		repo.setInbox(project, true);
 		await settled();
 		expect(isInInbox(repo.get(project)!, repo.index())).toBe(true);

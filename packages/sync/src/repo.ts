@@ -885,9 +885,11 @@ export class Repo {
 		});
 	}
 
-	/** Into the inbox (kept there until checked off), or out of it ("Done"). */
+	/** Into the inbox now (kept there until checked off; also one back tomorrow), or out of it ("Done"). */
 	setInbox(id: string, on: boolean) {
-		this.change(id, (doc) => setMeta(doc, { inbox: on ? Date.now() : null }));
+		this.change(id, (doc) =>
+			setMeta(doc, on ? { inbox: Date.now(), later: null } : { inbox: null }),
+		);
 	}
 
 	setProp(id: string, propId: string, value: Value | null) {

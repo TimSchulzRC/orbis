@@ -64,7 +64,7 @@ import {
 import { originText, parseOrigin } from "@orbis/core/origin";
 import { findSection, type Heading, outline, page } from "@orbis/core/outline";
 import { freshColor } from "@orbis/core/palette";
-import { canCheckOff, isInInbox } from "@orbis/core/placement";
+import { isInInbox, isSorted } from "@orbis/core/placement";
 import type { ActivityEvent, FieldChange } from "@orbis/core/protocol";
 import { fromB64 } from "@orbis/core/protocol";
 import {
@@ -1367,11 +1367,11 @@ export class Ops {
 
 	/**
 	 * Product decision: in the inbox agents only suggest, the user accepts with one click. An entry
-	 * already sorted (kept in the inbox with a type or a place) is theirs to change like any other.
+	 * already sorted (with a type, a place or a pin) is theirs to change like any other.
 	 */
 	private guardInbox(item: Item, what: string) {
 		const ix = this.store.index();
-		if (isInInbox(item, ix) && !canCheckOff(item, ix))
+		if (isInInbox(item, ix) && !isSorted(item, ix))
 			throw new OpError(
 				`"${item.title}" is in the inbox. Agents don't sort the inbox themselves (${what}); use suggest to propose a type and place – the user accepts with one click.`,
 			);
@@ -1574,8 +1574,8 @@ export class Ops {
 		return {
 			now,
 			part_of: after.parentsOf(item.id).map((p) => after.get(p)?.title ?? p),
-			// back in the inbox by its rule (no type, no place), not one kept there sorted
-			in_inbox: isInInbox(now, after) && !canCheckOff(now, after),
+			// in the inbox with no type and no place, not one kept there sorted
+			in_inbox: isInInbox(now, after) && !isSorted(now, after),
 		};
 	}
 

@@ -151,6 +151,14 @@ function Inbox({
 	}, [at]);
 	const card = useRef<HTMLDivElement>(null);
 	const byKey = new Map([...entries, ...later].map((e) => [e.key, e]));
+	// an entry asked for that is no to-do (a new note too) shows among all, once it is there
+	const askedSeen = useRef<string | undefined>(undefined);
+	useEffect(() => {
+		const asked = at ? byKey.get(at) : undefined;
+		if (!asked || at === askedSeen.current) return;
+		askedSeen.current = at;
+		if (view === "todos" && !todo(asked)) setView("all");
+	});
 	// back in the inbox (tomorrow has come, put in again on its page): waiting again, no longer done
 	const due = sorted.filter((s) => entries.some((e) => e.key === s.key));
 	useOnChange(due.length, () => {
