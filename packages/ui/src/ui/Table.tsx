@@ -60,11 +60,18 @@ export interface Look {
  * below which listed entry it is shown there.
  */
 let rowDrag: { id: string; table: string; group: string; from?: string } | null = null;
-/** The line or frame that shows where a dragged row lands. */
+/**
+ * What shows where a dragged row lands, as in the sidebar: a line between two rows, a frame around
+ * the row it goes into.
+ */
 const AIM: Record<DropZone, string> = {
 	before: "[&>td]:shadow-[inset_0_2px_0_0_var(--focus)]",
 	after: "[&>td]:shadow-[inset_0_-2px_0_0_var(--focus)]",
-	inside: "[&>td]:shadow-[inset_0_2px_0_0_var(--focus),inset_0_-2px_0_0_var(--focus)]",
+	inside: cn(
+		"[&>td]:shadow-[inset_0_2px_0_0_var(--focus),inset_0_-2px_0_0_var(--focus)]",
+		"[&>td:first-child]:shadow-[inset_2px_2px_0_0_var(--focus),inset_0_-2px_0_0_var(--focus)]",
+		"[&>td:last-child]:shadow-[inset_-2px_2px_0_0_var(--focus),inset_0_-2px_0_0_var(--focus)]",
+	),
 };
 
 /** Bounds for a column width dragged by its border. */
@@ -243,7 +250,8 @@ export function GroupedTable({
 	// on a phone the title column leaves room for the next one; the table scrolls sideways
 	const narrow = useNarrow();
 	const titleW = narrow ? Math.min(width("title"), 190) : width("title");
-	const total = titleW + cols.reduce((s, c) => s + width(c), 0);
+	// plus room for the empty last column: it draws the right edge of the frame around a drop target
+	const total = titleW + cols.reduce((s, c) => s + width(c), 0) + 2;
 	const label = (c: string) => {
 		if ((FIELDS as readonly string[]).includes(c)) return t(`field.${c}`);
 		if (c === "tags") return t("item.tags");
@@ -259,7 +267,8 @@ export function GroupedTable({
 	const [dragCol, setDragCol] = useState<string | null>(null);
 	// Rows are dragged by their title. On another row's middle: below that entry. Between two rows:
 	// on their level, and there in the order – kept in the view, so only while it has no sort of
-	// its own. Into another group: its value too.
+	// its own. Into another group: its value too. As in the sidebar, Alt adds a place instead of
+	// moving.
 	const tableId = useId();
 	const [aim, setAim] = useState<{ id: string; zone: DropZone } | { group: string } | null>(null);
 	const dragged = () => (rowDrag?.table === tableId ? rowDrag : null);
@@ -274,7 +283,14 @@ export function GroupedTable({
 	 */
 	const landing = (g: Group, target: Item, zone: DropZone, hasOpenKids: boolean) =>
 		zone === "inside" || (zone === "after" && hasOpenKids) ? target.id : listedParent(g, target.id);
-	const dropRow = (g: Group, parent: string | undefined, zone: DropZone, target: Item) => {
+	/** With Alt held, going below another entry adds that place and keeps the one it came from. */
+	const dropRow = (
+		g: Group,
+		parent: string | undefined,
+		zone: DropZone,
+		target: Item,
+		keep: boolean,
+	) => {
 		const d = dragged();
 		rowDrag = null;
 		setAim(null);
@@ -282,7 +298,8 @@ export function GroupedTable({
 		if (!d || !item) return;
 		if (parent !== d.from) {
 			if (parent) {
-				if (!repo.moveParent(d.id, d.from ?? null, parent)) return;
+				if (!(keep ? repo.addParent(d.id, parent) : repo.moveParent(d.id, d.from ?? null, parent)))
+					return;
 			} else if (d.from) repo.removeParent(d.id, d.from);
 		}
 		if (by && d.group !== g.key) groupSetter(item, by, g)?.();
@@ -402,7 +419,10 @@ export function GroupedTable({
 					)}
 					data-id={i.id}
 					key={i.id}
-					onDragLeave={() => setAim(null)}
+					// from one cell to the next the row keeps its mark: only leaving the row clears it
+					onDragLeave={(e) =>
+						!e.currentTarget.contains(e.relatedTarget as Node | null) && setAim(null)
+					}
 					onDragOver={(e) => {
 						const at = landingAt(e);
 						if (!at) return;
@@ -415,7 +435,7 @@ export function GroupedTable({
 						if (!at) return;
 						e.preventDefault();
 						e.stopPropagation();
-						dropRow(g, at.parent, at.zone, i);
+						dropRow(g, at.parent, at.zone, i, e.altKey);
 					}}
 				>
 					<ShadcnTableCell
@@ -440,6 +460,7 @@ export function GroupedTable({
 									from: listedParent(g, i.id),
 								};
 								e.dataTransfer.setData("text/plain", titleOf(i, t));
+								e.dataTransfer.effectAllowed = "copyMove";
 							}}
 							style={{ paddingLeft: depth * 20 }}
 						>
