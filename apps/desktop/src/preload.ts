@@ -8,6 +8,7 @@ const bridge: DesktopBridge = {
 	os: process.platform,
 	local: ipcRenderer.sendSync("obtion:local"),
 	renewLocal: () => ipcRenderer.invoke("obtion:renew"),
+	theme: (choice) => ipcRenderer.send("obtion:theme", choice),
 };
 
 contextBridge.exposeInMainWorld("obtionDesktop", bridge);

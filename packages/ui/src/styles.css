@@ -659,6 +659,35 @@ tr:hover .cell-tools button:not(.tap-y) {
 		padding: 16px 16px 72px;
 	}
 }
+/* below the inbox at the bottom (App.tsx): its room replaces the page's own, so a page that fits
+   shows no scrollbar */
+.tray-room {
+	padding-bottom: 80px;
+}
+.tray-room :is(.page-read, .page-wide) {
+	padding-bottom: 0;
+}
+
+/* The desktop app (platform.ts sets data-desktop): the top row is the window's title bar. It moves
+   the window; on a Mac the traffic lights sit at its start (apps/desktop: trafficLightPosition),
+   elsewhere the window's buttons are drawn over its end (titleBarOverlay, 44px high). */
+[data-desktop] .titlebar {
+	min-height: 44px;
+	padding-block: 0;
+	align-items: center;
+	-webkit-app-region: drag;
+}
+[data-desktop] .titlebar :is(a, button, input, select, [role="button"]),
+[data-desktop]
+	:is([role="dialog"], [role="menu"], [role="listbox"], [data-radix-popper-content-wrapper]) {
+	-webkit-app-region: no-drag;
+}
+[data-desktop="darwin"]:not([data-fullscreen]) .titlebar-lights {
+	padding-left: 80px;
+}
+[data-desktop]:not([data-desktop="darwin"]) .titlebar-end {
+	padding-right: calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw) + 8px);
+}
 
 /* design rules § 1.2 */
 .page-title {

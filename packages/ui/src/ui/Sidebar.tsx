@@ -242,7 +242,7 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
 			className="relative flex shrink-0 flex-col border-r border-line bg-sidebar pt-safe"
 			style={{ width }}
 		>
-			<div className="flex items-center px-2 pb-px pt-2">
+			<div className="titlebar titlebar-lights flex items-center px-2 pb-px pt-2">
 				<SpaceSelector className="flex-1" onNew={() => setCreating(true)} />
 			</div>
 			{/* biome-ignore lint/a11y/noStaticElementInteractions: dropping a dragged workspace between the others; the workspace menu moves them by keyboard */}

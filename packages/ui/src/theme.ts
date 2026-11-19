@@ -1,5 +1,6 @@
 // index.html sets <html data-theme> before the first paint to avoid a flash; this keeps it current.
 import { useSyncExternalStore } from "react";
+import { desktop } from "./platform";
 import { KEYS } from "./ui/storage";
 
 type ThemeChoice = "system" | "light" | "dark";
@@ -22,6 +23,7 @@ function resolve(c = themeChoice()): "light" | "dark" {
 function apply() {
 	const mode = resolve();
 	document.documentElement.dataset.theme = mode;
+	desktop?.theme(themeChoice());
 	document.querySelector('meta[name="theme-color"]')?.setAttribute("content", BAR[mode]);
 	document
 		.querySelector('link[rel="icon"]')

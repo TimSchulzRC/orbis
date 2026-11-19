@@ -76,6 +76,19 @@ const readBounds = (): Bounds => {
 
 let win: BrowserWindow | null = null;
 
+// no title bar: the app's top row is the window's (packages/ui: titlebar in styles.css). On a Mac
+// the traffic lights sit in it; elsewhere the window's buttons are drawn over its right end
+const TOP_ROW = 44;
+const mac = process.platform === "darwin";
+/** The page's background (packages/ui/src/theme.css) under the window's buttons, and their colour. */
+const overlay = () =>
+	nativeTheme.shouldUseDarkColors
+		? { color: "#121212", symbolColor: "#a3a3a3", height: TOP_ROW }
+		: { color: "#f7f6f3", symbolColor: "#6b6b6b", height: TOP_ROW };
+nativeTheme.on("updated", () => {
+	if (win && !mac) win.setTitleBarOverlay(overlay());
+});
+
 function createWindow() {
 	const bounds = readBounds();
 	win = new BrowserWindow({
@@ -84,6 +97,8 @@ function createWindow() {
 		minHeight: 480,
 		show: false,
 		title: "Obtion",
+		titleBarStyle: "hidden",
+		...(mac ? { trafficLightPosition: { x: 16, y: 15 } } : { titleBarOverlay: overlay() }),
 		backgroundColor: nativeTheme.shouldUseDarkColors ? "#191919" : "#f7f6f3",
 		...(process.platform === "linux" ? { icon: join(here, "icon.png") } : {}),
 		webPreferences: {
@@ -104,6 +119,13 @@ function createWindow() {
 		);
 	});
 	win.on("closed", () => (win = null));
+	// in full screen a Mac shows no traffic lights: the row needs no room for them
+	const fullScreen = (on: boolean) =>
+		void win?.webContents.executeJavaScript(
+			`document.documentElement.toggleAttribute("data-fullscreen", ${on})`,
+		);
+	win.on("enter-full-screen", () => fullScreen(true));
+	win.on("leave-full-screen", () => fullScreen(false));
 
 	// links to elsewhere open in the browser; the window stays the app
 	win.webContents.setWindowOpenHandler(({ url }) => {
@@ -121,6 +143,11 @@ function createWindow() {
 // what the page asks for (preload.ts)
 ipcMain.on("obtion:local", (e) => (e.returnValue = server.local));
 ipcMain.handle("obtion:renew", () => server.signIn(lang(), true));
+// the theme chosen in the app (system, light, dark): the window's buttons and menus follow it
+ipcMain.on("obtion:theme", (_e, choice: unknown) => {
+	if (choice === "system" || choice === "light" || choice === "dark")
+		nativeTheme.themeSource = choice;
+});
 
 app.on("second-instance", () => {
 	if (!win) return createWindow();

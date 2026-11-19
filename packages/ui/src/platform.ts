@@ -12,6 +12,8 @@ export interface DesktopBridge {
 	local: { url: string; token: string; user: User };
 	/** A new session on the server on this device, when its token stopped counting. */
 	renewLocal(): Promise<{ token: string; user: User }>;
+	/** The theme chosen in the app: the window's buttons and the system menus follow it. */
+	theme(choice: "system" | "light" | "dark"): void;
 }
 
 declare global {
@@ -22,6 +24,9 @@ declare global {
 
 export const desktop: DesktopBridge | undefined =
 	typeof window !== "undefined" ? window.obtionDesktop : undefined;
+
+// the app's top row is the window's title bar there (styles.css: titlebar)
+if (desktop) document.documentElement.dataset.desktop = desktop.os;
 
 /** The address of the app's own server ("" never: in a browser at least the page's origin). */
 export const homeUrl = (): string =>
