@@ -31,7 +31,7 @@ The model:
 - Everything is a note (title, Markdown body, tags, refs) or a file. A note has at most one type. Types are data: call \`schema\` first – it lists every type with its description, properties (with options) and capabilities. Follow the descriptions. Never assume a type exists because of its name.
 - "Part of" (place) builds the tree: an item can have several parents, one is its home. Links ([[Title]]) and refs are mentions; they connect without sorting. Relations are typed properties.
 - Pinned items form the top of the sidebar (place with pin:true); pinning counts as a place.
-- A note without a type, without a parent and not pinned is in the inbox (precisely: whatever the inbox query matches, see \`schema\`). Giving it a type or a parent sorts it out of the inbox.
+- A note without a type, without a parent and not pinned lands in the inbox (precisely: whatever the inbox query matches, see \`schema\`). The inbox is where the user works: what they make there or sort while it lies there stays in it, with its type and place, until they mark it done there; a done status takes it out too. Answers mark such entries "in inbox".
 - A type can have one property of kind "status": its options sit in the groups todo, active and done. Done counts as finished in progress, is never overdue and no longer blocks; active entries show on Today. Capabilities say what else a type can do: a due date (\`due_date\`), dated updates (\`updates\`), a template for new entries (\`template\`). Progress is a computed property ("progress" or "progress:Type"): the first one is the bar on the page. The app gives no type a special role: what a project or a task is comes from the types the user made.
 - Every type has a page: the list of its entries with views as tabs (\`update_type\` views). Mixed lists are pages with query blocks. Query syntax: ${QUERY_HELP} In bodies, \`\`\`query <text>\`\`\` blocks are live lists.
 
@@ -263,7 +263,7 @@ function buildMcpServer(
 		{
 			title: "Create",
 			description:
-				"Create notes. type is a type name (see schema) or omitted; parents (titles/ids) place them; properties by name (only those of the type). Without type and parent the item lands in the inbox.",
+				"Create notes. type is a type name (see schema) or omitted; parents (titles/ids) place them; properties by name (only those of the type). Without type and parent the item lands in the inbox; inbox: true puts it there too with its type and parents (a to-do the user wants to work on soon).",
 			inputSchema: { items: z.array(createInput).min(1) },
 		},
 		write(
@@ -528,7 +528,7 @@ function buildMcpServer(
 		() =>
 			userPrompt(`Go through my inbox (today is ${todayISO()}).
 1. Read the types and their descriptions with schema, then the inbox with query "inbox".
-2. For each item (oldest first): get it, look at what it mentions and links, and search for similar items and likely places (items with entries below, projects).
+2. For each item (oldest first) that has no type or no place yet – the others are sorted and wait there for me to work on: get it, look at what it mentions and links, and search for similar items and likely places (items with entries below, projects).
 3. Suggest a type and/or a place with suggest – only where it is clear. Leave unclear items alone and say why. Don't place, type or delete anything yourself; I accept suggestions in the app.
 4. End with a short list: item → suggestion, and the items you left alone.`),
 	);

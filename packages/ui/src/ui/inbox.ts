@@ -4,6 +4,7 @@ import type { Index } from "@orbis/core/graph";
 import { type Item, SETTINGS_ID } from "@orbis/core/model";
 import { laterItems } from "@orbis/core/placement";
 import { runQuery } from "@orbis/core/query";
+import { statusProp } from "@orbis/core/traits";
 import { replica, shownSpaces, useAccounts } from "../accounts";
 import { isBlank } from "../actions";
 import { createStore } from "../lib/store";
@@ -20,6 +21,28 @@ export const entryKey = (space: string, id: string) => `${space}/${id}`;
 
 export function useInboxItems(): InboxEntry[] {
 	return useEntries((ix) => runQuery({ where: { inbox: true } }, { ix }).items);
+}
+
+/** A to-do: an entry whose type has a status, so it can be ticked off. */
+export const isTodo = (item: Item, ix: Index) => !!statusProp(ix.schemaOf(item));
+
+/**
+ * The type a new to-do gets: the first type to offer first (the capture types) that has a status,
+ * else the first such type by name. None: the workspace has no type with a status.
+ */
+export function todoType(ix: Index): string | undefined {
+	const withStatus = (id: string) => !!statusProp(ix.types.get(id)?.schema);
+	return ix.captureTypes().find(withStatus) ?? ix.typesByName().find((t) => withStatus(t.id))?.id;
+}
+
+/** A new to-do in the inbox, kept there until ticked off or checked off. Returns its key. */
+export function newTodo(title: string, space = captureSpace()): string | undefined {
+	if (!space || !title.trim()) return;
+	const repo = replica(space).repo;
+	const type = todoType(repo.index());
+	if (!type) return;
+	const id = repo.create({ title: title.trim(), type, parents: [], inbox: Date.now() });
+	return entryKey(space, id);
 }
 
 /** Set aside with "Back tomorrow", out of the inbox until tomorrow. */
@@ -44,7 +67,8 @@ export const useDraftKey = () => {
 
 /**
  * A new empty note in the inbox, open in the panel (in workspace `space`, else the one notes go to).
- * One still empty is taken again, the caret back in its title, so clicking twice makes no second.
+ * It stays in the inbox with whatever type and place it gets, until checked off. One still empty is
+ * taken again, the caret back in its title, so clicking twice makes no second.
  */
 export function newNote(space = captureSpace()) {
 	if (!space) return;
@@ -61,7 +85,7 @@ export function newNote(space = captureSpace()) {
 		}
 	}
 	dropDraft();
-	const id = replica(space).repo.create({ title: "", type: null, parents: [] });
+	const id = replica(space).repo.create({ title: "", type: null, parents: [], inbox: Date.now() });
 	draft.set({ space, id });
 	openShelf(entryKey(space, id));
 }

@@ -2,6 +2,7 @@
 // tray opens its panel, the list and an entry to sort; the button beside it (on a phone the "+") the
 // panel at a new note.
 
+import { inboxSince } from "@orbis/core/inbox";
 import { Check, ChevronDown, ChevronUp, Inbox, Plus } from "lucide-react";
 import { useRef } from "react";
 import { ButtonGroup } from "../components/ui/button-group";
@@ -27,7 +28,7 @@ export function Tray({ desktop }: { desktop: boolean }) {
 	const { open, at } = useShelf();
 	const openPanel = () => openShelf();
 	const touch = useRef<number | null>(null);
-	const ages = entries.map((e) => age(e.item.created)).sort((a, b) => b - a);
+	const ages = entries.map((e) => age(inboxSince(e.item))).sort((a, b) => b - a);
 	// the legend of the marks, while the panel above is shut
 	const tray = (
 		<Tip card={<Legend ages={ages} />} label={t("tray.open", { count })} off={open}>
@@ -148,9 +149,9 @@ export function Tray({ desktop }: { desktop: boolean }) {
 
 /** How long an entry has lain: 0 put down today, 1 since yesterday, 2 over a week. */
 type Age = 0 | 1 | 2;
-function age(created: number, now = Date.now()): Age {
-	if (created >= new Date(now).setHours(0, 0, 0, 0)) return 0;
-	return now - created > 7 * DAY ? 2 : 1;
+function age(since: number, now = Date.now()): Age {
+	if (since >= new Date(now).setHours(0, 0, 0, 0)) return 0;
+	return now - since > 7 * DAY ? 2 : 1;
 }
 const AGE_LOOK = ["bg-faint", "bg-inbox", "bg-danger"] as const;
 const AGE_TEXT = ["tray.age.today", "tray.age.days", "tray.age.week"] as const;

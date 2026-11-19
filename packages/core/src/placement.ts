@@ -1,10 +1,11 @@
-// Done items are hidden in the sidebar but stay in "Below", the type's page and search. Pinning counts as a place, so pinned
-// items are never in the inbox.
+// Done items are hidden in the sidebar but stay in "Below", the type's page and search. Pinning
+// counts as a place: the inbox rule never takes a pinned item, but an entry kept in the inbox stays
+// there pinned too (see inbox.ts).
 
+import type * as Y from "yjs";
 import type { Index } from "./graph";
-import { inboxWhere } from "./inbox";
-import { type Item, isContent, META_TYPE } from "./model";
-import { matches } from "./query";
+import { type Item, isContent, META_TYPE, setMeta } from "./model";
+import { liesInInbox, matches } from "./query";
 import { cmpKey } from "./sortkey";
 import { isDone } from "./traits";
 
@@ -12,9 +13,13 @@ export function hasPlace(item: Item, ix: Index): boolean {
 	return !!item.pinned || ix.parentsOf(item.id).length > 0;
 }
 
+/** Can be in the inbox at all. A drawing is part of the note it is drawn in, never sorted on its own. */
+function inboxable(item: Item): boolean {
+	return isContent(item) && item.type !== META_TYPE;
+}
+
 export function isInInbox(item: Item, ix: Index): boolean {
-	if (!isContent(item) || item.type === META_TYPE) return false;
-	return matches(item, { inbox: true }, { ix });
+	return inboxable(item) && matches(item, { inbox: true }, { ix });
 }
 
 export function inbox(ix: Index): Item[] {
@@ -23,14 +28,25 @@ export function inbox(ix: Index): Item[] {
 
 /** Inbox items set aside with "Back tomorrow" that are not back yet. */
 export function laterItems(ix: Index, now = Date.now()): Item[] {
-	return ix.live.filter(
-		(i) =>
-			isContent(i) &&
-			i.type !== META_TYPE &&
-			!i.pinned &&
-			(i.later ?? 0) > now &&
-			matches(i, inboxWhere(ix), { ix, inInbox: true }),
-	);
+	return ix.live.filter((i) => inboxable(i) && (i.later ?? 0) > now && liesInInbox(i, { ix }));
+}
+
+/**
+ * Sorting never takes an entry out of the inbox: one there by the rule alone (also one back
+ * tomorrow) is kept from now on, since it was made. Call in the change that gives it a type, a
+ * place or a pin, with the item as it was before.
+ */
+export function keepInInbox(doc: Y.Doc, item: Item | undefined, ix: Index) {
+	if (item && !item.inbox && inboxable(item) && liesInInbox(item, { ix }))
+		setMeta(doc, { inbox: item.created });
+}
+
+/**
+ * "Done" takes an entry kept in the inbox out of it. Not one the rule would take straight back (a
+ * note without a type or a place): it would be found nowhere else.
+ */
+export function canCheckOff(item: Item, ix: Index): boolean {
+	return !!item.inbox && !liesInInbox({ ...item, inbox: undefined }, { ix });
 }
 
 export function canPlaceIn(item: Item, target: Item, ix: Index): boolean {

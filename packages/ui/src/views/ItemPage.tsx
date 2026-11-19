@@ -4,7 +4,7 @@
 import type { EditorView } from "@codemirror/view";
 import type { Index } from "@orbis/core/graph";
 import { type Item, META_TYPE } from "@orbis/core/model";
-import { isInInbox } from "@orbis/core/placement";
+import { canCheckOff, isInInbox } from "@orbis/core/placement";
 import { pluralOf } from "@orbis/core/plural";
 import { hasUpdates, progressSpec } from "@orbis/core/traits";
 import { movedItems } from "@orbis/core/transfer";
@@ -15,6 +15,7 @@ import {
 	AlertTriangle,
 	ArrowRightLeft,
 	Bot,
+	Check,
 	FilePlus,
 	FolderInput,
 	ImagePlus,
@@ -165,6 +166,31 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
 						>
 							{item.pinned ? t("item.unpin") : t("item.pin")}
 						</MenuItem>
+						{/* the inbox is where one works: put an entry there, or done with it there */}
+						{!item.deleted &&
+							(isInInbox(item, ix) ? (
+								canCheckOff(item, ix) && (
+									<MenuItem
+										icon={<Check size={14} />}
+										onClick={() => {
+											close();
+											repo.setInbox(item.id, false);
+										}}
+									>
+										{t("item.outOfInbox")}
+									</MenuItem>
+								)
+							) : (
+								<MenuItem
+									icon={<INBOX_ICON size={14} />}
+									onClick={() => {
+										close();
+										repo.setInbox(item.id, true);
+									}}
+								>
+									{t("item.toInbox")}
+								</MenuItem>
+							))}
 						<MenuItem
 							icon={<FilePlus size={14} />}
 							onClick={() => {

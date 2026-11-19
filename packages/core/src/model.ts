@@ -4,8 +4,8 @@
 // settings doc).
 //
 // Top-level Yjs types of a document:
-//   meta     Y.Map   scalars: kind, title, type, home, pinned, created, updated, deleted, later …
-//                    No inbox field, the inbox is computed.
+//   meta     Y.Map   scalars: kind, title, type, home, pinned, created, updated, deleted, later,
+//                    inbox (kept in the inbox since; without it the inbox rule decides) …
 //   parents  Y.Map   parentId -> { sort, at }  (sort is per parent, at = when added)
 //   props    Y.Map   propId -> value
 //   extra    Y.Map   name -> { k, v }          (left over from a removed type or property; k "list": v is string[])
@@ -274,6 +274,11 @@ export interface Item {
 	suggestion?: Suggestion;
 	/** Out of the inbox until then ("Back tomorrow"). */
 	later?: number;
+	/**
+	 * Kept in the inbox since then, with whatever type and place it has, until checked off ("Done")
+	 * or its status is done. Unset: the inbox rule decides (see inbox.ts).
+	 */
+	inbox?: number;
 	created: number;
 	updated: number;
 	createdBy?: string;
@@ -432,6 +437,8 @@ export function readItem(id: string, doc: Y.Doc): Item | null {
 	};
 	const later = num("later");
 	if (later !== undefined) item.later = later;
+	const inbox = num("inbox");
+	if (inbox !== undefined) item.inbox = inbox;
 	const sug = meta.get("suggestion");
 	if (sug && typeof sug === "object") item.suggestion = sug;
 	if (item.type === META_TYPE) {
@@ -485,6 +492,7 @@ export interface ItemInit {
 	extra?: Record<string, FreeValue>;
 	rels?: Record<string, string[]>;
 	pinned?: string;
+	inbox?: number; // kept in the inbox since
 	created?: number;
 	updated?: number;
 	createdBy?: string;
@@ -498,6 +506,7 @@ export function initItem(doc: Y.Doc, init: ItemInit, now = Date.now()) {
 	meta.set("title", init.title ?? "");
 	if (init.type) meta.set("type", init.type);
 	if (init.pinned) meta.set("pinned", init.pinned);
+	if (init.inbox) meta.set("inbox", init.inbox);
 	if (init.source) meta.set("source", init.source);
 	if (init.createdBy) meta.set("createdBy", init.createdBy);
 	meta.set("created", init.created ?? now);
@@ -522,7 +531,8 @@ export type MetaField =
 	| "deleted"
 	| "source"
 	| "suggestion"
-	| "later";
+	| "later"
+	| "inbox";
 
 /** null, "" or false clears a field. */
 export function setMeta(

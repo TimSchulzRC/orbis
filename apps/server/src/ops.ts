@@ -64,7 +64,7 @@ import {
 import { originText, parseOrigin } from "@orbis/core/origin";
 import { findSection, type Heading, outline, page } from "@orbis/core/outline";
 import { freshColor } from "@orbis/core/palette";
-import { isInInbox } from "@orbis/core/placement";
+import { canCheckOff, isInInbox } from "@orbis/core/placement";
 import type { ActivityEvent, FieldChange } from "@orbis/core/protocol";
 import { fromB64 } from "@orbis/core/protocol";
 import {
@@ -442,7 +442,7 @@ export class Ops {
 				note: "Binding. They apply to the owner and everything below it (all parents). Answers that touch items end with the ones that apply; get an owner for its full text.",
 			},
 			notes: [
-				"Items without a type, without a parent and not pinned are in the inbox (its query, see inbox.query, decides).",
+				"Items without a type, without a parent and not pinned land in the inbox (its query, see inbox.query, decides). Entries made in the inbox or sorted there stay in it with their type and place until the user marks them done; a done status takes them out too.",
 				"Every type has its page: a list of its entries with views as tabs (see views; change them with update_type).",
 				"Belonging comes from children (part of); [[links]] are only mentions.",
 				"Pinned items form the top of the sidebar and count as a place.",
@@ -560,6 +560,8 @@ export class Ops {
 			i.kind === "file" ? `file ${i.file?.filetype ?? ""}`.trim() : (tn ?? placeKind(i, ix)),
 		);
 		if (i.pinned) parts.push("pinned");
+		// an entry kept in the inbox with a type or a place: still there
+		if (i.inbox && (tn || ix.parentsOf(i.id).length) && isInInbox(i, ix)) parts.push("in inbox");
 		const st = statusOf(i, schema);
 		if (st) parts.push(`${st.option.name} (${st.group})`);
 		const due = dueOf(i, schema);
@@ -1363,9 +1365,13 @@ export class Ops {
 		}
 	}
 
-	/** Product decision: in the inbox agents only suggest, the user accepts with one click. */
+	/**
+	 * Product decision: in the inbox agents only suggest, the user accepts with one click. An entry
+	 * already sorted (kept in the inbox with a type or a place) is theirs to change like any other.
+	 */
 	private guardInbox(item: Item, what: string) {
-		if (isInInbox(item, this.store.index()))
+		const ix = this.store.index();
+		if (isInInbox(item, ix) && !canCheckOff(item, ix))
 			throw new OpError(
 				`"${item.title}" is in the inbox. Agents don't sort the inbox themselves (${what}); use suggest to propose a type and place – the user accepts with one click.`,
 			);
@@ -1393,6 +1399,7 @@ export class Ops {
 				refs,
 				parents,
 				pinned,
+				inbox: input.inbox ? Date.now() : undefined,
 				props: initialProps(schema),
 				createdBy: origin,
 			});
@@ -1567,7 +1574,8 @@ export class Ops {
 		return {
 			now,
 			part_of: after.parentsOf(item.id).map((p) => after.get(p)?.title ?? p),
-			in_inbox: isInInbox(now, after),
+			// back in the inbox by its rule (no type, no place), not one kept there sorted
+			in_inbox: isInInbox(now, after) && !canCheckOff(now, after),
 		};
 	}
 

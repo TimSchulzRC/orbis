@@ -95,6 +95,22 @@ test("the agent suggests for inbox items instead of sorting them", () => {
 	expect(it.type).toBeNull();
 });
 
+test("a to-do made into the inbox stays there sorted; the agent may change it, the line says where it is", () => {
+	const p = ops.create({ title: "Relaunch", type: "Projekt" }, A);
+	const t = ops.create({ title: "Call Lena", type: "Task", parents: [p.id], inbox: true }, A);
+	expect(ops.query("eingang").items.map((i) => i.title)).toEqual(["Call Lena"]);
+	expect(ops.line(t)).toContain("in inbox");
+	expect(ops.line(p)).not.toContain("in inbox");
+	// sorted already: no longer the user's to sort, so the agent may move it on
+	const other = ops.create({ title: "Website", type: "Projekt" }, A);
+	const placed = ops.place(t.id, { add: [other.id], remove: [p.id] }, A);
+	expect(placed.in_inbox).toBe(false);
+	expect(ops.query("eingang").items.map((i) => i.title)).toEqual(["Call Lena"]);
+	// done, it leaves the inbox
+	ops.update(t.id, { properties: { Status: "erledigt" } }, A);
+	expect(ops.query("eingang").items).toEqual([]);
+});
+
 test("files never get a type, neither directly nor as a suggestion", () => {
 	const f = s.create({ kind: "file", title: "invoice.pdf" }, A);
 	expect(() => ops.update(f, { type: "Karte" }, A)).toThrow(/file/);

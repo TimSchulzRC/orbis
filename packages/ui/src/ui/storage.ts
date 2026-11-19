@@ -24,6 +24,8 @@ export const KEYS = {
 	sidebarOpen: "orbis.sidebar.open",
 	/** the inbox's "Sorted" with each entry's undo, until cleared */
 	inboxSorted: "orbis.inbox.sorted",
+	/** which entries the inbox lists: all, or only the to-dos */
+	inboxView: "orbis.inbox.view",
 	sidebarSpace: (space: string) => `orbis.sidebar.space.${space}`,
 	sidebarTypes: (space: string) => `orbis.sidebar.types.${space}`,
 	/** a view's tab shown last (a type's page, a block) */

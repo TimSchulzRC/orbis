@@ -30,7 +30,16 @@ import {
 	type ViewTab,
 } from "./model";
 import { foldUmlauts as fold } from "./text";
-import { dateEnd, dateStart, doneAt, dueOf, hasOptions, statusOf, statusProp } from "./traits";
+import {
+	dateEnd,
+	dateStart,
+	doneAt,
+	dueOf,
+	hasOptions,
+	isDone,
+	statusOf,
+	statusProp,
+} from "./traits";
 
 function isStatusOptionName(ix: Index, word: string): boolean {
 	const k = titleKey(word);
@@ -693,6 +702,17 @@ function matchField(
 	}
 }
 
+/**
+ * In the inbox, "Back tomorrow" aside: kept there until checked off or done; else by the rule, where
+ * pinning counts as a place.
+ */
+export function liesInInbox(item: Item, ctx: EvalCtx): boolean {
+	if (item.inbox) return !isDone(item, ctx.ix.schemaOf(item));
+	return (
+		!item.pinned && matches(item, inboxWhere(ctx.ix), { ...ctx, thisId: undefined, inInbox: true })
+	);
+}
+
 export function matches(item: Item, c: Cond, ctx: EvalCtx): boolean {
 	const ix = ctx.ix;
 	if ("and" in c) return c.and.every((x) => matches(item, x, ctx));
@@ -733,12 +753,7 @@ export function matches(item: Item, c: Cond, ctx: EvalCtx): boolean {
 		if (c.status === "new") return s.group === "todo";
 		return s.group === c.status;
 	}
-	if ("inbox" in c)
-		return (
-			!ctx.inInbox &&
-			!setAside(item) &&
-			matches(item, inboxWhere(ix), { ...ctx, thisId: undefined, inInbox: true })
-		);
+	if ("inbox" in c) return !ctx.inInbox && !setAside(item) && liesInInbox(item, ctx);
 	if ("without" in c) {
 		switch (c.without) {
 			case "type":

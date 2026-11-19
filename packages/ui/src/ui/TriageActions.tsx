@@ -31,6 +31,7 @@ export interface Undo {
 		deleted?: boolean;
 		pinned?: boolean;
 		later?: number | null;
+		inbox?: number; // checked off: kept in the inbox since then
 	}[];
 }
 
@@ -43,6 +44,8 @@ export function revert(u: Undo) {
 		if (step.pinned) repo.pin(step.id, false);
 		if (step.later !== undefined)
 			repo.change(step.id, (doc) => setMeta(doc, { later: step.later }));
+		if (step.inbox !== undefined)
+			repo.change(step.id, (doc) => setMeta(doc, { inbox: step.inbox }));
 	}
 }
 
@@ -143,7 +146,18 @@ export function useTriageActions(spaceOf: (i: Item) => string, opts: { quiet?: b
 			steps: ok.map((i) => ({ space: spaceOf(i), id: i.id, addedParents: [parent] })),
 		});
 	};
-	// out of the inbox: into the sidebar, or back tomorrow
+	// out of the inbox: done with it; it stays where it was sorted to
+	const checkOff = (list: Item[]) => {
+		const kept = list.filter((i) => i.inbox);
+		if (!kept.length) return;
+		const u = done({
+			label: label(kept, "triage.checkedOff", { title: short(kept[0]) }),
+			steps: kept.map((i) => ({ space: spaceOf(i), id: i.id, inbox: i.inbox })),
+		});
+		for (const i of kept) repoOf(i).setInbox(i.id, false);
+		return u;
+	};
+	// a place of its own at the top of the sidebar; in the inbox it stays there
 	const pin = (list: Item[]) => {
 		const fresh = list.filter((i) => !i.pinned);
 		if (!fresh.length) return;
@@ -169,7 +183,7 @@ export function useTriageActions(spaceOf: (i: Item) => string, opts: { quiet?: b
 		revert(last.current);
 		last.current = null;
 	};
-	return { firstType, giveType, trash, place, pin, later, undo };
+	return { firstType, giveType, trash, place, pin, later, checkOff, undo };
 }
 
 export function usePickers(

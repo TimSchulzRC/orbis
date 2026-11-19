@@ -38,6 +38,7 @@ import {
 	type Value,
 } from "@orbis/core/model";
 import { type Person, personOrigin } from "@orbis/core/origin";
+import { keepInInbox } from "@orbis/core/placement";
 import {
 	type ActivityEvent,
 	type ClientMsg,
@@ -823,22 +824,28 @@ export class Repo {
 		if (ownsTitle && prev!.title !== title) this.renameLinks(prev!.title, title);
 	}
 
-	/** Applies the new type's initial values. Files have no type. */
+	/** Applies the new type's initial values. Files have no type. An entry in the inbox stays there. */
 	setType(id: string, type: string | null) {
 		const item = this.records.get(id);
 		if (item?.kind !== "note" || item.type === type) return;
 		const schema = type ? this.records.get(type)?.schema : undefined;
+		const ix = this.index();
 		this.change(id, (doc) => {
+			keepInInbox(doc, item, ix);
 			setMeta(doc, { type });
 			for (const [k, v] of Object.entries(initialProps(schema)))
 				if (item.props[k] === undefined) setProp(doc, k, v);
 		});
 	}
 
-	/** false if it would create a cycle. */
+	/** false if it would create a cycle. An entry in the inbox stays there. */
 	addParent(id: string, parent: string, sort?: string): boolean {
-		if (this.index().wouldCycle(id, parent)) return false;
-		this.changeAndTouch(id, (doc) => addParent(doc, parent, sort));
+		const ix = this.index();
+		if (ix.wouldCycle(id, parent)) return false;
+		this.changeAndTouch(id, (doc) => {
+			keepInInbox(doc, this.records.get(id), ix);
+			addParent(doc, parent, sort);
+		});
 		return true;
 	}
 	removeParent(id: string, parent: string) {
@@ -846,8 +853,10 @@ export class Repo {
 	}
 	/** Replaces the parent the item was dragged from. */
 	moveParent(id: string, from: string | null, to: string, sort?: string): boolean {
-		if (this.index().wouldCycle(id, to)) return false;
+		const ix = this.index();
+		if (ix.wouldCycle(id, to)) return false;
 		this.change(id, (doc) => {
+			keepInInbox(doc, this.records.get(id), ix);
 			const wasHome = from && metaMap(doc).get("home") === from;
 			addParent(doc, to, sort);
 			if (from && from !== to) removeParent(doc, from);
@@ -866,10 +875,19 @@ export class Repo {
 		);
 	}
 
-	/** Pins after everything pinned so far. */
+	/** Pins after everything pinned so far. An entry in the inbox stays there. */
 	pin(id: string, on: boolean) {
 		const pinned = on ? nextPinKey(this.live()) : null;
-		this.change(id, (doc) => setMeta(doc, { pinned }));
+		const ix = this.index();
+		this.change(id, (doc) => {
+			if (on) keepInInbox(doc, this.records.get(id), ix);
+			setMeta(doc, { pinned });
+		});
+	}
+
+	/** Into the inbox (kept there until checked off), or out of it ("Done"). */
+	setInbox(id: string, on: boolean) {
+		this.change(id, (doc) => setMeta(doc, { inbox: on ? Date.now() : null }));
 	}
 
 	setProp(id: string, propId: string, value: Value | null) {

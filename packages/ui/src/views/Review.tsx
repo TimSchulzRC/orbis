@@ -1,9 +1,12 @@
-// The inbox panel: the list on the left, the chosen entry on the right to read, edit and sort; on a
-// phone the list, and the entry as a sheet over it. Sorting moves on to the next entry and the sorted
-// one down under "Sorted" in the list, with its undo. The entry's card keeps one height, so the
-// choices below it never move.
+// The inbox panel, where the user works: the list on the left, the chosen entry on the right to
+// read, edit and sort; on a phone the list, and the entry as a sheet over it. Sorting, typing and
+// pinning happen in place, the entry stays. "Done", "Tomorrow" and "Delete" move on to the next
+// entry and the one left down under "Done" in the list, with its undo. The list shows all entries
+// or only the to-dos, ticked off right there. The entry's card keeps one height, so the choices
+// below it never move.
 
 import type { Item } from "@orbis/core/model";
+import { canCheckOff } from "@orbis/core/placement";
 import { ArrowLeft, Check, ChevronDown, Layers, X } from "lucide-react";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { replica, spaceById, useAccounts } from "../accounts";
@@ -17,8 +20,11 @@ import {
 	dropDraft,
 	entryKey,
 	type InboxEntry,
+	isTodo,
 	newNote,
+	newTodo,
 	openShelf,
+	todoType,
 	useDraftKey,
 	useInboxItems,
 	useLaterItems,
@@ -26,7 +32,7 @@ import {
 } from "../ui/inbox";
 import { NoteCard } from "../ui/NoteCard";
 import { Button, Empty, IconButton, MenuItem, Popover } from "../ui/primitives";
-import { backNow, InboxList } from "../ui/Shelf";
+import { backNow, InboxList, type InboxView } from "../ui/Shelf";
 import { SortChoices } from "../ui/SortChoices";
 import { moveTo, SpaceScope } from "../ui/Spaces";
 import { KEYS, readJSON, writeJSON } from "../ui/storage";
@@ -39,7 +45,7 @@ interface Sorted {
 	undo: Undo;
 }
 
-/** The sorting on this device: kept while the panel is closed. What was sorted stays, also across a reload and into tomorrow, until "Fertig" or cleared by hand. */
+/** The work on this device: kept while the panel is closed. What was done stays, also across a reload and into tomorrow, until "Fertig" or cleared by hand. */
 let session: { order: string[]; at?: string } | null = null;
 const storedSorted = () => readJSON<Sorted[]>(KEYS.inboxSorted, []);
 
@@ -126,24 +132,37 @@ function Inbox({
 			e.key === drafting ? order.current.unshift(e.key) : order.current.push(e.key);
 	const [sorted, setSorted] = useState<Sorted[]>(storedSorted);
 	const [chosen, setChosen] = useState<string | undefined>(at ?? session?.at);
+	const [chosenView, setViewNow] = useState<InboxView>(() =>
+		readJSON<InboxView>(KEYS.inboxView, "all") === "todos" ? "todos" : "all",
+	);
+	// to-dos need a type with a status in one of the workspaces shown
+	const canTodo = shown.some((s) => todoType(replica(s.id).repo.index()));
+	const view = canTodo ? chosenView : "all";
+	const setView = (v: InboxView) => {
+		setViewNow(v);
+		writeJSON(KEYS.inboxView, v);
+	};
+	// to-dos ticked off in the list: they left the inbox, but stay in the list until the panel closes
+	const [ticked, setTicked] = useState<InboxEntry[]>([]);
+	const todo = (e: InboxEntry) => isTodo(e.item, replica(e.space).repo.index());
 	// another entry asked for while open
 	useEffect(() => {
 		if (at) setChosen(at);
 	}, [at]);
 	const card = useRef<HTMLDivElement>(null);
 	const byKey = new Map([...entries, ...later].map((e) => [e.key, e]));
-	// set aside till tomorrow and back in the inbox now: waiting again, no longer sorted
-	const due = sorted.filter(
-		(s) =>
-			s.undo.steps.some((step) => step.later !== undefined) && entries.some((e) => e.key === s.key),
-	);
+	// back in the inbox (tomorrow has come, put in again on its page): waiting again, no longer done
+	const due = sorted.filter((s) => entries.some((e) => e.key === s.key));
 	useOnChange(due.length, () => {
 		if (due.length) setSorted((list) => list.filter((s) => !due.includes(s)));
 	});
 	const done = (k: string) => sorted.some((s) => s.key === k && !due.includes(s));
-	const left = order.current.filter((k) => entries.some((e) => e.key === k) && !done(k));
+	const shownHere = (k: string) => view === "all" || todo(byKey.get(k)!);
+	const left = order.current.filter(
+		(k) => entries.some((e) => e.key === k) && !done(k) && shownHere(k),
+	);
 	// back tomorrow and not just sent there here (that one is under "Sorted")
-	const waitingLater = later.filter((e) => !done(e.key));
+	const waitingLater = later.filter((e) => !done(e.key) && shownHere(e.key));
 	const isLater = (k?: string) => !!k && waitingLater.some((e) => e.key === k);
 	// the chosen entry while it still waits (also one back tomorrow), else the next one after its place
 	const pickAt = (wanted?: string) =>
@@ -168,7 +187,9 @@ function Inbox({
 	}, [key, drafting]);
 	useEffect(() => writeJSON(KEYS.inboxSorted, sorted), [sorted]);
 
+	// "Done", "Tomorrow" and "Delete" move on and show under "Done"; sorting stays, with a notice
 	const act = useTriageActions(() => entry!.space, { quiet: true });
+	const sort = useTriageActions(() => entry!.space);
 	const record = (target: InboxEntry, what: string, undo?: Undo | null) => {
 		if (!undo) return;
 		const title = replica(target.space).repo.get(target.item.id)?.title ?? target.item.title; // may have just been edited
@@ -178,23 +199,19 @@ function Inbox({
 		]);
 		setChosen(target.key);
 	};
-	const placeIn = (list: Item[], place: string) =>
-		entry &&
-		record(
-			entry,
-			`→ ${replica(entry.space).repo.index().get(place)?.title ?? ""}`,
-			act.place(list, place),
-		);
-	const typeAs = (list: Item[], type: string) =>
-		entry &&
-		record(entry, replica(entry.space).repo.index().typeName(type) ?? "", act.giveType(list, type));
+	const placeIn = (list: Item[], place: string) => sort.place(list, place);
+	const typeAs = (list: Item[], type: string) => sort.giveType(list, type);
 	const pick = usePickers(() => entry!.space, placeIn, typeAs);
+	const current = entry && (replica(entry.space).repo.get(entry.item.id) ?? entry.item);
+	const canDone = !!current && canCheckOff(current, replica(entry!.space).repo.index());
+	const checkOff = () =>
+		current && canDone && record(entry!, t("review.done.checkedOff"), act.checkOff([current]));
 	const later_ = () =>
 		entry &&
 		(waiting
 			? backNow(replica(entry.space).repo, entry.item.id)
 			: record(entry, t("review.done.later"), act.later([entry.item])));
-	const pin = () => entry && record(entry, t("review.done.pinned"), act.pin([entry.item]));
+	const pin = () => current && sort.pin([current]);
 	const trash = () =>
 		entry &&
 		void act.trash([entry.item]).then((back) => record(entry, t("review.done.trashed"), back));
@@ -207,6 +224,16 @@ function Inbox({
 	const choose = (k: string) => {
 		setChosen(k);
 		if (!desktop) openShelf(k);
+	};
+	const tick = (e: InboxEntry, done: boolean) => {
+		if (done) setTicked((list) => [...list.filter((x) => x.key !== e.key), e]);
+		else setTicked((list) => list.filter((x) => x.key !== e.key));
+	};
+	// a new to-do joins the top of the list, the caret stays in the field for the next
+	const addTodo = (title: string) => {
+		const k = newTodo(title);
+		if (k) order.current.unshift(k);
+		return !!k;
 	};
 	const step = (direction: 1 | -1) => {
 		const index = key ? left.indexOf(key) : -1;
@@ -239,6 +266,7 @@ function Inbox({
 			else dismissShelf();
 		} else if (pressed === "u" || pressed === "z") undo();
 		else if (!entry) return;
+		else if (pressed === "d") checkOff();
 		else if (pressed === "e") pick.setPlacing([entry.item]);
 		else if (pressed === "y" && isNote) pick.setTyping([entry.item]);
 		else if (pressed === "s") later_();
@@ -287,12 +315,20 @@ function Inbox({
 	const touchX = useRef<number | null>(null);
 	const list = (
 		<InboxList
+			canTodo={canTodo}
+			count={entries.length}
 			current={desktop ? key : undefined}
 			later={waitingLater}
+			onAddTodo={addTodo}
 			onClear={() => setSorted([])}
 			onPick={choose}
+			onTick={tick}
 			onUndo={(k) => undo(sorted.find((s) => s.key === k))}
+			onView={setView}
 			sorted={sorted}
+			ticked={view === "todos" ? ticked.filter((e) => !byKey.has(e.key)) : []}
+			todos={entries.filter(todo).length}
+			view={view}
 			waiting={left.map((k) => byKey.get(k)!)}
 		/>
 	);
@@ -315,9 +351,11 @@ function Inbox({
 				space={several ? spaceById(entry.space)?.name : undefined}
 			/>
 			<SortChoices
+				canDone={canDone}
 				className="mt-6"
 				item={entry.item}
 				keys={desktop}
+				onDone={checkOff}
 				onLater={later_}
 				onPick={() => pick.setPlacing([entry.item])}
 				onPin={pin}
@@ -327,7 +365,7 @@ function Inbox({
 			/>
 		</SpaceScope>
 	) : (
-		<Finished count={sorted.length} onDone={finish} />
+		<Finished count={sorted.length} onDone={finish} todos={view === "todos"} />
 	);
 
 	if (listOnly)
@@ -559,13 +597,23 @@ function LastSorted({ last, onUndo }: { last: Sorted; onUndo: () => void }) {
 	);
 }
 
-function Finished({ count, onDone }: { count: number; onDone?: () => void }) {
+function Finished({
+	count,
+	todos,
+	onDone,
+}: {
+	count: number;
+	todos: boolean;
+	onDone?: () => void;
+}) {
 	const { t } = useT();
 	return (
 		<div className="flex flex-1 flex-col justify-center rounded-2xl border border-line bg-surface">
 			<Empty
 				icon={<Check className="text-ok" size={22} />}
-				title={count ? t("review.finished", { count }) : t("inbox.empty")}
+				title={
+					todos ? t("inbox.noTodos") : count ? t("review.finished", { count }) : t("inbox.empty")
+				}
 			>
 				{onDone && (
 					<Button className="mt-2" onClick={onDone} variant="primary">
