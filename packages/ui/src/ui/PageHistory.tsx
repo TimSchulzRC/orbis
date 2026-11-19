@@ -4,7 +4,7 @@
 import type { Item } from "@obtion/core/model";
 import type { ActivityEvent } from "@obtion/core/protocol";
 import { useMemo, useRef, useState } from "react";
-import { spaceCall, useAccounts } from "../accounts";
+import { accountOf, spaceById, spaceCall, useAccounts } from "../accounts";
 import { useOnChange, useRepo } from "../hooks";
 import { useT } from "../i18n";
 import { groupBySteps, mergeEvents, StepGroup } from "./ActivityFeed";
@@ -42,7 +42,9 @@ const start = (key: string): Got => {
 export function PageHistory({ item, space }: { item: Item; space: string }) {
 	const { t } = useT();
 	const r = useRepo();
-	const me = useAccounts().account?.user;
+	useAccounts();
+	// the account on the workspace's server
+	const me = accountOf(spaceById(space)?.server)?.user;
 	// whose log: another account on this device never sees the rows kept for this one
 	const key = `${me?.id}/${space}/${item.id}`;
 	const [got, setGot] = useState<Got>(() => start(key));

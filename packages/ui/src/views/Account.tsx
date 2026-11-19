@@ -1,18 +1,23 @@
 // Before the app: signing in or creating an account on this server, joining by an invite link
-// (#/join/<code>). Then a workspace has to be open: without one, the first is created here.
+// (#/join/<code>). In the desktop app also connecting a further server (ConnectServer). Gate.tsx
+// puts them in front of the app.
 
 import type { InviteInfo, ServerInfo } from "@obtion/core/api";
 import { KeyRound } from "lucide-react";
 import { type ReactNode, useEffect, useEffectEvent, useId, useState } from "react";
 import {
 	ApiError,
+	answers,
+	baseOf,
 	errorText,
 	invite,
 	joinInvite,
 	loginOf,
 	oauthFailed,
+	parseServer,
 	sendCode,
 	serverInfo,
+	serverName,
 	signIn,
 	signInWithCode,
 	signInWithOAuth,
@@ -21,11 +26,10 @@ import {
 	useAccounts,
 } from "../accounts";
 import { Input } from "../components/ui/input";
-import { navigate, useRoute } from "../hooks";
+import { navigate } from "../hooks";
 import { getLang, useT } from "../i18n";
 import { BrandLogo } from "../ui/BrandLogo";
 import { Button } from "../ui/primitives";
-import { NewSpaceForm } from "../ui/Spaces";
 
 export function AuthCard({
 	title,
@@ -50,7 +54,10 @@ export function AuthCard({
 
 const input = "mt-1 block bg-surface";
 
-function Field({ label, ...p }: { label: string } & React.InputHTMLAttributes<HTMLInputElement>) {
+export function Field({
+	label,
+	...p
+}: { label: string } & React.InputHTMLAttributes<HTMLInputElement>) {
 	const inputId = useId();
 	return (
 		<label className="mt-4 block text-sm font-medium" htmlFor={inputId}>
@@ -75,6 +82,8 @@ const canPasskey = () =>
 /**
  * `inviteCode`: a new account joins that workspace. `email`: re-confirming who is signed in (sign-in
  * only; `hasPassword` and `hasPasskey` then limit the offered ways to the ones this account has).
+ * `server`: a further server (desktop app); code or password only, since passkeys and OAuth belong
+ * to that server's own page.
  */
 export function SignIn({
 	inviteCode,
@@ -82,12 +91,14 @@ export function SignIn({
 	email: fixedEmail,
 	hasPassword,
 	hasPasskey,
+	server,
 }: {
 	inviteCode?: string;
 	onDone?: () => void;
 	email?: string;
 	hasPassword?: boolean;
 	hasPasskey?: boolean;
+	server?: string;
 }) {
 	const { t } = useT();
 	const [info, setInfo] = useState<ServerInfo | null>(null);
@@ -99,23 +110,23 @@ export function SignIn({
 	const [email, setEmail] = useState(fixedEmail ?? "");
 	const [password, setPassword] = useState("");
 	const [code, setCode] = useState("");
-	const [error, setError] = useState(oauthFailed ? t(oauthErrorKey(oauthFailed)) : "");
+	const [error, setError] = useState(oauthFailed && !server ? t(oauthErrorKey(oauthFailed)) : "");
 	const [busy, setBusy] = useState(false);
 	// asked once, when the form opens
-	const gotServer = useEffectEvent((server: ServerInfo) => {
-		setInfo(server);
-		if (!fixedEmail && (server.firstAccount || inviteCode)) setMode("up");
+	const gotServer = useEffectEvent((i: ServerInfo) => {
+		setInfo(i);
+		if (!fixedEmail && (i.firstAccount || inviteCode)) setMode("up");
 		// confirming an account with a password: with that, as the password manager knows it
-		if (!loginOf(server).emailCode || (fixedEmail && hasPassword && loginOf(server).password))
+		if (!loginOf(i).emailCode || (fixedEmail && hasPassword && loginOf(i).password))
 			setWithPassword(true);
 	});
 	const offline = useEffectEvent(() => setError(t("account.offline")));
 	useEffect(() => {
-		serverInfo()
-			.then((server) => gotServer(server))
+		serverInfo(server)
+			.then((i) => gotServer(i))
 			.catch(() => offline());
-	}, []);
-	const login = loginOf(info);
+	}, [server]);
+	const login = server ? { ...loginOf(info), passkey: false, oauth: [] } : loginOf(info);
 	// confirming an account without a password: no password to ask for
 	const byPassword = login.password && !(fixedEmail && hasPassword === false);
 	const byEmail = login.emailCode || byPassword;
@@ -141,23 +152,25 @@ export function SignIn({
 	// a new account with a password, where codes are on: its address proves itself with a code first
 	const signUpWithCode = withPassword && mode === "up" && login.emailCode;
 	const sendAgain = () =>
-		run("code", () => (signUpWithCode ? signUp(account) : sendCode(email, ctx)));
+		run("code", () => (signUpWithCode ? signUp(account, server) : sendCode(email, ctx, server)));
 	const submit = async (e: React.FormEvent) => {
 		e.preventDefault();
 		if (codeSent && signUpWithCode) {
-			if (await run("code", () => signUp({ ...account, code }))) onDone?.();
+			if (await run("code", () => signUp({ ...account, code }, server))) onDone?.();
 		} else if (withPassword) {
 			let verify = false;
 			const ok = await run("signIn", async () => {
-				if (mode === "up") verify = (await signUp(account)) === "verify";
-				else await signIn(email, password);
+				if (mode === "up") verify = (await signUp(account, server)) === "verify";
+				else await signIn(email, password, server, inviteCode);
 			});
 			if (ok && verify) setCodeSent(true);
 			else if (ok) onDone?.();
 		} else if (!codeSent) {
-			if (await run("code", () => sendCode(email, ctx))) setCodeSent(true);
+			if (await run("code", () => sendCode(email, ctx, server))) setCodeSent(true);
 		} else if (
-			await run("code", () => signInWithCode(email, code, mode === "up" ? name : undefined, ctx))
+			await run("code", () =>
+				signInWithCode(email, code, mode === "up" ? name : undefined, ctx, server),
+			)
 		)
 			onDone?.();
 	};
@@ -297,6 +310,7 @@ export function SignIn({
 					) : (
 						<Field
 							autoComplete="username"
+							autoFocus={!!server}
 							label={t("account.email")}
 							name="username"
 							onChange={(e) => setEmail(e.target.value)}
@@ -360,7 +374,94 @@ export function SignIn({
 	);
 }
 
-function Join({ code }: { code: string }) {
+/**
+ * Connect a further server (desktop app): its address (or an invite link of it) first, then
+ * signing in there. `onDone` gets its address.
+ */
+export function ConnectServer({
+	initial = "",
+	onDone,
+}: {
+	initial?: string;
+	onDone: (server: string) => void;
+}) {
+	const { t } = useT();
+	const [text, setText] = useState(initial);
+	const [target, setTarget] = useState<{ url: string; invite?: string } | null>(null);
+	const [error, setError] = useState("");
+	const [busy, setBusy] = useState(false);
+	return (
+		<div>
+			<Field
+				autoCapitalize="off"
+				autoFocus
+				label={t("server.address")}
+				// another address: sign in there anew
+				onChange={(e) => {
+					setText(e.target.value);
+					setError("");
+					setTarget(null);
+				}}
+				onKeyDown={(e) => {
+					if (e.key !== "Enter" || target || busy) return;
+					e.preventDefault();
+					void go();
+				}}
+				placeholder="https://"
+				spellCheck={false}
+				value={text}
+			/>
+			{target ? (
+				<SignIn
+					inviteCode={target.invite}
+					key={target.url}
+					onDone={() => onDone(target.url)}
+					server={target.url}
+				/>
+			) : (
+				<>
+					<p className="mt-1 text-xs text-muted-foreground">{t("server.addressHint")}</p>
+					{error && (
+						<p className="mt-3 text-sm text-danger" role="alert">
+							{error}
+						</p>
+					)}
+					<Button
+						className="mt-6 w-full"
+						disabled={!text.trim() || busy}
+						onClick={() => void go()}
+						variant="primary"
+					>
+						{t("server.continue")}
+					</Button>
+				</>
+			)}
+		</div>
+	);
+	async function go() {
+		const s = parseServer(text);
+		if (!s) return setError(t("server.invalid"));
+		if (s.url === baseOf()) return setError(t("server.ownServer"));
+		setBusy(true);
+		// there, and does it let this app in? A server that answers but sends no CORS headers for it
+		// is older than the desktop app or does not list it (OBTION_APP_ORIGINS): say so, not "offline"
+		const ok = await serverInfo(s.url).then(
+			() => "ok" as const,
+			async () => ((await answers(s.url)) ? ("closed" as const) : ("gone" as const)),
+		);
+		setBusy(false);
+		if (ok === "ok") setTarget(s);
+		else
+			setError(
+				t(ok === "closed" ? "server.notForApp" : "server.unreachable", {
+					server: serverName(s.url),
+				}),
+			);
+	}
+}
+
+/** Joining a workspace by its invite link: with the account signed in here, or a new one. */
+export function Join({ code }: { code: string }) {
 	const { t } = useT();
 	const [invitation, setInvitation] = useState<InviteInfo | null | undefined>();
 	const [error, setError] = useState("");
@@ -382,7 +483,7 @@ function Join({ code }: { code: string }) {
 		<AuthCard
 			intro={t(invitation.role === "owner" ? "account.joinIntroOwner" : "account.joinIntro", {
 				by: invitation.by,
-				server: location.host,
+				server: serverName(),
 			})}
 			title={t("account.joinTitle", { workspace: invitation.workspace })}
 		>
@@ -403,38 +504,4 @@ function Join({ code }: { code: string }) {
 			)}
 		</AuthCard>
 	);
-}
-
-/** Signed in, but in no workspace (a new account, or left them all): make one. */
-function NoSpace() {
-	const { t } = useT();
-	return (
-		<AuthCard intro={t("account.noSpaceHint")} title={t("account.noSpace")}>
-			<div className="mt-6">
-				<NewSpaceForm name={t("account.personal")} />
-			</div>
-		</AuthCard>
-	);
-}
-
-export function Gate({ children }: { children: ReactNode }) {
-	const { t } = useT();
-	const route = useRoute();
-	const { account, active } = useAccounts();
-	if (route.parts[0] === "join" && route.parts[1]) return <Join code={route.parts[1]} />;
-	if (!account)
-		return (
-			<AuthCard intro={t("account.intro", { server: location.host })} title={t("setup.welcome")}>
-				<SignIn />
-			</AuthCard>
-		);
-	if (!active)
-		return account.lost ? (
-			<AuthCard intro={t("account.lost", { server: location.host })} title={t("account.lostTitle")}>
-				<SignIn />
-			</AuthCard>
-		) : (
-			<NoSpace />
-		);
-	return <>{children}</>;
 }

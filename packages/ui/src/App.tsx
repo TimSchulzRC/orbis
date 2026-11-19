@@ -12,7 +12,7 @@ import {
 	X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { signOut, useAccounts } from "./accounts";
+import { serverName, signOut, useAccounts } from "./accounts";
 import { Backdrop, ModalSurface } from "./components/ui/dialog";
 import { DrawingHost } from "./drawing/Drawing";
 import {
@@ -37,7 +37,7 @@ import { HistoryButtons } from "./ui/HistoryButtons";
 import { ICON } from "./ui/icons";
 import { syncShelf, useInboxItems, useShelf } from "./ui/inbox";
 import { LightboxHost } from "./ui/Lightbox";
-import { Button, IconButton, PagePlaceholder } from "./ui/primitives";
+import { Button, Dialog, IconButton, PagePlaceholder } from "./ui/primitives";
 import { Sidebar, SpaceTree } from "./ui/Sidebar";
 import { NewSpaceDialog, SpaceScope, SpaceSelector, useReplicas } from "./ui/Spaces";
 import { StatusButton } from "./ui/StatusButton";
@@ -46,8 +46,9 @@ import { KEYS } from "./ui/storage";
 import { TitleTips } from "./ui/TitleTips";
 import { Tray } from "./ui/Tray";
 import { AppToaster } from "./ui/toasts";
-import { Gate } from "./views/Account";
+import { ConnectServer } from "./views/Account";
 import { Activity } from "./views/Activity";
+import { Gate } from "./views/Gate";
 import { GraphView } from "./views/Graph";
 import { ItemPage } from "./views/ItemPage";
 import { FilesPage } from "./views/Lists";
@@ -71,14 +72,34 @@ export function App() {
 	);
 }
 
+/** A server no longer takes its account's token: sign in again (the app's own: anew; a further one: there). */
 function SignedOut() {
 	const { t } = useT();
-	const { account } = useAccounts();
-	if (!account?.lost) return null;
+	const { account, remotes } = useAccounts();
+	const [again, setAgain] = useState<string | null>(null);
+	const lost = [
+		...(account?.lost ? [undefined] : []),
+		...remotes.filter((r) => r.account.lost).map((r) => r.url),
+	];
 	return (
-		<StatusBanner action={{ label: t("account.signInAgain"), run: () => void signOut() }}>
-			{t("account.lost", { server: location.host })}
-		</StatusBanner>
+		<>
+			{lost.map((server) => (
+				<StatusBanner
+					action={{
+						label: t("account.signInAgain"),
+						run: () => (server ? setAgain(server) : void signOut()),
+					}}
+					key={server ?? ""}
+				>
+					{t("account.lost", { server: serverName(server) })}
+				</StatusBanner>
+			))}
+			{again && (
+				<Dialog onClose={() => setAgain(null)} title={t("account.signInAgain")}>
+					<ConnectServer initial={again} onDone={() => setAgain(null)} />
+				</Dialog>
+			)}
+		</>
 	);
 }
 
@@ -216,7 +237,7 @@ function Main() {
 			<div className="flex min-w-0 flex-1 flex-col" data-column>
 				{!wide && (
 					// iOS 26 blurs the top edge of an installed app unless a sticky, opaque, full-width box covers it
-					<header className="sticky top-0 flex items-center gap-2 border-b border-line bg-bg px-3 pb-2 pt-[calc(0.5rem+env(safe-area-inset-top))]">
+					<header className="titlebar titlebar-lights titlebar-end sticky top-0 flex items-center gap-2 border-b border-line bg-bg px-3 pb-2 pt-[calc(0.5rem+env(safe-area-inset-top))]">
 						{/* only back: the bar has no room for both, and a phone has no toolbar for it */}
 						<HistoryButtons />
 						<a
@@ -248,9 +269,15 @@ function Main() {
 				<TooNew />
 				{/* a row of their own above the page, where a browser has its arrows: pages fill their
             width, so there is no free corner to put them in. The sidebar's button is here, not in
-            the sidebar, so it stays where it is when the sidebar is closed */}
+            the sidebar, so it stays where it is when the sidebar is closed. In the desktop app it is
+            the window's title bar, next to the sidebar's top row (styles.css: titlebar) */}
 				{wide && (
-					<div className="flex shrink-0 px-2 pt-2">
+					<div
+						className={cn(
+							"titlebar titlebar-end flex shrink-0 px-2 pt-2",
+							!sidebar && "titlebar-lights",
+						)}
+					>
 						<IconButton
 							aria-expanded={sidebar}
 							icon={sidebar ? PanelLeftClose : PanelLeftOpen}
@@ -264,7 +291,8 @@ function Main() {
 					className={cn(
 						"@container min-h-0 flex-1 outline-none",
 						isGraph ? "overflow-hidden" : "overflow-y-auto",
-						tray && wide && !isGraph && "pb-24",
+						// room for the inbox below the last line: instead of the page's own, not on top of it
+						tray && wide && !isGraph && "tray-room",
 					)}
 					tabIndex={-1}
 				>

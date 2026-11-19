@@ -11,8 +11,9 @@
 	},
 	"exports": {
 		".": "./src/index.ts",
-		"./styles.css": "./src/styles.css",
-		"./library-link": "./src/drawing/library-link.ts"
+		"./library-link": "./src/drawing/library-link.ts",
+		"./platform": "./src/platform.ts",
+		"./styles.css": "./src/styles.css"
 	},
 	"dependencies": {
 		"@codemirror/autocomplete": "^6.20.4",

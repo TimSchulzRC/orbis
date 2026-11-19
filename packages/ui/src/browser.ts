@@ -1,5 +1,5 @@
-// The replica's host in a browser: IndexedDB storage, the serving server's workspace, other tabs
-// over BroadcastChannel, UI dialogs.
+// The replica's host in a browser (the web app, the desktop app's window): IndexedDB storage, a
+// workspace on its server, other tabs over BroadcastChannel, UI dialogs.
 
 import type { Person } from "@obtion/core/origin";
 import type {
@@ -36,8 +36,9 @@ function idbStorage(name: string): ReplicaStorage {
 				// Another tab wants to delete or upgrade the database (e.g. "re-download everything").
 				blocking: () => {
 					db.close();
-					// Signing out reloads by itself once all copies are removed.
-					if (localStorage.getItem(KEYS.account) !== "null") location.reload();
+					// Signing out (of every server, or of one: KEYS.leaving) reloads itself once all copies are removed.
+					if (localStorage.getItem(KEYS.account) !== "null" && !localStorage.getItem(KEYS.leaving))
+						location.reload();
 				},
 				upgrade(db) {
 					db.createObjectStore("updates", { autoIncrement: true });

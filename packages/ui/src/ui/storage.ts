@@ -3,6 +3,10 @@
 
 export const KEYS = {
 	account: "obtion.account",
+	/** the desktop app's further servers, each with its account */
+	servers: "obtion.servers",
+	/** while the copies of one server's workspaces are removed: they close without reloading the page */
+	leaving: "obtion.leaving",
 	spaces: "obtion.spaces",
 	active: "obtion.active",
 	shown: "obtion.shown",

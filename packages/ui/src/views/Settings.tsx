@@ -31,6 +31,7 @@ import {
 	X,
 } from "lucide-react";
 import {
+	Fragment,
 	useCallback,
 	useEffect,
 	useId,
@@ -41,14 +42,16 @@ import {
 } from "react";
 import {
 	ApiError,
-	activeUser,
+	accountOf,
 	addPasskey,
 	changePassword,
 	deleteAccount,
 	deleteSpace,
+	disconnectServer,
 	errorText,
 	inviteLink,
 	inviteLinks,
+	isLocal,
 	joinUrl,
 	leaveSpace,
 	linkedProviders,
@@ -67,6 +70,7 @@ import {
 	revokeMcpToken,
 	type Space,
 	serverInfo,
+	serverName,
 	setRole,
 	signOut,
 	spaceById,
@@ -84,6 +88,7 @@ import { NativeSelect } from "../components/ui/native-select";
 import { navigate, useOnChange, useRepo } from "../hooks";
 import { setLang, useT } from "../i18n";
 import { cn, toggled } from "../lib/utils";
+import { canConnect, desktop } from "../platform";
 import { setTheme, useTheme } from "../theme";
 import { RulesField, WORKSPACE_RULES } from "../ui/AgentRules";
 import { confirmAction, notify } from "../ui/feedback";
@@ -99,14 +104,14 @@ import {
 	Seg,
 } from "../ui/primitives";
 import { SettingRow, SettingsGroup } from "../ui/SettingRows";
-import { NewSpaceDialog, SpaceScope } from "../ui/Spaces";
+import { NewSpaceDialog, SpaceScope, useServers } from "../ui/Spaces";
 import {
 	closeSettings,
 	openSettings,
 	openSpaceSettings,
 	useSettingsOpen,
 } from "../ui/settings-open";
-import { SignIn } from "./Account";
+import { ConnectServer, SignIn } from "./Account";
 
 /** navigator.clipboard exists only in a secure context; opened as http://<address>, the old way copies. */
 function copyText(text: string) {
@@ -219,18 +224,23 @@ function SpaceGroup({ space }: { space: Space }) {
 						<span className="text-sm">{space.name}</span>
 					)
 				}
-				hint={t("space.intro", { server: location.host })}
+				hint={
+					isLocal(space) ? t("space.local") : t("space.intro", { server: serverName(space.server) })
+				}
 				title={t("space.name")}
 			/>
-			<SettingRow
-				control={
-					<Button onClick={() => void leaveSpace(space).catch(fail)} variant="outline">
-						{t("space.leave")}
-					</Button>
-				}
-				hint={t("space.leaveHint")}
-				title={t("space.leave")}
-			/>
+			{/* a workspace on this device alone has no one else to leave it to */}
+			{!isLocal(space) && (
+				<SettingRow
+					control={
+						<Button onClick={() => void leaveSpace(space).catch(fail)} variant="outline">
+							{t("space.leave")}
+						</Button>
+					}
+					hint={t("space.leaveHint")}
+					title={t("space.leave")}
+				/>
+			)}
 			<SettingRow
 				control={
 					owner && (
@@ -257,7 +267,7 @@ function MembersGroup({ space, onRemoved }: { space: Space; onRemoved: () => voi
 		});
 	useOnChange(space.id, () => void load());
 	const owner = space.role === "owner";
-	const me = activeUser();
+	const me = accountOf(space.server)?.user.id;
 	const fail = (e: unknown) => setError(errorText(e, t, "space"));
 	const who = (member: Member) => member.name || member.email;
 	const changeRole = async (member: Member) => {
@@ -399,7 +409,9 @@ function InviteLinksGroup({ space, version }: { space: Space; version: number })
 					{links.map((link) => (
 						<li className="flex items-center gap-2 py-2.5 pl-4 pr-2" key={link.code}>
 							<div className="min-w-0 flex-1">
-								<code className="block truncate font-mono text-xs">{joinUrl(link.code)}</code>
+								<code className="block truncate font-mono text-xs">
+									{joinUrl(link.code, space.server)}
+								</code>
 								<p className="mt-0.5 truncate text-xs text-muted-foreground">
 									{t(`space.role.${link.role}`)} ·{" "}
 									{t(link.by ? "space.inviteBy" : "space.inviteMade", {
@@ -409,7 +421,7 @@ function InviteLinksGroup({ space, version }: { space: Space; version: number })
 									})}
 								</p>
 							</div>
-							<CopyButton text={joinUrl(link.code)} />
+							<CopyButton text={joinUrl(link.code, space.server)} />
 							<Button onClick={() => void revoke(link)} small>
 								{t("space.revoke")}
 							</Button>
@@ -424,65 +436,106 @@ function InviteLinksGroup({ space, version }: { space: Space; version: number })
 	);
 }
 
+/**
+ * Every account on this device, one per server. The app's own server also shows its passkeys and
+ * providers. The desktop app's own server has no account to show (the app made it); further
+ * servers are connected here.
+ */
 function AccountGroup() {
 	const { t } = useT();
-	const { account } = useAccounts();
-	const [deleting, setDeleting] = useState(false);
-	const [changing, setChanging] = useState(false);
+	useAccounts();
+	const servers = useServers().filter((g) => g.server || !desktop);
+	const [deleting, setDeleting] = useState<{ server?: string } | null>(null);
+	const [changing, setChanging] = useState<{ server?: string } | null>(null);
+	const [connecting, setConnecting] = useState(false);
 	const [info, setInfo] = useState<ServerInfo | null>(null);
 	useEffect(() => {
+		if (desktop) return;
 		serverInfo().then(setInfo, () => {
 			// offline: no sign-in methods to show
 		});
 	}, []);
-	if (!account) return null;
+	if (!servers.length && !canConnect) return null;
 	const login = loginOf(info);
 	return (
 		<SettingsGroup title={t("account.title")}>
-			<SettingRow
-				control={
-					<Button onClick={() => void signOut()} variant="outline">
-						{t("account.signOut")}
-					</Button>
-				}
-				hint={
-					t("account.thisServer", { server: location.host }) +
-					(account.lost ? ` · ${t("account.signedOut")}` : "")
-				}
-				title={account.user.email}
-			/>
-			{/* an account that signs in by code, passkey or provider has no password to change */}
-			{account.password !== false && (
+			{servers.map((g) => {
+				const account = accountOf(g.server);
+				const home = !g.server && account && !account.lost;
+				return (
+					<Fragment key={g.server ?? ""}>
+						<SettingRow
+							control={
+								<Button
+									onClick={() => void (g.server ? disconnectServer(g.server) : signOut())}
+									variant="outline"
+								>
+									{t("account.signOut")}
+								</Button>
+							}
+							hint={
+								(g.server
+									? serverName(g.server)
+									: t("account.thisServer", { server: serverName() })) +
+								(g.lost ? ` · ${t("account.signedOut")}` : "")
+							}
+							title={g.email}
+						/>
+						{/* an account that signs in by code, passkey or provider has no password to change */}
+						{account?.password !== false && (
+							<SettingRow
+								control={
+									<Button onClick={() => setChanging({ server: g.server })} variant="outline">
+										{t("account.changePassword")}
+									</Button>
+								}
+								hint={t("account.changePasswordHint")}
+								title={t("account.password")}
+							/>
+						)}
+						{home && login.passkey && <Passkeys />}
+						{home && login.oauth.length > 0 && <Providers providers={login.oauth} />}
+						<SettingRow
+							control={
+								<Button onClick={() => setDeleting({ server: g.server })} variant="danger-outline">
+									{t("account.delete")}
+								</Button>
+							}
+							hint={t("account.deleteHint")}
+							title={t("account.delete")}
+						/>
+					</Fragment>
+				);
+			})}
+			{canConnect && (
 				<SettingRow
 					control={
-						<Button onClick={() => setChanging(true)} variant="outline">
-							{t("account.changePassword")}
+						<Button onClick={() => setConnecting(true)} variant="outline">
+							{t("server.connect")}
 						</Button>
 					}
-					hint={t("account.changePasswordHint")}
-					title={t("account.password")}
+					hint={t("server.remoteHint")}
+					title={t("server.connect")}
 				/>
 			)}
-			{login.passkey && !account.lost && <Passkeys />}
-			{login.oauth.length > 0 && !account.lost && <Providers providers={login.oauth} />}
-			<SettingRow
-				control={
-					<Button onClick={() => setDeleting(true)} variant="danger-outline">
-						{t("account.delete")}
-					</Button>
-				}
-				hint={t("account.deleteHint")}
-				title={t("account.delete")}
-			/>
-			{changing && <ChangePasswordDialog onClose={() => setChanging(false)} />}
-			{deleting && <DeleteAccountDialog onClose={() => setDeleting(false)} />}
+			{changing && (
+				<ChangePasswordDialog onClose={() => setChanging(null)} server={changing.server} />
+			)}
+			{deleting && (
+				<DeleteAccountDialog onClose={() => setDeleting(null)} server={deleting.server} />
+			)}
+			{connecting && (
+				<Dialog onClose={() => setConnecting(false)} title={t("server.connect")}>
+					<ConnectServer onDone={() => setConnecting(false)} />
+				</Dialog>
+			)}
 		</SettingsGroup>
 	);
 }
 
 const MIN_PASSWORD = 8;
 
-function ChangePasswordDialog({ onClose }: { onClose: () => void }) {
+function ChangePasswordDialog({ server, onClose }: { server?: string; onClose: () => void }) {
 	const currentId = useId();
 	const nextId = useId();
 	const repeatId = useId();
@@ -519,7 +572,7 @@ function ChangePasswordDialog({ onClose }: { onClose: () => void }) {
 					setBusy(true);
 					setError("");
 					try {
-						await changePassword(current, next);
+						await changePassword(current, next, server);
 						setDone(true);
 					} catch (err) {
 						setError(errorText(err, t, "password"));
@@ -591,22 +644,34 @@ function ChangePasswordDialog({ onClose }: { onClose: () => void }) {
  * For what needs a recent sign-in: signing in again with a way this account already has keeps
  * everything on this device. `onDone` lets what asked for it go on.
  */
-function Reauth({ onDone, onClose }: { onDone: () => void; onClose: () => void }) {
+function Reauth({
+	server,
+	onDone,
+	onClose,
+}: {
+	server?: string;
+	onDone: () => void;
+	onClose: () => void;
+}) {
 	const { t } = useT();
-	const { account } = useAccounts();
-	// the passkey button only for an account that has one; offered when the list fails
+	useAccounts();
+	const account = accountOf(server);
+	// the passkey button only for an account that has one; offered when the list fails. A further
+	// server offers no passkey here.
 	const [hasPasskey, setHasPasskey] = useState<boolean | undefined>(false);
 	useEffect(
 		() =>
-			void passkeys().then(
-				(list) => setHasPasskey(list.length > 0),
-				() => setHasPasskey(undefined),
-			),
-		[],
+			void (server
+				? undefined
+				: passkeys().then(
+						(list) => setHasPasskey(list.length > 0),
+						() => setHasPasskey(undefined),
+					)),
+		[server],
 	);
 	const userId = account?.user.id;
 	// a passkey of another account signs that one in instead: then nothing goes on
-	const done = () => (activeUser() === userId ? onDone() : onClose());
+	const done = () => (accountOf(server)?.user.id === userId ? onDone() : onClose());
 	if (!account) return null;
 	return (
 		<Dialog onClose={onClose} title={t("account.reauth")}>
@@ -617,6 +682,7 @@ function Reauth({ onDone, onClose }: { onDone: () => void; onClose: () => void }
 				hasPasskey={hasPasskey}
 				hasPassword={account.password !== false}
 				onDone={done}
+				server={server}
 			/>
 		</Dialog>
 	);
@@ -747,12 +813,12 @@ function Providers({ providers }: { providers: { id: string; name: string }[] })
 	);
 }
 
-function DeleteAccountDialog({ onClose }: { onClose: () => void }) {
+function DeleteAccountDialog({ server, onClose }: { server?: string; onClose: () => void }) {
 	const passwordId = useId();
 	const { t } = useT();
-	const { account } = useAccounts();
+	useAccounts();
 	// without a password: a recent sign-in is the proof
-	const withPassword = account?.password !== false;
+	const withPassword = accountOf(server)?.password !== false;
 	const [password, setPassword] = useState("");
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState("");
@@ -762,7 +828,7 @@ function DeleteAccountDialog({ onClose }: { onClose: () => void }) {
 		setBusy(true);
 		setError("");
 		try {
-			await deleteAccount(withPassword ? password : undefined);
+			await deleteAccount(withPassword ? password : undefined, server);
 		} catch (err) {
 			if (
 				!withPassword &&
@@ -783,6 +849,7 @@ function DeleteAccountDialog({ onClose }: { onClose: () => void }) {
 					setReauth(false);
 					void remove();
 				}}
+				server={server}
 			/>
 		);
 	return (
@@ -846,9 +913,16 @@ function WorkspacesGroup() {
 					variant="plain"
 				>
 					<span className="min-w-0 flex-1 truncate font-medium">{space.name}</span>
-					<span className="shrink-0 text-xs text-muted-foreground">
-						{t(`space.role.${space.role}`)}
-					</span>
+					{canConnect && (
+						<span className="min-w-0 truncate text-xs text-muted-foreground">
+							{space.server ? serverName(space.server) : t("server.local")}
+						</span>
+					)}
+					{!isLocal(space) && (
+						<span className="shrink-0 text-xs text-muted-foreground">
+							{t(`space.role.${space.role}`)}
+						</span>
+					)}
 					<ChevronRight className="shrink-0 text-faint" size={15} />
 				</Button>
 			))}
@@ -1169,8 +1243,11 @@ function SpaceSettings({ space }: { space: Space }) {
 	return (
 		<div className="space-y-7">
 			<SpaceGroup space={space} />
-			<MembersGroup onRemoved={() => setRemoved((n) => n + 1)} space={space} />
-			{space.role === "owner" && <InviteLinksGroup space={space} version={removed} />}
+			{/* a workspace on this device alone has no members and no invites */}
+			{!isLocal(space) && <MembersGroup onRemoved={() => setRemoved((n) => n + 1)} space={space} />}
+			{space.role === "owner" && !isLocal(space) && (
+				<InviteLinksGroup space={space} version={removed} />
+			)}
 			<ExamplesGroup />
 
 			<SettingsGroup title={t("settings.capture")}>

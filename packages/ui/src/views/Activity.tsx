@@ -2,7 +2,7 @@
 
 import type { ActivityEvent } from "@obtion/core/protocol";
 import { useState } from "react";
-import { spaceCall, useAccounts } from "../accounts";
+import { accountOf, spaceCall, useAccounts } from "../accounts";
 import { useDocumentTitle, useOnChange } from "../hooks";
 import { useT } from "../i18n";
 import { groupBySteps, mergeEvents, StepGroup } from "../ui/ActivityFeed";
@@ -23,8 +23,9 @@ interface Fetched {
 
 export function Activity() {
 	const { t } = useT();
-	const { account, spaces } = useAccounts();
-	const me = account?.user;
+	const { spaces } = useAccounts();
+	// "you" is the account on the event's server
+	const me = (space: string) => accountOf(spaces.find((s) => s.id === space)?.server)?.user;
 	useDocumentTitle(t("nav.activity"));
 	// null: all
 	const [only, setOnly] = useState<string[] | null>(null);
@@ -76,7 +77,7 @@ export function Activity() {
 		.filter((e) => {
 			if (filter === "all") return true;
 			const actor = who(e.origin, t);
-			return filter === "agent" ? actor.agent : byMe(actor, me);
+			return filter === "agent" ? actor.agent : byMe(actor, me(e.space));
 		})
 		.sort((a, b) => b.ts - a.ts || b.id - a.id);
 	const nameOf = (id: string) =>

@@ -10,6 +10,8 @@
 	"scripts": {
 		"build": "bun run --cwd apps/web build",
 		"check": "bash scripts/check",
+		"desktop": "bun run --cwd apps/desktop build && bun run --cwd apps/desktop start",
+		"desktop:dist": "bun run --cwd apps/desktop dist",
 		"dev": "bun --watch apps/server/src/index.ts & bun run --cwd apps/web dev",
 		"dev:build": "bun run --cwd apps/web dev:build",
 		"dev:reset:all": "bash scripts/obtion-dev reset-all",
@@ -19,12 +21,14 @@
 		"fix": "biome check --write",
 		"lint": "biome check",
 		"start": "bun apps/server/src/index.ts",
+		"start:headless": "OBTION_WEB_APP=off bun apps/server/src/index.ts",
 		"test": "bun test",
 		"test:browser": "vitest run",
 		"test:e2e": "bun run build && bun tests/e2e/smoke.ts",
+		"test:e2e:desktop": "bun run --cwd apps/desktop build && bun tests/e2e/desktop.ts",
 		"test:integration": "bun test tests/integration",
 		"test:unit": "bun test tests/unit",
-		"typecheck": "tsc --noEmit -p packages/core && tsc --noEmit -p packages/sync && tsc --noEmit -p packages/ui && tsc --noEmit -p apps/server && tsc --noEmit -p apps/web && tsc --noEmit -p ."
+		"typecheck": "tsc --noEmit -p packages/core && tsc --noEmit -p packages/sync && tsc --noEmit -p packages/ui && tsc --noEmit -p apps/server && tsc --noEmit -p apps/web && tsc --noEmit -p apps/desktop && tsc --noEmit -p ."
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.6.7",

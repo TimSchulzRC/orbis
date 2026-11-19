@@ -1,6 +1,8 @@
 // Applying an update: local changes go to the server first, then SKIP_WAITING, then exactly one
 // reload once the new worker has taken over.
+// In the desktop app: a newer release of its channel, whose installer a click downloads.
 import { setUpdate, setUpdateCheck, unsynced } from "@obtion/ui";
+import { type DesktopBridge, desktop } from "@obtion/ui/platform";
 
 let reg: ServiceWorkerRegistration | undefined;
 let reloading = false;
@@ -34,6 +36,7 @@ async function apply() {
 }
 
 export function initUpdates() {
+	if (desktop) return initDesktopUpdates(desktop);
 	if (!("serviceWorker" in navigator) || import.meta.env.DEV) return;
 	import("virtual:pwa-register").then(({ registerSW }) => {
 		registerSW({
@@ -65,4 +68,20 @@ export function initUpdates() {
 			},
 		});
 	});
+}
+
+/** The desktop app looks on GitHub (apps/desktop/src/updates.ts); the browser downloads the installer. */
+function initDesktopUpdates(app: DesktopBridge) {
+	const check = async () => {
+		const found = await app.checkUpdate();
+		if (found) setUpdate("ready", () => window.open(found.url));
+		return !!found;
+	};
+	setUpdateCheck(check);
+	const recheck = () =>
+		void check().catch(() => {
+			// offline or GitHub unreachable; the next check tries again
+		});
+	recheck();
+	setInterval(recheck, RECHECK_MS);
 }

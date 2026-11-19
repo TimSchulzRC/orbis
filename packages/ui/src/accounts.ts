@@ -1,5 +1,7 @@
-// The signed-in account and its workspaces ("spaces"). Each workspace is its own replica with its own
-// storage; one is open in the app, the others sync alongside. Kept in localStorage so the app opens offline.
+// The accounts on this device and their workspaces ("spaces"). The app's own server (platform.ts)
+// has one account; the desktop app can connect further servers, one account each. Each workspace is
+// its own replica with its own storage; one is open in the app, the others sync alongside. Kept in
+// localStorage so the app opens offline.
 
 import type {
 	AccountInfo,
@@ -34,6 +36,7 @@ import { browserHost, type SpaceLink, storageNames } from "./browser";
 import { DeviceFiles, setFiles } from "./files";
 import { getLang } from "./i18n";
 import { moveInArray } from "./lib/utils";
+import { canConnect, desktop, homeUrl } from "./platform";
 import { setRepo } from "./repo";
 import { globalPage } from "./scope";
 import { KEYS } from "./ui/storage";
@@ -48,7 +51,14 @@ export interface Account {
 	lost?: boolean;
 }
 
-export type Space = WorkspaceInfo;
+/** A further server's account (desktop app): its address (an origin) and the account. */
+export interface Remote {
+	url: string;
+	account: Account;
+}
+
+/** A workspace; `server`: the further server it lies on, none for the app's own. */
+export type Space = WorkspaceInfo & { server?: string };
 
 const read = <T>(k: string, def: T): T => {
 	try {
@@ -58,8 +68,14 @@ const read = <T>(k: string, def: T): T => {
 	}
 };
 
-let account: Account | null = read(KEYS.account, null);
-let spaces: Space[] = read(KEYS.spaces, []);
+// the desktop app's own server always has its account signed in (the app made it)
+let account: Account | null = desktop
+	? { token: desktop.local.token, user: desktop.local.user }
+	: read(KEYS.account, null);
+let remotes: Remote[] = canConnect ? read(KEYS.servers, []) : [];
+let spaces: Space[] = read<Space[]>(KEYS.spaces, []).filter(
+	(s) => !s.server || remotes.some((r) => r.url === s.server),
+);
 let active: string | null = localStorage.getItem(KEYS.active);
 /** Workspaces shown on this device (sidebar, inbox); null = all. */
 let shown: string[] | null = read(KEYS.shown, null);
@@ -68,6 +84,7 @@ const listeners = new Set<() => void>();
 
 function save() {
 	localStorage.setItem(KEYS.account, JSON.stringify(account));
+	localStorage.setItem(KEYS.servers, JSON.stringify(remotes));
 	localStorage.setItem(KEYS.spaces, JSON.stringify(spaces));
 	if (active) localStorage.setItem(KEYS.active, active);
 	else localStorage.removeItem(KEYS.active);
@@ -88,6 +105,7 @@ export function useAccounts() {
 	const allSeen = !shown || !spaces.some((s) => shown!.includes(s.id));
 	return {
 		account,
+		remotes,
 		spaces,
 		active: spaces.find((s) => s.id === active),
 		shown: shownSpaces(),
@@ -114,17 +132,61 @@ export const activeUser = () => account?.user.id;
 export const activeSpace = () => spaces.find((s) => s.id === active);
 export const spaceById = (id: string) => spaces.find((s) => s.id === id);
 
+/** The workspaces on further server `url` (desktop app), in their order. */
+export const spacesOn = (url: string) => spaces.filter((s) => s.server === url);
+
+// ---------- servers ----------
+
+/** The address of a server: a further one's own, or the app's (none). */
+export const baseOf = (server?: string) => server ?? homeUrl();
+export const accountOf = (server?: string): Account | null =>
+	server ? (remotes.find((r) => r.url === server)?.account ?? null) : account;
+/** A workspace on the desktop app's own server: on this device only, no members, no invites. */
+export const isLocal = (s: Space) => !!desktop && !s.server;
+
+/** How a server is named to the user: its host. */
+export const serverName = (server?: string) => new URL(baseOf(server)).host;
+
+/**
+ * What the user typed as a server's address, as its origin: "nas:8480" → http://nas:8480,
+ * "notes.example.org" → https://…; an invite link (…/#/join/<code>) also gives the code.
+ */
+export function parseServer(input: string): { url: string; invite?: string } | null {
+	const text = input.trim();
+	if (!text) return null;
+	const host = text
+		.replace(/^[a-z]+:\/\//i, "")
+		.split(/[/?#]/)[0]!
+		.replace(/:\d+$/, "");
+	const plain =
+		!host.includes(".") ||
+		/^[\d.]+$/.test(host) ||
+		host.startsWith("[") ||
+		/\.(local|lan|home\.arpa|internal)$/.test(host);
+	try {
+		const url = new URL(
+			/^[a-z]+:\/\//i.test(text) ? text : `${plain ? "http" : "https"}://${text}`,
+		);
+		if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+		return { url: url.origin, invite: /^#\/join\/([\w-]+)/.exec(url.hash)?.[1] };
+	} catch {
+		return null;
+	}
+}
+
+// ---------- replicas ----------
+
 const open = new Map<string, { repo: Repo; files: DeviceFiles }>();
 
 function link(s: Space): SpaceLink {
-	// read at each use: signing in again (to confirm it is them) gives the account a new token
-	const first = account!.token;
+	// the token as it is now: a new sign-in (also to confirm it is them) reaches replicas already open
+	const acc = accountOf(s.server)!;
 	return {
-		base: `${location.origin}/w/${s.id}`,
+		base: `${baseOf(s.server)}/w/${s.id}`,
 		get token() {
-			return account?.token ?? first;
+			return accountOf(s.server)?.token ?? acc.token;
 		},
-		person: { id: account!.user.id, name: firstName(account!.user) },
+		person: { id: acc.user.id, name: firstName(acc.user) },
 		storage: storageNames(s),
 	};
 }
@@ -199,19 +261,19 @@ export class ApiError extends Error {
 	}
 }
 
+/** A call of a server's API (the app's own without `server`); `token: null` calls without one. */
 async function call<R>(
 	path: string,
-	body?: unknown,
-	method = body === undefined ? "GET" : "POST",
-	token = account?.token,
+	o: { body?: unknown; method?: string; server?: string; token?: string | null } = {},
 ): Promise<R> {
-	const res = await fetch(path, {
-		method,
+	const token = o.token === undefined ? accountOf(o.server)?.token : o.token;
+	const res = await fetch(baseOf(o.server) + path, {
+		method: o.method ?? (o.body === undefined ? "GET" : "POST"),
 		headers: {
-			...(body !== undefined ? { "content-type": "application/json" } : {}),
+			...(o.body !== undefined ? { "content-type": "application/json" } : {}),
 			...(token ? { authorization: `Bearer ${token}` } : {}),
 		},
-		body: body === undefined ? undefined : JSON.stringify(body),
+		body: o.body === undefined ? undefined : JSON.stringify(o.body),
 	});
 	const data: unknown = await res.json().catch(() => ({}));
 	if (!res.ok)
@@ -219,7 +281,8 @@ async function call<R>(
 	return data as R;
 }
 
-export const spaceCall = <R>(id: string, path: string) => call<R>(`/w/${id}${path}`);
+export const spaceCall = <R>(id: string, path: string) =>
+	call<R>(`/w/${id}${path}`, { server: spaceById(id)?.server });
 
 export function errorText(
 	e: unknown,
@@ -238,7 +301,8 @@ export function errorText(
 			if (status === 401) return t("account.wrong");
 			if (status === 409 || status === 422) return t("account.exists");
 			if (status === 403) return t("account.closed");
-			return message;
+			// no answer at all (a further server out of reach)
+			return status === undefined ? t("account.offline") : message;
 		case "password":
 			if (message === "invalid password") return t("account.deletePassword");
 			if (message === "password too long") return t("account.passwordLong");
@@ -252,21 +316,46 @@ export function errorText(
 	}
 }
 
-/** Also marks the account `lost` when the server rejects the token. */
-export async function refresh() {
-	if (!account) return;
-	let gone: Space[] = [];
+/** Ask one server for its account's workspaces; also marks the account `lost` when the server rejects the token. Returns the ones gone there. */
+async function refreshServer(server?: string): Promise<Space[]> {
+	const acc = accountOf(server);
+	if (!acc) return [];
+	let me: AccountInfo;
 	try {
-		const me = await call<AccountInfo>("/api/account");
-		Object.assign(account, { user: me.user, admin: me.admin, password: me.password, lost: false });
-		const known = new Map(spaces.map((s) => [s.id, s]));
-		// gone on the server (deleted, or this account removed): the copy here goes too
-		gone = spaces.filter((s) => !me.workspaces.some((w) => w.id === s.id));
-		spaces = me.workspaces.map((w) => ({ ...known.get(w.id), ...w }));
+		me = await call<AccountInfo>("/api/account", { server });
 	} catch (e) {
-		if (e instanceof ApiError && e.status === 401) account.lost = true;
-		else return; // offline: keep what is known
+		if (!(e instanceof ApiError && e.status === 401)) return []; // offline: keep what is known
+		// the desktop app's own server: the app signs in again by itself
+		if (server || !desktop) {
+			acc.lost = true;
+			return [];
+		}
+		Object.assign(acc, await desktop.renewLocal());
+		me = await call<AccountInfo>("/api/account");
 	}
+	Object.assign(acc, { user: me.user, admin: me.admin, password: me.password, lost: false });
+	const mine = spaces.filter((s) => s.server === server);
+	const known = new Map(mine.map((s) => [s.id, s]));
+	const fresh: Space[] = me.workspaces.map((w) => ({
+		...known.get(w.id),
+		...w,
+		...(server ? { server } : {}),
+	}));
+	// the app's own server first, then the others in the order they were added
+	spaces = [undefined, ...remotes.map((r) => r.url)].flatMap((srv) =>
+		srv === server ? fresh : spaces.filter((s) => s.server === srv),
+	);
+	// gone on the server (deleted, or this account removed): the copy here goes too
+	return mine.filter((s) => !me.workspaces.some((w) => w.id === s.id));
+}
+
+/** Ask every server for its account's workspaces. */
+export async function refresh() {
+	const gone = (
+		await Promise.all(
+			[undefined, ...remotes.map((r) => r.url)].map((srv) => refreshServer(srv).catch(() => [])),
+		)
+	).flat();
 	if (!activeSpace() && spaces[0]) activate(spaces[0].id);
 	save();
 	// last: deleting makes open replicas reload the page
@@ -278,10 +367,10 @@ export async function refresh() {
  * confirm it is them) keeps its workspaces and ends the old session.
  */
 async function keep(token: string) {
-	const me = await call<AccountInfo>("/api/account", undefined, "GET", token);
+	const me = await call<AccountInfo>("/api/account", { token });
 	if (account && account.user.id !== me.user.id) await forgetAll();
 	else if (account && account.token !== token && !account.lost)
-		await call<Ok>("/api/account/signout", {}).catch(() => {
+		await call<Ok>("/api/account/signout", { body: {} }).catch(() => {
 			// the old session ends on its own if the server cannot be reached
 		});
 	account = { token, user: me.user };
@@ -298,35 +387,55 @@ function signupContext(invite: string | undefined, lang: string) {
 	document.cookie = `obtion_signup=${encodeURIComponent(JSON.stringify({ invite, lang }))}; path=/api/auth; max-age=1800; samesite=lax`;
 }
 
-export async function signIn(email: string, password: string) {
-	const res = await call<SignedIn>("/api/auth/sign-in/email", { email, password });
-	await keep(res.token);
+/** Sign in with a password (on `server`: a further one, desktop app; `invite`: join it there too). */
+export async function signIn(email: string, password: string, server?: string, invite?: string) {
+	const res = await call<SignedIn>("/api/auth/sign-in/email", {
+		body: { email, password },
+		server,
+		token: null,
+	});
+	await (server ? adopt(server, res, invite) : keep(res.token));
 }
 
 /**
- * Where email codes are on, the address is verified first: without `code` a code is sent and the
- * result is "verify"; then call again with the code.
+ * On `server`: a further one (desktop app). Where email codes are on, the address is verified
+ * first: without `code` a code is sent and the result is "verify"; then call again with the code.
  */
-export async function signUp(b: {
-	name: string;
-	email: string;
-	password: string;
-	invite?: string;
-	lang: string;
-	code?: string;
-}): Promise<"verify" | undefined> {
-	const res = await call<SignedIn | VerifyFirst>("/api/account/signup", b);
+export async function signUp(
+	b: {
+		name: string;
+		email: string;
+		password: string;
+		invite?: string;
+		lang: string;
+		code?: string;
+	},
+	server?: string,
+): Promise<"verify" | undefined> {
+	const res = await call<SignedIn | VerifyFirst>("/api/account/signup", {
+		body: b,
+		server,
+		token: null,
+	});
 	if ("verify" in res) {
-		await sendCode(b.email, { invite: b.invite, lang: b.lang });
+		await sendCode(b.email, { invite: b.invite, lang: b.lang }, server);
 		return "verify";
 	}
-	await keep(res.token);
+	await (server ? adopt(server, res) : keep(res.token));
 }
 
 /** An address without an account gets a code too where sign-up is open. */
-export async function sendCode(email: string, ctx: { invite?: string; lang: string }) {
+export async function sendCode(
+	email: string,
+	ctx: { invite?: string; lang: string },
+	server?: string,
+) {
 	signupContext(ctx.invite, ctx.lang);
-	await call<Ok>("/api/auth/email-otp/send-verification-otp", { email, type: "sign-in" });
+	await call<Ok>("/api/auth/email-otp/send-verification-otp", {
+		body: { email, type: "sign-in" },
+		server,
+		token: null,
+	});
 }
 
 /** A new address becomes an account named `name`. */
@@ -335,14 +444,77 @@ export async function signInWithCode(
 	otp: string,
 	name: string | undefined,
 	ctx: { invite?: string; lang: string },
+	server?: string,
 ) {
 	signupContext(ctx.invite, ctx.lang);
 	const res = await call<SignedIn>("/api/auth/sign-in/email-otp", {
-		email,
-		otp: otp.trim(),
-		...(name?.trim() ? { name: name.trim() } : {}),
+		body: { email, otp: otp.trim(), ...(name?.trim() ? { name: name.trim() } : {}) },
+		server,
+		token: null,
 	});
-	await keep(res.token);
+	await (server ? adopt(server, res, ctx.invite) : keep(res.token));
+}
+
+/**
+ * Connect a further server (desktop app) with an account signed in there: its workspaces show
+ * here too. An invite (from a pasted link) is joined.
+ */
+async function adopt(url: string, res: SignedIn, invite?: string) {
+	if (url === homeUrl()) throw new ApiError("this is the app's own server", 400);
+	const known = remotes.find((r) => r.url === url);
+	// another account of the same server: the workspaces of the one before leave this device (and the page starts anew below)
+	const switched = !!known && known.account.user.id !== res.user.id;
+	if (switched) await forgetServer(url);
+	const acc: Account = { token: res.token, user: res.user };
+	if (remotes.some((r) => r.url === url))
+		remotes = remotes.map((r) => (r.url === url ? { url, account: acc } : r));
+	else remotes = [...remotes, { url, account: acc }];
+	save();
+	if (invite)
+		await call(`/api/invites/${invite}`, { server: url, body: {} }).catch(() => {
+			// an invite that no longer counts: signed in all the same
+		});
+	await refresh();
+	if (switched) {
+		location.replace("#/");
+		location.reload();
+	}
+}
+
+/** Sign out of a further server: its workspaces leave this device, with their local copies. */
+export async function disconnectServer(url: string) {
+	await call<Ok>("/api/account/signout", { server: url, body: {} }).catch(() => {
+		// signing out offline still forgets everything on this device
+	});
+	await forgetServer(url);
+	navigate("/", { replace: true });
+	location.reload();
+}
+
+async function forgetServer(url: string) {
+	const previous = spaces.filter((s) => s.server === url);
+	remotes = remotes.filter((r) => r.url !== url);
+	spaces = spaces.filter((s) => s.server !== url);
+	if (active && !spaces.some((s) => s.id === active)) active = spaces[0]?.id ?? null;
+	save();
+	// the open copies step aside without reloading the page (browser.ts) until all are gone
+	localStorage.setItem(KEYS.leaving, url);
+	try {
+		for (const s of previous) await forget(s);
+	} finally {
+		localStorage.removeItem(KEYS.leaving);
+	}
+}
+
+/**
+ * Whether `url` answers at all, even where it does not let this app in (no CORS for it: an older
+ * server, or the app's origin not in its OBTION_APP_ORIGINS).
+ */
+export function answers(url: string): Promise<boolean> {
+	return fetch(`${url}/api/info`, { mode: "no-cors" }).then(
+		() => true,
+		() => false,
+	);
 }
 
 export async function signInWithPasskey() {
@@ -352,7 +524,7 @@ export async function signInWithPasskey() {
 	const response = await startAuthentication({ optionsJSON });
 	const res = await call<{ session: { token: string } }>(
 		"/api/auth/passkey/verify-authentication",
-		{ response },
+		{ body: { response } },
 	);
 	await keep(res.session.token);
 }
@@ -364,7 +536,9 @@ export async function signInWithOAuth(provider: string, ctx: { invite?: string; 
 	signupContext(ctx.invite, ctx.lang);
 	sessionStorage.setItem(OAUTH_RETURN, location.hash);
 	const urls = { callbackURL: "/?signin=oauth", errorCallbackURL: "/?signin=failed" };
-	const res = await call<{ url: string }>("/api/auth/sign-in/social", { provider, ...urls });
+	const res = await call<{ url: string }>("/api/auth/sign-in/social", {
+		body: { provider, ...urls },
+	});
 	location.href = res.url;
 }
 
@@ -397,7 +571,7 @@ async function finishOAuth() {
 		return;
 	}
 	try {
-		const res = await call<SignedIn>("/api/account/claim", {});
+		const res = await call<SignedIn>("/api/account/claim", { body: {} });
 		await keep(res.token);
 	} catch {
 		oauthFailed = "failed";
@@ -418,9 +592,7 @@ export async function linkOAuth(provider: string) {
 	// the settings are a dialog: "#/settings" opens them again
 	sessionStorage.setItem(OAUTH_RETURN, "#/settings");
 	const res = await call<{ url: string }>("/api/auth/link-social", {
-		provider,
-		callbackURL: "/?signin=linked",
-		errorCallbackURL: "/?signin=linkFailed",
+		body: { provider, callbackURL: "/?signin=linked", errorCallbackURL: "/?signin=linkFailed" },
 	});
 	location.href = res.url;
 }
@@ -433,10 +605,13 @@ export async function addPasskey() {
 		"/api/auth/passkey/generate-register-options",
 	);
 	const response = await startRegistration({ optionsJSON });
-	await call<Ok>("/api/auth/passkey/verify-registration", { response, name: deviceLabel() });
+	await call<Ok>("/api/auth/passkey/verify-registration", {
+		body: { response, name: deviceLabel() },
+	});
 }
 
-export const removePasskey = (id: string) => call<Ok>("/api/auth/passkey/delete-passkey", { id });
+export const removePasskey = (id: string) =>
+	call<Ok>("/api/auth/passkey/delete-passkey", { body: { id } });
 
 /** First match wins: an iPad's agent also says "Mac", Chrome's also says "Safari". */
 const OS_NAMES: [RegExp, string][] = [
@@ -462,7 +637,7 @@ function deviceLabel(): string {
 }
 
 export async function signOut() {
-	await call<Ok>("/api/account/signout", {}).catch(() => {
+	await call<Ok>("/api/account/signout", { body: {} }).catch(() => {
 		// signing out offline still forgets everything on this device
 	});
 	await forgetAll();
@@ -477,14 +652,19 @@ function restart() {
 }
 
 /** The server signs out the other devices; this one stays signed in. */
-export async function changePassword(current: string, next: string) {
-	await call<Ok>("/api/account/password", { current, next });
+export async function changePassword(current: string, next: string, server?: string) {
+	await call<Ok>("/api/account/password", { body: { current, next }, server });
 }
 
 /** Proof is the password, or without one a recent sign-in (403: confirm first). */
-export async function deleteAccount(password?: string) {
-	await call<Ok>("/api/account", password === undefined ? {} : { password }, "DELETE");
-	await forgetAll();
+export async function deleteAccount(password?: string, server?: string) {
+	await call<Ok>("/api/account", {
+		body: password === undefined ? {} : { password },
+		method: "DELETE",
+		server,
+	});
+	if (server) await forgetServer(server);
+	else await forgetAll();
 	save();
 	restart();
 }
@@ -492,6 +672,7 @@ export async function deleteAccount(password?: string) {
 async function forgetAll() {
 	const previous = spaces;
 	account = null;
+	remotes = [];
 	spaces = [];
 	active = null;
 	shown = null;
@@ -519,8 +700,9 @@ async function forget(s: Space) {
 	});
 }
 
-export async function createSpace(name: string, examples: boolean) {
-	const w = await call<WorkspaceInfo>("/api/workspaces", { name });
+/** With the examples or without; then opens it. */
+export async function createSpace(name: string, examples: boolean, server?: string) {
+	const w = await call<WorkspaceInfo>("/api/workspaces", { body: { name }, server });
 	created.set(w.id, examples);
 	if (shown) shown = [...shown, w.id];
 	await refresh();
@@ -530,16 +712,23 @@ export async function createSpace(name: string, examples: boolean) {
 /**
  * Put workspace `id` before (or after) `to` in the account's order of workspaces. Shown at once;
  * the server keeps it for every device. Offline or refused: back to the order before, and the error.
+ * Only within one server: each account keeps its own order, and the servers stay in their order.
  */
 export async function moveSpace(id: string, to: string, before: boolean) {
 	const from = spaces.findIndex((s) => s.id === id);
 	const at = spaces.findIndex((s) => s.id === to);
 	if (from < 0 || at < 0 || id === to) return;
+	const server = spaces[from]!.server;
+	if (spaces[at]!.server !== server) return;
 	const previous = spaces;
 	spaces = moveInArray(spaces, from, at + (before ? 0 : 1));
 	save();
 	try {
-		await call<Ok>("/api/account/workspaces", { order: spaces.map((s) => s.id) }, "PUT");
+		await call<Ok>("/api/account/workspaces", {
+			body: { order: spaces.filter((s) => s.server === server).map((s) => s.id) },
+			method: "PUT",
+			server,
+		});
 	} catch (e) {
 		spaces = previous;
 		save();
@@ -548,38 +737,50 @@ export async function moveSpace(id: string, to: string, before: boolean) {
 }
 
 export async function renameSpace(s: Space, name: string) {
-	await call<Ok>(`/api/workspaces/${s.id}`, { name }, "PATCH");
+	await call<Ok>(`/api/workspaces/${s.id}`, { body: { name }, method: "PATCH", server: s.server });
 	await refresh();
 }
 
-export const joinUrl = (code: string) => `${location.origin}/#/join/${code}`;
+export const joinUrl = (code: string, server?: string) =>
+	`${server ?? location.origin}/#/join/${code}`;
 
 /** Owners only; a link is for one person. */
 export async function inviteLink(s: Space, opts: InviteRequest = {}): Promise<string> {
-	const { code } = await call<InviteCode>(`/api/workspaces/${s.id}/invites`, opts);
-	return joinUrl(code);
+	const { code } = await call<InviteCode>(`/api/workspaces/${s.id}/invites`, {
+		body: opts,
+		server: s.server,
+	});
+	return joinUrl(code, s.server);
 }
 
 /** Owners only; only links that still work. */
-export const inviteLinks = (s: Space) => call<InviteLink[]>(`/api/workspaces/${s.id}/invites`);
+export const inviteLinks = (s: Space) =>
+	call<InviteLink[]>(`/api/workspaces/${s.id}/invites`, { server: s.server });
 
 export const revokeInvite = (s: Space, code: string) =>
-	call<Ok>(`/api/workspaces/${s.id}/invites/${code}`, undefined, "DELETE");
+	call<Ok>(`/api/workspaces/${s.id}/invites/${code}`, { method: "DELETE", server: s.server });
 
 export function members(s: Space): Promise<Member[]> {
-	return call(`/api/workspaces/${s.id}/members`);
+	return call(`/api/workspaces/${s.id}/members`, { server: s.server });
 }
 
 /** Owners only. */
 export const setRole = (s: Space, user: string, role: Role) =>
-	call<Ok>(`/api/workspaces/${s.id}/members/${user}`, { role }, "PATCH");
+	call<Ok>(`/api/workspaces/${s.id}/members/${user}`, {
+		body: { role },
+		method: "PATCH",
+		server: s.server,
+	});
 
 /** Owners only; their devices stop syncing it. */
 export const removeMember = (s: Space, user: string) =>
-	call<Ok>(`/api/workspaces/${s.id}/members/${user}`, undefined, "DELETE");
+	call<Ok>(`/api/workspaces/${s.id}/members/${user}`, { method: "DELETE", server: s.server });
 
 export async function leaveSpace(s: Space) {
-	await call<Ok>(`/api/workspaces/${s.id}/members/${account!.user.id}`, undefined, "DELETE");
+	await call<Ok>(`/api/workspaces/${s.id}/members/${accountOf(s.server)!.user.id}`, {
+		method: "DELETE",
+		server: s.server,
+	});
 	await forget(s);
 	dropFromList(s);
 	save();
@@ -588,7 +789,7 @@ export async function leaveSpace(s: Space) {
 
 /** Owners only; deletes it for every member. */
 export async function deleteSpace(s: Space) {
-	await call<Ok>(`/api/workspaces/${s.id}`, undefined, "DELETE");
+	await call<Ok>(`/api/workspaces/${s.id}`, { method: "DELETE", server: s.server });
 	dropFromList(s);
 	save();
 	await forget(s);
@@ -602,18 +803,21 @@ function dropFromList(s: Space) {
 }
 
 export async function joinInvite(code: string) {
-	const w = await call<WorkspaceInfo>(`/api/invites/${code}`, {});
+	const w = await call<WorkspaceInfo>(`/api/invites/${code}`, { body: {} });
 	await refresh();
 	activate(w.id);
 }
 
 export const invite = (code: string) => call<InviteInfo>(`/api/invites/${code}`);
-export const serverInfo = () => call<ServerInfo>("/api/info");
+export const serverInfo = (server?: string) =>
+	call<ServerInfo>("/api/info", { server, token: null });
 
-export const mcpToken = (s: Space) => call<McpConnect>(`/api/workspaces/${s.id}/mcp-token`, {});
-export const mcpTokenInfo = (s: Space) => call<McpTokenInfo>(`/api/workspaces/${s.id}/mcp-token`);
+export const mcpToken = (s: Space) =>
+	call<McpConnect>(`/api/workspaces/${s.id}/mcp-token`, { body: {}, server: s.server });
+export const mcpTokenInfo = (s: Space) =>
+	call<McpTokenInfo>(`/api/workspaces/${s.id}/mcp-token`, { server: s.server });
 export const revokeMcpToken = (s: Space) =>
-	call<Ok>(`/api/workspaces/${s.id}/mcp-token`, undefined, "DELETE");
+	call<Ok>(`/api/workspaces/${s.id}/mcp-token`, { method: "DELETE", server: s.server });
 
 /**
  * A workspace page without "#/w/<id>" (a link inside the app) gets the open workspace's id, so going

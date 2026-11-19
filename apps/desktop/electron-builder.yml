@@ -1,0 +1,32 @@
+# Packages the desktop app: `bun run dist` (see README.md). The server on this device comes from
+# build/server/<os>-<arch>/ (scripts/build.ts); the rest is dist/ inside the app.
+appId: app.obtion.desktop
+productName: Obtion
+copyright: AGPL-3.0-or-later
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist/**
+  - package.json
+asar: true
+extraResources:
+  - from: build/server/${os}-${arch}
+    to: server
+artifactName: Obtion-${version}-${os}-${arch}.${ext}
+mac:
+  target: [dmg]
+  category: public.app-category.productivity
+  # ad-hoc: Apple Silicon starts only signed apps; there is no developer certificate (yet)
+  identity: "-"
+  hardenedRuntime: false
+win:
+  target: [nsis]
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+linux:
+  executableName: obtion
+  target: [AppImage, deb]
+  category: Office
+  maintainer: Tim Schulz

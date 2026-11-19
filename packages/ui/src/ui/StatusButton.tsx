@@ -4,6 +4,7 @@ import { refresh, useAccounts } from "../accounts";
 import { Tip } from "../components/ui/tooltip";
 import { useT } from "../i18n";
 import { cn } from "../lib/utils";
+import { desktop } from "../platform";
 import { applyUpdate, checkForUpdate, useUpdate } from "../update";
 import { Button } from "./primitives";
 import { useReplicas } from "./Spaces";
@@ -76,7 +77,8 @@ export function StatusButton({ className }: { className?: string }) {
 							key: "update",
 							icon: CircleFadingArrowUp,
 							label: t("app.newVersion"),
-							hint: t("app.clickUpdate"),
+							// the desktop app: its installer, in the browser (apps/web/src/update.ts)
+							hint: t(desktop ? "app.clickDownload" : "app.clickUpdate"),
 							tone: "text-link",
 							run: applyUpdate,
 						}

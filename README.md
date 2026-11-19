@@ -1,6 +1,6 @@
 # Obtion
 
-Notes that link to each other and projects with tasks, in one app. Self-hosted, works in the browser on every device (also offline) and through AI agents via MCP. German and English.
+Notes that link to each other and projects with tasks, in one app. Self-hosted, works in the browser on every device (also offline), as a desktop app for macOS, Windows and Linux, and through AI agents via MCP. German and English.
 
 ## Installation
 
@@ -41,7 +41,13 @@ Choose with `OBTION_VERSION` in `.env`:
 
 Or pin a version, e.g. `0.0.2`. Going back after an update may need a backup of `./data`.
 
-Without the web app (sync, API and MCP only): `OBTION_WEB_APP=off`. Apps on another origin call the server only if it lets them: the desktop app always, others when `OBTION_APP_ORIGINS` names their origin. They sign in with a password or a code by email; passkeys and OAuth stay on the server's own page, and so does signing up with an invite where the server confirms addresses by code.
+Without the web app (sync, API and MCP only): `OBTION_WEB_APP=off`. Apps on another origin call the server only if it lets them: the desktop app always, others when `OBTION_APP_ORIGINS` names their origin (e.g. a web app served by another host, built with `VITE_OBTION_SERVER=<server>`). They sign in with a password or a code by email; passkeys and OAuth stay on the server's own page, and so does signing up with an invite where the server confirms addresses by code.
+
+## Desktop app
+
+The same interface as the web app (both use `packages/ui`), with a server of its own on the device: workspaces **on this device** work without a network. A new workspace can go **on a server** instead; the first time you enter its address and sign in there.
+
+Installers are attached to each [release](https://github.com/TimSchulzRC/obtion/releases): nightly and stable, like the image. The app looks there for a newer release of its own channel (the cloud button at the bottom of the sidebar, and every half hour); a click downloads its installer. Builds of the workflow [Desktop](.github/workflows/desktop.yml) (a run's artifacts) are dev versions and look for none. The Mac app is signed ad hoc, not notarized: open it once via System Settings › Privacy & Security › _Open anyway_, or run `xattr -dr com.apple.quarantine /Applications/Obtion.app`.
 
 ## Development
 
@@ -53,10 +59,13 @@ bun run dev         # server on :8480 and the web app with hot reload
 bun test            # unit and integration tests
 bun run test:browser  # parts of the interface on their own, in Chromium
 bun run test:e2e    # the built app against real servers
+bun run test:e2e:desktop  # the desktop app (Electron), its local server and a remote one
 bun run typecheck
 bun run lint        # Biome: format, lint rules, sorted imports (read-only)
 bun run fix         # Biome: apply the safe fixes and format
 bun run check       # everything CI runs for a pull request, side by side
+bun run desktop     # build and start the desktop app
+bun run desktop:dist   # its installer for this system, in apps/desktop/release
 ```
 
 A pull request is ready to merge when `bun run check` passes: Biome counts warnings as failures too. The rules are in [`biome.jsonc`](biome.jsonc); for VS Code the repository recommends the Biome extension and formats on save.

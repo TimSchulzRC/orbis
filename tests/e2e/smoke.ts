@@ -991,7 +991,11 @@ async function deleteAccountOnSettings(browser: import("playwright").Browser, se
 		}
 		await p.getByRole("button", { name: "Konto endgültig löschen", exact: true }).click();
 		await dialog.getByLabel("Passwort").fill("secret12345");
+		// the app shows the sign-in once the account is gone, then loads itself afresh (restart in
+		// accounts.ts): the checks below are for the page after that
+		const reloaded = p.waitForEvent("load");
 		await dialog.getByRole("button", { name: "Konto endgültig löschen", exact: true }).click();
+		await reloaded;
 		await p.getByRole("button", { name: "Konto anlegen", exact: true }).waitFor();
 		const stored = await p.evaluate(() => ({
 			account: JSON.parse(localStorage.getItem("obtion.account") ?? "null"),
