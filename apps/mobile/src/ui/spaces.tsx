@@ -12,7 +12,12 @@ const LABEL = 16;
 /** The name for the button, cut to fit next to the buttons on the right. */
 function short(name: string): string {
 	const chars = Array.from(name);
-	return chars.length > LABEL ? `${chars.slice(0, LABEL - 1).join("").trimEnd()}…` : name;
+	if (chars.length <= LABEL) return name;
+	const cut = chars
+		.slice(0, LABEL - 1)
+		.join("")
+		.trimEnd();
+	return `${cut}…`;
 }
 
 export function SpaceSwitcher() {
