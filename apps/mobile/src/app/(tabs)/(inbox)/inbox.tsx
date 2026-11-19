@@ -1,4 +1,4 @@
-// The inbox across every workspace, newest first. A long press sorts an entry: give it a type,
+// The inbox of the workspaces the switcher shows, newest first. A long press sorts an entry: give it a type,
 // put it somewhere, bring it back tomorrow, pin it or delete it.
 
 import { fmtRelative } from "@obtion/core/i18n";
@@ -8,17 +8,18 @@ import { inbox } from "@obtion/core/placement";
 import { plainText } from "@obtion/core/search";
 import * as Haptics from "expo-haptics";
 import { Link, router, Stack } from "expo-router";
-import { useSpaces } from "../../../lib/hooks";
+import { useShownSpaces } from "../../../lib/hooks";
 import { lang, t } from "../../../lib/i18n";
 import { ItemRow } from "../../../ui/item";
 import { Empty, Screen, Section } from "../../../ui/list";
 import { typeSymbol } from "../../../ui/look";
+import { SpaceSwitcher } from "../../../ui/spaces";
 import { SessionNotice } from "../../../ui/status";
 
 const EXCERPT = 120;
 
 export default function Inbox() {
-	const spaces = useSpaces();
+	const spaces = useShownSpaces();
 	const several = spaces.length > 1;
 	const entries = spaces
 		.flatMap((space) => (space.ix ? inbox(space.ix).map((item) => ({ space, item })) : []))
@@ -27,6 +28,7 @@ export default function Inbox() {
 	return (
 		<>
 			<Stack.Screen options={{ title: t("nav.inbox") }} />
+			<SpaceSwitcher />
 			<Stack.Toolbar placement="right">
 				<Stack.Toolbar.Button icon="square.and.pencil" onPress={() => router.push("/new")}>
 					{t("quick.title")}

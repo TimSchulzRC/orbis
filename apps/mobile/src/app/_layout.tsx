@@ -1,5 +1,5 @@
 // The app's frame: signed out it shows only the sign-in, signed in the tabs with sheets above
-// them (a new note, choosing a place, the settings).
+// them (a new note, choosing a place, the settings, a new workspace, another server).
 
 import { DarkTheme, DefaultTheme, SplashScreen, Stack, ThemeProvider } from "expo-router";
 import { useEffect } from "react";
@@ -48,7 +48,12 @@ export default function RootLayout() {
 						name="settings"
 						options={{ ...sheet, sheetAllowedDetents: [1], title: t("nav.settings") }}
 					/>
+					<Stack.Screen
+						name="new-space"
+						options={{ ...sheet, sheetAllowedDetents: [1], title: t("space.new") }}
+					/>
 					<Stack.Screen name="reauth" options={{ presentation: "modal" }} />
+					<Stack.Screen name="connect" options={{ presentation: "modal" }} />
 				</Stack.Protected>
 				<Stack.Protected guard={!session}>
 					<Stack.Screen name="sign-in" />

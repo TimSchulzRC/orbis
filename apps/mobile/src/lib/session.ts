@@ -1,6 +1,7 @@
-// The signed-in account on one server and its workspaces. Each workspace is a replica (Repo from
-// @obtion/sync) with its own SQLite database; all of them sync while the app runs. The token sits
-// in the iOS keychain, the rest in a small key-value store, so the app opens offline.
+// The accounts on this phone, one per server, as in the desktop app, and their workspaces. Each
+// workspace is a replica (Repo from @obtion/sync) with its own SQLite database; all of them sync
+// while the app runs. The tokens sit in the iOS keychain, the rest in a small key-value store, so
+// the app opens offline.
 
 import type { AccountInfo, Ok, ServerInfo, SignedIn, User, WorkspaceInfo } from "@obtion/core/api";
 import { SETTINGS_ID } from "@obtion/core/model";
@@ -15,19 +16,42 @@ import { ApiError, call, statusOf } from "./api";
 import { lang, t } from "./i18n";
 import { removeReplica, sqliteStorage } from "./storage";
 
-export interface Session {
+export interface Account {
+	/** The server's address, an origin ("https://notes.example.org"). */
 	server: string;
 	user: User;
-	spaces: WorkspaceInfo[];
-	/** The workspace "Browse" shows and new notes go to. */
-	active: string | null;
 	/** The server no longer accepts the token. */
 	lost?: boolean;
 }
 
-const SESSION = "obtion.session";
-const TOKEN = "obtion.token";
+/** A workspace and the server it lies on. */
+export type Workspace = WorkspaceInfo & { server: string };
+
+/** Signed in to at least one server; signed out of all of them there is none. */
+export interface Session {
+	/** In the order they were connected. */
+	accounts: Account[];
+	/** By server in the order of `accounts`, each server's in its account's order. */
+	spaces: Workspace[];
+	/** The workspace the pages show (the switcher at the top left); null: all of them. */
+	shown: string | null;
+}
+
+const SESSION = "obtion.accounts";
 const DEVICE = "obtion.device";
+/** A keychain key allows letters, digits and "._-" only. */
+const tokenKey = (server: string) => `obtion.token.${server.replace(/[^\w.-]/g, "_")}`;
+
+/** The chosen workspace while the accounts still have it, else all. */
+const shownOf = (shown: string | null, spaces: Workspace[]) =>
+	shown && spaces.some((w) => w.id === shown) ? shown : null;
+
+/** The session without the accounts `drop` picks and their workspaces; null once none is left. */
+function without(s: Session, drop: (a: Account) => boolean): Session | null {
+	const accounts = s.accounts.filter((a) => !drop(a));
+	const spaces = s.spaces.filter((w) => accounts.some((a) => a.server === w.server));
+	return accounts.length ? { accounts, spaces, shown: shownOf(s.shown, spaces) } : null;
+}
 
 function read(): Session | null {
 	try {
@@ -38,8 +62,13 @@ function read(): Session | null {
 }
 
 let session: Session | null = read();
-let token: string | null = session ? SecureStore.getItem(TOKEN) : null;
-if (session && !token) session = null;
+const tokens = new Map<string, string>();
+for (const a of session?.accounts ?? []) {
+	const known = SecureStore.getItem(tokenKey(a.server));
+	if (known) tokens.set(a.server, known);
+}
+// an account whose token is gone from the keychain counts as signed out of
+if (session) session = without(session, (a) => !tokens.has(a.server));
 let version = 0;
 const listeners = new Set<() => void>();
 
@@ -59,6 +88,8 @@ export function useSession(): Session | null {
 	useSyncExternalStore(subscribe, () => version);
 	return session;
 }
+
+export const accountOf = (server: string) => session?.accounts.find((a) => a.server === server);
 
 /** Names this device in the origin of its changes ("iPhone-x3f9"), never shown. */
 function deviceName(): string {
@@ -84,6 +115,7 @@ interface Host extends RepoHost {
 interface Open {
 	repo: Repo;
 	host: Host;
+	server: string;
 }
 const open = new Map<string, Open>();
 /** Replicas still closing: a new one of the same workspace opens its database after. */
@@ -125,7 +157,8 @@ function ask<K extends string>(
 	);
 }
 
-function host(space: string, s: Session, onReload: () => void): Host {
+function host(w: Workspace, user: User, onReload: () => void): Host {
+	const { id: space, server } = w;
 	let disposed = false;
 	const storage = sqliteStorage(space, closing.get(space));
 	let failures = 0;
@@ -144,14 +177,15 @@ function host(space: string, s: Session, onReload: () => void): Host {
 	return {
 		storage,
 		device: deviceName(),
-		person: { id: s.user.id, name: firstName(s.user) },
+		person: { id: user.id, name: firstName(user) },
 		connect() {
-			if (disposed || !token || session?.lost) {
+			const token = tokens.get(server);
+			if (disposed || !token || accountOf(server)?.lost) {
 				waiting = parked();
 				return waiting;
 			}
 			// the token as a subprotocol, as in the browser (the server reads it there or in the header)
-			socket = new WebSocket(`${s.server.replace(/^http/, "ws")}/w/${space}/sync`, [
+			socket = new WebSocket(`${server.replace(/^http/, "ws")}/w/${space}/sync`, [
 				"obtion",
 				`auth.${token}`,
 			]);
@@ -159,9 +193,9 @@ function host(space: string, s: Session, onReload: () => void): Host {
 		},
 		async post(path, body) {
 			try {
-				const res = await call<unknown>(s.server, `/w/${space}${path}`, {
+				const res = await call<unknown>(server, `/w/${space}${path}`, {
 					body,
-					token: token ?? undefined,
+					token: tokens.get(server),
 				});
 				return { ok: true, statusText: "OK", body: res };
 			} catch (e) {
@@ -212,10 +246,12 @@ function host(space: string, s: Session, onReload: () => void): Host {
  * a workspace the account no longer has (a page of it may still be on screen).
  */
 export function replica(space: string): Repo | undefined {
-	if (!session?.spaces.some((w) => w.id === space)) return undefined;
+	const w = session?.spaces.find((s) => s.id === space);
+	const account = w && accountOf(w.server);
+	if (!w || !account) return undefined;
 	const known = open.get(space);
 	if (known) return known.repo;
-	const h = host(space, session, () => {
+	const h = host(w, account.user, () => {
 		// the storage was emptied (another server): start afresh
 		void forgetReplica(space).then(() => {
 			version++;
@@ -223,7 +259,7 @@ export function replica(space: string): Repo | undefined {
 		});
 	});
 	const repo = new Repo(h);
-	open.set(space, { repo, host: h });
+	open.set(space, { repo, host: h, server: w.server });
 	setUpWhenEmpty(repo);
 	repo.init().catch((e) => console.error("could not open the replica", e));
 	return repo;
@@ -272,21 +308,24 @@ function dropReplica(space: string): Promise<void> {
  */
 export const writeFailures = (space: string) => open.get(space)?.host.failures() ?? 0;
 
-/** Signed in again: the replicas that waited connect with the new token. */
-function resume() {
+/** Signed in to `server` again: its replicas that waited connect with the new token. */
+function resume(server: string) {
 	for (const o of open.values()) {
+		if (o.server !== server) continue;
 		o.host.resume();
 		// one still loading connects when it is loaded
 		if (o.repo.status.loaded) o.repo.connect();
 	}
 }
 
-/** Pending local changes in any workspace. */
-export function pendingChanges(): number {
-	return [...open.values()].reduce((n, o) => n + o.repo.status.pending, 0);
+/** Pending local changes in the workspaces on `server`. */
+export function pendingChanges(server: string): number {
+	return [...open.values()]
+		.filter((o) => o.server === server)
+		.reduce((n, o) => n + o.repo.status.pending, 0);
 }
 
-// ---- account --------------------------------------------------------------------------------
+// ---- accounts -------------------------------------------------------------------------------
 
 export const serverInfo = (server: string) => call<ServerInfo>(server, "/api/info");
 
@@ -310,101 +349,123 @@ export async function signInWithCode(server: string, email: string, otp: string)
 	await keep(server, res.token);
 }
 
-/** The workspace the account has: the active one if it still is, else the first. */
-const activeOf = (active: string | null | undefined, spaces: WorkspaceInfo[]) =>
-	active && spaces.some((w) => w.id === active) ? active : (spaces[0]?.id ?? null);
+/**
+ * What `server` says about its account: the account and its workspaces take the place of what was
+ * known of that server (a new server goes last). Returns the workspaces gone there.
+ */
+function update(server: string, me: AccountInfo): Workspace[] {
+	const s = session ?? { accounts: [], spaces: [], shown: null };
+	const before = s.spaces.filter((w) => w.server === server);
+	// A workspace another server has too (a copy of its data folder) stays with the first: on this
+	// phone both would share one database.
+	const fresh = me.workspaces
+		.filter((w) => !s.spaces.some((o) => o.id === w.id && o.server !== server))
+		.map((w) => ({ ...w, server }));
+	const account: Account = { server, user: me.user, lost: false };
+	const accounts = s.accounts.some((a) => a.server === server)
+		? s.accounts.map((a) => (a.server === server ? account : a))
+		: [...s.accounts, account];
+	const spaces = accounts.flatMap((a) =>
+		a.server === server ? fresh : s.spaces.filter((w) => w.server === a.server),
+	);
+	session = { accounts, spaces, shown: shownOf(s.shown, spaces) };
+	return before.filter((w) => !fresh.some((f) => f.id === w.id));
+}
 
 /**
- * Another account (or server) signed in before is forgotten first. The same one signing in again
- * keeps its copies, with what they did not send yet: they go on with the new token.
+ * Signed in to `server`: a new server joins the others. Another account signed in there before is
+ * forgotten first; the same one signing in again keeps its copies, with what they did not send
+ * yet: they go on with the new token.
  */
 async function keep(server: string, next: string) {
 	const me = await call<AccountInfo>(server, "/api/account", { token: next });
-	const same = !!session && session.server === server && session.user.id === me.user.id;
-	if (session && !same) await forgetAll();
-	else if (session && token && token !== next && !session.lost)
-		await call<Ok>(server, "/api/account/signout", { body: {}, token }).catch(() => {
+	const known = accountOf(server);
+	const old = tokens.get(server);
+	if (known && known.user.id !== me.user.id) await forgetServer(server);
+	else if (known && old && old !== next && !known.lost)
+		await call<Ok>(server, "/api/account/signout", { body: {}, token: old }).catch(() => {
 			// the old session ends on its own
 		});
-	const gone = same ? session!.spaces.filter((s) => !me.workspaces.some((w) => w.id === s.id)) : [];
-	token = next;
-	SecureStore.setItem(TOKEN, next);
-	session = {
-		server,
-		user: me.user,
-		spaces: me.workspaces,
-		active: activeOf(session?.active, me.workspaces),
-		lost: false,
-	};
+	tokens.set(server, next);
+	SecureStore.setItem(tokenKey(server), next);
+	const gone = update(server, me);
 	save();
-	for (const s of gone) await dropReplica(s.id);
-	resume();
+	for (const w of gone) await dropReplica(w.id);
+	resume(server);
+}
+
+/** Every account's workspaces and name from its server. */
+export async function refresh() {
+	await Promise.all((session?.accounts ?? []).map((a) => refreshServer(a.server)));
 }
 
 /**
- * The account's workspaces and name from the server; marks the session lost when it refuses the
- * token. An answer for a token or account that changed meanwhile is dropped.
+ * The account's workspaces and name from `server`; marks the account lost when the server refuses
+ * the token. An answer for a token or account that changed meanwhile is dropped.
  */
-export async function refresh() {
-	if (!session || !token) return;
-	const asked = { token, server: session.server, user: session.user.id, lost: !!session.lost };
+async function refreshServer(server: string) {
+	const token = tokens.get(server);
+	const account = accountOf(server);
+	if (!token || !account) return;
+	const asked = { token, user: account.user.id, lost: !!account.lost };
 	const current = () =>
-		!!session &&
-		token === asked.token &&
-		session.server === asked.server &&
-		session.user.id === asked.user;
+		tokens.get(server) === asked.token && accountOf(server)?.user.id === asked.user;
 	let me: AccountInfo;
 	try {
-		me = await call<AccountInfo>(asked.server, "/api/account", { token: asked.token });
+		me = await call<AccountInfo>(server, "/api/account", { token });
 	} catch (e) {
 		if (statusOf(e) !== 401 || !current()) return; // offline: keep what is known
 		// the copies stay and keep what changes here; they connect again after signing in
-		session = { ...session!, lost: true };
+		session = {
+			...session!,
+			accounts: session!.accounts.map((a) => (a.server === server ? { ...a, lost: true } : a)),
+		};
 		save();
-		for (const o of open.values()) o.host.suspend();
+		for (const o of open.values()) if (o.server === server) o.host.suspend();
 		return;
 	}
 	if (!current()) return;
-	const gone = session!.spaces.filter((s) => !me.workspaces.some((w) => w.id === s.id));
-	session = {
-		...session!,
-		user: me.user,
-		spaces: me.workspaces,
-		lost: false,
-		active: activeOf(session!.active, me.workspaces),
-	};
+	const gone = update(server, me);
 	save();
-	for (const s of gone) await dropReplica(s.id);
-	if (asked.lost) resume();
+	for (const w of gone) await dropReplica(w.id);
+	if (asked.lost) resume(server);
 }
 
-/** A new workspace on the server; this phone sets it up once it is in sync. */
-export async function createWorkspace(name: string) {
-	if (!session || !token) return;
-	const w = await call<WorkspaceInfo>(session.server, "/api/workspaces", { body: { name }, token });
-	await refresh();
-	setActive(w.id);
+/** A new workspace on `server`; the pages show it, and this phone sets it up once it is in sync. */
+export async function createWorkspace(server: string, name: string) {
+	const token = tokens.get(server);
+	if (!token) return;
+	const w = await call<WorkspaceInfo>(server, "/api/workspaces", { body: { name }, token });
+	await refreshServer(server);
+	setShown(w.id);
 }
 
-export function setActive(space: string) {
-	if (!session || session.active === space) return;
-	session = { ...session, active: space };
+/** The workspace the pages show; null for all. */
+export function setShown(space: string | null) {
+	if (!session || session.shown === space) return;
+	session = { ...session, shown: shownOf(space, session.spaces) };
 	save();
 }
 
-export async function signOut() {
-	if (session && token)
-		await call<Ok>(session.server, "/api/account/signout", { body: {}, token }).catch(() => {
-			// signing out offline still forgets everything here
+/** Signed out of `server`: its workspaces leave this phone. Out of the last one, the sign-in shows. */
+export async function signOut(server: string) {
+	const token = tokens.get(server);
+	if (token)
+		await call<Ok>(server, "/api/account/signout", { body: {}, token }).catch(() => {
+			// signing out offline still forgets everything of that server here
 		});
-	await forgetAll();
+	await forgetServer(server);
 	save();
 }
 
-async function forgetAll() {
-	const spaces = new Set([...(session?.spaces.map((s) => s.id) ?? []), ...open.keys()]);
-	session = null;
-	token = null;
-	await SecureStore.deleteItemAsync(TOKEN);
+/** The account of `server` and the copies of its workspaces; the caller saves. */
+async function forgetServer(server: string) {
+	const spaces = new Set([
+		...(session?.spaces.filter((w) => w.server === server).map((w) => w.id) ?? []),
+		...[...open].filter(([, o]) => o.server === server).map(([id]) => id),
+	]);
+	if (session) session = without(session, (a) => a.server === server);
+	tokens.delete(server);
+	await SecureStore.deleteItemAsync(tokenKey(server));
 	await Promise.all([...spaces].map(dropReplica));
 }

@@ -1,7 +1,9 @@
-// Above the lists: the session no longer counts (sign in again), or the first sync still runs.
+// Above the lists: a server no longer takes this phone's sign-in (sign in again), or the first sync
+// still runs.
 
 import { router } from "expo-router";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { hostOf } from "../lib/api";
 import type { Space } from "../lib/hooks";
 import { t } from "../lib/i18n";
 import { useSession } from "../lib/session";
@@ -15,17 +17,22 @@ export function SpaceGone() {
 
 export function SessionNotice({ spaces }: { spaces: Space[] }) {
 	const session = useSession();
-	if (session?.lost)
-		return (
-			<Pressable onPress={() => router.push("/reauth")} style={styles.card}>
+	const lost = session?.accounts.filter((a) => a.lost) ?? [];
+	if (lost.length)
+		return lost.map((a) => (
+			<Pressable
+				key={a.server}
+				onPress={() => router.push({ pathname: "/reauth", params: { server: a.server } })}
+				style={styles.card}
+			>
 				<Icon color={C.red} name="exclamationmark.triangle.fill" size={20} />
 				<View style={styles.texts}>
 					<Text style={styles.title}>{t("account.lostTitle")}</Text>
-					<Text style={styles.text}>{t("account.lost", { server: session.server })}</Text>
+					<Text style={styles.text}>{t("account.lost", { server: hostOf(a.server) })}</Text>
 				</View>
 				<Icon color={C.tertiary} name="chevron.right" size={13} />
 			</Pressable>
-		);
+		));
 	const loading = spaces.some((s) => !s.ix && !s.repo.status.synced);
 	if (!loading) return null;
 	return (

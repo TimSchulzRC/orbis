@@ -9,6 +9,7 @@ import * as Haptics from "expo-haptics";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { Alert, ScrollView, StyleSheet, Text, TextInput, useColorScheme, View } from "react-native";
+import { hostOf } from "../lib/api";
 import { useRepo, useSpaces } from "../lib/hooks";
 import { t, titleOf } from "../lib/i18n";
 import { useSession, writeFailures } from "../lib/session";
@@ -107,7 +108,9 @@ function useDone() {
 function NewNote() {
 	const session = useSession();
 	const spaces = useSpaces();
-	const [spaceId, setSpaceId] = useState(session?.active ?? spaces[0]?.info.id ?? "");
+	// the workspace the switcher shows, or with all of them the first
+	const [spaceId, setSpaceId] = useState(session?.shown ?? spaces[0]?.info.id ?? "");
+	const servers = session?.accounts.length ?? 0;
 	const space = spaces.find((s) => s.info.id === spaceId) ?? spaces[0];
 	const [title, setTitle] = useState("");
 	const [body, setBody] = useState("");
@@ -180,7 +183,10 @@ function NewNote() {
 								setSpaceId(v);
 								setType(INBOX);
 							}}
-							options={spaces.map((s) => ({ id: s.info.id, name: s.info.name }))}
+							options={spaces.map((s) => ({
+								id: s.info.id,
+								name: servers > 1 ? `${s.info.name} · ${hostOf(s.info.server)}` : s.info.name,
+							}))}
 							value={space?.info.id ?? ""}
 						/>
 					)}

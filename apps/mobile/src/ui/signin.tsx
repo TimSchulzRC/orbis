@@ -1,5 +1,6 @@
 // Signing in to an Obtion server: its address first, then email and password or a code by email,
-// whichever the server offers. Passkeys and OAuth belong to the server's own web page.
+// whichever the server offers. Passkeys and OAuth belong to the server's own web page. The same
+// form connects a further server and signs in again where a server no longer takes the token.
 
 import type { LoginMethods, ServerInfo } from "@obtion/core/api";
 import * as Haptics from "expo-haptics";
@@ -17,7 +18,7 @@ import {
 	useColorScheme,
 	View,
 } from "react-native";
-import { serverUrl, statusOf } from "../lib/api";
+import { hostOf, serverUrl, statusOf } from "../lib/api";
 import { t } from "../lib/i18n";
 import { sendCode, serverInfo, signIn, signInWithCode } from "../lib/session";
 import { C, GUTTER, RADIUS } from "./theme";
@@ -48,13 +49,20 @@ function errorText(e: unknown, what: "signIn" | "code" | "server"): string {
 export function SignInForm({
 	fixedServer,
 	email: knownEmail,
+	another,
+	onDone,
 }: {
 	fixedServer?: string;
 	email?: string;
+	/** A further server: its address starts empty. */
+	another?: boolean;
+	/** Signed in. */
+	onDone?: () => void;
 }) {
 	const dark = useColorScheme() === "dark";
 	const [address, setAddress] = useState(
-		fixedServer ?? launchArg("obtionServer") ?? Storage.getItemSync(LAST_SERVER) ?? "",
+		fixedServer ??
+			(another ? "" : (launchArg("obtionServer") ?? Storage.getItemSync(LAST_SERVER) ?? "")),
 	);
 	const [info, setInfo] = useState<{ server: string; info: ServerInfo } | null>(null);
 	const [email, setEmail] = useState(knownEmail ?? launchArg("obtionEmail") ?? "");
@@ -78,6 +86,17 @@ export function SignInForm({
 		}
 	};
 
+	const withPassword = (server: string) =>
+		run(async () => {
+			await signIn(server, email, password);
+			onDone?.();
+		}, "signIn");
+	const withCode = (server: string) =>
+		run(async () => {
+			await signInWithCode(server, email, code);
+			onDone?.();
+		}, "code");
+
 	const connect = () =>
 		run(async () => {
 			const server = serverUrl(address);
@@ -91,6 +110,7 @@ export function SignInForm({
 	// signing in again on the known server: straight to its sign-in
 	// biome-ignore lint/correctness/useExhaustiveDependencies: once, when the form opens
 	useEffect(() => {
+		if (another) return;
 		const auto = { server: launchArg("obtionServer"), password: launchArg("obtionPassword") };
 		if (!fixedServer && auto.server && auto.password && email)
 			void run(async () => {
@@ -102,7 +122,7 @@ export function SignInForm({
 	}, []);
 
 	const login: LoginMethods | undefined = info?.info.login;
-	const host = info?.server.replace(/^https?:\/\//, "");
+	const host = info && hostOf(info.server);
 
 	return (
 		<ScrollView
@@ -117,7 +137,9 @@ export function SignInForm({
 			/>
 			<Text style={styles.title}>Obtion</Text>
 			<Text style={styles.subtitle}>
-				{info ? t("mobile.signInTo", { server: host ?? "" }) : t("mobile.connectIntro")}
+				{info
+					? t("mobile.signInTo", { server: host ?? "" })
+					: t(another ? "mobile.connectAnother" : "mobile.connectIntro")}
 			</Text>
 
 			{!info && (
@@ -172,7 +194,7 @@ export function SignInForm({
 						<TextInput
 							autoComplete="current-password"
 							onChangeText={setPassword}
-							onSubmitEditing={() => run(() => signIn(info.server, email, password), "signIn")}
+							onSubmitEditing={() => withPassword(info.server)}
 							placeholder={t("account.password")}
 							placeholderTextColor={C.placeholder}
 							returnKeyType="go"
@@ -187,7 +209,7 @@ export function SignInForm({
 						busy={busy}
 						disabled={!email.trim() || !password}
 						label={t("account.signIn")}
-						onPress={() => run(() => signIn(info.server, email, password), "signIn")}
+						onPress={() => withPassword(info.server)}
 					/>
 					{login.emailCode && <Link label={t("account.useCode")} onPress={() => setMode("code")} />}
 				</>
@@ -234,7 +256,7 @@ export function SignInForm({
 							busy={busy}
 							disabled={!code.trim()}
 							label={t("account.signIn")}
-							onPress={() => run(() => signInWithCode(info.server, email, code), "code")}
+							onPress={() => withCode(info.server)}
 						/>
 					) : (
 						<Button

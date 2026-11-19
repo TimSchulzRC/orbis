@@ -1,15 +1,15 @@
-// The native tab bar (Liquid Glass on iOS 26): Home, the inbox with its count, Browse and Search,
-// which iOS shows as its own round button and turns into the search field. It stays full size while
-// scrolling, so the tabs are always one tap away.
+// The native tab bar (Liquid Glass on iOS 26): Home, the inbox with its count (of the workspaces the
+// switcher shows), Browse and Search, which iOS shows as its own round button and turns into the
+// search field. It stays full size while scrolling, so the tabs are always one tap away.
 
 import { inbox } from "@obtion/core/placement";
 import { NativeTabs } from "expo-router/native-tabs";
-import { useSpaces } from "../../lib/hooks";
+import { useShownSpaces } from "../../lib/hooks";
 import { t } from "../../lib/i18n";
 import { C } from "../../ui/theme";
 
 export default function TabsLayout() {
-	const spaces = useSpaces();
+	const spaces = useShownSpaces();
 	const waiting = spaces.reduce((n, s) => n + (s.ix ? inbox(s.ix).length : 0), 0);
 	return (
 		<NativeTabs minimizeBehavior="never" tintColor={C.accent}>

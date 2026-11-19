@@ -58,3 +58,6 @@ export async function call<R>(
 
 /** Offline or no answer: no status. */
 export const statusOf = (e: unknown) => (e instanceof ApiError ? e.status : undefined);
+
+/** "https://notes.example.org" → "notes.example.org", how the app names a server. */
+export const hostOf = (server: string) => server.replace(/^https?:\/\//, "");

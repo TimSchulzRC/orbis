@@ -1,11 +1,10 @@
 // Screens re-render when a workspace's data change: each replica counts its changes (version).
 
-import type { WorkspaceInfo } from "@obtion/core/api";
 import type { Index } from "@obtion/core/graph";
 import { SETTINGS_ID } from "@obtion/core/model";
 import type { Repo } from "@obtion/sync";
 import { useCallback, useSyncExternalStore } from "react";
-import { replica, useSession } from "./session";
+import { replica, useSession, type Workspace } from "./session";
 
 const none = () => () => undefined;
 const zero = () => 0;
@@ -33,13 +32,13 @@ function idOf(repo: Repo): number {
 }
 
 export interface Space {
-	info: WorkspaceInfo;
+	info: Workspace;
 	repo: Repo;
 	/** undefined until the workspace's data are here (set up). */
 	ix: Index | undefined;
 }
 
-/** Every workspace of the account with its replica, for pages across workspaces. */
+/** Every workspace of every account with its replica. */
 export function useSpaces(): Space[] {
 	const session = useSession();
 	const infos = session?.spaces ?? [];
@@ -60,4 +59,11 @@ export function useSpaces(): Space[] {
 		const repo = repos[i]!;
 		return { info, repo, ix: repo.get(SETTINGS_ID) ? repo.index() : undefined };
 	});
+}
+
+/** The workspaces the pages show: the one chosen in the switcher, or all of them. */
+export function useShownSpaces(): Space[] {
+	const session = useSession();
+	const spaces = useSpaces();
+	return session?.shown ? spaces.filter((s) => s.info.id === session.shown) : spaces;
 }

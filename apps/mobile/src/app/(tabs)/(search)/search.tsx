@@ -1,4 +1,4 @@
-// Full-text search over every workspace on this phone (offline too). Before typing it lists what
+// Full-text search over the workspaces the switcher shows, on this phone (offline too). Before typing it lists what
 // was edited last.
 
 import { fmtRelative } from "@obtion/core/i18n";
@@ -6,17 +6,18 @@ import { snippet } from "@obtion/core/search";
 import { recentlyChanged } from "@obtion/core/today";
 import { Stack } from "expo-router";
 import { useState } from "react";
-import { useSpaces } from "../../../lib/hooks";
+import { useShownSpaces } from "../../../lib/hooks";
 import { lang, t } from "../../../lib/i18n";
 import { ItemRow, placeOf } from "../../../ui/item";
 import { Empty, Screen, Section } from "../../../ui/list";
 import { lookOf } from "../../../ui/look";
+import { SpaceSwitcher } from "../../../ui/spaces";
 
 const LIMIT = 40;
 const RECENT = 15;
 
 export default function Search() {
-	const spaces = useSpaces();
+	const spaces = useShownSpaces();
 	const [q, setQ] = useState("");
 	const query = q.trim();
 	const several = spaces.length > 1;
@@ -33,6 +34,7 @@ export default function Search() {
 	return (
 		<>
 			<Stack.Screen options={{ title: t("nav.search") }} />
+			<SpaceSwitcher />
 			<Stack.SearchBar
 				autoCapitalize="none"
 				hideWhenScrolling={false}

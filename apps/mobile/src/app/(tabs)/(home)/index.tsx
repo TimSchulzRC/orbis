@@ -1,4 +1,5 @@
-// Home, the start page across every workspace: what is due, what runs, what changed last.
+// Home, the start page across the workspaces the switcher shows: what is due, what runs, what
+// changed last.
 
 import { fmtDate, fmtPercent, fmtRelative } from "@obtion/core/i18n";
 import { todayISO } from "@obtion/core/model";
@@ -7,12 +8,13 @@ import { cmpKey } from "@obtion/core/sortkey";
 import { dueBy, recentlyChanged, running } from "@obtion/core/today";
 import { router, Stack } from "expo-router";
 import { useState } from "react";
-import { Alert, StyleSheet, Text } from "react-native";
-import { type Space, useSpaces } from "../../../lib/hooks";
+import { StyleSheet, Text } from "react-native";
+import { type Space, useShownSpaces } from "../../../lib/hooks";
 import { lang, t } from "../../../lib/i18n";
-import { createWorkspace, refresh, useSession } from "../../../lib/session";
+import { refresh, useSession } from "../../../lib/session";
 import { DueText, ItemRow, placeOf, Ring } from "../../../ui/item";
 import { Icon, Row, Screen, Section } from "../../../ui/list";
+import { SpaceSwitcher } from "../../../ui/spaces";
 import { SessionNotice } from "../../../ui/status";
 import { C, GUTTER, palHex } from "../../../ui/theme";
 
@@ -30,7 +32,7 @@ type Of<T> = { space: Space; value: T };
 
 export default function Home() {
 	const session = useSession();
-	const spaces = useSpaces();
+	const spaces = useShownSpaces();
 	const [refreshing, setRefreshing] = useState(false);
 	const today = todayISO();
 	const ready = spaces.filter((s): s is Space & { ix: NonNullable<Space["ix"]> } => !!s.ix);
@@ -46,7 +48,12 @@ export default function Home() {
 	const where = (s: Space, place: string) =>
 		[place, several ? s.info.name : ""].filter(Boolean).join(" · ");
 
-	const name = session?.user.name.trim().split(/\s+/)[0];
+	// with several accounts: the one of the workspace shown, or the first connected
+	const user = (
+		session?.accounts.find((a) => spaces.length === 1 && a.server === spaces[0]!.info.server) ??
+		session?.accounts[0]
+	)?.user;
+	const name = user?.name.trim().split(/\s+/)[0];
 	const part = dayPart(new Date().getHours());
 	const greeting = (
 		name ? t(`today.greet.${part}`, { name }) : t(`today.greet.${part}Plain`)
@@ -64,6 +71,7 @@ export default function Home() {
 	return (
 		<>
 			<Stack.Screen options={{ title: greeting }} />
+			<SpaceSwitcher />
 			<Stack.Toolbar placement="right">
 				<Stack.Toolbar.Button icon="square.and.pencil" onPress={() => router.push("/new")}>
 					{t("quick.title")}
@@ -92,21 +100,11 @@ export default function Home() {
 					)}
 				</Text>
 				<SessionNotice spaces={spaces} />
-				{session && !session.spaces.length && !session.lost && (
+				{session && !session.spaces.length && session.accounts.some((a) => !a.lost) && (
 					<Section>
 						<Row
 							icon={<Icon color={C.accent} name="plus.circle.fill" />}
-							onPress={() =>
-								Alert.prompt(
-									t("space.new"),
-									t("account.noSpaceHint"),
-									(name) => {
-										if (name?.trim()) void createWorkspace(name.trim());
-									},
-									"plain-text",
-									t("account.noSpace"),
-								)
-							}
+							onPress={() => router.push("/new-space")}
 							subtitle={t("account.noSpaceHint")}
 							title={<Text style={{ color: C.accent }}>{t("space.create")}</Text>}
 						/>
