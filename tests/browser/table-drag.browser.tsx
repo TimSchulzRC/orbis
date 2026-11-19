@@ -1,6 +1,7 @@
 // Rows of a table are dragged by their title, with real drags: onto a row's middle below that
 // entry, between two rows to that place (the order is the view's, kept while it has no sort), and
-// into another group to its value.
+// into another group to its value. As in the sidebar: a frame around the row it goes into, and Alt
+// adds a place instead of moving.
 
 import type { ViewTab } from "@obtion/core/model";
 import { tabDef } from "@obtion/core/query";
@@ -127,4 +128,58 @@ test("a view with a sort keeps its order: rows still go into and out of each oth
 	await drag("Gamma", "Alpha", 0.5);
 	await expect.poll(() => parents(c)).toEqual([a]);
 	expect(saved).toEqual([]);
+});
+
+/** Fires a drag event of the row drag under way on `el`, at `at` of `row`'s height. */
+function fire(type: string, el: Element, row: Element, at: number, init: DragEventInit = {}) {
+	const box = row.getBoundingClientRect();
+	el.dispatchEvent(
+		new DragEvent(type, {
+			bubbles: true,
+			cancelable: true,
+			clientX: box.left + 150,
+			clientY: box.top + box.height * at,
+			dataTransfer: new DataTransfer(),
+			...init,
+		}),
+	);
+}
+
+test("into a row: a frame around it that stays while the pointer crosses its cells", async () => {
+	const { a, c, parents } = await setup();
+	const rowOf = (id: string) => document.querySelector<HTMLElement>(`tr[data-id="${id}"]`)!;
+	const source = rowOf(c).querySelector("[draggable=true]")!;
+	const target = rowOf(a);
+	const [first, second] = target.querySelectorAll("td");
+	const last = target.querySelector("td:last-child")!;
+	fire("dragstart", source, rowOf(c), 0.5);
+	fire("dragover", first!, target, 0.5);
+	// the first and the last cell close the frame at the sides, as the ring around a sidebar row
+	await expect.poll(() => getComputedStyle(first!).boxShadow).toMatch(/2px 2px 0px 0px inset/);
+	expect(getComputedStyle(last).boxShadow).toMatch(/-2px 2px 0px 0px inset/);
+	// from one cell to the next: no gap in which the mark is gone
+	fire("dragenter", second!, target, 0.5, { relatedTarget: first });
+	fire("dragleave", first!, target, 0.5, { relatedTarget: second });
+	await new Promise((r) => setTimeout(r, 100));
+	expect(getComputedStyle(first!).boxShadow).not.toBe("none");
+	// out of the row: gone
+	fire("dragleave", second!, target, 0.5, { relatedTarget: document.body });
+	await expect.poll(() => getComputedStyle(first!).boxShadow).toBe("none");
+	fire("dragend", source, rowOf(c), 0.5);
+	expect(parents(c)).toEqual([]);
+});
+
+test("with Alt a row dropped into another adds that place and keeps the one it had", async () => {
+	const { repo, a, b, c, parents } = await setup();
+	repo.addParent(c, b);
+	const rowOf = (id: string) => document.querySelector<HTMLElement>(`tr[data-id="${id}"]`);
+	// Gamma shows once Beta is open
+	await expect.poll(() => rowOf(b)?.querySelector("button[aria-expanded]")).toBeTruthy();
+	rowOf(b)!.querySelector<HTMLElement>("button[aria-expanded]")!.click();
+	await expect.poll(() => rowOf(c)).toBeTruthy();
+	fire("dragstart", rowOf(c)!.querySelector("[draggable=true]")!, rowOf(c)!, 0.5);
+	const cell = rowOf(a)!.querySelector("td")!;
+	fire("dragover", cell, rowOf(a)!, 0.5, { altKey: true });
+	fire("drop", cell, rowOf(a)!, 0.5, { altKey: true });
+	await expect.poll(() => parents(c).sort()).toEqual([a, b].sort());
 });
