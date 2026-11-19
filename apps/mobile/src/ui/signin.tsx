@@ -51,7 +51,6 @@ export function SignInForm({
 	email: knownEmail,
 	another,
 	onDone,
-	onCancel,
 }: {
 	fixedServer?: string;
 	email?: string;
@@ -59,8 +58,6 @@ export function SignInForm({
 	another?: boolean;
 	/** Signed in. */
 	onDone?: () => void;
-	/** Shows "Cancel" below the form. */
-	onCancel?: () => void;
 }) {
 	const dark = useColorScheme() === "dark";
 	const [address, setAddress] = useState(
@@ -304,7 +301,6 @@ export function SignInForm({
 					}}
 				/>
 			)}
-			{onCancel && <Link label={t("cancel")} onPress={onCancel} />}
 			{info && (
 				<Text style={styles.version}>{t("settings.version", { version: info.info.version })}</Text>
 			)}
@@ -340,7 +336,7 @@ function Button({
 
 function Link({ label, onPress }: { label: string; onPress: () => void }) {
 	return (
-		<Pressable hitSlop={8} onPress={onPress} style={styles.link}>
+		<Pressable accessibilityRole="button" hitSlop={8} onPress={onPress} style={styles.link}>
 			<Text style={styles.linkText}>{label}</Text>
 		</Pressable>
 	);

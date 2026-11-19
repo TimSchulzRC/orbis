@@ -53,7 +53,16 @@ export default function RootLayout() {
 						options={{ ...sheet, sheetAllowedDetents: [1], title: t("space.new") }}
 					/>
 					<Stack.Screen name="reauth" options={{ presentation: "modal" }} />
-					<Stack.Screen name="connect" options={{ presentation: "modal" }} />
+					<Stack.Screen
+						name="connect"
+						options={{
+							presentation: "modal",
+							headerShown: true,
+							headerTransparent: true,
+							headerShadowVisible: false,
+							title: "",
+						}}
+					/>
 				</Stack.Protected>
 				<Stack.Protected guard={!session}>
 					<Stack.Screen name="sign-in" />
