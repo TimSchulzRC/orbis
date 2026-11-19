@@ -6,6 +6,15 @@ import { hostOf } from "../lib/api";
 import { t } from "../lib/i18n";
 import { setShown, useSession, type Workspace } from "../lib/session";
 
+/** Longer than this, iOS folds the whole bar into one "•••" button. */
+const LABEL = 16;
+
+/** The name for the button, cut to fit next to the buttons on the right. */
+function short(name: string): string {
+	const chars = Array.from(name);
+	return chars.length > LABEL ? `${chars.slice(0, LABEL - 1).join("").trimEnd()}…` : name;
+}
+
 export function SpaceSwitcher() {
 	const session = useSession();
 	if (!session?.spaces.length) return null;
@@ -34,7 +43,7 @@ export function SpaceSwitcher() {
 		<Stack.Toolbar placement="left">
 			<Stack.Toolbar.Menu title={t("settings.workspaces")}>
 				<Stack.Toolbar.Label>
-					{spaces.find((w) => w.id === chosen)?.name ?? t("space.all")}
+					{short(spaces.find((w) => w.id === chosen)?.name ?? t("space.all"))}
 				</Stack.Toolbar.Label>
 				{!one && (
 					<Stack.Toolbar.MenuAction

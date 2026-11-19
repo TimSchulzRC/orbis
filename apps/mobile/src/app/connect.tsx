@@ -5,5 +5,5 @@ import { router } from "expo-router";
 import { SignInForm } from "../ui/signin";
 
 export default function Connect() {
-	return <SignInForm another onDone={() => router.back()} />;
+	return <SignInForm another onCancel={() => router.back()} onDone={() => router.back()} />;
 }

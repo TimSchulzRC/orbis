@@ -20,9 +20,8 @@ export default function TabsLayout() {
 			<NativeTabs.Trigger name="(inbox)">
 				<NativeTabs.Trigger.Icon sf={{ default: "tray", selected: "tray.fill" }} />
 				<NativeTabs.Trigger.Label>{t("nav.inbox")}</NativeTabs.Trigger.Label>
-				<NativeTabs.Trigger.Badge hidden={waiting === 0}>
-					{String(waiting)}
-				</NativeTabs.Trigger.Badge>
+				{/* only while something waits: with a value, expo-router ignores `hidden` and shows "0" */}
+				{waiting > 0 && <NativeTabs.Trigger.Badge>{String(waiting)}</NativeTabs.Trigger.Badge>}
 			</NativeTabs.Trigger>
 			<NativeTabs.Trigger name="(browse)">
 				<NativeTabs.Trigger.Icon

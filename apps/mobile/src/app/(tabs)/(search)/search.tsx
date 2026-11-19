@@ -35,8 +35,10 @@ export default function Search() {
 		<>
 			<Stack.Screen options={{ title: t("nav.search") }} />
 			<SpaceSwitcher />
+			{/* the bar stays while searching, with the switcher at its left */}
 			<Stack.SearchBar
 				autoCapitalize="none"
+				hideNavigationBar={false}
 				hideWhenScrolling={false}
 				onCancelButtonPress={() => setQ("")}
 				onChangeText={(e) => setQ(e.nativeEvent.text)}
