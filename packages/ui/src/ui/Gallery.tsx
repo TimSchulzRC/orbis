@@ -1,8 +1,8 @@
-import { fmtDuration } from "@obtion/core/i18n";
-import type { Item } from "@obtion/core/model";
-import type { EvalCtx } from "@obtion/core/query";
-import { plainText } from "@obtion/core/search";
-import { statusOf } from "@obtion/core/traits";
+import { fmtDuration } from "@orbis/core/i18n";
+import type { Item } from "@orbis/core/model";
+import type { EvalCtx } from "@orbis/core/query";
+import { plainText } from "@orbis/core/search";
+import { statusOf } from "@orbis/core/traits";
 import { files, useBlobUrl } from "../files";
 import { itemHref } from "../hooks";
 import { titleOf, useT } from "../i18n";

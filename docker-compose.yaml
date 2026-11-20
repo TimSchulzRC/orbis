@@ -1,38 +1,38 @@
-# Obtion on a NAS or any Docker host: put this file into a folder, `docker compose up -d`, open
+# Orbis on a NAS or any Docker host: put this file into a folder, `docker compose up -d`, open
 # http://<any address of the host>:8480. Optional settings go into .env next to it (see
 # .env.example). Update: `docker compose pull && docker compose up -d`.
 services:
-  obtion:
-    # the channel or a fixed version with OBTION_VERSION: latest (= stable, the default), nightly,
+  orbis:
+    # the channel or a fixed version with ORBIS_VERSION: latest (= stable, the default), nightly,
     # dev, or e.g. 0.0.2 (see .github/workflows/release.yml)
-    image: ghcr.io/timschulzrc/obtion:${OBTION_VERSION:-latest}
+    image: ghcr.io/timschulzrc/orbis:${ORBIS_VERSION:-latest}
     restart: unless-stopped
     ports:
       # on every address of the host (LAN, tailnet, …)
-      - "${OBTION_BIND:-0.0.0.0}:${OBTION_PORT:-8480}:8480"
+      - "${ORBIS_BIND:-0.0.0.0}:${ORBIS_PORT:-8480}:8480"
     volumes:
       # an ordinary folder on the host: database, files, Markdown mirror. Created
-      # if missing; the server runs as its owner (or OBTION_UID/OBTION_GID), never as root
-      - ${OBTION_DATA_DIR:-./data}:/data
+      # if missing; the server runs as its owner (or ORBIS_UID/ORBIS_GID), never as root
+      - ${ORBIS_DATA_DIR:-./data}:/data
     environment:
-      OBTION_UID: ${OBTION_UID:-}
-      OBTION_GID: ${OBTION_GID:-}
-      OBTION_PUBLIC_URL: ${OBTION_PUBLIC_URL:-}
-      OBTION_ALLOWED_HOSTS: ${OBTION_ALLOWED_HOSTS:-}
-      OBTION_WEB_APP: ${OBTION_WEB_APP:-on}
-      OBTION_APP_ORIGINS: ${OBTION_APP_ORIGINS:-}
+      ORBIS_UID: ${ORBIS_UID:-}
+      ORBIS_GID: ${ORBIS_GID:-}
+      ORBIS_PUBLIC_URL: ${ORBIS_PUBLIC_URL:-}
+      ORBIS_ALLOWED_HOSTS: ${ORBIS_ALLOWED_HOSTS:-}
+      ORBIS_WEB_APP: ${ORBIS_WEB_APP:-on}
+      ORBIS_APP_ORIGINS: ${ORBIS_APP_ORIGINS:-}
       # who may create an account: invite (with an invite link), open (anyone), off
-      OBTION_SIGNUP: ${OBTION_SIGNUP:-invite}
+      ORBIS_SIGNUP: ${ORBIS_SIGNUP:-invite}
       # how people sign in: password, code (by email), passkey; OAuth below (see .env.example)
-      OBTION_LOGIN: ${OBTION_LOGIN:-password,passkey}
+      ORBIS_LOGIN: ${ORBIS_LOGIN:-password,passkey}
       # sending mail (for codes)
-      OBTION_SMTP_URL: ${OBTION_SMTP_URL:-}
-      OBTION_MAIL_FROM: ${OBTION_MAIL_FROM:-}
-      OBTION_OIDC_ISSUER: ${OBTION_OIDC_ISSUER:-}
-      OBTION_OIDC_CLIENT_ID: ${OBTION_OIDC_CLIENT_ID:-}
-      OBTION_OIDC_CLIENT_SECRET: ${OBTION_OIDC_CLIENT_SECRET:-}
-      OBTION_OIDC_NAME: ${OBTION_OIDC_NAME:-}
-      OBTION_GITHUB_CLIENT_ID: ${OBTION_GITHUB_CLIENT_ID:-}
-      OBTION_GITHUB_CLIENT_SECRET: ${OBTION_GITHUB_CLIENT_SECRET:-}
-      OBTION_GOOGLE_CLIENT_ID: ${OBTION_GOOGLE_CLIENT_ID:-}
-      OBTION_GOOGLE_CLIENT_SECRET: ${OBTION_GOOGLE_CLIENT_SECRET:-}
+      ORBIS_SMTP_URL: ${ORBIS_SMTP_URL:-}
+      ORBIS_MAIL_FROM: ${ORBIS_MAIL_FROM:-}
+      ORBIS_OIDC_ISSUER: ${ORBIS_OIDC_ISSUER:-}
+      ORBIS_OIDC_CLIENT_ID: ${ORBIS_OIDC_CLIENT_ID:-}
+      ORBIS_OIDC_CLIENT_SECRET: ${ORBIS_OIDC_CLIENT_SECRET:-}
+      ORBIS_OIDC_NAME: ${ORBIS_OIDC_NAME:-}
+      ORBIS_GITHUB_CLIENT_ID: ${ORBIS_GITHUB_CLIENT_ID:-}
+      ORBIS_GITHUB_CLIENT_SECRET: ${ORBIS_GITHUB_CLIENT_SECRET:-}
+      ORBIS_GOOGLE_CLIENT_ID: ${ORBIS_GOOGLE_CLIENT_ID:-}
+      ORBIS_GOOGLE_CLIENT_SECRET: ${ORBIS_GOOGLE_CLIENT_SECRET:-}

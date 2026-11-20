@@ -15,8 +15,8 @@ import {
 	ViewPlugin,
 	WidgetType,
 } from "@codemirror/view";
-import { sameValue } from "@obtion/core/equal";
-import { MAIN_TAB, shortId, singleTab, type ViewTab } from "@obtion/core/model";
+import { sameValue } from "@orbis/core/equal";
+import { MAIN_TAB, shortId, singleTab, type ViewTab } from "@orbis/core/model";
 import {
 	andWhere,
 	blockSource,
@@ -25,9 +25,9 @@ import {
 	queryFence,
 	readBlock,
 	runQuery,
-} from "@obtion/core/query";
-import { cmpKey, keyBetween } from "@obtion/core/sortkey";
-import { filesAmong } from "@obtion/core/zip";
+} from "@orbis/core/query";
+import { cmpKey, keyBetween } from "@orbis/core/sortkey";
+import { filesAmong } from "@orbis/core/zip";
 import { ArrowUpDown, EyeOff, Funnel, Heading, MoreHorizontal, Rows3, Trash2 } from "lucide-react";
 import { StrictMode, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";

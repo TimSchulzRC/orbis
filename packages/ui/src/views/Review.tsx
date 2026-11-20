@@ -3,7 +3,7 @@
 // one down under "Sorted" in the list, with its undo. The entry's card keeps one height, so the
 // choices below it never move.
 
-import type { Item } from "@obtion/core/model";
+import type { Item } from "@orbis/core/model";
 import { ArrowLeft, Check, ChevronDown, Layers, X } from "lucide-react";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { replica, spaceById, useAccounts } from "../accounts";

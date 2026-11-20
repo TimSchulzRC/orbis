@@ -1,14 +1,14 @@
 import { expect, test } from "bun:test";
-import { isInInbox } from "@obtion/core/placement";
-import { runSetup, SYS } from "@obtion/core/setup";
-import { visibleProps } from "@obtion/core/traits";
+import { isInInbox } from "@orbis/core/placement";
+import { runSetup, SYS } from "@orbis/core/setup";
+import { visibleProps } from "@orbis/core/traits";
 import {
 	deleteType,
 	previewTagToType,
 	tagToType,
 	typeUsage,
 	wouldBeInInbox,
-} from "@obtion/core/typeops";
+} from "@orbis/core/typeops";
 import { MemRepo } from "../support/helpers";
 
 function books() {

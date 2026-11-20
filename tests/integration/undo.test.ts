@@ -1,9 +1,9 @@
 import { afterAll, beforeEach, expect, test } from "bun:test";
-import { initItem, setMeta, setTab, setTabs } from "@obtion/core/model";
-import { SYS, typeTabs } from "@obtion/core/setup";
-import type { Ops } from "@obtion/server/ops";
-import type { Store } from "@obtion/server/store";
-import { redoStep, UndoError, undoStep } from "@obtion/server/undo";
+import { initItem, setMeta, setTab, setTabs } from "@orbis/core/model";
+import { SYS, typeTabs } from "@orbis/core/setup";
+import type { Ops } from "@orbis/server/ops";
+import type { Store } from "@orbis/server/store";
+import { redoStep, UndoError, undoStep } from "@orbis/server/undo";
 import * as Y from "yjs";
 import { removeTempDirs } from "../support/helpers";
 import { ok, setupStore, stepOf } from "../support/store";
@@ -14,7 +14,7 @@ let s: Store;
 let ops: Ops;
 const AG = "agent:test";
 // set up in German: type names, status and date words below are German
-beforeEach(() => ({ s, ops } = setupStore("obtion-undo-")));
+beforeEach(() => ({ s, ops } = setupStore("orbis-undo-")));
 const byTitle = (t: string) =>
 	s.records.get(
 		s.index().resolveTitle(t) ?? [...s.records.values()].find((r) => r.title === t)?.id ?? "",

@@ -9,15 +9,15 @@ import {
 	removeExamples,
 	restoreExamples,
 	writeExamples,
-} from "@obtion/core/examples";
-import type { Lang } from "@obtion/core/i18n";
-import { touch } from "@obtion/core/model";
-import { inbox } from "@obtion/core/placement";
-import { findBlocks, readBlock, runQuery } from "@obtion/core/query";
-import { runSetup, SYS } from "@obtion/core/setup";
-import { Blobs, sha256 } from "@obtion/server/blobs";
-import { setUp } from "@obtion/server/setup";
-import { Store } from "@obtion/server/store";
+} from "@orbis/core/examples";
+import type { Lang } from "@orbis/core/i18n";
+import { touch } from "@orbis/core/model";
+import { inbox } from "@orbis/core/placement";
+import { findBlocks, readBlock, runQuery } from "@orbis/core/query";
+import { runSetup, SYS } from "@orbis/core/setup";
+import { Blobs, sha256 } from "@orbis/server/blobs";
+import { setUp } from "@orbis/server/setup";
+import { Store } from "@orbis/server/store";
 import { MemRepo, removeTempDirs, tempDir } from "../support/helpers";
 
 afterAll(removeTempDirs);
@@ -49,7 +49,7 @@ for (const lang of ["de", "en"] as Lang[])
 		// every [[link]] of the examples finds its target, also the embedded image and the PDF
 		for (const i of ex) expect(ix.missingLinks(i)).toEqual([]);
 		expect(ix.get("ex-welcome")!.title).toBe(
-			lang === "de" ? "So funktioniert Obtion" : "How Obtion works",
+			lang === "de" ? "So funktioniert Orbis" : "How Orbis works",
 		);
 		// a project in two places, progress across levels
 		expect(ix.parentsOf("ex-relaunch")).toEqual(["ex-work", "ex-nordlicht"]);
@@ -122,7 +122,7 @@ test("removeExamples ignores ids that are not examples", () => {
 });
 
 test("on the server: set up with the examples, the files' contents stored", async () => {
-	const dir = tempDir("obtion-ex-");
+	const dir = tempDir("orbis-ex-");
 	const store = new Store(dir);
 	const blobs = new Blobs(join(dir, "blobs"), store);
 	await setUp(store, blobs, "de", { examples: true });

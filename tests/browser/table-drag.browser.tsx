@@ -3,9 +3,9 @@
 // into another group to its value. As in the sidebar: a frame around the row it goes into, and Alt
 // adds a place instead of moving.
 
-import type { ViewTab } from "@obtion/core/model";
-import { tabDef } from "@obtion/core/query";
-import { SYS } from "@obtion/core/setup";
+import type { ViewTab } from "@orbis/core/model";
+import { tabDef } from "@orbis/core/query";
+import { SYS } from "@orbis/core/setup";
 import { useState } from "react";
 import { afterEach, expect, test } from "vitest";
 import { page, userEvent } from "vitest/browser";

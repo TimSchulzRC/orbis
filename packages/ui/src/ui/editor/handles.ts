@@ -2,7 +2,7 @@
 import { startCompletion } from "@codemirror/autocomplete";
 import { EditorSelection } from "@codemirror/state";
 import { type EditorView, ViewPlugin } from "@codemirror/view";
-import { DRAWING_INFO } from "@obtion/core/drawing";
+import { DRAWING_INFO } from "@orbis/core/drawing";
 import { ArrowDown, ArrowUp, Copy, GripVertical, Plus, Trash2 } from "lucide-react";
 import { tr } from "../../i18n";
 import { isCoarse as coarse, MOD } from "../../lib/platform";

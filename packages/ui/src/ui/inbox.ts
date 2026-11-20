@@ -1,9 +1,9 @@
 // Ids are unique within a workspace only, so an inbox entry is keyed "<workspace>/<id>".
 
-import type { Index } from "@obtion/core/graph";
-import { type Item, SETTINGS_ID } from "@obtion/core/model";
-import { laterItems } from "@obtion/core/placement";
-import { runQuery } from "@obtion/core/query";
+import type { Index } from "@orbis/core/graph";
+import { type Item, SETTINGS_ID } from "@orbis/core/model";
+import { laterItems } from "@orbis/core/placement";
+import { runQuery } from "@orbis/core/query";
 import { replica, shownSpaces, useAccounts } from "../accounts";
 import { isBlank } from "../actions";
 import { createStore } from "../lib/store";

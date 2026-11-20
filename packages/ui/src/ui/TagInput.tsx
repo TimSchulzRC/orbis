@@ -1,4 +1,4 @@
-import { normalizeTag } from "@obtion/core/model";
+import { normalizeTag } from "@orbis/core/model";
 import { useState } from "react";
 import { Input } from "../components/ui/input";
 import { useRepo } from "../hooks";

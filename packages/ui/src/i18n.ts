@@ -1,7 +1,7 @@
 // UI language per device; defaults to the device language.
 
-import { detectLang, LANGS, type Lang, makeT, type T, type Values } from "@obtion/core/i18n";
-import { displayTitle, type Item } from "@obtion/core/model";
+import { detectLang, LANGS, type Lang, makeT, type T, type Values } from "@orbis/core/i18n";
+import { displayTitle, type Item } from "@orbis/core/model";
 import { useSyncExternalStore } from "react";
 import { KEYS } from "./ui/storage";
 

@@ -1,12 +1,12 @@
 // A person's edits of one document fold into one activity entry until they pause: renaming a note
 // key by key is one entry, not one per letter. Entries stored before that fold when the server starts.
 import { afterAll, afterEach, beforeEach, expect, setSystemTime, test } from "bun:test";
-import { replaceBody, setMeta, touch } from "@obtion/core/model";
-import { agentOrigin, personOrigin } from "@obtion/core/origin";
-import { changeSize, FOLD_MAX_TEXT, FOLD_PAUSE_MS } from "@obtion/server/fold";
-import type { Ops } from "@obtion/server/ops";
-import { Store } from "@obtion/server/store";
-import { undoStep } from "@obtion/server/undo";
+import { replaceBody, setMeta, touch } from "@orbis/core/model";
+import { agentOrigin, personOrigin } from "@orbis/core/origin";
+import { changeSize, FOLD_MAX_TEXT, FOLD_PAUSE_MS } from "@orbis/server/fold";
+import type { Ops } from "@orbis/server/ops";
+import { Store } from "@orbis/server/store";
+import { undoStep } from "@orbis/server/undo";
 import { removeTempDirs } from "../support/helpers";
 import { setupStore, tool as storeTool } from "../support/store";
 
@@ -18,7 +18,7 @@ let ops: Ops;
 let dir: string;
 let now: number;
 beforeEach(() => {
-	({ s, ops, dir } = setupStore("obtion-fold-"));
+	({ s, ops, dir } = setupStore("orbis-fold-"));
 	now = Date.now();
 });
 

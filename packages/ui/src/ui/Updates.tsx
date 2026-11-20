@@ -3,11 +3,11 @@
 // page (the page moves aside, both stay usable); on narrower ones it opens over the page, on phones
 // from the bottom.
 
-import { dateOf } from "@obtion/core/date";
-import type { T } from "@obtion/core/i18n";
-import { fmtRelative, fmtTime } from "@obtion/core/i18n";
-import type { Item } from "@obtion/core/model";
-import { statusProp } from "@obtion/core/traits";
+import { dateOf } from "@orbis/core/date";
+import type { T } from "@orbis/core/i18n";
+import { fmtRelative, fmtTime } from "@orbis/core/i18n";
+import type { Item } from "@orbis/core/model";
+import { statusProp } from "@orbis/core/traits";
 import {
 	byAgent,
 	type FeedEntry,
@@ -16,7 +16,7 @@ import {
 	type ReadMark,
 	unread,
 	updateFeed,
-} from "@obtion/core/updates";
+} from "@orbis/core/updates";
 import { Bot, ChevronRight, History, MessageSquareText, Plus, Send, Trash2, X } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";

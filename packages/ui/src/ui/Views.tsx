@@ -1,10 +1,10 @@
 // View tabs, shared by a type's page and query blocks. A tab's filter is added to the query.
 
-import type { T } from "@obtion/core/i18n";
-import { titleKey, type ViewKind, type ViewTab } from "@obtion/core/model";
-import { type Group, groupId } from "@obtion/core/query";
-import { keyBetween } from "@obtion/core/sortkey";
-import { statusProp } from "@obtion/core/traits";
+import type { T } from "@orbis/core/i18n";
+import { titleKey, type ViewKind, type ViewTab } from "@orbis/core/model";
+import { type Group, groupId } from "@orbis/core/query";
+import { keyBetween } from "@orbis/core/sortkey";
+import { statusProp } from "@orbis/core/traits";
 import {
 	ArrowDown,
 	ArrowUp,
@@ -197,7 +197,7 @@ export function ViewTabs({
 										setOver(tab.id);
 									}}
 									onDragStart={(e) => {
-										e.dataTransfer.setData("obtion/tab", tab.id);
+										e.dataTransfer.setData("orbis/tab", tab.id);
 										setDrag(tab.id);
 									}}
 									onDrop={(e) => {

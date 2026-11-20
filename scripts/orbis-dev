@@ -7,16 +7,16 @@ set -euo pipefail
 }
 root=$(git rev-parse --show-toplevel)
 root=$(cd "$root" && pwd -P)
-[[ -f "$root/apps/server/src/index.ts" ]] || { echo 'Not an Obtion worktree' >&2; exit 1; }
+[[ -f "$root/apps/server/src/index.ts" ]] || { echo 'Not an Orbis worktree' >&2; exit 1; }
 key=$(printf '%s' "$root" | sha256sum)
 key=${key:0:16}
-state_dir=${XDG_STATE_HOME:-$HOME/.local/state}/obtion-dev
+state_dir=${XDG_STATE_HOME:-$HOME/.local/state}/orbis-dev
 mkdir -p "$state_dir"
 exec 9>"$state_dir/lock"
 flock 9
 state_file=$state_dir/$key.ports
-backend_unit=obtion-dev-$key-backend.service
-web_unit=obtion-dev-$key-web.service
+backend_unit=orbis-dev-$key-backend.service
+web_unit=orbis-dev-$key-web.service
 bun=$(command -v bun || true)
 [[ -n $bun ]] || bun=$HOME/.bun/bin/bun
 [[ -x $bun ]] || { echo 'Bun is required' >&2; exit 1; }
@@ -42,12 +42,12 @@ stop() {
 }
 
 # Sign in the test account (created on first start) and write a page that hands its token to the app.
-login_page=$root/apps/web/node_modules/.obtion-dev/login.html
+login_page=$root/apps/web/node_modules/.orbis-dev/login.html
 login() {
   "$bun" -e '
     const [port, page] = process.argv.slice(1);
     const base = `http://127.0.0.1:${port}`;
-    const creds = { email: "dev@obtion.test", password: "obtion-dev" };
+    const creds = { email: "dev@orbis.test", password: "orbis-dev" };
     const post = (path, body) => fetch(base + path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
     let info;
     for (let i = 0; i < 50 && !info; i++) info = await fetch(`${base}/api/info`).then((r) => r.json(), () => Bun.sleep(200));
@@ -56,21 +56,21 @@ login() {
     if (!res.ok) (console.error(`No test account ${creds.email} in this data (${res.status})`), process.exit(1));
     const { token, user } = await res.json();
     const account = JSON.stringify({ token, user: { id: user.id, name: user.name, email: user.email } });
-    await Bun.write(page, `<!doctype html><script>localStorage.setItem("obtion.account", ${JSON.stringify(account)}); location.replace("/");</script>`);
+    await Bun.write(page, `<!doctype html><script>localStorage.setItem("orbis.account", ${JSON.stringify(account)}); location.replace("/");</script>`);
     console.log(`Test account: ${creds.email} / ${creds.password}`);
   ' "$backend" "$login_page"
 }
 signed_in_url() {
-  if login; then echo "$url/node_modules/.obtion-dev/login.html"; else echo 'Could not sign in the test account' >&2; echo "$url"; fi
+  if login; then echo "$url/node_modules/.orbis-dev/login.html"; else echo 'Could not sign in the test account' >&2; echo "$url"; fi
 }
 
 # Stop every service managed by this script, including units whose state file is gone.
 stop_all() {
   local units unit saved
-  units=$(systemctl --user list-units --all --plain --no-legend 'obtion-dev-*-backend.service' 'obtion-dev-*-web.service')
+  units=$(systemctl --user list-units --all --plain --no-legend 'orbis-dev-*-backend.service' 'orbis-dev-*-web.service')
   while read -r unit _; do
     [[ -n $unit ]] || continue
-    [[ $unit =~ ^obtion-dev-[a-f0-9]{16}-(backend|web)\.service$ ]] || continue
+    [[ $unit =~ ^orbis-dev-[a-f0-9]{16}-(backend|web)\.service$ ]] || continue
     systemctl --user stop "$unit"
     if active "$unit"; then
       echo "Could not stop $unit" >&2
@@ -109,7 +109,7 @@ if [[ $1 == stop-all || $1 == reset-all ]]; then
     trap - EXIT
   fi
   stop_all
-  echo 'Stopped all managed Obtion development servers'
+  echo 'Stopped all managed Orbis development servers'
   if [[ $1 == reset-all ]]; then
     for target in "${targets[@]}"; do
       rm -rf -- "$target"
@@ -176,7 +176,7 @@ service() {
     --working-directory="$root" --property=Restart=on-failure \
     --property=RestartSec=2 --property=TimeoutStopSec=10 \
     --setenv="PATH=$(dirname "$bun"):$PATH" --setenv="PORT=$backend" \
-    --setenv="OBTION_DEV_PUBLIC_URL=$url" --setenv="OBTION_DATA=$root/data" "$@"
+    --setenv="ORBIS_DEV_PUBLIC_URL=$url" --setenv="ORBIS_DATA=$root/data" "$@"
 }
 service "$backend_unit" "$bun" --watch apps/server/src/index.ts
 service "$web_unit" "$bun" run --cwd apps/web dev --port "$web" --strictPort

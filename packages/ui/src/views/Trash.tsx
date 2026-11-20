@@ -1,6 +1,6 @@
-import type { Item } from "@obtion/core/model";
-import { isInInbox } from "@obtion/core/placement";
-import { cascadeCount, trashRoots } from "@obtion/core/trash";
+import type { Item } from "@orbis/core/model";
+import { isInInbox } from "@orbis/core/placement";
+import { cascadeCount, trashRoots } from "@orbis/core/trash";
 import { RotateCcw, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useAccounts } from "../accounts";

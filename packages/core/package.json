@@ -1,5 +1,5 @@
 {
-	"name": "@obtion/core",
+	"name": "@orbis/core",
 	"private": true,
 	"description": "Data model, index, queries, search, setup, sync protocol and translations – no UI, no platform APIs",
 	"license": "AGPL-3.0-or-later",

@@ -7,9 +7,9 @@
 //   - with that server gone the local workspace keeps working; after a restart the same account
 //     and workspaces are there; signing out of the server removes its workspaces' copies;
 //     another account of the same server replaces the one before, also the workspace open.
-// Screenshots go to $OBTION_SHOTS (default ~/tmp/obtion-desktop-shots).
+// Screenshots go to $ORBIS_SHOTS (default ~/tmp/orbis-desktop-shots).
 //   bun run test:e2e:desktop   (builds first; on Linux without a display: xvfb-run -a bun …)
-//   OBTION_DESKTOP_APP=apps/desktop/release/linux-unpacked/obtion bun tests/e2e/desktop.ts   (a packaged app)
+//   ORBIS_DESKTOP_APP=apps/desktop/release/linux-unpacked/orbis bun tests/e2e/desktop.ts   (a packaged app)
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
 import { homedir, networkInterfaces, tmpdir } from "node:os";
@@ -17,10 +17,10 @@ import { join } from "node:path";
 import { _electron, type ElectronApplication, type Locator, type Page } from "playwright";
 import { bootServer, get, ROOT } from "../support/server";
 
-const shots = process.env.OBTION_SHOTS ?? join(homedir(), "tmp/obtion-desktop-shots");
+const shots = process.env.ORBIS_SHOTS ?? join(homedir(), "tmp/orbis-desktop-shots");
 mkdirSync(shots, { recursive: true });
-const userData = mkdtempSync(join(tmpdir(), "obtion-desktop-"));
-const packaged = process.env.OBTION_DESKTOP_APP;
+const userData = mkdtempSync(join(tmpdir(), "orbis-desktop-"));
+const packaged = process.env.ORBIS_DESKTOP_APP;
 const electron =
 	packaged ?? (createRequire(join(ROOT, "apps/desktop/package.json"))("electron") as string);
 const failures: string[] = [];
@@ -32,11 +32,11 @@ const lan =
 	Object.values(networkInterfaces())
 		.flat()
 		.find((i) => i && i.family === "IPv4" && !i.internal)?.address ?? "127.0.0.1";
-const remoteData = mkdtempSync(join(tmpdir(), "obtion-remote-"));
+const remoteData = mkdtempSync(join(tmpdir(), "orbis-remote-"));
 const remote = await bootServer({
-	OBTION_DATA: remoteData,
+	ORBIS_DATA: remoteData,
 	HOST: "0.0.0.0",
-	OBTION_WEB_APP: "off",
+	ORBIS_WEB_APP: "off",
 });
 const remoteUrl = remote.url.replace("127.0.0.1", lan);
 
@@ -71,9 +71,9 @@ const opened = async (page: Page, name: string) => {
 		.waitForFunction(
 			(n) => {
 				const spaces: { id: string; name: string }[] = JSON.parse(
-					localStorage.getItem("obtion.spaces") ?? "[]",
+					localStorage.getItem("orbis.spaces") ?? "[]",
 				);
-				return spaces.find((w) => w.name === n)?.id === localStorage.getItem("obtion.active");
+				return spaces.find((w) => w.name === n)?.id === localStorage.getItem("orbis.active");
 			},
 			name,
 			{ timeout: 30000 },
@@ -105,7 +105,7 @@ try {
 	await shot(page, "1-first-start");
 	expect(await visible(page, "Mit Beispielen starten"), "first start: no choice of the examples");
 	await page.getByRole("button", { name: /^Workspace anlegen/ }).click();
-	expect(await visible(page, "So funktioniert Obtion"), "local workspace: not set up");
+	expect(await visible(page, "So funktioniert Orbis"), "local workspace: not set up");
 	await shot(page, "2-local-workspace");
 
 	// 2. a new workspace on a server: connect it first
@@ -284,7 +284,7 @@ try {
 
 	// 5. signing out of the server: its workspaces and every copy of them leave this device
 	const remoteIds: string[] = (
-		await page.evaluate(() => JSON.parse(localStorage.getItem("obtion.spaces") ?? "[]"))
+		await page.evaluate(() => JSON.parse(localStorage.getItem("orbis.spaces") ?? "[]"))
 	)
 		.filter((w: { server?: string }) => w.server)
 		.map((w: { id: string }) => w.id);
@@ -321,9 +321,9 @@ try {
 		cwd: ROOT,
 		env: {
 			...process.env,
-			OBTION_DATA: remoteData,
+			ORBIS_DATA: remoteData,
 			HOST: "0.0.0.0",
-			OBTION_WEB_APP: "off",
+			ORBIS_WEB_APP: "off",
 			PORT: new URL(remote.url).port,
 		},
 		stdout: "ignore",
@@ -355,7 +355,7 @@ try {
 		"connect again: the server's workspaces are missing",
 	);
 	const projekte = (
-		await page.evaluate(() => JSON.parse(localStorage.getItem("obtion.spaces") ?? "[]"))
+		await page.evaluate(() => JSON.parse(localStorage.getItem("orbis.spaces") ?? "[]"))
 	).find((w: { name: string }) => w.name === "Projekte")?.id;
 	await page.evaluate((id) => (location.hash = `#/w/${id}/`), projekte);
 	await Promise.all([page.waitForEvent("load"), connect("ada@example.org")]);
@@ -367,14 +367,14 @@ try {
 		"switch: a workspace of the account before is still listed",
 	);
 	expect(
-		(await page.evaluate(() => localStorage.getItem("obtion.active"))) !== projekte,
+		(await page.evaluate(() => localStorage.getItem("orbis.active"))) !== projekte,
 		"switch: the workspace of the account before is still open",
 	);
 	await shot(page, "8-other-account");
 	await app.close();
 
 	// 7. another computer's first start: the account's existing workspace on the server, nothing on this device
-	const other = mkdtempSync(join(tmpdir(), "obtion-desktop-"));
+	const other = mkdtempSync(join(tmpdir(), "orbis-desktop-"));
 	({ app, page } = await launch(other));
 	await page.getByRole("button", { name: /^Auf einem Server/ }).click();
 	await page.getByLabel("Adresse des Servers").fill(remoteUrl);
@@ -388,7 +388,7 @@ try {
 		await visible(page, "Team"),
 		"first start with an existing account: its workspace is missing",
 	);
-	const kept = await page.evaluate(() => JSON.parse(localStorage.getItem("obtion.spaces") ?? "[]"));
+	const kept = await page.evaluate(() => JSON.parse(localStorage.getItem("orbis.spaces") ?? "[]"));
 	expect(
 		kept.length === 1 && !!kept[0].server,
 		`first start with an existing account: ${JSON.stringify(kept.map((w: { name: string }) => w.name))} instead of only "Team" on the server`,

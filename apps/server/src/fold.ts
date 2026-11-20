@@ -8,8 +8,8 @@
 // sentences for an hour leaves one. An agent's tool call stays an entry of its own, so each can
 // be undone by its step. An entry that covers several steps names none.
 import type { Database } from "bun:sqlite";
-import { parseOrigin } from "@obtion/core/origin";
-import type { FieldChange } from "@obtion/core/protocol";
+import { parseOrigin } from "@orbis/core/origin";
+import type { FieldChange } from "@orbis/core/protocol";
 
 /** A pause this long ends an entry: the next change starts a new one. */
 export const FOLD_PAUSE_MS = 15 * 60_000;

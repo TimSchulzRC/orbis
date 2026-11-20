@@ -1,15 +1,15 @@
 import { afterAll, beforeEach, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { addDrawing, drawingFence, writeElements } from "@obtion/core/drawing";
-import { addDaysISO, addParent, replaceBody, setExtra, todayISO } from "@obtion/core/model";
-import { SYS } from "@obtion/core/setup";
-import { deleteItem } from "@obtion/core/trash";
-import { Mirror } from "@obtion/server/mirror";
-import { OpError, type Ops } from "@obtion/server/ops";
-import { capInput } from "@obtion/server/schemas";
-import { storeWriter } from "@obtion/server/setup";
-import type { Store } from "@obtion/server/store";
+import { addDrawing, drawingFence, writeElements } from "@orbis/core/drawing";
+import { addDaysISO, addParent, replaceBody, setExtra, todayISO } from "@orbis/core/model";
+import { SYS } from "@orbis/core/setup";
+import { deleteItem } from "@orbis/core/trash";
+import { Mirror } from "@orbis/server/mirror";
+import { OpError, type Ops } from "@orbis/server/ops";
+import { capInput } from "@orbis/server/schemas";
+import { storeWriter } from "@orbis/server/setup";
+import type { Store } from "@orbis/server/store";
 import * as Y from "yjs";
 import { removeTempDirs } from "../support/helpers";
 import { setupStore } from "../support/store";
@@ -20,7 +20,7 @@ let dir: string;
 let s: Store;
 let ops: Ops;
 const A = "agent:test";
-beforeEach(() => ({ dir, s, ops } = setupStore("obtion-ops-")));
+beforeEach(() => ({ dir, s, ops } = setupStore("orbis-ops-")));
 const props = (ref: string) => ops.get(ref).properties as Record<string, unknown>;
 
 test("progress report: status, update and follow-up task, all through names", () => {

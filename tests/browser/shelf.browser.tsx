@@ -2,10 +2,10 @@
 // waits until tomorrow is folded below ("Morgen wieder"), opens beside and can come back into the inbox
 // now.
 
-import { tomorrow } from "@obtion/core/inbox";
-import { setMeta } from "@obtion/core/model";
-import { inbox } from "@obtion/core/placement";
-import type { Repo } from "@obtion/sync";
+import { tomorrow } from "@orbis/core/inbox";
+import { setMeta } from "@orbis/core/model";
+import { inbox } from "@orbis/core/placement";
+import type { Repo } from "@orbis/sync";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { commands, page } from "vitest/browser";
 import { cleanup, render } from "vitest-browser-react";
@@ -17,7 +17,7 @@ let repo: Repo;
 let title = "";
 
 beforeEach(async () => {
-	localStorage.removeItem("obtion.inbox.sorted");
+	localStorage.removeItem("orbis.inbox.sorted");
 	repo = await workspace();
 	const waiting = inbox(repo.index())[0]!;
 	title = waiting.title;

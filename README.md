@@ -1,4 +1,4 @@
-# Obtion
+# Orbis
 
 Notes that link to each other and projects with tasks, in one app. Self-hosted, works in the browser on every device (also offline), as a desktop app for macOS, Windows and Linux, and through AI agents via MCP. German and English.
 
@@ -7,7 +7,7 @@ Notes that link to each other and projects with tasks, in one app. Self-hosted, 
 With Docker, you only need [`docker-compose.yaml`](docker-compose.yaml):
 
 ```bash
-mkdir obtion && cd obtion
+mkdir orbis && cd orbis
 # put docker-compose.yaml here
 docker compose up -d
 ```
@@ -18,20 +18,20 @@ Update: `docker compose pull && docker compose up -d`
 
 ## Signing in
 
-`OBTION_LOGIN` in `.env` lists the ways, default `password,passkey` (details in [`.env.example`](.env.example)):
+`ORBIS_LOGIN` in `.env` lists the ways, default `password,passkey` (details in [`.env.example`](.env.example)):
 
-| Way                | In `OBTION_LOGIN` | Needs                                                                                  |
-| ------------------ | ----------------- | -------------------------------------------------------------------------------------- |
-| Email and password | `password`        | –                                                                                      |
-| Code by email      | `code`            | `OBTION_SMTP_URL` (or `log`: the codes go to the server log)                           |
-| Passkeys           | `passkey`         | `OBTION_PUBLIC_URL` with `https://`; add one in Settings → Account                     |
-| OAuth              | –                 | `OBTION_PUBLIC_URL` and an OpenID Connect provider (`OBTION_OIDC_*`), GitHub or Google |
+| Way                | In `ORBIS_LOGIN` | Needs                                                                                |
+| ------------------ | ---------------- | ------------------------------------------------------------------------------------ |
+| Email and password | `password`       | –                                                                                    |
+| Code by email      | `code`           | `ORBIS_SMTP_URL` (or `log`: the codes go to the server log)                          |
+| Passkeys           | `passkey`        | `ORBIS_PUBLIC_URL` with `https://`; add one in Settings → Account                    |
+| OAuth              | –                | `ORBIS_PUBLIC_URL` and an OpenID Connect provider (`ORBIS_OIDC_*`), GitHub or Google |
 
-E.g. `OBTION_LOGIN=code,passkey`: no passwords. Before turning codes on for accounts made with passwords, read what their first code does in [`.env.example`](.env.example).
+E.g. `ORBIS_LOGIN=code,passkey`: no passwords. Before turning codes on for accounts made with passwords, read what their first code does in [`.env.example`](.env.example).
 
 ## Release channels
 
-Choose with `OBTION_VERSION` in `.env`:
+Choose with `ORBIS_VERSION` in `.env`:
 
 | Tag       |                                          |
 | --------- | ---------------------------------------- |
@@ -41,13 +41,13 @@ Choose with `OBTION_VERSION` in `.env`:
 
 Or pin a version, e.g. `0.0.2`. Going back after an update may need a backup of `./data`.
 
-Without the web app (sync, API and MCP only): `OBTION_WEB_APP=off`. Apps on another origin call the server only if it lets them: the desktop app always, others when `OBTION_APP_ORIGINS` names their origin (e.g. a web app served by another host, built with `VITE_OBTION_SERVER=<server>`). They sign in with a password or a code by email; passkeys and OAuth stay on the server's own page, and so does signing up with an invite where the server confirms addresses by code.
+Without the web app (sync, API and MCP only): `ORBIS_WEB_APP=off`. Apps on another origin call the server only if it lets them: the desktop app always, others when `ORBIS_APP_ORIGINS` names their origin (e.g. a web app served by another host, built with `VITE_ORBIS_SERVER=<server>`). They sign in with a password or a code by email; passkeys and OAuth stay on the server's own page, and so does signing up with an invite where the server confirms addresses by code.
 
 ## Desktop app
 
 The same interface as the web app (both use `packages/ui`), with a server of its own on the device: workspaces **on this device** work without a network. A new workspace can go **on a server** instead; the first time you enter its address and sign in there.
 
-Installers are attached to each [release](https://github.com/TimSchulzRC/obtion/releases): nightly and stable, like the image. The app looks there for a newer release of its own channel (the cloud button at the bottom of the sidebar, and every half hour); a click downloads its installer. Builds of the workflow [Desktop](.github/workflows/desktop.yml) (a run's artifacts) are dev versions and look for none. The Mac app is signed ad hoc, not notarized: open it once via System Settings › Privacy & Security › _Open anyway_, or run `xattr -dr com.apple.quarantine /Applications/Obtion.app`.
+Installers are attached to each [release](https://github.com/TimSchulzRC/orbis/releases): nightly and stable, like the image. The app looks there for a newer release of its own channel (the cloud button at the bottom of the sidebar, and every half hour); a click downloads its installer. Builds of the workflow [Desktop](.github/workflows/desktop.yml) (a run's artifacts) are dev versions and look for none. The Mac app is signed ad hoc, not notarized: open it once via System Settings › Privacy & Security › _Open anyway_, or run `xattr -dr com.apple.quarantine /Applications/Orbis.app`.
 
 ## Development
 

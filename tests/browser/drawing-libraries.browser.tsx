@@ -1,5 +1,5 @@
 // "Bibliotheken durchsuchen" in a diagram: Excalidraw's public libraries shown in the app, searched
-// and sorted there, each added with "Zu Obtion hinzufügen" straight into the drawing.
+// and sorted there, each added with "Zu Orbis hinzufügen" straight into the drawing.
 import { afterEach, expect, test, vi } from "vitest";
 import { page } from "vitest/browser";
 import { cleanup, render } from "vitest-browser-react";
@@ -64,7 +64,7 @@ test("lists, searches and sorts the libraries; a library goes into the drawing",
 	await dialog.getByRole("searchbox").fill("lambda");
 	await expect.poll(names).toEqual(["AWS Icons"]);
 
-	await dialog.getByRole("button", { name: "Zu Obtion hinzufügen" }).click();
+	await dialog.getByRole("button", { name: "Zu Orbis hinzufügen" }).click();
 	await expect.element(dialog.getByRole("button", { name: "Hinzugefügt" })).toBeDisabled();
 	expect(await added[0]!.text()).toContain("excalidrawlib");
 

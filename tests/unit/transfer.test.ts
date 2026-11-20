@@ -6,10 +6,10 @@ import {
 	setDrawingFile,
 	setDrawingState,
 	writeElements,
-} from "@obtion/core/drawing";
-import { initItem, newId } from "@obtion/core/model";
-import { runSetup, SYS } from "@obtion/core/setup";
-import { copyToWorkspace, movedItems, planMove } from "@obtion/core/transfer";
+} from "@orbis/core/drawing";
+import { initItem, newId } from "@orbis/core/model";
+import { runSetup, SYS } from "@orbis/core/setup";
+import { copyToWorkspace, movedItems, planMove } from "@orbis/core/transfer";
 import { MemRepo } from "../support/helpers";
 
 function workspace(lang: "de" | "en" = "de") {

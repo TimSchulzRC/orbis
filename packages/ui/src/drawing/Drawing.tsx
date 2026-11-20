@@ -3,8 +3,8 @@
 // ("?d=<note>.<drawing>" on the page's address, "@<workspace>" when the note is of another one than
 // the open workspace): Back closes it, Forward opens it again.
 
-import type { DrawingInfo } from "@obtion/core/drawing";
-import type { Repo } from "@obtion/sync";
+import type { DrawingInfo } from "@orbis/core/drawing";
+import type { Repo } from "@orbis/sync";
 import { memo, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { replica, spaceById } from "../accounts";
 import { files as currentFiles } from "../files";

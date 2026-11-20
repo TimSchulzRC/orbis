@@ -1,4 +1,4 @@
-// The only globals @obtion/core and @obtion/sync may use: what browsers, Electron, Bun and React
+// The only globals @orbis/core and @orbis/sync may use: what browsers, Electron, Bun and React
 // Native (Hermes) all have. No DOM, Node or Bun types. On Hermes, crypto.getRandomValues needs
 // react-native-get-random-values.
 

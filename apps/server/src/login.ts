@@ -1,7 +1,7 @@
 // Sign-in methods from the environment (see .env.example). SMTP settings alone switch nothing on.
 
-import type { LoginMethods } from "@obtion/core/api";
-import { type Lang, translate } from "@obtion/core/i18n";
+import type { LoginMethods } from "@orbis/core/api";
+import { type Lang, translate } from "@orbis/core/i18n";
 import { createTransport } from "nodemailer";
 
 export interface OAuthProvider {
@@ -27,16 +27,16 @@ export interface LoginConfig {
 const WAYS = ["password", "code", "passkey"] as const;
 const DEFAULT_LOGIN = "password,passkey";
 
-// OBTION_SMTP_URL=log prints the codes to the server log instead of sending mail.
+// ORBIS_SMTP_URL=log prints the codes to the server log instead of sending mail.
 function mailer(env: Record<string, string | undefined>, host: string): SendCode | undefined {
-	const url = env.OBTION_SMTP_URL?.trim();
+	const url = env.ORBIS_SMTP_URL?.trim();
 	if (!url) return undefined;
 	if (url === "log")
 		return (to, code) => {
-			console.log(`[obtion] sign-in code for ${to}: ${code}`);
+			console.log(`[orbis] sign-in code for ${to}: ${code}`);
 			return Promise.resolve();
 		};
-	const from = env.OBTION_MAIL_FROM?.trim() || `Obtion <obtion@${host.replace(/:\d+$/, "")}>`;
+	const from = env.ORBIS_MAIL_FROM?.trim() || `Orbis <orbis@${host.replace(/:\d+$/, "")}>`;
 	const transport = createTransport(url);
 	return async (to, code, lang) => {
 		const l: Lang = lang === "en" ? "en" : "de";
@@ -49,7 +49,7 @@ function mailer(env: Record<string, string | undefined>, host: string): SendCode
 			})
 			.catch((e: unknown) => {
 				console.error(
-					`[obtion] could not send the sign-in code to ${to}:`,
+					`[orbis] could not send the sign-in code to ${to}:`,
 					e instanceof Error ? e.message : e,
 				);
 			});
@@ -62,7 +62,7 @@ export function loginConfig(
 	publicUrl: string,
 ): LoginConfig {
 	const pub = publicUrl ? new URL(publicUrl) : undefined;
-	const listed = env.OBTION_LOGIN?.trim();
+	const listed = env.ORBIS_LOGIN?.trim();
 	const ways = new Set(
 		(listed || DEFAULT_LOGIN)
 			.split(",")
@@ -71,51 +71,49 @@ export function loginConfig(
 	);
 	for (const w of ways)
 		if (!(WAYS as readonly string[]).includes(w))
-			console.warn(`[obtion] OBTION_LOGIN: unknown way "${w}" (known: ${WAYS.join(", ")})`);
+			console.warn(`[orbis] ORBIS_LOGIN: unknown way "${w}" (known: ${WAYS.join(", ")})`);
 	const oauth: OAuthProvider[] = [];
-	const issuer = env.OBTION_OIDC_ISSUER?.trim();
-	if (issuer && env.OBTION_OIDC_CLIENT_ID)
+	const issuer = env.ORBIS_OIDC_ISSUER?.trim();
+	if (issuer && env.ORBIS_OIDC_CLIENT_ID)
 		oauth.push({
 			id: "oidc",
-			name: env.OBTION_OIDC_NAME?.trim() || "SSO",
-			clientId: env.OBTION_OIDC_CLIENT_ID,
-			clientSecret: env.OBTION_OIDC_CLIENT_SECRET ?? "",
+			name: env.ORBIS_OIDC_NAME?.trim() || "SSO",
+			clientId: env.ORBIS_OIDC_CLIENT_ID,
+			clientSecret: env.ORBIS_OIDC_CLIENT_SECRET ?? "",
 			discoveryUrl: issuer.includes("/.well-known/")
 				? issuer
 				: `${issuer.replace(/\/+$/, "")}/.well-known/openid-configuration`,
 		});
-	if (env.OBTION_GITHUB_CLIENT_ID && env.OBTION_GITHUB_CLIENT_SECRET)
+	if (env.ORBIS_GITHUB_CLIENT_ID && env.ORBIS_GITHUB_CLIENT_SECRET)
 		oauth.push({
 			id: "github",
 			name: "GitHub",
-			clientId: env.OBTION_GITHUB_CLIENT_ID,
-			clientSecret: env.OBTION_GITHUB_CLIENT_SECRET,
+			clientId: env.ORBIS_GITHUB_CLIENT_ID,
+			clientSecret: env.ORBIS_GITHUB_CLIENT_SECRET,
 		});
-	if (env.OBTION_GOOGLE_CLIENT_ID && env.OBTION_GOOGLE_CLIENT_SECRET)
+	if (env.ORBIS_GOOGLE_CLIENT_ID && env.ORBIS_GOOGLE_CLIENT_SECRET)
 		oauth.push({
 			id: "google",
 			name: "Google",
-			clientId: env.OBTION_GOOGLE_CLIENT_ID,
-			clientSecret: env.OBTION_GOOGLE_CLIENT_SECRET,
+			clientId: env.ORBIS_GOOGLE_CLIENT_ID,
+			clientSecret: env.ORBIS_GOOGLE_CLIENT_SECRET,
 		});
 	if (oauth.length && !pub)
 		console.warn(
-			"[obtion] OAuth needs OBTION_PUBLIC_URL (the address the provider sends people back to); it stays off",
+			"[orbis] OAuth needs ORBIS_PUBLIC_URL (the address the provider sends people back to); it stays off",
 		);
 	let sendCode: SendCode | undefined;
 	if (ways.has("code")) {
-		sendCode = mailer(env, pub?.host ?? "Obtion");
+		sendCode = mailer(env, pub?.host ?? "Orbis");
 		if (!sendCode)
 			throw new Error(
-				"OBTION_LOGIN has code, but there is no way to send mail: set OBTION_SMTP_URL (or OBTION_SMTP_URL=log to print the codes in the server log)",
+				"ORBIS_LOGIN has code, but there is no way to send mail: set ORBIS_SMTP_URL (or ORBIS_SMTP_URL=log to print the codes in the server log)",
 			);
 	}
 	// browsers have passkeys only in a secure context: https, or localhost
 	const secure = !!pub && (pub.protocol === "https:" || pub.hostname === "localhost");
 	if (ways.has("passkey") && !secure && listed)
-		console.warn(
-			"[obtion] passkeys need OBTION_PUBLIC_URL with https (or localhost); they stay off",
-		);
+		console.warn("[orbis] passkeys need ORBIS_PUBLIC_URL with https (or localhost); they stay off");
 	const config: LoginConfig = {
 		password: ways.has("password"),
 		sendCode,
@@ -126,7 +124,7 @@ export function loginConfig(
 	// passkeys are added to an account: someone has to be able to make one first
 	if (!config.password && !config.sendCode && !config.oauth.length)
 		throw new Error(
-			"OBTION_LOGIN needs password or code (or an OAuth provider): otherwise nobody can create an account",
+			"ORBIS_LOGIN needs password or code (or an OAuth provider): otherwise nobody can create an account",
 		);
 	return config;
 }

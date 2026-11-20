@@ -2,7 +2,7 @@
 // (Allgemein, Eigenschaften, Fähigkeiten), a page of setting rows on the right. "Eigenschaften"
 // lists the properties; each opens a page of its own, with a way back.
 
-import type { T } from "@obtion/core/i18n";
+import type { T } from "@orbis/core/i18n";
 import {
 	type Item,
 	type OptionDef,
@@ -19,25 +19,25 @@ import {
 	shortId,
 	titleKey,
 	upsertProp,
-} from "@obtion/core/model";
-import { COLORS, ICONS } from "@obtion/core/palette";
-import { parseQuery, printQuery, runQuery } from "@obtion/core/query";
-import { keyBetween } from "@obtion/core/sortkey";
+} from "@orbis/core/model";
+import { COLORS, ICONS } from "@orbis/core/palette";
+import { parseQuery, printQuery, runQuery } from "@orbis/core/query";
+import { keyBetween } from "@orbis/core/sortkey";
 import {
 	defaultStatusOptions,
 	isProgressProp,
 	kindPatch,
 	progressProp,
 	statusProp,
-} from "@obtion/core/traits";
+} from "@orbis/core/traits";
 import {
 	type DeleteMode,
 	deleteType,
 	previewTagToType,
 	tagToType,
 	typeUsage,
-} from "@obtion/core/typeops";
-import { followKindChange, followPropChange, followTypeRename } from "@obtion/core/typerefs";
+} from "@orbis/core/typeops";
+import { followKindChange, followPropChange, followTypeRename } from "@orbis/core/typerefs";
 import {
 	ArrowDown,
 	ArrowLeft,

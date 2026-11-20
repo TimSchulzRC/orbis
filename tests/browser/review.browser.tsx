@@ -1,9 +1,9 @@
 // The inbox panel, sorting: one inbox entry at a time beside the list; sorting moves on and moves it
 // in the list down under "Einsortiert", with its undo back up; the entry is edited right in the card.
 
-import { setMeta } from "@obtion/core/model";
-import { queryFence } from "@obtion/core/query";
-import type { Repo } from "@obtion/sync";
+import { setMeta } from "@orbis/core/model";
+import { queryFence } from "@orbis/core/query";
+import type { Repo } from "@orbis/sync";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { commands, page } from "vitest/browser";
 import { cleanup, render } from "vitest-browser-react";
@@ -18,7 +18,7 @@ const panel = () =>
 	);
 let repo: Repo;
 beforeEach(async () => {
-	localStorage.removeItem("obtion.inbox.sorted");
+	localStorage.removeItem("orbis.inbox.sorted");
 	repo = await workspace();
 	await panel();
 });
@@ -65,7 +65,7 @@ describe('"Einsortiert"', () => {
 		await expect
 			.poll(() => document.querySelector("main section[aria-label=Einsortiert]"))
 			.toBeNull();
-		expect(JSON.parse(localStorage.getItem("obtion.inbox.sorted")!)).toEqual([]);
+		expect(JSON.parse(localStorage.getItem("orbis.inbox.sorted")!)).toEqual([]);
 	});
 
 	test('set aside with "Morgen", it waits again once it is due', async () => {

@@ -1,8 +1,8 @@
 // A file behaves like a note whose content is the file itself.
 
-import { dateOf } from "@obtion/core/date";
-import { fmtBytes, fmtDate, fmtDuration } from "@obtion/core/i18n";
-import { type FileMeta, type Item, setFileMeta } from "@obtion/core/model";
+import { dateOf } from "@orbis/core/date";
+import { fmtBytes, fmtDate, fmtDuration } from "@orbis/core/i18n";
+import { type FileMeta, type Item, setFileMeta } from "@orbis/core/model";
 import { ArrowRightLeft, Download, Replace, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Input } from "../components/ui/input";

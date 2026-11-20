@@ -1,7 +1,7 @@
 // Device file storage against a server faked in fetch, with the browser's real storage.
 
-import { initItem, newId, setFileMeta } from "@obtion/core/model";
-import type { Repo } from "@obtion/sync";
+import { initItem, newId, setFileMeta } from "@orbis/core/model";
+import type { Repo } from "@orbis/sync";
 import { afterEach, expect, test, vi } from "vitest";
 import type { SpaceLink } from "../../packages/ui/src/browser";
 import { DeviceFiles, sha256 } from "../../packages/ui/src/files";
@@ -9,7 +9,7 @@ import { workspace } from "./workspace";
 
 afterEach(() => {
 	vi.restoreAllMocks();
-	localStorage.removeItem("obtion.fileMode");
+	localStorage.removeItem("orbis.fileMode");
 });
 
 /** The server's contents; a download whose hash is in `held` waits until it is released. */
@@ -28,7 +28,7 @@ function server() {
 		const blob = blobs.get(hash);
 		return blob
 			? new Response(blob)
-			: new Response(null, { status: 204, headers: { "x-obtion-missing": "1" } });
+			: new Response(null, { status: 204, headers: { "x-orbis-missing": "1" } });
 	});
 	return {
 		asked,
@@ -86,7 +86,7 @@ test("everything local: every original comes, the count moves with each download
 	addFile(repo, "a.pdf", a);
 	addFile(repo, "b.pdf", b);
 	srv.hold(b.hash);
-	localStorage.setItem("obtion.fileMode", "local");
+	localStorage.setItem("orbis.fileMode", "local");
 	const { files } = deviceFiles(repo);
 	await expect.poll(() => files.status.originals, { timeout: 5000 }).toBe(1);
 	expect(files.status.downloading).toBe(1);
@@ -120,7 +120,7 @@ test("a replaced original is removed from this device in the next session", asyn
 	const old = await srv.add("version 1");
 	const next = await srv.add("version 2");
 	const id = addFile(repo, "a.pdf", old);
-	localStorage.setItem("obtion.fileMode", "local");
+	localStorage.setItem("orbis.fileMode", "local");
 	const first = deviceFiles(repo);
 	await expect.poll(() => first.files.hasLocal(old.hash), { timeout: 5000 }).toBe(true);
 	repo.change(id, (doc) =>
@@ -141,7 +141,7 @@ test("a replaced original is removed from this device in the next session", asyn
 test("a content stored in this session and not yet in a file stays", async () => {
 	server();
 	const repo = await workspace(false);
-	localStorage.setItem("obtion.fileMode", "local");
+	localStorage.setItem("orbis.fileMode", "local");
 	const { files } = deviceFiles(repo);
 	// stored, uploaded, but its document is not written yet (as a PDF preview is)
 	await files.adopt("0".repeat(64), new Blob(["x"]), "x.pdf", false);

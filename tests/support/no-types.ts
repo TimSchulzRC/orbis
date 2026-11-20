@@ -1,16 +1,16 @@
-// Deletes every type in OBTION_DATA the way the app does (values stay as free properties).
+// Deletes every type in ORBIS_DATA the way the app does (values stay as free properties).
 // For the browser smoke test: the app has to run with zero types. Never point it at data/.
 import { resolve } from "node:path";
-import { deleteType } from "@obtion/core/typeops";
-import { storeWriter } from "@obtion/server/setup";
-import { Store } from "@obtion/server/store";
+import { deleteType } from "@orbis/core/typeops";
+import { storeWriter } from "@orbis/server/setup";
+import { Store } from "@orbis/server/store";
 import { workspaceDirs } from "./server";
 
-const dir = process.env.OBTION_DATA;
+const dir = process.env.ORBIS_DATA;
 if (!dir || resolve(dir) === resolve(import.meta.dir, "../../data"))
-	throw new Error("set OBTION_DATA to a test directory");
+	throw new Error("set ORBIS_DATA to a test directory");
 const [ws] = workspaceDirs(dir);
-if (!ws) throw new Error("no workspace in OBTION_DATA");
+if (!ws) throw new Error("no workspace in ORBIS_DATA");
 const store = new Store(ws);
 const w = storeWriter(store, "system:test");
 for (const id of [...store.index().types.keys()])

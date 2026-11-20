@@ -1,12 +1,12 @@
 // The accounts database in process, without a server: what deleting an account leaves behind.
 import { afterAll, expect, test } from "bun:test";
-import { Accounts } from "@obtion/server/accounts";
+import { Accounts } from "@orbis/server/accounts";
 import { removeTempDirs, tempDir } from "../support/helpers";
 
 afterAll(removeTempDirs);
 
 test("a co-owner can delete their account, including admin and credential records", async () => {
-	const accounts = new Accounts(tempDir("obtion-account-delete-"), {
+	const accounts = new Accounts(tempDir("orbis-account-delete-"), {
 		secret: "a-test-secret-longer-than-thirty-two-characters",
 		baseURL: "http://localhost:8480",
 		policy: "open",
@@ -43,7 +43,7 @@ test("a co-owner can delete their account, including admin and credential record
 });
 
 test("changing the password needs the current one and ends every other session", async () => {
-	const accounts = new Accounts(tempDir("obtion-account-password-"), {
+	const accounts = new Accounts(tempDir("orbis-account-password-"), {
 		secret: "a-test-secret-longer-than-thirty-two-characters",
 		baseURL: "http://localhost:8480",
 		policy: "open",
@@ -84,7 +84,7 @@ test("changing the password needs the current one and ends every other session",
 });
 
 test("a new or joined workspace comes first; each account keeps its own order", async () => {
-	const accounts = new Accounts(tempDir("obtion-account-order-"), {
+	const accounts = new Accounts(tempDir("orbis-account-order-"), {
 		secret: "a-test-secret-longer-than-thirty-two-characters",
 		baseURL: "http://localhost:8480",
 		policy: "open",

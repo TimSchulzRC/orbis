@@ -1,6 +1,6 @@
 // What changed between two versions of a text, line by line: removed lines red, added lines green,
 // a few unchanged lines around each change, "⋯" between changes far apart.
-import { type DiffLine, type TextDiff, type WordPart, wordDiff } from "@obtion/core/diff";
+import { type DiffLine, type TextDiff, type WordPart, wordDiff } from "@orbis/core/diff";
 import { useT } from "../i18n";
 import { cn } from "../lib/utils";
 

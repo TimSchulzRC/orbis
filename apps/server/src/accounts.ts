@@ -13,8 +13,8 @@ import type {
 	SignupPolicy,
 	User,
 	WorkspaceInfo,
-} from "@obtion/core/api";
-import { newId } from "@obtion/core/model";
+} from "@orbis/core/api";
+import { newId } from "@orbis/core/model";
 import { betterAuth } from "better-auth";
 import { APIError } from "better-auth/api";
 import { getMigrations } from "better-auth/db/migration";
@@ -30,7 +30,7 @@ export const FRESH_SECONDS = 10 * 60;
  * Set by the page before a code or OAuth signup, where the request is Better Auth's own. A cookie,
  * so it also reaches the OAuth callback.
  */
-export const SIGNUP_COOKIE = "obtion_signup";
+export const SIGNUP_COOKIE = "orbis_signup";
 interface SignupContext {
 	invite?: string;
 	/** language of the code email */
@@ -612,7 +612,7 @@ function makeAuth(accounts: Accounts, secret: string, baseURL: string) {
 		database: accounts.db,
 		secret,
 		baseURL,
-		appName: "Obtion",
+		appName: "Orbis",
 		emailAndPassword: { enabled: login.password, minPasswordLength: 8 },
 		socialProviders: social,
 		// Signing in links on its own only to an address the provider vouches for (email_verified).
@@ -648,7 +648,7 @@ function makeAuth(accounts: Accounts, secret: string, baseURL: string) {
 			// always registered so its table exists; index.ts hides the routes when passkeys are off
 			passkey({
 				rpID: login.passkey?.rpID ?? "localhost",
-				rpName: "Obtion",
+				rpName: "Orbis",
 				origin: login.passkey?.origin ?? null,
 			}),
 			...(login.sendCode

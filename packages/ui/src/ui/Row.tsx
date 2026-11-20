@@ -1,8 +1,8 @@
-import { fmtBytes } from "@obtion/core/i18n";
-import { type Item, propByName, STATUS_GROUPS, type StatusGroup } from "@obtion/core/model";
-import type { Group as QueryGroup } from "@obtion/core/query";
-import { dueOf, firstOfGroup, hasOptions, isDone, statusOf, statusProp } from "@obtion/core/traits";
-import type { Repo } from "@obtion/sync";
+import { fmtBytes } from "@orbis/core/i18n";
+import { type Item, propByName, STATUS_GROUPS, type StatusGroup } from "@orbis/core/model";
+import type { Group as QueryGroup } from "@orbis/core/query";
+import { dueOf, firstOfGroup, hasOptions, isDone, statusOf, statusProp } from "@orbis/core/traits";
+import type { Repo } from "@orbis/sync";
 import { useItemHref, useRepo } from "../hooks";
 import { titleOf, tr, useT } from "../i18n";
 import { cn } from "../lib/utils";

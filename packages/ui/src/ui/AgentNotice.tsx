@@ -1,8 +1,8 @@
 // Flashes on-screen rows an agent changed and offers undo for that agent step.
 
-import type { T } from "@obtion/core/i18n";
-import { parseOrigin } from "@obtion/core/origin";
-import type { ActivityEvent } from "@obtion/core/protocol";
+import type { T } from "@orbis/core/i18n";
+import { parseOrigin } from "@orbis/core/origin";
+import type { ActivityEvent } from "@orbis/core/protocol";
 import { useEffect, useRef } from "react";
 import { useT } from "../i18n";
 import { repo } from "../repo";

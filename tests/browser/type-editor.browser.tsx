@@ -1,8 +1,8 @@
 // "Typ bearbeiten" is laid out like the app's settings: Eigenschaften lists the properties, each
 // opens a page of its own with a way back; a status option moves to another group from its colour.
 
-import { removeProp, upsertProp } from "@obtion/core/model";
-import { SYS } from "@obtion/core/setup";
+import { removeProp, upsertProp } from "@orbis/core/model";
+import { SYS } from "@orbis/core/setup";
 import { afterEach, expect, test } from "vitest";
 import { page } from "vitest/browser";
 import { cleanup, render } from "vitest-browser-react";

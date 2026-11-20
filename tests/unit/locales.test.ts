@@ -2,8 +2,8 @@
 // in both languages, and both languages have the same keys. Keys built at runtime ("kind." + k,
 // `triage.${…}`) are not checked; core's own t() adds a prefix (setup.ts), so core is left out.
 import { expect, test } from "bun:test";
-import de from "@obtion/core/locales/de.json";
-import en from "@obtion/core/locales/en.json";
+import de from "@orbis/core/locales/de.json";
+import en from "@orbis/core/locales/en.json";
 import { Glob } from "bun";
 
 const root = new URL("../../", import.meta.url).pathname;

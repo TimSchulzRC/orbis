@@ -302,7 +302,7 @@ export function excalidrawFile(scene: Scene): string {
 		{
 			type: "excalidraw",
 			version: 2,
-			source: "obtion",
+			source: "orbis",
 			elements: scene.elements.filter((e) => !e.isDeleted),
 			appState: { viewBackgroundColor: "#ffffff", ...scene.state },
 			files: {},

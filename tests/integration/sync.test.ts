@@ -1,13 +1,13 @@
 import { afterAll, expect, test } from "bun:test";
 import { join } from "node:path";
-import { initItem, PERSONAL as P } from "@obtion/core/model";
-import { COMPACT_AFTER_ROWS, Store } from "@obtion/server/store";
+import { initItem, PERSONAL as P } from "@orbis/core/model";
+import { COMPACT_AFTER_ROWS, Store } from "@orbis/server/store";
 import * as Y from "yjs";
 import { docUpdate, removeTempDirs, tempDir } from "../support/helpers";
 
 afterAll(removeTempDirs);
 
-const tmp = () => tempDir("obtion-sync-");
+const tmp = () => tempDir("orbis-sync-");
 
 test("a server restored from an older backup is detected even after another device synced first", () => {
 	const dir = tmp();
@@ -15,7 +15,7 @@ test("a server restored from an older backup is detected even after another devi
 	server.applyRemote("a", docUpdate({ id: "a", title: "A" }), "web:laptop");
 	// Backup of the server at seq 1.
 	const backup = tmp();
-	server.db.exec(`VACUUM INTO '${join(backup, "obtion.db")}'`);
+	server.db.exec(`VACUUM INTO '${join(backup, "orbis.db")}'`);
 	// The phone pushes and remembers the server's cursor (seq 2 + id of that row).
 	server.applyRemote("b", docUpdate({ id: "b", title: "B" }), "web:phone");
 	const phone = { since: server.seq, sinceId: server.lastUid };

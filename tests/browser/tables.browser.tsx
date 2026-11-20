@@ -3,7 +3,7 @@
 // add rows, "/Tabelle" inserts one, the right-click menu adds and removes columns, only the lines
 // an edit is about change, and a long text with many tables draws only the ones on the screen.
 
-import type { Repo } from "@obtion/sync";
+import type { Repo } from "@orbis/sync";
 import { afterEach, beforeAll, describe, expect, test } from "vitest";
 import { commands } from "vitest/browser";
 import { cleanup, render } from "vitest-browser-react";

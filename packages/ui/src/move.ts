@@ -1,13 +1,13 @@
 // Moving an item (and what hangs only below it) to another workspace. The originals go to the
 // source's trash, so each workspace keeps its own undo.
 
-import { drawingImages } from "@obtion/core/drawing";
-import { SETTINGS_ID } from "@obtion/core/model";
-import { sidebarRoots } from "@obtion/core/placement";
-import { keyBetween } from "@obtion/core/sortkey";
-import { copyToWorkspace, type MovePlan, movedItems, planMove } from "@obtion/core/transfer";
-import { deleteItem } from "@obtion/core/trash";
-import type { Repo } from "@obtion/sync";
+import { drawingImages } from "@orbis/core/drawing";
+import { SETTINGS_ID } from "@orbis/core/model";
+import { sidebarRoots } from "@orbis/core/placement";
+import { keyBetween } from "@orbis/core/sortkey";
+import { copyToWorkspace, type MovePlan, movedItems, planMove } from "@orbis/core/transfer";
+import { deleteItem } from "@orbis/core/trash";
+import type { Repo } from "@orbis/sync";
 import { replica } from "./accounts";
 
 export class MoveError extends Error {}

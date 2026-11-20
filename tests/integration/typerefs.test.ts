@@ -1,9 +1,9 @@
 import { afterAll, beforeEach, expect, test } from "bun:test";
-import { replaceBody, setCapability } from "@obtion/core/model";
-import { blockSource, findBlocks, queryFence, readBlock } from "@obtion/core/query";
-import { BLOCKED_BY, SYS, typeTabs } from "@obtion/core/setup";
-import type { Ops } from "@obtion/server/ops";
-import type { Store } from "@obtion/server/store";
+import { replaceBody, setCapability } from "@orbis/core/model";
+import { blockSource, findBlocks, queryFence, readBlock } from "@orbis/core/query";
+import { BLOCKED_BY, SYS, typeTabs } from "@orbis/core/setup";
+import type { Ops } from "@orbis/server/ops";
+import type { Store } from "@orbis/server/store";
 import { removeTempDirs } from "../support/helpers";
 import { setupStore } from "../support/store";
 
@@ -13,7 +13,7 @@ let s: Store;
 let ops: Ops;
 const A = "agent:test";
 // the store is set up in German: shipped names ("Projekt", "Priorität", "Hoch") and query words stay German
-beforeEach(() => ({ s, ops } = setupStore("obtion-typerefs-")));
+beforeEach(() => ({ s, ops } = setupStore("orbis-typerefs-")));
 const tabsOf = (id: string) => typeTabs(s.records.get(id)!, "de");
 const prio = () =>
 	s

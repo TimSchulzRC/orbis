@@ -1,6 +1,6 @@
-import type { Index } from "@obtion/core/graph";
-import { type Item, META_TYPE } from "@obtion/core/model";
-import { isDone, statusProp } from "@obtion/core/traits";
+import type { Index } from "@orbis/core/graph";
+import { type Item, META_TYPE } from "@orbis/core/model";
+import { isDone, statusProp } from "@orbis/core/traits";
 import ForceGraph from "force-graph";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Checkbox } from "../components/ui/checkbox";

@@ -1,5 +1,5 @@
-import type { Index } from "@obtion/core/graph";
-import { fmtRelative, fmtShortDate, type T } from "@obtion/core/i18n";
+import type { Index } from "@orbis/core/graph";
+import { fmtRelative, fmtShortDate, type T } from "@orbis/core/i18n";
 import {
 	type Item,
 	META_TYPE,
@@ -7,8 +7,8 @@ import {
 	type StatusGroup,
 	type TypeSchema,
 	todayISO,
-} from "@obtion/core/model";
-import { isInInbox } from "@obtion/core/placement";
+} from "@orbis/core/model";
+import { isInInbox } from "@orbis/core/placement";
 import { CircleCheck } from "lucide-react";
 import type { ReactNode } from "react";
 import { Badge } from "../components/ui/badge";

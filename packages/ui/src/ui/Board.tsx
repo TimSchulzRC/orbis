@@ -1,4 +1,4 @@
-import type { Item } from "@obtion/core/model";
+import type { Item } from "@orbis/core/model";
 import {
 	type EvalCtx,
 	fieldOf,
@@ -6,7 +6,7 @@ import {
 	type Group as QGroup,
 	type QueryDef,
 	viewTypeIds,
-} from "@obtion/core/query";
+} from "@orbis/core/query";
 import { ChevronDown, ChevronRight, EyeOff } from "lucide-react";
 import { useState } from "react";
 import { itemHref, openItem, useRepo } from "../hooks";
@@ -123,7 +123,7 @@ export function BoardView({
 											}}
 											onDrop={(e) => {
 												setOver(null);
-												drop(e.dataTransfer.getData("obtion/item"), col);
+												drop(e.dataTransfer.getData("orbis/item"), col);
 											}}
 										>
 											<p className="group/head flex items-center gap-2 px-1">
@@ -193,7 +193,7 @@ function BoardCard({ item: i, cols, ctx }: { item: Item; cols: string[]; ctx: Ev
 			onClick={(e) => {
 				if (!(e.target as HTMLElement).closest("a,button,select,input")) openItem(i.id);
 			}}
-			onDragStart={(e) => e.dataTransfer.setData("obtion/item", i.id)}
+			onDragStart={(e) => e.dataTransfer.setData("orbis/item", i.id)}
 		>
 			<a className="flex items-start gap-2" draggable={false} href={itemHref(i.id)}>
 				<ItemIcon className="mt-0.5 shrink-0" item={i} size={14} />

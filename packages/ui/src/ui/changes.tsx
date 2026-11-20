@@ -1,14 +1,14 @@
 // One change of the activity log in words ("Status: Offen → Erledigt"), what it did to a text, and
 // the day headings of the updates list. Used by the activity page and the side panel.
 
-import type { EventText } from "@obtion/core/api";
-import { addDays, todayISO } from "@obtion/core/date";
-import { textDiff } from "@obtion/core/diff";
-import type { Index } from "@obtion/core/graph";
-import type { T } from "@obtion/core/i18n";
-import { fmtDate } from "@obtion/core/i18n";
-import { type Item, optionNames, type Value } from "@obtion/core/model";
-import type { ActivityEvent, FieldChange } from "@obtion/core/protocol";
+import type { EventText } from "@orbis/core/api";
+import { addDays, todayISO } from "@orbis/core/date";
+import { textDiff } from "@orbis/core/diff";
+import type { Index } from "@orbis/core/graph";
+import type { T } from "@orbis/core/i18n";
+import { fmtDate } from "@orbis/core/i18n";
+import { type Item, optionNames, type Value } from "@orbis/core/model";
+import type { ActivityEvent, FieldChange } from "@orbis/core/protocol";
 import { ChevronRight } from "lucide-react";
 import { type ReactNode, useEffect, useId, useMemo, useState } from "react";
 import { spaceCall } from "../accounts";

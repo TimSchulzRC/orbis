@@ -1,6 +1,6 @@
 // Workspace routes under /w/<id>/ need a member's token in the Authorization header. Besides the
 // server's own page, only the apps in APP_ORIGINS (the desktop app, a web app served elsewhere) may
-// call the server from a browser (CORS). OBTION_WEB_APP=off serves no web app (headless).
+// call the server from a browser (CORS). ORBIS_WEB_APP=off serves no web app (headless).
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { extname, join, resolve } from "node:path";
 import type {
@@ -16,10 +16,10 @@ import type {
 	SignedIn,
 	SignupPolicy,
 	SignupRequest,
-} from "@obtion/core/api";
-import { acceptLang, LANGS, type Lang } from "@obtion/core/i18n";
-import { agentOrigin, firstName, personOrigin } from "@obtion/core/origin";
-import { upgradeSetup } from "@obtion/core/setup";
+} from "@orbis/core/api";
+import { acceptLang, LANGS, type Lang } from "@orbis/core/i18n";
+import { agentOrigin, firstName, personOrigin } from "@orbis/core/origin";
+import { upgradeSetup } from "@orbis/core/setup";
 import type { Server, ServerWebSocket } from "bun";
 import { AccountError, Accounts, FRESH_SECONDS, randomToken, SIGNUP_COOKIE } from "./accounts";
 import { DATA, MAX_ATTACH, MAX_BLOB, MAX_WS_MESSAGE, PORT } from "./config";
@@ -32,19 +32,19 @@ import { allowedHosts } from "./trust";
 import { type Conn, parseClientMsg, Workspace } from "./workspace";
 
 const HOST = process.env.HOST ?? "127.0.0.1";
-const DIST = resolve(process.env.OBTION_WEB_DIST ?? join(import.meta.dir, "../../web/dist"));
-const PUBLIC_URL = process.env.OBTION_PUBLIC_URL ?? "";
-/** Every server brings the web app; OBTION_WEB_APP=off makes it a server for sync, API and MCP only (headless). */
-const WEB_APP = !/^(off|0|false|no)$/i.test(process.env.OBTION_WEB_APP ?? "on");
+const DIST = resolve(process.env.ORBIS_WEB_DIST ?? join(import.meta.dir, "../../web/dist"));
+const PUBLIC_URL = process.env.ORBIS_PUBLIC_URL ?? "";
+/** Every server brings the web app; ORBIS_WEB_APP=off makes it a server for sync, API and MCP only (headless). */
+const WEB_APP = !/^(off|0|false|no)$/i.test(process.env.ORBIS_WEB_APP ?? "on");
 /** The first account may always sign up. */
 const SIGNUP = (
-	["open", "invite", "off"].includes(process.env.OBTION_SIGNUP ?? "")
-		? process.env.OBTION_SIGNUP
+	["open", "invite", "off"].includes(process.env.ORBIS_SIGNUP ?? "")
+		? process.env.ORBIS_SIGNUP
 		: "invite"
 ) as SignupPolicy;
 /** Set by the Dockerfile, e.g. 0.0.2-nightly.20261030.41. */
-const VERSION = process.env.OBTION_BUILD_VERSION || "dev";
-const COMMIT = (process.env.OBTION_BUILD_COMMIT ?? "").slice(0, 7);
+const VERSION = process.env.ORBIS_BUILD_VERSION || "dev";
+const COMMIT = (process.env.ORBIS_BUILD_COMMIT ?? "").slice(0, 7);
 
 mkdirSync(DATA, { recursive: true });
 const configPath = join(DATA, "config.json");
@@ -60,7 +60,7 @@ const login = (() => {
 	try {
 		return loginConfig(process.env, PUBLIC_URL);
 	} catch (e) {
-		console.error(`[obtion] ${e instanceof Error ? e.message : e}`);
+		console.error(`[orbis] ${e instanceof Error ? e.message : e}`);
 		process.exit(1);
 	}
 })();
@@ -102,7 +102,7 @@ const methodNames = [
 	.filter(Boolean)
 	.join(", ");
 console.log(
-	`[obtion] ${VERSION}${COMMIT ? ` (${COMMIT})` : ""}, ${accounts.userCount()} accounts, signup ${SIGNUP}, sign-in by ${methodNames}, data in ${DATA}`,
+	`[orbis] ${VERSION}${COMMIT ? ` (${COMMIT})` : ""}, ${accounts.userCount()} accounts, signup ${SIGNUP}, sign-in by ${methodNames}, data in ${DATA}`,
 );
 
 /** For requests trusted only because a browser sent them. Browsers always send Origin on WebSocket upgrades and cross-site requests. */
@@ -118,12 +118,12 @@ function sameOrigin(req: Request): boolean {
 
 /**
  * Apps on another origin that sign in and call the API like the server's own page: the desktop
- * app (its pages are obtion://app) and OBTION_APP_ORIGINS, e.g. https://notes.example.org for the
+ * app (its pages are orbis://app) and ORBIS_APP_ORIGINS, e.g. https://notes.example.org for the
  * web app served by another host. Every other site gets no CORS answer.
  */
 const APP_ORIGINS = new Set([
-	"obtion://app",
-	...(process.env.OBTION_APP_ORIGINS ?? "")
+	"orbis://app",
+	...(process.env.ORBIS_APP_ORIGINS ?? "")
 		.split(",")
 		.map((o) => o.trim().replace(/\/$/, ""))
 		// "null" is every opaque origin (sandboxed frames, file:), never an app
@@ -148,14 +148,14 @@ function withCors(req: Request, res: Response): Response {
 	if (!origin) return res;
 	const out = new Response(res.body, res);
 	out.headers.set("access-control-allow-origin", origin);
-	out.headers.set("access-control-expose-headers", "x-obtion-missing");
+	out.headers.set("access-control-expose-headers", "x-orbis-missing");
 	out.headers.append("vary", "origin");
 	return out;
 }
 
 const allowedHost = allowedHosts([
 	PUBLIC_URL ? new URL(PUBLIC_URL).host : "",
-	...(process.env.OBTION_ALLOWED_HOSTS ?? "").split(","),
+	...(process.env.ORBIS_ALLOWED_HOSTS ?? "").split(","),
 ]);
 
 // Browsers cannot set headers on a WebSocket, so there the token comes as subprotocol "auth.<token>".
@@ -384,10 +384,10 @@ async function accountApi(req: Request, path: string, url: URL): Promise<Respons
 				return json<McpConnect>({
 					mcpUrl,
 					token: mcpToken,
-					claudeCode: `claude mcp add --transport http obtion ${mcpUrl} --header "Authorization: Bearer ${mcpToken}" -s user`,
+					claudeCode: `claude mcp add --transport http orbis ${mcpUrl} --header "Authorization: Bearer ${mcpToken}" -s user`,
 					json: {
 						mcpServers: {
-							obtion: {
+							orbis: {
 								type: "http",
 								url: mcpUrl,
 								headers: { Authorization: `Bearer ${mcpToken}` },
@@ -441,7 +441,7 @@ async function route(incoming: Request, srv: Server<Conn>): Promise<Response | u
 	const url = new URL(incoming.url);
 	const path = url.pathname;
 	if (!allowedHost(incoming.headers.get("host")))
-		return new Response("Unknown host. Add it to OBTION_ALLOWED_HOSTS or set OBTION_PUBLIC_URL.", {
+		return new Response("Unknown host. Add it to ORBIS_ALLOWED_HOSTS or set ORBIS_PUBLIC_URL.", {
 			status: 421,
 		});
 
@@ -457,7 +457,7 @@ async function route(incoming: Request, srv: Server<Conn>): Promise<Response | u
 			status: 204,
 			headers: {
 				"access-control-allow-methods": "GET, POST, PUT, PATCH, DELETE",
-				"access-control-allow-headers": "authorization, content-type, x-obtion-probe",
+				"access-control-allow-headers": "authorization, content-type, x-orbis-probe",
 				"access-control-max-age": "86400",
 			},
 		});
@@ -469,7 +469,7 @@ async function route(incoming: Request, srv: Server<Conn>): Promise<Response | u
 	if (path.startsWith("/api/auth/")) {
 		// an OAuth provider sends the browser back from its own site; Better Auth checks the state
 		const callback = req.method === "GET" && path.startsWith("/api/auth/callback/");
-		// an app counts as one even where its origin's host looks like this server's (obtion://app, host "app")
+		// an app counts as one even where its origin's host looks like this server's (orbis://app, host "app")
 		const app = appOrigin(req);
 		if (!callback && (app || !sameOrigin(req))) {
 			if (!app || !APP_AUTH.has(path)) return fail(403, "forbidden");
@@ -543,7 +543,7 @@ async function route(incoming: Request, srv: Server<Conn>): Promise<Response | u
 					userId: user.id,
 					session: token,
 				},
-				headers: { "sec-websocket-protocol": "obtion" },
+				headers: { "sec-websocket-protocol": "orbis" },
 			});
 			return ok ? undefined : fail(400, "expected WebSocket");
 		}
@@ -551,7 +551,7 @@ async function route(incoming: Request, srv: Server<Conn>): Promise<Response | u
 	}
 
 	if (!WEB_APP)
-		return new Response("This Obtion server serves sync, API and MCP only (OBTION_WEB_APP=off).", {
+		return new Response("This Orbis server serves sync, API and MCP only (ORBIS_WEB_APP=off).", {
 			status: 404,
 		});
 	return serveStatic(path);
@@ -588,7 +588,7 @@ const server = Bun.serve<Conn>({
 });
 
 console.log(
-	`[obtion] listening on http://${server.hostname}:${server.port}${WEB_APP ? "" : " (no web app: OBTION_WEB_APP=off)"}`,
+	`[orbis] listening on http://${server.hostname}:${server.port}${WEB_APP ? "" : " (no web app: ORBIS_WEB_APP=off)"}`,
 );
 
 function stop() {

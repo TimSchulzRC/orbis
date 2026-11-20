@@ -1,4 +1,4 @@
-import { fmtDate } from "@obtion/core/i18n";
+import { fmtDate } from "@orbis/core/i18n";
 import {
 	type Item,
 	type ItemInit,
@@ -7,7 +7,7 @@ import {
 	propByName,
 	type StatusGroup,
 	type ViewTab,
-} from "@obtion/core/model";
+} from "@orbis/core/model";
 import {
 	type EvalCtx,
 	FIELDS,
@@ -17,8 +17,8 @@ import {
 	pathBase,
 	type QueryDef,
 	viewTypeIds,
-} from "@obtion/core/query";
-import { firstOfGroup, statusProp } from "@obtion/core/traits";
+} from "@orbis/core/query";
+import { firstOfGroup, statusProp } from "@orbis/core/traits";
 import { ChevronDown, ChevronRight, Plus } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { Input } from "../components/ui/input";

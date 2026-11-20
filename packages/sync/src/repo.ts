@@ -1,8 +1,8 @@
 // A device's full offline replica of the server's data. Platform-free: storage, the server
 // connection and questions to the user come from the RepoHost.
 
-import type { PurgeRequest, PurgeResult, UndoRequest } from "@obtion/core/api";
-import { Index } from "@obtion/core/graph";
+import type { PurgeRequest, PurgeResult, UndoRequest } from "@orbis/core/api";
+import { Index } from "@orbis/core/graph";
 import {
 	addParent,
 	addRef,
@@ -36,8 +36,8 @@ import {
 	setRules,
 	touch,
 	type Value,
-} from "@obtion/core/model";
-import { type Person, personOrigin } from "@obtion/core/origin";
+} from "@orbis/core/model";
+import { type Person, personOrigin } from "@orbis/core/origin";
 import {
 	type ActivityEvent,
 	type ClientMsg,
@@ -45,12 +45,12 @@ import {
 	type PushItem,
 	type ServerMsg,
 	toB64,
-} from "@obtion/core/protocol";
-import { createIndex, indexRecord, searchIds } from "@obtion/core/search";
-import type { Writer } from "@obtion/core/setup";
-import { nextPinKey } from "@obtion/core/sortkey";
-import { initialProps, template, writeProp } from "@obtion/core/traits";
-import { deleteItem, resolveCascade, restoreItem } from "@obtion/core/trash";
+} from "@orbis/core/protocol";
+import { createIndex, indexRecord, searchIds } from "@orbis/core/search";
+import type { Writer } from "@orbis/core/setup";
+import { nextPinKey } from "@orbis/core/sortkey";
+import { initialProps, template, writeProp } from "@orbis/core/traits";
+import { deleteItem, resolveCascade, restoreItem } from "@orbis/core/trash";
 import * as Y from "yjs";
 
 const REMOTE = Symbol("remote");

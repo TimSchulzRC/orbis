@@ -1,12 +1,12 @@
 // Behaviour hangs on what the types mark (capabilities, `blocks`, a status option's group), never on a
 // type's or property's id or name: without the default types, with other names, everything works.
 import { expect, test } from "bun:test";
-import { matchOption } from "@obtion/core/input";
-import { type PropDef, removeProp, upsertProp } from "@obtion/core/model";
-import { runSetup, SYS } from "@obtion/core/setup";
-import { running } from "@obtion/core/today";
-import { progressSpec } from "@obtion/core/traits";
-import { deleteType } from "@obtion/core/typeops";
+import { matchOption } from "@orbis/core/input";
+import { type PropDef, removeProp, upsertProp } from "@orbis/core/model";
+import { runSetup, SYS } from "@orbis/core/setup";
+import { running } from "@orbis/core/today";
+import { progressSpec } from "@orbis/core/traits";
+import { deleteType } from "@orbis/core/typeops";
 import { MemRepo } from "../support/helpers";
 
 /** A project and its steps under other names, without any default type. */

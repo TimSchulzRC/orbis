@@ -1,8 +1,8 @@
 // The first setup of a workspace on the server, and the writer the server's own changes go through.
 
-import { addExamples, EXAMPLE_ORIGIN, fileFacts } from "@obtion/core/examples";
-import type { Lang } from "@obtion/core/i18n";
-import { runSetup, type Writer } from "@obtion/core/setup";
+import { addExamples, EXAMPLE_ORIGIN, fileFacts } from "@orbis/core/examples";
+import type { Lang } from "@orbis/core/i18n";
+import { runSetup, type Writer } from "@orbis/core/setup";
 import { type Blobs, sha256 } from "./blobs";
 import type { Store } from "./store";
 

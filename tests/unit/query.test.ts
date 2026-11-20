@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { addDaysISO, setMember } from "@obtion/core/model";
+import { addDaysISO, setMember } from "@orbis/core/model";
 import {
 	blocksAsText,
 	findBlocks,
@@ -11,8 +11,8 @@ import {
 	runQuery,
 	shownByBlocks,
 	tabDef,
-} from "@obtion/core/query";
-import { runSetup, SYS } from "@obtion/core/setup";
+} from "@orbis/core/query";
+import { runSetup, SYS } from "@orbis/core/setup";
 import { MemRepo } from "../support/helpers";
 
 function world() {

@@ -1,12 +1,12 @@
 // Format 3: dates with a time, lists in free properties (a former multiple choice) and former property names.
 import { describe, expect, test } from "bun:test";
-import { dayOf, timeOf } from "@obtion/core/date";
-import type { Index } from "@obtion/core/graph";
-import { dateText, parseDateTime } from "@obtion/core/input";
-import { propByName, readSchema, setExtra, upsertProp } from "@obtion/core/model";
-import { groupItems, parseQuery, runQuery as run } from "@obtion/core/query";
-import { dateEnd, dueOf } from "@obtion/core/traits";
-import { freeDef, mapValue, toFree } from "@obtion/core/typeops";
+import { dayOf, timeOf } from "@orbis/core/date";
+import type { Index } from "@orbis/core/graph";
+import { dateText, parseDateTime } from "@orbis/core/input";
+import { propByName, readSchema, setExtra, upsertProp } from "@orbis/core/model";
+import { groupItems, parseQuery, runQuery as run } from "@orbis/core/query";
+import { dateEnd, dueOf } from "@orbis/core/traits";
+import { freeDef, mapValue, toFree } from "@orbis/core/typeops";
 import { MemRepo } from "../support/helpers";
 
 const runQuery = (q: string, ix: Index, ctx: { today?: string }) =>

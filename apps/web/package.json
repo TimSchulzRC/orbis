@@ -1,7 +1,7 @@
 {
-	"name": "@obtion/web",
+	"name": "@orbis/web",
 	"private": true,
-	"description": "The web app (PWA): a thin shell around @obtion/ui, served by the server",
+	"description": "The web app (PWA): a thin shell around @orbis/ui, served by the server",
 	"license": "AGPL-3.0-or-later",
 	"type": "module",
 	"scripts": {
@@ -10,7 +10,7 @@
 		"dev:build": "vite build --watch"
 	},
 	"dependencies": {
-		"@obtion/ui": "workspace:*",
+		"@orbis/ui": "workspace:*",
 		"react": "^19.3.1",
 		"react-dom": "^19.3.1",
 		"sonner": "^2.0.8",

@@ -2,15 +2,15 @@
 // what was sorted with its undo (kept until cleared), and folded below what comes back tomorrow ("Back tomorrow").
 // Also the rule of what lands in the inbox.
 
-import { sameValue } from "@obtion/core/equal";
-import { fmtBytes, type Lang, type T } from "@obtion/core/i18n";
-import { inboxWhere } from "@obtion/core/inbox";
-import { SETTINGS_ID, setMeta, setSettings } from "@obtion/core/model";
-import { belowOf } from "@obtion/core/placement";
-import type { QueryDef } from "@obtion/core/query";
-import { plainText } from "@obtion/core/search";
-import { resetInbox } from "@obtion/core/setup";
-import type { Repo } from "@obtion/sync";
+import { sameValue } from "@orbis/core/equal";
+import { fmtBytes, type Lang, type T } from "@orbis/core/i18n";
+import { inboxWhere } from "@orbis/core/inbox";
+import { SETTINGS_ID, setMeta, setSettings } from "@orbis/core/model";
+import { belowOf } from "@orbis/core/placement";
+import type { QueryDef } from "@orbis/core/query";
+import { plainText } from "@orbis/core/search";
+import { resetInbox } from "@orbis/core/setup";
+import type { Repo } from "@orbis/sync";
 import {
 	Check,
 	ChevronDown,

@@ -1,6 +1,6 @@
-import { fmtDate, fmtNumber } from "@obtion/core/i18n";
-import type { Item } from "@obtion/core/model";
-import { type EvalCtx, fieldOf } from "@obtion/core/query";
+import { fmtDate, fmtNumber } from "@orbis/core/i18n";
+import type { Item } from "@orbis/core/model";
+import { type EvalCtx, fieldOf } from "@orbis/core/query";
 import { itemHref } from "../hooks";
 import { useT } from "../i18n";
 import { StatusPill, Tag } from "./item-look";

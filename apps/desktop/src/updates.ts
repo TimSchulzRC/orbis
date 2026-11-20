@@ -4,7 +4,7 @@
 // electron, so the tests can load it.
 import { channelOf } from "../../server/src/icons";
 
-export const RELEASES = "https://api.github.com/repos/TimSchulzRC/obtion/releases?per_page=50";
+export const RELEASES = "https://api.github.com/repos/TimSchulzRC/orbis/releases?per_page=50";
 
 /** What the GitHub API says about a release (only what is used here). */
 export interface Release {
@@ -67,7 +67,7 @@ const ARCH: Record<string, string[]> = {
 	arm64: ["arm64", "aarch64"],
 };
 
-/** Whether `name` is the installer for `sys`: Obtion-<version>-<os>-<arch>.<ext>. */
+/** Whether `name` is the installer for `sys`: Orbis-<version>-<os>-<arch>.<ext>. */
 export function isInstallerFor(name: string, sys: System): boolean {
 	const os = OS[sys.platform];
 	if (!os) return false;

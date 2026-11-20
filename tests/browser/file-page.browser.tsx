@@ -1,8 +1,8 @@
 // The file page: a text or code file shows its content (monospace), an Office file the text the
 // server took out, HTML only as text – never rendered; every file has its download.
 
-import { type FileMeta, initItem, newId, setFileMeta } from "@obtion/core/model";
-import type { Repo } from "@obtion/sync";
+import { type FileMeta, initItem, newId, setFileMeta } from "@orbis/core/model";
+import type { Repo } from "@orbis/sync";
 import { afterEach, expect, test } from "vitest";
 import { page } from "vitest/browser";
 import { cleanup, render } from "vitest-browser-react";

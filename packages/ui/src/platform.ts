@@ -1,8 +1,8 @@
 // Where the app runs. In a browser it belongs to one server: the one that served it, or the one it
-// was built for (VITE_OBTION_SERVER, for a web app served by another host). In the desktop app
+// was built for (VITE_ORBIS_SERVER, for a web app served by another host). In the desktop app
 // (apps/desktop) it belongs to the server running on this device – its local workspaces work
 // without a network – and can connect to further servers.
-import type { User } from "@obtion/core/api";
+import type { User } from "@orbis/core/api";
 
 /** What the desktop app's preload hands the page (apps/desktop/src/preload.ts). */
 export interface DesktopBridge {
@@ -23,12 +23,12 @@ export interface DesktopBridge {
 
 declare global {
 	interface Window {
-		obtionDesktop?: DesktopBridge;
+		orbisDesktop?: DesktopBridge;
 	}
 }
 
 export const desktop: DesktopBridge | undefined =
-	typeof window !== "undefined" ? window.obtionDesktop : undefined;
+	typeof window !== "undefined" ? window.orbisDesktop : undefined;
 
 // the app's top row is the window's title bar there (styles.css: titlebar)
 if (desktop) document.documentElement.dataset.desktop = desktop.os;
@@ -37,7 +37,7 @@ if (desktop) document.documentElement.dataset.desktop = desktop.os;
 export const homeUrl = (): string =>
 	desktop
 		? desktop.local.url
-		: (import.meta.env.VITE_OBTION_SERVER || location.origin).replace(/\/$/, "");
+		: (import.meta.env.VITE_ORBIS_SERVER || location.origin).replace(/\/$/, "");
 
 /** Further servers can be added: only in the desktop app (a web page stays with its server). */
 export const canConnect = !!desktop;

@@ -1,22 +1,22 @@
 // Before any module of the interface loads: the app in German, signed in with one workspace,
 // "ws", whose replica is the workspace in memory (workspace.ts) instead of one that syncs.
 import { vi } from "vitest";
-import "@obtion/ui/styles.css";
+import "@orbis/ui/styles.css";
 
 localStorage.clear();
-localStorage.setItem("obtion.lang", "de");
+localStorage.setItem("orbis.lang", "de");
 localStorage.setItem(
-	"obtion.account",
+	"orbis.account",
 	JSON.stringify({
 		token: "test",
 		user: { id: "u-test", name: "Test", email: "test@example.org" },
 	}),
 );
 localStorage.setItem(
-	"obtion.spaces",
+	"orbis.spaces",
 	JSON.stringify([{ id: "ws", name: "Personal", role: "owner" }]),
 );
-localStorage.setItem("obtion.active", "ws");
+localStorage.setItem("orbis.active", "ws");
 
 // accounts.ts as it is, only replica() answers with the workspace in memory. Spied, not replaced
 // by a factory: accounts.ts and hooks.ts import each other, and a factory that loads the original

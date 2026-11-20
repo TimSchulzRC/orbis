@@ -2,15 +2,15 @@
 // the layout.
 
 import type { EditorView } from "@codemirror/view";
-import type { Index } from "@obtion/core/graph";
-import { type Item, META_TYPE } from "@obtion/core/model";
-import { isInInbox } from "@obtion/core/placement";
-import { pluralOf } from "@obtion/core/plural";
-import { hasUpdates, progressSpec } from "@obtion/core/traits";
-import { movedItems } from "@obtion/core/transfer";
-import { onlyBelow } from "@obtion/core/trash";
-import { wouldBeInInbox } from "@obtion/core/typeops";
-import { updateFeed } from "@obtion/core/updates";
+import type { Index } from "@orbis/core/graph";
+import { type Item, META_TYPE } from "@orbis/core/model";
+import { isInInbox } from "@orbis/core/placement";
+import { pluralOf } from "@orbis/core/plural";
+import { hasUpdates, progressSpec } from "@orbis/core/traits";
+import { movedItems } from "@orbis/core/transfer";
+import { onlyBelow } from "@orbis/core/trash";
+import { wouldBeInInbox } from "@orbis/core/typeops";
+import { updateFeed } from "@orbis/core/updates";
 import {
 	AlertTriangle,
 	ArrowRightLeft,

@@ -1,10 +1,10 @@
 // Typing goes to the server as a few push items per document and step, not one per keystroke,
 // while every keystroke is stored on the device at once (outbox and updates).
 import { afterAll, expect, test } from "bun:test";
-import { FORMAT, PERSONAL, touch } from "@obtion/core/model";
-import { type ClientMsg, fromB64, type ServerMsg } from "@obtion/core/protocol";
-import { Store } from "@obtion/server/store";
-import { undoStep } from "@obtion/server/undo";
+import { FORMAT, PERSONAL, touch } from "@orbis/core/model";
+import { type ClientMsg, fromB64, type ServerMsg } from "@orbis/core/protocol";
+import { Store } from "@orbis/server/store";
+import { undoStep } from "@orbis/server/undo";
 import {
 	type OutItem,
 	PUSH_DELAY,
@@ -12,7 +12,7 @@ import {
 	Repo,
 	type StoredRow,
 	type SyncSocket,
-} from "@obtion/sync";
+} from "@orbis/sync";
 import { removeTempDirs, tempDir } from "../support/helpers";
 
 afterAll(removeTempDirs);
@@ -132,7 +132,7 @@ async function settle(repo: Repo) {
 }
 
 test("typing is pushed as one item per push delay; every keystroke is stored at once", async () => {
-	const store = new Store(tempDir("obtion-typing-"));
+	const store = new Store(tempDir("orbis-typing-"));
 	const { repo, mem, pushes } = await device(store);
 	const id = repo.create({ title: "Notiz" });
 	await settle(repo);
@@ -156,7 +156,7 @@ test("typing is pushed as one item per push delay; every keystroke is stored at 
 });
 
 test("updates of different steps or documents are never merged; undo pushes what is unsent", async () => {
-	const store = new Store(tempDir("obtion-typing-"));
+	const store = new Store(tempDir("orbis-typing-"));
 	const { repo } = await device(store);
 	const a = repo.create({ title: "A" });
 	const b = repo.create({ title: "B" });
@@ -192,7 +192,7 @@ test("updates of different steps or documents are never merged; undo pushes what
 });
 
 test("a flush before the push delay keeps a later step behind the typing it builds on", async () => {
-	const store = new Store(tempDir("obtion-typing-"));
+	const store = new Store(tempDir("orbis-typing-"));
 	const { repo } = await device(store);
 	const id = repo.create({ title: "A" });
 	await settle(repo);
@@ -215,7 +215,7 @@ test("a flush before the push delay keeps a later step behind the typing it buil
 });
 
 test("changes other than typing go to the server without the delay", async () => {
-	const store = new Store(tempDir("obtion-typing-"));
+	const store = new Store(tempDir("orbis-typing-"));
 	const { repo } = await device(store);
 	const id = repo.create({ title: "A" });
 	await sleep(5);
@@ -231,7 +231,7 @@ test("changes other than typing go to the server without the delay", async () =>
 });
 
 test("a reload before the push finds every keystroke in the stored outbox", async () => {
-	const store = new Store(tempDir("obtion-typing-"));
+	const store = new Store(tempDir("orbis-typing-"));
 	const first = await device(store);
 	const id = first.repo.create({ title: "Notiz" });
 	await settle(first.repo);
@@ -247,7 +247,7 @@ test("a reload before the push finds every keystroke in the stored outbox", asyn
 });
 
 test("a title typed key by key, every key its own step and push, is one entry in the history", async () => {
-	const store = new Store(tempDir("obtion-typing-"));
+	const store = new Store(tempDir("orbis-typing-"));
 	const { repo } = await device(store);
 	const id = repo.create({ title: "" });
 	await settle(repo);

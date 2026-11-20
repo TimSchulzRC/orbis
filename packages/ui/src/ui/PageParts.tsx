@@ -1,10 +1,10 @@
 // Parts every page shares, note and file pages alike (design rules § 3.1).
 
-import { dateOf } from "@obtion/core/date";
-import type { Index } from "@obtion/core/graph";
-import { fmtDate, type T } from "@obtion/core/i18n";
-import { type Item, META_TYPE } from "@obtion/core/model";
-import { hasPlace, isInInbox } from "@obtion/core/placement";
+import { dateOf } from "@orbis/core/date";
+import type { Index } from "@orbis/core/graph";
+import { fmtDate, type T } from "@orbis/core/i18n";
+import { type Item, META_TYPE } from "@orbis/core/model";
+import { hasPlace, isInInbox } from "@orbis/core/placement";
 import { ChevronRight, Link2, Pin, PinOff, Plus, RotateCcw, Star, X } from "lucide-react";
 import { useState } from "react";
 import { Tip } from "../components/ui/tooltip";
@@ -503,7 +503,7 @@ export function LinksRow({ item }: { item: Item }) {
 					onDragStart={(e) => {
 						// the chip is dragged, not its link: no URL to drop elsewhere, the chip itself under the pointer
 						e.dataTransfer.clearData();
-						e.dataTransfer.setData("obtion/ref", x.id);
+						e.dataTransfer.setData("orbis/ref", x.id);
 						e.dataTransfer.effectAllowed = "move";
 						const box = e.currentTarget.getBoundingClientRect();
 						e.dataTransfer.setDragImage(e.currentTarget, e.clientX - box.left, e.clientY - box.top);

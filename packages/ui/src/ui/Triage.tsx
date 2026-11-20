@@ -1,11 +1,11 @@
 // "Sortieren" (design rules § 5) for any list or query block. An entry leaves the list as soon as
 // it no longer matches the query.
 
-import { DAY_MS } from "@obtion/core/date";
-import type { Index } from "@obtion/core/graph";
-import type { T } from "@obtion/core/i18n";
-import { type Item, setMeta } from "@obtion/core/model";
-import { belowOf } from "@obtion/core/placement";
+import { DAY_MS } from "@orbis/core/date";
+import type { Index } from "@orbis/core/graph";
+import type { T } from "@orbis/core/i18n";
+import { type Item, setMeta } from "@orbis/core/model";
+import { belowOf } from "@orbis/core/placement";
 import { ArrowRight, Check, FolderInput, Shapes, Sparkles, Trash2, X } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { recentPlaces } from "../actions";

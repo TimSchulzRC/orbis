@@ -1,6 +1,6 @@
 // A page's updates as one feed: its own and those below it, unread agent updates, days.
 import { expect, test } from "bun:test";
-import { appendUpdate } from "@obtion/core/model";
+import { appendUpdate } from "@orbis/core/model";
 import {
 	byAgent,
 	byDay,
@@ -9,7 +9,7 @@ import {
 	type ReadMark,
 	unread,
 	updateFeed,
-} from "@obtion/core/updates";
+} from "@orbis/core/updates";
 import { MemRepo } from "../support/helpers";
 
 const at = (iso: string) => new Date(iso).getTime();

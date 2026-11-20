@@ -1,9 +1,9 @@
 import { afterAll, beforeEach, expect, test } from "bun:test";
-import { putBackUpdate, removeUpdate, replaceBody, touch } from "@obtion/core/model";
-import { agentOrigin, personOrigin } from "@obtion/core/origin";
-import type { Ops } from "@obtion/server/ops";
-import type { Store } from "@obtion/server/store";
-import { undoStep } from "@obtion/server/undo";
+import { putBackUpdate, removeUpdate, replaceBody, touch } from "@orbis/core/model";
+import { agentOrigin, personOrigin } from "@orbis/core/origin";
+import type { Ops } from "@orbis/server/ops";
+import type { Store } from "@orbis/server/store";
+import { undoStep } from "@orbis/server/undo";
 import { removeTempDirs } from "../support/helpers";
 import { ok, setupStore, tool as storeTool } from "../support/store";
 
@@ -11,7 +11,7 @@ afterAll(removeTempDirs);
 
 let s: Store;
 let ops: Ops;
-beforeEach(() => ({ s, ops } = setupStore("obtion-history-")));
+beforeEach(() => ({ s, ops } = setupStore("orbis-history-")));
 
 const AG = agentOrigin("claude-code", { id: "u1", name: "Tim" });
 const TIM = personOrigin({ id: "u1", name: "Tim" }, "Mac");

@@ -13,9 +13,9 @@ const failures: string[] = [];
 let checks = 0;
 
 async function startServer(seeded: boolean, noTypes = false, workspace = true) {
-	const dir = mkdtempSync(join(tmpdir(), "obtion-e2e-"));
-	const env = { ...process.env, OBTION_DATA: dir };
-	let { url, proc } = await bootServer({ OBTION_DATA: dir });
+	const dir = mkdtempSync(join(tmpdir(), "orbis-e2e-"));
+	const env = { ...process.env, ORBIS_DATA: dir };
+	let { url, proc } = await bootServer({ ORBIS_DATA: dir });
 	// the first account (the admin) with a workspace made through the API (the app sets it up) – or
 	// none, to create it on the page
 	const { token: session, me } = await firstAccount(url, workspace);
@@ -29,7 +29,7 @@ async function startServer(seeded: boolean, noTypes = false, workspace = true) {
 			if (!del.stdout.toString().includes("types left: 0"))
 				throw new Error(`deleting types failed: ${del.stderr.toString()}`);
 		}
-		({ url, proc } = await bootServer({ OBTION_DATA: dir }));
+		({ url, proc } = await bootServer({ ORBIS_DATA: dir }));
 	}
 	const server = { dir, url, proc, file: "", trashed: "", token: session, me };
 	if (seeded && !noTypes) {
@@ -65,10 +65,10 @@ async function signedIn(
 	const spaces = server.me.workspaces;
 	await context.addInitScript(
 		({ account, spaces }) => {
-			if (localStorage.getItem("obtion.account")) return;
-			localStorage.setItem("obtion.account", JSON.stringify(account));
-			localStorage.setItem("obtion.spaces", JSON.stringify(spaces));
-			if (spaces[0]) localStorage.setItem("obtion.active", spaces[0].id);
+			if (localStorage.getItem("orbis.account")) return;
+			localStorage.setItem("orbis.account", JSON.stringify(account));
+			localStorage.setItem("orbis.spaces", JSON.stringify(spaces));
+			if (spaces[0]) localStorage.setItem("orbis.active", spaces[0].id);
 		},
 		{ account, spaces },
 	);
@@ -528,7 +528,7 @@ async function firstWorkspace(browser: import("playwright").Browser, server: Ser
 	watch(page, errors);
 	const label = "fresh light";
 	const welcome = (p: Page) =>
-		p.locator("aside section[aria-label='Persönlich']").getByText("So funktioniert Obtion");
+		p.locator("aside section[aria-label='Persönlich']").getByText("So funktioniert Orbis");
 	await check(page, label, "/", errors, async (p) => {
 		if ((await p.getByLabel("Name").inputValue()) !== "Persönlich")
 			failures.push(`${label}: the first workspace's name is not preset`);
@@ -598,7 +598,7 @@ async function firstWorkspace(browser: import("playwright").Browser, server: Ser
 	});
 	await check(page, label, "/", errors, async (p) => {
 		await p.evaluate(
-			() => (location.hash = `#/w/${localStorage.getItem("obtion.active")}/settings`),
+			() => (location.hash = `#/w/${localStorage.getItem("orbis.active")}/settings`),
 		);
 		await p.getByRole("button", { name: "Beispiele entfernen …" }).click();
 		const dialog = p.getByRole("dialog");
@@ -1009,8 +1009,8 @@ async function deleteAccountOnSettings(browser: import("playwright").Browser, se
 		await reloaded;
 		await p.getByRole("button", { name: "Konto anlegen", exact: true }).waitFor();
 		const stored = await p.evaluate(() => ({
-			account: JSON.parse(localStorage.getItem("obtion.account") ?? "null"),
-			spaces: JSON.parse(localStorage.getItem("obtion.spaces") ?? "[]"),
+			account: JSON.parse(localStorage.getItem("orbis.account") ?? "null"),
+			spaces: JSON.parse(localStorage.getItem("orbis.spaces") ?? "[]"),
 		}));
 		if (stored.account || stored.spaces.length)
 			throw new Error("account or workspace metadata remained on this device");
@@ -1019,7 +1019,7 @@ async function deleteAccountOnSettings(browser: import("playwright").Browser, se
 		);
 		if (
 			databases.some(
-				(name) => name === "obtion" || name === "obtion-files" || name?.startsWith("obtion-ws-"),
+				(name) => name === "orbis" || name === "orbis-files" || name?.startsWith("orbis-ws-"),
 			)
 		)
 			throw new Error("workspace database remained on this device");

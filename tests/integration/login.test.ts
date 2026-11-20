@@ -1,8 +1,8 @@
 // Signing in without a password: codes by email, the sign-up rules for every way in, the OAuth
 // cookie traded for a token, deleting an account that has no password.
 import { afterAll, expect, test } from "bun:test";
-import type { SignupPolicy } from "@obtion/core/api";
-import { Accounts, SIGNUP_COOKIE } from "@obtion/server/accounts";
+import type { SignupPolicy } from "@orbis/core/api";
+import { Accounts, SIGNUP_COOKIE } from "@orbis/server/accounts";
 import { removeTempDirs, tempDir } from "../support/helpers";
 
 afterAll(removeTempDirs);
@@ -13,7 +13,7 @@ let address = 0;
 
 async function setUp(policy: SignupPolicy, opts: { password?: boolean } = {}) {
 	const codes: { to: string; code: string; lang?: string }[] = [];
-	const accounts = new Accounts(tempDir("obtion-login-"), {
+	const accounts = new Accounts(tempDir("orbis-login-"), {
 		secret: SECRET,
 		baseURL: "http://localhost:8480",
 		policy,

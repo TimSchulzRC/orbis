@@ -5,7 +5,7 @@
 #   check-image.sh <image> <version> <commit>
 set -euo pipefail
 image=$1 version=$2 commit=$3
-name=obtion-check-$$
+name=orbis-check-$$
 trap 'docker rm -f -v "$name" >/dev/null 2>&1 || true' EXIT
 
 docker run -d --name "$name" -p 127.0.0.1::8480 "$image" >/dev/null

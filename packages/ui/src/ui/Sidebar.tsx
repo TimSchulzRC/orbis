@@ -4,11 +4,11 @@
 // another workspace's block, an item moves there. Dragging a workspace's name to the nearest gap
 // reorders the blocks; the order is the account's, on every device.
 
-import { type Item, META_TYPE, SETTINGS_ID, setSchemaField, setSettings } from "@obtion/core/model";
-import { sidebarChildren, sidebarRoots } from "@obtion/core/placement";
-import { restoreDefaultTypes } from "@obtion/core/setup";
-import { cmpKey, keyBetween, keysFor } from "@obtion/core/sortkey";
-import { filesBelow } from "@obtion/core/zip";
+import { type Item, META_TYPE, SETTINGS_ID, setSchemaField, setSettings } from "@orbis/core/model";
+import { sidebarChildren, sidebarRoots } from "@orbis/core/placement";
+import { restoreDefaultTypes } from "@orbis/core/setup";
+import { cmpKey, keyBetween, keysFor } from "@orbis/core/sortkey";
+import { filesBelow } from "@orbis/core/zip";
 import {
 	ArrowDown,
 	ArrowLeft,

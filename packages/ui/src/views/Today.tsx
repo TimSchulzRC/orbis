@@ -1,9 +1,9 @@
 // "Home", the start page, across every workspace seen. Empty sections are left out.
 
-import { fmtDate } from "@obtion/core/i18n";
-import { type Item, SETTINGS_ID, todayISO } from "@obtion/core/model";
-import { cmpKey } from "@obtion/core/sortkey";
-import { dueBy, recentlyChanged, running } from "@obtion/core/today";
+import { fmtDate } from "@orbis/core/i18n";
+import { type Item, SETTINGS_ID, todayISO } from "@orbis/core/model";
+import { cmpKey } from "@orbis/core/sortkey";
+import { dueBy, recentlyChanged, running } from "@orbis/core/today";
 import { Sun } from "lucide-react";
 import { useAccounts } from "../accounts";
 import { useDesktop, useDocumentTitle, useIndex, useItemHref } from "../hooks";

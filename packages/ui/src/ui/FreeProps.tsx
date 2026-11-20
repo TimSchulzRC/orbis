@@ -1,7 +1,7 @@
 // Values left on an entry after its type or property is gone. They can only be shown and removed.
 
-import { fmtDate, fmtNumber } from "@obtion/core/i18n";
-import type { FreeValue } from "@obtion/core/model";
+import { fmtDate, fmtNumber } from "@orbis/core/i18n";
+import type { FreeValue } from "@orbis/core/model";
 import { useT } from "../i18n";
 
 export function FreeValueText({ value }: { value: FreeValue }) {

@@ -1,12 +1,12 @@
 // The page's lower part: "Below", everything below the page as one tree.
 
-import type { Index } from "@obtion/core/graph";
-import { fmtBytes } from "@obtion/core/i18n";
-import type { Item } from "@obtion/core/model";
-import { belowOf } from "@obtion/core/placement";
-import { cmpKey } from "@obtion/core/sortkey";
-import { dueOf, isDone, statusOf } from "@obtion/core/traits";
-import { filesBelow } from "@obtion/core/zip";
+import type { Index } from "@orbis/core/graph";
+import { fmtBytes } from "@orbis/core/i18n";
+import type { Item } from "@orbis/core/model";
+import { belowOf } from "@orbis/core/placement";
+import { cmpKey } from "@orbis/core/sortkey";
+import { dueOf, isDone, statusOf } from "@orbis/core/traits";
+import { filesBelow } from "@orbis/core/zip";
 import { ChevronRight, Plus } from "lucide-react";
 import { Fragment, useState } from "react";
 import { Input } from "../components/ui/input";

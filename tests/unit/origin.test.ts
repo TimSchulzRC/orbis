@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { agentOrigin, originText, parseOrigin, personOrigin } from "@obtion/core/origin";
+import { agentOrigin, originText, parseOrigin, personOrigin } from "@orbis/core/origin";
 
 const tim = { id: "u1", name: "Tim" };
 

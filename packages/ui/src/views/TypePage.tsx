@@ -1,6 +1,6 @@
 // A type is a note with a schema; changing it is editing, not programming.
 
-import { type Item, setTabs } from "@obtion/core/model";
+import { type Item, setTabs } from "@orbis/core/model";
 import { Pencil, Pin, RotateCcw } from "lucide-react";
 import { useEffect } from "react";
 import { useDocumentTitle, useIndex, useRepo, useSpaceId } from "../hooks";

@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Index } from "@obtion/core/graph";
+import { Index } from "@orbis/core/graph";
 import {
 	type Item,
 	type ItemInit,
@@ -10,9 +10,9 @@ import {
 	META_TYPE,
 	newId,
 	readItem,
-} from "@obtion/core/model";
-import type { Writer } from "@obtion/core/setup";
-import { resolveCascade } from "@obtion/core/trash";
+} from "@orbis/core/model";
+import type { Writer } from "@orbis/core/setup";
+import { resolveCascade } from "@orbis/core/trash";
 import * as Y from "yjs";
 
 const temps: string[] = [];

@@ -1,6 +1,6 @@
 # Every half hour, at the minutes of the workflow's own schedule.
 [Unit]
-Description=Obtion: nightly check every half hour
+Description=Orbis: nightly check every half hour
 
 [Timer]
 OnCalendar=*:08,38

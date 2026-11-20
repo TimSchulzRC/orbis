@@ -2,9 +2,9 @@
 // never regenerate it, add one per new format instead. Formats 1 to 3 were dropped with the
 // English stored names, before there was data to keep.
 import { expect, test } from "bun:test";
-import { Index } from "@obtion/core/graph";
-import { FORMAT, type Item, PERSONAL, readItem, SETTINGS_ID } from "@obtion/core/model";
-import { fromB64 } from "@obtion/core/protocol";
+import { Index } from "@orbis/core/graph";
+import { FORMAT, type Item, PERSONAL, readItem, SETTINGS_ID } from "@orbis/core/model";
+import { fromB64 } from "@orbis/core/protocol";
 import * as Y from "yjs";
 import fixture from "../support/format-4.json";
 

@@ -3,9 +3,9 @@
 // height it is given; a long note scrolls inside.
 
 import type { EditorView } from "@codemirror/view";
-import type { Item } from "@obtion/core/model";
-import { belowOf } from "@obtion/core/placement";
-import { plainText } from "@obtion/core/search";
+import type { Item } from "@orbis/core/model";
+import { belowOf } from "@orbis/core/placement";
+import { plainText } from "@orbis/core/search";
 import { Maximize2 } from "lucide-react";
 import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
 import { useBlobUrl } from "../files";

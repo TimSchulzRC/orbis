@@ -46,7 +46,7 @@ import {
 	Users,
 } from "lucide-react";
 
-/** Keys are stored in the data, so never rename them (see @obtion/core/palette). */
+/** Keys are stored in the data, so never rename them (see @orbis/core/palette). */
 export const ICON: Record<string, LucideIcon> = {
 	"sticky-note": StickyNote,
 	map: MapIcon,

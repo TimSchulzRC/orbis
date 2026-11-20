@@ -1,8 +1,8 @@
-import { runSetup } from "@obtion/core/setup";
-import { handleMcp } from "@obtion/server/mcp";
-import { Ops } from "@obtion/server/ops";
-import { storeWriter } from "@obtion/server/setup";
-import { Store } from "@obtion/server/store";
+import { runSetup } from "@orbis/core/setup";
+import { handleMcp } from "@orbis/server/mcp";
+import { Ops } from "@orbis/server/ops";
+import { storeWriter } from "@orbis/server/setup";
+import { Store } from "@orbis/server/store";
 import { tempDir } from "./helpers";
 import { MCP_ACCEPT, type RpcAnswer, rpcBody, toolText } from "./server";
 

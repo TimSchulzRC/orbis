@@ -1,4 +1,4 @@
-import type { Item } from "@obtion/core/model";
+import type { Item } from "@orbis/core/model";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { Textarea } from "../components/ui/textarea";
 import { useFocusDraft, useRepo } from "../hooks";

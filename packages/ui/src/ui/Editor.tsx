@@ -29,8 +29,8 @@ import {
 	WidgetType,
 } from "@codemirror/view";
 import { tags as t } from "@lezer/highlight";
-import { findDrawings } from "@obtion/core/drawing";
-import { parseWikiLinks, titleKey, touchOnTextEdit } from "@obtion/core/model";
+import { findDrawings } from "@orbis/core/drawing";
+import { parseWikiLinks, titleKey, touchOnTextEdit } from "@orbis/core/model";
 import { FilePlus } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { yCollab, yUndoManagerKeymap } from "y-codemirror.next";

@@ -1,7 +1,7 @@
 // A device's start: documents compacted with their record are not decoded until used.
 import { expect, test } from "bun:test";
-import { RECORD_VERSION } from "@obtion/core/model";
-import { type ReplicaStorage, Repo, type StoredRow } from "@obtion/sync";
+import { RECORD_VERSION } from "@orbis/core/model";
+import { type ReplicaStorage, Repo, type StoredRow } from "@orbis/sync";
 
 const noop = () => undefined;
 const done = () => Promise.resolve();

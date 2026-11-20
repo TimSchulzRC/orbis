@@ -21,7 +21,7 @@ import { iconPath } from "../server/src/icons";
 
 // pdf.js loads its JBIG2/JPEG 2000 decoders as WebAssembly from a folder at runtime.
 const pdfjs = dirname(
-	createRequire(createRequire(import.meta.url).resolve("@obtion/ui")).resolve(
+	createRequire(createRequire(import.meta.url).resolve("@orbis/ui")).resolve(
 		"pdfjs-dist/package.json",
 	),
 );
@@ -37,7 +37,7 @@ const pdfWasm: Plugin = {
 // Excalidraw loads its fonts from EXCALIDRAW_ASSET_PATH ("/excalidraw/"), so drawings work offline.
 const excalidraw = join(
 	dirname(
-		createRequire(createRequire(import.meta.url).resolve("@obtion/ui")).resolve(
+		createRequire(createRequire(import.meta.url).resolve("@orbis/ui")).resolve(
 			"@excalidraw/excalidraw",
 		),
 	),
@@ -102,8 +102,8 @@ const devIcons: Plugin = {
 
 const server = `http://127.0.0.1:${process.env.PORT ?? 8480}`;
 /** Set when the dev server is reached through `tailscale serve`. */
-const devPublic = process.env.OBTION_DEV_PUBLIC_URL
-	? new URL(process.env.OBTION_DEV_PUBLIC_URL)
+const devPublic = process.env.ORBIS_DEV_PUBLIC_URL
+	? new URL(process.env.ORBIS_DEV_PUBLIC_URL)
 	: undefined;
 
 // Rewrite Host and Origin to the server's address: it rejects unknown hosts (DNS rebinding) and
@@ -140,8 +140,8 @@ export default defineConfig(({ mode }) => ({
 			registerType: "prompt",
 			injectRegister: false,
 			manifest: {
-				name: "Obtion",
-				short_name: "Obtion",
+				name: "Orbis",
+				short_name: "Orbis",
 				description: "Knowledge and projects in one linked system",
 				theme_color: "#121212",
 				background_color: "#121212",

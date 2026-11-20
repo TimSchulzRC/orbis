@@ -20,7 +20,7 @@ The token's owner must still be a member of the workspace. A token never goes in
 ## Upload a new file
 
 ```sh
-curl -fsS -X POST -H "Authorization: Bearer $OBTION_TOKEN" \
+curl -fsS -X POST -H "Authorization: Bearer $ORBIS_TOKEN" \
   --data-binary @schema.xsd \
   "$BASE?name=schema.xsd&parent=<id or exact title>"
 ```
@@ -36,7 +36,7 @@ curl -fsS -X POST -H "Authorization: Bearer $OBTION_TOKEN" \
 ## Replace the content of a file
 
 ```sh
-curl -fsS -X PUT -H "Authorization: Bearer $OBTION_TOKEN" \
+curl -fsS -X PUT -H "Authorization: Bearer $ORBIS_TOKEN" \
   --data-binary @schema.xsd "$BASE/<file id>"
 ```
 
@@ -45,10 +45,10 @@ Same item, same name, same place and links. The old content stays in the file's 
 ## Download the original
 
 ```sh
-curl -fsS -H "Authorization: Bearer $OBTION_TOKEN" -o schema.xsd "$BASE/<file id>"
+curl -fsS -H "Authorization: Bearer $ORBIS_TOKEN" -o schema.xsd "$BASE/<file id>"
 ```
 
-Always a download (`Content-Disposition: attachment` with the file name). Headers: `ETag` and `X-Obtion-Hash` carry the SHA-256, so a script can skip files it already has. `HEAD` gives the headers only.
+Always a download (`Content-Disposition: attachment` with the file name). Headers: `ETag` and `X-Orbis-Hash` carry the SHA-256, so a script can skip files it already has. `HEAD` gives the headers only.
 
 ## Text
 

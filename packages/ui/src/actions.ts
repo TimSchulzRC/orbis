@@ -1,7 +1,7 @@
-import type { Index } from "@obtion/core/graph";
-import { type Item, type ItemInit, initType, newId } from "@obtion/core/model";
-import { freshColor } from "@obtion/core/palette";
-import type { Repo } from "@obtion/sync";
+import type { Index } from "@orbis/core/graph";
+import { type Item, type ItemInit, initType, newId } from "@orbis/core/model";
+import { freshColor } from "@orbis/core/palette";
+import type { Repo } from "@orbis/sync";
 import { openItem } from "./hooks";
 import { repo as current } from "./repo";
 import { KEYS } from "./ui/storage";

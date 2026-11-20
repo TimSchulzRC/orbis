@@ -1,6 +1,6 @@
 # Releasing
 
-How the [release channels](../README.md#release-channels) come about. One image, `ghcr.io/timschulzrc/obtion`, with a tag per channel:
+How the [release channels](../README.md#release-channels) come about. One image, `ghcr.io/timschulzrc/orbis`, with a tag per channel:
 
 | Channel | Made by                                                                                                 | Tags                                  | GitHub release                          |
 | ------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------- | --------------------------------------- |
@@ -25,11 +25,11 @@ The version is the next stable one, the day (UTC) and the how-manieth nightly of
 The workflow has a GitHub schedule (`8,38 * * * *`), but for this repository GitHub drops most of its runs without a trace. So a machine of our own (the home server) starts the check as well, with `workflow_dispatch` and `auto=true` (which makes it wait the six hours like the schedule). The user timer is in [`scripts/systemd`](../scripts/systemd):
 
 ```bash
-cp scripts/systemd/obtion-nightly-check.* ~/.config/systemd/user/
-systemctl --user daemon-reload && systemctl --user enable --now obtion-nightly-check.timer
+cp scripts/systemd/orbis-nightly-check.* ~/.config/systemd/user/
+systemctl --user daemon-reload && systemctl --user enable --now orbis-nightly-check.timer
 ```
 
-It needs `gh`, logged in with the `workflow` scope, and user lingering (`loginctl enable-linger`) to run without a login. Its runs: `journalctl --user -u obtion-nightly-check`.
+It needs `gh`, logged in with the `workflow` scope, and user lingering (`loginctl enable-linger`) to run without a login. Its runs: `journalctl --user -u orbis-nightly-check`.
 
 ## Stable
 
@@ -37,10 +37,10 @@ Actions → Release → _Run workflow_, channel `stable`. It builds the commit o
 
 For a new middle number, enter it as `version`, e.g. `0.1.0` for the beta. The next nightlies then lead up to `0.1.1`.
 
-The release is titled `Obtion 0.0.2 (Alpha)`, and the app calls itself `Obtion (Alpha)` in the settings: stable means "ran as nightly", not finished. Nightly and dev builds say `(Nightly)` and `(Dev)` instead. When Obtion leaves the alpha, change the stage in both places: `STABLE_STAGE` in [`release.ts`](../packages/core/src/release.ts) and in [`resolve-release.sh`](../.github/scripts/resolve-release.sh).
+The release is titled `Orbis 0.0.2 (Alpha)`, and the app calls itself `Orbis (Alpha)` in the settings: stable means "ran as nightly", not finished. Nightly and dev builds say `(Nightly)` and `(Dev)` instead. When Orbis leaves the alpha, change the stage in both places: `STABLE_STAGE` in [`release.ts`](../packages/core/src/release.ts) and in [`resolve-release.sh`](../.github/scripts/resolve-release.sh).
 
 The workflow refuses a version that is not newer than the latest stable one, and a nightly that is already stable.
 
 ## Going back
 
-Every version keeps its tag, so a server can go back with `OBTION_VERSION=<version>`. There is no hotfix for stable alone: a fix goes through `main`, a nightly and then stable, with everything merged in between.
+Every version keeps its tag, so a server can go back with `ORBIS_VERSION=<version>`. There is no hotfix for stable alone: a fix goes through `main`, a nightly and then stable, with everything merged in between.

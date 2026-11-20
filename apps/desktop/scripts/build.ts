@@ -30,7 +30,7 @@ await $`bun build ${join(here, "src/preload.ts")} --outfile ${join(here, "dist/p
 // the app icon is the web app's in the channel of this version (scripts/generate-icons.ts):
 // electron-builder takes it from build/, the Linux window from dist/. The version is a release's
 // (release.yml sets it, and electron-builder gets it as extraMetadata.version), otherwise dev
-const version = process.env.OBTION_BUILD_VERSION || "dev";
+const version = process.env.ORBIS_BUILD_VERSION || "dev";
 mkdirSync(join(here, "build"), { recursive: true });
 for (const to of ["build/icon.png", "dist/icon.png"])
 	copyFileSync(join(root, "apps/web/public", iconPath("/icon-512.png", version)), join(here, to));
@@ -39,7 +39,7 @@ const servers = join(here, "build/server");
 rmSync(servers, { recursive: true, force: true });
 mkdirSync(servers, { recursive: true });
 for (const { os, arch } of targets) {
-	const out = join(servers, `${os}-${arch}`, os === "win" ? "obtion-server.exe" : "obtion-server");
+	const out = join(servers, `${os}-${arch}`, os === "win" ? "orbis-server.exe" : "orbis-server");
 	mkdirSync(join(out, ".."), { recursive: true });
 	// in build/server (ignored by git): compiling for its own platform, Bun can leave a copy of itself
 	// in the working directory (".<hex>-00000000.bun-build"), which then goes too

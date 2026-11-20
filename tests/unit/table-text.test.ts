@@ -1,8 +1,8 @@
 // GFM tables as text (packages/ui/src/ui/editor/tableText.ts): the cells of a row, and the edits
 // to a row that keep every other cell's spacing as it is.
 import { describe, expect, test } from "bun:test";
-import { parseWikiLinks, renameLinksIn } from "@obtion/core/model";
-import { plainText } from "@obtion/core/search";
+import { parseWikiLinks, renameLinksIn } from "@orbis/core/model";
+import { plainText } from "@orbis/core/search";
 import {
 	alignments,
 	type Change,

@@ -1,16 +1,16 @@
 import { afterAll, beforeEach, expect, test } from "bun:test";
-import { deleteType } from "@obtion/core/typeops";
-import { versionOf } from "@obtion/server/ops";
-import { storeWriter } from "@obtion/server/setup";
-import type { Store } from "@obtion/server/store";
-import { Store as ServerStore } from "@obtion/server/store";
+import { deleteType } from "@orbis/core/typeops";
+import { versionOf } from "@orbis/server/ops";
+import { storeWriter } from "@orbis/server/setup";
+import type { Store } from "@orbis/server/store";
+import { Store as ServerStore } from "@orbis/server/store";
 import { removeTempDirs, tempDir } from "../support/helpers";
 import { setupStore, rpc as storeRpc, tool as storeTool } from "../support/store";
 
 afterAll(removeTempDirs);
 
 let s: Store;
-beforeEach(() => ({ s } = setupStore("obtion-mcp-")));
+beforeEach(() => ({ s } = setupStore("orbis-mcp-")));
 
 const rpc = (method: string, params: unknown) => storeRpc(s, method, params);
 const tool = (name: string, args: unknown) => storeTool(s, name, args);
@@ -21,7 +21,7 @@ const weeklyReview = async (store: Store) =>
 		.text;
 /** The queries the weekly review tells the agent to run, as written in its prompt. */
 const reviewQueries = [
-	...(await weeklyReview(setupStore("obtion-mcp-").s)).matchAll(/query "([^"]+)"/g),
+	...(await weeklyReview(setupStore("orbis-mcp-").s)).matchAll(/query "([^"]+)"/g),
 ].map((m) => m[1]!);
 
 test("all or nothing: one bad item in a create call, nothing is created", async () => {
@@ -288,7 +288,7 @@ test("get: a long body without headings comes in pages; a long file text too", a
 	expect(got.body.length).toBe(12000);
 	expect(got.body_more).toBe("More from offset 12000: get with offset: 12000.");
 	// a file keeps its extracted text in its meta: the same paging applies to it
-	const { setFileMeta } = await import("@obtion/core/model");
+	const { setFileMeta } = await import("@orbis/core/model");
 	const id = s.create({ kind: "file", title: "Manual.txt" }, "test");
 	s.change(id, "test", (d) =>
 		setFileMeta(d, { name: "Manual.txt", text: "First page. ".repeat(3000) }),
@@ -366,7 +366,7 @@ test("schema names every view as its tab shows it; that name finds an unnamed vi
 	const calendar = s.index().types.get("sys:project")!;
 	const before = calendar.schema.views?.length
 		? calendar.schema.views
-		: (await import("@obtion/core/setup")).typeTabs(calendar, "de");
+		: (await import("@orbis/core/setup")).typeTabs(calendar, "de");
 	const views2 = project.views.map((v: { name: string; query: string }) => ({
 		name: v.name,
 		query: v.query,
@@ -378,7 +378,7 @@ test("schema names every view as its tab shows it; that name finds an unnamed vi
 });
 
 test("a workspace no app has set up: schema says so, setup creates the default types once", async () => {
-	const bare = new ServerStore(tempDir("obtion-mcp-bare-"));
+	const bare = new ServerStore(tempDir("orbis-mcp-bare-"));
 	const call = (name: string, args: unknown) => storeTool(bare, name, args);
 	const schema = JSON.parse((await call("schema", {})).text);
 	expect(schema.types).toEqual([]);

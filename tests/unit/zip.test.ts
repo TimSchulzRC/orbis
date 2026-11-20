@@ -2,7 +2,7 @@
 // archive other programs can read.
 import { afterAll, expect, test } from "bun:test";
 import { join } from "node:path";
-import { addParent, setFileMeta, setMeta } from "@obtion/core/model";
+import { addParent, setFileMeta, setMeta } from "@orbis/core/model";
 import {
 	archivePaths,
 	crc32,
@@ -12,8 +12,8 @@ import {
 	safeName,
 	ZIP_MAX_BYTES,
 	zipStore,
-} from "@obtion/core/zip";
-import { Zip } from "@obtion/server/extract";
+} from "@orbis/core/zip";
+import { Zip } from "@orbis/server/extract";
 import { MemRepo, removeTempDirs, tempDir } from "../support/helpers";
 
 afterAll(removeTempDirs);
@@ -131,7 +131,7 @@ test("the archive: read back by the server's ZIP reader and by unzip", async () 
 		{ path: "Tests/big.bin", data: big },
 		{ path: "empty.txt", data: new Uint8Array() },
 	];
-	const path = join(tempDir("obtion-zip-"), "out.zip");
+	const path = join(tempDir("orbis-zip-"), "out.zip");
 	await Bun.write(path, new Blob(zipStore(entries) as BlobPart[]));
 
 	const zip = (await Zip.open(path))!;
@@ -155,7 +155,7 @@ test("the archive: read back by the server's ZIP reader and by unzip", async () 
 });
 
 test("an empty archive is still a ZIP", async () => {
-	const path = join(tempDir("obtion-zip-"), "empty.zip");
+	const path = join(tempDir("orbis-zip-"), "empty.zip");
 	await Bun.write(path, new Blob(zipStore([]) as BlobPart[]));
 	expect((await Zip.open(path))!.entries).toEqual([]);
 });

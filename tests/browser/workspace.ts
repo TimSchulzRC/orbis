@@ -1,9 +1,9 @@
 // A workspace in memory for component tests: the replica the interface reads and writes, set up
 // in German with the examples, never connected to a server.
 
-import { writeExamples } from "@obtion/core/examples";
-import { runSetup } from "@obtion/core/setup";
-import { type ReplicaStorage, Repo, type SyncSocket } from "@obtion/sync";
+import { writeExamples } from "@orbis/core/examples";
+import { runSetup } from "@orbis/core/setup";
+import { type ReplicaStorage, Repo, type SyncSocket } from "@orbis/sync";
 import { type DeviceFiles, setFiles } from "../../packages/ui/src/files";
 import { setRepo } from "../../packages/ui/src/repo";
 

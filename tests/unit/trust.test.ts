@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
-import { allowedHosts } from "@obtion/server/trust";
+import { allowedHosts } from "@orbis/server/trust";
 
 // addresses and private names on any port, public names only when configured
-const ok = allowedHosts(["obtion.example.org", "notes.example.com:8443", ""]);
+const ok = allowedHosts(["orbis.example.org", "notes.example.com:8443", ""]);
 
 test.each([
 	"192.168.1.10:8480",
@@ -16,8 +16,8 @@ test.each([
 	"nas.fritz.lan",
 	"nas.tail1234.ts.net",
 	"nas.tail1234.ts.net:8480",
-	"obtion.example.org",
-	"Obtion.Example.org:443",
+	"orbis.example.org",
+	"Orbis.Example.org:443",
 	"notes.example.com:8443",
 ])("host %p is allowed", (h) => expect(ok(h)).toBe(true));
 
