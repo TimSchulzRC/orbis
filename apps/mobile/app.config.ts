@@ -1,14 +1,14 @@
-// The iPhone app. OBTION_IOS_BUNDLE_ID and OBTION_IOS_TEAM sign it with your own Apple team (a free
+// The iPhone app. ORBIS_IOS_BUNDLE_ID and ORBIS_IOS_TEAM sign it with your own Apple team (a free
 // Personal Team works too, see README.md).
 import type { ExpoConfig } from "expo/config";
 
-const bundleIdentifier = process.env.OBTION_IOS_BUNDLE_ID || "app.obtion.mobile";
-const appleTeamId = process.env.OBTION_IOS_TEAM || undefined;
+const bundleIdentifier = process.env.ORBIS_IOS_BUNDLE_ID || "app.orbis.mobile";
+const appleTeamId = process.env.ORBIS_IOS_TEAM || undefined;
 
 export default (): ExpoConfig => ({
-	name: "Obtion",
-	slug: "obtion",
-	scheme: "obtion",
+	name: "Orbis",
+	slug: "orbis",
+	scheme: "orbis",
 	version: "0.0.1",
 	orientation: "portrait",
 	userInterfaceStyle: "automatic",
@@ -26,7 +26,7 @@ export default (): ExpoConfig => ({
 			// self-hosted servers often run on plain http in the home network
 			NSAppTransportSecurity: { NSAllowsArbitraryLoads: true },
 			NSLocalNetworkUsageDescription:
-				"Obtion verbindet sich mit deinem Obtion-Server, auch im lokalen Netzwerk.",
+				"Orbis verbindet sich mit deinem Orbis-Server, auch im lokalen Netzwerk.",
 			ITSAppUsesNonExemptEncryption: false,
 		},
 	},

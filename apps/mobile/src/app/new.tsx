@@ -3,8 +3,8 @@
 
 import { Host, Picker, Text as SwiftText } from "@expo/ui/swift-ui";
 import { pickerStyle, tag, tint } from "@expo/ui/swift-ui/modifiers";
-import { statusOf, statusProp } from "@obtion/core/traits";
-import type { Repo } from "@obtion/sync";
+import { statusOf, statusProp } from "@orbis/core/traits";
+import type { Repo } from "@orbis/sync";
 import * as Haptics from "expo-haptics";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";

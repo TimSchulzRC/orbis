@@ -1,5 +1,5 @@
 {
-	"name": "@obtion/mobile",
+	"name": "@orbis/mobile",
 	"private": true,
 	"main": "index.ts",
 	"scripts": {

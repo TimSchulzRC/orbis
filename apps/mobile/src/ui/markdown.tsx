@@ -1,11 +1,11 @@
 // A page's Markdown as native text: headings, lists with checkboxes that tick, quotes, code,
 // tables, [[links]] to other entries and ```query blocks as live lists.
 
-import type { Index } from "@obtion/core/graph";
-import { type Item, todayISO, wikiLinkRe } from "@obtion/core/model";
-import { readBlock, runQuery, tabDef } from "@obtion/core/query";
-import { dueOf, isDone, statusProp } from "@obtion/core/traits";
-import type { Repo } from "@obtion/sync";
+import type { Index } from "@orbis/core/graph";
+import { type Item, todayISO, wikiLinkRe } from "@orbis/core/model";
+import { readBlock, runQuery, tabDef } from "@orbis/core/query";
+import { dueOf, isDone, statusProp } from "@orbis/core/traits";
+import type { Repo } from "@orbis/sync";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import { Marked, type Token, type TokenizerExtension, type Tokens } from "marked";

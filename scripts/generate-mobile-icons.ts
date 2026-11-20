@@ -21,10 +21,10 @@ const mark = (svg: string) => square(svg).replace(/<rect fill="url\(#tile\)"[^>]
 const browser = await chromium.launch({ headless: true });
 try {
 	for (const [file, svg, size] of [
-		["icon.png", square(logo("obtion-logo.svg")), 1024],
-		["icon-dark.png", square(logo("obtion-logo-dark.svg")), 1024],
-		["splash.png", mark(logo("obtion-logo.svg")), 512],
-		["splash-dark.png", mark(logo("obtion-logo-dark.svg")), 512],
+		["icon.png", square(logo("orbis-logo.svg")), 1024],
+		["icon-dark.png", square(logo("orbis-logo-dark.svg")), 1024],
+		["splash.png", mark(logo("orbis-logo.svg")), 512],
+		["splash-dark.png", mark(logo("orbis-logo-dark.svg")), 512],
 	] as const) {
 		const page = await browser.newPage({ viewport: { width: size, height: size } });
 		await page.setContent(

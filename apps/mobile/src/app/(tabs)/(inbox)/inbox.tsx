@@ -1,11 +1,11 @@
 // The inbox of the workspaces the switcher shows, newest first. A long press sorts an entry: give it a type,
 // put it somewhere, bring it back tomorrow, pin it or delete it.
 
-import { fmtRelative } from "@obtion/core/i18n";
-import { tomorrow } from "@obtion/core/inbox";
-import { type Item, setMeta } from "@obtion/core/model";
-import { inbox } from "@obtion/core/placement";
-import { plainText } from "@obtion/core/search";
+import { fmtRelative } from "@orbis/core/i18n";
+import { tomorrow } from "@orbis/core/inbox";
+import { type Item, setMeta } from "@orbis/core/model";
+import { inbox } from "@orbis/core/placement";
+import { plainText } from "@orbis/core/search";
 import * as Haptics from "expo-haptics";
 import { Link, router, Stack } from "expo-router";
 import { useShownSpaces } from "../../../lib/hooks";

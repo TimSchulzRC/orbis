@@ -1,8 +1,8 @@
-// Signing in to an Obtion server: its address first, then email and password or a code by email,
+// Signing in to an Orbis server: its address first, then email and password or a code by email,
 // whichever the server offers. Passkeys and OAuth belong to the server's own web page. The same
 // form connects a further server and signs in again where a server no longer takes the token.
 
-import type { LoginMethods, ServerInfo } from "@obtion/core/api";
+import type { LoginMethods, ServerInfo } from "@orbis/core/api";
 import * as Haptics from "expo-haptics";
 import Storage from "expo-sqlite/kv-store";
 import { useEffect, useState } from "react";
@@ -23,11 +23,11 @@ import { t } from "../lib/i18n";
 import { sendCode, serverInfo, signIn, signInWithCode } from "../lib/session";
 import { C, GUTTER, RADIUS } from "./theme";
 
-const LAST_SERVER = "obtion.lastServer";
+const LAST_SERVER = "orbis.lastServer";
 
 /**
  * Automated simulator runs sign in with launch arguments (`xcrun simctl launch <device> <bundle id>
- * -obtionServer <url> -obtionEmail <email> -obtionPassword <password>`). iOS keeps them for that
+ * -orbisServer <url> -orbisEmail <email> -orbisPassword <password>`). iOS keeps them for that
  * launch only, and nothing outside Xcode or simctl can set them.
  */
 function launchArg(key: string): string | undefined {
@@ -62,10 +62,10 @@ export function SignInForm({
 	const dark = useColorScheme() === "dark";
 	const [address, setAddress] = useState(
 		fixedServer ??
-			(another ? "" : (launchArg("obtionServer") ?? Storage.getItemSync(LAST_SERVER) ?? "")),
+			(another ? "" : (launchArg("orbisServer") ?? Storage.getItemSync(LAST_SERVER) ?? "")),
 	);
 	const [info, setInfo] = useState<{ server: string; info: ServerInfo } | null>(null);
-	const [email, setEmail] = useState(knownEmail ?? launchArg("obtionEmail") ?? "");
+	const [email, setEmail] = useState(knownEmail ?? launchArg("orbisEmail") ?? "");
 	const [password, setPassword] = useState("");
 	const [code, setCode] = useState("");
 	const [mode, setMode] = useState<"password" | "code">("password");
@@ -111,7 +111,7 @@ export function SignInForm({
 	// biome-ignore lint/correctness/useExhaustiveDependencies: once, when the form opens
 	useEffect(() => {
 		if (another) return;
-		const auto = { server: launchArg("obtionServer"), password: launchArg("obtionPassword") };
+		const auto = { server: launchArg("orbisServer"), password: launchArg("orbisPassword") };
 		if (!fixedServer && auto.server && auto.password && email)
 			void run(async () => {
 				const server = serverUrl(auto.server!);
@@ -135,7 +135,7 @@ export function SignInForm({
 				source={dark ? require("../../assets/splash-dark.png") : require("../../assets/splash.png")}
 				style={styles.logo}
 			/>
-			<Text style={styles.title}>Obtion</Text>
+			<Text style={styles.title}>Orbis</Text>
 			<Text style={styles.subtitle}>
 				{info
 					? t("mobile.signInTo", { server: host ?? "" })

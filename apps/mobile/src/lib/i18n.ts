@@ -1,8 +1,8 @@
-// The app speaks the phone's language when Obtion has it (German or English), else English. iOS
+// The app speaks the phone's language when Orbis has it (German or English), else English. iOS
 // restarts an app when its language changes, so it is read once.
 
-import { type Lang, makeT, type T } from "@obtion/core/i18n";
-import { displayTitle, type Item } from "@obtion/core/model";
+import { type Lang, makeT, type T } from "@orbis/core/i18n";
+import { displayTitle, type Item } from "@orbis/core/model";
 import { getLocales } from "expo-localization";
 
 export const lang: Lang =

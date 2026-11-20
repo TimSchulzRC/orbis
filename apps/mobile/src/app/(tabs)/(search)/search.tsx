@@ -1,9 +1,9 @@
 // Full-text search over the workspaces the switcher shows, on this phone (offline too). Before typing it lists what
 // was edited last.
 
-import { fmtRelative } from "@obtion/core/i18n";
-import { snippet } from "@obtion/core/search";
-import { recentlyChanged } from "@obtion/core/today";
+import { fmtRelative } from "@orbis/core/i18n";
+import { snippet } from "@orbis/core/search";
+import { recentlyChanged } from "@orbis/core/today";
 import { Stack } from "expo-router";
 import { useState } from "react";
 import { useShownSpaces } from "../../../lib/hooks";

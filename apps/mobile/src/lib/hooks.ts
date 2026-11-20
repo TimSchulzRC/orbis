@@ -1,8 +1,8 @@
 // Screens re-render when a workspace's data change: each replica counts its changes (version).
 
-import type { Index } from "@obtion/core/graph";
-import { SETTINGS_ID } from "@obtion/core/model";
-import type { Repo } from "@obtion/sync";
+import type { Index } from "@orbis/core/graph";
+import { SETTINGS_ID } from "@orbis/core/model";
+import type { Repo } from "@orbis/sync";
 import { useCallback, useSyncExternalStore } from "react";
 import { replica, useSession, type Workspace } from "./session";
 

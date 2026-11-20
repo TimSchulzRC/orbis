@@ -1,8 +1,8 @@
-// HTTP calls to an Obtion server. The app sends no Origin header and no cookies (credentials
+// HTTP calls to an Orbis server. The app sends no Origin header and no cookies (credentials
 // "omit"): the server treats such a request like one from its own page, so any server works
 // without being told about the app. The account's token goes in the Authorization header.
 
-import type { ErrorBody } from "@obtion/core/api";
+import type { ErrorBody } from "@orbis/core/api";
 
 export class ApiError extends Error {
 	constructor(

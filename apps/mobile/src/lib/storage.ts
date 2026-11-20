@@ -1,7 +1,7 @@
 // A workspace's replica on the phone: one SQLite database, the same three stores as the browser's
 // IndexedDB (packages/ui/src/browser.ts): Yjs updates, the outbox and the sync cursor.
 
-import type { OutItem, ReplicaStorage, StoredRow } from "@obtion/sync";
+import type { OutItem, ReplicaStorage, StoredRow } from "@orbis/sync";
 import { deleteDatabaseAsync, openDatabaseAsync, type SQLiteDatabase } from "expo-sqlite";
 
 const SCHEMA = `
@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS outbox (k TEXT PRIMARY KEY, v TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL);
 `;
 
-export const databaseName = (space: string) => `obtion-ws-${space}.db`;
+export const databaseName = (space: string) => `orbis-ws-${space}.db`;
 
 export type Storage = ReplicaStorage & {
 	/** Closes the database after what is queued; later calls fail. */

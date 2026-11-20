@@ -1,7 +1,7 @@
 // The servers this phone is connected to, each with its account, its workspaces and how far each is
 // in sync, and signing out of it; below, a new workspace and another server.
 
-import type { ServerInfo } from "@obtion/core/api";
+import type { ServerInfo } from "@orbis/core/api";
 import Constants from "expo-constants";
 import { router, Stack } from "expo-router";
 import { useEffect, useState } from "react";

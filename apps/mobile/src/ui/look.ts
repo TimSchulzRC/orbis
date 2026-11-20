@@ -1,9 +1,9 @@
 // How an item looks: its SF Symbol, colour and kind, the iPhone counterpart of the web app's
 // item-look.tsx. Type icons are stored as Lucide names (core/palette.ts) and mapped here.
 
-import type { Index } from "@obtion/core/graph";
-import { type Item, META_TYPE, type TypeSchema } from "@obtion/core/model";
-import { isInInbox } from "@obtion/core/placement";
+import type { Index } from "@orbis/core/graph";
+import { type Item, META_TYPE, type TypeSchema } from "@orbis/core/model";
+import { isInInbox } from "@orbis/core/placement";
 import type { ColorValue } from "react-native";
 import type { SFSymbol } from "sf-symbols-typescript";
 import { t } from "../lib/i18n";

@@ -1,8 +1,8 @@
 // A type's entries ("Tasks"): running ones first, then open, done ones folded away. The search
 // field filters by title, "+" adds one.
 
-import { dueOf, isDone, statusOf, statusProp } from "@obtion/core/traits";
-import type { Repo } from "@obtion/sync";
+import { dueOf, isDone, statusOf, statusProp } from "@orbis/core/traits";
+import type { Repo } from "@orbis/sync";
 import * as Haptics from "expo-haptics";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useState } from "react";

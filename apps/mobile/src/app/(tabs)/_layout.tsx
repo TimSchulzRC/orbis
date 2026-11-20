@@ -2,7 +2,7 @@
 // switcher shows), Browse and Search, which iOS shows as its own round button and turns into the
 // search field. It stays full size while scrolling, so the tabs are always one tap away.
 
-import { inbox } from "@obtion/core/placement";
+import { inbox } from "@orbis/core/placement";
 import { NativeTabs } from "expo-router/native-tabs";
 import { useShownSpaces } from "../../lib/hooks";
 import { t } from "../../lib/i18n";

@@ -1,12 +1,12 @@
 // The parts of an entry's page below its properties: what sits below it, its updates and the
 // pages that link to it.
 
-import type { Index } from "@obtion/core/graph";
-import { fmtDateTime } from "@obtion/core/i18n";
-import type { Item } from "@obtion/core/model";
-import { belowOf } from "@obtion/core/placement";
-import { dueOf, hasUpdates, isDone, progressSpec, statusProp } from "@obtion/core/traits";
-import type { Repo } from "@obtion/sync";
+import type { Index } from "@orbis/core/graph";
+import { fmtDateTime } from "@orbis/core/i18n";
+import type { Item } from "@orbis/core/model";
+import { belowOf } from "@orbis/core/placement";
+import { dueOf, hasUpdates, isDone, progressSpec, statusProp } from "@orbis/core/traits";
+import type { Repo } from "@orbis/sync";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import { useState } from "react";

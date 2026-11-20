@@ -1,11 +1,11 @@
 // Home, the start page across the workspaces the switcher shows: what is due, what runs, what
 // changed last.
 
-import { fmtDate, fmtPercent, fmtRelative } from "@obtion/core/i18n";
-import { todayISO } from "@obtion/core/model";
-import { inbox } from "@obtion/core/placement";
-import { cmpKey } from "@obtion/core/sortkey";
-import { dueBy, recentlyChanged, running } from "@obtion/core/today";
+import { fmtDate, fmtPercent, fmtRelative } from "@orbis/core/i18n";
+import { todayISO } from "@orbis/core/model";
+import { inbox } from "@orbis/core/placement";
+import { cmpKey } from "@orbis/core/sortkey";
+import { dueBy, recentlyChanged, running } from "@orbis/core/today";
 import { router, Stack } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, Text } from "react-native";

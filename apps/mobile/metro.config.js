@@ -14,10 +14,10 @@ config.resolver.nodeModulesPaths = [path.join(__dirname, "node_modules")];
 
 /** @type {import("metro-resolver").CustomResolver} */
 config.resolver.resolveRequest = (context, name, platform) => {
-	if (name === "@obtion/sync")
+	if (name === "@orbis/sync")
 		return { type: "sourceFile", filePath: path.join(packages, "sync/src/repo.ts") };
-	if (name.startsWith("@obtion/core/")) {
-		const rest = name.slice("@obtion/core/".length);
+	if (name.startsWith("@orbis/core/")) {
+		const rest = name.slice("@orbis/core/".length);
 		const filePath = rest.startsWith("locales/")
 			? path.join(core, rest)
 			: path.join(core, "src", `${rest}.ts`);

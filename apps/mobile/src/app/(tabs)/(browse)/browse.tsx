@@ -1,8 +1,8 @@
 // Browse a workspace like the web app's sidebar: what is pinned, then every type with its list.
 // The switcher at the top left picks the workspace; with all of them, each follows under its name.
 
-import { sidebarChildren, sidebarRoots } from "@obtion/core/placement";
-import { isDone } from "@obtion/core/traits";
+import { sidebarChildren, sidebarRoots } from "@orbis/core/placement";
+import { isDone } from "@orbis/core/traits";
 import { router, Stack } from "expo-router";
 import { StyleSheet, Text } from "react-native";
 import { type Space, useShownSpaces } from "../../../lib/hooks";

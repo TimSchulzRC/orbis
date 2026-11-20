@@ -1,11 +1,11 @@
 // An entry in a list: status circle, icon, title, where it lives and when it is due. A tap opens
 // it, a long press shows its page as a preview with a menu (iOS context menu).
 
-import type { Index } from "@obtion/core/graph";
-import { fmtShortDate } from "@obtion/core/i18n";
-import { type Item, todayISO } from "@obtion/core/model";
-import { firstOfGroup, isDone, statusOf, statusProp } from "@obtion/core/traits";
-import type { Repo } from "@obtion/sync";
+import type { Index } from "@orbis/core/graph";
+import { fmtShortDate } from "@orbis/core/i18n";
+import { type Item, todayISO } from "@orbis/core/model";
+import { firstOfGroup, isDone, statusOf, statusProp } from "@orbis/core/traits";
+import type { Repo } from "@orbis/sync";
 import * as Haptics from "expo-haptics";
 import { type Href, Link } from "expo-router";
 import {

@@ -1,13 +1,13 @@
 // The accounts on this phone, one per server, as in the desktop app, and their workspaces. Each
-// workspace is a replica (Repo from @obtion/sync) with its own SQLite database; all of them sync
+// workspace is a replica (Repo from @orbis/sync) with its own SQLite database; all of them sync
 // while the app runs. The tokens sit in the iOS keychain, the rest in a small key-value store, so
 // the app opens offline.
 
-import type { AccountInfo, Ok, ServerInfo, SignedIn, User, WorkspaceInfo } from "@obtion/core/api";
-import { SETTINGS_ID } from "@obtion/core/model";
-import { firstName } from "@obtion/core/origin";
-import { runSetup } from "@obtion/core/setup";
-import { Repo, type RepoHost, type SyncSocket } from "@obtion/sync";
+import type { AccountInfo, Ok, ServerInfo, SignedIn, User, WorkspaceInfo } from "@orbis/core/api";
+import { SETTINGS_ID } from "@orbis/core/model";
+import { firstName } from "@orbis/core/origin";
+import { runSetup } from "@orbis/core/setup";
+import { Repo, type RepoHost, type SyncSocket } from "@orbis/sync";
 import * as SecureStore from "expo-secure-store";
 import Storage from "expo-sqlite/kv-store";
 import { useSyncExternalStore } from "react";
@@ -37,10 +37,10 @@ export interface Session {
 	shown: string | null;
 }
 
-const SESSION = "obtion.accounts";
-const DEVICE = "obtion.device";
+const SESSION = "orbis.accounts";
+const DEVICE = "orbis.device";
 /** A keychain key allows letters, digits and "._-" only. */
-const tokenKey = (server: string) => `obtion.token.${server.replace(/[^\w.-]/g, "_")}`;
+const tokenKey = (server: string) => `orbis.token.${server.replace(/[^\w.-]/g, "_")}`;
 
 /** The chosen workspace while the accounts still have it, else all. */
 const shownOf = (shown: string | null, spaces: Workspace[]) =>
@@ -186,7 +186,7 @@ function host(w: Workspace, user: User, onReload: () => void): Host {
 			}
 			// the token as a subprotocol, as in the browser (the server reads it there or in the header)
 			socket = new WebSocket(`${server.replace(/^http/, "ws")}/w/${space}/sync`, [
-				"obtion",
+				"orbis",
 				`auth.${token}`,
 			]);
 			return socket as unknown as SyncSocket;

@@ -1,9 +1,9 @@
 // "Put it in…": choose the page an entry belongs under. Giving it a place sorts it out of the
 // inbox; pinned pages and the last edited come first.
 
-import type { Item } from "@obtion/core/model";
-import { canPlaceIn } from "@obtion/core/placement";
-import type { Repo } from "@obtion/sync";
+import type { Item } from "@orbis/core/model";
+import { canPlaceIn } from "@orbis/core/placement";
+import type { Repo } from "@orbis/sync";
 import * as Haptics from "expo-haptics";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useState } from "react";

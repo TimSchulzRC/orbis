@@ -1,10 +1,10 @@
 // An entry's page: where it lives, its title, properties and text, what sits below it, its
 // updates and who links to it. The pencil opens the text in a full-screen editor.
 
-import { mergeText } from "@obtion/core/diff";
-import { fmtBytes, fmtDateTime } from "@obtion/core/i18n";
-import { META_TYPE } from "@obtion/core/model";
-import type { Repo } from "@obtion/sync";
+import { mergeText } from "@orbis/core/diff";
+import { fmtBytes, fmtDateTime } from "@orbis/core/i18n";
+import { META_TYPE } from "@orbis/core/model";
+import type { Repo } from "@orbis/sync";
 import { router, Stack, useIsPreview, useLocalSearchParams } from "expo-router";
 import { useHeaderHeight } from "expo-router/react-navigation";
 import { useEffect, useRef, useState } from "react";
