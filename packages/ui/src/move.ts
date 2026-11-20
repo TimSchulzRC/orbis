@@ -49,10 +49,11 @@ async function copyContents(items: ReturnType<typeof movedItems>, src: Replica, 
 			if (blob) await dst.files.adopt(hash, blob, derived ? "preview.webp" : f.name, derived);
 		}
 	}
-	// the images in a note's drawings; one not on this device yet shows as a placeholder there
+	// the images in a note's drawings: the other workspace could never fetch one from here later
 	for (const hash of new Set(items.flatMap((it) => drawingImages(it.drawings)))) {
 		const blob = await src.files.content(hash);
-		if (blob) await dst.files.adopt(hash, blob, "drawing-image", false);
+		if (!blob) throw new MoveError("file");
+		await dst.files.adopt(hash, blob, "drawing-image", false);
 	}
 }
 

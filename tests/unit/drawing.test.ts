@@ -179,3 +179,16 @@ test("the drawing fence: only ```excalidraw with an id on the next line", () => 
 	expect(findDrawings(body).map((b) => b.id)).toEqual(["x1", "x3"]);
 	expect(replaceDrawings(body, (b) => `[${b.id}]`)).toBe("a\n[x1]\nb\n```js\nx2\n```\n[x3]");
 });
+
+test("an edit that wins by its nonce alone changes what the drawing's preview is keyed by", () => {
+	const a = new MemRepo();
+	const id = a.add({ title: "Board" });
+	a.change(id, (d) => writeElements(d, D, [el("x", { version: 1 })]));
+	const b = fork(a);
+	a.change(id, (d) => writeElements(d, D, [el("x", { version: 2, versionNonce: 5, x: 20 })]));
+	b.change(id, (d) => writeElements(d, D, [el("x", { version: 2, versionNonce: 1, x: 10 })]));
+	const before = a.get(id)!.drawings![D]!.version;
+	sync(a, b);
+	expect(readElements(a.doc(id), D)[0]!.x).toBe(10);
+	expect(a.get(id)!.drawings![D]!.version).not.toBe(before);
+});

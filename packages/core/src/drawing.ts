@@ -214,9 +214,12 @@ export function drawingsInfo(doc: Y.Doc): Record<string, DrawingInfo> | undefine
 function info(maps: Maps): DrawingInfo {
 	const text: string[] = [];
 	let count = 0;
+	// a concurrent edit can win by its nonce alone, at the same version
 	let versions = 0;
+	let nonces = 0;
 	for (const el of elementsOf(maps.elements)) {
 		versions += el.version;
+		nonces = (nonces + el.versionNonce) % 2 ** 31;
 		if (el.isDeleted) continue;
 		count++;
 		const t =
@@ -233,7 +236,7 @@ function info(maps: Maps): DrawingInfo {
 		text: text.join("\n"),
 		files,
 		count,
-		version: `${versions}:${files.length}:${JSON.stringify(state)}`,
+		version: `${versions}:${nonces}:${files.join(",")}:${JSON.stringify(state)}`,
 	};
 }
 
