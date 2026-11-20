@@ -9,6 +9,7 @@ import { afterEach, expect, test } from "vitest";
 import { commands, page } from "vitest/browser";
 import { cleanup, render } from "vitest-browser-react";
 import { ConfirmHost } from "../../packages/ui/src/ui/feedback";
+import { closeShelf, openShelf } from "../../packages/ui/src/ui/inbox";
 import { AppToaster } from "../../packages/ui/src/ui/toasts";
 import { ItemPage } from "../../packages/ui/src/views/ItemPage";
 import { noop, workspace } from "./workspace";
@@ -159,6 +160,34 @@ test("wide: the panel docks beside the page, which stays in use; only what was o
 	);
 	expect(left).toBeGreaterThan(0);
 	expect(left).toBeLessThan(40);
+	await page.viewport(1280, 900);
+});
+
+test("wide: opening the inbox closes the docked panel, which leaves the focus there and stays shut", async () => {
+	await page.viewport(1440, 900);
+	const repo = await workspace(false);
+	const project = repo.create({ title: "Relaunch", type: SYS.project, pinned: "a" });
+	const other = repo.create({ title: "Website", type: SYS.project, pinned: "b" });
+	repo.change(project, (d) =>
+		appendUpdate(d, { at: Date.now() - 60_000, text: "Decision pending.", by: "agent:claude" }),
+	);
+	await render(<Shown start={project} />);
+	await page.getByRole("button", { name: "Updates, 1 neu" }).click();
+	await expect.element(page.getByRole("dialog", { name: /^Updates zu / })).toBeVisible();
+
+	// the inbox takes the focus as it opens; the panel goes, the page has its room back
+	openShelf();
+	const title = page.getByRole("textbox", { name: "Titel" });
+	(title.element() as HTMLElement).focus();
+	await expect.element(page.getByRole("dialog")).not.toBeInTheDocument();
+	expect(document.documentElement.hasAttribute("data-side-panel")).toBe(false);
+	await expect.element(title).toHaveFocus();
+
+	// closed, as by hand: the next page does not open it again
+	closeShelf();
+	go(other);
+	await expect.element(page.getByRole("textbox", { name: "Titel" })).toHaveValue("Website");
+	expect(page.getByRole("dialog").query()).toBeNull();
 	await page.viewport(1280, 900);
 });
 

@@ -32,6 +32,7 @@ import { repo } from "../repo";
 import { agentLabel, agentName } from "./AgentNotice";
 import { DayList, META } from "./changes";
 import { confirmAction, notify } from "./feedback";
+import { useShelf } from "./inbox";
 import { ItemIcon, statusColor } from "./item-look";
 import { PageHistory } from "./PageHistory";
 import { Button, IconButton, Kbd, REVEAL, Seg } from "./primitives";
@@ -240,6 +241,15 @@ export function PagePanel({
 	useEffect(() => {
 		if (open) dockedOpen = docked;
 	}, [open, docked]);
+	// the inbox opens its panel: this one makes way, as if closed by hand, so they don't overlap; the
+	// focus stays in the inbox
+	const shelfOpen = useShelf().open;
+	const handBack = useRef(true);
+	useOnChange(shelfOpen, () => {
+		if (!shelfOpen || !open) return;
+		handBack.current = false;
+		close();
+	});
 
 	// docked: the page makes room for the panel
 	const room = !!open && docked;
@@ -346,11 +356,13 @@ export function PagePanel({
 					item={item}
 					key={round}
 					onClose={close}
-					onClosed={() =>
-						(from.current?.isConnected ? from.current : trigger.current)?.focus({
-							preventScroll: true,
-						})
-					}
+					onClosed={() => {
+						if (handBack.current)
+							(from.current?.isConnected ? from.current : trigger.current)?.focus({
+								preventScroll: true,
+							});
+						handBack.current = true;
+					}}
 					onDraft={setDraft}
 					onView={pick}
 					open={!!open}
