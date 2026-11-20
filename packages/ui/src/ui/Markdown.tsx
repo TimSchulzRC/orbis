@@ -1,3 +1,4 @@
+import { DRAWING_INFO } from "@obtion/core/drawing";
 import { fmtBytes } from "@obtion/core/i18n";
 import { type Item, wikiLinkRe } from "@obtion/core/model";
 import type { Repo } from "@obtion/sync";
@@ -28,6 +29,13 @@ md.use({
 		// Never render raw HTML from notes or agent output; only a line break (in a table cell, where
 		// a row is one line of Markdown, "<br>" is the way to break one).
 		html: (t) => (/^<br\s*\/?>$/i.test(t.text.trim()) ? "<br>" : escapeHtml(t.text)),
+		// a drawing block of the note this text belongs to
+		code(t) {
+			if (t.lang?.trim() !== DRAWING_INFO || !renderingNote) return false;
+			const id = t.text.trim();
+			const info = (rendering ?? repo).get(renderingNote)?.drawings?.[id];
+			return drawingEmbedHTML(renderingNote, id, info, renderingSpace);
+		},
 		link(t) {
 			const text = this.parser.parseInline(t.tokens);
 			const internal = t.href.startsWith("#");
@@ -67,7 +75,6 @@ md.use({
 				const file = item?.file;
 				const size = link.alias && /^\d+$/.test(link.alias) ? Number(link.alias) : undefined;
 				if (file && link.embed) return embedHTML(item!, size, renderingSpace);
-				if (item?.kind === "drawing" && link.embed && !item.deleted) return drawingEmbedHTML(item);
 				if (file)
 					return `<a class="file-chip" href="${spaceHref(renderingSpace, itemPath(id!))}">📎 ${escapeHtml(link.alias || item!.title)} <small>${fmtBytes(getLang(), file.size)}</small></a>`;
 				const label = escapeHtml(link.alias || link.target);
@@ -104,10 +111,15 @@ export function embedHTML(item: Item, size?: number, space?: string): string {
 /** Module state because marked's renderers get no context. Set only inside renderMarkdown. */
 let rendering: Repo | undefined;
 let renderingSpace: string | undefined;
-/** Tables get a wrapper that scrolls sideways when they are wider than the text. */
-export function renderMarkdown(src: string, source?: Repo, space?: string): string {
+let renderingNote: string | undefined;
+/**
+ * Tables get a wrapper that scrolls sideways when they are wider than the text. `note`: the note
+ * whose text it is, so its drawing blocks show.
+ */
+export function renderMarkdown(src: string, source?: Repo, space?: string, note?: string): string {
 	rendering = source;
 	renderingSpace = space;
+	renderingNote = note;
 	try {
 		return (md.parse(src, { async: false }) as string)
 			.replace(/<table>/g, '<div class="md-table"><table>')
@@ -115,6 +127,7 @@ export function renderMarkdown(src: string, source?: Repo, space?: string): stri
 	} finally {
 		rendering = undefined;
 		renderingSpace = undefined;
+		renderingNote = undefined;
 	}
 }
 
@@ -138,14 +151,23 @@ export function hydrateFiles(root: HTMLElement | null, files: DeviceFiles = curr
 	}
 }
 
-export function Markdown({ src, className }: { src: string; className?: string }) {
+export function Markdown({
+	src,
+	note,
+	className,
+}: {
+	src: string;
+	/** The note whose text it is: its drawings show as blocks. */
+	note?: string;
+	className?: string;
+}) {
 	const spaceRepo = useRepo();
 	const space = useSpaceId();
 	const files = useFiles();
 	const ref = useRef<HTMLDivElement>(null);
 	const html = useMemo(
-		() => renderMarkdown(src, spaceRepo, space),
-		[src, spaceRepo, space, spaceRepo.version],
+		() => renderMarkdown(src, spaceRepo, space, note),
+		[src, spaceRepo, space, note, spaceRepo.version],
 	);
 	// biome-ignore lint/correctness/useExhaustiveDependencies: html is the trigger, each new html replaces the DOM that needs its files and drawings
 	useEffect(() => {

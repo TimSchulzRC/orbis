@@ -418,7 +418,7 @@ function Detail({ item, onPlaced }: { item: Item; onPlaced: (p: string) => void 
 			</p>
 			{item.body.trim() ? (
 				<div className="mt-4 max-w-[64ch] text-[15px] leading-[1.65]">
-					<Markdown src={item.body} />
+					<Markdown note={item.id} src={item.body} />
 				</div>
 			) : item.file?.text ? (
 				<p className="mt-4 max-w-[64ch] text-[15px] leading-[1.65] text-muted-foreground">

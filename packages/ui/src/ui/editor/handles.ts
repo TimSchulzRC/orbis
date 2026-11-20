@@ -2,6 +2,7 @@
 import { startCompletion } from "@codemirror/autocomplete";
 import { EditorSelection } from "@codemirror/state";
 import { type EditorView, ViewPlugin } from "@codemirror/view";
+import { DRAWING_INFO } from "@obtion/core/drawing";
 import { ArrowDown, ArrowUp, Copy, GripVertical, Plus, Trash2 } from "lucide-react";
 import { tr } from "../../i18n";
 import { isCoarse as coarse, MOD } from "../../lib/platform";
@@ -17,7 +18,6 @@ import {
 	setKind,
 } from "./blocks";
 import { iconButton } from "./icons";
-import { drawingOnLine } from "./links";
 import { showMenu } from "./menu";
 import { menuCell, tableAt, tableEntries } from "./tables";
 
@@ -41,7 +41,7 @@ function blockMenu(view: EditorView, pos: number, at: { left: number; top: numbe
 	const current = kindOf(line.text);
 	const fenced = blockAt(view.state, pos).to !== line.to || line.text.startsWith("```");
 	// a diagram is no text: nothing to turn it into, and a copy would show the same diagram twice
-	const diagram = !!drawingOnLine(line.text);
+	const diagram = line.text.trim() === `\`\`\`${DRAWING_INFO}`;
 	const table = tableAt(view.state, pos);
 	const cell = table && menuCell(view.state, table);
 	return showMenu(at, [

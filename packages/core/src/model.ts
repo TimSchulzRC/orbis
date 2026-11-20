@@ -1,8 +1,7 @@
 // The data model shared by server, devices and agents. Every item is one Yjs document (guid = item id).
 // Kinds: "note" (a type is a note of type META_TYPE plus a `schema` map), "file" (metadata only,
-// content on the server by SHA-256), "drawing" (a block in a note, kept as a document
-// of its own below that note, its content an Excalidraw scene, see drawing.ts), "op" (a reversible
-// bulk operation), "settings" (the one shared settings doc).
+// content on the server by SHA-256), "op" (a reversible bulk operation), "settings" (the one shared
+// settings doc).
 //
 // Top-level Yjs types of a document:
 //   meta     Y.Map   scalars: kind, title, type, home, pinned, created, updated, deleted, later …
@@ -13,7 +12,7 @@
 //   rels     Y.Map   propId -> Y.Map<targetId, true>
 //   tags     Y.Map   tag -> true
 //   refs     Y.Map   targetId -> sort key      (explicit only; links in the text are derived)
-//   body     Y.Text  Markdown with [[links]] and ```query blocks
+//   body     Y.Text  Markdown with [[links]], ```query blocks and ```excalidraw blocks
 //   rules    Y.Text  "Rules for agents": Markdown, binding for agents on this item and all below it
 //                    (see rules.ts); in the settings doc: the rules of the whole workspace
 //   updates  Y.Array { id, at, text, by, status? }
@@ -22,9 +21,9 @@
 //   file     Y.Map   files only: hash, name, mime, filetype, size, width, height, pages, duration,
 //                    display, thumb, text, extracted, history
 //   op, settings  Y.Map  only in documents of that kind
-//   drawing, drawingFiles, drawingState  only in drawings (see drawing.ts)
+//   drawings Y.Map   notes only: drawingId -> the scene of a drawing block (see drawing.ts)
 import * as Y from "yjs";
-import { DRAWING, DRAWING_FILES, DRAWING_STATE, type DrawingInfo, drawingInfo } from "./drawing";
+import { type DrawingInfo, drawingsInfo } from "./drawing";
 import type { Cond } from "./query";
 import { cmpKey, keyBetween } from "./sortkey";
 import { escapeRe } from "./text";
@@ -33,7 +32,7 @@ import { escapeRe } from "./text";
 export const META_TYPE = "sys:type";
 export const SETTINGS_ID = "sys:settings";
 
-export type Kind = "note" | "file" | "drawing" | "op" | "settings";
+export type Kind = "note" | "file" | "op" | "settings";
 export type FileType = "image" | "pdf" | "audio" | "video" | "document" | "other";
 export const FILE_TYPES: FileType[] = ["image", "pdf", "audio", "video", "document", "other"];
 
@@ -268,7 +267,8 @@ export interface Item {
 	updates: UpdateEntry[];
 	schema?: TypeSchema;
 	file?: FileMeta;
-	drawing?: DrawingInfo;
+	/** The drawings kept in a note's document, by id (see drawing.ts). */
+	drawings?: Record<string, DrawingInfo>;
 	op?: OpRecord;
 	settings?: SettingsRecord;
 	suggestion?: Suggestion;
@@ -316,9 +316,6 @@ export const DOC_MAPS = [
 	"file",
 	"op",
 	"settings",
-	DRAWING,
-	DRAWING_FILES,
-	DRAWING_STATE,
 ] as const;
 
 /** Narrow on reading: the data comes from other devices. */
@@ -389,7 +386,7 @@ export function readSchema(doc: Y.Doc): TypeSchema {
  * Bump when readItem returns something else for the same document. Server and devices store
  * readItem's result next to each document's state, and read every document again once this changes.
  */
-export const RECORD_VERSION = 2;
+export const RECORD_VERSION = 3;
 
 export function readItem(id: string, doc: Y.Doc): Item | null {
 	const meta = metaMap(doc);
@@ -442,7 +439,10 @@ export function readItem(id: string, doc: Y.Doc): Item | null {
 		if (doc.getMap("tabs").size) item.schema.views = readTabs(doc);
 	}
 	if (kind === "file") item.file = doc.getMap("file").toJSON() as FileMeta;
-	if (kind === "drawing") item.drawing = drawingInfo(doc);
+	if (kind === "note") {
+		const drawings = drawingsInfo(doc);
+		if (drawings) item.drawings = drawings;
+	}
 	if (kind === "op") item.op = doc.getMap("op").toJSON() as OpRecord;
 	if (kind === "settings") {
 		const s: Partial<SettingsRecord> = doc.getMap("settings").toJSON();
@@ -998,9 +998,9 @@ export function optionNames(p: PropDef, v: Value): string[] {
 	);
 }
 
-/** A note, file or drawing rather than an op or the settings. */
+/** A note or file rather than an op or the settings. */
 export function isContentKind(kind: Kind) {
-	return kind === "note" || kind === "file" || kind === "drawing";
+	return kind === "note" || kind === "file";
 }
 
 /** Not deleted, and content (isContentKind). */

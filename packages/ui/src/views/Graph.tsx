@@ -236,11 +236,9 @@ export function GraphView() {
 	const [q, setQ] = useState("");
 	const data = useMemo(() => {
 		const key = (n: Item) => (n.kind === "file" ? "#file" : (ix.typeOf(n) ?? ""));
-		// drawings are part of their note
 		const items = ix.live.filter(
 			(n) =>
 				n.type !== META_TYPE &&
-				n.kind !== "drawing" &&
 				!hidden.has(key(n)) &&
 				(!tag || n.tags.includes(tag)) &&
 				(!hideDone || !isDone(n, ix.schemaOf(n))),

@@ -1,6 +1,7 @@
 // Moving an item (and what hangs only below it) to another workspace. The originals go to the
 // source's trash, so each workspace keeps its own undo.
 
+import { drawingImages } from "@obtion/core/drawing";
 import { SETTINGS_ID } from "@obtion/core/model";
 import { sidebarRoots } from "@obtion/core/placement";
 import { keyBetween } from "@obtion/core/sortkey";
@@ -48,6 +49,12 @@ async function copyContents(items: ReturnType<typeof movedItems>, src: Replica, 
 			if (blob) await dst.files.adopt(hash, blob, derived ? "preview.webp" : f.name, derived);
 		}
 	}
+	// the images in a note's drawings: the other workspace could never fetch one from here later
+	for (const hash of new Set(items.flatMap((it) => drawingImages(it.drawings)))) {
+		const blob = await src.files.content(hash);
+		if (!blob) throw new MoveError("file");
+		await dst.files.adopt(hash, blob, "drawing-image", false);
+	}
 }
 
 export async function planToSpace(id: string, from: string, to: string): Promise<MovePlan> {
@@ -79,6 +86,7 @@ export async function moveToSpace(
 		{ w: dst.repo.writer, ix },
 		{ parent, pinned },
 		src.repo.origin,
+		(id) => src.repo.getDoc(id),
 	);
 	deleteItem(src.repo.writer, src.repo.index(), id);
 	return moved.ids.get(id)!;

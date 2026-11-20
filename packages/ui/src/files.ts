@@ -3,6 +3,7 @@
 // either "online" (fetched when opened) or "local" (all kept here). Files added offline wait in an
 // upload outbox.
 
+import { drawingImages } from "@obtion/core/drawing";
 import {
 	type FileMeta,
 	fileTypeOf,
@@ -566,7 +567,7 @@ export class DeviceFiles {
 		}
 		// images in drawings stay on the device like the previews, so drawings show offline
 		for (const r of this.repo.live())
-			for (const h of r.drawing?.files ?? []) if (!this.local.has(h)) want.push(h);
+			for (const h of drawingImages(r.drawings)) if (!this.local.has(h)) want.push(h);
 		if (this.repo.status.online)
 			for (const h of want) if (!this.queue.includes(h) && !this.missing.has(h)) this.queue.push(h);
 		this.pump();
@@ -722,9 +723,9 @@ export class DeviceFiles {
 	}
 }
 
-/** The contents an item points to on a device: a file's original and previews, a drawing's images. */
+/** The contents an item points to on a device: a file's original and previews, the images in a note's drawings. */
 function contentsOf(r: Item): string[] {
-	return [r.file?.hash, r.file?.display, r.file?.thumb, ...(r.drawing?.files ?? [])].filter(
+	return [r.file?.hash, r.file?.display, r.file?.thumb, ...drawingImages(r.drawings)].filter(
 		(h): h is string => !!h,
 	);
 }
@@ -742,7 +743,7 @@ function shownItself(repo: Repo): Set<string> {
 		repo
 			.live()
 			.flatMap((r) =>
-				r.file?.filetype === "image" && !r.file.display ? [r.file.hash] : (r.drawing?.files ?? []),
+				r.file?.filetype === "image" && !r.file.display ? [r.file.hash] : drawingImages(r.drawings),
 			),
 	);
 }

@@ -49,7 +49,7 @@ function pushTo<V>(map: Map<string, V[]>, key: string, value: V) {
 export class Index {
 	/** Includes deleted records (for "type deleted", trash, restore). */
 	readonly all: Map<string, Item>;
-	/** Live notes, files and drawings, types included. */
+	/** Live notes and files, types included. */
 	readonly live: Item[];
 	readonly byId = new Map<string, Item>();
 	readonly types = new Map<string, TypeItem>();

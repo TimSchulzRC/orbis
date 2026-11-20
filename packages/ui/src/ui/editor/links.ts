@@ -30,18 +30,6 @@ interface Link {
 	embed?: boolean;
 }
 
-/** A line that is nothing but one embed: a drawing there takes the whole line (Editor.tsx). */
-export const isDrawingLine = (text: string) =>
-	wikiLinkRe(true).exec(text.trim())?.[0].length === text.trim().length &&
-	text.trim().startsWith("![[");
-
-/** The drawing whose block a line is, if it is one. */
-export function drawingOnLine(text: string): string | undefined {
-	if (!isDrawingLine(text)) return undefined;
-	const id = repo.resolveTitle(wikiLinkRe(true).exec(text.trim())![2]!.trim());
-	return id && repo.get(id)?.kind === "drawing" ? id : undefined;
-}
-
 function linksIn(state: EditorState, from: number, to: number): Link[] {
 	const out: Link[] = [];
 	for (let pos = from; pos <= to; ) {
@@ -58,16 +46,13 @@ function linksIn(state: EditorState, from: number, to: number): Link[] {
 				const id = open === "![[" ? repo.resolveTitle(title.trim()) : undefined;
 				// [[id]] without a text reads as the page's title
 				const text = bar >= 0 ? rest.slice(bar + 1) : (repo.get(title.trim())?.title ?? target);
-				const drawing = !!id && repo.get(id)?.kind === "drawing";
-				// the drawing's block covers its line already
-				if (drawing && isDrawingLine(line.text)) continue;
 				out.push({
 					from: start,
 					to: start + all.length,
 					text,
 					target,
 					web: false,
-					embed: !!(id && (repo.get(id)?.file || drawing)),
+					embed: !!(id && repo.get(id)?.file),
 				});
 			}
 		}

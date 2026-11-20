@@ -332,6 +332,14 @@ async function pages(
 	if (serverName === "seeded" && !phone)
 		// a diagram made with "/" in a note: a block of the text, drawn on full screen after a click on it
 		await check(page, label, "/#/i/ex-course", errors, async (p) => {
+			// the links of the note, counted in its head ("Links: 3"); a diagram is none of them
+			const links = () =>
+				p
+					.locator('[aria-label^="Links: "]')
+					.first()
+					.getAttribute("aria-label", { timeout: 1000 })
+					.catch(() => null);
+			const linksBefore = await links();
 			await p.locator(".cm-line").first().click();
 			await p.keyboard.press("Control+End");
 			await p.keyboard.press("Enter");
@@ -395,6 +403,9 @@ async function pages(
 				failures.push(`${label}: closing does not go back to the note (${p.url()})`);
 			if (await p.getByText("Diagramme", { exact: true }).count())
 				failures.push(`${label}: the drawing is listed below the note`);
+			const linksAfter = await links();
+			if (linksAfter !== linksBefore)
+				failures.push(`${label}: the drawing counts as a link (${linksBefore} → ${linksAfter})`);
 		});
 	if (serverName === "seeded") {
 		// the open panel is a step in the history: Back closes it and stays on the page

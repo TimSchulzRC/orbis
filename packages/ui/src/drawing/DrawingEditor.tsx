@@ -1,5 +1,5 @@
 // The full-screen drawing: Excalidraw itself, with its tools, menus and shortcuts, bound to the
-// drawing's document. Loaded only when a drawing opens.
+// drawing in its note's document. Loaded only when a drawing opens.
 import "@excalidraw/excalidraw/index.css";
 import {
 	CaptureUpdateAction,
@@ -18,10 +18,9 @@ import type {
 	LibraryItems,
 } from "@excalidraw/excalidraw/types";
 import {
-	DRAWING,
-	DRAWING_FILES,
-	DRAWING_STATE,
+	DRAWINGS,
 	type DrawingFile,
+	drawingMaps,
 	readElements,
 	readScene,
 	type SceneElement,
@@ -75,27 +74,32 @@ const library = {
  * Renders again only when its note's title, the theme or the language change: Excalidraw redraws its
  * whole interface on a render, so it must not follow every change in the workspace.
  */
-export default memo(function DrawingEditor({ id, onClose }: { id: string; onClose: () => void }) {
+export default memo(function DrawingEditor({
+	note: noteId,
+	id,
+	onClose,
+}: {
+	note: string;
+	id: string;
+	onClose: () => void;
+}) {
 	const repo = useContext(ScopeContext)?.repo ?? current;
 	const files = useFiles();
 	const { t, lang } = useT();
 	const dark = useTheme().resolved === "dark";
-	const doc = useMemo(() => repo.getDoc(id), [repo, id]);
+	const doc = useMemo(() => repo.getDoc(noteId), [repo, noteId]);
 	// a diagram has no name of its own: an export ("Export image", "Save") is named after its note
-	const note = useSyncExternalStore(repo.subscribe, () => {
-		const parent = repo.get(id)?.parents;
-		return (parent && repo.get(Object.keys(parent)[0])?.title) || "";
-	});
+	const note = useSyncExternalStore(repo.subscribe, () => repo.get(noteId)?.title ?? "");
 	const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
 	const [root, setRoot] = useState<HTMLDivElement | null>(null);
 	const initial = useMemo(() => {
-		const scene = readScene(doc);
+		const scene = readScene(doc, id);
 		return {
 			elements: scene.elements as unknown as OrderedExcalidrawElement[],
 			appState: scene.state as Partial<AppState>,
 			scrollToContent: true,
 		};
-	}, [doc]);
+	}, [doc, id]);
 
 	// ---- writing: the scene into the document, throttled ----
 	const writing = useRef(false);
@@ -111,16 +115,16 @@ export default memo(function DrawingEditor({ id, onClose }: { id: string; onClos
 	const stored = useRef(new Set<string>()); // image ids in the document or on their way there
 
 	const uploadImages = (all: BinaryFiles) => {
-		const have = doc.getMap<DrawingFile>(DRAWING_FILES);
+		const have = readScene(doc, id).files;
 		for (const [fid, f] of Object.entries(all)) {
-			if (have.has(fid) || stored.current.has(fid) || !f.dataURL) continue;
+			if (have[fid] || stored.current.has(fid) || !f.dataURL) continue;
 			stored.current.add(fid);
 			void (async () => {
 				try {
 					const blob = await dataURLToBlob(f.dataURL);
 					const hash = await files.addContent(blob, imageName(f.mimeType));
 					write((d) => {
-						setDrawingFile(d, fid, {
+						setDrawingFile(d, id, fid, {
 							hash,
 							mimeType: f.mimeType,
 							created: f.created ?? Date.now(),
@@ -138,7 +142,7 @@ export default memo(function DrawingEditor({ id, onClose }: { id: string; onClos
 	const write = (fn: (d: typeof doc) => void) => {
 		writing.current = true;
 		try {
-			repo.change(id, fn);
+			repo.change(noteId, fn);
 		} finally {
 			writing.current = false;
 		}
@@ -158,7 +162,7 @@ export default memo(function DrawingEditor({ id, onClose }: { id: string; onClos
 			// an element gone from the scene (another file opened) is deleted on every device; "Reset the canvas" marks
 			// them deleted instead, so an empty scene is never one to delete everything by
 			const here = new Set(elements.map((e) => e.id));
-			const gone = (elements.length ? readElements(d) : [])
+			const gone = (elements.length ? readElements(d, id) : [])
 				.filter((e) => !here.has(e.id) && !e.isDeleted)
 				.map((e) => ({
 					...e,
@@ -167,8 +171,8 @@ export default memo(function DrawingEditor({ id, onClose }: { id: string; onClos
 					versionNonce: Math.floor(Math.random() * 2 ** 31),
 					updated: Date.now(),
 				}));
-			const n = writeElements(d, [...elements, ...gone]);
-			if (setDrawingState(d, state) || n) touch(d);
+			const n = writeElements(d, id, [...elements, ...gone]);
+			if (setDrawingState(d, id, state) || n) touch(d);
 		});
 		uploadImages(last.files);
 	};
@@ -228,44 +232,46 @@ export default memo(function DrawingEditor({ id, onClose }: { id: string; onClos
 			if (Object.keys(missing).length)
 				void loadImages(missing, files).then((list) => live && list.length && api.addFiles(list));
 		};
-		addImages(readScene(doc).files);
+		addImages(readScene(doc, id).files);
 		const onElements = () => {
-			if (writing.current) return;
 			const merged = reconcileElements(
 				api.getSceneElementsIncludingDeleted(),
-				readElements(doc) as never,
+				readElements(doc, id) as never,
 				api.getAppState(),
 			);
 			api.updateScene({ elements: merged, captureUpdate: CaptureUpdateAction.NEVER });
 		};
-		const onFiles = () => !writing.current && addImages(readScene(doc).files);
+		const onFiles = () => addImages(readScene(doc, id).files);
 		// an image whose content was still uploading on the other device: in once the server has it
 		const stopBlobs = repo.onBlob((hash) => {
-			const all = readScene(doc).files;
+			const all = readScene(doc, id).files;
 			if (Object.values(all).some((f) => f.hash === hash)) addImages(all);
 		});
 		const onState = () =>
-			!writing.current &&
 			api.updateScene({
-				appState: doc.getMap(DRAWING_STATE).toJSON() as never,
+				appState: readScene(doc, id).state as never,
 				captureUpdate: CaptureUpdateAction.NEVER,
 			});
-		const maps = [
-			doc.getMap(DRAWING),
-			doc.getMap(DRAWING_FILES),
-			doc.getMap(DRAWING_STATE),
-		] as const;
-		maps[0].observe(onElements);
-		maps[1].observe(onFiles);
-		maps[2].observe(onState);
+		// the note's other changes (its text, other drawings) are none of this drawing's business
+		const all = doc.getMap<unknown>(DRAWINGS);
+		const onChange = (events: { target: unknown }[]) => {
+			if (writing.current) return;
+			const maps = drawingMaps(doc, id);
+			if (!maps) return;
+			const hit = (m: unknown) => events.some((e) => e.target === m);
+			// the drawing came in whole (another device started it): everything at once
+			const whole = hit(all);
+			if (whole || hit(maps.elements)) onElements();
+			if (whole || hit(maps.files)) onFiles();
+			if (whole || hit(maps.state)) onState();
+		};
+		all.observeDeep(onChange);
 		return () => {
 			live = false;
 			stopBlobs();
-			maps[0].unobserve(onElements);
-			maps[1].unobserve(onFiles);
-			maps[2].unobserve(onState);
+			all.unobserveDeep(onChange);
 		};
-	}, [api, doc, repo, files]);
+	}, [api, doc, id, repo, files]);
 
 	useHandleLibrary({ excalidrawAPI: api, adapter: library });
 
@@ -414,7 +420,7 @@ export default memo(function DrawingEditor({ id, onClose }: { id: string; onClos
 					<WelcomeScreen.Center>
 						<WelcomeScreen.Center.Logo>
 							<span className="drawing-logo">
-								<DRAWING_ICON size={28} /> {t("kind.drawing")}
+								<DRAWING_ICON size={28} /> {t("drawing.name")}
 							</span>
 						</WelcomeScreen.Center.Logo>
 						<WelcomeScreen.Center.Heading>{t("drawing.welcome")}</WelcomeScreen.Center.Heading>
@@ -431,7 +437,7 @@ export default memo(function DrawingEditor({ id, onClose }: { id: string; onClos
 
 	return (
 		<div
-			aria-label={t("kind.drawing")}
+			aria-label={t("drawing.name")}
 			aria-modal
 			className="drawing-full fixed inset-0 z-50"
 			ref={setRoot}
@@ -444,7 +450,7 @@ export default memo(function DrawingEditor({ id, onClose }: { id: string; onClos
 				handleKeyboardGlobally
 				initialData={initial}
 				langCode={LANG_CODE[lang] ?? "en"}
-				name={note || t("kind.drawing")}
+				name={note || t("drawing.name")}
 				onChange={onChange}
 				onLinkOpen={onLinkOpen}
 				renderTopRightUI={renderTopRightUI}

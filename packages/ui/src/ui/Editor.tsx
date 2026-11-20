@@ -29,21 +29,24 @@ import {
 	WidgetType,
 } from "@codemirror/view";
 import { tags as t } from "@lezer/highlight";
+import { findDrawings } from "@obtion/core/drawing";
 import { parseWikiLinks, titleKey, touchOnTextEdit } from "@obtion/core/model";
 import { FilePlus } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { yCollab, yUndoManagerKeymap } from "y-codemirror.next";
 import * as Y from "yjs";
+import { replica } from "../accounts";
 import { drawingEmbedHTML, hydrateDrawings } from "../drawing/Drawing";
 import { files } from "../files";
 import { tr } from "../i18n";
 import { repo } from "../repo";
 import { moveBy } from "./editor/blocks";
 import { blockHandles } from "./editor/handles";
-import { isDrawingLine, links, refreshEmbeds } from "./editor/links";
+import { links, refreshEmbeds } from "./editor/links";
 import { livePreview } from "./editor/livePreview";
 import {
 	editorNode,
+	editorSpace,
 	mentionCompletion,
 	onSlashFiles,
 	pageOption,
@@ -125,27 +128,16 @@ function imageDecos(state: EditorState): DecorationSet {
 		for (const link of parseWikiLinks(line.text)) {
 			const id = link.embed ? repo.resolveTitle(link.target) : undefined;
 			const item = id ? repo.get(id) : undefined;
-			if (!item || item.deleted) continue;
-			// a drawing on a line of its own is that line: a block with no text around it
-			if (item.kind === "drawing" && isDrawingLine(line.text))
-				builder.add(
-					line.from,
-					line.to,
-					Decoration.replace({ widget: new EmbedWidget(drawingEmbedHTML(item)), block: true }),
-				);
-			else {
-				const html = item.file
-					? embedHTML(item, link.size)
-					: item.kind === "drawing"
-						? drawingEmbedHTML(item)
-						: undefined;
-				if (html)
-					builder.add(
-						line.to,
-						line.to,
-						Decoration.widget({ widget: new EmbedWidget(html), block: true, side: 1 }),
-					);
-			}
+			if (!item?.file || item.deleted) continue;
+			builder.add(
+				line.to,
+				line.to,
+				Decoration.widget({
+					widget: new EmbedWidget(embedHTML(item, link.size)),
+					block: true,
+					side: 1,
+				}),
+			);
 		}
 	}
 	return builder.finish();
@@ -155,23 +147,52 @@ const images = StateField.define<DecorationSet>({
 	create: imageDecos,
 	update: (deco, tr) =>
 		tr.docChanged || tr.effects.some((e) => e.is(refreshEmbeds)) ? imageDecos(tr.state) : deco,
-	// a diagram's block is one piece: arrows and Backspace never enter the text hidden behind it
+	provide: (f) => EditorView.decorations.from(f),
+});
+
+/** The replica of the text's workspace. */
+const repoOf = (state: EditorState) => {
+	const space = state.facet(editorSpace);
+	return space ? replica(space).repo : repo;
+};
+
+/** The note's drawing blocks (```excalidraw fences), each drawn in place of its fence. */
+function drawingDecos(state: EditorState): DecorationSet {
+	const builder = new RangeSetBuilder<Decoration>();
+	const note = state.facet(editorNode);
+	if (!note) return builder.finish();
+	const space = state.facet(editorSpace);
+	const drawings = repoOf(state).get(note)?.drawings;
+	for (const b of findDrawings(state.doc.toString()))
+		builder.add(
+			b.from,
+			b.to,
+			Decoration.replace({
+				widget: new EmbedWidget(drawingEmbedHTML(note, b.id, drawings?.[b.id], space)),
+				block: true,
+			}),
+		);
+	return builder.finish();
+}
+
+const drawingBlocks = StateField.define<DecorationSet>({
+	create: drawingDecos,
+	update: (deco, tr) =>
+		tr.docChanged || tr.effects.some((e) => e.is(refreshEmbeds)) ? drawingDecos(tr.state) : deco,
+	// a diagram's block is one piece: arrows and Backspace never enter the fence hidden behind it
 	provide: (f) => [
 		EditorView.decorations.from(f),
 		EditorView.atomicRanges.of((view) => view.state.field(f)),
 	],
 });
 
-/** What the embedded drawings of the text show, so drawing on one redraws it (files keep their element). */
+/** What the note's drawings show, so drawing on one redraws its block. */
 function embedsKey(state: EditorState): string {
-	const text = state.doc.toString();
-	if (!text.includes("![[")) return "";
-	return parseWikiLinks(text)
-		.filter((l) => l.embed)
-		.map((l) => {
-			const item = repo.get(repo.resolveTitle(l.target));
-			return item?.kind === "drawing" ? `${item.id}:${item.updated}:${item.deleted}` : "";
-		})
+	const note = state.facet(editorNode);
+	const drawings = note ? repoOf(state).get(note)?.drawings : undefined;
+	if (!drawings) return "";
+	return Object.entries(drawings)
+		.map(([id, d]) => `${id}:${d.version}`)
 		.join("|");
 }
 
@@ -295,6 +316,7 @@ const editableState = (readOnly: boolean) => [
 export function Editor({
 	doc,
 	nodeId,
+	space,
 	placeholder,
 	autoFocus,
 	onView,
@@ -306,6 +328,8 @@ export function Editor({
 	readOnly?: boolean;
 	doc: Y.Doc;
 	nodeId?: string;
+	/** The workspace of the text when it is not the open one. */
+	space?: string;
 	placeholder?: string;
 	autoFocus?: boolean;
 	onView?: (v: EditorView | null) => void;
@@ -316,13 +340,13 @@ export function Editor({
 	const editable = useRef(new Compartment());
 	// the editor is built once per doc; the other props only set it up (readOnly then follows
 	// through its compartment), so the effect reads them as they were at that render
-	const setup = useRef({ nodeId, placeholder, autoFocus, onView, extra, readOnly });
-	setup.current = { nodeId, placeholder, autoFocus, onView, extra, readOnly };
+	const setup = useRef({ nodeId, space, placeholder, autoFocus, onView, extra, readOnly });
+	setup.current = { nodeId, space, placeholder, autoFocus, onView, extra, readOnly };
 	useEffect(() => {
 		viewRef.current?.dispatch({ effects: editable.current.reconfigure(editableState(readOnly)) });
 	}, [readOnly]);
 	useEffect(() => {
-		const { nodeId, placeholder, autoFocus, onView, extra, readOnly } = setup.current;
+		const { nodeId, space, placeholder, autoFocus, onView, extra, readOnly } = setup.current;
 		const ytext = doc.getText("body");
 		const undoManager = new Y.UndoManager(ytext);
 		const stopTouch = touchOnTextEdit(doc); // typing moves "updated"
@@ -360,6 +384,7 @@ export function Editor({
 			livePreview,
 			tables,
 			images,
+			drawingBlocks,
 			autocompletion({
 				override: [linkCompletion(nodeId), slashCompletion, mentionCompletion(nodeId)],
 				icons: false,
@@ -367,6 +392,7 @@ export function Editor({
 				maxRenderedOptions: 40,
 			}),
 			editorNode.of(nodeId),
+			editorSpace.of(space),
 			blockHandles,
 			formatToolbar,
 			shortcuts,
@@ -386,7 +412,7 @@ export function Editor({
 		});
 		viewRef.current = view;
 		let embeds = embedsKey(view.state);
-		const stopEmbeds = repo.subscribe(() => {
+		const stopEmbeds = repoOf(view.state).subscribe(() => {
 			const next = embedsKey(view.state);
 			if (next === embeds) return;
 			embeds = next;

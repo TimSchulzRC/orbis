@@ -12,7 +12,7 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
-import { excalidrawFile, readScene } from "@obtion/core/drawing";
+import { excalidrawFile, findDrawings, readScene, replaceDrawings } from "@obtion/core/drawing";
 import type { Index } from "@obtion/core/graph";
 import { type Lang, translate } from "@obtion/core/i18n";
 import { type Item, META_TYPE, optionNames } from "@obtion/core/model";
@@ -103,15 +103,18 @@ export class Mirror {
 				want.set(pathOf(i, safe(i.file.name)), { blob: i.file.hash });
 				continue;
 			}
-			// a drawing as a file Excalidraw opens (its images are blobs and stay out)
-			if (i.kind === "drawing") {
-				want.set(pathOf(i, `${translate(lang, "kind.drawing")}.excalidraw`), {
-					content: excalidrawFile(readScene(this.store.getDoc(i.id))),
-				});
-				continue;
+			// each drawing as a file Excalidraw opens, next to its note (its images are blobs and stay out)
+			const drawings = new Map<string, string>();
+			for (const [n, { id }] of findDrawings(i.body).entries()) {
+				if (drawings.has(id)) continue;
+				const path = pathOf(i, `${safe(i.title)}${n ? ` ${n + 1}` : ""}.excalidraw`);
+				want.set(path, { content: excalidrawFile(readScene(this.store.getDoc(i.id), id)) });
+				drawings.set(id, path.split("/").pop()!);
 			}
 			// children go into a folder named after this item (folder-note style)
-			want.set(pathOf(i, `${safe(i.title)}.md`), { content: this.render(i, ix, lang) });
+			want.set(pathOf(i, `${safe(i.title)}.md`), {
+				content: this.render(i, ix, lang, drawings),
+			});
 		}
 		const ws = workspaceRules(ix);
 		const rulesHead = translate(lang, "rules.title");
@@ -151,7 +154,8 @@ export class Mirror {
 		return true;
 	}
 
-	render(i: Item, ix: Index, lang: Lang): string {
+	/** `drawings`: the file name of each drawing of the note in the mirror. */
+	render(i: Item, ix: Index, lang: Lang, drawings = new Map<string, string>()): string {
 		const schema = ix.schemaOf(i);
 		const fm: Record<string, unknown> = { id: i.id };
 		if (i.type === META_TYPE && i.schema) fm.kind = "type";
@@ -189,7 +193,10 @@ export class Mirror {
 				"\n";
 			return out;
 		}
-		out += `${blocksAsText(i.body, lang, ix).trimEnd()}\n`;
+		const body = replaceDrawings(blocksAsText(i.body, lang, ix), (b) =>
+			drawings.has(b.id) ? `![[${drawings.get(b.id)}]]` : "",
+		);
+		out += `${body.trimEnd()}\n`;
 		if (i.rules.trim()) out += `\n## ${translate(lang, "rules.title")}\n\n${i.rules.trimEnd()}\n`;
 		const kids = ix.childrenOf(i.id).map((c) => ix.get(c)!);
 		if (kids.length)

@@ -1,4 +1,5 @@
 import MiniSearch from "minisearch";
+import { findDrawings, replaceDrawings } from "./drawing";
 import { type Item, isContent, mapWikiLinks, stripQueryBlocks } from "./model";
 import { headingAt, outline } from "./outline";
 import { foldUmlauts, plainVowels } from "./text";
@@ -37,11 +38,21 @@ const OPTION_ID = /^(st|pr)_/;
 
 function bodyText(doc: Item): string {
 	return (
-		stripQueryBlocks(doc.body) +
+		replaceDrawings(stripQueryBlocks(doc.body), () => "") +
 		(doc.file ? ` ${doc.file.name} ${doc.file.text ?? ""}` : "") +
-		(doc.drawing ? ` ${doc.drawing.text}` : "") +
+		drawingsText(doc) +
 		(doc.schema ? ` ${doc.schema.description}` : "")
 	);
+}
+
+/** What the drawings in the note's text say. */
+function drawingsText(doc: Item): string {
+	if (!doc.drawings) return "";
+	return findDrawings(doc.body)
+		.map((b) => doc.drawings![b.id]?.text ?? "")
+		.filter(Boolean)
+		.map((t) => ` ${t}`)
+		.join("");
 }
 
 function propsText(doc: Item): string {
@@ -148,7 +159,7 @@ function tableCells(text: string): string {
 
 /** Without Markdown marks, on one line. */
 export function plainText(body: string): string {
-	const marks = stripQueryBlocks(body)
+	const marks = replaceDrawings(stripQueryBlocks(body), () => "")
 		.replace(/^\s*```.*$/gm, "") // code fences (the code itself stays)
 		.replace(/<br\s*\/?>/gi, " ") // line breaks (in table cells)
 		.replace(/<[^>\n]+>/g, "") // html tags

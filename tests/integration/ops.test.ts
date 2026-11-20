@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { addDrawing, drawingFence, writeElements } from "@obtion/core/drawing";
 import { addDaysISO, addParent, replaceBody, setExtra, todayISO } from "@obtion/core/model";
 import { SYS } from "@obtion/core/setup";
 import { deleteItem } from "@obtion/core/trash";
@@ -367,6 +368,33 @@ test("markdown mirror writes items below their home and removes stale files", ()
 	m.sync();
 	expect(existsSync(f)).toBe(false);
 	expect(existsSync(join(dir, "vault", "Work", "Relaunch 2026.md"))).toBe(true);
+});
+
+test("a note's drawing: agents read its text, the mirror writes it as .excalidraw next to the note", () => {
+	const m = new Mirror(s, join(dir, "vault"));
+	const work = ops.create({ title: "Work", pin: true }, A);
+	const n = ops.create(
+		{ title: "Sketch", parents: [work.id], body: `Overview\n${drawingFence("d1")}\nEnd` },
+		A,
+	);
+	// drawn on a device
+	const client = new Y.Doc();
+	Y.applyUpdate(client, Y.encodeStateAsUpdate(s.getDoc(n.id)));
+	const sv = Y.encodeStateVector(client);
+	client.transact(() => {
+		addDrawing(client, "d1");
+		writeElements(client, "d1", [
+			{ id: "t", type: "text", text: "Login flow", version: 1, versionNonce: 1, index: "a0" },
+		]);
+	});
+	s.applyRemote(n.id, Y.encodeStateAsUpdate(client, sv), "web:test");
+	expect(ops.get(n.id).drawings).toEqual([{ id: "d1", elements: 1, text: "Login flow" }]);
+	expect(ops.search("login flow").map((h) => h.item.id)).toContain(n.id);
+	m.sync();
+	const md = readFileSync(join(dir, "vault", "Work", "Sketch.md"), "utf8");
+	expect(md).toContain("Overview\n![[Sketch.excalidraw]]\nEnd");
+	const file = JSON.parse(readFileSync(join(dir, "vault", "Work", "Sketch.excalidraw"), "utf8"));
+	expect(file.elements.map((e: { text: string }) => e.text)).toEqual(["Login flow"]);
 });
 
 test("agent edits see text typed moments ago", () => {

@@ -835,12 +835,8 @@ export function runQuery(def: QueryDef, ctx: EvalCtx): QueryResult {
 	const ix = ctx.ix;
 	const missing = missingTypes(def.where, ix);
 	const wantTypes = typesIn(def.where).includes(META_TYPE);
-	// drawings belong to their note: lists show the note
 	let items = ix.live.filter(
-		(i) =>
-			i.kind !== "drawing" &&
-			(wantTypes || i.type !== META_TYPE) &&
-			(!def.where || matches(i, def.where, ctx)),
+		(i) => (wantTypes || i.type !== META_TYPE) && (!def.where || matches(i, def.where, ctx)),
 	);
 	items = sortItems(items, def.sort, ix);
 	if (!def.sort?.length && def.order?.length) {

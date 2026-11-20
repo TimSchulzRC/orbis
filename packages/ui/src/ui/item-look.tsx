@@ -16,7 +16,7 @@ import { useIndex, useItemHref } from "../hooks";
 import { titleOf, tr, useT } from "../i18n";
 import { cn } from "../lib/utils";
 import { repo } from "../repo";
-import { DRAWING_ICON, FILE_ICONS, ICON, INBOX_ICON, NOTE_ICON, TYPE_ICON } from "./icons";
+import { FILE_ICONS, ICON, INBOX_ICON, NOTE_ICON, TYPE_ICON } from "./icons";
 import { Button } from "./primitives";
 
 export const pal = (color?: string) => `var(--pal-${color ?? "slate"}, var(--pal-slate))`;
@@ -39,7 +39,7 @@ export interface Look {
 	icon: typeof INBOX_ICON;
 	color: string;
 	/** "schema" is an entry of a user type, named by `name` */
-	kind: "file" | "drawing" | "type" | "inbox" | "note" | "schema";
+	kind: "file" | "type" | "inbox" | "note" | "schema";
 	name?: string;
 }
 
@@ -50,8 +50,6 @@ export function itemLook(item: Item, ix: Index = repo.index()): Look {
 			color: "var(--t-file)",
 			kind: "file",
 		};
-	if (item.kind === "drawing")
-		return { icon: DRAWING_ICON, color: "var(--t-drawing)", kind: "drawing" };
 	if (item.schema && item.type === META_TYPE)
 		return {
 			icon: ICON[item.schema.icon] ?? TYPE_ICON,

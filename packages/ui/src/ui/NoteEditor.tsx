@@ -3,9 +3,10 @@
 
 import type { EditorView } from "@codemirror/view";
 import type { Item } from "@obtion/core/model";
-import { useMemo } from "react";
+import { useContext, useMemo } from "react";
 import { useIndex, useRepo } from "../hooks";
 import { useT } from "../i18n";
+import { ScopeContext } from "../scope";
 import { Editor } from "./Editor";
 import { toolbarExtract } from "./editor/toolbar";
 import { queryBlocks } from "./QueryBlock";
@@ -24,6 +25,7 @@ export function NoteEditor({
 	const { t } = useT();
 	// the workspace of this part of the page (the inbox shows entries of several)
 	const repo = useRepo();
+	const space = useContext(ScopeContext)?.id;
 	const doc = useMemo(() => repo.getDoc(item.id), [repo, item.id]);
 	const typed = !!useIndex().schemaOf(item);
 	return (
@@ -35,6 +37,7 @@ export function NoteEditor({
 			nodeId={item.id}
 			onView={onView}
 			placeholder={t(typed ? "editor.placeholderTyped" : "editor.placeholder")}
+			space={space}
 		/>
 	);
 }
