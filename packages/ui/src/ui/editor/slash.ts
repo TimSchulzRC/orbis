@@ -23,7 +23,7 @@ import {
 	Table,
 } from "lucide-react";
 import type { ComponentType } from "react";
-import { ySyncFacet } from "y-codemirror.next";
+import { replica } from "../../accounts";
 import { tr } from "../../i18n";
 import { repo } from "../../repo";
 import { DRAWING_ICON } from "../icons";
@@ -152,10 +152,17 @@ const ITEMS: SlashItem[] = [
 function insertDrawing(view: EditorView, pos: number) {
 	const note = view.state.facet(editorNode);
 	if (!note) return;
+	// the scene goes into the note's document in its own workspace
+	const space = view.state.facet(editorSpace);
+	const r = space ? replica(space).repo : repo;
 	const id = newId();
-	// the scene goes into the document this text is of, whichever workspace it belongs to
-	const doc = view.state.facet(ySyncFacet).ytext.doc!;
-	doc.transact(() => addDrawing(doc, id));
+	let added = false;
+	r.change(note, (d) => {
+		addDrawing(d, id);
+		added = true;
+	});
+	// a workspace this app may only read (it says why)
+	if (!added) return;
 	const fence = drawingFence(id);
 	insertBlock(view, pos, `${fence}\n`, fence.length + 1);
 }

@@ -5,8 +5,8 @@
 
 import type { DrawingInfo } from "@obtion/core/drawing";
 import type { Repo } from "@obtion/sync";
-import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { replica } from "../accounts";
+import { memo, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { replica, spaceById } from "../accounts";
 import { files as currentFiles } from "../files";
 import { setParams, useRoute } from "../hooks";
 import { tr, useT } from "../i18n";
@@ -132,13 +132,18 @@ export const DrawingHost = memo(function DrawingHost() {
 		shown.current = id;
 		if (was && was !== id) for (const l of closedListeners) l(was);
 	}, [id]);
-	// the note's workspace, which need not be the open one (the inbox, the review)
+	// the note's workspace, which need not be the open one (the inbox, the review); one no longer
+	// on this device shows nothing
+	const gone = !!open?.space && !spaceById(open.space);
 	const scope = useMemo(
-		() => (open?.space ? { id: open.space, ...replica(open.space) } : null),
-		[open?.space],
+		() => (open?.space && !gone ? { id: open.space, ...replica(open.space) } : null),
+		[open?.space, gone],
 	);
-	if (!open) return null;
-	if (!Editor) return <Loading />;
+	// before its replica has read this device's data, the note's document would start out empty
+	const repo = scope?.repo ?? current;
+	const ready = useSyncExternalStore(repo.subscribe, () => repo.status.loaded);
+	if (!open || gone) return null;
+	if (!Editor || !ready) return <Loading />;
 	const editor = <Editor id={open.id} key={id} note={open.note} onClose={closeDrawing} />;
 	return scope ? <ScopeContext.Provider value={scope}>{editor}</ScopeContext.Provider> : editor;
 });
