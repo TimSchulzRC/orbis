@@ -24,26 +24,20 @@ permissions:
 
 jobs:
   bundle:
-    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    # GitHub's runners only, as in ci.yml (docs/ci.md)
+    runs-on: ubuntu-latest
     timeout-minutes: 15
-    env:
-      SELF_HOSTED: ${{ vars.RUNNER != '' }}
     defaults:
       run:
         working-directory: apps/mobile
     steps:
       - uses: actions/checkout@v7
-      # Bun as in ci.yml: GitHub's runners install it, the self-hosted machine upgrades its own
+      # the newest Bun release, as in ci.yml
       - uses: oven-sh/setup-bun@v2
-        if: env.SELF_HOSTED != 'true'
         with:
           bun-version: latest
-      - if: env.SELF_HOSTED == 'true'
-        run: |
-          echo "$HOME/.bun/bin" >> "$GITHUB_PATH"
-          flock ~/.bun/upgrade.lock ~/.bun/bin/bun upgrade
-      # Expo's CLI runs on Node: it loads app.config.ts by stripping its types, which Bun standing in
-      # for a missing Node cannot do (the self-hosted machine has no Node of its own)
+      # Expo's CLI runs on Node and loads app.config.ts by stripping its types: the current LTS does
+      # that, whichever Node the runner image brings
       - uses: actions/setup-node@v7
         with:
           node-version: lts/*
