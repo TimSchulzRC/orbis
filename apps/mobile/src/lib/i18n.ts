@@ -16,8 +16,7 @@ export function useT() {
 	return { t, lang };
 }
 
-/** As in the web app: a file goes by its name, a drawing by its kind, an empty title is "Untitled". */
-export function titleOf(item: Pick<Item, "title" | "file" | "kind">): string {
-	if (item.kind === "drawing") return t("kind.drawing");
+/** As in the web app: a file goes by its name, an empty title is "Untitled". */
+export function titleOf(item: Pick<Item, "title" | "file">): string {
 	return displayTitle(item) || t("untitled");
 }

@@ -76,8 +76,6 @@ export function lookOf(item: Item, ix: Index): Look {
 			color: C.faint,
 			kind: t("kind.file"),
 		};
-	if (item.kind === "drawing")
-		return { symbol: "scribble", color: C.accent, kind: t("kind.drawing") };
 	if (item.type === META_TYPE && item.schema)
 		return { symbol: typeSymbol(item.schema), color: pal(item.schema.color), kind: t("kind.type") };
 	const schema = ix.schemaOf(item);

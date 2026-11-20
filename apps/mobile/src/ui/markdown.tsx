@@ -1,6 +1,7 @@
 // A page's Markdown as native text: headings, lists with checkboxes that tick, quotes, code,
-// tables, [[links]] to other entries and ```query blocks as live lists.
+// tables, [[links]] to other entries, ```query blocks as live lists and ```excalidraw blocks by name.
 
+import { DRAWING_INFO } from "@orbis/core/drawing";
 import type { Index } from "@orbis/core/graph";
 import { type Item, todayISO, wikiLinkRe } from "@orbis/core/model";
 import { readBlock, runQuery, tabDef } from "@orbis/core/query";
@@ -143,6 +144,8 @@ function block(tok: Token, ctx: Ctx): ReactNode {
 			const code = tok as Tokens.Code;
 			if (code.lang?.startsWith("query"))
 				return <QueryBlock ctx={ctx} src={`${code.lang.slice(5)}\n${code.text}`.trim()} />;
+			if (code.lang?.trim() === DRAWING_INFO)
+				return <DrawingBlock ctx={ctx} id={code.text.trim()} />;
 			return (
 				<View style={styles.code}>
 					<Text selectable style={styles.mono}>
@@ -356,6 +359,24 @@ function QueryBlock({ src, ctx }: { src: string; ctx: Ctx }) {
 	);
 }
 
+/** A ```excalidraw block: the phone does not draw the scene; it names it and shows its words. */
+function DrawingBlock({ id, ctx }: { id: string; ctx: Ctx }) {
+	const words = ctx.item.drawings?.[id]?.text.trim();
+	return (
+		<View style={[styles.query, styles.drawing]}>
+			<Icon color={C.accent} name="scribble" size={18} />
+			<View style={styles.drawingBody}>
+				<Text style={styles.queryText}>{t("drawing.name")}</Text>
+				{words ? (
+					<Text numberOfLines={3} style={styles.drawingWords}>
+						{words}
+					</Text>
+				) : null}
+			</View>
+		</View>
+	);
+}
+
 const H = StyleSheet.create({
 	h1: { fontSize: 26, fontWeight: "700", lineHeight: 32, marginTop: 10 },
 	h2: { fontSize: 22, fontWeight: "700", lineHeight: 28, marginTop: 8 },
@@ -410,4 +431,7 @@ const styles = StyleSheet.create({
 	queryRow: { alignItems: "center", flexDirection: "row", gap: 10, minHeight: 40 },
 	queryText: { color: C.label, flex: 1, fontSize: 16 },
 	queryEmpty: { color: C.secondary, fontSize: 14, paddingVertical: 6 },
+	drawing: { alignItems: "center", flexDirection: "row", gap: 10, minHeight: 52 },
+	drawingBody: { flex: 1, gap: 2 },
+	drawingWords: { color: C.secondary, fontSize: 14 },
 });
