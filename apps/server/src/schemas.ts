@@ -1,6 +1,6 @@
 // Tool input schemas: the MCP server validates with them, ops.ts uses the inferred types.
 
-import { PROP_KINDS, VIEW_KINDS } from "@obtion/core/model";
+import { PROP_KINDS, VIEW_KINDS } from "@orbis/core/model";
 import { z } from "zod";
 
 const values = z.record(z.string(), z.any());

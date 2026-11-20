@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
-import { migrate } from "@obtion/server/migrate";
+import { migrate } from "@orbis/server/migrate";
 
 const version = (db: Database) =>
 	(db.query("PRAGMA user_version").get() as { user_version: number }).user_version;

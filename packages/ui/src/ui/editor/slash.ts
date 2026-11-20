@@ -8,9 +8,9 @@ import {
 } from "@codemirror/autocomplete";
 import { EditorSelection, Facet } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
-import { addDrawing, drawingFence } from "@obtion/core/drawing";
-import { newId } from "@obtion/core/model";
-import { foldUmlauts, plainVowels } from "@obtion/core/text";
+import { addDrawing, drawingFence } from "@orbis/core/drawing";
+import { newId } from "@orbis/core/model";
+import { foldUmlauts, plainVowels } from "@orbis/core/text";
 import {
 	Code,
 	FileText,

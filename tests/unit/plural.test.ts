@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { pluralOf } from "@obtion/core/plural";
+import { pluralOf } from "@orbis/core/plural";
 
 test("plural suggestions for type names: German rules, irregular nouns, compounds, English", () => {
 	const de = (n: string) => pluralOf(n, "de");

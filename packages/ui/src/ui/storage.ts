@@ -2,42 +2,42 @@
 // before the app starts), lang, active space and file mode.
 
 export const KEYS = {
-	account: "obtion.account",
+	account: "orbis.account",
 	/** the desktop app's further servers, each with its account */
-	servers: "obtion.servers",
+	servers: "orbis.servers",
 	/** while the copies of one server's workspaces are removed: they close without reloading the page */
-	leaving: "obtion.leaving",
-	spaces: "obtion.spaces",
-	active: "obtion.active",
-	shown: "obtion.shown",
-	lang: "obtion.lang",
-	theme: "obtion.theme",
-	device: "obtion.device",
-	fileMode: "obtion.fileMode",
-	recentPlaces: "obtion.recentPlaces",
+	leaving: "orbis.leaving",
+	spaces: "orbis.spaces",
+	active: "orbis.active",
+	shown: "orbis.shown",
+	lang: "orbis.lang",
+	theme: "orbis.theme",
+	device: "orbis.device",
+	fileMode: "orbis.fileMode",
+	recentPlaces: "orbis.recentPlaces",
 	/** Excalidraw's library: shapes kept for all drawings */
-	drawingLibrary: "obtion.drawing.library",
-	captureSpace: "obtion.capture.space",
-	timelineScale: "obtion.timeline.scale",
-	sidebarTree: "obtion.sidebar.tree",
-	sidebarWidth: "obtion.sidebar.width",
-	sidebarOpen: "obtion.sidebar.open",
+	drawingLibrary: "orbis.drawing.library",
+	captureSpace: "orbis.capture.space",
+	timelineScale: "orbis.timeline.scale",
+	sidebarTree: "orbis.sidebar.tree",
+	sidebarWidth: "orbis.sidebar.width",
+	sidebarOpen: "orbis.sidebar.open",
 	/** the inbox's "Sorted" with each entry's undo, until cleared */
-	inboxSorted: "obtion.inbox.sorted",
-	sidebarSpace: (space: string) => `obtion.sidebar.space.${space}`,
-	sidebarTypes: (space: string) => `obtion.sidebar.types.${space}`,
+	inboxSorted: "orbis.inbox.sorted",
+	sidebarSpace: (space: string) => `orbis.sidebar.space.${space}`,
+	sidebarTypes: (space: string) => `orbis.sidebar.types.${space}`,
 	/** a view's tab shown last (a type's page, a block) */
-	tab: (key: string) => `obtion.tab.${key}`,
+	tab: (key: string) => `orbis.tab.${key}`,
 	/** folded groups of a table */
-	fold: (key: string) => `obtion.fold.${key}`,
+	fold: (key: string) => `orbis.fold.${key}`,
 	/** when a page's updates were last read on this device (not synced): newer ones by agents count as new */
-	updatesSeen: (item: string) => `obtion.updates.seen.${item}`,
+	updatesSeen: (item: string) => `orbis.updates.seen.${item}`,
 	/** an update being written on a page, until it is posted */
-	updatesDraft: (item: string) => `obtion.updates.draft.${item}`,
+	updatesDraft: (item: string) => `orbis.updates.draft.${item}`,
 	/** whether the updates panel shows those of the pages below too (this device) */
-	updatesWithBelow: "obtion.updates.withBelow",
+	updatesWithBelow: "orbis.updates.withBelow",
 	/** opened rows: sub-items of a table, parts of a page */
-	open: (key: string) => `obtion.open.${key}`,
+	open: (key: string) => `orbis.open.${key}`,
 };
 
 /** A stored value, or `fallback`. */

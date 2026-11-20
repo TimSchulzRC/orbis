@@ -17,8 +17,8 @@ import {
 	type ViewUpdate,
 	WidgetType,
 } from "@codemirror/view";
-import { DRAWING_INFO } from "@obtion/core/drawing";
-import { isQueryInfo } from "@obtion/core/query";
+import { DRAWING_INFO } from "@orbis/core/drawing";
+import { isQueryInfo } from "@orbis/core/query";
 import { tr } from "../../i18n";
 import { cn } from "../../lib/utils";
 import { blockAt, kindName } from "./blocks";

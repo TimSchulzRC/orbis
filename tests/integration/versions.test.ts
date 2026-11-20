@@ -1,10 +1,10 @@
 // Protection against lost updates: an agent that replaces a body it read earlier must not wipe
 // out what someone else wrote in between (base_version on update).
 import { afterAll, beforeEach, expect, test } from "bun:test";
-import { replaceBody, touch } from "@obtion/core/model";
-import { personOrigin } from "@obtion/core/origin";
-import { type Ops, versionOf } from "@obtion/server/ops";
-import type { Store } from "@obtion/server/store";
+import { replaceBody, touch } from "@orbis/core/model";
+import { personOrigin } from "@orbis/core/origin";
+import { type Ops, versionOf } from "@orbis/server/ops";
+import type { Store } from "@orbis/server/store";
 import * as Y from "yjs";
 import { removeTempDirs } from "../support/helpers";
 import { setupStore, tool as storeTool } from "../support/store";
@@ -14,7 +14,7 @@ afterAll(removeTempDirs);
 let s: Store;
 let ops: Ops;
 // set up in German: "Projekt", "Planung" and "aktiv" are German names and words
-beforeEach(() => ({ s, ops } = setupStore("obtion-versions-")));
+beforeEach(() => ({ s, ops } = setupStore("orbis-versions-")));
 
 const tool = (name: string, args: unknown) => storeTool(s, name, args);
 const body = (title: string) => s.records.get(s.index().resolveTitle(title)!)!.body;

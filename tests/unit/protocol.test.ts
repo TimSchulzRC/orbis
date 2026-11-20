@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { parseClientMsg } from "@obtion/server/workspace";
+import { parseClientMsg } from "@orbis/server/workspace";
 
 test("sync messages are checked once at the socket: valid ones pass, unknown keys drop", () => {
 	expect(

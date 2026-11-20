@@ -1,7 +1,7 @@
 // The device stays in the origin for later queries but is never shown.
 
-import type { T } from "@obtion/core/i18n";
-import { type Person, parseOrigin } from "@obtion/core/origin";
+import type { T } from "@orbis/core/i18n";
+import { type Person, parseOrigin } from "@orbis/core/origin";
 import { Bot, Cog, Download, type LucideIcon, Sparkles, User } from "lucide-react";
 import { agentLabel } from "./AgentNotice";
 

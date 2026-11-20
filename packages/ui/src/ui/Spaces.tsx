@@ -1,7 +1,7 @@
 // Several workspaces side by side. The selector choice is per device; each part of a page that
 // belongs to one workspace sits in its SpaceScope, where useRepo and useFiles read that replica.
 
-import type { Repo } from "@obtion/sync";
+import type { Repo } from "@orbis/sync";
 import { ChevronsUpDown, Plus } from "lucide-react";
 import { Fragment, useId, useMemo, useState, useSyncExternalStore } from "react";
 import {

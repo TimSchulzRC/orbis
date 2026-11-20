@@ -1,6 +1,6 @@
-import type { Item } from "@obtion/core/model";
-import { snippet } from "@obtion/core/search";
-import { statusOf } from "@obtion/core/traits";
+import type { Item } from "@orbis/core/model";
+import { snippet } from "@orbis/core/search";
+import { statusOf } from "@orbis/core/traits";
 import { ChevronRight, CornerDownLeft, Plus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useAccounts } from "../accounts";

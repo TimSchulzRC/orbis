@@ -1,8 +1,8 @@
 // The rows of the activity log, grouped by step: the activity page shows them for all pages, the
 // "Verlauf" tab of the side panel for one page.
 
-import { META_TYPE, replaceBody, touch } from "@obtion/core/model";
-import type { ActivityEvent } from "@obtion/core/protocol";
+import { META_TYPE, replaceBody, touch } from "@orbis/core/model";
+import type { ActivityEvent } from "@orbis/core/protocol";
 import { useItemHref, useRepo } from "../hooks";
 import { titleOf, useT } from "../i18n";
 import { cn } from "../lib/utils";

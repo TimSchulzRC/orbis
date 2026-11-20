@@ -1,5 +1,5 @@
-import { type Item, META_TYPE, titleKey } from "@obtion/core/model";
-import { belowOf, canPlaceIn } from "@obtion/core/placement";
+import { type Item, META_TYPE, titleKey } from "@orbis/core/model";
+import { belowOf, canPlaceIn } from "@orbis/core/placement";
 import { Plus, Sparkles } from "lucide-react";
 import { useState } from "react";
 import { Input } from "../components/ui/input";

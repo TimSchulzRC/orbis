@@ -5,8 +5,8 @@ import { Database } from "bun:sqlite";
 import { afterAll, beforeAll, expect, setDefaultTimeout, test } from "bun:test";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { FORMAT, initItem, PERSONAL } from "@obtion/core/model";
-import { type ServerMsg, toB64 } from "@obtion/core/protocol";
+import { FORMAT, initItem, PERSONAL } from "@orbis/core/model";
+import { type ServerMsg, toB64 } from "@orbis/core/protocol";
 import * as Y from "yjs";
 import { removeTempDirs, tempDir } from "../support/helpers";
 import { bootServer, del, get, mcpPost, mcpTool, post } from "../support/server";
@@ -27,14 +27,14 @@ let bare = "";
 let bareDir = "";
 beforeAll(async () => {
 	// a built web app of its own: the test does not depend on `bun run build`
-	const dist = tempDir("obtion-dist-");
-	writeFileSync(join(dist, "index.html"), "<!doctype html><title>Obtion under test</title>");
+	const dist = tempDir("orbis-dist-");
+	writeFileSync(join(dist, "index.html"), "<!doctype html><title>Orbis under test</title>");
 	mkdirSync(join(dist, "icons/dev"), { recursive: true });
 	writeFileSync(join(dist, "icons/dev/icon.svg"), "<svg>dev</svg>");
-	bareDir = tempDir("obtion-server-");
+	bareDir = tempDir("orbis-server-");
 	[plain, bare] = await Promise.all([
-		start({ OBTION_DATA: tempDir("obtion-server-"), OBTION_WEB_DIST: dist }),
-		start({ OBTION_DATA: bareDir, OBTION_WEB_APP: "off", OBTION_SIGNUP: "open" }),
+		start({ ORBIS_DATA: tempDir("orbis-server-"), ORBIS_WEB_DIST: dist }),
+		start({ ORBIS_DATA: bareDir, ORBIS_WEB_APP: "off", ORBIS_SIGNUP: "open" }),
 	]);
 });
 afterAll(async () => {
@@ -287,8 +287,8 @@ test("the sign-in only from the server's own page; other sites get no CORS answe
 	});
 });
 
-test("the desktop app (obtion://app) and OBTION_APP_ORIGINS sign in and call the API from their origin; a headless server serves no app", async () => {
-	const app = "obtion://app";
+test("the desktop app (orbis://app) and ORBIS_APP_ORIGINS sign in and call the API from their origin; a headless server serves no app", async () => {
+	const app = "orbis://app";
 	const eve = await post(
 		bare,
 		"/api/auth/sign-in/email",
@@ -352,9 +352,9 @@ test("the desktop app (obtion://app) and OBTION_APP_ORIGINS sign in and call the
 
 	const web = "https://notes.example.org";
 	const other = await start({
-		OBTION_DATA: tempDir("obtion-server-"),
-		OBTION_WEB_APP: "off",
-		OBTION_APP_ORIGINS: `${web}/`,
+		ORBIS_DATA: tempDir("orbis-server-"),
+		ORBIS_WEB_APP: "off",
+		ORBIS_APP_ORIGINS: `${web}/`,
 	});
 	const first = await post(
 		other,
@@ -378,7 +378,7 @@ test("without settings only passwords; the passkey routes stay shut; the OAuth c
 	).toBe(403);
 	// not from the apps either: OAuth runs on the server's own page
 	expect(
-		(await post(bare, "/api/account/claim", {}, undefined, { origin: "obtion://app" })).status,
+		(await post(bare, "/api/account/claim", {}, undefined, { origin: "orbis://app" })).status,
 	).toBe(403);
 	expect((await post(bare, "/api/account/claim", {}, undefined, { origin: bare })).status).toBe(
 		401,
@@ -458,15 +458,15 @@ test("linking a provider (its address may differ) needs a sign-in of the last mi
 	).toBe(403);
 });
 
-test("every server brings the web app; OBTION_WEB_APP=off leaves sync, API and MCP", async () => {
+test("every server brings the web app; ORBIS_WEB_APP=off leaves sync, API and MCP", async () => {
 	const app = await fetch(`${plain}/`);
 	expect(app.status).toBe(200);
-	expect(await app.text()).toContain("Obtion under test");
+	expect(await app.text()).toContain("Orbis under test");
 	// without a build version the server is dev and shows the dev icon
 	expect(await (await fetch(`${plain}/icon.svg`)).text()).toBe("<svg>dev</svg>");
 	const none = await fetch(`${bare}/`);
 	expect(none.status).toBe(404);
-	expect(await none.text()).toContain("OBTION_WEB_APP=off");
+	expect(await none.text()).toContain("ORBIS_WEB_APP=off");
 	expect((await fetch(`${bare}/api/info`)).status).toBe(200);
 	expect((await fetch(`${bare}/w/x/mcp`, { method: "POST" })).status).toBe(401); // there, asks for its token
 });
@@ -474,7 +474,7 @@ test("every server brings the web app; OBTION_WEB_APP=off leaves sync, API and M
 /** A sync connection to a workspace that collects what the server sends; the token goes as subprotocol, as in browsers. */
 async function connect(base: string, workspace: string, token: string) {
 	const ws = new WebSocket(`${base.replace("http", "ws")}/w/${workspace}/sync`, [
-		"obtion",
+		"orbis",
 		`auth.${token}`,
 	]);
 	const msgs: ServerMsg[] = [];
@@ -532,8 +532,8 @@ test("sync per workspace: members get each other's changes", async () => {
 });
 
 test("an owner deletes a workspace for everyone, with its folder; a member cannot", async () => {
-	const data = tempDir("obtion-server-");
-	const base = await start({ OBTION_DATA: data, OBTION_SIGNUP: "open" });
+	const data = tempDir("orbis-server-");
+	const base = await start({ ORBIS_DATA: data, ORBIS_SIGNUP: "open" });
 	const owner = await signUp(base, "olga@example.org");
 	const w = await newWorkspace(base, owner.token);
 	const { code } = await post(base, `/api/workspaces/${w.id}/invites`, {}, owner.token).then((r) =>

@@ -1,4 +1,4 @@
-import type { ErrorBody } from "@obtion/core/api";
+import type { ErrorBody } from "@orbis/core/api";
 
 export const json = <T = unknown>(x: T, status = 200) => Response.json(x, { status });
 export const fail = (status: number, error: string) => json<ErrorBody>({ error }, status);

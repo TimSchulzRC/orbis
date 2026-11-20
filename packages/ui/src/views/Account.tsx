@@ -2,7 +2,7 @@
 // (#/join/<code>). In the desktop app also connecting a further server (ConnectServer). Gate.tsx
 // puts them in front of the app.
 
-import type { InviteInfo, ServerInfo } from "@obtion/core/api";
+import type { InviteInfo, ServerInfo } from "@orbis/core/api";
 import { KeyRound } from "lucide-react";
 import { type ReactNode, useEffect, useEffectEvent, useId, useState } from "react";
 import {
@@ -444,7 +444,7 @@ export function ConnectServer({
 		if (s.url === baseOf()) return setError(t("server.ownServer"));
 		setBusy(true);
 		// there, and does it let this app in? A server that answers but sends no CORS headers for it
-		// is older than the desktop app or does not list it (OBTION_APP_ORIGINS): say so, not "offline"
+		// is older than the desktop app or does not list it (ORBIS_APP_ORIGINS): say so, not "offline"
 		const ok = await serverInfo(s.url).then(
 			() => "ok" as const,
 			async () => ((await answers(s.url)) ? ("closed" as const) : ("gone" as const)),

@@ -1,8 +1,8 @@
 // Schema changes never delete values; values of removed properties show as "Weitere Eigenschaften".
 
-import { dateOf } from "@obtion/core/date";
-import { fmtDate } from "@obtion/core/i18n";
-import { numberText, parseNumber } from "@obtion/core/input";
+import { dateOf } from "@orbis/core/date";
+import { fmtDate } from "@orbis/core/i18n";
+import { numberText, parseNumber } from "@orbis/core/input";
 import {
 	formatRange,
 	type Item,
@@ -12,8 +12,8 @@ import {
 	STATUS_GROUPS,
 	type TypeSchema,
 	type Value,
-} from "@obtion/core/model";
-import { matches, parseQuery } from "@obtion/core/query";
+} from "@orbis/core/model";
+import { matches, parseQuery } from "@orbis/core/query";
 import {
 	defaultOption,
 	doneAt,
@@ -23,7 +23,7 @@ import {
 	optionIds,
 	statusOf,
 	visibleProps,
-} from "@obtion/core/traits";
+} from "@orbis/core/traits";
 import { AlertTriangle, ExternalLink, Plus, X } from "lucide-react";
 import { useState } from "react";
 import { Checkbox } from "../components/ui/checkbox";

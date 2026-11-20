@@ -1,4 +1,4 @@
-import { sameValue } from "@obtion/core/equal";
+import { sameValue } from "@orbis/core/equal";
 import {
 	FILE_TYPES,
 	type FileType,
@@ -7,10 +7,10 @@ import {
 	setTabs,
 	shortId,
 	type ViewTab,
-} from "@obtion/core/model";
-import { andWhere, type QueryDef, tabDef } from "@obtion/core/query";
-import { typeTabs } from "@obtion/core/setup";
-import { keyBetween } from "@obtion/core/sortkey";
+} from "@orbis/core/model";
+import { andWhere, type QueryDef, tabDef } from "@orbis/core/query";
+import { typeTabs } from "@orbis/core/setup";
+import { keyBetween } from "@orbis/core/sortkey";
 import { ArrowUpDown, ListFilter, Plus, SlidersHorizontal, Upload } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { createAndOpen } from "../actions";

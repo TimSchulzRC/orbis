@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 
 export const PORT = Number(process.env.PORT ?? 8480);
-export const DATA = resolve(process.env.OBTION_DATA ?? "data");
+export const DATA = resolve(process.env.ORBIS_DATA ?? "data");
 
 /** Upload limit for a file's content sent by a device. */
 export const MAX_BLOB = 512 * 1024 * 1024;

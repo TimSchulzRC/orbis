@@ -1,8 +1,8 @@
 // The fields a view can show, sort, group and filter by: the properties of the types it lists and
 // the built-in ones.
 
-import { type PropDef, type PropKind, titleKey } from "@obtion/core/model";
-import { type Cond, parseQuery, typesIn, viewTypeIds } from "@obtion/core/query";
+import { type PropDef, type PropKind, titleKey } from "@orbis/core/model";
+import { type Cond, parseQuery, typesIn, viewTypeIds } from "@orbis/core/query";
 import {
 	Calendar,
 	CheckSquare,

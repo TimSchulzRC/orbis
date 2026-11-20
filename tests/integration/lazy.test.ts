@@ -3,10 +3,10 @@
 import { afterAll, expect, spyOn, test } from "bun:test";
 import { statSync } from "node:fs";
 import { join } from "node:path";
-import { PERSONAL as P, readItem } from "@obtion/core/model";
-import { versionOf } from "@obtion/server/ops";
-import { AreaError, Store } from "@obtion/server/store";
-import { undoStep } from "@obtion/server/undo";
+import { PERSONAL as P, readItem } from "@orbis/core/model";
+import { versionOf } from "@orbis/server/ops";
+import { AreaError, Store } from "@orbis/server/store";
+import { undoStep } from "@orbis/server/undo";
 import * as Y from "yjs";
 import { docUpdate, removeTempDirs, tempDir } from "../support/helpers";
 import { ok, setupStore, stepOf, tool } from "../support/store";
@@ -18,7 +18,7 @@ const body = (s: Store, id: string) => s.records.get(id)?.body;
 
 // set up in German: "Projekt", "Planung" and "aktiv" below are German names and words
 function seeded(n: number, cacheSize = 3) {
-	const { dir, s, ops } = setupStore("obtion-lazy-", cacheSize);
+	const { dir, s, ops } = setupStore("orbis-lazy-", cacheSize);
 	const ids = Array.from({ length: n }, (_, i) =>
 		s.create({ title: `Note ${i}`, body: `Text ${i}` }, "seed"),
 	);
@@ -207,7 +207,7 @@ test("all or nothing: a failed call leaves a document that had to be loaded as i
 });
 
 test("after a crash before the flush, the log rows after the snapshot are not lost", () => {
-	const dir = tempDir("obtion-lazy-");
+	const dir = tempDir("orbis-lazy-");
 	const s = new Store(dir, 3);
 	const a = s.create({ title: "A", body: "before" }, "seed");
 	s.change(a, "web:tim", (d) => d.getText("body").insert(0, "after "));
@@ -228,9 +228,9 @@ test("after a crash before the flush, the log rows after the snapshot are not lo
 });
 
 test("the WAL file shrinks back after a large write instead of staying that large", () => {
-	const dir = tempDir("obtion-lazy-");
+	const dir = tempDir("orbis-lazy-");
 	const s = new Store(dir);
-	const wal = () => statSync(join(dir, "obtion.db-wal")).size;
+	const wal = () => statSync(join(dir, "orbis.db-wal")).size;
 	// one large transaction, like an import or a rebuild of all records
 	s.db.exec(
 		"WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 2000) INSERT INTO kv SELECT 'big' || i, hex(randomblob(5000)) FROM n",

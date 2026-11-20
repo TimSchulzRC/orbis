@@ -3,13 +3,13 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "obtion",
+      "name": "orbis",
       "devDependencies": {
         "@biomejs/biome": "2.6.7",
-        "@obtion/core": "workspace:*",
-        "@obtion/server": "workspace:*",
-        "@obtion/sync": "workspace:*",
-        "@obtion/ui": "workspace:*",
+        "@orbis/core": "workspace:*",
+        "@orbis/server": "workspace:*",
+        "@orbis/sync": "workspace:*",
+        "@orbis/ui": "workspace:*",
         "@tailwindcss/vite": "^4.3.5",
         "@types/bun": "^1.4.4",
         "@types/react": "^19.3.0",
@@ -26,11 +26,11 @@
       },
     },
     "apps/desktop": {
-      "name": "@obtion/desktop",
+      "name": "@orbis/desktop",
       "version": "0.0.0-dev",
       "devDependencies": {
-        "@obtion/core": "workspace:*",
-        "@obtion/ui": "workspace:*",
+        "@orbis/core": "workspace:*",
+        "@orbis/ui": "workspace:*",
         "@types/bun": "^1.4.4",
         "@types/node": "^26.6.6",
         "electron": "^45.2.0",
@@ -38,11 +38,11 @@
       },
     },
     "apps/server": {
-      "name": "@obtion/server",
+      "name": "@orbis/server",
       "dependencies": {
         "@better-auth/passkey": "^1.7.18",
         "@modelcontextprotocol/sdk": "^1.32.2",
-        "@obtion/core": "workspace:*",
+        "@orbis/core": "workspace:*",
         "better-auth": "^1.7.18",
         "nodemailer": "^10.4.0",
         "pdfjs-dist": "^6.5.438",
@@ -55,9 +55,9 @@
       },
     },
     "apps/web": {
-      "name": "@obtion/web",
+      "name": "@orbis/web",
       "dependencies": {
-        "@obtion/ui": "workspace:*",
+        "@orbis/ui": "workspace:*",
         "react": "^19.3.1",
         "react-dom": "^19.3.1",
         "sonner": "^2.0.8",
@@ -75,7 +75,7 @@
       },
     },
     "packages/core": {
-      "name": "@obtion/core",
+      "name": "@orbis/core",
       "dependencies": {
         "diff": "^9.0.0",
         "intl-messageformat": "^12.1.5",
@@ -84,14 +84,14 @@
       },
     },
     "packages/sync": {
-      "name": "@obtion/sync",
+      "name": "@orbis/sync",
       "dependencies": {
-        "@obtion/core": "workspace:*",
+        "@orbis/core": "workspace:*",
         "yjs": "^13.6.33",
       },
     },
     "packages/ui": {
-      "name": "@obtion/ui",
+      "name": "@orbis/ui",
       "dependencies": {
         "@codemirror/autocomplete": "^6.20.4",
         "@codemirror/commands": "^6.11.1",
@@ -103,8 +103,8 @@
         "@excalidraw/excalidraw": "^0.18.1",
         "@lezer/highlight": "^1.2.5",
         "@noble/hashes": "^2.4.0",
-        "@obtion/core": "workspace:*",
-        "@obtion/sync": "workspace:*",
+        "@orbis/core": "workspace:*",
+        "@orbis/sync": "workspace:*",
         "@simplewebauthn/browser": "^14.0.0",
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
@@ -527,17 +527,17 @@
 
     "@noble/hashes": ["@noble/hashes@2.4.0", "", {}, "sha512-X5XaVWZIBCT7HHZGm5I7ZQXDwLG+bGXuSrMQAW+7Zvl87h1kmc1ZB1VSRJcpUfoUrGQp4Fkoxm5kZ+Ms+aW+eA=="],
 
-    "@obtion/core": ["@obtion/core@workspace:packages/core"],
+    "@orbis/core": ["@orbis/core@workspace:packages/core"],
 
-    "@obtion/desktop": ["@obtion/desktop@workspace:apps/desktop"],
+    "@orbis/desktop": ["@orbis/desktop@workspace:apps/desktop"],
 
-    "@obtion/server": ["@obtion/server@workspace:apps/server"],
+    "@orbis/server": ["@orbis/server@workspace:apps/server"],
 
-    "@obtion/sync": ["@obtion/sync@workspace:packages/sync"],
+    "@orbis/sync": ["@orbis/sync@workspace:packages/sync"],
 
-    "@obtion/ui": ["@obtion/ui@workspace:packages/ui"],
+    "@orbis/ui": ["@orbis/ui@workspace:packages/ui"],
 
-    "@obtion/web": ["@obtion/web@workspace:apps/web"],
+    "@orbis/web": ["@orbis/web@workspace:apps/web"],
 
     "@oxc-project/types": ["@oxc-project/types@0.156.0", "", {}, "sha512-1Duyg48TdJNdyhEB8Xn1L36bT9Pv6GUtlKjHxOys8xkaF/rQq3XJE+bAurSK/AgIz5mGFsb77cn9Pb20+WCScw=="],
 

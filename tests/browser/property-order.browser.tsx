@@ -2,9 +2,9 @@
 // single selections, relations with a value) in a row at the top, everything else (dates too) as rows below, each in order.
 // Empty ones wait at the very bottom behind a quiet "Mehr"; open, "Weniger" sits below all of them, in that order too.
 
-import { upsertProp } from "@obtion/core/model";
-import { BLOCKED_BY, SYS } from "@obtion/core/setup";
-import { keyBetween } from "@obtion/core/sortkey";
+import { upsertProp } from "@orbis/core/model";
+import { BLOCKED_BY, SYS } from "@orbis/core/setup";
+import { keyBetween } from "@orbis/core/sortkey";
 import { afterEach, expect, test } from "vitest";
 import { page } from "vitest/browser";
 import { cleanup, render } from "vitest-browser-react";

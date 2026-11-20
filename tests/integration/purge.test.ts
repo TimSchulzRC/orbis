@@ -1,20 +1,20 @@
 // Deleting for good: the server forgets every trace, and devices that missed it can't bring it back.
 import { afterAll, expect, test } from "bun:test";
-import { PERSONAL, replaceBody, setFileMeta } from "@obtion/core/model";
-import { type ServerMsg, toB64 } from "@obtion/core/protocol";
-import { deleteItem } from "@obtion/core/trash";
-import { sha256 } from "@obtion/server/blobs";
-import { Ops } from "@obtion/server/ops";
-import { storeWriter } from "@obtion/server/setup";
-import { Store } from "@obtion/server/store";
-import { type Conn, Workspace } from "@obtion/server/workspace";
+import { PERSONAL, replaceBody, setFileMeta } from "@orbis/core/model";
+import { type ServerMsg, toB64 } from "@orbis/core/protocol";
+import { deleteItem } from "@orbis/core/trash";
+import { sha256 } from "@orbis/server/blobs";
+import { Ops } from "@orbis/server/ops";
+import { storeWriter } from "@orbis/server/setup";
+import { Store } from "@orbis/server/store";
+import { type Conn, Workspace } from "@orbis/server/workspace";
 import {
 	type OutItem,
 	type ReplicaStorage,
 	Repo,
 	type StoredRow,
 	type SyncSocket,
-} from "@obtion/sync";
+} from "@orbis/sync";
 import * as Y from "yjs";
 import { docUpdate, removeTempDirs, tempDir } from "../support/helpers";
 import { setupStore, tool as storeTool } from "../support/store";
@@ -61,7 +61,7 @@ const rowsOf = (s: Store, ids: string[]) =>
 		);
 
 async function setUp() {
-	const dir = tempDir("obtion-purge-");
+	const dir = tempDir("orbis-purge-");
 	const w = new Workspace(dir);
 	const s = w.store;
 	const shared = new TextEncoder().encode("same content in two files");
@@ -245,7 +245,7 @@ test("a device drops purged documents from memory and storage and ignores them a
 });
 
 test("agents delete for good only from the trash, one item or all of it", async () => {
-	const { s } = setupStore("obtion-purge-mcp-");
+	const { s } = setupStore("orbis-purge-mcp-");
 	const tool = async (name: string, args: unknown) => (await storeTool(s, name, args)).text;
 	await tool("create", { items: [{ title: "Alt" }, { title: "Auch alt" }, { title: "Bleibt" }] });
 	expect(await tool("purge", { ref: "Alt" })).toContain("Nothing in the trash");
@@ -262,7 +262,7 @@ test("agents delete for good only from the trash, one item or all of it", async 
 });
 
 test("a purge after a restart still reaches a device whose cursor sat on purged rows", () => {
-	const dir = tempDir("obtion-purge-seq-");
+	const dir = tempDir("orbis-purge-seq-");
 	const s = new Store(dir);
 	for (const id of ["a", "b", "c"]) s.applyRemote(id, docUpdate({ id, title: id }), "web:x");
 	const cursor = s.last(PERSONAL); // on c's row, the newest

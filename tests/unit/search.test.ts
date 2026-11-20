@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { findSection, headingAt, outline, page } from "@obtion/core/outline";
+import { findSection, headingAt, outline, page } from "@orbis/core/outline";
 import {
 	createIndex,
 	excerpt,
@@ -8,7 +8,7 @@ import {
 	searchHits,
 	searchIds,
 	snippet,
-} from "@obtion/core/search";
+} from "@orbis/core/search";
 import { MemRepo } from "../support/helpers";
 
 function search(docs: { title: string; body?: string; tags?: string[] }[]) {

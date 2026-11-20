@@ -3,9 +3,9 @@
 // compares and with what. The text form parses every language and is shown in the UI language.
 // Storage is JSON.
 
-import type { Index } from "@obtion/core/graph";
-import { fmtDate, type Lang, type T } from "@obtion/core/i18n";
-import { titleKey } from "@obtion/core/model";
+import type { Index } from "@orbis/core/graph";
+import { fmtDate, type Lang, type T } from "@orbis/core/i18n";
+import { titleKey } from "@orbis/core/model";
 import {
 	type Cond,
 	type FieldValue,
@@ -14,7 +14,7 @@ import {
 	printQuery,
 	type QueryDef,
 	type StatusKey,
-} from "@obtion/core/query";
+} from "@orbis/core/query";
 import { Check, ChevronDown, ChevronLeft, HelpCircle, Plus, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Input } from "../components/ui/input";

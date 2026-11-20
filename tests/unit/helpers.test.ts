@@ -1,16 +1,16 @@
 import { expect, test } from "bun:test";
-import { addDays, addDaysISO, dateOf, diffDays } from "@obtion/core/date";
-import { sameValue } from "@obtion/core/equal";
+import { addDays, addDaysISO, dateOf, diffDays } from "@orbis/core/date";
+import { sameValue } from "@orbis/core/equal";
 import {
 	displayTitle,
 	mapWikiLinks,
 	optionNames,
 	type PropDef,
 	renameLinksIn,
-} from "@obtion/core/model";
-import { cmpKey, keyBetween, nextPinKey } from "@obtion/core/sortkey";
-import { escapeRe, foldUmlauts, plainVowels } from "@obtion/core/text";
-import { mapValue } from "@obtion/core/typeops";
+} from "@orbis/core/model";
+import { cmpKey, keyBetween, nextPinKey } from "@orbis/core/sortkey";
+import { escapeRe, foldUmlauts, plainVowels } from "@orbis/core/text";
+import { mapValue } from "@orbis/core/typeops";
 
 test("umlauts fold to two letters or to plain vowels, in lower case", () => {
 	expect(foldUmlauts("Größe Übermaß")).toBe("groesse uebermass");

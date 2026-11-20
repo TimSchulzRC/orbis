@@ -1,8 +1,8 @@
 // "Verlauf" in the side panel: every change to this one page from the server's activity log, as the
 // activity page shows them, with the live ones. A text change can go back to the text before it.
 
-import type { Item } from "@obtion/core/model";
-import type { ActivityEvent } from "@obtion/core/protocol";
+import type { Item } from "@orbis/core/model";
+import type { ActivityEvent } from "@orbis/core/protocol";
 import { useMemo, useRef, useState } from "react";
 import { accountOf, spaceById, spaceCall, useAccounts } from "../accounts";
 import { useOnChange, useRepo } from "../hooks";

@@ -1,7 +1,7 @@
 // The workspace a part of the page belongs to; null means the open one. Multi-workspace views
 // (sidebar, Today, inbox, activity, trash) wrap each block in its own SpaceScope.
 
-import type { Repo } from "@obtion/sync";
+import type { Repo } from "@orbis/sync";
 import { createContext } from "react";
 import type { DeviceFiles } from "./files";
 

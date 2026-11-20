@@ -1,16 +1,16 @@
 // Everything below a Workspace sees only its own folder, so workspaces cannot reach each other's data.
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import type { EventText, PurgeResult } from "@obtion/core/api";
-import { FORMAT, type Item, PERSONAL } from "@obtion/core/model";
-import { type Person, personOrigin } from "@obtion/core/origin";
+import type { EventText, PurgeResult } from "@orbis/core/api";
+import { FORMAT, type Item, PERSONAL } from "@orbis/core/model";
+import { type Person, personOrigin } from "@orbis/core/origin";
 import {
 	type ClientMsg,
 	fromB64,
 	type ServerMsg,
 	toB64,
 	type WireUpdate,
-} from "@obtion/core/protocol";
+} from "@orbis/core/protocol";
 import type { ServerWebSocket } from "bun";
 import { z } from "zod";
 import { Blobs } from "./blobs";
@@ -297,7 +297,7 @@ export class Workspace {
 		if (rest === "/api/files" || rest.startsWith("/api/files/"))
 			return this.files(req, url, rest.slice("/api/files".length), {
 				origin:
-					ctx.origin ?? personOrigin(ctx.user, req.headers.get("x-obtion-device") ?? undefined),
+					ctx.origin ?? personOrigin(ctx.user, req.headers.get("x-orbis-device") ?? undefined),
 				filesUrl: ctx.filesUrl,
 			});
 		return fail(404, "not found");
@@ -336,7 +336,7 @@ export class Workspace {
 					...fileHeaders(f.mime, f.name, true),
 					"cache-control": "private, no-cache",
 					etag: `"${f.hash}"`,
-					"x-obtion-hash": f.hash,
+					"x-orbis-hash": f.hash,
 					...(req.method === "HEAD" ? { "content-length": String(f.size) } : {}),
 				},
 			});
@@ -407,8 +407,8 @@ export class Workspace {
 		}
 		// the probe header lets the app check without a console error
 		if (!blobs.has(hash)) {
-			if (req.headers.get("x-obtion-probe"))
-				return new Response(null, { status: 204, headers: { "x-obtion-missing": "1" } });
+			if (req.headers.get("x-orbis-probe"))
+				return new Response(null, { status: 204, headers: { "x-orbis-missing": "1" } });
 			return fail(404, "not found");
 		}
 		if (url.searchParams.has("check")) return new Response(null, { status: 204 });

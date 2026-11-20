@@ -1,9 +1,9 @@
 // Sorting actions shared by the sort list and the review, each with one undo.
 
-import type { Values } from "@obtion/core/i18n";
-import { tomorrow } from "@obtion/core/inbox";
-import { type Item, setMeta, titleKey } from "@obtion/core/model";
-import { onlyBelow } from "@obtion/core/trash";
+import type { Values } from "@orbis/core/i18n";
+import { tomorrow } from "@orbis/core/inbox";
+import { type Item, setMeta, titleKey } from "@orbis/core/model";
+import { onlyBelow } from "@orbis/core/trash";
 import { Check, Plus } from "lucide-react";
 import { useRef, useState } from "react";
 import { replica } from "../accounts";

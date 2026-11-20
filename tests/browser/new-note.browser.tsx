@@ -1,7 +1,7 @@
 // A new note: the tray's "Neu" and the "+" in the inbox's head open the inbox panel at a new empty
 // note, the caret in its title. Left empty, it goes when the panel closes or moves on to another entry.
 
-import type { Repo } from "@obtion/sync";
+import type { Repo } from "@orbis/sync";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { commands, page } from "vitest/browser";
 import { cleanup, render } from "vitest-browser-react";
@@ -11,7 +11,7 @@ import { workspace } from "./workspace";
 
 let repo: Repo;
 beforeEach(async () => {
-	localStorage.removeItem("obtion.inbox.sorted");
+	localStorage.removeItem("orbis.inbox.sorted");
 	repo = await workspace();
 	await render(
 		<div className="fixed inset-x-0 bottom-0">

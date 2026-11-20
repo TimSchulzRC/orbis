@@ -1,15 +1,8 @@
 // The replica's host in a browser (the web app, the desktop app's window): IndexedDB storage, a
 // workspace on its server, other tabs over BroadcastChannel, UI dialogs.
 
-import type { Person } from "@obtion/core/origin";
-import type {
-	OutItem,
-	ReplicaStorage,
-	RepoHost,
-	StoredRow,
-	SyncSocket,
-	TabMsg,
-} from "@obtion/sync";
+import type { Person } from "@orbis/core/origin";
+import type { OutItem, ReplicaStorage, RepoHost, StoredRow, SyncSocket, TabMsg } from "@orbis/sync";
 import { type IDBPDatabase, openDB } from "idb";
 import { tr } from "./i18n";
 import { KEYS, readJSON, writeJSON } from "./ui/storage";
@@ -24,7 +17,7 @@ export interface SpaceLink {
 export type StorageNames = ReturnType<typeof storageNames>;
 
 export function storageNames(space: { id: string }) {
-	const replica = `obtion-ws-${space.id}`;
+	const replica = `orbis-ws-${space.id}`;
 	return { replica, files: `${replica}-files`, blobs: `blobs-${replica}` };
 }
 
@@ -120,7 +113,7 @@ export function browserHost(link: SpaceLink): RepoHost {
 		person: link.person,
 		connect() {
 			return new WebSocket(`${link.base.replace(/^http/, "ws")}/sync`, [
-				"obtion",
+				"orbis",
 				`auth.${link.token}`,
 			]) as unknown as SyncSocket;
 		},

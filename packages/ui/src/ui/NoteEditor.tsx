@@ -2,7 +2,7 @@
 // "extract". The page, the inbox's card and the quick note all write with it.
 
 import type { EditorView } from "@codemirror/view";
-import type { Item } from "@obtion/core/model";
+import type { Item } from "@orbis/core/model";
 import { useContext, useMemo } from "react";
 import { useIndex, useRepo } from "../hooks";
 import { useT } from "../i18n";

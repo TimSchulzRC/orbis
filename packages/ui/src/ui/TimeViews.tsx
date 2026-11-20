@@ -1,8 +1,8 @@
 // Calendar and timeline: entries at their date or range. Dragging moves the date (and in the
 // timeline the start or the end); entries without a date are listed below.
 
-import { addDays, dayOf, diffDays, timeOf, todayISO, withTime } from "@obtion/core/date";
-import { formatRange, type Item, type PropDef, parseRange, propByName } from "@obtion/core/model";
+import { addDays, dayOf, diffDays, timeOf, todayISO, withTime } from "@orbis/core/date";
+import { formatRange, type Item, type PropDef, parseRange, propByName } from "@orbis/core/model";
 import {
 	type EvalCtx,
 	fieldOf,
@@ -10,8 +10,8 @@ import {
 	groupItems,
 	type QueryDef,
 	viewTypeIds,
-} from "@obtion/core/query";
-import { dueProp } from "@obtion/core/traits";
+} from "@orbis/core/query";
+import { dueProp } from "@orbis/core/traits";
 import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { itemHref, openItem, useLocalStorage, useNarrow } from "../hooks";
@@ -260,7 +260,7 @@ export function CalendarView({
 											key={p.item.id}
 											onDragEnd={() => setDrag(null)}
 											onDragStart={(e) => {
-												e.dataTransfer.setData("obtion/item", p.item.id);
+												e.dataTransfer.setData("orbis/item", p.item.id);
 												setDrag({ id: p.item.id, from: days[p.s]! });
 											}}
 											style={{ gridColumn: `${p.s + 1} / ${p.e + 2}`, gridRow: p.lane + 2 }}

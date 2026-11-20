@@ -1,8 +1,8 @@
 // "Dateien herunterladen (n)": everything below an item as one ZIP with its folders, from the
 // sidebar's menu and "Darunter"; the files a query block shows, from its menu.
 
-import { initItem, newId, setFileMeta } from "@obtion/core/model";
-import type { Repo } from "@obtion/sync";
+import { initItem, newId, setFileMeta } from "@orbis/core/model";
+import type { Repo } from "@orbis/sync";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { cleanup, render } from "vitest-browser-react";

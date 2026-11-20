@@ -1,7 +1,7 @@
 // Formatting toolbar above selected text, as in Notion.
 import { EditorSelection, Facet, Prec } from "@codemirror/state";
 import { type EditorView, keymap, ViewPlugin, type ViewUpdate } from "@codemirror/view";
-import { titleKey } from "@obtion/core/model";
+import { titleKey } from "@orbis/core/model";
 import {
 	Bold,
 	ChevronDown,

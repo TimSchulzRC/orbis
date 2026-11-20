@@ -2,8 +2,8 @@
 // draft when closed, posts with Ctrl+Enter, hands the focus back, and marks agent updates as new
 // until they were on screen once.
 
-import { appendUpdate } from "@obtion/core/model";
-import { SYS } from "@obtion/core/setup";
+import { appendUpdate } from "@orbis/core/model";
+import { SYS } from "@orbis/core/setup";
 import { useState } from "react";
 import { afterEach, expect, test } from "vitest";
 import { commands, page } from "vitest/browser";

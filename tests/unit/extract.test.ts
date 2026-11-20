@@ -2,12 +2,12 @@
 // embedded invoice XML. The files are made in the test (support/fixtures.ts).
 import { afterAll, expect, test } from "bun:test";
 import { join } from "node:path";
-import { decodeText, extractText, htmlText, TEXT_MAX } from "@obtion/server/extract";
+import { decodeText, extractText, htmlText, TEXT_MAX } from "@orbis/server/extract";
 import { docx, pdfWithEmbedded, pptx, xlsx, zip } from "../support/fixtures";
 import { removeTempDirs, tempDir } from "../support/helpers";
 
 afterAll(removeTempDirs);
-const dir = tempDir("obtion-extract-");
+const dir = tempDir("orbis-extract-");
 let n = 0;
 async function text(name: string, data: Uint8Array | string) {
 	const path = join(dir, `${++n}-${name}`);

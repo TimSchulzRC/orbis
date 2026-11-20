@@ -3,7 +3,7 @@
 // either "online" (fetched when opened) or "local" (all kept here). Files added offline wait in an
 // upload outbox.
 
-import { drawingImages } from "@obtion/core/drawing";
+import { drawingImages } from "@orbis/core/drawing";
 import {
 	type FileMeta,
 	fileTypeOf,
@@ -12,10 +12,10 @@ import {
 	mimeOf,
 	newId,
 	setFileMeta,
-} from "@obtion/core/model";
-import { toB64 } from "@obtion/core/protocol";
-import { type ArchiveFile, archivePaths, type ZipEntry, zipStore } from "@obtion/core/zip";
-import type { Repo } from "@obtion/sync";
+} from "@orbis/core/model";
+import { toB64 } from "@orbis/core/protocol";
+import { type ArchiveFile, archivePaths, type ZipEntry, zipStore } from "@orbis/core/zip";
+import type { Repo } from "@orbis/sync";
 import { type IDBPDatabase, openDB } from "idb";
 import { useContext, useEffect, useState, useSyncExternalStore } from "react";
 import type { SpaceLink } from "./browser";
@@ -217,9 +217,9 @@ export class DeviceFiles {
 	async check(hash: string): Promise<void> {
 		if (this.local.has(hash) || this.missing.has(hash)) return;
 		const res = await fetch(`${this.link.base}/api/blobs/${hash}?check=1`, {
-			headers: { "x-obtion-probe": "1", ...this.auth },
+			headers: { "x-orbis-probe": "1", ...this.auth },
 		}).catch(() => null);
-		if (res?.headers.get("x-obtion-missing")) {
+		if (res?.headers.get("x-orbis-missing")) {
 			this.missing.add(hash);
 			this.emit();
 		}
@@ -419,9 +419,9 @@ export class DeviceFiles {
 	private async fetchVerified(hash: string): Promise<Blob | undefined> {
 		try {
 			const res = await fetch(`${this.link.base}/api/blobs/${hash}`, {
-				headers: { "x-obtion-probe": "1", ...this.auth },
+				headers: { "x-orbis-probe": "1", ...this.auth },
 			});
-			if (res.status === 404 || res.headers.get("x-obtion-missing")) {
+			if (res.status === 404 || res.headers.get("x-orbis-missing")) {
 				this.missing.add(hash);
 				this.emit();
 				return undefined;

@@ -10,7 +10,7 @@ import {
 	type ViewUpdate,
 	WidgetType,
 } from "@codemirror/view";
-import { wikiLinkRe } from "@obtion/core/model";
+import { wikiLinkRe } from "@orbis/core/model";
 import { ExternalLink, Link2, Pencil, Unlink } from "lucide-react";
 import { navigate, openItem } from "../../hooks";
 import { tr } from "../../i18n";

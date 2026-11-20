@@ -22,13 +22,13 @@ import type {
 	User,
 	VerifyFirst,
 	WorkspaceInfo,
-} from "@obtion/core/api";
-import { type ExampleFile, exampleFiles, fileFacts, writeExamples } from "@obtion/core/examples";
-import type { T } from "@obtion/core/i18n";
-import { type FileMeta, SETTINGS_ID } from "@obtion/core/model";
-import { firstName } from "@obtion/core/origin";
-import { runSetup } from "@obtion/core/setup";
-import { Repo } from "@obtion/sync";
+} from "@orbis/core/api";
+import { type ExampleFile, exampleFiles, fileFacts, writeExamples } from "@orbis/core/examples";
+import type { T } from "@orbis/core/i18n";
+import { type FileMeta, SETTINGS_ID } from "@orbis/core/model";
+import { firstName } from "@orbis/core/origin";
+import { runSetup } from "@orbis/core/setup";
+import { Repo } from "@orbis/sync";
 import { startAuthentication, startRegistration } from "@simplewebauthn/browser";
 import { useSyncExternalStore } from "react";
 import { navigate, parseHash, spaceHref } from "./address";
@@ -384,7 +384,7 @@ export const loginOf = (info: ServerInfo | null): LoginMethods =>
 /** The server reads this cookie when a code or OAuth sign-in creates the user. */
 function signupContext(invite: string | undefined, lang: string) {
 	// biome-ignore lint/suspicious/noDocumentCookie: the Cookie Store API needs a secure context, which a self-hosted server on plain http lacks
-	document.cookie = `obtion_signup=${encodeURIComponent(JSON.stringify({ invite, lang }))}; path=/api/auth; max-age=1800; samesite=lax`;
+	document.cookie = `orbis_signup=${encodeURIComponent(JSON.stringify({ invite, lang }))}; path=/api/auth; max-age=1800; samesite=lax`;
 }
 
 /** Sign in with a password (on `server`: a further one, desktop app; `invite`: join it there too). */
@@ -508,7 +508,7 @@ async function forgetServer(url: string) {
 
 /**
  * Whether `url` answers at all, even where it does not let this app in (no CORS for it: an older
- * server, or the app's origin not in its OBTION_APP_ORIGINS).
+ * server, or the app's origin not in its ORBIS_APP_ORIGINS).
  */
 export function answers(url: string): Promise<boolean> {
 	return fetch(`${url}/api/info`, { mode: "no-cors" }).then(
@@ -529,7 +529,7 @@ export async function signInWithPasskey() {
 	await keep(res.session.token);
 }
 
-const OAUTH_RETURN = "obtion.oauthReturn";
+const OAUTH_RETURN = "orbis.oauthReturn";
 
 /** Leaves the page; the provider returns to "/?signin=oauth", where finishOAuth takes over. */
 export async function signInWithOAuth(provider: string, ctx: { invite?: string; lang: string }) {
@@ -559,7 +559,7 @@ async function finishOAuth() {
 	sessionStorage.removeItem(OAUTH_RETURN);
 	history.replaceState(history.state, "", location.pathname + back);
 	// biome-ignore lint/suspicious/noDocumentCookie: the Cookie Store API needs a secure context, which a self-hosted server on plain http lacks
-	document.cookie = "obtion_signup=; path=/api/auth; max-age=0";
+	document.cookie = "orbis_signup=; path=/api/auth; max-age=0";
 	if (how === "linked") return;
 	const error = params.get("error") ?? "";
 	if (how === "linkFailed") {

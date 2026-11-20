@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { fmtDate, fmtNumber } from "@obtion/core/i18n";
-import { dateText, numberText, parseDate, parseNumber } from "@obtion/core/input";
+import { fmtDate, fmtNumber } from "@orbis/core/i18n";
+import { dateText, numberText, parseDate, parseNumber } from "@orbis/core/input";
 
 describe("numbers as typed", () => {
 	test("grouping and decimal mark of the app language", () => {

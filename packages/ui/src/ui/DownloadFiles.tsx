@@ -1,7 +1,7 @@
 // "Download files (n)": several files saved as one ZIP. The same entry in every menu that has
 // files to offer – everything below an item (sidebar, page, "Below") or the files a query shows.
 
-import { type ArchiveFile, fitsZip, safeName } from "@obtion/core/zip";
+import { type ArchiveFile, fitsZip, safeName } from "@orbis/core/zip";
 import { Download } from "lucide-react";
 import { useFiles } from "../hooks";
 import { useT } from "../i18n";

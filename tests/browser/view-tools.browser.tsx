@@ -1,9 +1,9 @@
 // A view's filter, sort and grouping, set as in Notion: a filter is a pill per property whose
 // popover takes comparison and value; sorting and grouping are pages of the view's menu.
 
-import type { ViewTab } from "@obtion/core/model";
-import type { Cond } from "@obtion/core/query";
-import { SYS } from "@obtion/core/setup";
+import type { ViewTab } from "@orbis/core/model";
+import type { Cond } from "@orbis/core/query";
+import { SYS } from "@orbis/core/setup";
 import { useState } from "react";
 import { afterEach, expect, test } from "vitest";
 import { page } from "vitest/browser";

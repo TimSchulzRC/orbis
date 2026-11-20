@@ -1,9 +1,9 @@
 import { existsSync, readdirSync } from "node:fs";
 import { createServer } from "node:net";
 import { join, resolve } from "node:path";
-import { Blobs } from "@obtion/server/blobs";
-import { setUp } from "@obtion/server/setup";
-import { Store } from "@obtion/server/store";
+import { Blobs } from "@orbis/server/blobs";
+import { setUp } from "@orbis/server/setup";
+import { Store } from "@orbis/server/store";
 
 export const MCP_ACCEPT = "application/json, text/event-stream";
 let rpcId = 0;

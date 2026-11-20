@@ -1,5 +1,5 @@
-import type { T } from "@obtion/core/i18n";
-import { type Item, type StatusGroup, titleKey, type ViewTab } from "@obtion/core/model";
+import type { T } from "@orbis/core/i18n";
+import { type Item, type StatusGroup, titleKey, type ViewTab } from "@orbis/core/model";
 import {
 	type EvalCtx,
 	FIELDS,
@@ -9,8 +9,8 @@ import {
 	pathBase,
 	type QueryDef,
 	viewTypeIds,
-} from "@obtion/core/query";
-import { cmpKey } from "@obtion/core/sortkey";
+} from "@orbis/core/query";
+import { cmpKey } from "@orbis/core/sortkey";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { itemHref, useIndex } from "../hooks";

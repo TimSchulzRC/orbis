@@ -1,9 +1,9 @@
 // "+ Task" at the foot of each board column, as in Notion: the new card takes the column's value,
 // and with sub-rows the row's value too.
 
-import type { ViewTab } from "@obtion/core/model";
-import { tabDef } from "@obtion/core/query";
-import { SYS } from "@obtion/core/setup";
+import type { ViewTab } from "@orbis/core/model";
+import { tabDef } from "@orbis/core/query";
+import { SYS } from "@orbis/core/setup";
 import { afterEach, expect, test } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { cleanup, render } from "vitest-browser-react";

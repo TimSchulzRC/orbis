@@ -2,9 +2,9 @@
 // page shows them, with the live ones; on every page; a text change can go back to the text before
 // it; a failed load says so and can be tried again. The tests run in German, so the labels below are.
 
-import { replaceBody } from "@obtion/core/model";
-import type { ActivityEvent } from "@obtion/core/protocol";
-import { SYS } from "@obtion/core/setup";
+import { replaceBody } from "@orbis/core/model";
+import type { ActivityEvent } from "@orbis/core/protocol";
+import { SYS } from "@orbis/core/setup";
 import { useState } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import { page } from "vitest/browser";

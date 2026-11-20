@@ -1,4 +1,4 @@
-import { type Lang, translate } from "@obtion/core/i18n";
+import { type Lang, translate } from "@orbis/core/i18n";
 
 export const MOD = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? "⌘" : "Ctrl";
 

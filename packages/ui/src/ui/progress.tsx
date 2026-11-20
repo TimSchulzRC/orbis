@@ -1,4 +1,4 @@
-import { fmtPercent } from "@obtion/core/i18n";
+import { fmtPercent } from "@orbis/core/i18n";
 import { Progress as ShadcnProgress } from "../components/ui/progress";
 import { tr, useT } from "../i18n";
 import { cn } from "../lib/utils";

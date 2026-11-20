@@ -1,4 +1,4 @@
-import { SETTINGS_ID } from "@obtion/core/model";
+import { SETTINGS_ID } from "@orbis/core/model";
 import {
 	History,
 	House,
@@ -164,10 +164,10 @@ function Main() {
 		const showPalette = (e: Event) =>
 			setPalette((e as CustomEvent<string | undefined>).detail ?? "");
 		window.addEventListener("keydown", on);
-		window.addEventListener("obtion:palette", showPalette);
+		window.addEventListener("orbis:palette", showPalette);
 		return () => {
 			window.removeEventListener("keydown", on);
-			window.removeEventListener("obtion:palette", showPalette);
+			window.removeEventListener("orbis:palette", showPalette);
 		};
 	}, []);
 

@@ -12,20 +12,20 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
-import { excalidrawFile, findDrawings, readScene, replaceDrawings } from "@obtion/core/drawing";
-import type { Index } from "@obtion/core/graph";
-import { type Lang, translate } from "@obtion/core/i18n";
-import { type Item, META_TYPE, optionNames } from "@obtion/core/model";
-import { isInInbox } from "@obtion/core/placement";
-import { blocksAsText } from "@obtion/core/query";
-import { workspaceRules } from "@obtion/core/rules";
+import { excalidrawFile, findDrawings, readScene, replaceDrawings } from "@orbis/core/drawing";
+import type { Index } from "@orbis/core/graph";
+import { type Lang, translate } from "@orbis/core/i18n";
+import { type Item, META_TYPE, optionNames } from "@orbis/core/model";
+import { isInInbox } from "@orbis/core/placement";
+import { blocksAsText } from "@orbis/core/query";
+import { workspaceRules } from "@orbis/core/rules";
 import type { Blobs } from "./blobs";
 import type { Store } from "./store";
 
 /** Records change in bursts (typing, imports): the first change starts the timer, and one write covers everything until it fires. */
 const SYNC_DELAY_MS = 1500;
 const README =
-	"# Obtion mirror\n\nGenerated from the Obtion database: every note as Markdown below its home. Read freely; changes made here are overwritten. To change data, use the app or the MCP tools.\n";
+	"# Orbis mirror\n\nGenerated from the Orbis database: every note as Markdown below its home. Read freely; changes made here are overwritten. To change data, use the app or the MCP tools.\n";
 
 export class Mirror {
 	private files = new Map<string, string>(); // relative path -> content signature

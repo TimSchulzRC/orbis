@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
-import { addParent, removeParent, setMeta } from "@obtion/core/model";
-import { isInInbox } from "@obtion/core/placement";
-import { runSetup, SYS } from "@obtion/core/setup";
-import { cascadeCount, deleteItem, purgeSet, restoreItem, trashRoots } from "@obtion/core/trash";
+import { addParent, removeParent, setMeta } from "@orbis/core/model";
+import { isInInbox } from "@orbis/core/placement";
+import { runSetup, SYS } from "@orbis/core/setup";
+import { cascadeCount, deleteItem, purgeSet, restoreItem, trashRoots } from "@orbis/core/trash";
 import { fork, MemRepo, sync } from "../support/helpers";
 
 function repo() {

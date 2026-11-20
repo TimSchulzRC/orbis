@@ -2,8 +2,8 @@
 // field the step changed to its value before the step, unless it changed again later. Documents
 // the step created go to the trash. The undo is a step itself, so redo undoes the undo.
 
-import type { UndoResult } from "@obtion/core/api";
-import { sameValue } from "@obtion/core/equal";
+import type { UndoResult } from "@orbis/core/api";
+import { sameValue } from "@orbis/core/equal";
 import {
 	DOC_MAPS,
 	DOC_TEXTS,
@@ -12,7 +12,7 @@ import {
 	replaceText,
 	touch,
 	type UpdateEntry,
-} from "@obtion/core/model";
+} from "@orbis/core/model";
 import * as Y from "yjs";
 import type { Store } from "./store";
 

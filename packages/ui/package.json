@@ -1,5 +1,5 @@
 {
-	"name": "@obtion/ui",
+	"name": "@orbis/ui",
 	"private": true,
 	"description": "The React interface for the web app and the desktop app",
 	"license": "AGPL-3.0-or-later",
@@ -26,8 +26,8 @@
 		"@excalidraw/excalidraw": "^0.18.1",
 		"@lezer/highlight": "^1.2.5",
 		"@noble/hashes": "^2.4.0",
-		"@obtion/core": "workspace:*",
-		"@obtion/sync": "workspace:*",
+		"@orbis/core": "workspace:*",
+		"@orbis/sync": "workspace:*",
 		"@simplewebauthn/browser": "^14.0.0",
 		"class-variance-authority": "^0.7.1",
 		"clsx": "^2.1.1",

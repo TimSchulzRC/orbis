@@ -1,9 +1,9 @@
 import { afterAll, beforeEach, expect, test } from "bun:test";
-import { FORMAT, SETTINGS_ID, setSettings, setTab, setTabs } from "@obtion/core/model";
-import { groupId, groupItems, runQuery, tabDef } from "@obtion/core/query";
-import { runSetup, SYS, typeTabs, upgradeSetup } from "@obtion/core/setup";
-import type { Ops } from "@obtion/server/ops";
-import type { Store } from "@obtion/server/store";
+import { FORMAT, SETTINGS_ID, setSettings, setTab, setTabs } from "@orbis/core/model";
+import { groupId, groupItems, runQuery, tabDef } from "@orbis/core/query";
+import { runSetup, SYS, typeTabs, upgradeSetup } from "@orbis/core/setup";
+import type { Ops } from "@orbis/server/ops";
+import type { Store } from "@orbis/server/store";
 import * as Y from "yjs";
 import { MemRepo, removeTempDirs } from "../support/helpers";
 import { setupStore } from "../support/store";
@@ -14,7 +14,7 @@ let s: Store;
 let ops: Ops;
 const A = "agent:test";
 // set up in German: the shipped view names, status options and query words checked here are German
-beforeEach(() => ({ s, ops } = setupStore("obtion-views-")));
+beforeEach(() => ({ s, ops } = setupStore("orbis-views-")));
 const tabsOf = (id: string) => typeTabs(s.records.get(id)!, "de");
 
 test("a type's views: the defaults until one is changed, then each a map of its own on the type", () => {

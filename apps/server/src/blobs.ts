@@ -12,8 +12,8 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import { drawingImages } from "@obtion/core/drawing";
-import { type FileMeta, type Item, setFileMeta } from "@obtion/core/model";
+import { drawingImages } from "@orbis/core/drawing";
+import { type FileMeta, type Item, setFileMeta } from "@orbis/core/model";
 import { extractMark, extractText, FACTS_TEXT, factsText } from "./extract";
 import type { Store } from "./store";
 

@@ -1,4 +1,4 @@
-# Obtion server with its web app: sync, API, MCP and the app in one container.
+# Orbis server with its web app: sync, API, MCP and the app in one container.
 # Data live in /data: accounts.db and config.json, and per workspace workspaces/<id>/ with its
 # database, files and Markdown mirror.
 # Built for amd64 and arm64: the web app and the server's dependencies are plain JavaScript, so
@@ -30,7 +30,7 @@ COPY apps/web/package.json apps/web/
 # COPY keeps the modes of the checkout; cloned with a strict umask the server's user could not
 # read its own code ("Module not found"). The dependencies get it here, cached with the install;
 # after the code only the code, so a commit doesn't rewrite all of node_modules.
-RUN bun install --frozen-lockfile --production --omit optional --filter @obtion/server \
+RUN bun install --frozen-lockfile --production --omit optional --filter @orbis/server \
   && chmod -R a+rX /app && mkdir /data
 COPY packages/core ./packages/core
 COPY apps/server ./apps/server
@@ -41,15 +41,15 @@ FROM oven/bun:1.4-slim@sha256:1846adf22496bd711036aae8be147e57bdebbaea2e5264e3e0
 WORKDIR /app
 COPY --from=server /app ./
 COPY --from=server --chown=bun:bun /data /data
-COPY --chmod=755 scripts/docker-entrypoint.sh /usr/local/bin/obtion-entrypoint
-ENV HOST=0.0.0.0 PORT=8480 OBTION_DATA=/data
+COPY --chmod=755 scripts/docker-entrypoint.sh /usr/local/bin/orbis-entrypoint
+ENV HOST=0.0.0.0 PORT=8480 ORBIS_DATA=/data
 # shown in the settings and at start: 0.0.1, 0.0.2-nightly.20261030.41 or dev, and the commit
 # (set by .github/workflows/ci.yml and release.yml)
-ARG OBTION_BUILD_VERSION=dev
-ARG OBTION_BUILD_COMMIT=
-ENV OBTION_BUILD_VERSION=$OBTION_BUILD_VERSION OBTION_BUILD_COMMIT=$OBTION_BUILD_COMMIT
+ARG ORBIS_BUILD_VERSION=dev
+ARG ORBIS_BUILD_COMMIT=
+ENV ORBIS_BUILD_VERSION=$ORBIS_BUILD_VERSION ORBIS_BUILD_COMMIT=$ORBIS_BUILD_COMMIT
 VOLUME /data
 EXPOSE 8480
 # the server never runs as root: the entrypoint hands /data to its owner and starts it as them
-ENTRYPOINT ["obtion-entrypoint"]
+ENTRYPOINT ["orbis-entrypoint"]
 CMD ["bun", "apps/server/src/index.ts"]

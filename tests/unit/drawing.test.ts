@@ -12,9 +12,9 @@ import {
 	setDrawingFile,
 	setDrawingState,
 	writeElements,
-} from "@obtion/core/drawing";
-import { parseWikiLinks } from "@obtion/core/model";
-import { createIndex, indexRecord, plainText, searchIds } from "@obtion/core/search";
+} from "@orbis/core/drawing";
+import { parseWikiLinks } from "@orbis/core/model";
+import { createIndex, indexRecord, plainText, searchIds } from "@orbis/core/search";
 import { fork, MemRepo, sync } from "../support/helpers";
 
 /** The drawing's id in its note. */

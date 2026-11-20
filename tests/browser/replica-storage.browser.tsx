@@ -1,8 +1,8 @@
 // The device's IndexedDB storage keeps the record that compaction stores with a row, so the next
 // start can skip decoding that document.
 
-import { RECORD_VERSION } from "@obtion/core/model";
-import { Repo, type SyncSocket } from "@obtion/sync";
+import { RECORD_VERSION } from "@orbis/core/model";
+import { Repo, type SyncSocket } from "@orbis/sync";
 import { expect, test } from "vitest";
 import * as Y from "yjs";
 import { browserHost } from "../../packages/ui/src/browser";
@@ -27,7 +27,7 @@ const link = (replica: string) => ({
 });
 
 test("a compacted row keeps its record in IndexedDB", async () => {
-	const host = browserHost(link(`obtion-test-${Date.now()}`));
+	const host = browserHost(link(`orbis-test-${Date.now()}`));
 	const storage = host.storage;
 	await storage.open();
 	const doc = new Y.Doc();

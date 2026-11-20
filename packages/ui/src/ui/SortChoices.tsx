@@ -1,7 +1,7 @@
 // The inbox's choices for one note: "Sort", "Type", "Tomorrow", "Pin" and, where offered,
 // "Delete". The inbox's card and the quick note show the same row.
 
-import type { Item } from "@obtion/core/model";
+import type { Item } from "@orbis/core/model";
 import { Clock, FolderInput, Pin, Shapes, Trash2, Undo2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useT } from "../i18n";

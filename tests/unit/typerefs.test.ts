@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import type { ViewTab } from "@obtion/core/model";
-import { mapCond, mapQuery, mapTab, renameTypeIn } from "@obtion/core/typerefs";
+import type { ViewTab } from "@orbis/core/model";
+import { mapCond, mapQuery, mapTab, renameTypeIn } from "@orbis/core/typerefs";
 
 const rename = { type: "t", prop: "p", from: "Priority", to: "Importance" };
 const remove = { ...rename, to: null };

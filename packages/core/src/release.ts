@@ -1,8 +1,8 @@
 // The app's name with the stage of its build, like T3 Code: a stable release still says "(Alpha)"
-// while Obtion is one. The version comes from the server (/api/info, OBTION_BUILD_VERSION).
+// while Orbis is one. The version comes from the server (/api/info, ORBIS_BUILD_VERSION).
 
 /**
- * The stage every stable release carries in its name. Changed by hand when Obtion leaves it;
+ * The stage every stable release carries in its name. Changed by hand when Orbis leaves it;
  * .github/scripts/resolve-release.sh puts the same word into the title of the GitHub release.
  */
 export const STABLE_STAGE = "Alpha";
@@ -14,5 +14,5 @@ export function appStage(version: string): string {
 	return STABLE_STAGE;
 }
 
-/** "Obtion (Alpha)" */
-export const appName = (version: string) => `Obtion (${appStage(version)})`;
+/** "Orbis (Alpha)" */
+export const appName = (version: string) => `Orbis (${appStage(version)})`;

@@ -18,7 +18,7 @@ test("the button counts links both ways and lists them; a ref outside the text c
 		parents: [home],
 		body: "Status under [[Website relaunch]].",
 	});
-	repo.create({ title: "How Obtion works", parents: [home], body: "See [[Marketing]]." });
+	repo.create({ title: "How Orbis works", parents: [home], body: "See [[Marketing]]." });
 	repo.setMember(id, "refs", roadmap, true);
 	await render(<ItemPage id={id} isNew={false} />);
 
@@ -37,7 +37,7 @@ test("the button counts links both ways and lists them; a ref outside the text c
 			.getByRole("link")
 			.elements()
 			.map((a) => a.textContent),
-	).toEqual(["How Obtion works", "Website relaunch", "Roadmap 2027"]);
+	).toEqual(["How Orbis works", "Website relaunch", "Roadmap 2027"]);
 	await expect
 		.element(menu.getByRole("link", { name: "Website relaunch" }))
 		.toHaveAttribute("href", expect.stringContaining(relaunch));

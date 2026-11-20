@@ -1,7 +1,7 @@
-import { DRAWING_INFO } from "@obtion/core/drawing";
-import { fmtBytes } from "@obtion/core/i18n";
-import { type Item, wikiLinkRe } from "@obtion/core/model";
-import type { Repo } from "@obtion/sync";
+import { DRAWING_INFO } from "@orbis/core/drawing";
+import { fmtBytes } from "@orbis/core/i18n";
+import { type Item, wikiLinkRe } from "@orbis/core/model";
+import type { Repo } from "@orbis/sync";
 import { Marked, type Tokens } from "marked";
 import { useEffect, useMemo, useRef } from "react";
 import { drawingEmbedHTML, hydrateDrawings } from "../drawing/Drawing";

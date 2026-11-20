@@ -1,6 +1,6 @@
 // An empty property row starts its input wherever its value cell is clicked, not only on the "–".
 
-import { SYS } from "@obtion/core/setup";
+import { SYS } from "@orbis/core/setup";
 import { afterEach, expect, test } from "vitest";
 import { commands, page } from "vitest/browser";
 import { cleanup, render } from "vitest-browser-react";

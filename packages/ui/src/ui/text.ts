@@ -1,8 +1,8 @@
 // Small text helpers for markup the app builds itself (rendered Markdown, the editor's own DOM).
 
-import type { Index } from "@obtion/core/graph";
-import type { Item } from "@obtion/core/model";
-import { plainText } from "@obtion/core/search";
+import type { Index } from "@orbis/core/graph";
+import type { Item } from "@orbis/core/model";
+import { plainText } from "@orbis/core/search";
 import { tr } from "../i18n";
 
 /** Text as HTML, safe in element content and in quoted attributes. */

@@ -11,7 +11,7 @@ function ipv4ToNumber(ip: string): number | undefined {
 
 // Host check against DNS rebinding. The attack needs a name the attacker controls in public DNS,
 // so IP addresses, dotless names and private suffixes (incl. MagicDNS .ts.net) are safe on any
-// port. Public names must be listed (OBTION_PUBLIC_URL, OBTION_ALLOWED_HOSTS).
+// port. Public names must be listed (ORBIS_PUBLIC_URL, ORBIS_ALLOWED_HOSTS).
 const PRIVATE_SUFFIX = /\.(local|lan|home\.arpa|internal|ts\.net)$/;
 
 /** `named` entries may be host or host:port. */

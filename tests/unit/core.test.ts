@@ -1,6 +1,6 @@
 import { describe, expect, jest, test } from "bun:test";
-import { CATALOGS } from "@obtion/core/i18n";
-import { setAside, tomorrow } from "@obtion/core/inbox";
+import { CATALOGS } from "@orbis/core/i18n";
+import { setAside, tomorrow } from "@orbis/core/inbox";
 import {
 	addParent,
 	initItem,
@@ -16,19 +16,13 @@ import {
 	setSettings,
 	type TypeSchema,
 	touchOnTextEdit,
-} from "@obtion/core/model";
-import {
-	inbox,
-	isInInbox,
-	laterItems,
-	sidebarChildren,
-	sidebarRoots,
-} from "@obtion/core/placement";
-import { parseQuery, printQuery, runQuery } from "@obtion/core/query";
-import { resetInbox, restoreDefaultTypes, runSetup, SYS } from "@obtion/core/setup";
-import { keyBetween, keysFor } from "@obtion/core/sortkey";
-import { dueBy, recentlyChanged, running } from "@obtion/core/today";
-import { initialProps, kindPatch, optionIds, statusProp } from "@obtion/core/traits";
+} from "@orbis/core/model";
+import { inbox, isInInbox, laterItems, sidebarChildren, sidebarRoots } from "@orbis/core/placement";
+import { parseQuery, printQuery, runQuery } from "@orbis/core/query";
+import { resetInbox, restoreDefaultTypes, runSetup, SYS } from "@orbis/core/setup";
+import { keyBetween, keysFor } from "@orbis/core/sortkey";
+import { dueBy, recentlyChanged, running } from "@orbis/core/today";
+import { initialProps, kindPatch, optionIds, statusProp } from "@orbis/core/traits";
 import * as Y from "yjs";
 import { MemRepo } from "../support/helpers";
 
@@ -393,7 +387,7 @@ describe("i18n", () => {
 test("readItem ignores uninitialised documents", () => {
 	const d = new Y.Doc();
 	expect(readItem("x", d)).toBeNull();
-	d.getMap("meta").set("type", "x"); // no kind: not an Obtion document
+	d.getMap("meta").set("type", "x"); // no kind: not an Orbis document
 	expect(readItem("x", d)).toBeNull();
 	d.transact(() => initItem(d, { title: "x", type: META_TYPE }));
 	expect(readItem("x", d)!.schema).toBeDefined();

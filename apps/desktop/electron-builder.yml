@@ -1,7 +1,7 @@
 # Packages the desktop app: `bun run dist` (see README.md). The server on this device comes from
 # build/server/<os>-<arch>/ (scripts/build.ts); the rest is dist/ inside the app.
-appId: app.obtion.desktop
-productName: Obtion
+appId: app.orbis.desktop
+productName: Orbis
 copyright: AGPL-3.0-or-later
 directories:
   output: release
@@ -13,7 +13,7 @@ asar: true
 extraResources:
   - from: build/server/${os}-${arch}
     to: server
-artifactName: Obtion-${version}-${os}-${arch}.${ext}
+artifactName: Orbis-${version}-${os}-${arch}.${ext}
 mac:
   target: [dmg]
   category: public.app-category.productivity
@@ -26,7 +26,7 @@ nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
 linux:
-  executableName: obtion
+  executableName: orbis
   target: [AppImage, deb]
   category: Office
   maintainer: Tim Schulz

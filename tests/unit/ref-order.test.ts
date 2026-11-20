@@ -1,7 +1,7 @@
 // Refs keep an order of their own: a link pinned from the text goes in front, one set by hand at
 // the end, and either can be moved anywhere.
 import { expect, test } from "bun:test";
-import { addRef, moveRef, refOrder, setMember } from "@obtion/core/model";
+import { addRef, moveRef, refOrder, setMember } from "@orbis/core/model";
 import * as Y from "yjs";
 
 test("pinned in front, set by hand at the end, moved anywhere", () => {

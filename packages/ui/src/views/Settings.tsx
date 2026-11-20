@@ -7,12 +7,12 @@ import type {
 	Member,
 	PasskeyInfo,
 	ServerInfo,
-} from "@obtion/core/api";
-import { listExamples, removeExamples, restoreExamples } from "@obtion/core/examples";
-import { ENDONYMS, fmtBytes, fmtDate, fmtDateTime, LANGS } from "@obtion/core/i18n";
-import { SETTINGS_ID, setSettings } from "@obtion/core/model";
-import { appName } from "@obtion/core/release";
-import { resetInbox } from "@obtion/core/setup";
+} from "@orbis/core/api";
+import { listExamples, removeExamples, restoreExamples } from "@orbis/core/examples";
+import { ENDONYMS, fmtBytes, fmtDate, fmtDateTime, LANGS } from "@orbis/core/i18n";
+import { SETTINGS_ID, setSettings } from "@orbis/core/model";
+import { appName } from "@orbis/core/release";
+import { resetInbox } from "@orbis/core/setup";
 import {
 	ArrowLeft,
 	Check,
@@ -1054,7 +1054,7 @@ function Version() {
 		});
 	}, []);
 	if (!info?.version) return null;
-	// "Obtion (Alpha) 0.0.2 (abc1234)"; a dev build has no version beyond its name
+	// "Orbis (Alpha) 0.0.2 (abc1234)"; a dev build has no version beyond its name
 	const build = [info.version !== "dev" && info.version, info.commit && `(${info.commit})`]
 		.filter(Boolean)
 		.join(" ");

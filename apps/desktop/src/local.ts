@@ -8,7 +8,7 @@ import { createWriteStream, existsSync, mkdirSync, readFileSync, writeFileSync }
 import { createServer } from "node:net";
 import { userInfo } from "node:os";
 import { join } from "node:path";
-import type { AccountInfo, ServerInfo, SignedIn, User } from "@obtion/core/api";
+import type { AccountInfo, ServerInfo, SignedIn, User } from "@orbis/core/api";
 
 /** The account of the server on this device, as kept in the app's folder (never shown to the user). */
 interface Saved {
@@ -114,9 +114,9 @@ export class LocalServer {
 				...this.env,
 				HOST: "127.0.0.1",
 				PORT: String(port),
-				OBTION_DATA: join(this.dir, "data"),
-				OBTION_WEB_APP: "off",
-				OBTION_SIGNUP: "off",
+				ORBIS_DATA: join(this.dir, "data"),
+				ORBIS_WEB_APP: "off",
+				ORBIS_SIGNUP: "off",
 			},
 			stdio: ["ignore", "pipe", "pipe"],
 			windowsHide: true,
@@ -127,7 +127,7 @@ export class LocalServer {
 		proc.on("exit", (code) => {
 			log.end();
 			if (this.proc === proc && !this.stopping) {
-				console.error(`[obtion] the server on this device ended (${code}); starting it again`);
+				console.error(`[orbis] the server on this device ended (${code}); starting it again`);
 				setTimeout(() => !this.stopping && this.spawn(port), 1000);
 			}
 		});
@@ -172,7 +172,7 @@ export class LocalServer {
 		let res: Answer<SignedIn>;
 		if (info.firstAccount || !this.saved.email) {
 			// the first start (or its data were removed): the account is made, with a password nobody types
-			this.saved.email = "me@obtion.local";
+			this.saved.email = "me@orbis.local";
 			this.saved.password = randomBytes(24).toString("base64url");
 			res = await this.call<SignedIn>("/api/account/signup", {
 				name: fullName() || userInfo().username,

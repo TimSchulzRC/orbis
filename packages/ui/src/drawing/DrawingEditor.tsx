@@ -27,8 +27,8 @@ import {
 	setDrawingFile,
 	setDrawingState,
 	writeElements,
-} from "@obtion/core/drawing";
-import { touch } from "@obtion/core/model";
+} from "@orbis/core/drawing";
+import { touch } from "@orbis/core/model";
 import { X } from "lucide-react";
 import {
 	memo,

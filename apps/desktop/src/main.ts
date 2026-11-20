@@ -1,5 +1,5 @@
 // The desktop app: the web app's interface (apps/web, built with --mode desktop) in a window of
-// its own, served from obtion://app, and the server on this device for local workspaces
+// its own, served from orbis://app, and the server on this device for local workspaces
 // (local.ts). Further servers are connected in the app itself, like on the web.
 
 import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
@@ -10,11 +10,11 @@ import { iconPath } from "../../server/src/icons";
 import { LocalServer } from "./local";
 import { pickUpdate, RELEASES, type Release } from "./updates";
 
-const SCHEME = "obtion";
-/** The app's pages: their origin is obtion://app, which every Obtion server lets call its API. */
+const SCHEME = "orbis";
+/** The app's pages: their origin is orbis://app, which every Orbis server lets call its API. */
 const APP_URL = `${SCHEME}://app/`;
 /** In development the pages come from Vite (`bun run dev` in apps/desktop) instead. */
-const DEV_URL = process.env.OBTION_RENDERER_URL;
+const DEV_URL = process.env.ORBIS_RENDERER_URL;
 
 // standard and secure: storage, IndexedDB and the origin private file system work as on https
 protocol.registerSchemesAsPrivileged([
@@ -44,25 +44,25 @@ const renderer = join(here, "renderer");
  */
 const icon = join(here, "icon.png");
 /**
- * The build version, the way the server takes it (OBTION_BUILD_VERSION): a release's
+ * The build version, the way the server takes it (ORBIS_BUILD_VERSION): a release's
  * (release.yml), or "dev" outside a package and in builds of the Desktop workflow
  * (package.json: 0.0.0-dev).
  */
 const version = app.isPackaged && !app.getVersion().endsWith("-dev") ? app.getVersion() : "dev";
-const exe = process.platform === "win32" ? "obtion-server.exe" : "obtion-server";
+const exe = process.platform === "win32" ? "orbis-server.exe" : "orbis-server";
 const server = new LocalServer(
 	join(userData, "server"),
 	app.isPackaged
 		? { cmd: join(process.resourcesPath, "server", exe), args: [] }
 		: { cmd: process.env.BUN ?? "bun", args: [join(app.getAppPath(), "../server/src/index.ts")] },
 	{
-		OBTION_BUILD_VERSION: version,
-		...(DEV_URL ? { OBTION_APP_ORIGINS: new URL(DEV_URL).origin } : {}),
+		ORBIS_BUILD_VERSION: version,
+		...(DEV_URL ? { ORBIS_APP_ORIGINS: new URL(DEV_URL).origin } : {}),
 	},
 );
 
 /**
- * The app's files for obtion://app/<path>; every other path is the app itself (index.html).
+ * The app's files for orbis://app/<path>; every other path is the app itself (index.html).
  * /icon.svg & co. in the colour of this version's channel, like the server answers them.
  */
 function serve(req: Request): Promise<Response> {
@@ -106,7 +106,7 @@ function createWindow() {
 		minWidth: 360,
 		minHeight: 480,
 		show: false,
-		title: "Obtion",
+		title: "Orbis",
 		titleBarStyle: "hidden",
 		...(mac ? { trafficLightPosition: { x: 16, y: 15 } } : { titleBarOverlay: overlay() }),
 		backgroundColor: nativeTheme.shouldUseDarkColors ? "#191919" : "#f7f6f3",
@@ -151,10 +151,10 @@ function createWindow() {
 }
 
 // what the page asks for (preload.ts)
-ipcMain.on("obtion:local", (e) => (e.returnValue = server.local));
-ipcMain.handle("obtion:renew", () => server.signIn(lang(), true));
+ipcMain.on("orbis:local", (e) => (e.returnValue = server.local));
+ipcMain.handle("orbis:renew", () => server.signIn(lang(), true));
 // a newer release of this version's channel with an installer for this system (updates.ts)
-ipcMain.handle("obtion:update", async () => {
+ipcMain.handle("orbis:update", async () => {
 	if (version === "dev") return null;
 	const res = await net.fetch(RELEASES, { headers: { accept: "application/vnd.github+json" } });
 	if (!res.ok) throw new Error(`GitHub: ${res.status}`);
@@ -165,7 +165,7 @@ ipcMain.handle("obtion:update", async () => {
 	});
 });
 // the theme chosen in the app (system, light, dark): the window's buttons and menus follow it
-ipcMain.on("obtion:theme", (_e, choice: unknown) => {
+ipcMain.on("orbis:theme", (_e, choice: unknown) => {
 	if (choice === "system" || choice === "light" || choice === "dark")
 		nativeTheme.themeSource = choice;
 });
@@ -191,7 +191,7 @@ app.whenReady().then(async () => {
 		await server.start(lang());
 	} catch (e) {
 		const { dialog } = await import("electron");
-		dialog.showErrorBox("Obtion", (e as Error).message);
+		dialog.showErrorBox("Orbis", (e as Error).message);
 		app.exit(1);
 		return;
 	}

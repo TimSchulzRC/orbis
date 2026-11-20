@@ -1,6 +1,6 @@
 // One log for all workspaces, with its own workspace choice independent of the sidebar's.
 
-import type { ActivityEvent } from "@obtion/core/protocol";
+import type { ActivityEvent } from "@orbis/core/protocol";
 import { useState } from "react";
 import { accountOf, spaceCall, useAccounts } from "../accounts";
 import { useDocumentTitle, useOnChange } from "../hooks";

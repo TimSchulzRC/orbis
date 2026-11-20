@@ -4,7 +4,7 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout, test } from "bun:test";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { sha256 } from "@obtion/server/blobs";
+import { sha256 } from "@orbis/server/blobs";
 import { removeTempDirs, tempDir } from "../support/helpers";
 import { bootServer, del, get, mcpTool, post } from "../support/server";
 
@@ -32,11 +32,11 @@ async function signUp(email: string) {
 }
 
 beforeAll(async () => {
-	data = tempDir("obtion-filesec-");
+	data = tempDir("orbis-filesec-");
 	({ url: base, proc } = await bootServer({
-		OBTION_DATA: data,
-		OBTION_WEB_APP: "off",
-		OBTION_SIGNUP: "open",
+		ORBIS_DATA: data,
+		ORBIS_WEB_APP: "off",
+		ORBIS_SIGNUP: "open",
 	}));
 	owner = await signUp("owner@example.org");
 	ws = (await post(base, "/api/workspaces", { name: "Project" }, owner.token).then((r) => r.json()))
@@ -179,7 +179,7 @@ async function refused(
 		const body = await res.text();
 		if (![401, 403].includes(res.status)) throw new Error(`${what} ${q}: ${res.status} ${body}`);
 		expect(body).not.toContain(content);
-		expect(res.headers.get("x-obtion-hash")).toBeNull();
+		expect(res.headers.get("x-orbis-hash")).toBeNull();
 	}
 }
 
@@ -342,11 +342,11 @@ test("no link opens a content without a token: no signed links, no token in the 
 test("contents by hash: no reading across workspaces, no foreign content under a hash", async () => {
 	const secret = "Secret content 5";
 	const f = await uploaded("secret5.txt", secret);
-	// the hash is known (X-Obtion-Hash, ETag, get): still nothing from another workspace
+	// the hash is known (X-Orbis-Hash, ETag, get): still nothing from another workspace
 	for (const token of [stranger.token, strangerAgent]) {
 		for (const path of [blobs(f.hash, strangerWs), `${blobs(f.hash, strangerWs)}?check=1`]) {
-			const res = await fetch(path, { headers: { ...bearer(token), "x-obtion-probe": "1" } });
-			expect(res.status === 401 || res.headers.get("x-obtion-missing") === "1").toBe(true);
+			const res = await fetch(path, { headers: { ...bearer(token), "x-orbis-probe": "1" } });
+			expect(res.status === 401 || res.headers.get("x-orbis-missing") === "1").toBe(true);
 			expect(await res.text()).not.toContain(secret);
 		}
 	}

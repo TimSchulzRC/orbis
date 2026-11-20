@@ -2,13 +2,13 @@
 // through names. The web app does not use this; it edits its replica directly.
 
 import { createHash } from "node:crypto";
-import type { TextVersion } from "@obtion/core/api";
-import { DAY_MS, dateOf } from "@obtion/core/date";
-import { textDiff, unifiedDiff } from "@obtion/core/diff";
-import { findDrawings } from "@obtion/core/drawing";
-import type { Index } from "@obtion/core/graph";
-import { type Lang, translate } from "@obtion/core/i18n";
-import { inboxWhere } from "@obtion/core/inbox";
+import type { TextVersion } from "@orbis/core/api";
+import { DAY_MS, dateOf } from "@orbis/core/date";
+import { textDiff, unifiedDiff } from "@orbis/core/diff";
+import { findDrawings } from "@orbis/core/drawing";
+import type { Index } from "@orbis/core/graph";
+import { type Lang, translate } from "@orbis/core/i18n";
+import { inboxWhere } from "@orbis/core/inbox";
 import {
 	DATE_HELP,
 	InputError,
@@ -16,7 +16,7 @@ import {
 	parseDateTime,
 	parseNumber,
 	statusGroupOf,
-} from "@obtion/core/input";
+} from "@orbis/core/input";
 import {
 	addParent,
 	appendUpdate,
@@ -60,13 +60,13 @@ import {
 	upsertProp,
 	type Value,
 	type ViewTab,
-} from "@obtion/core/model";
-import { originText, parseOrigin } from "@obtion/core/origin";
-import { findSection, type Heading, outline, page } from "@obtion/core/outline";
-import { freshColor } from "@obtion/core/palette";
-import { isInInbox } from "@obtion/core/placement";
-import type { ActivityEvent, FieldChange } from "@obtion/core/protocol";
-import { fromB64 } from "@obtion/core/protocol";
+} from "@orbis/core/model";
+import { originText, parseOrigin } from "@orbis/core/origin";
+import { findSection, type Heading, outline, page } from "@orbis/core/outline";
+import { freshColor } from "@orbis/core/palette";
+import { isInInbox } from "@orbis/core/placement";
+import type { ActivityEvent, FieldChange } from "@orbis/core/protocol";
+import { fromB64 } from "@orbis/core/protocol";
 import {
 	blocksAsText,
 	type Cond,
@@ -79,12 +79,12 @@ import {
 	runQuery,
 	tabDef,
 	typesIn,
-} from "@obtion/core/query";
-import { type AgentRule, ruleOwners, rulesForAll, workspaceRules } from "@obtion/core/rules";
-import { excerpt, searchHits, searchIds } from "@obtion/core/search";
-import { runSetup, typeTabs, type Writer } from "@obtion/core/setup";
-import { keyBetween, nextPinKey } from "@obtion/core/sortkey";
-import { running } from "@obtion/core/today";
+} from "@orbis/core/query";
+import { type AgentRule, ruleOwners, rulesForAll, workspaceRules } from "@orbis/core/rules";
+import { excerpt, searchHits, searchIds } from "@orbis/core/search";
+import { runSetup, typeTabs, type Writer } from "@orbis/core/setup";
+import { keyBetween, nextPinKey } from "@orbis/core/sortkey";
+import { running } from "@orbis/core/today";
 import {
 	caps,
 	defaultStatusOptions,
@@ -98,15 +98,15 @@ import {
 	statusProp,
 	template,
 	writeProp,
-} from "@obtion/core/traits";
-import { deleteItem, onlyBelow, purgeSet, restoreItem, trashRoots } from "@obtion/core/trash";
-import { previewTagToType, typeUsage } from "@obtion/core/typeops";
+} from "@orbis/core/traits";
+import { deleteItem, onlyBelow, purgeSet, restoreItem, trashRoots } from "@orbis/core/trash";
+import { previewTagToType, typeUsage } from "@orbis/core/typeops";
 import {
 	followKindChange,
 	followPropChange,
 	followTypeRename,
 	type PropChange,
-} from "@obtion/core/typerefs";
+} from "@orbis/core/typerefs";
 import type * as Y from "yjs";
 import { type Blobs, sha256 } from "./blobs";
 import { MAX_ATTACH } from "./config";
@@ -731,8 +731,8 @@ export class Ops {
 				const url = `${this.filesUrl}/${i.id}`;
 				Object.assign(file, {
 					download: url,
-					download_curl: `curl -fsS -H "Authorization: Bearer $OBTION_TOKEN" -o ${shq(f.name)} ${shq(url)}`,
-					replace_curl: `curl -fsS -X PUT -H "Authorization: Bearer $OBTION_TOKEN" --data-binary @${shq(f.name)} ${shq(url)}`,
+					download_curl: `curl -fsS -H "Authorization: Bearer $ORBIS_TOKEN" -o ${shq(f.name)} ${shq(url)}`,
+					replace_curl: `curl -fsS -X PUT -H "Authorization: Bearer $ORBIS_TOKEN" --data-binary @${shq(f.name)} ${shq(url)}`,
 				});
 			}
 			out.file = file;

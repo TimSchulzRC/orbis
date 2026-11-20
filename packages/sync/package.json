@@ -1,5 +1,5 @@
 {
-	"name": "@obtion/sync",
+	"name": "@orbis/sync",
 	"private": true,
 	"description": "The device's replica of a server: Yjs documents, outbox, sync over WebSocket – storage and platform are passed in",
 	"license": "AGPL-3.0-or-later",
@@ -8,7 +8,7 @@
 		".": "./src/repo.ts"
 	},
 	"dependencies": {
-		"@obtion/core": "workspace:*",
+		"@orbis/core": "workspace:*",
 		"yjs": "^13.6.33"
 	}
 }

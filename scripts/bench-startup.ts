@@ -6,8 +6,8 @@
 //   bun scripts/bench-startup.ts device <dir>   the same data loaded by a device's Repo (the first run prepares its rows)
 
 import { deserialize, serialize } from "bun:jsc";
-import { initItem, metaMap } from "@obtion/core/model";
-import { type ReplicaStorage, Repo, type StoredRow } from "@obtion/sync";
+import { initItem, metaMap } from "@orbis/core/model";
+import { type ReplicaStorage, Repo, type StoredRow } from "@orbis/sync";
 import * as Y from "yjs";
 import { Store } from "../apps/server/src/store";
 import { Workspace } from "../apps/server/src/workspace";

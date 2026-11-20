@@ -1,7 +1,7 @@
 // Between a drawing in its note's document and Excalidraw: images, the lazily loaded library and the preview.
 
 import type { BinaryFileData, LibraryItems } from "@excalidraw/excalidraw/types";
-import { type DrawingFile, readScene } from "@obtion/core/drawing";
+import { type DrawingFile, readScene } from "@orbis/core/drawing";
 import type * as Y from "yjs";
 import type { DeviceFiles } from "../files";
 import { KEYS } from "../ui/storage";

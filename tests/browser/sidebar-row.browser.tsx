@@ -1,9 +1,9 @@
 // A row of the sidebar tree opens its page wherever it is clicked (icon, empty space), except on
 // its buttons: fold, "+" and "…".
 
-import { setMeta } from "@obtion/core/model";
-import { sidebarChildren } from "@obtion/core/placement";
-import { SYS } from "@obtion/core/setup";
+import { setMeta } from "@orbis/core/model";
+import { sidebarChildren } from "@orbis/core/placement";
+import { SYS } from "@orbis/core/setup";
 import { afterEach, expect, test } from "vitest";
 import { page } from "vitest/browser";
 import { cleanup, render } from "vitest-browser-react";

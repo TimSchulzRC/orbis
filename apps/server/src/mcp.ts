@@ -2,11 +2,11 @@
 // first and follow the types' descriptions and capabilities.
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import { acceptLang, LANGS, type Lang } from "@obtion/core/i18n";
-import { InputError } from "@obtion/core/input";
-import { todayISO } from "@obtion/core/model";
-import { agentOrigin, type Person, parseOrigin } from "@obtion/core/origin";
-import { workspaceRules } from "@obtion/core/rules";
+import { acceptLang, LANGS, type Lang } from "@orbis/core/i18n";
+import { InputError } from "@orbis/core/input";
+import { todayISO } from "@orbis/core/model";
+import { agentOrigin, type Person, parseOrigin } from "@orbis/core/origin";
+import { workspaceRules } from "@orbis/core/rules";
 import { z } from "zod";
 import type { Blobs } from "./blobs";
 import { MAX_ATTACH } from "./config";
@@ -25,7 +25,7 @@ import {
 import type { Store } from "./store";
 import { redoStep, UndoError, undoStep } from "./undo";
 
-const INSTRUCTIONS = `Obtion is the user's personal system for knowledge and work: notes linked like Obsidian, projects and tasks like Notion, all in one graph. You are their interface: they tell you what happened, you record it; they ask, you answer from the data.
+const INSTRUCTIONS = `Orbis is the user's personal system for knowledge and work: notes linked like Obsidian, projects and tasks like Notion, all in one graph. You are their interface: they tell you what happened, you record it; they ask, you answer from the data.
 
 The model:
 - Everything is a note (title, Markdown body, tags, refs) or a file. A note has at most one type. Types are data: call \`schema\` first – it lists every type with its description, properties (with options) and capabilities. Follow the descriptions. Never assume a type exists because of its name.
@@ -55,7 +55,7 @@ How to work:
 
 Rules for agents:
 - The workspace and any item can carry rules for agents (Markdown). They are binding: an item's rules apply to it and to everything below it (over all its parents), the workspace's apply everywhere. Answers about items end with a "Rules for agents" block with the ones that apply; \`schema\` lists every item that has rules.
-- Read the rules that apply before you act outside Obtion – in other systems, by e-mail or any message to people – and follow them. When a rule asks you to ask first, ask.
+- Read the rules that apply before you act outside Orbis – in other systems, by e-mail or any message to people – and follow them. When a rule asks you to ask first, ask.
 - The user may change them in the app at any time. The current text always wins over anything you remember from earlier sessions or other places.
 - Change rules (update/create with agent_rules) only when the user asks you to.`;
 
@@ -72,15 +72,15 @@ function instructions(ops: Ops): string {
 
 /** The HTTP file API, for the instructions and the attach description. */
 function filesHelp(url: string) {
-	return `HTTP file API (token: the one this MCP connection uses, as $OBTION_TOKEN – never write the real token into answers or files):
-- Upload a new file: curl -fsS -X POST -H "Authorization: Bearer $OBTION_TOKEN" --data-binary @report.pdf "${url}?name=report.pdf&parent=<id>" → JSON with id, hash, size. Always give parent (an id or exact title): without it the file lands in the inbox, and from there you can no longer place it yourself – only suggest a place, which the user has to accept.
-- Replace the content of a file (same item, old version kept): curl -fsS -X PUT -H "Authorization: Bearer $OBTION_TOKEN" --data-binary @report.pdf ${url}/<file id>
-- Download the original: curl -fsS -H "Authorization: Bearer $OBTION_TOKEN" -o report.pdf ${url}/<file id>
+	return `HTTP file API (token: the one this MCP connection uses, as $ORBIS_TOKEN – never write the real token into answers or files):
+- Upload a new file: curl -fsS -X POST -H "Authorization: Bearer $ORBIS_TOKEN" --data-binary @report.pdf "${url}?name=report.pdf&parent=<id>" → JSON with id, hash, size. Always give parent (an id or exact title): without it the file lands in the inbox, and from there you can no longer place it yourself – only suggest a place, which the user has to accept.
+- Replace the content of a file (same item, old version kept): curl -fsS -X PUT -H "Authorization: Bearer $ORBIS_TOKEN" --data-binary @report.pdf ${url}/<file id>
+- Download the original: curl -fsS -H "Authorization: Bearer $ORBIS_TOKEN" -o report.pdf ${url}/<file id>
 Uploads and replacements show up in the activity and can be undone with undo like a tool call.`;
 }
 
 export function agentName(req: Request): string {
-	const explicit = req.headers.get("x-obtion-agent");
+	const explicit = req.headers.get("x-orbis-agent");
 	if (explicit) return explicit;
 	const ua = req.headers.get("user-agent") ?? "";
 	if (/claude-code/i.test(ua)) return "claude-code";
@@ -124,7 +124,7 @@ function buildMcpServer(
 	const ops = new Ops(store, blobs, filesUrl);
 	const agent = parseOrigin(origin).name;
 	const server = new McpServer(
-		{ name: "obtion", version: "0.2.0" },
+		{ name: "orbis", version: "0.2.0" },
 		{
 			instructions: filesUrl ? `${instructions(ops)}\n\n${filesHelp(filesUrl)}` : instructions(ops),
 		},
@@ -377,7 +377,7 @@ function buildMcpServer(
 		{
 			title: "Attach file",
 			description:
-				`Create a file from a public URL or base64 (small files only; max ${MAX_ATTACH / 1024 / 1024} MB) below a parent, optionally with tags. Any file type. Always give parent: without it the file lands in the inbox, and agents can't place inbox items afterwards (only suggest). replace: put the new content into an existing file instead. ${filesUrl ? `A file on your disk goes over HTTP, not base64: curl -fsS -X POST -H "Authorization: Bearer $OBTION_TOKEN" --data-binary @file.xsd "${filesUrl}?name=file.xsd&parent=<id>" (PUT ${filesUrl}/<file id> replaces a content). $OBTION_TOKEN is the token of this MCP connection.` : ""}`.trim(),
+				`Create a file from a public URL or base64 (small files only; max ${MAX_ATTACH / 1024 / 1024} MB) below a parent, optionally with tags. Any file type. Always give parent: without it the file lands in the inbox, and agents can't place inbox items afterwards (only suggest). replace: put the new content into an existing file instead. ${filesUrl ? `A file on your disk goes over HTTP, not base64: curl -fsS -X POST -H "Authorization: Bearer $ORBIS_TOKEN" --data-binary @file.xsd "${filesUrl}?name=file.xsd&parent=<id>" (PUT ${filesUrl}/<file id> replaces a content). $ORBIS_TOKEN is the token of this MCP connection.` : ""}`.trim(),
 			inputSchema: attachInput.shape,
 		},
 		wrap(

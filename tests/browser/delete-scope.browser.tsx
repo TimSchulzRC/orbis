@@ -1,8 +1,8 @@
 // Deleting from the sidebar block of a workspace that is not the open one: it goes to the trash
 // there, never in the open workspace.
 
-import { onlyBelow } from "@obtion/core/trash";
-import type { Repo } from "@obtion/sync";
+import { onlyBelow } from "@orbis/core/trash";
+import type { Repo } from "@orbis/sync";
 import { afterEach, expect, test } from "vitest";
 import { page } from "vitest/browser";
 import { cleanup, render } from "vitest-browser-react";

@@ -1,8 +1,8 @@
 // Applying an update: local changes go to the server first, then SKIP_WAITING, then exactly one
 // reload once the new worker has taken over.
 // In the desktop app: a newer release of its channel, whose installer a click downloads.
-import { setUpdate, setUpdateCheck, unsynced } from "@obtion/ui";
-import { type DesktopBridge, desktop } from "@obtion/ui/platform";
+import { setUpdate, setUpdateCheck, unsynced } from "@orbis/ui";
+import { type DesktopBridge, desktop } from "@orbis/ui/platform";
 
 let reg: ServiceWorkerRegistration | undefined;
 let reloading = false;

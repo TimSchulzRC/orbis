@@ -1,6 +1,6 @@
 // Downloads for attach with a url (fetch-public.ts): only public addresses, the checked one is the one connected to.
 import { afterAll, expect, test } from "bun:test";
-import { BlockedAddress, fetchPublic, privateAddress } from "@obtion/server/fetch-public";
+import { BlockedAddress, fetchPublic, privateAddress } from "@orbis/server/fetch-public";
 
 const inside = Bun.serve({
 	port: 0,

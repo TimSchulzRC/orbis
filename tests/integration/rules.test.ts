@@ -3,13 +3,13 @@
 import { afterAll, beforeEach, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { SETTINGS_ID, setRules } from "@obtion/core/model";
-import { rulesFor } from "@obtion/core/rules";
-import { Mirror } from "@obtion/server/mirror";
-import type { Ops } from "@obtion/server/ops";
-import { RULE_CAP } from "@obtion/server/ops";
-import type { Store } from "@obtion/server/store";
-import { undoStep } from "@obtion/server/undo";
+import { SETTINGS_ID, setRules } from "@orbis/core/model";
+import { rulesFor } from "@orbis/core/rules";
+import { Mirror } from "@orbis/server/mirror";
+import type { Ops } from "@orbis/server/ops";
+import { RULE_CAP } from "@orbis/server/ops";
+import type { Store } from "@orbis/server/store";
+import { undoStep } from "@orbis/server/undo";
 import { removeTempDirs } from "../support/helpers";
 import { setupStore, stepOf, rpc as storeRpc, tool as storeTool } from "../support/store";
 
@@ -19,7 +19,7 @@ let dir: string;
 let s: Store;
 let ops: Ops;
 const A = "agent:test";
-beforeEach(() => ({ dir, s, ops } = setupStore("obtion-rules-")));
+beforeEach(() => ({ dir, s, ops } = setupStore("orbis-rules-")));
 
 const tool = (name: string, args: unknown) => storeTool(s, name, args);
 const count = (text: string, part: string) => text.split(part).length - 1;

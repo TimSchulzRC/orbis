@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test";
-import { loginConfig, loginMethods } from "@obtion/server/login";
+import { loginConfig, loginMethods } from "@orbis/server/login";
 
 const methods = (env: Record<string, string>, pub = "") => loginMethods(loginConfig(env, pub));
 
 test("without settings: password and passkeys (passkeys where the address allows them)", () => {
 	expect(methods({})).toEqual({ password: true, emailCode: false, passkey: false, oauth: [] });
-	expect(methods({}, "https://obtion.example.org")).toEqual({
+	expect(methods({}, "https://orbis.example.org")).toEqual({
 		password: true,
 		emailCode: false,
 		passkey: true,
@@ -16,33 +16,33 @@ test("without settings: password and passkeys (passkeys where the address allows
 test("passkeys need a public https address (or localhost) and go off when not listed", () => {
 	expect(methods({}, "http://localhost:8480").passkey).toBe(true);
 	expect(methods({}, "http://nas:8480").passkey).toBe(false);
-	expect(methods({ OBTION_LOGIN: "password" }, "https://obtion.example.org").passkey).toBe(false);
-	expect(loginConfig({}, "https://obtion.example.org:8443").passkey).toEqual({
-		rpID: "obtion.example.org",
-		origin: "https://obtion.example.org:8443",
+	expect(methods({ ORBIS_LOGIN: "password" }, "https://orbis.example.org").passkey).toBe(false);
+	expect(loginConfig({}, "https://orbis.example.org:8443").passkey).toEqual({
+		rpID: "orbis.example.org",
+		origin: "https://orbis.example.org:8443",
 	});
 });
 
 test("codes are a way of their own: mail settings alone switch nothing on", () => {
-	expect(methods({ OBTION_SMTP_URL: "log" }).emailCode).toBe(false);
-	expect(methods({ OBTION_LOGIN: "password, code", OBTION_SMTP_URL: "log" })).toMatchObject({
+	expect(methods({ ORBIS_SMTP_URL: "log" }).emailCode).toBe(false);
+	expect(methods({ ORBIS_LOGIN: "password, code", ORBIS_SMTP_URL: "log" })).toMatchObject({
 		password: true,
 		emailCode: true,
 	});
-	expect(methods({ OBTION_LOGIN: "code", OBTION_SMTP_URL: "log" })).toMatchObject({
+	expect(methods({ ORBIS_LOGIN: "code", ORBIS_SMTP_URL: "log" })).toMatchObject({
 		password: false,
 		emailCode: true,
 	});
-	expect(() => loginConfig({ OBTION_LOGIN: "code" }, "")).toThrow("OBTION_SMTP_URL");
+	expect(() => loginConfig({ ORBIS_LOGIN: "code" }, "")).toThrow("ORBIS_SMTP_URL");
 });
 
 test("a server needs a way to create accounts", () => {
-	expect(() => loginConfig({ OBTION_LOGIN: "passkey" }, "https://obtion.example.org")).toThrow(
+	expect(() => loginConfig({ ORBIS_LOGIN: "passkey" }, "https://orbis.example.org")).toThrow(
 		"nobody can create an account",
 	);
 	expect(
 		methods(
-			{ OBTION_LOGIN: "passkey", OBTION_GITHUB_CLIENT_ID: "gh", OBTION_GITHUB_CLIENT_SECRET: "s" },
+			{ ORBIS_LOGIN: "passkey", ORBIS_GITHUB_CLIENT_ID: "gh", ORBIS_GITHUB_CLIENT_SECRET: "s" },
 			"https://o.example.org",
 		),
 	).toMatchObject({ password: false, passkey: true, oauth: [{ id: "github" }] });
@@ -50,20 +50,20 @@ test("a server needs a way to create accounts", () => {
 
 test("OAuth providers need their client and the public address", () => {
 	const env = {
-		OBTION_OIDC_ISSUER: "https://auth.example.org/application/o/obtion/",
-		OBTION_OIDC_CLIENT_ID: "id",
-		OBTION_OIDC_CLIENT_SECRET: "s",
-		OBTION_OIDC_NAME: "Authentik",
-		OBTION_GITHUB_CLIENT_ID: "gh",
+		ORBIS_OIDC_ISSUER: "https://auth.example.org/application/o/orbis/",
+		ORBIS_OIDC_CLIENT_ID: "id",
+		ORBIS_OIDC_CLIENT_SECRET: "s",
+		ORBIS_OIDC_NAME: "Authentik",
+		ORBIS_GITHUB_CLIENT_ID: "gh",
 	};
 	expect(methods(env)).toMatchObject({ oauth: [] });
-	const c = loginConfig(env, "https://obtion.example.org");
+	const c = loginConfig(env, "https://orbis.example.org");
 	expect(c.oauth.map((p) => p.id)).toEqual(["oidc"]);
 	expect(c.oauth[0]!.discoveryUrl).toBe(
-		"https://auth.example.org/application/o/obtion/.well-known/openid-configuration",
+		"https://auth.example.org/application/o/orbis/.well-known/openid-configuration",
 	);
 	expect(
-		methods({ ...env, OBTION_GITHUB_CLIENT_SECRET: "x" }, "https://o.example.org").oauth,
+		methods({ ...env, ORBIS_GITHUB_CLIENT_SECRET: "x" }, "https://o.example.org").oauth,
 	).toEqual([
 		{ id: "oidc", name: "Authentik" },
 		{ id: "github", name: "GitHub" },

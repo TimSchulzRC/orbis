@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { textDiff, unifiedDiff } from "@obtion/core/diff";
+import { textDiff, unifiedDiff } from "@orbis/core/diff";
 
 test("same text: no hunks", () => {
 	expect(textDiff("a\nb\n", "a\nb\n")).toEqual({ hunks: [], added: 0, removed: 0 });

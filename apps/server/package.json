@@ -1,5 +1,5 @@
 {
-	"name": "@obtion/server",
+	"name": "@orbis/server",
 	"private": true,
 	"description": "The server: SQLite, sync, API, MCP, Markdown mirror; serves the web app (optional)",
 	"license": "AGPL-3.0-or-later",
@@ -10,7 +10,7 @@
 	"dependencies": {
 		"@better-auth/passkey": "^1.7.18",
 		"@modelcontextprotocol/sdk": "^1.32.2",
-		"@obtion/core": "workspace:*",
+		"@orbis/core": "workspace:*",
 		"better-auth": "^1.7.18",
 		"nodemailer": "^10.4.0",
 		"pdfjs-dist": "^6.5.438",

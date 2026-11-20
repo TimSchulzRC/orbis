@@ -1,6 +1,6 @@
 // Dates with a time through the agent operations.
 import { afterAll, beforeEach, expect, test } from "bun:test";
-import type { Ops } from "@obtion/server/ops";
+import type { Ops } from "@orbis/server/ops";
 import { removeTempDirs } from "../support/helpers";
 import { setupStore } from "../support/store";
 
@@ -9,7 +9,7 @@ afterAll(removeTempDirs);
 let ops: Ops;
 const A = "agent:test";
 // set up in German: the due property is "Fällig"
-beforeEach(() => ({ ops } = setupStore("obtion-dates-")));
+beforeEach(() => ({ ops } = setupStore("orbis-dates-")));
 
 test("a date property keeps its time", () => {
 	const x = ops.create(

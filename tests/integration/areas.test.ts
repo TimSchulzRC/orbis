@@ -1,6 +1,6 @@
 import { afterAll, expect, test } from "bun:test";
-import { initItem, PERSONAL, readItem } from "@obtion/core/model";
-import { AreaError, Store } from "@obtion/server/store";
+import { initItem, PERSONAL, readItem } from "@orbis/core/model";
+import { AreaError, Store } from "@orbis/server/store";
 import * as Y from "yjs";
 import { docUpdate, removeTempDirs, tempDir } from "../support/helpers";
 
@@ -14,7 +14,7 @@ test("new documents belong to the personal area", () => {
 });
 
 test("server log: every row has its area; cursors and catch-up per area; areas never mix", () => {
-	const s = new Store(tempDir("obtion-area-"));
+	const s = new Store(tempDir("orbis-area-"));
 	s.applyRemote("p1", docUpdate({ id: "p1", title: "p1" }), "web:x");
 	s.applyRemote(
 		"t1",

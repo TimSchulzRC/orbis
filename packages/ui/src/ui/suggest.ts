@@ -1,6 +1,6 @@
-import type { Item } from "@obtion/core/model";
-import { canPlaceIn } from "@obtion/core/placement";
-import type { Repo } from "@obtion/sync";
+import type { Item } from "@orbis/core/model";
+import { canPlaceIn } from "@orbis/core/placement";
+import type { Repo } from "@orbis/sync";
 import { repo as current } from "../repo";
 
 /** Why the picker suggests an entry ("picker.reason.*"). */

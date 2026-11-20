@@ -1,6 +1,6 @@
 // Tags are their own thing, not a property.
 
-import { type Item, normalizeTag } from "@obtion/core/model";
+import { type Item, normalizeTag } from "@orbis/core/model";
 import { Check, Hash, Plus } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useIndex } from "../hooks";

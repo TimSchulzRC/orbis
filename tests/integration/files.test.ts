@@ -4,13 +4,13 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout, test } from "bun:test";
 import { mkdirSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { initItem, setFileMeta } from "@obtion/core/model";
-import { searchIds } from "@obtion/core/search";
-import { runSetup } from "@obtion/core/setup";
-import { sha256 } from "@obtion/server/blobs";
-import { storeWriter } from "@obtion/server/setup";
-import { Store } from "@obtion/server/store";
-import { Workspace } from "@obtion/server/workspace";
+import { initItem, setFileMeta } from "@orbis/core/model";
+import { searchIds } from "@orbis/core/search";
+import { runSetup } from "@orbis/core/setup";
+import { sha256 } from "@orbis/server/blobs";
+import { storeWriter } from "@orbis/server/setup";
+import { Store } from "@orbis/server/store";
+import { Workspace } from "@orbis/server/workspace";
 import { docx, pdfWithEmbedded, pptx, xlsx, zip } from "../support/fixtures";
 import { removeTempDirs, tempDir } from "../support/helpers";
 import { bootServer, get, mcpTool, post } from "../support/server";
@@ -37,9 +37,9 @@ async function signUp(email: string) {
 
 beforeAll(async () => {
 	({ url: base, proc } = await bootServer({
-		OBTION_DATA: tempDir("obtion-files-"),
-		OBTION_WEB_APP: "off",
-		OBTION_SIGNUP: "open",
+		ORBIS_DATA: tempDir("orbis-files-"),
+		ORBIS_WEB_APP: "off",
+		ORBIS_SIGNUP: "open",
 	}));
 	owner = await signUp("owner@example.org");
 	ws = (await post(base, "/api/workspaces", { name: "Project" }, owner.token).then((r) => r.json()))
@@ -265,7 +265,7 @@ test("get on a file: facts, download URL and curl commands with a placeholder, n
 		download: `${files()}/${made.id}`,
 	});
 	expect(out.file.download_curl).toBe(
-		`curl -fsS -H "Authorization: Bearer $OBTION_TOKEN" -o 'Report'\\''s.txt' '${files()}/${made.id}'`,
+		`curl -fsS -H "Authorization: Bearer $ORBIS_TOKEN" -o 'Report'\\''s.txt' '${files()}/${made.id}'`,
 	);
 	expect(out.file.replace_curl).toContain("--data-binary @'Report'\\''s.txt'");
 	expect(out.text).toBe("Content");
@@ -378,7 +378,7 @@ test("attach: any type, one step with undo; base64 limits point to the HTTP uplo
 });
 
 test("a file whose text was not read yet (e.g. the server stopped) is read when the workspace opens", async () => {
-	const dir = tempDir("obtion-backfill-");
+	const dir = tempDir("orbis-backfill-");
 	const s = new Store(dir);
 	runSetup(storeWriter(s, "system:setup"), "de");
 	const content = "old note with content";
@@ -423,7 +423,7 @@ test("a long text stays on the server: the facts carry its start, get and search
 });
 
 test("the facts of a file hold at most the start of its text; the whole text stays beside the content", async () => {
-	const dir = tempDir("obtion-facts-text-");
+	const dir = tempDir("orbis-facts-text-");
 	const s = new Store(dir);
 	runSetup(storeWriter(s, "system:setup"), "de");
 	const fresh = `New\n${"one more line\n".repeat(600)}Footer Traceword`;
@@ -457,7 +457,7 @@ test("the facts of a file hold at most the start of its text; the whole text sta
 });
 
 test("a content over the limit is refused while it streams and leaves nothing behind", async () => {
-	const dir = tempDir("obtion-limit-");
+	const dir = tempDir("orbis-limit-");
 	const w = new Workspace(dir);
 	try {
 		const body = new ReadableStream<Uint8Array>({

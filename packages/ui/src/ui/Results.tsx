@@ -1,5 +1,5 @@
-import { type Item, todayISO, type ViewKind } from "@obtion/core/model";
-import { type EvalCtx, groupItems, pathBase, type QueryDef, runQuery } from "@obtion/core/query";
+import { type Item, todayISO, type ViewKind } from "@orbis/core/model";
+import { type EvalCtx, groupItems, pathBase, type QueryDef, runQuery } from "@orbis/core/query";
 import { AlertTriangle } from "lucide-react";
 import { useState } from "react";
 import { useIndex } from "../hooks";

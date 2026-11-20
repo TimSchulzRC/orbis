@@ -3,8 +3,8 @@
 // answer about the item (see core rules.ts); people rarely need them, so the page shows only an icon
 // at the right edge after the tags.
 
-import type { Item } from "@obtion/core/model";
-import { inheritedOwners, workspaceRules } from "@obtion/core/rules";
+import type { Item } from "@orbis/core/model";
+import { inheritedOwners, workspaceRules } from "@orbis/core/rules";
 import { Bot } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useAccounts } from "../accounts";

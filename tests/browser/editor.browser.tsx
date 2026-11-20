@@ -1,4 +1,4 @@
-import type { Repo } from "@obtion/sync";
+import type { Repo } from "@orbis/sync";
 import { afterEach, beforeAll, describe, expect, test } from "vitest";
 import { commands } from "vitest/browser";
 import { cleanup, render } from "vitest-browser-react";
@@ -157,10 +157,10 @@ describe("links", () => {
 			.poll(
 				() => document.querySelector(".cm-toolbar-results .cm-menu-row.active")?.textContent ?? "",
 			)
-			.toContain("So funktioniert Obtion");
+			.toContain("So funktioniert Orbis");
 		await commands.keys("press", "Enter");
 		expect(doc(), "the target changes, the text stays").toContain(
-			"[[So funktioniert Obtion|the course DB]]",
+			"[[So funktioniert Orbis|the course DB]]",
 		);
 
 		await rightClick(".cm-mdlink");
@@ -192,11 +192,11 @@ describe("links", () => {
 		await expect.poll(doc).toMatch(/ @$/);
 		await commands.keys("type", "So funkt");
 		expect(lines().at(-1)!.text.endsWith("@So funkt")).toBe(true);
-		await expect.poll(selected).toContain("So funktioniert Obtion");
+		await expect.poll(selected).toContain("So funktioniert Orbis");
 		await pastInteractionDelay();
 		await commands.keys("press", "Enter");
-		expect(doc().endsWith("Fourth paragraph [[So funktioniert Obtion]]")).toBe(true);
-		expect(lines().at(-1)!.text).toBe("Fourth paragraph So funktioniert Obtion");
+		expect(doc().endsWith("Fourth paragraph [[So funktioniert Orbis]]")).toBe(true);
+		expect(lines().at(-1)!.text).toBe("Fourth paragraph So funktioniert Orbis");
 	});
 });
 

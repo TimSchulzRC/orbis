@@ -9,8 +9,8 @@ import { resolve } from "node:path";
 import { chromium } from "playwright";
 
 const root = resolve(import.meta.dir, "..");
-const light = readFileSync(resolve(root, "docs/design/obtion-logo.svg"), "utf8");
-const dark = readFileSync(resolve(root, "docs/design/obtion-logo-dark.svg"), "utf8");
+const light = readFileSync(resolve(root, "docs/design/orbis-logo.svg"), "utf8");
+const dark = readFileSync(resolve(root, "docs/design/orbis-logo-dark.svg"), "utf8");
 
 type Colours = {
 	tile: [string, string];

@@ -6,10 +6,10 @@
 import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import type { TextVersion as Version } from "@obtion/core/api";
-import { sameValue } from "@obtion/core/equal";
-import { Index } from "@obtion/core/graph";
-import type { Lang } from "@obtion/core/i18n";
+import type { TextVersion as Version } from "@orbis/core/api";
+import { sameValue } from "@orbis/core/equal";
+import { Index } from "@orbis/core/graph";
+import type { Lang } from "@orbis/core/i18n";
 import {
 	areaOf,
 	type FileMeta,
@@ -25,10 +25,10 @@ import {
 	readItem,
 	SETTINGS_ID,
 	type UpdateEntry,
-} from "@obtion/core/model";
-import type { ActivityEvent, FieldChange } from "@obtion/core/protocol";
-import { createIndex, indexRecord, type SearchIndex } from "@obtion/core/search";
-import { resolveCascade } from "@obtion/core/trash";
+} from "@orbis/core/model";
+import type { ActivityEvent, FieldChange } from "@orbis/core/protocol";
+import { createIndex, indexRecord, type SearchIndex } from "@orbis/core/search";
+import { resolveCascade } from "@orbis/core/trash";
 import * as Y from "yjs";
 import {
 	changeSize,
@@ -131,7 +131,7 @@ export class Store {
 		private cacheSize = CACHE_SIZE,
 	) {
 		mkdirSync(dir, { recursive: true });
-		this.db = new Database(join(dir, "obtion.db"));
+		this.db = new Database(join(dir, "orbis.db"));
 		// A checkpoint restarts the WAL but keeps the file as large as the largest write (an import,
 		// a rebuild of all records). The limit cuts it back at the next commit. 8 MB is twice what the
 		// automatic checkpoint (1000 pages) lets the WAL reach, so everyday writes never shrink it.

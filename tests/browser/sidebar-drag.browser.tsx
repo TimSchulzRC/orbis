@@ -1,7 +1,7 @@
 // Dragging into the sidebar tree, with real drags: a link to an item from the page gets a place
 // where it is dropped, and the room between two rows is wide enough to reorder without nesting.
 
-import { sidebarRoots } from "@obtion/core/placement";
+import { sidebarRoots } from "@orbis/core/placement";
 import { afterEach, expect, test } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { cleanup, render } from "vitest-browser-react";

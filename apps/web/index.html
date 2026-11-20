@@ -7,7 +7,7 @@
     <script>
       // light or dark before the first paint (per device; see packages/ui/src/theme.ts)
       try {
-        const c = localStorage.getItem("obtion.theme");
+        const c = localStorage.getItem("orbis.theme");
         const d = c === "dark" || (c !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
         document.documentElement.dataset.theme = d ? "dark" : "light";
         document.querySelector('meta[name="theme-color"]').setAttribute("content", d ? "#121212" : "#f7f6f3");
@@ -19,7 +19,7 @@
     <meta content="black-translucent" name="apple-mobile-web-app-status-bar-style" />
     <link href="/icon-dark.svg" rel="icon" type="image/svg+xml" />
     <link href="/apple-touch-icon.png" rel="apple-touch-icon" />
-    <title>Obtion</title>
+    <title>Orbis</title>
   </head>
   <body>
     <div id="root"></div>

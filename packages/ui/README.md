@@ -1,6 +1,6 @@
 # UI components and theme
 
-Obtion uses locally owned shadcn/ui components in `src/components/ui`, based on the New York registry and Radix primitives. `components.json` configures the shared UI package. Keep application-specific components such as the editor, graph, query builder and item rows in `src/ui`.
+Orbis uses locally owned shadcn/ui components in `src/components/ui`, based on the New York registry and Radix primitives. `components.json` configures the shared UI package. Keep application-specific components such as the editor, graph, query builder and item rows in `src/ui`.
 
 Edit `src/theme.css` to change the application palette, semantic colors and radius. Both light mode and `html[data-theme="dark"]` are defined there. `src/styles.css` maps the tokens to Tailwind and contains application layout rules. Existing domain colors and CSS aliases resolve to the same theme.
 
