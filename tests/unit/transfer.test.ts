@@ -1,4 +1,12 @@
 import { expect, test } from "bun:test";
+import {
+	addDrawing,
+	drawingFence,
+	readScene,
+	setDrawingFile,
+	setDrawingState,
+	writeElements,
+} from "@obtion/core/drawing";
 import { initItem, newId } from "@obtion/core/model";
 import { runSetup, SYS } from "@obtion/core/setup";
 import { copyToWorkspace, movedItems, planMove } from "@obtion/core/transfer";
@@ -177,4 +185,33 @@ test("a move keeps the rules for agents", () => {
 		"Ask first.",
 		"Read only.",
 	]);
+});
+
+test("a note's drawings move with it, images included", () => {
+	const a = workspace();
+	const b = workspace();
+	const note = a.add({ title: "Sketch", body: `Before\n${drawingFence("d1")}\n` });
+	a.change(note, (d) => {
+		addDrawing(d, "d1");
+		writeElements(d, "d1", [
+			{ id: "t", type: "text", text: "Server", version: 2, versionNonce: 1, index: "a0" },
+		]);
+		setDrawingFile(d, "d1", "img", { hash: "h1", mimeType: "image/png", created: 1 });
+		setDrawingState(d, "d1", { viewBackgroundColor: "#fafafa" });
+	});
+	const moved = copyToWorkspace(
+		a.index(),
+		note,
+		{ w: b.writer, ix: b.index() },
+		{},
+		"web:test",
+		(id) => a.doc(id),
+	);
+	const id = moved.ids.get(note)!;
+	expect(b.get(id)!.body).toBe(`Before\n${drawingFence("d1")}\n`);
+	const scene = readScene(b.doc(id), "d1");
+	expect(scene.elements.map((e) => e.text)).toEqual(["Server"]);
+	expect(scene.files.img?.hash).toBe("h1");
+	expect(scene.state).toEqual({ viewBackgroundColor: "#fafafa" });
+	expect(moved.hashes).toEqual(["h1"]);
 });

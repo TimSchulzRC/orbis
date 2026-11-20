@@ -54,9 +54,7 @@ function Entry({
 					<span className="font-medium">{op.title}</span>
 				) : item?.kind === "settings" ? (
 					<span className="font-medium">{t("activity.workspaceSettings")}</span>
-				) : e.doc &&
-					item &&
-					(item.kind === "note" || item.kind === "file" || item.kind === "drawing") ? (
+				) : e.doc && item && (item.kind === "note" || item.kind === "file") ? (
 					<a
 						className="inline-flex items-center gap-1 font-medium hover:underline"
 						href={itemHref(item.id)}

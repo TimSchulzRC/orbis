@@ -29,6 +29,7 @@ import {
 	WidgetType,
 } from "@codemirror/view";
 import { tags as t } from "@lezer/highlight";
+import { findDrawings } from "@obtion/core/drawing";
 import { parseWikiLinks, titleKey, touchOnTextEdit } from "@obtion/core/model";
 import { FilePlus } from "lucide-react";
 import { useEffect, useRef } from "react";
@@ -40,7 +41,7 @@ import { tr } from "../i18n";
 import { repo } from "../repo";
 import { moveBy } from "./editor/blocks";
 import { blockHandles } from "./editor/handles";
-import { isDrawingLine, links, refreshEmbeds } from "./editor/links";
+import { links, refreshEmbeds } from "./editor/links";
 import { livePreview } from "./editor/livePreview";
 import {
 	editorNode,
@@ -125,27 +126,16 @@ function imageDecos(state: EditorState): DecorationSet {
 		for (const link of parseWikiLinks(line.text)) {
 			const id = link.embed ? repo.resolveTitle(link.target) : undefined;
 			const item = id ? repo.get(id) : undefined;
-			if (!item || item.deleted) continue;
-			// a drawing on a line of its own is that line: a block with no text around it
-			if (item.kind === "drawing" && isDrawingLine(line.text))
-				builder.add(
-					line.from,
-					line.to,
-					Decoration.replace({ widget: new EmbedWidget(drawingEmbedHTML(item)), block: true }),
-				);
-			else {
-				const html = item.file
-					? embedHTML(item, link.size)
-					: item.kind === "drawing"
-						? drawingEmbedHTML(item)
-						: undefined;
-				if (html)
-					builder.add(
-						line.to,
-						line.to,
-						Decoration.widget({ widget: new EmbedWidget(html), block: true, side: 1 }),
-					);
-			}
+			if (!item?.file || item.deleted) continue;
+			builder.add(
+				line.to,
+				line.to,
+				Decoration.widget({
+					widget: new EmbedWidget(embedHTML(item, link.size)),
+					block: true,
+					side: 1,
+				}),
+			);
 		}
 	}
 	return builder.finish();
@@ -155,23 +145,45 @@ const images = StateField.define<DecorationSet>({
 	create: imageDecos,
 	update: (deco, tr) =>
 		tr.docChanged || tr.effects.some((e) => e.is(refreshEmbeds)) ? imageDecos(tr.state) : deco,
-	// a diagram's block is one piece: arrows and Backspace never enter the text hidden behind it
+	provide: (f) => EditorView.decorations.from(f),
+});
+
+/** The note's drawing blocks (```excalidraw fences), each drawn in place of its fence. */
+function drawingDecos(state: EditorState): DecorationSet {
+	const builder = new RangeSetBuilder<Decoration>();
+	const note = state.facet(editorNode);
+	if (!note) return builder.finish();
+	const drawings = repo.get(note)?.drawings;
+	for (const b of findDrawings(state.doc.toString()))
+		builder.add(
+			b.from,
+			b.to,
+			Decoration.replace({
+				widget: new EmbedWidget(drawingEmbedHTML(note, b.id, drawings?.[b.id])),
+				block: true,
+			}),
+		);
+	return builder.finish();
+}
+
+const drawingBlocks = StateField.define<DecorationSet>({
+	create: drawingDecos,
+	update: (deco, tr) =>
+		tr.docChanged || tr.effects.some((e) => e.is(refreshEmbeds)) ? drawingDecos(tr.state) : deco,
+	// a diagram's block is one piece: arrows and Backspace never enter the fence hidden behind it
 	provide: (f) => [
 		EditorView.decorations.from(f),
 		EditorView.atomicRanges.of((view) => view.state.field(f)),
 	],
 });
 
-/** What the embedded drawings of the text show, so drawing on one redraws it (files keep their element). */
+/** What the note's drawings show, so drawing on one redraws its block. */
 function embedsKey(state: EditorState): string {
-	const text = state.doc.toString();
-	if (!text.includes("![[")) return "";
-	return parseWikiLinks(text)
-		.filter((l) => l.embed)
-		.map((l) => {
-			const item = repo.get(repo.resolveTitle(l.target));
-			return item?.kind === "drawing" ? `${item.id}:${item.updated}:${item.deleted}` : "";
-		})
+	const note = state.facet(editorNode);
+	const drawings = note ? repo.get(note)?.drawings : undefined;
+	if (!drawings) return "";
+	return Object.entries(drawings)
+		.map(([id, d]) => `${id}:${d.version}`)
 		.join("|");
 }
 
@@ -360,6 +372,7 @@ export function Editor({
 			livePreview,
 			tables,
 			images,
+			drawingBlocks,
 			autocompletion({
 				override: [linkCompletion(nodeId), slashCompletion, mentionCompletion(nodeId)],
 				icons: false,

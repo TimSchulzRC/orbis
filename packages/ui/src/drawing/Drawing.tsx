@@ -1,8 +1,8 @@
-// Drawings outside the full-screen editor: opening one, and its picture as a block in a text (a click
-// on it opens it full screen to draw). An open drawing is a step in the browser's history ("?d=<id>"
-// on the note's address): Back closes it, Forward opens it again.
+// Drawings outside the full-screen editor: opening one, and its picture as a block in a note's text (a
+// click on it opens it full screen to draw). An open drawing is a step in the browser's history
+// ("?d=<note>.<drawing>" on the page's address): Back closes it, Forward opens it again.
 
-import type { Item } from "@obtion/core/model";
+import type { DrawingInfo } from "@obtion/core/drawing";
 import type { Repo } from "@obtion/sync";
 import { memo, useEffect, useRef, useState } from "react";
 import { files as currentFiles } from "../files";
@@ -42,7 +42,15 @@ const ignoreLoadError = () => undefined;
 const OPEN = "d";
 const openId = () => new URLSearchParams(location.hash.split("?")[1] ?? "").get(OPEN);
 
-export function openDrawing(id: string) {
+/** A drawing is known by its note and its id within that note. */
+const key = (note: string, id: string) => `${note}.${id}`;
+function parseKey(raw: string | null): { note: string; id: string } | null {
+	const [note, id] = raw?.split(".") ?? [];
+	return note && id ? { note, id } : null;
+}
+
+export function openDrawing(note: string, drawing: string) {
+	const id = key(note, drawing);
 	// keys go to the drawing, not to the note's text the click came from
 	if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
 	void loadEditor().catch(ignoreLoadError);
@@ -101,6 +109,7 @@ const isOpen = (id: string) => openId() === id;
 /** Shows the drawing the address names; the editor itself renders only when that changes. */
 export const DrawingHost = memo(function DrawingHost() {
 	const id = useRoute().query.get(OPEN);
+	const open = parseKey(id);
 	const [, loaded] = useState(0);
 	useEffect(() => {
 		if (id && !Editor)
@@ -118,9 +127,9 @@ export const DrawingHost = memo(function DrawingHost() {
 		shown.current = id;
 		if (was && was !== id) for (const l of closedListeners) l(was);
 	}, [id]);
-	if (!id) return null;
+	if (!open) return null;
 	if (!Editor) return <Loading />;
-	return <Editor id={id} key={id} onClose={closeDrawing} />;
+	return <Editor id={open.id} key={id} note={open.note} onClose={closeDrawing} />;
 });
 
 function Loading() {
@@ -132,9 +141,9 @@ function Loading() {
 	);
 }
 
-/** For texts (the editor and read-only Markdown): filled in by hydrateDrawings. */
-export function drawingEmbedHTML(item: Item): string {
-	return `<figure class="embed-drawing" data-drawing="${escapeHtml(item.id)}" data-v="${item.updated}"><div class="embed-drawing-svg" role="button" tabindex="0" aria-label="${escapeHtml(tr("drawing.edit"))}" title="${escapeHtml(tr("drawing.edit"))}">${item.drawing?.count ? "" : `<span class="embed-drawing-empty">${escapeHtml(tr("drawing.empty"))}</span>`}</div></figure>`;
+/** The block of a drawing in a note's text (the editor and read-only Markdown): filled in by hydrateDrawings. */
+export function drawingEmbedHTML(note: string, id: string, info: DrawingInfo | undefined): string {
+	return `<figure class="embed-drawing" data-note="${escapeHtml(note)}" data-drawing="${escapeHtml(id)}" data-v="${escapeHtml(info?.version ?? "")}"><div class="embed-drawing-svg" role="button" tabindex="0" aria-label="${escapeHtml(tr("drawing.edit"))}" title="${escapeHtml(tr("drawing.edit"))}">${info?.count ? "" : `<span class="embed-drawing-empty">${escapeHtml(tr("drawing.empty"))}</span>`}</div></figure>`;
 }
 
 /** Draws the drawings embedded in `root`; a click on one opens it to look at. */
@@ -152,20 +161,22 @@ export function hydrateDrawings(root: HTMLElement, repo: Repo = current, files =
 function hydrateDrawing(fig: HTMLElement, repo: Repo, files: typeof currentFiles, dark: boolean) {
 	if (fig.dataset.drawn) return;
 	fig.dataset.drawn = "1";
-	const id = fig.dataset.drawing!;
-	const item = repo.get(id);
+	const note = fig.dataset.note!;
+	const id = key(note, fig.dataset.drawing!);
+	const infoOf = () => repo.get(note)?.drawings?.[fig.dataset.drawing!];
+	const info = infoOf();
 	const box = fig.querySelector<HTMLElement>(".embed-drawing-svg")!;
 	const show = (e: Event) => {
 		e.preventDefault();
 		e.stopPropagation();
-		openDrawing(id);
+		openDrawing(note, fig.dataset.drawing!);
 	};
 	box.addEventListener("click", show);
 	box.addEventListener("pointerenter", () => void loadEditor().catch(ignoreLoadError), {
 		once: true,
 	});
 	box.addEventListener("keydown", (e) => (e.key === "Enter" || e.key === " ") && show(e));
-	if (!item?.drawing?.count) return;
+	if (!info?.count) return;
 	let waiting = false;
 	const draw = (): void => {
 		// drawn on full screen right now: once it closes, with what it has then
@@ -180,22 +191,24 @@ function hydrateDrawing(fig: HTMLElement, repo: Repo, files: typeof currentFiles
 			});
 			return;
 		}
-		const now = repo.get(id);
-		void drawingSvg(id, repo.getDoc(id), now?.updated ?? item.updated, dark, files).then((svg) => {
-			if (!svg) return;
-			// full width; the height follows the drawing's proportions within the block's limits (styles.css)
-			const [, , w, h] = (svg.getAttribute("viewBox") ?? "").split(/\s+/).map(Number);
-			if (w && h) box.style.aspectRatio = `${w} / ${h}`;
-			box.replaceChildren(svg);
-		});
+		const version = infoOf()?.version ?? info.version;
+		void drawingSvg(note, fig.dataset.drawing!, repo.getDoc(note), version, dark, files).then(
+			(svg) => {
+				if (!svg) return;
+				// full width; the height follows the drawing's proportions within the block's limits (styles.css)
+				const [, , w, h] = (svg.getAttribute("viewBox") ?? "").split(/\s+/).map(Number);
+				if (w && h) box.style.aspectRatio = `${w} / ${h}`;
+				box.replaceChildren(svg);
+			},
+		);
 	};
 	draw();
-	if (!item.drawing.files.length) return;
-	// an image still uploading elsewhere: drawn again once it is here; a removed embed stops listening
+	if (!info.files.length) return;
+	// an image still uploading elsewhere: drawn again once it is here; a removed block stops listening
 	const stop = repo.onBlob((hash) => {
 		if (!fig.isConnected) return void stop();
-		if (!item.drawing!.files.includes(hash)) return;
-		forgetDrawingSvg(id);
+		if (!(infoOf() ?? info).files.includes(hash)) return;
+		forgetDrawingSvg(note, fig.dataset.drawing!);
 		draw();
 	});
 }

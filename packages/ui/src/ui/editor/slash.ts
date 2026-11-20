@@ -8,6 +8,8 @@ import {
 } from "@codemirror/autocomplete";
 import { EditorSelection, Facet } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
+import { addDrawing, drawingFence } from "@obtion/core/drawing";
+import { newId } from "@obtion/core/model";
 import { foldUmlauts, plainVowels } from "@obtion/core/text";
 import {
 	Code,
@@ -30,7 +32,7 @@ import { KINDS, kindName, setKind } from "./blocks";
 import { iconHTML } from "./icons";
 import { insertTable } from "./tables";
 
-/** The item whose text the editor shows; a drawing made with "/" goes below it. */
+/** The item whose text the editor shows; a drawing made with "/" is kept in it. */
 export const editorNode = Facet.define<string | undefined, string | undefined>({
 	combine: (v) => v[0],
 });
@@ -138,15 +140,16 @@ const ITEMS: SlashItem[] = [
 ];
 
 /**
- * A drawing as a block of this text: kept as a document of its own below the note (so it syncs per
- * element and its images are files), embedded by id. A click on the block opens it to draw.
+ * A drawing as a block of this text: a fence naming it, its scene kept in the note's document
+ * (drawing.ts). A click on the block opens it to draw.
  */
 function insertDrawing(view: EditorView, pos: number) {
-	const parent = view.state.facet(editorNode);
-	const id = repo.create({ kind: "drawing", title: "", parents: parent ? [parent] : [] });
-	const embed = `![[${id}]]`;
-	// after the index has the new drawing (next microtask), so the embed shows at once
-	queueMicrotask(() => insertBlock(view, pos, `${embed}\n`, embed.length + 1));
+	const note = view.state.facet(editorNode);
+	if (!note) return;
+	const id = newId();
+	repo.change(note, (d) => addDrawing(d, id));
+	const fence = drawingFence(id);
+	insertBlock(view, pos, `${fence}\n`, fence.length + 1);
 }
 
 const SECTIONS = {
@@ -165,7 +168,10 @@ export function slashCompletion(ctx: CompletionContext): CompletionResult | null
 	const from = match.from + match.text.indexOf("/");
 	const query = ctx.state.sliceDoc(from + 1, ctx.pos);
 	const options: Option[] = [];
+	const note = ctx.state.facet(editorNode);
 	for (const item of ITEMS) {
+		// a drawing is kept in its note: a text of no note has none
+		if (item.id === "drawing" && !note) continue;
 		const kind = KINDS.find((k) => k.kind === item.id)?.kind;
 		const label = kind ? kindName(kind) : tr(`editor.slash.${item.id}`);
 		if (query && !hasWord(`${label} ${tr(`editor.slash.${item.id}.keys`)}`, query)) continue;

@@ -12,6 +12,7 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
+import { drawingImages } from "@obtion/core/drawing";
 import { type FileMeta, type Item, setFileMeta } from "@obtion/core/model";
 import { extractMark, extractText, FACTS_TEXT, factsText } from "./extract";
 import type { Store } from "./store";
@@ -284,11 +285,11 @@ export class Blobs {
 	}
 }
 
-/** The contents an item points to: the file with its history and derived versions, a drawing's images. */
+/** The contents an item points to: the file with its history and derived versions, the images in a note's drawings. */
 function contentsOf(r: Item): string[] {
 	const f = r.file;
 	const own = f ? [f.hash, f.display, f.thumb, ...(f.history ?? []).map((x) => x.hash)] : [];
-	return [...own, ...(r.drawing?.files ?? [])].filter((h): h is string => !!h);
+	return [...own, ...drawingImages(r.drawings)].filter((h): h is string => !!h);
 }
 
 async function probe(

@@ -13,8 +13,7 @@ export function hasPlace(item: Item, ix: Index): boolean {
 }
 
 export function isInInbox(item: Item, ix: Index): boolean {
-	// a drawing is part of the note it is drawn in, never sorted on its own
-	if (!isContent(item) || item.type === META_TYPE || item.kind === "drawing") return false;
+	if (!isContent(item) || item.type === META_TYPE) return false;
 	return matches(item, { inbox: true }, { ix });
 }
 
@@ -40,13 +39,13 @@ export function canPlaceIn(item: Item, target: Item, ix: Index): boolean {
 
 export function sidebarRoots(ix: Index): Item[] {
 	return ix.live
-		.filter((i) => i.pinned && i.kind !== "drawing")
+		.filter((i) => i.pinned)
 		.sort((a, b) => cmpKey(a.pinned!, b.pinned!) || a.title.localeCompare(b.title));
 }
 
-/** "Below": what sits below an item. A diagram is a block of its note's text, not something below it. */
+/** "Below": what sits below an item. */
 export function belowOf(id: string, ix: Index): Item[] {
-	return ix.items(ix.childrenOf(id)).filter((c) => !c.deleted && c.kind !== "drawing");
+	return ix.items(ix.childrenOf(id)).filter((c) => !c.deleted);
 }
 
 /** Done children are hidden, except those in `keep` (the path to the open page). */
@@ -54,5 +53,5 @@ export function sidebarChildren(id: string, ix: Index, keep: string[] = []): Ite
 	return ix
 		.childrenOf(id)
 		.map((c) => ix.get(c)!)
-		.filter((c) => c.kind !== "drawing" && (keep.includes(c.id) || !isDone(c, ix.schemaOf(c))));
+		.filter((c) => keep.includes(c.id) || !isDone(c, ix.schemaOf(c)));
 }

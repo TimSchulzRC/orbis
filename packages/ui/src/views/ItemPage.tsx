@@ -27,16 +27,7 @@ import { useAccounts } from "../accounts";
 import { createAndOpen, isBlank, rememberPlace } from "../actions";
 import { Input } from "../components/ui/input";
 import { Tip } from "../components/ui/tooltip";
-import {
-	leavePage,
-	openItem,
-	setParams,
-	showTitle,
-	useDocumentTitle,
-	useIndex,
-	useOnChange,
-	useRepo,
-} from "../hooks";
+import { leavePage, setParams, showTitle, useDocumentTitle, useIndex, useRepo } from "../hooks";
 import { getLang, titleOf, tr, useT } from "../i18n";
 import { cn } from "../lib/utils";
 import type { repo } from "../repo";
@@ -96,28 +87,8 @@ export function ItemPage({ id, isNew }: { id: string; isNew: boolean }) {
 		);
 	if (item.kind === "op") return <PagePlaceholder>{item.title}</PagePlaceholder>;
 	if (item.kind === "file") return <FilePage item={item} key={id} />;
-	if (item.kind === "drawing") return <DrawingInNote item={item} key={id} />;
 	if (item.type === META_TYPE) return <TypePage item={item} key={id} />;
 	return <InfoView isNew={isNew} item={item} key={id} />;
-}
-
-/**
- * A drawing has no page: it is a block in a note. A link to it (search, an agent) opens that note,
- * the one whose text embeds it or else the one it is kept under, and the drawing over it.
- */
-function DrawingInNote({ item }: { item: Item }) {
-	const scoped = useRepo();
-	const { t } = useT();
-	const ix = scoped.index();
-	const note =
-		ix.backlinks(item.id).find((b) => b.kind === "embed" && ix.get(b.from)?.kind === "note")
-			?.from ?? ix.parentsOf(item.id)[0];
-	// the drawing opens on its note (a search hit, a link to it)
-	useOnChange(item.id, () => {
-		if (note) openItem(note, { replace: true, query: `?d=${encodeURIComponent(item.id)}` });
-		else setParams({ d: item.id });
-	});
-	return <PagePlaceholder>{note ? t("drawing.loading") : titleOf(item, t)}</PagePlaceholder>;
 }
 
 const openItems = new Set<string>();

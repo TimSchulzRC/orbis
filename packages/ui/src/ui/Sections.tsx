@@ -93,7 +93,6 @@ export function Below({ item }: { item: Item }) {
 	const cmp = order(ix);
 	const done = (x: Item) => isDone(x, ix.schemaOf(x));
 	// done ones stay, at the end of their group
-	// drawings are blocks in the text above, not entries of their own
 	const below = (id: string) => belowOf(id, ix);
 	const direct = below(item.id);
 	const groups = new Map<string, Item[]>();

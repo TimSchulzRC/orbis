@@ -1,4 +1,4 @@
-// Between a drawing's document and Excalidraw: images, the lazily loaded library and the preview.
+// Between a drawing in its note's document and Excalidraw: images, the lazily loaded library and the preview.
 
 import type { BinaryFileData, LibraryItems } from "@excalidraw/excalidraw/types";
 import { type DrawingFile, readScene } from "@obtion/core/drawing";
@@ -78,16 +78,18 @@ export const imageName = (mime: string) => `drawing-image.${EXT[mime] ?? "bin"}`
  */
 const svgs = new Map<string, Promise<SVGSVGElement | null>>();
 export function drawingSvg(
-	id: string,
+	note: string,
+	drawing: string,
 	doc: Y.Doc,
-	version: number,
+	version: string,
 	dark: boolean,
 	files: DeviceFiles,
 ): Promise<SVGSVGElement | null> {
+	const id = `${note}.${drawing}`;
 	const key = `${id}:${version}:${dark ? 1 : 0}`;
 	let hit = svgs.get(key);
 	if (!hit) {
-		hit = renderSvg(doc, dark, files).then(
+		hit = renderSvg(doc, drawing, dark, files).then(
 			({ svg, complete }) => {
 				// an image not here yet: drawn again next time
 				if (!complete && svgs.get(key) === hit) svgs.delete(key);
@@ -108,16 +110,17 @@ export function drawingSvg(
 }
 
 /** An image arrived: the next drawingSvg draws afresh, also while an earlier render is still running. */
-export function forgetDrawingSvg(id: string) {
-	for (const k of svgs.keys()) if (k.startsWith(`${id}:`)) svgs.delete(k);
+export function forgetDrawingSvg(note: string, drawing: string) {
+	for (const k of svgs.keys()) if (k.startsWith(`${note}.${drawing}:`)) svgs.delete(k);
 }
 
 async function renderSvg(
 	doc: Y.Doc,
+	drawing: string,
 	dark: boolean,
 	files: DeviceFiles,
 ): Promise<{ svg: SVGSVGElement | null; complete: boolean }> {
-	const scene = readScene(doc);
+	const scene = readScene(doc, drawing);
 	const elements = scene.elements.filter((e) => !e.isDeleted);
 	if (!elements.length) return { svg: null, complete: true };
 	const { exportToSvg } = await loadExcalidraw();

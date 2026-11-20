@@ -2,8 +2,17 @@
 // below it with new ids; the originals go to the trash so "Restore" brings them back.
 // Parents, refs and relations to items left behind are dropped; [[id|…]] links to them become
 // [[Label]] links. Types are matched by id or name, not merged; a missing type is copied. Values
-// without a matching property become free properties.
+// without a matching property become free properties. A note's drawings go with it.
 
+import type * as Y from "yjs";
+import {
+	addDrawing,
+	drawingImages,
+	readScene,
+	setDrawingFile,
+	setDrawingState,
+	writeElements,
+} from "./drawing";
 import type { Index } from "./graph";
 import {
 	addParent,
@@ -101,6 +110,8 @@ export function copyToWorkspace(
 	dst: { w: Writer; ix: Index },
 	place: { parent?: string; pinned?: string },
 	by: string,
+	/** The source's documents, for what lives only there (a note's drawings). */
+	docOf?: (id: string) => Y.Doc,
 ): Moved {
 	const items = movedItems(src, root);
 	const ids = new Map(items.map((r) => [r.id, newId()]));
@@ -171,6 +182,16 @@ export function copyToWorkspace(
 				const { history: _h, ...file } = r.file;
 				setFileMeta(doc, file);
 			}
+			if (r.drawings && docOf) {
+				const from = docOf(r.id);
+				for (const d of Object.keys(r.drawings)) {
+					const scene = readScene(from, d);
+					addDrawing(doc, d);
+					writeElements(doc, d, scene.elements);
+					for (const [fid, f] of Object.entries(scene.files)) setDrawingFile(doc, d, fid, f);
+					setDrawingState(doc, d, scene.state);
+				}
+			}
 			for (const [pid, v] of Object.entries(r.props)) {
 				const p = propOf(map?.from, pid);
 				const q = p && map ? target(p, map.to) : undefined;
@@ -206,7 +227,10 @@ export function copyToWorkspace(
 	const hashes = [
 		...new Set(
 			items
-				.flatMap((r) => (r.file ? [r.file.hash, r.file.display, r.file.thumb] : []))
+				.flatMap((r) => [
+					...(r.file ? [r.file.hash, r.file.display, r.file.thumb] : []),
+					...drawingImages(r.drawings),
+				])
 				.filter((h): h is string => !!h),
 		),
 	];

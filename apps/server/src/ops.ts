@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import type { TextVersion } from "@obtion/core/api";
 import { DAY_MS, dateOf } from "@obtion/core/date";
 import { textDiff, unifiedDiff } from "@obtion/core/diff";
+import { findDrawings } from "@obtion/core/drawing";
 import type { Index } from "@obtion/core/graph";
 import { type Lang, translate } from "@obtion/core/i18n";
 import { inboxWhere } from "@obtion/core/inbox";
@@ -407,10 +408,7 @@ export class Ops {
 
 	label(i: Item) {
 		const ix = this.store.index();
-		const kind =
-			i.kind === "file" || i.kind === "drawing"
-				? i.kind
-				: (ix.typeName(i.type) ?? placeKind(i, ix));
+		const kind = i.kind === "file" ? i.kind : (ix.typeName(i.type) ?? placeKind(i, ix));
 		return `${displayTitle(i) || "(untitled)"} [${kind}]`;
 	}
 
@@ -539,7 +537,6 @@ export class Ops {
 		const out: Record<string, unknown> = { id: i.id, title: i.title };
 		const tn = ix.typeName(i.type);
 		if (i.kind === "file") out.file = `${i.file?.filetype} ${i.file?.name}`;
-		else if (i.kind === "drawing") out.kind = i.kind;
 		else if (tn) out.type = tn;
 		else out.kind = placeKind(i, ix);
 		if (i.pinned) out.pinned = true;
@@ -560,11 +557,7 @@ export class Ops {
 		const parts = [`${displayTitle(i) || "(untitled)"} [${i.id}]`];
 		const tn = ix.typeName(i.type);
 		parts.push(
-			i.kind === "file"
-				? `file ${i.file?.filetype ?? ""}`.trim()
-				: i.kind === "drawing"
-					? i.kind
-					: (tn ?? placeKind(i, ix)),
+			i.kind === "file" ? `file ${i.file?.filetype ?? ""}`.trim() : (tn ?? placeKind(i, ix)),
 		);
 		if (i.pinned) parts.push("pinned");
 		const st = statusOf(i, schema);
@@ -792,7 +785,11 @@ export class Ops {
 		}
 		// a file's long content is its text, a note's its body
 		// a drawing's text is what its text elements say; the drawing itself is for people
-		if (i.drawing) out.drawing = { elements: i.drawing.count, text: i.drawing.text };
+		const drawings = findDrawings(i.body).flatMap(({ id }) => {
+			const d = i.drawings?.[id];
+			return d ? [{ id, elements: d.count, text: d.text }] : [];
+		});
+		if (drawings.length) out.drawings = drawings;
 		if (opts.include_body !== false && i.body) {
 			const body = blocksAsText(i.body, this.store.lang(), ix);
 			if (i.file) out.body = body;
@@ -1124,7 +1121,7 @@ export class Ops {
 	private kindOf(i: Item): string {
 		const ix = this.store.index();
 		if (i.type === META_TYPE) return "type";
-		if (i.kind === "file" || i.kind === "drawing") return i.kind;
+		if (i.kind === "file") return i.kind;
 		return this.typeName(i.type) ?? (isInInbox(i, ix) ? "inbox" : "note");
 	}
 
@@ -1411,9 +1408,7 @@ export class Ops {
 		if (input.type !== undefined) {
 			if (input.type && item.kind !== "note")
 				throw new OpError(
-					item.kind === "drawing"
-						? `"${item.title}" is a drawing. Drawings have no type.`
-						: `"${item.title}" is a file. Files have no type, only the file type (filetype).`,
+					`"${item.title}" is a file. Files have no type, only the file type (filetype).`,
 				);
 			this.guardInbox(item, "giving it a type");
 		}
@@ -1639,7 +1634,7 @@ export class Ops {
 		touched?.add(item.id);
 		if (input.type && item.kind !== "note")
 			throw new OpError(
-				`"${item.title}" is a ${item.kind}. ${item.kind === "drawing" ? "Drawings" : "Files"} have no type; suggest a place instead.`,
+				`"${item.title}" is a ${item.kind}. Files have no type; suggest a place instead.`,
 			);
 		if (item.kind === "file" && (input.parents?.length ?? 0) > 1)
 			throw new OpError(

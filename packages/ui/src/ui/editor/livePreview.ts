@@ -17,6 +17,7 @@ import {
 	type ViewUpdate,
 	WidgetType,
 } from "@codemirror/view";
+import { DRAWING_INFO } from "@obtion/core/drawing";
 import { isQueryInfo } from "@obtion/core/query";
 import { tr } from "../../i18n";
 import { cn } from "../../lib/utils";
@@ -157,7 +158,9 @@ function build(view: EditorView): { deco: DecorationSet; atomic: DecorationSet }
 					}
 					case "FencedCode": {
 						const info = n.node.getChild("CodeInfo");
-						if (info && isQueryInfo(state.sliceDoc(info.from, info.to).trim())) return false; // a query block draws itself
+						const lang = info && state.sliceDoc(info.from, info.to).trim();
+						// a query block and a drawing draw themselves
+						if (lang && (isQueryInfo(lang) || lang === DRAWING_INFO)) return false;
 						const first = state.doc.lineAt(n.from).number;
 						const last = state.doc.lineAt(n.to).number;
 						for (let i = first; i <= last; i++)

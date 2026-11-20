@@ -35,8 +35,6 @@ export function titleOf(
 	item: Pick<Item, "title" | "file"> & { kind?: Item["kind"] },
 	translate: T = tr,
 ): string {
-	// a diagram has no name: "Excalidraw diagram", and where it is (the note) shows beside it
-	if (item.kind === "drawing") return translate("kind.drawing");
 	return displayTitle(item) || translate("untitled");
 }
 
