@@ -35,6 +35,7 @@ import { FilePlus } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { yCollab, yUndoManagerKeymap } from "y-codemirror.next";
 import * as Y from "yjs";
+import { replica } from "../accounts";
 import { drawingEmbedHTML, hydrateDrawings } from "../drawing/Drawing";
 import { files } from "../files";
 import { tr } from "../i18n";
@@ -45,6 +46,7 @@ import { links, refreshEmbeds } from "./editor/links";
 import { livePreview } from "./editor/livePreview";
 import {
 	editorNode,
+	editorSpace,
 	mentionCompletion,
 	onSlashFiles,
 	pageOption,
@@ -148,18 +150,25 @@ const images = StateField.define<DecorationSet>({
 	provide: (f) => EditorView.decorations.from(f),
 });
 
+/** The replica of the text's workspace. */
+const repoOf = (state: EditorState) => {
+	const space = state.facet(editorSpace);
+	return space ? replica(space).repo : repo;
+};
+
 /** The note's drawing blocks (```excalidraw fences), each drawn in place of its fence. */
 function drawingDecos(state: EditorState): DecorationSet {
 	const builder = new RangeSetBuilder<Decoration>();
 	const note = state.facet(editorNode);
 	if (!note) return builder.finish();
-	const drawings = repo.get(note)?.drawings;
+	const space = state.facet(editorSpace);
+	const drawings = repoOf(state).get(note)?.drawings;
 	for (const b of findDrawings(state.doc.toString()))
 		builder.add(
 			b.from,
 			b.to,
 			Decoration.replace({
-				widget: new EmbedWidget(drawingEmbedHTML(note, b.id, drawings?.[b.id])),
+				widget: new EmbedWidget(drawingEmbedHTML(note, b.id, drawings?.[b.id], space)),
 				block: true,
 			}),
 		);
@@ -180,7 +189,7 @@ const drawingBlocks = StateField.define<DecorationSet>({
 /** What the note's drawings show, so drawing on one redraws its block. */
 function embedsKey(state: EditorState): string {
 	const note = state.facet(editorNode);
-	const drawings = note ? repo.get(note)?.drawings : undefined;
+	const drawings = note ? repoOf(state).get(note)?.drawings : undefined;
 	if (!drawings) return "";
 	return Object.entries(drawings)
 		.map(([id, d]) => `${id}:${d.version}`)
@@ -307,6 +316,7 @@ const editableState = (readOnly: boolean) => [
 export function Editor({
 	doc,
 	nodeId,
+	space,
 	placeholder,
 	autoFocus,
 	onView,
@@ -318,6 +328,8 @@ export function Editor({
 	readOnly?: boolean;
 	doc: Y.Doc;
 	nodeId?: string;
+	/** The workspace of the text when it is not the open one. */
+	space?: string;
 	placeholder?: string;
 	autoFocus?: boolean;
 	onView?: (v: EditorView | null) => void;
@@ -328,13 +340,13 @@ export function Editor({
 	const editable = useRef(new Compartment());
 	// the editor is built once per doc; the other props only set it up (readOnly then follows
 	// through its compartment), so the effect reads them as they were at that render
-	const setup = useRef({ nodeId, placeholder, autoFocus, onView, extra, readOnly });
-	setup.current = { nodeId, placeholder, autoFocus, onView, extra, readOnly };
+	const setup = useRef({ nodeId, space, placeholder, autoFocus, onView, extra, readOnly });
+	setup.current = { nodeId, space, placeholder, autoFocus, onView, extra, readOnly };
 	useEffect(() => {
 		viewRef.current?.dispatch({ effects: editable.current.reconfigure(editableState(readOnly)) });
 	}, [readOnly]);
 	useEffect(() => {
-		const { nodeId, placeholder, autoFocus, onView, extra, readOnly } = setup.current;
+		const { nodeId, space, placeholder, autoFocus, onView, extra, readOnly } = setup.current;
 		const ytext = doc.getText("body");
 		const undoManager = new Y.UndoManager(ytext);
 		const stopTouch = touchOnTextEdit(doc); // typing moves "updated"
@@ -380,6 +392,7 @@ export function Editor({
 				maxRenderedOptions: 40,
 			}),
 			editorNode.of(nodeId),
+			editorSpace.of(space),
 			blockHandles,
 			formatToolbar,
 			shortcuts,
@@ -399,7 +412,7 @@ export function Editor({
 		});
 		viewRef.current = view;
 		let embeds = embedsKey(view.state);
-		const stopEmbeds = repo.subscribe(() => {
+		const stopEmbeds = repoOf(view.state).subscribe(() => {
 			const next = embedsKey(view.state);
 			if (next === embeds) return;
 			embeds = next;

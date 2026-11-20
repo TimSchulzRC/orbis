@@ -34,7 +34,7 @@ md.use({
 			if (t.lang?.trim() !== DRAWING_INFO || !renderingNote) return false;
 			const id = t.text.trim();
 			const info = (rendering ?? repo).get(renderingNote)?.drawings?.[id];
-			return drawingEmbedHTML(renderingNote, id, info);
+			return drawingEmbedHTML(renderingNote, id, info, renderingSpace);
 		},
 		link(t) {
 			const text = this.parser.parseInline(t.tokens);

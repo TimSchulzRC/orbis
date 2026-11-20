@@ -1,14 +1,17 @@
 // Drawings outside the full-screen editor: opening one, and its picture as a block in a note's text (a
 // click on it opens it full screen to draw). An open drawing is a step in the browser's history
-// ("?d=<note>.<drawing>" on the page's address): Back closes it, Forward opens it again.
+// ("?d=<note>.<drawing>" on the page's address, "@<workspace>" when the note is of another one than
+// the open workspace): Back closes it, Forward opens it again.
 
 import type { DrawingInfo } from "@obtion/core/drawing";
 import type { Repo } from "@obtion/sync";
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { replica } from "../accounts";
 import { files as currentFiles } from "../files";
 import { setParams, useRoute } from "../hooks";
 import { tr, useT } from "../i18n";
 import { repo as current } from "../repo";
+import { ScopeContext } from "../scope";
 import { notify } from "../ui/feedback";
 import { escapeHtml } from "../ui/text";
 import { onLibraryLink } from "./library-link";
@@ -42,15 +45,17 @@ const ignoreLoadError = () => undefined;
 const OPEN = "d";
 const openId = () => new URLSearchParams(location.hash.split("?")[1] ?? "").get(OPEN);
 
-/** A drawing is known by its note and its id within that note. */
-const key = (note: string, id: string) => `${note}.${id}`;
-function parseKey(raw: string | null): { note: string; id: string } | null {
-	const [note, id] = raw?.split(".") ?? [];
-	return note && id ? { note, id } : null;
+/** A drawing is known by its note, its id within that note and the note's workspace. */
+const key = (note: string, id: string, space?: string) =>
+	`${note}.${id}${space ? `@${space}` : ""}`;
+function parseKey(raw: string | null): { note: string; id: string; space?: string } | null {
+	const [k, space] = raw?.split("@") ?? [];
+	const [note, id] = k?.split(".") ?? [];
+	return note && id ? { note, id, space: space || undefined } : null;
 }
 
-export function openDrawing(note: string, drawing: string) {
-	const id = key(note, drawing);
+export function openDrawing(note: string, drawing: string, space?: string) {
+	const id = key(note, drawing, space);
 	// keys go to the drawing, not to the note's text the click came from
 	if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
 	void loadEditor().catch(ignoreLoadError);
@@ -127,9 +132,15 @@ export const DrawingHost = memo(function DrawingHost() {
 		shown.current = id;
 		if (was && was !== id) for (const l of closedListeners) l(was);
 	}, [id]);
+	// the note's workspace, which need not be the open one (the inbox, the review)
+	const scope = useMemo(
+		() => (open?.space ? { id: open.space, ...replica(open.space) } : null),
+		[open?.space],
+	);
 	if (!open) return null;
 	if (!Editor) return <Loading />;
-	return <Editor id={open.id} key={id} note={open.note} onClose={closeDrawing} />;
+	const editor = <Editor id={open.id} key={id} note={open.note} onClose={closeDrawing} />;
+	return scope ? <ScopeContext.Provider value={scope}>{editor}</ScopeContext.Provider> : editor;
 });
 
 function Loading() {
@@ -142,8 +153,13 @@ function Loading() {
 }
 
 /** The block of a drawing in a note's text (the editor and read-only Markdown): filled in by hydrateDrawings. */
-export function drawingEmbedHTML(note: string, id: string, info: DrawingInfo | undefined): string {
-	return `<figure class="embed-drawing" data-note="${escapeHtml(note)}" data-drawing="${escapeHtml(id)}" data-v="${escapeHtml(info?.version ?? "")}"><div class="embed-drawing-svg" role="button" tabindex="0" aria-label="${escapeHtml(tr("drawing.edit"))}" title="${escapeHtml(tr("drawing.edit"))}">${info?.count ? "" : `<span class="embed-drawing-empty">${escapeHtml(tr("drawing.empty"))}</span>`}</div></figure>`;
+export function drawingEmbedHTML(
+	note: string,
+	id: string,
+	info: DrawingInfo | undefined,
+	space?: string,
+): string {
+	return `<figure class="embed-drawing"${space ? ` data-space="${escapeHtml(space)}"` : ""} data-note="${escapeHtml(note)}" data-drawing="${escapeHtml(id)}" data-v="${escapeHtml(info?.version ?? "")}"><div class="embed-drawing-svg" role="button" tabindex="0" aria-label="${escapeHtml(tr("drawing.edit"))}" title="${escapeHtml(tr("drawing.edit"))}">${info?.count ? "" : `<span class="embed-drawing-empty">${escapeHtml(tr("drawing.empty"))}</span>`}</div></figure>`;
 }
 
 /** Draws the drawings embedded in `root`; a click on one opens it to look at. */
@@ -158,18 +174,25 @@ export function hydrateDrawings(root: HTMLElement, repo: Repo = current, files =
 		hydrateDrawing(fig, repo, files, dark);
 }
 
-function hydrateDrawing(fig: HTMLElement, repo: Repo, files: typeof currentFiles, dark: boolean) {
+function hydrateDrawing(
+	fig: HTMLElement,
+	given: Repo,
+	givenFiles: typeof currentFiles,
+	dark: boolean,
+) {
 	if (fig.dataset.drawn) return;
 	fig.dataset.drawn = "1";
+	const space = fig.dataset.space;
+	const { repo, files } = space ? replica(space) : { repo: given, files: givenFiles };
 	const note = fig.dataset.note!;
-	const id = key(note, fig.dataset.drawing!);
+	const id = key(note, fig.dataset.drawing!, space);
 	const infoOf = () => repo.get(note)?.drawings?.[fig.dataset.drawing!];
 	const info = infoOf();
 	const box = fig.querySelector<HTMLElement>(".embed-drawing-svg")!;
 	const show = (e: Event) => {
 		e.preventDefault();
 		e.stopPropagation();
-		openDrawing(note, fig.dataset.drawing!);
+		openDrawing(note, fig.dataset.drawing!, space);
 	};
 	box.addEventListener("click", show);
 	box.addEventListener("pointerenter", () => void loadEditor().catch(ignoreLoadError), {

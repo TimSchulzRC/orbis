@@ -23,6 +23,7 @@ import {
 	Table,
 } from "lucide-react";
 import type { ComponentType } from "react";
+import { ySyncFacet } from "y-codemirror.next";
 import { tr } from "../../i18n";
 import { repo } from "../../repo";
 import { DRAWING_ICON } from "../icons";
@@ -34,6 +35,11 @@ import { insertTable } from "./tables";
 
 /** The item whose text the editor shows; a drawing made with "/" is kept in it. */
 export const editorNode = Facet.define<string | undefined, string | undefined>({
+	combine: (v) => v[0],
+});
+
+/** The workspace of that item when it is not the open one (the inbox, the review). */
+export const editorSpace = Facet.define<string | undefined, string | undefined>({
 	combine: (v) => v[0],
 });
 
@@ -147,7 +153,9 @@ function insertDrawing(view: EditorView, pos: number) {
 	const note = view.state.facet(editorNode);
 	if (!note) return;
 	const id = newId();
-	repo.change(note, (d) => addDrawing(d, id));
+	// the scene goes into the document this text is of, whichever workspace it belongs to
+	const doc = view.state.facet(ySyncFacet).ytext.doc!;
+	doc.transact(() => addDrawing(doc, id));
 	const fence = drawingFence(id);
 	insertBlock(view, pos, `${fence}\n`, fence.length + 1);
 }
