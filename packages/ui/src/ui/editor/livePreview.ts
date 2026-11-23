@@ -58,8 +58,9 @@ class CheckWidget extends WidgetType {
 			e.preventDefault();
 			if (view.state.readOnly) return;
 			// flip the middle character of "[ ]" / "[x]"
+			// the box starts where a nested item's hidden indentation starts
 			const at = view.posAtDOM(box);
-			const text = view.state.doc.sliceString(at, at + 8);
+			const text = view.state.doc.sliceString(at, view.state.doc.lineAt(at).to);
 			const i = text.indexOf("[");
 			if (i < 0) return;
 			view.dispatch({
@@ -199,32 +200,54 @@ function build(view: EditorView): { deco: DecorationSet; atomic: DecorationSet }
 						const mark = n.node.getChild("ListMark");
 						if (!mark) return;
 						const listLine = state.doc.lineAt(n.from);
+						// in "- 1. text" only the outer marker hangs; the inner one stays text
+						const outer = n.node.parent?.parent;
+						if (outer?.name === "ListItem" && outer.from >= listLine.from) return;
+						let depth = 0;
+						for (let p = n.node.parent; p; p = p.parent)
+							if (p.name === "BulletList" || p.name === "OrderedList") depth++;
+						// the line's padding indents a nested item, so its leading spaces hide
+						const lead = /^[ \t]*$/.test(state.sliceDoc(listLine.from, mark.from))
+							? listLine.from
+							: mark.from;
+						const listline = (cls: string, style = "") =>
+							Decoration.line({
+								class: cn("cm-listline", cls),
+								attributes: { style: `--depth: ${depth - 1};${style}` },
+							}).range(listLine.from);
 						const task = n.node.getChild("Task")?.getChild("TaskMarker");
 						if (task) {
 							const checked = /x/i.test(state.sliceDoc(task.from, task.to));
 							const box = Decoration.replace({ widget: new CheckWidget(checked, mark.from) }).range(
-								mark.from,
+								lead,
 								pastSpace(state, task.to),
 							);
 							deco.push(box);
 							atomic.push(box);
-							deco.push(
-								line(cn("cm-listline cm-taskline", checked && "done")).range(listLine.from),
-							);
+							deco.push(listline(cn("cm-taskline", checked && "done")));
 						} else if (n.node.parent?.name === "BulletList") {
-							let depth = 0;
-							for (let p: typeof n.node | null = n.node.parent; p; p = p.parent)
-								if (p.name === "BulletList" || p.name === "OrderedList") depth++;
 							const bullet = Decoration.replace({ widget: new BulletWidget(depth - 1) }).range(
-								mark.from,
+								lead,
 								pastSpace(state, mark.to),
 							);
 							deco.push(bullet);
 							atomic.push(bullet);
-							deco.push(line("cm-listline").range(listLine.from));
+							deco.push(listline(""));
 						} else {
-							deco.push(Decoration.mark({ class: "cm-ordered" }).range(mark.from, mark.to));
-							deco.push(line("cm-listline").range(listLine.from));
+							if (lead < mark.from) {
+								const spaces = hide.range(lead, mark.from);
+								deco.push(spaces);
+								atomic.push(spaces);
+							}
+							deco.push(
+								Decoration.mark({ class: "cm-ordered" }).range(
+									mark.from,
+									pastSpace(state, mark.to),
+								),
+							);
+							// "10." needs a wider column than "1."; digits are 1ch wide (tabular-nums)
+							const digits = mark.to - mark.from - 1;
+							deco.push(listline("", `--mark: max(var(--li), ${digits}ch + 0.8em)`));
 						}
 						return;
 					}
