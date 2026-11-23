@@ -180,7 +180,7 @@ body {
 	list-style: decimal;
 }
 .md li + li {
-	margin-top: 0.15em;
+	margin-top: 0.35em;
 }
 .md code {
 	padding: 0.1em 0.3em;
@@ -750,18 +750,32 @@ textarea.page-title.field:focus {
 .cm-content > .cm-line.cm-h:first-child {
 	padding-top: 3px !important;
 }
+/* A list line indents by its depth and hangs its marker in the padding, so wrapped lines start
+   under the text, not under the marker. Every marker is one column wide (a long number wider) and takes no room itself. */
+.cm-line.cm-listline {
+	--li: 1.5em;
+	--mark: var(--li);
+	padding: 5px 0 5px calc(var(--depth, 0) * var(--li) + var(--mark)) !important;
+}
+.cm-line.cm-quote.cm-listline {
+	padding-left: calc(14px + var(--depth, 0) * var(--li) + var(--mark)) !important;
+}
 /* biome-ignore-end lint/complexity/noImportantStyles: the line padding has to beat CodeMirror's base theme and the !important .cm-line rule above */
+/* the bullet's own em is 1.05 times the line's */
 .cm-bullet {
 	display: inline-block;
-	width: 1.5em;
-	margin-left: -0.15em;
+	width: calc(var(--li) / 1.05);
+	margin-left: calc(var(--li) / -1.05);
 	font-size: 1.05em;
 	line-height: 1;
 	color: var(--text);
 	text-align: center;
 }
 .cm-ordered {
-	padding-right: 0.2em;
+	display: inline-block;
+	width: var(--mark);
+	margin-left: calc(-1 * var(--mark));
+	font-variant-numeric: tabular-nums;
 	color: var(--text);
 }
 .cm-check {
@@ -769,7 +783,7 @@ textarea.page-title.field:focus {
 	display: inline-block;
 	width: 15px;
 	height: 15px;
-	margin: 0 0.5em 0 0.15em;
+	margin: 0 calc(var(--li) - 15px - 0.15em) 0 calc(0.15em - var(--li));
 	vertical-align: -2px;
 	cursor: pointer;
 	background: var(--card);

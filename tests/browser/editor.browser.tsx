@@ -98,6 +98,58 @@ describe("hidden syntax", () => {
 	});
 });
 
+describe("lists", () => {
+	const long =
+		"Ein langer Punkt, der so viel Text hat, dass er in der Breite des Editors umbrechen muss und weiterläuft";
+	test("a wrapped list line goes on under its text, not under the marker", async () => {
+		const { view } = await open();
+		const items = [`- ${long}`, `  - ${long}`, `1. ${long}`, `- [ ] ${long}`, "", `100. ${long}`];
+		view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: items.join("\n") } });
+		await expect
+			.poll(() => document.querySelectorAll(".cm-listline").length)
+			.toBe(items.filter(Boolean).length);
+		const starts = items.map((item, i) => {
+			if (!item) return 0;
+			const docLine = view.state.doc.line(i + 1);
+			const textStart = docLine.from + item.indexOf("Ein");
+			const first = view.coordsAtPos(textStart)!;
+			let wrapped = Number.POSITIVE_INFINITY;
+			for (let pos = textStart; pos < docLine.to; pos++) {
+				const c = view.coordsAtPos(pos)!;
+				if (c.top > first.bottom - 2) wrapped = Math.min(wrapped, c.left);
+			}
+			expect(wrapped, `line ${i + 1} wraps`).toBeLessThan(Number.POSITIVE_INFINITY);
+			expect(Math.abs(wrapped - first.left), `line ${i + 1}`).toBeLessThan(1.5);
+			const marker = view.coordsAtPos(docLine.from, 1)!;
+			expect(
+				Math.abs(marker.top - first.top),
+				`line ${i + 1}: the marker sits beside the text, not on a row of its own`,
+			).toBeLessThan(6);
+			return first.left;
+		});
+		expect(starts[1]! - starts[0]!, "a nested item starts one column further in").toBeGreaterThan(
+			16,
+		);
+		expect(
+			Math.abs(starts[2]! - starts[0]!),
+			"a number takes as much room as a bullet",
+		).toBeLessThan(1.5);
+		expect(Math.abs(starts[3]! - starts[0]!), "a box takes as much room as a bullet").toBeLessThan(
+			1.5,
+		);
+	});
+
+	test("a box nested three deep still ticks", async () => {
+		const { view, doc } = await open();
+		const text = ["- a", "  - b", "    - c", "      - [ ] d"].join("\n");
+		view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text } });
+		await expect.poll(() => document.querySelector(".cm-check")).not.toBeNull();
+		const box = rect(document.querySelector(".cm-check")!);
+		await commands.mouse("click", box.left + box.width / 2, box.top + box.height / 2);
+		expect(doc()).toBe(text.replace("[ ]", "[x]"));
+	});
+});
+
 describe("headings", () => {
 	test("the # show at the start of the text and change the level there", async () => {
 		const { doc } = await open();
