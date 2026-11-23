@@ -5,7 +5,7 @@
 # both are made on the build platform; the last stage only copies (no emulation needed).
 # The base images are pinned to a digest: nightly and stable are built again from the commit dev
 # ran, and should differ from it in nothing but the version (Dependabot proposes newer ones).
-FROM --platform=$BUILDPLATFORM oven/bun:1.4@sha256:1d22548f177f4ff38e0c15baa3c2c46c6c2060ba2d1bc573bb4720b407548f1d AS build
+FROM --platform=$BUILDPLATFORM oven/bun:1.4@sha256:3aa040e5445efa09d75bb428a64ba50db13e2b3ac9b6b0c7f145615f62b2ee18 AS build
 WORKDIR /app
 # the manifests first: the install stays cached until a dependency changes, not with every commit
 COPY package.json bun.lock ./
@@ -18,7 +18,7 @@ RUN bun install --frozen-lockfile
 COPY . .
 RUN bun run build
 
-FROM --platform=$BUILDPLATFORM oven/bun:1.4-slim@sha256:1846adf22496bd711036aae8be147e57bdebbaea2e5264e3e0b5af1db187d9a4 AS server
+FROM --platform=$BUILDPLATFORM oven/bun:1.4-slim@sha256:b780593f3e10918cbdaec3d5a08d52224b9198069a65eb47812085c2ec007643 AS server
 WORKDIR /app
 # the workspace's manifests, then only what the server needs at runtime
 COPY package.json bun.lock ./
@@ -37,7 +37,7 @@ COPY apps/server ./apps/server
 COPY --from=build /app/apps/web/dist ./apps/web/dist
 RUN chmod -R a+rX packages/core apps/server apps/web/dist
 
-FROM oven/bun:1.4-slim@sha256:1846adf22496bd711036aae8be147e57bdebbaea2e5264e3e0b5af1db187d9a4
+FROM oven/bun:1.4-slim@sha256:b780593f3e10918cbdaec3d5a08d52224b9198069a65eb47812085c2ec007643
 WORKDIR /app
 COPY --from=server /app ./
 COPY --from=server --chown=bun:bun /data /data
