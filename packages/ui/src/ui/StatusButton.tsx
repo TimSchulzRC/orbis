@@ -43,9 +43,11 @@ export function StatusButton({ className }: { className?: string }) {
 	};
 	const lookForUpdate = async () => {
 		setBusy("checking");
-		const found = await checkForUpdate().catch(() => false);
+		// a failed check (offline, GitHub refuses) is no "up to date"
+		const found = await checkForUpdate().catch(() => null);
 		setBusy(null);
-		if (!found) notify(t("app.upToDate"));
+		if (found === null) notify.error(t("app.checkFailed"));
+		else if (!found) notify(t("app.upToDate"));
 	};
 
 	type Look = {
@@ -77,8 +79,9 @@ export function StatusButton({ className }: { className?: string }) {
 							key: "update",
 							icon: CircleFadingArrowUp,
 							label: t("app.newVersion"),
-							// the desktop app: its installer, in the browser (apps/web/src/update.ts)
-							hint: t(desktop ? "app.clickDownload" : "app.clickUpdate"),
+							// a desktop app that cannot replace itself: its installer, in the browser
+							// (apps/web/src/update.ts)
+							hint: t(desktop && !desktop.canInstall ? "app.clickDownload" : "app.clickUpdate"),
 							tone: "text-link",
 							run: applyUpdate,
 						}

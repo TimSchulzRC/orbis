@@ -10,6 +10,8 @@ const bridge: DesktopBridge = {
 	renewLocal: () => ipcRenderer.invoke("orbis:renew"),
 	theme: (choice) => ipcRenderer.send("orbis:theme", choice),
 	checkUpdate: () => ipcRenderer.invoke("orbis:update"),
+	canInstall: ipcRenderer.sendSync("orbis:can-install"),
+	installUpdate: () => ipcRenderer.invoke("orbis:install"),
 };
 
 contextBridge.exposeInMainWorld("orbisDesktop", bridge);

@@ -2,13 +2,14 @@
 // its own, served from orbis://app, and the server on this device for local workspaces
 // (local.ts). Further servers are connected in the app itself, like on the web.
 
-import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join, normalize, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { app, BrowserWindow, ipcMain, nativeTheme, net, protocol, shell } from "electron";
 import { iconPath } from "../../server/src/icons";
+import { install, replaceableApp } from "./install";
 import { LocalServer } from "./local";
-import { pickUpdate, RELEASES, type Release } from "./updates";
+import { pickUpdate, RELEASES, type Release, type Update } from "./updates";
 
 const SCHEME = "orbis";
 /** The app's pages: their origin is orbis://app, which every Orbis server lets call its API. */
@@ -154,15 +155,43 @@ function createWindow() {
 ipcMain.on("orbis:local", (e) => (e.returnValue = server.local));
 ipcMain.handle("orbis:renew", () => server.signIn(lang(), true));
 // a newer release of this version's channel with an installer for this system (updates.ts)
+let found: Update | null = null;
 ipcMain.handle("orbis:update", async () => {
 	if (version === "dev") return null;
 	const res = await net.fetch(RELEASES, { headers: { accept: "application/vnd.github+json" } });
 	if (!res.ok) throw new Error(`GitHub: ${res.status}`);
-	return pickUpdate((await res.json()) as Release[], version, {
+	found = pickUpdate((await res.json()) as Release[], version, {
 		platform: process.platform,
 		arch: process.arch,
 		appImage: !!process.env.APPIMAGE,
 	});
+	return found;
+});
+// the app installs the update itself, then starts again (install.ts): on a Mac, when it may
+// replace its .app; elsewhere the page opens the installer in the browser
+const replaceable = version === "dev" ? null : replaceableApp(process.platform, process.execPath);
+const updateDir = join(userData, "update");
+ipcMain.on("orbis:can-install", (e) => (e.returnValue = !!replaceable));
+// one installation at a time, also when a new window asks again (macOS keeps the app without one)
+let installing: Promise<void> | null = null;
+ipcMain.handle("orbis:install", () => {
+	if (!replaceable || !found) throw new Error("no update to install");
+	installing ??= install(found, {
+		app: replaceable,
+		dir: updateDir,
+		pid: process.pid,
+		args: process.argv.slice(1),
+		fetch: net.fetch,
+	}).then(
+		() => {
+			setImmediate(() => app.quit());
+		},
+		(e) => {
+			installing = null;
+			throw e;
+		},
+	);
+	return installing;
 });
 // the theme chosen in the app (system, light, dark): the window's buttons and menus follow it
 ipcMain.on("orbis:theme", (_e, choice: unknown) => {
@@ -186,6 +215,8 @@ app.on("will-quit", () => server.stop());
 
 app.whenReady().then(async () => {
 	if (mac && !app.isPackaged) app.dock?.setIcon(icon);
+	// what the last update left (its DMG)
+	rmSync(updateDir, { recursive: true, force: true });
 	protocol.handle(SCHEME, serve);
 	try {
 		await server.start(lang());

@@ -1,7 +1,8 @@
 // Applying an update: local changes go to the server first, then SKIP_WAITING, then exactly one
 // reload once the new worker has taken over.
-// In the desktop app: a newer release of its channel, whose installer a click downloads.
-import { setUpdate, setUpdateCheck, unsynced } from "@orbis/ui";
+// In the desktop app: a newer release of its channel, which a click installs (and the app starts
+// again), or whose installer it downloads where the app cannot replace itself.
+import { notify, setUpdate, setUpdateCheck, tr, unsynced } from "@orbis/ui";
 import { type DesktopBridge, desktop } from "@orbis/ui/platform";
 
 let reg: ServiceWorkerRegistration | undefined;
@@ -70,11 +71,30 @@ export function initUpdates() {
 	});
 }
 
-/** The desktop app looks on GitHub (apps/desktop/src/updates.ts); the browser downloads the installer. */
+/**
+ * The desktop app looks on GitHub (apps/desktop/src/updates.ts). It installs the update itself
+ * (apps/desktop/src/install.ts) once local changes went out, and quits; otherwise the browser
+ * downloads the installer.
+ */
 function initDesktopUpdates(app: DesktopBridge) {
+	let installing = false;
+	const install = async () => {
+		installing = true;
+		setUpdate("applying");
+		await waitForSync();
+		try {
+			await app.installUpdate();
+		} catch {
+			installing = false;
+			setUpdate("ready", () => void install());
+			notify.error(tr("app.updateFailed"));
+		}
+	};
 	const check = async () => {
 		const found = await app.checkUpdate();
-		if (found) setUpdate("ready", () => window.open(found.url));
+		// a check during the installation leaves it be
+		if (found && !installing)
+			setUpdate("ready", app.canInstall ? () => void install() : () => window.open(found.url));
 		return !!found;
 	};
 	setUpdateCheck(check);
