@@ -172,16 +172,26 @@ ipcMain.handle("orbis:update", async () => {
 const replaceable = version === "dev" ? null : replaceableApp(process.platform, process.execPath);
 const updateDir = join(userData, "update");
 ipcMain.on("orbis:can-install", (e) => (e.returnValue = !!replaceable));
-ipcMain.handle("orbis:install", async () => {
+// one installation at a time, also when a new window asks again (macOS keeps the app without one)
+let installing: Promise<void> | null = null;
+ipcMain.handle("orbis:install", () => {
 	if (!replaceable || !found) throw new Error("no update to install");
-	await install(found, {
+	installing ??= install(found, {
 		app: replaceable,
 		dir: updateDir,
 		pid: process.pid,
 		args: process.argv.slice(1),
 		fetch: net.fetch,
-	});
-	setImmediate(() => app.quit());
+	}).then(
+		() => {
+			setImmediate(() => app.quit());
+		},
+		(e) => {
+			installing = null;
+			throw e;
+		},
+	);
+	return installing;
 });
 // the theme chosen in the app (system, light, dark): the window's buttons and menus follow it
 ipcMain.on("orbis:theme", (_e, choice: unknown) => {

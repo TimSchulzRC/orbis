@@ -72,7 +72,7 @@ test("the update carries the installer's SHA-256 from GitHub", () => {
 	expect(pickUpdate(releases, "0.0.1", mac)?.sha256).toBeUndefined();
 });
 
-test("a download with another SHA-256 is not installed", async () => {
+test("a download with another SHA-256, or without one, is not installed", async () => {
 	const dir = tempDir();
 	const fetch = async () => new Response("not the DMG");
 	await expect(
@@ -81,6 +81,12 @@ test("a download with another SHA-256 is not installed", async () => {
 			{ app: join(dir, "Orbis.app"), dir: join(dir, "update"), pid: 1, args: [], fetch },
 		),
 	).rejects.toThrow("SHA-256");
+	await expect(
+		install(
+			{ version: "0.0.2", url: "https://dl/x.dmg" },
+			{ app: join(dir, "Orbis.app"), dir: join(dir, "update"), pid: 1, args: [], fetch },
+		),
+	).rejects.toThrow("no SHA-256");
 	expect(existsSync(join(dir, "update/Orbis.app"))).toBe(false);
 });
 

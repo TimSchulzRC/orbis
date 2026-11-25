@@ -54,8 +54,9 @@ if mv "$app" "$app.old"; then
 fi
 open -n "$app" --args "$@"`;
 
-/** Downloads `url` to `file`; throws when its SHA-256 is not `sha256`. */
+/** Downloads `url` to `file`; throws when its SHA-256 is not `sha256`, or there is none to check. */
 async function download(fetch: Fetch, url: string, file: string, sha256?: string) {
+	if (!sha256) throw new Error("download: no SHA-256 to check it against");
 	const res = await fetch(url);
 	if (!res.ok || !res.body) throw new Error(`download: ${res.status}`);
 	const hash = createHash("sha256");
@@ -63,7 +64,7 @@ async function download(fetch: Fetch, url: string, file: string, sha256?: string
 	body.on("data", (chunk: Buffer) => hash.update(chunk));
 	await pipeline(body, createWriteStream(file));
 	const got = hash.digest("hex");
-	if (sha256 && got !== sha256) throw new Error(`download: SHA-256 ${got}, expected ${sha256}`);
+	if (got !== sha256) throw new Error(`download: SHA-256 ${got}, expected ${sha256}`);
 }
 
 /**
