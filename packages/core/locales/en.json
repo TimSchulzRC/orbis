@@ -516,6 +516,7 @@
 	"op.typeToTag": "Type \"{name}\" turned into tag #{tag}",
 	"op.typeToType": "Type \"{name}\" turned into \"{target}\"",
 	"page.createdOn": "created on {date}",
+	"page.editedOn": "Edited on {date}",
 	"palette.cmd.language": "Switch language (Deutsch)",
 	"palette.cmd.newType": "New type",
 	"palette.cmd.sortInbox": "Sort the inbox",

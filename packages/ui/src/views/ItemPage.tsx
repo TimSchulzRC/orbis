@@ -41,7 +41,7 @@ import {
 	Crumbs,
 	LinksMenu,
 	LinksRow,
-	PageFooter,
+	PageDates,
 	pinnedRefs,
 	TrashBanner,
 } from "../ui/PageParts";
@@ -213,6 +213,7 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
 					<TitleField autoFocus={isNew && !item.title} item={item} />
 				</div>
 			</div>
+			<PageDates className="mt-1" item={item} />
 			{cycles.length > 0 && (
 				<p className="mt-1 flex items-center gap-1.5 text-xs text-warn">
 					<AlertTriangle size={12} />{" "}
@@ -281,15 +282,10 @@ function InfoView({ item, isNew: created }: { item: Item; isNew: boolean }) {
 			{/* a line between the text one writes and what the page adds below it;
           mt-7, not mt-6: the editor has 4px padding on top only, so the text sits in the middle */}
 			<div className="mt-7 border-t border-line" />
-			<div className="page-below [&>:first-child]:mt-6">
+			<div className="[&>:first-child]:mt-6">
 				{/* 3 · below: everything under the page, the same for every type (the links are in the head) */}
 				<Below item={item} />
 			</div>
-			{/* one more line above the dates, unless nothing came between */}
-			<PageFooter
-				className="mt-10 border-t border-line pt-4 max-md:mt-8 [.page-below:empty+&]:mt-4 [.page-below:empty+&]:border-t-0 [.page-below:empty+&]:pt-0"
-				item={item}
-			/>
 
 			{placing && (
 				<PlacePicker

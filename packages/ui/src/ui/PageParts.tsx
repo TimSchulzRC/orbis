@@ -2,7 +2,7 @@
 
 import { dateOf } from "@orbis/core/date";
 import type { Index } from "@orbis/core/graph";
-import { fmtDate, type T } from "@orbis/core/i18n";
+import { fmtDate, fmtRecent, type T } from "@orbis/core/i18n";
 import { type Item, META_TYPE } from "@orbis/core/model";
 import { hasPlace, isInInbox } from "@orbis/core/placement";
 import { ChevronRight, Link2, Pin, PinOff, Plus, RotateCcw, Star, X } from "lucide-react";
@@ -12,7 +12,7 @@ import { itemHref, useIndex, usePhone } from "../hooks";
 import { titleOf, useT } from "../i18n";
 import { cn } from "../lib/utils";
 import { repo } from "../repo";
-import { ItemIcon, ItemLink, RelTime } from "./item-look";
+import { ItemIcon, ItemLink } from "./item-look";
 import { ItemPicker } from "./Picker";
 import { Button, IconButton, MenuItem, MoreMenu, Popover, REVEAL } from "./primitives";
 
@@ -560,18 +560,24 @@ export function LinksRow({ item }: { item: Item }) {
 	);
 }
 
-export function PageFooter({ item, className }: { item: Item; className?: string }) {
+const LONG_DATE: Intl.DateTimeFormatOptions = { day: "numeric", month: "long", year: "numeric" };
+
+/** When the page last changed and when it was made. The change reads relative up to yesterday,
+ * older ones as a date. */
+export function PageDates({ item, className }: { item: Item; className?: string }) {
 	const { t, lang } = useT();
+	const long = (ts: number) => fmtDate(lang, dateOf(ts), LONG_DATE);
+	const recent = fmtRecent(lang, item.updated);
 	return (
 		<p className={cn("mt-4 text-xs text-muted-foreground", className)}>
-			{t("item.edited")} <RelTime ts={item.updated} /> ·{" "}
-			{t("page.createdOn", {
-				date: fmtDate(lang, dateOf(item.created), {
-					day: "numeric",
-					month: "long",
-					year: "numeric",
-				}),
-			})}
+			{recent ? (
+				<>
+					{t("item.edited")} <time dateTime={new Date(item.updated).toISOString()}>{recent}</time>
+				</>
+			) : (
+				t("page.editedOn", { date: long(item.updated) })
+			)}{" "}
+			· {t("page.createdOn", { date: long(item.created) })}
 		</p>
 	);
 }
