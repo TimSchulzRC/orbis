@@ -19,6 +19,10 @@ export interface DesktopBridge {
 	 * from GitHub; null when there is none, and always for a dev build.
 	 */
 	checkUpdate(): Promise<{ version: string; url: string } | null>;
+	/** Whether the app installs an update itself (installUpdate); otherwise the page opens its installer. */
+	canInstall: boolean;
+	/** Installs the update the last checkUpdate found and starts the app again: it quits right after. */
+	installUpdate(): Promise<void>;
 }
 
 declare global {

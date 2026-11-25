@@ -129,6 +129,7 @@
 	"app.opening": "Öffne deine Daten…",
 	"app.syncing": "Gleiche mit dem Server ab…",
 	"app.update": "Aktualisieren",
+	"app.updateFailed": "Das Update ließ sich nicht installieren",
 	"app.updateLoading": "Neue Version wird geladen …",
 	"app.updating": "Wird aktualisiert …",
 	"app.upToDate": "Orbis ist auf dem neuesten Stand",

@@ -129,6 +129,7 @@
 	"app.opening": "Opening your data…",
 	"app.syncing": "Syncing with your server…",
 	"app.update": "Update",
+	"app.updateFailed": "Could not install the update",
 	"app.updateLoading": "Loading the new version …",
 	"app.updating": "Updating …",
 	"app.upToDate": "Orbis is up to date",

@@ -79,8 +79,9 @@ export function StatusButton({ className }: { className?: string }) {
 							key: "update",
 							icon: CircleFadingArrowUp,
 							label: t("app.newVersion"),
-							// the desktop app: its installer, in the browser (apps/web/src/update.ts)
-							hint: t(desktop ? "app.clickDownload" : "app.clickUpdate"),
+							// a desktop app that cannot replace itself: its installer, in the browser
+							// (apps/web/src/update.ts)
+							hint: t(desktop && !desktop.canInstall ? "app.clickDownload" : "app.clickUpdate"),
 							tone: "text-link",
 							run: applyUpdate,
 						}

@@ -10,13 +10,16 @@ export const RELEASES = "https://api.github.com/repos/TimSchulzRC/orbis/releases
 export interface Release {
 	tag_name: string;
 	draft: boolean;
-	assets: { name: string; browser_download_url: string }[];
+	/** `digest`: "sha256:<hex>", which GitHub computes for every upload */
+	assets: { name: string; browser_download_url: string; digest?: string | null }[];
 }
 
 /** A newer version and its installer for this system. */
 export interface Update {
 	version: string;
 	url: string;
+	/** the installer's SHA-256 in hex, when GitHub gives one */
+	sha256?: string;
 }
 
 /** This system, the way release.yml names the installers (electron-builder: artifactName). */
@@ -92,8 +95,10 @@ export function pickUpdate(releases: Release[], current: string, sys: System): U
 		if (r.draft || channelOf(version) !== channel || compareVersions(version, current) <= 0)
 			continue;
 		const installer = r.assets.find((a) => isInstallerFor(a.name, sys));
-		if (installer && (!best || compareVersions(version, best.version) > 0))
-			best = { version, url: installer.browser_download_url };
+		if (installer && (!best || compareVersions(version, best.version) > 0)) {
+			const sha256 = installer.digest?.match(/^sha256:([0-9a-f]{64})$/)?.[1];
+			best = { version, url: installer.browser_download_url, ...(sha256 ? { sha256 } : {}) };
+		}
 	}
 	return best;
 }
