@@ -43,9 +43,11 @@ export function StatusButton({ className }: { className?: string }) {
 	};
 	const lookForUpdate = async () => {
 		setBusy("checking");
-		const found = await checkForUpdate().catch(() => false);
+		// a failed check (offline, GitHub refuses) is no "up to date"
+		const found = await checkForUpdate().catch(() => null);
 		setBusy(null);
-		if (!found) notify(t("app.upToDate"));
+		if (found === null) notify.error(t("app.checkFailed"));
+		else if (!found) notify(t("app.upToDate"));
 	};
 
 	type Look = {

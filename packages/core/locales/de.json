@@ -118,6 +118,7 @@
 	"activity.workspaceSettings": "Workspace-Einstellungen",
 	"agent.changed": "{agent} hat „{title}“ geändert",
 	"agent.changedMany": "{agent} hat {count} Einträge geändert",
+	"app.checkFailed": "Konnte nicht nach einer neuen Version suchen",
 	"app.checking": "Suche nach einer neuen Version …",
 	"app.clickCheck": "Klicken, um nach einer neuen Version zu suchen",
 	"app.clickDownload": "Klicken, um sie herunterzuladen",
