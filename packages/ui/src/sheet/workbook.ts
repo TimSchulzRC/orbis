@@ -608,7 +608,7 @@ export async function readWorkbook(
 				if (info?.kind === "chart") return empty();
 				const xml = info?.path ? await text(info.path) : undefined;
 				// a missing part or one that isn't a worksheet can't be shown
-				if (!xml || !/<(?:\w+:)?worksheet\b/.test(xml.slice(0, 4096))) return undefined;
+				if (!xml || !WORKSHEET_ROOT.test(xml.slice(0, 4096))) return undefined;
 				strings ??= readStrings(await text(sharedPath));
 				return readSheet(xml, strings, styles, baseSize);
 			})().catch((e: unknown): undefined => {
@@ -620,6 +620,9 @@ export async function readWorkbook(
 		},
 	};
 }
+
+/** A worksheet part: its first element, after the declaration and comments, is <worksheet>. */
+const WORKSHEET_ROOT = /^\s*(?:<\?[^>]*\?>\s*)?(?:<!--[\s\S]*?-->\s*)*<(?:\w+:)?worksheet\b/;
 
 /** A relationship's target relative to the folder of the part that names it. */
 function resolve(dir: string, target: string): string {
@@ -845,7 +848,7 @@ export function shiftFormula(f: string, dr: number, dc: number): string {
 			continue;
 		}
 		// not a sheet's name ("Q1!A1") nor a function ("LOG10(")
-		const m = /^(\$?)([A-Z]{1,3})(\$?)(\d+)(?![\w(!]|:\w+!)/.exec(f.slice(i));
+		const m = /^(\$?)([A-Z]{1,3})(\$?)(\d+)(?![\w(!]|:[\w.]+!)/.exec(f.slice(i));
 		const prev = out.at(-1) ?? "";
 		if (m && !/[\w.]/.test(prev)) {
 			const col = m[1] ? m[2]! : colName(Math.max(0, parseRef(`${m[2]}1`)!.c + dc));

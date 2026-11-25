@@ -107,6 +107,7 @@ describe("references and formulas", () => {
 		expect(shiftFormula("LOG10(A1)", 1, 0)).toBe("LOG10(A2)");
 		expect(shiftFormula("Q1!A1+Table1[Q1]", 1, 0)).toBe("Q1!A2+Table1[Q1]");
 		expect(shiftFormula("SUM(Q1:Q2!A1)", 1, 0)).toBe("SUM(Q1:Q2!A2)");
+		expect(shiftFormula("SUM(Q1:Sales.2025!A1)", 1, 0)).toBe("SUM(Q1:Sales.2025!A2)");
 	});
 });
 
@@ -251,7 +252,7 @@ describe("reading a workbook", () => {
 				'<workbook><sheets><sheet name="Weg" sheetId="1" r:id="rId1"/><sheet name="Ohne" sheetId="2" r:id="rId9"/><sheet name="Fremd" sheetId="3" r:id="rId3"/></sheets></workbook>',
 			"xl/_rels/workbook.xml.rels":
 				'<Relationships><Relationship Id="rId1" Type="w" Target="worksheets/gone.xml"/><Relationship Id="rId3" Type="w" Target="worksheets/other.xml"/></Relationships>',
-			"xl/worksheets/other.xml": "<styleSheet/>",
+			"xl/worksheets/other.xml": "<other><worksheet/></other>",
 		};
 		const parts = zipStore(
 			Object.entries(files).map(([path, text]) => ({ path, data: enc.encode(text) })),
