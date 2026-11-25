@@ -78,6 +78,7 @@ describe("number formats", () => {
 		expect(fmt(0.5, "h:mm AM/PM", en)).toBe("12:00 PM");
 		expect(fmt(0.25 + 30 / 86400, "hh:mm:ss")).toBe("06:00:30");
 		expect(fmt(1.5, "[h]:mm")).toBe("36:00");
+		expect(fmt(1.5, "[h]")).toBe("36");
 		expect(fmt(60, "dd.mm.yyyy")).toBe("29.02.1900");
 		expect(fmt(0, "yyyy-mm-dd", { lang: "de", date1904: true })).toBe("1904-01-01");
 		// rounds to the second shown
@@ -104,6 +105,7 @@ describe("references and formulas", () => {
 		expect(shiftFormula("SUM(A1:B2)*$C$1", 2, 1)).toBe("SUM(B3:C4)*$C$1");
 		expect(shiftFormula('IF(A1>0,"A1",Sheet2!B1)', 1, 0)).toBe('IF(A2>0,"A1",Sheet2!B2)');
 		expect(shiftFormula("LOG10(A1)", 1, 0)).toBe("LOG10(A2)");
+		expect(shiftFormula("Q1!A1+Table1[Q1]", 1, 0)).toBe("Q1!A2+Table1[Q1]");
 	});
 });
 
@@ -204,7 +206,7 @@ describe("reading a workbook", () => {
 				["Intern", true],
 			]);
 			expect(book.active).toBe(1);
-			const s = await book.sheet(0);
+			const s = (await book.sheet(0))!;
 			const text = (r: number, c: number) => {
 				const cell = s.cells[r]?.[c];
 				return cell ? cellText(cell, book.styles[cell.s]!.fmt, de).text : undefined;
@@ -235,12 +237,28 @@ describe("reading a workbook", () => {
 			expect(s.heights.get(1)).toBe(40);
 			expect(s.defaultHeight).toBe(20);
 			expect([s.rows, s.cols]).toEqual([6, 6]);
-			expect((await book.sheet(1)).rows).toBe(0);
+			expect((await book.sheet(1))?.rows).toBe(0);
 			// cells without reference follow each other
-			const hidden = await book.sheet(2);
+			const hidden = (await book.sheet(2))!;
 			expect(hidden.cells[0]?.map((c) => c && c.t === "n" && c.v)).toEqual([1, 2]);
 		});
 	}
+
+	test("a worksheet whose part is missing: undefined, so the page falls back to the text", async () => {
+		const files = {
+			"xl/workbook.xml":
+				'<workbook><sheets><sheet name="Weg" sheetId="1" r:id="rId1"/></sheets></workbook>',
+			"xl/_rels/workbook.xml.rels":
+				'<Relationships><Relationship Id="rId1" Type="w" Target="worksheets/gone.xml"/></Relationships>',
+		};
+		const parts = zipStore(
+			Object.entries(files).map(([path, text]) => ({ path, data: enc.encode(text) })),
+		);
+		const bytes = new Uint8Array(await new Blob(parts as BlobPart[]).arrayBuffer());
+		const book = (await readWorkbook(bytes, () => "General"))!;
+		expect(book.sheets.map((s) => s.name)).toEqual(["Weg"]);
+		expect(await book.sheet(0)).toBeUndefined();
+	});
 
 	test("not a workbook: undefined", async () => {
 		expect(await readWorkbook(enc.encode("hello"), () => "General")).toBeUndefined();

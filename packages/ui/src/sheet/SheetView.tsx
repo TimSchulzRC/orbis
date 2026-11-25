@@ -39,8 +39,7 @@ const HEAD_H = 24;
 const OVERSCAN = 3;
 /** Columns a text may run into while they are empty. */
 const OVERFLOW_MAX = 30;
-/** Cells a selection's count and sum or a search look at. */
-const SCAN_MAX = 1_000_000;
+/** Hits a search lists at most. */
 const MATCH_MAX = 10_000;
 /** The viewer's least height; below it the page scrolls. */
 const MIN_HEIGHT = 360;
@@ -97,13 +96,13 @@ export function SheetView({ file, fallback }: { file: FileMeta; fallback: ReactN
 				{t("sheet.loading")}
 			</div>
 		);
-	return <BookView book={current.book} key={file.hash} lang={lang} />;
+	return <BookView book={current.book} fallback={fallback} key={file.hash} lang={lang} />;
 }
 
-function BookView({ book, lang }: { book: Workbook; lang: Lang }) {
+function BookView({ book, lang, fallback }: { book: Workbook; lang: Lang; fallback: ReactNode }) {
 	const { t } = useT();
 	const [index, setIndex] = useState(book.active);
-	const [sheet, setSheet] = useState<{ index: number; data: SheetData }>();
+	const [sheet, setSheet] = useState<{ index: number; data?: SheetData }>();
 	useEffect(() => {
 		let alive = true;
 		void book.sheet(index).then((data) => alive && setSheet({ index, data }));
@@ -112,6 +111,8 @@ function BookView({ book, lang }: { book: Workbook; lang: Lang }) {
 		};
 	}, [book, index]);
 	const data = sheet?.index === index ? sheet.data : undefined;
+	// a sheet whose part can't be read: the text the server took out instead
+	const failed = sheet?.index === index && !sheet.data;
 	const info = book.sheets[index];
 	const [sel, setSel] = useState<Selection>({ a: { r: 0, c: 0 }, f: { r: 0, c: 0 } });
 	// a new sheet starts at its first cell
@@ -130,14 +131,12 @@ function BookView({ book, lang }: { book: Workbook; lang: Lang }) {
 		const q = query.trim().toLocaleLowerCase();
 		if (!q || !data) return [];
 		const out: Pos[] = [];
-		let seen = 0;
-		for (let r = 0; r < data.cells.length && out.length < MATCH_MAX && seen < SCAN_MAX * 4; r++) {
+		for (let r = 0; r < data.cells.length && out.length < MATCH_MAX; r++) {
 			const row = data.cells[r];
 			if (!row) continue;
 			for (let c = 0; c < row.length; c++) {
 				const cell = row[c];
 				if (!cell) continue;
-				seen++;
 				if (show(cell).text.toLocaleLowerCase().includes(q)) out.push({ r, c });
 			}
 		}
@@ -273,6 +272,8 @@ function BookView({ book, lang }: { book: Workbook; lang: Lang }) {
 			<div className="relative min-h-0 flex-1">
 				{info?.kind === "chart" ? (
 					<Note>{t("sheet.chart")}</Note>
+				) : failed ? (
+					<div className="h-full overflow-auto p-3">{fallback}</div>
 				) : !data ? (
 					<Note>{t("sheet.loading")}</Note>
 				) : (
@@ -373,12 +374,10 @@ function statsOf(data: SheetData, r: Range) {
 	let count = 0;
 	let numbers = 0;
 	let sum = 0;
-	let seen = 0;
-	for (let i = r.r1; i <= Math.min(r.r2, data.cells.length - 1) && seen < SCAN_MAX; i++) {
+	for (let i = r.r1; i <= Math.min(r.r2, data.cells.length - 1); i++) {
 		const row = data.cells[i];
 		if (!row) continue;
 		for (let c = r.c1; c <= Math.min(r.c2, row.length - 1); c++) {
-			seen++;
 			const cell = row[c];
 			if (!cell || (cell.t === "s" && cell.v === "")) continue;
 			count++;
@@ -394,8 +393,7 @@ function statsOf(data: SheetData, r: Range) {
 /** The text of a range, cells by tabs, rows by line breaks (what a spreadsheet pastes). */
 function rangeText(data: SheetData, r: Range, show: (c: Cell) => Formatted): string {
 	const lines: string[] = [];
-	const last = Math.min(r.r2, data.rows - 1, r.r1 + SCAN_MAX / Math.max(1, r.c2 - r.c1 + 1));
-	for (let i = r.r1; i <= last; i++) {
+	for (let i = r.r1; i <= Math.min(r.r2, data.rows - 1); i++) {
 		const row = data.cells[i];
 		const cells: string[] = [];
 		for (let c = r.c1; c <= Math.min(r.c2, Math.max(0, data.cols - 1)); c++) {
@@ -628,7 +626,12 @@ function Grid({ data, styles, show, sel, onSelect, matches }: GridProps) {
 		if (p.r < 0 && p.c < 0) onSelect({ a: { r: 0, c: 0 }, f: { r: lastRow, c: lastCol } });
 		else if (p.r < 0) onSelect({ a: { r: 0, c: p.c }, f: { r: Math.max(lastRow, 0), c: p.c } });
 		else if (p.c < 0) onSelect({ a: { r: p.r, c: 0 }, f: { r: p.r, c: Math.max(lastCol, 0) } });
-		else onSelect(extend ? { a: sel.a, f: p } : { a: p, f: p });
+		else {
+			// a click anywhere in a merged cell picks the cell itself
+			const m = data.merges.find((x) => p.r >= x.r1 && p.r <= x.r2 && p.c >= x.c1 && p.c <= x.c2);
+			const at = m ? { r: m.r1, c: m.c1 } : p;
+			onSelect(extend ? { a: sel.a, f: at } : { a: at, f: at });
+		}
 	};
 	const dragging = useRef(false);
 	const pointer = useRef("mouse");
@@ -886,10 +889,7 @@ function Grid({ data, styles, show, sel, onSelect, matches }: GridProps) {
 				else if (k === "ArrowRight") go(0, 1);
 				else if (k === "ArrowLeft") go(0, -1);
 				else if (k === "Enter") go(e.shiftKey ? -1 : 1, 0);
-				else if (k === "Tab") {
-					e.preventDefault();
-					move(0, e.shiftKey ? -1 : 1, false, false);
-				} else if (k === "PageDown") {
+				else if (k === "PageDown") {
 					e.preventDefault();
 					move(pageRows, 0, e.shiftKey, false);
 				} else if (k === "PageUp") {

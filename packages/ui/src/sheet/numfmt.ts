@@ -238,7 +238,7 @@ export function isDateFormat(code: string): boolean {
 }
 
 function isDateCode(code: string): boolean {
-	for (const t of tokens(code)) if (t.kind === "date") return true;
+	for (const t of tokens(code)) if (t.kind === "date" || t.kind === "elapsed") return true;
 	return false;
 }
 

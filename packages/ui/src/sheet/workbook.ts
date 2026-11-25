@@ -81,8 +81,8 @@ export interface Workbook {
 	active: number;
 	styles: CellStyle[];
 	date1904: boolean;
-	/** The sheet's cells; read once, then kept. */
-	sheet(index: number): Promise<SheetData>;
+	/** The sheet's cells; read once, then kept. Undefined when its part can't be read. */
+	sheet(index: number): Promise<SheetData | undefined>;
 }
 
 // ---------- ZIP ----------
@@ -579,7 +579,7 @@ export async function readWorkbook(
 			path: rel?.target,
 		});
 	}
-	const cache = new Map<number, Promise<SheetData>>();
+	const cache = new Map<number, Promise<SheetData | undefined>>();
 	const empty = (): SheetData => ({
 		rows: 0,
 		cols: 0,
@@ -601,18 +601,20 @@ export async function readWorkbook(
 		styles,
 		date1904,
 		sheet(index) {
-			let p = cache.get(index);
-			if (!p) {
-				p = (async () => {
-					const info = sheets[index];
-					if (!info?.path || info.kind !== "cells") return empty();
-					const xml = await text(info.path);
-					if (!xml) return empty();
-					strings ??= readStrings(await text(sharedPath));
-					return readSheet(xml, strings, styles, baseSize);
-				})();
-				cache.set(index, p);
-			}
+			const hit = cache.get(index);
+			if (hit) return hit;
+			const p = (async (): Promise<SheetData | undefined> => {
+				const info = sheets[index];
+				if (!info?.path || info.kind !== "cells") return empty();
+				const xml = await text(info.path);
+				if (!xml) return undefined;
+				strings ??= readStrings(await text(sharedPath));
+				return readSheet(xml, strings, styles, baseSize);
+			})().catch((e: unknown): undefined => {
+				console.warn("worksheet not readable", e);
+				return;
+			});
+			cache.set(index, p);
 			return p;
 		},
 	};
@@ -833,14 +835,16 @@ export function shiftFormula(f: string, dr: number, dc: number): string {
 	let i = 0;
 	while (i < f.length) {
 		const ch = f[i]!;
-		if (ch === '"' || ch === "'") {
-			const end = f.indexOf(ch, i + 1);
+		// strings, quoted sheet names and structured references ("Table1[Q1]") stay as they are
+		if (ch === '"' || ch === "'" || ch === "[") {
+			const end = f.indexOf(ch === "[" ? "]" : ch, i + 1);
 			const stop = end < 0 ? f.length : end + 1;
 			out += f.slice(i, stop);
 			i = stop;
 			continue;
 		}
-		const m = /^(\$?)([A-Z]{1,3})(\$?)(\d+)(?![\w(])/.exec(f.slice(i));
+		// not a sheet's name ("Q1!A1") nor a function ("LOG10(")
+		const m = /^(\$?)([A-Z]{1,3})(\$?)(\d+)(?![\w(!])/.exec(f.slice(i));
 		const prev = out.at(-1) ?? "";
 		if (m && !/[\w.]/.test(prev)) {
 			const col = m[1] ? m[2]! : colName(Math.max(0, parseRef(`${m[2]}1`)!.c + dc));
