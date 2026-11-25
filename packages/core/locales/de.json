@@ -516,6 +516,7 @@
 	"op.typeToTag": "Typ „{name}“ in Tag #{tag} umgewandelt",
 	"op.typeToType": "Typ „{name}“ in „{target}“ umgewandelt",
 	"page.createdOn": "erstellt am {date}",
+	"page.editedOn": "Geändert am {date}",
 	"palette.cmd.language": "Sprache wechseln (English)",
 	"palette.cmd.newType": "Neuer Typ",
 	"palette.cmd.sortInbox": "Eingang einsortieren",

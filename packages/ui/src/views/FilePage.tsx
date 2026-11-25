@@ -12,7 +12,7 @@ import { leavePage, useDocumentTitle, useFiles, useIndex, useRepo } from "../hoo
 import { titleOf, useT } from "../i18n";
 import { who } from "../ui/actor";
 import { ItemIcon, Tag } from "../ui/item-look";
-import { Crumbs, LinksMenu, PageFooter, TrashBanner } from "../ui/PageParts";
+import { Crumbs, LinksMenu, PageDates, TrashBanner } from "../ui/PageParts";
 import { ItemPicker } from "../ui/Picker";
 import { MenuItem, MoreMenu } from "../ui/primitives";
 import { TagInput } from "../ui/TagInput";
@@ -252,7 +252,7 @@ export function FilePage({ item }: { item: Item }) {
 				variant="inline"
 			/>
 
-			<PageFooter item={item} />
+			<PageDates item={item} />
 			{picking && (
 				<ItemPicker
 					exclude={(x) => x.id === item.id || parents.includes(x.id) || x.kind !== "note"}

@@ -3,6 +3,7 @@
 import { IntlMessageFormat, type PrimitiveType } from "intl-messageformat";
 import de from "../locales/de.json";
 import en from "../locales/en.json";
+import { dateOf, diffDays } from "./date";
 
 export type Lang = "de" | "en";
 export const LANGS: Lang[] = ["de", "en"];
@@ -140,6 +141,17 @@ export function fmtRelative(lang: Lang, ts: number, now = Date.now()) {
 		month: "short",
 		year: dist > DAY_S * SHOW_YEAR_DAYS ? "numeric" : undefined,
 	});
+}
+
+/** Relative while the moment is today or yesterday ("vor 3 Stunden", "gestern"); undefined for
+ * older moments, which read better as a date. */
+export function fmtRecent(lang: Lang, ts: number, now = Date.now()) {
+	const days = diffDays(dateOf(ts), dateOf(now));
+	if (days > 1) return;
+	// fmtRelative counts whole days from now: 40 hours ago would read "vorgestern"
+	if (days === 1 && now - ts >= DAY_S * 1000)
+		return new Intl.RelativeTimeFormat(locale(lang), { numeric: "auto" }).format(-1, "day");
+	return fmtRelative(lang, ts, now);
 }
 
 /** Seconds as "m:ss". */

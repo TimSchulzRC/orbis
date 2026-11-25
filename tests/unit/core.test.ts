@@ -1,5 +1,5 @@
 import { describe, expect, jest, test } from "bun:test";
-import { CATALOGS } from "@orbis/core/i18n";
+import { CATALOGS, fmtRecent } from "@orbis/core/i18n";
 import { setAside, tomorrow } from "@orbis/core/inbox";
 import {
 	addParent,
@@ -381,6 +381,19 @@ describe("i18n", () => {
 			const missing = [...keys].filter((k) => !(k in cat));
 			expect({ lang, missing }).toEqual({ lang, missing: [] });
 		}
+	});
+
+	test("fmtRecent is relative up to yesterday, then gives way to a date", () => {
+		const at = (d: number, h: number, m = 0) => new Date(2026, 10, d, h, m).getTime();
+		const now = at(25, 10);
+		expect(fmtRecent("de", at(25, 9), now)).toBe("vor 1 Stunde");
+		expect(fmtRecent("de", at(24, 20), now)).toBe("vor 14 Stunden");
+		// more than a day ago, still yesterday: not "vorgestern"
+		expect(fmtRecent("de", at(24, 1), now)).toBe("gestern");
+		expect(fmtRecent("en", at(24, 1), now)).toBe("yesterday");
+		expect(fmtRecent("de", at(23, 23), now)).toBeUndefined();
+		// shortly after midnight: two days back is a date, though only 25 hours ago
+		expect(fmtRecent("de", at(23, 23), at(25, 0, 30))).toBeUndefined();
 	});
 });
 
