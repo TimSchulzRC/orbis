@@ -1,7 +1,9 @@
 // The file page: a text or code file shows its content (monospace), an Office file the text the
-// server took out, HTML only as text – never rendered; every file has its download.
+// server took out, an Excel workbook its sheets, HTML only as text – never rendered; every file
+// has its download.
 
 import { type FileMeta, initItem, newId, setFileMeta } from "@orbis/core/model";
+import { zipStore } from "@orbis/core/zip";
 import type { Repo } from "@orbis/sync";
 import { afterEach, expect, test } from "vitest";
 import { page } from "vitest/browser";
@@ -142,4 +144,74 @@ test("a PDF shows from a blob: URL, and its download saves that", async () => {
 		.toBe(`blob:loaded-${"a".repeat(64)}`);
 	expect(download().element().getAttribute("href")).toBe(`blob:loaded-${"a".repeat(64)}`);
 	expect(download().element().getAttribute("download")).toBe("invoice.pdf");
+});
+
+/** A workbook with two sheets, as Excel stores it (stored, not compressed: the reader takes both). */
+function workbook(): Blob {
+	const enc = new TextEncoder();
+	const files: Record<string, string> = {
+		"xl/workbook.xml":
+			'<workbook xmlns:r="r"><sheets><sheet name="Umsatz" sheetId="1" r:id="rId1"/><sheet name="Notizen" sheetId="2" r:id="rId2"/></sheets></workbook>',
+		"xl/_rels/workbook.xml.rels":
+			'<Relationships><Relationship Id="rId1" Type="w" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="w" Target="worksheets/sheet2.xml"/></Relationships>',
+		"xl/sharedStrings.xml":
+			"<sst><si><t>Kunde</t></si><si><t>Betrag</t></si><si><t>Müller</t></si></sst>",
+		"xl/styles.xml":
+			'<styleSheet><numFmts><numFmt numFmtId="164" formatCode="#,##0.00 &quot;€&quot;"/></numFmts><cellXfs><xf numFmtId="0"/><xf numFmtId="164"/></cellXfs></styleSheet>',
+		"xl/worksheets/sheet1.xml":
+			'<worksheet><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c></row><row r="2"><c r="A2" t="s"><v>2</v></c><c r="B2" s="1"><v>1234.5</v></c></row><row r="3"><c r="B3" s="1"><f>SUM(B2)</f><v>1234.5</v></c></row></sheetData></worksheet>',
+		"xl/worksheets/sheet2.xml":
+			'<worksheet><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Zweites Blatt</t></is></c></row></sheetData></worksheet>',
+	};
+	const parts = zipStore(Object.entries(files).map(([path, s]) => ({ path, data: enc.encode(s) })));
+	return new Blob(parts as BlobPart[]);
+}
+
+const sheetFiles = (blob: Blob | undefined) =>
+	({ ...serverFiles, content: async () => blob }) as unknown as DeviceFiles;
+
+test("an Excel workbook: its cells as Excel shows them, sheets as tabs, the whole width", async () => {
+	await show(
+		{ name: "Umsatz.xlsx", filetype: "document", text: "Sheet: Umsatz", extracted: "x" },
+		sheetFiles(workbook()),
+	);
+	const grid = page.getByRole("grid");
+	await expect.element(grid).toBeVisible();
+	await expect.element(grid.getByText("1.234,50 €").first()).toBeVisible();
+	await expect.element(grid.getByText("Müller")).toBeVisible();
+	expect(document.querySelector(".page-full")).not.toBeNull();
+	expect(document.querySelector("[data-testid=file-text]")).toBeNull();
+	// a click shows the cell's value and formula above the grid
+	const box = grid.element().getBoundingClientRect();
+	const cell = [...grid.element().querySelectorAll(".xl-cell")].filter(
+		(e) => e.textContent === "1.234,50 €",
+	)[1]!;
+	const r = cell.getBoundingClientRect();
+	expect(r.left).toBeGreaterThan(box.left);
+	await page.elementLocator(cell).click();
+	await expect.element(page.getByTestId("sheet-value")).toHaveTextContent("1.234,50 €=SUM(B2)");
+	// search jumps to the hit
+	await page.getByRole("searchbox", { name: "In der Tabelle suchen" }).fill("müll");
+	await expect.element(page.getByText("1 von 1")).toBeVisible();
+	await expect.element(page.getByTestId("sheet-value")).toHaveTextContent("Müller");
+	// the other sheet
+	await page.getByRole("tab", { name: "Notizen" }).click();
+	await expect.element(grid.getByText("Zweites Blatt")).toBeVisible();
+	await expect
+		.element(page.getByRole("tab", { name: "Notizen" }))
+		.toHaveAttribute("aria-selected", "true");
+});
+
+test("an Excel workbook whose content can't be had: the text the server took out", async () => {
+	await show(
+		{
+			name: "Offline.xlsx",
+			filetype: "document",
+			text: "Sheet: Umsatz\nKunde\tBetrag",
+			extracted: "x",
+		},
+		sheetFiles(undefined),
+	);
+	await expect.element(page.getByTestId("file-text")).toBeVisible();
+	expect(page.getByTestId("file-text").element().textContent).toBe("Sheet: Umsatz\nKunde\tBetrag");
 });

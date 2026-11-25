@@ -10,6 +10,7 @@ import { Textarea } from "../components/ui/textarea";
 import { useBlobUrl } from "../files";
 import { leavePage, useDocumentTitle, useFiles, useIndex, useRepo } from "../hooks";
 import { titleOf, useT } from "../i18n";
+import { SHEET_FILE, SheetView } from "../sheet/SheetView";
 import { who } from "../ui/actor";
 import { ItemIcon, Tag } from "../ui/item-look";
 import { Crumbs, LinksMenu, PageDates, TrashBanner } from "../ui/PageParts";
@@ -146,8 +147,51 @@ export function FilePage({ item }: { item: Item }) {
 			</MoreMenu>
 		</>
 	);
+	// a workbook takes the whole width, its cells right below the title; the facts follow
+	const sheet = SHEET_FILE.test(file.name);
+	const properties = (
+		<>
+			{/* facts as the property block (no "+ Property") */}
+			<div className="mt-[18px] grid grid-cols-[148px_minmax(0,1fr)] gap-x-3 max-md:grid-cols-[124px_minmax(0,1fr)]">
+				{[[t("file.name"), file.name] as [string, React.ReactNode], ...facts.slice(1)].map(
+					([label, value]) => (
+						<div className="contents" key={label}>
+							<div className="flex min-h-8 items-center truncate text-[13px] text-muted-foreground pointer-coarse:min-h-11">
+								{label}
+							</div>
+							<div className="flex min-h-8 min-w-0 items-center break-all text-sm tabular-nums pointer-coarse:min-h-11">
+								{value}
+							</div>
+						</div>
+					),
+				)}
+				<div className="flex min-h-8 items-center text-[13px] text-muted-foreground pointer-coarse:min-h-11">
+					{t("item.tags")}
+				</div>
+				<div className="flex min-h-8 min-w-0 flex-wrap items-center gap-1.5 text-sm pointer-coarse:min-h-11">
+					{item.tags.map((x) => (
+						<Tag key={x} onRemove={() => repo.setMember(item.id, "tags", x, false)} tag={x} />
+					))}
+					<TagInput exclude={item.tags} onAdd={(x) => repo.setMember(item.id, "tags", x, true)} />
+				</div>
+			</div>
+			<div className="mt-5 border-t border-line" />
+		</>
+	);
+	const description = (
+		<Textarea
+			aria-label={t("file.description")}
+			className="field mt-4 w-full resize-y bg-transparent text-[15px] leading-[1.65] outline-none placeholder:text-faint max-md:text-base"
+			defaultValue={item.body}
+			key={item.id}
+			onBlur={(e) => e.target.value !== item.body && repo.setBody(item.id, e.target.value)}
+			placeholder={t("file.descriptionPlaceholder")}
+			rows={2}
+			variant="inline"
+		/>
+	);
 	return (
-		<div className="page-read">
+		<div className={sheet ? "page-full" : "page-read"}>
 			{item.deleted && <TrashBanner onRestore={() => repo.restore(item.id)} />}
 			{missing && (
 				<p className="mb-3 rounded-lg border border-dashed border-line px-3 py-2 text-sm text-muted-foreground">
@@ -183,56 +227,51 @@ export function FilePage({ item }: { item: Item }) {
 					<LinksMenu item={item} usedIn={usedIn} />
 				</span>
 			</div>
-			{/* facts as the property block (no "+ Property") */}
-			<div className="mt-[18px] grid grid-cols-[148px_minmax(0,1fr)] gap-x-3 max-md:grid-cols-[124px_minmax(0,1fr)]">
-				{[[t("file.name"), file.name] as [string, React.ReactNode], ...facts.slice(1)].map(
-					([label, value]) => (
-						<div className="contents" key={label}>
-							<div className="flex min-h-8 items-center truncate text-[13px] text-muted-foreground pointer-coarse:min-h-11">
-								{label}
-							</div>
-							<div className="flex min-h-8 min-w-0 items-center break-all text-sm tabular-nums pointer-coarse:min-h-11">
-								{value}
-							</div>
-						</div>
-					),
-				)}
-				<div className="flex min-h-8 items-center text-[13px] text-muted-foreground pointer-coarse:min-h-11">
-					{t("item.tags")}
+			{sheet && (
+				<>
+					<div className="mt-4">
+						<SheetView
+							fallback={
+								<div className="overflow-hidden rounded-xl border border-line bg-surface-2">
+									<FileText file={file} missing={missing} />
+								</div>
+							}
+							file={file}
+						/>
+					</div>
+					<div className="max-w-[760px]">
+						{properties}
+						{description}
+					</div>
+				</>
+			)}
+			{!sheet && properties}
+			{!sheet && (
+				<div className="mt-6 overflow-hidden rounded-xl border border-line bg-surface-2">
+					{isImg && display && (
+						<img
+							alt={item.body || item.title}
+							className="mx-auto max-h-[70vh] w-auto"
+							src={display}
+						/>
+					)}
+					{file.filetype === "pdf" && media && (
+						<iframe className="h-[75vh] w-full bg-white" src={media} title={item.title} />
+					)}
+					{file.filetype === "audio" && media && (
+						// biome-ignore lint/a11y/useMediaCaption: an uploaded file comes without a caption track
+						<audio className="w-full p-4" controls src={media} />
+					)}
+					{file.filetype === "video" && media && (
+						// biome-ignore lint/a11y/useMediaCaption: an uploaded file comes without a caption track
+						<video className="w-full" controls src={media} />
+					)}
+					{!isImg &&
+						file.filetype !== "pdf" &&
+						file.filetype !== "audio" &&
+						file.filetype !== "video" && <FileText file={file} missing={missing} />}
 				</div>
-				<div className="flex min-h-8 min-w-0 flex-wrap items-center gap-1.5 text-sm pointer-coarse:min-h-11">
-					{item.tags.map((x) => (
-						<Tag key={x} onRemove={() => repo.setMember(item.id, "tags", x, false)} tag={x} />
-					))}
-					<TagInput exclude={item.tags} onAdd={(x) => repo.setMember(item.id, "tags", x, true)} />
-				</div>
-			</div>
-			<div className="mt-5 border-t border-line" />
-
-			<div className="mt-6 overflow-hidden rounded-xl border border-line bg-surface-2">
-				{isImg && display && (
-					<img
-						alt={item.body || item.title}
-						className="mx-auto max-h-[70vh] w-auto"
-						src={display}
-					/>
-				)}
-				{file.filetype === "pdf" && media && (
-					<iframe className="h-[75vh] w-full bg-white" src={media} title={item.title} />
-				)}
-				{file.filetype === "audio" && media && (
-					// biome-ignore lint/a11y/useMediaCaption: an uploaded file comes without a caption track
-					<audio className="w-full p-4" controls src={media} />
-				)}
-				{file.filetype === "video" && media && (
-					// biome-ignore lint/a11y/useMediaCaption: an uploaded file comes without a caption track
-					<video className="w-full" controls src={media} />
-				)}
-				{!isImg &&
-					file.filetype !== "pdf" &&
-					file.filetype !== "audio" &&
-					file.filetype !== "video" && <FileText file={file} missing={missing} />}
-			</div>
+			)}
 			{file.filetype === "pdf" && file.text && (
 				<details className="mt-3 rounded-xl border border-line bg-surface-2">
 					<summary className="cursor-pointer px-4 py-2.5 text-[13px] text-muted-foreground">
@@ -241,16 +280,7 @@ export function FilePage({ item }: { item: Item }) {
 					<TextBlock hash={file.hash} mono={false} text={file.text} />
 				</details>
 			)}
-			<Textarea
-				aria-label={t("file.description")}
-				className="field mt-4 w-full resize-y bg-transparent text-[15px] leading-[1.65] outline-none placeholder:text-faint max-md:text-base"
-				defaultValue={item.body}
-				key={item.id}
-				onBlur={(e) => e.target.value !== item.body && repo.setBody(item.id, e.target.value)}
-				placeholder={t("file.descriptionPlaceholder")}
-				rows={2}
-				variant="inline"
-			/>
+			{!sheet && description}
 
 			<PageDates item={item} />
 			{picking && (
