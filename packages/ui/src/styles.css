@@ -612,15 +612,18 @@ tr:hover .cell-tools button:not(.tap-y) {
 	}
 }
 
-/* Content widths (design rules § 1.4): reading 760, overview 1040. Padding sits outside the width. */
+/* Content widths (design rules § 1.4): reading 760, overview 1040, a spreadsheet the whole column.
+   Padding sits outside the width. */
 .page-read,
-.page-wide {
+.page-wide,
+.page-full {
 	box-sizing: content-box;
 	padding: 28px 48px 72px;
 	margin-inline: auto;
 }
 /* the page bar stays on top while scrolling */
-.page-read:has(> .page-bar) {
+.page-read:has(> .page-bar),
+.page-full:has(> .page-bar) {
 	padding-top: 0;
 }
 .page-bar {
@@ -653,9 +656,14 @@ tr:hover .cell-tools button:not(.tap-y) {
 	max-width: 1040px;
 	padding-inline: 32px;
 }
+.page-full {
+	padding-inline: 24px;
+	padding-bottom: 24px;
+}
 @media (max-width: 767px) {
 	.page-read,
-	.page-wide {
+	.page-wide,
+	.page-full {
 		padding: 16px 16px 72px;
 	}
 }
@@ -664,7 +672,7 @@ tr:hover .cell-tools button:not(.tap-y) {
 .tray-room {
 	padding-bottom: 80px;
 }
-.tray-room :is(.page-read, .page-wide) {
+.tray-room :is(.page-read, .page-wide, .page-full) {
 	padding-bottom: 0;
 }
 
@@ -1257,4 +1265,80 @@ html.drawing-open #root aside {
 	color: var(--foreground);
 	background: transparent;
 	box-shadow: none;
+}
+
+/* The Excel viewer (sheet/SheetView.tsx): panes of absolutely placed cells; colours from the file
+   on cells that have them, the theme's elsewhere. */
+.xl {
+	--xl-bg: var(--card);
+	--xl-grid: color-mix(in srgb, var(--border) 85%, var(--muted-foreground) 15%);
+}
+.xl-pane {
+	box-sizing: border-box;
+	overflow: hidden;
+	background: var(--xl-bg);
+}
+.xl-pane[data-edge-r] {
+	border-right: 1px solid var(--faint);
+}
+.xl-pane[data-edge-b] {
+	border-bottom: 1px solid var(--faint);
+}
+.xl-line {
+	position: absolute;
+	background: var(--xl-grid);
+}
+.xl-head {
+	position: absolute;
+	box-sizing: border-box;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 11px;
+	font-variant-numeric: tabular-nums;
+	color: var(--muted-foreground);
+	user-select: none;
+	background: var(--secondary);
+	border-right: 1px solid var(--xl-grid);
+	border-bottom: 1px solid var(--xl-grid);
+}
+.xl-head[data-on] {
+	font-weight: 600;
+	color: var(--text);
+	background: var(--accent);
+}
+.xl-merge {
+	position: absolute;
+	background: var(--xl-bg);
+}
+.xl-cell {
+	position: absolute;
+	box-sizing: border-box;
+	display: flex;
+	padding: 1px 4px;
+	overflow: hidden;
+	font-size: 13px;
+	line-height: 1.3;
+	color: var(--ink, var(--text));
+	white-space: pre;
+	user-select: none;
+}
+/* dark text from the file would vanish on the dark theme */
+:root[data-theme="dark"] .xl-cell[data-dark-ink] {
+	color: var(--text);
+}
+.xl-cell[data-match] {
+	background-image: linear-gradient(
+		color-mix(in srgb, var(--pal-amber) 28%, transparent),
+		color-mix(in srgb, var(--pal-amber) 28%, transparent)
+	);
+}
+.xl-sel {
+	position: absolute;
+	box-sizing: border-box;
+	pointer-events: none;
+	border: 2px solid var(--ring);
+}
+.xl-sel[data-range] {
+	background: color-mix(in srgb, var(--ring) 10%, transparent);
 }
