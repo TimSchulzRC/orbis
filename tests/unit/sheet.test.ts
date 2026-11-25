@@ -106,6 +106,7 @@ describe("references and formulas", () => {
 		expect(shiftFormula('IF(A1>0,"A1",Sheet2!B1)', 1, 0)).toBe('IF(A2>0,"A1",Sheet2!B2)');
 		expect(shiftFormula("LOG10(A1)", 1, 0)).toBe("LOG10(A2)");
 		expect(shiftFormula("Q1!A1+Table1[Q1]", 1, 0)).toBe("Q1!A2+Table1[Q1]");
+		expect(shiftFormula("SUM(Q1:Q2!A1)", 1, 0)).toBe("SUM(Q1:Q2!A2)");
 	});
 });
 
@@ -244,20 +245,23 @@ describe("reading a workbook", () => {
 		});
 	}
 
-	test("a worksheet whose part is missing: undefined, so the page falls back to the text", async () => {
+	test("a worksheet that can't be read: undefined, so the page falls back to the text", async () => {
 		const files = {
 			"xl/workbook.xml":
-				'<workbook><sheets><sheet name="Weg" sheetId="1" r:id="rId1"/></sheets></workbook>',
+				'<workbook><sheets><sheet name="Weg" sheetId="1" r:id="rId1"/><sheet name="Ohne" sheetId="2" r:id="rId9"/><sheet name="Fremd" sheetId="3" r:id="rId3"/></sheets></workbook>',
 			"xl/_rels/workbook.xml.rels":
-				'<Relationships><Relationship Id="rId1" Type="w" Target="worksheets/gone.xml"/></Relationships>',
+				'<Relationships><Relationship Id="rId1" Type="w" Target="worksheets/gone.xml"/><Relationship Id="rId3" Type="w" Target="worksheets/other.xml"/></Relationships>',
+			"xl/worksheets/other.xml": "<styleSheet/>",
 		};
 		const parts = zipStore(
 			Object.entries(files).map(([path, text]) => ({ path, data: enc.encode(text) })),
 		);
 		const bytes = new Uint8Array(await new Blob(parts as BlobPart[]).arrayBuffer());
 		const book = (await readWorkbook(bytes, () => "General"))!;
-		expect(book.sheets.map((s) => s.name)).toEqual(["Weg"]);
-		expect(await book.sheet(0)).toBeUndefined();
+		expect(book.sheets.map((s) => s.name)).toEqual(["Weg", "Ohne", "Fremd"]);
+		expect(await book.sheet(0)).toBeUndefined(); // the part is missing
+		expect(await book.sheet(1)).toBeUndefined(); // no relationship
+		expect(await book.sheet(2)).toBeUndefined(); // not a worksheet
 	});
 
 	test("not a workbook: undefined", async () => {

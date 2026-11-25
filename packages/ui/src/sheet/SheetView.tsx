@@ -19,6 +19,7 @@ import {
 import { useFiles } from "../hooks";
 import { useT } from "../i18n";
 import { IconButton } from "../ui/primitives";
+import { notify } from "../ui/toasts";
 import { builtinFormat, cellText, type Formatted } from "./numfmt";
 import {
 	type Cell,
@@ -41,6 +42,8 @@ const OVERSCAN = 3;
 const OVERFLOW_MAX = 30;
 /** Hits a search lists at most. */
 const MATCH_MAX = 10_000;
+/** Cells a copy takes at most: a sparse sheet's "select all" can span billions. */
+const COPY_MAX = 2_000_000;
 /** The viewer's least height; below it the page scrolls. */
 const MIN_HEIGHT = 360;
 /** Excel's 11 pt at 13 px. */
@@ -138,6 +141,7 @@ function BookView({ book, lang, fallback }: { book: Workbook; lang: Lang; fallba
 				const cell = row[c];
 				if (!cell) continue;
 				if (show(cell).text.toLocaleLowerCase().includes(q)) out.push({ r, c });
+				if (out.length >= MATCH_MAX) break;
 			}
 		}
 		return out;
@@ -527,7 +531,7 @@ interface GridProps {
 }
 
 function Grid({ data, styles, show, sel, onSelect, matches }: GridProps) {
-	const { t } = useT();
+	const { t, lang } = useT();
 	const scroller = useRef<HTMLDivElement>(null);
 	const [view, setView] = useState({ w: 800, h: 600, left: 0, top: 0 });
 	useLayoutEffect(() => {
@@ -875,6 +879,12 @@ function Grid({ data, styles, show, sel, onSelect, matches }: GridProps) {
 			}}
 			onCopy={(e) => {
 				e.preventDefault();
+				const rows = Math.min(range.r2, data.rows - 1) - range.r1 + 1;
+				const cols = Math.min(range.c2, data.cols - 1) - range.c1 + 1;
+				if (rows * cols > COPY_MAX) {
+					notify(t("sheet.copyTooLarge", { count: fmtNumber(lang, COPY_MAX) }));
+					return;
+				}
 				e.clipboardData.setData("text/plain", rangeText(data, range, show));
 			}}
 			onKeyDown={(e) => {

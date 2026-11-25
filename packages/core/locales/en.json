@@ -891,6 +891,7 @@
 	"setup.welcome": "Welcome to Orbis",
 	"sheet.average": "Average: {average}",
 	"sheet.chart": "This sheet only holds a chart. Orbis doesn't show it; open the download to see it.",
+	"sheet.copyTooLarge": "Too many cells to copy: {count} at most. Select a smaller range.",
 	"sheet.count": "Count: {count}",
 	"sheet.cut": "first {count} rows only",
 	"sheet.empty": "This sheet is empty.",

@@ -891,6 +891,7 @@
 	"setup.welcome": "Willkommen bei Orbis",
 	"sheet.average": "Mittelwert: {average}",
 	"sheet.chart": "Dieses Blatt enthält nur ein Diagramm. Orbis zeigt es nicht an, das geht nur im Download.",
+	"sheet.copyTooLarge": "Zu viele Zellen zum Kopieren: höchstens {count}. Wähle einen kleineren Bereich.",
 	"sheet.count": "Anzahl: {count}",
 	"sheet.cut": "nur die ersten {count} Zeilen",
 	"sheet.empty": "Dieses Blatt ist leer.",
