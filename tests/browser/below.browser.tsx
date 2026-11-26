@@ -106,3 +106,20 @@ test("the arrow that opens an entry is at the end of its line, so every entry st
 	expect(arrow.getAttribute("aria-expanded")).toBe("true");
 	expect(left(title("ex-t-pages-home"))).toBeGreaterThan(left(title("ex-t-pages")));
 });
+
+test("the plus of the add line stands at the middle of the capitals beside it", async () => {
+	await setup("ex-relaunch");
+	const input = page.getByRole("textbox", { name: "Projekt anlegen …" });
+	await expect.element(input).toBeVisible();
+	const line = input.element().parentElement!;
+	const plus = line.querySelector("svg")!.getBoundingClientRect();
+	// where the line's baseline is: an empty box in it stands on the baseline
+	const probe = line.appendChild(document.createElement("i"));
+	const baseline = probe.getBoundingClientRect().bottom;
+	probe.remove();
+	const pen = document.createElement("canvas").getContext("2d")!;
+	const { fontStyle, fontWeight, fontSize, fontFamily } = getComputedStyle(input.element());
+	pen.font = `${fontStyle} ${fontWeight} ${fontSize} ${fontFamily}`;
+	const capitals = pen.measureText("H").actualBoundingBoxAscent;
+	expect(Math.abs(plus.top + plus.height / 2 - (baseline - capitals / 2))).toBeLessThan(0.75);
+});

@@ -45,7 +45,6 @@ function AddRow({
 	const [text, setText] = useState("");
 	return (
 		<form
-			className="border-t border-line"
 			onSubmit={(e) => {
 				e.preventDefault();
 				if (!text.trim()) return;
@@ -53,27 +52,32 @@ function AddRow({
 				setText("");
 			}}
 		>
-			<label className="group/add flex min-h-10 cursor-text items-center gap-2 px-3 text-faint not-focus-within:hover:bg-hover focus-within:bg-hover/60 focus-within:text-fg max-md:min-h-[48px]">
-				<Plus className="shrink-0" size={15} />
-				<Input
-					aria-label={label}
-					autoFocus={autoFocus}
-					className="flex-1 text-sm text-fg placeholder:text-muted-foreground max-md:text-[15px]"
-					onChange={(e) => setText(e.target.value)}
-					onKeyDown={(e) => {
-						if (e.key !== "Escape") return;
-						setText("");
-						e.currentTarget.blur();
-						onCancel?.();
-					}}
-					placeholder={placeholder}
-					ref={inputRef}
-					value={text}
-					variant="bare"
-				/>
+			<label className="group/add flex min-h-10 cursor-text items-center gap-2 border-t border-line px-3 text-faint not-focus-within:hover:bg-hover focus-within:bg-hover/60 focus-within:text-fg max-md:min-h-[48px]">
+				{/* On the text's baseline, not in the middle of its line: the plus stands on the baseline
+				    without adding height, then moves down to the middle of the capitals, in whatever font
+				    the device brings. */}
+				<span className="flex min-w-0 flex-1 items-baseline gap-2 text-sm max-md:text-[15px]">
+					<Plus className="-mt-[15px] shrink-0 translate-y-[calc((15px_-_1cap)/2)]" size={15} />
+					<Input
+						aria-label={label}
+						autoFocus={autoFocus}
+						className="flex-1 text-sm text-fg placeholder:text-muted-foreground max-md:text-[15px]"
+						onChange={(e) => setText(e.target.value)}
+						onKeyDown={(e) => {
+							if (e.key !== "Escape") return;
+							setText("");
+							e.currentTarget.blur();
+							onCancel?.();
+						}}
+						placeholder={placeholder}
+						ref={inputRef}
+						value={text}
+						variant="bare"
+					/>
+				</span>
 				{/* what Enter does, once there is something to add */}
 				{text.trim() && (
-					<span className="hidden shrink-0 group-focus-within/add:block">
+					<span className="hidden shrink-0 group-focus-within/add:flex">
 						<Kbd>Enter</Kbd>
 					</span>
 				)}
