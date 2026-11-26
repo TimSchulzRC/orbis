@@ -346,20 +346,33 @@ const keepOutOfPrefix = EditorState.transactionFilter.of((transaction) => {
 		: transaction;
 });
 
-/** Enter in front of a heading's text adds a line above it, and the heading stays one (as in Notion). */
+/** A to-do item's prefix, with its indentation. */
+const TASK = /^\s*[-*+] \[[ xX]\] /;
+
+/**
+ * Enter in front of a heading's text adds a line above it, and the heading stays one (as in Notion).
+ * In front of a to-do's text it adds an empty, unticked to-do above, and the cursor goes there.
+ */
 function newlineAbove(view: EditorView) {
 	const sel = view.state.selection.main;
 	const prefix = sel.empty ? textStart(view.state, sel.head) : null;
-	if (
-		!prefix ||
-		sel.head !== prefix.end ||
-		prefix.line.to === prefix.end ||
-		!HEADING.test(prefix.line.text)
-	)
-		return false;
+	if (!prefix || sel.head !== prefix.end || prefix.line.to === prefix.end) return false;
+	const { from, text } = prefix.line;
+	if (HEADING.test(text)) {
+		view.dispatch({
+			changes: { from, insert: "\n" },
+			selection: EditorSelection.cursor(sel.head + 1),
+			scrollIntoView: true,
+			userEvent: "input",
+		});
+		return true;
+	}
+	const task = TASK.exec(text);
+	if (!task) return false;
+	const box = task[0].replace(/\[[xX]\]/, "[ ]");
 	view.dispatch({
-		changes: { from: prefix.line.from, insert: "\n" },
-		selection: EditorSelection.cursor(sel.head + 1),
+		changes: { from, insert: `${box}\n` },
+		selection: EditorSelection.cursor(from + box.length),
 		scrollIntoView: true,
 		userEvent: "input",
 	});

@@ -148,6 +148,22 @@ describe("lists", () => {
 		await commands.mouse("click", box.left + box.width / 2, box.top + box.height / 2);
 		expect(doc()).toBe(text.replace("[ ]", "[x]"));
 	});
+
+	test("Enter in front of a box's text puts an empty box above, and the cursor in it", async () => {
+		const { view, doc } = await open();
+		const text = ["- a", "  - [x] Angebot prüfen"].join("\n");
+		view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text } });
+		await expect.poll(() => document.querySelector(".cm-check")).not.toBeNull();
+		view.focus();
+		view.dispatch({ selection: { anchor: text.indexOf("Angebot prüfen") } });
+		await commands.keys("press", "Enter");
+		expect(doc()).toBe(["- a", "  - [ ] ", "  - [x] Angebot prüfen"].join("\n"));
+		await expect.poll(() => document.querySelectorAll(".cm-check").length).toBe(2);
+		const cursor = view.state.selection.main.head;
+		expect(view.state.doc.lineAt(cursor).number, "the cursor is on the new line").toBe(2);
+		await commands.keys("type", "neu");
+		expect(doc()).toBe(["- a", "  - [ ] neu", "  - [x] Angebot prüfen"].join("\n"));
+	});
 });
 
 describe("headings", () => {
