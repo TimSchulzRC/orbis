@@ -8,17 +8,17 @@
 		"./*": "./src/*.ts"
 	},
 	"dependencies": {
-		"@better-auth/passkey": "^1.7.18",
+		"@better-auth/passkey": "^1.7.27",
 		"@modelcontextprotocol/sdk": "^1.32.2",
 		"@orbis/core": "workspace:*",
-		"better-auth": "^1.7.18",
-		"nodemailer": "^10.4.0",
+		"better-auth": "^1.7.27",
+		"nodemailer": "^10.6.1",
 		"pdfjs-dist": "^6.5.438",
 		"yjs": "^13.6.33",
 		"zod": "^4.6.7"
 	},
 	"devDependencies": {
-		"@types/bun": "^1.4.4",
+		"@types/bun": "^1.4.5",
 		"@types/nodemailer": "^8.0.2"
 	}
 }

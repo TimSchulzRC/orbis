@@ -31,22 +31,22 @@
 		"typecheck": "tsc --noEmit -p packages/core && tsc --noEmit -p packages/sync && tsc --noEmit -p packages/ui && tsc --noEmit -p apps/server && tsc --noEmit -p apps/web && tsc --noEmit -p apps/desktop && tsc --noEmit -p ."
 	},
 	"devDependencies": {
-		"@biomejs/biome": "2.6.7",
+		"@biomejs/biome": "2.6.8",
 		"@orbis/core": "workspace:*",
 		"@orbis/server": "workspace:*",
 		"@orbis/sync": "workspace:*",
 		"@orbis/ui": "workspace:*",
 		"@tailwindcss/vite": "^4.3.5",
-		"@types/bun": "^1.4.4",
+		"@types/bun": "^1.4.5",
 		"@types/react": "^19.3.0",
 		"@vitejs/plugin-react": "^6.3.0",
-		"@vitest/browser-playwright": "^5.1.0",
-		"playwright": "^1.65.0",
+		"@vitest/browser-playwright": "^5.1.1",
+		"playwright": "^1.65.1",
 		"react": "^19.3.1",
 		"react-dom": "^19.3.1",
 		"typescript": "^7.0.2",
-		"vite": "^8.3.6",
-		"vitest": "^5.1.0",
+		"vite": "^8.3.8",
+		"vitest": "^5.1.1",
 		"vitest-browser-react": "^2.3.0",
 		"yjs": "^13.6.33"
 	}

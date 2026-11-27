@@ -16,9 +16,9 @@
 	"devDependencies": {
 		"@orbis/core": "workspace:*",
 		"@orbis/ui": "workspace:*",
-		"@types/bun": "^1.4.4",
+		"@types/bun": "^1.4.5",
 		"@types/node": "^26.6.6",
-		"electron": "^45.2.0",
+		"electron": "^45.4.1",
 		"electron-builder": "^26.18.0"
 	},
 	"productName": "Orbis"
