@@ -72,6 +72,8 @@ A pull request is ready to merge when `bun run check` passes: Biome counts warni
 
 The browser tests need Chromium once: `bunx playwright install chromium`.
 
+The iPhone app lives in [`apps/mobile`](apps/mobile) with its own dependencies; its README says how to build it and put it on a phone.
+
 More in [`docs`](docs): [CI](docs/ci.md), [file API](docs/files-api.md), [releasing](docs/releasing.md), [background dev servers](scripts/README.md).
 
 ## License

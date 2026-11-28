@@ -723,6 +723,12 @@ export function setRules(doc: Y.Doc, next: string | null) {
 }
 
 /** Replace one text of the document with minimal edits (see replaceBody). */
+/** A low surrogate: the second half of a character outside the BMP (an emoji). */
+const isLowSurrogate = (s: string, i: number) => {
+	const c = s.charCodeAt(i);
+	return c >= 0xdc00 && c <= 0xdfff;
+};
+
 export function replaceText(doc: Y.Doc, name: DocText, next: string) {
 	const text = doc.getText(name);
 	const prev = text.toString();
@@ -734,6 +740,13 @@ export function replaceText(doc: Y.Doc, name: DocText, next: string) {
 	while (endPrev > start && endNext > start && prev[endPrev - 1] === next[endNext - 1]) {
 		endPrev--;
 		endNext--;
+	}
+	// never between the halves of a surrogate pair: Yjs would store each half as U+FFFD (😀 → 😁
+	// share their first half)
+	if (start > 0 && (isLowSurrogate(prev, start) || isLowSurrogate(next, start))) start--;
+	if (isLowSurrogate(prev, endPrev) || isLowSurrogate(next, endNext)) {
+		endPrev++;
+		endNext++;
 	}
 	if (endPrev > start) text.delete(start, endPrev - start);
 	if (endNext > start) text.insert(start, next.slice(start, endNext));

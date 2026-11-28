@@ -1,7 +1,7 @@
 // Line diffs between two versions of a text, for the history of an item's body: hunks for the
 // app (lines marked as kept, added or removed) and a compact unified diff for agents. The diff
 // itself comes from jsdiff (Myers); here only the shape the app and the tools need.
-import { diffWordsWithSpace, structuredPatch } from "diff";
+import { diffArrays, diffWordsWithSpace, structuredPatch } from "diff";
 
 export interface DiffLine {
 	op: " " | "+" | "-";
@@ -118,4 +118,81 @@ export function wordDiff(a: string, b: string): { old: WordPart[]; now: WordPart
 		if (!p.removed) now.push({ op: p.added ? "+" : " ", text: p.value });
 	}
 	return { old, now };
+}
+
+/** One change against the base text: its lines [start, end) become `lines` (start = end: inserted). */
+interface Edit {
+	start: number;
+	end: number;
+	lines: string[];
+}
+
+/** How long a merge may diff: past that (huge rewrites) it gives up and the user chooses. */
+const MERGE_MS = 250;
+
+/**
+ * The changes that turn `base` into `other`, each on its own range of base lines. A block of lines
+ * changed one for one is one change per line, so a clash on one of them leaves the others. undefined
+ * when the diff takes too long.
+ */
+function editsOf(base: string[], other: string[]): Edit[] | undefined {
+	const parts = diffArrays(base, other, { timeout: MERGE_MS });
+	if (!parts) return undefined;
+	const out: Edit[] = [];
+	let at = 0;
+	let open: Edit | undefined; // the edit a removal and an addition next to each other share
+	for (const part of parts) {
+		if (!part.added && !part.removed) {
+			at += part.count;
+			open = undefined;
+			continue;
+		}
+		if (!open) {
+			open = { start: at, end: at, lines: [] };
+			out.push(open);
+		}
+		if (part.added) open.lines.push(...part.value);
+		else {
+			at += part.count;
+			open.end = at;
+		}
+	}
+	return out.flatMap((e) =>
+		e.end - e.start > 1 && e.end - e.start === e.lines.length
+			? e.lines.map((line, i) => ({ start: e.start + i, end: e.start + i + 1, lines: [line] }))
+			: [e],
+	);
+}
+
+/** Two edits that touch the same base lines, or insert at the same place. */
+const clash = (a: Edit, b: Edit) =>
+	(a.start < b.end && b.start < a.end) ||
+	(a.start === a.end && b.start === b.end && a.start === b.start);
+
+/**
+ * The edits made from `base` to `draft`, applied to `current`, which someone else changed from
+ * `base` meanwhile: a three-way merge by lines on the base's line ranges. Where both changed the
+ * same lines, theirs stays and that edit of the draft gives way; every other edit of both goes in.
+ * undefined when the texts are too far apart to merge in time: then someone has to choose.
+ */
+export function mergeText(base: string, draft: string, current: string): string | undefined {
+	if (current === base || draft === current) return draft;
+	if (draft === base) return current;
+	const lines = base.split("\n");
+	const theirs = editsOf(lines, current.split("\n"));
+	const drafted = editsOf(lines, draft.split("\n"));
+	if (!theirs || !drafted) return undefined;
+	const mine = drafted.filter((m) => !theirs.some((t) => clash(m, t)));
+	// in base order; an insertion before a change that starts at the same line
+	const all = [...theirs, ...mine].sort(
+		(a, b) => a.start - b.start || a.end - a.start - (b.end - b.start),
+	);
+	const out: string[] = [];
+	let at = 0;
+	for (const e of all) {
+		out.push(...lines.slice(at, e.start), ...e.lines);
+		at = Math.max(at, e.end);
+	}
+	out.push(...lines.slice(at));
+	return out.join("\n");
 }

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { textDiff, unifiedDiff } from "@orbis/core/diff";
+import { mergeText, textDiff, unifiedDiff } from "@orbis/core/diff";
 
 test("same text: no hunks", () => {
 	expect(textDiff("a\nb\n", "a\nb\n")).toEqual({ hunks: [], added: 0, removed: 0 });
@@ -63,4 +63,29 @@ test("a rewrite too big to diff closely shows as replaced, still counted right",
 	expect([d.added, d.removed]).toEqual([6000, 6000]);
 	expect(d.hunks.length).toBe(1);
 	expect(d.hunks[0]!.lines[0]).toEqual({ op: "-", text: "old 0" });
+});
+
+test("merging a draft: edits from elsewhere stay, a clash keeps theirs", () => {
+	const base = "Ziel\n\n- Design\n- Umsetzung\n";
+	// an agent appended a line while the phone changed another
+	expect(mergeText(base, "Ziel!\n\n- Design\n- Umsetzung\n", `${base}- Livegang\n`)).toBe(
+		"Ziel!\n\n- Design\n- Umsetzung\n- Livegang\n",
+	);
+	// nothing changed elsewhere, or only there
+	expect(mergeText(base, "neu", base)).toBe("neu");
+	expect(mergeText(base, base, "anders")).toBe("anders");
+	// both changed the same line: theirs stays, the draft's other edits still go in
+	expect(mergeText("a\nb\nc\nd\ne\nf", "a\nB\nc\nd\ne\nF", "a\nX\nc\nd\ne\nf")).toBe(
+		"a\nX\nc\nd\ne\nF",
+	);
+	// lines changed one for one clash one by one
+	expect(mergeText("a\nb\nc", "A\nB\nc", "X\nb\nc")).toBe("X\nB\nc");
+	// neighbouring lines are no clash
+	expect(mergeText("a\nb\nc", "a\nB\nc", "a\nb\nC")).toBe("a\nB\nC");
+	// two equal passages: an edit stays where it was made, never moves to the other one
+	expect(mergeText("x\ny\nx\ny", "X\ny\nx\ny", "Z\ny\nx\ny")).toBe("Z\ny\nx\ny");
+	expect(mergeText("x\ny\nx\ny", "x\ny\nX\ny", "Z\ny\nx\ny")).toBe("Z\ny\nX\ny");
+	// insertions at the same place clash, at different places both stay
+	expect(mergeText("a\nb", "a\nmine\nb", "a\ntheirs\nb")).toBe("a\ntheirs\nb");
+	expect(mergeText("a\nb", "mine\na\nb", "a\nb\ntheirs")).toBe("mine\na\nb\ntheirs");
 });

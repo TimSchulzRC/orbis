@@ -5,7 +5,8 @@
 	"type": "module",
 	"workspaces": [
 		"packages/*",
-		"apps/*"
+		"apps/*",
+		"!apps/mobile"
 	],
 	"scripts": {
 		"build": "bun run --cwd apps/web build",

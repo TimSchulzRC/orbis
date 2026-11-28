@@ -1,0 +1,46 @@
+name: Mobile
+
+# The iPhone app (apps/mobile): its types and its iOS bundle, built from the shared packages. It
+# has its own dependencies (React Native pins its React), so ci.yml's check job leaves it out.
+# Building the native app needs a Mac; this job proves what Linux can: every import resolves and
+# Hermes compiles the code.
+on:
+  push:
+    branches: [main]
+    paths: &paths
+      - apps/mobile/**
+      - packages/core/**
+      - packages/sync/**
+      - .github/workflows/mobile.yml
+  pull_request:
+    paths: *paths
+
+concurrency:
+  group: mobile-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  bundle:
+    # GitHub's runners only, as in ci.yml (docs/ci.md)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v7
+      # the newest Bun release, as in ci.yml
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      # Expo's CLI runs on Node and loads app.config.ts by stripping its types: the current LTS does
+      # that, whichever Node the runner image brings
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun run bundle --output-dir "$RUNNER_TEMP/mobile-bundle"

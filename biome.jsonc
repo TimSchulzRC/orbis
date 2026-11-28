@@ -103,6 +103,16 @@
 	},
 	"overrides": [
 		{
+			// the iPhone app (apps/mobile): iOS-only APIs such as DynamicColorIOS and ActionSheetIOS need
+			// no .ios file suffix while it runs on nothing else
+			"includes": ["apps/mobile/**"],
+			"linter": {
+				"rules": {
+					"correctness": { "useReactNativePlatformComponents": "off" }
+				}
+			}
+		},
+		{
 			// translations: one key order in every language makes a missing key easy to spot
 			"includes": ["packages/core/locales/**/*.json"],
 			"assist": {
