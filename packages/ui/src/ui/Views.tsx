@@ -402,6 +402,7 @@ export function ViewSettings({
 	onLook,
 	kinds = TAB_KINDS,
 	part,
+	lines,
 }: {
 	tab: ViewTab;
 	fields: ViewField[];
@@ -410,6 +411,8 @@ export function ViewSettings({
 	onLook: (patch: Partial<ViewTab>) => void;
 	kinds?: ViewKind[];
 	part?: "sort" | "group" | "more";
+	/** A list whose lines show chosen properties too (the inbox's tabs). */
+	lines?: boolean;
 }) {
 	const { t } = useT();
 	const ix = useIndex();
@@ -446,7 +449,7 @@ export function ViewSettings({
 	const shown = tab.columns ?? columns ?? []; // none chosen yet: the ones shown by default
 	const kindsHere = kinds.includes(tab.kind) ? kinds : [...kinds, tab.kind];
 	const groupedKind = tab.kind !== "triage" && tab.kind !== "calendar";
-	const hasProps = tab.kind === "table" || tab.kind === "board";
+	const hasProps = tab.kind === "table" || tab.kind === "board" || !!lines;
 	const hasDate = tab.kind === "calendar" || tab.kind === "timeline";
 	const sorts = tab.sort ?? [];
 	const name = (key: string) => fieldLabel(key, t, fields);
@@ -707,12 +710,14 @@ export function ViewSettings({
 		);
 	return (
 		<div className={box}>
-			<MenuRow
-				icon={KIND_ICON[tab.kind]}
-				label={t("view.layout")}
-				onClick={() => setPage("layout")}
-				value={t(`view.${tab.kind}`)}
-			/>
+			{kindsHere.length > 1 && (
+				<MenuRow
+					icon={KIND_ICON[tab.kind]}
+					label={t("view.layout")}
+					onClick={() => setPage("layout")}
+					value={t(`view.${tab.kind}`)}
+				/>
+			)}
 			{hasProps && (
 				<MenuRow
 					icon={Eye}

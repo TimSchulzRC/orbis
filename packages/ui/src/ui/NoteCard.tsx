@@ -1,6 +1,7 @@
-// A note as a card: the inbox's entry and the quick note. Title and text are always editable, the text
-// with the page's editor, so queries, embeds and links look as on the note's page. The card keeps the
-// height it is given; a long note scrolls inside.
+// A note as a card: the inbox's entry. Title and text are always editable, the text with the page's
+// editor, so queries, embeds and links look as on the note's page. Where it is sorted to shows in
+// its head, an entry with a type has its properties (a to-do its status and due date) as on its
+// page. The card keeps the height it is given; a long note scrolls inside.
 
 import type { EditorView } from "@codemirror/view";
 import type { Item } from "@orbis/core/model";
@@ -15,6 +16,7 @@ import { cn } from "../lib/utils";
 import { ItemIcon, itemLook, kindLabel, RelTime, Tag } from "./item-look";
 import { Markdown } from "./Markdown";
 import { NoteEditor } from "./NoteEditor";
+import { PropertyBlock } from "./Properties";
 import { TitleField } from "./TitleField";
 
 /** Characters of a file's text shown in place of a body. */
@@ -42,6 +44,8 @@ export function NoteCard({
 	// in the inbox, a loose note is just a note
 	const kind = kindLabel(itemLook(item, ix), t, { inboxAsNote: true });
 	const children = belowOf(item.id, ix);
+	const schema = ix.schemaOf(item);
+	const places = ix.parentsOf(item.id);
 	const image = useBlobUrl(
 		item.file?.filetype === "image" ? (item.file.display ?? item.file.hash) : item.file?.thumb,
 		true,
@@ -85,6 +89,21 @@ export function NoteCard({
 								<span className="inline-flex items-center gap-1.5 rounded-full border border-line px-2 py-0.5 text-fg">
 									<ItemIcon item={item} size={13} /> {kind}
 								</span>
+								{places.map((id) => {
+									const place = ix.get(id);
+									return (
+										place && (
+											<a
+												className="inline-flex max-w-[16rem] items-center gap-1 hover:text-fg hover:underline"
+												href={hrefOf(id)}
+												key={id}
+											>
+												<ItemIcon item={place} size={13} />
+												<span className="truncate">{titleOf(place, t)}</span>
+											</a>
+										)
+									);
+								})}
 								{meta}
 								<span>
 									{t("triage.captured")} <RelTime ts={item.created} />
@@ -109,6 +128,7 @@ export function NoteCard({
 								placeholder={item.file?.name}
 							/>
 						</div>
+						{schema && <PropertyBlock item={item} schema={schema} />}
 						{hasText ? (
 							<div className="mt-3 max-w-[68ch] text-[15px] leading-[1.65]">
 								<NoteEditor item={item} minHeight="min-h-24" onView={setView} />
@@ -130,7 +150,7 @@ export function NoteCard({
 								src={image}
 							/>
 						)}
-						{item.tags.length > 0 && (
+						{!schema && item.tags.length > 0 && (
 							<div className="mt-4 flex flex-wrap gap-1.5">
 								{item.tags.map((tag) => (
 									<Tag key={tag} tag={tag} />

@@ -17,6 +17,7 @@ import {
 	FILE_TYPES,
 	type FileType,
 	type Item,
+	type ItemInit,
 	META_TYPE,
 	type OptionDef,
 	optionNames,
@@ -25,12 +26,24 @@ import {
 	QUERY_FENCE,
 	STATUS_GROUPS,
 	titleKey,
+	type Value,
 	VIEW_KINDS,
 	type ViewKind,
 	type ViewTab,
 } from "./model";
 import { foldUmlauts as fold } from "./text";
-import { dateEnd, dateStart, doneAt, dueOf, hasOptions, statusOf, statusProp } from "./traits";
+import {
+	dateEnd,
+	dateStart,
+	doneAt,
+	dueOf,
+	firstOfGroup,
+	hasOptions,
+	initialProps,
+	isDone,
+	statusOf,
+	statusProp,
+} from "./traits";
 
 function isStatusOptionName(ix: Index, word: string): boolean {
 	const k = titleKey(word);
@@ -428,7 +441,11 @@ function printCond(c: Cond, lang: Lang, ix: Index, top = false): string {
 		const s = c.or.map((x) => printCond(x, lang, ix)).join(" | ");
 		return top ? s : `(${s})`;
 	}
-	if ("not" in c) return `-${printCond(c.not, lang, ix)}`;
+	// -(a b): without the brackets it would read as -a b
+	if ("not" in c)
+		return "and" in c.not && c.not.and.length > 1
+			? `-(${printCond(c.not, lang, ix)})`
+			: `-${printCond(c.not, lang, ix)}`;
 	if ("type" in c) {
 		if (c.type === META_TYPE) return `${k("type")}:${words(lang, "q.metaType")[0] ?? "Type"}`;
 		return `${k("type")}:${quoteIf(ix.typeName(c.type) ?? c.type)}`;
@@ -693,6 +710,18 @@ function matchField(
 	}
 }
 
+/**
+ * In the inbox, "Back tomorrow" aside: kept there until checked off, else by the rule, where pinning
+ * counts as a place. A done status takes it out either way.
+ */
+export function liesInInbox(item: Item, ctx: EvalCtx): boolean {
+	if (isDone(item, ctx.ix.schemaOf(item))) return false;
+	if (item.inbox) return true;
+	return (
+		!item.pinned && matches(item, inboxWhere(ctx.ix), { ...ctx, thisId: undefined, inInbox: true })
+	);
+}
+
 export function matches(item: Item, c: Cond, ctx: EvalCtx): boolean {
 	const ix = ctx.ix;
 	if ("and" in c) return c.and.every((x) => matches(item, x, ctx));
@@ -733,12 +762,7 @@ export function matches(item: Item, c: Cond, ctx: EvalCtx): boolean {
 		if (c.status === "new") return s.group === "todo";
 		return s.group === c.status;
 	}
-	if ("inbox" in c)
-		return (
-			!ctx.inInbox &&
-			!setAside(item) &&
-			matches(item, inboxWhere(ix), { ...ctx, thisId: undefined, inInbox: true })
-		);
+	if ("inbox" in c) return !ctx.inInbox && !setAside(item) && liesInInbox(item, ctx);
 	if ("without" in c) {
 		switch (c.without) {
 			case "type":
@@ -1184,4 +1208,52 @@ export function tabDef(base: Cond | undefined, tab: ViewTab): QueryDef {
 		columns: tab.columns,
 		view: tab.kind,
 	};
+}
+
+/**
+ * What a new entry in a view starts with, so that it shows there: the type, tags, place and options
+ * its filter asks for (the parts joined by AND; the rest it cannot know). Its status starts open,
+ * also where the type's default is a done one. Undefined while the filter names a type that is gone.
+ */
+export function initFromWhere(where: Cond | undefined, ix: Index): ItemInit | undefined {
+	if (missingTypes(where, ix).length) return undefined;
+	const all = where ? conjuncts(where) : [];
+	const type = all.flatMap((c) => ("type" in c && c.type !== META_TYPE ? [c.type] : []))[0];
+	const schema = type ? ix.types.get(type)?.schema : undefined;
+	const tags: string[] = [];
+	const parents: string[] = [];
+	const props: Record<string, Value> = {};
+	for (const c of all) {
+		if ("tag" in c) tags.push(c.tag);
+		else if ("in" in c || "under" in c) {
+			const ref = "in" in c ? c.in : c.under;
+			if ("id" in ref && ix.get(ref.id)) parents.push(ref.id);
+		} else if ("prop" in c && c.op === ":" && typeof c.value === "string") {
+			const raw = c.value;
+			// as fieldOf: "status" is the type's status, whatever it is called, else a property of that name
+			const status = titleKey(c.prop) === "status" ? statusProp(schema) : undefined;
+			const prop = status ?? propByName(schema, c.prop, hasOptions);
+			const option = prop?.options?.find((o) => optionMatches(prop, o, raw));
+			const had = props[prop?.id ?? ""];
+			if (prop && option)
+				props[prop.id] = prop.multiple
+					? [...(Array.isArray(had) ? had : []), option.id]
+					: option.id;
+		} else if ("status" in c && c.status !== "open") {
+			// a group keeps an option of it asked for by name (Status:Pausiert aktiv), in either order
+			const prop = statusProp(schema);
+			const group = c.status === "new" ? "todo" : c.status;
+			const now = prop?.options?.find((o) => o.id === props[prop.id]);
+			const option = now && (now.group ?? "todo") === group ? now : firstOfGroup(schema, group);
+			if (prop && option) props[prop.id] = option.id;
+		}
+	}
+	const status = statusProp(schema);
+	if (status && props[status.id] === undefined) {
+		const options = status.options ?? [];
+		const initial = options.find((o) => o.id === initialProps(schema)[status.id]);
+		const open = options.find((o) => o.group !== "done");
+		if ((!initial || initial.group === "done") && open) props[status.id] = open.id;
+	}
+	return { type: type ?? null, tags, parents, props };
 }

@@ -79,7 +79,7 @@ test("Esc in the title leaves it and the keys are the panel's again", async () =
 	const first = titleNow();
 	await page.getByRole("article").getByRole("textbox", { name: "Titel" }).click();
 	await commands.keys("press", "Escape");
-	await commands.keys("press", "a");
+	await commands.keys("press", "x"); // "Löschen": moves on
 	await expect.poll(titleNow).not.toBe(first);
 });
 

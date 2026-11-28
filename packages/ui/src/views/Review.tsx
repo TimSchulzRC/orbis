@@ -1,9 +1,12 @@
-// The inbox panel: the list on the left, the chosen entry on the right to read, edit and sort; on a
-// phone the list, and the entry as a sheet over it. Sorting moves on to the next entry and the sorted
-// one down under "Sorted" in the list, with its undo. The entry's card keeps one height, so the
-// choices below it never move.
+// The inbox panel, where the user works. "Inbox": the list on the left, the chosen entry on the
+// right to read, edit and sort; on a phone the list, and the entry as a sheet over it. Sorting,
+// typing and pinning happen in place, the entry stays. "Done", "Tomorrow" and "Delete" move on to
+// the next entry and the one left down under "Done" in the list, with its undo. The entry's card
+// keeps one height, so the choices below it never move. The inbox's own tabs (InboxTabs) show
+// their part of it as lines across the whole panel, ticked off right there.
 
 import type { Item } from "@orbis/core/model";
+import { canCheckOff } from "@orbis/core/placement";
 import { ArrowLeft, Check, ChevronDown, Layers, X } from "lucide-react";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { replica, spaceById, useAccounts } from "../accounts";
@@ -11,6 +14,7 @@ import { isBlank } from "../actions";
 import { openItem, useOnChange, useRepo } from "../hooks";
 import { titleOf, useT } from "../i18n";
 import { cn } from "../lib/utils";
+import { InboxTabsBar, TabView } from "../ui/InboxTabs";
 import {
 	closeShelf,
 	dismissShelf,
@@ -19,14 +23,16 @@ import {
 	type InboxEntry,
 	newNote,
 	openShelf,
+	tabEntries,
 	useDraftKey,
 	useInboxItems,
+	useInboxTabs,
 	useLaterItems,
 	useShelf,
 } from "../ui/inbox";
 import { NoteCard } from "../ui/NoteCard";
 import { Button, Empty, IconButton, MenuItem, Popover } from "../ui/primitives";
-import { backNow, InboxList } from "../ui/Shelf";
+import { backNow, InboxHead, InboxList } from "../ui/Shelf";
 import { SortChoices } from "../ui/SortChoices";
 import { moveTo, SpaceScope } from "../ui/Spaces";
 import { KEYS, readJSON, writeJSON } from "../ui/storage";
@@ -39,7 +45,7 @@ interface Sorted {
 	undo: Undo;
 }
 
-/** The sorting on this device: kept while the panel is closed. What was sorted stays, also across a reload and into tomorrow, until "Fertig" or cleared by hand. */
+/** The work on this device: kept while the panel is closed. What was done stays, also across a reload and into tomorrow, until "Fertig" or cleared by hand. */
 let session: { order: string[]; at?: string } | null = null;
 const storedSorted = () => readJSON<Sorted[]>(KEYS.inboxSorted, []);
 
@@ -55,7 +61,7 @@ const OVERLAY_OPEN =
 
 export function InboxPanel({ desktop }: { desktop: boolean }) {
 	const { t } = useT();
-	const { at } = useShelf();
+	const { at, asked } = useShelf();
 	const self = useRef<HTMLDivElement>(null);
 	// take the keys from the button that opened the panel (a new note keeps the caret in its title)
 	const focusOnOpen = useEffectEvent(() => {
@@ -92,7 +98,7 @@ export function InboxPanel({ desktop }: { desktop: boolean }) {
 			{!desktop && (
 				<div aria-hidden className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-line" />
 			)}
-			<Inbox at={at} desktop={desktop} panel={self} />
+			<Inbox at={at} desktop={desktop} panel={self} request={asked} />
 		</div>
 	);
 }
@@ -104,13 +110,15 @@ function othersKey(el: Element) {
 	return !!layer && !layer.hasAttribute("data-shelf-panel");
 }
 
-/** `at`: the entry asked for, "<workspace>/<id>" (a row on a phone). */
+/** `at`: the entry asked for, "<workspace>/<id>" (a row on a phone); `request`: which time it was asked for. */
 function Inbox({
 	at,
+	request,
 	desktop,
 	panel,
 }: {
 	at?: string;
+	request?: number;
 	desktop: boolean;
 	panel: React.RefObject<HTMLDivElement | null>;
 }) {
@@ -126,17 +134,39 @@ function Inbox({
 			e.key === drafting ? order.current.unshift(e.key) : order.current.push(e.key);
 	const [sorted, setSorted] = useState<Sorted[]>(storedSorted);
 	const [chosen, setChosen] = useState<string | undefined>(at ?? session?.at);
+	// the inbox's own tabs: the one shown (null: "Inbox"), remembered on this device
+	const tabs = useInboxTabs();
+	const results = tabs.map(tabEntries);
+	const [chosenTab, setTabNow] = useState<string | null>(
+		() => readJSON<string>(KEYS.inboxView, "") || null,
+	);
+	const tab = tabs.find((x) => x.key === chosenTab);
+	const result = tab && results[tabs.indexOf(tab)];
+	const setTab = (key: string | null) => {
+		setTabNow(key);
+		writeJSON(KEYS.inboxView, key ?? "");
+	};
+	// ticked off in a tab: they left the inbox, but stay in its list until the panel closes
+	const [ticked, setTicked] = useState<{ tab: string; entry: InboxEntry }[]>([]);
+	const tabKeys = useRef<((e: KeyboardEvent) => boolean) | null>(null);
 	// another entry asked for while open
 	useEffect(() => {
 		if (at) setChosen(at);
 	}, [at]);
 	const card = useRef<HTMLDivElement>(null);
 	const byKey = new Map([...entries, ...later].map((e) => [e.key, e]));
-	// set aside till tomorrow and back in the inbox now: waiting again, no longer sorted
-	const due = sorted.filter(
-		(s) =>
-			s.undo.steps.some((step) => step.later !== undefined) && entries.some((e) => e.key === s.key),
-	);
+	// an entry asked for that is not in the tab shown, and a new note always (its card is for writing),
+	// shows in "Inbox", once it is there
+	const askedSeen = useRef<number | undefined>(undefined);
+	useEffect(() => {
+		const asked = at ? byKey.get(at) : undefined;
+		if (!asked || request === askedSeen.current) return;
+		askedSeen.current = request;
+		const elsewhere = !result?.entries.some((e) => e.key === asked.key);
+		if (result && (asked.key === drafting || elsewhere)) setTab(null);
+	});
+	// back in the inbox (tomorrow has come, put in again on its page): waiting again, no longer done
+	const due = sorted.filter((s) => entries.some((e) => e.key === s.key));
 	useOnChange(due.length, () => {
 		if (due.length) setSorted((list) => list.filter((s) => !due.includes(s)));
 	});
@@ -168,7 +198,9 @@ function Inbox({
 	}, [key, drafting]);
 	useEffect(() => writeJSON(KEYS.inboxSorted, sorted), [sorted]);
 
+	// "Done", "Tomorrow" and "Delete" move on and show under "Done"; sorting stays, with a notice
 	const act = useTriageActions(() => entry!.space, { quiet: true });
+	const sort = useTriageActions(() => entry!.space);
 	const record = (target: InboxEntry, what: string, undo?: Undo | null) => {
 		if (!undo) return;
 		const title = replica(target.space).repo.get(target.item.id)?.title ?? target.item.title; // may have just been edited
@@ -178,23 +210,19 @@ function Inbox({
 		]);
 		setChosen(target.key);
 	};
-	const placeIn = (list: Item[], place: string) =>
-		entry &&
-		record(
-			entry,
-			`→ ${replica(entry.space).repo.index().get(place)?.title ?? ""}`,
-			act.place(list, place),
-		);
-	const typeAs = (list: Item[], type: string) =>
-		entry &&
-		record(entry, replica(entry.space).repo.index().typeName(type) ?? "", act.giveType(list, type));
+	const placeIn = (list: Item[], place: string) => sort.place(list, place);
+	const typeAs = (list: Item[], type: string) => sort.giveType(list, type);
 	const pick = usePickers(() => entry!.space, placeIn, typeAs);
+	const current = entry && (replica(entry.space).repo.get(entry.item.id) ?? entry.item);
+	const canDone = !!current && canCheckOff(current, replica(entry!.space).repo.index());
+	const checkOff = () =>
+		current && canDone && record(entry!, t("review.done.checkedOff"), act.checkOff([current]));
 	const later_ = () =>
 		entry &&
 		(waiting
 			? backNow(replica(entry.space).repo, entry.item.id)
 			: record(entry, t("review.done.later"), act.later([entry.item])));
-	const pin = () => entry && record(entry, t("review.done.pinned"), act.pin([entry.item]));
+	const pin = () => current && sort.pin([current]);
 	const trash = () =>
 		entry &&
 		void act.trash([entry.item]).then((back) => record(entry, t("review.done.trashed"), back));
@@ -207,6 +235,10 @@ function Inbox({
 	const choose = (k: string) => {
 		setChosen(k);
 		if (!desktop) openShelf(k);
+	};
+	const tick = (e: InboxEntry, done: boolean) => {
+		const others = ticked.filter((x) => x.entry.key !== e.key);
+		setTicked(done && tab ? [...others, { tab: tab.key, entry: e }] : others);
 	};
 	const step = (direction: 1 | -1) => {
 		const index = key ? left.indexOf(key) : -1;
@@ -231,6 +263,15 @@ function Inbox({
 		if ((pressed === "Enter" && el.closest("button, a")) || pressed === "Tab") return;
 		// a menu or popover open above (a tooltip aside) gets its own Esc
 		if (pressed === "Escape" && document.querySelector(OVERLAY_OPEN)) return;
+		// a tab's list takes its keys; Esc it leaves closes the panel. Space on a button is the button's
+		if (tab) {
+			if (pressed === " " && el.closest("button, a")) return;
+			if (tabKeys.current?.(e)) e.preventDefault();
+			else if (pressed === "Escape") dismissShelf();
+			else return;
+			e.stopPropagation();
+			return;
+		}
 		if (listOnly && pressed !== "Escape") return;
 		e.stopPropagation();
 		const isNote = entry?.item.kind === "note";
@@ -239,6 +280,7 @@ function Inbox({
 			else dismissShelf();
 		} else if (pressed === "u" || pressed === "z") undo();
 		else if (!entry) return;
+		else if (pressed === "d") checkOff();
 		else if (pressed === "e") pick.setPlacing([entry.item]);
 		else if (pressed === "y" && isNote) pick.setTyping([entry.item]);
 		else if (pressed === "s") later_();
@@ -285,9 +327,33 @@ function Inbox({
 	const total = sorted.length + left.length;
 	const several = shown.length > 1;
 	const touchX = useRef<number | null>(null);
+	const bar = (
+		<InboxTabsBar
+			active={tab?.key ?? null}
+			counts={results.map((r) => r.entries.length)}
+			inboxCount={entries.length}
+			onPick={setTab}
+			tabs={tabs}
+		/>
+	);
+	if (tab && result)
+		return (
+			<div className="flex min-h-0 flex-1 flex-col">
+				<InboxHead bar={bar} onClose={dismissShelf} />
+				<TabView
+					key={tab.key}
+					keys={tabKeys}
+					onTick={tick}
+					result={result}
+					tab={tab}
+					ticked={ticked.filter((x) => x.tab === tab.key).map((x) => x.entry)}
+				/>
+			</div>
+		);
 	const list = (
 		<InboxList
 			current={desktop ? key : undefined}
+			head={<InboxHead bar={bar} />}
 			later={waitingLater}
 			onClear={() => setSorted([])}
 			onPick={choose}
@@ -315,9 +381,11 @@ function Inbox({
 				space={several ? spaceById(entry.space)?.name : undefined}
 			/>
 			<SortChoices
+				canDone={canDone}
 				className="mt-6"
 				item={entry.item}
 				keys={desktop}
+				onDone={checkOff}
 				onLater={later_}
 				onPick={() => pick.setPlacing([entry.item])}
 				onPin={pin}

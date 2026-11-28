@@ -1,10 +1,10 @@
-// The inbox panel's list (left of the entry on a desktop, the panel itself on a phone): what waits,
-// what was sorted with its undo (kept until cleared), and folded below what comes back tomorrow ("Back tomorrow").
-// Also the rule of what lands in the inbox.
+// The inbox panel's head (its tabs, see InboxTabs) and list (left of the entry on a desktop, the
+// panel itself on a phone): what waits, what was done with its undo (kept until cleared), and folded
+// below what comes back tomorrow ("Back tomorrow"). Also the rule of what lands in the inbox by itself.
 
 import { sameValue } from "@orbis/core/equal";
 import { fmtBytes, type Lang, type T } from "@orbis/core/i18n";
-import { inboxWhere } from "@orbis/core/inbox";
+import { inboxSince, inboxWhere } from "@orbis/core/inbox";
 import { SETTINGS_ID, setMeta, setSettings } from "@orbis/core/model";
 import { belowOf } from "@orbis/core/placement";
 import type { QueryDef } from "@orbis/core/query";
@@ -21,6 +21,7 @@ import {
 	RotateCcw,
 	SlidersHorizontal,
 	Undo2,
+	X,
 } from "lucide-react";
 import { useState } from "react";
 import { replica, spaceById, useAccounts } from "../accounts";
@@ -48,42 +49,18 @@ export interface SortedRow {
 	what: string;
 }
 
-/** `current`: the entry shown beside (none on a phone's list). */
-/** `onClear`: empties "Sorted"; the entries stay where they were sorted to. */
-export function InboxList({
-	waiting,
-	later,
-	sorted,
-	current,
-	onPick,
-	onUndo,
-	onClear,
-}: {
-	waiting: InboxEntry[];
-	later: InboxEntry[];
-	sorted: SortedRow[];
-	current?: string;
-	onPick: (key: string) => void;
-	onUndo: (key: string) => void;
-	onClear: () => void;
-}) {
+/**
+ * The panel's head: its tabs (`bar`), the rule of each workspace, a new note, and `onClose` where the
+ * panel has no other way to close. Below it, several workspaces: which of them.
+ */
+export function InboxHead({ bar, onClose }: { bar: React.ReactNode; onClose?: () => void }) {
 	const { t } = useT();
 	const { shown } = useAccounts();
-	const [laterOpen, setLaterOpen] = useState(false);
-	const [allSorted, setAllSorted] = useState(false);
 	const [rule, setRule] = useState<string | null>(null);
-	const space = (e: InboxEntry) => spaceById(e.space)?.name;
-	const newestSorted = [...sorted].reverse();
-	const sortedShown = allSorted ? newestSorted : newestSorted.slice(0, SORTED_SHOWN);
-	const section = "mt-1 border-t border-line pt-1";
-	const fold =
-		"flex w-full items-center gap-1.5 rounded-lg px-3 py-2 text-left text-[13px] text-muted-foreground hover:bg-hover hover:text-fg";
 	return (
 		<>
-			<div className="flex shrink-0 items-center gap-2 border-b border-line py-2.5 pl-5 pr-2">
-				<h2 className="text-[15px] font-semibold">
-					{t("tray.title")} <span className="tabular-nums text-warn">{waiting.length}</span>
-				</h2>
+			<div className="flex shrink-0 items-center gap-1 border-b border-line py-2.5 pl-5 pr-2">
+				{bar}
 				<span className="flex-1" />
 				<MoreMenu>
 					{(close) =>
@@ -109,11 +86,68 @@ export function InboxList({
 					onClick={() => newNote()}
 					title={t("quick.title")}
 				/>
+				{onClose && (
+					<IconButton
+						className="shrink-0"
+						icon={X}
+						iconSize={16}
+						label={t("review.close")}
+						onClick={onClose}
+						title={t("review.close")}
+					/>
+				)}
 			</div>
 			{/* several workspaces: which of them, as in the sidebar's selector */}
 			<div className="shrink-0 px-5 pt-3 empty:hidden [&>fieldset]:mb-1">
 				<SpaceFilter />
 			</div>
+			{rule && shown.some((s) => s.id === rule) && (
+				<SpaceScope id={rule}>
+					<InboxRule
+						name={shown.length > 1 ? spaceById(rule)?.name : undefined}
+						onClose={() => setRule(null)}
+					/>
+				</SpaceScope>
+			)}
+		</>
+	);
+}
+
+/**
+ * `head`: the panel's head above (InboxHead). `current`: the entry shown beside (none on a phone's
+ * list). `onClear`: empties "Done"; the entries stay where they were sorted to.
+ */
+export function InboxList({
+	head,
+	waiting,
+	later,
+	sorted,
+	current,
+	onPick,
+	onUndo,
+	onClear,
+}: {
+	head: React.ReactNode;
+	waiting: InboxEntry[];
+	later: InboxEntry[];
+	sorted: SortedRow[];
+	current?: string;
+	onPick: (key: string) => void;
+	onUndo: (key: string) => void;
+	onClear: () => void;
+}) {
+	const { t } = useT();
+	const [laterOpen, setLaterOpen] = useState(false);
+	const [allSorted, setAllSorted] = useState(false);
+	const space = (e: InboxEntry) => spaceById(e.space)?.name;
+	const newestSorted = [...sorted].reverse();
+	const sortedShown = allSorted ? newestSorted : newestSorted.slice(0, SORTED_SHOWN);
+	const section = "mt-1 border-t border-line pt-1";
+	const fold =
+		"flex w-full items-center gap-1.5 rounded-lg px-3 py-2 text-left text-[13px] text-muted-foreground hover:bg-hover hover:text-fg";
+	return (
+		<>
+			{head}
 			<section aria-label={t("triage.list")} className="min-h-0 flex-1 overflow-y-auto p-1.5">
 				{waiting.length ? (
 					<ul>
@@ -222,14 +256,6 @@ export function InboxList({
 					</section>
 				)}
 			</section>
-			{rule && shown.some((s) => s.id === rule) && (
-				<SpaceScope id={rule}>
-					<InboxRule
-						name={shown.length > 1 ? spaceById(rule)?.name : undefined}
-						onClose={() => setRule(null)}
-					/>
-				</SpaceScope>
-			)}
 		</>
 	);
 }
@@ -282,7 +308,7 @@ function Row({
 					<span className="min-w-0 flex-1 truncate">{space}</span>
 					{/* the buttons take the corner: the age gives way (always on a touch screen, where they always show) */}
 					<span className="shrink-0 text-xs group-hover/row:invisible pointer-coarse:invisible">
-						<RelTime ts={item.created} />
+						<RelTime ts={inboxSince(item)} />
 					</span>
 				</span>
 				<span className="mt-0.5 block truncate text-[15px] font-medium">{titleOf(item, t)}</span>

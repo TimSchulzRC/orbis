@@ -1,8 +1,8 @@
-// The inbox's choices for one note: "Sort", "Type", "Tomorrow", "Pin" and, where offered,
-// "Delete". The inbox's card and the quick note show the same row.
+// The inbox's choices for one entry: "Done", "Sort", "Type", "Tomorrow", "Pin" and, where offered,
+// "Delete". Sorting, typing and pinning leave the entry in the inbox; "Done" takes it out.
 
 import type { Item } from "@orbis/core/model";
-import { Clock, FolderInput, Pin, Shapes, Trash2, Undo2 } from "lucide-react";
+import { Check, Clock, FolderInput, Pin, Shapes, Trash2, Undo2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useT } from "../i18n";
 import { cn } from "../lib/utils";
@@ -11,10 +11,13 @@ import { Button, Kbd } from "./primitives";
 /**
  * The buttons stay the same and in the same place for every entry. `keys`: their key hints.
  * `waiting`: one back tomorrow comes back now instead of "Tomorrow". Without `onTrash` there is no "Delete".
+ * `canDone`: "Done" works (an entry without a type or a place would land right back in the inbox).
  */
 export function SortChoices({
 	item,
 	waiting,
+	canDone,
+	onDone,
 	onPick,
 	onTypes,
 	onLater,
@@ -25,6 +28,8 @@ export function SortChoices({
 }: {
 	item: Item;
 	waiting?: boolean;
+	canDone: boolean;
+	onDone: () => void;
 	onPick: () => void;
 	onTypes: () => void;
 	onLater: () => void;
@@ -37,7 +42,7 @@ export function SortChoices({
 	const isNote = item.kind === "note";
 	const hint = (key: string) =>
 		keys && (
-			<span className="hidden @[600px]:inline-flex">
+			<span className="hidden @[780px]:inline-flex">
 				<Kbd>{key}</Kbd>
 			</span>
 		);
@@ -46,7 +51,13 @@ export function SortChoices({
 		label: string,
 		key: string,
 		onClick: () => void,
-		opts: { primary?: boolean; danger?: boolean; disabled?: boolean; wide?: boolean } = {},
+		opts: {
+			primary?: boolean;
+			danger?: boolean;
+			disabled?: boolean;
+			wide?: boolean;
+			why?: string;
+		} = {},
 	) => (
 		<Button
 			className={cn(
@@ -54,13 +65,13 @@ export function SortChoices({
 				opts.primary
 					? "border-transparent bg-primary text-primary-foreground hover:bg-primary/90"
 					: "border-line bg-surface hover:bg-hover",
-				(opts.primary || opts.wide) && "max-lg:col-span-2",
+				opts.wide && "max-lg:col-span-2",
 				opts.danger && "text-danger lg:w-9 lg:flex-none lg:justify-center lg:px-0",
 			)}
 			disabled={opts.disabled}
 			onClick={onClick}
-			// delete on a desktop is only its icon: the name and key on hover
-			title={opts.danger && keys ? `${label} (${key})` : undefined}
+			// delete on a desktop is only its icon: the name and key on hover; a disabled one says why
+			title={opts.why ?? (opts.danger && keys ? `${label} (${key})` : undefined)}
 			variant="plain"
 		>
 			{icon}
@@ -72,7 +83,13 @@ export function SortChoices({
 	);
 	return (
 		<div className={cn("@container flex shrink-0 gap-2 max-lg:grid max-lg:grid-cols-2", className)}>
-			{tile(<FolderInput size={15} />, t("review.placeAction"), "e", onPick, { primary: true })}
+			{/* "Done" leads once the entry has a type or a place; before, sorting it does */}
+			{tile(<Check size={15} />, t("review.doneAction"), "d", onDone, {
+				primary: canDone,
+				disabled: !canDone,
+				why: canDone ? undefined : t("review.doneFirst"),
+			})}
+			{tile(<FolderInput size={15} />, t("review.placeAction"), "e", onPick, { primary: !canDone })}
 			{tile(<Shapes size={15} />, t("review.convertAction"), "y", onTypes, { disabled: !isNote })}
 			{waiting
 				? tile(<Undo2 size={15} />, t("review.backAction"), "s", onLater)

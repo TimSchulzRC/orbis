@@ -121,6 +121,12 @@ export const createInput = z.object({
 	refs: z.array(z.string()).optional(),
 	parents: z.array(z.string()).optional(),
 	pin: z.boolean().optional().describe("pin to the top of the sidebar (a place of its own)"),
+	inbox: z
+		.boolean()
+		.optional()
+		.describe(
+			"put it into the user's inbox too, with its type and parents, until they mark it done there (e.g. a to-do for them to work on soon)",
+		),
 	properties: values.optional(),
 	agent_rules: z
 		.string()
