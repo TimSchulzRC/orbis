@@ -61,7 +61,7 @@ const OVERLAY_OPEN =
 
 export function InboxPanel({ desktop }: { desktop: boolean }) {
 	const { t } = useT();
-	const { at } = useShelf();
+	const { at, asked } = useShelf();
 	const self = useRef<HTMLDivElement>(null);
 	// take the keys from the button that opened the panel (a new note keeps the caret in its title)
 	const focusOnOpen = useEffectEvent(() => {
@@ -98,7 +98,7 @@ export function InboxPanel({ desktop }: { desktop: boolean }) {
 			{!desktop && (
 				<div aria-hidden className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-line" />
 			)}
-			<Inbox at={at} desktop={desktop} panel={self} />
+			<Inbox at={at} desktop={desktop} panel={self} request={asked} />
 		</div>
 	);
 }
@@ -110,13 +110,15 @@ function othersKey(el: Element) {
 	return !!layer && !layer.hasAttribute("data-shelf-panel");
 }
 
-/** `at`: the entry asked for, "<workspace>/<id>" (a row on a phone). */
+/** `at`: the entry asked for, "<workspace>/<id>" (a row on a phone); `request`: which time it was asked for. */
 function Inbox({
 	at,
+	request,
 	desktop,
 	panel,
 }: {
 	at?: string;
+	request?: number;
 	desktop: boolean;
 	panel: React.RefObject<HTMLDivElement | null>;
 }) {
@@ -153,13 +155,15 @@ function Inbox({
 	}, [at]);
 	const card = useRef<HTMLDivElement>(null);
 	const byKey = new Map([...entries, ...later].map((e) => [e.key, e]));
-	// an entry asked for that is not in the tab shown (a new note too) shows in "Inbox", once it is there
-	const askedSeen = useRef<string | undefined>(undefined);
+	// an entry asked for that is not in the tab shown, and a new note always (its card is for writing),
+	// shows in "Inbox", once it is there
+	const askedSeen = useRef<number | undefined>(undefined);
 	useEffect(() => {
 		const asked = at ? byKey.get(at) : undefined;
-		if (!asked || at === askedSeen.current) return;
-		askedSeen.current = at;
-		if (result && !result.entries.some((e) => e.key === asked.key)) setTab(null);
+		if (!asked || request === askedSeen.current) return;
+		askedSeen.current = request;
+		const elsewhere = !result?.entries.some((e) => e.key === asked.key);
+		if (result && (asked.key === drafting || elsewhere)) setTab(null);
 	});
 	// back in the inbox (tomorrow has come, put in again on its page): waiting again, no longer done
 	const due = sorted.filter((s) => entries.some((e) => e.key === s.key));

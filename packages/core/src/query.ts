@@ -441,7 +441,11 @@ function printCond(c: Cond, lang: Lang, ix: Index, top = false): string {
 		const s = c.or.map((x) => printCond(x, lang, ix)).join(" | ");
 		return top ? s : `(${s})`;
 	}
-	if ("not" in c) return `-${printCond(c.not, lang, ix)}`;
+	// -(a b): without the brackets it would read as -a b
+	if ("not" in c)
+		return "and" in c.not && c.not.and.length > 1
+			? `-(${printCond(c.not, lang, ix)})`
+			: `-${printCond(c.not, lang, ix)}`;
 	if ("type" in c) {
 		if (c.type === META_TYPE) return `${k("type")}:${words(lang, "q.metaType")[0] ?? "Type"}`;
 		return `${k("type")}:${quoteIf(ix.typeName(c.type) ?? c.type)}`;
@@ -1226,12 +1230,21 @@ export function initFromWhere(where: Cond | undefined, ix: Index): ItemInit | un
 			if ("id" in ref && ix.get(ref.id)) parents.push(ref.id);
 		} else if ("prop" in c && c.op === ":" && typeof c.value === "string") {
 			const raw = c.value;
-			const prop = propByName(schema, c.prop, hasOptions);
+			// as fieldOf: "status" is the type's status, whatever it is called, else a property of that name
+			const status = titleKey(c.prop) === "status" ? statusProp(schema) : undefined;
+			const prop = status ?? propByName(schema, c.prop, hasOptions);
 			const option = prop?.options?.find((o) => optionMatches(prop, o, raw));
-			if (prop && option) props[prop.id] = prop.multiple ? [option.id] : option.id;
+			const had = props[prop?.id ?? ""];
+			if (prop && option)
+				props[prop.id] = prop.multiple
+					? [...(Array.isArray(had) ? had : []), option.id]
+					: option.id;
 		} else if ("status" in c && c.status !== "open") {
+			// a group keeps an option of it asked for by name (Status:Pausiert aktiv), in either order
 			const prop = statusProp(schema);
-			const option = firstOfGroup(schema, c.status === "new" ? "todo" : c.status);
+			const group = c.status === "new" ? "todo" : c.status;
+			const now = prop?.options?.find((o) => o.id === props[prop.id]);
+			const option = now && (now.group ?? "todo") === group ? now : firstOfGroup(schema, group);
 			if (prop && option) props[prop.id] = option.id;
 		}
 	}

@@ -3,7 +3,7 @@
 // filter asks for. Renaming the type keeps the tab; deleting it shows as a missing type.
 import { describe, expect, test } from "bun:test";
 import { SETTINGS_ID, setProp, setSchemaField, setTab, upsertProp } from "@orbis/core/model";
-import { initFromWhere, runQuery, tabDef } from "@orbis/core/query";
+import { initFromWhere, parseQuery, printQuery, runQuery, tabDef } from "@orbis/core/query";
 import { runSetup, SYS } from "@orbis/core/setup";
 import { deleteType } from "@orbis/core/typeops";
 import { MemRepo } from "../support/helpers";
@@ -143,5 +143,80 @@ describe("a new entry gets what the filter asks for", () => {
 			parents: [],
 			props: {},
 		});
+	});
+});
+
+describe("a filter between workspaces", () => {
+	test("goes over as text and means the same: a negated AND keeps its brackets", () => {
+		const m = setup();
+		const where = { not: { and: [{ type: SYS.task }, { tag: "dringend" }] } };
+		const text = printQuery({ where }, "de", m.index());
+		expect(parseQuery(text, m.index()).def.where).toEqual(where);
+	});
+});
+
+describe("options a new entry gets", () => {
+	test("the status by option name, whatever the property is called; several values of one property", () => {
+		const m = setup();
+		m.change(SYS.task, (d) => {
+			upsertProp(d, "p_status", { name: "Phase" });
+			upsertProp(d, "p_labels", {
+				name: "Labels",
+				kind: "select",
+				multiple: true,
+				options: [
+					{ id: "l_a", name: "Anruf" },
+					{ id: "l_b", name: "Büro" },
+				],
+			});
+		});
+		const init = initFromWhere(
+			{
+				and: [
+					{ type: SYS.task },
+					{ prop: "status", op: ":", value: "Pausiert" },
+					{ prop: "Labels", op: ":", value: "Anruf" },
+					{ prop: "Labels", op: ":", value: "Büro" },
+				],
+			},
+			m.index(),
+		);
+		expect(init?.props).toEqual({ p_status: "st_paused", p_labels: ["l_a", "l_b"] });
+	});
+
+	test("a type without a status: status means its property of that name", () => {
+		const m = setup();
+		m.change(SYS.card, (d) =>
+			upsertProp(d, "p_state", {
+				name: "Status",
+				kind: "select",
+				options: [{ id: "o_pub", name: "Veröffentlicht" }],
+			}),
+		);
+		const init = initFromWhere(
+			{ and: [{ type: SYS.card }, { prop: "status", op: ":", value: "Veröffentlicht" }] },
+			m.index(),
+		);
+		expect(init?.props).toEqual({ p_state: "o_pub" });
+	});
+
+	test("an option by name and its group: the option, in either order, and the entry shows", () => {
+		const m = setup();
+		m.change(SYS.task, (d) => upsertProp(d, "p_status", { name: "Phase" }));
+		const byName = { prop: "status", op: ":" as const, value: "Pausiert" };
+		const group = { status: "active" as const };
+		for (const parts of [
+			[byName, group],
+			[group, byName],
+		]) {
+			const where = { and: [{ type: SYS.task }, ...parts] };
+			const init = initFromWhere(where, m.index())!;
+			expect(init.props).toEqual({ p_status: "st_paused" });
+			const id = m.add({ ...init, title: "Lena anrufen", inbox: 1 });
+			const tab = { id: "v", pos: "a", kind: "list" as const, where };
+			expect(
+				runQuery(tabDef({ inbox: true }, tab), { ix: m.index() }).items.map((i) => i.id),
+			).toContain(id);
+		}
 	});
 });

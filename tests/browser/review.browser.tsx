@@ -206,6 +206,17 @@ describe("to-dos", () => {
 		await expect.poll(() => lineOf("Angebot schicken")?.querySelector(".line-through")).toBeFalsy();
 	});
 
+	test("ticked off, then deleted: it leaves the list below too", async () => {
+		const id = repo.create({ title: "Belege scannen", type: "sys:task", parents: [], inbox: 1 });
+		await page.getByRole("tab", { name: /^To-dos/ }).click();
+		await page.getByRole("button", { name: "„Belege scannen“ abhaken" }).click();
+		await expect
+			.poll(() => lineOf("Belege scannen")?.closest("section[aria-label=Erledigt]"))
+			.toBeTruthy();
+		repo.remove(id, "trash");
+		await expect.poll(() => lineOf("Belege scannen")).toBeFalsy();
+	});
+
 	test("a line shows where it is sorted to and opens in place; out of the inbox, it stays open", async () => {
 		const project = repo.create({ title: "Relaunch", type: "sys:project", parents: [] });
 		const id = repo.create({

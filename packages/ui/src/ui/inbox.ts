@@ -284,7 +284,9 @@ function useEntries(pick: (ix: Index) => Item[]): InboxEntry[] {
  * history step, so Back closes it instead of leaving the app on a phone. On Home that step is
  * "#/inbox", elsewhere the page's own address once more. "#/review" is the old address of the same.
  */
-const shelf = createStore<{ open: boolean; at?: string }>({ open: false });
+/** `asked`: counts the requests, so the same entry asked for again is a new request. */
+const shelf = createStore<{ open: boolean; at?: string; asked?: number }>({ open: false });
+let asks = 0;
 const hashPath = () => location.hash.split("?")[0];
 const onInbox = () => hashPath() === "#/inbox" || hashPath() === "#/review";
 const onToday = () => ["", "#", "#/"].includes(hashPath()!);
@@ -301,7 +303,7 @@ export function openShelf(at?: string) {
 			history.replaceState({ ...history.state, shelf: true }, "");
 		} else history.pushState({ ...history.state, shelf: true }, "");
 	}
-	shelf.set({ open: true, at });
+	shelf.set({ open: true, at, asked: ++asks });
 }
 
 /** Keeps the history step, so Back reopens the panel. For links that lead away. */
@@ -320,7 +322,7 @@ export function dismissShelf() {
 export function syncShelf() {
 	const open = !!history.state?.shelf || onInbox();
 	if (open === shelf.get().open) return;
-	shelf.set({ open, at: open ? addressAt() : undefined });
+	shelf.set({ open, at: open ? addressAt() : undefined, asked: ++asks });
 	if (!open) dropDraft();
 }
 addEventListener("popstate", syncShelf);

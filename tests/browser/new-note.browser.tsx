@@ -1,6 +1,7 @@
 // A new note: the tray's "Neu" and the "+" in the inbox's head open the inbox panel at a new empty
 // note, the caret in its title. Left empty, it goes when the panel closes or moves on to another entry.
 
+import { SETTINGS_ID, setTab } from "@orbis/core/model";
 import type { Repo } from "@orbis/sync";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { commands, page } from "vitest/browser";
@@ -83,6 +84,32 @@ test("with a tab shown, a new note switches the list to the whole inbox", async 
 		.toHaveAttribute("aria-selected", "true");
 	await commands.keys("type", "Idea");
 	await expect.poll(() => found("Idea")?.inbox).toBeGreaterThan(0);
+	localStorage.removeItem("orbis.inbox.view");
+});
+
+test("with a tab that would show it too (no filter), a new note still opens in the whole inbox", async () => {
+	repo.change(SETTINGS_ID, (d) => setTab(d, "v_all", { kind: "list", name: "Alles", pos: "x" }));
+	localStorage.setItem("orbis.inbox.view", JSON.stringify("alles"));
+	await open();
+	await expect
+		.element(panel().getByRole("tab", { name: /^Eingang/ }))
+		.toHaveAttribute("aria-selected", "true");
+	await expect.element(titleField()).toHaveFocus();
+	localStorage.removeItem("orbis.inbox.view");
+});
+
+test("asked for again from a tab, the empty new note opens in the whole inbox again", async () => {
+	repo.change(SETTINGS_ID, (d) => setTab(d, "v_all", { kind: "list", name: "Alles", pos: "x" }));
+	await open();
+	await panel()
+		.getByRole("tab", { name: /^Alles/ })
+		.click();
+	await expect.element(titleField()).not.toBeInTheDocument();
+	await page.getByRole("button", { name: "Neu", exact: true }).click();
+	await expect
+		.element(panel().getByRole("tab", { name: /^Eingang/ }))
+		.toHaveAttribute("aria-selected", "true");
+	await expect.element(titleField()).toHaveFocus();
 	localStorage.removeItem("orbis.inbox.view");
 });
 

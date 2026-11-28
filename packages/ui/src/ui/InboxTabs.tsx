@@ -19,7 +19,14 @@ import {
 	runQuery,
 	tabDef,
 } from "@orbis/core/query";
-import { defaultOption, dueOf, firstOfGroup, statusOf, statusProp } from "@orbis/core/traits";
+import {
+	defaultOption,
+	dueOf,
+	firstOfGroup,
+	isDone,
+	statusOf,
+	statusProp,
+} from "@orbis/core/traits";
 import {
 	AlertTriangle,
 	Check,
@@ -35,7 +42,7 @@ import {
 	Trash2,
 	Undo2,
 } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { replica, useAccounts } from "../accounts";
 import { Input } from "../components/ui/input";
 import { itemPath, spaceHref, useIndex, useRepo } from "../hooks";
@@ -104,9 +111,9 @@ export function InboxTabsBar({
 				{/* keyed by the tab's id: renamed, it keeps its menu open */}
 				{tabs.map((tab, n) => (
 					<Popover
-						key={tab.parts[0]!.tab.id}
-						onOpenChange={(o) => setMenu(o ? tab.parts[0]!.tab.id : null)}
-						open={menu === tab.parts[0]!.tab.id}
+						key={tabId(tab)}
+						onOpenChange={(o) => setMenu(o ? tabId(tab) : null)}
+						open={menu === tabId(tab)}
 						trigger={(p) => (
 							<TabButton
 								count={counts[n] ?? 0}
@@ -116,7 +123,7 @@ export function InboxTabsBar({
 								onClick={() => (active === tab.key ? p.onClick() : onPick(tab.key))}
 								onContextMenu={(e) => {
 									e.preventDefault();
-									setMenu(tab.parts[0]!.tab.id);
+									setMenu(tabId(tab));
 								}}
 							/>
 						)}
@@ -151,6 +158,9 @@ export function InboxTabsBar({
 		</>
 	);
 }
+
+/** What stays of a tab while it is renamed: its first workspace's tab id (ids repeat across workspaces). */
+const tabId = (tab: InboxTab) => `${tab.parts[0]!.space}/${tab.parts[0]!.tab.id}`;
 
 function TabButton({
 	label,
@@ -299,22 +309,23 @@ function TabFilter({ tab, onClose }: { tab: InboxTab; onClose: () => void }) {
 function TabFilterDialog({ tab, onClose }: { tab: InboxTab; onClose: () => void }) {
 	const { t, lang } = useT();
 	const where = tab.parts[0]!.tab.where;
-	const [draft, setDraft] = useState<Cond | null>(null);
+	// null: untouched; { where: undefined }: every condition removed, to save as such
+	const [draft, setDraft] = useState<{ where?: Cond } | null>(null);
 	return (
 		<Dialog onClose={onClose} title={t("inbox.tabFilterTitle", { name: tab.name })} wide>
 			<div className="space-y-3">
 				<p className="text-xs text-muted-foreground">{t("inbox.tabFilterHint")}</p>
 				<QueryEditor
 					autoFocus
-					def={{ where: draft ?? where }}
-					onChange={(d) => setDraft(d.where ?? null)}
+					def={{ where: draft ? draft.where : where }}
+					onChange={(d) => setDraft({ where: d.where })}
 				/>
-				{draft && !sameValue(draft, where) && (
+				{draft && !sameValue(draft.where, where) && (
 					<DraftBar
 						className="sticky top-0 z-10 mb-3 rounded-xl bg-surface px-3 py-2"
 						onDiscard={() => setDraft(null)}
 						onSave={() => {
-							editTab(tab, { where: draft }, lang);
+							editTab(tab, { where: draft.where }, lang);
 							setDraft(null);
 							notify(t("view.saved"));
 						}}
@@ -496,21 +507,35 @@ export function TabView({
 	const byKey = new Map(entries.map((e) => [e.key, e]));
 	const freshHere = fresh.flatMap((k) => byKey.get(k) ?? []);
 	const groups = sections(parts, new Set(fresh), t);
-	const tickedHere = ticked.filter((e) => !byKey.has(e.key));
+	const live = (e: InboxEntry) => replica(e.space).repo.get(e.item.id) ?? e.item;
+	// ticked here and still done: deleted or opened again elsewhere, it goes
+	const tickedHere = ticked.filter((e) => {
+		const item = replica(e.space).repo.get(e.item.id);
+		return (
+			!byKey.has(e.key) &&
+			!!item &&
+			!item.deleted &&
+			isDone(item, replica(e.space).repo.index().schemaOf(item))
+		);
+	});
 	const all = [...freshHere, ...groups.flatMap((g) => g.entries), ...tickedHere];
-	const spaceOf = new Map(all.map((e) => [e.item.id, e.space]));
-	const act = useTriageActions((i) => spaceOf.get(i.id) ?? all[0]!.space);
+	// the workspace of the entry acted on (the same id may be in two)
+	const acting = useRef("");
+	const act = useTriageActions(() => acting.current);
 	const pick = usePickers(
-		(i) => spaceOf.get(i.id) ?? all[0]!.space,
+		() => acting.current,
 		(list, place) => act.place(list, place),
 		(list, type) => act.giveType(list, type),
 	);
+	const actOn = (e: InboxEntry) => {
+		acting.current = e.space;
+		return live(e);
+	};
 	const init = newInit(tab);
 	const columnsOf = (space: string) => parts.find((p) => p.space === space)?.view.columns ?? [];
 	const groupedByPlace = (space: string) =>
 		parts.find((p) => p.space === space)?.view.group === "path";
 	const current = (k: string | null) => (k ? all.find((e) => e.key === k) : undefined);
-	const live = (e: InboxEntry) => replica(e.space).repo.get(e.item.id) ?? e.item;
 	const tick = async (e: InboxEntry) => {
 		const repo = replica(e.space).repo;
 		const item = live(e);
@@ -518,13 +543,13 @@ export function TabView({
 		if (target?.to && (await setStatus(item, target.to, repo))) onTick(e, !target.done);
 	};
 	const actions = {
-		place: (e: InboxEntry) => pick.setPlacing([live(e)]),
-		out: (e: InboxEntry) => act.checkOff([live(e)]),
+		place: (e: InboxEntry) => pick.setPlacing([actOn(e)]),
+		out: (e: InboxEntry) => act.checkOff([actOn(e)]),
 		later: (e: InboxEntry) =>
-			live(e).later && live(e).later! > Date.now()
+			(live(e).later ?? 0) > Date.now()
 				? replica(e.space).repo.change(e.item.id, (d) => setMeta(d, { later: null }))
-				: act.later([live(e)]),
-		trash: (e: InboxEntry) => void act.trash([live(e)]),
+				: act.later([actOn(e)]),
+		trash: (e: InboxEntry) => void act.trash([actOn(e)]),
 	};
 	keys.current = (ev) => {
 		if (pick.placing || pick.typing) return false;
@@ -688,7 +713,8 @@ function TabRow({
 		const v = fieldOf(item, c, ix)?.value;
 		return v !== undefined && v !== null && v !== "" && !(Array.isArray(v) && !v.length);
 	};
-	const cell = "min-w-0 truncate @[640px]:shrink-0";
+	// wide, the cells keep their columns while there is room, then give way before the title does
+	const cell = "min-w-0 truncate";
 	return (
 		<li className="rounded-lg" data-row={entry.key}>
 			{/* biome-ignore lint/a11y/noStaticElementInteractions lint/a11y/useKeyWithClickEvents: the click widens the title's button to the line; that button is the way for keys */}
@@ -722,7 +748,7 @@ function TabRow({
 					<Button
 						aria-expanded={open}
 						className={cn(
-							"min-w-0 text-left text-[15px] @[640px]:flex-1 @[640px]:truncate",
+							"min-w-0 text-left text-[15px] @[640px]:min-w-40 @[640px]:flex-1 @[640px]:truncate",
 							done && "text-muted-foreground line-through",
 						)}
 						onClick={onOpen}
