@@ -22,6 +22,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRepo } from "../../../../../lib/hooks";
 import { lang, t, titleOf } from "../../../../../lib/i18n";
+import { writeBody } from "../../../../../lib/text";
 import { confirmDelete, typeHref, useTab } from "../../../../../ui/item";
 import { Empty, Icon, Row, Screen, Section } from "../../../../../ui/list";
 import { lookOf, typeSymbol } from "../../../../../ui/look";
@@ -272,7 +273,7 @@ function BodyEditor({ id, repo, onDone }: { id: string; repo: Repo; onDone: () =
 			asking.current = false;
 			saved.current = text;
 			latest.current = text;
-			if (text !== repo.get(id)?.body) repo.setBody(id, text);
+			if (text !== repo.get(id)?.body) writeBody(repo, id, text);
 			if (open.current) setText(text);
 		};
 		Alert.alert(t("mobile.clash.title"), t("mobile.clash.body"), [
@@ -289,7 +290,7 @@ function BodyEditor({ id, repo, onDone }: { id: string; repo: Repo; onDone: () =
 		if (merged === undefined) return choose(next, current);
 		saved.current = merged;
 		latest.current = merged; // closing right after (Done) must not save the draft over it
-		if (merged !== current) repo.setBody(id, merged);
+		if (merged !== current) writeBody(repo, id, merged);
 		if (merged !== next && open.current) setText(merged);
 	};
 	// a change from elsewhere arrives while nothing is unsaved here: take it

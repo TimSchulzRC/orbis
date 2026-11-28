@@ -1,8 +1,10 @@
 // The iPhone app's plain logic (apps/mobile/src/lib): what it makes of a typed server address and
 // which checkbox a tap ticks.
 import { expect, test } from "bun:test";
+import { initItem } from "@orbis/core/model";
+import * as Y from "yjs";
 import { serverUrl } from "../../apps/mobile/src/lib/api";
-import { toggleTask } from "../../apps/mobile/src/lib/text";
+import { toggleTask, writeBody } from "../../apps/mobile/src/lib/text";
 
 test("a server address: https unless http is typed, only scheme and host, from a link too", () => {
 	expect(serverUrl("notes.example.org")).toBe("https://notes.example.org");
@@ -39,4 +41,13 @@ test("nested checkboxes count in the order of the text, as the page numbers them
 	const body = "- [ ] a\n  - [ ] a1\n- [ ] b";
 	expect(toggleTask(body, 1, "- [ ] a1")).toBe("- [ ] a\n  - [x] a1\n- [ ] b");
 	expect(toggleTask(body, 2, "- [ ] b")).toBe("- [ ] a\n  - [ ] a1\n- [x] b");
+});
+
+test("writing a page's text moves its changed time, as typing in the web app does", () => {
+	const doc = new Y.Doc();
+	initItem(doc, { title: "Alt", body: "vorher", created: 1000 });
+	const repo = { change: (_id: string, fn: (d: Y.Doc) => void) => doc.transact(() => fn(doc)) };
+	writeBody(repo, "x", "nachher");
+	expect(doc.getText("body").toString()).toBe("nachher");
+	expect(doc.getMap("meta").get("updated")).toBeGreaterThan(1000);
 });

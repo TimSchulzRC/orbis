@@ -1,5 +1,19 @@
 // Text edits the app makes in a page's Markdown.
 
+import { replaceBody, touch } from "@orbis/core/model";
+import type { Repo } from "@orbis/sync";
+
+/**
+ * Writes the page's new text and moves its "changed" time, as typing in the web app's editor does
+ * (touchOnTextEdit); repo.setBody alone leaves the time as it was.
+ */
+export function writeBody(repo: Pick<Repo, "change">, id: string, body: string) {
+	repo.change(id, (doc) => {
+		replaceBody(doc, body);
+		touch(doc);
+	});
+}
+
 /** A checkbox list item, also inside a quote: "- [ ] …", "1. [x] …", "> - [ ] …". */
 const TASK = /^((?:[ \t]*>)*[ \t]*(?:[-*+]|\d+[.)])[ \t]+\[)([ xX])(\])/;
 /** A code fence, also inside a quote. */

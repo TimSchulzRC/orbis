@@ -13,7 +13,7 @@ import { Marked, type Token, type TokenizerExtension, type Tokens } from "marked
 import { Fragment, type ReactNode, useMemo, useState } from "react";
 import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { t, titleOf } from "../lib/i18n";
-import { toggleTask } from "../lib/text";
+import { toggleTask, writeBody } from "../lib/text";
 import { DueText, itemHref, StatusCircle } from "./item";
 import { Icon } from "./list";
 import { lookOf } from "./look";
@@ -200,7 +200,7 @@ function List({ list, ctx }: { list: Tokens.List; ctx: Ctx }) {
 								const next = tickIn(now, ctx.tokens, at, li.raw);
 								if (next === now) return;
 								void Haptics.selectionAsync();
-								ctx.repo.ownStep(() => ctx.repo.setBody(ctx.item.id, next));
+								ctx.repo.ownStep(() => writeBody(ctx.repo, ctx.item.id, next));
 							}}
 						>
 							<Icon
