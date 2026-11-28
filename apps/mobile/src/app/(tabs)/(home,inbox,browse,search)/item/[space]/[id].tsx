@@ -1,9 +1,10 @@
-// An entry's page: where it lives, its title, properties and text, what sits below it, its
-// updates and who links to it. The pencil opens the text in a full-screen editor.
+// An entry's page: where it lives, its title and when it changed, properties and text, what sits
+// below it, its updates and who links to it. The pencil opens the text in a full-screen editor.
 
+import { dateOf } from "@orbis/core/date";
 import { mergeText } from "@orbis/core/diff";
-import { fmtBytes, fmtDateTime } from "@orbis/core/i18n";
-import { META_TYPE } from "@orbis/core/model";
+import { fmtBytes, fmtDate, fmtRecent } from "@orbis/core/i18n";
+import { type Item, META_TYPE } from "@orbis/core/model";
 import type { Repo } from "@orbis/sync";
 import { router, Stack, useIsPreview, useLocalSearchParams } from "expo-router";
 import { useHeaderHeight } from "expo-router/react-navigation";
@@ -151,6 +152,7 @@ function Page({ space, id, edit, repo }: { space: string; id: string; edit?: str
 						<Text style={[styles.kindText, { color: look.color }]}>{look.kind}</Text>
 					</View>
 					<TitleField id={id} repo={repo} title={item.title} />
+					<Text style={styles.dates}>{datesOf(item)}</Text>
 				</View>
 				{item.deleted && (
 					<Section>
@@ -181,13 +183,22 @@ function Page({ space, id, edit, repo }: { space: string; id: string; edit?: str
 				<Below {...props} />
 				<Updates {...props} />
 				<Mentions {...props} />
-				<Text style={styles.meta}>
-					{t("page.createdOn", { date: fmtDateTime(lang, item.created) })} ·{" "}
-					{t("mobile.editedOn", { date: fmtDateTime(lang, item.updated) })}
-				</Text>
 			</Screen>
 		</>
 	);
+}
+
+const LONG_DATE: Intl.DateTimeFormatOptions = { day: "numeric", month: "long", year: "numeric" };
+
+/** When the entry last changed and when it was made, as in the web app: the change reads relative
+ * up to yesterday, older ones as a date. */
+function datesOf(item: Pick<Item, "created" | "updated">): string {
+	const long = (ts: number) => fmtDate(lang, dateOf(ts), LONG_DATE);
+	const recent = fmtRecent(lang, item.updated);
+	const edited = recent
+		? `${t("item.edited")} ${recent}`
+		: t("page.editedOn", { date: long(item.updated) });
+	return `${edited} · ${t("page.createdOn", { date: long(item.created) })}`;
 }
 
 /** The title in place: saved when editing ends (links to it follow the new title). */
@@ -339,13 +350,7 @@ const styles = StyleSheet.create({
 	title: { color: C.label, fontSize: 30, fontWeight: "700", lineHeight: 36, padding: 0 },
 	body: { marginHorizontal: GUTTER + 4, marginTop: 22, minHeight: 60 },
 	placeholder: { color: C.placeholder, fontSize: 17 },
-	meta: {
-		color: C.tertiary,
-		fontSize: 12,
-		marginHorizontal: GUTTER + 4,
-		marginTop: 28,
-		textAlign: "center",
-	},
+	dates: { color: C.secondary, fontSize: 13 },
 	editor: { backgroundColor: C.plain, flex: 1 },
 	editorInput: {
 		color: C.label,
