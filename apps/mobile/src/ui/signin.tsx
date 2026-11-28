@@ -3,6 +3,7 @@
 // form connects a further server and signs in again where a server no longer takes the token.
 
 import type { LoginMethods, ServerInfo } from "@orbis/core/api";
+import { appName } from "@orbis/core/release";
 import * as Haptics from "expo-haptics";
 import Storage from "expo-sqlite/kv-store";
 import { useEffect, useState } from "react";
@@ -301,9 +302,7 @@ export function SignInForm({
 					}}
 				/>
 			)}
-			{info && (
-				<Text style={styles.version}>{t("settings.version", { version: info.info.version })}</Text>
-			)}
+			{info && <Text style={styles.version}>{versionOf(info.info)}</Text>}
 		</ScrollView>
 	);
 }
@@ -340,6 +339,13 @@ function Link({ label, onPress }: { label: string; onPress: () => void }) {
 			<Text style={styles.linkText}>{label}</Text>
 		</Pressable>
 	);
+}
+
+/** "Orbis (Nightly) 0.0.2-nightly.20261128.1 (abc1234)", as in the web app's settings; a dev server
+ * has no version beyond its name. */
+function versionOf({ version, commit }: ServerInfo): string {
+	const build = [version !== "dev" && version, commit && `(${commit})`].filter(Boolean).join(" ");
+	return t("settings.version", { name: appName(version), version: build }).trim();
 }
 
 const styles = StyleSheet.create({
