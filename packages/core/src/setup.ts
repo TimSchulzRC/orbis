@@ -13,10 +13,11 @@ import {
 	setMeta,
 	setSchemaField,
 	setSettings,
+	setTab,
 	setTabs,
 	type ViewTab,
 } from "./model";
-import { keysFor } from "./sortkey";
+import { keyBetween, keysFor } from "./sortkey";
 
 export const SYS = {
 	card: "sys:card",
@@ -295,5 +296,13 @@ export function runSetup(w: Writer, lang: Lang, origin?: string) {
 		w.change(SETTINGS_ID, (doc) => {
 			initItem(doc, { kind: "settings", title: "Settings" });
 			setSettings(doc, { setupLang: lang, format: FORMAT, captureTypes: DEFAULT_CAPTURE_TYPES });
+			// the inbox's to-dos: an ordinary tab, to change or remove like any other
+			setTab(doc, "v_todos", {
+				kind: "list",
+				name: translate(lang, "setup.view.todos"),
+				pos: keyBetween(null, null),
+				where: { type: SYS.task },
+				columns: [translate(lang, "setup.prop.priority")],
+			});
 		});
 }

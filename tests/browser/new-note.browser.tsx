@@ -75,8 +75,8 @@ test('the "+" in the inbox\'s head starts a new note; on to another entry, the e
 	await expect.poll(() => repo.live().length).toBe(before);
 });
 
-test("with the to-dos shown, a new note switches the list to the whole inbox", async () => {
-	localStorage.setItem("orbis.inbox.view", JSON.stringify("todos"));
+test("with a tab shown, a new note switches the list to the whole inbox", async () => {
+	localStorage.setItem("orbis.inbox.view", JSON.stringify("to-dos"));
 	await open();
 	await expect
 		.element(panel().getByRole("tab", { name: /^Eingang/ }))

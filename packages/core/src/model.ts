@@ -17,7 +17,8 @@
 //                    (see rules.ts); in the settings doc: the rules of the whole workspace
 //   updates  Y.Array { id, at, text, by, status? }
 //   schema   Y.Map   types only; capabilities and each property are nested Y.Maps
-//   tabs     Y.Map   types only: tabId -> Y.Map (ViewTab); empty means the default views
+//   tabs     Y.Map   types: tabId -> Y.Map (ViewTab), empty means the default views; in the settings
+//                    doc: the inbox's own tabs beside "Inbox"
 //   file     Y.Map   files only: hash, name, mime, filetype, size, width, height, pages, duration,
 //                    display, thumb, text, extracted, history
 //   op, settings  Y.Map  only in documents of that kind
@@ -209,6 +210,8 @@ export interface SettingsRecord {
 	captureTypes: string[]; // pinned types in the capture type picker
 	inbox?: Cond; // what lands in the inbox; unset: the default
 	filesPos?: string; // where "Files" stands among the types in the sidebar
+	/** The inbox's own tabs beside "Inbox", each a part of it: the settings doc's `tabs` (setTab). */
+	inboxTabs: ViewTab[];
 }
 
 /**
@@ -391,7 +394,7 @@ export function readSchema(doc: Y.Doc): TypeSchema {
  * Bump when readItem returns something else for the same document. Server and devices store
  * readItem's result next to each document's state, and read every document again once this changes.
  */
-export const RECORD_VERSION = 3;
+export const RECORD_VERSION = 4;
 
 export function readItem(id: string, doc: Y.Doc): Item | null {
 	const meta = metaMap(doc);
@@ -459,6 +462,7 @@ export function readItem(id: string, doc: Y.Doc): Item | null {
 			captureTypes: s.captureTypes ?? [],
 			inbox: s.inbox ?? undefined,
 			filesPos: s.filesPos ?? undefined,
+			inboxTabs: readTabs(doc),
 		};
 	}
 	return item;
@@ -953,7 +957,7 @@ function toMap(o: Record<string, unknown>): Y.Map<unknown> {
 	return m;
 }
 
-export function setSettings(doc: Y.Doc, patch: Patch<SettingsRecord>) {
+export function setSettings(doc: Y.Doc, patch: Patch<Omit<SettingsRecord, "inboxTabs">>) {
 	const s = doc.getMap<unknown>("settings");
 	for (const [k, v] of Object.entries(patch)) {
 		if (v === null) s.delete(k);

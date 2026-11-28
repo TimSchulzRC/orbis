@@ -1,7 +1,6 @@
-// The inbox panel's list (left of the entry on a desktop, the panel itself on a phone): what waits,
-// all of it or only the to-dos (ticked off right there, a new one typed in at the top), what was
-// done with its undo (kept until cleared), and folded below what comes back tomorrow ("Back
-// tomorrow"). Also the rule of what lands in the inbox by itself.
+// The inbox panel's head (its tabs, see InboxTabs) and list (left of the entry on a desktop, the
+// panel itself on a phone): what waits, what was done with its undo (kept until cleared), and folded
+// below what comes back tomorrow ("Back tomorrow"). Also the rule of what lands in the inbox by itself.
 
 import { sameValue } from "@orbis/core/equal";
 import { fmtBytes, type Lang, type T } from "@orbis/core/i18n";
@@ -11,7 +10,6 @@ import { belowOf } from "@orbis/core/placement";
 import type { QueryDef } from "@orbis/core/query";
 import { plainText } from "@orbis/core/search";
 import { resetInbox } from "@orbis/core/setup";
-import { defaultOption, dueOf, firstOfGroup, statusOf, statusProp } from "@orbis/core/traits";
 import type { Repo } from "@orbis/sync";
 import {
 	Check,
@@ -23,24 +21,20 @@ import {
 	RotateCcw,
 	SlidersHorizontal,
 	Undo2,
+	X,
 } from "lucide-react";
 import { useState } from "react";
 import { replica, spaceById, useAccounts } from "../accounts";
-import { Input } from "../components/ui/input";
 import { Tip } from "../components/ui/tooltip";
 import { itemPath, spaceHref, useRepo } from "../hooks";
 import { titleOf, useT } from "../i18n";
 import { cn } from "../lib/utils";
 import { notify } from "./feedback";
 import { type InboxEntry, newNote } from "./inbox";
-import { DueLabel, ItemIcon, RelTime, StatusGlyph, statusColor } from "./item-look";
+import { ItemIcon, RelTime } from "./item-look";
 import { Button, Dialog, DraftBar, IconButton, MenuItem, MoreMenu } from "./primitives";
 import { QueryEditor } from "./QueryEditor";
-import { setStatus } from "./Row";
 import { SpaceFilter, SpaceScope } from "./Spaces";
-
-/** What the list shows: every entry, or only those with a status (to-dos). */
-export type InboxView = "all" | "todos";
 
 /** A waiting entry ("Back tomorrow") comes back into the inbox now. */
 export const backNow = (repo: Repo, id: string) =>
@@ -56,66 +50,17 @@ export interface SortedRow {
 }
 
 /**
- * `current`: the entry shown beside (none on a phone's list). `onClear`: empties "Done"; the
- * entries stay where they were sorted to. `canTodo`: a workspace shown has a type with a status.
- * `count`: all entries waiting, `todos`: the to-dos among them. `ticked`: to-dos ticked off here, shown until the panel closes. `onAddTodo`: a new to-do
- * with this title, false if none could be made.
+ * The panel's head: its tabs (`bar`), the rule of each workspace, a new note, and `onClose` where the
+ * panel has no other way to close. Below it, several workspaces: which of them.
  */
-export function InboxList({
-	waiting,
-	later,
-	sorted,
-	ticked,
-	current,
-	canTodo,
-	count,
-	todos,
-	view,
-	onView,
-	onPick,
-	onTick,
-	onAddTodo,
-	onUndo,
-	onClear,
-}: {
-	waiting: InboxEntry[];
-	later: InboxEntry[];
-	sorted: SortedRow[];
-	ticked: InboxEntry[];
-	current?: string;
-	canTodo: boolean;
-	count: number;
-	todos: number;
-	view: InboxView;
-	onView: (v: InboxView) => void;
-	onPick: (key: string) => void;
-	onTick: (e: InboxEntry, done: boolean) => void;
-	onAddTodo: (title: string) => boolean;
-	onUndo: (key: string) => void;
-	onClear: () => void;
-}) {
+export function InboxHead({ bar, onClose }: { bar: React.ReactNode; onClose?: () => void }) {
 	const { t } = useT();
 	const { shown } = useAccounts();
-	const todoList = view === "todos";
-	const [laterOpen, setLaterOpen] = useState(false);
-	const [allSorted, setAllSorted] = useState(false);
 	const [rule, setRule] = useState<string | null>(null);
-	const space = (e: InboxEntry) => spaceById(e.space)?.name;
-	const newestSorted = [...sorted].reverse();
-	const sortedShown = allSorted ? newestSorted : newestSorted.slice(0, SORTED_SHOWN);
-	const section = "mt-1 border-t border-line pt-1";
-	const fold =
-		"flex w-full items-center gap-1.5 rounded-lg px-3 py-2 text-left text-[13px] text-muted-foreground hover:bg-hover hover:text-fg";
 	return (
 		<>
-			<div className="flex shrink-0 items-center gap-2 border-b border-line py-2.5 pl-5 pr-2">
-				{canTodo ? (
-					<ViewTabs count={count} onView={onView} todos={todos} view={view} />
-				) : (
-					<h2 className="text-[15px] font-semibold">
-						{t("tray.title")} <span className="tabular-nums text-warn">{count}</span>
-					</h2>
-				)}
+			<div className="flex shrink-0 items-center gap-1 border-b border-line py-2.5 pl-5 pr-2">
+				{bar}
 				<span className="flex-1" />
 				<MoreMenu>
 					{(close) =>
@@ -141,49 +86,85 @@ export function InboxList({
 					onClick={() => newNote()}
 					title={t("quick.title")}
 				/>
+				{onClose && (
+					<IconButton
+						className="shrink-0"
+						icon={X}
+						iconSize={16}
+						label={t("review.close")}
+						onClick={onClose}
+						title={t("review.close")}
+					/>
+				)}
 			</div>
 			{/* several workspaces: which of them, as in the sidebar's selector */}
 			<div className="shrink-0 px-5 pt-3 empty:hidden [&>fieldset]:mb-1">
 				<SpaceFilter />
 			</div>
+			{rule && shown.some((s) => s.id === rule) && (
+				<SpaceScope id={rule}>
+					<InboxRule
+						name={shown.length > 1 ? spaceById(rule)?.name : undefined}
+						onClose={() => setRule(null)}
+					/>
+				</SpaceScope>
+			)}
+		</>
+	);
+}
+
+/**
+ * `head`: the panel's head above (InboxHead). `current`: the entry shown beside (none on a phone's
+ * list). `onClear`: empties "Done"; the entries stay where they were sorted to.
+ */
+export function InboxList({
+	head,
+	waiting,
+	later,
+	sorted,
+	current,
+	onPick,
+	onUndo,
+	onClear,
+}: {
+	head: React.ReactNode;
+	waiting: InboxEntry[];
+	later: InboxEntry[];
+	sorted: SortedRow[];
+	current?: string;
+	onPick: (key: string) => void;
+	onUndo: (key: string) => void;
+	onClear: () => void;
+}) {
+	const { t } = useT();
+	const [laterOpen, setLaterOpen] = useState(false);
+	const [allSorted, setAllSorted] = useState(false);
+	const space = (e: InboxEntry) => spaceById(e.space)?.name;
+	const newestSorted = [...sorted].reverse();
+	const sortedShown = allSorted ? newestSorted : newestSorted.slice(0, SORTED_SHOWN);
+	const section = "mt-1 border-t border-line pt-1";
+	const fold =
+		"flex w-full items-center gap-1.5 rounded-lg px-3 py-2 text-left text-[13px] text-muted-foreground hover:bg-hover hover:text-fg";
+	return (
+		<>
+			{head}
 			<section aria-label={t("triage.list")} className="min-h-0 flex-1 overflow-y-auto p-1.5">
-				{todoList && <NewTodo onAdd={onAddTodo} />}
-				{waiting.length || (todoList && ticked.length) ? (
+				{waiting.length ? (
 					<ul>
-						{waiting.map((e) =>
-							todoList ? (
-								<TodoRow
-									current={e.key === current}
-									entry={e}
-									key={e.key}
-									onPick={() => onPick(e.key)}
-									onTick={onTick}
-								/>
-							) : (
-								<Row
-									current={e.key === current}
-									entry={e}
-									key={e.key}
-									onPick={() => onPick(e.key)}
-									space={space(e)}
-									waiting={false}
-								/>
-							),
-						)}
-						{todoList &&
-							ticked.map((e) => (
-								<TodoRow
-									current={false}
-									entry={e}
-									key={e.key}
-									onPick={() => onPick(e.key)}
-									onTick={onTick}
-								/>
-							))}
+						{waiting.map((e) => (
+							<Row
+								current={e.key === current}
+								entry={e}
+								key={e.key}
+								onPick={() => onPick(e.key)}
+								space={space(e)}
+								waiting={false}
+							/>
+						))}
 					</ul>
 				) : (
 					<p className="px-4 py-8 text-center text-[15px] text-muted-foreground">
-						{todoList ? t("inbox.noTodos") : t("inbox.empty")}
+						{t("inbox.empty")}
 					</p>
 				)}
 				{sorted.length > 0 && (
@@ -275,163 +256,7 @@ export function InboxList({
 					</section>
 				)}
 			</section>
-			{rule && shown.some((s) => s.id === rule) && (
-				<SpaceScope id={rule}>
-					<InboxRule
-						name={shown.length > 1 ? spaceById(rule)?.name : undefined}
-						onClose={() => setRule(null)}
-					/>
-				</SpaceScope>
-			)}
 		</>
-	);
-}
-
-/**
- * The head as two tabs: the whole inbox, or only its to-dos, each with how many. Apart from the
- * workspaces' chips below, which choose from where.
- */
-function ViewTabs({
-	view,
-	count,
-	todos,
-	onView,
-}: {
-	view: InboxView;
-	count: number;
-	todos: number;
-	onView: (v: InboxView) => void;
-}) {
-	const { t } = useT();
-	const tab = (v: InboxView, label: string, n: number, tone: string) => (
-		<Button
-			aria-selected={view === v}
-			className={cn(
-				"tap-y whitespace-nowrap rounded-md px-1.5 py-0.5 text-[15px] font-semibold",
-				view === v ? "text-fg" : "text-muted-foreground hover:bg-hover hover:text-fg",
-			)}
-			onClick={() => onView(v)}
-			role="tab"
-			variant="plain"
-		>
-			{label} <span className={cn("tabular-nums", view === v && tone)}>{n}</span>
-		</Button>
-	);
-	return (
-		<>
-			<h2 className="sr-only">{t("tray.title")}</h2>
-			<div aria-label={t("inbox.show")} className="-ml-1.5 flex min-w-0 gap-1" role="tablist">
-				{tab("all", t("tray.title"), count, "text-warn")}
-				{tab("todos", t("inbox.todos"), todos, "text-fg")}
-			</div>
-		</>
-	);
-}
-
-/** Types a new to-do into the inbox: Enter adds it, the field stays for the next. */
-function NewTodo({ onAdd }: { onAdd: (title: string) => boolean }) {
-	const { t } = useT();
-	const [title, setTitle] = useState("");
-	return (
-		<form
-			className="mb-1 flex items-center gap-2 rounded-xl border border-line px-3 py-2 focus-within:border-focus"
-			onSubmit={(e) => {
-				e.preventDefault();
-				if (onAdd(title)) setTitle("");
-			}}
-		>
-			<Plus aria-hidden className="shrink-0 text-muted-foreground" size={16} />
-			<Input
-				aria-label={t("inbox.newTodo")}
-				className="text-[15px]"
-				onChange={(e) => setTitle(e.target.value)}
-				placeholder={t("inbox.newTodo")}
-				value={title}
-				variant="bare"
-			/>
-		</form>
-	);
-}
-
-/**
- * A to-do: its status to tick off (or, ticked here, to open again), its title, where it is sorted
- * to, when it is due and how long it has lain in the inbox.
- */
-function TodoRow({
-	entry,
-	current,
-	onPick,
-	onTick,
-}: {
-	entry: InboxEntry;
-	current: boolean;
-	onPick: () => void;
-	onTick: (e: InboxEntry, done: boolean) => void;
-}) {
-	const { t } = useT();
-	const repo = replica(entry.space).repo;
-	const ix = repo.index();
-	const item = repo.get(entry.item.id) ?? entry.item;
-	const schema = ix.schemaOf(item);
-	const status = statusOf(item, schema);
-	const done = status?.group === "done";
-	const prop = statusProp(schema);
-	const title = titleOf(item, t);
-	const home = ix.get(ix.home(item.id));
-	const due = dueOf(item, schema);
-	const doneOption = firstOfGroup(schema, "done");
-	// open again: the type's default unless that one is done too, else its first open option
-	const options = prop?.options ?? [];
-	const open =
-		options.find((o) => o.id === defaultOption(prop!) && o.group !== "done") ??
-		options.find((o) => o.group !== "done");
-	const toggle = async () => {
-		const to = (done ? open : doneOption)?.id;
-		if (to && (await setStatus(item, to, repo))) onTick(entry, !done);
-	};
-	return (
-		<li
-			className={cn(
-				"group/row relative rounded-xl hover:bg-hover",
-				current &&
-					"bg-selected before:absolute before:inset-y-2.5 before:left-0 before:w-[3px] before:rounded-r before:bg-inbox",
-			)}
-			data-row={entry.key}
-		>
-			{status && doneOption && (
-				<Button
-					aria-label={done ? t("inbox.reopen", { title }) : t("inbox.tick", { title })}
-					className="tap absolute left-2 top-2 rounded-full p-1 hover:bg-surface"
-					onClick={() => void toggle()}
-					style={{ color: statusColor(status.option, done) }}
-					variant="plain"
-				>
-					<StatusGlyph option={status.option} size={17} />
-				</Button>
-			)}
-			<Button
-				aria-current={current}
-				className="block w-full min-w-0 rounded-xl py-2.5 pl-10 pr-3 text-left"
-				onClick={onPick}
-				variant="plain"
-			>
-				<span
-					className={cn(
-						"block truncate text-[15px] font-medium",
-						done && "text-muted-foreground line-through",
-					)}
-				>
-					{title}
-				</span>
-				<span className="flex min-w-0 items-center gap-1.5 text-[13px] text-muted-foreground">
-					{home && <span className="min-w-0 truncate">{titleOf(home, t)}</span>}
-					{due && <DueLabel done={done} due={due} />}
-					<span className="ml-auto shrink-0 text-xs">
-						<RelTime ts={inboxSince(item)} />
-					</span>
-				</span>
-			</Button>
-		</li>
 	);
 }
 
